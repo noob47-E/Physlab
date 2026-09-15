@@ -1,0 +1,711 @@
+@import 'tailwindcss';
+
+:root {
+  --bg-0: #121315;
+  --bg-1: #1a1b1e;
+  --bg-2: #222327;
+  --bg-3: #2b2c31;
+  --bg-4: #35363c;
+  --line: #303137;
+  --line-2: #3d3f46;
+  --text: #d9dbe0;
+  --text-dim: #9a9ea8;
+  --text-faint: #6c707a;
+  --accent: #4f8cff;
+  --accent-2: #3a6fd8;
+  --warn: #ffb84d;
+  --good: #58d68d;
+  --bad: #ff6b6b;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  font-size: 12.5px;
+  overflow: hidden;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3c43 transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------- Dockview theme tuned to Blender-like greys ---------- */
+.dockview-theme-dark {
+  --dv-background-color: var(--bg-0);
+  --dv-paneview-header-border-color: var(--line);
+  --dv-group-view-background-color: var(--bg-1);
+  --dv-tabs-and-actions-container-background-color: var(--bg-2);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-1);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-2);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-1);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-2);
+  --dv-tab-divider-color: var(--line);
+  --dv-activegroup-visiblepanel-tab-color: #ffffff;
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-faint);
+  --dv-separator-border: var(--line);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--accent);
+  --dv-tabs-and-actions-container-height: 28px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+}
+
+/* Custom component classes live in a cascade layer so Tailwind utilities (w-12, h-auto…) can override them. */
+@layer components {
+/* ---------- Generic controls ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  background: var(--bg-4);
+  border: 1px solid #45474f;
+  color: var(--text);
+  white-space: nowrap;
+}
+.btn:hover {
+  background: #40424a;
+}
+.btn.primary {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: white;
+}
+.btn.primary:hover {
+  background: var(--accent);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn.ghost:hover {
+  background: var(--bg-3);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(34, 35, 39, 0.9);
+  border: 1px solid #3a3c43;
+  color: var(--text-dim);
+}
+.icon-btn:hover {
+  color: white;
+  background: #33353b;
+}
+.icon-btn.on {
+  color: white;
+  background: var(--accent-2);
+  border-color: var(--accent);
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid #3a3c43;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(34, 35, 39, 0.9);
+}
+.seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  color: var(--text-dim);
+}
+.seg button.on {
+  background: var(--accent-2);
+  color: white;
+}
+.seg button:not(.on):hover {
+  background: #33353b;
+  color: white;
+}
+
+.field {
+  height: 24px;
+  width: 100%;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: #16171a;
+  border: 1px solid #34363d;
+  outline: none;
+}
+.field:focus {
+  border-color: var(--accent);
+}
+.field.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(34, 35, 39, 0.85);
+  border: 1px solid #34363d;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-1);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.prop-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+}
+.prop-row > label {
+  color: var(--text-dim);
+  text-align: right;
+  font-size: 12px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  padding: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.kv > .k {
+  color: var(--text-dim);
+}
+.kv > .v {
+  color: #eef0f4;
+  text-align: right;
+}
+
+.card {
+  margin: 6px 8px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+
+/* ---------- Viewport ---------- */
+.viewport canvas {
+  display: block;
+}
+.tick-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 10.5px;
+  color: #7d828c;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 3px #17181b, 0 0 3px #17181b;
+}
+.obj-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+  font-family: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
+  white-space: nowrap;
+  text-shadow: 0 0 4px #000, 0 0 2px #000;
+  transition: opacity 0.12s ease;
+}
+/* "On hover" labels: appear at once, linger a moment after the cursor leaves, then fade. */
+.obj-label.is-away {
+  opacity: 0;
+  transition: opacity 0.3s ease 0.4s;
+}
+.obj-label.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 7px 2px 6px;
+  border-radius: 5px;
+  background: rgba(16, 17, 20, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 3px solid var(--c, #888);
+  text-shadow: none;
+  color: var(--c, #ddd);
+}
+.obj-label.chip .nm {
+  font-size: 14px;
+}
+.obj-label.chip .ms {
+  font-family: 'Segoe UI', 'Inter', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 12px;
+  color: #e9ecef;
+  font-variant-numeric: tabular-nums;
+}
+.obj-label.is-selected {
+  border-color: rgba(255, 212, 59, 0.6);
+  box-shadow: 0 0 0 1px rgba(255, 212, 59, 0.35);
+}
+.obj-label.is-text {
+  font-style: normal;
+  font-weight: 500;
+  font-family: 'Segoe UI', sans-serif;
+  color: #e9ecef;
+  background: rgba(20, 21, 24, 0.7);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.vec-name {
+  position: relative;
+  display: inline-block;
+}
+.vec-name::before {
+  content: '→';
+  position: absolute;
+  left: 50%;
+  top: -0.72em;
+  transform: translateX(-50%);
+  font-size: 0.72em;
+  font-style: normal;
+}
+.measure-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 12px;
+  color: #ffe8a3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  background: rgba(18, 19, 22, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.measure-label.part-label {
+  font-size: 15px;
+  font-weight: 700;
+  background: rgba(18, 19, 22, 0.55);
+}
+.cursor-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(18, 19, 22, 0.9);
+  border: 1px solid #3d3f46;
+  color: #f1f3f5;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tool-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: rgba(24, 25, 28, 0.92);
+  border: 1px solid #3a3c43;
+  color: #e6e8ec;
+  pointer-events: none;
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 8px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.menu-btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 4px;
+  color: var(--text);
+}
+.menu-btn:hover,
+.menu-btn.open {
+  background: var(--bg-4);
+}
+.menu {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 50;
+  min-width: 220px;
+  padding: 4px;
+  border-radius: 7px;
+  background: #26272c;
+  border: 1px solid #3d3f46;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.menu button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  text-align: left;
+}
+.menu button:hover {
+  background: var(--accent-2);
+}
+.menu .sc {
+  color: var(--text-faint);
+}
+.menu hr {
+  border: 0;
+  border-top: 1px solid #3a3c43;
+  margin: 4px 0;
+}
+
+.mode-tab {
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 5px;
+  color: var(--text-dim);
+}
+.mode-tab.on {
+  background: var(--bg-4);
+  color: white;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.mode-tab:not(.on):hover {
+  color: white;
+}
+.mode-tab.soon {
+  opacity: 0.4;
+}
+
+.toolshelf {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 8px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 50px;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+.tool:hover {
+  background: var(--bg-3);
+  color: white;
+}
+.tool.on {
+  background: var(--accent-2);
+  color: white;
+}
+.tool-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 6px;
+  background: var(--line-2);
+}
+
+.cmdbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.cmd-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: #121316;
+  border: 1px solid #3a3c43;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13.5px;
+  outline: none;
+}
+.cmd-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.2);
+}
+.suggest {
+  position: absolute;
+  z-index: 60;
+  top: 34px;
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 7px;
+  background: #222328;
+  border: 1px solid #3d3f46;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+.suggest button {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  width: 100%;
+  padding: 5px 12px;
+  text-align: left;
+  gap: 12px;
+}
+.suggest button.active,
+.suggest button:hover {
+  background: var(--accent-2);
+}
+.suggest code {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  color: #ffe8a3;
+}
+
+/* ---------- Console ---------- */
+.log-entry {
+  padding: 6px 12px;
+  border-bottom: 1px solid #25262b;
+}
+.log-in {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  color: #8fb6ff;
+}
+.log-out {
+  margin-top: 2px;
+  padding-left: 14px;
+  color: #eef0f4;
+  white-space: pre-wrap;
+}
+.log-out.err {
+  color: #ff8787;
+}
+.log-out.info {
+  color: var(--text-dim);
+}
+
+/* ---------- Natural math input (MathLive) ---------- */
+math-field.math-input {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #121316;
+  color: #f1f3f5;
+  border: 1px solid #3a3c43;
+  font-size: 18px;
+  --caret-color: #74c0fc;
+  --selection-background-color: rgba(79, 140, 255, 0.35);
+  --contains-highlight-background-color: rgba(79, 140, 255, 0.12);
+  --placeholder-color: #6c707a;
+  --smart-fence-color: #9aa1ab;
+}
+math-field.math-input:focus-within {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.2);
+}
+math-field.math-input-sm {
+  font-size: 15px;
+  min-height: 28px;
+}
+math-field.math-input-lg {
+  font-size: 22px;
+  min-height: 46px;
+}
+math-field.math-input::part(virtual-keyboard-toggle),
+math-field.math-input::part(menu-toggle) {
+  display: none;
+}
+.lcd math-field.math-input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #11140f;
+  --caret-color: #11140f;
+  --placeholder-color: #5d6a55;
+  --selection-background-color: rgba(0, 0, 0, 0.15);
+  padding: 0;
+}
+
+/* ---------- Calculator ---------- */
+.calc {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  min-height: 100%;
+  background: linear-gradient(180deg, #1d1e22, #16171a);
+}
+.lcd {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, #c9d4c1, #b6c3ad);
+  color: #1b1f1a;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+  min-height: 118px;
+}
+.lcd .status {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #394235;
+}
+.lcd input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 15px;
+  color: #11140f;
+}
+.lcd .pretty {
+  min-height: 34px;
+  font-size: 15px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.lcd .result {
+  text-align: right;
+  font-size: 22px;
+  min-height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.keys {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+.keys.num {
+  grid-template-columns: repeat(5, 1fr);
+}
+.key {
+  position: relative;
+  height: 34px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #3b3d44, #2e3035);
+  border: 1px solid #484a52;
+  color: #f1f3f5;
+  font-size: 12.5px;
+  box-shadow: 0 2px 0 #101114;
+}
+.key:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 #101114;
+}
+.key .shift {
+  position: absolute;
+  top: -1px;
+  left: 4px;
+  font-size: 8.5px;
+  color: #ffb84d;
+}
+.key .alpha {
+  position: absolute;
+  top: -1px;
+  right: 4px;
+  font-size: 8.5px;
+  color: #ff6b9a;
+}
+.key.fn {
+  background: linear-gradient(180deg, #2a2c31, #212226);
+  font-size: 11.5px;
+}
+.key.digit {
+  background: linear-gradient(180deg, #4a4c54, #3a3c43);
+  font-size: 15px;
+}
+.key.del {
+  background: linear-gradient(180deg, #4d7bd6, #3b64b8);
+}
+.key.ac {
+  background: linear-gradient(180deg, #d9534f, #b8403c);
+}
+.key.eq {
+  background: linear-gradient(180deg, #3aa66a, #2e8a57);
+}
+.key.shift-key {
+  background: linear-gradient(180deg, #d99a2b, #b37b1b);
+  color: #1b1405;
+  font-weight: 700;
+}
+.key.alpha-key {
+  background: linear-gradient(180deg, #d94c80, #b33a67);
+  font-weight: 700;
+}
+.key.lit {
+  outline: 2px solid #fff;
+}
+
+} /* end @layer components */
+
+.katex {
+  font-size: 1.08em;
+}
+.steps .katex-display {
+  margin: 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}

@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest'
+import { formatMeasure, texMeasure, type MeasureSettings } from '../src/renderer/src/math/format'
+import { answerTex, circleReport, polygonReport } from '../src/renderer/src/math/shapeFormulas'
+import type { V3 } from '../src/renderer/src/math/vec'
+
+const S: MeasureSettings = { decimals: 2, precisionMode: 'dp', unit: 'cm', unitPerSquare: 1, angleUnit: 'deg' }
+const P = (...xy: number[]): V3[] => {
+  const out: V3[] = []
+  for (let i = 0; i < xy.length; i += 2) out.push([xy[i], xy[i + 1], 0])
+  return out
+}
+
+describe('measurement formatting', () => {
+  it('applies units, scale and precision', () => {
+    expect(formatMeasure(4, 'length', S)).toBe('4 cm')
+    expect(formatMeasure(12, 'area', S)).toBe('12 cm²')
+    expect(formatMeasure(2, 'length', { ...S, unit: 'm', unitPerSquare: 0.5 })).toBe('1 m')
+    expect(formatMeasure(3, 'area', { ...S, unitPerSquare: 2 })).toBe('12 cm²')
+    expect(formatMeasure(Math.PI / 3, 'angle', S)).toBe('60°')
+    expect(formatMeasure(1234.567, 'length', { ...S, precisionMode: 'sf', decimals: 3 })).toBe('1230 cm')
+    expect(texMeasure(12, 'area', S)).toBe('12\\,\\text{cm}^2')
+  })
+  it('shows exact forms only when the decimal is rounded', () => {
+    expect(answerTex(5.5, 'length', S)).toBe('5.5\\,\\text{cm}')
+    expect(answerTex(Math.SQRT2 * 3, 'length', S)).toBe('3\\sqrt{2}\\,\\text{cm} \\approx 4.24\\,\\text{cm}')
+    expect(answerTex(4 * Math.PI, 'area', S, true)).toContain('4\\pi')
+  })
+})
+
+describe('shape reports', () => {
+  it('rectangle: A = l × w with substitution', () => {
+    const r = polygonReport(P(0, 0, 4, 0, 4, 3, 0, 3), ['A', 'B', 'C', 'D'], S)
+    expect(r.name).toBe('Rectangle')
+    const area = r.rows[0]
+    expect(area.general).toBe('A = l \\times w')
+    expect(area.symbols.map((s) => s.label)).toEqual(['AB', 'BC'])
+    expect(area.substitution).toBe('A = 4 \\times 3')
+    expect(area.value).toBeCloseTo(12)
+    expect(r.rows.find((x) => x.title === 'Diagonal')?.value).toBeCloseTo(5)
+  })
+  it('triangle, trapezium, circle and general polygons', () => {
+    const t = polygonReport(P(0, 0, 4, 0, 1, 3), ['A', 'B', 'C'], S)
+    expect(t.rows[0].general).toBe('A = \\tfrac{1}{2} \\times b \\times h')
+    expect(t.rows[0].value).toBeCloseTo(6)
+    expect(t.rows.find((x) => x.title.includes('Heron'))?.value).toBeCloseTo(6)
+    const trap = polygonReport(P(0, 0, 6, 0, 4, 2, 1, 2), ['A', 'B', 'C', 'D'], S)
+    expect(trap.name).toBe('Trapezium')
+    expect(trap.rows[0].value).toBeCloseTo(9)
+    const c = circleReport([0, 0, 0], 2, 'O', S)
+    expect(c.rows[0].value).toBeCloseTo(4 * Math.PI)
+    const L = polygonReport(P(0, 0, 4, 0, 4, 2, 2, 2, 2, 4, 0, 4), ['A', 'B', 'C', 'D', 'E', 'F'], S)
+    expect(L.note).toMatch(/Decompose/)
+    expect(L.rows[0].value).toBeCloseTo(12)
+  })
+})
