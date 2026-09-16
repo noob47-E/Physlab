@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { Builder } from '../core/factory'
+import { isFree, parentRefs } from '../core/evaluate'
 import { scene } from '../core/store'
 import type { Computed, ObjId, SceneObject, ToolId } from '../core/types'
 import type { V3 } from '../math/vec'
@@ -20,12 +21,12 @@ export const TOOLS: ToolInfo[] = [
   { id: 'sketch', label: 'Sketch', key: 'K', hint: ['Draw a rough shape with the mouse: it becomes a perfect square, rectangle, triangle, circle or line. Hold Alt for no grid snapping.'] },
   { id: 'point', label: 'Point', key: 'P', hint: ['Click anywhere to place a point.'] },
   { id: 'vector', label: 'Vector', key: 'W', hint: ['Drag from tail to head (or click tail, then head).', 'Click where the head should be.'] },
-  { id: 'segment', label: 'Segment', key: 'S', hint: ['Click the first point.', 'Click the next point. Keep clicking to draw connected sides; close the loop to make a shape. Esc to stop.'] },
+  { id: 'segment', label: 'Segment', key: 'S', hint: ['Click the first point.', 'Click the next point. Right-click or Enter when you are done; Backspace removes the last point; close the loop to make a shape.'] },
   { id: 'line', label: 'Line', key: 'L', hint: ['Click the first point.', 'Click the second point.'] },
   { id: 'ray', label: 'Ray', key: 'R', hint: ['Click the start point.', 'Click a point on the ray.'] },
   { id: 'circle', label: 'Circle', key: 'C', hint: ['Click the centre.', 'Click a point on the circle.'] },
   { id: 'triangle', label: 'Triangle', key: 'T', hint: ['Click vertex 1.', 'Click vertex 2.', 'Click vertex 3.'] },
-  { id: 'polygon', label: 'Polygon', key: 'G', hint: ['Click the vertices; click the first vertex again to close.'] },
+  { id: 'polygon', label: 'Polygon', key: 'G', hint: ['Click the first corner.', 'Click the next corners. Right-click or Enter to finish (or click the first corner again).'] },
   { id: 'angle', label: 'Angle', key: 'A', hint: ['Click a point on the first arm.', 'Click the vertex.', 'Click a point on the second arm.'] },
   { id: 'distance', label: 'Measure', key: 'D', hint: ['Click the first point.', 'Click the second point to measure the distance.'] },
   { id: 'midpoint', label: 'Midpoint', key: 'M', hint: ['Click two points or a segment.', 'Click the second point.'] },
@@ -60,6 +61,71 @@ export interface ToolRuntime {
 export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [] }))
 
 export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [] })
+
+/** Is a tool part-way through a drawing (so Finish / Undo point / Cancel apply)? */
+export const isDrawing = (): boolean => useTool.getState().picks.length > 0
+
+/** Delete points this tool created that nothing ended up using. */
+function dropUnusedPicks(picks: ObjId[]): void {
+  const s = scene()
+  const used = new Set<ObjId>()
+  for (const o of Object.values(s.objects)) {
+    if (o.type === 'point') continue
+    for (const r of parentRefs(o)) used.add(r)
+  }
+  const drop = picks.filter((id) => {
+    const o = s.objects[id]
+    return !!o && o.type === 'point' && isFree(o) && !used.has(id)
+  })
+  if (drop.length) s.removeObjects(drop)
+}
+
+/**
+ * Finish the drawing in progress: a polygon with at least three corners is built,
+ * anything else simply stops. Bound to right-click, Enter and double-click.
+ */
+export function finishTool(): boolean {
+  const s = scene()
+  const picks = useTool.getState().picks
+  if (!picks.length) return false
+  if (s.tool === 'polygon' && picks.length >= 3) {
+    const b = new Builder()
+    const poly = b.polygon(picks, { withSides: true })
+    b.commit()
+    resetTool()
+    s.select([poly.id])
+    s.requestFocus('measure')
+    return true
+  }
+  resetTool()
+  dropUnusedPicks(picks)
+  return true
+}
+
+/** Throw away the unfinished drawing (Esc). */
+export function cancelTool(): boolean {
+  const picks = useTool.getState().picks
+  if (!picks.length) return false
+  resetTool()
+  dropUnusedPicks(picks)
+  return true
+}
+
+/** Step back one point (Backspace). Sides already drawn are undone through the scene's history. */
+export function undoLastPick(): boolean {
+  const s = scene()
+  const picks = useTool.getState().picks
+  if (!picks.length) return false
+  if (s.tool === 'segment') {
+    s.undo()
+    resetTool()
+    return true
+  }
+  const last = picks[picks.length - 1]
+  useTool.setState({ picks: picks.slice(0, -1) })
+  dropUnusedPicks([last])
+  return true
+}
 
 const isLineLike = (c?: Computed) => !!c && (c.type === 'line' || c.type === 'segment' || c.type === 'ray' || c.type === 'vector')
 const isCurve = (c?: Computed) => isLineLike(c) || c?.type === 'circle'

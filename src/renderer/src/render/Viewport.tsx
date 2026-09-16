@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
 import { useApp } from '../app/modes'
-import { Box, Grid3x3, Home, Magnet, Square } from 'lucide-react'
+import { Box, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
 import { createRenderer, QUALITY, useGpuInfo } from './renderer'
@@ -14,7 +14,7 @@ import { Interaction } from './Interaction'
 import { overlay } from './overlay'
 import { resetCamera } from './viewState'
 import { GpuParticles, useParticleLab } from './GpuParticles'
-import { TOOLS, useTool } from './tools'
+import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
 import { LabelShowSwitch } from '../ui/LabelControls'
@@ -172,7 +172,24 @@ export function Viewport() {
         </span>
       </div>
 
-      {hint && tool !== 'select' && <div className="tool-hint">{hint}</div>}
+      {hint && tool !== 'select' && (
+        <div className="tool-hint">
+          <span>{hint}</span>
+          {picks > 0 && (
+            <span className="pointer-events-auto ml-3 inline-flex items-center gap-1 border-l border-[#3a3c43] pl-3">
+              <button className="btn h-6 primary" onClick={() => finishTool()} title="Finish this shape (right-click, Enter or double-click)">
+                <Check size={12} /> Finish
+              </button>
+              <button className="btn h-6" onClick={() => undoLastPick()} title="Remove the last point (Backspace)">
+                <Undo2 size={12} /> Undo point
+              </button>
+              <button className="btn h-6" onClick={() => cancelTool()} title="Throw this drawing away (Esc)">
+                <X size={12} /> Cancel
+              </button>
+            </span>
+          )}
+        </div>
+      )}
       <SliderDock />
     </div>
   )

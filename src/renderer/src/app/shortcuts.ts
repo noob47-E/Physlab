@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { newProject, openProject, saveProject } from './files'
 import { scene } from '../core/store'
-import { TOOLS, resetTool } from '../render/tools'
+import { TOOLS, cancelTool, finishTool, resetTool, undoLastPick, useTool } from '../render/tools'
 import { resetCamera } from '../render/viewState'
 import { useApp } from './modes'
 
@@ -55,12 +55,17 @@ export function useShortcuts() {
       if (ctrl) return
       switch (e.key) {
         case 'Escape':
+          // First Esc throws away the unfinished drawing, a second one goes back to Move.
+          if (cancelTool()) return
           resetTool()
           s.setTool('select')
           s.select([])
           return
         case 'Delete':
+          if (s.selection.length) s.removeObjects(s.selection)
+          return
         case 'Backspace':
+          if (undoLastPick()) return
           if (s.selection.length) s.removeObjects(s.selection)
           return
         case 'Tab':
@@ -77,6 +82,8 @@ export function useShortcuts() {
         case '/':
         case 'Enter':
           e.preventDefault()
+          // While drawing, Enter finishes the shape instead of jumping to the command bar.
+          if (e.key === 'Enter' && useTool.getState().picks.length && finishTool()) return
           document.getElementById('command-input')?.focus()
           return
       }

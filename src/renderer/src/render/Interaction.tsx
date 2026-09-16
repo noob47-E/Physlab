@@ -5,7 +5,7 @@ import { FatLine } from './FatLine'
 import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './cameraUtils'
 import { overlay, showTip } from './overlay'
 import { pickAt, type Hit } from './picking'
-import { acceptsFor, advanceTool, createsPointsOnEmpty, resetTool, useTool, type SnapInfo } from './tools'
+import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type SnapInfo } from './tools'
 import { Arrow } from './ObjectViews'
 import { Builder } from '../core/factory'
 import { isFree, parentRefs } from '../core/evaluate'
@@ -456,6 +456,18 @@ export function Interaction() {
       advanceTool(tool, next)
     }
 
+    // Right-click and double-click finish a drawing (the usual convention in drawing programs).
+    const onContextMenu = (e: MouseEvent) => {
+      if (useTool.getState().picks.length && finishTool()) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    const onDoubleClick = () => {
+      if (useTool.getState().picks.length) finishTool()
+    }
+
     const onLeave = () => {
       showTip(null)
       // Labels shown "on hover" must hide once the cursor leaves the drawing.
@@ -463,11 +475,15 @@ export function Interaction() {
     }
 
     host.addEventListener('pointerdown', onDown, { capture: true })
+    host.addEventListener('contextmenu', onContextMenu, { capture: true })
+    host.addEventListener('dblclick', onDoubleClick)
     host.addEventListener('pointerleave', onLeave)
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     return () => {
       host.removeEventListener('pointerdown', onDown, { capture: true })
+      host.removeEventListener('contextmenu', onContextMenu, { capture: true })
+      host.removeEventListener('dblclick', onDoubleClick)
       host.removeEventListener('pointerleave', onLeave)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)

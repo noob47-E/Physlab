@@ -101,6 +101,10 @@ export interface PolygonObj extends ObjectBase {
   showAngles?: boolean
   /** Show as simple component shapes with gap lines. */
   decomposed?: boolean
+  /** Which shapes the split may use: 'basic' = rectangles and triangles only. */
+  decomposeGoal?: 'basic' | 'formula'
+  /** Which of the possible splits to show ("Other way" cycles it). */
+  decomposeIndex?: number
 }
 
 export interface AngleObj extends ObjectBase {

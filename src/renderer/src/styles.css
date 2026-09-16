@@ -348,6 +348,9 @@ textarea {
   left: 50%;
   bottom: 14px;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 24px);
   padding: 6px 14px;
   border-radius: 16px;
   background: rgba(24, 25, 28, 0.92);

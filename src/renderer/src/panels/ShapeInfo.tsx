@@ -1,8 +1,10 @@
 import { useMemo } from 'react'
-import { Scissors, Shapes } from 'lucide-react'
+import { RotateCcw, Scissors, Shapes } from 'lucide-react'
 import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
-import { decompose } from '../math/decompose'
+import { freeCapitals } from '../core/naming'
+import { decompose, type DecomposeGoal } from '../math/decompose'
+import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
 import { Tex } from '../ui/Tex'
@@ -66,21 +68,39 @@ export function ShapeInfo({ id }: { id: ObjId }) {
 
   const obj = objects[id]
   const c = ev.values.get(id)
+  const setGoal = (g: DecomposeGoal) =>
+    update(id, (d) => {
+      if (d.type === 'polygon') {
+        d.decomposeGoal = g
+        d.decomposeIndex = 0
+      }
+    })
+
+  const goal: DecomposeGoal = (obj?.type === 'polygon' && obj.decomposeGoal) || 'basic'
+  const decIndex = (obj?.type === 'polygon' && obj.decomposeIndex) || 0
 
   const data = useMemo(() => {
     if (!obj || !c) return null
     if (obj.type === 'polygon' && c.type === 'polygon' && c.pts.length >= 3) {
       const names = obj.points.map((p) => objects[p]?.name ?? '?')
       const report = polygonReport(c.pts, names, settings)
-      const dec = obj.decomposed ? decompose(c.pts) : null
-      return { kind: 'polygon' as const, report, names, dec, pts: c.pts }
+      const dec = obj.decomposed ? decompose(c.pts, goal, decIndex) : null
+      // Corners made by the cut get the next free capitals, the same letter in every part.
+      const letters = dec ? freeCapitals(Object.values(objects).map((o) => o.name), dec.newPoints.length) : []
+      const nameAt = (p: V3): string => {
+        const k = c.pts.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-7)
+        if (k >= 0) return names[k]
+        const n = dec ? dec.newPoints.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-7) : -1
+        return n >= 0 ? letters[n] ?? '?' : '?'
+      }
+      return { kind: 'polygon' as const, report, names, dec, pts: c.pts, nameAt }
     }
     if (obj.type === 'circle' && c.type === 'circle') {
       const centerId = obj.def.kind === 'centerPoint' || obj.def.kind === 'centerRadius' ? obj.def.c : undefined
       return { kind: 'circle' as const, report: circleReport(c.circle.c, c.circle.r, centerId ? objects[centerId]?.name ?? 'O' : 'O', settings) }
     }
     return null
-  }, [obj, c, objects, settings])
+  }, [obj, c, objects, settings, goal, decIndex])
 
   if (!data || !obj) return null
 
@@ -108,19 +128,47 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         )}
       </div>
 
+      {data.kind === 'polygon' && data.dec && data.dec.parts.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#2a2b30] px-2 py-1.5 text-[12px]">
+          <span className="text-zinc-500">Split into</span>
+          <div className="seg">
+            <button className={goal === 'basic' ? 'on' : ''} onClick={() => setGoal('basic')} title="Only rectangles, squares and triangles">
+              Rectangles &amp; triangles
+            </button>
+            <button className={goal === 'formula' ? 'on' : ''} onClick={() => setGoal('formula')} title="Also trapeziums and parallelograms: fewer pieces, harder formulas">
+              Any shape with a formula
+            </button>
+          </div>
+          <span className="flex-1" />
+          {data.dec.alternatives > 1 && (
+            <button
+              className="btn h-6"
+              title={`Show another way of splitting it (${(decIndex % data.dec.alternatives) + 1} of ${data.dec.alternatives})`}
+              onClick={() => {
+                setHighlight(null)
+                update(id, (d) => {
+                  if (d.type === 'polygon') d.decomposeIndex = (d.decomposeIndex ?? 0) + 1
+                })
+              }}
+            >
+              <RotateCcw size={12} /> Other way {(decIndex % data.dec.alternatives) + 1}/{data.dec.alternatives}
+            </button>
+          )}
+        </div>
+      )}
+
       {data.kind === 'polygon' && data.dec ? (
         <div>
           {data.dec.parts.length === 1 ? (
-            <div className="px-2 py-2 text-zinc-400">This is already a simple shape; no need to split it.</div>
+            <div className="px-2 py-2 text-zinc-400">
+              This is already a simple shape; no need to split it.
+              {goal === 'basic' && <span className="text-zinc-500"> It is a rectangle, square or triangle already.</span>}
+            </div>
           ) : (
             <>
               {data.dec.parts.map((part, i) => {
-                // Corners that are corners of the whole shape keep their letters; new ones get P1, P2…
-                let extra = 0
-                const partNames = part.pts.map((p) => {
-                  const k = data.pts.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-9)
-                  return k >= 0 ? data.names[k] : `P_${++extra}`
-                })
+                // Corners of the whole shape keep their letters; corners made by the cut get new ones.
+                const partNames = part.pts.map((p) => data.nameAt(p))
                 const rep = polygonReport(part.pts, partNames, settings)
                 const areaRow = rep.rows.find((r) => r.title.startsWith('Area'))
                 return (

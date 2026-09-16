@@ -1,4 +1,11 @@
-// Split a composite polygon into simple shapes (rectangles, triangles, trapeziums …) with cut lines.
+// Split a composite polygon into simple shapes with cut lines.
+//
+// Two goals:
+//   'basic'   — rectangles, squares and triangles only (the formulas a student meets first).
+//   'formula' — also trapeziums, parallelograms, kites … (fewer pieces, harder formulas).
+//
+// Cuts may add new corners: a right trapezium only becomes a rectangle plus a right triangle
+// if a new point is dropped on one of its sides.
 
 import { cross, dist, sub, type V3 } from './vec'
 import { polygonArea, signedArea2D } from './geometry'
@@ -10,14 +17,22 @@ export interface Part {
   area: number
 }
 
+export type DecomposeGoal = 'basic' | 'formula'
+
 export interface Decomposition {
   parts: Part[]
   /** Shared edges between parts (drawn as dashed gap lines). */
   cuts: [V3, V3][]
+  /** Corners that are not vertices of the original shape, so they need new letters. */
+  newPoints: V3[]
+  /** How many different splits were found; the caller can cycle through them. */
+  alternatives: number
 }
 
 const EPS = 1e-9
+const SNAP = 1e-7
 
+/** Cost of each shape when anything with an area formula is allowed. */
 const PENALTY: Record<ShapeKind, number> = {
   square: 0,
   rectangle: 0,
@@ -35,10 +50,26 @@ const PENALTY: Record<ShapeKind, number> = {
   polygon: 20
 }
 
+/** Cost when only rectangles, squares and triangles count. */
+const BASIC: Partial<Record<ShapeKind, number>> = {
+  square: 0,
+  rectangle: 0,
+  'right-isosceles-triangle': 0.8,
+  'right-triangle': 1,
+  'equilateral-triangle': 1.4,
+  'isosceles-triangle': 1.6,
+  // A scalene triangle needs a constructed height or Heron's formula, so prefer a rectangle.
+  'scalene-triangle': 7
+}
+
 /** Shapes a student has a formula for. */
 const SIMPLE = new Set<ShapeKind>(Object.keys(PENALTY).filter((k) => k !== 'polygon') as ShapeKind[])
 
+const accepts = (kind: ShapeKind, goal: DecomposeGoal) => (goal === 'basic' ? kind in BASIC : SIMPLE.has(kind))
+const penaltyOf = (kind: ShapeKind, goal: DecomposeGoal) => (goal === 'basic' ? BASIC[kind] ?? 20 : PENALTY[kind])
+
 const toCCW = (pts: V3[]) => (signedArea2D(pts) < 0 ? [...pts].reverse() : pts)
+const round9 = (v: number) => Math.round(v * 1e9) / 1e9
 
 function makePart(pts: V3[]): Part {
   const clean = cleanPolygon(pts)
@@ -115,7 +146,7 @@ function triangulations(pts: V3[], limit = 2000): number[][][] {
   return rec(0, n - 1)
 }
 
-/** Merge two polygons (index lists into `pts`) that share exactly one edge. */
+/** Merge two polygons (index lists into a shared vertex array) that share exactly one edge. */
 function mergeShared(a: number[], b: number[]): number[] | null {
   for (let i = 0; i < a.length; i++) {
     const p = a[i]
@@ -131,12 +162,104 @@ function mergeShared(a: number[], b: number[]): number[] | null {
   return null
 }
 
-function score(parts: Part[]): number {
-  return parts.length * 10 + parts.reduce((s, p) => s + PENALTY[p.cls.kind], 0)
+// ---------------------------------------------------------------------------
+// Slab cutting — the only way to get a rectangle + triangle out of a trapezium
+// ---------------------------------------------------------------------------
+
+/** Rotate so a direction with cos = c, sin = s lands on the +x axis (and back). */
+const rot = (p: V3, c: number, s: number): V3 => [p[0] * c + p[1] * s, -p[0] * s + p[1] * c, 0]
+const unrot = (p: V3, c: number, s: number): V3 => [p[0] * c - p[1] * s, p[0] * s + p[1] * c, 0]
+
+/**
+ * A slab with no vertex inside it is a trapezoid with two vertical sides: take the widest
+ * rectangle inside it, plus the right triangle left over below and above.
+ */
+function trapezoidPieces(x0: number, x1: number, yb0: number, yb1: number, yt0: number, yt1: number): V3[][] {
+  const out: V3[][] = []
+  const lo = Math.max(yb0, yb1)
+  const hi = Math.min(yt0, yt1)
+  const at = (x: number, y: number): V3 => [x, y, 0]
+  if (hi - lo > SNAP) out.push([at(x0, lo), at(x1, lo), at(x1, hi), at(x0, hi)])
+  if (Math.abs(yb1 - yb0) > SNAP) {
+    out.push(yb0 < yb1 ? [at(x0, yb0), at(x1, yb1), at(x0, yb1)] : [at(x0, yb0), at(x1, yb1), at(x1, yb0)])
+  }
+  if (Math.abs(yt1 - yt0) > SNAP) {
+    out.push(yt0 > yt1 ? [at(x0, yt0), at(x1, yt1), at(x0, yt1)] : [at(x0, yt0), at(x1, yt1), at(x1, yt0)])
+  }
+  return out
 }
 
-function greedyMerge(pts: V3[], tris: number[][]): number[][] {
-  let polys = tris.map((t) => [...t])
+/** Cut the polygon with lines perpendicular to `dir` through every vertex, then split each slab. */
+function slabPieces(pts: V3[], dir: V3): V3[][] | null {
+  const l = Math.hypot(dir[0], dir[1])
+  if (l < SNAP) return null
+  const c = dir[0] / l
+  const s = dir[1] / l
+  const P = pts.map((p) => rot(p, c, s))
+  const xs = [...new Set(P.map((p) => round9(p[0])))].sort((a, b) => a - b)
+  const out: V3[][] = []
+  for (let k = 0; k + 1 < xs.length; k++) {
+    const x0 = xs[k]
+    const x1 = xs[k + 1]
+    if (x1 - x0 < 1e-6) continue
+    const xm = (x0 + x1) / 2
+    const hits: { a: V3; b: V3; y: number }[] = []
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i]
+      const b = P[(i + 1) % P.length]
+      if (a[0] > xm === b[0] > xm) continue
+      hits.push({ a, b, y: a[1] + ((xm - a[0]) * (b[1] - a[1])) / (b[0] - a[0]) })
+    }
+    if (hits.length < 2 || hits.length % 2 !== 0) return null
+    hits.sort((p, q) => p.y - q.y)
+    const yAt = (e: { a: V3; b: V3 }, x: number) => e.a[1] + ((x - e.a[0]) * (e.b[1] - e.a[1])) / (e.b[0] - e.a[0])
+    for (let h = 0; h + 1 < hits.length; h += 2) {
+      const bottom = hits[h]
+      const top = hits[h + 1]
+      for (const piece of trapezoidPieces(x0, x1, yAt(bottom, x0), yAt(bottom, x1), yAt(top, x0), yAt(top, x1))) {
+        out.push(piece.map((p) => unrot(p, c, s)))
+      }
+    }
+  }
+  return out.length ? out : null
+}
+
+/** Directions worth slicing along: the axes plus every edge direction and its perpendicular. */
+function cutDirections(pts: V3[]): V3[] {
+  const dirs: V3[] = [
+    [1, 0, 0],
+    [0, 1, 0]
+  ]
+  for (let i = 0; i < pts.length; i++) {
+    const d = sub(pts[(i + 1) % pts.length], pts[i])
+    const l = Math.hypot(d[0], d[1])
+    if (l < SNAP) continue
+    const u: V3 = [d[0] / l, d[1] / l, 0]
+    const v: V3 = [-u[1], u[0], 0]
+    for (const w of [u, v]) {
+      if (!dirs.some((e) => Math.abs(e[0] * w[1] - e[1] * w[0]) < 1e-6)) dirs.push(w)
+    }
+  }
+  return dirs
+}
+
+// ---------------------------------------------------------------------------
+// Merging the pieces back into as few simple shapes as possible
+// ---------------------------------------------------------------------------
+
+function mergePieces(pieces: V3[][], goal: DecomposeGoal): Part[] {
+  const verts: V3[] = []
+  const idx = (p: V3): number => {
+    const i = verts.findIndex((q) => dist(p, q) < SNAP)
+    if (i >= 0) return i
+    verts.push([round9(p[0]), round9(p[1]), 0])
+    return verts.length - 1
+  }
+  let polys = pieces
+    .map((pc) => cleanPolygon(pc))
+    .filter((pc) => pc.length >= 3 && Math.abs(signedArea2D(pc)) > 1e-9)
+    .map((pc) => toCCW(pc).map(idx))
+
   let improved = true
   while (improved) {
     improved = false
@@ -145,9 +268,9 @@ function greedyMerge(pts: V3[], tris: number[][]): number[][] {
       for (let j = i + 1; j < polys.length; j++) {
         const merged = mergeShared(polys[i], polys[j])
         if (!merged) continue
-        const part = makePart(merged.map((k) => pts[k]))
-        if (!part.cls.convex || !SIMPLE.has(part.cls.kind)) continue
-        const penalty = PENALTY[part.cls.kind]
+        const part = makePart(merged.map((k) => verts[k]))
+        if (!part.cls.convex || !accepts(part.cls.kind, goal)) continue
+        const penalty = penaltyOf(part.cls.kind, goal)
         if (!best || penalty < best.penalty) best = { i, j, merged, penalty }
       }
     }
@@ -157,33 +280,7 @@ function greedyMerge(pts: V3[], tris: number[][]): number[][] {
       improved = true
     }
   }
-  return polys
-}
-
-/** Rectilinear polygons: slice into horizontal (or vertical) slabs and merge equal neighbours. */
-function rectilinear(pts: V3[], vertical: boolean): V3[][] {
-  const P = vertical ? pts.map((p) => [p[1], p[0], 0] as V3) : pts
-  const ys = [...new Set(P.map((p) => +p[1].toFixed(9)))].sort((a, b) => a - b)
-  const rects: { x0: number; x1: number; y0: number; y1: number }[] = []
-  for (let s = 0; s < ys.length - 1; s++) {
-    const y = (ys[s] + ys[s + 1]) / 2
-    const xs: number[] = []
-    for (let i = 0; i < P.length; i++) {
-      const a = P[i]
-      const b = P[(i + 1) % P.length]
-      if (a[1] > y !== b[1] > y) xs.push(a[0] + ((y - a[1]) * (b[0] - a[0])) / (b[1] - a[1]))
-    }
-    xs.sort((a, b) => a - b)
-    for (let k = 0; k + 1 < xs.length; k += 2) {
-      const prev = rects.find((r) => Math.abs(r.x0 - xs[k]) < 1e-9 && Math.abs(r.x1 - xs[k + 1]) < 1e-9 && Math.abs(r.y1 - ys[s]) < 1e-9)
-      if (prev) prev.y1 = ys[s + 1]
-      else rects.push({ x0: xs[k], x1: xs[k + 1], y0: ys[s], y1: ys[s + 1] })
-    }
-  }
-  return rects.map((r) => {
-    const q: V3[] = [[r.x0, r.y0, 0], [r.x1, r.y0, 0], [r.x1, r.y1, 0], [r.x0, r.y1, 0]]
-    return vertical ? q.map((p) => [p[1], p[0], 0] as V3).reverse() : q
-  })
+  return polys.map((p) => makePart(p.map((k) => verts[k])))
 }
 
 function sharedEdges(parts: V3[][]): [V3, V3][] {
@@ -210,31 +307,74 @@ function sharedEdges(parts: V3[][]): [V3, V3][] {
   return cuts
 }
 
-/** Best decomposition of a simple polygon into shapes with known area formulas. */
-export function decompose(input: V3[]): Decomposition {
+function score(parts: Part[], goal: DecomposeGoal, newPoints: number): number {
+  return parts.length * 10 + parts.reduce((s, p) => s + penaltyOf(p.cls.kind, goal), 0) + newPoints * 0.5
+}
+
+/** Corners of the parts that are not corners of the original shape. */
+function extraPoints(parts: Part[], original: V3[]): V3[] {
+  const out: V3[] = []
+  for (const part of parts) {
+    for (const p of part.pts) {
+      if (original.some((q) => dist(p, q) < SNAP)) continue
+      if (out.some((q) => dist(p, q) < SNAP)) continue
+      out.push(p)
+    }
+  }
+  return out
+}
+
+/** Every way of splitting the shape, best first (fewest and simplest pieces). */
+function allWays(pts: V3[], goal: DecomposeGoal): { parts: Part[]; newPoints: V3[] }[] {
+  const candidates: V3[][][] = []
+  for (const dir of cutDirections(pts)) {
+    const pieces = slabPieces(pts, dir)
+    if (pieces) candidates.push(pieces)
+  }
+  for (const tri of triangulations(pts, pts.length <= 10 ? 2000 : 1)) {
+    candidates.push(tri.map((t) => t.map((k) => pts[k])))
+  }
+
+  const target = polygonArea(pts)
+  const seen = new Set<string>()
+  const ways: { parts: Part[]; newPoints: V3[]; cost: number }[] = []
+  for (const pieces of candidates) {
+    const parts = mergePieces(pieces, goal)
+    if (!parts.length || parts.some((p) => p.area < 1e-9)) continue
+    const total = parts.reduce((s, p) => s + p.area, 0)
+    if (Math.abs(total - target) > 1e-6 * Math.max(1, target)) continue
+    const newPoints = extraPoints(parts, pts)
+    const key = parts
+      .map((p) => `${p.cls.kind}:${p.area.toFixed(6)}`)
+      .sort()
+      .join('|')
+    if (seen.has(key)) continue
+    seen.add(key)
+    ways.push({ parts, newPoints, cost: score(parts, goal, newPoints.length) })
+  }
+  ways.sort((a, b) => a.cost - b.cost)
+  return ways.map(({ parts, newPoints }) => ({ parts, newPoints }))
+}
+
+/**
+ * Best split of a simple polygon into shapes with known area formulas.
+ * `index` picks another way of splitting it (the "Other way" button).
+ */
+export function decompose(input: V3[], goal: DecomposeGoal = 'basic', index = 0): Decomposition {
   const pts = toCCW(cleanPolygon(input.map((p) => [p[0], p[1], 0] as V3)))
   const whole = makePart(pts)
-  if (pts.length < 3) return { parts: [whole], cuts: [] }
-  if (SIMPLE.has(whole.cls.kind) && pts.length <= 4) return { parts: [whole], cuts: [] }
+  const single: Decomposition = { parts: [whole], cuts: [], newPoints: [], alternatives: 1 }
+  if (pts.length < 3) return single
+  // Already one of the wanted shapes: nothing to split.
+  if (accepts(whole.cls.kind, goal) && pts.length <= 4) return single
 
-  const candidates: V3[][][] = []
-  if (whole.cls.rectilinear) {
-    candidates.push(rectilinear(pts, false), rectilinear(pts, true))
+  const ways = allWays(pts, goal)
+  if (!ways.length) return single
+  const pick = ways[((index % ways.length) + ways.length) % ways.length]
+  return {
+    parts: pick.parts,
+    cuts: sharedEdges(pick.parts.map((p) => p.pts)),
+    newPoints: pick.newPoints,
+    alternatives: ways.length
   }
-  if (pts.length <= 10) {
-    for (const tri of triangulations(pts)) {
-      candidates.push(greedyMerge(pts, tri).map((poly) => poly.map((k) => pts[k])))
-    }
-  } else {
-    const tri = triangulations(pts, 1)[0]
-    if (tri) candidates.push(greedyMerge(pts, tri).map((poly) => poly.map((k) => pts[k])))
-  }
-  if (!candidates.length) return { parts: [whole], cuts: [] }
-
-  let best: Part[] = candidates[0].map(makePart)
-  for (const c of candidates.slice(1)) {
-    const parts = c.map(makePart)
-    if (score(parts) < score(best)) best = parts
-  }
-  return { parts: best, cuts: sharedEdges(best.map((p) => p.pts)) }
 }

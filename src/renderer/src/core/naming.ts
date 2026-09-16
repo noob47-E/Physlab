@@ -53,6 +53,24 @@ export function uniqueName(name: string, objects: Record<string, SceneObject>, r
   }
 }
 
+/** Capital letters that no object is using, for corners created by a cut (F, G, H…). */
+export function freeCapitals(used: Iterable<string>, count: number): string[] {
+  const taken = new Set(used)
+  const out: string[] = []
+  for (const c of CAPITALS) {
+    if (out.length >= count) break
+    if (!taken.has(c)) out.push(c)
+  }
+  for (let i = 1; out.length < count; i++) {
+    for (const c of CAPITALS) {
+      if (out.length >= count) break
+      const n = `${c}${i}`
+      if (!taken.has(n)) out.push(n)
+    }
+  }
+  return out
+}
+
 export function isValidName(name: string): boolean {
   return /^[A-Za-zͰ-Ͽ][A-Za-z0-9_Ͱ-Ͽ']*$/.test(name) && !RESERVED.has(name)
 }

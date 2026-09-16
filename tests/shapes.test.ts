@@ -110,4 +110,32 @@ describe('decompose', () => {
   it('leaves a simple rectangle alone', () => {
     expect(decompose(P(0, 0, 3, 0, 3, 2, 0, 2)).parts).toHaveLength(1)
   })
+  it('splits a right trapezium into a rectangle and a right triangle, with a new corner', () => {
+    const trap = P(0, 0, 5, 0, 5, 5, 0, 1)
+    const d = decompose(trap)
+    expect(d.parts).toHaveLength(2)
+    expect(d.parts.map((p) => p.cls.kind).sort()).toEqual(['rectangle', 'right-triangle'])
+    expect(d.parts.find((p) => p.cls.kind === 'rectangle')?.area).toBeCloseTo(5)
+    expect(d.parts.reduce((s, p) => s + p.area, 0)).toBeCloseTo(polygonArea(trap))
+    // The cut needs a point that is not a corner of the trapezium.
+    expect(d.newPoints).toHaveLength(1)
+    expect(d.newPoints[0][0]).toBeCloseTo(5)
+    expect(d.newPoints[0][1]).toBeCloseTo(1)
+    expect(d.alternatives).toBeGreaterThan(1)
+  })
+  it('splits an isosceles trapezium and a parallelogram into basic shapes', () => {
+    for (const shape of [P(0, 0, 6, 0, 4, 2, 1, 2), P(0, 0, 4, 0, 6, 3, 2, 3)]) {
+      const d = decompose(shape)
+      expect(d.parts.length).toBeGreaterThan(1)
+      expect(d.parts.every((p) => /rectangle|square|triangle/.test(p.cls.kind))).toBe(true)
+      expect(d.parts.reduce((s, p) => s + p.area, 0)).toBeCloseTo(polygonArea(shape))
+    }
+  })
+  it('keeps the trapezium whole when any formula shape is allowed, and cycles other ways', () => {
+    const trap = P(0, 0, 5, 0, 5, 5, 0, 1)
+    expect(decompose(trap, 'formula').parts).toHaveLength(1)
+    const first = decompose(trap).parts.map((p) => p.cls.kind).join()
+    const second = decompose(trap, 'basic', 1).parts.map((p) => p.cls.kind).join()
+    expect(second).not.toBe(first)
+  })
 })

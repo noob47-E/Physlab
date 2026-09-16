@@ -7,8 +7,9 @@ import { labelAnchors, overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneObject, TextObj, VectorObj } from '../core/types'
 import { isFree } from '../core/evaluate'
+import { freeCapitals } from '../core/naming'
 import { angleAt, centroid, orientedAngleAt, triangleInfo } from '../math/geometry'
-import { add, angleBetween, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
+import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
 
@@ -351,7 +352,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
           <meshBasicMaterial color={obj.color} transparent opacity={selected ? 0.3 : hovered ? 0.24 : obj.fill ? 0.16 : 0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {obj.decomposed && pts.length >= 3 && <DecomposedParts pts={pts} wpp={wpp} />}
+      {obj.decomposed && pts.length >= 3 && <DecomposedParts obj={obj} pts={pts} wpp={wpp} />}
       {arcs.map((a, i) => (
         <FatLine key={i} points={a} color="#ffa94d" width={1.6} renderOrder={6} />
       ))}
@@ -362,9 +363,40 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
 const PART_COLORS = ['#4dabf7', '#ff922b', '#51cf66', '#cc5de8', '#fcc419', '#22b8cf', '#f06595', '#94d82d']
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 
+/** Right-angle marks where a cut meets a side of the shape at 90°. */
+function rightAngleMarks(cuts: [V3, V3][], pts: V3[], size: number): V3[][] {
+  const marks: V3[][] = []
+  for (const [p, q] of cuts) {
+    const d = normalize(sub(q, p))
+    for (const end of [p, q] as V3[]) {
+      const dir = end === p ? d : scale(d, -1)
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i]
+        const b = pts[(i + 1) % pts.length]
+        const e = normalize(sub(b, a))
+        const along = dot(sub(end, a), e)
+        if (along < -1e-7 || along > len(sub(b, a)) + 1e-7) continue
+        if (len(sub(end, add(a, scale(e, along)))) > 1e-7) continue
+        if (Math.abs(dot(dir, e)) > 1e-6) continue
+        // Point the mark into the side, on whichever end has room.
+        const side = along > len(sub(b, a)) / 2 ? scale(e, -1) : e
+        marks.push([add(end, scale(side, size)), add(add(end, scale(side, size)), scale(dir, size)), add(end, scale(dir, size))])
+        break
+      }
+    }
+  }
+  return marks
+}
+
 /** Component shapes drawn slightly apart, with dashed cut ("gap") lines and Roman numerals. */
-function DecomposedParts({ pts, wpp }: { pts: V3[]; wpp: number }) {
-  const dec = useMemo(() => decompose(pts), [pts])
+function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: number }) {
+  const dec = useMemo(() => decompose(pts, obj.decomposeGoal ?? 'basic', obj.decomposeIndex ?? 0), [pts, obj.decomposeGoal, obj.decomposeIndex])
+  const objects = useScene((s) => s.objects)
+  const letters = useMemo(
+    () => freeCapitals(Object.values(objects).map((o) => o.name), dec.newPoints.length),
+    [objects, dec.newPoints.length]
+  )
+  const marks = useMemo(() => rightAngleMarks(dec.cuts, pts, 14 * wpp), [dec.cuts, pts, wpp])
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label part-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
   const gap = 4 * wpp
@@ -389,6 +421,11 @@ function DecomposedParts({ pts, wpp }: { pts: V3[]; wpp: number }) {
         const s = toScreen(camera, size, centroid(part.pts))
         pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', PART_COLORS[i % PART_COLORS.length])
       })
+      // Letters for the corners the cut created.
+      dec.newPoints.forEach((p, i) => {
+        const s = toScreen(camera, size, p)
+        pool.place(letters[i] ?? '', s.x + 12, s.y - 12, 'center', '#f8f9fa')
+      })
     }
     pool.end()
   })
@@ -401,6 +438,9 @@ function DecomposedParts({ pts, wpp }: { pts: V3[]; wpp: number }) {
       ))}
       {dec.cuts.map((cut, i) => (
         <FatLine key={`c${i}`} points={cut} color="#f8f9fa" width={2} dashed dashSize={8 * wpp} gapSize={6 * wpp} renderOrder={7} />
+      ))}
+      {marks.map((m, i) => (
+        <FatLine key={`m${i}`} points={m} color="#ffa94d" width={1.6} renderOrder={8} />
       ))}
     </>
   )
