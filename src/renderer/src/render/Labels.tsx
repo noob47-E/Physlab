@@ -7,6 +7,25 @@ import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { formatMeasure } from '../math/format'
 import { heading, len } from '../math/vec'
 import { polygonArea } from '../math/geometry'
+import { classifyPolygon } from '../math/shapes'
+
+/**
+ * What the chip calls an object: a side of a shape is named by its corners (AB, not c),
+ * and a shape by what it is (Trapezium ABCD, not poly1).
+ */
+export function displayName(o: SceneObject, objects: Record<ObjId, SceneObject>, c?: Computed): string {
+  if (o.type === 'segment') {
+    const inShape = Object.values(objects).some((p) => p.type === 'polygon' && p.points.includes(o.a) && p.points.includes(o.b))
+    const a = objects[o.a]?.name
+    const b = objects[o.b]?.name
+    if (inShape && a && b) return `${a}${b}`
+  }
+  if (o.type === 'polygon' && c?.type === 'polygon' && c.pts.length >= 3) {
+    const letters = o.points.map((p) => objects[p]?.name ?? '').join('')
+    return `${classifyPolygon(c.pts).name} ${letters}`.trim()
+  }
+  return o.name
+}
 
 type LabelMode = SceneSettings['measureLabels']
 
@@ -147,7 +166,7 @@ export function LabelLayer() {
             className={`obj-label chip ${sel ? 'is-selected' : ''} ${visible ? '' : 'is-away'}`}
             style={{ ['--c' as string]: o.color, display: 'none' }}
           >
-            {showName && <span className={`nm ${o.type === 'vector' ? 'vec-name' : ''}`}>{o.name}</span>}
+            {showName && <span className={`nm ${o.type === 'vector' ? 'vec-name' : ''}`}>{displayName(o, objects, c)}</span>}
             {text && <span className="ms">{text}</span>}
           </span>
         )

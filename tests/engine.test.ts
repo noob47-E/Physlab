@@ -32,6 +32,37 @@ describe('scene evaluation', () => {
   })
 })
 
+describe('points that live on another object', () => {
+  const base = { visible: true, locked: false, color: '#fff', showLabel: true }
+  it('sits at a fraction along a segment and on a circle', () => {
+    const objects: Record<ObjId, SceneObject> = {
+      A: { ...base, id: 'A', name: 'A', type: 'point', def: { kind: 'free', p: [0, 0, 0] } } as SceneObject,
+      B: { ...base, id: 'B', name: 'B', type: 'point', def: { kind: 'free', p: [4, 0, 0] } } as SceneObject,
+      s1: { ...base, id: 's1', name: 'a', type: 'segment', a: 'A', b: 'B' } as SceneObject,
+      F: { ...base, id: 'F', name: 'F', type: 'point', def: { kind: 'onObject', on: 's1', t: 0.25 } } as SceneObject,
+      c1: { ...base, id: 'c1', name: 'c', type: 'circle', def: { kind: 'centerRadius', c: 'A', r: '2' } } as SceneObject,
+      G: { ...base, id: 'G', name: 'G', type: 'point', def: { kind: 'onObject', on: 'c1', t: 0 } } as SceneObject
+    }
+    const ev = evaluateScene(objects, ['A', 'B', 's1', 'F', 'c1', 'G'], DEFAULT_SETTINGS, 0)
+    expect(ev.errors.size).toBe(0)
+    const f = ev.values.get('F')
+    expect(f?.type === 'point' && f.p[0]).toBeCloseTo(1)
+    const g = ev.values.get('G')
+    expect(g?.type === 'point' && g.p[0]).toBeCloseTo(2)
+  })
+  it('follows the segment when an end point moves', () => {
+    const objects: Record<ObjId, SceneObject> = {
+      A: { ...base, id: 'A', name: 'A', type: 'point', def: { kind: 'free', p: [0, 0, 0] } } as SceneObject,
+      B: { ...base, id: 'B', name: 'B', type: 'point', def: { kind: 'free', p: [10, 0, 0] } } as SceneObject,
+      s1: { ...base, id: 's1', name: 'a', type: 'segment', a: 'A', b: 'B' } as SceneObject,
+      F: { ...base, id: 'F', name: 'F', type: 'point', def: { kind: 'onObject', on: 's1', t: 0.5 } } as SceneObject
+    }
+    const ev = evaluateScene(objects, ['A', 'B', 's1', 'F'], DEFAULT_SETTINGS, 0)
+    const f = ev.values.get('F')
+    expect(f?.type === 'point' && f.p[0]).toBeCloseTo(5)
+  })
+})
+
 describe('3D surfaces', () => {
   it('leaves a hole where the function has no value', () => {
     const f = (x: number, y: number) => Math.sqrt(x * x + y * y - 1)

@@ -41,8 +41,11 @@ export const TOOLS: ToolInfo[] = [
 
 export interface SnapInfo {
   p: V3
-  kind: 'free' | 'grid' | 'point' | 'axis'
+  kind: 'free' | 'grid' | 'point' | 'axis' | 'onObject'
   pointId?: ObjId
+  /** For 'onObject': the line/segment/circle the point should stick to, and where along it. */
+  onId?: ObjId
+  t?: number
   label?: string
 }
 

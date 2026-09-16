@@ -18,7 +18,7 @@ import {
   type GLine
 } from '../math/geometry'
 import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode } from '../math/expr'
-import { add, dist, mid, sub, type V3 } from '../math/vec'
+import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
 import type { Computed, EvalResult, ObjId, SceneObject, SceneSettings } from './types'
 
 interface ParsedExpr {
@@ -114,6 +114,15 @@ export function evaluateScene(
             return { type: 'point', p: toV3(evalExpr(d.expr)) }
           case 'midpoint':
             return { type: 'point', p: mid(needPoint(d.a), needPoint(d.b)) }
+          case 'onObject': {
+            const host = need(d.on)
+            if (host.type === 'circle') {
+              const a = d.t * 2 * Math.PI
+              return { type: 'point', p: add(host.circle.c, [host.circle.r * Math.cos(a), host.circle.r * Math.sin(a), 0]) }
+            }
+            if (host.type !== 'segment' && host.type !== 'ray' && host.type !== 'line') throw new Error('not something a point can sit on')
+            return { type: 'point', p: add(host.line.p, scale(host.line.d, d.t)) }
+          }
           case 'vectorHead': {
             const v = need(d.vector)
             if (v.type !== 'vector') throw new Error('not a vector')
@@ -367,6 +376,7 @@ export function parentRefs(o: SceneObject): ObjId[] {
     case 'point': {
       const d = o.def
       if (d.kind === 'midpoint' || d.kind === 'intersection') return [d.a, d.b]
+      if (d.kind === 'onObject') return [d.on]
       if (d.kind === 'vectorHead') return [d.vector]
       if (d.kind === 'center') return [d.circle]
       if (d.kind === 'triangleCenter') return [d.poly]

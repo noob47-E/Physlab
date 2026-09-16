@@ -11,6 +11,8 @@ export type PointDef =
   | { kind: 'free'; p: V3 }
   | { kind: 'expr'; expr: string }
   | { kind: 'midpoint'; a: ObjId; b: ObjId }
+  /** Sits on a segment/ray/line at fraction t of its direction, and slides along it when dragged. */
+  | { kind: 'onObject'; on: ObjId; t: number }
   | { kind: 'intersection'; a: ObjId; b: ObjId; index: number }
   | { kind: 'vectorHead'; vector: ObjId }
   | { kind: 'center'; circle: ObjId }

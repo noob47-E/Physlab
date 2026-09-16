@@ -13,7 +13,7 @@ import { Builder } from '../core/factory'
 import { isFree, parentRefs } from '../core/evaluate'
 import { scene, useScene } from '../core/store'
 import type { ObjId, SceneObject } from '../core/types'
-import { add, dist, heading, len, sub, type V3 } from '../math/vec'
+import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 
@@ -97,6 +97,25 @@ export function Interaction() {
       const g: V3 = [Math.round(w[0] / step) * step, Math.round(w[1] / step) * step, w[2]]
       const gs = scr(g)
       if (Math.hypot(gs.x - x, gs.y - y) <= SNAP_GRID_PX) return { p: g, kind: 'grid' }
+      // On a side or a circle: the new point sticks to it and slides along it.
+      const onHit = pickAt(pickCtx(), x, y, (o, c) => !exclude?.has(o.id) && (c.type === 'segment' || c.type === 'ray' || c.type === 'line' || c.type === 'circle'))
+      if (onHit && onHit.dist <= SNAP_POINT_PX) {
+        const c = s.ev.values.get(onHit.id)
+        const name = s.objects[onHit.id]?.name
+        if (c?.type === 'circle') {
+          const dir = normalize(sub(w, c.circle.c))
+          const p = add(c.circle.c, scale(dir, c.circle.r))
+          const t = (Math.atan2(dir[1], dir[0]) + 2 * Math.PI) / (2 * Math.PI)
+          return { p, kind: 'onObject', onId: onHit.id, t: t % 1, label: `on ${name}` }
+        }
+        if (c?.type === 'segment' || c?.type === 'ray' || c?.type === 'line') {
+          const dd = dot(c.line.d, c.line.d)
+          let t = dd > 1e-12 ? dot(sub(w, c.line.p), c.line.d) / dd : 0
+          if (c.type === 'segment') t = Math.max(0, Math.min(1, t))
+          if (c.type === 'ray') t = Math.max(0, t)
+          return { p: add(c.line.p, scale(c.line.d, t)), kind: 'onObject', onId: onHit.id, t, label: `on ${name}` }
+        }
+      }
       if (s.viewMode === '2d') {
         const onX = Math.abs(scr([w[0], 0, 0]).y - y) <= SNAP_AXIS_PX
         const onY = Math.abs(scr([0, w[1], 0]).x - x) <= SNAP_AXIS_PX
@@ -108,7 +127,8 @@ export function Interaction() {
     const fmtL = (v: number) => formatMeasure(v, 'length', scene().settings)
     const fmtA = (r: number) => formatMeasure(r, 'angle', scene().settings)
     const coordText = (p: V3) => `(${[p[0], p[1]].map((v) => fmtL(v).replace(/ \S+$/, '')).join(', ')})`
-    const snapNote = (sn: SnapInfo) => (sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : '')
+    const snapNote = (sn: SnapInfo) =>
+      sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'onObject' ? `  • ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : ''
 
     /** Existing point under the cursor (snapped), or a new free point there. */
     const pointAt = (x: number, y: number, alt: boolean): ObjId | null => {
@@ -116,7 +136,8 @@ export function Interaction() {
       if (!sn) return null
       if (sn.pointId) return sn.pointId
       const b = new Builder()
-      const p = b.point(sn.p)
+      // A point placed on a side belongs to it and slides along it afterwards.
+      const p = sn.kind === 'onObject' && sn.onId ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 }) : b.point(sn.p)
       b.commit(false)
       return p.id
     }
@@ -257,6 +278,8 @@ export function Interaction() {
       const o = scene().objects[hit.id]
       if (!o) return false
       if (isFree(o)) return true
+      // Points that live on a side slide along it.
+      if (o.type === 'point' && o.def.kind === 'onObject') return true
       const m = new Map<ObjId, V3>()
       collectFreePoints(o, scene().objects, m)
       return m.size > 0
@@ -301,6 +324,27 @@ export function Interaction() {
           showTip(coordText(w) + snapNote(sn), x, y)
           return
         }
+      }
+      // A point that lives on a side or circle slides along it instead of moving freely.
+      if (o.type === 'point' && o.def.kind === 'onObject') {
+        const host2 = s.ev.values.get(o.def.on)
+        const raw = worldOn(x, y, d.plane) ?? w
+        let t = o.def.t
+        if (host2?.type === 'circle') {
+          const a = Math.atan2(raw[1] - host2.circle.c[1], raw[0] - host2.circle.c[0])
+          t = ((a + 2 * Math.PI) / (2 * Math.PI)) % 1
+        } else if (host2?.type === 'segment' || host2?.type === 'ray' || host2?.type === 'line') {
+          const dd = dot(host2.line.d, host2.line.d)
+          t = dd > 1e-12 ? dot(sub(raw, host2.line.p), host2.line.d) / dd : 0
+          if (host2.type === 'segment') t = Math.max(0, Math.min(1, t))
+          if (host2.type === 'ray') t = Math.max(0, t)
+        }
+        s.updateObject(o.id, (dr) => {
+          if (dr.type === 'point' && dr.def.kind === 'onObject') dr.def.t = t
+        }, false)
+        const now = scene().ev.values.get(o.id)
+        showTip(`${o.name} ${now?.type === 'point' ? coordText(now.p) : ''} on ${s.objects[o.def.on]?.name ?? ''}`, x, y)
+        return
       }
       if (o.type === 'point' && o.def.kind === 'free') {
         s.updateObject(o.id, (dr) => {
@@ -580,8 +624,8 @@ function ToolPreview() {
 
 function SnapMarker({ p, kind }: { p: V3; kind: SnapInfo['kind'] }) {
   const wpp = useThreeWpp()
-  const color = kind === 'point' ? '#ffd43b' : kind === 'axis' ? '#74c0fc' : '#8ce99a'
-  const r = (kind === 'point' ? 9 : 6) * wpp
+  const color = kind === 'point' ? '#ffd43b' : kind === 'axis' ? '#74c0fc' : kind === 'onObject' ? '#e599f7' : '#8ce99a'
+  const r = (kind === 'point' || kind === 'onObject' ? 9 : 6) * wpp
   const ring: V3[] = Array.from({ length: 33 }, (_, i) => {
     const t = (i / 32) * Math.PI * 2
     return [p[0] + r * Math.cos(t), p[1] + r * Math.sin(t), p[2]]
