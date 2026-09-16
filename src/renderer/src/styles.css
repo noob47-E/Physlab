@@ -403,6 +403,32 @@ textarea {
   pointer-events: none;
 }
 
+/* ---------- Tour, welcome and help ---------- */
+.tour-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(8, 10, 14, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tour-hole {
+  position: fixed;
+  border-radius: 8px;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(8, 10, 14, 0.55);
+  pointer-events: none;
+}
+.tour-card {
+  max-width: calc(100vw - 24px);
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 50px var(--shadow);
+}
+
 /* ---------- Right-click menu ---------- */
 .context-menu {
   position: fixed;

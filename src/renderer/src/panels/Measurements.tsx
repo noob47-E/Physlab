@@ -247,7 +247,7 @@ function AllMeasurements() {
   const list = order.map((id) => objects[id]).filter((o) => o && o.visible && !o.auxiliary && LISTED.has(o.type) && ev.values.has(o.id))
 
   return (
-    <div className="panel pb-6">
+    <div data-tour="measure" className="panel pb-6">
       <div className="px-3 pb-2 pt-3 text-zinc-500">
         Click any object to measure it live. Drag it and watch the <span className="text-emerald-400">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product.
       </div>

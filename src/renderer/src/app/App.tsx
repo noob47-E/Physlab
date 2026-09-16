@@ -19,6 +19,7 @@ import { startAutosave } from './autosave'
 import { RecoveryBar } from './RecoveryBar'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
+import { Tour } from './tour/Tour'
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
@@ -162,6 +163,7 @@ export function App() {
       </div>
       <SearchPalette />
       <ContextMenuHost />
+      <Tour />
     </div>
   )
 }

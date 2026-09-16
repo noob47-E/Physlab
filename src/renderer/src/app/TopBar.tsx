@@ -30,6 +30,7 @@ import type { LengthUnit, ToolId } from '../core/types'
 import { TOOLS } from '../render/tools'
 import { saveViewportImage } from '../render/exportImage'
 import { useTheme } from './theme'
+import { useTour } from './tour/Tour'
 import { resetLayout } from './App'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
@@ -293,7 +294,17 @@ export function TopBar() {
         ]}
       />
 
+      <Menu
+        label="Help"
+        items={[
+          { label: 'Take the tour', run: () => useTour.getState().start() },
+          { label: 'Practice tasks', run: () => useTour.getState().setMissions(true) },
+          { label: 'Keyboard and mouse', run: () => useTour.getState().setShortcuts(true) }
+        ]}
+      />
+
       <div className="mx-2 h-5 w-px bg-zinc-700" />
+      <span data-tour="modes" className="contents">
       {ready.map((m) => (
         <button key={m.id} className={`mode-tab ${mode === m.id ? 'on' : ''}`} title={m.description} onClick={() => enterMode(m.id)}>
           {m.label}
@@ -309,7 +320,8 @@ export function TopBar() {
       />
 
       <div className="flex-1" />
-      <button className="menu-btn flex items-center gap-2 text-zinc-400" onClick={() => setSearchOpen(true)} title="Search everything (Ctrl+K)">
+      </span>
+      <button data-tour="search" className="menu-btn flex items-center gap-2 text-zinc-400" onClick={() => setSearchOpen(true)} title="Search everything (Ctrl+K)">
         <Search size={14} /> Search <kbd className="rounded border border-[var(--line)] bg-[var(--bg-3)] px-1 text-[10px] text-[var(--text-dim)]">Ctrl K</kbd>
       </button>
       <MeasureSettingsMenu />
@@ -334,7 +346,7 @@ export function ToolShelf() {
   const tool = useScene((s) => s.tool)
   const setTool = useScene((s) => s.setTool)
   return (
-    <div className="toolshelf">
+    <div data-tour="tools" className="toolshelf">
       {modeById(mode).tools.map((id, i) => {
         if (id === '|') return <div key={i} className="tool-sep" />
         const info = TOOLS.find((t) => t.id === id)!

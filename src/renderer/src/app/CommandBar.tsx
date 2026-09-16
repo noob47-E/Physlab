@@ -105,7 +105,7 @@ export function CommandBar() {
       <TerminalSquare size={16} className="text-zinc-500" />
       <div className="relative flex-1">
         <input
-          id="command-input"
+          id="command-input" data-tour="command"
           className="cmd-input w-full"
           value={text}
           spellCheck={false}

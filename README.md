@@ -22,10 +22,22 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | --- | --- |
 | **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). |
 | **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity), big answers, optional steps, **Draw on graph**. |
-| **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits composite shapes into simple parts with gap lines. |
+| **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern, Problem Sets. |
+
+## Drawing, finishing and the right-click menu
+
+- While you draw: **right-click, Enter or double-click** finishes the shape, **Backspace** removes the last point, **Esc** cancels. The same three buttons appear next to the hint at the bottom of the drawing.
+- **Right-click** any object for what you can do with it: show components, resolve with steps, midpoint, perpendicular bisector, decompose, show angles, pin its label, rename, delete. Right-clicking empty space gives view, grid, snapping and label options. The same menu works in the Outliner and the Measure list.
+- A point clicked **on a side or a circle** sticks to it and slides along it when dragged.
+
+## Help for new users
+
+- On the first run a welcome card offers a **two-minute tour** and four starting points.
+- **Help ▸ Practice tasks** lists small tasks ("Draw a vector", "Sketch a shape", "Split a shape into simple parts") that tick themselves off as you do them.
+- **Help ▸ Keyboard and mouse** lists every shortcut. Everything is also in **Ctrl+K**.
 
 ## Measurements
 
@@ -37,6 +49,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 - **Pin** a label to keep it on whatever the setting: the pin button in the Measure list or Outliner, or *On drawing* in Properties (which can also hide one label for good).
 - Point letters (A, B, C…) stay visible by default so formulas like `AB = 4` are readable; untick this in the settings menu.
 - **Settings button** in the top bar: 1 grid square = 1 unit / mm / cm / m / km / in / ft, decimal places or significant figures, and what labels contain. Label choices are remembered.
+- **Notation** (same menu), so PhysLab matches whatever book is in front of you: vectors as A⃗, **A** or A̲; components as 3î + 4ĵ, (3, 4), a column or size ∠ angle; directions from the +x axis or as compass bearings (N 30° E).
 - Snapping is magnetic: it only jumps to a point, grid crossing or axis when you are close. Hold **Alt** to switch snapping off, **Shift** to draw at 15° steps.
 
 ## Command bar examples
@@ -48,6 +61,14 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 - `k = 2` makes a slider; use `t` in formulas and press Play to animate. Type `help` for more.
 
 Shortcuts: `Ctrl+K` search · `Tab` 2D/3D · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project.
+
+## Teachers and classrooms
+
+- **Light theme** for bright rooms and projectors (View ▸ Light theme); dark stays the default.
+- **Export the drawing** as a PNG at 1× or 2×, labels and axis numbers included (camera button on the drawing, or File ▸ Export).
+- **Auto-save**: unsaved work is copied aside every minute, and offered back if the app closes unexpectedly.
+- The panel arrangement and the mode you were in are remembered (View ▸ Reset the panel layout puts them back).
+- Lessons are grouped by topic with **Basic / Intermediate / Advanced** tags and a search box — no chapter numbers, so any syllabus fits.
 
 ## Performance on any PC
 

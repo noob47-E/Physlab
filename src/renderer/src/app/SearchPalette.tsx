@@ -4,6 +4,7 @@ import { MODES, useApp } from './modes'
 import { enterMode } from './TopBar'
 import { CATALOG } from './CommandBar'
 import { scene } from '../core/store'
+import { useTour } from './tour/Tour'
 import type { LengthUnit } from '../core/types'
 import { TOOLS } from '../render/tools'
 import { EXAMPLES, runExample } from '../panels/Examples'
@@ -56,6 +57,9 @@ function buildItems(): Item[] {
     items.push({ group: 'Settings', title: `Units: ${UNIT_NAMES[u]}`, hint: 'Measurements use this unit (1 grid square = 1 of it)', run: () => scene().setSettings({ unit: u, unitPerSquare: 1 }) })
   }
   items.push(
+    { group: 'Help', title: 'Take the tour', hint: 'A two-minute look around PhysLab', run: () => useTour.getState().start() },
+    { group: 'Help', title: 'Practice tasks', hint: 'Small tasks that tick themselves off', run: () => useTour.getState().setMissions(true) },
+    { group: 'Help', title: 'Keyboard and mouse', hint: 'Every shortcut in one list', run: () => useTour.getState().setShortcuts(true) },
     { group: 'Settings', title: 'Labels: always show', hint: 'Every label stays on the drawing', run: () => scene().setSettings({ labelShow: 'always' }) },
     { group: 'Settings', title: 'Labels: show on hover', hint: 'Appear when you point at an object, hide when the cursor moves away', run: () => scene().setSettings({ labelShow: 'hover' }) },
     { group: 'Settings', title: 'Labels: hide (side panel only)', hint: 'Values stay in the Measure panel; pinned labels still show', run: () => scene().setSettings({ labelShow: 'never' }) },

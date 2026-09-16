@@ -117,7 +117,7 @@ export function Viewport() {
   const hint = info ? info.hint[Math.min(picks, info.hint.length - 1)] : ''
 
   return (
-    <div ref={hostRef} className="viewport relative h-full w-full select-none overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
+    <div ref={hostRef} data-tour="viewport" className="viewport relative h-full w-full select-none overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
       {layoutReady && <Canvas gl={createRenderer as never} flat dpr={[1, QUALITY[quality].dpr]} frameloop="demand" style={{ background: canvasBg }}>
         <color attach="background" args={[canvasBg]} />
         <CameraRig />
@@ -163,7 +163,7 @@ export function Viewport() {
           <Camera size={14} />
         </button>
       </div>
-      <div className="absolute left-3 top-11 flex items-center gap-1.5">
+      <div data-tour="labels" className="absolute left-3 top-11 flex items-center gap-1.5">
         <span className="text-[11px] text-zinc-500">Labels</span>
         <LabelShowSwitch />
       </div>
