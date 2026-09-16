@@ -24,6 +24,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity), big answers, optional steps, **Draw on graph**. |
 | **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
+| **Sandbox** | Real objects that collide, powered by the Jolt physics engine. Add balls, crates, cylinders, ramps, planks and walls; set mass or density, material, size, position, velocity, bounciness and friction; pick things up with the mouse and throw them. World controls: gravity (Earth, Moon, Mars, Jupiter, none), air or vacuum, a true flat 2D mode, slow motion and an accuracy setting. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern, Problem Sets. |
 
@@ -74,7 +75,11 @@ Shortcuts: `Ctrl+K` search · `Tab` 2D/3D · `Home` reset view · `Space` play/p
 
 - The viewport only redraws when something changes (near-zero CPU when idle).
 - WebGPU when available, otherwise WebGL2; quality (Auto/Low/Medium/High, top right of the viewport) adjusts resolution, graph detail and particle counts.
-- Test switches: `PHYSLAB_FORCE_WEBGL=1` (no WebGPU), `PHYSLAB_SWIFTSHADER=1` (software graphics), `PHYSLAB_BENCH=1000000` (particle benchmark), `PHYSLAB_LOG=1` (log to terminal).
+- Test switches: `PHYSLAB_FORCE_WEBGL=1` (no WebGPU), `PHYSLAB_SWIFTSHADER=1` (software graphics), `PHYSLAB_BENCH=1000000` (particle benchmark), `PHYSLAB_SANDBOX=1` (open the sandbox and report what the physics is doing), `PHYSLAB_LOG=1` (log to terminal).
+
+## Is the physics real?
+
+The sandbox uses [Jolt](https://github.com/jrouwe/JoltPhysics) (MIT), the engine behind several big games, and `npm test` checks it against the formulas rather than trusting it: free fall covering ½gt², equal masses swapping velocities in an elastic hit, momentum kept and energy lost in an inelastic one, a bounce to e² of the height, a block that holds on a 10° slope and slides on a 35° one with μ = 0.3, and terminal velocity matching √(2mg/ρC_dA) within 3%.
 
 ## Layout of the code
 
@@ -87,6 +92,7 @@ src/renderer/src
   math/           vectors, geometry, shapes & decomposition, area formulas, LaTeX conversion,
                   expression language, step solvers, graphs, CAS client
   calc/           calculator engine, constants, calculator state
+  sim/            physics sandbox: Jolt bridge, bodies, materials, air drag, world settings
   lang/           command-bar interpreter
   render/         viewport, grid, objects, labels, highlights, graphs, picking, tools, GPU particles
   panels/         Outliner, Examples, Vector Calculator, Measure (+ shape info), Properties, Solver,
