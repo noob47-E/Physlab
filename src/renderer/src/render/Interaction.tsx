@@ -6,6 +6,8 @@ import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './ca
 import { overlay, showTip } from './overlay'
 import { pickAt, type Hit } from './picking'
 import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type SnapInfo } from './tools'
+import { menuForBackground, menuForObject } from '../app/contextActions'
+import { showContextMenu } from '../ui/ContextMenu'
 import { Arrow } from './ObjectViews'
 import { Builder } from '../core/factory'
 import { isFree, parentRefs } from '../core/evaluate'
@@ -52,7 +54,7 @@ export function Interaction() {
     const host = overlay.canvasHost
     if (!host) return
 
-    const local = (e: PointerEvent) => {
+    const local = (e: { clientX: number; clientY: number }) => {
       const r = host.getBoundingClientRect()
       return { x: e.clientX - r.left, y: e.clientY - r.top }
     }
@@ -456,11 +458,21 @@ export function Interaction() {
       advanceTool(tool, next)
     }
 
-    // Right-click and double-click finish a drawing (the usual convention in drawing programs).
+    // Right-click finishes a drawing; otherwise it opens the menu for whatever is under the cursor.
     const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
       if (useTool.getState().picks.length && finishTool()) {
-        e.preventDefault()
         e.stopPropagation()
+        return
+      }
+      const { x, y } = local(e)
+      const hit = pickAt(pickCtx(), x, y)
+      if (hit) {
+        const s = scene()
+        if (!s.selection.includes(hit.id)) s.select([hit.id])
+        showContextMenu(e, menuForObject(hit.id))
+      } else {
+        showContextMenu(e, menuForBackground(worldOn(x, y)))
       }
     }
 

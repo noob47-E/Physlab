@@ -359,6 +359,40 @@ textarea {
   pointer-events: none;
 }
 
+/* ---------- Right-click menu ---------- */
+.context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 226px;
+  max-width: 320px;
+  padding: 4px 0;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+.menu-item.is-active {
+  background: var(--accent-2);
+  color: #fff;
+}
+.menu-item.is-danger {
+  color: #ff9c9c;
+}
+.menu-item.is-danger.is-active {
+  background: #7a2c2c;
+  color: #fff;
+}
+
 /* ---------- Top bar ---------- */
 .topbar {
   display: flex;

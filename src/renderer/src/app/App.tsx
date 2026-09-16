@@ -16,6 +16,7 @@ import { useParticleLab } from '../render/GpuParticles'
 import { useScene } from '../core/store'
 import { useApp } from './modes'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { ContextMenuHost } from '../ui/ContextMenu'
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
@@ -105,6 +106,7 @@ export function App() {
         />
       </div>
       <SearchPalette />
+      <ContextMenuHost />
     </div>
   )
 }

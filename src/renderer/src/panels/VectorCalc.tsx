@@ -51,6 +51,13 @@ const useVC = create<VCState>(() => ({
   showSteps: false
 }))
 
+/** Add a card that reads one of the scene's vectors (used by the right-click menu). */
+export function addVectorFromScene(sceneId: string, name: string): void {
+  const st = useVC.getState()
+  if (st.cards.some((c) => c.entry === 'scene' && c.sceneId === sceneId)) return
+  useVC.setState({ cards: [...st.cards, { id: nextCard++, name, entry: 'scene', latex: '', mag: '1', angle: '0', sceneId }] })
+}
+
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
 
 function evalNumber(latex: string): number {

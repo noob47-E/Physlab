@@ -4,6 +4,8 @@ import type { ObjType, SceneObject } from '../core/types'
 import { describeComputed } from '../lang/commands'
 import { Tex } from '../ui/Tex'
 import { PinLabelButton } from '../ui/LabelControls'
+import { menuForObject } from '../app/contextActions'
+import { showContextMenu } from '../ui/ContextMenu'
 
 const GROUPS: { type: ObjType[]; label: string }[] = [
   { type: ['vector'], label: 'Vectors' },
@@ -56,6 +58,11 @@ export function Outliner() {
                   onMouseEnter={() => setHovered(o.id)}
                   onMouseLeave={() => setHovered(null)}
                   onClick={(e) => select([o.id], e.shiftKey || e.ctrlKey)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    select([o.id])
+                    showContextMenu(e, menuForObject(o.id))
+                  }}
                   className={`group flex h-7 cursor-pointer items-center gap-2 px-2 ${sel ? 'bg-[#2f4a7a]' : hovered === o.id ? 'bg-[#26282d]' : ''}`}
                 >
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color, opacity: o.visible ? 1 : 0.3 }} />

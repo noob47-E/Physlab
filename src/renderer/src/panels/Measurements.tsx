@@ -9,6 +9,8 @@ import { visualizeSolution } from '../core/visualize'
 import { ShapeInfo } from './ShapeInfo'
 import { measureText } from '../render/Labels'
 import { PinLabelButton } from '../ui/LabelControls'
+import { menuForObject } from '../app/contextActions'
+import { showContextMenu } from '../ui/ContextMenu'
 
 type Row = { label: string; value: number | string; kind?: 'num' | 'length' | 'area' | 'angle' | 'text'; accent?: boolean }
 type Get = (id: ObjId) => Computed | undefined
@@ -264,6 +266,11 @@ function AllMeasurements() {
                 onMouseEnter={() => setHovered(o.id)}
                 onMouseLeave={() => setHovered(null)}
                 onClick={() => select([o.id])}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  select([o.id])
+                  showContextMenu(e, menuForObject(o.id))
+                }}
                 className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${hovered === o.id ? 'bg-[#26282d]' : ''}`}
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color }} />
