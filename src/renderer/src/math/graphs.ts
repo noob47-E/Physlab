@@ -201,23 +201,28 @@ export function surfaceGeometry(f: Fxy, half: number, n: number) {
   const positions = new Float32Array((n + 1) * (n + 1) * 3)
   const colors = new Float32Array((n + 1) * (n + 1) * 3)
   const zs: number[] = []
+  // Where f(x, y) has no value (a hole in the surface) the point is marked and no triangle uses it,
+  // instead of being flattened onto z = 0, which would draw a sheet that is not there.
+  const defined: boolean[] = []
   for (let j = 0; j <= n; j++) {
     for (let i = 0; i <= n; i++) {
       const x = -half + (2 * half * i) / n
       const y = -half + (2 * half * j) / n
-      let z = f(x, y)
-      if (!Number.isFinite(z)) z = NaN
+      const z = f(x, y)
+      const ok = Number.isFinite(z)
       const k = (j * (n + 1) + i) * 3
       positions[k] = x
       positions[k + 1] = y
-      positions[k + 2] = Number.isFinite(z) ? Math.max(-half * 4, Math.min(half * 4, z)) : 0
-      zs.push(positions[k + 2])
+      positions[k + 2] = ok ? Math.max(-half * 4, Math.min(half * 4, z)) : 0
+      defined.push(ok)
+      zs.push(ok ? positions[k + 2] : NaN)
     }
   }
-  const zMin = Math.min(...zs)
-  const zMax = Math.max(...zs)
+  const real = zs.filter((z) => Number.isFinite(z))
+  const zMin = real.length ? Math.min(...real) : 0
+  const zMax = real.length ? Math.max(...real) : 0
   for (let idx = 0; idx < zs.length; idx++) {
-    const t = zMax - zMin < 1e-9 ? 0.5 : (zs[idx] - zMin) / (zMax - zMin)
+    const t = zMax - zMin < 1e-9 || !defined[idx] ? 0.5 : (zs[idx] - zMin) / (zMax - zMin)
     const [r, g, b] = turbo(t)
     colors.set([r, g, b], idx * 3)
   }
@@ -228,7 +233,8 @@ export function surfaceGeometry(f: Fxy, half: number, n: number) {
       const b2 = a + 1
       const c = a + n + 1
       const d = c + 1
-      indices.push(a, b2, d, a, d, c)
+      if (defined[a] && defined[b2] && defined[d]) indices.push(a, b2, d)
+      if (defined[a] && defined[d] && defined[c]) indices.push(a, d, c)
     }
   }
   return { positions, colors, indices, zMin, zMax }

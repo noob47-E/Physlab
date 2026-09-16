@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { directionAngles, toDeg } from '../src/renderer/src/math/vec'
 import { compileScalar, inferKind, math, preprocess, setAngleMode, symbolsOf, toV3 } from '../src/renderer/src/math/expr'
 
 describe('preprocess', () => {
@@ -45,5 +46,16 @@ describe('mathjs helpers', () => {
   it('compiles scalar functions', () => {
     const f = compileScalar('k * sin(x) + x^2', ['x'], () => ({ k: 2 }))
     expect(f({ x: Math.PI / 2 })).toBeCloseTo(2 + (Math.PI / 2) ** 2)
+  })
+})
+
+
+describe('direction angles', () => {
+  it('never returns NaN for axis-aligned vectors', () => {
+    for (const v of [[1, 0, 0], [0, -2, 0], [0, 0, 3], [-1, 0, 0]] as [number, number, number][]) {
+      const angs = directionAngles(v).map(toDeg)
+      expect(angs.every(Number.isFinite)).toBe(true)
+    }
+    expect(directionAngles([1, 0, 0]).map(toDeg)).toEqual([0, 90, 90])
   })
 })

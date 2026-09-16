@@ -19,8 +19,13 @@ export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'pre
   if (s.precisionMode === 'sf') {
     if (v === 0) return '0'
     const abs = Math.abs(v)
-    if (abs >= 1e9 || abs < 1e-6) return fmt(Number(v.toPrecision(Math.max(1, s.decimals))), Math.max(1, s.decimals))
-    return Number(v.toPrecision(Math.max(1, s.decimals))).toString().replace('-', '−')
+    const digits = Math.max(1, s.decimals)
+    if (abs >= 1e9 || abs < 1e-6) return fmt(Number(v.toPrecision(digits)), digits)
+    // Keep the string from toPrecision: Number(...) would drop the zeros that show the precision
+    // (3 s.f. of 2.5 must read 2.50), but trim the exponent form and any padding zeros before the point.
+    const text = v.toPrecision(digits)
+    const plain = /e/i.test(text) ? String(Number(text)) : text
+    return plain.replace('-', '−')
   }
   return fmt(v, s.decimals)
 }

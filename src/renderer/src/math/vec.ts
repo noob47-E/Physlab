@@ -47,11 +47,14 @@ export const heading = (a: V3): number => {
 
 export const fromPolar = (r: number, thetaRad: number): V3 => [r * Math.cos(thetaRad), r * Math.sin(thetaRad), 0]
 
+/** acos that never returns NaN: rounding can push a ratio a hair past ±1. */
+export const safeAcos = (x: number): number => Math.acos(Math.max(-1, Math.min(1, x)))
+
 /** Direction cosines angles α, β, γ with the x, y, z axes (radians). */
 export const directionAngles = (a: V3): V3 => {
   const l = len(a)
   if (l < 1e-12) return [NaN, NaN, NaN]
-  return [Math.acos(a[0] / l), Math.acos(a[1] / l), Math.acos(a[2] / l)]
+  return [safeAcos(a[0] / l), safeAcos(a[1] / l), safeAcos(a[2] / l)]
 }
 
 /** Projection of b onto a (vector). */

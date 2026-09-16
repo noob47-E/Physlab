@@ -18,6 +18,10 @@ describe('measurement formatting', () => {
     expect(formatMeasure(3, 'area', { ...S, unitPerSquare: 2 })).toBe('12 cm²')
     expect(formatMeasure(Math.PI / 3, 'angle', S)).toBe('60°')
     expect(formatMeasure(1234.567, 'length', { ...S, precisionMode: 'sf', decimals: 3 })).toBe('1230 cm')
+    // Significant figures must keep the zeros that show the precision.
+    expect(formatMeasure(2.5, 'length', { ...S, precisionMode: 'sf', decimals: 3 })).toBe('2.50 cm')
+    expect(formatMeasure(0.5, 'length', { ...S, precisionMode: 'sf', decimals: 2 })).toBe('0.50 cm')
+    expect(formatMeasure(7, 'length', { ...S, precisionMode: 'sf', decimals: 4 })).toBe('7.000 cm')
     expect(texMeasure(12, 'area', S)).toBe('12\\,\\text{cm}^2')
   })
   it('shows exact forms only when the decimal is rounded', () => {

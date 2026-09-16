@@ -1,7 +1,7 @@
 // Step-by-step vector solutions in the notation of the Punjab 11th-class textbook
 // (A_x = A cos θ, A = √(A_x² + A_y²), A·B = AB cos θ, A×B = AB sin θ n̂ ...).
 
-import { add, angleBetween, cross, dot, len, neg, normalize, scale, toDeg, toRad, type V3 } from './vec'
+import { add, angleBetween, cross, dot, len, neg, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
 import { tex, texIJK, texP } from './format'
 
 export interface Step {
@@ -111,7 +111,7 @@ export function solveMagnitudeDirection(A: NamedVec): Solution {
       text: 'Magnitude (Pythagorean theorem in 3D):',
       tex: `${name} = \\sqrt{${sub_(name, 'x')}^2 + ${sub_(name, 'y')}^2 + ${sub_(name, 'z')}^2} = \\sqrt{${texP(v[0])}^2 + ${texP(v[1])}^2 + ${texP(v[2])}^2} = \\sqrt{${tex(dot(v, v), D)}} = ${tex(m, D)}`
     })
-    const angs = v.map((c) => toDeg(Math.acos(c / m)))
+    const angs = v.map((c) => toDeg(safeAcos(c / m)))
     ;(['x', 'y', 'z'] as const).forEach((ax, i) => {
       const g = ['\\alpha', '\\beta', '\\gamma'][i]
       steps.push({ text: `Angle with the ${ax}-axis (direction cosine):`, tex: `${g} = \\cos^{-1}\\left(\\frac{${sub_(name, ax)}}{${name}}\\right) = \\cos^{-1}\\left(\\frac{${tex(v[i])}}{${tex(m, D)}}\\right) = ${tex(angs[i], D)}^\\circ` })

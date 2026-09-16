@@ -287,7 +287,10 @@ export function evaluateScene(
   }
 
   let pending = order.filter((id) => objects[id])
-  for (let pass = 0; pass < 50 && pending.length; pass++) {
+  // One pass resolves at least one level of dependencies, so the chain can never need more
+  // passes than there are objects.
+  const maxPasses = pending.length + 1
+  for (let pass = 0; pass < maxPasses && pending.length; pass++) {
     const next: ObjId[] = []
     for (const id of pending) {
       const o = objects[id]
@@ -299,13 +302,30 @@ export function evaluateScene(
       }
     }
     if (next.length === pending.length) {
-      for (const id of next) errors.set(id, 'circular or missing dependency')
+      for (const id of next) errors.set(id, stuckMessage(id, next, objects))
       break
     }
     pending = next
   }
 
   return { values, errors, scope, names }
+}
+
+/** Plain explanation of why an object could not be worked out. */
+function stuckMessage(id: ObjId, stuck: ObjId[], objects: Record<ObjId, SceneObject>): string {
+  const name = (x: ObjId) => objects[x]?.name ?? x
+  // Objects this one needs, both by reference and by name inside a formula.
+  const usedNames = new Set(exprRefs(objects[id]).flatMap((e) => e.match(/[A-Za-zͰ-Ͽ][\w']*/g) ?? []))
+  const others = [
+    ...parentRefs(objects[id]),
+    ...stuck.filter((p) => usedNames.has(objects[p]?.name ?? ''))
+  ].filter((p, i, arr) => p !== id && stuck.includes(p) && arr.indexOf(p) === i)
+  if (others.length) {
+    return `${name(id)} needs ${others.map(name).join(' and ')}, which in turn need ${name(id)}. This is a loop — make one of them independent.`
+  }
+  const missing = parentRefs(objects[id]).filter((p) => !objects[p])
+  if (missing.length) return `${name(id)} refers to something that no longer exists.`
+  return `${name(id)} cannot be worked out yet: one of the things it depends on is missing or forms a loop.`
 }
 
 /** Ids of objects that (directly or indirectly) depend on `id`. */

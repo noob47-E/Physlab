@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
-import { extname, join, normalize, sep } from 'node:path'
+import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, writeFile } from 'node:fs/promises'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -54,7 +54,9 @@ function registerAppProtocol(): void {
     let pathname = decodeURIComponent(url.pathname)
     if (pathname === '/' || pathname === '') pathname = '/index.html'
     const file = normalize(join(root, pathname))
-    if (!file.startsWith(root + sep)) return new Response('Forbidden', { status: 403 })
+    // relative() handles Windows drive-letter case, where startsWith can wrongly refuse every file.
+    const rel = relative(root, file)
+    if (!rel || rel.startsWith('..') || rel.includes(`..${sep}`)) return new Response('Forbidden', { status: 403 })
     const res = await net.fetch(pathToFileURL(file).toString())
     const headers = new Headers(res.headers)
     headers.set('Content-Type', MIME[extname(file).toLowerCase()] ?? 'application/octet-stream')
@@ -147,7 +149,10 @@ ipcMain.handle('file:save', async (_e, content: string, path: string | null) => 
     if (result.canceled || !result.filePath) return null
     target = result.filePath
   }
-  await writeFile(target, content, 'utf8')
+  // Write beside the file first, then swap it in, so a crash cannot leave a half-written project.
+  const tmp = `${target}.saving`
+  await writeFile(tmp, content, 'utf8')
+  await rename(tmp, target)
   return target
 })
 

@@ -91,6 +91,9 @@ export function circleFrom3(a: V3, b: V3, c: V3): GCircle | null {
 }
 
 export function circumcenter(a: V3, b: V3, c: V3): V3 | null {
+  // The formula below is 2D only, so a tilted 3D triangle would get a wrong centre.
+  const z = a[2]
+  if (Math.abs(b[2] - z) > 1e-9 || Math.abs(c[2] - z) > 1e-9) return null
   const d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
   if (Math.abs(d) < EPS) return null
   const a2 = a[0] * a[0] + a[1] * a[1]
@@ -99,7 +102,7 @@ export function circumcenter(a: V3, b: V3, c: V3): V3 | null {
   return [
     (a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d,
     (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d,
-    0
+    z
   ]
 }
 

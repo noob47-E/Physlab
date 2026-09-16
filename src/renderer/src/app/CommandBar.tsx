@@ -3,7 +3,7 @@ import { CornerDownLeft, TerminalSquare } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { runCommand } from '../lang/commands'
 import { useScene } from '../core/store'
-import { useCasStatus } from '../math/cas'
+import { cancelCas, useCasStatus } from '../math/cas'
 
 export const CATALOG: { insert: string; desc: string; group: string }[] = [
   { insert: 'A = (3, 4)', desc: 'Point', group: 'Create' },
@@ -70,6 +70,7 @@ export function CommandBar() {
   const histIdx = useRef(-1)
   const names = useScene(useShallow((s) => s.order.map((id) => s.objects[id]?.name).filter(Boolean)))
   const casStatus = useCasStatus((s) => s.status)
+  const casBusy = useCasStatus((s) => s.busy)
 
   useEffect(() => {
     // Search and other panels can prefill the command bar.
@@ -174,7 +175,19 @@ export function CommandBar() {
         <CornerDownLeft size={13} /> Run
       </button>
       <span className="badge text-[11px] text-zinc-400" title="Symbolic algebra engine (SymPy, offline)">
-        CAS {casStatus === 'ready' ? '● ready' : casStatus === 'loading' ? '◌ loading' : casStatus === 'error' ? '✕ error' : '○ idle'}
+        CAS {casBusy ? '◌ working' : casStatus === 'ready' ? '● ready' : casStatus === 'loading' ? '◌ loading' : casStatus === 'error' ? '✕ error' : '○ idle'}
+        {casBusy > 0 && (
+          <button
+            className="ml-1 text-amber-300 hover:text-white"
+            title="Stop the algebra engine"
+            onClick={(e) => {
+              e.stopPropagation()
+              cancelCas()
+            }}
+          >
+            Cancel
+          </button>
+        )}
       </span>
     </div>
   )

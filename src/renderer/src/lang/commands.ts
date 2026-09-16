@@ -349,13 +349,25 @@ function addHeadToTailHelpers(b: Builder, names: string[]) {
   }
 }
 
+/** Replace one object id with another wherever it is used, without touching text or colours. */
+function remapIds<T>(value: T, from: ObjId, to: ObjId): T {
+  if (typeof value === 'string') return (value === from ? to : value) as T
+  if (Array.isArray(value)) return value.map((v) => remapIds(v, from, to)) as T
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = remapIds(v, from, to)
+    return out as T
+  }
+  return value
+}
+
 function redefine(existingId: ObjId, obj: SceneObject, b: Builder) {
   const s = scene()
   const old = s.objects[existingId]
   const replaced = { ...obj, id: existingId, name: old.name, color: old.type === obj.type ? old.color : obj.color } as SceneObject
   const others = b.created.filter((o) => o.id !== obj.id)
   // Children created alongside (e.g. helper points) that referenced the new id must point at the old id.
-  const fixed = others.map((o) => JSON.parse(JSON.stringify(o).split(obj.id).join(existingId)) as SceneObject)
+  const fixed = others.map((o) => remapIds(o, obj.id, existingId) as SceneObject)
   s.addObjects([replaced, ...fixed], { select: true })
 }
 

@@ -78,7 +78,8 @@ export const MODES: ModeDef[] = [
   { id: 'problems', label: 'Problem Sets', description: 'Random practice problems with checking, hints and worksheets.', ready: false, tools: ['select'] }
 ]
 
-export const modeById = (id: ModeId) => MODES.find((m) => m.id === id)!
+/** Never throws: a file from a newer version may name a mode this build does not have. */
+export const modeById = (id: ModeId) => MODES.find((m) => m.id === id) ?? MODES[0]
 
 export const useApp = create<{ mode: ModeId; searchOpen: boolean; layoutReady: boolean; setMode: (m: ModeId) => void; setSearchOpen: (o: boolean) => void }>((set) => ({
   mode: 'vectors',

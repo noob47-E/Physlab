@@ -15,13 +15,47 @@ export type CasResult = CasValue & {
   vars?: string[]
 }
 
-export const useCasStatus = create<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string }>(() => ({
-  status: 'idle'
+export const useCasStatus = create<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string; busy: number }>(() => ({
+  status: 'idle',
+  busy: 0
 }))
+
+/** Hard stop for a calculation that never finishes (an impossible integral, say). */
+const TIMEOUT_MS = 30000
 
 let worker: Worker | null = null
 let nextId = 1
-const waiting = new Map<number, (r: CasResult) => void>()
+const waiting = new Map<number, { resolve: (r: CasResult) => void; timer: ReturnType<typeof setTimeout> }>()
+
+const errorResult = (message: string): CasResult => ({ latex: '', text: '', numeric: null, error: message })
+
+const settle = (id: number, result: CasResult) => {
+  const w = waiting.get(id)
+  if (!w) return
+  clearTimeout(w.timer)
+  waiting.delete(id)
+  useCasStatus.setState({ busy: waiting.size })
+  w.resolve(result)
+}
+
+/** Throw the worker away; the next request starts a fresh one. */
+function restartWorker(): void {
+  worker?.terminate()
+  worker = null
+}
+
+/** Answer everything still waiting with an error (used on a crash or when cancelled). */
+function failAll(message: string): void {
+  for (const id of [...waiting.keys()]) settle(id, errorResult(message))
+}
+
+/** Stop whatever the algebra engine is doing (the Cancel button). */
+export function cancelCas(): void {
+  if (!waiting.size) return
+  failAll('Cancelled.')
+  restartWorker()
+  useCasStatus.setState({ status: 'idle', message: 'cancelled', busy: 0 })
+}
 
 function getWorker(): Worker {
   if (worker) return worker
@@ -32,19 +66,26 @@ function getWorker(): Worker {
       useCasStatus.setState({ status: d.status, message: d.message })
       if (d.status !== 'loading') console.info(`PHYSLAB_CHECK cas=${d.status}${d.message ? ` ${d.message}` : ''}`)
     }
-    if (d.id !== undefined && d.result) {
-      waiting.get(d.id)?.(d.result)
-      waiting.delete(d.id)
-    }
+    if (d.id !== undefined && d.result) settle(d.id, d.result)
   }
-  worker.onerror = (e) => useCasStatus.setState({ status: 'error', message: e.message })
+  worker.onerror = (e) => {
+    useCasStatus.setState({ status: 'error', message: e.message })
+    failAll(`The algebra engine stopped: ${e.message}. It will start again on the next command.`)
+    restartWorker()
+  }
   return worker
 }
 
 export function cas(op: string, payload: Record<string, unknown> = {}): Promise<CasResult> {
   const id = nextId++
   return new Promise((resolve) => {
-    waiting.set(id, resolve)
+    const timer = setTimeout(() => {
+      settle(id, errorResult('This took too long, so it was stopped. Try a simpler expression, or give the numbers instead of symbols.'))
+      restartWorker()
+      useCasStatus.setState({ status: 'idle', message: 'stopped after 30 s' })
+    }, TIMEOUT_MS)
+    waiting.set(id, { resolve, timer })
+    useCasStatus.setState({ busy: waiting.size })
     getWorker().postMessage({ id, op, payload })
   })
 }
