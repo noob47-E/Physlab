@@ -133,6 +133,24 @@ export function Properties() {
         </div>
       )}
 
+      {o.type === 'point' && o.def.kind === 'onObject' && (
+        <div className="prop-row">
+          <label>On {objects[o.def.on]?.name ?? '?'}</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              className="w-full"
+              min={0}
+              max={1}
+              step={0.001}
+              value={o.def.t}
+              onChange={(e) => set((d) => d.type === 'point' && d.def.kind === 'onObject' && void (d.def.t = Number(e.target.value)))}
+            />
+            <span className="w-12 text-right tabular-nums text-zinc-400">{o.def.t.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
       {o.type === 'vector' && c?.type === 'vector' && (
         <>
           {o.def.kind === 'free' ? (
