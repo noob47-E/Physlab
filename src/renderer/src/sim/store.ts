@@ -20,6 +20,8 @@ export interface SandboxState {
   contacts: ContactEvent[]
   /** Set by the viewport so panels can show live values. */
   engineTime: number
+  /** Camera flattened to a straight-on side view, so a scene reads like a textbook figure. */
+  sideView: boolean
 
   addBody: (shape: ShapeKind, at?: [number, number, number]) => BodyDef
   updateBody: (id: BodyId, patch: Partial<BodyDef>) => void
@@ -29,6 +31,7 @@ export interface SandboxState {
   pushContacts: (c: ContactEvent[]) => void
   clearContacts: () => void
   setScene: (bodies: BodyDef[], world?: Partial<WorldSettings>) => void
+  setSideView: (on: boolean) => void
 }
 
 /** Sensible starting sizes in metres, so a scene looks like a lab bench, not a galaxy. */
@@ -97,6 +100,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   selection: null,
   contacts: [],
   engineTime: 0,
+  sideView: true,
 
   addBody: (shape, at) => {
     const used = new Set(get().bodies.map((b) => b.name))
@@ -127,7 +131,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   setWorld: (patch) => set({ world: { ...get().world, ...patch } }),
   pushContacts: (c) => (c.length ? set({ contacts: [...c].reverse().concat(get().contacts).slice(0, 60) }) : undefined),
   clearContacts: () => set({ contacts: [] }),
-  setScene: (bodies, world) => set({ bodies, world: { ...get().world, ...world }, selection: null, contacts: [] })
+  setScene: (bodies, world) => set({ bodies, world: { ...get().world, ...world }, selection: null, contacts: [] }),
+  setSideView: (sideView) => set({ sideView })
 }))
 
 /** Mass a body will have, for the panels (the engine works it out the same way). */

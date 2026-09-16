@@ -60,6 +60,8 @@ export function Sandbox() {
   const remove = useSandbox((s) => s.removeBody)
   const select = useSandbox((s) => s.select)
   const setWorld = useSandbox((s) => s.setWorld)
+  const sideView = useSandbox((s) => s.sideView)
+  const setSideView = useSandbox((s) => s.setSideView)
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
   const sel = bodies.find((b) => b.id === selection)
@@ -233,6 +235,17 @@ export function Sandbox() {
             </button>
           </div>
           {world.airDensity > 0 && <span className="tabular-nums text-zinc-400">{world.airDensity} kg/m³</span>}
+        </div>
+      </div>
+      <div className="prop-row">
+        <label>View</label>
+        <div className="seg">
+          <button className={sideView ? 'on' : ''} onClick={() => setSideView(true)} title="Straight-on view, like a diagram in a book">
+            Side view
+          </button>
+          <button className={!sideView ? 'on' : ''} onClick={() => setSideView(false)} title="Look around in 3D">
+            3D view
+          </button>
         </div>
       </div>
       <div className="prop-row">

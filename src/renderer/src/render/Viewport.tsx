@@ -66,12 +66,22 @@ function ExportHook() {
 function FrameStats() {
   const acc = useRef({ frames: 0, t: performance.now() })
   const tick = useScene((s) => s.tick)
-  useFrame(({ gl, size, viewport }, dt) => {
+  useFrame(({ gl, size, viewport, camera }, dt) => {
     // The async WebGPU renderer can miss R3F's initial resize; keep it in sync.
     gl.getSize(sizeProbe)
     if (sizeProbe.x !== size.width || sizeProbe.y !== size.height || gl.getPixelRatio() !== viewport.dpr) {
       gl.setPixelRatio(viewport.dpr)
       gl.setSize(size.width, size.height, false)
+    }
+    // A canvas that mounted before the window had a size leaves the camera with a
+    // nonsense aspect ratio (0/0), which projects everything to NaN.
+    const cam = camera as THREE.PerspectiveCamera
+    if (cam.isPerspectiveCamera && size.width > 0 && size.height > 0) {
+      const aspect = size.width / size.height
+      if (!Number.isFinite(cam.aspect) || Math.abs(cam.aspect - aspect) > 1e-6) {
+        cam.aspect = aspect
+        cam.updateProjectionMatrix()
+      }
     }
     tick(dt)
     const a = acc.current

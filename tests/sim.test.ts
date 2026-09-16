@@ -188,6 +188,36 @@ describe('the sandbox engine agrees with the formulas', () => {
     world.destroy()
   })
 
+  it('a grabbed object follows the hand and keeps the speed when let go', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0], size: [0.3, 0, 0] })
+    world.addBody(b)
+    // Hold it and move the hand to x = 2.
+    world.grab(b.id, [2, 0, 0])
+    run(world, 1)
+    const held = world.state(b.id)!
+    expect(held.position[0]).toBeGreaterThan(1.7)
+    expect(held.position[0]).toBeLessThan(2.3)
+    // Let go with a throw.
+    world.release_()
+    world.setVelocity(b.id, [5, 0, 0])
+    run(world, 0.5)
+    const thrown = world.state(b.id)!
+    expect(thrown.velocity[0]).toBeGreaterThan(4.5)
+    expect(thrown.position[0]).toBeGreaterThan(held.position[0] + 2)
+  })
+
+  it('holds everything in one plane in 2D mode', async () => {
+    const world = await makeWorld({ twoD: true })
+    const b = body({ position: [0, 3, 0], velocity: [2, 0, 3], angularVelocity: [4, 2, 0], size: [0.3, 0, 0] })
+    world.addBody(b)
+    run(world, 1)
+    const s = world.state(b.id)!
+    // The z push and the out-of-plane spin are simply not allowed.
+    expect(Math.abs(s.position[2])).toBeLessThan(1e-6)
+    expect(Math.abs(s.velocity[2])).toBeLessThan(1e-6)
+  })
+
   it('cleans up after itself: no Jolt handles left behind', async () => {
     const world = await makeWorld()
     const base = world.handleCount

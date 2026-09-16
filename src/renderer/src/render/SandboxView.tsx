@@ -61,6 +61,106 @@ function geometryFor(def: BodyDef): THREE.BufferGeometry {
   }
 }
 
+
+/**
+ * Picking things up and throwing them. The body follows a spring to the cursor, which is honest
+ * physics (and lets it push other things on the way), and keeps the speed of the hand on release.
+ */
+function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.RefObject<THREE.Group | null>) {
+  const { gl, camera, size, controls } = useThree()
+  const select = useSandbox((s) => s.select)
+  const twoD = useSandbox((s) => s.world.twoD)
+  const drag = useRef<{ id: string; plane: THREE.Plane; samples: { p: THREE.Vector3; t: number }[] } | null>(null)
+
+  useEffect(() => {
+    const el = gl.domElement
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2()
+    const point = new THREE.Vector3()
+
+    const pick = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect()
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, camera)
+      const meshes = (group.current?.children ?? []).filter((c) => (c as THREE.Mesh).isMesh)
+      const hit = raycaster.intersectObjects(meshes, false)[0]
+      return hit ? { id: (hit.object.userData as { bodyId?: string }).bodyId, point: hit.point } : null
+    }
+
+    /** Where the cursor is, on the plane the drag happens in. */
+    const onPlane = (e: PointerEvent, plane: THREE.Plane): THREE.Vector3 | null => {
+      const r = el.getBoundingClientRect()
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, camera)
+      return raycaster.ray.intersectPlane(plane, point.clone())
+    }
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || useApp.getState().mode !== 'sandbox') return
+      const w = sim.current
+      const hit = pick(e)
+      if (!w || !hit?.id) return
+      select(hit.id)
+      const def = useSandbox.getState().bodies.find((b) => b.id === hit.id)
+      if (!def || def.motion !== 'dynamic') return
+      // In 2D everything lives in one flat plane; in 3D drag in the plane facing the camera.
+      const plane = twoD
+        ? new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+        : new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), hit.point)
+      const start = onPlane(e, plane)
+      if (!start) return
+      drag.current = { id: hit.id, plane, samples: [{ p: start.clone(), t: performance.now() }] }
+      w.grab(hit.id, [start.x, start.y, start.z])
+      const c = controls as unknown as { enabled: boolean } | null
+      if (c) c.enabled = false
+      el.setPointerCapture(e.pointerId)
+    }
+
+    const onMove = (e: PointerEvent) => {
+      const d = drag.current
+      const w = sim.current
+      if (!d || !w) return
+      const p = onPlane(e, d.plane)
+      if (!p) return
+      w.moveGrab([p.x, p.y, p.z])
+      d.samples.push({ p: p.clone(), t: performance.now() })
+      if (d.samples.length > 8) d.samples.shift()
+    }
+
+    const onUp = (e: PointerEvent) => {
+      const d = drag.current
+      const w = sim.current
+      drag.current = null
+      const c = controls as unknown as { enabled: boolean } | null
+      if (c) c.enabled = true
+      if (!d || !w) return
+      w.release_()
+      // Throw: the speed of the hand over the last few samples, capped at something sensible.
+      const first = d.samples[0]
+      const last = d.samples[d.samples.length - 1]
+      const dt = (last.t - first.t) / 1000
+      if (dt > 0.008) {
+        const v = last.p.clone().sub(first.p).divideScalar(dt)
+        const speed = v.length()
+        if (speed > 0.2) {
+          if (speed > 25) v.multiplyScalar(25 / speed)
+          w.setVelocity(d.id, [v.x, v.y, v.z])
+        }
+      }
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+    }
+
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
+    }
+  }, [gl, camera, size, controls, select, twoD, sim, group])
+}
+
 export function SandboxView() {
   const bodies = useSandbox((s) => s.bodies)
   const world = useSandbox((s) => s.world)
@@ -75,6 +175,7 @@ export function SandboxView() {
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   const { invalidate } = useThree()
   const check = useRef(location.hash.includes('sandbox') ? { last: -1, contacts: 0 } : null)
+  useGrabAndThrow(sim, group)
 
   // Start the engine the first time the sandbox is opened.
   useEffect(() => {
@@ -129,7 +230,11 @@ export function SandboxView() {
           .filter((d) => d.motion === 'dynamic')
           .map((d) => {
             const st = w.state(d.id)
-            return st ? `${d.name} y=${st.position[1].toFixed(2)} v=${Math.hypot(...st.velocity).toFixed(2)}` : ''
+            if (!st) return ''
+            // Where it lands on the screen, so a terminal check can tell it is actually in view.
+            const sp = toScreen(state.camera, state.size, st.position)
+            const onScreen = sp.visible && sp.x > 0 && sp.y > 0 && sp.x < state.size.width && sp.y < state.size.height
+            return `${d.name} pos=${st.position.map((n) => n.toFixed(2)).join(',')} v=${Math.hypot(...st.velocity).toFixed(2)} screen=${sp.x.toFixed(0)},${sp.y.toFixed(0)} size=${state.size.width}x${state.size.height} cam=${state.camera.position.toArray().map((n) => n.toFixed(1)).join(',')}${onScreen ? '' : ' OFFSCREEN'}`
           })
         console.info(`PHYSLAB_CHECK sandbox t=${w.time.toFixed(1)} bodies=${bodies.length} contacts=${check.current.contacts} ${lines.join(' | ')}`)
       }

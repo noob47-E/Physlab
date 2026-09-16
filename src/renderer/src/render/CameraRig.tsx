@@ -5,6 +5,8 @@ import * as THREE from 'three/webgpu'
 import { niceStep, orthoBounds, worldPerPixel } from './cameraUtils'
 import { useCameraCommand, useView } from './viewState'
 import { useScene } from '../core/store'
+import { useApp } from '../app/modes'
+import { useSandbox } from '../sim/store'
 
 /** Bounding box of all visible geometry (graphs excluded). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -52,9 +54,27 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
 
 export function CameraRig() {
   const viewMode = useScene((s) => s.viewMode)
+  const mode = useApp((s) => s.mode)
+  const sideView = useSandbox((s) => s.sideView)
   const { camera, size, controls } = useThree()
   const command = useCameraCommand()
   const last = useRef({ cx: NaN, cy: NaN, wpp: NaN, w: 0, h: 0 })
+
+  // The sandbox stands the world up the other way (y is up) and frames the floor.
+  useEffect(() => {
+    if (mode !== 'sandbox' || viewMode !== '3d') return
+    const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+    camera.up.set(0, 1, 0)
+    if (sideView) camera.position.set(0, 2.5, 16)
+    else camera.position.set(9, 6, 13)
+    c?.target.set(0, 1.2, 0)
+    camera.lookAt(0, 1.2, 0)
+    c?.update()
+    return () => {
+      // Put the maths view back the way it was when leaving the sandbox.
+      camera.up.set(0, 0, 1)
+    }
+  }, [mode, viewMode, sideView, camera, controls])
 
   useEffect(() => {
     if (!command.nonce) return
