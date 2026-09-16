@@ -237,4 +237,8 @@ export interface SceneSettings {
   measureLabels: 'name' | 'measure' | 'full'
   /** Keep point letters (A, B, C…) on the drawing even when other labels are hidden. */
   pointLetters: boolean
+  /** How vectors are written, so PhysLab matches whatever book is in front of the student. */
+  vectorNotation: 'arrow' | 'bold' | 'underline'
+  componentForm: 'ijk' | 'pair' | 'column' | 'polar'
+  directionStyle: 'standard' | 'bearing'
 }

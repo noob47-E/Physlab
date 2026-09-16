@@ -647,7 +647,7 @@ export const poissonCd = (x: number, lambda: number) => {
 }
 
 // ---------------------------------------------------------------------------
-// Chapter 1: measurements — significant figures & uncertainties
+// Measurements: significant figures & uncertainties
 // ---------------------------------------------------------------------------
 
 export function countSigFigs(raw: string): { count: number; explanation: string } {

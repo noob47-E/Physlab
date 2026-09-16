@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { produce, type Draft } from 'immer'
 import { dependentsOf, evaluateScene } from './evaluate'
+import { setNotation } from '../math/format'
 import type { EvalResult, ObjId, SceneFile, SceneObject, SceneSettings, ToolId, ViewMode } from './types'
 import type { Solution } from '../math/vectorSolver'
 
@@ -94,11 +95,14 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   unitPerSquare: 1,
   labelShow: 'hover',
   measureLabels: 'measure',
-  pointLetters: true
+  pointLetters: true,
+  vectorNotation: 'arrow',
+  componentForm: 'ijk',
+  directionStyle: 'standard'
 }
 
 /** Label preferences belong to the person using the app, so they survive restarts and opening files. */
-const LABEL_PREFS = ['labelShow', 'measureLabels', 'pointLetters'] as const
+const LABEL_PREFS = ['labelShow', 'measureLabels', 'pointLetters', 'vectorNotation', 'componentForm', 'directionStyle'] as const
 const PREFS_KEY = 'physlab.labelPrefs'
 
 function loadLabelPrefs(): Partial<SceneSettings> {
@@ -125,6 +129,12 @@ function migrateLabels(s: Partial<SceneSettings>): Partial<SceneSettings> {
 }
 
 const INITIAL_SETTINGS: SceneSettings = { ...DEFAULT_SETTINGS, ...loadLabelPrefs() }
+applyNotation(INITIAL_SETTINGS)
+
+/** Keep the formatter in step with the chosen notation. */
+function applyNotation(s: SceneSettings) {
+  setNotation({ vector: s.vectorNotation, components: s.componentForm, direction: s.directionStyle })
+}
 
 const HISTORY_LIMIT = 200
 let logCounter = 0
@@ -250,6 +260,7 @@ export const useScene = create<SceneState>()((set, get) => {
       const settings = { ...get().settings, ...patch }
       if (LABEL_PREFS.some((k) => k in patch)) {
         saveLabelPrefs(settings)
+        applyNotation(settings)
         // Labels are drawn from settings alone; no need to re-evaluate the scene.
         if (Object.keys(patch).every((k) => (LABEL_PREFS as readonly string[]).includes(k))) return set({ settings })
       }

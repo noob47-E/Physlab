@@ -4,6 +4,44 @@ import type { LengthUnit, SceneSettings } from '../core/types'
 export type AngleUnit = 'deg' | 'rad' | 'grad'
 
 // ---------------------------------------------------------------------------
+// Notation: every book writes vectors a little differently, so the user chooses
+// ---------------------------------------------------------------------------
+
+export interface Notation {
+  /** How a vector's letter is written. */
+  vector: 'arrow' | 'bold' | 'underline'
+  /** How its components are written. */
+  components: 'ijk' | 'pair' | 'column' | 'polar'
+  /** How a direction is given: from the +x axis, or as a compass bearing. */
+  direction: 'standard' | 'bearing'
+}
+
+let NOTATION: Notation = { vector: 'arrow', components: 'ijk', direction: 'standard' }
+
+export const notation = (): Notation => NOTATION
+export const setNotation = (n: Partial<Notation>): void => {
+  NOTATION = { ...NOTATION, ...n }
+}
+
+/** A vector's name in LaTeX, in the chosen style. */
+export function vecTex(name: string): string {
+  if (NOTATION.vector === 'bold') return `\\mathbf{${name}}`
+  if (NOTATION.vector === 'underline') return `\\underline{${name}}`
+  return `\\vec{${name}}`
+}
+
+/** A compass bearing such as "N 30° E" for a direction measured from +x. */
+export function bearingText(rad: number, decimals = 2): string {
+  const fromNorth = ((90 - (rad * 180) / Math.PI) % 360 + 360) % 360
+  const exact = ['N', 'E', 'S', 'W'][Math.round(fromNorth / 90) % 4]
+  if (Math.abs(fromNorth - Math.round(fromNorth / 90) * 90) < 1e-9) return exact
+  const ns = fromNorth < 90 || fromNorth > 270 ? 'N' : 'S'
+  const ew = fromNorth < 180 ? 'E' : 'W'
+  const off = ns === 'N' ? (fromNorth < 90 ? fromNorth : 360 - fromNorth) : Math.abs(180 - fromNorth)
+  return `${ns} ${fmt(off, decimals)}° ${ew}`
+}
+
+// ---------------------------------------------------------------------------
 // Measurements with units and precision (one place for every displayed value)
 // ---------------------------------------------------------------------------
 
@@ -106,8 +144,17 @@ export function texP(n: number, decimals = 4): string {
 export const fmtPoint = (p: V3, decimals = 3): string =>
   Math.abs(p[2]) < 1e-12 ? `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)})` : `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)}, ${fmt(p[2], decimals)})`
 
-/** "3i + 4j − 2k" style. */
+/** "3i + 4j − 2k" style, or whatever the notation setting asks for. */
 export function fmtIJK(v: V3, decimals = 3): string {
+  if (NOTATION.components === 'pair' || NOTATION.components === 'column') {
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => fmt(c, decimals))
+    return NOTATION.components === 'pair' ? `(${nums.join(', ')})` : `[${nums.join('; ')}]`
+  }
+  if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
+    const m = Math.hypot(v[0], v[1])
+    const ang = Math.atan2(v[1], v[0])
+    return `${fmt(m, decimals)} ∠ ${NOTATION.direction === 'bearing' ? bearingText(ang, decimals) : fmtAngle(ang < 0 ? ang + 2 * Math.PI : ang, 'deg', 2)}`
+  }
   const parts: string[] = []
   const names = ['i', 'j', 'k']
   v.forEach((c, idx) => {
@@ -120,6 +167,20 @@ export function fmtIJK(v: V3, decimals = 3): string {
 }
 
 export function texIJK(v: V3, decimals = 3): string {
+  if (NOTATION.components === 'pair') {
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => tex(c, decimals))
+    return `\\left(${nums.join(',\\; ')}\\right)`
+  }
+  if (NOTATION.components === 'column') {
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => tex(c, decimals))
+    return `\\begin{pmatrix}${nums.join(' \\\\ ')}\\end{pmatrix}`
+  }
+  if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
+    const m = Math.hypot(v[0], v[1])
+    const ang = Math.atan2(v[1], v[0])
+    const a = ang < 0 ? ang + 2 * Math.PI : ang
+    return `${tex(m, decimals)}\\,\\angle\\,${NOTATION.direction === 'bearing' ? `\\text{${bearingText(a, 2)}}` : texAngle(a, 'deg', 2)}`
+  }
   const parts: string[] = []
   const names = ['\\hat{i}', '\\hat{j}', '\\hat{k}']
   v.forEach((c, idx) => {
@@ -145,6 +206,7 @@ export function angleTo(value: number, unit: AngleUnit): number {
 
 export function fmtAngle(rad: number, unit: AngleUnit = 'deg', decimals = 2): string {
   if (Number.isNaN(rad)) return 'undefined'
+  if (unit === 'deg' && NOTATION.direction === 'bearing') return bearingText(rad, decimals)
   const v = angleFrom(rad, unit)
   return unit === 'deg' ? `${fmt(v, decimals)}°` : unit === 'grad' ? `${fmt(v, decimals)} grad` : `${fmt(v, 4)} rad`
 }

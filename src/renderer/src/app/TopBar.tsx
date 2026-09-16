@@ -183,6 +183,49 @@ function MeasureSettingsMenu() {
               </button>
             ))}
           </div>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">Vector notation</div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="seg">
+              {(
+                [
+                  ['arrow', 'A⃗'],
+                  ['bold', 'A bold'],
+                  ['underline', 'A̲']
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} className={`whitespace-nowrap ${settings.vectorNotation === k ? 'on' : ''}`} onClick={() => set({ vectorNotation: k })}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="seg">
+              {(
+                [
+                  ['ijk', '3î + 4ĵ'],
+                  ['pair', '(3, 4)'],
+                  ['column', 'column'],
+                  ['polar', '5 ∠ 53°']
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} className={`whitespace-nowrap ${settings.componentForm === k ? 'on' : ''}`} onClick={() => set({ componentForm: k })}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-zinc-400">Directions</span>
+            <div className="seg">
+              <button className={`whitespace-nowrap ${settings.directionStyle === 'standard' ? 'on' : ''}`} onClick={() => set({ directionStyle: 'standard' })}>
+                From +x axis
+              </button>
+              <button className={`whitespace-nowrap ${settings.directionStyle === 'bearing' ? 'on' : ''}`} onClick={() => set({ directionStyle: 'bearing' })} title="Compass style, e.g. N 30° E">
+                Compass bearing
+              </button>
+            </div>
+          </div>
           <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">Angles</div>
           <div className="seg">
             <button className={settings.angleUnit === 'deg' ? 'on' : ''} onClick={() => set({ angleUnit: 'deg' })}>

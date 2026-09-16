@@ -1,8 +1,8 @@
-// Step-by-step vector solutions in the notation of the Punjab 11th-class textbook
-// (A_x = A cos θ, A = √(A_x² + A_y²), A·B = AB cos θ, A×B = AB sin θ n̂ ...).
+// Step-by-step vector solutions in standard notation, the way every textbook writes them:
+// A_x = A cos θ, A = √(A_x² + A_y²), A·B = AB cos θ, A×B = AB sin θ n̂ …
 
 import { add, angleBetween, cross, dot, len, neg, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
-import { tex, texIJK, texP } from './format'
+import { tex, texIJK, texP, vecTex } from './format'
 
 export interface Step {
   /** Plain explanation sentence. */
@@ -32,7 +32,7 @@ export interface NamedVec {
 }
 
 const D = 4 // decimals shown in working
-const b = (name: string) => `\\vec{${name}}`
+const b = (name: string) => vecTex(name)
 const mag = (name: string) => name.length === 1 ? name : `|\\vec{${name}}|`
 const sub_ = (name: string, axis: string) => `${name}_{${axis}}`
 const is3D = (...vs: V3[]) => vs.some((v) => Math.abs(v[2]) > 1e-12)
@@ -71,7 +71,7 @@ function directionSteps(name: string, v: V3, steps: Step[]): number {
   return theta
 }
 
-/** Eq. 2.2 & 2.3 — rectangular components from magnitude and angle. */
+/** Rectangular components from magnitude and angle. */
 export function solveComponents(name: string, magnitude: number, thetaDeg: number, unit = ''): Solution {
   const t = toRad(thetaDeg)
   const x = magnitude * Math.cos(t)
@@ -79,9 +79,9 @@ export function solveComponents(name: string, magnitude: number, thetaDeg: numbe
   const u = unit ? `\\,\\text{${unit}}` : ''
   const steps: Step[] = [
     { text: `Given: magnitude ${name} = ${tex(magnitude)}${unit ? ' ' + unit : ''} at θ = ${tex(thetaDeg)}° with the +x axis.` },
-    { text: 'x-component (Eq. 2.2):', tex: `${sub_(name, 'x')} = ${name}\\cos\\theta = ${tex(magnitude)}\\cos ${tex(thetaDeg)}^\\circ = ${tex(magnitude)}\\times ${texP(Math.cos(t), D)} = ${tex(x, D)}${u}` },
-    { text: 'y-component (Eq. 2.3):', tex: `${sub_(name, 'y')} = ${name}\\sin\\theta = ${tex(magnitude)}\\sin ${tex(thetaDeg)}^\\circ = ${tex(magnitude)}\\times ${texP(Math.sin(t), D)} = ${tex(y, D)}${u}` },
-    { text: 'Written with unit vectors (Eq. 2.1: A = Aₓ + A_y):', tex: `${b(name)} = ${texIJK([x, y, 0], D)}` }
+    { text: 'x-component:', tex: `${sub_(name, 'x')} = ${name}\\cos\\theta = ${tex(magnitude)}\\cos ${tex(thetaDeg)}^\\circ = ${tex(magnitude)}\\times ${texP(Math.cos(t), D)} = ${tex(x, D)}${u}` },
+    { text: 'y-component:', tex: `${sub_(name, 'y')} = ${name}\\sin\\theta = ${tex(magnitude)}\\sin ${tex(thetaDeg)}^\\circ = ${tex(magnitude)}\\times ${texP(Math.sin(t), D)} = ${tex(y, D)}${u}` },
+    { text: 'Written with unit vectors:', tex: `${b(name)} = ${texIJK([x, y, 0], D)}` }
   ]
   return {
     title: `Resolve ${name} into rectangular components`,
@@ -101,7 +101,7 @@ export function solveComponents(name: string, magnitude: number, thetaDeg: numbe
   }
 }
 
-/** Eq. 2.4 & 2.5 — magnitude and direction from components. */
+/** Magnitude and direction from components. */
 export function solveMagnitudeDirection(A: NamedVec): Solution {
   const { name, v } = A
   const m = len(v)
@@ -127,10 +127,10 @@ export function solveMagnitudeDirection(A: NamedVec): Solution {
     }
   }
   steps.push({
-    text: 'Magnitude (Eq. 2.4):',
+    text: 'Magnitude :',
     tex: `${name} = \\sqrt{${sub_(name, 'x')}^2 + ${sub_(name, 'y')}^2} = \\sqrt{${texP(v[0])}^2 + ${texP(v[1])}^2} = \\sqrt{${tex(dot(v, v), D)}} = ${tex(m, D)}`
   })
-  steps.push({ text: 'Direction (Eq. 2.5):' })
+  steps.push({ text: 'Direction :' })
   const theta = directionSteps(name, v, steps)
   return {
     title: `Magnitude and direction of ${name}`,
@@ -168,6 +168,67 @@ export function solveAddition(vs: NamedVec[], resultName = 'R'): Solution {
       vectors: [...vs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: resultName, v: R, role: 'result' as const, color: '#ffd43b' }],
       mode: 'head-to-tail'
     }
+  }
+}
+
+/** Same sum, done the way books do it without components: law of cosines, then law of sines. */
+export function solveAdditionCosineLaw(A: NamedVec, B: NamedVec, resultName = 'R'): Solution {
+  const a = len(A.v)
+  const bb = len(B.v)
+  const theta = toDeg(angleBetween(A.v, B.v))
+  const r = Math.sqrt(a * a + bb * bb + 2 * a * bb * Math.cos(toRad(theta)))
+  const alpha = r < 1e-12 ? 0 : toDeg(Math.asin(Math.max(-1, Math.min(1, (bb * Math.sin(toRad(theta))) / r))))
+  const steps: Step[] = [
+    { text: `Sizes and the angle between them:`, tex: `${mag(A.name)} = ${tex(a, D)},\quad ${mag(B.name)} = ${tex(bb, D)},\quad \theta = ${tex(theta, D)}^\circ` },
+    {
+      text: 'Law of cosines (the angle inside the triangle is 180° − θ, which flips the sign):',
+      tex: `${resultName}^2 = ${mag(A.name)}^2 + ${mag(B.name)}^2 + 2\,${mag(A.name)}${mag(B.name)}\cos\theta = ${tex(a * a, D)} + ${tex(bb * bb, D)} + ${tex(2 * a * bb * Math.cos(toRad(theta)), D)}`
+    },
+    { text: 'So the size of the resultant is', tex: `${resultName} = \sqrt{${tex(r * r, D)}} = ${tex(r, D)}` },
+    {
+      text: `Law of sines gives the angle between ${resultName} and ${A.name}:`,
+      tex: `\frac{\sin\alpha}{${mag(B.name)}} = \frac{\sin\theta}{${resultName}} \;\Rightarrow\; \alpha = \sin^{-1}\left(\frac{${tex(bb, D)}\sin ${tex(theta, 2)}^\circ}{${tex(r, D)}}\right) = ${tex(alpha, D)}^\circ`
+    },
+    { text: 'The component method gives the same answer — use whichever your book prefers.' }
+  ]
+  return {
+    title: `${A.name} + ${B.name} by the law of cosines`,
+    steps,
+    answers: [
+      { label: resultName, tex: tex(r, D) },
+      { label: 'angle with ' + A.name, tex: `${tex(alpha, D)}^\circ` }
+    ],
+    visual: { vectors: [
+      { name: A.name, v: A.v, role: 'input' },
+      { name: B.name, v: B.v, role: 'input' },
+      { name: resultName, v: add(A.v, B.v), role: 'result' }
+    ], mode: 'parallelogram' }
+  }
+}
+
+/** The drawing method: choose a scale, draw head-to-tail, then measure the closing vector. */
+export function solveAdditionGraphical(vs: NamedVec[], resultName = 'R'): Solution {
+  const total = vs.reduce((acc, v) => add(acc, v.v), [0, 0, 0] as V3)
+  const biggest = Math.max(...vs.map((v) => len(v.v)), 1)
+  const scale1 = biggest > 10 ? 1 : biggest > 1 ? 1 : 0.1
+  const steps: Step[] = [
+    { text: `1. Choose a scale. Here 1 grid square stands for ${tex(scale1, 2)} unit${scale1 === 1 ? '' : 's'}, so every vector fits on the paper.` },
+    ...vs.map((v, i) => ({
+      text: `${i + 2}. Draw ${v.name} to scale at ${tex(toDeg(Math.atan2(v.v[1], v.v[0])), 2)}° from the +x axis${i === 0 ? '' : `, starting at the head of ${vs[i - 1].name}`}.`,
+      tex: `${mag(v.name)} = ${tex(len(v.v), D)}`
+    })),
+    { text: `${vs.length + 2}. Join the tail of the first vector to the head of the last one. That closing arrow is the resultant.` },
+    {
+      text: 'Measuring it with a ruler and protractor gives',
+      tex: `${resultName} = ${tex(len(total), D)},\quad \theta = ${tex((toDeg(Math.atan2(total[1], total[0])) + 360) % 360, D)}^\circ`
+    },
+    { text: 'A drawing is only as accurate as the ruler; the component method gives the exact value.' }
+  ]
+  return {
+    title: `${vs.map((v) => v.name).join(' + ')} by drawing (head-to-tail)`,
+    steps,
+    answers: [{ label: resultName, tex: texIJK(total, D) }],
+    visual: { vectors: [...vs.map((v) => ({ name: v.name, v: v.v, role: 'input' as const })), { name: resultName, v: total, role: 'result' as const }], mode: 'head-to-tail' }
   }
 }
 
@@ -227,7 +288,7 @@ export function solveUnitVector(A: NamedVec): Solution {
   }
 }
 
-/** Eq. 2.6–2.8 — scalar (dot) product and the angle between two vectors. */
+/** Scalar (dot) product and the angle between two vectors. */
 export function solveDot(A: NamedVec, B: NamedVec): Solution {
   const d = dot(A.v, B.v)
   const mA = len(A.v)
@@ -237,12 +298,12 @@ export function solveDot(A: NamedVec, B: NamedVec): Solution {
   const steps: Step[] = [
     { text: 'Given:', tex: `${b(A.name)} = ${texIJK(A.v, D)},\\quad ${b(B.name)} = ${texIJK(B.v, D)}` },
     {
-      text: 'Scalar product in terms of rectangular components (Eq. 2.7):',
+      text: 'Scalar product in terms of rectangular components :',
       tex: `${b(A.name)}\\cdot${b(B.name)} = ${A.name}_xB_x + ${A.name}_yB_y + ${A.name}_zB_z`.replace(/B_/g, `${B.name}_`)
     },
     { tex: `= (${tex(A.v[0])})(${tex(B.v[0])}) + (${tex(A.v[1])})(${tex(B.v[1])}) + (${tex(A.v[2])})(${tex(B.v[2])}) = ${tex(d, D)}` },
     { text: 'Magnitudes:', tex: `${mag(A.name)} = ${tex(mA, D)},\\quad ${mag(B.name)} = ${tex(mB, D)}` },
-    { text: 'Angle between them (Eq. 2.8):', tex: `\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}\\,${mag(B.name)}} = \\frac{${tex(d, D)}}{${tex(mA, D)}\\times${tex(mB, D)}} = ${tex(cosT, D)}` },
+    { text: 'Angle between them :', tex: `\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}\\,${mag(B.name)}} = \\frac{${tex(d, D)}}{${tex(mA, D)}\\times${tex(mB, D)}} = ${tex(cosT, D)}` },
     { tex: `\\theta = \\cos^{-1}(${tex(cosT, D)}) = ${tex(theta, D)}^\\circ` }
   ]
   if (Math.abs(d) < 1e-9) steps.push({ text: 'The dot product is zero, so the vectors are perpendicular (θ = 90°).' })
@@ -255,7 +316,7 @@ export function solveDot(A: NamedVec, B: NamedVec): Solution {
   }
 }
 
-/** Eq. 2.9 — vector (cross) product via determinant expansion. */
+/** Vector (cross) product via determinant expansion. */
 export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C'): Solution {
   const [ax, ay, az] = A.v
   const [bx, by, bz] = B.v
@@ -276,7 +337,7 @@ export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C'): Solution
     },
     { tex: `${b(resultName)} = ${texIJK(C, D)}` },
     { text: 'Magnitude:', tex: `|${b(resultName)}| = \\sqrt{${C.map((c) => `${texP(c, D)}^2`).join(' + ')}} = ${tex(mC, D)}` },
-    { text: 'Check with Eq. 2.9, |A×B| = AB sin θ:', tex: `${tex(mA, D)}\\times${tex(mB, D)}\\times\\sin ${tex(theta, 2)}^\\circ = ${tex(mA * mB * Math.sin(toRad(theta)), D)}` },
+    { text: 'Check with |A×B| = AB sin θ:', tex: `${tex(mA, D)}\\times${tex(mB, D)}\\times\\sin ${tex(theta, 2)}^\\circ = ${tex(mA * mB * Math.sin(toRad(theta)), D)}` },
     { text: `|A×B| is also the area of the parallelogram with sides ${A.name} and ${B.name}.`, tex: `\\text{Area} = ${tex(mC, D)}` },
     { text: 'The direction is perpendicular to the plane of A and B (right-hand rule). The order matters:', tex: `${b(B.name)}\\times${b(A.name)} = -${b(A.name)}\\times${b(B.name)} = ${texIJK(neg(C), D)}` }
   ]
@@ -324,7 +385,7 @@ export function solveProjection(B: NamedVec, A: NamedVec): Solution {
   }
 }
 
-/** Resultant of two forces F1 (along +x) and F2 at angle θ — textbook Example 2.1 method. */
+/** Resultant of two forces: F1 along +x and F2 at angle θ, by the law of cosines. */
 export function solveTwoForces(F1: number, F2: number, thetaDeg: number, unit = 'N'): Solution {
   const t = toRad(thetaDeg)
   const Rx = F1 + F2 * Math.cos(t)

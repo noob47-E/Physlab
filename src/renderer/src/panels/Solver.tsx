@@ -21,7 +21,7 @@ const PROBLEMS = [
   { id: 'dot', label: 'Scalar (dot) product & angle between' },
   { id: 'cross', label: 'Vector (cross) product' },
   { id: 'projection', label: 'Projection of B on A' },
-  { id: 'twoforces', label: 'Resultant of two forces at an angle (Example 2.1)' },
+  { id: 'twoforces', label: 'Resultant of two forces at an angle (law of cosines)' },
   { id: 'equilibrium', label: 'Force needed for equilibrium' },
   { id: 'torque', label: 'Torque τ = r × F' },
   { id: 'work', label: 'Work done W = F · d' },
@@ -151,6 +151,7 @@ export function Solver() {
   const [vecs, setVecs] = useState<VecInput[]>([newVec('A', [3, 4, 0]), newVec('B', [2, -1, 0])])
   const [nums, setNums] = useState({ F: 10, theta: 30, F1: 5, F2: 5, angle: 120, k: 2, q: 2 })
   const [error, setError] = useState('')
+  const [method, setMethod] = useState<'components' | 'cosine' | 'graphical'>('components')
 
   const needVecs: Record<ProblemId, number> = {
     components: 0, magdir: 1, add: -1, subtract: 2, scale: 1, unit: 1, dot: 2, cross: 2, projection: 2, twoforces: 0, equilibrium: -1, torque: 2, work: 2, magforce: 2
@@ -182,7 +183,12 @@ export function Solver() {
           sol = VS.solveMagnitudeDirection(vs[0])
           break
         case 'add':
-          sol = VS.solveAddition(vs)
+          sol =
+            method === 'cosine' && vs.length === 2
+              ? VS.solveAdditionCosineLaw(vs[0], vs[1])
+              : method === 'graphical'
+                ? VS.solveAdditionGraphical(vs)
+                : VS.solveAddition(vs)
           break
         case 'subtract':
           sol = VS.solveSubtraction(vs[0], vs[1])
@@ -244,6 +250,25 @@ export function Solver() {
           ))}
         </select>
       </div>
+      {problem === 'add' && (
+        <div className="mt-2 px-3">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">Solve by</div>
+          <div className="seg">
+            {(
+              [
+                ['components', 'Components'],
+                ['cosine', 'Law of cosines'],
+                ['graphical', 'Drawing (head-to-tail)']
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} className={`whitespace-nowrap ${method === k ? 'on' : ''}`} onClick={() => setMethod(k)} title="Every method gives the same answer">
+                {l}
+              </button>
+            ))}
+          </div>
+          {method === 'cosine' && vecs.length !== 2 && <div className="mt-1 text-[11px] text-amber-300">The law of cosines works with exactly two vectors.</div>}
+        </div>
+      )}
       <div className="mt-2">
         {problem === 'components' && (
           <>

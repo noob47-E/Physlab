@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMeasure, texMeasure, type MeasureSettings } from '../src/renderer/src/math/format'
+import { bearingText, fmtIJK, formatMeasure, setNotation, texMeasure, vecTex, type MeasureSettings } from '../src/renderer/src/math/format'
 import { answerTex, circleReport, polygonReport } from '../src/renderer/src/math/shapeFormulas'
 import type { V3 } from '../src/renderer/src/math/vec'
 
@@ -55,5 +55,24 @@ describe('shape reports', () => {
     const L = polygonReport(P(0, 0, 4, 0, 4, 2, 2, 2, 2, 4, 0, 4), ['A', 'B', 'C', 'D', 'E', 'F'], S)
     expect(L.note).toMatch(/Decompose/)
     expect(L.rows[0].value).toBeCloseTo(12)
+  })
+})
+
+describe('notation choices', () => {
+  it('writes vectors the way the chosen book does', () => {
+    expect(vecTex('A')).toBe(String.raw`\vec{A}`)
+    setNotation({ vector: 'bold', components: 'pair' })
+    expect(vecTex('A')).toBe(String.raw`\mathbf{A}`)
+    expect(fmtIJK([3, 4, 0])).toBe('(3, 4)')
+    setNotation({ components: 'polar' })
+    expect(fmtIJK([3, 4, 0])).toBe('5 ∠ 53.13°')
+    setNotation({ components: 'ijk', vector: 'arrow' })
+    expect(fmtIJK([3, 4, 0])).toBe('3i + 4j')
+  })
+  it('gives compass bearings when asked', () => {
+    expect(bearingText(0)).toBe('E')
+    expect(bearingText(Math.PI / 2)).toBe('N')
+    expect(bearingText((3 * Math.PI) / 4)).toBe('N 45° W')
+    expect(bearingText(-Math.PI / 4)).toBe('S 45° E')
   })
 })

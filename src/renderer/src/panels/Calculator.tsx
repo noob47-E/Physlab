@@ -28,7 +28,7 @@ const MODES: { id: CalcMode; label: string; desc: string }[] = [
   { id: 'SHEET', label: 'SHEET', desc: 'Spreadsheet' },
   { id: 'UNITS', label: 'UNITS', desc: 'Unit conversion' },
   { id: 'CONST', label: 'CONST', desc: 'Physical constants' },
-  { id: 'MEASURE', label: 'MEASURE', desc: 'Sig. figs & uncertainty (Ch. 1)' }
+  { id: 'MEASURE', label: 'MEASURE', desc: 'Significant figures & uncertainty' }
 ]
 
 /** A key inserts LaTeX (#0 = selection/cursor, #? = placeholder to fill) or runs an action. */
