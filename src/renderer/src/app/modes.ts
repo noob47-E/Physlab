@@ -9,6 +9,7 @@ export type ModeId =
   | 'shapes'
   | 'graphing'
   | 'gpu'
+  | 'sandbox'
   | 'proofs'
   | 'mechanics'
   | 'instruments'
@@ -65,6 +66,15 @@ export const MODES: ModeDef[] = [
     ready: true,
     tools: ['select', '|', 'point', 'intersect', 'distance', '|', 'delete'],
     panel: 'console'
+  },
+  {
+    id: 'sandbox',
+    label: 'Sandbox',
+    description: 'Real objects that collide: mass, velocity, bounciness, friction, gravity, air resistance and throwing.',
+    ready: true,
+    tools: ['select'],
+    panel: 'sandbox',
+    view: '3d'
   },
   { id: 'gpu', label: 'GPU Lab', description: 'Millions of charged particles in electric and magnetic fields on the graphics card.', ready: true, tools: ['select'], panel: 'gpulab', view: '3d' },
   { id: 'proofs', label: 'Proofs', description: 'Interactive proofs of theorems, laws and formulas with written steps.', ready: false, tools: ['select'] },

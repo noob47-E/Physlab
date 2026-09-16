@@ -20,7 +20,7 @@ if (process.env['PHYSLAB_SWIFTSHADER']) {
   app.commandLine.appendSwitch('enable-unsafe-swiftshader')
   app.commandLine.appendSwitch('disable-features', 'Vulkan')
 }
-if (process.env['PHYSLAB_BENCH']) {
+if (process.env['PHYSLAB_BENCH'] || process.env['PHYSLAB_SANDBOX']) {
   // Keep full frame rate even when another window covers PhysLab during a benchmark.
   app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
   app.commandLine.appendSwitch('disable-renderer-backgrounding')
@@ -82,7 +82,7 @@ function createWindow(): void {
       sandbox: true,
       contextIsolation: true,
       // Benchmarks must keep rendering even when the window is covered by other windows.
-      backgroundThrottling: !process.env['PHYSLAB_BENCH']
+      backgroundThrottling: !process.env['PHYSLAB_BENCH'] && !process.env['PHYSLAB_SANDBOX']
     }
   })
 
@@ -117,7 +117,11 @@ function createWindow(): void {
 
   // PHYSLAB_BENCH=1000000 opens straight into the GPU particle benchmark.
   // PHYSLAB_FORCE_WEBGL=1 tests the path used by computers without WebGPU.
-  const hash = process.env['PHYSLAB_BENCH'] ? `#bench=${process.env['PHYSLAB_BENCH']}` : ''
+  const hash = process.env['PHYSLAB_BENCH']
+    ? `#bench=${process.env['PHYSLAB_BENCH']}`
+    : process.env['PHYSLAB_SANDBOX']
+      ? '#sandbox=1'
+      : ''
   const query = process.env['PHYSLAB_FORCE_WEBGL'] ? '?webgl=1' : ''
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (!app.isPackaged && devUrl) {

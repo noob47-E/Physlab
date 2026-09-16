@@ -26,6 +26,7 @@ const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.S
 const Calculator = lazy(() => import('../panels/Calculator').then((m) => ({ default: m.Calculator })))
 const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.Graphs })))
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
+const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
 
 const PANELS: Record<string, [string, React.ComponentType]> = {
   viewport: ['Viewport', Viewport],
@@ -39,7 +40,8 @@ const PANELS: Record<string, [string, React.ComponentType]> = {
   console: ['Console', Console],
   timeline: ['Timeline', Timeline],
   graphs: ['Graphs', Graphs],
-  gpulab: ['GPU Lab', GpuLab]
+  gpulab: ['GPU Lab', GpuLab],
+  sandbox: ['Sandbox', SandboxPanel]
 }
 
 const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
@@ -104,6 +106,7 @@ function buildLayout(api: DockviewApi) {
   api.addPanel({ id: 'calculator', component: 'calculator', title: 'Calculator', position: { referencePanel: 'vectorcalc', direction: 'within' } })
   api.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: 'vectorcalc', direction: 'within' } })
   api.addPanel({ id: 'solver', component: 'solver', title: 'Solver', position: { referencePanel: 'vectorcalc', direction: 'within' } })
+  api.addPanel({ id: 'sandbox', component: 'sandbox', title: 'Sandbox', position: { referencePanel: 'vectorcalc', direction: 'within' } })
   api.addPanel({ id: 'console', component: 'console', title: 'Console', position: { referencePanel: 'viewport', direction: 'below' }, initialHeight: 200 })
   api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: 'console', direction: 'within' } })
   api.addPanel({ id: 'graphs', component: 'graphs', title: 'Graphs', position: { referencePanel: 'console', direction: 'within' } })
@@ -131,6 +134,11 @@ export function App() {
       enterMode('gpu')
       useParticleLab.setState({ enabled: true, count: Number(bench[1]) })
     }
+    // #sandbox=1 opens the physics sandbox and starts it running (used to check a real build).
+    if (location.hash.includes('sandbox')) {
+      enterMode('sandbox')
+      setTimeout(() => useScene.getState().setPlaying(true), 1500)
+    }
   }, [])
 
   return (
@@ -157,7 +165,12 @@ export function App() {
               console.error('PhysLab layout', err)
               localStorage.removeItem(LAYOUT_KEY)
             }
-            requestAnimationFrame(() => useApp.setState({ layoutReady: true }))
+            // Both paths are harmless if they both run; the timer covers a window that is
+            // hidden or minimised, where animation frames never arrive and the canvas
+            // would otherwise never appear.
+            const ready = () => useApp.setState({ layoutReady: true })
+            requestAnimationFrame(ready)
+            setTimeout(ready, 150)
           }}
         />
       </div>

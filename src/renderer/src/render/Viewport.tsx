@@ -17,6 +17,7 @@ import { GpuParticles, useParticleLab } from './GpuParticles'
 import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
+import { SandboxView } from './SandboxView'
 import { LabelShowSwitch } from '../ui/LabelControls'
 import { themeColor, useTheme } from '../app/theme'
 import { saveViewportImage, setExportContext } from './exportImage'
@@ -103,6 +104,7 @@ export function Viewport() {
   const gpu = useGpuInfo()
   const particles = useParticleLab((s) => s.enabled)
   const layoutReady = useApp((s) => s.layoutReady)
+  const mode = useApp((s) => s.mode)
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
   const theme = useTheme((t) => t.theme)
   const canvasBg = themeColor('--canvas-bg', '#17181b')
@@ -123,6 +125,7 @@ export function Viewport() {
         <CameraRig />
         {viewMode === '2d' ? <Grid2D /> : <Grid3D />}
         <SceneObjects />
+        {mode === 'sandbox' && <SandboxView />}
         <Highlights />
         {particles && <GpuParticles />}
         <Interaction />
