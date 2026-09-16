@@ -54,6 +54,7 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "immer": "^11.1.18",
+    "jolt-physics": "^1.1.0",
     "katex": "^0.18.7",
     "lucide-react": "^1.46.0",
     "mathjs": "^15.2.0",
