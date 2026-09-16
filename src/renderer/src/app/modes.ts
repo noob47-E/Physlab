@@ -89,3 +89,6 @@ export const useApp = create<{ mode: ModeId; searchOpen: boolean; layoutReady: b
   setMode: (mode) => set({ mode }),
   setSearchOpen: (searchOpen) => set({ searchOpen })
 }))
+
+// Handy while developing: inspect app state from the browser console.
+if (import.meta.env?.DEV) (window as unknown as { __useApp?: typeof useApp }).__useApp = useApp

@@ -14,7 +14,9 @@ import { Examples } from '../panels/Examples'
 import { VectorCalc } from '../panels/VectorCalc'
 import { useParticleLab } from '../render/GpuParticles'
 import { useScene } from '../core/store'
-import { useApp } from './modes'
+import { useApp, type ModeId } from './modes'
+import { startAutosave } from './autosave'
+import { RecoveryBar } from './RecoveryBar'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
 
@@ -52,6 +54,46 @@ const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   ])
 )
 
+const LAYOUT_KEY = 'physlab.layout'
+
+/** Put the panels back where the user left them (and the mode they were in). */
+function restoreLayout(api: DockviewApi): boolean {
+  try {
+    const saved = localStorage.getItem(LAYOUT_KEY)
+    if (!saved) return false
+    const { layout, mode } = JSON.parse(saved) as { layout: object; mode?: ModeId }
+    api.fromJSON(layout as never)
+    if (mode) useApp.getState().setMode(mode)
+    return true
+  } catch {
+    localStorage.removeItem(LAYOUT_KEY)
+    return false
+  }
+}
+
+function watchLayout(api: DockviewApi) {
+  const save = () => {
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ layout: api.toJSON(), mode: useApp.getState().mode }))
+    } catch {
+      // Storage blocked: the layout just will not be remembered.
+    }
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const queue = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(save, 800)
+  }
+  api.onDidLayoutChange(queue)
+  window.addEventListener('beforeunload', save)
+}
+
+/** Forget the saved arrangement and start from the standard one. */
+export function resetLayout(): void {
+  localStorage.removeItem(LAYOUT_KEY)
+  location.reload()
+}
+
 function buildLayout(api: DockviewApi) {
   api.addPanel({ id: 'viewport', component: 'viewport', title: 'Viewport' })
   api.addPanel({ id: 'outliner', component: 'outliner', title: 'Outliner', position: { referencePanel: 'viewport', direction: 'left' }, initialWidth: 260 })
@@ -79,6 +121,8 @@ export function App() {
     if (focus) api.current?.getPanel(focus.id)?.api.setActive()
   }, [focus])
 
+  useEffect(() => startAutosave(), [])
+
   useEffect(() => {
     // #bench=1000000 starts the GPU particle benchmark (used for performance checks).
     const bench = location.hash.match(/bench=(\d+)/)
@@ -91,6 +135,7 @@ export function App() {
   return (
     <div className="flex h-full flex-col">
       <TopBar />
+      <RecoveryBar />
       <ToolShelf />
       <CommandBar />
       <div className="min-h-0 flex-1">
@@ -99,8 +144,18 @@ export function App() {
           components={components}
           onReady={(e: DockviewReadyEvent) => {
             api.current = e.api
-            buildLayout(e.api)
-            if (!location.hash.includes('bench')) useApp.getState().setMode('vectors')
+            try {
+              const restored = !location.hash.includes('bench') && restoreLayout(e.api)
+              if (!restored) {
+                buildLayout(e.api)
+                if (!location.hash.includes('bench')) useApp.getState().setMode('vectors')
+              }
+              watchLayout(e.api)
+            } catch (err) {
+              // A layout we cannot restore must never stop the app from starting.
+              console.error('PhysLab layout', err)
+              localStorage.removeItem(LAYOUT_KEY)
+            }
             requestAnimationFrame(() => useApp.setState({ layoutReady: true }))
           }}
         />

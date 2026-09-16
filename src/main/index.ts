@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -154,6 +154,53 @@ ipcMain.handle('file:save', async (_e, content: string, path: string | null) => 
   await writeFile(tmp, content, 'utf8')
   await rename(tmp, target)
   return target
+})
+
+ipcMain.handle('file:saveImage', async (_e, dataUrl: string) => {
+  const result = await dialog.showSaveDialog({
+    title: 'Save the drawing as an image',
+    defaultPath: 'physlab.png',
+    filters: [{ name: 'PNG image', extensions: ['png'] }]
+  })
+  if (result.canceled || !result.filePath) return null
+  await writeFile(result.filePath, Buffer.from(dataUrl.split(',')[1] ?? '', 'base64'))
+  return result.filePath
+})
+
+// ---------------------------------------------------------------------------
+// Crash recovery: one rolling copy of unsaved work
+// ---------------------------------------------------------------------------
+
+const autosaveDir = () => join(app.getPath('userData'), 'autosave')
+const autosaveFile = () => join(autosaveDir(), 'latest.phys')
+
+ipcMain.handle('autosave:write', async (_e, content: string) => {
+  try {
+    await mkdir(autosaveDir(), { recursive: true })
+    const tmp = `${autosaveFile()}.saving`
+    await writeFile(tmp, content, 'utf8')
+    await rename(tmp, autosaveFile())
+    return true
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('autosave:read', async () => {
+  try {
+    return await readFile(autosaveFile(), 'utf8')
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('autosave:clear', async () => {
+  try {
+    await rm(autosaveFile(), { force: true })
+    return true
+  } catch {
+    return false
+  }
 })
 
 app.whenReady().then(() => {

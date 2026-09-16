@@ -28,6 +28,9 @@ import { MODES, modeById, useApp, type ModeId } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
 import { TOOLS } from '../render/tools'
+import { saveViewportImage } from '../render/exportImage'
+import { useTheme } from './theme'
+import { resetLayout } from './App'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useParticleLab } from '../render/GpuParticles'
@@ -197,6 +200,7 @@ function MeasureSettingsMenu() {
 
 export function TopBar() {
   const s = useScene()
+  const theme = useTheme((t) => t.theme)
   const mode = useApp((a) => a.mode)
   const setSearchOpen = useApp((a) => a.setSearchOpen)
   const title = s.filePath ? s.filePath.split(/[\\/]/).pop() : 'untitled'
@@ -215,7 +219,9 @@ export function TopBar() {
           { label: 'Open…', sc: 'Ctrl+O', run: openProject },
           '-',
           { label: 'Save', sc: 'Ctrl+S', run: () => saveProject(false) },
-          { label: 'Save As…', sc: 'Ctrl+Shift+S', run: () => saveProject(true) }
+          { label: 'Save As…', sc: 'Ctrl+Shift+S', run: () => saveProject(true) },
+          '-',
+          { label: 'Export the drawing as an image…', run: () => void saveViewportImage(2) }
         ]}
       />
       <Menu
@@ -237,7 +243,10 @@ export function TopBar() {
           '-',
           { label: `Grid: ${s.settings.showGrid ? 'on' : 'off'}`, run: () => s.setSettings({ showGrid: !s.settings.showGrid }) },
           { label: `Axes: ${s.settings.showAxes ? 'on' : 'off'}`, run: () => s.setSettings({ showAxes: !s.settings.showAxes }) },
-          { label: `Snapping: ${s.settings.snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s.setSettings({ snap: !s.settings.snap }) }
+          { label: `Snapping: ${s.settings.snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s.setSettings({ snap: !s.settings.snap }) },
+          '-',
+          { label: theme === 'dark' ? 'Light theme (for projectors)' : 'Dark theme', run: () => useTheme.getState().toggle() },
+          { label: 'Reset the panel layout', run: resetLayout }
         ]}
       />
 
@@ -258,7 +267,7 @@ export function TopBar() {
 
       <div className="flex-1" />
       <button className="menu-btn flex items-center gap-2 text-zinc-400" onClick={() => setSearchOpen(true)} title="Search everything (Ctrl+K)">
-        <Search size={14} /> Search <kbd className="rounded bg-[#1b1c20] px-1 text-[10px]">Ctrl K</kbd>
+        <Search size={14} /> Search <kbd className="rounded border border-[var(--line)] bg-[var(--bg-3)] px-1 text-[10px] text-[var(--text-dim)]">Ctrl K</kbd>
       </button>
       <MeasureSettingsMenu />
       <span className="ml-2 text-[12px] text-zinc-400">

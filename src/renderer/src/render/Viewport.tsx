@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
 import { useApp } from '../app/modes'
-import { Box, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
+import { Box, Camera, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
 import { createRenderer, QUALITY, useGpuInfo } from './renderer'
@@ -18,6 +18,8 @@ import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
 import { LabelShowSwitch } from '../ui/LabelControls'
+import { themeColor, useTheme } from '../app/theme'
+import { saveViewportImage, setExportContext } from './exportImage'
 
 let fpsEl: HTMLSpanElement | null = null
 const sizeProbe = new THREE.Vector2()
@@ -45,6 +47,18 @@ function Invalidator() {
     const s = useScene.getState()
     if (s.playing || useParticleLab.getState().enabled) state.invalidate()
   })
+  return null
+}
+
+/** Lets the export code render one frame on demand. */
+function ExportHook() {
+  const gl = useThree((st) => st.gl)
+  const sc = useThree((st) => st.scene)
+  const cam = useThree((st) => st.camera)
+  useEffect(() => {
+    setExportContext({ gl: gl as never, scene: sc as never, camera: cam as never })
+    return () => setExportContext(null)
+  }, [gl, sc, cam])
   return null
 }
 
@@ -90,6 +104,9 @@ export function Viewport() {
   const particles = useParticleLab((s) => s.enabled)
   const layoutReady = useApp((s) => s.layoutReady)
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
+  const theme = useTheme((t) => t.theme)
+  const canvasBg = themeColor('--canvas-bg', '#17181b')
+  void theme // re-reads the colour whenever the theme changes
 
   useEffect(() => {
     overlay.canvasHost = hostRef.current
@@ -101,8 +118,8 @@ export function Viewport() {
 
   return (
     <div ref={hostRef} className="viewport relative h-full w-full select-none overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
-      {layoutReady && <Canvas gl={createRenderer as never} flat dpr={[1, QUALITY[quality].dpr]} frameloop="demand" style={{ background: '#17181b' }}>
-        <color attach="background" args={['#17181b']} />
+      {layoutReady && <Canvas gl={createRenderer as never} flat dpr={[1, QUALITY[quality].dpr]} frameloop="demand" style={{ background: canvasBg }}>
+        <color attach="background" args={[canvasBg]} />
         <CameraRig />
         {viewMode === '2d' ? <Grid2D /> : <Grid3D />}
         <SceneObjects />
@@ -111,6 +128,7 @@ export function Viewport() {
         <Interaction />
         <LabelProjector />
         <FrameStats />
+        <ExportHook />
         <Invalidator />
       </Canvas>}
       <div ref={ticksRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
@@ -140,6 +158,9 @@ export function Viewport() {
         </button>
         <button className={`icon-btn ${settings.snap ? 'on' : ''}`} onClick={() => setSettings({ snap: !settings.snap })} title="Snap to grid">
           <Magnet size={14} />
+        </button>
+        <button className="icon-btn" onClick={() => void saveViewportImage(2)} title="Save the drawing as an image (PNG)">
+          <Camera size={14} />
         </button>
       </div>
       <div className="absolute left-3 top-11 flex items-center gap-1.5">

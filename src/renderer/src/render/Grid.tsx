@@ -5,11 +5,13 @@ import { FatLine } from './FatLine'
 import { niceStep, orthoBounds, toScreen } from './cameraUtils'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
+import { themeColor, useTheme } from '../app/theme'
 import type { V3 } from '../math/vec'
 
-const MINOR = '#26282d'
-const MAJOR = '#33363c'
-const AXIS = '#7d828c'
+// Grid colours come from the stylesheet so they follow the light/dark theme.
+const MINOR = () => themeColor('--grid-minor', '#26282d')
+const MAJOR = () => themeColor('--grid-major', '#33363c')
+const AXIS = () => themeColor('--grid-axis', '#7d828c')
 
 export const AXIS_COLORS = { x: '#ff4d6a', y: '#8fd12e', z: '#3b9dff' }
 
@@ -30,8 +32,14 @@ function useGridLines(): [THREE.LineSegments, THREE.LineSegments] {
       l.renderOrder = -10
       return l
     }
-    return [mk(MINOR), mk(MAJOR)] as [THREE.LineSegments, THREE.LineSegments]
+    return [mk(MINOR()), mk(MAJOR())] as [THREE.LineSegments, THREE.LineSegments]
   }, [])
+  // Repaint the grid when the theme changes.
+  const theme = useTheme((t) => t.theme)
+  useEffect(() => {
+    const colors = [MINOR(), MAJOR()]
+    lines.forEach((l, i) => (l.material as THREE.LineBasicMaterial).color.set(colors[i]))
+  }, [theme, lines])
   useEffect(() => () => lines.forEach((l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose())), [lines])
   return lines
 }
@@ -113,8 +121,8 @@ export function Grid2D() {
       <primitive object={major} />
       {showAxes && axes.x.length > 0 && (
         <>
-          <FatLine points={axes.x} color={AXIS} width={1.6} renderOrder={-5} />
-          <FatLine points={axes.y} color={AXIS} width={1.6} renderOrder={-5} />
+          <FatLine points={axes.x} color={AXIS()} width={1.6} renderOrder={-5} />
+          <FatLine points={axes.y} color={AXIS()} width={1.6} renderOrder={-5} />
         </>
       )}
     </>

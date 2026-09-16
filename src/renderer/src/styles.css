@@ -7,7 +7,7 @@
   --bg-3: #2b2c31;
   --bg-4: #35363c;
   --line: #303137;
-  --line-2: #3d3f46;
+  --line-2: var(--line-2);
   --text: #d9dbe0;
   --text-dim: #9a9ea8;
   --text-faint: #6c707a;
@@ -16,7 +16,51 @@
   --warn: #ffb84d;
   --good: #58d68d;
   --bad: #ff6b6b;
+  --text-strong: #eef0f4;
+  --input-bg: #16171a;
+  --canvas-bg: #17181b;
+  --grid-minor: #26272c;
+  --grid-major: #34363d;
+  --grid-axis: #7d828c;
+  --tick-text: #7d828c;
+  --label-bg: rgba(16, 17, 20, 0.78);
+  --label-text: #e9ecef;
+  --label-shadow: rgba(0, 0, 0, 0.9);
+  --sel-row: #2f4a7a;
+  --shadow: rgba(0, 0, 0, 0.55);
   color-scheme: dark;
+}
+
+/* Light theme for bright rooms and classroom projectors. */
+:root[data-theme='light'] {
+  --bg-0: #eceef1;
+  --bg-1: #f6f7f9;
+  --bg-2: #ffffff;
+  --bg-3: #e8eaee;
+  --bg-4: #dfe2e7;
+  --line: #d3d7dd;
+  --line-2: #bcc2cb;
+  --text: #24262b;
+  --text-dim: #565b64;
+  --text-faint: #767c86;
+  --text-strong: #15171a;
+  --accent: #2f6fe4;
+  --accent-2: #3d7bf0;
+  --warn: #b26a00;
+  --good: #1f8a4c;
+  --bad: #c92a2a;
+  --input-bg: #ffffff;
+  --canvas-bg: #fbfcfd;
+  --grid-minor: #e4e7ec;
+  --grid-major: #c9ced6;
+  --grid-axis: #6b7078;
+  --tick-text: #6b7078;
+  --label-bg: rgba(255, 255, 255, 0.86);
+  --label-text: #1c1e22;
+  --label-shadow: rgba(255, 255, 255, 0.9);
+  --sel-row: #bcd4ff;
+  --shadow: rgba(30, 40, 60, 0.18);
+  color-scheme: light;
 }
 
 html,
@@ -33,7 +77,7 @@ body,
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3a3c43 transparent;
+  scrollbar-color: var(--line-2) transparent;
 }
 
 button {
@@ -80,12 +124,12 @@ textarea {
   padding: 0 10px;
   border-radius: 5px;
   background: var(--bg-4);
-  border: 1px solid #45474f;
+  border: 1px solid var(--line-2);
   color: var(--text);
   white-space: nowrap;
 }
 .btn:hover {
-  background: #40424a;
+  background: var(--bg-4);
 }
 .btn.primary {
   background: var(--accent-2);
@@ -114,13 +158,13 @@ textarea {
   width: 28px;
   height: 26px;
   border-radius: 5px;
-  background: rgba(34, 35, 39, 0.9);
-  border: 1px solid #3a3c43;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
   color: var(--text-dim);
 }
 .icon-btn:hover {
   color: white;
-  background: #33353b;
+  background: var(--bg-3);
 }
 .icon-btn.on {
   color: white;
@@ -130,10 +174,10 @@ textarea {
 
 .seg {
   display: inline-flex;
-  border: 1px solid #3a3c43;
+  border: 1px solid var(--line-2);
   border-radius: 6px;
   overflow: hidden;
-  background: rgba(34, 35, 39, 0.9);
+  background: var(--bg-2);
 }
 .seg button {
   display: inline-flex;
@@ -148,7 +192,7 @@ textarea {
   color: white;
 }
 .seg button:not(.on):hover {
-  background: #33353b;
+  background: var(--bg-3);
   color: white;
 }
 
@@ -157,8 +201,8 @@ textarea {
   width: 100%;
   padding: 0 7px;
   border-radius: 4px;
-  background: #16171a;
-  border: 1px solid #34363d;
+  background: var(--input-bg);
+  border: 1px solid var(--line);
   outline: none;
 }
 .field:focus {
@@ -172,8 +216,8 @@ textarea {
 .badge {
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(34, 35, 39, 0.85);
-  border: 1px solid #34363d;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
   font-variant-numeric: tabular-nums;
 }
 
@@ -219,7 +263,7 @@ textarea {
   color: var(--text-dim);
 }
 .kv > .v {
-  color: #eef0f4;
+  color: var(--text-strong);
   text-align: right;
 }
 
@@ -239,10 +283,10 @@ textarea {
   left: 0;
   top: 0;
   font-size: 10.5px;
-  color: #7d828c;
+  color: var(--tick-text);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 3px #17181b, 0 0 3px #17181b;
+  text-shadow: 0 0 3px var(--canvas-bg), 0 0 3px var(--canvas-bg);
 }
 .obj-label {
   position: absolute;
@@ -253,7 +297,7 @@ textarea {
   font-style: italic;
   font-family: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
   white-space: nowrap;
-  text-shadow: 0 0 4px #000, 0 0 2px #000;
+  text-shadow: 0 0 4px var(--label-shadow), 0 0 2px var(--label-shadow);
   transition: opacity 0.12s ease;
 }
 /* "On hover" labels: appear at once, linger a moment after the cursor leaves, then fade. */
@@ -267,8 +311,8 @@ textarea {
   gap: 6px;
   padding: 1px 7px 2px 6px;
   border-radius: 5px;
-  background: rgba(16, 17, 20, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--label-bg);
+  border: 1px solid var(--line);
   border-left: 3px solid var(--c, #888);
   text-shadow: none;
   color: var(--c, #ddd);
@@ -281,7 +325,7 @@ textarea {
   font-style: normal;
   font-weight: 500;
   font-size: 12px;
-  color: #e9ecef;
+  color: var(--text-strong);
   font-variant-numeric: tabular-nums;
 }
 .obj-label.is-selected {
@@ -292,8 +336,8 @@ textarea {
   font-style: normal;
   font-weight: 500;
   font-family: 'Segoe UI', sans-serif;
-  color: #e9ecef;
-  background: rgba(20, 21, 24, 0.7);
+  color: var(--text-strong);
+  background: var(--label-bg);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -318,15 +362,15 @@ textarea {
   color: #ffe8a3;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  background: rgba(18, 19, 22, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--label-bg);
+  border: 1px solid var(--line);
   padding: 1px 6px;
   border-radius: 4px;
 }
 .measure-label.part-label {
   font-size: 15px;
   font-weight: 700;
-  background: rgba(18, 19, 22, 0.55);
+  background: var(--label-bg);
 }
 .cursor-tip {
   position: absolute;
@@ -335,8 +379,8 @@ textarea {
   z-index: 5;
   padding: 2px 8px;
   border-radius: 5px;
-  background: rgba(18, 19, 22, 0.9);
-  border: 1px solid #3d3f46;
+  background: var(--label-bg);
+  border: 1px solid var(--line-2);
   color: #f1f3f5;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -353,9 +397,9 @@ textarea {
   max-width: calc(100% - 24px);
   padding: 6px 14px;
   border-radius: 16px;
-  background: rgba(24, 25, 28, 0.92);
-  border: 1px solid #3a3c43;
-  color: #e6e8ec;
+  background: var(--label-bg);
+  border: 1px solid var(--line-2);
+  color: var(--text);
   pointer-events: none;
 }
 
@@ -369,7 +413,7 @@ textarea {
   border-radius: 7px;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 12px 34px var(--shadow);
 }
 .menu-item {
   display: flex;
@@ -422,8 +466,8 @@ textarea {
   padding: 4px;
   border-radius: 7px;
   background: #26272c;
-  border: 1px solid #3d3f46;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 10px 30px var(--shadow);
 }
 .menu button {
   display: flex;
@@ -442,7 +486,7 @@ textarea {
 }
 .menu hr {
   border: 0;
-  border-top: 1px solid #3a3c43;
+  border-top: 1px solid var(--line-2);
   margin: 4px 0;
 }
 
@@ -516,8 +560,8 @@ textarea {
   height: 28px;
   padding: 0 12px;
   border-radius: 6px;
-  background: #121316;
-  border: 1px solid #3a3c43;
+  background: var(--bg-0);
+  border: 1px solid var(--line-2);
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 13.5px;
   outline: none;
@@ -536,8 +580,8 @@ textarea {
   overflow: auto;
   border-radius: 7px;
   background: #222328;
-  border: 1px solid #3d3f46;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 12px 30px var(--shadow);
 }
 .suggest button {
   display: grid;
@@ -568,7 +612,7 @@ textarea {
 .log-out {
   margin-top: 2px;
   padding-left: 14px;
-  color: #eef0f4;
+  color: var(--text-strong);
   white-space: pre-wrap;
 }
 .log-out.err {
@@ -585,9 +629,9 @@ math-field.math-input {
   min-height: 34px;
   padding: 4px 8px;
   border-radius: 6px;
-  background: #121316;
-  color: #f1f3f5;
-  border: 1px solid #3a3c43;
+  background: var(--input-bg);
+  color: var(--text-strong);
+  border: 1px solid var(--line-2);
   font-size: 18px;
   --caret-color: #74c0fc;
   --selection-background-color: rgba(79, 140, 255, 0.35);
@@ -630,7 +674,7 @@ math-field.math-input::part(menu-toggle) {
   gap: 8px;
   padding: 10px;
   min-height: 100%;
-  background: linear-gradient(180deg, #1d1e22, #16171a);
+  background: linear-gradient(180deg, #1d1e22, var(--input-bg));
 }
 .lcd {
   border-radius: 8px;
@@ -685,11 +729,11 @@ math-field.math-input::part(menu-toggle) {
   border: 1px solid #484a52;
   color: #f1f3f5;
   font-size: 12.5px;
-  box-shadow: 0 2px 0 #101114;
+  box-shadow: 0 2px 0 var(--bg-0);
 }
 .key:active {
   transform: translateY(1px);
-  box-shadow: 0 1px 0 #101114;
+  box-shadow: 0 1px 0 var(--bg-0);
 }
 .key .shift {
   position: absolute;
@@ -710,7 +754,7 @@ math-field.math-input::part(menu-toggle) {
   font-size: 11.5px;
 }
 .key.digit {
-  background: linear-gradient(180deg, #4a4c54, #3a3c43);
+  background: linear-gradient(180deg, #4a4c54, var(--line-2));
   font-size: 15px;
 }
 .key.del {
@@ -745,4 +789,78 @@ math-field.math-input::part(menu-toggle) {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 2px 0;
+}
+
+
+/* ---------- Light theme: readable values for the dark-first utility classes ---------- */
+:root[data-theme='light'] .text-white,
+:root[data-theme='light'] .text-zinc-100,
+:root[data-theme='light'] .text-zinc-200 {
+  color: var(--text-strong);
+}
+:root[data-theme='light'] .text-zinc-300 {
+  color: #2b2f35;
+}
+:root[data-theme='light'] .text-zinc-400 {
+  color: #4b5058;
+}
+:root[data-theme='light'] .text-zinc-500 {
+  color: #5f656e;
+}
+:root[data-theme='light'] .text-zinc-600 {
+  color: #757b85;
+}
+:root[data-theme='light'] .bg-\[\#2f4a7a\] {
+  background: var(--sel-row);
+  color: var(--text-strong);
+}
+:root[data-theme='light'] .bg-\[\#2f4a7a55\] {
+  background: #dbe7ff;
+}
+:root[data-theme='light'] .bg-\[\#26282d\],
+:root[data-theme='light'] .bg-\[\#222327\],
+:root[data-theme='light'] .bg-\[\#2a2c32\] {
+  background: var(--bg-3);
+}
+:root[data-theme='light'] .bg-\[\#3a3f4a\] {
+  background: var(--bg-4);
+  color: var(--text-strong);
+}
+:root[data-theme='light'] .bg-\[\#3a6fd8\] {
+  background: var(--accent);
+}
+:root[data-theme='light'] .border-\[\#2a2b30\],
+:root[data-theme='light'] .border-\[\#26272c\],
+:root[data-theme='light'] .border-\[\#2c2d32\],
+:root[data-theme='light'] .border-\[\#2e3036\],
+:root[data-theme='light'] .border-\[\#33353c\],
+:root[data-theme='light'] .border-\[\#34363d\],
+:root[data-theme='light'] .border-\[\#3a3c43\],
+:root[data-theme='light'] .border-\[\#3d3f46\] {
+  border-color: var(--line);
+}
+:root[data-theme='light'] .bg-black\/30,
+:root[data-theme='light'] .bg-black\/20 {
+  background: rgba(15, 20, 30, 0.06);
+}
+:root[data-theme='light'] .text-amber-200,
+:root[data-theme='light'] .text-amber-300 {
+  color: #8a5a00;
+}
+:root[data-theme='light'] .text-emerald-400 {
+  color: #10794a;
+}
+:root[data-theme='light'] .text-sky-300 {
+  color: #1257b8;
+}
+:root[data-theme='light'] .text-violet-300 {
+  color: #6a35c9;
+}
+:root[data-theme='light'] .text-red-300,
+:root[data-theme='light'] .text-red-400,
+:root[data-theme='light'] .text-rose-400 {
+  color: #b32424;
+}
+:root[data-theme='light'] .katex {
+  color: var(--text-strong);
 }
