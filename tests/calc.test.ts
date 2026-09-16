@@ -36,6 +36,11 @@ describe('COMP mode', () => {
     const pol = evaluateComp('Pol(3, 4)', ctx)
     expect(pol.text).toBe('r = 5')
     expect(pol.extra?.[0]).toContain('53.13')
+    // An argument with its own comma must not split in the wrong place.
+    expect(evaluateComp('Pol(max(1,3), 4)', ctx).text).toBe('r = 5')
+    expect(evaluateComp('Pol(3*cos(0), 4)', ctx).text).toBe('r = 5')
+    expect(Number(evaluateComp('Rec(√(4), 60)', ctx).value)).toBeCloseTo(1)
+    expect(Number(evaluateComp('Rec(max(1,2), 60)', ctx).value)).toBeCloseTo(1)
   })
 })
 

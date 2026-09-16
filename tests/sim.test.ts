@@ -218,6 +218,22 @@ describe('the sandbox engine agrees with the formulas', () => {
     expect(Math.abs(s.velocity[2])).toBeLessThan(1e-6)
   })
 
+  it('keeps ramps solid after a rebuild', async () => {
+    // A ramp is a convex hull: its shape lives only as long as someone holds a reference.
+    // If the settings that built it are freed too early the ball falls straight through.
+    const world = await makeWorld()
+    const ramp = body({ shape: 'ramp', size: [2, 1, 2], position: [0, 0, 0], motion: 'static' })
+    const ball = body({ shape: 'sphere', size: [0.2, 0.2, 0.2], position: [-0.9, 3, 0] })
+    world.addBody(ramp)
+    world.addBody(ball)
+    for (let i = 0; i < 3; i++) world.rebuild()
+    const hits: string[] = []
+    const dt = 1 / 60
+    for (let t = 0; t < 1.5; t += dt) for (const c of world.step(dt).contacts) hits.push(c.a + '-' + c.b)
+    // A shape that died with its settings would let the ball fall through without ever touching.
+    expect(hits.some((h) => h.includes(ramp.id) && h.includes(ball.id))).toBe(true)
+  })
+
   it('cleans up after itself: no Jolt handles left behind', async () => {
     const world = await makeWorld()
     const base = world.handleCount
@@ -230,6 +246,18 @@ describe('the sandbox engine agrees with the formulas', () => {
     run(world, 0.5)
     for (const id of ids) world.removeBody(id)
     // Creating and deleting bodies must not grow the handle set.
+    expect(world.handleCount).toBeLessThanOrEqual(base + 4)
+  })
+
+  it('cleans up after hull shapes too (ramps and cones)', async () => {
+    const world = await makeWorld()
+    const base = world.handleCount
+    for (let i = 0; i < 30; i++) {
+      const b = body({ shape: i % 2 ? 'ramp' : 'cone', size: [1, 1, 1], position: [i, 5, 0] })
+      world.addBody(b)
+      world.removeBody(b.id)
+    }
+    // The ShapeSettings behind every hull has to be freed once the body holds the shape.
     expect(world.handleCount).toBeLessThanOrEqual(base + 4)
   })
 })

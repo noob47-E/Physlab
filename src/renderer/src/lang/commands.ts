@@ -10,7 +10,7 @@ import { isValidName } from '../core/naming'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { visualizeGraph, visualizePoint, visualizeSolution, visualizeVector } from '../core/visualize'
 import { cas } from '../math/cas'
-import { inferKind, math, preprocess, symbolsOf, toV3, type ValueKind } from '../math/expr'
+import { inferKind, math, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
 import { fmt, fmtAngle, tex, texIJK } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
@@ -226,22 +226,6 @@ function usesSymbol(src: string, sym: string): boolean {
   } catch {
     return new RegExp(`(^|[^A-Za-z_])${sym}([^A-Za-z_(]|$)`).test(src)
   }
-}
-
-function splitArgs(s: string): string[] {
-  const out: string[] = []
-  let depth = 0
-  let cur = ''
-  for (const ch of s) {
-    if (ch === '(' || ch === '[') depth++
-    if (ch === ')' || ch === ']') depth--
-    if (ch === ',' && depth === 0) {
-      out.push(cur.trim())
-      cur = ''
-    } else cur += ch
-  }
-  if (cur.trim()) out.push(cur.trim())
-  return out
 }
 
 // ---------------------------------------------------------------------------

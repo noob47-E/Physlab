@@ -165,8 +165,9 @@ export class SimWorld {
 
   addBody(def: BodyDef): void {
     const J = this.jolt as unknown as AnyJolt & Jolt
-    const shape = this.makeShape(def)
-    if (!shape) return
+    const built = this.makeShape(def)
+    if (!built) return
+    const { shape, settings: shapeSettings } = built
     const motion =
       def.motion === 'static' ? J.EMotionType_Static : def.motion === 'kinematic' ? J.EMotionType_Kinematic : J.EMotionType_Dynamic
     const layer = def.motion === 'dynamic' ? LAYER_MOVING : LAYER_STATIC
@@ -202,6 +203,8 @@ export class SimWorld {
     this.order.push(def.id)
     this.transforms = new Float32Array(this.order.length * STRIDE)
     this.release(settings)
+    // The body holds its own reference to the shape now, so the settings that built it can go.
+    if (shapeSettings) this.release(shapeSettings)
     this.release(pos)
     this.release(rot)
     this.release(lv)
@@ -232,10 +235,11 @@ export class SimWorld {
   }
 
   /**
-   * Builds the collision shape. Shapes are created directly (not through settings that are then
-   * thrown away) because a freed ShapeSettings takes its shape with it.
+   * Builds the collision shape. Simple shapes are created directly, because a freed ShapeSettings
+   * takes its shape with it. A hull (ramp, cone) can only be built through settings, so those come
+   * back with the shape and addBody() frees them once the body holds its own reference.
    */
-  private makeShape(def: BodyDef): InstanceType<Jolt['Shape']> | null {
+  private makeShape(def: BodyDef): { shape: InstanceType<Jolt['Shape']>; settings: unknown | null } | null {
     const J = this.jolt as unknown as AnyJolt & Jolt
     const [a, b, c] = def.size
     const min = (v: number) => Math.max(0.01, v)
@@ -244,11 +248,11 @@ export class SimWorld {
     const cast = (shape: unknown) => shape as InstanceType<Jolt['Shape']>
     switch (def.shape) {
       case 'sphere':
-        return cast(new J.SphereShape(min(a)))
+        return { shape: cast(new J.SphereShape(min(a))), settings: null }
       case 'cylinder':
-        return cast(new J.CylinderShape(min(b / 2), min(a), 0.02))
+        return { shape: cast(new J.CylinderShape(min(b / 2), min(a), 0.02)), settings: null }
       case 'capsule':
-        return cast(new J.CapsuleShape(min(b / 2), min(a)))
+        return { shape: cast(new J.CapsuleShape(min(b / 2), min(a))), settings: null }
       case 'ramp':
       case 'cone':
         return this.hullShape(def)
@@ -256,13 +260,13 @@ export class SimWorld {
         const half = this.v3([min(a / 2), min(b / 2), min(c / 2)])
         const shape = new J.BoxShape(half, 0.02)
         this.release(half)
-        return cast(shape)
+        return { shape: cast(shape), settings: null }
       }
     }
   }
 
   /** A wedge (ramp) or a cone, built from corner points. */
-  private hullShape(def: BodyDef): InstanceType<Jolt['Shape']> | null {
+  private hullShape(def: BodyDef): { shape: InstanceType<Jolt['Shape']>; settings: unknown } | null {
     const J = this.jolt as unknown as AnyJolt & Jolt
     const [a, b, c] = def.size
     const hx = Math.max(0.01, a / 2)
@@ -291,12 +295,14 @@ export class SimWorld {
       pts.push_back(v)
       this.release(v)
     }
-    const settings = new J.ConvexHullShapeSettings()
+    const settings = this.track(new J.ConvexHullShapeSettings())
     settings.mPoints = pts
     settings.mMaxConvexRadius = 0.02
     const shape = settings.Create().Get() as unknown as InstanceType<Jolt['Shape']>
     this.release(pts)
-    return shape
+    // These settings hold the only reference to the new shape, so they are freed in addBody()
+    // once the body has taken one of its own; freeing them here would take the shape too.
+    return { shape, settings }
   }
 
   private quatFromEuler(deg: V3) {

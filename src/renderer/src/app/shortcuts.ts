@@ -10,6 +10,13 @@ const isTyping = (e: KeyboardEvent) => {
   return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'MATH-FIELD' || t.isContentEditable
 }
 
+/** Controls that already turn Enter or Space into a click, so a shortcut must not steal the key. */
+const isActivatable = (t: HTMLElement) =>
+  t.tagName === 'BUTTON' ||
+  t.tagName === 'SUMMARY' ||
+  (t.tagName === 'A' && t.hasAttribute('href')) ||
+  ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'switch'].includes(t.getAttribute('role') ?? '')
+
 export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -76,11 +83,15 @@ export function useShortcuts() {
           resetCamera()
           return
         case ' ':
+          // Space on a focused button is that button's click, not play/pause.
+          if (isActivatable(e.target as HTMLElement)) return
           e.preventDefault()
           s.setPlaying(!s.playing)
           return
         case '/':
         case 'Enter':
+          // The same for Enter on a focused button, link or menu item.
+          if (e.key === 'Enter' && isActivatable(e.target as HTMLElement)) return
           e.preventDefault()
           // While drawing, Enter finishes the shape instead of jumping to the command bar.
           if (e.key === 'Enter' && useTool.getState().picks.length && finishTool()) return

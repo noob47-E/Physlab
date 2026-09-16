@@ -429,3 +429,23 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
     }
   }
 }
+
+/**
+ * Splits `a, b, f(c, d)` into its arguments, ignoring commas inside brackets.
+ * The command bar and the calculator share it so both read arguments the same way.
+ */
+export function splitArgs(s: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of s) {
+    if (ch === '(' || ch === '[') depth++
+    if (ch === ')' || ch === ']') depth--
+    if (ch === ',' && depth === 0) {
+      out.push(cur.trim())
+      cur = ''
+    } else cur += ch
+  }
+  if (cur.trim()) out.push(cur.trim())
+  return out
+}

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -156,7 +156,14 @@ ipcMain.handle('file:save', async (_e, content: string, path: string | null) => 
   // Write beside the file first, then swap it in, so a crash cannot leave a half-written project.
   const tmp = `${target}.saving`
   await writeFile(tmp, content, 'utf8')
-  await rename(tmp, target)
+  try {
+    await rename(tmp, target)
+  } catch {
+    // Windows refuses the swap while a backup tool or virus scanner holds the file open.
+    // Copying over it is not atomic, but losing the student's work would be worse.
+    await copyFile(tmp, target)
+    await unlink(tmp).catch(() => {})
+  }
   return target
 })
 

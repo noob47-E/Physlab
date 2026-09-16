@@ -1,7 +1,7 @@
 // Numeric engine behind the calculator panel (fx-991EX feature set and more).
 
 import type { MathNode } from 'mathjs'
-import { math, preprocess, setAngleMode, getAngleMode } from '../math/expr'
+import { math, preprocess, setAngleMode, getAngleMode, splitArgs } from '../math/expr'
 import { constantScope } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -201,19 +201,22 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
   if (!src) throw new Error('Empty')
   const scope: Record<string, unknown> = { ...constantScope(), ...ctx.vars, Ans: ctx.ans ?? 0 }
 
-  const pol = src.match(/^Pol\((.+),(.+)\)$/i)
-  if (pol) {
-    const x = Number(math.evaluate(casioToMath(pol[1]), scope))
-    const y = Number(math.evaluate(casioToMath(pol[2]), scope))
+  // splitArgs, not a regex: Pol(max(1,3), 4) must split on the right comma.
+  const pol = src.match(/^Pol\((.*)\)$/i)
+  const polArgs = pol ? splitArgs(pol[1]) : null
+  if (polArgs?.length === 2) {
+    const x = Number(math.evaluate(casioToMath(polArgs[0]), scope))
+    const y = Number(math.evaluate(casioToMath(polArgs[1]), scope))
     const r = Math.hypot(x, y)
     const theta = Math.atan2(y, x)
     const th = ctx.angle === 'deg' ? (theta * 180) / Math.PI : theta
     return { value: r, text: `r = ${fmtNum(r)}`, extra: [`θ = ${fmtNum(th)}${ctx.angle === 'deg' ? '°' : ' rad'}`] }
   }
-  const rec = src.match(/^Rec\((.+),(.+)\)$/i)
-  if (rec) {
-    const r = Number(math.evaluate(casioToMath(rec[1]), scope))
-    const t = Number(math.evaluate(casioToMath(rec[2]), scope))
+  const rec = src.match(/^Rec\((.*)\)$/i)
+  const recArgs = rec ? splitArgs(rec[1]) : null
+  if (recArgs?.length === 2) {
+    const r = Number(math.evaluate(casioToMath(recArgs[0]), scope))
+    const t = Number(math.evaluate(casioToMath(recArgs[1]), scope))
     const tr = ctx.angle === 'deg' ? (t * Math.PI) / 180 : t
     return { value: r * Math.cos(tr), text: `x = ${fmtNum(r * Math.cos(tr))}`, extra: [`y = ${fmtNum(r * Math.sin(tr))}`] }
   }
