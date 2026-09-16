@@ -85,7 +85,15 @@ export const MODES: ModeDef[] = [
   { id: 'waves', label: 'Waves & Sound', description: 'Oscillations, waves, superposition, standing waves, the Doppler effect.', ready: false, tools: ['select'] },
   { id: 'heat', label: 'Heat', description: 'Temperature, gases, kinetic theory, thermodynamic cycles.', ready: false, tools: ['select'] },
   { id: 'nuclear', label: 'Nuclear & Modern', description: 'Radioactivity, half-life, binding energy, relativity.', ready: false, tools: ['select'] },
-  { id: 'problems', label: 'Problem Sets', description: 'Random practice problems with checking, hints and worksheets.', ready: false, tools: ['select'] }
+  {
+    id: 'problems',
+    label: 'Problem Sets',
+    description: 'Random practice problems: hints one step at a time, and checking of the answer you worked out yourself.',
+    ready: true,
+    tools: ['select', '|', 'vector', 'point', '|', 'delete'],
+    panel: 'practice',
+    view: '2d'
+  }
 ]
 
 /** Never throws: a file from a newer version may name a mode this build does not have. */

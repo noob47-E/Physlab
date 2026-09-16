@@ -26,13 +26,23 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
 | **Sandbox** | Real objects that collide, powered by the Jolt physics engine. Add balls, crates, cylinders, ramps, planks and walls; set mass or density, material, size, position, velocity, bounciness and friction; pick things up with the mouse and throw them. World controls: gravity (Earth, Moon, Mars, Jupiter, none), air or vacuum, a true flat 2D mode, slow motion and an accuracy setting. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
-| Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern, Problem Sets. |
+| **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. |
+| Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern. |
 
 ## Drawing, finishing and the right-click menu
 
 - While you draw: **right-click, Enter or double-click** finishes the shape, **Backspace** removes the last point, **Esc** cancels. The same three buttons appear next to the hint at the bottom of the drawing.
 - **Right-click** any object for what you can do with it: show components, resolve with steps, midpoint, perpendicular bisector, decompose, show angles, pin its label, rename, delete. Right-clicking empty space gives view, grid, snapping and label options. The same menu works in the Outliner and the Measure list.
 - A point clicked **on a side or a circle** sticks to it and slides along it when dragged.
+
+## Practice and hints
+
+- **Problem Sets** mode: choose your topics (components, resultant, dot and cross product, equilibrium, work, torque, projection…), choose 3, 5 or 10 questions, and PhysLab makes new numbers every time.
+- Work the question out on paper, type what you got, and press **Check my answer**. A right answer is a right answer even if you rounded: anything within 1% is correct, and a slightly rounded one is marked right with a note.
+- A wrong answer is told *why* it is wrong whenever PhysLab can recognise the mistake — "That is F sin θ. The x-component uses cos", "Right reference angle, wrong quadrant", "That is the resultant R; the balancing force is equal and opposite", "That is the answer in radians".
+- **Hint** shows the first step of the worked solution. Press it again for the next step. The answer only appears when you ask for it.
+- The same **Give me a hint** button is in the Solver panel, so any solved problem can be revealed one step at a time.
+- **Show in scene** draws the problem with its vectors and components, so you can see what the numbers mean.
 
 ## Help for new users
 

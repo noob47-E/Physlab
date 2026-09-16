@@ -1,4 +1,5 @@
 // Serves the renderer alone in a browser (http://localhost:5199) for quick testing.
+// PORT overrides the port, so a second session can preview at the same time.
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -10,7 +11,7 @@ export default defineConfig({
   worker: { format: 'es' },
   optimizeDeps: { exclude: ['pyodide'] },
   server: {
-    port: 5199,
+    port: Number(process.env.PORT) || 5199,
     strictPort: true,
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',

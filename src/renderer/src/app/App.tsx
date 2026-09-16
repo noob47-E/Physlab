@@ -27,6 +27,7 @@ const Calculator = lazy(() => import('../panels/Calculator').then((m) => ({ defa
 const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.Graphs })))
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
+const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
 
 const PANELS: Record<string, [string, React.ComponentType]> = {
   viewport: ['Viewport', Viewport],
@@ -36,6 +37,7 @@ const PANELS: Record<string, [string, React.ComponentType]> = {
   measure: ['Measure', Measurements],
   vectorcalc: ['Vector Calculator', VectorCalc],
   solver: ['Solver', Solver],
+  practice: ['Practice', Practice],
   calculator: ['Calculator', Calculator],
   console: ['Console', Console],
   timeline: ['Timeline', Timeline],
@@ -107,6 +109,7 @@ function buildLayout(api: DockviewApi) {
   api.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: 'vectorcalc', direction: 'within' } })
   api.addPanel({ id: 'solver', component: 'solver', title: 'Solver', position: { referencePanel: 'vectorcalc', direction: 'within' } })
   api.addPanel({ id: 'sandbox', component: 'sandbox', title: 'Sandbox', position: { referencePanel: 'vectorcalc', direction: 'within' } })
+  api.addPanel({ id: 'practice', component: 'practice', title: 'Practice', position: { referencePanel: 'vectorcalc', direction: 'within' } })
   api.addPanel({ id: 'console', component: 'console', title: 'Console', position: { referencePanel: 'viewport', direction: 'below' }, initialHeight: 200 })
   api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: 'console', direction: 'within' } })
   api.addPanel({ id: 'graphs', component: 'graphs', title: 'Graphs', position: { referencePanel: 'console', direction: 'within' } })

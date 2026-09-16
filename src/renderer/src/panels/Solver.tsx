@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Eye, Plus, Sparkles, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Eye, Lightbulb, Plus, Sparkles, X } from 'lucide-react'
 import { useScene } from '../core/store'
 import { visualizeSolution } from '../core/visualize'
 import { fromPolar, toRad, type V3 } from '../math/vec'
@@ -106,7 +106,11 @@ function resolveVec(v: VecInput): VS.NamedVec {
   return { name: v.name, v: v.comp }
 }
 
-export function SolutionView({ sol }: { sol: VS.Solution }) {
+/** The worked solution. With `startHidden` the steps arrive one press at a time, like a tutor. */
+export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; startHidden?: boolean }) {
+  const [shown, setShown] = useState(startHidden ? 0 : sol.steps.length)
+  useEffect(() => setShown(startHidden ? 0 : sol.steps.length), [sol, startHidden])
+  const more = sol.steps.length - shown
   return (
     <div className="steps">
       <div className="flex items-center gap-2 px-3 pt-3">
@@ -118,8 +122,11 @@ export function SolutionView({ sol }: { sol: VS.Solution }) {
           </button>
         )}
       </div>
+      {shown === 0 && (
+        <div className="px-3 pt-2 text-zinc-400">Work it out yourself first. Press Hint when you are stuck — one step at a time.</div>
+      )}
       <ol className="mt-2 space-y-1.5 px-3">
-        {sol.steps.map((s, i) => (
+        {sol.steps.slice(0, shown).map((s, i) => (
           <li key={i} className="rounded-md bg-black/20 px-3 py-2">
             <div className="flex gap-2">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2f4a7a] text-[11px] text-white">{i + 1}</span>
@@ -131,15 +138,28 @@ export function SolutionView({ sol }: { sol: VS.Solution }) {
           </li>
         ))}
       </ol>
-      <div className="card mx-3 mt-3 border-amber-400/40 bg-amber-400/5 p-3">
-        <div className="mb-1 text-[11px] uppercase tracking-wide text-amber-300">Answer</div>
-        {sol.answers.map((a) => (
-          <div key={a.label} className="flex items-baseline gap-3 py-0.5">
-            <span className="w-24 text-zinc-400">{a.label}</span>
-            <Tex tex={a.tex} className="text-[15px] text-white" />
-          </div>
-        ))}
-      </div>
+      {more > 0 && (
+        <div className="flex items-center gap-2 px-3 pt-2">
+          <button className="btn" onClick={() => setShown((n) => n + 1)}>
+            <Lightbulb size={13} /> {shown === 0 ? 'Hint' : 'Next step'}
+          </button>
+          <button className="btn ghost" onClick={() => setShown(sol.steps.length)}>
+            Show all {sol.steps.length} steps
+          </button>
+          <span className="text-zinc-500">{more} to go</span>
+        </div>
+      )}
+      {more === 0 && (
+        <div className="card mx-3 mt-3 border-amber-400/40 bg-amber-400/5 p-3">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-amber-300">Answer</div>
+          {sol.answers.map((a) => (
+            <div key={a.label} className="flex items-baseline gap-3 py-0.5">
+              <span className="w-24 text-zinc-400">{a.label}</span>
+              <Tex tex={a.tex} className="text-[15px] text-white" />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -152,6 +172,7 @@ export function Solver() {
   const [nums, setNums] = useState({ F: 10, theta: 30, F1: 5, F2: 5, angle: 120, k: 2, q: 2 })
   const [error, setError] = useState('')
   const [method, setMethod] = useState<'components' | 'cosine' | 'graphical'>('components')
+  const [hintFirst, setHintFirst] = useState(false)
 
   const needVecs: Record<ProblemId, number> = {
     components: 0, magdir: 1, add: -1, subtract: 2, scale: 1, unit: 1, dot: 2, cross: 2, projection: 2, twoforces: 0, equilibrium: -1, torque: 2, work: 2, magforce: 2
@@ -170,8 +191,9 @@ export function Solver() {
     if (id === 'magforce') setVecs([newVec('v', [1, 0, 0]), newVec('B', [0, 0, 1])])
   }
 
-  const solve = () => {
+  const solve = (hint = false) => {
     setError('')
+    setHintFirst(hint)
     try {
       const vs = vecs.map(resolveVec)
       let sol: VS.Solution
@@ -303,14 +325,17 @@ export function Solver() {
         )}
       </div>
       <div className="flex items-center gap-2 px-3 pt-2">
-        <button className="btn primary" onClick={solve}>
+        <button className="btn primary" onClick={() => solve(false)}>
           <Sparkles size={13} /> Solve step by step
+        </button>
+        <button className="btn" onClick={() => solve(true)} title="One step at a time, so you can carry on yourself">
+          <Lightbulb size={13} /> Give me a hint
         </button>
         {error && <span className="text-red-400">{error}</span>}
       </div>
       {solution && (
         <div className="mt-3 border-t border-[#2a2b30]">
-          <SolutionView sol={solution} />
+          <SolutionView sol={solution} startHidden={hintFirst} />
         </div>
       )}
     </div>
