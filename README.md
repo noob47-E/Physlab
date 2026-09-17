@@ -8,7 +8,7 @@ Everything runs offline.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.2.1.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.2.2.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |

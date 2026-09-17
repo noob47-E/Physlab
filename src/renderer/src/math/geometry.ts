@@ -247,7 +247,8 @@ export function angleBisector(a: V3, vertex: V3, b: V3): GLine {
   const u = normalize(sub(a, vertex))
   const v = normalize(sub(b, vertex))
   let d = add(u, v)
-  if (len(d) < EPS) d = [-u[1], u[0], 0]
+  // Opposite arms: any perpendicular will do, but it must not be the zero vector.
+  if (len(d) < EPS) d = Math.abs(u[0]) > EPS || Math.abs(u[1]) > EPS ? [-u[1], u[0], 0] : [1, 0, 0]
   return { kind: 'line', p: vertex, d }
 }
 

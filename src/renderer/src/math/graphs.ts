@@ -107,6 +107,8 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
       }
     }
   }
+  // The loop compares pairs, so a root exactly on the last sample is only seen here.
+  if (ys[n] === 0) out.push({ x: xMax, y: 0, kind: 'root' })
   if (xMin <= 0 && xMax >= 0) {
     const y = f(0)
     if (Number.isFinite(y)) out.push({ x: 0, y, kind: 'yIntercept' })

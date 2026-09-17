@@ -98,7 +98,7 @@ export function Grid2D() {
     const majorStep = niceStep(100 / zoom)
     const minorStep = majorStep / (String(majorStep).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
     const prev = built.current
-    const key = gridKey(majorStep, size)
+    const key = gridKey(majorStep, size, zoom)
     if (needsGridRebuild(prev, b, key)) {
       const w = b.xMax - b.xMin
       const h = b.yMax - b.yMin

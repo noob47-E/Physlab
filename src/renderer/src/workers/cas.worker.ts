@@ -130,7 +130,13 @@ self.onmessage = async (e: MessageEvent<{ id: number; op: string; payload: objec
     if (!py) {
       loading ??= boot()
       postMessage({ status: 'loading' })
-      py = await loading
+      try {
+        py = await loading
+      } catch (err) {
+        // Forget the failed attempt, or every later request replays the same rejection.
+        loading = null
+        throw err
+      }
       postMessage({ status: 'ready' })
     }
     if (op === 'warmup') {

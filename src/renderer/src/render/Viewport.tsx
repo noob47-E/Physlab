@@ -12,7 +12,7 @@ import { SceneObjects } from './SceneObjects'
 import { LabelLayer, LabelProjector } from './Labels'
 import { Interaction } from './Interaction'
 import { overlay } from './overlay'
-import { resetCamera } from './viewState'
+import { resetCamera, useView } from './viewState'
 import { GpuParticles, useParticleLab } from './GpuParticles'
 import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { useScene } from '../core/store'
@@ -44,7 +44,9 @@ function Invalidator() {
       useParticleLab.subscribe(kick),
       // The renderer starts asynchronously; the frames drawn before it reports its backend can be
       // too early to show anything.
-      useGpuInfo.subscribe(kick)
+      useGpuInfo.subscribe(kick),
+      // The camera moving, zooming or simply arriving changes what the grid has to cover.
+      useView.subscribe(kick)
     ]
     window.addEventListener('resize', kick)
     kick()

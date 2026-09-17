@@ -24,7 +24,7 @@ describe('a frame before the canvas has a size', () => {
 })
 
 describe('deciding when to rebuild the grid', () => {
-  const built = { key: gridKey(1, { width: 1200, height: 800 }), ...area(-24, 24, -16, 16) }
+  const built = { key: gridKey(1, { width: 1200, height: 800 }, 50), ...area(-24, 24, -16, 16) }
 
   it('leaves a grid alone while the view stays inside it', () => {
     expect(needsGridRebuild(built, area(-12, 12, -8, 8), built.key)).toBe(false)
@@ -36,16 +36,16 @@ describe('deciding when to rebuild the grid', () => {
   })
 
   it('rebuilds when the spacing changes', () => {
-    expect(needsGridRebuild(built, area(-12, 12, -8, 8), gridKey(2, { width: 1200, height: 800 }))).toBe(true)
+    expect(needsGridRebuild(built, area(-12, 12, -8, 8), gridKey(2, { width: 1200, height: 800 }, 50))).toBe(true)
   })
 
   it('rebuilds when the panel is resized at the same spacing', () => {
     // Without the size in the key a panel that grew kept the grid it had when it was small.
-    expect(needsGridRebuild(built, area(-12, 12, -8, 8), gridKey(1, { width: 1600, height: 800 }))).toBe(true)
+    expect(needsGridRebuild(built, area(-12, 12, -8, 8), gridKey(1, { width: 1600, height: 800 }, 50))).toBe(true)
   })
 
   it('always rebuilds over the empty cache a zero-size frame used to leave behind', () => {
-    const poisoned = { key: gridKey(1, { width: 0, height: 0 }), ...area(0, 0, 0, 0) }
-    expect(needsGridRebuild(poisoned, area(-12, 12, -8, 8), gridKey(1, { width: 1200, height: 800 }))).toBe(true)
+    const poisoned = { key: gridKey(1, { width: 0, height: 0 }, 1), ...area(0, 0, 0, 0) }
+    expect(needsGridRebuild(poisoned, area(-12, 12, -8, 8), gridKey(1, { width: 1200, height: 800 }, 50))).toBe(true)
   })
 })

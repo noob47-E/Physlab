@@ -24,7 +24,12 @@ function renameObject(obj: SceneObject, next: string) {
     if (copy.type === 'vector' && copy.def.kind === 'expr') copy.def.expr = copy.def.expr.replace(re, next)
     if (copy.type === 'circle' && copy.def.kind === 'centerRadius') copy.def.r = copy.def.r.replace(re, next)
     if (copy.type === 'number') copy.expr = copy.expr.replace(re, next)
-    if (copy.type === 'graph') copy.exprs = copy.exprs.map((e) => e.replace(re, next))
+    if (copy.type === 'graph') {
+      copy.exprs = copy.exprs.map((e) => e.replace(re, next))
+      // The source is what the Outliner shows and what editing starts from, so it renames too.
+      re.lastIndex = 0
+      copy.source = copy.source.replace(re, next)
+    }
     changed.push(copy)
   }
   s.addObjects(changed)

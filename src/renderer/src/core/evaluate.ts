@@ -202,7 +202,9 @@ export function evaluateScene(
           }
           case 'perpendicular': {
             const l = needLine(d.line)
-            return { type: 'line', line: { kind: 'line', p: needPoint(d.through), d: [-l.d[1], l.d[0], 0] } }
+            // A line along z has no perpendicular in the xy-plane; any horizontal direction is one.
+            const flat = Math.abs(l.d[0]) > 1e-12 || Math.abs(l.d[1]) > 1e-12
+            return { type: 'line', line: { kind: 'line', p: needPoint(d.through), d: flat ? [-l.d[1], l.d[0], 0] : [1, 0, 0] } }
           }
           case 'parallel': {
             const l = needLine(d.line)

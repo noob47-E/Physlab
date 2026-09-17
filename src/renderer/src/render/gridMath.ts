@@ -26,5 +26,10 @@ export function needsGridRebuild(prev: GridArea & { key: string }, view: GridAre
   return view.xMin < prev.xMin || view.xMax > prev.xMax || view.yMin < prev.yMin || view.yMax > prev.yMax
 }
 
-/** What was built is remembered under this key; the size is part of it because a panel that grew needs more grid. */
-export const gridKey = (majorStep: number, size: ViewSize): string => `${majorStep}|${size.width}x${size.height}`
+/**
+ * What was built is remembered under this key. The size is part of it because a panel that grew
+ * needs more grid, and the zoom is part of it because the very first frame uses a stand-in camera
+ * whose zoom is 1 — a grid built for that must not be mistaken for the real one.
+ */
+export const gridKey = (majorStep: number, size: ViewSize, zoom = 1): string =>
+  `${majorStep}|${size.width}x${size.height}|${zoom}`

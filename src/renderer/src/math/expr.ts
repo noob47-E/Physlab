@@ -340,7 +340,8 @@ const F = {
   sec: (x: number) => 1 / Math.cos(x),
   csc: (x: number) => 1 / Math.sin(x),
   cot: (x: number) => 1 / Math.tan(x),
-  nthRoot: (x: number, n: number) => (x < 0 && n % 2 === 1 ? -Math.pow(-x, 1 / n) : Math.pow(x, 1 / n)),
+  // n % 2 is −1 for a negative odd n in JavaScript, so compare the size.
+  nthRoot: (x: number, n: number) => (x < 0 && Math.abs(n % 2) === 1 ? -Math.pow(-x, 1 / n) : Math.pow(x, 1 / n)),
   mod: (a: number, b: number) => ((a % b) + b) % b,
   fact: (n: number) => math.gamma(n + 1),
   gamma: (n: number) => math.gamma(n),

@@ -111,7 +111,9 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const { camera, size } = useThree()
 
   useFrame(({ camera: cam, size: sz }) => {
-    const firstPoly = data.polylines[0] ?? (data.segments ? [data.segments[0]] : undefined)
+    // An implicit curve with nothing to draw (x² + y² = −1) has an empty segment list, and
+    // [segments[0]] would be [undefined]: projecting that threw on every frame.
+    const firstPoly = data.polylines[0] ?? (data.segments?.length ? [data.segments[0]] : undefined)
     if (firstPoly?.length) {
       // Anchor the name near the right edge of the visible part of the curve.
       const vis = firstPoly.filter((p) => {

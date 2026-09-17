@@ -438,7 +438,11 @@ export function polyInequality(coeffs: number[], op: '<' | '<=' | '>' | '>='): {
     const mid = !Number.isFinite(a) ? b - 1 : !Number.isFinite(b) ? a + 1 : (a + b) / 2
     if (ok(p(mid))) {
       const last = out[out.length - 1]
-      if (last && last.to === a && inclusive) last.to = b
+      if (last && last.to === a && inclusive) {
+        last.to = b
+        // Nothing is ever closed at infinity.
+        last.closedTo = Number.isFinite(b)
+      }
       else out.push({ from: a, to: b, closedFrom: inclusive && Number.isFinite(a), closedTo: inclusive && Number.isFinite(b) })
     } else if (inclusive && Number.isFinite(b) && i < edges.length - 2) {
       // isolated touching root
@@ -684,16 +688,22 @@ export function propagate(op: '+' | '-' | '×' | '÷' | '^', a: Measured, b: Mea
   if (op === '^') {
     const p = b as number
     const value = a.value ** p
-    const unc = Math.abs(p) * (a.unc / Math.abs(a.value)) * Math.abs(value)
-    return { value, unc, rule: `Power rule: % uncertainty is multiplied by the power (${p}).` }
+    // |Δy| = |p x^(p−1)| |Δx| — the same rule, but it survives a measurement of zero.
+    const unc = Math.abs(p) * Math.abs(a.value ** (p - 1)) * a.unc
+    return { value, unc: Number.isFinite(unc) ? unc : 0, rule: `Power rule: % uncertainty is multiplied by the power (${p}).` }
   }
   const bb = b as Measured
   if (op === '+' || op === '-') {
     return { value: op === '+' ? a.value + bb.value : a.value - bb.value, unc: a.unc + bb.unc, rule: 'Adding or subtracting: add the absolute uncertainties.' }
   }
   const value = op === '×' ? a.value * bb.value : a.value / bb.value
-  const frac = a.unc / Math.abs(a.value) + bb.unc / Math.abs(bb.value)
-  return { value, unc: frac * Math.abs(value), rule: 'Multiplying or dividing: add the percentage (fractional) uncertainties.' }
+  // Adding the percentage uncertainties, written so that a reading of zero (whose percentage
+  // uncertainty is undefined) gives an answer instead of NaN.
+  const unc =
+    op === '×'
+      ? Math.abs(a.value) * bb.unc + Math.abs(bb.value) * a.unc
+      : (a.unc * Math.abs(bb.value) + Math.abs(a.value) * bb.unc) / (bb.value * bb.value)
+  return { value, unc: Number.isFinite(unc) ? unc : 0, rule: 'Multiplying or dividing: add the percentage (fractional) uncertainties.' }
 }
 
 /** Dimensions [M L T I Θ N J] of an expression with units, e.g. "kg*m/s^2". */

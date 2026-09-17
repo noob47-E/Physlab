@@ -240,14 +240,14 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
       const integ = input.match(/^integral\((.*)\)$/)
       if (integ) {
         const [f, a, b] = args(integ[1])
-        const lo = Number(math.evaluate(casioToMath(a), constantScope()))
-        const hi = Number(math.evaluate(casioToMath(b), constantScope()))
+        const lo = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
+        const hi = Number(math.evaluate(casioToMath(b), { ...constantScope(), ...s.vars }))
         visualizeArea(casioToMath(f), lo, hi, `∫ ${f} dx from ${a} to ${b}`)
         return
       }
       const pol = input.match(/^(Pol|Rec)\((.*)\)$/i)
       if (pol) {
-        const [p, q] = args(pol[2]).map((t) => Number(math.evaluate(casioToMath(t), constantScope())))
+        const [p, q] = args(pol[2]).map((t) => Number(math.evaluate(casioToMath(t), { ...constantScope(), ...s.vars })))
         const rad = angleUnit === 'deg' ? (q * Math.PI) / 180 : q
         visualizeVector(pol[1].toLowerCase() === 'pol' ? [p, q, 0] : [p * Math.cos(rad), p * Math.sin(rad), 0])
         return

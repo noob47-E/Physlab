@@ -337,8 +337,8 @@ export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C'): Solution
     },
     { tex: `${b(resultName)} = ${texIJK(C, D)}` },
     { text: 'Magnitude:', tex: `|${b(resultName)}| = \\sqrt{${C.map((c) => `${texP(c, D)}^2`).join(' + ')}} = ${tex(mC, D)}` },
-    { text: 'Check with |A×B| = AB sin θ:', tex: `${tex(mA, D)}\\times${tex(mB, D)}\\times\\sin ${tex(theta, 2)}^\\circ = ${tex(mA * mB * Math.sin(toRad(theta)), D)}` },
-    { text: `|A×B| is also the area of the parallelogram with sides ${A.name} and ${B.name}.`, tex: `\\text{Area} = ${tex(mC, D)}` },
+    { text: `Check with |${A.name}×${B.name}| = ${A.name}${B.name} sin θ:`, tex: `${tex(mA, D)}\\times${tex(mB, D)}\\times\\sin ${tex(theta, 2)}^\\circ = ${tex(mA * mB * Math.sin(toRad(theta)), D)}` },
+    { text: `|${A.name}×${B.name}| is also the area of the parallelogram with sides ${A.name} and ${B.name}.`, tex: `\\text{Area} = ${tex(mC, D)}` },
     { text: 'The direction is perpendicular to the plane of A and B (right-hand rule). The order matters:', tex: `${b(B.name)}\\times${b(A.name)} = -${b(A.name)}\\times${b(B.name)} = ${texIJK(neg(C), D)}` }
   ]
   if (mC < 1e-9) steps.push({ text: 'The cross product is the null vector, so the vectors are parallel or antiparallel (θ = 0° or 180°).' })
@@ -347,7 +347,7 @@ export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C'): Solution
     steps,
     answers: [
       { label: `${A.name}×${B.name}`, tex: texIJK(C, D) },
-      { label: '|A×B|', tex: tex(mC, D) },
+      { label: `|${A.name}×${B.name}|`, tex: tex(mC, D) },
       { label: 'θ', tex: `${tex(theta, 2)}^\\circ` }
     ],
     visual: {

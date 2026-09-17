@@ -81,6 +81,9 @@ export function cas(op: string, payload: Record<string, unknown> = {}): Promise<
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       settle(id, errorResult('This took too long, so it was stopped. Try a simpler expression, or give the numbers instead of symbols.'))
+      // The worker is about to go, so nothing else waiting on it will ever be answered — and their
+      // timers would otherwise fire later and kill a healthy worker.
+      failAll('The algebra engine was restarted, so this was stopped too. Send it again.')
       restartWorker()
       useCasStatus.setState({ status: 'idle', message: 'stopped after 30 s' })
     }, TIMEOUT_MS)
