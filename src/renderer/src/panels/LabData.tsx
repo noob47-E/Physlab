@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Sigma, Trash2, X } from 'lucide-react'
+import { Lightbulb, Plus, Sigma, Trash2, X } from 'lucide-react'
 import { math, preprocess } from '../math/expr'
 import { fmt } from '../math/format'
-import { addColumn, addRow, currentTable, removeColumn, removeRow, setCell, setColumn, useLab } from '../lab/labStore'
-import { isUsableName, resolveValues } from '../lab/values'
-import type { LabColumn } from '../lab/types'
+import { addColumn, addRow, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
+import { headerOf, isUsableName, plotPairs, ratioUnit, resolveValues } from '../lab/values'
+import { betterFit, fitOf, gradientMeaning, MIN_POINTS, rankFits, type Fit } from '../lab/fit'
+import { FIT_LABELS, type FitShape, type LabColumn } from '../lab/types'
+import { LabChart } from './LabChart'
 
 /** A cell that may be empty. Accepts a typed expression ("9.8/2") the way the rest of PhysLab does. */
 function Cell({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
@@ -54,7 +56,7 @@ function HeaderCell({ col, onPatch, onRemove, canRemove }: { col: LabColumn; onP
         <input
           className={`field w-12 px-1 text-center font-semibold italic ${badName ? 'text-amber-300' : ''}`}
           value={col.name}
-          title={badName ? 'Use a letter and then letters or numbers, so formulas can refer to it' : 'Name used in formulas and on the graph'}
+          title={badName ? 'Use a letter, then letters or numbers, so formulas can refer to it' : 'Name used in formulas and on the graph'}
           onChange={(e) => onPatch({ name: e.target.value })}
           onKeyDown={(e) => e.stopPropagation()}
         />
@@ -97,6 +99,26 @@ function HeaderCell({ col, onPatch, onRemove, canRemove }: { col: LabColumn; onP
   )
 }
 
+/** The fitted shape written out with the student's own column names and numbers. */
+function equationText(fit: Fit, y: string, x: string): string {
+  const n = (v: number) => fmt(v, 4)
+  const { coef: c } = fit
+  switch (fit.shape) {
+    case 'linear':
+      return `${y} = ${n(c.b)} ${x} ${c.a < 0 ? '−' : '+'} ${n(Math.abs(c.a))}`
+    case 'quadratic':
+      return `${y} = ${n(c.c)} ${x}² ${c.b < 0 ? '−' : '+'} ${n(Math.abs(c.b))} ${x} ${c.a < 0 ? '−' : '+'} ${n(Math.abs(c.a))}`
+    case 'log':
+      return `${y} = ${n(c.a)} ${c.b < 0 ? '−' : '+'} ${n(Math.abs(c.b))} ln ${x}`
+    case 'exp':
+      return `${y} = ${n(c.a)} e^(${n(c.b)} ${x})`
+    case 'power':
+      return `${y} = ${n(c.a)} ${x}^${n(c.b)}`
+    case 'inverse':
+      return `${y} = ${n(c.a)} ${c.b < 0 ? '−' : '+'} ${n(Math.abs(c.b))}/${x}`
+  }
+}
+
 export function LabData() {
   const tables = useLab((s) => s.tables)
   const currentId = useLab((s) => s.currentId)
@@ -104,6 +126,16 @@ export function LabData() {
   const table = useMemo(() => tables.find((t) => t.id === currentId) ?? tables[0], [tables, currentId])
   const resolved = useMemo(() => resolveValues(table), [table])
   const patch = (fn: Parameters<typeof update>[1]) => update(table.id, fn)
+
+  const { xs, ys } = useMemo(() => plotPairs(table, resolved), [table, resolved])
+  const fit = useMemo(() => fitOf(xs, ys, table.plot.fit), [xs, ys, table.plot.fit])
+  const ranked = useMemo(() => rankFits(xs, ys), [xs, ys])
+  const better = useMemo(() => betterFit(fit, ranked), [fit, ranked])
+
+  const xCol = table.columns.find((c) => c.id === table.plot.x)
+  const yCol = table.columns.find((c) => c.id === table.plot.y)
+  const slopeUnit = xCol && yCol ? ratioUnit(yCol.unit, xCol.unit) : ''
+  const meaning = xCol && yCol ? gradientMeaning(yCol.name, xCol.name) : null
 
   return (
     <div className="panel pb-8">
@@ -124,10 +156,7 @@ export function LabData() {
       </div>
 
       <div className="mt-3 overflow-x-auto px-3">
-        <div
-          className="grid min-w-min gap-1"
-          style={{ gridTemplateColumns: `28px repeat(${table.columns.length}, minmax(104px, 1fr)) 26px` }}
-        >
+        <div className="grid min-w-min gap-1" style={{ gridTemplateColumns: `28px repeat(${table.columns.length}, minmax(104px, 1fr)) 26px` }}>
           <div />
           {table.columns.map((col) => (
             <HeaderCell
@@ -174,6 +203,75 @@ export function LabData() {
           <Plus size={13} /> Column
         </button>
       </div>
+
+      {/* ---------------------------------------------------------------- graph */}
+      <div className="section-title mt-4">Graph</div>
+      <div className="flex flex-wrap items-center gap-2 px-3">
+        <span className="text-zinc-500">Plot</span>
+        <select className="field w-auto" value={table.plot.y} onChange={(e) => patch((t) => setPlot(t, { y: e.target.value }))}>
+          {table.columns.map((c) => (
+            <option key={c.id} value={c.id}>
+              {headerOf(c)}
+            </option>
+          ))}
+        </select>
+        <span className="text-zinc-500">against</span>
+        <select className="field w-auto" value={table.plot.x} onChange={(e) => patch((t) => setPlot(t, { x: e.target.value }))}>
+          {table.columns.map((c) => (
+            <option key={c.id} value={c.id}>
+              {headerOf(c)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="mt-2 px-3">
+        <select className="field" value={table.plot.fit} onChange={(e) => patch((t) => setPlot(t, { fit: e.target.value as FitShape }))}>
+          {Object.entries(FIT_LABELS).map(([shape, label]) => (
+            <option key={shape} value={shape}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-2 px-1">
+        <LabChart xs={xs} ys={ys} fit={fit} xLabel={xCol ? headerOf(xCol) : 'x'} yLabel={yCol ? headerOf(yCol) : 'y'} />
+      </div>
+
+      {xs.length < MIN_POINTS ? (
+        <div className="px-3 text-zinc-500">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>
+      ) : fit ? (
+        <div className="card mx-3 mt-2 border-amber-400/40 bg-amber-400/5 p-3">
+          <div className="text-[15px] text-white">{equationText(fit, yCol?.name ?? 'y', xCol?.name ?? 'x')}</div>
+          <div className="mt-1 text-zinc-400">
+            r² = {fmt(fit.r2, 4)}
+            {fit.r2 > 0.98 ? ' — the readings sit very close to this line.' : fit.r2 < 0.9 ? ' — the readings are scattered; check for a mistake, or try another shape.' : ''}
+          </div>
+          {fit.slope !== undefined && (
+            <div className="mt-2">
+              <span className="text-zinc-400">gradient = </span>
+              <span className="text-[15px] font-semibold text-white">
+                {fmt(fit.slope, 4)} {slopeUnit}
+              </span>
+              {meaning && <div className="mt-1 text-emerald-300">{meaning}</div>}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="px-3 text-amber-300">This shape cannot be fitted to these readings — a logarithm or a power needs positive values.</div>
+      )}
+
+      {better && (
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-[var(--line-2)] bg-black/10 px-3 py-2">
+          <Lightbulb size={14} className="shrink-0 text-amber-300" />
+          <span className="min-w-0 flex-1 text-zinc-300">
+            {FIT_LABELS[better.shape].split('   ')[0].toLowerCase()} fits your readings better — r² {fmt(better.r2, 3)} against {fmt(fit?.r2 ?? 0, 3)}.
+          </span>
+          <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: better.shape }))}>
+            Use it
+          </button>
+        </div>
+      )}
     </div>
   )
 }

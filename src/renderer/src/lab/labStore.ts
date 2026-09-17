@@ -60,6 +60,10 @@ export const useLab = create<LabStore>((set, get) => ({
   update: (id, patch) => set({ tables: get().tables.map((t) => (t.id === id ? patch(t) : t)) })
 }))
 
+// Handy while developing: inspect and drive the tables from the browser console.
+// (guarded for the test runner, which has no window)
+if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __useLab?: typeof useLab }).__useLab = useLab
+
 /** The table being edited. */
 export const currentTable = (): LabTable => {
   const { tables, currentId } = useLab.getState()

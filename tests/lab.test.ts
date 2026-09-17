@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest'
 import { addColumn, addRow, emptyTable, removeColumn, setCell } from '../src/renderer/src/lab/labStore'
 import { headerOf, plotPairs, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
+import { betterFit, fitOf, rankFits } from '../src/renderer/src/lab/fit'
+import { chartSeries } from '../src/renderer/src/lab/chartData'
 import type { LabTable } from '../src/renderer/src/lab/types'
 
 /** A table of t and d with the readings filled in. */
@@ -90,5 +92,90 @@ describe('units and headers', () => {
   it('writes a header the way a notebook does', () => {
     expect(headerOf({ id: 'a', name: 't', unit: 's' })).toBe('t / s')
     expect(headerOf({ id: 'a', name: 'n', unit: '' })).toBe('n')
+  })
+})
+
+describe('fitting a shape through the readings', () => {
+  const line = { xs: [1, 2, 3, 4, 5], ys: [5, 8, 11, 14, 17] } // y = 2 + 3x exactly
+
+  it('finds the gradient and intercept of a straight line', () => {
+    const fit = fitOf(line.xs, line.ys, 'linear')!
+    expect(fit.slope).toBeCloseTo(3, 10)
+    expect(fit.intercept).toBeCloseTo(2, 10)
+    expect(fit.r2).toBeCloseTo(1, 10)
+    expect(fit.residuals.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 10)
+  })
+
+  it('gets g back from free-fall readings', () => {
+    // d = ½gt², so d against t² is a straight line of gradient g/2.
+    const ts = [0.2, 0.4, 0.6, 0.8, 1]
+    const xs = ts.map((t) => t * t)
+    const ys = ts.map((t) => 0.5 * 9.81 * t * t)
+    const fit = fitOf(xs, ys, 'linear')!
+    expect(2 * fit.slope!).toBeCloseTo(9.81, 6)
+  })
+
+  it('scores a quadratic, which the calculator gives no r for', () => {
+    const xs = [-2, -1, 0, 1, 2, 3]
+    const ys = xs.map((x) => 4 - 3 * x + 2 * x * x)
+    const fit = fitOf(xs, ys, 'quadratic')!
+    expect(fit.r2).toBeCloseTo(1, 8)
+    expect(fitOf(xs, ys, 'linear')!.r2).toBeLessThan(0.9)
+  })
+
+  it('ranks the shape that really fits first', () => {
+    const xs = [1, 2, 3, 4, 5, 6]
+    const quad = xs.map((x) => 1 + x * x)
+    expect(rankFits(xs, quad)[0].shape).toBe('quadratic')
+    expect(rankFits(line.xs, line.ys)[0].shape).toBe('linear')
+  })
+
+  it('offers a better shape only when it is clearly better', () => {
+    const xs = [1, 2, 3, 4, 5, 6]
+    const quad = xs.map((x) => 1 + x * x)
+    const straight = fitOf(xs, quad, 'linear')!
+    expect(betterFit(straight, rankFits(xs, quad))).not.toBeNull()
+    // Readings that are already a good straight line should be left alone.
+    const lineFit = fitOf(line.xs, line.ys, 'linear')!
+    expect(betterFit(lineFit, rankFits(line.xs, line.ys))).toBeNull()
+  })
+
+  it('puts an uncertainty on a gradient read from scattered points', () => {
+    const xs = [1, 2, 3, 4, 5]
+    const exact = xs.map((x) => 2 * x)
+    const scattered = [2.1, 3.9, 6.2, 7.8, 10.1]
+    expect(fitOf(xs, exact, 'linear')!.slopeError).toBeCloseTo(0, 8)
+    const s = fitOf(xs, scattered, 'linear')!.slopeError!
+    expect(s).toBeGreaterThan(0)
+    expect(s).toBeLessThan(0.2)
+  })
+
+  it('refuses instead of inventing a fit when there is too little to go on', () => {
+    expect(fitOf([1, 2], [3, 4], 'linear')).toBeNull()
+    // A logarithm cannot take zero or a negative reading.
+    expect(fitOf([0, 1, 2], [1, 2, 3], 'log')).toBeNull()
+  })
+})
+
+describe('what the graph is handed', () => {
+  const xs = [3, 1, 2]
+  const ys = [30, 10, 20]
+
+  it('puts the readings in order, and says so plainly when there is no fit', () => {
+    const s = chartSeries(xs, ys, null)
+    expect(s.x).toEqual([1, 2, 3])
+    expect(s.points).toEqual([10, 20, 30])
+    expect(s.curve).toEqual([])
+  })
+
+  it('gives the curve many more x values than the readings, without inventing readings', () => {
+    const fit = fitOf([1, 2, 3, 4, 5], [2, 4, 6, 8, 10], 'linear')!
+    const s = chartSeries([1, 2, 3, 4, 5], [2, 4, 6, 8, 10], fit)
+    expect(s.x.length).toBeGreaterThan(100)
+    // Exactly five real readings, the rest of the row is empty.
+    expect(s.points.filter((p) => p !== null)).toEqual([2, 4, 6, 8, 10])
+    expect(s.curve.every((c) => c !== null)).toBe(true)
+    // The shared axis stays in order, which is what uPlot needs.
+    expect([...s.x].sort((a, b) => a - b)).toEqual(s.x)
   })
 })
