@@ -1,7 +1,7 @@
 // The lab table: what gets worked out from what, and what reaches the graph.
 
 import { describe, expect, it } from 'vitest'
-import { addColumn, addRow, emptyTable, removeColumn, setCell, setColumn } from '../src/renderer/src/lab/labStore'
+import { addColumn, addRow, emptyTable, removeColumn, setCell } from '../src/renderer/src/lab/labStore'
 import { headerOf, plotPairs, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
 import type { LabTable } from '../src/renderer/src/lab/types'
 
@@ -20,9 +20,8 @@ function freeFall(): LabTable {
 
 describe('working out a column from the others', () => {
   it('computes t² for every row', () => {
-    const table = setColumn(addColumn(freeFall(), { name: 'tsq', unit: 's²' }), '', {})
-    const withFormula = { ...table, columns: table.columns.map((c, i) => (i === 2 ? { ...c, formula: 't^2' } : c)) }
-    const { values, errors } = resolveValues(withFormula)
+    const table = addColumn(freeFall(), { name: 'tsq', unit: 's²', formula: 't^2' })
+    const { values, errors } = resolveValues(table)
     expect(errors).toEqual({})
     expect(values.map((r) => r[2])).toEqual([0.2, 0.4, 0.6, 0.8, 1].map((t) => t * t))
   })
