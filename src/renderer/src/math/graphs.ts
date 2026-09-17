@@ -117,6 +117,17 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
   return out.filter((p, i) => out.findIndex((q) => q.kind === p.kind && Math.abs(q.x - p.x) < dx) === i)
 }
 
+/**
+ * The points a graph's name can be anchored to: the first polyline, or the first segment pair of
+ * an implicit curve. A curve with nothing to draw (x² + y² = −1) has an empty segment list, and
+ * returning [undefined] from here used to crash the label projection on every frame.
+ */
+export function labelPoints(data: { polylines?: V3[][]; segments?: V3[] }): V3[] | undefined {
+  if (data.polylines?.[0]?.length) return data.polylines[0]
+  if (data.segments?.length) return [data.segments[0]]
+  return undefined
+}
+
 /** Marching squares for F(x, y) = 0 → segment endpoint pairs. */
 export function implicitSegments(F: Fxy, xMin: number, xMax: number, yMin: number, yMax: number, nx: number, ny: number): V3[] {
   const dx = (xMax - xMin) / nx

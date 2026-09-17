@@ -10,7 +10,7 @@ import { QUALITY, qualityNow } from './renderer'
 import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
 import { compileScalar } from '../math/expr'
-import { implicitSegments, inequalityMesh, keyPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
+import { implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
 import { fmt } from '../math/format'
 import type { V3 } from '../math/vec'
 
@@ -111,9 +111,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const { camera, size } = useThree()
 
   useFrame(({ camera: cam, size: sz }) => {
-    // An implicit curve with nothing to draw (x² + y² = −1) has an empty segment list, and
-    // [segments[0]] would be [undefined]: projecting that threw on every frame.
-    const firstPoly = data.polylines[0] ?? (data.segments?.length ? [data.segments[0]] : undefined)
+    const firstPoly = labelPoints(data)
     if (firstPoly?.length) {
       // Anchor the name near the right edge of the visible part of the curve.
       const vis = firstPoly.filter((p) => {
