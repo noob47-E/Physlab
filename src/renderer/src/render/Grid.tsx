@@ -73,15 +73,23 @@ export function Grid2D() {
   const [axes, setAxes] = useState<{ x: V3[]; y: V3[] }>({ x: [], y: [] })
   const ticks = useMemo(() => new SpanPool(() => overlay.ticks, 'tick-label'), [])
   useEffect(() => () => ticks.dispose(), [ticks])
+  const traced = useRef(0)
 
   useFrame(() => {
     // A frame can arrive before the canvas has been measured: the dock panel is still settling, or
     // the renderer has only just finished starting. Building from a zero size gives zero-length
     // lines and caches them as done, which is what used to leave the viewport black on first open.
-    if (!usableSize(size)) return
-    const b = orthoBounds(camera, size)
-    if (!finiteArea(b)) return
+    const trace = traced.current < 8 ? ++traced.current : 0
     const zoom = (camera as THREE.OrthographicCamera).zoom
+    if (!usableSize(size)) {
+      if (trace) console.info(`PHYSLAB_CHECK grid f${trace} SKIP size=${size.width}x${size.height} zoom=${zoom}`)
+      return
+    }
+    const b = orthoBounds(camera, size)
+    if (!finiteArea(b)) {
+      if (trace) console.info(`PHYSLAB_CHECK grid f${trace} SKIP-area size=${size.width}x${size.height} zoom=${zoom} x=[${b.xMin},${b.xMax}] y=[${b.yMin},${b.yMax}]`)
+      return
+    }
     const majorStep = niceStep(100 / zoom)
     const minorStep = majorStep / (String(majorStep).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
     const prev = built.current
@@ -97,6 +105,12 @@ export function Grid2D() {
     }
     minor.visible = showGrid
     major.visible = showGrid
+    if (trace) {
+      const verts = (minor.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0
+      console.info(
+        `PHYSLAB_CHECK grid f${trace} size=${size.width}x${size.height} zoom=${zoom} step=${majorStep}/${minorStep} x=[${b.xMin.toFixed(2)},${b.xMax.toFixed(2)}] y=[${b.yMin.toFixed(2)},${b.yMax.toFixed(2)}] key=${key} prev=${prev.key} verts=${verts} axes=${axes.x.length} grid=${showGrid} axesOn=${showAxes}`
+      )
+    }
 
     ticks.begin()
     if (showAxes) {
