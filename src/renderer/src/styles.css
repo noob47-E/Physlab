@@ -112,7 +112,8 @@ textarea {
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-1);
   --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-2);
   --dv-tab-divider-color: var(--line);
-  --dv-activegroup-visiblepanel-tab-color: #ffffff;
+  /* The focused tab: white here would be invisible on the light theme. */
+  --dv-activegroup-visiblepanel-tab-color: var(--text-strong);
   --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
   --dv-inactivegroup-visiblepanel-tab-color: var(--text);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--text-faint);
