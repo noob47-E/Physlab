@@ -32,6 +32,7 @@ import { saveViewportImage } from '../render/exportImage'
 import { useTheme } from './theme'
 import { useTour } from './tour/Tour'
 import { resetLayout } from './App'
+import { PANEL_LIST, showPanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useParticleLab } from '../render/GpuParticles'
@@ -245,6 +246,7 @@ function MeasureSettingsMenu() {
 export function TopBar() {
   const s = useScene()
   const theme = useTheme((t) => t.theme)
+  const openPanels = useOpenPanels((s) => s.open)
   const mode = useApp((a) => a.mode)
   const setSearchOpen = useApp((a) => a.setSearchOpen)
   const title = s.filePath ? s.filePath.split(/[\\/]/).pop() : 'untitled'
@@ -290,6 +292,10 @@ export function TopBar() {
           { label: `Snapping: ${s.settings.snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s.setSettings({ snap: !s.settings.snap }) },
           '-',
           { label: theme === 'dark' ? 'Light theme (for projectors)' : 'Dark theme', run: () => useTheme.getState().toggle() },
+          '-',
+          // Closing a panel used to be a one-way door: the only way back was resetting the layout.
+          ...PANEL_LIST.map((p) => ({ label: p.title, sc: openPanels.includes(p.id) ? 'open' : 'closed', run: () => showPanel(p.id) })),
+          '-',
           { label: 'Reset the panel layout', run: resetLayout }
         ]}
       />

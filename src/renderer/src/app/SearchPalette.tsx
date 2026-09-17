@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { MODES, useApp } from './modes'
 import { enterMode } from './TopBar'
+import { PANEL_LIST, showPanel } from './panels'
 import { CATALOG } from './CommandBar'
 import { scene } from '../core/store'
 import { useTour } from './tour/Tour'
@@ -40,6 +41,7 @@ function buildItems(): Item[] {
       }
     })
   }
+  for (const p of PANEL_LIST) items.push({ group: 'Panels', title: p.title, hint: 'Show this panel (and reopen it if it was closed)', run: () => showPanel(p.id) })
   for (const ex of EXAMPLES) items.push({ group: 'Examples', title: ex.title, hint: ex.what, run: () => void runExample(ex) })
   for (const c of CATALOG) items.push({ group: 'Commands', title: c.insert, hint: `${c.desc} · ${c.group}`, run: () => fillCommandBar(c.insert) })
   for (const cm of CALC_MODES) {

@@ -8,11 +8,13 @@ Everything runs offline.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.2.2.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.2.3.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
 | Unit tests | `npm test` |
+
+**Panels.** Closing a panel is not a dead end: **View** lists every panel with open/closed beside it, click one to bring it back. Ctrl+K finds them too, and entering a mode reopens the panel that mode uses.
 
 **Updating.** Run the new setup: it swaps itself over the build you already have, keeps your
 settings, your layout and your autosaved work, and starts the new version. Nothing to uninstall

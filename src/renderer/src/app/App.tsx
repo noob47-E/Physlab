@@ -20,6 +20,7 @@ import { RecoveryBar } from './RecoveryBar'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
 import { Tour } from './tour/Tour'
+import { PANEL_TITLES, refreshOpenPanels, setDockApi, showPanel } from './panels'
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
@@ -29,28 +30,28 @@ const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.G
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
 
-const PANELS: Record<string, [string, React.ComponentType]> = {
-  viewport: ['Viewport', Viewport],
-  outliner: ['Outliner', Outliner],
-  examples: ['Examples', Examples],
-  properties: ['Properties', Properties],
-  measure: ['Measure', Measurements],
-  vectorcalc: ['Vector Calculator', VectorCalc],
-  solver: ['Solver', Solver],
-  practice: ['Practice', Practice],
-  calculator: ['Calculator', Calculator],
-  console: ['Console', Console],
-  timeline: ['Timeline', Timeline],
-  graphs: ['Graphs', Graphs],
-  gpulab: ['GPU Lab', GpuLab],
-  sandbox: ['Sandbox', SandboxPanel]
+const PANEL_VIEWS: Record<string, React.ComponentType> = {
+  viewport: Viewport,
+  outliner: Outliner,
+  examples: Examples,
+  properties: Properties,
+  measure: Measurements,
+  vectorcalc: VectorCalc,
+  solver: Solver,
+  practice: Practice,
+  calculator: Calculator,
+  console: Console,
+  timeline: Timeline,
+  graphs: Graphs,
+  gpulab: GpuLab,
+  sandbox: SandboxPanel
 }
 
 const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
-  Object.entries(PANELS).map(([id, [name, Panel]]) => [
+  Object.entries(PANEL_VIEWS).map(([id, Panel]) => [
     id,
     () => (
-      <ErrorBoundary name={name}>
+      <ErrorBoundary name={PANEL_TITLES[id]}>
         <Suspense fallback={<div className="panel p-4 text-zinc-500">Loading…</div>}>
           <Panel />
         </Suspense>
@@ -68,6 +69,11 @@ function restoreLayout(api: DockviewApi): boolean {
     if (!saved) return false
     const { layout, mode } = JSON.parse(saved) as { layout: object; mode?: ModeId }
     api.fromJSON(layout as never)
+    // A layout with nothing in it would leave the window empty for good, with no tab to click.
+    if (api.panels.length === 0) {
+      localStorage.removeItem(LAYOUT_KEY)
+      return false
+    }
     if (mode) useApp.getState().setMode(mode)
     return true
   } catch {
@@ -90,6 +96,8 @@ function watchLayout(api: DockviewApi) {
     timer = setTimeout(save, 800)
   }
   api.onDidLayoutChange(queue)
+  // Opening or closing a panel changes what the View menu should offer.
+  api.onDidLayoutChange(refreshOpenPanels)
   window.addEventListener('beforeunload', save)
 }
 
@@ -125,7 +133,8 @@ export function App() {
   useShortcuts()
 
   useEffect(() => {
-    if (focus) api.current?.getPanel(focus.id)?.api.setActive()
+    // A mode asking for its panel reopens it when the user has closed it.
+    if (focus) showPanel(focus.id)
   }, [focus])
 
   useEffect(() => startAutosave(), [])
@@ -156,6 +165,7 @@ export function App() {
           components={components}
           onReady={(e: DockviewReadyEvent) => {
             api.current = e.api
+            setDockApi(e.api)
             try {
               const restored = !location.hash.includes('bench') && restoreLayout(e.api)
               if (!restored) {
@@ -163,6 +173,7 @@ export function App() {
                 if (!location.hash.includes('bench')) useApp.getState().setMode('vectors')
               }
               watchLayout(e.api)
+              refreshOpenPanels()
             } catch (err) {
               // A layout we cannot restore must never stop the app from starting.
               console.error('PhysLab layout', err)
