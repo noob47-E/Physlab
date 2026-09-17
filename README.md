@@ -8,7 +8,7 @@ Everything runs offline.
 
 | What | Command |
 | --- | --- |
-| Install once (installer with desktop shortcut) | `dist\PhysLab Setup 0.1.0.exe` |
+| Install once (installer with desktop shortcut) | `dist\PhysLab Setup 0.2.0.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
