@@ -28,6 +28,11 @@
   --label-shadow: rgba(0, 0, 0, 0.9);
   --sel-row: #2f4a7a;
   --shadow: rgba(0, 0, 0, 0.55);
+  /* Menus and popups float above everything, so they have their own surface colour. */
+  --menu-bg: #26272c;
+  --measure-text: #ffe8a3;
+  --code-text: #ffe8a3;
+  --log-in: #8fb6ff;
   color-scheme: dark;
 }
 
@@ -50,16 +55,21 @@
   --good: #1f8a4c;
   --bad: #c92a2a;
   --input-bg: #ffffff;
-  --canvas-bg: #fbfcfd;
-  --grid-minor: #e4e7ec;
-  --grid-major: #c9ced6;
-  --grid-axis: #6b7078;
-  --tick-text: #6b7078;
-  --label-bg: rgba(255, 255, 255, 0.86);
+  /* Moonlight, not paper: a soft cool surface that is easy on the eyes and still projects well. */
+  --canvas-bg: #e9eef6;
+  --grid-minor: #d6dfec;
+  --grid-major: #bcc8da;
+  --grid-axis: #59647a;
+  --tick-text: #59647a;
+  --label-bg: rgba(250, 252, 255, 0.9);
   --label-text: #1c1e22;
   --label-shadow: rgba(255, 255, 255, 0.9);
   --sel-row: #bcd4ff;
   --shadow: rgba(30, 40, 60, 0.18);
+  --menu-bg: #ffffff;
+  --measure-text: #8a5a00;
+  --code-text: #8a5a00;
+  --log-in: #1c4fa1;
   color-scheme: light;
 }
 
@@ -359,7 +369,7 @@ textarea {
   left: 0;
   top: 0;
   font-size: 12px;
-  color: #ffe8a3;
+  color: var(--measure-text);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   background: var(--label-bg);
@@ -381,7 +391,7 @@ textarea {
   border-radius: 5px;
   background: var(--label-bg);
   border: 1px solid var(--line-2);
-  color: #f1f3f5;
+  color: var(--label-text);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -456,7 +466,7 @@ textarea {
   color: #fff;
 }
 .menu-item.is-danger {
-  color: #ff9c9c;
+  color: var(--bad);
 }
 .menu-item.is-danger.is-active {
   background: #7a2c2c;
@@ -491,7 +501,7 @@ textarea {
   min-width: 220px;
   padding: 4px;
   border-radius: 7px;
-  background: #26272c;
+  background: var(--menu-bg);
   border: 1px solid var(--line-2);
   box-shadow: 0 10px 30px var(--shadow);
 }
@@ -605,7 +615,7 @@ textarea {
   max-height: 320px;
   overflow: auto;
   border-radius: 7px;
-  background: #222328;
+  background: var(--menu-bg);
   border: 1px solid var(--line-2);
   box-shadow: 0 12px 30px var(--shadow);
 }
@@ -623,17 +633,17 @@ textarea {
 }
 .suggest code {
   font-family: 'Cascadia Code', Consolas, monospace;
-  color: #ffe8a3;
+  color: var(--code-text);
 }
 
 /* ---------- Console ---------- */
 .log-entry {
   padding: 6px 12px;
-  border-bottom: 1px solid #25262b;
+  border-bottom: 1px solid var(--line);
 }
 .log-in {
   font-family: 'Cascadia Code', Consolas, monospace;
-  color: #8fb6ff;
+  color: var(--log-in);
 }
 .log-out {
   margin-top: 2px;
@@ -642,7 +652,7 @@ textarea {
   white-space: pre-wrap;
 }
 .log-out.err {
-  color: #ff8787;
+  color: var(--bad);
 }
 .log-out.info {
   color: var(--text-dim);

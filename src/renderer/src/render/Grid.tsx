@@ -39,7 +39,12 @@ function useGridLines(): [THREE.LineSegments, THREE.LineSegments] {
   const theme = useTheme((t) => t.theme)
   useEffect(() => {
     const colors = [MINOR(), MAJOR()]
-    lines.forEach((l, i) => (l.material as THREE.LineBasicMaterial).color.set(colors[i]))
+    lines.forEach((l, i) => {
+      const m = l.material as THREE.LineBasicMaterial
+      m.color.set(colors[i])
+      // The WebGPU backend compiles the colour into the material, so it has to be told.
+      m.needsUpdate = true
+    })
   }, [theme, lines])
   useEffect(() => () => lines.forEach((l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose())), [lines])
   return lines

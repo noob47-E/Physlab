@@ -67,6 +67,7 @@ export function FatLine({
   useEffect(() => {
     const m = obj.material as THREE.Line2NodeMaterial
     m.color.set(color)
+    m.needsUpdate = true
     m.linewidth = width
     m.depthTest = depthTest
     m.depthWrite = depthTest
