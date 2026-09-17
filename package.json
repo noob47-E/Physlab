@@ -31,11 +31,14 @@
       "icon": "build/icon.png"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": true,
+      "allowElevation": true,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "PhysLab"
+      "shortcutName": "PhysLab",
+      "deleteAppDataOnUninstall": false
     }
   },
   "devDependencies": {

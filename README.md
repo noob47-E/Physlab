@@ -8,11 +8,16 @@ Everything runs offline.
 
 | What | Command |
 | --- | --- |
-| Install once (installer with desktop shortcut) | `dist\PhysLab Setup 0.2.1.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.2.1.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
 | Unit tests | `npm test` |
+
+**Updating.** Run the new setup: it swaps itself over the build you already have, keeps your
+settings, your layout and your autosaved work, and starts the new version. Nothing to uninstall
+first. Windows asks for permission once, because PhysLab lives in `C:\Program Files\PhysLab` for
+every user of the PC. **Help ▸ PhysLab x.y.z** tells you which build is running.
 
 ## Modes
 

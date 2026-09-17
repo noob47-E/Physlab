@@ -299,7 +299,10 @@ export function TopBar() {
         items={[
           { label: 'Take the tour', run: () => useTour.getState().start() },
           { label: 'Practice tasks', run: () => useTour.getState().setMissions(true) },
-          { label: 'Keyboard and mouse', run: () => useTour.getState().setShortcuts(true) }
+          { label: 'Keyboard and mouse', run: () => useTour.getState().setShortcuts(true) },
+          '-',
+          // Which build is this? Handy after installing an update over an older one.
+          { label: `PhysLab ${__APP_VERSION__}`, run: () => {}, disabled: true }
         ]}
       />
 
