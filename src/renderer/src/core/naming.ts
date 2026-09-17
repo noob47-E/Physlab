@@ -72,7 +72,8 @@ export function freeCapitals(used: Iterable<string>, count: number): string[] {
 }
 
 export function isValidName(name: string): boolean {
-  return /^[A-Za-zͰ-Ͽ][A-Za-z0-9_Ͱ-Ͽ']*$/.test(name) && !RESERVED.has(name)
+  // ′ (U+2032) is here because the app names placed copies A′ and B′ itself.
+  return /^[A-Za-zͰ-Ͽ][A-Za-z0-9_Ͱ-Ͽ'′]*$/.test(name) && !RESERVED.has(name)
 }
 
 let counter = 0

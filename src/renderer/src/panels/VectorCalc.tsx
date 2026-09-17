@@ -308,7 +308,7 @@ export function VectorCalc() {
           className="btn ghost"
           onClick={() => {
             const used = new Set(st.cards.map((c) => c.name))
-            const name = 'ABCDEFGHJKLMNPQRSTUVW'.split('').find((l) => !used.has(l)) ?? `V${nextCard}`
+            const name = 'ABCDEFGHJKLMNPQRSTUVWXYZ'.split('').find((l) => !used.has(l)) ?? `V${nextCard}`
             set({ cards: [...st.cards, { id: nextCard++, name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
           }}
         >

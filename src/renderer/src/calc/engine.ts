@@ -415,7 +415,7 @@ export function polyRoots(coeffs: number[]): Cx[] {
 
 export function solveLinearSystem(A: number[][], b: number[]): number[] {
   const det = Number(math.det(A))
-  if (Math.abs(det) < 1e-14) throw new Error(Math.abs(det) < 1e-14 ? 'No unique solution (determinant is 0)' : '')
+  if (Math.abs(det) < 1e-14) throw new Error('No unique solution (determinant is 0)')
   const x = math.lusolve(A, b) as number[][]
   return x.map((row) => row[0])
 }

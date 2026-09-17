@@ -3,6 +3,7 @@ import { evaluateScene } from '../src/renderer/src/core/evaluate'
 import { DEFAULT_SETTINGS } from '../src/renderer/src/core/store'
 import type { ObjId, SceneObject } from '../src/renderer/src/core/types'
 import { surfaceGeometry } from '../src/renderer/src/math/graphs'
+import { isValidName } from '../src/renderer/src/core/naming'
 
 const point = (id: string, expr: string): SceneObject =>
   ({ id, name: id, visible: true, locked: false, color: '#fff', showLabel: true, type: 'point', def: { kind: 'expr', expr } }) as SceneObject
@@ -71,5 +72,17 @@ describe('3D surfaces', () => {
     // No triangle may use a point inside the unit circle, where the function is undefined.
     const inside = (k: number) => Math.hypot(g.positions[k * 3], g.positions[k * 3 + 1]) < 1
     expect(g.indices.some(inside)).toBe(false)
+  })
+})
+
+describe('object names', () => {
+  it('accepts the names the app gives itself', () => {
+    // visualize.ts labels the placed copies A′ and B′ with the Unicode prime (U+2032); the
+    // validator used to reject them, so the app produced names it considered invalid.
+    expect(isValidName('A′')).toBe(true)
+    expect(isValidName("A'")).toBe(true)
+    expect(isValidName('R')).toBe(true)
+    expect(isValidName('theta')).toBe(false)
+    expect(isValidName('2A')).toBe(false)
   })
 })

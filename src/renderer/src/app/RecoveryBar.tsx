@@ -8,7 +8,7 @@ export function RecoveryBar() {
   const set = useRecovery((s) => s.set)
   if (!found) return null
   const when = new Date(found.savedAt)
-  const name = found.path ? found.path.split(/[\/]/).pop() : 'untitled'
+  const name = found.path ? found.path.split(/[\\/]/).pop() : 'untitled'
   return (
     <div className="flex items-center gap-3 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-amber-100">
       <RotateCcw size={14} />

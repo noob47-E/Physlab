@@ -291,7 +291,8 @@ export function Sandbox() {
           className="btn"
           onClick={() => {
             setPlaying(false)
-            // Rebuilding from the definitions puts everything back where it started.
+            // A fresh array makes the viewport's effect rebuild the world from these definitions,
+            // which is what puts every object back where it started.
             useSandbox.setState({ bodies: [...useSandbox.getState().bodies], contacts: [], engineTime: 0 })
           }}
         >
