@@ -33,6 +33,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
 | **Sandbox** | Real objects that collide, powered by the Jolt physics engine. Add balls, crates, cylinders, ramps, planks and walls; set mass or density, material, size, position, velocity, bounciness and friction; pick things up with the mouse and throw them. World controls: gravity (Earth, Moon, Mars, Jupiter, none), air or vacuum, a true flat 2D mode, slow motion and an accuracy setting. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
+| **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
 | **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern. |
 
@@ -50,6 +51,37 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 - **Hint** shows the first step of the worked solution. Press it again for the next step. The answer only appears when you ask for it.
 - The same **Give me a hint** button is in the Solver panel, so any solved problem can be revealed one step at a time.
 - **Show in scene** draws the problem with its vectors and components, so you can see what the numbers mean.
+
+## Lab data: readings from your own experiment
+
+**Lab Data** mode is the table you fill in during a practical, with the graph and the write-up
+attached to it.
+
+- **Type or paste the readings.** Copy a block out of a spreadsheet and paste it straight onto the
+  table — tabs, commas or semicolons, and a decimal comma if that is how your machine writes
+  numbers. **Import** reads a `.csv`, **Export** writes one. Anything pasted or imported can be
+  **undone** with one click.
+- **A column can be worked out from the others.** Press **Σ** on a column and write `t^2` or `d/t`.
+  It fills itself in for every row and updates when you change a reading.
+- **Headers carry the unit** (`t / s`), so the graph axes and the gradient's unit come from the
+  table itself: metres over seconds is quoted as m/s without being told.
+- **The fit is your choice, and PhysLab says when another shape matches better** — "curve fits your
+  readings better — r² 0.998 against 0.874" — with one button to switch, so you can justify the
+  shape you chose.
+- **The gradient comes with what it means**: distance against time is a speed, velocity against
+  time is an acceleration, d against t² gives g = 2 × gradient, T² against length gives
+  g = 4π²/gradient, force against extension is the spring constant.
+- **Uncertainties, only when you ask.** Press **±** on a column and it gains a ± column beside it.
+  The readings then carry error bars, and the gradient is quoted the way a practical is marked:
+  from the steepest and shallowest lines that still pass through the bars, with the value rounded
+  to the place the uncertainty supports — `4.92 ± 0.04 m/s²`, never more digits than you measured.
+  Without bars the ± comes from how much the readings scatter about the line.
+- **Residuals** (reading minus line), off by default, show the pattern a good r² can hide.
+- **Show on the drawing** puts the points and the fitted line into the main viewport, where they
+  can be measured, zoomed and exported as a picture like anything else.
+- Tables are saved inside the `.phys` project, so an experiment reopens with the drawing.
+
+Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one click.
 
 ## Help for new users
 

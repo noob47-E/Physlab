@@ -106,3 +106,21 @@ export function visualizeRoots(roots: number[], expr?: string): void {
   roots.forEach((r) => b.point([r, 0, 0], {}))
   b.commit()
 }
+
+/**
+ * Lab readings on the drawing: the measured points, and the fitted line through them as a graph
+ * object that lives in the scene like anything else — so it can be measured, zoomed, exported as a
+ * picture, or have a tangent taken. A student's own data becomes part of the drawing rather than
+ * something trapped in a side panel.
+ */
+export function visualizeReadings(xs: number[], ys: number[], expr: string | null, title: string): void {
+  if (!xs.length) return
+  const b = new Builder()
+  xs.forEach((x, i) => b.point([x, ys[i], 0], { auxiliary: true, showLabel: false }))
+  if (expr) b.graph({ kind: 'explicit', source: title, exprs: [expr], showRoots: false, showExtrema: false }, { name: 'fit' })
+  b.commit()
+  scene().setViewMode('2d')
+  // Readings are rarely near the origin at the scale the grid starts on — free fall runs 0 to 5 m
+  // against 0 to 1 s² — so the camera has to come to the data.
+  fitCamera()
+}

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Lightbulb, Plus, Sigma, Trash2, Undo2, Upload, X } from 'lucide-react'
+import { Download, Eye, Lightbulb, Plus, Sigma, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { math, preprocess } from '../math/expr'
 import { fmt } from '../math/format'
 import { saveTextFile } from '../app/files'
+import { visualizeReadings } from '../core/visualize'
 import { applyPaste, csvFileName, parseTable, toCsv } from '../lab/csv'
 import { addColumn, addRow, addUncertainty, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
 import { columnHeader, headerOf, isUsableName, plotSeries, ratioUnit, resolveValues, uncertaintyIndex } from '../lab/values'
@@ -348,6 +349,18 @@ export function LabData() {
           yLabel={yCol ? headerOf(yCol) : 'y'}
         />
       </div>
+
+      {xs.length > 0 && (
+        <div className="mt-2 px-3">
+          <button
+            className="btn"
+            title="Put the readings and the line into the main drawing, where everything else lives"
+            onClick={() => visualizeReadings(xs, ys, fit?.expr ?? null, table.title || 'readings')}
+          >
+            <Eye size={13} /> Show on the drawing
+          </button>
+        </div>
+      )}
 
       {xs.length < MIN_POINTS ? (
         <div className="px-3 text-zinc-500">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>

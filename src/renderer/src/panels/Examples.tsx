@@ -5,6 +5,8 @@ import { scene } from '../core/store'
 import { useParticleLab } from '../render/GpuParticles'
 import { fitCamera, resetCamera } from '../render/viewState'
 import { enterMode } from '../app/TopBar'
+import { useLab } from '../lab/labStore'
+import type { LabTable } from '../lab/types'
 
 /** Level tags replace grade levels: the same topic turns up in many classes. */
 export type Level = 'Basic' | 'Intermediate' | 'Advanced'
@@ -233,8 +235,45 @@ export const EXAMPLES: Example[] = [
     tryThis: 'Change B and E in the GPU Lab tab. Try 1M or 2M particles.',
     commands: ['3d'],
     after: () => useParticleLab.setState({ enabled: true, count: 500_000 })
+  },
+  {
+    title: 'Free fall: find g from d and t',
+    topic: 'Reading a constant off the gradient of a graph',
+    area: 'Motion',
+    level: 'Basic',
+    what: 'Five timed drops, measured to ± 2 cm. d = ½gt², so d against t² is a straight line of gradient g/2.',
+    tryThis: 'Read the gradient under the graph and double it. Turn the residuals on, or try the curve fit, to see why the straight line is the right choice.',
+    commands: [],
+    after: () => {
+      useLab.getState().setTables([freeFallReadings()])
+      enterMode('lab')
+    }
   }
 ]
+
+/** The readings the free-fall example starts with: real-looking, not perfect. */
+function freeFallReadings(): LabTable {
+  const measured: [number, number][] = [
+    [0.2, 0.21],
+    [0.4, 0.78],
+    [0.6, 1.8],
+    [0.8, 3.1],
+    [1.0, 4.95]
+  ]
+  return {
+    id: 'exFreeFall',
+    title: 'Free fall',
+    columns: [
+      { id: 'exT', name: 't', unit: 's' },
+      { id: 'exTsq', name: 'tsq', unit: 's^2', formula: 't^2' },
+      { id: 'exD', name: 'd', unit: 'm' },
+      { id: 'exDu', name: 'd_u', unit: 'm', uncertaintyFor: 'exD' }
+    ],
+    // The t² column works itself out, so its cell is left empty.
+    rows: measured.map(([t, d]) => [t, null, d, 0.02]),
+    plot: { x: 'exTsq', y: 'exD', fit: 'linear' }
+  }
+}
 
 /** Replace the scene with an example lesson. */
 export async function runExample(ex: Example): Promise<void> {
