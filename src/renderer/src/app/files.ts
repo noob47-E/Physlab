@@ -62,3 +62,23 @@ export function newProject() {
   if (scene().dirty && !confirm('Discard unsaved changes?')) return
   scene().newScene()
 }
+
+type TextBridge = { saveText?: (content: string, defaultName: string, filterName: string, ext: string) => Promise<string | null> }
+
+/**
+ * Saves a piece of text the app has made — readings as CSV today, more later. On the desktop the
+ * user picks where it goes; in the browser build it comes down as an ordinary download, which is
+ * the same two branches saveViewportImage uses.
+ */
+export async function saveTextFile(content: string, defaultName: string, filterName = 'CSV file', ext = 'csv'): Promise<string | null> {
+  const api = (window as unknown as { physlab?: TextBridge }).physlab
+  if (api?.saveText) return api.saveText(content, defaultName, filterName, ext)
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = defaultName
+  a.click()
+  // The browser hands the file to the download folder, so there is no path to report back.
+  URL.revokeObjectURL(a.href)
+  return 'download'
+}

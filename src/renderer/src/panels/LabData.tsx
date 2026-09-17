@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Lightbulb, Plus, Sigma, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Download, Lightbulb, Plus, Sigma, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { math, preprocess } from '../math/expr'
 import { fmt } from '../math/format'
+import { saveTextFile } from '../app/files'
+import { applyPaste, csvFileName, parseTable, toCsv } from '../lab/csv'
 import { addColumn, addRow, addUncertainty, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
 import { columnHeader, headerOf, isUsableName, plotSeries, ratioUnit, resolveValues, uncertaintyIndex } from '../lab/values'
 import { betterFit, fitOf, gradientMeaning, gradientRange, MIN_POINTS, pmText, rankFits, type Fit } from '../lab/fit'
@@ -154,6 +156,18 @@ export function LabData() {
   const resolved = useMemo(() => resolveValues(table), [table])
   const patch = (fn: Parameters<typeof update>[1]) => update(table.id, fn)
   const [showResiduals, setShowResiduals] = useState(false)
+  // What a paste or an import replaced, so it can be put back with one click: a student who pastes
+  // over an afternoon's readings should not lose them.
+  const [undo, setUndo] = useState<{ what: string; before: LabTable } | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const takeIn = (text: string, what: string) => {
+    const parsed = parseTable(text)
+    if (!parsed.rows.length) return false
+    setUndo({ what: `${what} ${parsed.rows.length} ${parsed.rows.length === 1 ? 'row' : 'rows'}`, before: table })
+    patch((t) => applyPaste(t, parsed))
+    return true
+  }
 
   const series = useMemo(() => plotSeries(table, resolved), [table, resolved])
   const { xs, ys } = series
@@ -190,7 +204,18 @@ export function LabData() {
         />
       </div>
 
-      <div className="mt-3 overflow-x-auto px-3">
+      <div
+        className="mt-3 overflow-x-auto px-3 outline-none"
+        tabIndex={0}
+        onPaste={(e) => {
+          const text = e.clipboardData.getData('text')
+          // One value belongs to the cell the student is typing in; a block belongs to the table.
+          if (!text.trim() || !/[\t\n;,]/.test(text.trim())) return
+          e.preventDefault()
+          e.stopPropagation()
+          takeIn(text, 'Pasted')
+        }}
+      >
         <div className="grid min-w-min gap-1" style={{ gridTemplateColumns: `28px repeat(${table.columns.length}, minmax(104px, 1fr)) 26px` }}>
           <div />
           {table.columns.map((col) => (
@@ -239,7 +264,48 @@ export function LabData() {
         <button className="btn" onClick={() => patch((t) => addColumn(t))}>
           <Plus size={13} /> Column
         </button>
+        <button className="btn" title="Read a .csv file of readings" onClick={() => fileInput.current?.click()}>
+          <Upload size={13} /> Import
+        </button>
+        <button className="btn" title="Save these readings as a .csv file" onClick={() => void saveTextFile(toCsv(table, resolved), csvFileName(table.title))}>
+          <Download size={13} /> Export
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            // Clearing the value lets the same file be picked again after an undo.
+            e.target.value = ''
+            if (file) takeIn(await file.text(), 'Imported')
+          }}
+        />
       </div>
+
+      <div className="mt-2 px-3 text-zinc-500">
+        You can also copy readings out of a spreadsheet and paste them straight onto the table.
+      </div>
+
+      {undo && (
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-[var(--line-2)] bg-black/10 px-3 py-2">
+          <span className="min-w-0 flex-1 text-zinc-300">{undo.what}.</span>
+          <button
+            className="btn"
+            onClick={() => {
+              const before = undo.before
+              patch(() => before)
+              setUndo(null)
+            }}
+          >
+            <Undo2 size={13} /> Undo
+          </button>
+          <button className="icon-btn" title="Keep it" onClick={() => setUndo(null)}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       {/* ---------------------------------------------------------------- graph */}
       <div className="section-title mt-4">Graph</div>

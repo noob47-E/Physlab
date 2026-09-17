@@ -5,6 +5,7 @@ import { addColumn, addRow, addUncertainty, emptyTable, removeColumn, setCell, s
 import { headerOf, isUsableName, plotPairs, plotSeries, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
 import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/renderer/src/lab/fit'
 import { chartSeries } from '../src/renderer/src/lab/chartData'
+import { applyPaste, cellNumber, csvFileName, parseTable, toCsv } from '../src/renderer/src/lab/csv'
 import type { LabTable } from '../src/renderer/src/lab/types'
 
 /** A table of t and d with the readings filled in. */
@@ -280,5 +281,83 @@ describe('the gradient a practical quotes, read off the error bars', () => {
 
   it('refuses when the bars are so wide the readings overlap', () => {
     expect(gradientRange([1, 2], [2, 4], [3, 3], [])).toBeNull()
+  })
+})
+
+describe('readings pasted in or read from a file', () => {
+  it('reads a block copied out of a spreadsheet', () => {
+    const p = parseTable('t / s\td / m\n0.2\t0.196\n0.4\t0.784\n')
+    expect(p.header).toEqual([
+      { name: 't', unit: 's' },
+      { name: 'd', unit: 'm' }
+    ])
+    expect(p.rows).toEqual([
+      [0.2, 0.196],
+      [0.4, 0.784]
+    ])
+  })
+
+  it('takes commas, semicolons and a caption written with brackets', () => {
+    expect(parseTable('t (s),d (m)\n1,2').header).toEqual([
+      { name: 't', unit: 's' },
+      { name: 'd', unit: 'm' }
+    ])
+    // Where semicolons separate, a comma is a decimal point.
+    expect(parseTable('0,2;1,5\n0,4;3,0').rows).toEqual([
+      [0.2, 1.5],
+      [0.4, 3]
+    ])
+  })
+
+  it('knows readings from captions, and leaves a blank cell empty', () => {
+    const p = parseTable('1,2,3\n4,,6')
+    expect(p.header).toBeNull()
+    expect(p.rows).toEqual([
+      [1, 2, 3],
+      [4, null, 6]
+    ])
+  })
+
+  it('accepts the minus sign a word processor inserts, and rejects words', () => {
+    expect(cellNumber('−2.5')).toBe(-2.5)
+    expect(cellNumber('+3')).toBe(3)
+    expect(cellNumber('1.2e-3')).toBe(0.0012)
+    expect(cellNumber('about 4')).toBeNull()
+    expect(cellNumber('')).toBeNull()
+  })
+
+  it('writes a CSV that reads back as the same numbers', () => {
+    const t = addColumn(freeFall(), { name: 'tsq', unit: 's^2', formula: 't^2' })
+    const csv = toCsv(t, resolveValues(t))
+    expect(csv.split('\n')[0]).toBe('t / s,d / m,tsq / s^2')
+    const back = parseTable(csv)
+    expect(back.rows.map((r) => [r[0], r[1]])).toEqual(t.rows.map((r) => [r[0], r[1]]))
+    // The computed column is written out too, since that is what goes in the report.
+    expect(back.rows[4][2]).toBeCloseTo(1, 10)
+  })
+
+  it('grows the table to fit a wider block, and takes its captions when the table is empty', () => {
+    const p = parseTable('t / s,v / m s^-1,F / N\n1,2,3\n2,4,6\n3,6,9')
+    const grown = applyPaste(emptyTable('Trolley'), p)
+    expect(grown.columns.map((c) => c.name)).toEqual(['t', 'v', 'F'])
+    expect(grown.columns[1].unit).toBe('m s^-1')
+    expect(grown.rows).toEqual([
+      [1, 2, 3],
+      [2, 4, 6],
+      [3, 6, 9]
+    ])
+  })
+
+  it('keeps the captions of a table that already has readings in it', () => {
+    const p = parseTable('a,b\n7,8')
+    const pasted = applyPaste(freeFall(), p)
+    expect(pasted.columns.map((c) => c.name)).toEqual(['t', 'd'])
+    expect(pasted.rows).toEqual([[7, 8]])
+  })
+
+  it('names the file after the experiment', () => {
+    expect(csvFileName('Free fall')).toBe('Free-fall.csv')
+    expect(csvFileName('  ')).toBe('lab-data.csv')
+    expect(csvFileName('g: from d/t?')).toBe('g-from-dt.csv')
   })
 })

@@ -178,6 +178,25 @@ ipcMain.handle('file:saveImage', async (_e, dataUrl: string) => {
   return result.filePath
 })
 
+/**
+ * Saving any piece of text the renderer has made — a CSV of lab readings today, a worksheet or a
+ * LaTeX snippet tomorrow. The other save handlers each hardcode one extension, which is why there
+ * was no way to write a file that is not a project or a picture.
+ */
+ipcMain.handle('file:saveText', async (_e, content: string, defaultName: string, filterName: string, ext: string) => {
+  const result = await dialog.showSaveDialog({
+    title: 'Save as',
+    defaultPath: defaultName,
+    filters: [
+      { name: filterName, extensions: [ext] },
+      { name: 'All files', extensions: ['*'] }
+    ]
+  })
+  if (result.canceled || !result.filePath) return null
+  await writeFile(result.filePath, content, 'utf8')
+  return result.filePath
+})
+
 // ---------------------------------------------------------------------------
 // Crash recovery: one rolling copy of unsaved work
 // ---------------------------------------------------------------------------
