@@ -9,7 +9,8 @@ describe('preprocess', () => {
     expect(preprocess('(cos(t), sin(t))')).toBe('pt(cos(t), sin(t))')
   })
   it('rewrites cross, dot, magnitude and polar notation', () => {
-    expect(preprocess('A × B')).toBe('cross(A, B)')
+    // × dispatches on what is on either side: a cross product here, multiplication between numbers.
+    expect(preprocess('A × B')).toBe('timesOrCross(A, B)')
     expect(preprocess('A · (B + C)')).toBe('dot(A, (B + C))')
     expect(preprocess('|A + B|')).toBe('mag(A + B)')
     expect(preprocess('10 ∠ 30°')).toBe('polarVec(10, 30 deg)')

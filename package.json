@@ -17,6 +17,7 @@
   "build": {
     "appId": "com.physlab.desktop",
     "productName": "PhysLab",
+    "copyright": " ",
     "directories": {
       "output": "dist",
       "buildResources": "build"

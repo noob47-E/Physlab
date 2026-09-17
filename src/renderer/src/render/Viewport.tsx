@@ -29,6 +29,23 @@ const sizeProbe = new THREE.Vector2()
  * The canvas only renders when something changes (saves CPU/GPU and battery on weak laptops).
  * Any scene, tool or highlight change requests a new frame; animations keep requesting frames.
  */
+/**
+ * The canvas background, set on the scene itself rather than through `<color attach="background">`.
+ * That element detaches when its args change and does not come back: after a theme switch the
+ * scene's background was left null, so the viewport painted pure black while the rest of the app
+ * turned light. Setting it here also guarantees the frame that paints it.
+ */
+function Background({ color }: { color: string }) {
+  const scene = useThree((s) => s.scene)
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => {
+    scene.background = new THREE.Color(color)
+    invalidate()
+    requestAnimationFrame(() => invalidate())
+  }, [color, scene, invalidate])
+  return null
+}
+
 function Invalidator() {
   const invalidate = useThree((s) => s.invalidate)
   const size = useThree((s) => s.size)
@@ -47,7 +64,11 @@ function Invalidator() {
       // too early to show anything.
       useGpuInfo.subscribe(kick),
       // The camera moving, zooming or simply arriving changes what the grid has to cover.
-      useView.subscribe(kick)
+      useView.subscribe(kick),
+      // Switching the theme changes the canvas background and every line colour, but with
+      // frameloop="demand" nothing asks for the frame that would paint them: the viewport stayed
+      // on its last dark frame while the rest of the app turned light.
+      useTheme.subscribe(kick)
     ]
     window.addEventListener('resize', kick)
     kick()
@@ -151,7 +172,7 @@ export function Viewport() {
   return (
     <div ref={hostRef} data-tour="viewport" className="viewport relative h-full w-full select-none overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
       {layoutReady && <Canvas gl={createRenderer as never} flat dpr={[1, QUALITY[quality].dpr]} frameloop="demand" style={{ background: canvasBg }}>
-        <color attach="background" args={[canvasBg]} />
+        <Background color={canvasBg} />
         <CameraRig />
         {viewMode === '2d' ? <Grid2D /> : <Grid3D />}
         <SceneObjects />

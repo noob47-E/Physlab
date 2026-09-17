@@ -16,6 +16,9 @@ import {
   solveLinearSystem,
   statistics
 } from '../src/renderer/src/calc/engine'
+import { parseAnswer } from '../src/renderer/src/math/checkAnswer'
+import { fmt } from '../src/renderer/src/math/format'
+import { math, preprocess } from '../src/renderer/src/math/expr'
 
 const ctx = { vars: {}, ans: 0, angle: 'deg' as const }
 
@@ -105,5 +108,46 @@ describe('chapter 1 measurements', () => {
     expect(r.value).toBe(6)
     expect(r.unc).toBeCloseTo(0.9)
     expect(dimensionsOf('N')).toBe('[M L T^-2]')
+  })
+})
+
+describe('the × key means what is on either side of it', () => {
+  it('multiplies numbers', () => {
+    expect(parseAnswer('2 × 3')).toBe(6)
+    expect(parseAnswer('2.5 × 10^3')).toBe(2500)
+  })
+
+  it('reads back the scientific notation PhysLab itself prints', () => {
+    // fmt() writes small and large numbers as "1.234×10^-5"; rewriting every × to a cross
+    // product meant the app could not read its own output.
+    for (const v of [0.00001234, 1.5e10, -2.5e-7]) {
+      expect(parseAnswer(fmt(v, 4))).toBeCloseTo(v, 12)
+    }
+  })
+
+  it('still takes a cross product between vectors', () => {
+    const r = math.evaluate(preprocess('<1, 0, 0> × <0, 1, 0>')) as number[]
+    expect([r[0], r[1], r[2]]).toEqual([0, 0, 1])
+  })
+})
+
+describe('calculus follows the angle mode, like the real calculator', () => {
+  const deg = { vars: {}, ans: 0, angle: 'deg' as const }
+  const rad = { vars: {}, ans: 0, angle: 'rad' as const }
+
+  it('differentiates in degrees when the calculator is in DEG', () => {
+    // d/dx sin(x°) = cos(x°) × π/180 — what an fx-991EX shows in DEG mode.
+    expect(Number(evaluateComp('ddx(sin(x), 30)', deg).value)).toBeCloseTo((Math.cos(Math.PI / 6) * Math.PI) / 180, 6)
+    expect(Number(evaluateComp('integral(sin(x), 0, 90)', deg).value)).toBeCloseTo(180 / Math.PI, 4)
+  })
+
+  it('is unchanged in RAD', () => {
+    expect(Number(evaluateComp('ddx(sin(x), 30)', rad).value)).toBeCloseTo(Math.cos(30), 6)
+    expect(Number(evaluateComp('integral(sin(x), 0, pi)', rad).value)).toBeCloseTo(2, 6)
+  })
+
+  it('leaves plain algebra alone in either mode', () => {
+    expect(Number(evaluateComp('ddx(x^3, 2)', deg).value)).toBeCloseTo(12, 6)
+    expect(Number(evaluateComp('integral(x^2, 0, 3)', rad).value)).toBeCloseTo(9, 8)
   })
 })

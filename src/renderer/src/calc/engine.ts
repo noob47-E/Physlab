@@ -115,17 +115,13 @@ const scopeToObject = (scope: Map<string, unknown> | Record<string, unknown>): R
 function lambdaOf(node: MathNode, scope: Map<string, unknown>, variable = 'x') {
   const code = node.compile()
   const base = scopeToObject(scope)
-  return (v: number) => {
-    // Calculus is always done in radians (as the fx-991EX manual requires), so
-    // ∫ sin(x) dx from 0 to π gives 2 regardless of the DEG/RAD setting.
-    const prev = getAngleMode()
-    setAngleMode('rad')
-    try {
-      return Number(code.evaluate({ ...base, [variable]: v }))
-    } finally {
-      setAngleMode(prev)
-    }
-  }
+  // Calculus follows the angle mode, the way the real calculator does. Forcing radians here
+  // answered a different question from the one that was typed: in DEG mode, sin(30) means 30
+  // degrees, so ddx(sin(x), 30) has to mean the slope at 30 degrees too — otherwise the same
+  // number means two things on one screen, and the answer disagrees with the calculator in the
+  // student's hand. (The fx-991EX manual advises the user to switch to Rad for trig calculus;
+  // it does not switch for them.)
+  return (v: number) => Number(code.evaluate({ ...base, [variable]: v }))
 }
 
 const raw = (fn: Raw): Raw => {

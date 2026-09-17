@@ -144,6 +144,11 @@ export function Interaction() {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
+      // The buttons floating over the drawing — 2D/3D, grid, snap, the label choices — live inside
+      // the same container this listener is attached to, and it listens in the capture phase, so a
+      // click on one of them used to reach the canvas as well: pressing "Always" with a drawing
+      // tool selected dropped a point behind the button. Only the canvas draws.
+      if (!(e.target instanceof HTMLCanvasElement)) return
       const { x, y } = local(e)
       const s = scene()
       const tool = s.tool

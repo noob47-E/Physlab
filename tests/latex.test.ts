@@ -17,7 +17,10 @@ describe('latexToMath', () => {
     expect(calc('\\log_{2}\\left(8\\right)')).toBeCloseTo(3)
     expect(calc('\\left|-5\\right|\\times 2')).toBeCloseTo(10)
     expect(calc('6\\div 4')).toBeCloseTo(1.5)
-    expect(calc('\\int_{0}^{\\pi}\\sin x\\,dx')).toBeCloseTo(2, 6)
+    // Calculus follows the angle mode, as on the real calculator: in RAD this is the familiar 2,
+    // and in DEG the limits are 0 to 3.14 degrees, which is a thin sliver of the same curve.
+    expect(calc('\\int_{0}^{\\pi}\\sin x\\,dx', 'rad')).toBeCloseTo(2, 6)
+    expect(calc('\\int_{0}^{\\pi}\\sin x\\,dx', 'deg')).toBeCloseTo(0.0861, 4)
     expect(calc('\\sum_{x=1}^{10}x^{2}')).toBe(385)
     expect(calc('\\operatorname{ddx}\\left(x^3,2\\right)')).toBeCloseTo(12, 6)
     expect(calc('2.5\\times 10^{3}')).toBeCloseTo(2500)

@@ -76,8 +76,13 @@ export function measureValue(v: number, kind: MeasureKind, s: MeasureSettings): 
   return v * Math.pow(s.unitPerSquare, DIM[kind])
 }
 
+/** Degrees, radians or grads — written the way each one is written. */
+const ANGLE_SUFFIX: Record<AngleUnit, string> = { deg: '°', rad: ' rad', grad: ' grad' }
+const ANGLE_TEX: Record<AngleUnit, string> = { deg: '^\\circ', rad: '\\,\\text{rad}', grad: '\\,\\text{grad}' }
+
 export function unitSuffix(kind: MeasureKind, s: MeasureSettings): string {
-  if (kind === 'angle') return s.angleUnit === 'deg' ? '°' : ' rad'
+  // A ternary on 'deg' labelled a grad angle "rad": the number was converted, the name was not.
+  if (kind === 'angle') return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
   if (kind === 'number') return ''
   const u = UNIT_LABELS[s.unit]
   return ` ${u}${DIM[kind] === 2 ? '²' : DIM[kind] === 3 ? '³' : ''}`
@@ -92,13 +97,13 @@ export function formatMeasure(v: number, kind: MeasureKind, s: MeasureSettings):
 export function texMeasure(v: number, kind: MeasureKind, s: MeasureSettings, withUnit = true): string {
   const n = fmtPrecise(measureValue(v, kind, s), s).replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
   if (!withUnit || kind === 'number') return n
-  if (kind === 'angle') return s.angleUnit === 'deg' ? `${n}^\\circ` : `${n}\\,\\text{rad}`
+  if (kind === 'angle') return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
   const d = DIM[kind]
   return `${n}\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
 }
 
 export function texUnit(kind: MeasureKind, s: MeasureSettings): string {
-  if (kind === 'angle') return s.angleUnit === 'deg' ? '^\\circ' : '\\,\\text{rad}'
+  if (kind === 'angle') return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
   if (kind === 'number') return ''
   const d = DIM[kind]
   return `\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`

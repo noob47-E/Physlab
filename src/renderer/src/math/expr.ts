@@ -81,6 +81,15 @@ math.import(
       return [m * Math.cos(t), m * Math.sin(t), 0]
     },
     cross: (a: AnyVal, b: AnyVal) => vcross(toV3(a), toV3(b)),
+    // What the × key means depends on what is on either side of it: a cross product between
+    // vectors, ordinary multiplication between numbers. Rewriting every × to cross() made
+    // "2 × 3" unreadable — and worse, PhysLab prints small numbers as "1.234×10^-5", so it
+    // could not read back what it had just written.
+    timesOrCross: (a: AnyVal, b: AnyVal) => {
+      const scalar = (v: AnyVal) => typeof v === 'number' || isUnit(v)
+      if (scalar(a) && scalar(b)) return math.multiply(a as never, b as never)
+      return vcross(toV3(a), toV3(b))
+    },
     dot: (a: AnyVal, b: AnyVal) => vdot(toV3(a), toV3(b)),
     mag: (a: AnyVal) => (typeof a === 'number' ? Math.abs(a) : isUnit(a) ? math.abs(a as never) : len(toV3(a))),
     unitVec: (a: AnyVal) => normalize(toV3(a)),
@@ -243,7 +252,12 @@ export function preprocess(src: string): string {
   s = s.replace(/[⟨<]([^<>=⟨⟩]*,[^<>=⟨⟩]*)[⟩>]/g, 'vec($1)')
   s = s.replace(/\|([^|]+)\|/g, 'mag($1)')
   s = tuplesToPoints(s)
-  s = infixToCall(s, '×', 'cross')
+  // "1.234×10^-5" is one number, not a multiplication: it is how fmt() prints anything very large
+  // or very small, so it comes back in on every copy and paste. It has to become a literal before
+  // the × below is treated as an operator, because infixToCall takes "10" as the whole right-hand
+  // side and leaves the exponent outside — turning 2.5×10^3 into (2.5×10)^3 = 15625.
+  s = s.replace(/(\d(?:\.\d+)?)\s*×\s*10\s*\^\s*\(?\s*(-?\d+)\s*\)?/g, '($1e$2)')
+  s = infixToCall(s, '×', 'timesOrCross')
   s = infixToCall(s, '·', 'dot')
   s = infixToCall(s, '⋅', 'dot')
   return s
