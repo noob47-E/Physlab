@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { niceStep, orthoBounds, toScreen } from './cameraUtils'
+import { finiteArea, gridKey, needsGridRebuild, usableSize } from './gridMath'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
@@ -74,14 +75,18 @@ export function Grid2D() {
   useEffect(() => () => ticks.dispose(), [ticks])
 
   useFrame(() => {
+    // A frame can arrive before the canvas has been measured: the dock panel is still settling, or
+    // the renderer has only just finished starting. Building from a zero size gives zero-length
+    // lines and caches them as done, which is what used to leave the viewport black on first open.
+    if (!usableSize(size)) return
     const b = orthoBounds(camera, size)
+    if (!finiteArea(b)) return
     const zoom = (camera as THREE.OrthographicCamera).zoom
     const majorStep = niceStep(100 / zoom)
     const minorStep = majorStep / (String(majorStep).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
     const prev = built.current
-    const outside = b.xMin < prev.xMin || b.xMax > prev.xMax || b.yMin < prev.yMin || b.yMax > prev.yMax
-    const key = `${majorStep}`
-    if (outside || key !== prev.key) {
+    const key = gridKey(majorStep, size)
+    if (needsGridRebuild(prev, b, key)) {
       const w = b.xMax - b.xMin
       const h = b.yMax - b.yMin
       const ext = { xMin: b.xMin - w, xMax: b.xMax + w, yMin: b.yMin - h, yMax: b.yMax + h }
@@ -140,6 +145,7 @@ export function Grid3D() {
   useEffect(() => () => ticks.dispose(), [ticks])
 
   useFrame(() => {
+    if (!usableSize(size)) return
     const dist = camera.position.length()
     const step = niceStep(dist / 12)
     const half = step * 10

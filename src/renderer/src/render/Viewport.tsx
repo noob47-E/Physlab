@@ -31,12 +31,21 @@ const sizeProbe = new THREE.Vector2()
  */
 function Invalidator() {
   const invalidate = useThree((s) => s.invalidate)
+  const size = useThree((s) => s.size)
   useEffect(() => {
     const kick = () => {
       invalidate()
       requestAnimationFrame(() => invalidate())
     }
-    const unsubs = [useScene.subscribe(kick), useTool.subscribe(kick), useHighlight.subscribe(kick), useParticleLab.subscribe(kick)]
+    const unsubs = [
+      useScene.subscribe(kick),
+      useTool.subscribe(kick),
+      useHighlight.subscribe(kick),
+      useParticleLab.subscribe(kick),
+      // The renderer starts asynchronously; the frames drawn before it reports its backend can be
+      // too early to show anything.
+      useGpuInfo.subscribe(kick)
+    ]
     window.addEventListener('resize', kick)
     kick()
     return () => {
@@ -44,6 +53,13 @@ function Invalidator() {
       window.removeEventListener('resize', kick)
     }
   }, [invalidate])
+  // A dock panel settling into place, or a dragged splitter, resizes the canvas without resizing the
+  // window — and that is usually when the first real size arrives.
+  useEffect(() => {
+    invalidate()
+    const id = requestAnimationFrame(() => invalidate())
+    return () => cancelAnimationFrame(id)
+  }, [invalidate, size.width, size.height])
   useFrame((state) => {
     const s = useScene.getState()
     if (s.playing || useParticleLab.getState().enabled) state.invalidate()
