@@ -1,9 +1,9 @@
 // The lab table: what gets worked out from what, and what reaches the graph.
 
 import { describe, expect, it } from 'vitest'
-import { addColumn, addRow, emptyTable, removeColumn, setCell } from '../src/renderer/src/lab/labStore'
-import { headerOf, plotPairs, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
-import { betterFit, fitOf, rankFits } from '../src/renderer/src/lab/fit'
+import { addColumn, addRow, addUncertainty, emptyTable, removeColumn, setCell, setColumn } from '../src/renderer/src/lab/labStore'
+import { headerOf, isUsableName, plotPairs, plotSeries, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
+import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/renderer/src/lab/fit'
 import { chartSeries } from '../src/renderer/src/lab/chartData'
 import type { LabTable } from '../src/renderer/src/lab/types'
 
@@ -177,5 +177,108 @@ describe('what the graph is handed', () => {
     expect(s.curve.every((c) => c !== null)).toBe(true)
     // The shared axis stays in order, which is what uPlot needs.
     expect([...s.x].sort((a, b) => a - b)).toEqual(s.x)
+  })
+})
+
+describe('uncertainties, once they are asked for', () => {
+  it('puts the ± column beside its own column, in the same unit, with a name a formula can use', () => {
+    const base = freeFall()
+    const table = addUncertainty(base, base.columns[0].id)
+    expect(table.columns.map((c) => c.name)).toEqual(['t', 't_u', 'd'])
+    expect(table.columns[1].unit).toBe('s')
+    expect(table.columns[1].uncertaintyFor).toBe(base.columns[0].id)
+    expect(isUsableName(table.columns[1].name)).toBe(true)
+    // Every row grew a cell in the right place, so the readings did not shift along.
+    expect(table.rows[0]).toEqual([0.2, null, 0.196])
+  })
+
+  it('refuses to give one column two ± columns', () => {
+    const base = freeFall()
+    const once = addUncertainty(base, base.columns[0].id)
+    expect(addUncertainty(once, base.columns[0].id)).toBe(once)
+  })
+
+  it('keeps the ± column named and measured like the column it describes', () => {
+    const base = freeFall()
+    const table = addUncertainty(base, base.columns[0].id)
+    const renamed = setColumn(table, base.columns[0].id, { name: 'time', unit: 'ms' })
+    expect(renamed.columns[1].name).toBe('time_u')
+    expect(renamed.columns[1].unit).toBe('ms')
+  })
+
+  it('takes the ± column away with the reading it belonged to', () => {
+    const base = freeFall()
+    const table = addUncertainty(base, base.columns[0].id)
+    const gone = removeColumn(table, base.columns[0].id)
+    expect(gone.columns).toHaveLength(1)
+    expect(gone.rows[0]).toEqual([0.196])
+  })
+
+  it('lines the bars up with the readings that were kept, not with the rows that were typed', () => {
+    const base = freeFall()
+    let table = addUncertainty(base, base.columns[1].id)
+    // Uncertainties of 1, 2, 3, 4, 5 mm, then the middle reading is deleted.
+    table = table.rows.reduce((acc, _r, i) => setCell(acc, i, 2, (i + 1) / 1000), table)
+    table = setCell(table, 2, 0, null)
+    const s = plotSeries(table, resolveValues(table))
+    expect(s.xs).toEqual([0.2, 0.4, 0.8, 1])
+    expect(s.yErr).toEqual([0.001, 0.002, 0.004, 0.005])
+    expect(s.xErr).toEqual([])
+  })
+
+  it('treats a blank ± cell as no bar, not as a missing reading', () => {
+    const base = freeFall()
+    const table = setCell(addUncertainty(base, base.columns[1].id), 0, 2, 0.01)
+    const s = plotSeries(table, resolveValues(table))
+    expect(s.xs).toHaveLength(5)
+    expect(s.yErr).toEqual([0.01, 0, 0, 0, 0])
+  })
+})
+
+describe('writing a value with its uncertainty', () => {
+  it('rounds both to the place the uncertainty supports', () => {
+    expect(pmText(4.9053, 0.0612)).toBe('4.91 ± 0.06')
+    expect(pmText(9.81234, 0.1)).toBe('9.8 ± 0.1')
+    expect(pmText(1234.5, 60)).toBe('1235 ± 60')
+  })
+
+  it('says nothing about ± when the readings sit exactly on the line', () => {
+    expect(pmText(3, 1e-16)).toBe('3')
+    expect(pmText(3.25, undefined)).toBe('3.25')
+  })
+
+  it('writes a negative gradient with a real minus sign', () => {
+    expect(pmText(-2.5, 0.12)).toBe('−2.5 ± 0.1')
+  })
+})
+
+describe('the gradient a practical quotes, read off the error bars', () => {
+  // y = 2x exactly, with a ± 0.5 bar on the first and last readings.
+  const xs = [1, 2, 3, 4, 5]
+  const ys = xs.map((x) => 2 * x)
+
+  it('draws the steepest and shallowest lines through the bars', () => {
+    const yErr = [0.5, 0, 0, 0, 0.5]
+    const r = gradientRange(xs, ys, [], yErr)!
+    // Steepest: (1, 1.5) to (5, 10.5) — a run of 4 and a rise of 9.
+    expect(r.max).toBeCloseTo(9 / 4, 10)
+    expect(r.min).toBeCloseTo(7 / 4, 10)
+    expect(r.half).toBeCloseTo(0.25, 10)
+  })
+
+  it('lets a sideways bar tilt the line too', () => {
+    const r = gradientRange(xs, ys, [0.5, 0, 0, 0, 0.5], [])!
+    // The steepest line runs from x = 1.5 to x = 4.5: the same rise over a shorter run.
+    expect(r.max).toBeCloseTo(8 / 3, 10)
+    expect(r.min).toBeCloseTo(8 / 5, 10)
+  })
+
+  it('says nothing when there are no bars to read', () => {
+    expect(gradientRange(xs, ys, [], [])).toBeNull()
+    expect(gradientRange([1], [2], [], [0.1])).toBeNull()
+  })
+
+  it('refuses when the bars are so wide the readings overlap', () => {
+    expect(gradientRange([1, 2], [2, 4], [3, 3], [])).toBeNull()
   })
 })

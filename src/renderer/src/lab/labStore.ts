@@ -3,6 +3,7 @@
 
 import { create } from 'zustand'
 import type { FitShape, LabColumn, LabTable } from './types'
+import { isUsableName } from './values'
 
 let counter = 0
 const nextId = (prefix: string) => `${prefix}${++counter}${Math.random().toString(36).slice(2, 6)}`
@@ -84,10 +85,32 @@ export function setCell(t: LabTable, row: number, col: number, value: number | n
   return { ...t, rows }
 }
 
-export function addColumn(t: LabTable, col?: Partial<LabColumn>): LabTable {
+/** Adds a column, at the end or beside another one when `at` says where. */
+export function addColumn(t: LabTable, col?: Partial<LabColumn>, at?: number): LabTable {
   const name = col?.name ?? nextColumnName(t)
   const added: LabColumn = { id: nextId('col'), name, unit: col?.unit ?? '', formula: col?.formula, uncertaintyFor: col?.uncertaintyFor }
-  return { ...t, columns: [...t.columns, added], rows: t.rows.map((r) => [...r, null]) }
+  const where = at === undefined ? t.columns.length : Math.max(0, Math.min(at, t.columns.length))
+  return {
+    ...t,
+    columns: [...t.columns.slice(0, where), added, ...t.columns.slice(where)],
+    rows: t.rows.map((r) => [...r.slice(0, where), null, ...r.slice(where)])
+  }
+}
+
+/**
+ * Gives a column a ± column of its own, right beside it. The uncertainty of a quantity is measured
+ * in the same unit as the quantity, and is named after it so a formula can still reach it.
+ */
+export function addUncertainty(t: LabTable, parentId: string): LabTable {
+  const parent = t.columns.find((c) => c.id === parentId)
+  if (!parent) return t
+  if (t.columns.some((c) => c.uncertaintyFor === parentId)) return t
+  return addColumn(t, { name: uncertaintyName(parent.name), unit: parent.unit, uncertaintyFor: parentId }, t.columns.indexOf(parent) + 1)
+}
+
+/** "t" → "t_u". A name mathjs will take, so the column can be used in a formula like any other. */
+export function uncertaintyName(parent: string): string {
+  return isUsableName(parent) ? `${parent}_u` : 'u'
 }
 
 export function removeColumn(t: LabTable, id: string): LabTable {
@@ -110,10 +133,21 @@ export function removeColumn(t: LabTable, id: string): LabTable {
   }
 }
 
-export const setColumn = (t: LabTable, id: string, patch: Partial<LabColumn>): LabTable => ({
-  ...t,
-  columns: t.columns.map((c) => (c.id === id ? { ...c, ...patch } : c))
-})
+export function setColumn(t: LabTable, id: string, patch: Partial<LabColumn>): LabTable {
+  const before = t.columns.find((c) => c.id === id)
+  if (!before) return t
+  const after = { ...before, ...patch }
+  return {
+    ...t,
+    columns: t.columns.map((c) => {
+      if (c.id === id) return after
+      if (c.uncertaintyFor !== id) return c
+      // A ± column belongs to its quantity: renaming t to time must not leave a stray t_u behind,
+      // and an uncertainty is always measured in the same unit as the reading.
+      return { ...c, name: uncertaintyName(after.name), unit: after.unit }
+    })
+  }
+}
 
 export const setPlot = (t: LabTable, patch: Partial<{ x: string; y: string; fit: FitShape }>): LabTable => ({
   ...t,

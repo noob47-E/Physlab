@@ -122,3 +122,56 @@ export function gradientMeaning(yName: string, xName: string): string | null {
   if (is(y, 't²', 't^2', 'tsq') && is(x, 'l', 'length')) return 'T² against length: for a pendulum the gradient is 4π²/g, so g = 4π²/gradient.'
   return null
 }
+
+/**
+ * A measurement and its uncertainty written the way a practical is marked: the uncertainty to one
+ * significant figure, and the value rounded to that same decimal place — "4.91 ± 0.06". Writing
+ * more digits than the uncertainty supports is the mistake this prevents.
+ */
+export function pmText(value: number, error: number | undefined): string {
+  // Readings that lie exactly on the line leave a standard error of about 1e-16, which is
+  // arithmetic noise rather than a measurement: writing "± 0.0000000000000002" would be nonsense.
+  if (error === undefined || !Number.isFinite(error) || error <= 0 || error < Math.abs(value) * 1e-9) {
+    return Number.isFinite(value) ? String(Number(value.toPrecision(6))).replace('-', '−') : '—'
+  }
+  const rounded = Number(error.toPrecision(1))
+  const places = Math.max(0, -Math.floor(Math.log10(rounded)))
+  const show = (v: number) => v.toFixed(places).replace('-', '−')
+  return `${show(value)} ± ${show(rounded)}`
+}
+
+export interface GradientRange {
+  /** The shallowest line that still passes through every error bar. */
+  min: number
+  /** The steepest one. */
+  max: number
+  /** Half the spread between them: the ± a practical quotes. */
+  half: number
+}
+
+/**
+ * The max/min gradient method, which is how a practical is actually marked once error bars are
+ * drawn: the steepest line runs from the bottom of the first bar to the top of the last, the
+ * shallowest from the top of the first to the bottom of the last, and the gradient's uncertainty is
+ * half the difference. It answers the question the error bars ask — how much could this gradient be
+ * wrong? — which the scatter of the points alone cannot.
+ */
+export function gradientRange(xs: number[], ys: number[], xErr: number[], yErr: number[]): GradientRange | null {
+  if (xs.length < 2) return null
+  const at = (i: number) => ({ x: xs[i], y: ys[i], ex: xErr[i] ?? 0, ey: yErr[i] ?? 0 })
+  const order = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b])
+  const first = at(order[0])
+  const last = at(order[order.length - 1])
+  if (first.ex === 0 && first.ey === 0 && last.ex === 0 && last.ey === 0) return null
+
+  const steepRun = last.x - last.ex - (first.x + first.ex)
+  const shallowRun = last.x + last.ex - (first.x - first.ex)
+  // Bars wide enough to overlap leave no line to draw: the readings are too close together to say
+  // anything about the gradient.
+  if (steepRun <= 0 || shallowRun <= 0) return null
+  const steep = (last.y + last.ey - (first.y - first.ey)) / steepRun
+  const shallow = (last.y - last.ey - (first.y + first.ey)) / shallowRun
+  const min = Math.min(steep, shallow)
+  const max = Math.max(steep, shallow)
+  return { min, max, half: (max - min) / 2 }
+}

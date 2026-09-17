@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Lightbulb, Plus, Sigma, Trash2, X } from 'lucide-react'
 import { math, preprocess } from '../math/expr'
 import { fmt } from '../math/format'
-import { addColumn, addRow, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
-import { headerOf, isUsableName, plotPairs, ratioUnit, resolveValues } from '../lab/values'
-import { betterFit, fitOf, gradientMeaning, MIN_POINTS, rankFits, type Fit } from '../lab/fit'
-import { FIT_LABELS, type FitShape, type LabColumn } from '../lab/types'
-import { LabChart } from './LabChart'
+import { addColumn, addRow, addUncertainty, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
+import { columnHeader, headerOf, isUsableName, plotSeries, ratioUnit, resolveValues, uncertaintyIndex } from '../lab/values'
+import { betterFit, fitOf, gradientMeaning, gradientRange, MIN_POINTS, pmText, rankFits, type Fit } from '../lab/fit'
+import { FIT_LABELS, type FitShape, type LabColumn, type LabTable } from '../lab/types'
+import { LabChart, ResidualStrip } from './LabChart'
 
 /** A cell that may be empty. Accepts a typed expression ("9.8/2") the way the rest of PhysLab does. */
 function Cell({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
@@ -47,28 +47,50 @@ function Cell({ value, onChange }: { value: number | null; onChange: (v: number 
   )
 }
 
-function HeaderCell({ col, onPatch, onRemove, canRemove }: { col: LabColumn; onPatch: (p: Partial<LabColumn>) => void; onRemove: () => void; canRemove: boolean }) {
+interface HeaderProps {
+  table: LabTable
+  col: LabColumn
+  onPatch: (p: Partial<LabColumn>) => void
+  onRemove: () => void
+  onUncertainty: () => void
+  canRemove: boolean
+}
+
+function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }: HeaderProps) {
   const [showFormula, setShowFormula] = useState(!!col.formula)
   const badName = !isUsableName(col.name)
+  // A ± column is named, measured and removed with the column it belongs to, so it is shown as a
+  // caption rather than two more boxes to fill in.
+  const isError = !!col.uncertaintyFor
+  const hasError = uncertaintyIndex(table, col.id) >= 0
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1">
-        <input
-          className={`field w-12 px-1 text-center font-semibold italic ${badName ? 'text-amber-300' : ''}`}
-          value={col.name}
-          title={badName ? 'Use a letter, then letters or numbers, so formulas can refer to it' : 'Name used in formulas and on the graph'}
-          onChange={(e) => onPatch({ name: e.target.value })}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-        <span className="text-zinc-500">/</span>
-        <input
-          className="field w-12 px-1 text-center"
-          value={col.unit}
-          placeholder="unit"
-          title="Unit, e.g. s or m"
-          onChange={(e) => onPatch({ unit: e.target.value })}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
+        {isError ? (
+          <span className="flex-1 truncate px-1 text-center font-semibold italic text-zinc-400" title="How uncertain each reading of that column is">
+            {columnHeader(table, col)}
+          </span>
+        ) : (
+          <>
+            <input
+              className={`field w-12 px-1 text-center font-semibold italic ${badName ? 'text-amber-300' : ''}`}
+              value={col.name}
+              title={badName ? 'Use a letter, then letters or numbers, so formulas can refer to it' : 'Name used in formulas and on the graph'}
+              onChange={(e) => onPatch({ name: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+            <span className="text-zinc-500">/</span>
+            <input
+              className="field w-12 px-1 text-center"
+              value={col.unit}
+              placeholder="unit"
+              title="Unit, e.g. s or m"
+              onChange={(e) => onPatch({ unit: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          </>
+        )}
         <button
           className={`icon-btn ${col.formula ? 'on' : ''}`}
           title="Work this column out from the ones before it"
@@ -79,6 +101,11 @@ function HeaderCell({ col, onPatch, onRemove, canRemove }: { col: LabColumn; onP
         >
           <Sigma size={13} />
         </button>
+        {!isError && !hasError && (
+          <button className="icon-btn" title="Add a ± column: how uncertain each reading is" onClick={onUncertainty}>
+            <span className="text-[13px] leading-none">±</span>
+          </button>
+        )}
         {canRemove && (
           <button className="icon-btn" title="Remove this column" onClick={onRemove}>
             <X size={13} />
@@ -89,7 +116,7 @@ function HeaderCell({ col, onPatch, onRemove, canRemove }: { col: LabColumn; onP
         <input
           className="field"
           value={col.formula ?? ''}
-          placeholder="= t^2"
+          placeholder={isError ? '= 0.005 * t' : '= t^2'}
           title="Use the names of the columns to the left"
           onChange={(e) => onPatch({ formula: e.target.value })}
           onKeyDown={(e) => e.stopPropagation()}
@@ -126,23 +153,31 @@ export function LabData() {
   const table = useMemo(() => tables.find((t) => t.id === currentId) ?? tables[0], [tables, currentId])
   const resolved = useMemo(() => resolveValues(table), [table])
   const patch = (fn: Parameters<typeof update>[1]) => update(table.id, fn)
+  const [showResiduals, setShowResiduals] = useState(false)
 
-  const { xs, ys } = useMemo(() => plotPairs(table, resolved), [table, resolved])
+  const series = useMemo(() => plotSeries(table, resolved), [table, resolved])
+  const { xs, ys } = series
   const fit = useMemo(() => fitOf(xs, ys, table.plot.fit), [xs, ys, table.plot.fit])
   const ranked = useMemo(() => rankFits(xs, ys), [xs, ys])
   const better = useMemo(() => betterFit(fit, ranked), [fit, ranked])
+  // Once there are error bars, the gradient's ± comes from them rather than from the scatter: that
+  // is the steepest-and-shallowest-line method a practical is marked with.
+  const bars = useMemo(() => gradientRange(xs, ys, series.xErr, series.yErr), [xs, ys, series])
 
   const xCol = table.columns.find((c) => c.id === table.plot.x)
   const yCol = table.columns.find((c) => c.id === table.plot.y)
   const slopeUnit = xCol && yCol ? ratioUnit(yCol.unit, xCol.unit) : ''
   const meaning = xCol && yCol ? gradientMeaning(yCol.name, xCol.name) : null
+  // A ± column is not a quantity in its own right, so it is not offered as something to plot.
+  const plottable = table.columns.filter((c) => !c.uncertaintyFor)
 
   return (
     <div className="panel pb-8">
       <div className="section-title">Lab data</div>
       <div className="px-3 text-zinc-400">
         Type the readings you measured. A column can also be worked out from the others — press{' '}
-        <Sigma size={11} className="inline" /> and write something like <code>t^2</code>.
+        <Sigma size={11} className="inline" /> and write something like <code>t^2</code>. Press ± to say how uncertain a
+        reading is.
       </div>
 
       <div className="mt-2 px-3">
@@ -161,10 +196,12 @@ export function LabData() {
           {table.columns.map((col) => (
             <HeaderCell
               key={col.id}
+              table={table}
               col={col}
               canRemove={table.columns.length > 1}
               onPatch={(p) => patch((t) => setColumn(t, col.id, p))}
               onRemove={() => patch((t) => removeColumn(t, col.id))}
+              onUncertainty={() => patch((t) => addUncertainty(t, col.id))}
             />
           ))}
           <div />
@@ -209,7 +246,7 @@ export function LabData() {
       <div className="flex flex-wrap items-center gap-2 px-3">
         <span className="text-zinc-500">Plot</span>
         <select className="field w-auto" value={table.plot.y} onChange={(e) => patch((t) => setPlot(t, { y: e.target.value }))}>
-          {table.columns.map((c) => (
+          {plottable.map((c) => (
             <option key={c.id} value={c.id}>
               {headerOf(c)}
             </option>
@@ -217,7 +254,7 @@ export function LabData() {
         </select>
         <span className="text-zinc-500">against</span>
         <select className="field w-auto" value={table.plot.x} onChange={(e) => patch((t) => setPlot(t, { x: e.target.value }))}>
-          {table.columns.map((c) => (
+          {plottable.map((c) => (
             <option key={c.id} value={c.id}>
               {headerOf(c)}
             </option>
@@ -235,7 +272,15 @@ export function LabData() {
       </div>
 
       <div className="mt-2 px-1">
-        <LabChart xs={xs} ys={ys} fit={fit} xLabel={xCol ? headerOf(xCol) : 'x'} yLabel={yCol ? headerOf(yCol) : 'y'} />
+        <LabChart
+          xs={xs}
+          ys={ys}
+          fit={fit}
+          xErr={series.xErr}
+          yErr={series.yErr}
+          xLabel={xCol ? headerOf(xCol) : 'x'}
+          yLabel={yCol ? headerOf(yCol) : 'y'}
+        />
       </div>
 
       {xs.length < MIN_POINTS ? (
@@ -251,8 +296,19 @@ export function LabData() {
             <div className="mt-2">
               <span className="text-zinc-400">gradient = </span>
               <span className="text-[15px] font-semibold text-white">
-                {fmt(fit.slope, 4)} {slopeUnit}
+                {pmText(fit.slope, bars ? bars.half : fit.slopeError)} {slopeUnit}
               </span>
+              {bars ? (
+                <div className="mt-1 text-zinc-500">
+                  From your error bars: the steepest line through them gives {fmt(bars.max, 4)}, the shallowest {fmt(bars.min, 4)}, and half
+                  the difference is the ±.
+                </div>
+              ) : (
+                fit.slopeError !== undefined &&
+                fit.slopeError > Math.abs(fit.slope) * 1e-9 && (
+                  <div className="mt-1 text-zinc-500">The ± is how far the line could tilt and still pass through readings this scattered.</div>
+                )
+              )}
               {meaning && <div className="mt-1 text-emerald-300">{meaning}</div>}
             </div>
           )}
@@ -270,6 +326,20 @@ export function LabData() {
           <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: better.shape }))}>
             Use it
           </button>
+        </div>
+      )}
+
+      {fit && (
+        <div className="mt-3 px-3">
+          <label className="flex items-center gap-2 text-zinc-400">
+            <input type="checkbox" checked={showResiduals} onChange={(e) => setShowResiduals(e.target.checked)} />
+            Residuals — how far each reading is from the line
+          </label>
+        </div>
+      )}
+      {fit && showResiduals && (
+        <div className="mt-1 px-1">
+          <ResidualStrip xs={xs} fit={fit} xLabel={xCol ? headerOf(xCol) : 'x'} />
         </div>
       )}
     </div>

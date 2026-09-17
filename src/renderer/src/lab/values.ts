@@ -60,20 +60,47 @@ export function resolveValues(table: LabTable): Resolved {
   return { values, errors }
 }
 
-/** The two columns a graph needs, as plain number pairs, skipping rows that are not complete. */
-export function plotPairs(table: LabTable, resolved: Resolved): { xs: number[]; ys: number[] } {
+/** Where the ± column of a given column sits, or −1 when it has none. */
+export const uncertaintyIndex = (table: LabTable, columnId: string): number =>
+  table.columns.findIndex((c) => c.uncertaintyFor === columnId)
+
+export interface PlotSeries {
+  xs: number[]
+  ys: number[]
+  /** One per kept reading, or empty when that column has no ± column. */
+  xErr: number[]
+  yErr: number[]
+}
+
+/** A blank or nonsense ± cell means "no bar on this reading", never "shift the bars along". */
+const errorAt = (v: number | null | undefined): number => (typeof v === 'number' && Number.isFinite(v) ? Math.abs(v) : 0)
+
+/**
+ * The two columns a graph needs, as plain numbers, skipping rows that are not complete — with the
+ * uncertainties of the rows that were kept, in the same order, so a bar can never end up drawn on
+ * the wrong point.
+ */
+export function plotSeries(table: LabTable, resolved: Resolved): PlotSeries {
   const xi = table.columns.findIndex((c) => c.id === table.plot.x)
   const yi = table.columns.findIndex((c) => c.id === table.plot.y)
-  const xs: number[] = []
-  const ys: number[] = []
-  if (xi < 0 || yi < 0) return { xs, ys }
+  const out: PlotSeries = { xs: [], ys: [], xErr: [], yErr: [] }
+  if (xi < 0 || yi < 0) return out
+  const xe = uncertaintyIndex(table, table.plot.x)
+  const ye = uncertaintyIndex(table, table.plot.y)
   for (const row of resolved.values) {
     const x = row[xi]
     const y = row[yi]
     if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) continue
-    xs.push(x)
-    ys.push(y)
+    out.xs.push(x)
+    out.ys.push(y)
+    if (xe >= 0) out.xErr.push(errorAt(row[xe]))
+    if (ye >= 0) out.yErr.push(errorAt(row[ye]))
   }
+  return out
+}
+
+export function plotPairs(table: LabTable, resolved: Resolved): { xs: number[]; ys: number[] } {
+  const { xs, ys } = plotSeries(table, resolved)
   return { xs, ys }
 }
 
@@ -90,3 +117,10 @@ export function ratioUnit(yUnit: string, xUnit: string): string {
 
 /** The header as it is written in a notebook: "t / s". */
 export const headerOf = (col: LabColumn): string => (col.unit.trim() ? `${col.name} / ${col.unit.trim()}` : col.name)
+
+/** The header as it is shown on screen: "± t / s" for an uncertainty, "t / s" for anything else. */
+export function columnHeader(table: LabTable, col: LabColumn): string {
+  if (!col.uncertaintyFor) return headerOf(col)
+  const parent = table.columns.find((c) => c.id === col.uncertaintyFor)
+  return `± ${headerOf(parent ? { ...col, name: parent.name } : col)}`
+}
