@@ -4,6 +4,7 @@ import { dependentsOf, evaluateScene } from './evaluate'
 import { setNotation } from '../math/format'
 import type { EvalResult, ObjId, SceneFile, SceneObject, SceneSettings, ToolId, ViewMode } from './types'
 import type { Solution } from '../math/vectorSolver'
+import { useLab } from '../lab/labStore'
 
 export interface LogEntry {
   id: number
@@ -291,6 +292,7 @@ export const useScene = create<SceneState>()((set, get) => {
     requestFocus: (id) => set({ focusPanel: { id, nonce: Date.now() } }),
 
     newScene: () => {
+      useLab.getState().setTables([])
       set({
         objects: {},
         order: [],
@@ -306,6 +308,7 @@ export const useScene = create<SceneState>()((set, get) => {
       })
     },
     loadScene: (file, path = null) => {
+      useLab.getState().setTables(file.lab ?? [])
       const objects: Record<ObjId, SceneObject> = {}
       for (const o of file.objects) objects[o.id] = o
       const order = file.objects.map((o) => o.id)
@@ -332,7 +335,7 @@ export const useScene = create<SceneState>()((set, get) => {
     },
     serialize: () => {
       const { objects, order, settings } = get()
-      return { app: 'PhysLab', version: 1, objects: order.map((id) => objects[id]), settings }
+      return { app: 'PhysLab', version: 1, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables }
     },
     markSaved: (path) => set({ filePath: path, dirty: false })
   }
@@ -340,3 +343,7 @@ export const useScene = create<SceneState>()((set, get) => {
 
 /** Convenience: read the current state outside React. */
 export const scene = () => useScene.getState()
+
+// Typing readings into a lab table changes the project as much as moving a point does, so Ctrl+S
+// and the autosave have to notice. newScene and loadScene set dirty back to false afterwards.
+useLab.subscribe(() => useScene.setState({ dirty: true }))

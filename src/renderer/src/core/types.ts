@@ -1,5 +1,6 @@
 import type { V3 } from '../math/vec'
 import type { GCircle, GLine } from '../math/geometry'
+import type { LabTable } from '../lab/types'
 
 export type ObjId = string
 
@@ -216,6 +217,9 @@ export interface SceneFile {
   version: 1
   objects: SceneObject[]
   settings: SceneSettings
+  /** Lab tables. Optional, so an older file still opens here and a file from here still opens
+   *  in an older build. */
+  lab?: LabTable[]
 }
 
 export type LengthUnit = 'unit' | 'mm' | 'cm' | 'm' | 'km' | 'in' | 'ft'

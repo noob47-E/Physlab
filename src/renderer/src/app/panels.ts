@@ -17,6 +17,7 @@ export const PANEL_TITLES: Record<string, string> = {
   vectorcalc: 'Vector Calculator',
   solver: 'Solver',
   practice: 'Practice',
+  labdata: 'Lab Data',
   calculator: 'Calculator',
   console: 'Console',
   timeline: 'Timeline',
@@ -31,7 +32,7 @@ export const PANEL_LIST = Object.entries(PANEL_TITLES).map(([id, title]) => ({ i
 const PANEL_GROUPS: string[][] = [
   ['outliner', 'examples'],
   ['viewport'],
-  ['vectorcalc', 'measure', 'calculator', 'properties', 'solver', 'practice', 'sandbox'],
+  ['vectorcalc', 'measure', 'calculator', 'properties', 'solver', 'practice', 'labdata', 'sandbox'],
   ['console', 'timeline', 'graphs', 'gpulab']
 ]
 

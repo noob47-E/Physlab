@@ -19,6 +19,7 @@ export type ModeId =
   | 'heat'
   | 'nuclear'
   | 'problems'
+  | 'lab'
 
 export interface ModeDef {
   id: ModeId
@@ -85,6 +86,15 @@ export const MODES: ModeDef[] = [
   { id: 'waves', label: 'Waves & Sound', description: 'Oscillations, waves, superposition, standing waves, the Doppler effect.', ready: false, tools: ['select'] },
   { id: 'heat', label: 'Heat', description: 'Temperature, gases, kinetic theory, thermodynamic cycles.', ready: false, tools: ['select'] },
   { id: 'nuclear', label: 'Nuclear & Modern', description: 'Radioactivity, half-life, binding energy, relativity.', ready: false, tools: ['select'] },
+  {
+    id: 'lab',
+    label: 'Lab Data',
+    description: 'Readings from an experiment: type them in, plot them, and read the gradient off the best-fit line.',
+    ready: true,
+    tools: ['select'],
+    panel: 'labdata',
+    view: '2d'
+  },
   {
     id: 'problems',
     label: 'Problem Sets',
