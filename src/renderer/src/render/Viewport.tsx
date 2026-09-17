@@ -32,6 +32,7 @@ const sizeProbe = new THREE.Vector2()
 function Invalidator() {
   const invalidate = useThree((s) => s.invalidate)
   const size = useThree((s) => s.size)
+  const camera = useThree((s) => s.camera)
   useEffect(() => {
     const kick = () => {
       invalidate()
@@ -55,13 +56,14 @@ function Invalidator() {
       window.removeEventListener('resize', kick)
     }
   }, [invalidate])
-  // A dock panel settling into place, or a dragged splitter, resizes the canvas without resizing the
-  // window — and that is usually when the first real size arrives.
+  // Three moments that change what should be on screen without a frame being due: a dock panel
+  // settling into place or a splitter being dragged (neither resizes the window), and the real
+  // camera replacing the stand-in one that the very first frame is drawn with.
   useEffect(() => {
     invalidate()
     const id = requestAnimationFrame(() => invalidate())
     return () => cancelAnimationFrame(id)
-  }, [invalidate, size.width, size.height])
+  }, [invalidate, size.width, size.height, camera])
   useFrame((state) => {
     const s = useScene.getState()
     if (s.playing || useParticleLab.getState().enabled) state.invalidate()

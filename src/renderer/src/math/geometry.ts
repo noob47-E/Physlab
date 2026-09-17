@@ -31,7 +31,12 @@ export function lineLineIntersection(l1: GLine, l2: GLine): V3 | null {
   const t = (w[0] * l2.d[1] - w[1] * l2.d[0]) / denom
   const u = (w[0] * l1.d[1] - w[1] * l1.d[0]) / denom
   if (!paramInRange(l1.kind, t) || !paramInRange(l2.kind, u)) return null
-  return add(l1.p, scale(l1.d, t))
+  const p1 = add(l1.p, scale(l1.d, t))
+  // The maths above only looks at x and y. Two lines that cross on paper can pass at different
+  // heights (skew lines): the meeting point has to agree in z as well, or there is none.
+  const p2 = add(l2.p, scale(l2.d, u))
+  if (Math.abs(p1[2] - p2[2]) > 1e-6) return null
+  return p1
 }
 
 export function lineCircleIntersection(l: GLine, c: GCircle): V3[] {
@@ -52,6 +57,8 @@ export function lineCircleIntersection(l: GLine, c: GCircle): V3[] {
 }
 
 export function circleCircleIntersection(c1: GCircle, c2: GCircle): V3[] {
+  // Two circles only meet if they lie in the same plane; the offset below is a flat one.
+  if (Math.abs(c1.c[2] - c2.c[2]) > EPS) return []
   const d = dist(c1.c, c2.c)
   if (d < EPS || d > c1.r + c2.r + EPS || d < Math.abs(c1.r - c2.r) - EPS) return []
   const a = (c1.r * c1.r - c2.r * c2.r + d * d) / (2 * d)
