@@ -1,0 +1,127 @@
+# Working on PhysLab
+
+Read this before changing anything. It is written for whoever — or whatever — picks this project up
+next, and it records the things that are expensive to rediscover.
+
+## What this is
+
+A maths and physics engine for students and teachers, built for one 11th-class student (Punjab
+Board) and shaped by what they asked for. Electron + React + TypeScript, three.js (WebGPU with a
+WebGL2 fallback), Jolt physics in WebAssembly, mathjs, MathLive, and Pyodide/SymPy in a worker.
+
+## Rules that are not negotiable
+
+1. **No AI in the product.** No API keys, no cloud calls, no model of any kind. Everything runs
+   offline. The user asked for this explicitly and repeatedly.
+2. **It must feel like a calculator, not a programming language.** The user is afraid of code. Input
+   is fx-991EX-shaped: natural maths, a command bar of one-liners, buttons. Never expose syntax that
+   looks like programming.
+3. **Answers are mandatory; working is a bonus.** Every feature must produce the result. Steps,
+   hints and visualisation are welcome on top, never instead.
+4. **Everything shown has units and the user's precision.** Format through `formatMeasure` /
+   `fmtPrecise` (`src/renderer/src/math/format.ts`), never with raw `toFixed`.
+5. **Features are modes, not grade levels.** A new capability becomes an entry in `MODES` with its
+   own panel. There are no "beginner/advanced" gates.
+6. **Anything solved should be visualisable.** If a feature computes something, there should be a
+   path to see it in the viewport.
+
+## The shape of the code
+
+```
+src/main/          Electron main process: window, app:// protocol, file dialogs, autosave
+src/preload/       The only bridge to the renderer (window.physlab)
+src/renderer/src/
+  app/             Shell: TopBar, CommandBar, SearchPalette, modes, panels, shortcuts, theme, tour
+  core/            Scene state (zustand), the dependency evaluator, object factory, types
+  lang/            The command bar language (commands.ts)
+  math/            Pure maths: vectors, geometry, shapes, graphs, formatting, CAS client, solvers
+  calc/            The scientific calculator engine and its store
+  lab/             Lab Data: tables of readings, fitting, chart data
+  sim/             Jolt physics bridge for the Sandbox
+  render/          three.js: viewport, grid, labels, tools, picking, export
+  panels/          One file per dock panel
+  workers/         cas.worker.ts (Pyodide + SymPy)
+tests/             vitest, no DOM — pure logic only
+```
+
+**Adding a mode and a panel** touches exactly four files: `app/modes.ts` (the `ModeId` union and a
+`MODES` entry), `app/panels.ts` (`PANEL_TITLES`, `PANEL_GROUPS`), `app/App.tsx` (lazy import,
+`PANEL_VIEWS`, `buildLayout`), and the panel component itself. Copy how `lab` or `problems` was done.
+
+## Traps that have already cost a day
+
+- **Jolt owns its objects by reference count.** A `ShapeSettings` holds the only reference to the
+  shape it creates: free the settings early and the body's shape goes with it, silently. Hull shapes
+  (ramp, cone) are handed back with their settings and freed in `addBody()` once the body holds a
+  reference. A returned `BodyID` is a temporary — keep the `Body`. Only one `JoltInterface` may exist.
+- **The canvas renders on demand** (`frameloop="demand"`). Nothing is drawn unless something calls
+  `invalidate()`. The first frame is drawn with React Three Fiber's **stand-in camera at zoom 1**, so
+  anything derived from the camera on that frame is wrong; the real orthographic camera arrives a
+  moment later. The `Invalidator` in `render/Viewport.tsx` therefore watches the camera object, the
+  canvas size, the renderer readiness and the stores. Watching a store that is only written *inside*
+  a frame is circular and does not work. This was the "black viewport" bug.
+- **WebGPU compiles a material's colour in.** Changing `material.color` after the first render does
+  nothing until `material.needsUpdate = true`. That is why a theme switch used to leave the old
+  theme's grid on screen.
+- **Never hardcode a colour.** Both themes must work. Use CSS variables and `themeColor()`. Several
+  bugs came from literal hex values that were invisible in the light theme — menus, popups,
+  measurement labels, the focused tab. `panels/Graphs.tsx` still has hardcoded chart colours; fix it
+  if you touch that file. `panels/LabChart.tsx` shows the right way.
+- **Custom CSS must live inside `@layer components`** or Tailwind's width/height utilities stop
+  working.
+- **MathLive options must wait for the `mount` event.** Line2 geometry needs positions before the
+  first render. The async R3F renderer needs a manual `setSize` sync.
+- **Circular imports bite.** `App.tsx` imports the top bar and the search palette, so those two must
+  not import `App`. Shared things live in their own module — that is why `app/panels.ts` exists.
+- **A dev-only global needs `typeof window !== 'undefined'`**, or the test runner fails on import.
+
+## How to check your work
+
+```bash
+npm test          # vitest, ~90 tests, pure logic, no DOM
+npm run typecheck # tsc --noEmit, must be clean
+npm run dev       # Electron with hot reload
+npm run dist      # builds dist/PhysLab Setup <version>.exe
+```
+
+The test suite covers the maths, not the UI: put any decision worth trusting into a pure function in
+`math/`, `lab/` or `render/gridMath.ts` and test that, rather than testing through React.
+
+**Verifying the real app** matters, because the packaged build behaves differently from the dev one:
+
+```bash
+PHYSLAB_LOG=1 "dist/win-unpacked/PhysLab.exe"
+```
+
+`PHYSLAB_LOG=1` mirrors renderer warnings, errors and every `PHYSLAB_CHECK` line to the terminal.
+Other switches: `PHYSLAB_SANDBOX=1` (opens the physics sandbox and logs positions and contacts each
+second), `PHYSLAB_BENCH=<n>` (GPU particle benchmark, logs fps), `PHYSLAB_FORCE_WEBGL=1`,
+`PHYSLAB_SWIFTSHADER=1`.
+
+A browser-only preview runs on port 5199 (`npm run web`); `PORT` overrides it. Beware: when the
+window is hidden or behind another, animation frames stop entirely — screenshots go stale and the
+canvas never repaints, so **no rendering conclusion drawn from a hidden preview is trustworthy**.
+
+## Environment quirks on this machine
+
+- The shell PATH lacks Node and Git. Prefix commands with the machine + user PATH.
+- Poppler for PDF pages lives under `WinGet\Packages\oschwartz10612.Poppler_…\poppler-25.07.0\Library\bin`.
+- The app installs per-machine to `C:\Program Files\PhysLab`; settings and autosave live in
+  `%APPDATA%\PhysLab` and must survive an update.
+- Backups: a git bundle and a source zip in `C:\my_projects\PhysLab-backups`, refreshed each session.
+
+## House style
+
+- Comments explain **why**, never what. If a line looks odd, the comment says what goes wrong
+  without it.
+- Plain English in anything a student reads. "Right size, wrong sign", not "sign error detected".
+- Match the surrounding code: no new dependencies without a reason, no reformatting unrelated lines.
+- Commit messages say what changed and why it was wrong before.
+
+## A warning about automated bug reports
+
+This project has been reviewed several times by other AI tools. Roughly a third of what they report
+is real; the rest describes code that no longer exists, or misreads it. One report's suggested
+"fix" would have crashed every ramp in the Sandbox; another credited fixes to commits that never
+touched those files. **Verify every claim against the code before acting on it**, and say plainly
+which ones were wrong.
