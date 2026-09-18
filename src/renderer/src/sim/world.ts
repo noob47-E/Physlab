@@ -8,7 +8,7 @@
 
 import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
-import type { BodyDef, BodyId, BodyState, ContactEvent, WorldSettings } from './types'
+import type { BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
 import type { V3 } from '../math/vec'
 
@@ -55,6 +55,10 @@ export class SimWorld {
   private grabbed: { id: BodyId; target: V3 } | null = null
   /** Who is touching what, refilled by the contact listener every step: body → the body under it. */
   private touching = new Map<BodyId, BodyId>()
+  /** Rods, strings and springs, by their id. */
+  private links = new Map<string, InstanceType<Jolt['Constraint']>>()
+  /** The definitions behind them, so a rebuild can put them back. */
+  private linkDefs: Link[] = []
   /** Simulated time in seconds since the last reset. */
   time = 0
 
@@ -107,6 +111,10 @@ export class SimWorld {
 
   /** Removes every body but keeps the engine ready for the next scene. */
   clear(): void {
+    // Constraints refer to bodies, so they have to go first or Jolt is left holding a reference
+    // to something that no longer exists.
+    for (const c of this.links.values()) this.physics.RemoveConstraint(c)
+    this.links.clear()
     for (const id of [...this.order]) this.removeBody(id)
     this.time = 0
     this.accumulator = 0
@@ -281,11 +289,75 @@ export class SimWorld {
     })
   }
 
+  // -------------------------------------------------------------------------
+  // Connections between bodies
+  // -------------------------------------------------------------------------
+
+  /**
+   * Rebuilds every rod, string and spring. All three are Jolt distance constraints; what differs
+   * is the range they allow and whether it is soft:
+   *
+   *  * a **rod** holds exactly its length, so it pushes as well as pulls;
+   *  * a **string** allows anything from nothing up to its length, so it pulls when taut and
+   *    goes slack otherwise — which is what makes a pendulum swing rather than orbit;
+   *  * a **spring** holds its length through a soft limit of stiffness k, so F = kx and a mass
+   *    on it oscillates with the period the textbook gives.
+   */
+  setLinks(links: Link[]): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    this.linkDefs = links
+    for (const c of this.links.values()) this.physics.RemoveConstraint(c)
+    this.links.clear()
+
+    for (const link of links) {
+      const a = this.entries.get(link.a)
+      const b = this.entries.get(link.b)
+      if (!a || !b || a === b) continue
+      const settings = this.track(new J.DistanceConstraintSettings())
+      // The set_* methods, not plain assignment: the generated typings offer both, but only
+      // these actually reach the C++ object. Assigning `settings.mPoint1 = …` left both
+      // attachment points at the world origin, which pinned the bodies where they stood instead
+      // of joining them — a pendulum that would not swing at all.
+      // Attached at each body's own centre, in its own frame. Giving world-space points instead
+      // leaves the constraint holding whatever positions the bodies happened to have when it was
+      // made, which pinned them where they stood — a slack string held a ball in mid-air.
+      settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+      const p1 = this.rv3([0, 0, 0])
+      const p2 = this.rv3([0, 0, 0])
+      settings.set_mPoint1(p1)
+      settings.set_mPoint2(p2)
+      const L = Math.max(0.01, link.length)
+      // A string may go slack — that is the whole difference between a string and a rod.
+      settings.set_mMinDistance(link.kind === 'string' ? 0 : L)
+      settings.set_mMaxDistance(L)
+      if (link.kind === 'spring') {
+        const spring = settings.get_mLimitsSpringSettings()
+        spring.set_mMode(J.ESpringMode_StiffnessAndDamping)
+        spring.set_mStiffness(Math.max(0.01, link.stiffness))
+        spring.set_mDamping(Math.max(0, link.damping))
+        settings.set_mLimitsSpringSettings(spring)
+      }
+      const constraint = settings.Create(a.body, b.body)
+      this.physics.AddConstraint(constraint)
+      this.links.set(link.id, constraint)
+      // The settings and the points they hold are NOT released here. Jolt's constraint keeps
+      // referring to them, exactly as a ShapeSettings owns the shape it built — free them and the
+      // constraint pins both bodies rigidly in place instead of joining them. They are tracked,
+      // so they still go when the world is destroyed.
+      void p1
+      void p2
+    }
+  }
+
   /** Replace every body with its definition again (Reset, or a change that needs a rebuild). */
-  rebuild(defs?: BodyDef[]): void {
+  rebuild(defs?: BodyDef[], links?: Link[]): void {
     const list = defs ?? this.order.map((id) => this.entries.get(id)!.def)
+    const joins = links ?? this.linkDefs
     this.clear()
     for (const def of list) this.addBody(def)
+    // Constraints are built after the bodies, because each one needs both of them to exist.
+    this.linkDefs = joins
+    this.setLinks(joins)
   }
 
   /**

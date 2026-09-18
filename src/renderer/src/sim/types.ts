@@ -96,3 +96,29 @@ export const GRAVITY_PRESETS: { label: string; value: number }[] = [
   { label: 'Jupiter', value: 24.79 },
   { label: 'None (free space)', value: 0 }
 ]
+
+/** What two objects can be joined with. */
+export type LinkKind = 'rod' | 'string' | 'spring'
+
+/**
+ * A connection between two bodies. Without these a pendulum, a spring-mass system and a pulley
+ * are all impossible, which rules out half of school mechanics.
+ */
+export interface Link {
+  id: string
+  kind: LinkKind
+  a: BodyId
+  b: BodyId
+  /** Natural length in metres: how long the rod is, or the spring at rest. */
+  length: number
+  /** Spring only: the spring constant k in N/m, so F = kx and T = 2π√(m/k) come out right. */
+  stiffness: number
+  /** Spring only: how quickly the bouncing dies away. 0 is a spring that never stops. */
+  damping: number
+}
+
+export const LINK_LABELS: Record<LinkKind, string> = {
+  rod: 'Rod — a fixed distance, pushes and pulls',
+  string: 'String — pulls when taut, goes slack',
+  spring: 'Spring — F = kx'
+}

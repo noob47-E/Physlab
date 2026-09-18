@@ -1,12 +1,12 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, Trash2, Triangle, Undo2 } from 'lucide-react'
+import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Link2, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, Trash2, Triangle, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
 import { massOf, useSandbox } from '../sim/store'
-import { DEFAULT_WORLD, GRAVITY_PRESETS, type ShapeKind } from '../sim/types'
+import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type LinkKind, type ShapeKind } from '../sim/types'
 import { launchVelocity, PRESETS } from '../sim/presets'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
@@ -280,6 +280,8 @@ export function Sandbox() {
         </>
       )}
 
+      <Connections selected={selection} />
+
       <EnergyReadout />
 
       <div className="section-title mt-2">World</div>
@@ -456,7 +458,7 @@ function Presets() {
               className="rounded-md border border-[var(--line-2)] px-2 py-1.5 text-left hover:bg-[#26282d]"
               onClick={() => {
                 const built = p.build()
-                setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) })
+                setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
                 setOpen(false)
               }}
             >
@@ -507,5 +509,77 @@ function UndoButton() {
     <button className="btn" disabled={past.length === 0} onClick={undo} title="Undo the last change to the objects (Ctrl+Z)">
       <Undo2 size={13} /> Undo
     </button>
+  )
+}
+
+/**
+ * Joining two objects. A pendulum and a spring-mass system are half of school mechanics and
+ * neither was possible before: there was no way to connect anything to anything.
+ */
+function Connections({ selected }: { selected: string | null }) {
+  const bodies = useSandbox((s) => s.bodies)
+  const links = useSandbox((s) => s.links)
+  const addLink = useSandbox((s) => s.addLink)
+  const updateLink = useSandbox((s) => s.updateLink)
+  const removeLink = useSandbox((s) => s.removeLink)
+  const [to, setTo] = useState('')
+  const [kind, setKind] = useState<LinkKind>('string')
+  const name = (id: string) => bodies.find((b) => b.id === id)?.name ?? '?'
+  const others = bodies.filter((b) => b.id !== selected)
+
+  return (
+    <>
+      <div className="section-title mt-2">Connections</div>
+      {selected ? (
+        <div className="prop-row">
+          <label>Join to</label>
+          <div className="flex flex-wrap items-center gap-1">
+            <select className="field w-auto" value={to} onChange={(e) => setTo(e.target.value)}>
+              <option value="">choose…</option>
+              {others.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <select className="field w-auto" value={kind} onChange={(e) => setKind(e.target.value as LinkKind)}>
+              {(Object.keys(LINK_LABELS) as LinkKind[]).map((k) => (
+                <option key={k} value={k} title={LINK_LABELS[k]}>
+                  {LINK_LABELS[k].split(' — ')[0]}
+                </option>
+              ))}
+            </select>
+            <button className="btn" disabled={!to} onClick={() => to && addLink(selected, to, kind)} title={LINK_LABELS[kind]}>
+              <Link2 size={12} /> Join
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-3 pb-1 text-[11.5px] text-zinc-500">Pick an object to join it to another one.</div>
+      )}
+
+      {links.map((l) => (
+        <div key={l.id} className="prop-row">
+          <label>
+            {name(l.a)} – {name(l.b)} <span className="text-zinc-600">{l.kind}</span>
+          </label>
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] text-zinc-500">L</span>
+            <NumField value={l.length} onChange={(length) => updateLink(l.id, { length: Math.max(0.05, length) })} />
+            {l.kind === 'spring' && (
+              <>
+                <span className="text-[11px] text-zinc-500" title="Spring constant in newtons per metre">
+                  k
+                </span>
+                <NumField value={l.stiffness} onChange={(stiffness) => updateLink(l.id, { stiffness: Math.max(0.01, stiffness) })} />
+              </>
+            )}
+            <button className="icon-btn" title="Remove this connection" onClick={() => removeLink(l.id)}>
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </>
   )
 }

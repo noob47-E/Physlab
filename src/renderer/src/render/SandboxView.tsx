@@ -8,7 +8,8 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { massOf, useSandbox } from '../sim/store'
 import { SimWorld, STRIDE } from '../sim/world'
-import type { BodyDef, BodyState } from '../sim/types'
+import type { BodyDef, BodyState, LinkKind } from '../sim/types'
+import type { V3 } from '../math/vec'
 import { energyOf, groundTopOf } from '../sim/energy'
 import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
@@ -167,6 +168,7 @@ export function SandboxView() {
   const bodies = useSandbox((s) => s.bodies)
   const world = useSandbox((s) => s.world)
   const selection = useSandbox((s) => s.selection)
+  const links = useSandbox((s) => s.links)
   const pushContacts = useSandbox((s) => s.pushContacts)
   const playing = useScene((s) => s.playing)
   const settings = useScene((s) => s.settings)
@@ -208,10 +210,18 @@ export function SandboxView() {
     const before = applied.current
     const sameBodies = before.length === bodies.length && bodies.every((b, i) => before[i]?.id === b.id)
     const inPlace = sameBodies && bodies.every((b, i) => before[i] === b || w.updateBody(b))
-    if (!inPlace) w.rebuild(bodies)
+    if (!inPlace) w.rebuild(bodies, links)
     applied.current = bodies
     invalidate()
-  }, [bodies, ready, invalidate])
+  }, [bodies, links, ready, invalidate])
+
+  // Connections are cheap to rebuild and each one needs both of its bodies to exist, so they are
+  // rebuilt on their own rather than dragging the whole world down with them.
+  useEffect(() => {
+    if (!sim.current || !ready) return
+    sim.current.setLinks(links)
+    invalidate()
+  }, [links, ready, invalidate])
 
   useEffect(() => {
     if (!sim.current || !ready) return
@@ -310,6 +320,7 @@ export function SandboxView() {
       <FloorGrid bodies={bodies} />
       {ready && <VelocityArrows sim={sim} />}
       {ready && <Traces sim={sim} />}
+      {ready && <LinkLines sim={sim} />}
     </group>
   )
 }
@@ -461,3 +472,72 @@ function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
 }
 
 export { massOf }
+
+/**
+ * The rods, strings and springs themselves. A connection you cannot see is a mystery force, so
+ * each one is drawn between the two bodies as they move — a spring as a coil, so it reads as a
+ * spring rather than a stick.
+ */
+function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
+  const links = useSandbox((s) => s.links)
+  const theme = useTheme((t) => t.theme)
+  const [, force] = useState(0)
+  useFrame(() => force((n) => (n + 1) % 1000))
+  const w = sim.current
+  if (!w || !links.length) return null
+  const colour = themeColor('--tick-text', theme === 'light' ? '#59647a' : '#8a8f98')
+  return (
+    <>
+      {links.map((l) => {
+        const a = w.state(l.a)
+        const b = w.state(l.b)
+        if (!a || !b) return null
+        return <LinkLine key={l.id} kind={l.kind} from={a.position} to={b.position} colour={colour} />
+      })}
+    </>
+  )
+}
+
+function LinkLine({ kind, from, to, colour }: { kind: LinkKind; from: V3; to: V3; colour: string }) {
+  const geo = useMemo(() => {
+    const pts: number[] = []
+    if (kind === 'spring') {
+      // A zigzag along the line, so it is obviously a spring: the number of coils stays the same
+      // while it stretches, which is how a drawn spring behaves in a textbook.
+      const coils = 12
+      const dx = to[0] - from[0]
+      const dy = to[1] - from[1]
+      const dz = to[2] - from[2]
+      const len = Math.hypot(dx, dy, dz) || 1
+      // A unit vector across the spring, to zigzag along.
+      const side = Math.abs(dy / len) < 0.9 ? [0, 1, 0] : [1, 0, 0]
+      const nx = (dy / len) * side[2] - (dz / len) * side[1]
+      const ny = (dz / len) * side[0] - (dx / len) * side[2]
+      const nz = (dx / len) * side[1] - (dy / len) * side[0]
+      const nl = Math.hypot(nx, ny, nz) || 1
+      const amp = Math.min(0.12, len / 12)
+      const pt = (t: number, s: number): [number, number, number] => [
+        from[0] + dx * t + (nx / nl) * amp * s,
+        from[1] + dy * t + (ny / nl) * amp * s,
+        from[2] + dz * t + (nz / nl) * amp * s
+      ]
+      let prev = pt(0, 0)
+      for (let i = 1; i <= coils; i++) {
+        const next = pt(i / coils, i === coils ? 0 : i % 2 === 0 ? 1 : -1)
+        pts.push(...prev, ...next)
+        prev = next
+      }
+    } else {
+      pts.push(...from, ...to)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+    return g
+  }, [kind, from[0], from[1], from[2], to[0], to[1], to[2]])
+  useEffect(() => () => geo.dispose(), [geo])
+  return (
+    <lineSegments geometry={geo} renderOrder={12}>
+      <lineBasicMaterial color={colour} transparent opacity={kind === 'string' ? 0.7 : 1} />
+    </lineSegments>
+  )
+}

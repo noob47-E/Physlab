@@ -3,7 +3,7 @@
 
 import { create } from 'zustand'
 import { materialById } from './materials'
-import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactEvent, type ShapeKind, type WorldSettings } from './types'
+import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactEvent, type Link, type LinkKind, type ShapeKind, type WorldSettings } from './types'
 import { SimWorld } from './world'
 
 let counter = 0
@@ -25,9 +25,10 @@ export interface SandboxState {
   live: Record<BodyId, BodyState>
   /** Camera flattened to a straight-on side view, so a scene reads like a textbook figure. */
   sideView: boolean
+  links: Link[]
   /** Previous versions of the object list, newest last. Live positions are not in here: undo
    *  puts the objects back as they were defined, which is what Reset does too. */
-  past: BodyDef[][]
+  past: { bodies: BodyDef[]; links: Link[] }[]
 
   addBody: (shape: ShapeKind, at?: [number, number, number]) => BodyDef
   updateBody: (id: BodyId, patch: Partial<BodyDef>) => void
@@ -36,7 +37,10 @@ export interface SandboxState {
   setWorld: (patch: Partial<WorldSettings>) => void
   pushContacts: (c: ContactEvent[]) => void
   clearContacts: () => void
-  setScene: (bodies: BodyDef[], world?: Partial<WorldSettings>) => void
+  setScene: (bodies: BodyDef[], world?: Partial<WorldSettings>, links?: Link[]) => void
+  addLink: (a: BodyId, b: BodyId, kind: LinkKind) => void
+  updateLink: (id: string, patch: Partial<Link>) => void
+  removeLink: (id: string) => void
   setSideView: (on: boolean) => void
   /** Step back one edit. The sandbox had no history at all, so a wrong delete was final. */
   undo: () => void
@@ -111,6 +115,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   engineTime: 0,
   live: {},
   sideView: true,
+  links: [],
   past: [],
 
   addBody: (shape, at) => {
@@ -142,22 +147,50 @@ export const useSandbox = create<SandboxState>((set, get) => ({
 
   removeBody: (id) => {
     remember(set, get)
-    set({ bodies: get().bodies.filter((b) => b.id !== id), selection: get().selection === id ? null : get().selection })
+    // A rod to an object that no longer exists would leave the engine holding a dead reference.
+    set({
+      bodies: get().bodies.filter((b) => b.id !== id),
+      links: get().links.filter((l) => l.a !== id && l.b !== id),
+      selection: get().selection === id ? null : get().selection
+    })
   },
   select: (selection) => set({ selection }),
   setWorld: (patch) => set({ world: { ...get().world, ...patch } }),
   pushContacts: (c) => (c.length ? set({ contacts: [...c].reverse().concat(get().contacts).slice(0, 60) }) : undefined),
   clearContacts: () => set({ contacts: [] }),
-  setScene: (bodies, world) => {
+  setScene: (bodies, world, links) => {
     remember(set, get)
-    set({ bodies, world: { ...get().world, ...world }, selection: null, contacts: [] })
+    set({ bodies, world: { ...get().world, ...world }, links: links ?? [], selection: null, contacts: [] })
+  },
+
+  addLink: (a, b, kind) => {
+    if (a === b) return
+    const bodies = get().bodies
+    const one = bodies.find((x) => x.id === a)
+    const two = bodies.find((x) => x.id === b)
+    if (!one || !two) return
+    remember(set, get)
+    // The natural length is however far apart they are right now, so making a connection never
+    // starts by yanking the two objects together.
+    const gap = Math.hypot(one.position[0] - two.position[0], one.position[1] - two.position[1], one.position[2] - two.position[2])
+    const link: Link = { id: nextId(), kind, a, b, length: Math.max(0.05, gap), stiffness: 200, damping: 0.5 }
+    set({ links: [...get().links, link] })
+  },
+  updateLink: (id, patch) => {
+    remember(set, get)
+    set({ links: get().links.map((l) => (l.id === id ? { ...l, ...patch } : l)) })
+  },
+  removeLink: (id) => {
+    remember(set, get)
+    set({ links: get().links.filter((l) => l.id !== id) })
   },
   setSideView: (sideView) => set({ sideView }),
 
   undo: () => {
     const past = get().past
     if (!past.length) return
-    set({ bodies: past[past.length - 1], past: past.slice(0, -1), selection: null })
+    const back = past[past.length - 1]
+    set({ bodies: back.bodies, links: back.links, past: past.slice(0, -1), selection: null })
   },
   canUndo: () => get().past.length > 0
 }))
@@ -176,7 +209,7 @@ function remember(set: (p: Partial<SandboxState>) => void, get: () => SandboxSta
   const burst = now - lastRemembered < 700 && get().past.length > 0
   lastRemembered = now
   if (burst) return
-  set({ past: [...get().past, get().bodies].slice(-30) })
+  set({ past: [...get().past, { bodies: get().bodies, links: get().links }].slice(-30) })
 }
 
 /** Mass a body will have, for the panels (the engine works it out the same way). */

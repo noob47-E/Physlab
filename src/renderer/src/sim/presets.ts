@@ -6,14 +6,21 @@
 // something happen and then take it apart.
 
 import { makeBody } from './store'
-import { DEFAULT_WORLD, type BodyDef, type WorldSettings } from './types'
+import { DEFAULT_WORLD, type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
 
 export interface Preset {
   id: string
   label: string
   /** What the experiment shows, in the words a teacher would use. */
   about: string
-  build: () => { bodies: BodyDef[]; world?: Partial<WorldSettings> }
+  build: () => { bodies: BodyDef[]; world?: Partial<WorldSettings>; links?: Link[] }
+}
+
+let linkCount = 0
+
+/** A rod, string or spring between two bodies of a preset. */
+function link(a: BodyDef, b: BodyDef, kind: LinkKind, length: number, stiffness = 200): Link {
+  return { id: `pl${++linkCount}`, kind, a: a.id, b: b.id, length, stiffness, damping: 0.4 }
 }
 
 /** Velocity components of a launch: the calculation a projectile question starts with. */
@@ -110,6 +117,26 @@ export const PRESETS: Preset[] = [
         put('sphere', 'Ball', [-4, 1, 0], { size: [0.3, 0.3, 0.3], material: 'steel', velocity: [9, 1, 0] })
       ]
     })
+  },
+  {
+    id: 'pendulum',
+    label: 'Pendulum',
+    about: 'A bob on a string. Time ten swings, then find g from T = 2π√(L/g).',
+    build: () => {
+      const pivot = put('box', 'Pivot', [0, 4, 0], { size: [0.12, 0.12, 0.12], motion: 'static', material: 'steel' })
+      const bob = put('sphere', 'Bob', [1.6, 2.8, 0], { size: [0.15, 0.15, 0.15], material: 'lead', massMode: 'mass', mass: 1, trace: true, angularDamping: 0 })
+      return { bodies: [floor(), pivot, bob], world: { airDensity: 0 }, links: [link(pivot, bob, 'string', 2)] }
+    }
+  },
+  {
+    id: 'spring',
+    label: 'Mass on a spring',
+    about: 'Pull it down and let go. The period is T = 2π√(m/k) — check it against the clock.',
+    build: () => {
+      const hook = put('box', 'Hook', [0, 4, 0], { size: [0.12, 0.12, 0.12], motion: 'static', material: 'steel' })
+      const mass = put('box', 'M', [0, 2.2, 0], { size: [0.35, 0.35, 0.35], material: 'steel', massMode: 'mass', mass: 2, trace: true })
+      return { bodies: [floor(), hook, mass], world: { airDensity: 0 }, links: [link(hook, mass, 'spring', 1.4, 200)] }
+    }
   }
 ]
 

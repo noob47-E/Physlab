@@ -2,7 +2,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
-import type { BodyDef, BodyState, WorldSettings } from '../src/renderer/src/sim/types'
+import type { BodyDef, BodyState, Link, WorldSettings } from '../src/renderer/src/sim/types'
 import { energyOf, systemEnergy, systemMomentum } from '../src/renderer/src/sim/energy'
 import { launchVelocity, PRESETS } from '../src/renderer/src/sim/presets'
 import type { V3 } from '../src/renderer/src/math/vec'
@@ -444,5 +444,79 @@ describe('setting up an experiment', () => {
     // Gravity pulls, and it does not fall: the track holds it.
     expect(s.position[1]).toBeCloseTo(2, 3)
     expect(s.position[0]).toBeGreaterThan(2)
+  })
+})
+
+describe('things joined together', () => {
+  const link = (over: Partial<Link> & Pick<Link, 'a' | 'b' | 'kind'>): Link => ({
+    id: `l${++n}`,
+    length: 1,
+    stiffness: 200,
+    damping: 0,
+    ...over
+  })
+
+  it('a mass on a spring oscillates with the period the textbook gives', async () => {
+    // T = 2π√(m/k). With m = 2 kg and k = 200 N/m that is 0.628 s, and the mass should pass back
+    // through where it started after one whole period.
+    const m = 2
+    const k = 200
+    const T = 2 * Math.PI * Math.sqrt(m / k)
+    const world = await makeWorld({ gravity: 0 })
+    const anchor = body({ shape: 'box', size: [0.2, 0.2, 0.2], position: [0, 0, 0], motion: 'static' })
+    const bob = body({ shape: 'box', size: [0.2, 0.2, 0.2], position: [1.3, 0, 0], mass: m })
+    world.addBody(anchor)
+    world.addBody(bob)
+    // Natural length 1 m, pulled out to 1.3 m: it should swing between 0.7 and 1.3.
+    world.setLinks([link({ a: anchor.id, b: bob.id, kind: 'spring', length: 1, stiffness: k, damping: 0 })])
+
+    let lowest = Infinity
+    const dt = 1 / 240
+    for (let t = 0; t < T / 2; t += dt) {
+      world.step(dt)
+      lowest = Math.min(lowest, world.state(bob.id)!.position[0])
+    }
+    // Half a period later it is at the other end of its swing, near 0.7 m.
+    expect(lowest).toBeLessThan(0.85)
+    expect(lowest).toBeGreaterThan(0.55)
+
+    for (let t = 0; t < T / 2; t += dt) world.step(dt)
+    // A whole period later it is back where it was let go.
+    expect(world.state(bob.id)!.position[0]).toBeGreaterThan(1.15)
+  })
+
+  it('a rod holds its length whichever way the load pulls', async () => {
+    const world = await makeWorld()
+    const anchor = body({ shape: 'box', size: [0.2, 0.2, 0.2], position: [0, 4, 0], motion: 'static' })
+    const bob = body({ shape: 'sphere', size: [0.15, 0.15, 0.15], position: [0, 2.5, 0], mass: 1 })
+    world.addBody(anchor)
+    world.addBody(bob)
+    world.setLinks([link({ a: anchor.id, b: bob.id, kind: 'rod', length: 1.5 })])
+    run(world, 2)
+    const p = world.state(bob.id)!.position
+    expect(Math.hypot(p[0], p[1] - 4, p[2])).toBeCloseTo(1.5, 1)
+  })
+
+  it('a string pulls but does not push, so a pendulum swings', async () => {
+    const world = await makeWorld()
+    const anchor = body({ shape: 'box', size: [0.1, 0.1, 0.1], position: [0, 4, 0], motion: 'static' })
+    // Held out to the side, so it has to swing down and across.
+    const bob = body({ shape: 'sphere', size: [0.12, 0.12, 0.12], position: [1.5, 4, 0], mass: 1, angularDamping: 0 })
+    world.addBody(anchor)
+    world.addBody(bob)
+    world.setLinks([link({ a: anchor.id, b: bob.id, kind: 'string', length: 1.5 })])
+    let lowest = Infinity
+    let furthest = -Infinity
+    const dt = 1 / 240
+    for (let t = 0; t < 2; t += dt) {
+      world.step(dt)
+      const p = world.state(bob.id)!.position
+      lowest = Math.min(lowest, p[1])
+      furthest = Math.max(furthest, Math.hypot(p[0], p[1] - 4, p[2]))
+      // The string can never be longer than it is.
+      expect(furthest).toBeLessThan(1.6)
+    }
+    // It swung down through the bottom of its arc.
+    expect(lowest).toBeLessThan(3.0)
   })
 })
