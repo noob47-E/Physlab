@@ -2,7 +2,8 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
-import type { BodyDef, WorldSettings } from '../src/renderer/src/sim/types'
+import type { BodyDef, BodyState, WorldSettings } from '../src/renderer/src/sim/types'
+import { energyOf, systemEnergy, systemMomentum } from '../src/renderer/src/sim/energy'
 import type { V3 } from '../src/renderer/src/math/vec'
 
 const G = 9.81
@@ -333,5 +334,75 @@ describe('editing a body does not restart the run', () => {
     expect(world.updateBody({ ...b, size: [0.5, 0.5, 0.5] })).toBe(false)
     expect(world.updateBody({ ...b, motion: 'static' })).toBe(false)
     expect(world.updateBody({ ...b, mass: 99 })).toBe(false)
+  })
+})
+
+describe('what the simulation is worth in joules', () => {
+  const state = (over: Partial<BodyState> = {}): BodyState => ({
+    position: [0, 0, 0],
+    rotation: [0, 0, 0, 1],
+    velocity: [0, 0, 0],
+    angularVelocity: [0, 0, 0],
+    mass: 1,
+    asleep: false,
+    ...over
+  })
+
+  it('gives ½mv² and mgh', () => {
+    const e = energyOf(body({ mass: 2 }), state({ mass: 2, velocity: [3, 0, 0], position: [0, 10, 0] }), 9.81)
+    expect(e.linear).toBeCloseTo(9, 9)
+    expect(e.potential).toBeCloseTo(2 * 9.81 * 10, 9)
+    expect(e.total).toBeCloseTo(9 + 196.2, 6)
+  })
+
+  it('counts the spin of a rolling ball as 2/7 of its kinetic energy', () => {
+    // A rolling sphere has I = ⅖mr² and v = ωr, so ½Iω² is 1/5 mv² against ½mv² of travel:
+    // two sevenths of the total. If this number is wrong, energy will appear not to conserve.
+    const r = 0.2
+    const v = 3
+    const def = body({ shape: 'sphere', size: [r, r, r], mass: 1 })
+    const e = energyOf(def, state({ velocity: [v, 0, 0], angularVelocity: [0, 0, v / r] }), 9.81)
+    expect(e.rotational / e.kinetic).toBeCloseTo(2 / 7, 9)
+  })
+
+  it('gives a fixed body no energy at all, however high it sits', () => {
+    const wall = body({ motion: 'static', position: [0, 5, 0] })
+    expect(energyOf(wall, state({ position: [0, 5, 0] }), 9.81).total).toBe(0)
+  })
+
+  it('measures height from the floor, not from the origin', () => {
+    const def = body({ mass: 1 })
+    const high = energyOf(def, state({ position: [0, 2, 0] }), 10, 0).potential
+    const same = energyOf(def, state({ position: [0, 3, 0] }), 10, 1).potential
+    expect(high).toBeCloseTo(same, 9)
+  })
+
+  it('adds the scene up, and keeps the total steady through a fall', async () => {
+    const world = await makeWorld()
+    const def = body({ position: [0, 20, 0], mass: 1 })
+    world.addBody(def)
+    const at = (t: number) => {
+      run(world, t)
+      return systemEnergy([energyOf(def, world.state(def.id)!, G, 0)]).total
+    }
+    // A fixed-step integrator always leaks a little; what matters is that a student reading the
+    // total sees it hold. Half a percent over a second is well under the precision anything is
+    // displayed to.
+    const start = at(0.01)
+    const drift = (t: number) => Math.abs(at(t) - start) / start
+    expect(drift(0.5)).toBeLessThan(0.005)
+    expect(drift(1.0)).toBeLessThan(0.005)
+  })
+
+  it('keeps momentum through a head-on collision', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const left = body({ position: [-2, 0, 0], velocity: [4, 0, 0], mass: 1, restitution: 1 })
+    const right = body({ position: [2, 0, 0], velocity: [-1, 0, 0], mass: 3, restitution: 1 })
+    world.addBody(left)
+    world.addBody(right)
+    const before = systemMomentum([world.state(left.id)!, world.state(right.id)!])
+    run(world, 2)
+    const after = systemMomentum([world.state(left.id)!, world.state(right.id)!])
+    expect(after[0]).toBeCloseTo(before[0], 2)
   })
 })

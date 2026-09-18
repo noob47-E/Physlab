@@ -3,6 +3,7 @@
 import { Box, Circle, Cone, Cylinder, Minus, Pill, Plus, RectangleHorizontal, RotateCcw, Trash2, Triangle } from 'lucide-react'
 import { useScene } from '../core/store'
 import { dragCoefficient, MATERIALS } from '../sim/materials'
+import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
 import { massOf, useSandbox } from '../sim/store'
 import { GRAVITY_PRESETS, type ShapeKind } from '../sim/types'
 import { useJoltState } from '../sim/jolt'
@@ -249,8 +250,14 @@ export function Sandbox() {
             <label>Velocity arrow</label>
             <input type="checkbox" checked={!!sel.showArrows} onChange={(e) => update(sel.id, { showArrows: e.target.checked })} />
           </div>
+          <div className="prop-row">
+            <label title="Draw the path it takes, so a projectile leaves its parabola behind">Leave a trail</label>
+            <input type="checkbox" checked={!!sel.trace} onChange={(e) => update(sel.id, { trace: e.target.checked })} />
+          </div>
         </>
       )}
+
+      <EnergyReadout />
 
       <div className="section-title mt-2">World</div>
       <div className="prop-row">
@@ -351,5 +358,55 @@ export function Sandbox() {
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Where the energy is, right now. This is the thing the Sandbox was missing: you could watch a
+ * ball fall and learn nothing from it, because nothing on screen said whether energy was
+ * conserved — the one question every mechanics practical is really asking.
+ */
+function EnergyReadout() {
+  const bodies = useSandbox((s) => s.bodies)
+  const live = useSandbox((s) => s.live)
+  const gravity = useSandbox((s) => s.world.gravity)
+  const datum = groundTopOf(bodies)
+
+  const moving = bodies.filter((b) => b.motion === 'dynamic')
+  const parts = moving.map((b) => ({ def: b, state: live[b.id], energy: live[b.id] ? energyOf(b, live[b.id], gravity, datum) : null }))
+  const known = parts.filter((p) => p.energy)
+  if (!known.length) return null
+  const total = systemEnergy(known.map((p) => p.energy!))
+  const j = (v: number) => `${v.toFixed(2)} J`
+  // The split between movement and height, as a bar: watching it tip over as something falls is
+  // the whole lesson.
+  const share = total.total > 1e-9 ? Math.max(0, Math.min(1, total.kinetic / (total.kinetic + Math.max(0, total.potential)))) : 0
+
+  return (
+    <>
+      <div className="section-title mt-2">Energy</div>
+      <div className="px-3 pb-2">
+        <div className="flex h-2 overflow-hidden rounded-full border border-[var(--line-2)]">
+          <div className="bg-[var(--accent)]" style={{ width: `${share * 100}%` }} title="Kinetic" />
+          <div className="flex-1 bg-[var(--warn)]" title="Potential" />
+        </div>
+        <div className="mt-1 flex justify-between text-[11.5px]">
+          <span className="text-[var(--accent)]">KE {j(total.kinetic)}</span>
+          <span className="text-[var(--warn)]">PE {j(total.potential)}</span>
+          <span className="font-semibold text-zinc-200">total {j(total.total)}</span>
+        </div>
+      </div>
+      {known.map(({ def, state, energy }) => (
+        <div key={def.id} className="flex items-center gap-2 px-3 text-[11.5px] text-zinc-400">
+          <span className="w-14 shrink-0 truncate text-zinc-300">{def.name}</span>
+          <span className="w-20 tabular-nums">KE {energy!.kinetic.toFixed(2)}</span>
+          <span className="w-20 tabular-nums">PE {energy!.potential.toFixed(2)}</span>
+          <span className="tabular-nums" title="Momentum, mass × velocity">
+            p {momentumSize(state!).toFixed(2)} kg m/s
+          </span>
+        </div>
+      ))}
+      <div className="px-3 pt-1 text-[11px] text-zinc-500">Heights are measured from the top of the floor.</div>
+    </>
   )
 }

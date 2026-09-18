@@ -8,11 +8,13 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { massOf, useSandbox } from '../sim/store'
 import { SimWorld, STRIDE } from '../sim/world'
-import type { BodyDef } from '../sim/types'
+import type { BodyDef, BodyState } from '../sim/types'
+import { energyOf, groundTopOf } from '../sim/energy'
 import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
 import { toScreen } from './cameraUtils'
 import { formatMeasure } from '../math/format'
+import { themeColor, useTheme } from '../app/theme'
 
 /** Geometry for each shape, in metres. */
 function geometryFor(def: BodyDef): THREE.BufferGeometry {
@@ -175,6 +177,8 @@ export function SandboxView() {
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   const { invalidate } = useThree()
   const check = useRef(location.hash.includes('sandbox') ? { last: -1, contacts: 0 } : null)
+  /** Engine time the live values were last published at. */
+  const published = useRef(0)
   useGrabAndThrow(sim, group)
 
   // Start the engine the first time the sandbox is opened.
@@ -217,6 +221,9 @@ export function SandboxView() {
 
   useEffect(() => () => pool.dispose(), [pool])
 
+  /** Heights are quoted above the floor, not above the world origin. */
+  const groundTop = useMemo(() => groundTopOf(bodies), [bodies])
+
   const meshes = useMemo(() => {
     const geos = bodies.map(geometryFor)
     return { geos }
@@ -232,6 +239,17 @@ export function SandboxView() {
       applyTransforms(g, transforms)
       if (contacts.length) pushContacts(contacts)
       useSandbox.setState({ engineTime: w.time })
+      // Live values for the panel, about ten times a second. Publishing every frame would
+      // re-render the whole panel sixty times a second to move a digit no one can read that fast.
+      if (w.time - published.current > 0.1) {
+        published.current = w.time
+        const live: Record<string, BodyState> = {}
+        for (const d of bodies) {
+          const s = w.state(d.id)
+          if (s) live[d.id] = s
+        }
+        useSandbox.setState({ live })
+      }
       if (check.current && Math.floor(w.time) !== check.current.last) {
         check.current.last = Math.floor(w.time)
         const lines = bodies
@@ -242,7 +260,8 @@ export function SandboxView() {
             // Where it lands on the screen, so a terminal check can tell it is actually in view.
             const sp = toScreen(state.camera, state.size, st.position)
             const onScreen = sp.visible && sp.x > 0 && sp.y > 0 && sp.x < state.size.width && sp.y < state.size.height
-            return `${d.name} pos=${st.position.map((n) => n.toFixed(2)).join(',')} v=${Math.hypot(...st.velocity).toFixed(2)} screen=${sp.x.toFixed(0)},${sp.y.toFixed(0)} size=${state.size.width}x${state.size.height} cam=${state.camera.position.toArray().map((n) => n.toFixed(1)).join(',')}${onScreen ? '' : ' OFFSCREEN'}`
+            const en = energyOf(d, st, world.gravity, groundTop)
+            return `${d.name} pos=${st.position.map((n) => n.toFixed(2)).join(',')} v=${Math.hypot(...st.velocity).toFixed(2)} KE=${en.kinetic.toFixed(1)} PE=${en.potential.toFixed(1)} E=${en.total.toFixed(1)} screen=${sp.x.toFixed(0)},${sp.y.toFixed(0)} size=${state.size.width}x${state.size.height} cam=${state.camera.position.toArray().map((n) => n.toFixed(1)).join(',')}${onScreen ? '' : ' OFFSCREEN'}`
           })
         console.info(`PHYSLAB_CHECK sandbox t=${w.time.toFixed(1)} bodies=${bodies.length} contacts=${check.current.contacts} ${lines.join(' | ')}`)
       }
@@ -262,8 +281,12 @@ export function SandboxView() {
         if (!show) return
         const p = toScreen(state.camera, state.size, st.position)
         if (!p.visible) return
+        // Speed and mass alone could not answer the question a mechanics practical asks. Height
+        // and kinetic energy are what a student needs to watch while something falls.
         const speed = Math.hypot(st.velocity[0], st.velocity[1], st.velocity[2])
-        const text = `${def.name}  ${formatMeasure(speed, 'number', settings)} m/s  ${st.mass.toFixed(2)} kg`
+        const e = energyOf(def, st, world.gravity, groundTop)
+        const num = (v: number) => formatMeasure(v, 'number', settings)
+        const text = `${def.name}  ${num(speed)} m/s  h ${num(st.position[1] - groundTop)} m  KE ${num(e.kinetic)} J`
         pool.place(text, p.x, p.y - 26, 'center', def.color)
       })
     }
@@ -284,8 +307,108 @@ export function SandboxView() {
           />
         </mesh>
       ))}
+      <FloorGrid bodies={bodies} />
       {ready && <VelocityArrows sim={sim} />}
+      {ready && <Traces sim={sim} />}
     </group>
+  )
+}
+
+/**
+ * Metre lines on the floor. Without them two balls three metres apart and two balls thirty
+ * centimetres apart look the same, and every distance has to be read off the panel instead of
+ * seen. The grid is drawn to the size of the floor and follows the theme.
+ */
+function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
+  const theme = useTheme((t) => t.theme)
+  const floor = bodies.find((b) => b.shape === 'ground')
+  const grid = useMemo(() => {
+    if (!floor) return null
+    const half = Math.min(20, Math.max(4, floor.size[0] / 2))
+    const top = floor.position[1] + floor.size[1] / 2 + 0.002
+    const pts: number[] = []
+    for (let x = -half; x <= half + 1e-9; x += 1) pts.push(x, top, -half, x, top, half)
+    for (let z = -half; z <= half + 1e-9; z += 1) pts.push(-half, top, z, half, top, z)
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+    return g
+    // The theme only changes the colour, but the geometry is cheap enough to rebuild with it.
+  }, [floor?.size[0], floor?.size[1], floor?.position[1], floor])
+  useEffect(() => () => grid?.dispose(), [grid])
+  if (!grid) return null
+  return (
+    <lineSegments geometry={grid} renderOrder={1}>
+      <lineBasicMaterial color={themeColor('--grid-major', theme === 'light' ? '#bcc8da' : '#34363d')} transparent opacity={0.85} />
+    </lineSegments>
+  )
+}
+
+/** How many positions a traced body remembers: about twenty seconds of flight. */
+const TRACE_POINTS = 600
+
+/**
+ * The path a body has taken. `trace` has been a field on every body since the Sandbox was
+ * written and nothing ever drew it, so a projectile left no parabola behind — the one picture a
+ * student opens a physics sandbox to see.
+ */
+function Traces({ sim }: { sim: React.RefObject<SimWorld | null> }) {
+  const bodies = useSandbox((s) => s.bodies)
+  const playing = useScene((s) => s.playing)
+  const paths = useRef(new Map<string, number[]>())
+  const [, force] = useState(0)
+
+  useFrame(() => {
+    const w = sim.current
+    if (!w) return
+    let changed = false
+    for (const def of bodies) {
+      if (!def.trace || def.motion !== 'dynamic') {
+        if (paths.current.delete(def.id)) changed = true
+        continue
+      }
+      const st = w.state(def.id)
+      if (!st || !playing) continue
+      const path = paths.current.get(def.id) ?? []
+      const n = path.length
+      // Only record when it has actually moved, or a body at rest fills the buffer with one point.
+      if (n < 3 || Math.hypot(path[n - 3] - st.position[0], path[n - 2] - st.position[1], path[n - 1] - st.position[2]) > 0.01) {
+        path.push(st.position[0], st.position[1], st.position[2])
+        if (path.length > TRACE_POINTS * 3) path.splice(0, 3)
+        paths.current.set(def.id, path)
+        changed = true
+      }
+    }
+    if (changed) force((k) => (k + 1) % 1000)
+  })
+
+  return (
+    <>
+      {bodies.map((def) => {
+        const path = paths.current.get(def.id)
+        if (!path || path.length < 6) return null
+        return <TraceLine key={def.id} points={path} color={def.color} />
+      })}
+    </>
+  )
+}
+
+function TraceLine({ points, color }: { points: number[]; color: string }) {
+  const geo = useMemo(() => {
+    // Drawn as separate segments rather than one polyline: `<line>` in JSX means the SVG element,
+    // and `<lineSegments>` is the R3F tag that does not collide with it.
+    const pairs: number[] = []
+    for (let i = 3; i < points.length; i += 3) {
+      pairs.push(points[i - 3], points[i - 2], points[i - 1], points[i], points[i + 1], points[i + 2])
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(pairs), 3))
+    return g
+  }, [points, points.length])
+  useEffect(() => () => geo.dispose(), [geo])
+  return (
+    <lineSegments geometry={geo} renderOrder={13}>
+      <lineBasicMaterial color={color} transparent opacity={0.8} />
+    </lineSegments>
   )
 }
 
@@ -317,8 +440,10 @@ function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
         if (!st) return null
         const speed = Math.hypot(st.velocity[0], st.velocity[1], st.velocity[2])
         if (speed < 0.05) return null
-        // One metre of arrow for every 4 m/s, so a fast object has a long arrow.
-        const k = 0.25
+        // One metre of arrow for every two metres per second. At the old quarter-scale a ball
+        // doing 4 m/s grew an arrow shorter than the ramp it had just left, which is not
+        // something you can reason about at a glance.
+        const k = 0.5
         return (
           <Arrow
             key={def.id}
@@ -326,7 +451,7 @@ function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
             comp={[st.velocity[0] * k, st.velocity[1] * k, st.velocity[2] * k]}
             color="#4dabf7"
             is3D
-            thick={2}
+            thick={3.5}
             renderOrder={14}
           />
         )

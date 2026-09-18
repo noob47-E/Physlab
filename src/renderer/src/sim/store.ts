@@ -3,7 +3,7 @@
 
 import { create } from 'zustand'
 import { materialById } from './materials'
-import { DEFAULT_WORLD, type BodyDef, type BodyId, type ContactEvent, type ShapeKind, type WorldSettings } from './types'
+import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactEvent, type ShapeKind, type WorldSettings } from './types'
 import { SimWorld } from './world'
 
 let counter = 0
@@ -20,6 +20,9 @@ export interface SandboxState {
   contacts: ContactEvent[]
   /** Set by the viewport so panels can show live values. */
   engineTime: number
+  /** Live state per body, published by the viewport about ten times a second so the panel can
+   *  show energy and momentum without re-rendering on every frame. */
+  live: Record<BodyId, BodyState>
   /** Camera flattened to a straight-on side view, so a scene reads like a textbook figure. */
   sideView: boolean
 
@@ -100,6 +103,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   selection: null,
   contacts: [],
   engineTime: 0,
+  live: {},
   sideView: true,
 
   addBody: (shape, at) => {
