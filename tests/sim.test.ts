@@ -581,3 +581,30 @@ describe('turning a run into readings', () => {
     expect(-2 * slope).toBeLessThan(1.03 * G)
   })
 })
+
+describe('a ball actually stops', () => {
+  it('is asleep on concrete before the minute is out, and a typed figure beats the material', async () => {
+    // Sleeping is on, as it is in the app: rolling resistance takes the speed down and the sleep
+    // thresholds finish the job, so "has it stopped?" has an answer.
+    const world = await makeWorld({ allowSleeping: true })
+    world.addBody(ground({ material: 'concrete', friction: 0.8 }))
+    const ball = body({ shape: 'sphere', size: [0.2, 0.2, 0.2], position: [0, 0.2, 0], velocity: [2, 0, 0], material: 'steel' })
+    world.addBody(ball)
+    run(world, 30)
+    expect(speed(world.state(ball.id)!.velocity)).toBeLessThan(0.05)
+  })
+
+  it('takes a rolling figure from the body over the one its material carries', async () => {
+    const stopped = async (rolling?: number) => {
+      const world = await makeWorld()
+      world.addBody(ground({ material: 'ice', friction: 0.8 }))
+      const ball = body({ shape: 'sphere', size: [0.2, 0.2, 0.2], position: [0, 0.2, 0], velocity: [3, 0, 0], material: 'ice', rolling })
+      world.addBody(ball)
+      run(world, 5)
+      return speed(world.state(ball.id)!.velocity)
+    }
+    // Ice against ice barely slows; the same ball told to resist at 0.08 does.
+    expect(await stopped(undefined)).toBeGreaterThan(1.9)
+    expect(await stopped(0.08)).toBeLessThan(1.2)
+  })
+})

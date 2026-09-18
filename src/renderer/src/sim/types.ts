@@ -36,6 +36,8 @@ export interface BodyDef {
   dragArea?: number
   showArrows?: boolean
   trace?: boolean
+  /** Coefficient of rolling resistance. Empty means "whatever this material has". */
+  rolling?: number
   /** Which way it is allowed to move: free, or held to one axis so a student can isolate what
    *  they are studying (a trolley on a track, a lift in a shaft). */
   lock?: 'free' | 'x' | 'y'

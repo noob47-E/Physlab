@@ -170,6 +170,14 @@ export class SimWorld {
     const g = this.v3([0, -this.settings.gravity, 0])
     this.physics.SetGravity(g)
     this.release(g)
+
+    // Jolt's defaults let a body creep for half a second below a threshold meant for a game, where
+    // a barrel drifting a millimetre goes unnoticed. In a physics lab the question is "has it
+    // stopped?", so a body has to be slower and stay slow before it is allowed to settle.
+    const ps = this.physics.GetPhysicsSettings()
+    ps.mPointVelocitySleepThreshold = 0.02
+    ps.mTimeBeforeSleep = 0.35
+    this.physics.SetPhysicsSettings(ps)
   }
 
   // -------------------------------------------------------------------------
@@ -510,8 +518,11 @@ export class SimWorld {
         const w = body.GetAngularVelocity()
         const spin = Math.hypot(w.GetX(), w.GetY(), w.GetZ())
         if (spin > 1e-3) {
-          const mine = materialById(e.def.material).rolling
-          const theirs = materialById(this.entries.get(touch)?.def.material ?? e.def.material).rolling
+          // A figure typed on the body wins over the one its material carries, so a student can
+          // put a textbook value in and watch what it changes.
+          const mine = e.def.rolling ?? materialById(e.def.material).rolling
+          const other = this.entries.get(touch)?.def
+          const theirs = other ? (other.rolling ?? materialById(other.material).rolling) : mine
           // Rolling resistance comes from whichever surface deforms more, so the larger figure
           // wins rather than the two averaging out: a steel ball rolls a long way on ice and a
           // short way on concrete, which is the pair of results a student can check by eye.

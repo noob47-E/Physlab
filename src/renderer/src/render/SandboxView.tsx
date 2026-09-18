@@ -316,10 +316,13 @@ export function SandboxView() {
       <directionalLight position={[-8, 5, -6]} intensity={0.35} />
       {bodies.map((def, i) => (
         <mesh key={def.id} geometry={meshes.geos[i]} userData={{ bodyId: def.id }}>
+          {/* A gold tint at a third strength was all but invisible on steel, concrete and lead —
+              the three darkest materials and the three most used. The selected object is lit
+              properly instead, so you can tell at a glance which one the panel is describing. */}
           <meshLambertMaterial
             color={def.color}
             emissive={selection === def.id ? '#ffd43b' : '#000000'}
-            emissiveIntensity={selection === def.id ? 0.35 : 0}
+            emissiveIntensity={selection === def.id ? 0.95 : 0}
           />
         </mesh>
       ))}

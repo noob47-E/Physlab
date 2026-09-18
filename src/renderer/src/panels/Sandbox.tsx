@@ -1,9 +1,9 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Link2, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
+import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Eraser, Link2, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScene } from '../core/store'
-import { dragCoefficient, MATERIALS } from '../sim/materials'
+import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
 import { massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type LinkKind, type ShapeKind } from '../sim/types'
@@ -15,6 +15,9 @@ import { LabChart } from './LabChart'
 import { enterMode } from '../app/TopBar'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
+
+/** Shapes that roll, so only they are offered a rolling-resistance figure. */
+const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
 
 // Crate, plank and wall all used the same square icon, so the row read as three identical
 // buttons. Every shape the engine can build is offered — capsule and cone were only ever missing
@@ -240,6 +243,23 @@ export function Sandbox() {
               <span className="w-10 text-right tabular-nums text-zinc-400">{sel.linearDamping.toFixed(2)}</span>
             </div>
           </div>
+          {ROLLING_SHAPES.has(sel.shape) && (
+            <div className="prop-row">
+              <label title="Rolling resistance: why a ball stops on concrete and runs on ice">Rolls against</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  className="w-full"
+                  min={0}
+                  max={0.1}
+                  step={0.001}
+                  value={sel.rolling ?? materialById(sel.material).rolling}
+                  onChange={(e) => update(sel.id, { rolling: Number(e.target.value) })}
+                />
+                <span className="w-12 text-right tabular-nums text-zinc-400">{(sel.rolling ?? materialById(sel.material).rolling).toFixed(3)}</span>
+              </div>
+            </div>
+          )}
           <div className="prop-row">
             <label>Motion</label>
             <div className="seg">
@@ -389,6 +409,7 @@ export function Sandbox() {
           <RotateCcw size={13} /> Reset
         </button>
         <UndoButton />
+        <ClearTrailsButton />
       </div>
     </div>
   )
@@ -668,4 +689,21 @@ function tableFrom(name: string, samples: Sample[]): LabTable {
     // Height against time to begin with; the student picks the pair they actually want.
     plot: { x: columns[0].id, y: columns[2].id, fit: 'linear' }
   }
+}
+
+/** Wipes every trail at once, for when the screen has filled with old runs. */
+function ClearTrailsButton() {
+  const bodies = useSandbox((s) => s.bodies)
+  const update = useSandbox((s) => s.updateBody)
+  const any = bodies.some((b) => b.trace)
+  return (
+    <button
+      className="btn"
+      disabled={!any}
+      title="Clear every trail. Turn them back on with 'Leave a trail' on an object."
+      onClick={() => bodies.filter((b) => b.trace).forEach((b) => update(b.id, { trace: false }))}
+    >
+      <Eraser size={13} /> Clear trails
+    </button>
+  )
 }
