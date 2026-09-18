@@ -261,3 +261,77 @@ describe('the sandbox engine agrees with the formulas', () => {
     expect(world.handleCount).toBeLessThanOrEqual(base + 4)
   })
 })
+
+describe('heavy things behave as if they are heavy', () => {
+  /** How far the cursor drags a body of this mass in half a second, from rest. */
+  async function dragged(mass: number): Promise<number> {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ mass, position: [0, 0, 0], shape: 'box', size: [0.4, 0.4, 0.4] })
+    world.addBody(b)
+    world.grab(b.id, [5, 0, 0])
+    run(world, 0.5)
+    const moved = world.state(b.id)!.position[0]
+    world.release_()
+    return moved
+  }
+
+  it('a heavy block barely shifts while a light one follows the cursor', async () => {
+    const light = await dragged(1)
+    const heavy = await dragged(2_000_000)
+    // The spring used to scale its stiffness with mass, which cancelled the mass out of a = F/m:
+    // two tonnes moved exactly as fast as a marble. With the pull capped, it cannot.
+    expect(light).toBeGreaterThan(0.5)
+    expect(heavy).toBeLessThan(light / 1000)
+  })
+})
+
+describe('a rolling ball comes to rest', () => {
+  /** Speed left after rolling across a floor of this material for four seconds. */
+  async function rolled(floor: string, seconds: number): Promise<number> {
+    const world = await makeWorld()
+    world.addBody(ground({ material: floor, friction: 0.8 }))
+    const ball = body({ shape: 'sphere', size: [0.2, 0.2, 0.2], position: [0, 0.2, 0], velocity: [3, 0, 0], material: 'steel' })
+    world.addBody(ball)
+    run(world, seconds)
+    return speed(world.state(ball.id)!.velocity)
+  }
+
+  it('settles into a roll at 5/7 of the speed it was sliding at', async () => {
+    // A ball set moving without spin slides until friction spins it up; angular momentum about
+    // the contact point is conserved, so it ends up rolling at 5v/7. On ice, where rolling
+    // resistance is negligible, that is what should be left a second later.
+    expect(await rolled('ice', 1)).toBeCloseTo((5 / 7) * 3, 1)
+  })
+
+  it('keeps slowing on concrete and keeps going on ice', async () => {
+    const onConcrete = await rolled('concrete', 8)
+    const onIce = await rolled('ice', 8)
+    expect(onConcrete).toBeLessThan(1.1)
+    expect(onIce).toBeGreaterThan(1.9)
+  })
+})
+
+describe('editing a body does not restart the run', () => {
+  it('renaming a falling ball leaves every position alone', async () => {
+    const world = await makeWorld()
+    const b = body({ position: [0, 50, 0] })
+    world.addBody(b)
+    run(world, 0.8)
+    const fallen = world.state(b.id)!.position[1]
+    expect(fallen).toBeLessThan(49)
+
+    const applied = world.updateBody({ ...b, name: 'Renamed', color: '#ff0000' })
+    expect(applied).toBe(true)
+    // The ball is still where it fell to, not back at the 50 m in its definition.
+    expect(world.state(b.id)!.position[1]).toBeCloseTo(fallen, 6)
+  })
+
+  it('says no to a change Jolt cannot make in place', async () => {
+    const world = await makeWorld()
+    const b = body()
+    world.addBody(b)
+    expect(world.updateBody({ ...b, size: [0.5, 0.5, 0.5] })).toBe(false)
+    expect(world.updateBody({ ...b, motion: 'static' })).toBe(false)
+    expect(world.updateBody({ ...b, mass: 99 })).toBe(false)
+  })
+})

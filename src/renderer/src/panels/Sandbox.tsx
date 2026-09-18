@@ -1,20 +1,25 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Box, Circle, Cylinder, Plus, RotateCcw, Trash2, Triangle } from 'lucide-react'
+import { Box, Circle, Cone, Cylinder, Minus, Pill, Plus, RectangleHorizontal, RotateCcw, Trash2, Triangle } from 'lucide-react'
 import { useScene } from '../core/store'
-import { MATERIALS } from '../sim/materials'
+import { dragCoefficient, MATERIALS } from '../sim/materials'
 import { massOf, useSandbox } from '../sim/store'
 import { GRAVITY_PRESETS, type ShapeKind } from '../sim/types'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
 
+// Crate, plank and wall all used the same square icon, so the row read as three identical
+// buttons. Every shape the engine can build is offered — capsule and cone were only ever missing
+// from this list, not from the physics.
 const ADD: { shape: ShapeKind; label: string; icon: React.ReactNode }[] = [
   { shape: 'sphere', label: 'Ball', icon: <Circle size={13} /> },
   { shape: 'box', label: 'Crate', icon: <Box size={13} /> },
   { shape: 'cylinder', label: 'Cylinder', icon: <Cylinder size={13} /> },
+  { shape: 'capsule', label: 'Capsule', icon: <Pill size={13} /> },
+  { shape: 'cone', label: 'Cone', icon: <Cone size={13} /> },
   { shape: 'ramp', label: 'Ramp', icon: <Triangle size={13} /> },
-  { shape: 'plank', label: 'Plank', icon: <Box size={13} /> },
-  { shape: 'wall', label: 'Wall', icon: <Box size={13} /> }
+  { shape: 'plank', label: 'Plank', icon: <Minus size={13} /> },
+  { shape: 'wall', label: 'Wall', icon: <RectangleHorizontal size={13} className="rotate-90" /> }
 ]
 
 function Vec3Row({
@@ -35,15 +40,19 @@ function Vec3Row({
       </label>
       <div className="flex gap-1">
         {(['x', 'y', 'z'] as const).map((axis, i) => (
-          <NumField
-            key={axis}
-            value={value[i]}
-            onChange={(n) => {
-              const next: [number, number, number] = [...value]
-              next[i] = n
-              onChange(next)
-            }}
-          />
+          // The axis letter was used as the React key and never shown, so these were three
+          // anonymous boxes and you had to guess which one was which.
+          <label key={axis} className="flex min-w-0 flex-1 items-center gap-1">
+            <span className="text-[10px] italic text-zinc-500">{axis}</span>
+            <NumField
+              value={value[i]}
+              onChange={(n) => {
+                const next: [number, number, number] = [...value]
+                next[i] = n
+                onChange(next)
+              }}
+            />
+          </label>
         ))}
       </div>
     </div>
@@ -73,7 +82,9 @@ export function Sandbox() {
 
       <div className="section-title flex items-center">
         <span className="flex-1">Objects</span>
-        <span className="normal-case tracking-normal text-zinc-600">t = {engineTime.toFixed(2)} s</span>
+        {/* The clock is the number every kinematics question needs; it used to be the hardest
+            thing on the panel to read. */}
+        <span className="normal-case tracking-normal tabular-nums text-zinc-300">t = {engineTime.toFixed(2)} s</span>
       </div>
 
       <div className="flex flex-wrap gap-1.5 px-2 pb-2">
@@ -96,7 +107,9 @@ export function Sandbox() {
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: b.color }} />
             <span className="w-14 shrink-0 truncate font-semibold text-zinc-100">{b.name}</span>
             <span className="min-w-0 flex-1 truncate text-[11.5px] text-zinc-400">
-              {b.shape} · {massOf(b).toFixed(2)} kg {b.motion === 'static' && '· fixed'}
+              {/* A bolted-down floor reporting "9408 kg" only invites the question "why does the
+                  ground weigh nine tonnes?" — for a static body the mass means nothing. */}
+              {b.shape} {b.motion === 'static' ? '· fixed' : `· ${massOf(b).toFixed(2)} kg`}
             </span>
             <button
               className="hidden text-zinc-500 hover:text-red-400 group-hover:block"
@@ -133,11 +146,12 @@ export function Sandbox() {
             <label>Mass</label>
             <div className="flex items-center gap-2">
               <div className="seg">
-                <button className={sel.massMode === 'density' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'density' })} title="From the material and the size">
+                <button className={sel.massMode === 'density' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'density' })} title="Work the mass out from the material and the size">
                   from density
                 </button>
-                <button className={sel.massMode === 'mass' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'mass' })}>
-                  set it
+                {/* "set it" left you asking "set what?" */}
+                <button className={sel.massMode === 'mass' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'mass' })} title="Type the mass yourself">
+                  type it
                 </button>
               </div>
               {sel.massMode === 'mass' ? (
@@ -151,6 +165,8 @@ export function Sandbox() {
           <Vec3Row label="Position" unit="m" value={sel.position} onChange={(position) => update(sel.id, { position })} />
           <Vec3Row label="Rotation" unit="°" value={sel.rotation} onChange={(rotation) => update(sel.id, { rotation })} />
           <Vec3Row label="Velocity" unit="m/s" value={sel.velocity} onChange={(velocity) => update(sel.id, { velocity })} />
+          {/* The engine has always spun bodies; there was simply no way to ask it to. */}
+          <Vec3Row label="Spin" unit="rad/s" value={sel.angularVelocity} onChange={(angularVelocity) => update(sel.id, { angularVelocity })} />
           <div className="prop-row">
             <label>Bounciness e</label>
             <div className="flex items-center gap-2">
@@ -182,7 +198,40 @@ export function Sandbox() {
             </div>
           </div>
           <div className="prop-row">
-            <label>Moves?</label>
+            <label>Air drag Cd</label>
+            <div className="flex items-center gap-2">
+              {/* The engine has applied drag since the first version, using a default for the
+                  shape. A student matching a textbook figure needs to be able to set it. */}
+              <input
+                type="range"
+                className="w-full"
+                min={0}
+                max={1.5}
+                step={0.01}
+                value={sel.dragCd ?? dragCoefficient(sel.shape)}
+                onChange={(e) => update(sel.id, { dragCd: Number(e.target.value) })}
+              />
+              <span className="w-10 text-right tabular-nums text-zinc-400">{(sel.dragCd ?? dragCoefficient(sel.shape)).toFixed(2)}</span>
+            </div>
+          </div>
+          <div className="prop-row">
+            <label>Slows down</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                className="w-full"
+                min={0}
+                max={1}
+                step={0.01}
+                value={sel.linearDamping}
+                title="Damping: how quickly it loses speed to everything not modelled"
+                onChange={(e) => update(sel.id, { linearDamping: Number(e.target.value) })}
+              />
+              <span className="w-10 text-right tabular-nums text-zinc-400">{sel.linearDamping.toFixed(2)}</span>
+            </div>
+          </div>
+          <div className="prop-row">
+            <label>Motion</label>
             <div className="seg">
               {(
                 [
@@ -237,6 +286,8 @@ export function Sandbox() {
           {world.airDensity > 0 && <span className="tabular-nums text-zinc-400">{world.airDensity} kg/m³</span>}
         </div>
       </div>
+      {/* Wind has been in the drag calculation from the start, with nothing to set it. */}
+      {world.airDensity > 0 && <Vec3Row label="Wind" unit="m/s" value={world.wind} onChange={(wind) => setWorld({ wind })} />}
       <div className="prop-row">
         <label>View</label>
         <div className="seg">

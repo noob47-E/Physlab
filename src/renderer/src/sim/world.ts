@@ -20,6 +20,16 @@ const NUM_LAYERS = 2
 /** Floats per body in the transform buffer: position (3) + rotation quaternion (4). */
 export const STRIDE = 7
 
+/**
+ * The hardest a dragged object can be pulled, in newtons — roughly a firm two-handed pull. It is
+ * what stops the cursor behaving like an infinitely strong crane: with the force bounded, a = F/m
+ * finally depends on m again.
+ */
+const GRAB_MAX_FORCE = 800
+
+/** Shapes that roll, and so are slowed by rolling resistance rather than sliding friction. */
+const ROLLING_SHAPES = new Set(['sphere', 'cylinder', 'capsule'])
+
 interface Entry {
   def: BodyDef
   /** The Jolt Body itself: a stable pointer. A BodyID returned by value is a temporary
@@ -43,6 +53,8 @@ export class SimWorld {
   private settings: WorldSettings = { ...DEFAULT_WORLD }
   private accumulator = 0
   private grabbed: { id: BodyId; target: V3 } | null = null
+  /** Who is touching what, refilled by the contact listener every step: body → the body under it. */
+  private touching = new Map<BodyId, BodyId>()
   /** Simulated time in seconds since the last reset. */
   time = 0
 
@@ -211,6 +223,43 @@ export class SimWorld {
     this.release(av)
   }
 
+  /**
+   * Applies a changed definition to a body that is already in the world, and says whether it
+   * managed it. Renaming a ball, recolouring it or making it bouncier costs nothing; changing its
+   * shape, size, mass or whether it moves at all means Jolt has to build the body again.
+   *
+   * This exists because the panel used to rebuild the entire world on every keystroke, so typing a
+   * new name for a falling ball snapped every object back to where it started.
+   */
+  updateBody(def: BodyDef): boolean {
+    const e = this.entries.get(def.id)
+    if (!e) return false
+    const was = e.def
+    const structural =
+      was.shape !== def.shape ||
+      was.motion !== def.motion ||
+      was.size.some((v, i) => v !== def.size[i]) ||
+      was.material !== def.material ||
+      was.massMode !== def.massMode ||
+      was.mass !== def.mass
+    if (structural) return false
+
+    const body = e.body
+    if (was.restitution !== def.restitution) body.SetRestitution(def.restitution)
+    if (was.friction !== def.friction) body.SetFriction(def.friction)
+    if (def.motion === 'dynamic') {
+      const mp = body.GetMotionProperties()
+      if (was.linearDamping !== def.linearDamping) mp.SetLinearDamping(def.linearDamping)
+      if (was.angularDamping !== def.angularDamping) mp.SetAngularDamping(def.angularDamping)
+    }
+    // Position and velocity are only pushed when they really changed, so a body mid-flight is not
+    // yanked back to the number sitting in the panel on every unrelated edit.
+    if (was.position.some((v, i) => v !== def.position[i])) this.setPosition(def.id, def.position)
+    if (was.velocity.some((v, i) => v !== def.velocity[i])) this.setVelocity(def.id, def.velocity)
+    e.def = def
+    return true
+  }
+
   removeBody(id: BodyId): void {
     const e = this.entries.get(id)
     if (!e) return
@@ -338,7 +387,9 @@ export class SimWorld {
     this.accumulator = Math.min(this.accumulator + dt * this.settings.timeScale, FIXED * 3)
     this.contacts = []
     while (this.accumulator >= FIXED) {
+      // beforeStep reads the contacts the last step found; the listener refills them during Step.
       this.beforeStep(FIXED)
+      this.touching.clear()
       this.joltInterface.Step(FIXED, this.settings.collisionSteps)
       this.accumulator -= FIXED
       this.time += FIXED
@@ -372,17 +423,51 @@ export class SimWorld {
         }
       }
 
+      // Rolling resistance. Jolt has none, so a ball on a level floor rolls until the scene is
+      // closed. The resistive torque is μr·N·r against the spin, with N ≈ mg, and it is applied
+      // only while the body is actually touching something — in flight there is no surface to
+      // resist against. μr comes from both materials, the way friction does, so a ball on ice
+      // runs and the same ball on concrete stops.
+      const touch = this.touching.get(id)
+      if (touch && ROLLING_SHAPES.has(e.def.shape)) {
+        const w = body.GetAngularVelocity()
+        const spin = Math.hypot(w.GetX(), w.GetY(), w.GetZ())
+        if (spin > 1e-3) {
+          const mine = materialById(e.def.material).rolling
+          const theirs = materialById(this.entries.get(touch)?.def.material ?? e.def.material).rolling
+          // Rolling resistance comes from whichever surface deforms more, so the larger figure
+          // wins rather than the two averaging out: a steel ball rolls a long way on ice and a
+          // short way on concrete, which is the pair of results a student can check by eye.
+          const mu = Math.max(mine, theirs)
+          const radius = Math.max(1e-3, e.def.size[0])
+          const mag = mu * e.mass * this.settings.gravity * radius
+          const t = this.v3([(-w.GetX() / spin) * mag, (-w.GetY() / spin) * mag, (-w.GetZ() / spin) * mag])
+          body.AddTorque(t)
+          this.release(t)
+        }
+      }
+
       if (this.grabbed && this.grabbed.id === id) {
-        // A spring to the cursor: F = k(target − x) − c·v, the same model as a real spring.
+        // A spring to the cursor: F = k(target − x) − c·v, the same model as a real spring. The
+        // stiffness scales with mass so a light object is not flung across the scene, but that
+        // alone cancelled the mass out of a = F/m and made a two-tonne block as easy to drag as a
+        // marble. A hand can only pull so hard, so the force is capped: heavy things now barely
+        // shift, which is the whole point of giving them a mass.
         const p = body.GetPosition()
         const v = body.GetLinearVelocity()
         const k = 60 * e.mass
         const c = 12 * e.mass
-        const f = this.v3([
-          k * (this.grabbed.target[0] - p.GetX()) - c * v.GetX(),
-          k * (this.grabbed.target[1] - p.GetY()) - c * v.GetY(),
-          k * (this.grabbed.target[2] - p.GetZ()) - c * v.GetZ()
-        ])
+        let fx = k * (this.grabbed.target[0] - p.GetX()) - c * v.GetX()
+        let fy = k * (this.grabbed.target[1] - p.GetY()) - c * v.GetY()
+        let fz = k * (this.grabbed.target[2] - p.GetZ()) - c * v.GetZ()
+        const pull = Math.hypot(fx, fy, fz)
+        if (pull > GRAB_MAX_FORCE) {
+          const s = GRAB_MAX_FORCE / pull
+          fx *= s
+          fy *= s
+          fz *= s
+        }
+        const f = this.v3([fx, fy, fz])
         body.AddForce(f)
         this.bodies.ActivateBody(body.GetID())
         this.release(f)
@@ -496,8 +581,24 @@ export class SimWorld {
         point: [p.GetX(), p.GetY(), p.GetZ()]
       })
     }
-    listener.OnContactAdded = (body1: number, body2: number, manifold: number, _settings: number) => record(body1, body2, manifold)
-    listener.OnContactPersisted = (_b1: number, _b2: number, _manifold: number, _settings: number) => undefined
+    // A contact that is merely continuing is not an event worth logging, but it is what tells
+    // rolling resistance there is a surface underneath. Both callbacks note who is touching whom;
+    // only a new contact becomes a collision the student can read.
+    const noteTouch = (body1: number, body2: number) => {
+      const b1 = J.wrapPointer(body1, J.Body)
+      const b2 = J.wrapPointer(body2, J.Body)
+      const a = this.order[Number(b1.GetUserData()) - 1]
+      const b = this.order[Number(b2.GetUserData()) - 1]
+      if (a && b) {
+        this.touching.set(a, b)
+        this.touching.set(b, a)
+      }
+    }
+    listener.OnContactAdded = (body1: number, body2: number, manifold: number, _settings: number) => {
+      noteTouch(body1, body2)
+      record(body1, body2, manifold)
+    }
+    listener.OnContactPersisted = (body1: number, body2: number, _manifold: number, _settings: number) => noteTouch(body1, body2)
     listener.OnContactRemoved = (_subShapePair: number) => undefined
     listener.OnContactValidate = (_b1: number, _b2: number, _offset: number, _result: number) =>
       J.ValidateResult_AcceptAllContactsForThisBodyPair

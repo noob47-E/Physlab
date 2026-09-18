@@ -194,10 +194,18 @@ export function SandboxView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Any change to the objects rebuilds the world from the definitions.
+  // A change to the objects is applied to the running world where it can be, and only forces a
+  // rebuild when the change is structural. Rebuilding on every edit meant renaming a ball reset
+  // every position in the scene — the single most confusing thing the Sandbox did.
+  const applied = useRef<BodyDef[]>([])
   useEffect(() => {
-    if (!sim.current || !ready) return
-    sim.current.rebuild(bodies)
+    const w = sim.current
+    if (!w || !ready) return
+    const before = applied.current
+    const sameBodies = before.length === bodies.length && bodies.every((b, i) => before[i]?.id === b.id)
+    const inPlace = sameBodies && bodies.every((b, i) => before[i] === b || w.updateBody(b))
+    if (!inPlace) w.rebuild(bodies)
+    applied.current = bodies
     invalidate()
   }, [bodies, ready, invalidate])
 
