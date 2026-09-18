@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
 import type { BodyDef, BodyState, WorldSettings } from '../src/renderer/src/sim/types'
 import { energyOf, systemEnergy, systemMomentum } from '../src/renderer/src/sim/energy'
+import { launchVelocity, PRESETS } from '../src/renderer/src/sim/presets'
 import type { V3 } from '../src/renderer/src/math/vec'
 
 const G = 9.81
@@ -404,5 +405,44 @@ describe('what the simulation is worth in joules', () => {
     run(world, 2)
     const after = systemMomentum([world.state(left.id)!, world.state(right.id)!])
     expect(after[0]).toBeCloseTo(before[0], 2)
+  })
+})
+
+describe('setting up an experiment', () => {
+  it('splits a launch into the components a projectile question starts with', () => {
+    const [vx, vy] = launchVelocity(20, 30)
+    expect(vx).toBeCloseTo(20 * Math.cos(Math.PI / 6), 9)
+    expect(vy).toBeCloseTo(10, 9)
+    // Straight up has no sideways part, and straight along has no upward part.
+    expect(launchVelocity(5, 90)[0]).toBeCloseTo(0, 9)
+    expect(launchVelocity(5, 0)[1]).toBeCloseTo(0, 9)
+  })
+
+  it('gives every preset a floor, a name and something that moves', () => {
+    for (const p of PRESETS) {
+      const { bodies } = p.build()
+      expect(bodies.some((b) => b.shape === 'ground')).toBe(true)
+      expect(bodies.some((b) => b.motion === 'dynamic')).toBe(true)
+      expect(new Set(bodies.map((b) => b.id)).size).toBe(bodies.length)
+      expect(new Set(bodies.map((b) => b.name)).size).toBe(bodies.length)
+    }
+  })
+
+  it('builds a fresh scene every time, so one experiment cannot disturb the next', () => {
+    const first = PRESETS[0].build().bodies
+    const second = PRESETS[0].build().bodies
+    expect(first[0].id).not.toBe(second[0].id)
+  })
+
+  it('holds a body to one axis', async () => {
+    const world = await makeWorld()
+    world.addBody(ground())
+    const trolley = body({ shape: 'box', size: [0.5, 0.5, 0.5], position: [0, 2, 0], velocity: [3, 0, 0], lock: 'x' })
+    world.addBody(trolley)
+    run(world, 1)
+    const s = world.state(trolley.id)!
+    // Gravity pulls, and it does not fall: the track holds it.
+    expect(s.position[1]).toBeCloseTo(2, 3)
+    expect(s.position[0]).toBeGreaterThan(2)
   })
 })

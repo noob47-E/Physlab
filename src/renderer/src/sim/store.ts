@@ -25,6 +25,9 @@ export interface SandboxState {
   live: Record<BodyId, BodyState>
   /** Camera flattened to a straight-on side view, so a scene reads like a textbook figure. */
   sideView: boolean
+  /** Previous versions of the object list, newest last. Live positions are not in here: undo
+   *  puts the objects back as they were defined, which is what Reset does too. */
+  past: BodyDef[][]
 
   addBody: (shape: ShapeKind, at?: [number, number, number]) => BodyDef
   updateBody: (id: BodyId, patch: Partial<BodyDef>) => void
@@ -35,6 +38,9 @@ export interface SandboxState {
   clearContacts: () => void
   setScene: (bodies: BodyDef[], world?: Partial<WorldSettings>) => void
   setSideView: (on: boolean) => void
+  /** Step back one edit. The sandbox had no history at all, so a wrong delete was final. */
+  undo: () => void
+  canUndo: () => boolean
 }
 
 /** Sensible starting sizes in metres, so a scene looks like a lab bench, not a galaxy. */
@@ -105,8 +111,10 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   engineTime: 0,
   live: {},
   sideView: true,
+  past: [],
 
   addBody: (shape, at) => {
+    remember(set, get)
     const used = new Set(get().bodies.map((b) => b.name))
     const letter = LETTERS.find((l) => !used.has(l)) ?? `X${get().bodies.length}`
     const def = makeBody(shape, shape === 'ground' ? 'Floor' : letter, at)
@@ -114,7 +122,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     return def
   },
 
-  updateBody: (id, patch) =>
+  updateBody: (id, patch) => {
+    remember(set, get)
     set({
       bodies: get().bodies.map((b) => {
         if (b.id !== id) return b
@@ -128,16 +137,47 @@ export const useSandbox = create<SandboxState>((set, get) => ({
         }
         return next
       })
-    }),
+    })
+  },
 
-  removeBody: (id) => set({ bodies: get().bodies.filter((b) => b.id !== id), selection: get().selection === id ? null : get().selection }),
+  removeBody: (id) => {
+    remember(set, get)
+    set({ bodies: get().bodies.filter((b) => b.id !== id), selection: get().selection === id ? null : get().selection })
+  },
   select: (selection) => set({ selection }),
   setWorld: (patch) => set({ world: { ...get().world, ...patch } }),
   pushContacts: (c) => (c.length ? set({ contacts: [...c].reverse().concat(get().contacts).slice(0, 60) }) : undefined),
   clearContacts: () => set({ contacts: [] }),
-  setScene: (bodies, world) => set({ bodies, world: { ...get().world, ...world }, selection: null, contacts: [] }),
-  setSideView: (sideView) => set({ sideView })
+  setScene: (bodies, world) => {
+    remember(set, get)
+    set({ bodies, world: { ...get().world, ...world }, selection: null, contacts: [] })
+  },
+  setSideView: (sideView) => set({ sideView }),
+
+  undo: () => {
+    const past = get().past
+    if (!past.length) return
+    set({ bodies: past[past.length - 1], past: past.slice(0, -1), selection: null })
+  },
+  canUndo: () => get().past.length > 0
 }))
+
+let lastRemembered = 0
+
+/**
+ * Keeps the object list as it is now, so the next change can be undone.
+ *
+ * Changes that arrive in a burst — every keystroke of a new name, every drag of a slider — are
+ * folded into one entry, or a student would have to press undo twenty times to take back one
+ * word.
+ */
+function remember(set: (p: Partial<SandboxState>) => void, get: () => SandboxState): void {
+  const now = Date.now()
+  const burst = now - lastRemembered < 700 && get().past.length > 0
+  lastRemembered = now
+  if (burst) return
+  set({ past: [...get().past, get().bodies].slice(-30) })
+}
 
 /** Mass a body will have, for the panels (the engine works it out the same way). */
 export const massOf = (def: BodyDef): number => SimWorld.massOf(def)

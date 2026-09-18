@@ -36,6 +36,9 @@ export interface BodyDef {
   dragArea?: number
   showArrows?: boolean
   trace?: boolean
+  /** Which way it is allowed to move: free, or held to one axis so a student can isolate what
+   *  they are studying (a trolley on a track, a lift in a shaft). */
+  lock?: 'free' | 'x' | 'y'
 }
 
 export interface WorldSettings {

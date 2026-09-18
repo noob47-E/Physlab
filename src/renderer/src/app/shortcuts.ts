@@ -4,6 +4,7 @@ import { scene } from '../core/store'
 import { TOOLS, cancelTool, finishTool, resetTool, undoLastPick, useTool } from '../render/tools'
 import { resetCamera } from '../render/viewState'
 import { useApp } from './modes'
+import { useSandbox } from '../sim/store'
 
 const isTyping = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement
@@ -45,6 +46,12 @@ export function useShortcuts() {
       if (isTyping(e)) return
       if (ctrl && e.key.toLowerCase() === 'z') {
         e.preventDefault()
+        // The Sandbox keeps its own objects in its own store, so Ctrl+Z there has to reach that
+        // history rather than the drawing's.
+        if (useApp.getState().mode === 'sandbox') {
+          useSandbox.getState().undo()
+          return
+        }
         if (e.shiftKey) s.redo()
         else s.undo()
         return

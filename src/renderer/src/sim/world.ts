@@ -201,6 +201,10 @@ export class SimWorld {
       // Fast, thin objects must not tunnel through walls.
       settings.mMotionQuality = J.EMotionQuality_LinearCast
       if (this.settings.twoD) settings.mAllowedDOFs = J.EAllowedDOFs_Plane2D
+      // Held to one axis: a trolley on a track, a lift in a shaft. Isolating one direction is how
+      // half of mechanics is taught, and there was no way to ask for it.
+      if (def.lock === 'x') settings.mAllowedDOFs = J.EAllowedDOFs_TranslationX | J.EAllowedDOFs_RotationZ
+      else if (def.lock === 'y') settings.mAllowedDOFs = J.EAllowedDOFs_TranslationY | J.EAllowedDOFs_RotationZ
     }
     const lv = this.v3(def.velocity)
     const av = this.v3(def.angularVelocity)
@@ -241,7 +245,8 @@ export class SimWorld {
       was.size.some((v, i) => v !== def.size[i]) ||
       was.material !== def.material ||
       was.massMode !== def.massMode ||
-      was.mass !== def.mass
+      was.mass !== def.mass ||
+      was.lock !== def.lock
     if (structural) return false
 
     const body = e.body

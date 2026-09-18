@@ -1,11 +1,13 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Box, Circle, Cone, Cylinder, Minus, Pill, Plus, RectangleHorizontal, RotateCcw, Trash2, Triangle } from 'lucide-react'
+import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, Trash2, Triangle, Undo2 } from 'lucide-react'
+import { useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
 import { massOf, useSandbox } from '../sim/store'
-import { GRAVITY_PRESETS, type ShapeKind } from '../sim/types'
+import { DEFAULT_WORLD, GRAVITY_PRESETS, type ShapeKind } from '../sim/types'
+import { launchVelocity, PRESETS } from '../sim/presets'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
 
@@ -87,6 +89,8 @@ export function Sandbox() {
             thing on the panel to read. */}
         <span className="normal-case tracking-normal tabular-nums text-zinc-300">t = {engineTime.toFixed(2)} s</span>
       </div>
+
+      <Presets />
 
       <div className="flex flex-wrap gap-1.5 px-2 pb-2">
         {ADD.map((a) => (
@@ -254,6 +258,25 @@ export function Sandbox() {
             <label title="Draw the path it takes, so a projectile leaves its parabola behind">Leave a trail</label>
             <input type="checkbox" checked={!!sel.trace} onChange={(e) => update(sel.id, { trace: e.target.checked })} />
           </div>
+          {sel.motion === 'dynamic' && (
+            <div className="prop-row">
+              <label title="Hold it to one direction, the way a trolley is held to a track">Moves along</label>
+              <div className="seg">
+                {(
+                  [
+                    ['free', 'Any way'],
+                    ['x', 'x only'],
+                    ['y', 'y only']
+                  ] as const
+                ).map(([k, l]) => (
+                  <button key={k} className={(sel.lock ?? 'free') === k ? 'on' : ''} onClick={() => update(sel.id, { lock: k })}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {sel.motion === 'dynamic' && <Launcher id={sel.id} />}
         </>
       )}
 
@@ -356,6 +379,7 @@ export function Sandbox() {
         >
           <RotateCcw size={13} /> Reset
         </button>
+        <UndoButton />
       </div>
     </div>
   )
@@ -408,5 +432,80 @@ function EnergyReadout() {
       ))}
       <div className="px-3 pt-1 text-[11px] text-zinc-500">Heights are measured from the top of the floor.</div>
     </>
+  )
+}
+
+/**
+ * Experiments to start from. A blank floor with a ball on it is not a starting point for someone
+ * who has never opened a physics simulator; every one of these is a question with an answer.
+ */
+function Presets() {
+  const setScene = useSandbox((s) => s.setScene)
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="px-2 pb-1">
+      <button className="btn h-7 w-full justify-start" onClick={() => setOpen((v) => !v)} title="Ready-made experiments">
+        <Beaker size={13} /> Start from an experiment
+        <ChevronDown size={13} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-1 flex flex-col gap-1">
+          {PRESETS.map((p) => (
+            <button
+              key={p.id}
+              className="rounded-md border border-[var(--line-2)] px-2 py-1.5 text-left hover:bg-[#26282d]"
+              onClick={() => {
+                const built = p.build()
+                setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) })
+                setOpen(false)
+              }}
+            >
+              <div className="font-semibold text-zinc-100">{p.label}</div>
+              <div className="text-[11.5px] leading-snug text-zinc-400">{p.about}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Launch at an angle. Working out vₓ = v cos θ and v_y = v sin θ by hand before you can even
+ * start the simulation is exactly the arithmetic the simulator is supposed to do for you — and
+ * the components are shown, so it is still a lesson rather than a black box.
+ */
+function Launcher({ id }: { id: string }) {
+  const update = useSandbox((s) => s.updateBody)
+  const [speed, setSpeed] = useState(12)
+  const [angle, setAngle] = useState(45)
+  const v = launchVelocity(speed, angle)
+  return (
+    <div className="prop-row">
+      <label title="Set the velocity from a speed and an angle">Launch</label>
+      <div className="flex flex-wrap items-center gap-1">
+        <NumField value={speed} onChange={setSpeed} />
+        <span className="text-zinc-500">m/s at</span>
+        <NumField value={angle} onChange={setAngle} />
+        <span className="text-zinc-500">°</span>
+        <button className="btn" onClick={() => update(id, { velocity: v })}>
+          <Rocket size={12} /> Set
+        </button>
+        <div className="w-full pt-0.5 text-[11.5px] tabular-nums text-zinc-500">
+          vₓ = {v[0].toFixed(2)} m/s · v_y = {v[1].toFixed(2)} m/s
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Taking back the last change. Deleting the wrong object used to mean building it again. */
+function UndoButton() {
+  const past = useSandbox((s) => s.past)
+  const undo = useSandbox((s) => s.undo)
+  return (
+    <button className="btn" disabled={past.length === 0} onClick={undo} title="Undo the last change to the objects (Ctrl+Z)">
+      <Undo2 size={13} /> Undo
+    </button>
   )
 }
