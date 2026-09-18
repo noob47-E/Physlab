@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { classifyPolygon, recognizeStroke } from '../src/renderer/src/math/shapes'
 import { decompose } from '../src/renderer/src/math/decompose'
 import { polygonArea } from '../src/renderer/src/math/geometry'
-import type { V3 } from '../src/renderer/src/math/vec'
+import { angleBetween, dist, sub, type V3 } from '../src/renderer/src/math/vec'
+import { pointAtAngle, pointAtLength } from '../src/renderer/src/math/setMeasure'
 
 const P = (...xy: number[]): V3[] => {
   const out: V3[] = []
@@ -137,5 +138,46 @@ describe('decompose', () => {
     const first = decompose(trap).parts.map((p) => p.cls.kind).join()
     const second = decompose(trap, 'basic', 1).parts.map((p) => p.cls.kind).join()
     expect(second).not.toBe(first)
+  })
+})
+
+describe('driving a drawing from its measurements', () => {
+  it('moves the far end so the length is what was typed', () => {
+    const a: V3 = [0, 0, 0]
+    const b: V3 = [3, 4, 0]
+    const moved = pointAtLength(a, b, 10)!
+    expect(dist(a, moved)).toBeCloseTo(10, 9)
+    // It slid along the line it was already on, so the drawing keeps its shape.
+    expect(moved[0]).toBeCloseTo(6, 9)
+    expect(moved[1]).toBeCloseTo(8, 9)
+  })
+
+  it('refuses a length it cannot give', () => {
+    expect(pointAtLength([0, 0, 0], [0, 0, 0], 5)).toBeNull()
+    expect(pointAtLength([0, 0, 0], [1, 0, 0], 0)).toBeNull()
+    expect(pointAtLength([0, 0, 0], [1, 0, 0], NaN)).toBeNull()
+  })
+
+  it('turns the free arm to the angle that was typed, keeping its length', () => {
+    const vertex: V3 = [1, 1, 0]
+    const fixed: V3 = [4, 1, 0]
+    const moving: V3 = [1, 3, 0]
+    const wanted = Math.PI / 6
+    const turned = pointAtAngle(vertex, fixed, moving, wanted)!
+    expect(angleBetween(sub(fixed, vertex), sub(turned, vertex))).toBeCloseTo(wanted, 9)
+    // The arm is the same length as it was; only its direction changed.
+    expect(dist(vertex, turned)).toBeCloseTo(dist(vertex, moving), 9)
+  })
+
+  it('keeps a flat drawing flat', () => {
+    const turned = pointAtAngle([0, 0, 0], [2, 0, 0], [0, 2, 0], Math.PI / 3)!
+    expect(turned[2]).toBeCloseTo(0, 12)
+  })
+
+  it('still turns an arm that is folded back on the other one', () => {
+    // The two arms point the same way, so there is no plane between them to turn in.
+    const turned = pointAtAngle([0, 0, 0], [2, 0, 0], [1, 0, 0], Math.PI / 2)
+    expect(turned).not.toBeNull()
+    expect(angleBetween([2, 0, 0], sub(turned!, [0, 0, 0]))).toBeCloseTo(Math.PI / 2, 9)
   })
 })

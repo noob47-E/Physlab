@@ -238,3 +238,13 @@ export function toDMS(deg: number): string {
   }
   return `${sign}${D}°${M}'${fmt(S, 2)}"`
 }
+
+/**
+ * The inverse of `measureValue`: a number as the student typed it, in whatever unit is on screen,
+ * turned back into the world value the scene stores. Typing a measurement to set it needs this,
+ * and it has to be the exact mirror of the display or the drawing will drift a little each time.
+ */
+export function worldValue(shown: number, kind: MeasureKind, s: MeasureSettings): number {
+  if (kind === 'angle') return angleTo(shown, s.angleUnit)
+  return shown / Math.pow(s.unitPerSquare, DIM[kind])
+}

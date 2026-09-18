@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { ListOrdered } from 'lucide-react'
-import { useScene } from '../core/store'
+import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { distanceToLineLike, footOfPerpendicular, lineEquation, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
-import { fmt, fmtIJK, fmtPoint, formatMeasure } from '../math/format'
+import { fmt, fmtIJK, fmtPoint, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
+import { pointAtAngle, pointAtLength } from '../math/setMeasure'
 import * as VS from '../math/vectorSolver'
 import { visualizeSolution } from '../core/visualize'
 import { ShapeInfo } from './ShapeInfo'
@@ -12,7 +14,18 @@ import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
 
-type Row = { label: string; value: number | string; kind?: 'num' | 'length' | 'area' | 'angle' | 'text'; accent?: boolean }
+type Row = {
+  label: string
+  value: number | string
+  kind?: 'num' | 'length' | 'area' | 'angle' | 'text'
+  accent?: boolean
+  /**
+   * Set when PhysLab can make the value be whatever is typed — a length whose far end is a free
+   * point, an angle whose arm can turn. Rows without it stay read-only, because a measurement
+   * that is a consequence of other things must not pretend it can be dictated.
+   */
+  set?: (value: number) => void
+}
 type Get = (id: ObjId) => Computed | undefined
 
 function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>): { title: string; rows: Row[] }[] {
@@ -52,7 +65,29 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       const b = add(a, c.line.d)
       const eq = lineEquation(a, b)
       const rows: Row[] = []
-      if (c.type === 'segment') rows.push({ label: 'Length', value: len(c.line.d), kind: 'length', accent: true }, { label: 'Midpoint', value: fmtPoint(mid(a, b)), kind: 'text' })
+      if (c.type === 'segment') {
+        // A length can be typed when the far end is a point PhysLab is free to move: the end
+        // slides along the line it is already on, so the drawing keeps its direction.
+        const seg = o.type === 'segment' ? o : null
+        const movable = seg && isFreePoint(objects[seg.b]) ? seg.b : seg && isFreePoint(objects[seg.a]) ? seg.a : null
+        const anchorAt = movable === seg?.b ? a : b
+        const endAt = movable === seg?.b ? b : a
+        rows.push(
+          {
+            label: 'Length',
+            value: len(c.line.d),
+            kind: 'length',
+            accent: true,
+            set: movable
+              ? (world) => {
+                  const to = pointAtLength(anchorAt, endAt, world)
+                  if (to) movePoint(movable, to)
+                }
+              : undefined
+          },
+          { label: 'Midpoint', value: fmtPoint(mid(a, b)), kind: 'text' }
+        )
+      }
       rows.push(
         { label: 'Slope m', value: Number.isFinite(eq.slope) ? eq.slope : 'vertical (undefined)', kind: Number.isFinite(eq.slope) ? 'num' : 'text' },
         { label: 'Inclination', value: eq.inclination, kind: 'angle' },
@@ -118,18 +153,45 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       rows.push({ label: 'Perimeter', value: rows.reduce((s, r) => s + (r.value as number), 0), kind: 'length' }, { label: 'Area', value: polygonArea(pts), kind: 'area', accent: true })
       return [{ title: `Polygon ${o.name}`, rows }]
     }
-    case 'angle':
+    case 'angle': {
+      // Typing an angle turns whichever arm is free about the vertex, keeping its length. If both
+      // arms are fixed points, the angle is a consequence of the drawing and stays read-only.
+      const ang = o.type === 'angle' ? o : null
+      const vertexAt = ang ? get(ang.vertex) : undefined
+      const turn =
+        ang && vertexAt?.type === 'point'
+          ? isFreePoint(objects[ang.b])
+            ? { move: ang.b, fixed: ang.a }
+            : isFreePoint(objects[ang.a])
+              ? { move: ang.a, fixed: ang.b }
+              : null
+          : null
+      const at = (id: ObjId): V3 | null => {
+        const p = get(id)
+        return p?.type === 'point' ? p.p : null
+      }
+      const setAngle =
+        turn && vertexAt?.type === 'point'
+          ? (world: number) => {
+              const fixed = at(turn.fixed)
+              const moving = at(turn.move)
+              if (!fixed || !moving) return
+              const to = pointAtAngle(vertexAt.p, fixed, moving, world)
+              if (to) movePoint(turn.move, to)
+            }
+          : undefined
       return [
         {
           title: `Angle ${o.name}`,
           rows: [
-            { label: 'Value', value: c.value, kind: 'angle', accent: true },
+            { label: 'Value', value: c.value, kind: 'angle', accent: true, set: setAngle },
             { label: 'In radians', value: c.value },
             { label: 'Supplement (180° − θ)', value: Math.PI - c.value, kind: 'angle' },
             { label: 'Complement (90° − θ)', value: Math.PI / 2 - c.value, kind: 'angle' }
           ]
         }
       ]
+    }
     case 'number':
       return [{ title: `Number ${o.name}`, rows: [{ label: 'Value', value: c.value, accent: true }] }]
     default:
@@ -221,7 +283,17 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
     <>
       <div className="k">{row.label}</div>
       <div className={`v ${row.accent ? 'font-semibold text-white' : ''}`}>
-        {show(row.value)}
+        {/* Typed in whatever unit is on screen — centimetres, degrees — and converted back to the
+            world value the scene stores, or a drawing in cm would jump by a factor of ten. */}
+        {row.set && typeof row.value === 'number' ? (
+          <EditableValue
+            value={measureValue(row.value, k, settings)}
+            suffix={unitSuffix(k, settings)}
+            onSet={(shown) => row.set!(worldValue(shown, k, settings))}
+          />
+        ) : (
+          show(row.value)
+        )}
         {Math.abs(delta) > 1e-9 && (
           <span className={`ml-2 text-[11px] ${delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             Δ {delta > 0 ? '+' : '−'}
@@ -380,4 +452,57 @@ export function Measurements() {
       ))}
     </div>
   )
+}
+
+/**
+ * A measurement you can type into. It shows the value in whatever unit the drawing is using, and
+ * hands back the number as typed — the caller converts it, because only the caller knows whether
+ * it is looking at a length in centimetres or an angle in degrees.
+ */
+function EditableValue({ value, suffix, onSet }: { value: number; suffix: string; onSet: (shown: number) => void }) {
+  const [text, setText] = useState('')
+  const [editing, setEditing] = useState(false)
+  const shown = editing ? text : fmt(value, 4)
+  const commit = () => {
+    setEditing(false)
+    const raw = text.trim().replace(/−/g, '-')
+    if (!raw) return
+    const v = Number(raw)
+    if (Number.isFinite(v)) onSet(v)
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        className="field num h-5 w-20 px-1 py-0"
+        value={shown}
+        title="Type a value and the drawing moves to match"
+        onFocus={(e) => {
+          setEditing(true)
+          setText(fmt(value, 4).replace(/−/g, '-'))
+          e.target.select()
+        }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'Escape') {
+            setEditing(false)
+            ;(e.target as HTMLInputElement).blur()
+          }
+          e.stopPropagation()
+        }}
+      />
+      <span className="text-zinc-500">{suffix.trim()}</span>
+    </span>
+  )
+}
+
+/** A point PhysLab may move: one that was placed, not one worked out from other objects. */
+const isFreePoint = (o: SceneObject | undefined): boolean => !!o && o.type === 'point' && o.def.kind === 'free'
+
+/** Puts a free point somewhere, which is what typing a measurement comes down to. */
+function movePoint(id: ObjId, to: V3): void {
+  scene().updateObject(id, (d) => {
+    if (d.type === 'point' && d.def.kind === 'free') d.def.p = to
+  })
 }

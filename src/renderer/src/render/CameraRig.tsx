@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { MapControls, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three/webgpu'
@@ -52,10 +52,31 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
   return { min, max }
 }
 
+/** True while Ctrl is held, so the wheel can zoom in small steps when a scale has to be exact. */
+function useFineZoom(): boolean {
+  const [fine, setFine] = useState(false)
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => e.key === 'Control' && setFine(true)
+    const up = (e: KeyboardEvent) => e.key === 'Control' && setFine(false)
+    // Alt-tabbing away with Ctrl held would otherwise leave the fine zoom stuck on.
+    const blur = () => setFine(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
+    }
+  }, [])
+  return fine
+}
+
 export function CameraRig() {
   const viewMode = useScene((s) => s.viewMode)
   const mode = useApp((s) => s.mode)
   const sideView = useSandbox((s) => s.sideView)
+  const fineZoom = useFineZoom()
   const { camera, size, controls } = useThree()
   const command = useCameraCommand()
   const last = useRef({ cx: NaN, cy: NaN, wpp: NaN, w: 0, h: 0 })
@@ -158,7 +179,9 @@ export function CameraRig() {
           enableRotate={false}
           screenSpacePanning
           zoomToCursor
-          zoomSpeed={1.2}
+          // A notch of the wheel used to jump; this is a drawing with measurements on it, so
+          // getting the scale you want matters. Hold Ctrl for a finer step still.
+          zoomSpeed={fineZoom ? 0.15 : 0.6}
           mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }}
           minZoom={0.05}
           maxZoom={20000}
