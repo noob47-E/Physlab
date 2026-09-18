@@ -54,6 +54,15 @@ tests/             vitest, no DOM — pure logic only
   shape it creates: free the settings early and the body's shape goes with it, silently. Hull shapes
   (ramp, cone) are handed back with their settings and freed in `addBody()` once the body holds a
   reference. A returned `BodyID` is a temporary — keep the `Body`. Only one `JoltInterface` may exist.
+- **Attach a constraint in `LocalToBodyCOM`, never `WorldSpace`.** Handing a distance constraint the
+  bodies' current world positions as its attachment points bakes those absolute points in, and the
+  constraint then pins both bodies where they stood: a *slack* string held a ball motionless in
+  mid-air half a metre below its pivot, and a rod between two dynamic bodies did nothing at all.
+  Points of `[0,0,0]` in each body's own frame join their centres and behave. The settings must also
+  outlive `Create()` — same ownership rule as `ShapeSettings`.
+- **Rolling resistance does not exist in Jolt.** A sphere on a level floor rolls until the scene is
+  closed. `world.ts` applies a μr·mg·r torque against the spin, but only while `touching` says the
+  body is in contact — the contact listener's `OnContactPersisted` is what fills that in.
 - **The canvas renders on demand** (`frameloop="demand"`). Nothing is drawn unless something calls
   `invalidate()`. The first frame is drawn with React Three Fiber's **stand-in camera at zoom 1**, so
   anything derived from the camera on that frame is wrong; the real orthographic camera arrives a

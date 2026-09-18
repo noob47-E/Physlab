@@ -1,3 +1,4 @@
+| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Join any two with a **rod, string or spring**. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
 # PhysLab
 
 A general math and physics engine for students and teachers: vectors, shapes and geometry,
@@ -8,7 +9,7 @@ Everything runs offline.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.2.5.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.3.0.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
