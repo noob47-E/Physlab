@@ -11,6 +11,7 @@ import { SimWorld, STRIDE } from '../sim/world'
 import type { BodyDef, BodyState, LinkKind } from '../sim/types'
 import type { V3 } from '../math/vec'
 import { energyOf, groundTopOf } from '../sim/energy'
+import { sampleOf, type Sample } from '../sim/recording'
 import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
 import { toScreen } from './cameraUtils'
@@ -254,11 +255,16 @@ export function SandboxView() {
       if (w.time - published.current > 0.1) {
         published.current = w.time
         const live: Record<string, BodyState> = {}
+        const samples: Record<string, Sample> = {}
         for (const d of bodies) {
           const s = w.state(d.id)
-          if (s) live[d.id] = s
+          if (!s) continue
+          live[d.id] = s
+          // The same tick records the run, so a student can plot what they just watched.
+          if (d.motion === 'dynamic') samples[d.id] = sampleOf(d, s, w.time, world.gravity, groundTop)
         }
         useSandbox.setState({ live })
+        useSandbox.getState().record(samples)
       }
       if (check.current && Math.floor(w.time) !== check.current.last) {
         check.current.last = Math.floor(w.time)

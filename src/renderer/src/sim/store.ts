@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import { materialById } from './materials'
 import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactEvent, type Link, type LinkKind, type ShapeKind, type WorldSettings } from './types'
 import { SimWorld } from './world'
+import { addSample, type Sample } from './recording'
 
 let counter = 0
 const nextId = () => `sb${Date.now().toString(36)}${(counter++).toString(36)}`
@@ -26,6 +27,8 @@ export interface SandboxState {
   /** Camera flattened to a straight-on side view, so a scene reads like a textbook figure. */
   sideView: boolean
   links: Link[]
+  /** Readings taken while the run plays, per body: the raw material of a graph or a table. */
+  recording: Record<BodyId, Sample[]>
   /** Previous versions of the object list, newest last. Live positions are not in here: undo
    *  puts the objects back as they were defined, which is what Reset does too. */
   past: { bodies: BodyDef[]; links: Link[] }[]
@@ -41,6 +44,8 @@ export interface SandboxState {
   addLink: (a: BodyId, b: BodyId, kind: LinkKind) => void
   updateLink: (id: string, patch: Partial<Link>) => void
   removeLink: (id: string) => void
+  record: (samples: Record<BodyId, Sample>) => void
+  clearRecording: () => void
   setSideView: (on: boolean) => void
   /** Step back one edit. The sandbox had no history at all, so a wrong delete was final. */
   undo: () => void
@@ -116,6 +121,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   live: {},
   sideView: true,
   links: [],
+  recording: {},
   past: [],
 
   addBody: (shape, at) => {
@@ -184,6 +190,13 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     remember(set, get)
     set({ links: get().links.filter((l) => l.id !== id) })
   },
+  record: (samples) => {
+    const before = get().recording
+    const next: Record<BodyId, Sample[]> = { ...before }
+    for (const [id, s] of Object.entries(samples)) next[id] = addSample(before[id] ?? [], s)
+    set({ recording: next })
+  },
+  clearRecording: () => set({ recording: {} }),
   setSideView: (sideView) => set({ sideView }),
 
   undo: () => {

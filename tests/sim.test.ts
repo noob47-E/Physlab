@@ -5,6 +5,7 @@ import { SimWorld } from '../src/renderer/src/sim/world'
 import type { BodyDef, BodyState, Link, WorldSettings } from '../src/renderer/src/sim/types'
 import { energyOf, systemEnergy, systemMomentum } from '../src/renderer/src/sim/energy'
 import { launchVelocity, PRESETS } from '../src/renderer/src/sim/presets'
+import { addSample, MAX_SAMPLES, RECORDING_COLUMNS, rowsFor, sampleOf, type Sample } from '../src/renderer/src/sim/recording'
 import type { V3 } from '../src/renderer/src/math/vec'
 
 const G = 9.81
@@ -518,5 +519,65 @@ describe('things joined together', () => {
     }
     // It swung down through the bottom of its arc.
     expect(lowest).toBeLessThan(3.0)
+  })
+})
+
+describe('turning a run into readings', () => {
+  const state = (over: Partial<BodyState> = {}): BodyState => ({
+    position: [0, 0, 0],
+    rotation: [0, 0, 0, 1],
+    velocity: [0, 0, 0],
+    angularVelocity: [0, 0, 0],
+    mass: 1,
+    asleep: false,
+    ...over
+  })
+
+  it('records height above the floor, not above the origin', () => {
+    const s = sampleOf(body({ mass: 1 }), state({ position: [2, 5, 0], velocity: [3, 0, 0] }), 1.5, 9.81, 1)
+    expect(s.t).toBe(1.5)
+    expect(s.y).toBeCloseTo(4, 9)
+    expect(s.x).toBeCloseTo(2, 9)
+    expect(s.v).toBeCloseTo(3, 9)
+    expect(s.ke).toBeCloseTo(4.5, 9)
+  })
+
+  it('keeps the newest readings once the run is long', () => {
+    let list: Sample[] = []
+    for (let i = 0; i < MAX_SAMPLES + 50; i++) list = addSample(list, sampleOf(body(), state(), i / 10, 9.81, 0))
+    expect(list).toHaveLength(MAX_SAMPLES)
+    // The oldest have gone and the latest is still the latest.
+    expect(list[0].t).toBeGreaterThan(0)
+    expect(list[list.length - 1].t).toBeCloseTo((MAX_SAMPLES + 49) / 10, 9)
+  })
+
+  it('gives a table a row per reading, rounded to what a measurement can carry', () => {
+    const samples = [0, 1, 2].map((i) => sampleOf(body(), state({ position: [i / 3, 1 / 3, 0] }), i / 3, 9.81, 0))
+    const rows = rowsFor(samples)
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toHaveLength(RECORDING_COLUMNS.length)
+    // 0.3333333333333333 is not a reading anyone took.
+    expect(String(rows[1][2])).toBe('0.33333')
+  })
+
+  it('records a real fall that Lab Data can find g from', async () => {
+    // What the "Send to Lab Data" button hands over: y against t for a dropped ball. Fitting
+    // y against t² should give a gradient of −g/2.
+    const world = await makeWorld()
+    const ball = body({ position: [0, 40, 0], mass: 1 })
+    world.addBody(ball)
+    let list: Sample[] = []
+    for (let i = 0; i < 12; i++) {
+      run(world, 0.1)
+      list = addSample(list, sampleOf(ball, world.state(ball.id)!, world.time, G, 0))
+    }
+    const tsq = list.map((s) => s.t * s.t)
+    const ys = list.map((s) => s.y)
+    const n = tsq.length
+    const meanX = tsq.reduce((a, b) => a + b, 0) / n
+    const meanY = ys.reduce((a, b) => a + b, 0) / n
+    const slope = tsq.reduce((acc, x, i) => acc + (x - meanX) * (ys[i] - meanY), 0) / tsq.reduce((acc, x) => acc + (x - meanX) ** 2, 0)
+    expect(-2 * slope).toBeGreaterThan(0.97 * G)
+    expect(-2 * slope).toBeLessThan(1.03 * G)
   })
 })

@@ -1,6 +1,6 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Link2, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, Trash2, Triangle, Undo2, X } from 'lucide-react'
+import { Beaker, Box, ChevronDown, Circle, Cone, Cylinder, Link2, Minus, Pill, Plus, RectangleHorizontal, Rocket, RotateCcw, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, MATERIALS } from '../sim/materials'
@@ -8,6 +8,11 @@ import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy
 import { massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type LinkKind, type ShapeKind } from '../sim/types'
 import { launchVelocity, PRESETS } from '../sim/presets'
+import { QUANTITIES, quantity, RECORDING_COLUMNS, rowsFor, type QuantityKey, type Sample } from '../sim/recording'
+import { useLab } from '../lab/labStore'
+import type { LabTable } from '../lab/types'
+import { LabChart } from './LabChart'
+import { enterMode } from '../app/TopBar'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
 
@@ -283,6 +288,8 @@ export function Sandbox() {
       <Connections selected={selection} />
 
       <EnergyReadout />
+
+      <Recording />
 
       <div className="section-title mt-2">World</div>
       <div className="prop-row">
@@ -582,4 +589,83 @@ function Connections({ selected }: { selected: string | null }) {
       ))}
     </>
   )
+}
+
+/**
+ * The run, as a graph and then as readings.
+ *
+ * This is where the Sandbox stops being a demonstration. Everything the simulation knows is
+ * sampled ten times a second; the graph shows it while it happens, and "Send to Lab Data" hands
+ * the same numbers to the table that already knows how to fit a line and read a gradient. Drop a
+ * ball, send it over, plot y against t², and g falls out — without a single reading typed in.
+ */
+function Recording() {
+  const bodies = useSandbox((s) => s.bodies)
+  const recording = useSandbox((s) => s.recording)
+  const selection = useSandbox((s) => s.selection)
+  const clearRecording = useSandbox((s) => s.clearRecording)
+  const [key, setKey] = useState<QuantityKey>('y')
+
+  const moving = bodies.filter((b) => b.motion === 'dynamic')
+  const watched = moving.find((b) => b.id === selection) ?? moving[0]
+  const samples = watched ? (recording[watched.id] ?? []) : []
+  const q = quantity(key)
+  const xs = samples.map((s) => s.t)
+  const ys = samples.map((s) => s[key])
+
+  if (!watched) return null
+  return (
+    <>
+      <div className="section-title mt-2 flex items-center">
+        <span className="flex-1">Recording · {watched.name}</span>
+        <span className="normal-case tracking-normal text-zinc-500">{samples.length} readings</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 px-3">
+        <select className="field w-auto" value={key} onChange={(e) => setKey(e.target.value as QuantityKey)}>
+          {QUANTITIES.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+        <span className="text-zinc-500">against time</span>
+      </div>
+      {samples.length > 1 ? (
+        <div className="mt-1 px-1">
+          <LabChart xs={xs} ys={ys} fit={null} xLabel="t / s" yLabel={`${q.label} / ${q.unit}`} height={150} />
+        </div>
+      ) : (
+        <div className="px-3 pt-1 text-[11.5px] text-zinc-500">Press Play and the readings start arriving.</div>
+      )}
+      <div className="mt-1 flex flex-wrap gap-2 px-3">
+        <button
+          className="btn"
+          disabled={samples.length < 2}
+          title="Put these readings in the Lab Data table, ready to plot and fit"
+          onClick={() => {
+            useLab.getState().setTables([tableFrom(watched.name, samples)])
+            enterMode('lab')
+          }}
+        >
+          <TableProperties size={13} /> Send to Lab Data
+        </button>
+        <button className="btn" disabled={!samples.length} onClick={clearRecording}>
+          Clear readings
+        </button>
+      </div>
+    </>
+  )
+}
+
+/** The samples as a Lab Data table, with the columns named and carrying their units. */
+function tableFrom(name: string, samples: Sample[]): LabTable {
+  const columns = RECORDING_COLUMNS.map((c, i) => ({ id: `rc${i}`, name: c.name, unit: c.unit }))
+  return {
+    id: `rec${Date.now().toString(36)}`,
+    title: `${name} — from the Sandbox`,
+    columns,
+    rows: rowsFor(samples),
+    // Height against time to begin with; the student picks the pair they actually want.
+    plot: { x: columns[0].id, y: columns[2].id, fit: 'linear' }
+  }
 }
