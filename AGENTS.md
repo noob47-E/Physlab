@@ -8,9 +8,14 @@ next, and it records the things that are expensive to rediscover.
 [HISTORY.md](HISTORY.md) records how the project got here, version by version, including the bugs
 that produced the rules below.
 
-A maths and physics engine for students and teachers, built for one 11th-class student (Punjab
-Board) and shaped by what they asked for. Electron + React + TypeScript, three.js (WebGPU with a
-WebGL2 fallback), Jolt physics in WebAssembly, mathjs, MathLive, and Pyodide/SymPy in a worker.
+A maths and physics engine **for anyone learning maths and physics** — any student, any teacher,
+any level. It is not built for one syllabus, board or country, and nothing in it should assume one.
+It began with one 11th-class student and is shaped by what real use turns up, but that is where it
+started, not who it is for. (Rule 5 below says the same thing from the inside: features are modes,
+never grade levels — and never syllabus gates either.)
+
+Electron + React + TypeScript, three.js (WebGPU with a WebGL2 fallback), Jolt physics in
+WebAssembly, mathjs, MathLive, and Pyodide/SymPy in a worker.
 
 ## Rules that are not negotiable
 

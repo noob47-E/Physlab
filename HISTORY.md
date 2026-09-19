@@ -11,8 +11,12 @@ it came to exist.
 
 ## What PhysLab is
 
-A maths and physics engine for students and teachers, built by one 11th-class student following the
-Punjab Curriculum & Textbook Board syllabus, together with Claude.
+A maths and physics engine for anyone learning maths and physics — any student, any teacher, any
+level, anywhere. It is deliberately not tied to one syllabus, board or country.
+
+It was written by an 11th-class student together with Claude, and the first person to use it in
+anger was its author, which is why so much of what follows is driven by real complaints. That is
+where it started; it is not who it is for.
 
 It runs entirely offline as a Windows desktop application. There is no AI inside the product, no
 API keys, no cloud calls, no accounts, no ads, and no cost to the user. That was a design rule from
@@ -26,11 +30,11 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.3.2 (2026-09-19) |
-| Releases built | 10 |
-| Commits | 47 |
+| Current version | 0.3.3 (2026-09-19) |
+| Releases built | 11 |
+| Commits | 50 |
 | Source | 25,481 lines of TypeScript/TSX across 114 files, plus 996 lines of CSS |
-| Tests | 209, across 13 files, all pure logic with no browser |
+| Tests | 238, across 14 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
 | Dock panels | 16 |
 | Licence | GPL-3.0 |
@@ -40,7 +44,7 @@ can be taken away from it later.
 
 ## The rules that shaped every decision
 
-These came from the student the project was built for, and they are repeated at the top of
+These came from the student who started it, and they are repeated at the top of
 `AGENTS.md` because almost every design argument was settled by one of them.
 
 1. **No AI in the product.** Stated explicitly and repeatedly. Everything offline.
@@ -253,6 +257,62 @@ persistent history for both the calculator and the Working panel, and `ModeDef.c
 claim the big middle area instead of the viewport.
 
 ---
+
+### 0.3.3 — the repairs · 2026-09-19
+
+Pure Math shipped with 209 passing tests and a panel that could not really be used. The student
+using it reported three things within minutes, and all three were real.
+
+**Backspace did nothing in any maths field.** `MathInput` called `stopPropagation()` on *every*
+key, in the capture phase, on the `<math-field>` host. MathLive does its real keyboard work on an
+element inside its own shadow root, also in the capture phase, so the event was killed before
+MathLive ever saw it. Plain typing survived by accident, through a native fallback. Backspace,
+Delete, the arrow keys, Home and End did not. Only a plain Enter is taken now.
+
+This was **not a 0.3.2 regression** — it had been broken in the Calculator all along, hidden by its
+on-screen `DEL` button, which calls `deleteBackward` directly and never touches the keyboard. The
+Working panel has no such button, so it exposed a bug that was already there. The guided tour was
+also quietly taking Enter and the arrow keys from whatever was being typed in.
+
+**Pressing a job button corrupted the expression.** The panel wrote the *linear* form of the
+question back into the field, and MathLive reads whatever it is handed as LaTeX, so `x^(2)` came
+out as a stray bracket in the middle of the student's algebra. The store now keeps both forms and
+only ever hands the field the LaTeX that was actually typed.
+
+**Anything starting with a minus would not factorise.** A guard skipped pulling out a bare `−1`,
+after which both the middle-term split and the root search gave up, so `−x² + 5x − 6` was reported
+as not factorisable at all when it is plainly `−(x − 2)(x − 3)`.
+
+**A typed power made an expression unreadable.** Converting natural maths to linear form turns `x²`
+into `x^(2)`, and the exponent check demanded a bare number, so any expression typed with a power
+was refused outright. This is most of what "it is super glitchy" meant.
+
+**Partial fractions could display a wrong answer under a green tick.** Signs were patched with a
+search-and-replace over the finished string, which negated a whole fraction while only removing the
+minus from the first term of its numerator. `1/((x+1)(x²+1))` was shown as something that comes to
+0 at x = 0 instead of 1. The self-check passed because it recombined the internal coefficients and
+never looked at the string on screen.
+
+Signs are now built as each piece is made. More importantly, the check reads the **displayed
+LaTeX** back and evaluates it at several exact points — it verifies what the student actually sees,
+which is the only version of that promise worth making.
+
+Also repaired: the SymPy fallback for Solve never worked (it sent `equations` where the worker reads
+`eqs`, so every non-quadratic silently produced nothing), partial fractions fell back to `simplify`
+instead of `apart`, `hcf(x², x³)` returned 1, a fractional discriminant displayed `√(15/4)` as
+`√15`, three searches had no iteration ceiling and could freeze the window, the complex argument
+used raw `toFixed`, and a buggy `isPrime` was dead code and was deleted.
+
+**Why nothing caught any of it.** Every one of these bugs lived on a **boundary** — TypeScript to
+Python, a store to a web component, internal numbers to the displayed string. The suite tested each
+side and never the join. The new tests are joins: nothing in linear syntax may reach a maths field,
+the global shortcut must stand down for a `MATH-FIELD`, the TypeScript operation list is checked
+against the Python worker's source *read as text*, every bounded search must finish inside a
+timeout so a lost ceiling fails instead of hanging, and 400 generated products are factorised and
+multiplied back — each one together with its negation.
+
+238 tests. Verified in the running app rather than only in the suite: the keys, the field surviving
+every button, both repaired answers correct with their ticks, no KaTeX errors, and the light theme.
 
 ## What is in it today
 

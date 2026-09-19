@@ -11,7 +11,7 @@ added, and the bugs that were worth remembering.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.3.2.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.3.3.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
