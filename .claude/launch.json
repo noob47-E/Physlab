@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "physlab-web",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeExecutable": "node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js", "--config", "vite.web.config.ts"],
       "port": 5199,
       "autoPort": true
