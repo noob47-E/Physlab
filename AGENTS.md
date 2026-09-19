@@ -5,8 +5,8 @@ next, and it records the things that are expensive to rediscover.
 
 ## What this is
 
-A maths and physics engine for students and teachers, built for one 11th-class student (Punjab
-Board) and shaped by what they asked for. Electron + React + TypeScript, three.js (WebGPU with a
+A maths and physics engine for students and teachers, built for students and 
+shaped by what they asked for. Electron + React + TypeScript, three.js (WebGPU with a
 WebGL2 fallback), Jolt physics in WebAssembly, mathjs, MathLive, and Pyodide/SymPy in a worker.
 
 ## Rules that are not negotiable
