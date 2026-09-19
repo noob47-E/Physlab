@@ -24,8 +24,10 @@ import {
   type Rat
 } from './rat'
 import { NotPolynomial, exprTex, parseExpr, parseFraction, varsOf, type Expr } from './mono'
+import { MAX_TRIAL } from './limits'
 import { pDeg, pTex, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
 import { factorsOf } from './factor'
+import { texAngle } from '../format'
 import { Steps, failed, type Working } from './work'
 
 /** An exact complex number: both parts are fractions. */
@@ -51,11 +53,18 @@ export function cxTex(z: Cx): string {
   return `${rTex(z.re)} ${rIsNeg(z.im) ? '-' : '+'} ${body}`
 }
 
-/** Largest square taken out of a root: 72 becomes 6√2. */
-export function simplifySurd(n: bigint): { out: bigint; in: bigint } {
+/**
+ * Largest square taken out of a root: 72 becomes 6√2.
+ *
+ * Gives up after MAX_TRIAL divisors and says so. √n left unsimplified is still the right
+ * number, which is what matters — an answer that is correct but untidy beats a frozen window.
+ */
+export function simplifySurd(n: bigint): { out: bigint; in: bigint; tooBig?: boolean } {
   let out = 1n
   let rest = n < 0n ? -n : n
+  let steps = 0
   for (let d = 2n; d * d <= rest; d++) {
+    if (steps++ > MAX_TRIAL) return { out: 1n, in: n < 0n ? -n : n, tooBig: true }
     while (rest % (d * d) === 0n) {
       out *= d
       rest /= d * d
@@ -69,6 +78,19 @@ function rootTex(n: bigint): string {
   const { out, in: inner } = simplifySurd(n)
   if (inner === 1n) return String(out)
   return out === 1n ? `\\sqrt{${inner}}` : `${out}\\sqrt{${inner}}`
+}
+
+/**
+ * √(p/q) as LaTeX, for a fraction under the root.
+ *
+ * Uses √(p/q) = √(pq)/q, the same rule the roots themselves are built with a few steps below.
+ * The displayed step used to drop the denominator entirely and claim √(15/4) = √15.
+ */
+function surdOf(a: Rat): string {
+  const { out, in: inner } = simplifySurd(a.n * a.d)
+  const coef = rat(out, a.d)
+  if (inner === 1n) return rTex(coef)
+  return `${rIsOne(coef) ? '' : rTex(coef)}\\sqrt{${inner}}`
 }
 
 // ---------------------------------------------------------------- powers of i
@@ -194,11 +216,13 @@ function finishComplex(title: string, input: string, s: Steps, z: Cx): Working {
     `|z| = \\sqrt{${rTex(rMul(z.re, z.re))} + ${rTex(rMul(z.im, z.im))}} = ${modTex}`,
     '|a+bi| = \\sqrt{a^2 + b^2}'
   )
-  const argDeg = (Math.atan2(rNum(z.im), rNum(z.re)) * 180) / Math.PI
+  // texAngle rather than fmtAngle: fmtAngle honours the compass-bearing notation setting, and
+  // "N 36.87° E" is not a thing anyone writes for the argument of a complex number.
+  const argTex = texAngle(Math.atan2(rNum(z.im), rNum(z.re)), 'deg', 2)
   const answers = [{ label: 'Answer', tex: cxTex(z) }]
   if (!cxIsReal(z)) {
     answers.push({ label: 'Modulus', tex: modTex })
-    answers.push({ label: 'Argument', tex: `${argDeg.toFixed(2)}^\\circ` })
+    answers.push({ label: 'Argument', tex: argTex })
     answers.push({ label: 'Conjugate', tex: cxTex(cxConj(z)) })
   }
   return {
@@ -288,7 +312,7 @@ export function solveQuadraticWorking(src: string): Working {
     )
     s.add(
       'As we know, the square root of a negative number is written with i.',
-      `\\sqrt{${rTex(disc)}} = \\sqrt{${rTex(rAbs(disc))} \\times (-1)} = ${rootTex(rAbs(disc).d === 1n ? rAbs(disc).n : rAbs(disc).n)}\\,i`,
+      `\\sqrt{${rTex(disc)}} = \\sqrt{${rTex(rAbs(disc))} \\times (-1)} = ${surdOf(rAbs(disc))}\\,i`,
       'i = \\sqrt{-1} \\;\\Rightarrow\\; \\sqrt{-k} = i\\sqrt{k}'
     )
   }

@@ -65,12 +65,25 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
     }
     if (!configure()) mf.addEventListener('mount', configure, { once: true })
     const onInput = () => cbs.current.onChange?.(mf.getValue('latex-unstyled'))
+    /**
+     * Only a plain Enter is taken. Everything else must reach MathLive.
+     *
+     * This used to call stopPropagation() on every key. MathLive does its real keyboard work on an
+     * element inside its own shadow root, also in the capture phase, so stopping the event on the
+     * host killed it before MathLive ever saw it: Backspace, Delete, the arrow keys, Home and End
+     * all did nothing, and only plain typing survived — through a native fallback, by luck.
+     *
+     * Nothing else needs the blanket stop either: the global shortcut handler already stands down
+     * for a MATH-FIELD target (app/keyTargets.ts), and events from the shadow root are retargeted
+     * to the host before they reach window.
+     */
     const onKey = (e: KeyboardEvent) => {
-      e.stopPropagation()
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        cbs.current.onEnter?.()
-      }
+      if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
+      // A field nobody is listening to should not swallow the key either.
+      if (!cbs.current.onEnter) return
+      e.preventDefault() // MathLive would otherwise start a new line
+      e.stopPropagation() // and the tour would treat it as "next step"
+      cbs.current.onEnter()
     }
     mf.addEventListener('input', onInput)
     mf.addEventListener('keydown', onKey, { capture: true })

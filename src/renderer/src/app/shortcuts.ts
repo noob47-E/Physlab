@@ -6,17 +6,9 @@ import { resetCamera } from '../render/viewState'
 import { useApp } from './modes'
 import { useSandbox } from '../sim/store'
 
-const isTyping = (e: KeyboardEvent) => {
-  const t = e.target as HTMLElement
-  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'MATH-FIELD' || t.isContentEditable
-}
+import { isActivatable, isTyping as typingIn } from './keyTargets'
 
-/** Controls that already turn Enter or Space into a click, so a shortcut must not steal the key. */
-const isActivatable = (t: HTMLElement) =>
-  t.tagName === 'BUTTON' ||
-  t.tagName === 'SUMMARY' ||
-  (t.tagName === 'A' && t.hasAttribute('href')) ||
-  ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'switch'].includes(t.getAttribute('role') ?? '')
+const isTyping = (e: KeyboardEvent) => typingIn(e.target as HTMLElement)
 
 export function useShortcuts() {
   useEffect(() => {

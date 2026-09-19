@@ -33,8 +33,15 @@ export interface JobDef {
   about: string
   /** Shown in the input box before anything is typed. */
   placeholder: string
-  /** A worked example the student can load with one tap. */
+  /** A worked example the student can load with one tap, in linear syntax for the engine. */
   example: string
+  /**
+   * The same example as LaTeX, for the maths field.
+   *
+   * The two are not interchangeable: writing `example` into the field would render its powers and
+   * slashes as literal characters, which is the bracket corruption this pair exists to avoid.
+   */
+  exampleLatex: string
   /** True when this job takes a list: "12, 18". */
   list?: boolean
 }
@@ -45,28 +52,32 @@ export const JOBS: JobDef[] = [
     label: 'Factorise',
     about: 'Break an expression into brackets, or a number into primes.',
     placeholder: '6x^2 + 7x - 3',
-    example: '6x^2 + 7x - 3'
+    example: '6x^2 + 7x - 3',
+    exampleLatex: '6x^2+7x-3'
   },
   {
     id: 'expand',
     label: 'Expand',
     about: 'Multiply the brackets out and collect like terms.',
     placeholder: '(2x + 3)(3x - 1)',
-    example: '(2x + 3)(3x - 1)'
+    example: '(2x + 3)(3x - 1)',
+    exampleLatex: '\\left(2x+3\\right)\\left(3x-1\\right)'
   },
   {
     id: 'divide',
     label: 'Divide',
     about: 'Long division of one expression by another.',
     placeholder: '(x^3 - 6x^2 + 11x - 6)/(x - 1)',
-    example: '(x^3 - 6x^2 + 11x - 6)/(x - 1)'
+    example: '(x^3 - 6x^2 + 11x - 6)/(x - 1)',
+    exampleLatex: '\\frac{x^3-6x^2+11x-6}{x-1}'
   },
   {
     id: 'partial',
     label: 'Partial fractions',
     about: 'Split one fraction into the A/(x−1) + B/(x+2) pieces.',
     placeholder: '(3x + 5)/((x + 1)(x + 2))',
-    example: '(3x + 5)/((x + 1)(x + 2))'
+    example: '(3x + 5)/((x + 1)(x + 2))',
+    exampleLatex: '\\frac{3x+5}{\\left(x+1\\right)\\left(x+2\\right)}'
   },
   {
     id: 'hcf',
@@ -74,6 +85,7 @@ export const JOBS: JobDef[] = [
     about: 'Highest common factor of numbers or expressions.',
     placeholder: '12, 18',
     example: '12, 18, 30',
+    exampleLatex: '12,\\ 18,\\ 30',
     list: true
   },
   {
@@ -82,6 +94,7 @@ export const JOBS: JobDef[] = [
     about: 'Lowest common multiple of numbers or expressions.',
     placeholder: '12, 18',
     example: '12, 18, 30',
+    exampleLatex: '12,\\ 18,\\ 30',
     list: true
   },
   {
@@ -89,28 +102,32 @@ export const JOBS: JobDef[] = [
     label: 'Prime factors',
     about: 'Split a whole number into its primes, with the division ladder.',
     placeholder: '360',
-    example: '360'
+    example: '360',
+    exampleLatex: '360'
   },
   {
     id: 'complex',
     label: 'Complex',
     about: 'Add, multiply or divide complex numbers, using i² = −1.',
     placeholder: '(2 + 3i)/(1 - i)',
-    example: '(2 + 3i)/(1 - i)'
+    example: '(2 + 3i)/(1 - i)',
+    exampleLatex: '\\frac{2+3i}{1-i}'
   },
   {
     id: 'solve',
     label: 'Solve',
     about: 'Solve a quadratic, real roots or complex ones.',
     placeholder: 'x^2 + 4x + 13 = 0',
-    example: 'x^2 + 4x + 13 = 0'
+    example: 'x^2 + 4x + 13 = 0',
+    exampleLatex: 'x^2+4x+13=0'
   },
   {
     id: 'factorComplex',
     label: 'Factorise with i',
     about: 'Factorise all the way down by allowing complex numbers.',
     placeholder: 'x^2 + 4',
-    example: 'x^4 - 16'
+    example: 'x^4 - 16',
+    exampleLatex: 'x^4-16'
   }
 ]
 

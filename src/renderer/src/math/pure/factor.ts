@@ -37,7 +37,7 @@ import {
 } from './mono'
 import {
   exprFromPoly,
-  findRationalRoot,
+  findRationalRootDetailed,
   pDeg,
   pDivMod,
   pMul,
@@ -46,6 +46,7 @@ import {
   polyFromExpr,
   type Poly
 } from './poly'
+import { MAX_TRIAL, TOO_BIG_TO_SEARCH } from './limits'
 import { Steps, failed, type Working } from './work'
 
 /** The exact k-th root of a fraction, or null. */
@@ -178,13 +179,22 @@ interface Ctx {
   s: Steps
   /** Every factor found so far, so each step can redraw the whole expression. */
   done: Expr[]
+  /** Set when a search gave up early, so "no factors" is never claimed on incomplete evidence. */
+  tooBig?: boolean
 }
 
-const productTex = (parts: Expr[]): string =>
+/** A lone factor of exactly -1 is written as the minus sign it is, not as "-1(...)". */
+const isMinusOne = (e: Expr): boolean => e.length === 1 && isConstant(e) && rIsNeg(e[0].c) && rIsOne(rAbs(e[0].c))
+
+const factorTex = (p: Expr): string => (isOneTerm(p) && isConstant(p) ? exprTex(p) : exprTexBracketed(p))
+
+const productTex = (parts: Expr[]): string => {
   // One piece on its own is just the expression; brackets only mean something beside another factor.
-  parts.length === 1
-    ? exprTex(parts[0])
-    : parts.map((p) => (isOneTerm(p) && isConstant(p) ? exprTex(p) : exprTexBracketed(p))).join('')
+  if (parts.length === 1) return exprTex(parts[0])
+  const lead = isMinusOne(parts[0]) ? '-' : ''
+  const rest = (lead ? parts.slice(1) : parts).map(factorTex).join('')
+  return `${lead}${rest}`
+}
 
 /** Show the expression as it now stands: the finished factors plus whatever is still being worked on. */
 function snapshot(ctx: Ctx, pending: Expr[]): string {
@@ -203,10 +213,16 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
   const ac = a.n * c.n
   const bb = b.n
 
-  // Two numbers that multiply to a·c and add to b.
+  // Two numbers that multiply to a·c and add to b. Bounded, because this runs on the window's
+  // own thread and a huge a·c would otherwise hang the app rather than merely take a while.
   let found: [bigint, bigint] | null = null
   const abs = ac < 0n ? -ac : ac
+  let steps = 0
   for (let d = 1n; d * d <= abs && !found; d++) {
+    if (steps++ > MAX_TRIAL) {
+      ctx.tooBig = true
+      break
+    }
     if (abs % d !== 0n) continue
     for (const p of [d, -d]) {
       const q = ac / p
@@ -222,6 +238,9 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
 
   const sign = (v: bigint): string => (v < 0n ? '-' : '+')
   const mag = (v: bigint): string => String(v < 0n ? -v : v)
+  // A coefficient of one is written by not writing it: "x + 4x", never "1x + 4x".
+  const coef = (v: bigint): string => (v === 1n || v === -1n ? '' : mag(v))
+  const signedTerm = (v: bigint): string => `${v < 0n ? '-' : ''}${coef(v)}${name}`
 
   ctx.s.add(
     `Multiply the first and last coefficients: ${a.n} × ${c.n} = ${ac}. Now find two numbers that multiply to ${ac} and add to ${bb}.`,
@@ -237,7 +256,7 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
       ]
     : []
   ctx.s.add(
-    `Write the middle term as ${p}${name} ${sign(q)} ${mag(q)}${name}.`,
+    `Write the middle term as ${signedTerm(p)} ${sign(q)} ${coef(q)}${name}.`,
     `${snapshot(ctx, [...pending, split as Expr])}`,
     undefined,
     'Nothing has changed in value — the middle term has only been written as two pieces.'
@@ -278,8 +297,12 @@ function peelRoot(e: Expr, ctx: Ctx): Expr[] | null {
   if (vars.length !== 1) return null
   const { poly, name } = polyFromExpr(e)
   if (pDeg(poly) < 3) return null
-  const { prim } = pPrimitive(poly)
-  const root = findRationalRoot(prim)
+  // The content has to be carried, not dropped: pPrimitive takes any numeric factor (including a
+  // sign) out of the polynomial, and a quotient built from the primitive alone multiplies back to
+  // the wrong thing. In practice commonFactor has already removed it, so this is belt and braces.
+  const { content, prim } = pPrimitive(poly)
+  const { root, tooBig } = findRationalRootDetailed(prim)
+  if (tooBig) ctx.tooBig = true
   if (!root) return null
   // A root p/q means (qx − p) is a factor; that keeps the coefficients whole.
   const divisor: Poly = pTrim([rNeg(rat(root.n)), rat(root.d)])
@@ -297,7 +320,7 @@ function peelRoot(e: Expr, ctx: Ctx): Expr[] | null {
       `${exprTexBracketed(exprFromPoly(prim, name))} \\div ${exprTexBracketed(dExpr)} = ${exprTexBracketed(qExpr)}`,
       '\\text{long division}'
     )
-    return [dExpr, qExpr]
+    return [dExpr, rIsOne(content) ? qExpr : eMul(constExpr(content), qExpr)]
   }
   return null
 }
@@ -307,17 +330,24 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   if (depth > 12 || e.length === 0) return [e]
   if (isConstant(e) || exprDegree(e) === 0) return [e]
 
-  // 1. Always take the common factor out first.
+  // 1. Always take the common factor out first — including a bare −1.
+  //
+  // A bare minus used to be skipped here as "not worth a step". That quietly broke every
+  // expression with a negative highest power: the minus stayed in, pPrimitive then reported a
+  // content of −1, and both splitMiddleTerm and peelRoot bailed out, so −x² + 5x − 6 was reported
+  // as not factorisable at all when it is plainly −(x − 2)(x − 3).
   const cf = commonFactor(e)
   const trivial = rIsOne(cf.c) && Object.keys(cf.v).length === 0
-  const justMinus = rIsOne(rAbs(cf.c)) && rIsNeg(cf.c) && Object.keys(cf.v).length === 0
-  if (!trivial && !justMinus) {
+  if (!trivial) {
     const rest = divideByTerm(e, cf)
     if (rest && rest.length > 0) {
+      const bareMinus = rIsNeg(cf.c) && rIsOne(rAbs(cf.c)) && Object.keys(cf.v).length === 0
       ctx.s.add(
-        `Every term has ${termTex(cf)} in it, so take it out at the front.`,
+        bareMinus
+          ? 'The highest power is negative, so take −1 out at the front and factorise what is left.'
+          : `Every term has ${termTex(cf)} in it, so take it out at the front.`,
         `${snapshot(ctx, [...pending, termExpr(cf), rest])}`,
-        '\\text{HCF of the terms}'
+        bareMinus ? '-1 \\text{ is a common factor too}' : '\\text{HCF of the terms}'
       )
       ctx.done.push(termExpr(cf))
       return [termExpr(cf), ...factorAll(rest, ctx, pending, depth + 1)]
@@ -429,7 +459,9 @@ export function factorise(src: string): FactorOutcome {
         input,
         moves: ctx.s.moves,
         answers: [{ label: 'Answer', tex: expanded }],
-        check: 'This one does not break into simpler factors with whole numbers.',
+        check: ctx.tooBig
+          ? TOO_BIG_TO_SEARCH
+          : 'This one does not break into simpler factors with whole numbers.',
         error: undefined
       },
       factors: [e]
@@ -440,6 +472,10 @@ export function factorise(src: string): FactorOutcome {
   const remade = nonTrivial.reduce((acc, p) => eMul(acc, p), constExpr(R1))
   const ok = exprTex(remade) === expanded
   const answerTex = groupPowers(nonTrivial)
+  // Taking a minus out of something irreducible is the textbook answer, but calling it "factorised"
+  // would overclaim: nothing was actually broken down.
+  const onlyASign = nonTrivial.length === 2 && nonTrivial.some(isMinusOne)
+  const stillWhole = onlyASign ? nonTrivial.find((p) => !isMinusOne(p)) : undefined
 
   return {
     working: {
@@ -448,7 +484,11 @@ export function factorise(src: string): FactorOutcome {
       method: methodName(ctx.s.moves.map((m) => m.rule ?? '')),
       moves: ctx.s.moves,
       answers: [{ label: 'Answer', tex: answerTex }],
-      check: ok ? `Multiplying back out gives ${expanded} — the original.` : 'Careful: multiplying back out did not match. Treat this answer with suspicion.'
+      check: !ok
+        ? 'Careful: multiplying back out did not match. Treat this answer with suspicion.'
+        : stillWhole
+          ? `The most that can be taken out is the minus sign; ${exprTex(stillWhole)} does not break down further.`
+          : `Multiplying back out gives ${expanded} — the original.`
     },
     factors: nonTrivial
   }
@@ -465,12 +505,16 @@ function groupPowers(parts: Expr[]): string {
   }
   // Numbers go in front, brackets after.
   seen.sort((a, b) => Number(isConstant(b.expr)) - Number(isConstant(a.expr)))
-  return seen
-    .map(({ expr, n }) => {
-      const body = isConstant(expr) && expr.length === 1 ? exprTex(expr) : exprTexBracketed(expr)
-      return n === 1 ? body : `${body}^{${n}}`
-    })
-    .join('')
+  const lead = seen.length > 1 && seen[0].n === 1 && isMinusOne(seen[0].expr) ? '-' : ''
+  return (
+    lead +
+    (lead ? seen.slice(1) : seen)
+      .map(({ expr, n }) => {
+        const body = isConstant(expr) && expr.length === 1 ? exprTex(expr) : exprTexBracketed(expr)
+        return n === 1 ? body : `${body}^{${n}}`
+      })
+      .join('')
+  )
 }
 
 function methodName(rules: string[]): string | undefined {

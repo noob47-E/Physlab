@@ -9,6 +9,29 @@ export interface CasValue {
   value?: CasValue
 }
 
+/**
+ * Every operation cas.worker.ts implements. Nothing else may be sent.
+ *
+ * This list is a contract with Python in another file. It is written down here, and checked
+ * against the worker's source by a test, because the halves drifted apart once already: a payload
+ * key of `equations` where the worker reads `eqs` made every solve fallback fail in silence.
+ */
+export const CAS_OPS = [
+  'exact',
+  'eval',
+  'simplify',
+  'expand',
+  'factor',
+  'apart',
+  'diff',
+  'integrate',
+  'limit',
+  'series',
+  'solve',
+  'warmup'
+] as const
+export type CasOp = (typeof CAS_OPS)[number]
+
 export type CasResult = CasValue & {
   error?: string
   solutions?: Record<string, CasValue>[]

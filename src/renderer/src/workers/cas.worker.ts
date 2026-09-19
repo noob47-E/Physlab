@@ -72,6 +72,10 @@ def cas_run(op, payload_json):
             return json.dumps(_out(sp.expand(P(p['expr'], deg))))
         if op == 'factor':
             return json.dumps(_out(sp.factor(P(p['expr'], deg))))
+        if op == 'apart':
+            # Partial fractions. Used as the fallback when the step engine cannot split a
+            # denominator itself; simplify would hand back the same fraction it was given.
+            return json.dumps(_out(sp.apart(P(p['expr'], deg))))
         if op == 'diff':
             var = sp.Symbol(p.get('var', 'x'))
             f = P(p['expr'], deg)

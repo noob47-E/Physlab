@@ -201,19 +201,21 @@ function graphable(src: string): boolean {
 }
 
 export function Working() {
-  const { job, input, working, asking, history, run, setJob, recall, remove, clearHistory } = usePure()
+  const { job, input, inputLatex, working, asking, history, run, setJob, recall, remove, clearHistory } = usePure()
   const casStatus = useCasStatus((s) => s.status)
-  const [latex, setLatex] = useState(input)
+  const [latex, setLatex] = useState(inputLatex)
   const [showHistory, setShowHistory] = useState(true)
   const field = useRef<MathInputHandle>(null)
 
-  // A recalled entry has to appear in the input box, not just in the working below.
-  useEffect(() => setLatex(input), [input])
+  // A recalled entry has to appear in the input box, not just in the working below. This must
+  // follow inputLatex and never input: input is the linear form, and MathLive reads whatever it is
+  // handed as LaTeX, so x^(2) would come back as a stray bracket in the student's expression.
+  useEffect(() => setLatex(inputLatex), [inputLatex])
 
   const go = (which?: JobId): void => {
     const text = latexToMath(latex).trim()
     if (!text) return
-    run(which ?? job, text)
+    run(which ?? job, text, latex)
   }
 
   const def = jobById(job)
@@ -256,8 +258,8 @@ export function Working() {
             className="btn ghost"
             title={`Load an example: ${def.example}`}
             onClick={() => {
-              setLatex(def.example)
-              run(job, def.example)
+              setLatex(def.exampleLatex)
+              run(job, def.example, def.exampleLatex)
             }}
           >
             Example
@@ -285,8 +287,8 @@ export function Working() {
                       className="btn ghost"
                       onClick={() => {
                         setJob(j.id)
-                        setLatex(j.example)
-                        run(j.id, j.example)
+                        setLatex(j.exampleLatex)
+                        run(j.id, j.example, j.exampleLatex)
                       }}
                     >
                       {j.label}

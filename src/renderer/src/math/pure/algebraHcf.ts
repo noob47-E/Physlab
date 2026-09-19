@@ -5,15 +5,22 @@
 // two side by side is the point — students routinely mix up which way round it goes.
 
 import { R1, bgcd, blcm, rIsNeg, rIsOne, rMul, rNeg, rTex, rat, type Rat } from './rat'
-import { NotPolynomial, exprTex, exprTexBracketed, isConstant, parseExpr, type Expr } from './mono'
+import { NotPolynomial, exprTex, exprTexBracketed, isConstant, parseExpr, varExpr, type Expr } from './mono'
 import { factorsOf } from './factor'
 import { Steps, failed, type Working } from './work'
+
+/** One repeated factor: the thing being raised to a power, and the power. */
+interface SplitPart {
+  /** What makes two factors "the same": a variable name, or a bracket's tidied-up LaTeX. */
+  key: string
+  atom: Expr
+  power: number
+}
 
 interface Split {
   /** The plain number in front. */
   constant: Rat
-  /** Each distinct bracket, and how many times it appears. */
-  parts: { tex: string; expr: Expr; power: number }[]
+  parts: SplitPart[]
 }
 
 /** Pull a sign out so (2 − x) and (x − 2) are recognised as the same factor. */
@@ -22,38 +29,66 @@ function orient(e: Expr): { expr: Expr; flipped: boolean } {
   return { expr: e.map((t) => ({ c: rNeg(t.c), v: t.v })), flipped: true }
 }
 
+/**
+ * Break an expression into a number and a list of powers.
+ *
+ * Factors used to be matched by their exact LaTeX, which meant x^2 and x^3 looked like two
+ * unrelated things and hcf(x^2, x^3) came out as 1. A monomial is therefore pulled apart here:
+ * its coefficient joins the number in front, and each letter becomes its own part carrying its
+ * exponent, so the min/max logic below can compare powers of the same letter.
+ */
 function split(e: Expr): Split {
   let constant = R1
-  const parts: Split['parts'] = []
+  const parts: SplitPart[] = []
+  const merge = (key: string, atom: Expr, power: number): void => {
+    const hit = parts.find((p) => p.key === key)
+    if (hit) hit.power += power
+    else parts.push({ key, atom, power })
+  }
+
   for (const f of factorsOf(e)) {
     if (isConstant(f)) {
       constant = rMul(constant, f[0]?.c ?? R1)
       continue
     }
+    if (f.length === 1) {
+      // A single term: 12x^3 is 12 and x to the third, not one indivisible lump.
+      const t = f[0]
+      constant = rMul(constant, t.c)
+      for (const name of Object.keys(t.v)) {
+        if (t.v[name] > 0) merge(name, varExpr(name), t.v[name])
+      }
+      continue
+    }
     const { expr, flipped } = orient(f)
     if (flipped) constant = rNeg(constant)
-    const tex = exprTex(expr)
-    const hit = parts.find((p) => p.tex === tex)
-    if (hit) hit.power++
-    else parts.push({ tex, expr, power: 1 })
+    merge(exprTex(expr), expr, 1)
   }
   return { constant, parts }
 }
 
 const showSplit = (s: Split): string => {
   const num = rIsOne(s.constant) ? '' : rTex(s.constant)
-  const body = s.parts.map((p) => `${exprTexBracketed(p.expr)}${p.power > 1 ? `^{${p.power}}` : ''}`).join('')
+  // exprTexBracketed already leaves a single term unbracketed, so x^2 does not become (x)^2.
+  const body = s.parts.map((p) => `${exprTexBracketed(p.atom)}${p.power > 1 ? `^{${p.power}}` : ''}`).join('')
   return `${num}${body}` || '1'
 }
 
-/** HCF of the numeric parts: whole numbers use the ordinary rule. */
+/** HCF of the numeric parts: hcf of the tops over lcm of the bottoms, so fractions work too. */
 const numHcf = (rs: Rat[]): Rat => {
-  if (!rs.every((r) => r.d === 1n)) return R1
-  return rat(rs.reduce((a, r) => bgcd(a, r.n < 0n ? -r.n : r.n), 0n) || 1n)
+  const nz = rs.filter((r) => r.n !== 0n)
+  if (!nz.length) return R1
+  const n = nz.reduce((a, r) => bgcd(a, r.n < 0n ? -r.n : r.n), 0n) || 1n
+  const d = nz.reduce((a, r) => blcm(a, r.d), 1n)
+  return rat(n, d)
 }
+/** LCM of the numeric parts: lcm of the tops over hcf of the bottoms. */
 const numLcm = (rs: Rat[]): Rat => {
-  if (!rs.every((r) => r.d === 1n)) return rs.reduce((a, r) => rMul(a, r), R1)
-  return rat(rs.reduce((a, r) => blcm(a, r.n < 0n ? -r.n : r.n), 1n))
+  const nz = rs.filter((r) => r.n !== 0n)
+  if (!nz.length) return R1
+  const n = nz.reduce((a, r) => blcm(a, r.n < 0n ? -r.n : r.n), 1n)
+  const d = nz.reduce((a, r) => bgcd(a, r.d), 0n) || 1n
+  return rat(n, d)
 }
 
 function prepare(srcs: string[], title: string, symbol: string): { splits: Split[]; exprs: Expr[]; input: string } | Working {
@@ -84,7 +119,7 @@ export function hcfAlgebraWorking(srcs: string[]): Working {
   const constant = numHcf(splits.map((sp) => sp.constant))
   const common = splits[0].parts
     .map((p) => {
-      const power = Math.min(...splits.map((sp) => sp.parts.find((q) => q.tex === p.tex)?.power ?? 0))
+      const power = Math.min(...splits.map((sp) => sp.parts.find((q) => q.key === p.key)?.power ?? 0))
       return { ...p, power }
     })
     .filter((p) => p.power > 0)
@@ -121,10 +156,10 @@ export function lcmAlgebraWorking(srcs: string[]): Working {
   splits.forEach((sp, i) => s.add(`Expression ${i + 1}:`, `${exprTex(exprs[i])} = ${showSplit(sp)}`))
 
   const constant = numLcm(splits.map((sp) => sp.constant))
-  const all: Split['parts'] = []
+  const all: SplitPart[] = []
   for (const sp of splits) {
     for (const p of sp.parts) {
-      const hit = all.find((q) => q.tex === p.tex)
+      const hit = all.find((q) => q.key === p.key)
       if (hit) hit.power = Math.max(hit.power, p.power)
       else all.push({ ...p })
     }

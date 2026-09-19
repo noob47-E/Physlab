@@ -162,6 +162,26 @@ export function exprTexBracketed(e: Expr): string {
 
 // ---------------------------------------------------------------- parsing
 
+/**
+ * The whole number an exponent comes to, or null.
+ *
+ * Brackets and a leading minus have to be seen through. MathLive's natural input becomes `x^(2)`
+ * once converted to linear form, and a bare ConstantNode check rejected that outright — so typing
+ * any power into the maths field made the whole expression unreadable.
+ */
+function wholeNumberIn(node: MathNode): number | null {
+  const n = node as unknown as { type: string; value?: unknown; content?: MathNode; op?: string; args?: MathNode[] }
+  if (n.type === 'ParenthesisNode' && n.content) return wholeNumberIn(n.content)
+  if (n.type === 'ConstantNode') {
+    return typeof n.value === 'number' && Number.isInteger(n.value) ? n.value : null
+  }
+  if (n.type === 'OperatorNode' && n.args?.length === 1 && (n.op === '-' || n.op === '+')) {
+    const inner = wholeNumberIn(n.args[0])
+    return inner === null ? null : n.op === '-' ? -inner : inner
+  }
+  return null
+}
+
 function fromNode(node: MathNode): Expr {
   const n = node as unknown as { type: string; [k: string]: unknown }
   switch (n.type) {
@@ -193,11 +213,9 @@ function fromNode(node: MathNode): Expr {
       if (op === '*') return args.map(fromNode).reduce(eMul)
       if (op === '^') {
         const base = fromNode(args[0])
-        const powNode = args[1] as unknown as { type: string; value?: unknown }
-        if (powNode.type !== 'ConstantNode' || typeof powNode.value !== 'number' || !Number.isInteger(powNode.value)) {
-          throw new NotPolynomial('Powers have to be whole numbers for this.')
-        }
-        return ePow(base, powNode.value)
+        const k = wholeNumberIn(args[1])
+        if (k === null) throw new NotPolynomial('Powers have to be whole numbers for this.')
+        return ePow(base, k)
       }
       if (op === '/') {
         const top = fromNode(args[0])

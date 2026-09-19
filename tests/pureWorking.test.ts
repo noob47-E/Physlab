@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { JOBS, runPure, suggestJob } from '../src/renderer/src/math/pure/run'
 import { texToPlain } from '../src/renderer/src/math/pure/work'
+import { evalDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
+import { rStr, rat } from '../src/renderer/src/math/pure/rat'
 
 describe('long division', () => {
   it('divides exactly and says so', () => {
@@ -219,5 +221,107 @@ describe('the check sentence', () => {
         expect(texToPlain(raw), `${job.id}: ${raw}`).not.toMatch(/[\\{}]/)
       }
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Regressions from the 0.3.3 repairs. Each of these shipped green, so each one
+// gets a test that fails loudly if it ever comes back.
+// ---------------------------------------------------------------------------
+
+describe('a negative highest power', () => {
+  it('factorises instead of giving up', () => {
+    const w = runPure('factor', '-x^2 + 5x - 6')
+    expect(w.check).not.toMatch(/does not break into simpler factors/)
+    expect(w.check).not.toMatch(/suspicion/)
+    expect(w.answers[0].tex).toMatch(/x - 2/)
+    expect(w.answers[0].tex).toMatch(/x - 3/)
+    expect(w.answers[0].tex.startsWith('-')).toBe(true)
+  })
+
+  it('writes the sign as a minus, never as -1(...)', () => {
+    for (const src of ['-x^2 + 5x - 6', '-2x^2 - 5x - 2', '-x^3 + 6x^2 - 11x + 6']) {
+      expect(runPure('factor', src).answers[0].tex, src).not.toMatch(/-1\left/)
+    }
+  })
+
+  it('carries the sign through a cubic without tripping its own check', () => {
+    const w = runPure('factor', '-x^3 + 6x^2 - 11x + 6')
+    expect(w.check).not.toMatch(/suspicion/)
+  })
+
+  it('is honest when only the sign can come out', () => {
+    const w = runPure('factor', '-x^2 - 1')
+    expect(w.check).toMatch(/most that can be taken out is the minus sign/)
+  })
+
+  it('never claims a wrong answer, over many generated products', () => {
+    // Deterministic, so a failure is reproducible.
+    let seed = 12345
+    const rnd = (n: number): number => {
+      seed = (seed * 16807) % 2147483647
+      return seed % n
+    }
+    const pick = (): string => {
+      const p = 1 + rnd(4)
+      const q = rnd(13) - 6 || 1
+      return `(${p}x ${q < 0 ? '-' : '+'} ${Math.abs(q)})`
+    }
+    for (let i = 0; i < 200; i++) {
+      const body = Array.from({ length: 2 + rnd(2) }, pick).join('*')
+      for (const src of [body, `-(${body})`]) {
+        const w = runPure('factor', src)
+        expect(w.check ?? '', src).not.toMatch(/suspicion/)
+        expect(w.error, src).toBeUndefined()
+      }
+    }
+  })
+})
+
+describe('partial fractions show what they checked', () => {
+  it('gets the sign right on an irreducible quadratic', () => {
+    // The old string-patching turned this into something that is 0 at x = 0, not 1.
+    const w = runPure('partial', '1/((x + 1)(x^2 + 1))')
+    expect(w.check).toMatch(/the original/)
+    // The minus belongs to the first term of the numerator, not to the whole fraction.
+    expect(w.answers[0].tex).toContain(String.raw`+ \dfrac{-\frac{1}{2}x`)
+    // And the strongest form of the same claim: what is displayed is 1 at x = 0, not 0.
+    expect(rStr(evalDisplayedSum(w.answers[0].tex, 'x', rat(0n))!)).toBe('1')
+  })
+
+  it('never leaves a "+ -" or a negated whole fraction in the answer', () => {
+    for (const src of [
+      '1/((x + 1)(x^2 + 1))',
+      '(2x + 1)/((x + 1)(x^2 + 1))',
+      '(x^2 - 1)/((x + 2)(x^2 + 4))',
+      '(-2x + 1)/((x - 1)(x + 3))',
+      '(x^3)/((x + 1)(x + 2))'
+    ]) {
+      const w = runPure('partial', src)
+      expect(w.check, src).toMatch(/the original/)
+      expect(w.answers[0].tex, src).not.toMatch(/\+ -/)
+    }
+  })
+})
+
+describe('HCF and LCM of algebra', () => {
+  it('compares powers of the same letter', () => {
+    expect(runPure('hcf', 'x^2, x^3').answers[0].tex).toBe('x^{2}')
+    expect(runPure('hcf', '12x^3, 18x^2').answers[0].tex).toBe('6x^{2}')
+    expect(runPure('hcf', 'x^3 + x^2, x^2 + 2x').answers[0].tex).toBe('x')
+    expect(runPure('hcf', '12x^3*y^2, 6x^2*y^4').answers[0].tex).toBe('6x^{2}y^{2}')
+    expect(runPure('hcf', '6x^2*y, 9x*y^2').answers[0].tex).toBe('3xy')
+  })
+
+  it('takes the highest power for the LCM', () => {
+    expect(runPure('lcm', '12x^3, 18x^2').answers[0].tex).toBe('36x^{3}')
+  })
+})
+
+describe('a power typed as natural maths', () => {
+  it('is read the same however it was bracketed', () => {
+    // latexToMath turns a typed x² into x^(2); rejecting that made the field unusable.
+    expect(runPure('factor', '6x^(2)+7x-3').answers[0].tex).toMatch(/2x \+ 3/)
+    expect(runPure('solve', 'x^(2)+4x+13=0').answers[0].tex).toBe('-2 + 3i')
   })
 })

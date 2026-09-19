@@ -3,7 +3,7 @@
 // Two methods are taught and both are shown where they apply: the cover-up rule, which is quick
 // and only works for separate linear factors, and equating coefficients, which always works.
 
-import { R0, R1, rDiv, rIsZero, rMul, rNeg, rSub, rTex, rat, type Rat } from './rat'
+import { R0, R1, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rSub, rTex, rat, type Rat } from './rat'
 import { NotPolynomial, exprTex, parseFraction, varsOf, type Expr } from './mono'
 import {
   exprFromPoly,
@@ -13,7 +13,9 @@ import {
   pEq,
   pEval,
   pIsZero,
+  pLead,
   pMonomial,
+  pNeg,
   pMul,
   pTex,
   pTexBracketed,
@@ -22,6 +24,7 @@ import {
   type Poly
 } from './poly'
 import { factorsOf } from './factor'
+import { evalDisplayedSum } from './latexCheck'
 import { Steps, failed, type Working } from './work'
 
 const LETTERS = 'ABCDEFGHJKLMNP'.split('')
@@ -241,15 +244,35 @@ export function partialFractionsWorking(src: string): Working {
     s.add('Solve those equations together.', sol.map((v, i) => `${LETTERS[i]} = ${rTex(v)}`).join(',\\quad '))
   }
 
-  const answerPieces = pieces.map((p) => {
-    const tops = p.unknowns.map((u) => sol[u])
-    const topPoly: Poly = pTrim(tops.slice().reverse())
-    if (pIsZero(topPoly)) return null
-    return `\\dfrac{${pTex(topPoly, name)}}{${pTexBracketed(p.base, name)}${p.j > 1 ? `^{${p.j}}` : ''}}`
-  })
-  const shown = answerPieces.filter((x): x is string => x !== null)
-  const wholeTex = pIsZero(whole) ? '' : `${pTex(whole, name)} + `
-  const answer = `${wholeTex}${shown.join(' + ')}`.replace(/\+ \\dfrac\{-/g, '- \\dfrac{')
+  // Each piece carries its own sign, built as it is made.
+  //
+  // This used to be a search-and-replace over the finished string, turning "+ \\dfrac{-" into
+  // "- \\dfrac{". That negates the WHOLE fraction while only removing the minus from the first
+  // term of its numerator, so (-x/2 + 1/2)/(x^2+1) was shown as -(x/2 + 1/2)/(x^2+1) — a different
+  // expression, displayed under a green tick, because the check below looks at the coefficients
+  // and never at the string the student actually reads.
+  const shown = pieces
+    .map((p) => {
+      const tops = p.unknowns.map((u) => sol[u])
+      const topPoly: Poly = pTrim(tops.slice().reverse())
+      if (pIsZero(topPoly)) return null
+      // A single negative term can be pulled out in front as a minus sign; a sum cannot, because
+      // the minus would have to apply to every term in it.
+      const single = topPoly.filter((c) => !rIsZero(c)).length === 1
+      const negate = single && rIsNeg(pLead(topPoly))
+      const top = negate ? pNeg(topPoly) : topPoly
+      return {
+        sign: negate ? ('-' as const) : ('+' as const),
+        tex: `\\dfrac{${pTex(top, name)}}{${pTexBracketed(p.base, name)}${p.j > 1 ? `^{${p.j}}` : ''}}`
+      }
+    })
+    .filter((x): x is { sign: '+' | '-'; tex: string } => x !== null)
+
+  const head = pIsZero(whole) ? '' : pTex(whole, name)
+  const answer = shown.reduce(
+    (acc, piece, i) => (acc === '' && i === 0 ? (piece.sign === '-' ? `-${piece.tex}` : piece.tex) : `${acc} ${piece.sign} ${piece.tex}`),
+    head
+  )
 
   s.add('Put the values back into the fractions.', `${input} = ${answer}`)
 
@@ -262,7 +285,12 @@ export function partialFractionsWorking(src: string): Working {
     const topPoly: Poly = pTrim(tops.slice().reverse())
     back = pAdd(back, pMul(topPoly, rest))
   }
-  const ok = pEq(back, pTrim(N))
+  // Two checks on two different representations. The coefficient check proves the maths; the
+  // display check proves that what the student is shown means the same thing. The old code only
+  // had the first, which is exactly how a wrong answer got a green tick.
+  // N0, not N: after an improper division N holds only the remainder, while the answer on screen
+  // includes the whole part in front of the fractions.
+  const ok = pEq(back, pTrim(N)) && displayedAgrees(answer, name, N0, D)
 
   return {
     title,
@@ -274,6 +302,30 @@ export function partialFractionsWorking(src: string): Working {
       ? `Adding the pieces back over a common denominator gives ${pTex(N, name)} on top — the original.`
       : 'Careful: adding the pieces back did not give the original. Treat this answer with suspicion.'
   }
+}
+
+
+/**
+ * Does the answer as written mean the same as the question?
+ *
+ * Reads the displayed LaTeX back and compares it with num/den at several exact points. Poles are
+ * skipped. A point that cannot be read at all counts as a failure, because an answer nobody can
+ * parse is not one that has been checked.
+ */
+function displayedAgrees(answer: string, name: string, num: Poly, den: Poly): boolean {
+  const probes = [rat(0n), rat(2n), rat(-3n), rat(1n, 2n), rat(5n)]
+  let checked = 0
+  for (const x of probes) {
+    const d = pEval(den, x)
+    if (rIsZero(d)) continue
+    const want = rDiv(pEval(num, x), d)
+    const got = evalDisplayedSum(answer, name, x)
+    if (got === null) return false
+    if (!rEq(got, want)) return false
+    checked++
+    if (checked >= 3) return true
+  }
+  return checked > 0
 }
 
 export { rat }

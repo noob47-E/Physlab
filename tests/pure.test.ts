@@ -68,7 +68,17 @@ describe('expressions', () => {
 
   it('refuses what it cannot do, in plain words', () => {
     expect(() => parseExpr('sin(x)')).toThrow(/not something I can factorise/)
-    expect(() => parseExpr('x^(-2)')).toThrow(/whole numbers/)
+    expect(() => parseExpr('x^(-2)')).toThrow(/negative power/)
+    expect(() => parseExpr('x^(1/2)')).toThrow(/whole numbers/)
+  })
+
+  it('reads a power however it was bracketed', () => {
+    // latexToMath turns a typed power into x^(2), so rejecting a bracketed exponent made every
+    // expression typed as natural maths unreadable.
+    expect(exprTex(parseExpr('x^(2)'))).toBe('x^{2}')
+    expect(exprTex(parseExpr('6x^(2)+7x-3'))).toBe('6x^{2} + 7x - 3')
+    expect(exprTex(parseExpr('(x+1)^(2)'))).toBe('x^{2} + 2x + 1')
+    expect(exprTex(parseExpr('x^((2))'))).toBe('x^{2}')
   })
 })
 

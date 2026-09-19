@@ -6,8 +6,7 @@
 import { bgcd, blcm } from './rat'
 import { Steps, failed, type Working } from './work'
 
-/** How far trial division will go before giving up. Covers anything a student will type. */
-const MAX_TRIAL = 10_000_000
+import { MAX_TRIAL } from './limits'
 
 export interface Factorisation {
   n: bigint
@@ -42,11 +41,6 @@ export function primeFactorise(input: bigint): Factorisation {
   }
   if (n > 1n) push(n)
   return { n: input, factors }
-}
-
-export const isPrime = (n: bigint): boolean => {
-  const f = primeFactorise(n)
-  return n > 1n && f.factors.length === 1 && f.factors[0][1] === 1
 }
 
 /** 2^{3} \times 3^{2} \times 5 */

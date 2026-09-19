@@ -8,6 +8,7 @@ import { useScene } from '../../core/store'
 import { useCalc } from '../../calc/calcStore'
 import { enterMode } from '../TopBar'
 import { MISSIONS, SHORTCUTS, TOUR } from './steps'
+import { isTyping } from '../keyTargets'
 
 const SEEN_KEY = 'physlab.tourSeen'
 const DONE_KEY = 'physlab.missionsDone'
@@ -128,6 +129,9 @@ export function Tour() {
     if (step === null) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') stop()
+      // This listener is on window in the capture phase, so without this guard it would take the
+      // arrow keys and Enter out of whatever the student is typing in before the field sees them.
+      if (isTyping(e.target as HTMLElement)) return
       if (e.key === 'ArrowRight' || e.key === 'Enter') next()
       if (e.key === 'ArrowLeft') back()
     }

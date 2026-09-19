@@ -19,6 +19,7 @@ import {
   rat,
   type Rat
 } from './rat'
+import { MAX_TRIAL } from './limits'
 import { NotPolynomial, exprTex, normalize, varsOf, type Expr, type Term } from './mono'
 
 /** Coefficients smallest power first: [−3, 7, 6] is 6x² + 7x − 3. */
@@ -138,10 +139,18 @@ export function rationalRootCandidates(p: Poly): Rat[] {
   while (low < prim.length && rIsZero(prim[low])) low++
   const c0 = prim[low]
   const cn = prim[prim.length - 1]
+  // Bounded: this runs on the window's own thread, and a constant term of 10^16 would otherwise
+  // be 10^8 bigint divisions with the app frozen throughout.
+  let truncated = false
   const divisors = (v: bigint): bigint[] => {
     const a = v < 0n ? -v : v
     const out: bigint[] = []
+    let steps = 0
     for (let d = 1n; d * d <= a; d++) {
+      if (steps++ > MAX_TRIAL) {
+        truncated = true
+        break
+      }
       if (a % d === 0n) {
         out.push(d)
         if (d !== a / d) out.push(a / d)
@@ -168,7 +177,24 @@ export function rationalRootCandidates(p: Poly): Rat[] {
   // Nearest to zero first: small, tidy roots are the ones a student would try.
   out.sort((x, y) => Math.abs(Number(x.n) / Number(x.d)) - Math.abs(Number(y.n) / Number(y.d)))
   if (low > 0) out.unshift(R0)
+  lastSearchTruncated = truncated
   return out
+}
+
+/**
+ * True when the last call to rationalRootCandidates gave up early.
+ *
+ * A module-level flag rather than a changed return type, so the existing signature — which tests
+ * and callers already use — stays as it is.
+ */
+let lastSearchTruncated = false
+
+/** Find the first rational root, and say whether the search was complete. */
+export function findRationalRootDetailed(p: Poly): { root: Rat | null; tooBig: boolean } {
+  const candidates = rationalRootCandidates(p)
+  const truncated = lastSearchTruncated
+  for (const c of candidates) if (rIsZero(pEval(p, c))) return { root: c, tooBig: false }
+  return { root: null, tooBig: truncated }
 }
 
 /** The first rational root, or null. */
