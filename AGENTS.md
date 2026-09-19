@@ -5,6 +5,9 @@ next, and it records the things that are expensive to rediscover.
 
 ## What this is
 
+[HISTORY.md](HISTORY.md) records how the project got here, version by version, including the bugs
+that produced the rules below.
+
 A maths and physics engine for students and teachers, built for one 11th-class student (Punjab
 Board) and shaped by what they asked for. Electron + React + TypeScript, three.js (WebGPU with a
 WebGL2 fallback), Jolt physics in WebAssembly, mathjs, MathLive, and Pyodide/SymPy in a worker.

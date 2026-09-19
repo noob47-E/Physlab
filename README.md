@@ -4,6 +4,9 @@ A general math and physics engine for students and teachers: vectors, shapes and
 graphing, a natural textbook-math calculator, step-by-step solutions and GPU simulations.
 Everything runs offline.
 
+[HISTORY.md](HISTORY.md) is the full record of how it was built — every version, what each one
+added, and the bugs that were worth remembering.
+
 ## Run it
 
 | What | Command |
