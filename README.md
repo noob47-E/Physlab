@@ -1,4 +1,3 @@
-| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Join any two with a **rod, string or spring**. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
 # PhysLab
 
 A general math and physics engine for students and teachers: vectors, shapes and geometry,
@@ -32,7 +31,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity), big answers, optional steps, **Draw on graph**. |
 | **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
-| **Sandbox** | Real objects that collide, powered by the Jolt physics engine. Add balls, crates, cylinders, ramps, planks and walls; set mass or density, material, size, position, velocity, bounciness and friction; pick things up with the mouse and throw them. World controls: gravity (Earth, Moon, Mars, Jupiter, none), air or vacuum, a true flat 2D mode, slow motion and an accuracy setting. |
+| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Join any two with a **rod, string or spring**. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
 | **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
 | **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. |
@@ -153,3 +152,17 @@ src/renderer/src
 
 New modes plug in through `app/modes.ts`: a tool shelf and panel, object types in `core/types.ts`,
 renderers in `render/`, and commands in `lang/commands.ts`.
+
+## Licence and contributing
+
+PhysLab is free software under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
+
+You may use it, study it, share it and change it. If you distribute a changed version you must
+publish your source under the same licence, so that it stays free for the next student who needs
+it. That is the whole point of the choice.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) explains what is most useful to send, and the five rules that do
+not bend. The most valuable contribution is not code: it is telling us what broke while you were
+using it.
+
+Copyright © 2026 the PhysLab contributors.
