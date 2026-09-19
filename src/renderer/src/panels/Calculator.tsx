@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { Eye, History, Sparkles } from 'lucide-react'
-import { useCalc, type CalcMode } from '../calc/calcStore'
+import { Eye, History, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { clearCalcHistory, useCalc, type CalcMode } from '../calc/calcStore'
 import { casioToMath, evaluateBaseN, evaluateComp, exactForm, fmtEng, fmtNum, formatBase, type Base } from '../calc/engine'
 import { constantScope } from '../calc/constants'
 import { math, setAngleMode } from '../math/expr'
@@ -12,6 +12,9 @@ import { Builder } from '../core/factory'
 import { Tex } from '../ui/Tex'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { ModePanel } from './calcModes'
+import { usePure } from '../math/pure/store'
+import { suggestJob, type JobId } from '../math/pure/run'
+import { showPanel } from '../app/panels'
 
 const MODES: { id: CalcMode; label: string; desc: string }[] = [
   { id: 'COMP', label: 'COMP', desc: 'Calculate' },
@@ -115,6 +118,46 @@ function args(inner: string): string[] {
   }
   out.push(cur)
   return out.map((s) => s.trim())
+}
+
+
+/**
+ * Sends whatever is in the calculator across to the Working area, which is the big panel in the
+ * middle. Keeping the two apart means the keypad stays a keypad and long working gets real room.
+ */
+function PureMathRow({ latex }: { latex: string }) {
+  const run = usePure((s) => s.run)
+  const text = latexToMath(latex).trim()
+  const go = (job?: JobId) => {
+    if (!text) return
+    run(job ?? suggestJob(text), text)
+    showPanel('working')
+  }
+  const QUICK: { id: JobId; label: string }[] = [
+    { id: 'factor', label: 'Factorise' },
+    { id: 'expand', label: 'Expand' },
+    { id: 'solve', label: 'Solve' },
+    { id: 'partial', label: 'Partial fr.' },
+    { id: 'complex', label: 'Complex' }
+  ]
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-[color:var(--text-faint)]">Pure Math</span>
+      <button
+        className="btn"
+        disabled={!text}
+        onClick={() => go()}
+        title={text ? 'Work this out step by step in the Working panel' : 'Type something first'}
+      >
+        <Wand2 size={13} /> Work it out
+      </button>
+      {QUICK.map((q) => (
+        <button key={q.id} className="btn ghost" disabled={!text} onClick={() => go(q.id)} title={`${q.label} — step by step, in the Working panel`}>
+          {q.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function Keypad({ keys, cols, onKey }: { keys: KeyDef[]; cols: number; onKey: (k: KeyDef) => void }) {
@@ -502,9 +545,16 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
         </button>
       </div>
 
+      <PureMathRow latex={calc.input} />
+
       {showHistory && (
         <div className="card max-h-40 overflow-auto">
           {calc.history.length === 0 && <div className="p-2 text-zinc-500">No calculations yet.</div>}
+          {calc.history.length > 0 && (
+            <button className="flex w-full items-center gap-1 px-2 py-1 text-left text-zinc-500 hover:text-[color:var(--bad)]" onClick={clearCalcHistory}>
+              <Trash2 size={12} /> Clear history
+            </button>
+          )}
           {calc.history.map((h, i) => (
             <button key={i} className="flex w-full items-center justify-between gap-3 px-2 py-1 text-left hover:bg-[#2f4a7a]" onClick={() => useCalc.setState({ input: h.input, mode: h.mode })}>
               <span className="truncate text-zinc-300">{h.mode === 'BASE-N' ? h.input : <Tex tex={h.input} />}</span>

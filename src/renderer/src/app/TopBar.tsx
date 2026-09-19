@@ -32,7 +32,7 @@ import { saveViewportImage } from '../render/exportImage'
 import { useTheme } from './theme'
 import { useTour } from './tour/Tour'
 import { resetLayout } from './App'
-import { PANEL_LIST, showPanel, useOpenPanels } from './panels'
+import { PANEL_LIST, isPanelOpen, showPanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useParticleLab } from '../render/GpuParticles'
@@ -70,6 +70,10 @@ export function enterMode(id: ModeId) {
   useParticleLab.setState(id === 'gpu' ? { enabled: true, count: QUALITY[qualityNow()].particles } : { enabled: false })
   if (m.view) s.setViewMode(m.view)
   if (!m.tools.includes(s.tool)) s.setTool('select')
+  // The centre panel is switched directly: requestFocus holds one panel at a time, so asking
+  // for two in a row would lose the first.
+  if (m.centre) showPanel(m.centre)
+  else if (isPanelOpen('working')) showPanel('viewport')
   if (m.panel) s.requestFocus(m.panel)
   if (!m.ready) s.pushLog({ input: m.label, kind: 'info', text: `${m.label} is coming in the next build stages: ${m.description}` })
 }

@@ -30,11 +30,16 @@ export function Console() {
             <div className={`log-out ${e.kind === 'error' ? 'err' : e.kind === 'info' ? 'info' : ''}`}>
               {e.tex ? <Tex tex={e.tex} /> : e.text}
             </div>
-            {(e.solution || e.visualize) && (
+            {(e.solution || e.visualize || e.working) && (
               <div className="mt-1 flex gap-1.5 pl-3.5">
                 {e.solution && (
                   <button className="btn h-6" onClick={() => showSolution(e.solution!)}>
                     <ListOrdered size={12} /> Steps
+                  </button>
+                )}
+                {e.working && (
+                  <button className="btn h-6" onClick={e.working}>
+                    <ListOrdered size={12} /> Working
                   </button>
                 )}
                 {e.visualize && (

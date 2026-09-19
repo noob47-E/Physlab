@@ -816,6 +816,99 @@ math-field.math-input::part(menu-toggle) {
   outline: 2px solid #fff;
 }
 
+/* ---------- Pure Math: the step-by-step working area ---------- */
+.pure-doc .katex-display {
+  margin: 3px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.pure-move {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+}
+.pure-num {
+  display: flex;
+  height: 20px;
+  width: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--sel-row);
+  color: var(--text-strong);
+  font-size: 11px;
+  margin-top: 1px;
+}
+.pure-head {
+  color: var(--text);
+  line-height: 1.45;
+}
+.pure-note {
+  color: var(--text-faint);
+  font-style: italic;
+  margin-top: 2px;
+}
+/* The formula that licenced the step, parked on the right so the sentence stays readable. */
+.pure-rule {
+  flex-shrink: 0;
+  max-width: 40%;
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+  color: var(--text-dim);
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+.pure-rule .katex {
+  font-size: 1em;
+  color: var(--text-dim);
+}
+.pure-method {
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 1px 8px;
+  font-size: 11px;
+}
+.pure-answer {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  padding: 10px 12px;
+}
+.pure-history {
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--line);
+  background: var(--bg-1);
+  min-height: 0;
+}
+.pure-hist-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+  padding: 5px 8px;
+}
+.pure-hist-row:hover {
+  background: var(--bg-2);
+}
+.pure-hist-row .katex {
+  font-size: 0.95em;
+}
+/* Long division and prime-factor ladders are wide; let them scroll rather than spill. */
+.pure-doc .katex-display > .katex {
+  white-space: normal;
+}
+
 } /* end @layer components */
 
 .katex {

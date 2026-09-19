@@ -15,6 +15,9 @@ import { fmt, fmtAngle, tex, texIJK } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import * as VS from '../math/vectorSolver'
+import { runPure, type JobId } from '../math/pure/run'
+import { usePure } from '../math/pure/store'
+import { showPanel } from '../app/panels'
 
 type Node = MathNode & Record<string, unknown>
 
@@ -138,6 +141,7 @@ export async function runCommand(raw: string): Promise<void> {
   }
 
   try {
+    if (tryPureMath(input)) return
     if (await tryCas(input)) return
     if (tryGraph(input)) return
     if (tryAssignment(input)) return
@@ -682,6 +686,61 @@ function trySolverCommand(input: string): boolean {
 // ---------------------------------------------------------------------------
 // CAS: solve, diff, integrate, limit, series, simplify, expand, factor
 // ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// Pure Math: factorise, divide, partial fractions, HCF/LCM, complex numbers.
+// These run offline and instantly, and they write out their working, so they are tried before
+// the SymPy worker. Anything they cannot do falls through to tryCas, which still gives an answer.
+// ---------------------------------------------------------------------------
+
+const PURE_WORDS: Record<string, JobId> = {
+  factorise: 'factor',
+  factorize: 'factor',
+  factor: 'factor',
+  expand: 'expand',
+  divide: 'divide',
+  partial: 'partial',
+  partialfractions: 'partial',
+  hcf: 'hcf',
+  gcd: 'hcf',
+  lcm: 'lcm',
+  primes: 'primes',
+  primefactors: 'primes',
+  complex: 'complex',
+  solve: 'solve'
+}
+
+function tryPureMath(input: string): boolean {
+  const m = input.match(/^\s*([a-z]+)\s*\((.*)\)\s*$/i)
+  if (!m) return false
+  const job = PURE_WORDS[m[1].toLowerCase().replace(/[\s_-]/g, '')]
+  if (!job) return false
+
+  const args = splitArgs(m[2])
+  // solve(x^2-4, x) names the unknown; the pure solver works that out for itself.
+  const body = job === 'hcf' || job === 'lcm' ? args.join(', ') : job === 'solve' ? args[0] ?? '' : m[2]
+  if (!body.trim()) return false
+
+  const doc = runPure(job, body)
+  // Not something the step engine can do: let the SymPy path have it, so an answer still appears.
+  if (doc.error) return false
+
+  const s = scene()
+  const label = (text: string): string => String.raw`\text{` + text.replace(/[=]/g, '') + String.raw`}\;`
+  s.pushLog({
+    input,
+    kind: 'result',
+    tex: doc.answers.map((a) => `${a.label === 'Answer' ? '' : label(a.label)}${a.tex}`).join(String.raw`,\quad `),
+    working: () => {
+      usePure.getState().run(job, body)
+      showPanel('working')
+    }
+  })
+  usePure.getState().run(job, body)
+  showPanel('working')
+  return true
+}
 
 async function tryCas(input: string): Promise<boolean> {
   const m = input.match(/^\s*(solve|nsolve|diff|derivative|d\/dx|integrate|integral|limit|series|simplify|expand|factor|exact)\s*\((.*)\)\s*$/i)

@@ -8,7 +8,7 @@ Everything runs offline.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.3.1.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.3.2.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
@@ -27,7 +27,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 
 | Mode | What it does |
 | --- | --- |
-| **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). |
+| **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). Beside the keypad is the **Working** area — see Pure Math below. |
 | **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity), big answers, optional steps, **Draw on graph**. |
 | **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
@@ -36,6 +36,45 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
 | **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern. |
+
+## Pure Math: the working, not just the answer
+
+Open **Calculator** and the big area in the middle becomes **Working**. Type a question, press
+**Work it out**, and the whole method appears — every step with a plain-English line saying what
+just happened, and the formula that allowed it printed beside the step.
+
+| Tool | Example | What you get |
+| --- | --- | --- |
+| **Factorise** | `6x^2 + 7x - 3` | Splitting the middle term, grouping, and the pair of brackets |
+| **Expand** | `(2x + 3)(3x - 1)` | Multiplied out and collected, highest power first |
+| **Divide** | `(x^3 - 6x^2 + 11x - 6)/(x - 1)` | Long division written out as the full staircase, quotient and remainder |
+| **Partial fractions** | `(3x + 5)/((x + 1)(x + 2))` | The A/(x+1) + B/(x+2) form, by the cover-up rule or by equating coefficients |
+| **HCF / LCM** | `12, 18, 30` or `x^2 - 1, x^2 + 2x + 1` | The prime-factor table, or the common brackets — numbers and algebra both |
+| **Prime factors** | `360` | The division ladder, the index form, and how many divisors the number has |
+| **Complex** | `(2 + 3i)/(1 - i)` | Multiplying by the conjugate, i² = −1 applied where you can see it, plus modulus, argument and conjugate |
+| **Solve** | `x^2 + 4x + 13 = 0` | The quadratic formula step by step; a negative discriminant becomes i, and the roots come out as a conjugate pair |
+| **Factorise with i** | `x^2 + 4` | Factors that do not exist over the real numbers: (x + 2i)(x − 2i) |
+
+Three things make this different from a calculator that just prints an answer:
+
+- **It is exact.** Everything is worked out in whole numbers and fractions, never in decimals that
+  drift. `1/3` stays `1/3`, and a third multiplied by three is exactly one.
+- **It checks itself.** Before any answer is shown, PhysLab multiplies the factors back out, or adds
+  the partial fractions back over a common denominator, and compares the result with your question.
+  The tick at the bottom of the answer is that check, not a promise.
+- **It can hide the working.** Press **Let me try first** and the steps disappear. Then **Hint**
+  gives you one step at a time, so you can get unstuck without being handed the answer.
+
+Everything is offline and instant. If a question is past the methods PhysLab can write out by hand,
+it still gives you the answer and says plainly that there are no steps for that one.
+
+You can also run these from the calculator keypad — **Work it out**, **Factorise**, **Expand**,
+**Solve**, **Partial fr.** sit under the keys and send whatever you have typed across — or from the
+command bar: `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `partial((3x+5)/((x+1)(x+2)))`,
+`primes(360)`, `complex((2+3i)/(1-i))`.
+
+Everything you work out is kept in **History** down the side, and it is still there next time you
+open PhysLab. The calculator's own history is remembered now too.
 
 ## Drawing, finishing and the right-click menu
 
@@ -108,6 +147,7 @@ Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one c
 - `components(10, 30)`, `resultant(5, 5, 120)`, `equilibrium(A, B)`
 - `Triangle((0,0), (4,0), (0,3))`, `Polygon((0,0), (6,0), (6,4), (3,7), (0,4))`, `Circle(P, 3)`
 - `solve(x^2 - 5x + 6 = 0)`, `diff(x^3)`, `integrate(x^2, 0, 3)`
+- `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `lcm(12, 18)`, `primes(360)`, `divide((x^3-1)/(x-1))`, `partial((3x+5)/((x+1)(x+2)))`, `complex((2+3i)/(1-i))` — each writes out its working in the Working panel
 - `k = 2` makes a slider; use `t` in formulas and press Play to animate. Type `help` for more.
 
 Shortcuts: `Ctrl+K` search · `Tab` 2D/3D · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project.

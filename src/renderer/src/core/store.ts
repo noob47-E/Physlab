@@ -18,6 +18,8 @@ export interface LogEntry {
   solution?: Solution
   /** Offer a "Visualize" button. */
   visualize?: () => void
+  /** Offer a "Working" button, which reopens the step-by-step working for this line. */
+  working?: () => void
 }
 
 interface Snapshot {

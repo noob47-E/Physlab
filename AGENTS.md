@@ -35,6 +35,7 @@ src/renderer/src/
   core/            Scene state (zustand), the dependency evaluator, object factory, types
   lang/            The command bar language (commands.ts)
   math/            Pure maths: vectors, geometry, shapes, graphs, formatting, CAS client, solvers
+  math/pure/       Pure Math: exact fractions, polynomials, and the step-by-step working engine
   calc/            The scientific calculator engine and its store
   lab/             Lab Data: tables of readings, fitting, chart data
   sim/             Jolt physics bridge for the Sandbox
@@ -47,6 +48,12 @@ tests/             vitest, no DOM — pure logic only
 **Adding a mode and a panel** touches exactly four files: `app/modes.ts` (the `ModeId` union and a
 `MODES` entry), `app/panels.ts` (`PANEL_TITLES`, `PANEL_GROUPS`), `app/App.tsx` (lazy import,
 `PANEL_VIEWS`, `buildLayout`), and the panel component itself. Copy how `lab` or `problems` was done.
+
+A mode's `panel` is its side panel; its optional `centre` takes over the big middle area instead of
+the viewport (Calculator mode uses it for `working`). `enterMode` sets `centre` with `showPanel`
+rather than `requestFocus`, because `requestFocus` holds one panel at a time and asking for two in
+a row would silently lose the first. A panel added after a user's layout was saved still appears:
+`showPanel` puts it back beside whichever `PANEL_GROUPS` neighbour is open.
 
 ## Traps that have already cost a day
 
@@ -76,6 +83,21 @@ tests/             vitest, no DOM — pure logic only
   bugs came from literal hex values that were invisible in the light theme — menus, popups,
   measurement labels, the focused tab. `panels/Graphs.tsx` still has hardcoded chart colours; fix it
   if you touch that file. `panels/LabChart.tsx` shows the right way.
+- **Pure Math works in exact fractions, never in doubles.** `math/pure/rat.ts` is bigint over
+  bigint, and everything above it — polynomials, factorisation, partial fractions — is built on
+  that. A student reading a factorisation must never meet `0.30000000000000004`, and a step that
+  divides by 3 and multiplies back has to land exactly where it started. `rFromNumber` deliberately
+  reads a decimal the way it was *written* (0.15 → 3/20), not the way the double stores it,
+  because the alternative is a "simplified" fraction with a nineteen-digit denominator.
+- **A step's `head` and `check` are spoken sentences, not display maths.** They are rendered as
+  plain text, so LaTeX leaking into them shows up as literal `x^{2}` and `\left(`. `texToPlain` in
+  `math/pure/work.ts` is applied by the panel to every heading, note and check line, which is why a
+  generator may write "divide x^{3} by x" without thinking about it. Only `tex` and `rule` go
+  through KaTeX. `tests/pureRender.test.ts` runs the real KaTeX over every generated string —
+  an unbalanced brace is otherwise invisible until it renders red in the app.
+- **Nothing is shown until it has been checked.** Every Pure Math tool reconstructs its own answer
+  (multiply the factors back out, recombine the partial fractions) and compares it with the input
+  before returning. If the check fails the working still appears, but says so.
 - **Custom CSS must live inside `@layer components`** or Tailwind's width/height utilities stop
   working.
 - **MathLive options must wait for the `mount` event.** Line2 geometry needs positions before the
@@ -87,7 +109,7 @@ tests/             vitest, no DOM — pure logic only
 ## How to check your work
 
 ```bash
-npm test          # vitest, ~90 tests, pure logic, no DOM
+npm test          # vitest, ~210 tests, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run dev       # Electron with hot reload
 npm run dist      # builds dist/PhysLab Setup <version>.exe

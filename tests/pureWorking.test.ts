@@ -1,0 +1,223 @@
+import { describe, expect, it } from 'vitest'
+import { JOBS, runPure, suggestJob } from '../src/renderer/src/math/pure/run'
+import { texToPlain } from '../src/renderer/src/math/pure/work'
+
+describe('long division', () => {
+  it('divides exactly and says so', () => {
+    const w = runPure('divide', '(x^3 - 6x^2 + 11x - 6)/(x - 1)')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toBe('x^{2} - 5x + 6')
+    expect(w.answers[1].tex).toBe('0')
+  })
+
+  it('reports a remainder', () => {
+    const w = runPure('divide', '(x^3 - 2x^2 + 3x - 4)/(x - 1)')
+    expect(w.answers[0].tex).toBe('x^{2} - x + 2')
+    expect(w.answers[1].tex).toBe('-2')
+    expect(w.answers[2].label).toBe('Altogether')
+  })
+
+  it('stops when the top is smaller than the bottom', () => {
+    const w = runPure('divide', '(x + 1)/(x^2 + 1)')
+    expect(w.answers[0].tex).toBe('0')
+    expect(w.answers[1].tex).toBe('x + 1')
+  })
+
+  it('mentions the remainder theorem for a linear divisor', () => {
+    const w = runPure('divide', '(x^3 - 2x^2 + 3x - 4)/(x - 1)')
+    expect(w.moves.some((m) => m.rule?.includes('remainder theorem'))).toBe(true)
+  })
+})
+
+describe('partial fractions', () => {
+  it('splits two distinct linear factors by cover-up', () => {
+    const w = runPure('partial', '(3x + 5)/((x + 1)(x + 2))')
+    expect(w.error).toBeUndefined()
+    expect(w.method).toBe('Cover-up rule')
+    expect(w.check).toMatch(/the original/)
+    // 3x + 5 over (x+1)(x+2) is 2/(x+1) + 1/(x+2).
+    expect(w.answers[0].tex).toMatch(/\\dfrac\{2\}/)
+    expect(w.answers[0].tex).toMatch(/\\dfrac\{1\}/)
+  })
+
+  it('handles a repeated factor', () => {
+    const w = runPure('partial', '(x + 3)/((x + 1)^2)')
+    expect(w.error).toBeUndefined()
+    expect(w.check).toMatch(/the original/)
+  })
+
+  it('handles an irreducible quadratic factor', () => {
+    const w = runPure('partial', '(2x + 1)/((x + 1)(x^2 + 1))')
+    expect(w.error).toBeUndefined()
+    expect(w.check).toMatch(/the original/)
+  })
+
+  it('divides out an improper fraction first', () => {
+    const w = runPure('partial', '(x^3)/((x + 1)(x + 2))')
+    expect(w.error).toBeUndefined()
+    expect(w.moves[0].head).toMatch(/divide first/)
+    expect(w.check).toMatch(/the original/)
+  })
+})
+
+describe('complex numbers', () => {
+  it('multiplies and shows i squared becoming minus one', () => {
+    const w = runPure('complex', '(2 + 3i)(4 - 5i)')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toBe('23 + 2i')
+    expect(w.moves.some((m) => m.tex === 'i^2 = -1' || m.rule?.includes('i^2 = -1'))).toBe(true)
+  })
+
+  it('divides using the conjugate', () => {
+    const w = runPure('complex', '(2 + 3i)/(1 - i)')
+    expect(w.error).toBeUndefined()
+    // (2+3i)(1+i)/2 = (-1 + 5i)/2
+    expect(w.answers[0].tex).toBe('-\\frac{1}{2} + \\frac{5}{2}i')
+    expect(w.moves.some((m) => m.head.includes('conjugate'))).toBe(true)
+  })
+
+  it('reduces high powers of i', () => {
+    const w = runPure('complex', 'i^7 + i^2')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toBe('-1 - i')
+  })
+
+  it('reports modulus, argument and conjugate', () => {
+    const w = runPure('complex', '3 + 4i')
+    expect(w.answers.find((a) => a.label === 'Modulus')?.tex).toBe('5')
+    expect(w.answers.find((a) => a.label === 'Conjugate')?.tex).toBe('3 - 4i')
+  })
+})
+
+describe('solving quadratics', () => {
+  it('gives complex roots when the discriminant is negative', () => {
+    const w = runPure('solve', 'x^2 + 4x + 13 = 0')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toBe('-2 + 3i')
+    expect(w.answers[1].tex).toBe('-2 - 3i')
+    expect(w.moves.some((m) => m.rule?.includes('\\sqrt{-1}'))).toBe(true)
+  })
+
+  it('gives rational roots when it factorises', () => {
+    const w = runPure('solve', 'x^2 - 5x + 6 = 0')
+    expect(w.answers.map((a) => a.tex).sort()).toEqual(['2', '3'])
+  })
+
+  it('gives a repeated root when the discriminant is zero', () => {
+    const w = runPure('solve', 'x^2 + 6x + 9 = 0')
+    expect(w.answers).toHaveLength(1)
+    expect(w.answers[0].tex).toBe('-3')
+  })
+
+  it('gives a surd when the discriminant is positive but not square', () => {
+    const w = runPure('solve', 'x^2 - 2x - 1 = 0')
+    expect(w.answers[0].tex).toBe('1 + \\sqrt{2}')
+    expect(w.answers[1].tex).toBe('1 - \\sqrt{2}')
+  })
+})
+
+describe('factorising over the complex numbers', () => {
+  it('splits a sum of squares', () => {
+    const w = runPure('factorComplex', 'x^2 + 4')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toMatch(/2i/)
+  })
+
+  it('goes all the way down on x^4 - 16', () => {
+    const w = runPure('factorComplex', 'x^4 - 16')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toMatch(/2i/)
+  })
+})
+
+describe('algebraic HCF and LCM', () => {
+  it('finds a common bracket', () => {
+    const w = runPure('hcf', 'x^2 - 1, x^2 + 2x + 1')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toBe('\\left(x + 1\\right)')
+  })
+
+  it('takes the highest power for the LCM', () => {
+    const w = runPure('lcm', 'x^2 - 1, x^2 + 2x + 1')
+    expect(w.error).toBeUndefined()
+    expect(w.answers[0].tex).toMatch(/\^\{2\}/)
+  })
+
+  it('still does plain numbers', () => {
+    expect(runPure('hcf', '12, 18, 30').answers[0].tex).toBe('6')
+    expect(runPure('lcm', '4, 6, 10').answers[0].tex).toBe('60')
+  })
+})
+
+describe('the dispatcher', () => {
+  it('sends a bare number to prime factors', () => {
+    expect(runPure('factor', '360').answers[0].tex).toBe('2^{3} \\times 3^{2} \\times 5')
+  })
+
+  it('expands', () => {
+    expect(runPure('expand', '(2x + 3)(3x - 1)').answers[0].tex).toBe('6x^{2} + 7x - 3')
+  })
+
+  it('guesses a sensible job from what was typed', () => {
+    expect(suggestJob('360')).toBe('primes')
+    expect(suggestJob('12, 18')).toBe('hcf')
+    expect(suggestJob('2 + 3i')).toBe('complex')
+    expect(suggestJob('x^2 - 4 = 0')).toBe('solve')
+    expect(suggestJob('6x^2 + 7x - 3')).toBe('factor')
+    expect(suggestJob('(3x+5)/((x+1)(x+2))')).toBe('partial')
+    expect(suggestJob('(x^3-1)/(x-1)')).toBe('divide')
+  })
+
+  it('never throws, whatever it is given', () => {
+    const junk = ['', '   ', ')(', 'sin(x)', '!!!', '1/0', 'x^-2', '0', 'pi', '=', 'x=', '((((']
+    for (const j of junk) {
+      for (const job of JOBS) {
+        const w = runPure(job.id, j)
+        // Either a readable error or a real answer — never a crash, never an empty shell.
+        expect(Boolean(w.error) || w.answers.length > 0, `${job.id} on "${j}"`).toBe(true)
+      }
+    }
+  })
+
+  it('every example offered in the UI actually works', () => {
+    for (const job of JOBS) {
+      const w = runPure(job.id, job.example)
+      expect(w.error, `${job.id}: ${job.example}`).toBeUndefined()
+      expect(w.answers.length, job.id).toBeGreaterThan(0)
+      expect(w.moves.length, job.id).toBeGreaterThan(0)
+    }
+  })
+
+  it('never shows working it could not verify', () => {
+    const cases = ['6x^2+7x-3', 'x^4-16', 'x^3-6x^2+11x-6', 'x^2-y^2', '2x^2-8']
+    for (const c of cases) {
+      expect(runPure('factor', c).check, c).not.toMatch(/suspicion/)
+    }
+    for (const c of ['(3x+5)/((x+1)(x+2))', '(x+3)/((x+1)^2)', '(2x+1)/((x+1)(x^2+1))']) {
+      expect(runPure('partial', c).check, c).not.toMatch(/suspicion/)
+    }
+  })
+})
+
+describe('the check sentence', () => {
+  it('reads as words, not as LaTeX', () => {
+    expect(texToPlain(String.raw`6x^{2} + 7x - 3`)).toBe('6x² + 7x - 3')
+    expect(texToPlain(String.raw`\left(x + 1\right)`)).toBe('(x + 1)')
+    expect(texToPlain(String.raw`2^{3} \times 3^{2} \times 5`)).toBe('2³ × 3² × 5')
+    expect(texToPlain(String.raw`\dfrac{3}{4}`)).toBe('3/4')
+    expect(texToPlain(String.raw`\text{HCF} = 6`)).toBe('HCF = 6')
+    expect(texToPlain(String.raw`\sqrt{2}`)).toBe('√2')
+  })
+
+  it('leaves no backslashes or braces anywhere a student can see', () => {
+    // Everything read as a sentence — the check line, every step heading, every note — goes
+    // through texToPlain before it is shown, so none of it may still look like LaTeX afterwards.
+    for (const job of JOBS) {
+      const w = runPure(job.id, job.example)
+      const sentences = [w.check ?? '', ...w.moves.map((m) => m.head), ...w.moves.map((m) => m.note ?? '')]
+      for (const raw of sentences) {
+        expect(texToPlain(raw), `${job.id}: ${raw}`).not.toMatch(/[\\{}]/)
+      }
+    }
+  })
+})

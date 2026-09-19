@@ -1,5 +1,19 @@
 import { create } from 'zustand'
 
+/** History outlives the session: a student closing the app mid-homework should not lose it. */
+const HISTORY_KEY = 'physlab.calc.history'
+const HISTORY_CAP = 100
+
+function loadHistory(): HistoryItem[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    return Array.isArray(parsed) ? (parsed.slice(0, HISTORY_CAP) as HistoryItem[]) : []
+  } catch {
+    return []
+  }
+}
+
 export type CalcMode =
   | 'COMP'
   | 'CMPLX'
@@ -51,7 +65,7 @@ export const useCalc = create<CalcStore>((set, get) => ({
   sto: false,
   vars: { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, M: 0, x: 0, y: 0 },
   ans: 0,
-  history: [],
+  history: loadHistory(),
   matrices: { MatA: mat(2, 2), MatB: [[2, 1], [1, 3]], MatC: mat(3, 3), MatD: mat(3, 3) },
   vectors: { VctA: [3, 4], VctB: [2, -1], VctC: [1, 2, 3], VctD: [0, 0, 1] },
   setMode: (mode) => set({ mode }),
@@ -62,3 +76,18 @@ export const useCalc = create<CalcStore>((set, get) => ({
   },
   setInput: (input, cursor) => set({ input, cursor: cursor ?? input.length })
 }))
+
+// Written straight from the store rather than from the panel, so every place that pushes a
+// calculation is remembered without having to know about storage.
+let lastSaved: HistoryItem[] = useCalc.getState().history
+useCalc.subscribe((s) => {
+  if (s.history === lastSaved) return
+  lastSaved = s.history
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(s.history.slice(0, HISTORY_CAP)))
+  } catch {
+    // Storage blocked: history just will not survive a restart.
+  }
+})
+
+export const clearCalcHistory = (): void => useCalc.setState({ history: [] })

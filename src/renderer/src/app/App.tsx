@@ -25,6 +25,7 @@ import { PANEL_TITLES, refreshOpenPanels, setDockApi, showPanel } from './panels
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
 const Calculator = lazy(() => import('../panels/Calculator').then((m) => ({ default: m.Calculator })))
+const Working = lazy(() => import('../panels/Working').then((m) => ({ default: m.Working })))
 const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.Graphs })))
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
@@ -42,6 +43,7 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   practice: Practice,
   labdata: LabData,
   calculator: Calculator,
+  working: Working,
   console: Console,
   timeline: Timeline,
   graphs: Graphs,
@@ -111,6 +113,7 @@ export function resetLayout(): void {
 
 function buildLayout(api: DockviewApi) {
   api.addPanel({ id: 'viewport', component: 'viewport', title: 'Viewport' })
+  api.addPanel({ id: 'working', component: 'working', title: 'Working', position: { referencePanel: 'viewport', direction: 'within' } })
   api.addPanel({ id: 'outliner', component: 'outliner', title: 'Outliner', position: { referencePanel: 'viewport', direction: 'left' }, initialWidth: 260 })
   api.addPanel({ id: 'examples', component: 'examples', title: 'Examples', position: { referencePanel: 'outliner', direction: 'within' } })
   api.addPanel({ id: 'vectorcalc', component: 'vectorcalc', title: 'Vector Calc', position: { referencePanel: 'viewport', direction: 'right' }, initialWidth: 430 })
@@ -125,6 +128,8 @@ function buildLayout(api: DockviewApi) {
   api.addPanel({ id: 'timeline', component: 'timeline', title: 'Timeline', position: { referencePanel: 'console', direction: 'within' } })
   api.addPanel({ id: 'graphs', component: 'graphs', title: 'Graphs', position: { referencePanel: 'console', direction: 'within' } })
   api.addPanel({ id: 'gpulab', component: 'gpulab', title: 'GPU Lab', position: { referencePanel: 'console', direction: 'within' } })
+  // Working was added inside the viewport's group, so the viewport has to be made active again.
+  api.getPanel('viewport')?.api.setActive()
   api.getPanel('vectorcalc')?.api.setActive()
   api.getPanel('examples')?.api.setActive()
   api.getPanel('console')?.api.setActive()

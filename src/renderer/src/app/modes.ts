@@ -30,6 +30,8 @@ export interface ModeDef {
   tools: (ToolId | '|')[]
   /** Panel to bring forward when the mode opens. */
   panel?: string
+  /** A panel for the big centre area, shown instead of the viewport while this mode is open. */
+  centre?: string
   view?: '2d' | '3d'
 }
 
@@ -37,10 +39,11 @@ export const MODES: ModeDef[] = [
   {
     id: 'calculator',
     label: 'Calculator',
-    description: 'Scientific calculator in natural textbook math, with every fx-991EX mode and more.',
+    description: 'Scientific calculator in natural textbook math, plus Pure Math: factorising, division, partial fractions, HCF/LCM and complex numbers worked out step by step.',
     ready: true,
     tools: ['select', '|', 'point', 'distance', '|', 'delete'],
-    panel: 'calculator'
+    panel: 'calculator',
+    centre: 'working'
   },
   {
     id: 'vectors',
