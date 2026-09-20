@@ -8,6 +8,7 @@
 
 import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
+import { pulleyRim, reachOf, ropeSegments } from './links'
 import type { BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
 import type { V3 } from '../math/vec'
@@ -38,12 +39,24 @@ export const grabForceCap = (mass: number, gravity: number): number => Math.max(
 /** Shapes that roll, and so are slowed by rolling resistance rather than sliding friction. */
 const ROLLING_SHAPES = new Set(['sphere', 'cylinder', 'capsule'])
 
+/** A rope link's radius in metres. */
+const ROPE_RADIUS = 0.02
+
 interface Entry {
   def: BodyDef
   /** The Jolt Body itself: a stable pointer. A BodyID returned by value is a temporary
    *  and using it after the call that produced it crashes the WebAssembly heap. */
   body: InstanceType<Jolt['Body']>
   mass: number
+}
+
+type Body = InstanceType<Jolt['Body']>
+type Constraint = InstanceType<Jolt['Constraint']>
+
+/** A rope: its own small bodies and the joints between them. Not in `order`, never in the panel. */
+interface Rope {
+  bodies: Body[]
+  constraints: Constraint[]
 }
 
 type AnyJolt = Record<string, never>
@@ -63,8 +76,11 @@ export class SimWorld {
   private grabbed: { id: BodyId; target: V3 } | null = null
   /** Who is touching what, refilled by the contact listener every step: body → the body under it. */
   private touching = new Map<BodyId, BodyId>()
-  /** Rods, strings and springs, by their id. */
-  private links = new Map<string, InstanceType<Jolt['Constraint']>>()
+  /** Rods, strings, springs, pulleys, hinges and welds, by their id. */
+  private links = new Map<string, Constraint>()
+  /** Ropes, by their id. */
+  private ropes = new Map<string, Rope>()
+  private ropeCount = 0
   /** The definitions behind them, so a rebuild can put them back. */
   private linkDefs: Link[] = []
   /** Simulated time in seconds since the last reset. */
@@ -121,8 +137,7 @@ export class SimWorld {
   clear(): void {
     // Constraints refer to bodies, so they have to go first or Jolt is left holding a reference
     // to something that no longer exists.
-    for (const c of this.links.values()) this.physics.RemoveConstraint(c)
-    this.links.clear()
+    this.removeLinks()
     for (const id of [...this.order]) this.removeBody(id)
     this.time = 0
     this.accumulator = 0
@@ -165,7 +180,8 @@ export class SimWorld {
     const before = this.settings
     this.settings = { ...before, ...patch }
     this.applyWorldSettings()
-    // Switching 2D on or off changes what a body is allowed to do, so rebuild them.
+    // Switching 2D on or off changes what a body is allowed to do, so rebuild them — keeping
+    // the run where it is; ticking a box is not a Reset.
     if (patch.twoD !== undefined && patch.twoD !== before.twoD) this.rebuild(undefined, undefined, true)
     if (patch.allowSleeping !== undefined && patch.allowSleeping !== before.allowSleeping) this.rebuild(undefined, undefined, true)
   }
@@ -313,8 +329,9 @@ export class SimWorld {
   // -------------------------------------------------------------------------
 
   /**
-   * Rebuilds every rod, string and spring. All three are Jolt distance constraints; what differs
-   * is the range they allow and whether it is soft:
+   * Rebuilds every connection. A rod, a string and a spring are Jolt distance constraints that
+   * differ only in the range they allow and whether it is soft; a pulley is Jolt's own pulley
+   * constraint; a hinge and a weld are what their names say; a rope is a chain of small bodies.
    *
    *  * a **rod** holds exactly its length, so it pushes as well as pulls;
    *  * a **string** allows anything from nothing up to its length, so it pulls when taut and
@@ -323,49 +340,242 @@ export class SimWorld {
    *    on it oscillates with the period the textbook gives.
    */
   setLinks(links: Link[]): void {
-    const J = this.jolt as unknown as AnyJolt & Jolt
     this.linkDefs = links
-    for (const c of this.links.values()) this.physics.RemoveConstraint(c)
-    this.links.clear()
-
+    this.removeLinks()
     for (const link of links) {
       const a = this.entries.get(link.a)
       const b = this.entries.get(link.b)
       if (!a || !b || a === b) continue
-      const settings = this.track(new J.DistanceConstraintSettings())
-      // The set_* methods, not plain assignment: the generated typings offer both, but only
-      // these actually reach the C++ object. Assigning `settings.mPoint1 = …` left both
-      // attachment points at the world origin, which pinned the bodies where they stood instead
-      // of joining them — a pendulum that would not swing at all.
-      // Attached at each body's own centre, in its own frame. Giving world-space points instead
-      // leaves the constraint holding whatever positions the bodies happened to have when it was
-      // made, which pinned them where they stood — a slack string held a ball in mid-air.
-      settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-      const p1 = this.rv3([0, 0, 0])
-      const p2 = this.rv3([0, 0, 0])
-      settings.set_mPoint1(p1)
-      settings.set_mPoint2(p2)
-      const L = Math.max(0.01, link.length)
-      // A string may go slack — that is the whole difference between a string and a rod.
-      settings.set_mMinDistance(link.kind === 'string' ? 0 : L)
-      settings.set_mMaxDistance(L)
-      if (link.kind === 'spring') {
-        const spring = settings.get_mLimitsSpringSettings()
-        spring.set_mMode(J.ESpringMode_StiffnessAndDamping)
-        spring.set_mStiffness(Math.max(0.01, link.stiffness))
-        spring.set_mDamping(Math.max(0, link.damping))
-        settings.set_mLimitsSpringSettings(spring)
+      switch (link.kind) {
+        case 'rope':
+          this.addRope(link, a, b)
+          break
+        case 'pulley':
+          this.addPulley(link, a, b)
+          break
+        case 'hinge':
+          this.addHinge(link, a, b)
+          break
+        case 'weld':
+          this.addWeld(link, a, b)
+          break
+        default:
+          this.addDistance(link, a, b)
       }
-      const constraint = settings.Create(a.body, b.body)
-      this.physics.AddConstraint(constraint)
-      this.links.set(link.id, constraint)
-      // The settings and the points they hold are NOT released here. Jolt's constraint keeps
-      // referring to them, exactly as a ShapeSettings owns the shape it built — free them and the
-      // constraint pins both bodies rigidly in place instead of joining them. They are tracked,
-      // so they still go when the world is destroyed.
-      void p1
-      void p2
     }
+  }
+
+  private removeLinks(): void {
+    for (const c of this.links.values()) this.physics.RemoveConstraint(c)
+    this.links.clear()
+    for (const rope of this.ropes.values()) {
+      for (const c of rope.constraints) this.physics.RemoveConstraint(c)
+      for (const body of rope.bodies) {
+        const id = body.GetID()
+        this.bodies.RemoveBody(id)
+        this.bodies.DestroyBody(id)
+      }
+    }
+    this.ropes.clear()
+  }
+
+  private addDistance(link: Link, a: Entry, b: Entry): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const settings = this.track(new J.DistanceConstraintSettings())
+    // The set_* methods, not plain assignment: the generated typings offer both, but only
+    // these actually reach the C++ object. Assigning `settings.mPoint1 = …` left both
+    // attachment points at the world origin, which pinned the bodies where they stood instead
+    // of joining them — a pendulum that would not swing at all.
+    // Attached at each body's own centre, in its own frame. Giving world-space points instead
+    // leaves the constraint holding whatever positions the bodies happened to have when it was
+    // made, which pinned them where they stood — a slack string held a ball in mid-air.
+    settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+    settings.set_mPoint1(this.rv3([0, 0, 0]))
+    settings.set_mPoint2(this.rv3([0, 0, 0]))
+    const L = Math.max(0.01, link.length)
+    // A string may go slack — that is the whole difference between a string and a rod.
+    settings.set_mMinDistance(link.kind === 'string' ? 0 : L)
+    settings.set_mMaxDistance(L)
+    if (link.kind === 'spring') {
+      const spring = settings.get_mLimitsSpringSettings()
+      spring.set_mMode(J.ESpringMode_StiffnessAndDamping)
+      spring.set_mStiffness(Math.max(0.01, link.stiffness))
+      spring.set_mDamping(Math.max(0, link.damping))
+      settings.set_mLimitsSpringSettings(spring)
+    }
+    // The settings and the points they hold are NOT released: Jolt's constraint keeps referring
+    // to them, exactly as a ShapeSettings owns the shape it built — free them and the constraint
+    // pins both bodies rigidly in place instead of joining them.
+    this.addConstraint(link.id, settings.Create(a.body, b.body))
+  }
+
+  private addConstraint(id: string, c: Constraint): void {
+    this.physics.AddConstraint(c)
+    this.links.set(id, c)
+  }
+
+  /** Two bodies glued together exactly as they stand. */
+  private addWeld(link: Link, a: Entry, b: Entry): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const settings = this.track(new J.FixedConstraintSettings())
+    settings.set_mSpace(J.EConstraintSpace_WorldSpace)
+    settings.set_mAutoDetectPoint(true)
+    this.addConstraint(link.id, settings.Create(a.body, b.body))
+  }
+
+  /** A pin through both bodies, turning about the z axis — a seesaw on its stand, a door on its post. */
+  private addHinge(link: Link, a: Entry, b: Entry): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const settings = this.track(new J.HingeConstraintSettings())
+    settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+    settings.set_mPoint1(this.rv3(link.pivotA ?? [0, 0, 0]))
+    settings.set_mPoint2(this.rv3(link.pivotB ?? [0, 0, 0]))
+    settings.set_mHingeAxis1(this.v3([0, 0, 1]))
+    settings.set_mHingeAxis2(this.v3([0, 0, 1]))
+    settings.set_mNormalAxis1(this.v3([1, 0, 0]))
+    settings.set_mNormalAxis2(this.v3([1, 0, 0]))
+    this.addConstraint(link.id, settings.Create(a.body, b.body))
+  }
+
+  /**
+   * A rope over a wheel: Jolt's pulley constraint keeps the two straight runs adding up to the
+   * rope's length. The wheel itself is only a picture; the rim points are where the rope leaves it.
+   */
+  private addPulley(link: Link, a: Entry, b: Entry): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const wheel = link.over ? this.entries.get(link.over) : undefined
+    if (!wheel) return
+    const { p1, p2 } = pulleyRim(wheel.def, this.positionOf(a), this.positionOf(b))
+    const settings = this.track(new J.PulleyConstraintSettings())
+    settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+    settings.set_mBodyPoint1(this.rv3([0, 0, 0]))
+    settings.set_mBodyPoint2(this.rv3([0, 0, 0]))
+    // The fixed points are always in world space, whatever mSpace says.
+    settings.set_mFixedPoint1(this.rv3(p1))
+    settings.set_mFixedPoint2(this.rv3(p2))
+    settings.set_mRatio(1)
+    settings.set_mMinLength(0)
+    settings.set_mMaxLength(Math.max(0.05, link.length))
+    this.addConstraint(link.id, settings.Create(a.body, b.body))
+  }
+
+  /**
+   * A real rope: a chain of light capsules pinned end to end, tied to the surface of each body.
+   * Neighbouring links are told not to collide with each other (they overlap at the joints), but
+   * the rest of the rope still collides, so it can hang over a wheel or lie on the floor.
+   */
+  private addRope(link: Link, a: Entry, b: Entry): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const pa = this.positionOf(a)
+    const pb = this.positionOf(b)
+    let dir: V3 = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
+    const span = Math.hypot(...dir)
+    dir = span > 1e-6 ? [dir[0] / span, dir[1] / span, dir[2] / span] : [0, -1, 0]
+    const reachA = reachOf(a.def)
+    const reachB = reachOf(b.def)
+    const start: V3 = [pa[0] + dir[0] * reachA, pa[1] + dir[1] * reachA, pa[2] + dir[2] * reachA]
+    const end: V3 = [pb[0] - dir[0] * reachB, pb[1] - dir[1] * reachB, pb[2] - dir[2] * reachB]
+    const length = Math.max(0.1, Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]))
+    const n = link.segments ?? ropeSegments(length)
+    const seg = length / n
+    const half = seg / 2
+    // A rope that weighs a tenth of what it carries hangs and swings like one. Far lighter and the
+    // solver loses the fight against the mass ratio and the rope stretches; far heavier and it
+    // drags the load about.
+    const loads = [a, b].filter((e) => e.def.motion === 'dynamic').map((e) => e.mass)
+    const perLink = Math.max(0.02, Math.min(5, 0.1 * (loads.length ? Math.min(...loads) : 4)) / n)
+    const filter = this.track(new J.GroupFilterTable(n))
+    for (let i = 0; i + 1 < n; i++) filter.DisableCollision(i, i + 1)
+    const group = this.ropeCount++
+    const rot = this.quatFromY(dir)
+    const rope: Rope = { bodies: [], constraints: [] }
+
+    for (let i = 0; i < n; i++) {
+      const centre: V3 = [start[0] + dir[0] * (i + 0.5) * seg, start[1] + dir[1] * (i + 0.5) * seg, start[2] + dir[2] * (i + 0.5) * seg]
+      const shape = new J.CapsuleShape(Math.max(0.005, half - ROPE_RADIUS), ROPE_RADIUS) as unknown as InstanceType<Jolt['Shape']>
+      const pos = this.rv3(centre)
+      const settings = this.track(new J.BodyCreationSettings(shape, pos, rot, J.EMotionType_Dynamic, LAYER_MOVING))
+      settings.mOverrideMassProperties = J.EOverrideMassProperties_CalculateInertia
+      settings.mMassPropertiesOverride.mMass = perLink
+      settings.mMotionQuality = J.EMotionQuality_LinearCast
+      settings.mAllowSleeping = this.settings.allowSleeping
+      settings.mLinearDamping = 0.05
+      settings.mAngularDamping = 0.3
+      settings.mFriction = 0.6
+      if (this.settings.twoD) settings.mAllowedDOFs = J.EAllowedDOFs_Plane2D
+      settings.set_mCollisionGroup(this.track(new J.CollisionGroup(filter, group, i)))
+      // A chain is solved link by link, so it needs more solver passes than a lone box.
+      settings.set_mNumPositionStepsOverride(10)
+      settings.set_mNumVelocityStepsOverride(20)
+      const body = this.bodies.CreateBody(settings)
+      // User data 0: the contact listener maps user data to `order` and skips what it cannot find.
+      body.SetUserData(0)
+      this.bodies.AddBody(body.GetID(), J.EActivation_Activate)
+      rope.bodies.push(body)
+      this.release(settings)
+      this.release(pos)
+    }
+    this.release(rot)
+
+    const pin = (b1: Body, p1: V3, b2: Body, p2: V3) => {
+      const s = this.track(new J.PointConstraintSettings())
+      s.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+      s.set_mPoint1(this.rv3(p1))
+      s.set_mPoint2(this.rv3(p2))
+      const c = s.Create(b1, b2)
+      this.physics.AddConstraint(c)
+      rope.constraints.push(c)
+    }
+    pin(a.body, [dir[0] * reachA, dir[1] * reachA, dir[2] * reachA], rope.bodies[0], [0, -half, 0])
+    for (let i = 0; i + 1 < n; i++) pin(rope.bodies[i], [0, half, 0], rope.bodies[i + 1], [0, -half, 0])
+    pin(rope.bodies[n - 1], [0, half, 0], b.body, [-dir[0] * reachB, -dir[1] * reachB, -dir[2] * reachB])
+    this.ropes.set(link.id, rope)
+  }
+
+  /** The points a rope or pulley rope is drawn through, in world space. */
+  linkPath(link: Link): V3[] {
+    const a = this.entries.get(link.a)
+    const b = this.entries.get(link.b)
+    if (!a || !b) return []
+    const pa = this.positionOf(a)
+    const pb = this.positionOf(b)
+    if (link.kind === 'pulley') {
+      const wheel = link.over ? this.entries.get(link.over) : undefined
+      if (!wheel) return [pa, pb]
+      const { p1, p2 } = pulleyRim(wheel.def, pa, pb)
+      return [pa, p1, p2, pb]
+    }
+    const rope = this.ropes.get(link.id)
+    if (!rope) return [pa, pb]
+    const pts: V3[] = [pa]
+    for (const body of rope.bodies) {
+      const p = body.GetPosition()
+      pts.push([p.GetX(), p.GetY(), p.GetZ()])
+    }
+    pts.push(pb)
+    return pts
+  }
+
+  private positionOf(e: Entry): V3 {
+    const p = e.body.GetPosition()
+    return [p.GetX(), p.GetY(), p.GetZ()]
+  }
+
+  /** The rotation that stands a capsule (whose axis is y) along `dir`. */
+  private quatFromY(dir: V3) {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const d = dir[1]
+    if (d < -0.9999) return this.track(new J.Quat(1, 0, 0, 0))
+    let x = dir[2]
+    let y = 0
+    let z = -dir[0]
+    let w = 1 + d
+    const n = Math.hypot(x, y, z, w) || 1
+    x /= n
+    y /= n
+    z /= n
+    w /= n
+    return this.track(new J.Quat(x, y, z, w))
   }
 
   /**
@@ -432,6 +642,7 @@ export class SimWorld {
       case 'sphere':
         return { shape: cast(new J.SphereShape(min(a))), settings: null }
       case 'cylinder':
+      case 'pulley':
         return { shape: cast(new J.CylinderShape(min(b / 2), min(a), 0.02)), settings: null }
       case 'capsule':
         return { shape: cast(new J.CapsuleShape(min(b / 2), min(a))), settings: null }
@@ -533,7 +744,6 @@ export class SimWorld {
 
   /** Forces that PhysLab applies itself: air drag, wind, and the grab spring. */
   private beforeStep(dt: number) {
-    const J = this.jolt as unknown as AnyJolt & Jolt
     const rho = this.settings.airDensity
     for (const id of this.order) {
       const e = this.entries.get(id)!
@@ -590,8 +800,7 @@ export class SimWorld {
         // A spring to the cursor: F = k(target − x) − c·v, the same model as a real spring. The
         // stiffness scales with mass so a light object is not flung across the scene, but that
         // alone cancelled the mass out of a = F/m and made a two-tonne block as easy to drag as a
-        // marble. A hand can only pull so hard, so the force is capped: heavy things now barely
-        // shift, which is the whole point of giving them a mass.
+        // marble. A hand can only pull so hard, so the force is capped.
         const p = body.GetPosition()
         const v = body.GetLinearVelocity()
         const k = 60 * e.mass

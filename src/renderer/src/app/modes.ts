@@ -56,7 +56,7 @@ export const MODES: ModeDef[] = [
   },
   {
     id: 'shapes',
-    label: 'Shapes & Geometry',
+    label: 'Geometry',
     description: 'Sketch or click shapes: automatic recognition, area formulas, decomposition, constructions.',
     ready: true,
     tools: ['select', '|', 'sketch', 'segment', 'triangle', 'polygon', 'circle', '|', 'point', 'line', 'ray', 'vector', '|', 'midpoint', 'perpendicular', 'parallel', 'perpBisector', 'angleBisector', 'intersect', '|', 'angle', 'distance', 'text', '|', 'delete'],

@@ -5,6 +5,7 @@ import { TOOLS, cancelTool, finishTool, resetTool, undoLastPick, useTool } from 
 import { resetCamera } from '../render/viewState'
 import { useApp } from './modes'
 import { useSandbox } from '../sim/store'
+import { useLab } from '../lab/labStore'
 
 import { isActivatable, isTyping as typingIn } from './keyTargets'
 
@@ -43,6 +44,10 @@ export function useShortcuts() {
         if (useApp.getState().mode === 'sandbox') {
           if (e.shiftKey) useSandbox.getState().redo()
           else useSandbox.getState().undo()
+          return
+        }
+        if (useApp.getState().mode === 'lab') {
+          useLab.getState().undo()
           return
         }
         if (e.shiftKey) s.redo()

@@ -9,6 +9,10 @@ const api = {
   autosaveWrite: (content: string): Promise<boolean> => ipcRenderer.invoke('autosave:write', content),
   autosaveRead: (): Promise<string | null> => ipcRenderer.invoke('autosave:read'),
   autosaveClear: (): Promise<boolean> => ipcRenderer.invoke('autosave:clear'),
+  /** The copy written as the window closes; a promise would never come back. */
+  autosaveWriteSync: (content: string): boolean => ipcRenderer.sendSync('autosave:writeSync', content) as boolean,
+  /** So the window can ask before closing on unsaved work. */
+  setDirty: (dirty: boolean): void => ipcRenderer.send('app:dirty', dirty),
   saveImage: (dataUrl: string): Promise<string | null> => ipcRenderer.invoke('file:saveImage', dataUrl),
   /** Any text file the renderer makes: a CSV of readings, and whatever is exported next. */
   saveText: (content: string, defaultName: string, filterName: string, ext: string): Promise<string | null> =>

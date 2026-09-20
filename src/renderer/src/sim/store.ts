@@ -7,6 +7,8 @@ import { groundTopOf } from './energy'
 import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactEvent, type Link, type LinkKind, type ShapeKind, type WorldSettings } from './types'
 import { SimWorld } from './world'
 import { addSample, type Sample } from './recording'
+import type { SandboxFile } from '../core/types'
+import { makeLink } from './links'
 
 let counter = 0
 const nextId = () => `sb${Date.now().toString(36)}${(counter++).toString(36)}`
@@ -59,7 +61,7 @@ export interface SandboxState {
   pushContacts: (c: ContactEvent[]) => void
   clearContacts: () => void
   setScene: (bodies: BodyDef[], world?: Partial<WorldSettings>, links?: Link[]) => void
-  addLink: (a: BodyId, b: BodyId, kind: LinkKind) => boolean
+  addLink: (a: BodyId, b: BodyId, kind: LinkKind, over?: BodyId) => boolean
   updateLink: (id: string, patch: Partial<Link>) => void
   removeLink: (id: string) => void
   record: (samples: Record<BodyId, Sample>) => void
@@ -73,6 +75,10 @@ export interface SandboxState {
   /** Every object back where its definition says, clock at zero, readings cleared. */
   resetRun: () => void
   clearTrails: () => void
+  /** What goes into the project file. */
+  snapshot: () => SandboxFile
+  /** Opening a project, or starting a new one when nothing is given. Not undoable: it is a new history. */
+  loadSandbox: (file?: SandboxFile) => void
 }
 
 /** Sensible starting sizes in metres, so a scene looks like a lab bench, not a galaxy. */
@@ -85,6 +91,8 @@ export const DEFAULT_SIZE: Record<ShapeKind, [number, number, number]> = {
   ramp: [3, 1.5, 1.5],
   plank: [3, 0.15, 0.6],
   wall: [0.3, 2, 3],
+  // A wheel: radius, thickness. It stands with its axis along z, facing the side view.
+  pulley: [0.3, 0.15, 0.3],
   // Forty metres looked generous and was not: a ball on ice left it in seconds and fell for ever.
   ground: [200, 0.4, 200]
 }
@@ -98,7 +106,8 @@ const DEFAULT_MATERIAL: Record<ShapeKind, string> = {
   ramp: 'concrete',
   plank: 'wood',
   wall: 'concrete',
-  ground: 'concrete'
+  ground: 'concrete',
+  pulley: 'steel'
 }
 
 /** Half the height of a body, so it can be rested on the floor rather than dropped through it. */
@@ -106,6 +115,7 @@ export function halfHeight(shape: ShapeKind, size: [number, number, number]): nu
   const [a, b] = size
   switch (shape) {
     case 'sphere':
+    case 'pulley':
       return a
     case 'capsule':
       return b / 2 + a
@@ -116,7 +126,7 @@ export function halfHeight(shape: ShapeKind, size: [number, number, number]): nu
 
 /** Width along x, for placing things side by side. */
 const widthOf = (shape: ShapeKind, size: [number, number, number]): number =>
-  shape === 'sphere' || shape === 'cylinder' || shape === 'capsule' ? 2 * size[0] : size[0]
+  shape === 'sphere' || shape === 'cylinder' || shape === 'capsule' || shape === 'pulley' ? 2 * size[0] : size[0]
 
 /**
  * A free spot for a new object: beside the last one, resting on the floor. Every Add button used
@@ -126,6 +136,11 @@ const widthOf = (shape: ShapeKind, size: [number, number, number]): number =>
 export function spawnAt(shape: ShapeKind, bodies: BodyDef[]): [number, number, number] {
   if (shape === 'ground') return [0, -0.2, 0]
   const size = DEFAULT_SIZE[shape]
+  // A pulley on the floor is no use to anyone; it hangs above the last object.
+  if (shape === 'pulley') {
+    const last = bodies.filter((b) => b.shape !== 'ground').pop()
+    return [last ? last.position[0] : 0, groundTopOf(bodies) + 3.5, 0]
+  }
   const others = bodies.filter((b) => b.shape !== 'ground')
   let x = 0
   if (others.length) {
@@ -137,14 +152,15 @@ export function spawnAt(shape: ShapeKind, bodies: BodyDef[]): [number, number, n
 
 export function makeBody(shape: ShapeKind, name: string, at: [number, number, number] = [0, 1, 0]): BodyDef {
   const material = materialById(DEFAULT_MATERIAL[shape])
-  const fixed = shape === 'ramp' || shape === 'wall' || shape === 'ground'
+  const fixed = shape === 'ramp' || shape === 'wall' || shape === 'ground' || shape === 'pulley'
   return {
     id: nextId(),
     name,
     shape,
     size: DEFAULT_SIZE[shape],
     position: at,
-    rotation: [0, 0, 0],
+    // A pulley is a cylinder stood on its side so the wheel faces the camera.
+    rotation: shape === 'pulley' ? [90, 0, 0] : [0, 0, 0],
     velocity: [0, 0, 0],
     angularVelocity: [0, 0, 0],
     motion: fixed ? 'static' : 'dynamic',
@@ -252,7 +268,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     })
   },
 
-  addLink: (a, b, kind) => {
+  addLink: (a, b, kind, over) => {
     if (a === b) return false
     const bodies = get().bodies
     const one = bodies.find((x) => x.id === a)
@@ -260,14 +276,16 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     if (!one || !two) return false
     // Joining the same pair twice would double the force between them without anything to show it.
     if (get().links.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a))) return false
-    remember(set, get, 'link')
     // The natural length is however far apart they are right now — where they actually are, if
     // the run has moved them — so making a connection never starts by yanking them together.
     const live = get().live
-    const pa = live[a]?.position ?? one.position
-    const pb = live[b]?.position ?? two.position
-    const gap = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2])
-    const link: Link = { id: nextId(), kind, a, b, length: Math.max(0.05, gap), stiffness: 200, damping: 0.5 }
+    const link = makeLink(nextId(), kind, one, two, {
+      over: bodies.find((x) => x.id === over),
+      posA: live[a]?.position ?? one.position,
+      posB: live[b]?.position ?? two.position
+    })
+    if (!link) return false
+    remember(set, get, 'link')
     set({ links: [...get().links, link] })
     return true
   },
@@ -304,6 +322,22 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   canRedo: () => get().future.length > 0,
 
   resetRun: () => set({ runNonce: get().runNonce + 1, engineTime: 0, live: {}, recording: {}, contacts: [] }),
+  snapshot: () => ({ bodies: get().bodies, links: get().links, world: get().world, sideView: get().sideView }),
+  loadSandbox: (file) =>
+    set({
+      bodies: file?.bodies ?? startingScene(),
+      links: file?.links ?? [],
+      world: { ...DEFAULT_WORLD, ...(file?.world ?? {}) },
+      sideView: file?.sideView ?? true,
+      selection: null,
+      contacts: [],
+      recording: {},
+      live: {},
+      engineTime: 0,
+      past: [],
+      future: [],
+      runNonce: get().runNonce + 1
+    }),
   clearTrails: () => set({ trailNonce: get().trailNonce + 1 })
 }))
 

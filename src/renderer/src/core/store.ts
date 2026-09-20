@@ -5,6 +5,7 @@ import { setNotation } from '../math/format'
 import type { EvalResult, ObjId, SceneFile, SceneObject, SceneSettings, ToolId, ViewMode } from './types'
 import type { Solution } from '../math/vectorSolver'
 import { useLab } from '../lab/labStore'
+import { useSandbox } from '../sim/store'
 
 export interface LogEntry {
   id: number
@@ -295,6 +296,7 @@ export const useScene = create<SceneState>()((set, get) => {
 
     newScene: () => {
       useLab.getState().setTables([])
+      useSandbox.getState().loadSandbox()
       set({
         objects: {},
         order: [],
@@ -310,7 +312,10 @@ export const useScene = create<SceneState>()((set, get) => {
       })
     },
     loadScene: (file, path = null) => {
+      // Check before touching anything: a bad file used to wipe the lab tables and then throw.
+      if (!Array.isArray(file.objects)) throw new Error('This is not a PhysLab project: it has no objects in it.')
       useLab.getState().setTables(file.lab ?? [])
+      useSandbox.getState().loadSandbox(file.sandbox)
       const objects: Record<ObjId, SceneObject> = {}
       for (const o of file.objects) objects[o.id] = o
       const order = file.objects.map((o) => o.id)
@@ -337,7 +342,7 @@ export const useScene = create<SceneState>()((set, get) => {
     },
     serialize: () => {
       const { objects, order, settings } = get()
-      return { app: 'PhysLab', version: 1, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables }
+      return { app: 'PhysLab', version: 1, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot() }
     },
     markSaved: (path) => set({ filePath: path, dirty: false })
   }
@@ -349,3 +354,8 @@ export const scene = () => useScene.getState()
 // Typing readings into a lab table changes the project as much as moving a point does, so Ctrl+S
 // and the autosave have to notice. newScene and loadScene set dirty back to false afterwards.
 useLab.subscribe(() => useScene.setState({ dirty: true }))
+// The same for the Sandbox, which was never saved at all: only the parts that go into the file,
+// not the live values published every tenth of a second.
+useSandbox.subscribe((s, prev) => {
+  if (s.bodies !== prev.bodies || s.links !== prev.links || s.world !== prev.world || s.sideView !== prev.sideView) useScene.setState({ dirty: true })
+})

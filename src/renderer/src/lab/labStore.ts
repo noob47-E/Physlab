@@ -37,6 +37,19 @@ interface LabStore {
   /** Replace everything (opening a project). */
   setTables: (tables: LabTable[]) => void
   update: (id: string, patch: (t: LabTable) => LabTable) => void
+  /** Previous table lists, newest last. Deleting a column used to be final. */
+  past: LabTable[][]
+  undo: () => void
+}
+
+let lastRemembered = 0
+/** Keystrokes into one cell arrive in a burst and fold into one undo step. */
+function remember(get: () => LabStore, set: (p: Partial<LabStore>) => void): void {
+  const now = Date.now()
+  const burst = now - lastRemembered < 700 && get().past.length > 0
+  lastRemembered = now
+  if (burst) return
+  set({ past: [...get().past, get().tables].slice(-50) })
 }
 
 const first = emptyTable('Free fall')
@@ -44,21 +57,33 @@ const first = emptyTable('Free fall')
 export const useLab = create<LabStore>((set, get) => ({
   tables: [first],
   currentId: first.id,
+  past: [],
+  undo: () => {
+    const past = get().past
+    const back = past[past.length - 1]
+    if (!back) return
+    set({ tables: back, past: past.slice(0, -1), currentId: back.some((t) => t.id === get().currentId) ? get().currentId : back[0].id })
+  },
   setCurrent: (currentId) => set({ currentId }),
   addTable: () => {
+    remember(get, set)
     const t = emptyTable(`Experiment ${get().tables.length + 1}`)
     set({ tables: [...get().tables, t], currentId: t.id })
   },
   removeTable: (id) => {
+    remember(get, set)
     const tables = get().tables.filter((t) => t.id !== id)
     const left = tables.length ? tables : [emptyTable('Experiment')]
     set({ tables: left, currentId: left.some((t) => t.id === get().currentId) ? get().currentId : left[0].id })
   },
   setTables: (tables) => {
     const left = tables.length ? tables : [emptyTable('Experiment')]
-    set({ tables: left, currentId: left[0].id })
+    set({ tables: left, currentId: left[0].id, past: [] })
   },
-  update: (id, patch) => set({ tables: get().tables.map((t) => (t.id === id ? patch(t) : t)) })
+  update: (id, patch) => {
+    remember(get, set)
+    set({ tables: get().tables.map((t) => (t.id === id ? patch(t) : t)) })
+  }
 }))
 
 // Handy while developing: inspect and drive the tables from the browser console.

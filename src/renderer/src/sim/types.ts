@@ -6,7 +6,7 @@ import type { V3 } from '../math/vec'
 export type BodyId = string
 
 /** Shapes a student can drop into the world. Sizes are in metres. */
-export type ShapeKind = 'box' | 'sphere' | 'cylinder' | 'capsule' | 'cone' | 'ramp' | 'plank' | 'wall' | 'ground'
+export type ShapeKind = 'box' | 'sphere' | 'cylinder' | 'capsule' | 'cone' | 'ramp' | 'plank' | 'wall' | 'ground' | 'pulley'
 
 export type MotionKind = 'dynamic' | 'static' | 'kinematic'
 
@@ -100,7 +100,7 @@ export const GRAVITY_PRESETS: { label: string; value: number }[] = [
 ]
 
 /** What two objects can be joined with. */
-export type LinkKind = 'rod' | 'string' | 'spring'
+export type LinkKind = 'rod' | 'string' | 'spring' | 'rope' | 'pulley' | 'hinge' | 'weld'
 
 /**
  * A connection between two bodies. Without these a pendulum, a spring-mass system and a pulley
@@ -117,10 +117,21 @@ export interface Link {
   stiffness: number
   /** Spring only: how quickly the bouncing dies away. 0 is a spring that never stops. */
   damping: number
+  /** Rope only: how many short links it is made of. */
+  segments?: number
+  /** Pulley only: the wheel the rope runs over. */
+  over?: BodyId
+  /** Hinge only: the pivot, in each body's own frame, fixed when the hinge was made. */
+  pivotA?: V3
+  pivotB?: V3
 }
 
 export const LINK_LABELS: Record<LinkKind, string> = {
-  rod: 'Rod — a fixed distance, pushes and pulls',
   string: 'String — pulls when taut, goes slack',
-  spring: 'Spring — F = kx'
+  rod: 'Rod — a fixed distance, pushes and pulls',
+  spring: 'Spring — F = kx',
+  rope: 'Rope — a real rope that hangs, swings and wraps',
+  pulley: 'Rope over a pulley — the wheel is a Pulley object',
+  hinge: 'Hinge — turns about the second object\'s centre',
+  weld: 'Weld — glued together'
 }

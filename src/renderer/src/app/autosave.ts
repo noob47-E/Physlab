@@ -9,6 +9,9 @@ const KEY = 'physlab.autosave'
 
 type Bridge = {
   autosaveWrite?: (content: string) => Promise<boolean>
+  /** Synchronous, for the moment the window closes: a promise made then never resolves. */
+  autosaveWriteSync?: (content: string) => boolean
+  setDirty?: (dirty: boolean) => void
   autosaveRead?: () => Promise<string | null>
   autosaveClear?: () => Promise<boolean>
 }
@@ -61,11 +64,27 @@ async function read(): Promise<string | null> {
   }
 }
 
-async function saveNow(): Promise<void> {
+function snapshotText(): string | null {
   const s = scene()
-  if (!s.dirty || s.order.length === 0) return
+  // Anything unsaved is worth keeping: the old rule ("only if the drawing has objects") left a
+  // sandbox-only or lab-only session unprotected.
+  if (!s.dirty) return null
   const snap: Snapshot = { savedAt: Date.now(), path: s.filePath, file: s.serialize() }
-  await write(JSON.stringify(snap))
+  return JSON.stringify(snap)
+}
+
+async function saveNow(): Promise<void> {
+  const text = snapshotText()
+  if (text) await write(text)
+}
+
+/** On close there is no time for a promise; the desktop bridge writes the copy synchronously. */
+function saveOnLeave(): void {
+  const text = snapshotText()
+  if (!text) return
+  const b = bridge()
+  if (b?.autosaveWriteSync) b.autosaveWriteSync(text)
+  else void write(text)
 }
 
 /**
@@ -75,7 +94,7 @@ async function saveNow(): Promise<void> {
  */
 export function startAutosave(): () => void {
   const timer = setInterval(() => void saveNow(), INTERVAL_MS)
-  const onLeave = () => void saveNow()
+  const onLeave = () => saveOnLeave()
   window.addEventListener('beforeunload', onLeave)
 
   void (async () => {
@@ -83,7 +102,8 @@ export function startAutosave(): () => void {
     if (!text) return
     try {
       const snap = JSON.parse(text) as Snapshot
-      if (snap?.file?.objects?.length) useRecovery.getState().set(snap)
+      const f = snap?.file
+      if (f && (f.objects?.length || f.lab?.length || f.sandbox)) useRecovery.getState().set(snap)
       else await clearAutosave()
     } catch {
       await clearAutosave()
@@ -92,8 +112,10 @@ export function startAutosave(): () => void {
 
   // Saving the project for real makes the copy unnecessary.
   let wasDirty = scene().dirty
+  bridge()?.setDirty?.(wasDirty)
   const unsub = useScene.subscribe((s) => {
     if (wasDirty && !s.dirty) void clearAutosave()
+    if (s.dirty !== wasDirty) bridge()?.setDirty?.(s.dirty)
     wasDirty = s.dirty
   })
 

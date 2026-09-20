@@ -1,6 +1,15 @@
 import type { V3 } from '../math/vec'
 import type { GCircle, GLine } from '../math/geometry'
 import type { LabTable } from '../lab/types'
+import type { BodyDef, Link, WorldSettings } from '../sim/types'
+
+/** The Sandbox as saved: what the student built, never the live run. */
+export interface SandboxFile {
+  bodies: BodyDef[]
+  links: Link[]
+  world: WorldSettings
+  sideView: boolean
+}
 
 export type ObjId = string
 
@@ -220,6 +229,8 @@ export interface SceneFile {
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens
    *  in an older build. */
   lab?: LabTable[]
+  /** The Sandbox scene. Optional for the same reason: a 0.3.3 file has none, and still opens. */
+  sandbox?: SandboxFile
 }
 
 export type LengthUnit = 'unit' | 'mm' | 'cm' | 'm' | 'km' | 'in' | 'ft'

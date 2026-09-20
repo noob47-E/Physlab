@@ -21,7 +21,7 @@ export const TOUR: TourStep[] = [
   {
     anchor: 'modes',
     title: 'Modes',
-    body: 'Like the modes on a calculator. Calculator, Vectors, Shapes & Geometry, Graphing — each one brings its own tools and panels.'
+    body: 'Like the modes on a calculator. Calculator, Vectors, Geometry, Graphing — each one brings its own tools and panels.'
   },
   {
     anchor: 'tools',

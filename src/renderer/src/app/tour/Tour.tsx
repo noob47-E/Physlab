@@ -153,7 +153,7 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
   const tiles = [
     { mode: 'calculator' as const, label: 'Calculator', text: 'Fractions, roots, powers, ∫ and Σ, just as they look in a book.' },
     { mode: 'vectors' as const, label: 'Vectors', text: 'Draw and add vectors, with the working written out.' },
-    { mode: 'shapes' as const, label: 'Shapes & Geometry', text: 'Sketch a shape and get its area with the formula.' },
+    { mode: 'shapes' as const, label: 'Geometry', text: 'Sketch a shape and get its area with the formula.' },
     { mode: 'graphing' as const, label: 'Graphing', text: 'y = x² − 4, circles, inequalities, 3D surfaces.' }
   ]
   return (

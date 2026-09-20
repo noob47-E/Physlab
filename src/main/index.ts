@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -91,6 +92,21 @@ function createWindow(): void {
     win.show()
   })
 
+  // The X button used to discard unsaved work without a word. The renderer says when there is
+  // any; the autosave copy is written on the way out either way.
+  win.on('close', (e) => {
+    if (!dirty) return
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['Close anyway', 'Keep working'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'PhysLab has unsaved work.',
+      detail: 'It will be offered back next time you open PhysLab, but it is not saved in a file. Press Ctrl+S first to keep it.'
+    })
+    if (choice !== 0) e.preventDefault()
+  })
+
   // PHYSLAB_LOG=1 mirrors renderer warnings/errors to the terminal (useful for diagnosing GPU issues).
   if (process.env['PHYSLAB_LOG']) {
     win.webContents.on('console-message', (details) => {
@@ -130,6 +146,11 @@ function createWindow(): void {
     win.loadURL(`app://physlab/index.html${query}${hash}`)
   }
 }
+
+let dirty = false
+ipcMain.on('app:dirty', (_e, value: boolean) => {
+  dirty = !!value
+})
 
 ipcMain.handle('file:open', async () => {
   const result = await dialog.showOpenDialog({
@@ -213,6 +234,18 @@ ipcMain.handle('autosave:write', async (_e, content: string) => {
     return true
   } catch {
     return false
+  }
+})
+
+ipcMain.on('autosave:writeSync', (e, content: string) => {
+  try {
+    mkdirSync(autosaveDir(), { recursive: true })
+    const tmp = `${autosaveFile()}.saving`
+    writeFileSync(tmp, content, 'utf8')
+    renameSync(tmp, autosaveFile())
+    e.returnValue = true
+  } catch {
+    e.returnValue = false
   }
 })
 

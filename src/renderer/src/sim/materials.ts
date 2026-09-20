@@ -36,6 +36,7 @@ export function shapeVolume(shape: string, size: [number, number, number]): numb
     case 'sphere':
       return (4 / 3) * Math.PI * a ** 3
     case 'cylinder':
+    case 'pulley':
       return Math.PI * a ** 2 * b
     case 'capsule':
       return Math.PI * a ** 2 * b + (4 / 3) * Math.PI * a ** 3

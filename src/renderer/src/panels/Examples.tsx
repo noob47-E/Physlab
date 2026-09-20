@@ -278,7 +278,8 @@ function freeFallReadings(): LabTable {
 /** Replace the scene with an example lesson. */
 export async function runExample(ex: Example): Promise<void> {
   const s = scene()
-  if (s.dirty && s.order.length && !confirm('Replace the current scene with this example?')) return
+  // Lab readings and a sandbox count as work too; the old test only looked at the drawing.
+  if (s.dirty && !confirm('Replace your current work with this example? Unsaved changes will be lost.')) return
   useParticleLab.setState({ enabled: false })
   s.newScene()
   s.setViewMode('2d')

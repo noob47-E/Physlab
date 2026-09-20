@@ -25,6 +25,7 @@ function geometryFor(def: BodyDef): THREE.BufferGeometry {
     case 'sphere':
       return new THREE.SphereGeometry(a, 32, 16)
     case 'cylinder':
+    case 'pulley':
       return new THREE.CylinderGeometry(a, a, b, 28)
     case 'capsule':
       return new THREE.CapsuleGeometry(a, b, 8, 20)
@@ -505,11 +506,13 @@ function TraceLine({ sim, def }: { sim: React.RefObject<SimWorld | null>; def: B
   useEffect(() => () => geo.dispose(), [geo])
   const count = useRef(0)
   const last = useRef<V3 | null>(null)
+  const line = useRef<THREE.LineSegments>(null)
   // Reset, a new scene or "Clear trails": start the line again.
   useEffect(() => {
     count.current = 0
     last.current = null
     geo.setDrawRange(0, 0)
+    if (line.current) line.current.visible = false
   }, [runNonce, trailNonce, geo])
 
   useFrame(() => {
@@ -527,12 +530,14 @@ function TraceLine({ sim, def }: { sim: React.RefObject<SimWorld | null>; def: B
       attr.needsUpdate = true
       count.current++
       geo.setDrawRange(0, Math.min(count.current, TRACE_POINTS) * 2)
+      // An empty geometry drawn every frame makes WebGPU warn every frame.
+      if (line.current) line.current.visible = true
     }
     last.current = [p[0], p[1], p[2]]
   })
 
   return (
-    <lineSegments geometry={geo} renderOrder={13} frustumCulled={false}>
+    <lineSegments ref={line} geometry={geo} renderOrder={13} frustumCulled={false} visible={false}>
       <lineBasicMaterial color={def.color} transparent opacity={0.8} />
     </lineSegments>
   )
@@ -645,7 +650,42 @@ function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   )
 }
 
+/** A rope, drawn through the centres of its links; a pulley rope as two straight runs. */
+function RopeLine({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
+  const capacity = 64
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(capacity * 6), 3))
+    g.setDrawRange(0, 0)
+    return g
+  }, [])
+  useEffect(() => () => geo.dispose(), [geo])
+  const line = useRef<THREE.LineSegments>(null)
+  useFrame(() => {
+    const w = sim.current
+    if (!w) return
+    const pts = w.linkPath(link)
+    const attr = geo.getAttribute('position') as THREE.BufferAttribute
+    const n = Math.min(capacity, pts.length - 1)
+    for (let i = 0; i < n; i++) attr.array.set([...pts[i], ...pts[i + 1]], i * 6)
+    attr.needsUpdate = true
+    geo.setDrawRange(0, Math.max(0, n) * 2)
+    if (line.current) line.current.visible = n > 0
+  })
+  return (
+    <lineSegments ref={line} geometry={geo} renderOrder={12} frustumCulled={false} visible={false}>
+      <lineBasicMaterial color={colour} />
+    </lineSegments>
+  )
+}
+
 function LinkLine({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
+  if (link.kind === 'rope' || link.kind === 'pulley') return <RopeLine sim={sim} link={link} colour={colour} />
+  if (link.kind === 'hinge' || link.kind === 'weld') return null
+  return <StraightLink sim={sim} link={link} colour={colour} />
+}
+
+function StraightLink({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
   const segments = link.kind === 'spring' ? 12 : 1
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry()

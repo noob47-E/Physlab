@@ -1,6 +1,6 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Beaker, Box, ChevronDown, ChevronRight, Circle, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
+import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
@@ -8,6 +8,7 @@ import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy
 import { engine, massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
 import { launchVelocity, PRESETS } from '../sim/presets'
+import { LINK_KINDS } from '../sim/links'
 import { QUANTITIES, quantity, RECORDING_COLUMNS, rowsFor, type QuantityKey, type Sample } from '../sim/recording'
 import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
@@ -32,7 +33,8 @@ const ADD: { shape: ShapeKind; label: string; icon: React.ReactNode }[] = [
   { shape: 'cone', label: 'Cone', icon: <Cone size={13} /> },
   { shape: 'ramp', label: 'Ramp', icon: <Triangle size={13} /> },
   { shape: 'plank', label: 'Plank', icon: <Minus size={13} /> },
-  { shape: 'wall', label: 'Wall', icon: <RectangleHorizontal size={13} className="rotate-90" /> }
+  { shape: 'wall', label: 'Wall', icon: <RectangleHorizontal size={13} className="rotate-90" /> },
+  { shape: 'pulley', label: 'Pulley', icon: <CircleDot size={13} /> }
 ]
 
 type V = [number, number, number]
@@ -625,9 +627,12 @@ function Connections({ selected }: { selected: string | null }) {
   const removeLink = useSandbox((s) => s.removeLink)
   const [to, setTo] = useState('')
   const [kind, setKind] = useState<LinkKind>('string')
+  const [over, setOver] = useState('')
   const name = (id: string) => bodies.find((b) => b.id === id)?.name ?? '?'
-  const others = bodies.filter((b) => b.id !== selected)
+  const others = bodies.filter((b) => b.id !== selected && b.shape !== 'ground')
   const target = others.some((b) => b.id === to) ? to : ''
+  const wheels = bodies.filter((b) => b.shape === 'pulley')
+  const wheel = wheels.some((b) => b.id === over) ? over : (wheels[0]?.id ?? '')
 
   return (
     <>
@@ -645,17 +650,27 @@ function Connections({ selected }: { selected: string | null }) {
               ))}
             </select>
             <select className="field w-auto" value={kind} onChange={(e) => setKind(e.target.value as LinkKind)}>
-              {(Object.keys(LINK_LABELS) as LinkKind[]).map((k) => (
+              {LINK_KINDS.map((k) => (
                 <option key={k} value={k} title={LINK_LABELS[k]}>
                   {LINK_LABELS[k].split(' — ')[0]}
                 </option>
               ))}
             </select>
+            {kind === 'pulley' && (
+              <select className="field w-auto" value={wheel} onChange={(e) => setOver(e.target.value)} title="Which pulley the rope runs over">
+                {wheels.length === 0 && <option value="">add a Pulley first</option>}
+                {wheels.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    over {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               className="btn"
-              disabled={!target}
+              disabled={!target || (kind === 'pulley' && !wheel)}
               onClick={() => {
-                if (target && addLink(selected, target, kind)) setTo('')
+                if (target && addLink(selected, target, kind, kind === 'pulley' ? wheel : undefined)) setTo('')
               }}
               title={LINK_LABELS[kind]}
             >
@@ -673,8 +688,12 @@ function Connections({ selected }: { selected: string | null }) {
             {name(l.a)} – {name(l.b)} <span className="text-[color:var(--text-faint)]">{l.kind}</span>
           </label>
           <div className="flex items-center gap-1">
-            <span className="text-[11px] text-[color:var(--text-faint)]">L</span>
-            <NumField value={l.length} onChange={(length) => updateLink(l.id, { length: Math.max(0.05, length) })} />
+            {l.kind !== 'hinge' && l.kind !== 'weld' && (
+              <>
+                <span className="text-[11px] text-[color:var(--text-faint)]">L</span>
+                <NumField value={l.length} onChange={(length) => updateLink(l.id, { length: Math.max(0.05, length) })} />
+              </>
+            )}
             {l.kind === 'spring' && (
               <>
                 <span className="text-[11px] text-[color:var(--text-faint)]" title="Spring constant in newtons per metre">

@@ -30,11 +30,11 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.3.4 (2026-09-20) |
-| Releases built | 12 |
+| Current version | 0.3.5 (2026-09-20) |
+| Releases built | 13 |
 | Commits | 50 |
 | Source | 25,481 lines of TypeScript/TSX across 114 files, plus 996 lines of CSS |
-| Tests | 251, across 15 files, all pure logic with no browser |
+| Tests | 257, across 16 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
 | Dock panels | 16 |
 | Licence | GPL-3.0 |
@@ -347,6 +347,28 @@ the code) found the causes, and every one of them was a boundary the tests never
 251 tests. `tests/sandbox.test.ts` runs the engine with the app's own defaults — air, sleeping, 2D —
 which the old harness switched off, and checks lifting a 500 kg ball, grabbing a sleeping one,
 placing a static floor, rotation edits, and a rebuild that preserves the untouched bodies.
+
+### 0.3.5 — saved, tied, and twenty-four experiments · 2026-09-20
+
+- **The Sandbox is saved.** Every `.phys` file now carries the bodies, connections, world settings
+  and view; older files still open. The autosave protects any unsaved work (it used to skip a
+  session with no drawing in it), finishes synchronously as the window closes, and the window asks
+  before closing on unsaved work. Restored work stays protected until it is saved.
+- **Ropes, pulleys, hinges and welds.** A rope is a chain of light links pinned end to end, tied to
+  the surface of each body: it hangs, swings, goes slack and can lie on the floor. A pulley is a
+  Pulley object plus Jolt's pulley constraint, so an Atwood machine accelerates at
+  (m₂ − m₁)g/(m₁ + m₂) — checked in the tests. A hinge turns about the second object's centre; a
+  weld glues two things as they stand.
+- **Twenty-four experiments** grouped by topic, each with the number to check: off a cliff, on
+  the Moon, terminal velocity, rolling against sliding, sliding to a stop, seesaw, Atwood machine,
+  lifting with a pulley, bouncing ball, Galileo's ramps, sticky collision, into a wall, Newton's
+  cradle, two trolleys and a rod, rope swing, spring on ice, and the eight from 0.3.0.
+- Lab Data has an undo. "Send to Lab Data" adds a table instead of replacing them. An Example asks
+  before replacing lab or sandbox work. The mode is called **Geometry** now.
+
+257 tests. `tests/links.test.ts` checks the Atwood acceleration, a hanging rope's length, a hinged
+plank tipping, a weld holding against gravity, and that every preset runs a second without anything
+falling through the floor.
 
 ## What is in it today
 
