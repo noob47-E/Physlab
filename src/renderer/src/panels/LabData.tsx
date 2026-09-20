@@ -67,23 +67,27 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
   const isError = !!col.uncertaintyFor
   const hasError = uncertaintyIndex(table, col.id) >= 0
 
+  // The three header buttons appear when the pointer or the keyboard is on the header; a formula
+  // column keeps its Σ showing so the student can see which columns are worked out.
+  const tools = `flex items-center gap-1 transition-opacity ${col.formula ? '' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="group flex flex-col gap-1">
       <div className="flex items-center gap-1">
         {isError ? (
-          <span className="flex-1 truncate px-1 text-center font-semibold italic text-zinc-400" title="How uncertain each reading of that column is">
+          <span className="flex-1 truncate px-1 text-center font-semibold italic text-ink-dim" title="How uncertain each reading of that column is">
             {columnHeader(table, col)}
           </span>
         ) : (
           <>
             <input
-              className={`field w-12 px-1 text-center font-semibold italic ${badName ? 'text-amber-300' : ''}`}
+              className={`field w-12 px-1 text-center font-semibold italic ${badName ? 'text-warn' : ''}`}
               value={col.name}
               title={badName ? 'Use a letter, then letters or numbers, so formulas can refer to it' : 'Name used in formulas and on the graph'}
               onChange={(e) => onPatch({ name: e.target.value })}
               onKeyDown={(e) => e.stopPropagation()}
             />
-            <span className="text-zinc-500">/</span>
+            <span className="text-ink-faint">/</span>
             <input
               className="field w-12 px-1 text-center"
               value={col.unit}
@@ -94,26 +98,28 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
             />
           </>
         )}
-        <button
-          className={`icon-btn ${col.formula ? 'on' : ''}`}
-          title="Work this column out from the ones before it"
-          onClick={() => {
-            setShowFormula((s) => !s)
-            if (col.formula) onPatch({ formula: undefined })
-          }}
-        >
-          <Sigma size={13} />
-        </button>
-        {!isError && !hasError && (
-          <button className="icon-btn" title="Add a ± column: how uncertain each reading is" onClick={onUncertainty}>
-            <span className="text-[13px] leading-none">±</span>
+        <span className={tools}>
+          <button
+            className={`icon-btn ${col.formula ? 'on' : ''}`}
+            title="Work this column out from the ones before it"
+            onClick={() => {
+              setShowFormula((s) => !s)
+              if (col.formula) onPatch({ formula: undefined })
+            }}
+          >
+            <Sigma size={13} />
           </button>
-        )}
-        {canRemove && (
-          <button className="icon-btn" title="Remove this column" onClick={onRemove}>
-            <X size={13} />
-          </button>
-        )}
+          {!isError && !hasError && (
+            <button className="icon-btn" title="Add a ± column: how uncertain each reading is" onClick={onUncertainty}>
+              <span className="text-body leading-none">±</span>
+            </button>
+          )}
+          {canRemove && (
+            <button className="icon-btn" title="Remove this column" onClick={onRemove}>
+              <X size={13} />
+            </button>
+          )}
+        </span>
       </div>
       {showFormula && (
         <input
@@ -189,7 +195,7 @@ export function LabData() {
   return (
     <div className="panel pb-8">
       <div className="section-title">Lab data</div>
-      <div className="px-3 text-zinc-400">
+      <div className="px-3 text-ink-dim">
         Type the readings you measured. A column can also be worked out from the others — press{' '}
         <Sigma size={11} className="inline" /> and write something like <code>t^2</code>. Press ± to say how uncertain a
         reading is.
@@ -234,10 +240,10 @@ export function LabData() {
 
           {table.rows.map((row, r) => (
             <FlatRow key={r}>
-              <div className="flex items-center justify-center text-[11px] text-zinc-500">{r + 1}</div>
+              <div className="flex items-center justify-center text-fine text-ink-faint">{r + 1}</div>
               {table.columns.map((col, c) =>
                 col.formula ? (
-                  <div key={col.id} className="field num flex items-center justify-end text-zinc-400" title="Worked out from the other columns">
+                  <div key={col.id} className="field num flex items-center justify-end text-ink-dim" title="Worked out from the other columns">
                     {resolved.values[r]?.[c] === null || resolved.values[r]?.[c] === undefined ? '' : fmt(resolved.values[r][c] as number, 4)}
                   </div>
                 ) : (
@@ -253,7 +259,7 @@ export function LabData() {
       </div>
 
       {Object.entries(resolved.errors).map(([id, message]) => (
-        <div key={id} className="mt-2 px-3 text-red-300">
+        <div key={id} className="mt-2 px-3 text-bad">
           {table.columns.find((c) => c.id === id)?.name}: {message}
         </div>
       ))}
@@ -285,13 +291,13 @@ export function LabData() {
         />
       </div>
 
-      <div className="mt-2 px-3 text-zinc-500">
+      <div className="mt-2 px-3 text-ink-faint">
         You can also copy readings out of a spreadsheet and paste them straight onto the table.
       </div>
 
       {undo && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-[var(--line-2)] bg-black/10 px-3 py-2">
-          <span className="min-w-0 flex-1 text-zinc-300">{undo.what}.</span>
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
+          <span className="min-w-0 flex-1 text-ink">{undo.what}.</span>
           <button
             className="btn"
             onClick={() => {
@@ -311,7 +317,7 @@ export function LabData() {
       {/* ---------------------------------------------------------------- graph */}
       <div className="section-title mt-4">Graph</div>
       <div className="flex flex-wrap items-center gap-2 px-3">
-        <span className="text-zinc-500">Plot</span>
+        <span className="text-ink-faint">Plot</span>
         <select className="field w-auto" value={table.plot.y} onChange={(e) => patch((t) => setPlot(t, { y: e.target.value }))}>
           {plottable.map((c) => (
             <option key={c.id} value={c.id}>
@@ -319,7 +325,7 @@ export function LabData() {
             </option>
           ))}
         </select>
-        <span className="text-zinc-500">against</span>
+        <span className="text-ink-faint">against</span>
         <select className="field w-auto" value={table.plot.x} onChange={(e) => patch((t) => setPlot(t, { x: e.target.value }))}>
           {plottable.map((c) => (
             <option key={c.id} value={c.id}>
@@ -363,43 +369,43 @@ export function LabData() {
       )}
 
       {xs.length < MIN_POINTS ? (
-        <div className="px-3 text-zinc-500">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>
+        <div className="px-3 text-ink-faint">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>
       ) : fit ? (
-        <div className="card mx-3 mt-2 border-amber-400/40 bg-amber-400/5 p-3">
-          <div className="text-[15px] text-white">{equationText(fit, yCol?.name ?? 'y', xCol?.name ?? 'x')}</div>
-          <div className="mt-1 text-zinc-400">
+        <div className="card mx-3 mt-2 border-warn/40 bg-warn/5 p-3">
+          <div className="text-lead text-ink-strong">{equationText(fit, yCol?.name ?? 'y', xCol?.name ?? 'x')}</div>
+          <div className="mt-1 text-ink-dim">
             r² = {fmt(fit.r2, 4)}
             {fit.r2 > 0.98 ? ' — the readings sit very close to this line.' : fit.r2 < 0.9 ? ' — the readings are scattered; check for a mistake, or try another shape.' : ''}
           </div>
           {fit.slope !== undefined && (
             <div className="mt-2">
-              <span className="text-zinc-400">gradient = </span>
-              <span className="text-[15px] font-semibold text-white">
+              <span className="text-ink-dim">gradient = </span>
+              <span className="text-lead font-semibold text-ink-strong">
                 {pmText(fit.slope, bars ? bars.half : fit.slopeError)} {slopeUnit}
               </span>
               {bars ? (
-                <div className="mt-1 text-zinc-500">
+                <div className="mt-1 text-ink-faint">
                   From your error bars: the steepest line through them gives {fmt(bars.max, 4)}, the shallowest {fmt(bars.min, 4)}, and half
                   the difference is the ±.
                 </div>
               ) : (
                 fit.slopeError !== undefined &&
                 fit.slopeError > Math.abs(fit.slope) * 1e-9 && (
-                  <div className="mt-1 text-zinc-500">The ± is how far the line could tilt and still pass through readings this scattered.</div>
+                  <div className="mt-1 text-ink-faint">The ± is how far the line could tilt and still pass through readings this scattered.</div>
                 )
               )}
-              {meaning && <div className="mt-1 text-emerald-300">{meaning}</div>}
+              {meaning && <div className="mt-1 text-good">{meaning}</div>}
             </div>
           )}
         </div>
       ) : (
-        <div className="px-3 text-amber-300">This shape cannot be fitted to these readings — a logarithm or a power needs positive values.</div>
+        <div className="px-3 text-warn">This shape cannot be fitted to these readings — a logarithm or a power needs positive values.</div>
       )}
 
       {better && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-[var(--line-2)] bg-black/10 px-3 py-2">
-          <Lightbulb size={14} className="shrink-0 text-amber-300" />
-          <span className="min-w-0 flex-1 text-zinc-300">
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
+          <Lightbulb size={14} className="shrink-0 text-warn" />
+          <span className="min-w-0 flex-1 text-ink">
             {FIT_LABELS[better.shape].split('   ')[0].toLowerCase()} fits your readings better — r² {fmt(better.r2, 3)} against {fmt(fit?.r2 ?? 0, 3)}.
           </span>
           <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: better.shape }))}>
@@ -410,7 +416,7 @@ export function LabData() {
 
       {fit && (
         <div className="mt-3 px-3">
-          <label className="flex items-center gap-2 text-zinc-400">
+          <label className="flex items-center gap-2 text-ink-dim">
             <input type="checkbox" checked={showResiduals} onChange={(e) => setShowResiduals(e.target.checked)} />
             Residuals — how far each reading is from the line
           </label>

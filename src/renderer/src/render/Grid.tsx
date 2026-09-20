@@ -7,19 +7,25 @@ import { finiteArea, gridKey, needsGridRebuild, usableSize } from './gridMath'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
+import { axisTitle, tickText } from './gridLabels'
 import type { V3 } from '../math/vec'
 
 // Grid colours come from the stylesheet so they follow the light/dark theme.
-const MINOR = () => themeColor('--grid-minor', '#26282d')
-const MAJOR = () => themeColor('--grid-major', '#33363c')
-const AXIS = () => themeColor('--grid-axis', '#7d828c')
+const MINOR = () => themeColor('--grid-minor')
+const MAJOR = () => themeColor('--grid-major')
+const AXIS = () => themeColor('--grid-axis')
 
-export const AXIS_COLORS = { x: '#ff4d6a', y: '#8fd12e', z: '#3b9dff' }
-
-function fmtTick(v: number, step: number): string {
-  const decimals = Math.max(0, -Math.floor(Math.log10(step)))
-  const s = v.toFixed(decimals)
-  return s === '-0' ? '0' : s.replace('-', '−')
+// The axis colours are read when needed rather than once: a theme switch changes them.
+const AXIS_COLORS = {
+  get x() {
+    return themeColor('--axis-x')
+  },
+  get y() {
+    return themeColor('--axis-y')
+  },
+  get z() {
+    return themeColor('--axis-z')
+  }
 }
 
 function useGridLines(): [THREE.LineSegments, THREE.LineSegments] {
@@ -74,6 +80,8 @@ export function Grid2D() {
   const [minor, major] = useGridLines()
   const showGrid = useScene((s) => s.settings.showGrid)
   const showAxes = useScene((s) => s.settings.showAxes)
+  // Ticks are written in the drawing's unit and scale, like every other number on screen.
+  const settings = useScene((s) => s.settings)
   const built = useRef({ key: '', xMin: 0, xMax: 0, yMin: 0, yMax: 0 })
   const [axes, setAxes] = useState<{ x: V3[]; y: V3[] }>({ x: [], y: [] })
   const ticks = useMemo(() => new SpanPool(() => overlay.ticks, 'tick-label'), [])
@@ -125,16 +133,16 @@ export function Grid2D() {
       for (let i = Math.ceil(b.xMin / majorStep); i <= Math.floor(b.xMax / majorStep); i++) {
         if (i === 0) continue
         const sx = toScreen(camera, size, [i * majorStep, 0, 0]).x
-        ticks.place(fmtTick(i * majorStep, majorStep), sx, axisY)
+        ticks.place(tickText(i * majorStep, majorStep, settings), sx, axisY)
       }
       for (let j = Math.ceil(b.yMin / majorStep); j <= Math.floor(b.yMax / majorStep); j++) {
         if (j === 0) continue
         const sy = toScreen(camera, size, [0, j * majorStep, 0]).y
-        ticks.place(fmtTick(j * majorStep, majorStep), axisX, sy, 'right')
+        ticks.place(tickText(j * majorStep, majorStep, settings), axisX, sy, 'right')
       }
       ticks.place('0', origin.x - 8, origin.y + 12, 'right')
-      ticks.place('x', size.width - 12, Math.min(Math.max(origin.y - 12, 12), size.height - 20), 'center', AXIS_COLORS.x)
-      ticks.place('y', Math.min(Math.max(origin.x + 12, 12), size.width - 12), 14, 'center', AXIS_COLORS.y)
+      ticks.place(axisTitle('x', settings), size.width - 12, Math.min(Math.max(origin.y - 12, 12), size.height - 20), 'right', AXIS_COLORS.x)
+      ticks.place(axisTitle('y', settings), Math.min(Math.max(origin.x + 12, 12), size.width - 12), 14, 'left', AXIS_COLORS.y)
     }
     ticks.end()
   })
@@ -159,6 +167,7 @@ export function Grid3D() {
   const [minor, major] = useGridLines()
   const showGrid = useScene((s) => s.settings.showGrid)
   const showAxes = useScene((s) => s.settings.showAxes)
+  const settings = useScene((s) => s.settings)
   const [extent, setExtent] = useState({ size: 10, step: 1 })
   const ticks = useMemo(() => new SpanPool(() => overlay.ticks, 'tick-label'), [])
   useEffect(() => () => ticks.dispose(), [ticks])
@@ -177,14 +186,15 @@ export function Grid3D() {
         const s = toScreen(camera, size, p)
         if (s.visible) ticks.place(label, s.x, s.y, 'center', color)
       }
-      put('x', [half * 1.08, 0, 0], AXIS_COLORS.x)
-      put('y', [0, half * 1.08, 0], AXIS_COLORS.y)
-      put('z', [0, 0, half * 1.08], AXIS_COLORS.z)
+      put(axisTitle('x', settings), [half * 1.08, 0, 0], AXIS_COLORS.x)
+      put(axisTitle('y', settings), [0, half * 1.08, 0], AXIS_COLORS.y)
+      put(axisTitle('z', settings), [0, 0, half * 1.08], AXIS_COLORS.z)
       for (let i = -10; i <= 10; i += 2) {
         if (i === 0) continue
-        put(fmtTick(i * step, step), [i * step, 0, 0])
-        put(fmtTick(i * step, step), [0, i * step, 0])
-        put(fmtTick(i * step, step), [0, 0, i * step])
+        const label = tickText(i * step, step, settings)
+        put(label, [i * step, 0, 0])
+        put(label, [0, i * step, 0])
+        put(label, [0, 0, i * step])
       }
     }
     ticks.end()

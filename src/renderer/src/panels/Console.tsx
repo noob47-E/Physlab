@@ -15,7 +15,7 @@ export function Console() {
 
   return (
     <div className="panel flex flex-col">
-      <div className="flex items-center gap-2 border-b border-[#26272c] px-3 py-1 text-[11px] text-zinc-500">
+      <div className="flex items-center gap-2 border-b border-line px-3 py-1 text-fine text-ink-faint">
         Results of everything you type in the command bar
         <div className="flex-1" />
         <button className="btn ghost h-6" onClick={clear}>
@@ -23,7 +23,7 @@ export function Console() {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {log.length === 0 && <div className="p-4 text-zinc-500">Nothing yet. Try typing <code className="text-amber-200">A = &lt;3, 4&gt;</code> in the command bar and press Enter.</div>}
+        {log.length === 0 && <div className="p-4 text-ink-faint">Nothing yet. Try typing <code className="text-warn">A = &lt;3, 4&gt;</code> in the command bar and press Enter.</div>}
         {log.map((e) => (
           <div key={e.id} className="log-entry">
             <div className="log-in">› {e.input}</div>

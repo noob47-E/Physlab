@@ -77,12 +77,12 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
   const ang = (v: number) => formatMeasure(v, 'angle', settings)
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-[color:var(--line)] px-2 py-1.5">
-        <Equal size={15} className="text-[color:var(--good)]" />
-        <div className="flex-1 font-semibold text-[color:var(--text-strong)]">
+      <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
+        <Equal size={15} className="text-good" />
+        <div className="flex-1 font-semibold text-ink-strong">
           △{A.names.join('')} and △{r.matchedName}
         </div>
-        <span className={`rounded-full border px-2 text-[11px] ${r.congruent ? 'border-[color:var(--good)] text-[color:var(--good)]' : r.similar ? 'border-[color:var(--warn)] text-[color:var(--warn)]' : 'border-[color:var(--bad)] text-[color:var(--bad)]'}`}>
+        <span className={`rounded-full border px-2 text-fine ${r.congruent ? 'border-good text-good' : r.similar ? 'border-warn text-warn' : 'border-bad text-bad'}`}>
           {r.congruent ? `congruent · ${r.test}` : r.similar ? 'similar' : 'not congruent'}
         </span>
       </div>
@@ -94,14 +94,14 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
           <Row key={`∠${p.a}`} label={`∠${p.a} · ∠${p.b}`} a={ang(p.valueA)} b={ang(p.valueB)} equal={p.equal} />
         ))}
       </div>
-      <ol className="space-y-1 border-t border-[color:var(--line)] px-3 py-2 text-[color:var(--text)]">
+      <ol className="space-y-1 border-t border-line px-3 py-2 text-ink">
         {r.reasons.map((line, i) => (
-          <li key={i} className={i === r.reasons.length - 1 ? 'font-semibold text-[color:var(--text-strong)]' : ''}>
+          <li key={i} className={i === r.reasons.length - 1 ? 'font-semibold text-ink-strong' : ''}>
             {i + 1}. {line}
           </li>
         ))}
       </ol>
-      <label className="flex cursor-pointer items-center gap-2 border-t border-[color:var(--line)] px-3 py-1.5 text-[color:var(--text-dim)]">
+      <label className="flex cursor-pointer items-center gap-2 border-t border-line px-3 py-1.5 text-ink-dim">
         <input type="checkbox" checked={showMarks} onChange={(e) => setShowMarks(e.target.checked)} /> Mark the equal sides and angles on the drawing
       </label>
     </div>
@@ -112,7 +112,7 @@ function Row({ label, a, b, equal }: { label: string; a: string; b: string; equa
   return (
     <>
       <span className="k">{label}</span>
-      <span className={`v ${equal ? 'text-[color:var(--good)]' : 'text-[color:var(--text-dim)]'}`}>
+      <span className={`v ${equal ? 'text-good' : 'text-ink-dim'}`}>
         {a} {equal ? '=' : '≠'} {b}
       </span>
     </>
@@ -142,13 +142,13 @@ export function TriangleFromSides() {
   }
   return (
     <div className="card p-2">
-      <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-[color:var(--text-faint)]">
+      <div className="mb-1 flex items-center gap-2 text-fine uppercase tracking-wide text-ink-faint">
         <Shapes size={12} /> Draw a triangle from its sides
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {(['a', 'b', 'c'] as const).map((l, i) => (
           <label key={l} className="flex items-center gap-1">
-            <span className="italic text-[color:var(--text-dim)]">{l}</span>
+            <span className="italic text-ink-dim">{l}</span>
             <div className="w-16">
               <NumField
                 value={sides[i]}
@@ -165,8 +165,8 @@ export function TriangleFromSides() {
           Draw
         </button>
       </div>
-      {error && <div className="mt-1 text-[color:var(--bad)]">{error}</div>}
-      <div className="mt-1 text-[11px] text-[color:var(--text-faint)]">Draw two, then Shift-click both to compare them.</div>
+      {error && <div className="mt-1 text-bad">{error}</div>}
+      <div className="mt-1 text-fine text-ink-faint">Draw two, then Shift-click both to compare them.</div>
     </div>
   )
 }

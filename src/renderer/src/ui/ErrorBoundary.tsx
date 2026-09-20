@@ -16,8 +16,8 @@ export class ErrorBoundary extends Component<{ name: string; children: ReactNode
     if (!this.state.error) return this.props.children
     return (
       <div className="panel p-4">
-        <div className="mb-2 font-semibold text-red-300">{this.props.name} hit a problem.</div>
-        <div className="mb-3 font-mono text-[12px] text-zinc-400">{this.state.error.message}</div>
+        <div className="mb-2 font-semibold text-bad">{this.props.name} hit a problem.</div>
+        <div className="mb-3 font-mono text-small text-ink-dim">{this.state.error.message}</div>
         <button className="btn" onClick={() => this.setState({ error: null })}>
           Retry
         </button>

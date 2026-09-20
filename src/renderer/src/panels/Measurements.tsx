@@ -284,7 +284,7 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
   return (
     <>
       <div className="k">{row.label}</div>
-      <div className={`v ${row.accent ? 'font-semibold text-white' : ''}`}>
+      <div className={`v ${row.accent ? 'font-semibold text-ink-strong' : ''}`}>
         {/* Typed in whatever unit is on screen — centimetres, degrees — and converted back to the
             world value the scene stores, or a drawing in cm would jump by a factor of ten. */}
         {row.set && typeof row.value === 'number' ? (
@@ -297,7 +297,7 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
           show(row.value)
         )}
         {Math.abs(delta) > 1e-9 && (
-          <span className={`ml-2 text-[11px] ${delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <span className={`ml-2 text-fine ${delta > 0 ? 'text-good' : 'text-bad'}`}>
             Δ {delta > 0 ? '+' : '−'}
             {formatMeasure(Math.abs(delta), k, settings)}
           </span>
@@ -323,15 +323,15 @@ function AllMeasurements() {
 
   return (
     <div data-tour="measure" className="panel pb-6">
-      <div className="px-3 pb-2 pt-3 text-zinc-500">
-        Click any object to measure it live. Drag it and watch the <span className="text-emerald-400">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product, or two triangles to see whether they are congruent.
+      <div className="px-3 pb-2 pt-3 text-ink-faint">
+        Click any object to measure it live. Drag it and watch the <span className="text-good">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product, or two triangles to see whether they are congruent.
       </div>
       {space === 'shapes' && <TriangleFromSides />}
       {list.length > 0 && (
         <>
           <div className="section-title flex items-center">
             <span className="flex-1">All measurements</span>
-            <span className="normal-case tracking-normal text-zinc-600">pin = always on drawing</span>
+            <span className="normal-case tracking-normal text-ink-faint">pin = always on drawing</span>
           </div>
           {list.map((o) => {
             const c = ev.values.get(o.id)
@@ -347,13 +347,13 @@ function AllMeasurements() {
                   select([o.id])
                   showContextMenu(e, menuForObject(o.id))
                 }}
-                className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${hovered === o.id ? 'bg-[#26282d]' : ''}`}
+                className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${hovered === o.id ? 'bg-surface-3' : ''}`}
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color }} />
-                <span className="w-14 shrink-0 truncate font-semibold italic text-zinc-100" style={{ fontFamily: 'Cambria, serif' }}>
+                <span className="w-14 shrink-0 truncate font-math font-semibold italic text-ink-strong">
                   {o.name}
                 </span>
-                <span className="min-w-0 flex-1 truncate tabular-nums text-zinc-300">{text || '—'}</span>
+                <span className="min-w-0 flex-1 truncate tabular-nums text-ink">{text || '—'}</span>
                 <PinLabelButton id={o.id} className={o.labelPin === 'always' ? '' : 'opacity-0 group-hover:opacity-100'} />
               </div>
             )
@@ -405,7 +405,7 @@ export function Measurements() {
       {triangles.length === 2 && <CongruenceCard a={triangles[0].id} b={triangles[1].id} />}
       {triangles.length === 1 && sel.length === 1 && (
         <>
-          <div className="px-3 pt-2 text-[11.5px] text-[color:var(--text-faint)]">Shift-click another triangle to check whether the two are congruent — or draw one to compare with:</div>
+          <div className="px-3 pt-2 text-fine text-ink-faint">Shift-click another triangle to check whether the two are congruent — or draw one to compare with:</div>
           <TriangleFromSides />
         </>
       )}
@@ -414,7 +414,7 @@ export function Measurements() {
       ))}
       {vecs.length >= 2 && (
         <div className="card p-2">
-          <div className="mb-1.5 text-[11px] uppercase tracking-wide text-zinc-500">Solve with steps</div>
+          <div className="mb-1.5 text-fine uppercase tracking-wide text-ink-faint">Solve with steps</div>
           <div className="flex flex-wrap gap-1.5">
             <button className="btn" onClick={() => showSolution(VS.solveAddition(vecs))}>
               <ListOrdered size={13} /> {vecs.map((v) => v.name).join(' + ')}
@@ -506,7 +506,7 @@ function EditableValue({ value, suffix, onSet }: { value: number; suffix: string
           e.stopPropagation()
         }}
       />
-      <span className="text-zinc-500">{suffix.trim()}</span>
+      <span className="text-ink-faint">{suffix.trim()}</span>
     </span>
   )
 }

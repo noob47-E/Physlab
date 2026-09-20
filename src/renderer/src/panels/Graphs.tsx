@@ -3,8 +3,7 @@ import uPlot from 'uplot'
 import { Plus, Trash2, X } from 'lucide-react'
 import { useScene } from '../core/store'
 import { math, preprocess } from '../math/expr'
-
-const COLORS = ['#4dabf7', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#22b8cf']
+import { seriesColor, themeColor, useTheme } from '../app/theme'
 
 /** Live plots of any quantity against time (e.g. |R|, angle(A, B), P[1]). */
 export function Graphs() {
@@ -13,20 +12,25 @@ export function Graphs() {
   const host = useRef<HTMLDivElement>(null)
   const plot = useRef<uPlot | null>(null)
   const data = useRef<number[][]>([[]])
+  // Every colour comes from the stylesheet, the way LabChart does it, so the plot is readable in
+  // the light theme too; the chart is rebuilt when the theme changes.
+  const theme = useTheme((t) => t.theme)
 
   useEffect(() => {
     data.current = [[], ...tracks.map(() => [])]
     const el = host.current
     if (!el) return
+    const axis = themeColor('--tick-text')
+    const grid = themeColor('--grid-major')
     const opts: uPlot.Options = {
       width: el.clientWidth || 600,
       height: Math.max(120, (el.clientHeight || 200) - 10),
       scales: { x: { time: false } },
       axes: [
-        { stroke: '#8a8f98', grid: { stroke: '#2a2c31' }, ticks: { stroke: '#2a2c31' }, label: 't (s)' },
-        { stroke: '#8a8f98', grid: { stroke: '#2a2c31' }, ticks: { stroke: '#2a2c31' } }
+        { stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, label: 't (s)' },
+        { stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid } }
       ],
-      series: [{ label: 't' }, ...tracks.map((t, i) => ({ label: t, stroke: COLORS[i % COLORS.length], width: 2 }))],
+      series: [{ label: 't' }, ...tracks.map((t, i) => ({ label: t, stroke: seriesColor(i), width: 2 }))],
       legend: { show: true }
     }
     plot.current?.destroy()
@@ -38,7 +42,7 @@ export function Graphs() {
       plot.current?.destroy()
       plot.current = null
     }
-  }, [tracks])
+  }, [tracks, theme])
 
   useEffect(() => {
     let lastT = -Infinity
@@ -70,11 +74,11 @@ export function Graphs() {
 
   return (
     <div className="panel flex flex-col">
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-[#26272c] px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5">
         {tracks.map((t, i) => (
-          <span key={i} className="flex items-center gap-1 rounded bg-[#26282d] px-2 py-0.5 font-mono" style={{ color: COLORS[i % COLORS.length] }}>
+          <span key={i} className="flex items-center gap-1 rounded bg-surface-3 px-2 py-0.5 font-mono" style={{ color: seriesColor(i) }}>
             {t}
-            <button className="text-zinc-500 hover:text-white" onClick={() => setTracks(tracks.filter((_, j) => j !== i))}>
+            <button className="text-ink-faint hover:text-ink-strong" onClick={() => setTracks(tracks.filter((_, j) => j !== i))}>
               <X size={12} />
             </button>
           </span>
@@ -105,7 +109,7 @@ export function Graphs() {
         <button className="btn ghost h-6" onClick={() => (data.current = [[], ...tracks.map(() => [])], plot.current?.setData(data.current as uPlot.AlignedData))}>
           <Trash2 size={12} /> Reset
         </button>
-        <span className="text-[11px] text-zinc-500">Values are recorded while the timeline plays.</span>
+        <span className="text-fine text-ink-faint">Values are recorded while the timeline plays.</span>
       </div>
       <div ref={host} className="min-h-0 flex-1 px-1" />
     </div>

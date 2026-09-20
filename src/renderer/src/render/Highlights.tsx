@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import { FatLine } from './FatLine'
 import { useView } from './viewState'
 import { useScene } from '../core/store'
+import { themeColor, useTheme } from '../app/theme'
 import type { Highlight } from '../math/shapeFormulas'
 import type { V3 } from '../math/vec'
 
@@ -40,16 +41,20 @@ export function Highlights() {
   const wpp = useView((s) => s.wpp)
   const alive = useScene((s) => !h?.owner || !!s.objects[h.owner])
   const hatch = useMemo(() => (h?.region ? hatchSegments(h.region, 7 * wpp) : []), [h, wpp])
+  // The colours come from the stylesheet: a fixed light grey and yellow were invisible on the
+  // light theme's pale canvas. Re-read when the theme changes.
+  const theme = useTheme((t) => t.theme)
+  const { hatchColour, glow } = useMemo(() => ({ hatchColour: themeColor('--grid-axis'), glow: themeColor('--warn') }), [theme])
   // A highlight whose shape has been deleted has nothing to shade.
   if (!h || !alive) return null
   return (
     <>
-      {hatch.length > 1 && <FatLine points={hatch} segments color="#c9ced6" width={1.1} renderOrder={40} />}
+      {hatch.length > 1 && <FatLine points={hatch} segments color={hatchColour} width={1.1} renderOrder={40} />}
       {h.segments?.map((s, i) => (
-        <FatLine key={`s${i}`} points={s} color="#ffd43b" width={5} renderOrder={41} />
+        <FatLine key={`s${i}`} points={s} color={glow} width={5} renderOrder={41} />
       ))}
       {h.dashed?.map((s, i) => (
-        <FatLine key={`d${i}`} points={s} color="#ffd43b" width={2.2} dashed dashSize={7 * wpp} gapSize={5 * wpp} renderOrder={41} />
+        <FatLine key={`d${i}`} points={s} color={glow} width={2.2} dashed dashSize={7 * wpp} gapSize={5 * wpp} renderOrder={41} />
       ))}
     </>
   )

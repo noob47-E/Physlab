@@ -38,7 +38,7 @@ export function PinLabelButton({ id, size = 13, className = '' }: { id: ObjId; s
   const pinned = pin === 'always'
   return (
     <button
-      className={`${pinned ? 'text-amber-300' : 'text-zinc-500 hover:text-white'} ${className}`}
+      className={`${pinned ? 'text-warn' : 'text-ink-faint hover:text-ink-strong'} ${className}`}
       title={pinned ? 'Label pinned: always shown on the drawing. Click to unpin.' : 'Pin label: always show it on the drawing'}
       onClick={(e) => {
         e.stopPropagation()

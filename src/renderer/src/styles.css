@@ -1,5 +1,50 @@
 @import 'tailwindcss';
 
+/*
+ * Type and colour tokens the .tsx files use as utilities (text-fine, text-ink-dim, bg-surface-2,
+ * font-math…). Sizes are named steps rather than pixel values so a panel cannot quietly invent a
+ * 10.5 px label again: there are six sizes in the whole app, and the smallest is one step under
+ * the base. `static` keeps every variable in the output even where no utility uses it, because the
+ * rules further down refer to them with var().
+ */
+@theme static {
+  --font-ui: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  --font-math: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
+  --font-mono: 'Cascadia Code', 'Consolas', monospace;
+  --text-fine: 11px;
+  --text-small: 12px;
+  --text-body: 13px;
+  --text-lead: 15px;
+  --text-title: 18px;
+  --text-display: 22px;
+}
+
+/* Colour utilities resolve to the theme variables below, so the same class works in both themes. */
+@theme inline {
+  --color-ink: var(--text);
+  --color-ink-strong: var(--text-strong);
+  --color-ink-dim: var(--text-dim);
+  --color-ink-faint: var(--text-faint);
+  --color-surface-0: var(--bg-0);
+  --color-surface-1: var(--bg-1);
+  --color-surface-2: var(--bg-2);
+  --color-surface-3: var(--bg-3);
+  --color-surface-4: var(--bg-4);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-on-accent: var(--on-accent);
+  --color-warn: var(--warn);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-sel: var(--sel-row);
+  --color-measure: var(--measure-text);
+  --color-code: var(--code-text);
+  --color-input: var(--input-bg);
+  --color-label: var(--label-bg);
+}
+
 :root {
   --bg-0: #121315;
   --bg-1: #1a1b1e;
@@ -33,6 +78,19 @@
   --measure-text: #ffe8a3;
   --code-text: #ffe8a3;
   --log-in: #8fb6ff;
+  /* Text on an accent-coloured button or row: the accent is blue in both themes, so this is white in both. */
+  --on-accent: #ffffff;
+  /* The x, y, z axes keep the colours every textbook uses; the light theme only deepens them. */
+  --axis-x: #ff4d6a;
+  --axis-y: #8fd12e;
+  --axis-z: #3b9dff;
+  /* Series colours for plotted quantities, in the order they are added. */
+  --series-1: #4dabf7;
+  --series-2: #ff6b6b;
+  --series-3: #51cf66;
+  --series-4: #fcc419;
+  --series-5: #cc5de8;
+  --series-6: #22b8cf;
   color-scheme: dark;
 }
 
@@ -70,6 +128,16 @@
   --measure-text: #8a5a00;
   --code-text: #8a5a00;
   --log-in: #1c4fa1;
+  --on-accent: #ffffff;
+  --axis-x: #d6224a;
+  --axis-y: #4f8f0e;
+  --axis-z: #1f6fd0;
+  --series-1: #1c7ed6;
+  --series-2: #d6336c;
+  --series-3: #2b8a3e;
+  --series-4: #b3800a;
+  --series-5: #862e9c;
+  --series-6: #0b7285;
   color-scheme: light;
 }
 
@@ -80,8 +148,8 @@ body,
   margin: 0;
   background: var(--bg-0);
   color: var(--text);
-  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-  font-size: 12.5px;
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
   overflow: hidden;
 }
 
@@ -94,11 +162,23 @@ button {
   cursor: pointer;
 }
 
-input,
-select,
-textarea {
-  font: inherit;
-  color: inherit;
+/* In the base layer, so a component rule such as .cmd-input can still choose its own face and size:
+   an unlayered rule here beats every rule inside @layer components, which is why the command bar
+   silently ignored its font for two versions. */
+@layer base {
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* Checkboxes and range sliders take the theme's accent without a class on every one of them. */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
 }
 
 /* ---------- Dockview theme tuned to Blender-like greys ---------- */
@@ -121,7 +201,7 @@ textarea {
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--accent);
   --dv-tabs-and-actions-container-height: 28px;
-  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-font-size: var(--text-small);
 }
 
 /* Custom component classes live in a cascade layer so Tailwind utilities (w-12, h-auto…) can override them. */
@@ -145,7 +225,7 @@ textarea {
 .btn.primary {
   background: var(--accent-2);
   border-color: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 .btn.primary:hover {
   background: var(--accent);
@@ -174,17 +254,19 @@ textarea {
   color: var(--text-dim);
 }
 .icon-btn:hover {
-  color: white;
+  color: var(--text-strong);
   background: var(--bg-3);
 }
 .icon-btn.on {
-  color: white;
+  color: var(--on-accent);
   background: var(--accent-2);
   border-color: var(--accent);
 }
 
 .seg {
   display: inline-flex;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   border: 1px solid var(--line-2);
   border-radius: 6px;
   overflow: hidden;
@@ -197,14 +279,15 @@ textarea {
   height: 24px;
   padding: 0 10px;
   color: var(--text-dim);
+  white-space: nowrap;
 }
 .seg button.on {
   background: var(--accent-2);
-  color: white;
+  color: var(--on-accent);
 }
 .seg button:not(.on):hover {
   background: var(--bg-3);
-  color: white;
+  color: var(--text-strong);
 }
 
 .field {
@@ -243,7 +326,7 @@ textarea {
   align-items: center;
   gap: 6px;
   padding: 7px 10px 5px;
-  font-size: 11px;
+  font-size: var(--text-fine);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -252,7 +335,7 @@ textarea {
 
 .prop-row {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: minmax(72px, 33%) 1fr;
   align-items: center;
   gap: 8px;
   padding: 3px 10px;
@@ -260,7 +343,10 @@ textarea {
 .prop-row > label {
   color: var(--text-dim);
   text-align: right;
-  font-size: 12px;
+  font-size: var(--text-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kv {
@@ -293,7 +379,7 @@ textarea {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: 10.5px;
+  font-size: var(--text-fine);
   color: var(--tick-text);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -306,7 +392,7 @@ textarea {
   font-size: 14px;
   font-weight: 600;
   font-style: italic;
-  font-family: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
+  font-family: var(--font-math);
   white-space: nowrap;
   text-shadow: 0 0 4px var(--label-shadow), 0 0 2px var(--label-shadow);
   transition: opacity 0.12s ease;
@@ -332,10 +418,10 @@ textarea {
   font-size: 14px;
 }
 .obj-label.chip .ms {
-  font-family: 'Segoe UI', 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-style: normal;
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--text-small);
   color: var(--text-strong);
   font-variant-numeric: tabular-nums;
 }
@@ -346,7 +432,7 @@ textarea {
 .obj-label.is-text {
   font-style: normal;
   font-weight: 500;
-  font-family: 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
   color: var(--text-strong);
   background: var(--label-bg);
   padding: 2px 6px;
@@ -369,7 +455,7 @@ textarea {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: 12px;
+  font-size: var(--text-small);
   color: var(--measure-text);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -379,7 +465,7 @@ textarea {
   border-radius: 4px;
 }
 .measure-label.part-label {
-  font-size: 15px;
+  font-size: var(--text-lead);
   font-weight: 700;
   background: var(--label-bg);
 }
@@ -393,7 +479,7 @@ textarea {
   background: var(--label-bg);
   border: 1px solid var(--line-2);
   color: var(--label-text);
-  font-size: 12px;
+  font-size: var(--text-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
@@ -464,14 +550,15 @@ textarea {
 }
 .menu-item.is-active {
   background: var(--accent-2);
-  color: #fff;
+  color: var(--on-accent);
 }
 .menu-item.is-danger {
   color: var(--bad);
 }
 .menu-item.is-danger.is-active {
-  background: #7a2c2c;
-  color: #fff;
+  /* Darkened rather than a fixed dark red, so it follows whichever red the theme uses. */
+  background: color-mix(in srgb, var(--bad) 60%, black);
+  color: var(--on-accent);
 }
 
 /* ---------- Top bar ---------- */
@@ -500,6 +587,8 @@ textarea {
   left: 0;
   z-index: 50;
   min-width: 220px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   padding: 4px;
   border-radius: 7px;
   background: var(--menu-bg);
@@ -517,6 +606,11 @@ textarea {
 }
 .menu button:hover {
   background: var(--accent-2);
+  color: var(--on-accent);
+}
+.menu button:hover .sc {
+  color: var(--on-accent);
+  opacity: 0.8;
 }
 .menu .sc {
   color: var(--text-faint);
@@ -535,11 +629,11 @@ textarea {
 }
 .mode-tab.on {
   background: var(--bg-4);
-  color: white;
+  color: var(--text-strong);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 .mode-tab:not(.on):hover {
-  color: white;
+  color: var(--text-strong);
 }
 .mode-tab.soon {
   opacity: 0.4;
@@ -566,15 +660,15 @@ textarea {
   padding: 0 6px;
   border-radius: 6px;
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: var(--text-fine);
 }
 .tool:hover {
   background: var(--bg-3);
-  color: white;
+  color: var(--text-strong);
 }
 .tool.on {
   background: var(--accent-2);
-  color: white;
+  color: var(--on-accent);
 }
 .tool-sep {
   width: 1px;
@@ -599,9 +693,12 @@ textarea {
   border-radius: 6px;
   background: var(--bg-0);
   border: 1px solid var(--line-2);
-  font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-size: 13.5px;
+  font-family: var(--font-ui);
+  font-size: var(--text-lead);
   outline: none;
+}
+.cmd-input::placeholder {
+  color: var(--text-faint);
 }
 .cmd-input:focus {
   border-color: var(--accent);
@@ -631,9 +728,14 @@ textarea {
 .suggest button.active,
 .suggest button:hover {
   background: var(--accent-2);
+  color: var(--on-accent);
+}
+.suggest button.active code,
+.suggest button:hover code {
+  color: var(--on-accent);
 }
 .suggest code {
-  font-family: 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--code-text);
 }
 
@@ -643,7 +745,7 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 .log-in {
-  font-family: 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--log-in);
 }
 .log-out {
@@ -669,12 +771,12 @@ math-field.math-input {
   background: var(--input-bg);
   color: var(--text-strong);
   border: 1px solid var(--line-2);
-  font-size: 18px;
-  --caret-color: #74c0fc;
+  font-size: var(--text-title);
+  --caret-color: var(--accent);
   --selection-background-color: rgba(79, 140, 255, 0.35);
   --contains-highlight-background-color: rgba(79, 140, 255, 0.12);
-  --placeholder-color: #6c707a;
-  --smart-fence-color: #9aa1ab;
+  --placeholder-color: var(--text-faint);
+  --smart-fence-color: var(--text-dim);
 }
 math-field.math-input:focus-within {
   outline: none;
@@ -682,11 +784,11 @@ math-field.math-input:focus-within {
   box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.2);
 }
 math-field.math-input-sm {
-  font-size: 15px;
+  font-size: var(--text-lead);
   min-height: 28px;
 }
 math-field.math-input-lg {
-  font-size: 22px;
+  font-size: var(--text-display);
   min-height: 46px;
 }
 math-field.math-input::part(virtual-keyboard-toggle),
@@ -909,7 +1011,65 @@ math-field.math-input::part(menu-toggle) {
   white-space: normal;
 }
 
+/* ---------- Smaller screens ---------- */
+/* A 1366×768 laptop at 125 % scaling has about 1090 px of width and 610 px of height to give. The
+   bars give up their spare padding first, then their height, before any panel has to shrink. */
+@media (max-width: 1440px) {
+  .topbar {
+    gap: 4px;
+    padding: 0 6px;
+  }
+  .menu-btn {
+    padding: 0 7px;
+  }
+  .mode-tab {
+    padding: 0 8px;
+  }
+  .tool {
+    min-width: 44px;
+    padding: 0 4px;
+  }
+  .cmdbar {
+    gap: 6px;
+    padding: 0 8px;
+  }
+  .prop-row {
+    padding: 3px 8px;
+  }
+}
+@media (max-height: 800px) {
+  .topbar {
+    height: 32px;
+  }
+  .menu {
+    top: 28px;
+  }
+  .toolshelf {
+    height: 34px;
+  }
+  .tool {
+    height: 30px;
+    gap: 0;
+  }
+  .cmdbar {
+    height: 32px;
+  }
+  .cmd-input {
+    height: 26px;
+  }
+  .suggest {
+    top: 30px;
+  }
+}
+
 } /* end @layer components */
+
+/* The dock's own variable is set outside the layer above, so this override has to be too. */
+@media (max-height: 800px) {
+  .dockview-theme-dark {
+    --dv-tabs-and-actions-container-height: 24px;
+  }
+}
 
 .katex {
   font-size: 1.08em;
@@ -923,6 +1083,9 @@ math-field.math-input::part(menu-toggle) {
 
 
 /* ---------- Light theme: readable values for the dark-first utility classes ---------- */
+/* Only files that still use text-zinc-*, bg-[#…] and friends need this block. New code uses the
+   token utilities (text-ink-dim, bg-surface-2…) declared at the top, which need no remapping;
+   once no .tsx file uses a grey utility (tests/colours.test.ts keeps count) this block can go. */
 :root[data-theme='light'] .text-white,
 :root[data-theme='light'] .text-zinc-100,
 :root[data-theme='light'] .text-zinc-200 {

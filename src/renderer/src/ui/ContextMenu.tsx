@@ -88,8 +88,8 @@ export function ContextMenuHost() {
   return (
     <div ref={ref} className="context-menu" style={{ left: at.x, top: at.y }} onContextMenu={(e) => e.preventDefault()}>
       {groups.map((g, gi) => (
-        <div key={gi} className={gi ? 'border-t border-[#33353c] pt-1 mt-1' : ''}>
-          {g.title && <div className="px-3 pb-0.5 pt-1 text-[10.5px] uppercase tracking-wide text-zinc-500">{g.title}</div>}
+        <div key={gi} className={gi ? 'border-t border-line-2 pt-1 mt-1' : ''}>
+          {g.title && <div className="px-3 pb-0.5 pt-1 text-fine uppercase tracking-wide text-ink-faint">{g.title}</div>}
           {g.items.map((item) => {
             index++
             const i = index
@@ -104,9 +104,9 @@ export function ContextMenuHost() {
                 }}
                 title={item.hint}
               >
-                <span className="w-3 text-[11px] text-sky-300">{item.checked ? '✓' : ''}</span>
+                <span className="w-3 text-fine text-accent">{item.checked ? '✓' : ''}</span>
                 <span className="flex-1 text-left">{item.label}</span>
-                {item.shortcut && <span className="ml-4 text-[11px] text-zinc-500">{item.shortcut}</span>}
+                {item.shortcut && <span className="ml-4 text-fine text-ink-faint">{item.shortcut}</span>}
               </button>
             )
           })}
