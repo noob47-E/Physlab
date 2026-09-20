@@ -16,6 +16,7 @@ import type { ObjId, SceneObject } from '../core/types'
 import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
+import { visibleOrder } from '../core/visibility'
 
 interface DragState {
   hit: Hit
@@ -60,7 +61,8 @@ export function Interaction() {
     }
     const pickCtx = () => {
       const s = scene()
-      return { camera: ctxRef.current.camera, size: ctxRef.current.size, objects: s.objects, order: s.order, ev: s.ev }
+      // Only what is on screen can be picked: the other drawings are not there.
+      return { camera: ctxRef.current.camera, size: ctxRef.current.size, objects: s.objects, order: visibleOrder(s.order, s.objects, s.activeSpace), ev: s.ev }
     }
     const setControls = (enabled: boolean) => {
       const c = ctxRef.current.controls as unknown as { enabled: boolean } | null
@@ -139,6 +141,8 @@ export function Interaction() {
       // A point placed on a side belongs to it and slides along it afterwards.
       const p = sn.kind === 'onObject' && sn.onId ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 }) : b.point(sn.p)
       b.commit(false)
+      // Remember that the tool made this point, so Esc may take it away again — and only this.
+      useTool.setState((t) => ({ created: [...t.created, p.id] }))
       return p.id
     }
 
@@ -499,6 +503,7 @@ export function Interaction() {
           const b = new Builder()
           id = b.point(constrainAngle(anchorPt, sn.p)).id
           b.commit(false)
+          useTool.setState((t) => ({ created: [...t.created, id!] }))
         } else id = pointAt(x, y, e.altKey)
       }
       if (!id) return

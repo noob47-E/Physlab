@@ -6,6 +6,7 @@ import type { EvalResult, ObjId, SceneFile, SceneObject, SceneSettings, ToolId, 
 import type { Solution } from '../math/vectorSolver'
 import { useLab } from '../lab/labStore'
 import { useSandbox } from '../sim/store'
+import { visibleOrder, type Space } from './visibility'
 
 export interface LogEntry {
   id: number
@@ -51,6 +52,9 @@ export interface SceneState {
 
   filePath: string | null
   dirty: boolean
+  /** The drawing the current mode looks at. Objects are stamped with it when made and shown only there. */
+  activeSpace: Space | null
+  setActiveSpace: (space: Space | null) => void
 
   log: LogEntry[]
   solution: Solution | null
@@ -181,6 +185,12 @@ export const useScene = create<SceneState>()((set, get) => {
 
     filePath: null,
     dirty: false,
+    activeSpace: 'vectors',
+    setActiveSpace: (activeSpace) => {
+      if (get().activeSpace === activeSpace) return
+      // What was selected may no longer be on screen.
+      set({ activeSpace, selection: [], hovered: null })
+    },
 
     log: [],
     solution: null,
@@ -359,3 +369,6 @@ useLab.subscribe(() => useScene.setState({ dirty: true }))
 useSandbox.subscribe((s, prev) => {
   if (s.bodies !== prev.bodies || s.links !== prev.links || s.world !== prev.world || s.sideView !== prev.sideView) useScene.setState({ dirty: true })
 })
+
+// Handy while developing: inspect the drawing from the browser console.
+if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __useScene?: typeof useScene }).__useScene = useScene

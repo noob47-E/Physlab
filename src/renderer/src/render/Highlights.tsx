@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { FatLine } from './FatLine'
 import { useView } from './viewState'
+import { useScene } from '../core/store'
 import type { Highlight } from '../math/shapeFormulas'
 import type { V3 } from '../math/vec'
 
@@ -37,8 +38,10 @@ export function hatchSegments(region: V3[], spacing: number): V3[] {
 export function Highlights() {
   const h = useHighlight((s) => s.h)
   const wpp = useView((s) => s.wpp)
+  const alive = useScene((s) => !h?.owner || !!s.objects[h.owner])
   const hatch = useMemo(() => (h?.region ? hatchSegments(h.region, 7 * wpp) : []), [h, wpp])
-  if (!h) return null
+  // A highlight whose shape has been deleted has nothing to shade.
+  if (!h || !alive) return null
   return (
     <>
       {hatch.length > 1 && <FatLine points={hatch} segments color="#c9ced6" width={1.1} renderOrder={40} />}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { visibleIn } from '../core/visibility'
 import { useFrame } from '@react-three/fiber'
 import { toScreen } from './cameraUtils'
 import { labelAnchors, overlay } from './overlay'
@@ -98,6 +99,7 @@ export function LabelLayer() {
   const hovered = useScene((s) => s.hovered)
   const gesture = useScene((s) => s.gesture)
   const settings = useScene((s) => s.settings)
+  const space = useScene((s) => s.activeSpace)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -115,7 +117,7 @@ export function LabelLayer() {
     <div ref={ref} className="pointer-events-none absolute inset-0 overflow-hidden">
       {order.map((id) => {
         const o = objects[id]
-        if (!o || !o.visible || !ev.values.has(id)) return null
+        if (!o || !o.visible || !ev.values.has(id) || !visibleIn(o, space)) return null
         const c = ev.values.get(id)
         const sel = selection.includes(id)
         if (o.type === 'text') {

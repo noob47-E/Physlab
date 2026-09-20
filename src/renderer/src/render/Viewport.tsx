@@ -18,6 +18,7 @@ import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
 import { SandboxView } from './SandboxView'
+import { MarksView } from './Marks'
 import { useSandbox } from '../sim/store'
 import { formatMeasure } from '../math/format'
 import { LabelShowSwitch } from '../ui/LabelControls'
@@ -182,6 +183,7 @@ export function Viewport() {
         {mode !== 'sandbox' && <SceneObjects />}
         {mode === 'sandbox' && <SandboxView />}
         {mode !== 'sandbox' && <Highlights />}
+        {mode !== 'sandbox' && <MarksView />}
         {particles && <GpuParticles />}
         {mode !== 'sandbox' && <Interaction />}
         {mode !== 'sandbox' && <LabelProjector />}

@@ -1,4 +1,5 @@
 import { Pause, Play } from 'lucide-react'
+import { visibleIn } from '../core/visibility'
 import { useScene } from '../core/store'
 import type { NumberObj } from '../core/types'
 import { fmt } from '../math/format'
@@ -14,7 +15,8 @@ export function SliderDock() {
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
 
-  const sliders = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number' && !!o.slider && o.visible)
+  const space = useScene((s) => s.activeSpace)
+  const sliders = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number' && !!o.slider && o.visible && visibleIn(o, space))
   if (!sliders.length) return null
 
   return (

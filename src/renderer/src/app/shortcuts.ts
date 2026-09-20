@@ -6,6 +6,7 @@ import { resetCamera } from '../render/viewState'
 import { useApp } from './modes'
 import { useSandbox } from '../sim/store'
 import { useLab } from '../lab/labStore'
+import { visibleOrder } from '../core/visibility'
 
 import { isActivatable, isTyping as typingIn } from './keyTargets'
 
@@ -62,7 +63,7 @@ export function useShortcuts() {
       }
       if (ctrl && e.key.toLowerCase() === 'a') {
         e.preventDefault()
-        s.select(s.order)
+        s.select(visibleOrder(s.order, s.objects, s.activeSpace))
         return
       }
       if (ctrl) return

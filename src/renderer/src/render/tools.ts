@@ -59,11 +59,14 @@ export interface ToolRuntime {
   snap: SnapInfo | null
   /** Freehand stroke being drawn with the Sketch tool. */
   stroke: V3[]
+  /** Points this tool itself created for the drawing in progress. Esc removes these and no others:
+   *  it used to remove every unused point it had been clicked on, including ones placed earlier. */
+  created: ObjId[]
 }
 
-export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [] }))
+export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [], created: [] }))
 
-export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [] })
+export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [] })
 
 /** Is a tool part-way through a drawing (so Finish / Undo point / Cancel apply)? */
 export const isDrawing = (): boolean => useTool.getState().picks.length > 0
@@ -107,10 +110,10 @@ export function finishTool(): boolean {
 
 /** Throw away the unfinished drawing (Esc). */
 export function cancelTool(): boolean {
-  const picks = useTool.getState().picks
+  const { picks, created } = useTool.getState()
   if (!picks.length) return false
   resetTool()
-  dropUnusedPicks(picks)
+  dropUnusedPicks(picks.filter((id) => created.includes(id)))
   return true
 }
 

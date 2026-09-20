@@ -1,5 +1,6 @@
 // What the right-click menu offers for each kind of object, in each mode.
 
+import { visibleOrder } from '../core/visibility'
 import { scene } from '../core/store'
 import { Builder } from '../core/factory'
 import { isFree } from '../core/evaluate'
@@ -203,7 +204,7 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
   items.push(
     { label: 'Fit everything in view', run: () => fitCamera() },
     { label: 'Reset the view', shortcut: 'Home', run: () => resetCamera() },
-    { label: 'Select everything', shortcut: 'Ctrl+A', run: () => st.select(st.order) }
+    { label: 'Select everything', shortcut: 'Ctrl+A', run: () => st.select(visibleOrder(st.order, st.objects, st.activeSpace)) }
   )
   const labels = st.settings.labelShow
   return [

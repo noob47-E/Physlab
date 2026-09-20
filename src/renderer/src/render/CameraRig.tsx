@@ -7,10 +7,11 @@ import { useCameraCommand, useView } from './viewState'
 import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { engine, useSandbox } from '../sim/store'
+import { visibleIn } from '../core/visibility'
 
 /** Bounding box of all visible geometry (graphs excluded). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
-  const { ev, objects } = useScene.getState()
+  const { ev, objects, activeSpace } = useScene.getState()
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
   const add = (p: readonly number[]) => {
@@ -23,7 +24,7 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
     }
   }
   for (const [id, c] of ev.values) {
-    if (!objects[id]?.visible) continue
+    if (!objects[id]?.visible || !visibleIn(objects[id], activeSpace)) continue
     switch (c.type) {
       case 'point':
       case 'text':

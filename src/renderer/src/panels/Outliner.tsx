@@ -6,6 +6,8 @@ import { Tex } from '../ui/Tex'
 import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
+import { modeOfSpace, SPACE_LABELS, visibleIn, type Space } from '../core/visibility'
+import { enterMode } from '../app/TopBar'
 
 const GROUPS: { type: ObjType[]; label: string }[] = [
   { type: ['vector'], label: 'Vectors' },
@@ -27,14 +29,29 @@ export function Outliner() {
   const update = useScene((s) => s.updateObject)
   const remove = useScene((s) => s.removeObjects)
   const setHovered = useScene((s) => s.setHovered)
+  const space = useScene((s) => s.activeSpace)
 
-  const list = order.map((id) => objects[id]).filter((o): o is SceneObject => !!o)
+  const all = order.map((id) => objects[id]).filter((o): o is SceneObject => !!o)
+  const list = all.filter((o) => visibleIn(o, space))
+  // What lives in the other drawings, so nothing feels lost.
+  const elsewhere = new Map<Space, number>()
+  for (const o of all) if (!visibleIn(o, space) && o.space && !o.auxiliary) elsewhere.set(o.space, (elsewhere.get(o.space) ?? 0) + 1)
+  const others = [...elsewhere.entries()].length > 0 && (
+    <div className="px-3 pt-3 text-[color:var(--text-faint)]">
+      {[...elsewhere.entries()].map(([sp, n]) => (
+        <button key={sp} className="btn ghost mr-1 mb-1" onClick={() => enterMode(modeOfSpace[sp])} title={`Switch to ${SPACE_LABELS[sp]}`}>
+          {n} in {SPACE_LABELS[sp]}
+        </button>
+      ))}
+    </div>
+  )
   if (list.length === 0) {
     return (
       <div className="panel p-4 text-zinc-500">
         <p className="mb-2 text-zinc-300">The scene is empty.</p>
         <p>Pick a tool above and click in the viewport, or type in the command bar, for example:</p>
         <pre className="mt-2 rounded bg-black/30 p-2 text-[12px] leading-6 text-amber-200">{`A = <3, 4>\nB = <2, -1>\nR = A + B\nTriangle((0,0),(4,0),(0,3))\ny = sin(x)`}</pre>
+        {others}
       </div>
     )
   }
@@ -117,6 +134,7 @@ export function Outliner() {
           </div>
         )
       })}
+      {others}
     </div>
   )
 }

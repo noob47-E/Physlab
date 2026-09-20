@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { RotateCcw, Scissors, Shapes } from 'lucide-react'
 import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
@@ -11,28 +11,28 @@ import { Tex } from '../ui/Tex'
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 
-function Hover({ h, children, className = '' }: { h: Highlight; children: React.ReactNode; className?: string }) {
+function Hover({ h, owner, children, className = '' }: { h: Highlight; owner: ObjId; children: React.ReactNode; className?: string }) {
   const set = useHighlight((s) => s.set)
   return (
-    <div className={`cursor-help rounded px-1 hover:bg-[#2f4a7a55] ${className}`} onMouseEnter={() => set(h)} onMouseLeave={() => set(null)}>
+    <div className={`cursor-help rounded px-1 hover:bg-[#2f4a7a55] ${className}`} onMouseEnter={() => set({ ...h, owner })} onMouseLeave={() => set(null)}>
       {children}
     </div>
   )
 }
 
-function Row({ row, piFactor }: { row: FormulaRow; piFactor?: boolean }) {
+function Row({ row, owner, piFactor }: { row: FormulaRow; owner: ObjId; piFactor?: boolean }) {
   const settings = useScene((s) => s.settings)
   return (
     <div className="border-t border-[#2a2b30] px-2 py-2 first:border-t-0">
       <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">{row.title}</div>
-      <Hover h={row.highlight} className="text-[15px]">
+      <Hover h={row.highlight} owner={owner} className="text-[15px]">
         <Tex tex={row.general} />
         <span className="ml-2 text-[11px] text-zinc-500">hover to shade</span>
       </Hover>
       {row.symbols.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-1 text-zinc-300">
           {row.symbols.map((s) => (
-            <Hover key={s.sym + s.label} h={s.highlight}>
+            <Hover key={s.sym + s.label} h={s.highlight} owner={owner}>
               <Tex tex={`${s.sym} = ${/^[A-Z][\w]*$/.test(s.label) ? `\\mathit{${s.label}} = ` : ''}${answerTex(s.value, s.kind, settings)}`} />
             </Hover>
           ))}
@@ -48,11 +48,11 @@ function Row({ row, piFactor }: { row: FormulaRow; piFactor?: boolean }) {
   )
 }
 
-export function ShapeReportView({ report, piFactor }: { report: ShapeReport; piFactor?: boolean }) {
+export function ShapeReportView({ report, owner, piFactor }: { report: ShapeReport; owner: ObjId; piFactor?: boolean }) {
   return (
     <>
       {report.rows.map((r) => (
-        <Row key={r.title} row={r} piFactor={piFactor} />
+        <Row key={r.title} row={r} owner={owner} piFactor={piFactor} />
       ))}
     </>
   )
@@ -68,6 +68,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
 
   const obj = objects[id]
   const c = ev.values.get(id)
+  // When this card goes — the shape deleted, another one selected — its shading goes too. The
+  // mouse-leave that used to clear it never fires on an element that has been unmounted.
+  useEffect(() => () => setHighlight(null), [id, setHighlight])
   const setGoal = (g: DecomposeGoal) =>
     update(id, (d) => {
       if (d.type === 'polygon') {
@@ -173,7 +176,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                 const areaRow = rep.rows.find((r) => r.title.startsWith('Area'))
                 return (
                   <div key={i} className="border-t border-[#2a2b30]">
-                    <Hover h={{ region: part.pts }} className="mx-1 mt-1 flex items-center gap-2">
+                    <Hover h={{ region: part.pts }} owner={id} className="mx-1 mt-1 flex items-center gap-2">
                       <span className="rounded bg-[#3a3f4a] px-1.5 text-[11px] font-bold text-white">{ROMAN[i]}</span>
                       <span className="text-zinc-200">
                         {part.cls.name}{' '}
@@ -184,11 +187,11 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                       <span className="flex-1" />
                       <Tex tex={`A_{${ROMAN[i]}} = ${answerTex(part.area, 'area', settings)}`} className="text-white" />
                     </Hover>
-                    {areaRow && <Row row={{ ...areaRow, highlight: { ...areaRow.highlight, region: part.pts } }} />}
+                    {areaRow && <Row row={{ ...areaRow, highlight: { ...areaRow.highlight, region: part.pts } }} owner={id} />}
                   </div>
                 )
               })}
-              <Hover h={{ region: data.pts }} className="m-1 border-t border-[#2a2b30] pt-2 text-[15px] text-white">
+              <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-[#2a2b30] pt-2 text-[15px] text-white">
                 <Tex
                   tex={`A = ${data.dec.parts.map((_, i) => `A_{${ROMAN[i]}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
                 />
@@ -197,7 +200,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
           )}
         </div>
       ) : (
-        <ShapeReportView report={data.report} piFactor={data.kind === 'circle'} />
+        <ShapeReportView report={data.report} owner={id} piFactor={data.kind === 'circle'} />
       )}
       {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-[#2a2b30] px-2 py-1.5 text-[12px] text-amber-200">{data.report.note}</div>}
     </div>

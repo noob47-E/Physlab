@@ -126,6 +126,13 @@ a row would silently lose the first. A panel added after a user's layout was sav
 - **A pulley's fixed points are always world space**, whatever `mSpace` says; the body points are
   local. A hinge stores its pivot as local offsets (`pivotA`/`pivotB`) because `setLinks` re-runs
   mid-run and world-space points would re-pin the bodies where they were when the link was made.
+- **Every scene object carries the `space` it was drawn in** (`core/visibility.ts`), stamped by
+  `Builder.base()` from `scene().activeSpace`, which `enterMode` sets. Rendering, labels, picking,
+  the Outliner, Measure, sliders, Select-all and camera framing filter on it; evaluation, naming,
+  undo, save and `dependentsOf` never do. An object with no space (old files) shows everywhere.
+- **A hover highlight names its `owner`**, and `ShapeInfo` clears the highlight when it unmounts.
+  A mouse-leave never fires on an element that has just been removed, which is how a shaded area
+  used to outlive the shape it belonged to.
 - **Custom CSS must live inside `@layer components`** or Tailwind's width/height utilities stop
   working.
 - **MathLive options must wait for the `mount` event.** Line2 geometry needs positions before the

@@ -78,7 +78,8 @@ function restoreLayout(api: DockviewApi): boolean {
       localStorage.removeItem(LAYOUT_KEY)
       return false
     }
-    if (mode) useApp.getState().setMode(mode)
+    // enterMode, not setMode: the restored mode needs its view, tool shelf and drawing too.
+    if (mode) enterMode(mode)
     return true
   } catch {
     localStorage.removeItem(LAYOUT_KEY)

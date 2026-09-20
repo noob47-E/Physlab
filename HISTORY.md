@@ -30,11 +30,11 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.3.5 (2026-09-20) |
-| Releases built | 13 |
+| Current version | 0.3.6 (2026-09-20) |
+| Releases built | 14 |
 | Commits | 50 |
 | Source | 25,481 lines of TypeScript/TSX across 114 files, plus 996 lines of CSS |
-| Tests | 257, across 16 files, all pure logic with no browser |
+| Tests | 262, across 17 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
 | Dock panels | 16 |
 | Licence | GPL-3.0 |
@@ -370,6 +370,30 @@ placing a static floor, rotation edits, and a rebuild that preserves the untouch
 plank tipping, a weld holding against gravity, and that every preset runs a second without anything
 falling through the floor.
 
+### 0.3.6 — Geometry: its own drawing, and congruent triangles · 2026-09-20
+
+- **Each mode has its own drawing.** A triangle drawn in Geometry used to appear behind the vectors
+  in Vectors mode, and the other way round. Every object now remembers the drawing it was made in
+  (`space`) and is shown, listed, labelled and picked only there; the Outliner says how many things
+  live in the other drawings and takes you to them. Older files, whose objects have no space, show
+  everywhere as before. One file, one undo, nothing moved.
+- **Congruent triangles.** Shift-click two triangles and the Measure panel says whether they are
+  congruent and by which rule — SSS, SAS, ASA, AAS or RHS — with each equal side and angle written
+  out as a numbered reason, the corners matched by name (△ABC ≅ △EFD), equal parts ticked and
+  arced on the drawing, and "similar, 2× the size" when only the angles agree. The other way in:
+  type three sides and the triangle is drawn.
+- **The shaded area no longer outlives its shape.** Deleting a polygon while its area formula was
+  being hovered left the hatching on screen for the rest of the session: the mouse-leave that
+  cleared it never fires on an element that has just been unmounted. A highlight now names its
+  owner and the card clears it on the way out.
+- **Esc no longer deletes points you placed earlier.** Cancelling a half-drawn shape removed every
+  unused point it had been clicked on, including ones drawn before; only the points the tool made
+  go now. Restoring a session enters the saved mode properly (view, tools and drawing), instead of
+  only naming it.
+
+262 tests. `tests/congruence.test.ts` covers SSS in a different corner order, a side that differs,
+a similar triangle with its ratio, a mirrored right triangle, and drawing from three sides.
+
 ## What is in it today
 
 Eight working modes, eight reserved.
@@ -378,7 +402,7 @@ Eight working modes, eight reserved.
 | --- | --- | --- |
 | Calculator | working | Natural textbook maths, all fifteen fx-991EX modes, and the Pure Math working area |
 | Vectors | working | Vector calculator, drawing with live measurements, step-by-step solutions |
-| Shapes & Geometry | working | Sketch recognition, algebraic area, decomposition, constructions |
+| Geometry | working | Sketch recognition, algebraic area, decomposition, constructions |
 | Graphing | working | Explicit, implicit, polar, parametric and 3D surfaces, with roots and turning points |
 | Sandbox | working | Rigid-body physics on Jolt: collisions, constraints, energy, momentum, recording |
 | GPU Lab | working | Millions of charged particles in E and B fields |

@@ -13,6 +13,8 @@ import { measureText } from '../render/Labels'
 import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
+import { visibleIn } from '../core/visibility'
+import { CongruenceCard, TriangleFromSides } from './Congruence'
 
 type Row = {
   label: string
@@ -316,13 +318,15 @@ function AllMeasurements() {
   const hovered = useScene((s) => s.hovered)
   const select = useScene((s) => s.select)
   const setHovered = useScene((s) => s.setHovered)
-  const list = order.map((id) => objects[id]).filter((o) => o && o.visible && !o.auxiliary && LISTED.has(o.type) && ev.values.has(o.id))
+  const space = useScene((s) => s.activeSpace)
+  const list = order.map((id) => objects[id]).filter((o) => o && o.visible && !o.auxiliary && LISTED.has(o.type) && ev.values.has(o.id) && visibleIn(o, space))
 
   return (
     <div data-tour="measure" className="panel pb-6">
       <div className="px-3 pb-2 pt-3 text-zinc-500">
-        Click any object to measure it live. Drag it and watch the <span className="text-emerald-400">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product.
+        Click any object to measure it live. Drag it and watch the <span className="text-emerald-400">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product, or two triangles to see whether they are congruent.
       </div>
+      {space === 'shapes' && <TriangleFromSides />}
       {list.length > 0 && (
         <>
           <div className="section-title flex items-center">
@@ -393,8 +397,18 @@ export function Measurements() {
     )
   ]
 
+  // Two triangles: are they the same triangle, and by which rule?
+  const triangles = sel.filter((o) => o.type === 'polygon' && o.points.length === 3 && ev.values.get(o.id)?.type === 'polygon')
+
   return (
     <div className="panel pb-6">
+      {triangles.length === 2 && <CongruenceCard a={triangles[0].id} b={triangles[1].id} />}
+      {triangles.length === 1 && sel.length === 1 && (
+        <>
+          <div className="px-3 pt-2 text-[11.5px] text-[color:var(--text-faint)]">Shift-click another triangle to check whether the two are congruent — or draw one to compare with:</div>
+          <TriangleFromSides />
+        </>
+      )}
       {shapeIds.map((id) => (
         <ShapeInfo key={id} id={id} />
       ))}

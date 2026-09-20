@@ -40,7 +40,10 @@ export class Builder {
       visible: opts.visible ?? true,
       locked: false,
       showLabel: opts.showLabel ?? !opts.auxiliary,
-      auxiliary: opts.auxiliary
+      auxiliary: opts.auxiliary,
+      // A graph always lives in Graphing, wherever it was asked for; everything else belongs to
+      // the drawing the student is looking at.
+      space: type === 'graph' ? ('graphing' as const) : (scene().activeSpace ?? undefined)
     }
   }
 

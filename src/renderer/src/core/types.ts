@@ -2,6 +2,7 @@ import type { V3 } from '../math/vec'
 import type { GCircle, GLine } from '../math/geometry'
 import type { LabTable } from '../lab/types'
 import type { BodyDef, Link, WorldSettings } from '../sim/types'
+import type { Space } from './visibility'
 
 /** The Sandbox as saved: what the student built, never the live run. */
 export interface SandboxFile {
@@ -67,6 +68,8 @@ export interface ObjectBase {
   auxiliary?: boolean
   /** Free-text caption shown in the outliner. */
   caption?: string
+  /** The drawing this belongs to (Vectors, Geometry, Graphing, Lab Data). Missing = shown everywhere. */
+  space?: Space
 }
 
 export interface PointObj extends ObjectBase {

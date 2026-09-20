@@ -37,8 +37,10 @@ import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useParticleLab } from '../render/GpuParticles'
 import { useSandbox } from '../sim/store'
+import { spaceOf } from '../core/visibility'
 import { QUALITY, qualityNow } from '../render/renderer'
 import { UNIT_NAMES } from '../math/format'
+import { visibleOrder } from '../core/visibility'
 
 const ICONS: Record<ToolId, React.ReactNode> = {
   select: <MousePointer2 size={16} />,
@@ -68,6 +70,7 @@ export function enterMode(id: ModeId) {
   const m = modeById(id)
   useApp.getState().setMode(id)
   const s = scene()
+  s.setActiveSpace(spaceOf(id))
   useParticleLab.setState(id === 'gpu' ? { enabled: true, count: QUALITY[qualityNow()].particles } : { enabled: false })
   if (m.view) s.setViewMode(m.view)
   if (!m.tools.includes(s.tool)) s.setTool('select')
@@ -290,7 +293,7 @@ export function TopBar() {
               if (sb.selection) sb.removeBody(sb.selection)
             }
           },
-          { label: 'Select all', sc: 'Ctrl+A', run: () => s.select(s.order) }
+          { label: 'Select all', sc: 'Ctrl+A', run: () => s.select(visibleOrder(s.order, s.objects, s.activeSpace)) }
         ]}
       />
       <Menu
