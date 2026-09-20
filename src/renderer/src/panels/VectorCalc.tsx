@@ -12,7 +12,7 @@ import { create } from 'zustand'
 import { useScene } from '../core/store'
 import { visualizeSolution, type DrawStyle } from '../core/visualize'
 import { latexToMath } from '../math/latexToMath'
-import { math, preprocess, setAngleMode, toV3 } from '../math/expr'
+import { getAngleMode, math, preprocess, setAngleMode, toV3 } from '../math/expr'
 import { formatMeasure, texIJK } from '../math/format'
 import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
@@ -29,7 +29,16 @@ interface Card {
   mag: string
   angle: string
   sceneId: string
+  /** The components a drawing card last read, so it stays readable if that vector is deleted. */
+  last?: V3
 }
+
+/** A vector written the way a card is typed, at full precision, so nothing is lost in the copy. */
+const ijkLatex = (v: V3): string =>
+  v
+    .map((c, i) => (Math.abs(c) < 1e-12 ? '' : `${c < 0 ? '-' : '+'}${Math.abs(c)}\\hat{${'ijk'[i]}}`))
+    .join('')
+    .replace(/^\+/, '') || '0'
 
 const DEFAULT_CARDS: Card[] = [
   { id: 1, name: 'A', entry: 'comp', latex: '3\\hat{i}+4\\hat{j}', mag: '10', angle: '30', sceneId: '' },
@@ -47,9 +56,11 @@ function loadCards(): Card[] {
     const raw = localStorage.getItem(CARDS_KEY)
     if (!raw) return DEFAULT_CARDS
     const cards = JSON.parse(raw) as Card[]
-    // A card that read a vector from a drawing that is no longer open would show an error; it
-    // comes back as a typed card so the panel opens clean.
-    const usable = cards.filter((c) => c && typeof c.name === 'string' && typeof c.latex === 'string').map((c) => (c.entry === 'scene' ? { ...c, entry: 'comp' as Entry, sceneId: '' } : c))
+    // A card linked to a drawing's vector stays linked while the drawing still has it. If the
+    // vector is gone (the app restarted with an empty drawing, or it was deleted) the staleness
+    // check in the panel turns it into a typed card holding the last components it read —
+    // demoting every linked card here left a red, empty card on every restart.
+    const usable = cards.filter((c) => c && typeof c.name === 'string' && typeof c.latex === 'string')
     return usable.length ? usable : DEFAULT_CARDS
   } catch {
     return DEFAULT_CARDS
@@ -113,27 +124,45 @@ function evalNumber(latex: string): number {
 
 const friendly = (e: unknown): string => (e instanceof Error ? e.message.replace(/^Undefined symbol/, 'Unknown name') : 'Cannot read this vector')
 
+/**
+ * Runs `fn` with the calculator in degrees — a card's 10∠30° is always degrees — and puts the
+ * mode back after, so opening the Vectors panel does not silently switch a student working in
+ * radians in the Calculator.
+ */
+function inDegrees<T>(fn: () => T): T {
+  const prev = getAngleMode()
+  setAngleMode('deg')
+  try {
+    return fn()
+  } finally {
+    setAngleMode(prev)
+  }
+}
+
 /** The vector value of a card, or an error message. */
 function cardValue(card: Card, cards: Card[]): V3 | string {
   try {
-    setAngleMode('deg')
-    if (card.entry === 'polar') return fromPolar(evalNumber(card.mag), toRad(evalNumber(card.angle)))
-    if (card.entry === 'scene') {
-      const c = useScene.getState().ev.values.get(card.sceneId)
-      if (c?.type === 'vector') return c.comp
-      return 'Pick a vector from the drawing'
-    }
-    if (!card.latex.trim()) return 'Type the vector, e.g. 3i + 4j or 10∠30°'
-    const scope: Record<string, unknown> = { ...UNIT_VECTORS }
-    for (const other of cards) {
-      if (other.id === card.id) break
-      const v = cardValue(other, cards)
-      if (typeof v !== 'string') scope[other.name] = v
-    }
-    return toV3(math.evaluate(preprocess(latexToMath(card.latex, { vectorOps: true })), scope))
+    return inDegrees(() => cardValueNow(card, cards))
   } catch (e) {
     return friendly(e)
   }
+}
+
+function cardValueNow(card: Card, cards: Card[]): V3 | string {
+  if (card.entry === 'polar') return fromPolar(evalNumber(card.mag), toRad(evalNumber(card.angle)))
+  if (card.entry === 'scene') {
+    const c = useScene.getState().ev.values.get(card.sceneId)
+    if (c?.type === 'vector') return c.comp
+    return 'Pick a vector from the drawing'
+  }
+  if (!card.latex.trim()) return 'Type the vector, e.g. 3i + 4j or 10∠30°'
+  const scope: Record<string, unknown> = { ...UNIT_VECTORS }
+  for (const other of cards) {
+    if (other.id === card.id) break
+    const v = cardValue(other, cards)
+    if (typeof v !== 'string') scope[other.name] = v
+  }
+  return toV3(math.evaluate(preprocess(latexToMath(card.latex, { vectorOps: true })), scope))
 }
 
 interface Op {
@@ -188,12 +217,21 @@ export function VectorCalc() {
   const set = useVC.setState
 
   const values = useMemo(() => st.cards.map((c) => cardValue(c, st.cards)), [st.cards, objects])
-  const sceneVectors = Object.values(objects).filter((o) => o.type === 'vector')
+  // Helpers are not offered: a force arrow drawn to a stand-in length would read as the wrong vector.
+  const sceneVectors = Object.values(objects).filter((o) => o.type === 'vector' && !o.auxiliary)
 
-  // A card that pointed at a drawing's vector goes stale when that drawing is cleared.
+  // A drawing card remembers what it last read, so that when its vector is deleted (or the app
+  // restarts with an empty drawing) it becomes a typed card holding those components, not an
+  // empty red one.
+  useEffect(() => {
+    // Compared by value: values is a fresh array each time, and a store write here re-runs it.
+    const same = (a: V3, b?: V3) => !!b && a.every((x, k) => x === b[k])
+    const changed = st.cards.some((c, i) => c.entry === 'scene' && typeof values[i] !== 'string' && !same(values[i] as V3, c.last))
+    if (changed) set({ cards: st.cards.map((c, i) => (c.entry === 'scene' && typeof values[i] !== 'string' ? { ...c, last: values[i] as V3 } : c)) })
+  }, [values, st.cards, set])
   useEffect(() => {
     const stale = st.cards.filter((c) => c.entry === 'scene' && c.sceneId && !objects[c.sceneId])
-    if (stale.length) set({ cards: st.cards.map((c) => (stale.includes(c) ? { ...c, entry: 'comp', sceneId: '' } : c)) })
+    if (stale.length) set({ cards: st.cards.map((c) => (stale.includes(c) ? { ...c, entry: 'comp', sceneId: '', latex: c.last ? ijkLatex(c.last) : c.latex } : c)) })
   }, [objects, st.cards, set])
 
   const updateCard = (id: number, patch: Partial<Card>) => set({ cards: st.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)) })
@@ -285,14 +323,12 @@ export function VectorCalc() {
   const runExpr = () => {
     setError('')
     try {
-      setAngleMode('deg')
       const scope: Record<string, unknown> = { ...UNIT_VECTORS }
       st.cards.forEach((c, i) => {
         if (typeof values[i] !== 'string') scope[c.name] = values[i]
       })
       const src = preprocess(latexToMath(st.expr, { vectorOps: true }))
-      const node = math.parse(src)
-      const out = node.compile().evaluate(scope)
+      const out = inDegrees(() => math.parse(src).compile().evaluate(scope))
       if (typeof out === 'number') {
         const shown = formatMeasure(out, 'number', settings)
         set({ result: { label: 'Expression', sol: { title: 'Result', steps: [{ tex: `${st.expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } } })
@@ -303,8 +339,8 @@ export function VectorCalc() {
       const md = VS.solveMagnitudeDirection({ name: 'R', v }, settings)
       const sol: VS.Solution = {
         title: 'Resultant of the expression',
-        steps: [{ text: 'Evaluate component by component:', tex: `\\vec{R} = ${st.expr} = ${texIJK(v, settings.decimals)}` }, ...md.steps.slice(1)],
-        answers: [{ label: 'R', tex: texIJK(v, settings.decimals) }, ...md.answers],
+        steps: [{ text: 'Evaluate component by component:', tex: `\\vec{R} = ${st.expr} = ${texIJK(v, settings)}` }, ...md.steps.slice(1)],
+        answers: [{ label: 'R', tex: texIJK(v, settings) }, ...md.answers],
         visual: { vectors: [...inputs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: 'R', v, role: 'result' as const }], mode: 'common-tail' }
       }
       set({ result: { sol, label: 'Expression' } })
@@ -403,7 +439,7 @@ export function VectorCalc() {
             <div className="mt-1 min-h-5 pl-1 text-[13px]">
               {ok ? (
                 <span className="text-[color:var(--text)]">
-                  <Tex tex={`\\vec{${card.name}} = ${texIJK(v as V3, settings.decimals)}`} />
+                  <Tex tex={`\\vec{${card.name}} = ${texIJK(v as V3, settings)}`} />
                   <span className="ml-3 text-[color:var(--text-dim)]">
                     |{card.name}| = {formatMeasure(len(v as V3), sizeKind, settings)}
                     {Math.abs((v as V3)[2]) < 1e-12 && <> · θ = {formatMeasure(heading(v as V3), 'direction', settings)}</>}

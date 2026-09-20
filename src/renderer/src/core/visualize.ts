@@ -2,13 +2,13 @@
 
 import { Builder } from './factory'
 import { scene } from './store'
-import { add, type V3 } from '../math/vec'
-import { sceneName, type Solution, type VisualVector } from '../math/vectorSolver'
-import type { GraphKind, VectorObj } from './types'
+import type { V3 } from '../math/vec'
+import { planDrawing, type DrawStyle, type Solution, type VisualVector } from '../math/vectorSolver'
+import type { GraphKind, SceneObject } from './types'
 import { fitCamera } from '../render/viewState'
 import { themeColor } from '../app/theme'
 
-export type DrawStyle = 'head-to-tail' | 'parallelogram' | 'common-tail'
+export type { DrawStyle }
 
 /** The answer is drawn in the warning colour and helpers in the faint one, whichever theme is on. */
 const roleColor = (role: VisualVector['role']): string | undefined =>
@@ -49,50 +49,38 @@ function remember(tag: string, b: Builder): void {
  * Draws a worked answer. `style` is only passed when the student chose a layout; otherwise the
  * solution's own picture is used (a subtraction from a common tail, a sum head-to-tail).
  *
- * Every vector that is not an input is drawn from its own components. The parallelogram layout
- * used to rebuild the result as "A + B" from the title, which drew A + B for a subtraction, a
- * projection and a relative velocity — the answer card said (1, 5) and the drawing showed (5, 3).
+ * The layout itself is planDrawing's, pure and tested: every vector that is not an input is
+ * drawn from its own components (the parallelogram layout used to rebuild the result as "A + B"
+ * from the title, which drew A + B for a subtraction), and an arrow drawn to a stand-in length
+ * is a helper with its true value written at its head, never a measurement.
  */
 export function visualizeSolution(sol: Solution, style?: DrawStyle): void {
   const vis = sol.visual
   if (!vis) return
   clearTagged('solution')
   const b = new Builder()
-  const inputs = vis.vectors.filter((v) => v.role === 'input')
-  const others = vis.vectors.filter((v) => v.role !== 'input')
-  let mode = style ?? vis.mode ?? 'common-tail'
-  if (mode === 'parallelogram' && inputs.length !== 2) mode = 'head-to-tail'
-
-  /** One arrow, named so the scene can read it back, helpers kept auxiliary whatever the layout. */
-  const draw = (v: VisualVector, tail: V3): VectorObj => {
-    const obj = b.vector({ kind: 'free', tail, comp: v.drawn ?? v.v }, { name: sceneName(v.name), color: roleColor(v.role), auxiliary: v.role === 'helper' })
-    if (v.note) obj.caption = v.note
-    return obj
-  }
-
-  if (mode === 'head-to-tail') {
-    let cursor: V3 = [0, 0, 0]
-    for (const v of inputs) {
-      draw(v, cursor)
-      cursor = add(cursor, v.v)
+  const plan = planDrawing(vis, style)
+  const made = new Map<string, SceneObject>()
+  const faint = themeColor('--text-faint', '#6c707a')
+  for (const it of plan.items) {
+    if (it.kind === 'arrow') {
+      const o = b.vector({ kind: 'free', tail: it.tail, comp: it.comp }, { name: it.name, color: roleColor(it.role), auxiliary: it.auxiliary })
+      if (it.labelMode) o.labelMode = it.labelMode
+      made.set(it.name, o)
+    } else if (it.kind === 'ghost') {
+      // Dashed opposite sides, linked to the originals so dragging keeps the parallelogram.
+      const of = made.get(it.of)
+      const at = made.get(it.atHeadOf)
+      if (of && at) b.vector({ kind: 'placed', vector: of.id, tail: headPoint(b, at.id) }, { name: it.name, color: faint, auxiliary: true })
+    } else {
+      b.text(it.at, it.text, { name: it.name, auxiliary: true })
     }
-    for (const v of others) draw(v, v.tail ?? [0, 0, 0])
-  } else if (mode === 'parallelogram') {
-    const [p, q] = inputs
-    const A = draw(p, [0, 0, 0])
-    const B = draw(q, [0, 0, 0])
-    // Dashed opposite sides, linked to the originals so dragging keeps the parallelogram.
-    const faint = themeColor('--text-faint', '#6c707a')
-    b.vector({ kind: 'placed', vector: B.id, tail: headPoint(b, A.id) }, { name: `${B.name}_`, color: faint, auxiliary: true })
-    b.vector({ kind: 'placed', vector: A.id, tail: headPoint(b, B.id) }, { name: `${A.name}_`, color: faint, auxiliary: true })
-    for (const v of others) draw(v, v.tail ?? [0, 0, 0])
-  } else {
-    for (const v of vis.vectors) draw(v, v.tail ?? [0, 0, 0])
   }
   b.commit()
   remember('solution', b)
-  if (vis.vectors.some((v) => Math.abs((v.drawn ?? v.v)[2]) > 1e-9)) scene().setViewMode('3d')
-  scene().select(b.created.filter((o) => o.type === 'vector' && !o.auxiliary).map((o) => o.id).slice(-1))
+  if (plan.is3D) scene().setViewMode('3d')
+  const chosen = plan.select ? made.get(plan.select) : undefined
+  scene().select(chosen ? [chosen.id] : [])
   fitCamera()
 }
 

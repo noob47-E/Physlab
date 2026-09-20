@@ -51,8 +51,14 @@ describe('latexToMath', () => {
     expect(vec('3i\u0302 + 4j\u0302 - 2k\u0302')).toEqual([3, 4, -2])
     expect(vec('\\begin{pmatrix}3\\\\4\\end{pmatrix}')).toEqual([3, 4, 0])
     expect(vec('\\begin{pmatrix} 1 \\\\ -2 \\\\ \\frac{1}{2} \\end{pmatrix}')).toEqual([1, -2, 0.5])
-    expect(latexToMath('\\begin{bmatrix}1 & 2 \\\\ 3 & 4\\end{bmatrix}')).toBe('[[1, 2], [3, 4]]')
+    expect(latexToMath('\\begin{bmatrix}1 & 2 \\\\ 3 & 4\\end{bmatrix}')).toBe('([[1, 2], [3, 4]])')
     expect(calc('\\begin{vmatrix}1 & 2 \\\\ 3 & 4\\end{vmatrix}')).toBeCloseTo(-2)
+    // A scalar in front of a column vector, the way a book writes 2a once columns are chosen.
+    expect(vec('2\\begin{pmatrix}3\\\\4\\end{pmatrix}')).toEqual([6, 8, 0])
+    expect(vec('\\begin{pmatrix}3\\\\4\\end{pmatrix}+\\begin{pmatrix}1\\\\1\\end{pmatrix}')).toEqual([4, 5, 0])
+    // Vulgar fractions: the hint on the Vectors panel promises ½A.
+    expect(vec('½(6\\hat{i}+8\\hat{j})')).toEqual([3, 4, 0])
+    expect(calc('¾+¼')).toBeCloseTo(1)
   })
   it('refuses ± with a sentence instead of quietly picking +', () => {
     expect(() => latexToMath('x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}')).toThrow(/Choose \+ or −/)

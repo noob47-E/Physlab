@@ -108,20 +108,20 @@ function writers(s: SolverSettings) {
     /** A vector whose components are all that tiny, written as (mantissa vector) × 10ⁿ. */
     sciIJK: (v: V3) => {
       const big = Math.max(...v.map(Math.abs))
-      if (!tiny(big)) return texIJK(v, s.decimals)
+      if (!tiny(big)) return texIJK(v, s)
       const { e } = parts(big)
-      return `\\left(${texIJK(scale(v, Math.pow(10, -e)), s.decimals)}\\right)\\times 10^{${e}}`
+      return `\\left(${texIJK(scale(v, Math.pow(10, -e)), s)}\\right)\\times 10^{${e}}`
     },
     /** A number wrapped in brackets when negative, for substituting into a formula. */
     numP: (n: number) => (n < 0 && Math.abs(n) >= 1e-12 ? `(${num(n)})` : num(n)),
-    /** An angle given in degrees, written in the chosen unit. */
-    ang: (deg: number) => texMeasure(toRad(deg), 'angle', s),
+    /** An angle given in degrees, written in the chosen unit; the zero vector's is undefined. */
+    ang: (deg: number) => (Number.isNaN(deg) ? '\\text{undefined}' : texMeasure(toRad(deg), 'angle', s)),
     /** A direction from +x given in degrees, written in the chosen unit or as a bearing. */
-    dir: (deg: number) => texMeasure(toRad(deg), 'direction', s),
+    dir: (deg: number) => (Number.isNaN(deg) ? '\\text{undefined}' : texMeasure(toRad(deg), 'direction', s)),
     /** Plain-text versions for sentences. */
     numText: (n: number) => formatMeasure(n, 'number', s),
-    angText: (deg: number) => formatMeasure(toRad(deg), 'angle', s),
-    ijk: (v: V3) => texIJK(v, s.decimals)
+    angText: (deg: number) => (Number.isNaN(deg) ? 'undefined' : formatMeasure(toRad(deg), 'angle', s)),
+    ijk: (v: V3) => texIJK(v, s)
   }
 }
 
@@ -141,6 +141,11 @@ function directionSteps(name: string, v: V3, steps: Step[], s: SolverSettings): 
   if (Math.abs(x) < 1e-12) {
     theta = y > 0 ? 90 : 270
     steps.push({ text: `${name}x = 0, so the vector points straight along the ${y > 0 ? '+y' : '−y'} axis.`, tex: `\\theta = ${w.ang(theta)}` })
+    return theta
+  }
+  if (Math.abs(y) < 1e-12) {
+    theta = x > 0 ? 0 : 180
+    steps.push({ text: `${name}y = 0, so the vector points straight along the ${x > 0 ? '+x' : '−x'} axis.`, tex: `\\theta = ${w.ang(theta)}` })
     return theta
   }
   steps.push({
@@ -214,7 +219,7 @@ export function solveMagnitudeDirection(A: NamedVec, s: SolverSettings = DEFAULT
       const g = ['\\alpha', '\\beta', '\\gamma'][i]
       steps.push({ text: `Angle with the ${ax}-axis (direction cosine):`, tex: `${g} = \\cos^{-1}\\left(\\frac{${sub_(name, ax)}}{${name}}\\right) = \\cos^{-1}\\left(\\frac{${w.num(v[i])}}{${w.num(m)}}\\right) = ${w.ang(angs[i])}` })
     })
-    return {
+    return finish({
       title: `Magnitude and direction of ${name}`,
       steps,
       answers: [
@@ -222,7 +227,7 @@ export function solveMagnitudeDirection(A: NamedVec, s: SolverSettings = DEFAULT
         { label: 'α, β, γ', tex: angs.map((a) => w.ang(a)).join(',\\ ') }
       ],
       visual: { vectors: [{ name, v, role: 'input' }] }
-    }
+    })
   }
   steps.push({
     text: 'Magnitude :',
@@ -318,10 +323,28 @@ export function solveAdditionCosineLaw(A: NamedVec, B: NamedVec, resultName = 'R
   const sinAlpha = r < 1e-12 ? 0 : Math.max(-1, Math.min(1, (bb * Math.sin(toRad(theta))) / r))
   const acute = toDeg(Math.asin(sinAlpha))
   const obtuse = alpha > 90 + 1e-9
+  if (a < 1e-12 || bb < 1e-12) {
+    // The law of cosines needs a triangle; with a zero vector there is none, and every line
+    // below would read "undefined".
+    const zero = a < 1e-12 ? A : B
+    const other = a < 1e-12 ? B : A
+    return finish({
+      title: `${A.name} + ${B.name} by the law of cosines`,
+      steps: [
+        { text: `${zero.name} has zero length, so there is no triangle to solve: the sum is just ${other.name}.`, tex: `${b(resultName)} = ${b(other.name)} = ${w.ijk(Rv)}` },
+        { tex: `${resultName} = ${w.num(r)}` }
+      ],
+      answers: [
+        { label: resultName, tex: w.num(r) },
+        { label: 'angle with ' + A.name, tex: w.ang(0) }
+      ],
+      visual: { vectors: [{ name: A.name, v: A.v, role: 'input' }, { name: B.name, v: B.v, role: 'input' }, { name: resultName, v: Rv, role: 'result' }], mode: 'common-tail' }
+    })
+  }
   const steps: Step[] = [
     { text: `Sizes and the angle between them:`, tex: `${mag(A.name)} = ${w.num(a)},\\quad ${mag(B.name)} = ${w.num(bb)},\\quad \\theta = ${w.ang(theta)}` },
     {
-      text: 'Law of cosines (the angle inside the triangle is 180° − θ, which flips the sign):',
+      text: `Law of cosines (the angle inside the triangle is ${w.angText(180)} − θ, which flips the sign):`,
       tex: `${resultName}^2 = ${mag(A.name)}^2 + ${mag(B.name)}^2 + 2\\,${mag(A.name)}${mag(B.name)}\\cos\\theta = ${w.num(a * a)} + ${w.num(bb * bb)} + ${w.numP(2 * a * bb * Math.cos(toRad(theta)))}`
     },
     { text: 'So the size of the resultant is', tex: `${resultName} = \\sqrt{${w.num(r * r)}} = ${w.num(r)}` },
@@ -430,7 +453,14 @@ export function solveScalarMultiply(k: number, A: NamedVec, resultName = 'R', s:
   const steps: Step[] = [
     { text: 'Multiply every component by the scalar:', tex: `${w.num(k)}\\,${b(A.name)} = ${w.num(k)}(${w.ijk(A.v)}) = ${w.ijk(R)}` },
     { text: 'The magnitude is multiplied by |k|:', tex: `\\left|${w.num(k)}\\,${b(A.name)}\\right| = |${w.num(k)}|\\times ${w.num(len(A.v))} = ${w.num(len(R))}` },
-    { text: k >= 0 ? 'k is positive, so the direction does not change.' : 'k is negative, so the direction is reversed (turned through 180°).' }
+    {
+      text:
+        Math.abs(k) < 1e-12
+          ? 'k is zero, so every component is zero: the result is the null vector, which has no direction.'
+          : k > 0
+            ? 'k is positive, so the direction does not change.'
+            : `k is negative, so the direction is reversed (turned through ${w.angText(180)}).`
+    }
   ]
   return finish({
     title: `${resultName} = ${w.numText(k)}${A.name}`,
@@ -472,7 +502,16 @@ function dotSteps(A: NamedVec, B: NamedVec, s: SolverSettings) {
   const cosT = d / (mA * mB)
   const theta = toDeg(angleBetween(A.v, B.v))
   const steps: Step[] = [
-    { text: 'Given:', tex: `${b(A.name)} = ${w.ijk(A.v)},\\quad ${b(B.name)} = ${w.ijk(B.v)}` },
+    { text: 'Given:', tex: `${b(A.name)} = ${w.ijk(A.v)},\\quad ${b(B.name)} = ${w.ijk(B.v)}` }
+  ]
+  if (mA < 1e-12 || mB < 1e-12) {
+    // cos θ = A·B / (|A||B|) divides by zero: say so in one sentence instead of printing
+    // "undefined" three times and then calling the vectors perpendicular.
+    const zero = mA < 1e-12 ? A.name : B.name
+    steps.push({ text: `${zero} has zero length, so ${A.name}·${B.name} = 0 and there is no angle between them.`, tex: `${b(A.name)}\\cdot${b(B.name)} = 0` })
+    return { d: 0, mA, mB, cosT: NaN, theta: NaN, steps }
+  }
+  steps.push(
     {
       text: 'Scalar product in terms of rectangular components :',
       tex: `${b(A.name)}\\cdot${b(B.name)} = ${sub_(A.name, 'x')}${sub_(B.name, 'x')} + ${sub_(A.name, 'y')}${sub_(B.name, 'y')} + ${sub_(A.name, 'z')}${sub_(B.name, 'z')}`
@@ -481,7 +520,7 @@ function dotSteps(A: NamedVec, B: NamedVec, s: SolverSettings) {
     { text: 'Magnitudes:', tex: `${mag(A.name)} = ${w.num(mA)},\\quad ${mag(B.name)} = ${w.num(mB)}` },
     { text: 'Angle between them :', tex: `\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}\\,${mag(B.name)}} = \\frac{${w.num(d)}}{${w.num(mA)}\\times${w.num(mB)}} = ${w.num(cosT)}` },
     { tex: `\\theta = \\cos^{-1}(${w.num(cosT)}) = ${w.ang(theta)}` }
-  ]
+  )
   if (Math.abs(d) < 1e-9) steps.push({ text: 'The dot product is zero, so the vectors are perpendicular (θ = 90°).' })
   return { d, mA, mB, cosT, theta, steps }
 }
@@ -490,7 +529,7 @@ function dotSteps(A: NamedVec, B: NamedVec, s: SolverSettings) {
 export function solveDot(A: NamedVec, B: NamedVec, s: SolverSettings = DEFAULT_SETTINGS): Solution {
   const w = writers(s)
   const { d, mB, cosT, theta, steps } = dotSteps(A, B, s)
-  steps.push({ text: `Meaning: ${A.name}·${B.name} = |${A.name}| × (projection of ${B.name} on ${A.name}).`, tex: `${mag(B.name)}\\cos\\theta = ${w.num(mB * cosT)}` })
+  if (!Number.isNaN(theta)) steps.push({ text: `Meaning: ${A.name}·${B.name} = |${A.name}| × (projection of ${B.name} on ${A.name}).`, tex: `${mag(B.name)}\\cos\\theta = ${w.num(mB * cosT)}` })
   return finish({
     title: `Scalar product ${A.name}·${B.name}`,
     steps,
@@ -739,13 +778,15 @@ export function solveWork(F: V3, d: V3, s: SolverSettings = DEFAULT_SETTINGS): S
 const CARD_RESERVED = new Set(['i', 'j', 'k', 'e', 'pi', 'x', 'y', 'z'])
 
 /**
- * The name a vector card may take: letters, digits and _ only, starting with a letter, at most
- * four characters, not a reserved word and not another card's name. Anything else keeps the
- * current name, so a stray keystroke never silently renames a card to something unusable.
+ * The name a vector card may take: letters and digits, starting with a letter, with at most one
+ * subscript after a single "_" (v_A, F_1), at most four characters, not a reserved word and not
+ * another card's name. Anything else keeps the current name, so a stray keystroke never silently
+ * renames a card to something unusable — "A_" alone is \vec{A_}, which KaTeX paints red, and
+ * "v__A" is a double subscript.
  */
 export function safeCardName(typed: string, current: string, others: string[]): string {
   const cleaned = typed.replace(/[^A-Za-z0-9_]/g, '').slice(0, 4)
-  if (!cleaned || !/^[A-Za-z]/.test(cleaned)) return current
+  if (!/^[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)?$/.test(cleaned)) return current
   if (CARD_RESERVED.has(cleaned) || others.includes(cleaned)) return current
   return cleaned
 }
@@ -778,4 +819,82 @@ export function sceneName(name: string): string {
 export function headingArc(theta: number): { from: number; to: number; mid: number } {
   const t = theta > Math.PI ? theta - 2 * Math.PI : theta
   return { from: Math.min(0, t), to: Math.max(0, t), mid: t / 2 }
+}
+
+// ---------------------------------------------------------------------------
+// Laying out a solution's drawing
+// ---------------------------------------------------------------------------
+
+export type DrawStyle = 'head-to-tail' | 'parallelogram' | 'common-tail'
+
+/** One thing to put on the drawing for a solution. */
+export type DrawItem =
+  | {
+      kind: 'arrow'
+      name: string
+      tail: V3
+      comp: V3
+      role: VisualVector['role']
+      /** Helpers, and an arrow drawn at a stand-in length, are never measured as if they were the answer. */
+      auxiliary: boolean
+      /** An arrow that is not to scale shows its name only, never a size that is not the true one. */
+      labelMode?: 'name'
+    }
+  /** The dashed far side of a parallelogram: a copy of one input placed at the head of the other. */
+  | { kind: 'ghost'; name: string; of: string; atHeadOf: string }
+  /** A sentence at a point of the drawing, such as the true size of an arrow drawn to a stand-in length. */
+  | { kind: 'note'; name: string; at: V3; text: string }
+
+export interface DrawPlan {
+  items: DrawItem[]
+  /** The arrow to leave selected: the answer, when it is drawn at its true size. */
+  select?: string
+  is3D: boolean
+}
+
+/** Whether a vector is drawn at a stand-in length rather than its own. */
+const standIn = (v: VisualVector): boolean => v.drawn !== undefined && v.drawn.some((c, i) => Math.abs(c - v.v[i]) > 1e-12)
+
+/**
+ * Where every arrow of a solution goes, as pure data the scene bridge only has to follow.
+ * `style` overrides the solution's own picture only when the student chose a layout. Every
+ * vector that is not an input is drawn from its own components. A vector whose drawn length is
+ * a stand-in (a 1.6×10⁻¹⁹ N force beside a 1 m/s velocity) goes down as a helper with its true
+ * value written at its head, so neither the arrow's label nor the Measurements panel ever
+ * reports the stand-in length as |F|.
+ */
+export function planDrawing(vis: NonNullable<Solution['visual']>, style?: DrawStyle): DrawPlan {
+  const inputs = vis.vectors.filter((v) => v.role === 'input')
+  const others = vis.vectors.filter((v) => v.role !== 'input')
+  let mode: DrawStyle = style ?? vis.mode ?? 'common-tail'
+  if (mode === 'parallelogram' && inputs.length !== 2) mode = 'head-to-tail'
+  const items: DrawItem[] = []
+  let select: string | undefined
+  const arrow = (v: VisualVector, tail: V3): string => {
+    const name = sceneName(v.name)
+    const scaled = standIn(v)
+    items.push({ kind: 'arrow', name, tail, comp: v.drawn ?? v.v, role: v.role, auxiliary: v.role === 'helper' || scaled, labelMode: scaled ? 'name' : undefined })
+    if (scaled && v.note) items.push({ kind: 'note', name: `${name}note`, at: add(tail, v.drawn!), text: v.note })
+    if (v.role !== 'helper' && !scaled) select = name
+    return name
+  }
+
+  if (mode === 'head-to-tail') {
+    let cursor: V3 = [0, 0, 0]
+    for (const v of inputs) {
+      arrow(v, cursor)
+      cursor = add(cursor, v.v)
+    }
+    for (const v of others) arrow(v, v.tail ?? [0, 0, 0])
+  } else if (mode === 'parallelogram') {
+    const [p, q] = inputs
+    const a = arrow(p, [0, 0, 0])
+    const bName = arrow(q, [0, 0, 0])
+    items.push({ kind: 'ghost', name: `${bName}_`, of: bName, atHeadOf: a })
+    items.push({ kind: 'ghost', name: `${a}_`, of: a, atHeadOf: bName })
+    for (const v of others) arrow(v, v.tail ?? [0, 0, 0])
+  } else {
+    for (const v of vis.vectors) arrow(v, v.tail ?? [0, 0, 0])
+  }
+  return { items, select, is3D: vis.vectors.some((v) => Math.abs((v.drawn ?? v.v)[2]) > 1e-9) }
 }

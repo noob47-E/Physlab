@@ -190,10 +190,50 @@ describe('textbook values', () => {
       { label: '|A|', tex: '1.41' },
       { label: 'θ', tex: '45.0^\\circ' }
     ])
+    // Components follow the same precision as the magnitudes: 3 s.f., not 3 d.p.
+    expect(VS.solveAddition([{ name: 'A', v: [1.23456, 0, 0] }, { name: 'B', v: [0, 2.5, 0] }], 'R', sf).answers[0].tex).toBe('1.23\\hat{i} + 2.50\\hat{j}')
+    // Sentences about 180° follow the angle unit too.
+    const cos = VS.solveAdditionCosineLaw({ name: 'A', v: [1, 0, 0] }, { name: 'B', v: fromPolar(5, toRad(120)) }, 'R', s)
+    expect(cos.steps[1].text).toContain('3.14 rad − θ')
+    expect(VS.solveScalarMultiply(-2, A, 'R', s).steps[2].text).toContain('turned through 3.14 rad')
     // Bearings apply to the direction of the answer, never to the angle between two vectors.
     setNotation({ direction: 'bearing' })
     expect(VS.solveMagnitudeDirection(A, { ...s, angleUnit: 'deg' }).answers[1].tex).toBe('\\text{N 36.87° E}')
     expect(VS.solveDot(A, { name: 'B', v: [4, -3, 0] }, { ...s, angleUnit: 'deg' }).answers[1].tex).toBe('90^\\circ')
+  })
+
+  it('a vector on an axis is said to lie on it, not in a quadrant', () => {
+    const left = VS.solveMagnitudeDirection({ name: 'A', v: [-3, 0, 0] })
+    expect(left.steps.map((st) => st.text ?? '').join(' ')).toContain('straight along the −x axis')
+    expect(left.steps.map((st) => st.text ?? '').join(' ')).not.toContain('quadrant')
+    expect(left.answers[1].tex).toBe('180^\\circ')
+    expect(VS.solveMagnitudeDirection({ name: 'A', v: [3, 0, 0] }).answers[1].tex).toBe('0^\\circ')
+  })
+
+  it('a zero vector is said plainly instead of printing "undefined"', () => {
+    const O: VS.NamedVec = { name: 'O', v: [0, 0, 0] }
+    for (const [name, sol] of [
+      ['dot', VS.solveDot(A, O)],
+      ['angle', VS.solveAngleBetween(O, A)],
+      ['work', VS.solveWork([0, 0, 0], [1, 2, 0])],
+      ['cosine law', VS.solveAdditionCosineLaw(A, O)],
+      ['scale by 0', VS.solveScalarMultiply(0, A)],
+      ['magnitude', VS.solveMagnitudeDirection(O)]
+    ] as [string, VS.Solution][]) {
+      rendersAll(sol, name)
+      const text = sol.steps.map((st) => st.text ?? '').join(' ')
+      const tex = [...sol.steps.map((st) => st.tex ?? ''), ...sol.answers.map((a) => a.tex)].join(' ')
+      // "its direction is undefined" is a sentence; "cos⁻¹(undefined) = undefined°" is not.
+      expect(text, name).not.toMatch(/undefined[°(]|= undefined|\(undefined\)/)
+      expect(tex, name).not.toMatch(/undefined\^|\(\text\{undefined\}\)|[0-9]\s*\times\s*\text\{undefined\}/)
+      expect(text, name).not.toContain('perpendicular')
+    }
+    expect(VS.solveDot(A, O).steps.map((st) => st.text).join(' ')).toContain('O has zero length')
+    expect(VS.solveDot(A, O).answers[1].tex).toBe('\\text{undefined}')
+    expect(VS.solveScalarMultiply(0, A).steps[2].text).toContain('k is zero')
+    setNotation({ direction: 'bearing' })
+    expect(VS.solveMagnitudeDirection(O).answers[1].tex).toBe('\\text{undefined}')
+    setNotation({ direction: 'standard' })
   })
 
   it('the equilibrant is equal and opposite to the resultant', () => {
@@ -234,6 +274,54 @@ describe('names', () => {
     expect(VS.safeCardName('2', 'A', ['B'])).toBe('A')
     expect(VS.safeCardName('v−1!', 'A', [])).toBe('v1')
     expect(VS.safeCardName('Force', 'A', [])).toBe('Forc')
+    // One subscript is fine; a trailing or doubled underscore is \vec{A_}, which KaTeX paints red.
+    expect(VS.safeCardName('v_A', 'A', [])).toBe('v_A')
+    expect(VS.safeCardName('F_1', 'A', [])).toBe('F_1')
+    expect(VS.safeCardName('A_', 'A', [])).toBe('A')
+    expect(VS.safeCardName('v__A', 'A', [])).toBe('A')
+    expect(VS.safeCardName('v_A_', 'v_A', [])).toBe('v_A')
+    for (const n of ['v_A', 'F_1']) rendersAll(VS.solveAddition([{ name: n, v: [1, 2, 0] }, B]), n)
+  })
+})
+
+describe('laying out a drawing', () => {
+  it('a force drawn to a stand-in length is a helper with its true size written at its head', () => {
+    const sol = VS.solveMagneticForce(-1.6e-19, [1, 0, 0], [0, 1, 0])
+    const plan = VS.planDrawing(sol.visual!)
+    const F = plan.items.find((it) => it.kind === 'arrow' && it.name === 'F')
+    expect(F && F.kind === 'arrow' && F.auxiliary).toBe(true)
+    expect(F && F.kind === 'arrow' && F.labelMode).toBe('name')
+    expect(F && F.kind === 'arrow' && F.comp.map((c) => c + 0)).toEqual([0, 0, -1])
+    const note = plan.items.find((it) => it.kind === 'note')
+    expect(note && note.kind === 'note' && note.text).toMatch(/\|F\| = 1\.6×10\^-19 N — arrow not to scale/)
+    expect(note && note.kind === 'note' && note.at.map((c) => c + 0)).toEqual([0, 0, -1])
+    // Nothing drawn to a stand-in length is left selected as if it were the answer.
+    expect(plan.select).toBe('B')
+    expect(plan.is3D).toBe(true)
+    // A force the size of its inputs is an ordinary answer arrow.
+    const plain = VS.planDrawing(VS.solveMagneticForce(1, [1, 0, 0], [0, 1, 0]).visual!)
+    expect(plain.items.filter((it) => it.kind === 'note')).toHaveLength(0)
+    expect(plain.select).toBe('F')
+  })
+
+  it('draws every non-input vector from its own components, in the solution’s own layout', () => {
+    const sub = VS.planDrawing(VS.solveSubtraction(A, B).visual!)
+    const R = sub.items.find((it) => it.kind === 'arrow' && it.name === 'R')
+    expect(R && R.kind === 'arrow' && R.comp).toEqual([1, 5, 0])
+    expect(R && R.kind === 'arrow' && R.auxiliary).toBe(false)
+    const helper = sub.items.find((it) => it.kind === 'arrow' && it.name === 'negB')
+    expect(helper && helper.kind === 'arrow' && helper.auxiliary).toBe(true)
+    expect(helper && helper.kind === 'arrow' && helper.tail).toEqual([3, 4, 0])
+    expect(sub.select).toBe('R')
+    // The head-to-tail layout chains the inputs; a chosen style overrides the solution's own.
+    const chain = VS.planDrawing(VS.solveSubtraction(A, B).visual!, 'head-to-tail')
+    const Bh = chain.items.find((it) => it.kind === 'arrow' && it.name === 'B')
+    expect(Bh && Bh.kind === 'arrow' && Bh.tail).toEqual([3, 4, 0])
+    // The parallelogram adds the two dashed sides and falls back when there are not two inputs.
+    const para = VS.planDrawing(VS.solveAddition([A, B]).visual!, 'parallelogram')
+    expect(para.items.filter((it) => it.kind === 'ghost').map((it) => it.kind === 'ghost' && [it.of, it.atHeadOf])).toEqual([['B', 'A'], ['A', 'B']])
+    const three = VS.planDrawing(VS.solveAddition([A, B, { name: 'C', v: [0, 1, 0] }]).visual!, 'parallelogram')
+    expect(three.items.some((it) => it.kind === 'ghost')).toBe(false)
   })
 })
 

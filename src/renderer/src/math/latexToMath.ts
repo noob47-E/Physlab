@@ -15,7 +15,7 @@ type Tok = string
 /**
  * Characters a student pastes from a textbook or types with a Unicode keyboard, read as the
  * LaTeX MathLive would have produced: î ĵ k̂ are the unit vectors, − is a minus, x² is a square.
- * Without this a pasted "3î + 4ĵ" failed while the typed version worked.
+ * ½A is half of A. Without this a pasted "3î + 4ĵ" failed while the typed version worked.
  */
 const UNICODE_ALIASES: [RegExp, string][] = [
   [/î|î/g, '\\hat{i}'],
@@ -24,6 +24,11 @@ const UNICODE_ALIASES: [RegExp, string][] = [
   [/[−–]/g, '-'],
   [/²/g, '^{2}'],
   [/³/g, '^{3}'],
+  [/½/g, '\\frac{1}{2}'],
+  [/¼/g, '\\frac{1}{4}'],
+  [/¾/g, '\\frac{3}{4}'],
+  [/⅓/g, '\\frac{1}{3}'],
+  [/⅔/g, '\\frac{2}{3}'],
   [/±/g, '\\pm']
 ]
 
@@ -303,8 +308,10 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
             }
             return cells.map((c) => latexToMath(c.join(' '), opts) || '0')
           })
-        const body = `[${parsed.map((r) => `[${r.join(', ')}]`).join(', ')}]`
-        return env === 'vmatrix' ? `det(${body})` : body
+        // Bracketed, because mathjs reads "2[[3], [4]]" as a stray operator but "2([[3], [4]])" as
+        // a scalar times a column vector, which is how a book writes it.
+        const body = `([${parsed.map((r) => `[${r.join(', ')}]`).join(', ')}])`
+        return env === 'vmatrix' ? `det${body}` : body
       }
       case 'int': {
         let lo = ''

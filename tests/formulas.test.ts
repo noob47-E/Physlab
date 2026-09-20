@@ -30,6 +30,9 @@ describe('measurement formatting', () => {
     expect(formatMeasure(Math.PI / 2, 'direction', S)).toBe('N')
     expect(formatMeasure((5 * Math.PI) / 4, 'direction', S)).toBe('S 45° W')
     expect(texMeasure(Math.PI / 6, 'direction', S)).toBe('\\text{N 60° E}')
+    // A bearing keeps the student's significant figures, like every other measurement.
+    expect(formatMeasure(Math.atan2(4, 3), 'direction', { ...S, precisionMode: 'sf', decimals: 3 })).toBe('N 36.9° E')
+    expect(formatMeasure(NaN, 'direction', S)).toBe('undefined')
     // The corner of a triangle is an amount of turning, not a heading.
     expect(formatMeasure(Math.PI / 6, 'angle', S)).toBe('30°')
     // In radians a bearing makes no sense, so the direction is a plain angle again.
