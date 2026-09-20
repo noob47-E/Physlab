@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react'
-import { Eye, History, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, Eye, History, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { clearCalcHistory, useCalc, type CalcMode } from '../calc/calcStore'
-import { casioToMath, evaluateBaseN, evaluateComp, exactForm, fmtEng, fmtNum, formatBase, type Base } from '../calc/engine'
+import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, type Base } from '../calc/engine'
+import { calcEng, calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
 import { math, setAngleMode } from '../math/expr'
 import { latexToMath } from '../math/latexToMath'
-import { cas } from '../math/cas'
+import { cas, warmupCas } from '../math/cas'
 import { useScene } from '../core/store'
+import { themeColor } from '../app/theme'
 import { visualizeArea, visualizeGraph, visualizePoint, visualizeTangent, visualizeVector } from '../core/visualize'
 import { Builder } from '../core/factory'
 import { Tex } from '../ui/Tex'
@@ -16,10 +18,17 @@ import { usePure } from '../math/pure/store'
 import { suggestJob, type JobId } from '../math/pure/run'
 import { showPanel } from '../app/panels'
 
-const MODES: { id: CalcMode; label: string; desc: string }[] = [
+// Every number the calculator shows follows the precision the student chose in Settings
+// (Rule 4). The scene store is read lazily so calc/ never imports it back.
+setCalcPrecisionSource(() => useScene.getState().settings)
+
+/** The three modes with a keypad are always in reach; the rest sit behind "More modes". */
+const MAIN_MODES: { id: CalcMode; label: string; desc: string }[] = [
   { id: 'COMP', label: 'COMP', desc: 'Calculate' },
   { id: 'CMPLX', label: 'CMPLX', desc: 'Complex numbers' },
-  { id: 'BASE-N', label: 'BASE-N', desc: 'Binary, octal, hex' },
+  { id: 'BASE-N', label: 'BASE-N', desc: 'Binary, octal, hex' }
+]
+const MORE_MODES: { id: CalcMode; label: string; desc: string }[] = [
   { id: 'MATRIX', label: 'MATRIX', desc: 'Matrices' },
   { id: 'VECTOR', label: 'VECTOR', desc: 'Vectors' },
   { id: 'STAT', label: 'STAT', desc: 'Statistics & regression' },
@@ -39,6 +48,16 @@ type KeyDef = { label: string; tex?: string; act?: string; cls?: string; shift?:
 
 /** Templates whose first box to fill is the lower limit (subscript). */
 const LOWER_FIRST = /^\\(int|sum|prod)_/
+
+/** Whether the function keys are folded away; remembered, because it is a preference not a state. */
+const FN_KEY = 'physlab.calc.fnKeys'
+const readFnOpen = (): boolean => {
+  try {
+    return localStorage.getItem(FN_KEY) !== 'closed'
+  } catch {
+    return true
+  }
+}
 
 const fn = (name: string, args = 1) => `\\${name}\\left(#0${',#?'.repeat(args - 1)}\\right)`
 const op = (name: string, args = 1) => `\\operatorname{${name}}\\left(#0${',#?'.repeat(args - 1)}\\right)`
@@ -130,7 +149,9 @@ function PureMathRow({ latex }: { latex: string }) {
   const text = latexToMath(latex).trim()
   const go = (job?: JobId) => {
     if (!text) return
-    run(job ?? suggestJob(text), text)
+    // The field's own LaTeX goes across with the linear form: the Working panel's field reads
+    // LaTeX, and handing it the linear form put x^(2) with a stray bracket in front of the student.
+    run(job ?? suggestJob(text), text, latex)
     showPanel('working')
   }
   const QUICK: { id: JobId; label: string }[] = [
@@ -190,17 +211,55 @@ interface Result {
   error?: boolean
 }
 
+const CHIP = 'rounded px-2 py-0.5 text-[11px] font-semibold'
+const CHIP_ON = 'bg-[color:var(--accent-2)] text-[color:var(--text-strong)]'
+const CHIP_OFF = 'bg-[color:var(--bg-3)] text-[color:var(--text-dim)] hover:text-[color:var(--text-strong)]'
+
 export function Calculator() {
   const mode = useCalc((s) => s.mode)
   const setMode = useCalc((s) => s.setMode)
+  const [more, setMore] = useState(false)
+  // Re-render when the precision setting changes, so every number on the panel follows it.
+  useScene((s) => s.settings.decimals)
+  useScene((s) => s.settings.precisionMode)
+  // SymPy takes a few seconds to wake; starting it when the calculator opens means the first
+  // exact form or fallback answer is ready by the time it is wanted.
+  useEffect(() => {
+    void warmupCas()
+  }, [])
+  const other = MORE_MODES.find((m) => m.id === mode)
   return (
     <div className="calc">
-      <div className="flex flex-wrap gap-1">
-        {MODES.map((m) => (
-          <button key={m.id} title={m.desc} onClick={() => setMode(m.id)} className={`rounded px-2 py-0.5 text-[11px] font-semibold ${mode === m.id ? 'bg-[#3a6fd8] text-white' : 'bg-[#2a2c31] text-zinc-400 hover:text-white'}`}>
+      <div className="relative flex flex-wrap gap-1">
+        {MAIN_MODES.map((m) => (
+          <button key={m.id} title={m.desc} onClick={() => setMode(m.id)} className={`${CHIP} ${mode === m.id ? CHIP_ON : CHIP_OFF}`}>
             {m.label}
           </button>
         ))}
+        <button
+          title="Matrices, vectors, statistics, tables, equations and more"
+          onClick={() => setMore(!more)}
+          className={`${CHIP} flex items-center gap-1 ${other ? CHIP_ON : CHIP_OFF}`}
+        >
+          {other ? other.label : 'More modes'} <ChevronDown size={11} />
+        </button>
+        {more && (
+          <div className="menu top-full mt-1" onMouseLeave={() => setMore(false)}>
+            {MORE_MODES.map((m) => (
+              <button
+                key={m.id}
+                className={mode === m.id ? 'font-semibold' : ''}
+                onClick={() => {
+                  setMode(m.id)
+                  setMore(false)
+                }}
+              >
+                <span>{m.label}</span>
+                <span className="sc">{m.desc}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {mode === 'COMP' || mode === 'CMPLX' || mode === 'BASE-N' ? <ScientificMode key={mode} mode={mode} /> : <ModePanel mode={mode} />}
     </div>
@@ -219,6 +278,28 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
   const [base, setBase] = useState<Base>(10)
   const [calcVars, setCalcVars] = useState<string[] | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [fnOpen, setFnOpen] = useState(readFnOpen)
+
+  // A constant chosen from the CONST list arrives here, because that list was on screen instead
+  // of this field. It goes in at the caret, through MathLive, like any key press.
+  useEffect(() => {
+    // Taken inside the timer, not before it: React runs this effect twice in development and
+    // clears the first timer, and the constant must not be taken by a run that never inserts it.
+    const t = setTimeout(() => {
+      const queued = useCalc.getState().takePending()
+      if (queued) mathRef.current?.insert(queued)
+    }, 0)
+    return () => clearTimeout(t)
+  }, [])
+
+  const toggleFn = (): void => {
+    setFnOpen(!fnOpen)
+    try {
+      localStorage.setItem(FN_KEY, fnOpen ? 'closed' : 'open')
+    } catch {
+      // Not remembered; the keys still fold.
+    }
+  }
 
   /** The current input as PhysLab's linear syntax. */
   const linear = (): string => {
@@ -243,15 +324,15 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
         const c = math.complex(v as never) as unknown as { re: number; im: number }
         const r = Math.hypot(c.re, c.im)
         const th = Math.atan2(c.im, c.re)
-        const main = `${fmtNum(c.re)} ${c.im < 0 ? '−' : '+'} ${fmtNum(Math.abs(c.im))}i`
-        setResult({ main, extra: [`r∠θ = ${fmtNum(r)} ∠ ${fmtNum(angleUnit === 'deg' ? (th * 180) / Math.PI : th)}${angleUnit === 'deg' ? '°' : ''}`, `conjugate ${fmtNum(c.re)} ${c.im < 0 ? '+' : '−'} ${fmtNum(Math.abs(c.im))}i`], value: c })
+        const main = `${calcNum(c.re)} ${c.im < 0 ? '−' : '+'} ${calcNum(Math.abs(c.im))}i`
+        setResult({ main, extra: [`r∠θ = ${calcNum(r)} ∠ ${calcNum(angleUnit === 'deg' ? (th * 180) / Math.PI : th)}${angleUnit === 'deg' ? '°' : ''}`, `conjugate ${calcNum(c.re)} ${c.im < 0 ? '+' : '−'} ${calcNum(Math.abs(c.im))}i`], value: c })
         useCalc.setState({ ans: v, history: [{ input: s.input, result: main, mode }, ...s.history].slice(0, 100) })
         return
       }
       const out = evaluateComp(input, { vars: { ...s.vars, ...varsOverride }, ans: s.ans, angle: angleUnit })
       const num = typeof out.value === 'number' ? out.value : NaN
       const exact = Number.isFinite(num) && !/=/.test(input) && !/^(Pol|Rec)/i.test(input) ? exactForm(num) : null
-      setResult({ main: eng && Number.isFinite(num) ? fmtEng(num) : out.text, extra: out.extra, exact: exact && exact !== String(num) ? exact : null, value: out.value })
+      setResult({ main: eng && Number.isFinite(num) ? calcEng(num) : out.text, extra: out.extra, exact: exact && exact !== String(num) ? exact : null, value: out.value })
       useCalc.setState({ ans: out.value, vars: /=/.test(input) ? { ...s.vars, x: out.value } : s.vars, history: [{ input: s.input, result: out.text, mode }, ...s.history].slice(0, 100) })
       if (!exact && Number.isFinite(num) && !Number.isInteger(num) && !/[xy=]|ddx|integral|sigma|product|Ran/.test(input)) {
         cas('exact', { expr: casioToMath(input), deg: angleUnit === 'deg' }).then((r) => {
@@ -320,7 +401,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
           const y = Number(math.evaluate(casioToMath(f), { x: k }))
           const top = bld.point([k, y, 0], { auxiliary: true, showLabel: false })
           const baseP = bld.point([k, 0, 0], { auxiliary: true, visible: false })
-          bld.segment(baseP.id, top.id, { color: '#4dabf7', showLabel: false })
+          bld.segment(baseP.id, top.id, { color: themeColor('--accent', '#4dabf7'), showLabel: false })
         }
         bld.commit()
         useScene.getState().setViewMode('2d')
@@ -361,7 +442,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
     if (s.sto && k.alpha) {
       const letter = k.alpha.tex!
       useCalc.setState({ vars: { ...s.vars, [letter]: s.ans }, sto: false, alpha: false, shift: false })
-      setResult({ main: `${fmtNum(Number(s.ans))} → ${letter}` })
+      setResult({ main: `${calcNum(Number(s.ans))} → ${letter}` })
       return
     }
     const act = useShift ? k.shift!.act : useAlpha ? undefined : k.act
@@ -398,7 +479,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
           return useCalc.setState({ sto: true, alpha: true, shift: false })
         case 'rcl':
           useCalc.setState({ shift: false })
-          return setResult({ main: 'Variables', extra: Object.entries(s.vars).map(([n, v]) => `${n} = ${typeof v === 'number' ? fmtNum(v) : String(v)}`) })
+          return setResult({ main: 'Variables', extra: Object.entries(s.vars).map(([n, v]) => `${n} = ${typeof v === 'number' ? calcNum(v) : String(v)}`) })
         case 'solve':
           if (!linear().includes('=')) insertTex('=')
           else void evaluate()
@@ -457,8 +538,8 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
     <>
       <div className="lcd">
         <div className="status">
-          {calc.shift && <span className="text-[#a86a00]">S</span>}
-          {calc.alpha && <span className="text-[#a8205a]">A</span>}
+          {calc.shift && <span className="text-[color:var(--lcd-shift)]">S</span>}
+          {calc.alpha && <span className="text-[color:var(--lcd-alpha)]">A</span>}
           {calc.sto && <span>STO</span>}
           <span>{angleUnit === 'deg' ? 'D' : 'R'}</span>
           <span>{mode === 'BASE-N' ? ({ 2: 'BIN', 8: 'OCT', 10: 'DEC', 16: 'HEX' } as Record<number, string>)[base] : mode}</span>
@@ -469,7 +550,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
         {mode === 'BASE-N' ? (
           <input
             ref={baseRef}
-            className="w-full bg-transparent font-mono text-[16px] text-[#11140f] outline-none"
+            className="w-full bg-transparent font-mono text-[16px] text-[color:var(--lcd-text)] outline-none"
             value={calc.input}
             spellCheck={false}
             placeholder="e.g. FF + 1A   or   1010 and 0110"
@@ -485,13 +566,13 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
         <div className="result">
           {result && (
             <>
-              {showExact && exactTex && !result.error ? <Tex tex={exactTex} /> : <span className={result.error ? 'text-[#8a1c1c]' : ''}>{result.main}</span>}
+              {showExact && exactTex && !result.error ? <Tex tex={exactTex} /> : <span className={result.error ? 'text-[color:var(--lcd-bad)]' : ''}>{result.main}</span>}
               {showExact && exactTex && !result.error && !/^-?\d+$/.test(exactTex) && <div className="text-[13px] opacity-70">≈ {result.main}</div>}
             </>
           )}
         </div>
         {result?.extra && (
-          <div className="text-right text-[12px] leading-5 text-[#2c3328]">
+          <div className="text-right text-[12px] leading-5 text-[color:var(--lcd-dim)]">
             {result.extra.map((x, i) => (
               <div key={i}>{x}</div>
             ))}
@@ -501,7 +582,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
 
       {calcVars && (
         <div className="card p-2">
-          <div className="mb-1 text-[11px] text-zinc-400">CALC: enter the values, then press Calculate</div>
+          <div className="mb-1 text-[11px] text-[color:var(--text-dim)]">CALC: enter the values, then press Calculate</div>
           <CalcVarForm
             vars={calcVars}
             initial={calc.vars}
@@ -540,7 +621,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
             ))}
           </div>
         )}
-        <button className={`btn ghost ${showHistory ? 'text-white' : ''}`} onClick={() => setShowHistory(!showHistory)}>
+        <button className={`btn ghost ${showHistory ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowHistory(!showHistory)}>
           <History size={13} /> History
         </button>
       </div>
@@ -549,16 +630,16 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
 
       {showHistory && (
         <div className="card max-h-40 overflow-auto">
-          {calc.history.length === 0 && <div className="p-2 text-zinc-500">No calculations yet.</div>}
+          {calc.history.length === 0 && <div className="p-2 text-[color:var(--text-faint)]">No calculations yet.</div>}
           {calc.history.length > 0 && (
-            <button className="flex w-full items-center gap-1 px-2 py-1 text-left text-zinc-500 hover:text-[color:var(--bad)]" onClick={clearCalcHistory}>
+            <button className="flex w-full items-center gap-1 px-2 py-1 text-left text-[color:var(--text-faint)] hover:text-[color:var(--bad)]" onClick={clearCalcHistory}>
               <Trash2 size={12} /> Clear history
             </button>
           )}
           {calc.history.map((h, i) => (
-            <button key={i} className="flex w-full items-center justify-between gap-3 px-2 py-1 text-left hover:bg-[#2f4a7a]" onClick={() => useCalc.setState({ input: h.input, mode: h.mode })}>
-              <span className="truncate text-zinc-300">{h.mode === 'BASE-N' ? h.input : <Tex tex={h.input} />}</span>
-              <span className="shrink-0 font-mono text-amber-200">{h.result}</span>
+            <button key={i} className="flex w-full items-center justify-between gap-3 px-2 py-1 text-left hover:bg-[color:var(--sel-row)]" onClick={() => useCalc.setState({ input: h.input, mode: h.mode })}>
+              <span className="truncate text-[color:var(--text)]">{h.mode === 'BASE-N' ? h.input : <Tex tex={h.input} />}</span>
+              <span className="shrink-0 font-mono text-[color:var(--code-text)]">{h.result}</span>
             </button>
           ))}
         </div>
@@ -566,10 +647,15 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
 
       {mode === 'BASE-N' && <Keypad keys={baseKeys} cols={6} onKey={onKey} />}
       {mode === 'CMPLX' && <Keypad keys={cmplxKeys} cols={6} onKey={onKey} />}
-      {mode !== 'BASE-N' && <Keypad keys={FN_KEYS} cols={6} onKey={onKey} />}
+      {mode !== 'BASE-N' && (
+        <button className="flex items-center gap-1 self-start text-[11px] text-[color:var(--text-faint)] hover:text-[color:var(--text)]" onClick={toggleFn} title={fnOpen ? 'Fold the function keys away' : 'Show the function keys'}>
+          {fnOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Function keys
+        </button>
+      )}
+      {mode !== 'BASE-N' && fnOpen && <Keypad keys={FN_KEYS} cols={6} onKey={onKey} />}
       <Keypad keys={NUM_KEYS} cols={5} onKey={onKey} />
-      <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-        <Sparkles size={12} /> Tip: type straight on your keyboard too: <code className="text-amber-200">/</code> makes a fraction, <code className="text-amber-200">^</code> a power, <code className="text-amber-200">sqrt</code> a root.
+      <div className="flex items-center gap-1.5 text-[11px] text-[color:var(--text-faint)]">
+        <Sparkles size={12} /> Tip: type straight on your keyboard too: <code className="text-[color:var(--code-text)]">/</code> makes a fraction, <code className="text-[color:var(--code-text)]">^</code> a power, <code className="text-[color:var(--code-text)]">sqrt</code> a root.
       </div>
     </>
   )
@@ -581,7 +667,7 @@ function CalcVarForm({ vars, initial, onSubmit }: { vars: string[]; initial: Rec
     <div className="flex flex-wrap items-center gap-2">
       {vars.map((v) => (
         <label key={v} className="flex items-center gap-1">
-          <span className="font-semibold italic text-zinc-300">{v} =</span>
+          <span className="font-semibold italic text-[color:var(--text)]">{v} =</span>
           <input className="field num w-20" value={vals[v]} onChange={(e) => setVals({ ...vals, [v]: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
         </label>
       ))}

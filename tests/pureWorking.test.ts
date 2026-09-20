@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { JOBS, runPure, suggestJob } from '../src/renderer/src/math/pure/run'
 import { texToPlain } from '../src/renderer/src/math/pure/work'
+import { checkTone, initialShown, offeredJob, resolveJob, stepPrefFrom } from '../src/renderer/src/math/pure/reveal'
 import { evalDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
 import { rStr, rat } from '../src/renderer/src/math/pure/rat'
 
@@ -160,6 +161,29 @@ describe('the dispatcher', () => {
     expect(runPure('expand', '(2x + 3)(3x - 1)').answers[0].tex).toBe('6x^{2} + 7x - 3')
   })
 
+  it('expands by showing the distribution, not by restating the answer', () => {
+    const w = runPure('expand', '(2x + 3)(3x - 1)')
+    expect(w.input).toBe('\\left(2x + 3\\right)\\left(3x - 1\\right)')
+    // The heading names the actual brackets; the first step is the each-times-each grid.
+    expect(w.moves[0].head).toContain('2x + 3')
+    expect(w.moves[0].head).toContain('3x - 1')
+    expect(w.moves[0].tex).toContain('\\begin{array}')
+    expect(w.moves[0].tex).toContain('6x^{2}')
+    expect(w.moves[0].tex).toContain('-2x')
+    // Then the products in a line, then the like terms collected.
+    expect(w.moves[1].tex).toBe('6x^{2} - 2x + 9x - 3')
+    expect(w.moves[2].tex).toBe('6x^{2} + \\left(-2x + 9x\\right) - 3 = 6x^{2} + 7x - 3')
+    expect(w.checked).toBe('ok')
+    // A square is the bracket written twice, and three brackets are done two at a time.
+    expect(runPure('expand', '(x + 1)^2').moves[0].head).toMatch(/x \+ 1.*x \+ 1/)
+    const three = runPure('expand', '(x + 1)^2 (x - 2)')
+    expect(three.answers[0].tex).toBe('x^{3} - 3x - 2')
+    expect(three.moves.filter((m) => m.tex?.includes('\\begin{array}'))).toHaveLength(2)
+    expect(three.checked).toBe('ok')
+    // A number outside a bracket is distributed too.
+    expect(runPure('expand', '3(x + 2)').moves[0].tex).toContain('3x')
+  })
+
   it('guesses a sensible job from what was typed', () => {
     expect(suggestJob('360')).toBe('primes')
     expect(suggestJob('12, 18')).toBe('hcf')
@@ -168,6 +192,21 @@ describe('the dispatcher', () => {
     expect(suggestJob('6x^2 + 7x - 3')).toBe('factor')
     expect(suggestJob('(3x+5)/((x+1)(x+2))')).toBe('partial')
     expect(suggestJob('(x^3-1)/(x-1)')).toBe('divide')
+  })
+
+  it('factorises the bottom before choosing between division and partial fractions', () => {
+    // No visible bracket pair, but x² − 4 is (x − 2)(x + 2): a partial-fractions question.
+    expect(suggestJob('1/(x^2-4)')).toBe('partial')
+    expect(suggestJob('(x+3)/(x^2+2x+1)')).toBe('partial')
+    expect(suggestJob('(x^2+1)/(x^3-2)')).toBe('divide')
+    expect(suggestJob('(x+1)/(x^2+1)')).toBe('divide')
+  })
+
+  it('sends a quadratic with no real roots to Factorise with i', () => {
+    expect(suggestJob('x^2 + 4')).toBe('factorComplex')
+    expect(suggestJob('x^2 + x + 1')).toBe('factorComplex')
+    expect(suggestJob('x^2 - 4')).toBe('factor')
+    expect(suggestJob('x^4 + 4')).toBe('factor')
   })
 
   it('never throws, whatever it is given', () => {
@@ -323,5 +362,48 @@ describe('a power typed as natural maths', () => {
     // latexToMath turns a typed x² into x^(2); rejecting that made the field unusable.
     expect(runPure('factor', '6x^(2)+7x-3').answers[0].tex).toMatch(/2x \+ 3/)
     expect(runPure('solve', 'x^(2)+4x+13=0').answers[0].tex).toBe('-2 + 3i')
+  })
+})
+
+describe('what the Working panel decides before it draws anything', () => {
+  it('hides the steps first unless the student has asked to see them all', () => {
+    // Retrieval practice beats reading: the answer is shown, the steps wait to be asked for.
+    expect(stepPrefFrom(null)).toBe('try')
+    expect(stepPrefFrom('nonsense')).toBe('try')
+    expect(stepPrefFrom('all')).toBe('all')
+    expect(initialShown(6, 'try')).toBe(0)
+    expect(initialShown(6, 'all')).toBe(6)
+    expect(initialShown(0, 'try')).toBe(0)
+  })
+
+  it('treats the typing as whatever was chosen, or guesses when nothing was', () => {
+    expect(resolveJob('auto', '12, 18')).toBe('hcf')
+    expect(resolveJob('auto', 'x^2 + 4')).toBe('factorComplex')
+    expect(resolveJob('expand', '12, 18')).toBe('expand')
+  })
+
+  it('colours the check line by the verdict, never by the wording', () => {
+    expect(checkTone({ checked: 'ok', check: 'Treat this answer with suspicion.' })).toBe('ok')
+    expect(checkTone({ checked: 'failed', check: 'All fine.' })).toBe('failed')
+    expect(checkTone({ check: 'Nothing was multiplied, so there is nothing to check.' })).toBe('plain')
+    // Every generator that verifies its answer says so.
+    for (const src of [['factor', '6x^2 + 7x - 3'], ['factorComplex', 'x^2 + 4'], ['expand', '(x + 1)(x - 1)'], ['solve', '2x + 1 = 7']] as const) {
+      expect(checkTone(runPure(src[0], src[1])), src.join(' ')).toBe('ok')
+    }
+  })
+
+  it('offers "Allow i" only for a job the panel knows', () => {
+    const known = JOBS.map((j) => j.id)
+    expect(offeredJob(runPure('factor', 'x^2 + 4'), known)).toBe('factorComplex')
+    expect(offeredJob(runPure('factor', 'x^2 - 4'), known)).toBeNull()
+    expect(offeredJob({ offer: { job: 'nothing', label: '', hint: '' } }, known)).toBeNull()
+    expect(offeredJob({ error: 'no', offer: { job: 'factorComplex', label: '', hint: '' } }, known)).toBeNull()
+  })
+
+  it('records why the steps are missing when SymPy had to answer', () => {
+    // The reason is a field of its own, so the panel can show it under the answer.
+    const w = runPure('factorComplex', 'x^5 + x + 1')
+    expect(w.error).toBeTruthy()
+    expect(w.error).toMatch(/power 5|cannot/)
   })
 })

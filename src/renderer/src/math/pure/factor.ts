@@ -5,14 +5,18 @@
 // that comes out is multiplied back together and checked against the original before it is shown.
 
 import {
+  R0,
   R1,
   rAbs,
+  rAdd,
+  rDiv,
   rIsNeg,
   rIsOne,
   rIsZero,
   rMul,
   rNeg,
   rSqrt,
+  rSub,
   rat,
   rTex,
   type Rat
@@ -22,8 +26,10 @@ import {
   commonFactor,
   constExpr,
   divideByTerm,
+  eAdd,
   eMul,
   eNeg,
+  eSub,
   exprDegree,
   exprTex,
   exprTexBracketed,
@@ -42,11 +48,14 @@ import {
   pDivMod,
   pMul,
   pPrimitive,
+  pTex,
+  pTexBracketed,
   pTrim,
   polyFromExpr,
   type Poly
 } from './poly'
 import { MAX_TRIAL, TOO_BIG_TO_SEARCH } from './limits'
+import { splitBiquadratic } from './cxpoly'
 import { Steps, failed, type Working } from './work'
 
 /** The exact k-th root of a fraction, or null. */
@@ -171,6 +180,77 @@ function byGrouping(e: Expr): { parts: Expr[]; pairs: [Expr, Expr]; taken: [Term
     return { parts: [r1, outer], pairs: [p1, p2], taken: [f1, g2] }
   }
   return null
+}
+
+/**
+ * A quadratic in disguise: x⁴ + 5x² + 4 is u² + 5u + 4 once u = x².
+ *
+ * Three terms whose powers are 2k, k and 0. The quadratic in u has to have rational roots for
+ * this to give whole-number brackets; when it does not, completing the square (below) or "Allow
+ * i" are the next moves. This used to be missing altogether, so x⁴ + 5x² + 4 was reported as not
+ * factorisable — which is the kind of wrong answer that costs a student marks.
+ */
+function bySubstitution(e: Expr, ctx: Ctx, pending: Expr[]): { parts: Expr[]; name: string; k: number } | null {
+  if (e.length !== 3 || varsOf(e).length !== 1) return null
+  const { poly, name } = polyFromExpr(e)
+  const deg = pDeg(poly)
+  if (deg < 4 || deg % 2 !== 0) return null
+  const k = deg / 2
+  for (let i = 1; i < deg; i++) if (i !== k && !rIsZero(poly[i] ?? rat(0n))) return null
+  const [c, b, a] = [poly[0] ?? rat(0n), poly[k] ?? rat(0n), poly[deg]]
+  if (rIsZero(b) || rIsZero(c)) return null
+  if (a.d !== 1n || b.d !== 1n || c.d !== 1n) return null
+  const disc = rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
+  const root = rSqrt(disc)
+  if (!root) return null
+  const twoA = rMul(rat(2n), a)
+  const roots = [rDiv(rAdd(rNeg(b), root), twoA), rDiv(rSub(rNeg(b), root), twoA)]
+  // A root p/q means (q·u − p) is a factor, which keeps every coefficient whole.
+  const uFactors: Poly[] = roots.map((r) => pTrim([rNeg(rat(r.n)), rat(r.d)]))
+  const content = rDiv(a, rat(roots[0].d * roots[1].d))
+  const inU = pTrim([c, b, a])
+
+  ctx.s.add(
+    `This is a quadratic in disguise: the powers are ${deg}, ${k} and 0. Write u = ${name}^${k} and it becomes a quadratic in u.`,
+    `u = ${name}^{${k}} \\;\\Rightarrow\\; ${pTex(inU, 'u')}`,
+    `\\text{substitute } u = ${name}^{${k}}`
+  )
+  const uBrackets = `${rIsOne(content) ? '' : rTex(content)}${uFactors.map((f) => pTexBracketed(f, 'u')).join('')}`
+  ctx.s.add(
+    `Factorise the quadratic in u. Its roots are u = ${rTex(roots[0])} and u = ${rTex(roots[1])}.`,
+    `${pTex(inU, 'u')} = ${uBrackets}`,
+    'a u^2 + b u + c = a(u - u_1)(u - u_2)'
+  )
+  const parts = uFactors.map((f) => exprFromPoly([f[0], ...new Array(k - 1).fill(rat(0n)), f[1]], name))
+  if (!rIsOne(content)) parts.unshift(constExpr(content))
+  ctx.s.add(`Put ${name}^${k} back in place of u.`, snapshot(ctx, [...pending, ...parts]))
+  return { parts, name, k }
+}
+
+/**
+ * x⁴ + 4 has no rational roots and is not a difference of squares as it stands — but
+ * x⁴ + 4 = (x² + 2)² − (2x)², which is. Adding and taking away the middle term is the move, and
+ * it is the one students are shown for exactly this expression.
+ */
+function byCompletingSquare(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
+  if (varsOf(e).length !== 1 || e.length < 2 || e.length > 3) return null
+  const { poly, name } = polyFromExpr(e)
+  if (pDeg(poly) !== 4) return null
+  const split = splitBiquadratic(poly)
+  // A surd in the middle term (x⁴ + 1 needs √2·x) is a job for "Allow i", not for whole numbers.
+  if (!split || !rIsZero(split.k.r)) return null
+  const { alpha, s } = split
+  const kx: Term = { c: split.k.q, v: { [name]: 1 } }
+  const inner = exprFromPoly([s, rat(0n), alpha], name)
+  const taken: Term = { c: rMul(kx.c, kx.c), v: { [name]: 2 } }
+  ctx.s.add(
+    `Complete the square: ${exprTex(inner)} squared is ${exprTex(eMul(inner, inner))}, which is this expression with ${termTex(taken)} added on. So take ${termTex(taken)} away again.`,
+    `${exprTex(e)} = \\left(${exprTex(inner)}\\right)^2 - \\left(${termTex(kx)}\\right)^2`,
+    '\\text{add and take away the middle term}'
+  )
+  const parts = [eSub(inner, termExpr(kx)), eAdd(inner, termExpr(kx))]
+  ctx.s.add('Now it is a difference of two squares, so it splits into the difference and the sum.', snapshot(ctx, [...pending, ...parts]), 'a^2 - b^2 = (a-b)(a+b)')
+  return parts
 }
 
 // ---------------------------------------------------------------- driver
@@ -396,6 +476,13 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   const split = splitMiddleTerm(e, ctx, pending)
   if (split) return split.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
 
+  // 3b. Even powers only: a quadratic in u = x^k, or a square with the middle term completed.
+  const sub = bySubstitution(e, ctx, pending)
+  if (sub) return sub.parts.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+
+  const completed = byCompletingSquare(e, ctx, pending)
+  if (completed) return completed.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+
   // 4. Four terms: grouping.
   const grp = byGrouping(e)
   if (grp) {
@@ -462,7 +549,8 @@ export function factorise(src: string): FactorOutcome {
         check: ctx.tooBig
           ? TOO_BIG_TO_SEARCH
           : 'This one does not break into simpler factors with whole numbers.',
-        error: undefined
+        error: undefined,
+        offer: leavesIrreducibleQuadratic([e]) ? ALLOW_I : undefined
       },
       factors: [e]
     }
@@ -488,10 +576,25 @@ export function factorise(src: string): FactorOutcome {
         ? 'Careful: multiplying back out did not match. Treat this answer with suspicion.'
         : stillWhole
           ? `The most that can be taken out is the minus sign; ${exprTex(stillWhole)} does not break down further.`
-          : `Multiplying back out gives ${expanded} — the original.`
+          : `Multiplying back out gives ${expanded} — the original.`,
+      checked: ok ? 'ok' : 'failed',
+      offer: leavesIrreducibleQuadratic(nonTrivial) ? ALLOW_I : undefined
     },
     factors: nonTrivial
   }
+}
+
+const ALLOW_I = { job: 'factorComplex', label: 'Allow i', hint: 'Carry on by allowing complex numbers: every quadratic factorises then.' }
+
+/** True when some factor is a quadratic with no real roots — the point where "Allow i" helps. */
+function leavesIrreducibleQuadratic(parts: Expr[]): boolean {
+  return parts.some((p) => {
+    if (varsOf(p).length !== 1) return false
+    const { poly } = polyFromExpr(p)
+    if (pDeg(poly) !== 2) return false
+    const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
+    return rIsNeg(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))
+  })
 }
 
 /** Collapse repeated factors into powers: (x+2)(x+2) becomes (x+2)². */

@@ -72,6 +72,9 @@ def cas_run(op, payload_json):
             return json.dumps(_out(sp.expand(P(p['expr'], deg))))
         if op == 'factor':
             return json.dumps(_out(sp.factor(P(p['expr'], deg))))
+        if op == 'factor_complex':
+            # Over the complex numbers, for "Factorise with i". Plain factor() stops at x**2 + 4.
+            return json.dumps(_out(sp.factor(P(p['expr'], deg), extension=[sp.I])))
         if op == 'apart':
             # Partial fractions. Used as the fallback when the step engine cannot split a
             # denominator itself; simplify would hand back the same fraction it was given.

@@ -710,8 +710,20 @@ math-field.math-input::part(menu-toggle) {
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  min-height: 100%;
-  background: linear-gradient(180deg, #1d1e22, var(--input-bg));
+  /* The panel scrolls; it used to grow past its dock instead, and on a short window the number
+     keys and the = button were simply off the bottom with no way to reach them. */
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, var(--bg-2), var(--input-bg));
+  /* The LCD is the same green in both themes, so its ink is named here rather than by hex in
+     the panel: dark text, a dimmer note, the error red, and the SHIFT/ALPHA indicators. */
+  --lcd-text: #11140f;
+  --lcd-dim: #2c3328;
+  --lcd-bad: #8a1c1c;
+  --lcd-shift: #a86a00;
+  --lcd-alpha: #a8205a;
 }
 .lcd {
   border-radius: 8px;
@@ -884,11 +896,16 @@ math-field.math-input::part(menu-toggle) {
 .pure-history {
   display: flex;
   flex-direction: column;
-  width: 220px;
+  width: 200px;
+  min-width: 120px;
+  max-width: 60%;
   flex-shrink: 0;
   border-left: 1px solid var(--line);
   background: var(--bg-1);
   min-height: 0;
+  /* Closed by default and dragged narrower from its corner: the working needs the room more. */
+  resize: horizontal;
+  overflow: hidden;
 }
 .pure-hist-row {
   display: flex;

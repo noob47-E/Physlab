@@ -64,4 +64,10 @@ export const CONSTANTS: PhysConst[] = [
   { no: 51, symbol: 'eV', id: 'eV_J', name: 'electronvolt', value: 1.602176634e-19, unit: 'J' }
 ]
 
-export const constantScope = (): Record<string, number> => Object.fromEntries(CONSTANTS.map((c) => [c.id, c.value]))
+/**
+ * Every constant under its id and under the id with the underscore dropped. A constant inserted
+ * into the maths field is written as a subscript, m_p, and comes back from latexToMath as mp;
+ * without the second spelling the constant a student had just picked was an undefined symbol.
+ */
+export const constantScope = (): Record<string, number> =>
+  Object.fromEntries(CONSTANTS.flatMap((c) => [[c.id, c.value] as const, [c.id.replace(/_/g, ''), c.value] as const]))

@@ -11,8 +11,8 @@
 
 import { create } from 'zustand'
 import { cas, type CasOp } from '../cas'
-import { runPure, suggestJob, type JobId } from './run'
-import type { Working } from './work'
+import { jobById, runPure, type JobId } from './run'
+import { failed, type Working } from './work'
 
 export interface PureEntry {
   id: string
@@ -60,6 +60,13 @@ interface PureState {
   working: Working | null
   /** True while SymPy is being asked for an answer this engine could not work out itself. */
   asking: boolean
+  /**
+   * Counts every run. A SymPy answer carries the number of the run that asked for it, and is
+   * dropped unless that is still the latest run. Comparing the input text instead let a slow
+   * answer for an earlier problem land after the student had moved on to a later one with the
+   * same text, or after a newer run had already answered.
+   */
+  runSeq: number
   history: PureEntry[]
   setInput: (s: string) => void
   setJob: (j: JobId) => void
@@ -75,6 +82,7 @@ export const usePure = create<PureState>((set, get) => ({
   inputLatex: '',
   working: null,
   asking: false,
+  runSeq: 0,
   history: load(),
 
   setInput: (input) => set({ input }),
@@ -84,33 +92,29 @@ export const usePure = create<PureState>((set, get) => ({
     const j = job ?? get().job
     const src = (input ?? get().input).trim()
     if (!src) return
-    const working = runPure(j, src)
+    // Every generator is meant to return a readable refusal rather than throw, but a throw from
+    // deep inside one used to leave the panel showing the previous problem with no explanation.
+    // Whatever escapes becomes a refusal the student can read.
+    let working: Working
+    try {
+      working = runPure(j, src)
+    } catch (err) {
+      working = failed(jobById(j).label, latex ?? src, err instanceof Error && err.message ? err.message : 'Something went wrong while working that out.')
+    }
     // With no LaTeX given, the source doubles as the display form. That is only safe because the
     // callers that have real LaTeX always pass it; see the contract test.
     const shown = latex ?? src
-    set({ job: j, input: src, inputLatex: shown, working, asking: false })
+    const runSeq = get().runSeq + 1
+    set({ job: j, input: src, inputLatex: shown, working, asking: false, runSeq })
 
     if (!working.error) {
-      const entry: PureEntry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        job: j,
-        input: src,
-        latex: shown,
-        title: working.title,
-        answer: working.answers[0]?.tex ?? '',
-        at: Date.now()
-      }
-      // The same question asked twice should move up the list, not appear twice.
-      const rest = get().history.filter((h) => !(h.job === j && h.input === src))
-      const next = [entry, ...rest].slice(0, CAP)
-      save(next)
-      set({ history: next })
+      remember(j, src, shown, working, set, get)
       return
     }
 
     // The answer is not optional. When this engine cannot show working, SymPy is asked for the
     // result alone, and the panel says plainly that the steps are missing.
-    void askCas(j, src, set, get)
+    void askCas(j, src, shown, runSeq, set, get)
   },
 
   recall: (id) => {
@@ -139,11 +143,30 @@ export const usePure = create<PureState>((set, get) => ({
  */
 const CAS_OP: Partial<Record<JobId, CasOp>> = {
   factor: 'factor',
-  factorComplex: 'factor',
+  // Not plain `factor`: SymPy's default factors over the rationals, so the fallback for
+  // "Factorise with i" used to hand back x² + 4 untouched and call it the answer.
+  factorComplex: 'factor_complex',
   expand: 'expand',
   solve: 'solve',
   partial: 'apart',
   divide: 'apart'
+}
+
+/** Put a finished answer into the history, moving a repeat of the same question to the top. */
+function remember(job: JobId, src: string, latex: string, working: Working, set: (p: Partial<PureState>) => void, get: () => PureState): void {
+  const entry: PureEntry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    job,
+    input: src,
+    latex,
+    title: working.title,
+    answer: working.answers[0]?.tex ?? '',
+    at: Date.now()
+  }
+  const rest = get().history.filter((h) => !(h.job === job && h.input === src))
+  const next = [entry, ...rest].slice(0, CAP)
+  save(next)
+  set({ history: next })
 }
 
 /**
@@ -159,9 +182,14 @@ export function casRequestFor(job: JobId, src: string): { op: CasOp; payload: Re
   return op === 'solve' ? { op, payload: { eqs: [src] } } : { op, payload: { expr: src } }
 }
 
+/** True when a SymPy answer that was asked for by run `asked` may still be shown. */
+export const casAnswerIsCurrent = (asked: number, latest: number): boolean => asked === latest
+
 async function askCas(
   job: JobId,
   src: string,
+  latex: string,
+  asked: number,
   set: (p: Partial<PureState>) => void,
   get: () => PureState
 ): Promise<void> {
@@ -171,7 +199,7 @@ async function askCas(
   try {
     const res = await cas(req.op, req.payload)
     // The question may have moved on while Pyodide was waking up.
-    if (get().input !== src) return
+    if (!casAnswerIsCurrent(asked, get().runSeq)) return
     const current = get().working
     if (!current?.error) return
     // "x = 2" reads as an answer; a bare "2" does not say what it is the value of.
@@ -189,16 +217,18 @@ async function askCas(
       set({ asking: false })
       return
     }
-    set({
-      asking: false,
-      working: {
-        ...current,
-        error: undefined,
-        noWorking: true,
-        answers: [{ label: 'Answer', tex: answer }],
-        check: current.error
-      }
-    })
+    const working: Working = {
+      ...current,
+      error: undefined,
+      noWorking: true,
+      answers: [{ label: 'Answer', tex: answer }],
+      // The student is told why the steps are missing, not just that they are.
+      reason: current.error,
+      check: undefined
+    }
+    set({ asking: false, working })
+    // An answer is an answer: it goes into the history like any other, and recalling it asks again.
+    remember(job, src, latex, working, set, get)
   } catch {
     set({ asking: false })
   }

@@ -22,6 +22,7 @@ export const CAS_OPS = [
   'simplify',
   'expand',
   'factor',
+  'factor_complex',
   'apart',
   'diff',
   'integrate',

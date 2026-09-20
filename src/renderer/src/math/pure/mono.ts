@@ -248,6 +248,42 @@ export function parseExpr(src: string): Expr {
 }
 
 /**
+ * The factors of a product, each expanded on its own but not multiplied together.
+ *
+ * (2x + 3)(3x − 1) comes back as [2x + 3, 3x − 1] and (x + 1)² as [x + 1, x + 1], which is what
+ * Expand needs to show the distribution rather than restate the answer. Anything that is not a
+ * product at the top level comes back as a single factor.
+ */
+export function parseFactors(src: string): Expr[] {
+  const text = src.trim()
+  if (!text) throw new NotPolynomial('Nothing to work on yet — type an expression first.')
+  let node: MathNode
+  try {
+    node = math.parse(preprocess(text))
+  } catch {
+    throw new NotPolynomial('I could not read that. Check the brackets and signs.')
+  }
+  const out: Expr[] = []
+  const walk = (n: MathNode): void => {
+    const v = n as unknown as { type: string; op?: string; args?: MathNode[]; content?: MathNode }
+    if (v.type === 'ParenthesisNode' && v.content) return walk(v.content)
+    if (v.type === 'OperatorNode' && v.op === '*' && v.args) return v.args.forEach(walk)
+    if (v.type === 'OperatorNode' && v.op === '^' && v.args?.length === 2) {
+      const k = wholeNumberIn(v.args[1])
+      const base = fromNode(v.args[0])
+      // A power of a bracket is that bracket written k times; a power of a single term stays whole.
+      if (k !== null && k >= 2 && k <= 6 && base.length > 1) {
+        for (let i = 0; i < k; i++) out.push(base)
+        return
+      }
+    }
+    out.push(fromNode(n))
+  }
+  walk(node)
+  return out
+}
+
+/**
  * Read a fraction of two expressions. `x` on its own comes back as x/1, so callers can treat
  * everything uniformly.
  */
