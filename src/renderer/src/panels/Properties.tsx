@@ -4,6 +4,7 @@ import { exprRefs, isFree } from '../core/evaluate'
 import { isValidName } from '../core/naming'
 import type { SceneObject } from '../core/types'
 import { heading, len, toDeg, toRad, type V3 } from '../math/vec'
+import { fmt } from '../math/format'
 import * as VS from '../math/vectorSolver'
 import { Check, ColorField, NumField, TextField } from '../ui/fields'
 import { runCommand } from '../lang/commands'
@@ -151,7 +152,7 @@ export function Properties() {
               value={o.def.t}
               onChange={(e) => set((d) => d.type === 'point' && d.def.kind === 'onObject' && void (d.def.t = Number(e.target.value)))}
             />
-            <span className="w-12 text-right tabular-nums text-ink-dim">{o.def.t.toFixed(2)}</span>
+            <span className="w-12 text-right tabular-nums text-ink-dim">{fmt(o.def.t, 2)}</span>
           </div>
         </div>
       )}

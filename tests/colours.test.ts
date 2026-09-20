@@ -61,12 +61,18 @@ const PROPS = 'text|bg|border|ring|divide|placeholder|outline|fill|stroke|accent
 const LEAKS: { what: string; re: RegExp }[] = [
   { what: 'hex colour', re: /#[0-9a-fA-F]{3,8}\b/g },
   { what: 'palette utility', re: new RegExp(`\\b(?:${PROPS})-(?:${PALETTE})\\b(?:-\\d+)?(?:/\\d+)?`, 'g') },
-  { what: 'arbitrary colour utility', re: new RegExp(`\\b(?:${PROPS})-\\[#[^\\]]*\\]`, 'g') }
+  { what: 'arbitrary colour utility', re: new RegExp(`\\b(?:${PROPS})-\\[#[^\\]]*\\]`, 'g') },
+  // A colour function or a named colour in a style object is the same leak without the hash.
+  { what: 'colour function', re: /\b(?:rgba?|hsla?)\(/g },
+  { what: 'named colour', re: /\b(?:color|background|fill|stroke)\s*:\s*['"`](?:white|black|red|grey|gray|transparent)['"`]/g }
 ]
 
 const SIZES: { what: string; re: RegExp }[] = [
-  { what: 'pixel text size', re: /\btext-\[[0-9.]+px\]/g },
-  { what: 'inline font', re: /\bfont(?:Family|Size)\s*:/g }
+  // Tailwind's own text-xs and text-sm are pixel sizes with a nicer name, not one of the steps.
+  { what: 'pixel text size', re: /\b(?:text|leading)-\[[0-9.]+(?:px|rem|em)\]/g },
+  { what: 'built-in text size', re: /\btext-(?:xs|sm|base|lg|xl|\dxl)\b/g },
+  { what: 'inline font', re: /\bfont(?:Family|Size)\s*:/g },
+  { what: 'inline font shorthand', re: /\bfont\s*:\s*['"`]/g }
 ]
 
 /** Every match of every pattern, with its line number, so a failure says where to look. */
@@ -107,12 +113,16 @@ describe('the renderer has no colour of its own', () => {
     expect(offending, offending.map((f) => `${f.file}\n  ${f.leaks.join('\n  ')}`).join('\n')).toEqual([])
   })
 
-  it('keeps the allow-lists honest: an entry that is already clean should be removed', () => {
-    // Not a failure — the merger tightens these — but the names are printed so nobody has to look.
+  it('keeps the allow-lists honest: every entry still exists and still needs to be there', () => {
+    // The lists may only shrink. An entry for a file that was renamed or deleted, or one that a
+    // later phase has cleaned, fails here so it gets removed rather than quietly outliving its reason.
+    const names = new Set(files.map((f) => f.rel))
+    const missing = [...COLOUR_ALLOW, ...SIZE_ALLOW].filter((rel) => !names.has(rel))
+    expect(missing, 'allow-listed but no such file any more').toEqual([])
     const cleanColour = [...COLOUR_ALLOW].filter((rel) => files.some((f) => f.rel === rel && findLeaks(f.text, LEAKS).length === 0))
     const cleanSize = [...SIZE_ALLOW].filter((rel) => files.some((f) => f.rel === rel && findLeaks(f.text, SIZES).length === 0))
-    if (cleanColour.length || cleanSize.length) console.info(`colours.test.ts: allow-list entries now clean — colour: ${cleanColour.join(', ') || 'none'}; size: ${cleanSize.join(', ') || 'none'}`)
-    expect(true).toBe(true)
+    expect(cleanColour, 'now clean — remove these from COLOUR_ALLOW').toEqual([])
+    expect(cleanSize, 'now clean — remove these from SIZE_ALLOW').toEqual([])
   })
 })
 
@@ -135,5 +145,14 @@ describe('the scan itself', () => {
     expect(findLeaks('className="text-[11px]"', SIZES)).toHaveLength(1)
     expect(findLeaks("style={{ fontFamily: 'Cambria, serif' }}", SIZES)).toHaveLength(1)
     expect(findLeaks('className="text-fine font-math"', SIZES)).toEqual([])
+  })
+
+  it('catches the sizes and colours that have no hash or px to give them away', () => {
+    expect(findLeaks('className="text-xs leading-[10px] text-[0.7rem]"', SIZES)).toHaveLength(3)
+    expect(findLeaks("style={{ font: '11px Cambria' }}", SIZES)).toEqual(["1: inline font shorthand font: '"])
+    expect(findLeaks("style={{ color: 'white', background: 'rgba(0,0,0,0.5)' }}", LEAKS)).toHaveLength(2)
+    expect(findLeaks('className="text-lead font-mono"', SIZES)).toEqual([])
+    // "context" and "textarea" contain text-, and a fill from a token is not a colour of its own.
+    expect(findLeaks("const context = 'textarea'; fill={themeColor('--accent')}", [...LEAKS, ...SIZES])).toEqual([])
   })
 })

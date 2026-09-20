@@ -17,14 +17,19 @@ export function tickDecimals(step: number): number {
   return 12
 }
 
+/** Decimals an axis may show when the precision setting gives no number of decimal places. */
+const MOST_TICK_DECIMALS = 4
+
 /**
  * The number beside a grid line, in the drawing's unit and scale. Ticks are exact multiples of a
  * nice step, so the step decides how many decimals are shown, not the precision setting: 3 s.f.
- * would turn the axis into 1.00, 2.00, 3.00.
+ * would turn the axis into 1.00, 2.00, 3.00. The user's decimal places are still the ceiling,
+ * because a scale of 0.3333333 cm per square would otherwise number every line to seven places.
  */
 export function tickText(v: number, step: number, s: MeasureSettings): string {
   const value = measureValue(v, 'length', s)
-  const decimals = tickDecimals(measureValue(step, 'length', s))
+  const ceiling = s.precisionMode === 'dp' ? Math.max(1, s.decimals) : MOST_TICK_DECIMALS
+  const decimals = Math.min(tickDecimals(measureValue(step, 'length', s)), ceiling)
   return fmtPrecise(value, { decimals, precisionMode: 'dp' })
 }
 

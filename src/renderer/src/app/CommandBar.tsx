@@ -14,14 +14,7 @@ import { describeCasStatus } from '../ui/casStatus'
 export const PLACEHOLDER = 'Type a sum, an equation or a shape…  ·  Ctrl+K to search'
 
 /** The handful of things worth trying first, for the palette and the help text to show. */
-export const QUICK_EXAMPLES: { insert: string; desc: string }[] = [
-  { insert: 'A = <3, 4>', desc: 'A vector' },
-  { insert: 'R = A + B', desc: 'Add two vectors' },
-  { insert: 'A × B', desc: 'Cross product, with steps' },
-  { insert: 'Triangle((0,0),(4,0),(0,3))', desc: 'A triangle' },
-  { insert: 'y = sin(x)', desc: 'A graph' },
-  { insert: 'solve(x^2 = 4)', desc: 'Solve an equation' }
-]
+export { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 export const CATALOG: { insert: string; desc: string; group: string }[] = [
   { insert: 'A = (3, 4)', desc: 'Point', group: 'Create' },

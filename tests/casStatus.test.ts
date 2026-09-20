@@ -17,14 +17,16 @@ describe('what the command bar says about the algebra engine', () => {
   })
 
   it('says it is starting while the engine loads', () => {
-    expect(describeCasStatus('loading', 0).words).toMatch(/starting/i)
+    expect(describeCasStatus('loading', 0).words).toBe('Starting algebra…')
   })
 
   it('says algebra is unavailable, with the reason in the tooltip, when it failed', () => {
     const s = describeCasStatus('error', 0, 'no WebAssembly')
     expect(s.tone).toBe('bad')
     expect(s.words).toBe('Algebra unavailable')
-    expect(s.tip).toContain('no WebAssembly')
+    expect(s.tip).toBe('The algebra engine stopped: no WebAssembly. It starts again with the next command.')
+    // A crash mid-question sets the same state; the words must not claim it never started.
+    expect(describeCasStatus('error', 0).tip).toBe('The algebra engine stopped. It starts again with the next command.')
   })
 
   it('never uses the acronym or a symbol a student would have to look up', () => {

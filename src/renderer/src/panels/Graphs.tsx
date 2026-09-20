@@ -16,8 +16,14 @@ export function Graphs() {
   // the light theme too; the chart is rebuilt when the theme changes.
   const theme = useTheme((t) => t.theme)
 
+  // The recorded values are cleared only when the tracked expressions change. This runs before the
+  // rebuild below and is separate from it, so that switching the theme mid-experiment re-colours
+  // the same series instead of throwing away everything recorded while the timeline played.
   useEffect(() => {
     data.current = [[], ...tracks.map(() => [])]
+  }, [tracks])
+
+  useEffect(() => {
     const el = host.current
     if (!el) return
     const axis = themeColor('--tick-text')

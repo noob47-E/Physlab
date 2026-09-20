@@ -8,6 +8,7 @@ import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
 import { modeOfSpace, SPACE_LABELS, visibleIn, type Space } from '../core/visibility'
 import { enterMode } from '../app/TopBar'
+import { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 const GROUPS: { type: ObjType[]; label: string }[] = [
   { type: ['vector'], label: 'Vectors' },
@@ -20,12 +21,7 @@ const GROUPS: { type: ObjType[]; label: string }[] = [
 ]
 
 /** Plain words beside each starter: a bare block of syntax read like a programming manual. */
-const STARTERS: { type: string; makes: string }[] = [
-  { type: 'A = <3, 4>', makes: 'a vector' },
-  { type: 'R = A + B', makes: 'adds two vectors' },
-  { type: 'Triangle((0,0), (4,0), (0,3))', makes: 'a triangle' },
-  { type: 'y = sin(x)', makes: 'a graph' }
-]
+const STARTERS = QUICK_EXAMPLES.filter((e) => e.draws)
 
 export function Outliner() {
   const objects = useScene((s) => s.objects)
@@ -60,11 +56,11 @@ export function Outliner() {
         <p>Pick a tool above and click on the drawing, or type something in the bar at the top, such as:</p>
         <ul className="mt-2 space-y-1">
           {STARTERS.map((s) => (
-            <li key={s.type} className="flex items-baseline gap-2">
-              <button className="font-mono text-warn hover:underline" title="Put this in the command bar" onClick={() => window.dispatchEvent(new CustomEvent('physlab:command', { detail: s.type }))}>
-                {s.type}
+            <li key={s.insert} className="flex items-baseline gap-2">
+              <button className="font-mono text-warn hover:underline" title="Put this in the command bar" onClick={() => window.dispatchEvent(new CustomEvent('physlab:command', { detail: s.insert }))}>
+                {s.insert}
               </button>
-              <span>{s.makes}</span>
+              <span>{s.desc.charAt(0).toLowerCase() + s.desc.slice(1)}</span>
             </li>
           ))}
         </ul>

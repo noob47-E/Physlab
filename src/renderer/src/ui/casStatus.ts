@@ -24,7 +24,9 @@ export function describeCasStatus(status: CasState, busy: number, message?: stri
     case 'loading':
       return { tone: 'warn', words: 'Starting algebra…', tip: 'The algebra engine is loading. Drawing and arithmetic work meanwhile.' }
     case 'error':
-      return { tone: 'bad', words: 'Algebra unavailable', tip: message ? `The algebra engine could not start: ${message}` : 'The algebra engine could not start.' }
+      // 'error' is set both when the engine never started and when it crashed mid-question, and
+      // math/cas.ts restarts it on the next command either way, so the words cover both.
+      return { tone: 'bad', words: 'Algebra unavailable', tip: `The algebra engine stopped${message ? `: ${message}` : ''}. It starts again with the next command.` }
     default:
       return { tone: 'faint', words: '', tip: message ? `Algebra: ${message}.` : 'Algebra starts the first time it is needed.' }
   }

@@ -67,9 +67,9 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
   const isError = !!col.uncertaintyFor
   const hasError = uncertaintyIndex(table, col.id) >= 0
 
-  // The three header buttons appear when the pointer or the keyboard is on the header; a formula
-  // column keeps its Σ showing so the student can see which columns are worked out.
-  const tools = `flex items-center gap-1 transition-opacity ${col.formula ? '' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`
+  // The header buttons appear when the pointer or the keyboard is on the header; a formula column
+  // keeps only its Σ showing, so the student can see which columns are worked out.
+  const onHover = 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'
 
   return (
     <div className="group flex flex-col gap-1">
@@ -98,9 +98,9 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
             />
           </>
         )}
-        <span className={tools}>
+        <span className="flex items-center gap-1">
           <button
-            className={`icon-btn ${col.formula ? 'on' : ''}`}
+            className={`icon-btn ${col.formula ? 'on' : onHover}`}
             title="Work this column out from the ones before it"
             onClick={() => {
               setShowFormula((s) => !s)
@@ -110,12 +110,12 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
             <Sigma size={13} />
           </button>
           {!isError && !hasError && (
-            <button className="icon-btn" title="Add a ± column: how uncertain each reading is" onClick={onUncertainty}>
+            <button className={`icon-btn ${onHover}`} title="Add a ± column: how uncertain each reading is" onClick={onUncertainty}>
               <span className="text-body leading-none">±</span>
             </button>
           )}
           {canRemove && (
-            <button className="icon-btn" title="Remove this column" onClick={onRemove}>
+            <button className={`icon-btn ${onHover}`} title="Remove this column" onClick={onRemove}>
               <X size={13} />
             </button>
           )}

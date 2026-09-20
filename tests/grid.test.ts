@@ -98,6 +98,20 @@ describe('numbering the axes', () => {
     expect(tickText(0.5, 0.5, sf)).toBe('0.5')
   })
 
+  it("never runs past the user's decimal places when the scale does not terminate", () => {
+    // 1 square = 0.3333333 cm, typed into the scale box: the step needs seven decimals to be exact,
+    // and the axis would read 0.3333333, 0.6666666… on every line.
+    const thirds: MeasureSettings = { ...grid, unit: 'cm', unitPerSquare: 0.3333333, decimals: 2 }
+    expect(tickText(1, 1, thirds)).toBe('0.33')
+    expect(tickText(2, 1, thirds)).toBe('0.67')
+    expect(tickText(3, 1, thirds)).toBe('1')
+    // In significant-figures mode there is no number of decimals to lean on; four is the most.
+    const sfThirds: MeasureSettings = { ...thirds, precisionMode: 'sf', decimals: 3 }
+    expect(tickText(1, 1, sfThirds)).toBe('0.3333')
+    // A setting of 0 decimal places still leaves one, or 0.5 and 1 would both read "1".
+    expect(tickText(0.5, 0.5, { ...grid, decimals: 0 })).toBe('0.5')
+  })
+
   it('never shows −0 or floating-point dust', () => {
     expect(tickText(-0, 1, grid)).toBe('0')
     expect(tickText(3 * 0.1, 0.1, grid)).toBe('0.3')
