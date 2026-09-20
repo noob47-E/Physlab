@@ -10,7 +10,7 @@ import { enterMode } from '../layout'
 import { showPanel } from '../panels'
 import { usePure } from '../../math/pure/store'
 import { JOBS } from '../../math/pure/run'
-import { MISSIONS, SHORTCUTS, TOUR, WELCOME_JOB } from './steps'
+import { MISSIONS, SHORTCUTS, TOUR, WELCOME_JOB, WELCOME_PROMISE } from './steps'
 import { isTyping } from '../keyTargets'
 import { placeTourCard } from '../layoutMath'
 
@@ -191,7 +191,7 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
             }}
           >
             <div className="font-semibold text-[var(--text-strong)]">Show your working</div>
-            <div className="text-[var(--text-dim)]">Factorise 6x² + 7x − 3 step by step, the way it is set out on the board. Then try your own.</div>
+            <div className="text-[var(--text-dim)]">{WELCOME_PROMISE} step by step, the way it is set out on the board. Then try your own.</div>
           </button>
           {tiles.map((t) => (
             <button

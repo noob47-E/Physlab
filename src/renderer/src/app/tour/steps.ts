@@ -12,6 +12,14 @@ import type { JobId } from '../../math/pure/run'
  */
 export const WELCOME_JOB: JobId = 'factor'
 
+/**
+ * What the tile promises, in the notation a student writes. It has to match the job's own
+ * example, which is what the tile actually runs: tests/layout.test.ts holds the two together,
+ * so a changed example in math/pure/run.ts cannot leave the tile promising one problem and
+ * showing another.
+ */
+export const WELCOME_PROMISE = 'Factorise 6x² + 7x − 3'
+
 export interface TourStep {
   /** Element to spotlight (a data-tour name). Missing element: the card is centred. */
   anchor?: string

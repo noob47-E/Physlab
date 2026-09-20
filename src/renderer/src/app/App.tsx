@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
 import { CommandBar } from './CommandBar'
-import { TopBar, ToolShelf, applySavedZoom } from './TopBar'
+import { TopBar, ToolShelf } from './TopBar'
 import { LAYOUT_KEY, buildLayout, enterMode, restoreLayout, savedMode, watchLayout } from './layout'
 import './shell.css'
 import { SearchPalette } from './SearchPalette'
@@ -72,8 +72,6 @@ export function App() {
   const focus = useScene((s) => s.focusPanel)
   useShortcuts()
 
-  // The saved zoom level is the window's, not the page's, so it has to be asked for again.
-  useEffect(() => applySavedZoom(), [])
   useEffect(() => () => unwatch.current?.(), [])
 
   useEffect(() => {

@@ -34,8 +34,10 @@ export const PANEL_LIST = Object.entries(PANEL_TITLES).map(([id, title]) => ({ i
 const PANEL_GROUPS: string[][] = [
   ['outliner', 'examples'],
   ['viewport', 'working'],
-  ['vectorcalc', 'measure', 'calculator', 'properties', 'solver', 'practice', 'labdata', 'sandbox'],
-  ['console', 'timeline', 'graphs', 'gpulab']
+  // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
+  // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
+  ['vectorcalc', 'measure', 'calculator', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab'],
+  ['console', 'timeline', 'graphs']
 ]
 
 let dockApi: DockviewApi | null = null

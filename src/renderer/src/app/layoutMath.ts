@@ -126,25 +126,43 @@ export function panelsForMode(mode: ModeShape): string[] {
 /** The tool shelf: full labels, icons only when the labels would not fit, or gone entirely. */
 export type ShelfMode = 'full' | 'icons' | 'hidden'
 
-// Measured from the stylesheet: a labelled tool is 50 px wide plus 2 px gap, an icon-only one
-// 32 px, a separator 13 px, and the shelf has 16 px of padding.
+// Measured from the stylesheet: a labelled tool is at least 50 px wide plus 2 px gap, an
+// icon-only one 32 px, a separator 1 px with 6 px margins and the 2 px gap, and the shelf has
+// 16 px of padding.
 export const SHELF_TOOL_FULL = 52
 export const SHELF_TOOL_ICON = 34
-export const SHELF_SEP = 13
+export const SHELF_SEP = 15
 export const SHELF_PAD = 16
+/** A character of the 10.5 px label, and the button's own side padding. */
+export const SHELF_CHAR = 5.4
+export const SHELF_TOOL_PAD = 12
 
-export function shelfWidth(tools: ToolList, mode: 'full' | 'icons'): number {
+/** The label a tool shows under its icon, when the caller knows it. */
+export type LabelOf = (id: string) => string | undefined
+
+/**
+ * A labelled tool is as wide as its longest word: the button shrinks to that when the shelf is
+ * squeezed, so "Perpendicular" takes 80-odd px however the estimate is rounded. A flat 52 px per
+ * tool left Geometry's shelf scrolling — with Delete out of reach — in a band of window widths
+ * just above where it claimed to fit.
+ */
+export function toolWidth(label: string | undefined): number {
+  const longest = (label ?? '').split(/\s+/).reduce((n, word) => Math.max(n, word.length), 0)
+  return Math.max(SHELF_TOOL_FULL, longest * SHELF_CHAR + SHELF_TOOL_PAD + 2)
+}
+
+export function shelfWidth(tools: ToolList, mode: 'full' | 'icons', labelOf?: LabelOf): number {
   let w = SHELF_PAD
-  for (const t of tools) w += t === '|' ? SHELF_SEP : mode === 'full' ? SHELF_TOOL_FULL : SHELF_TOOL_ICON
+  for (const t of tools) w += t === '|' ? SHELF_SEP : mode === 'full' ? toolWidth(labelOf?.(t)) : SHELF_TOOL_ICON
   return w
 }
 
-export function shelfMode(width: number, tools: ToolList): ShelfMode {
+export function shelfMode(width: number, tools: ToolList, labelOf?: LabelOf): ShelfMode {
   const real = tools.filter((t) => t !== '|')
   // A shelf whose only tool is Move gives the student nothing to pick: it is just 40 px lost.
   if (real.length <= 1) return 'hidden'
   if (width <= 0) return 'full'
-  return shelfWidth(tools, 'full') <= width ? 'full' : 'icons'
+  return shelfWidth(tools, 'full', labelOf) <= width ? 'full' : 'icons'
 }
 
 export interface Box {
@@ -169,7 +187,11 @@ export function placeTourCard(hole: Box, card: { w: number; h: number }, win: { 
   return { left: Math.round(left), top: Math.round(top) }
 }
 
-/** The window's zoom, kept inside what still leaves the shell usable. */
+/**
+ * The window's zoom, kept inside what still leaves the shell usable. src/main/index.ts holds the
+ * same three lines for the keyboard shortcuts (the main bundle cannot import renderer code):
+ * change both together, or the popover will offer a step the menu refuses.
+ */
 export const ZOOM_MIN = -3
 export const ZOOM_MAX = 3
 export const clampZoom = (level: number): number => (Number.isFinite(level) ? clamp(Math.round(level * 2) / 2, ZOOM_MIN, ZOOM_MAX) : 0)

@@ -76,19 +76,11 @@ type ZoomBridge = {
   onZoom?: (cb: (level: number) => void) => () => void
 }
 const zoomBridge = (): ZoomBridge | undefined => (window as unknown as { physlab?: ZoomBridge }).physlab
-const ZOOM_KEY = 'physlab.zoom'
 
-/** Put the window back at the zoom the student chose last time. */
-export function applySavedZoom(): void {
-  const b = zoomBridge()
-  if (!b?.setZoom) return
-  try {
-    const saved = Number(localStorage.getItem(ZOOM_KEY))
-    if (saved) void b.setZoom(clampZoom(saved))
-  } catch {
-    // Nothing remembered.
-  }
-}
+// The zoom is remembered by Chromium itself, per host, whichever way it was set: the popover, or
+// Ctrl+= / Ctrl+- / Ctrl+0 in the application menu. The renderer used to keep its own copy in
+// localStorage and replay it at start-up, but only the popover wrote that copy, so a Ctrl+0 was
+// silently undone at the next launch. One owner, none here.
 
 function useZoom(): [number, (level: number) => void, boolean] {
   const [level, setLevel] = useState(0)
@@ -103,11 +95,6 @@ function useZoom(): [number, (level: number) => void, boolean] {
   const set = useCallback((next: number) => {
     const z = clampZoom(next)
     setLevel(z)
-    try {
-      localStorage.setItem(ZOOM_KEY, String(z))
-    } catch {
-      // Not remembered.
-    }
     void zoomBridge()?.setZoom?.(z)
   }, [])
   return [level, set, available]
@@ -498,13 +485,15 @@ export function TopBar() {
   )
 }
 
+const toolLabel = (id: string): string | undefined => TOOLS.find((t) => t.id === id)?.label
+
 export function ToolShelf() {
   const mode = useApp((a) => a.mode)
   const tool = useScene((s) => s.tool)
   const setTool = useScene((s) => s.setTool)
   const [ref, width] = useContainerWidth()
   const def = modeById(mode)
-  const shelf = shelfMode(width, def.tools)
+  const shelf = shelfMode(width, def.tools, toolLabel)
   // A mode whose only tool is Move (Sandbox, GPU Lab, Lab Data) has nothing to offer here, and
   // the empty strip was 40 px taken from the drawing on a small screen.
   if (shelf === 'hidden') return null

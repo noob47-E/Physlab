@@ -66,7 +66,13 @@ function registerAppProtocol(): void {
   })
 }
 
-/** Chromium zoom levels: each step is ×1.2. Kept within what still leaves the shell usable. */
+/**
+ * Chromium zoom levels: each step is ×1.2. Kept within what still leaves the shell usable.
+ * The renderer holds the same three lines in src/renderer/src/app/layoutMath.ts (the popover's
+ * disabled buttons come from that copy); the main and preload bundles cannot import renderer
+ * code, so change both together. Chromium remembers the level per host across launches, so
+ * nothing here or in the renderer has to save it.
+ */
 const ZOOM_MIN = -3
 const ZOOM_MAX = 3
 const clampZoom = (level: number): number => (Number.isFinite(level) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(level * 2) / 2)) : 0)

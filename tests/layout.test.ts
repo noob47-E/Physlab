@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LAYOUT_VERSION,
+  SHELF_TOOL_FULL,
   barDensity,
   clampZoom,
   columns,
@@ -14,11 +15,13 @@ import {
   placeTourCard,
   shelfMode,
   shelfWidth,
+  toolWidth,
   windowClass,
   zoomPercent
 } from '../src/renderer/src/app/layoutMath'
 import { MODES } from '../src/renderer/src/app/modes'
-import { WELCOME_JOB } from '../src/renderer/src/app/tour/steps'
+import { TOOLS } from '../src/renderer/src/render/tools'
+import { WELCOME_JOB, WELCOME_PROMISE } from '../src/renderer/src/app/tour/steps'
 import { JOBS, runPure } from '../src/renderer/src/math/pure/run'
 
 describe('how much of the top bar fits', () => {
@@ -111,6 +114,13 @@ describe('what a mode opens by default', () => {
     expect(panelsForMode(sandbox)).toEqual(['viewport', 'sandbox'])
   })
 
+  it('opens Examples for Geometry, which has its own lessons under "Shapes & geometry"', () => {
+    // A review claimed Geometry had no lessons; panels/Examples.tsx has four (circle, composite
+    // shape, sketch recognition, triangle explorer). If that column ever goes, the flag in modes.ts goes too.
+    const shapes = MODES.find((m) => m.id === 'shapes')!
+    expect(panelsForMode(shapes)).toEqual(['viewport', 'examples', 'measure'])
+  })
+
   it('never opens more than four panels for any mode', () => {
     for (const m of MODES) expect(panelsForMode(m).length).toBeLessThanOrEqual(4)
   })
@@ -129,6 +139,8 @@ describe('what a mode opens by default', () => {
     expect(panelHome('console')).toBe('below')
     expect(panelHome('labdata')).toBe('right')
     expect(panelHome('vectorcalc')).toBe('right')
+    // A mode's own panel, so beside the drawing — not in the console strip.
+    expect(panelHome('gpulab')).toBe('right')
   })
 })
 
@@ -143,14 +155,28 @@ describe('the tool shelf', () => {
     }
   })
 
+  const label = (id: string) => TOOLS.find((t) => t.id === id)?.label
+
   it('shows labels when they fit and icons when they do not', () => {
-    expect(shelfMode(1920, shapes)).toBe('full')
-    // Geometry's 20 tools and 6 separators need about 1130 px with labels.
-    expect(shelfWidth(shapes, 'full')).toBeGreaterThan(1093)
-    expect(shelfMode(1093, shapes)).toBe('icons')
+    expect(shelfMode(1920, shapes, label)).toBe('full')
+    // Geometry's 20 tools and 5 separators measure about 1160 px with labels in the real app:
+    // a flat 52 px per tool said 1130, and in the band between the shelf scrolled instead of
+    // folding. The estimate must never fall short of what is on screen.
+    expect(shelfWidth(shapes, 'full', label)).toBeGreaterThanOrEqual(1160)
+    expect(shelfWidth(shapes, 'full', label)).toBeLessThan(1250)
+    expect(shelfMode(1093, shapes, label)).toBe('icons')
+    expect(shelfMode(1150, shapes, label)).toBe('icons')
     expect(shelfWidth(shapes, 'icons')).toBeLessThan(960)
-    expect(shelfMode(960, shapes)).toBe('icons')
-    expect(shelfMode(960, vectors)).toBe('full')
+    expect(shelfMode(960, shapes, label)).toBe('icons')
+    expect(shelfMode(960, vectors, label)).toBe('full')
+  })
+
+  it('gives a long label the room its longest word needs', () => {
+    expect(toolWidth('Move')).toBe(SHELF_TOOL_FULL)
+    expect(toolWidth('Perpendicular')).toBeGreaterThan(80)
+    // "Perp. bisector" wraps at the space, so only "bisector" sets its width.
+    expect(toolWidth('Perp. bisector')).toBe(toolWidth('Midpoint'))
+    expect(toolWidth(undefined)).toBe(SHELF_TOOL_FULL)
   })
 
   it('shows labels until it has been measured', () => {
@@ -210,5 +236,18 @@ describe('the Welcome screen tile "Show your working"', () => {
     expect(w.answers.length).toBeGreaterThan(0)
     expect(w.moves.length).toBeGreaterThan(0)
     expect(w.noWorking).toBeFalsy()
+  })
+
+  it('shows the factorisation it promises, and the check says it multiplies back', () => {
+    // The tile's sentence is written by hand; the job's example is what it runs. The two are
+    // held together here, because a changed example would otherwise promise one problem and
+    // show another.
+    const job = JOBS.find((j) => j.id === WELCOME_JOB)!
+    expect(job.example).toBe('6x^2 + 7x - 3')
+    const written = job.example.replace('^2', '²').replace(/ - /g, ' − ')
+    expect(WELCOME_PROMISE).toBe(`${job.label} ${written}`)
+    const w = runPure(job.id, job.example)
+    expect(w.answers[0].tex).toBe('\\left(3x - 1\\right)\\left(2x + 3\\right)')
+    expect(w.check).toContain('the original')
   })
 })

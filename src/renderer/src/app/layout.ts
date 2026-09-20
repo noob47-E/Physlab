@@ -148,6 +148,9 @@ export function watchLayout(api: DockviewApi): () => void {
  * comes back where they were, in the default arrangement for it.
  */
 export function resetLayout(): void {
+  // Ctrl+R asks before throwing unsaved work into the autosave copy; this reloads too, so it asks
+  // the same question rather than being the one way to reload without one.
+  if (scene().dirty && !window.confirm('There is unsaved work. Resetting the layout reloads PhysLab: the work will be offered back afterwards, but it is not saved in a file. Press Cancel and Ctrl+S first to keep it.')) return
   resetting = true
   try {
     const mode = useApp.getState().mode
