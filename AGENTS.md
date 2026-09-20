@@ -106,6 +106,19 @@ a row would silently lose the first. A panel added after a user's layout was sav
 - **Nothing is shown until it has been checked.** Every Pure Math tool reconstructs its own answer
   (multiply the factors back out, recombine the partial fractions) and compares it with the input
   before returning. If the check fails the working still appears, but says so.
+- **Sandbox Reset is a counter, not a comparison.** `useSandbox.runNonce` is what makes the viewport
+  rebuild the engine. Handing the reconciliation effect a fresh array of the same `BodyDef` objects
+  does nothing: it compares object identity and finds nothing changed. That was why Reset "worked
+  sometimes" — only when something else had forced a rebuild.
+- **The grab spring only acts inside `beforeStep`, which only runs while playing.** Paused, a drag
+  has to *place* the body (`placeBody`) and the demand-driven canvas has to be `invalidate()`d by
+  hand, or nothing moves and nothing repaints. A sleeping body must be woken before the force
+  block can reach it.
+- **Meshes in the sandbox group are matched to the engine by `userData.bodyId`.** The velocity
+  arrows are meshes in the same group; they must be filtered out of picking and never counted by
+  index against the transform buffer.
+- **The engine outlives the view.** `engine.world` in `sim/store.ts` is created once; leaving the
+  Sandbox and coming back must not call `SimWorld.create` again, which clears it.
 - **Custom CSS must live inside `@layer components`** or Tailwind's width/height utilities stop
   working.
 - **MathLive options must wait for the `mount` event.** Line2 geometry needs positions before the

@@ -30,11 +30,11 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.3.3 (2026-09-19) |
-| Releases built | 11 |
+| Current version | 0.3.4 (2026-09-20) |
+| Releases built | 12 |
 | Commits | 50 |
 | Source | 25,481 lines of TypeScript/TSX across 114 files, plus 996 lines of CSS |
-| Tests | 238, across 14 files, all pure logic with no browser |
+| Tests | 251, across 15 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
 | Dock panels | 16 |
 | Licence | GPL-3.0 |
@@ -313,6 +313,40 @@ multiplied back — each one together with its negation.
 
 238 tests. Verified in the running app rather than only in the suite: the keys, the field surviving
 every button, both repaired answers correct with their ticks, no KaTeX errors, and the light theme.
+
+### 0.3.4 — the Sandbox that works · 2026-09-20
+
+The student's list began with the Sandbox: nothing could be grabbed or lifted, Reset "worked
+sometimes", walls could not be placed, and objects fell off the floor for ever. An audit of the
+whole app (eight readers, sixteen skeptics; about a fifth of what was reported was refuted against
+the code) found the causes, and every one of them was a boundary the tests never crossed.
+
+- **Reset never rebuilt the world.** It handed the viewport a new array of the *same* body objects,
+  and the viewport compared the objects, found nothing changed, and did nothing. It appeared to
+  work only when something else forced a rebuild. Reset is now a counter the viewport watches.
+- **Dragging did nothing while paused**, because the grab is a spring applied inside the physics
+  step, and paused there is no step. Paused, a drag now *arranges*: any object — a wall, the floor
+  — goes where the cursor puts it and the definition follows, so Reset, undo and the file agree.
+- **Nothing could be lifted.** The hand was capped at 800 N; the default steel ball weighs 514 kg
+  and the wooden crate 151 kg, so neither could even be slid. The cap now scales with weight.
+- **A body that had settled could never be grabbed again**: the sleep check sat above the grab.
+- **Rotation and spin typed into the panel were silently ignored.** Applied in place now.
+- **The floor was 40 m** and there was no edge and no way back. It is 200 m, and anything that
+  falls ten metres below it is put back at rest where it started, with a line saying so.
+- **The maths grid stood through the sandbox as a vertical wall**, and a stray tool key then a
+  click drew maths points over the physics. The sandbox now draws only itself.
+- Changing one object's mass no longer teleports every other object back to its start; the run
+  survives switching modes; Home frames the objects instead of diving under the floor; Delete,
+  Ctrl+Y and Edit ▸ Undo reach the sandbox; the Timeline panel shows the engine's clock; the
+  velocity arrows no longer swallow clicks; a cone's mass was four times too big; new objects land
+  beside the last one on the floor instead of inside each other; the floor can be added back.
+- The panel: Play, Reset, undo and the clock pinned at the top; live values while playing; only
+  the dimensions a shape has; the rarely used settings folded away; every number through the
+  precision setting; collisions listed; "Send to Lab Data" adds a table instead of replacing them.
+
+251 tests. `tests/sandbox.test.ts` runs the engine with the app's own defaults — air, sleeping, 2D —
+which the old harness switched off, and checks lifting a 500 kg ball, grabbing a sleeping one,
+placing a static floor, rotation edits, and a rebuild that preserves the untouched bodies.
 
 ## What is in it today
 

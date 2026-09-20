@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
 import { useApp } from '../app/modes'
-import { Box, Camera, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
+import { Box, Camera, Check, Grid3x3, Home, Magnet, Pause, Play, RotateCcw, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
 import { createRenderer, QUALITY, useGpuInfo } from './renderer'
@@ -18,6 +18,8 @@ import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
 import { SandboxView } from './SandboxView'
+import { useSandbox } from '../sim/store'
+import { formatMeasure } from '../math/format'
 import { LabelShowSwitch } from '../ui/LabelControls'
 import { themeColor, useTheme } from '../app/theme'
 import { saveViewportImage, setExportContext } from './exportImage'
@@ -174,13 +176,15 @@ export function Viewport() {
       {layoutReady && <Canvas gl={createRenderer as never} flat dpr={[1, QUALITY[quality].dpr]} frameloop="demand" style={{ background: canvasBg }}>
         <Background color={canvasBg} />
         <CameraRig />
-        {viewMode === '2d' ? <Grid2D /> : <Grid3D />}
-        <SceneObjects />
+        {/* The sandbox is its own world: the maths grid used to stand through it as a vertical
+            wall, and a stray tool click dropped maths points over the physics. */}
+        {mode !== 'sandbox' && (viewMode === '2d' ? <Grid2D /> : <Grid3D />)}
+        {mode !== 'sandbox' && <SceneObjects />}
         {mode === 'sandbox' && <SandboxView />}
-        <Highlights />
+        {mode !== 'sandbox' && <Highlights />}
         {particles && <GpuParticles />}
-        <Interaction />
-        <LabelProjector />
+        {mode !== 'sandbox' && <Interaction />}
+        {mode !== 'sandbox' && <LabelProjector />}
         <FrameStats />
         <ExportHook />
         <Invalidator />
@@ -195,6 +199,8 @@ export function Viewport() {
         }}
       />
 
+      {mode === 'sandbox' && <SandboxStrip />}
+      {mode !== 'sandbox' && (
       <div className="absolute left-3 top-3 flex items-center gap-1">
         <div className="seg">
           <button className={viewMode === '2d' ? 'on' : ''} onClick={() => setViewMode('2d')} title="2D view (Tab)">
@@ -217,10 +223,13 @@ export function Viewport() {
           <Camera size={14} />
         </button>
       </div>
+      )}
+      {mode !== 'sandbox' && (
       <div data-tour="labels" className="absolute left-3 top-11 flex items-center gap-1.5">
         <span className="text-[11px] text-zinc-500">Labels</span>
         <LabelShowSwitch />
       </div>
+      )}
 
       <div className="absolute right-3 top-3 flex items-center gap-2 text-[11px] text-zinc-400">
         <span className="badge" title={gpu.adapter || undefined}>
@@ -247,7 +256,12 @@ export function Viewport() {
         </span>
       </div>
 
-      {hint && tool !== 'select' && (
+      {mode === 'sandbox' && (
+        <div className="tool-hint">
+          <span>Drag an object to place it. Press Play, then drag to push or lift it and let go to throw. Right-drag turns the view, scroll zooms.</span>
+        </div>
+      )}
+      {mode !== 'sandbox' && hint && tool !== 'select' && (
         <div className="tool-hint">
           <span>{hint}</span>
           {picks > 0 && (
@@ -266,6 +280,36 @@ export function Viewport() {
         </div>
       )}
       <SliderDock />
+    </div>
+  )
+}
+
+/** Play, Reset, the clock and a way to find the objects again, on the drawing itself. */
+function SandboxStrip() {
+  const playing = useScene((s) => s.playing)
+  const setPlaying = useScene((s) => s.setPlaying)
+  const settings = useScene((s) => s.settings)
+  const time = useSandbox((s) => s.engineTime)
+  const resetRun = useSandbox((s) => s.resetRun)
+  return (
+    <div className="absolute left-3 top-3 flex items-center gap-1">
+      <button className="btn primary" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
+        {playing ? <Pause size={13} /> : <Play size={13} />} {playing ? 'Pause' : 'Play'}
+      </button>
+      <button
+        className="btn"
+        onClick={() => {
+          setPlaying(false)
+          resetRun()
+        }}
+        title="Everything back to the start, t = 0"
+      >
+        <RotateCcw size={13} /> Reset
+      </button>
+      <button className="icon-btn" onClick={resetCamera} title="Find the objects (Home)">
+        <Home size={14} />
+      </button>
+      <span className="badge tabular-nums">t = {formatMeasure(time, 'number', settings)} s</span>
     </div>
   )
 }

@@ -41,7 +41,8 @@ export function useShortcuts() {
         // The Sandbox keeps its own objects in its own store, so Ctrl+Z there has to reach that
         // history rather than the drawing's.
         if (useApp.getState().mode === 'sandbox') {
-          useSandbox.getState().undo()
+          if (e.shiftKey) useSandbox.getState().redo()
+          else useSandbox.getState().undo()
           return
         }
         if (e.shiftKey) s.redo()
@@ -50,7 +51,8 @@ export function useShortcuts() {
       }
       if (ctrl && e.key.toLowerCase() === 'y') {
         e.preventDefault()
-        s.redo()
+        if (useApp.getState().mode === 'sandbox') useSandbox.getState().redo()
+        else s.redo()
         return
       }
       if (ctrl && e.key.toLowerCase() === 'a') {
@@ -59,6 +61,28 @@ export function useShortcuts() {
         return
       }
       if (ctrl) return
+      // The Sandbox has its own objects and its own camera: Delete removes the selected body, Esc
+      // drops the selection, and the drawing tools, Tab and the 2D view do not apply.
+      if (useApp.getState().mode === 'sandbox') {
+        const sb = useSandbox.getState()
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (sb.selection) sb.removeBody(sb.selection)
+          return
+        }
+        if (e.key === 'Escape') {
+          sb.select(null)
+          return
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault()
+          return
+        }
+        if (e.key === 'Home') {
+          resetCamera()
+          return
+        }
+        if (e.key !== ' ') return
+      }
       switch (e.key) {
         case 'Escape':
           // First Esc throws away the unfinished drawing, a second one goes back to Move.

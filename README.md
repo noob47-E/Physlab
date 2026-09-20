@@ -11,7 +11,7 @@ added, and the bugs that were worth remembering.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.3.3.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.3.4.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
@@ -34,7 +34,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity), big answers, optional steps, **Draw on graph**. |
 | **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
-| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Join any two with a **rod, string or spring**. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
+| **Sandbox** | Real objects that collide, on the Jolt physics engine. Paused, drag anything — a ball, a wall, the floor — to arrange it; playing, drag to push or lift it and let go to throw. Reset puts everything back and the clock to zero; an object that falls off the edge is put back and says so. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Join any two with a **rod, string or spring**. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
 | **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
 | **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. |

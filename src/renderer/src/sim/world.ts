@@ -27,6 +27,14 @@ export const STRIDE = 7
  */
 const GRAB_MAX_FORCE = 800
 
+/**
+ * How hard the hand may pull on a body of this mass. The flat 800 N cap made mass matter, but
+ * it also made the default steel ball (514 kg) and wooden crate (151 kg) impossible to lift or
+ * even to slide. The hand can now always beat the weight by half — a heavy thing rises slowly,
+ * a light thing still flies — so nothing in the scene is beyond it.
+ */
+export const grabForceCap = (mass: number, gravity: number): number => Math.max(GRAB_MAX_FORCE, 1.5 * mass * gravity)
+
 /** Shapes that roll, and so are slowed by rolling resistance rather than sliding friction. */
 const ROLLING_SHAPES = new Set(['sphere', 'cylinder', 'capsule'])
 
@@ -158,8 +166,8 @@ export class SimWorld {
     this.settings = { ...before, ...patch }
     this.applyWorldSettings()
     // Switching 2D on or off changes what a body is allowed to do, so rebuild them.
-    if (patch.twoD !== undefined && patch.twoD !== before.twoD) this.rebuild()
-    if (patch.allowSleeping !== undefined && patch.allowSleeping !== before.allowSleeping) this.rebuild()
+    if (patch.twoD !== undefined && patch.twoD !== before.twoD) this.rebuild(undefined, undefined, true)
+    if (patch.allowSleeping !== undefined && patch.allowSleeping !== before.allowSleeping) this.rebuild(undefined, undefined, true)
   }
 
   getWorldSettings(): WorldSettings {
@@ -277,6 +285,9 @@ export class SimWorld {
     // yanked back to the number sitting in the panel on every unrelated edit.
     if (was.position.some((v, i) => v !== def.position[i])) this.setPosition(def.id, def.position)
     if (was.velocity.some((v, i) => v !== def.velocity[i])) this.setVelocity(def.id, def.velocity)
+    // Rotation and spin were neither structural nor applied, so typing them did nothing at all.
+    if (was.rotation.some((v, i) => v !== def.rotation[i])) this.setRotation(def.id, def.rotation)
+    if (was.angularVelocity.some((v, i) => v !== def.angularVelocity[i])) this.setAngularVelocity(def.id, def.angularVelocity)
     e.def = def
     return true
   }
@@ -357,15 +368,52 @@ export class SimWorld {
     }
   }
 
-  /** Replace every body with its definition again (Reset, or a change that needs a rebuild). */
-  rebuild(defs?: BodyDef[], links?: Link[]): void {
+  /**
+   * Replace every body with its definition again (Reset, or a change that needs a rebuild).
+   *
+   * With `preserve`, bodies whose definition object is unchanged keep their live position,
+   * velocity and the clock keeps counting: changing one crate's mass mid-run used to snap every
+   * other object back to its start, which read as a Reset nobody had asked for.
+   */
+  rebuild(defs?: BodyDef[], links?: Link[], preserve = false): void {
     const list = defs ?? this.order.map((id) => this.entries.get(id)!.def)
     const joins = links ?? this.linkDefs
+    const kept = new Map<BodyId, { def: BodyDef; state: BodyState }>()
+    const time = this.time
+    if (preserve) {
+      for (const id of this.order) {
+        const e = this.entries.get(id)
+        const st = this.state(id)
+        if (e && st) kept.set(id, { def: e.def, state: st })
+      }
+    }
     this.clear()
-    for (const def of list) this.addBody(def)
+    for (const def of list) {
+      this.addBody(def)
+      const k = kept.get(def.id)
+      if (k && k.def === def) this.placeState(def.id, k.state)
+    }
+    if (preserve) this.time = time
     // Constraints are built after the bodies, because each one needs both of them to exist.
     this.linkDefs = joins
     this.setLinks(joins)
+  }
+
+  /** Put a body exactly into a recorded state. */
+  private placeState(id: BodyId, st: BodyState): void {
+    const e = this.entries.get(id)
+    if (!e) return
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const p = this.rv3(st.position)
+    const q = this.track(new J.Quat(st.rotation[0], st.rotation[1], st.rotation[2], st.rotation[3]))
+    const v = this.v3(st.velocity)
+    const w = this.v3(st.angularVelocity)
+    if (e.def.motion === 'dynamic') this.bodies.SetPositionRotationAndVelocity(e.body.GetID(), p, q, v, w)
+    else this.bodies.SetPositionAndRotation(e.body.GetID(), p, q, J.EActivation_DontActivate)
+    this.release(p)
+    this.release(q)
+    this.release(v)
+    this.release(w)
   }
 
   /**
@@ -491,7 +539,10 @@ export class SimWorld {
       const e = this.entries.get(id)!
       if (e.def.motion !== 'dynamic') continue
       const body = e.body
-      if (!body.IsActive()) continue
+      // A body Jolt has put to sleep is skipped — except the one in the hand, which the grab
+      // block below wakes. It used to be skipped too, so anything that had settled for a third
+      // of a second could never be picked up again.
+      if (!body.IsActive() && this.grabbed?.id !== id) continue
 
       if (rho > 0) {
         const v = body.GetLinearVelocity()
@@ -549,8 +600,9 @@ export class SimWorld {
         let fy = k * (this.grabbed.target[1] - p.GetY()) - c * v.GetY()
         let fz = k * (this.grabbed.target[2] - p.GetZ()) - c * v.GetZ()
         const pull = Math.hypot(fx, fy, fz)
-        if (pull > GRAB_MAX_FORCE) {
-          const s = GRAB_MAX_FORCE / pull
+        const cap = grabForceCap(e.mass, this.settings.gravity)
+        if (pull > cap) {
+          const s = cap / pull
           fx *= s
           fy *= s
           fz *= s
@@ -622,7 +674,56 @@ export class SimWorld {
   }
 
   grab(id: BodyId, target: V3): void {
+    const e = this.entries.get(id)
+    if (!e || e.def.motion !== 'dynamic') return
     this.grabbed = { id, target }
+    this.bodies.ActivateBody(e.body.GetID())
+  }
+
+  /**
+   * Put a body somewhere, at rest, whatever it was doing: arranging the scene while paused. A
+   * static body (wall, ramp, floor) is moved the same way, and everything else is woken so a
+   * ball asleep on a floor that has just moved notices.
+   */
+  placeBody(id: BodyId, position: V3): void {
+    const e = this.entries.get(id)
+    if (!e) return
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const p = this.rv3(position)
+    const q = e.body.GetRotation()
+    if (e.def.motion === 'dynamic') {
+      const zero = this.v3([0, 0, 0])
+      this.bodies.SetPositionRotationAndVelocity(e.body.GetID(), p, q, zero, zero)
+      this.release(zero)
+    } else {
+      this.bodies.SetPositionAndRotation(e.body.GetID(), p, q, J.EActivation_DontActivate)
+      this.wakeAll()
+    }
+    this.release(p)
+  }
+
+  setRotation(id: BodyId, degrees: V3): void {
+    const e = this.entries.get(id)
+    if (!e) return
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const q = this.quatFromEuler(degrees)
+    this.bodies.SetPositionAndRotation(e.body.GetID(), e.body.GetPosition(), q, e.def.motion === 'dynamic' ? J.EActivation_Activate : J.EActivation_DontActivate)
+    this.release(q)
+    if (e.def.motion !== 'dynamic') this.wakeAll()
+  }
+
+  setAngularVelocity(id: BodyId, w: V3): void {
+    const e = this.entries.get(id)
+    if (!e || e.def.motion !== 'dynamic') return
+    const v = this.v3(w)
+    this.bodies.SetAngularVelocity(e.body.GetID(), v)
+    this.bodies.ActivateBody(e.body.GetID())
+    this.release(v)
+  }
+
+  /** Wake every moving body, after something they may be resting on has moved. */
+  wakeAll(): void {
+    for (const e of this.entries.values()) if (e.def.motion === 'dynamic') this.bodies.ActivateBody(e.body.GetID())
   }
 
   moveGrab(target: V3): void {

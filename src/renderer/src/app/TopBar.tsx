@@ -36,6 +36,7 @@ import { PANEL_LIST, isPanelOpen, showPanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useParticleLab } from '../render/GpuParticles'
+import { useSandbox } from '../sim/store'
 import { QUALITY, qualityNow } from '../render/renderer'
 import { UNIT_NAMES } from '../math/format'
 
@@ -277,10 +278,18 @@ export function TopBar() {
       <Menu
         label="Edit"
         items={[
-          { label: 'Undo', sc: 'Ctrl+Z', run: s.undo },
-          { label: 'Redo', sc: 'Ctrl+Y', run: s.redo },
+          { label: 'Undo', sc: 'Ctrl+Z', run: () => (mode === 'sandbox' ? useSandbox.getState().undo() : s.undo()) },
+          { label: 'Redo', sc: 'Ctrl+Y', run: () => (mode === 'sandbox' ? useSandbox.getState().redo() : s.redo()) },
           '-',
-          { label: 'Delete selected', sc: 'Del', run: () => s.removeObjects(s.selection) },
+          {
+            label: 'Delete selected',
+            sc: 'Del',
+            run: () => {
+              if (mode !== 'sandbox') return s.removeObjects(s.selection)
+              const sb = useSandbox.getState()
+              if (sb.selection) sb.removeBody(sb.selection)
+            }
+          },
           { label: 'Select all', sc: 'Ctrl+A', run: () => s.select(s.order) }
         ]}
       />

@@ -6,7 +6,7 @@ import { niceStep, orthoBounds, worldPerPixel } from './cameraUtils'
 import { useCameraCommand, useView } from './viewState'
 import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
-import { useSandbox } from '../sim/store'
+import { engine, useSandbox } from '../sim/store'
 
 /** Bounding box of all visible geometry (graphs excluded). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -100,6 +100,44 @@ export function CameraRig() {
   useEffect(() => {
     if (!command.nonce) return
     const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+    if (useApp.getState().mode === 'sandbox') {
+      // The maths presets below put the camera 12 m under the floor. Frame the objects instead,
+      // where they are now rather than where they started.
+      const { bodies, sideView } = useSandbox.getState()
+      const min = [Infinity, Infinity, Infinity]
+      const max = [-Infinity, -Infinity, -Infinity]
+      for (const b of bodies) {
+        if (b.shape === 'ground') continue
+        const p = engine.world?.state(b.id)?.position ?? b.position
+        const r = Math.max(...b.size) / 2
+        for (let k = 0; k < 3; k++) {
+          min[k] = Math.min(min[k], p[k] - r)
+          max[k] = Math.max(max[k], p[k] + r)
+        }
+      }
+      const floor = bodies.find((b) => b.shape === 'ground')
+      const top = floor ? floor.position[1] + floor.size[1] / 2 : 0
+      if (!Number.isFinite(min[0])) {
+        min[0] = -4
+        max[0] = 4
+        min[1] = top
+        max[1] = top + 3
+        min[2] = -1
+        max[2] = 1
+      }
+      min[1] = Math.min(min[1], top)
+      const cx = (min[0] + max[0]) / 2
+      const cy = (min[1] + max[1]) / 2
+      const cz = (min[2] + max[2]) / 2
+      const r = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 3)
+      camera.up.set(0, 1, 0)
+      if (sideView) camera.position.set(cx, cy + r * 0.25, cz + r * 1.6)
+      else camera.position.set(cx + r * 0.9, cy + r * 0.7, cz + r * 1.2)
+      c?.target.set(cx, cy, cz)
+      camera.lookAt(cx, cy, cz)
+      c?.update()
+      return
+    }
     if (command.kind === 'fit') {
       const box = sceneBounds()
       if (box) {

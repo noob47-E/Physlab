@@ -40,7 +40,9 @@ export function shapeVolume(shape: string, size: [number, number, number]): numb
     case 'capsule':
       return Math.PI * a ** 2 * b + (4 / 3) * Math.PI * a ** 3
     case 'cone':
-      return (1 / 3) * Math.PI * a ** 2 * b
+      // The cone's size is its base width, not its radius (the hull and the mesh both use a/2);
+      // using a as the radius quoted a mass four times too big.
+      return (1 / 3) * Math.PI * (a / 2) ** 2 * b
     case 'ramp':
       // A wedge: half of the box it fits in.
       return (a * b * c) / 2
@@ -60,9 +62,10 @@ export function frontalArea(shape: string, size: [number, number, number], dir: 
       return Math.PI * a ** 2
     case 'cylinder':
     case 'capsule':
-    case 'cone':
       // Round end towards the motion, or the long side.
       return ay * Math.PI * a ** 2 + (1 - ay) * 2 * a * b
+    case 'cone':
+      return ay * Math.PI * (a / 2) ** 2 + (1 - ay) * a * b * 0.5
     default:
       // Box-like: the projected area of the three faces.
       return ax * b * c + ay * a * c + az * a * b
