@@ -24,7 +24,7 @@ function SandboxTimeline() {
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-[15px] tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
         <span className="text-[color:var(--text-dim)]">{playing ? 'running' : 'paused'}</span>
-        {timeScale !== 1 && <span className="text-[color:var(--text-dim)]">slow motion ×{timeScale}</span>}
+        {timeScale !== 1 && <span className="text-[color:var(--text-dim)]">slow motion ×{formatMeasure(timeScale, 'number', settings)}</span>}
       </div>
       <p className="text-[color:var(--text-dim)]">Play, Step, Reset and slow motion are at the top of the Sandbox panel. Space plays and pauses.</p>
     </div>

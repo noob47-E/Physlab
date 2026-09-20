@@ -5,16 +5,19 @@
 
 import type { BodyDef, BodyId } from './types'
 
-/** The rows a body always shows; everything else sits under a fold. */
+/** The rows a body always shows, in this order; everything else sits under a fold. */
 export const ALWAYS_SHOWN = ['name', 'material', 'mass', 'position', 'velocity'] as const
 
 export type FoldId = 'launcher' | 'connections' | 'appearance' | 'physics' | 'advanced' | 'world-more' | 'collisions'
 
-/** Which fold each of the other controls belongs to. */
-export const FOLD_OF: Record<string, FoldId> = {
+/**
+ * Which fold each of the other controls belongs to, in the order they appear. The panel renders
+ * each fold from this table (`controlsIn`), so moving a control means editing one line here, and
+ * the type of `ControlKey` makes the panel supply a row for every key named.
+ */
+export const FOLD_OF = {
   color: 'appearance',
-  showArrows: 'appearance',
-  trace: 'appearance',
+  show: 'appearance',
   size: 'physics',
   rotation: 'physics',
   motion: 'physics',
@@ -25,7 +28,17 @@ export const FOLD_OF: Record<string, FoldId> = {
   dragCd: 'advanced',
   linearDamping: 'advanced',
   rolling: 'advanced'
-}
+} as const satisfies Record<string, FoldId>
+
+export type FoldedKey = keyof typeof FOLD_OF
+/** Every control the inspector has a row for. */
+export type ControlKey = (typeof ALWAYS_SHOWN)[number] | FoldedKey
+
+/** The folds a body's controls are spread over, top to bottom. */
+export const BODY_FOLDS = ['appearance', 'physics', 'advanced'] as const satisfies readonly FoldId[]
+
+/** The controls that sit under one fold, in the order the table gives them. */
+export const controlsIn = (fold: FoldId): FoldedKey[] => (Object.keys(FOLD_OF) as FoldedKey[]).filter((k) => FOLD_OF[k] === fold)
 
 export const FOLD_TITLES: Record<FoldId, string> = {
   launcher: 'Launcher',

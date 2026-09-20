@@ -137,10 +137,11 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         if (!e.shiftKey) select(null)
         return
       }
-      // Shift-click on a second body chooses it as the partner to join to, and does not drag.
+      // Shift-click on a second body chooses it as the partner to join to, and does not drag;
+      // a second shift-click lets it go, the same as in the list. The store refuses the floor.
       const chosen = useSandbox.getState().selection
       if (e.shiftKey && chosen && chosen !== hit.id) {
-        setPartner(hit.id)
+        setPartner(useSandbox.getState().partner === hit.id ? null : hit.id)
         return
       }
       select(hit.id)

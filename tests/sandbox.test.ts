@@ -7,7 +7,7 @@ import { DEFAULT_MASS, DEFAULT_SIZE, halfHeight, makeBody, massOf, spawnAt, star
 import { shapeVolume } from '../src/renderer/src/sim/materials'
 import { DEFAULT_WORLD, type BodyDef, type ShapeKind, type WorldSettings } from '../src/renderer/src/sim/types'
 import { PRESETS, START_PRESET_ID, startPreset } from '../src/renderer/src/sim/presets'
-import { ALWAYS_SHOWN, connectionsProminent, FOLD_OF, joinCandidates, readFold, writeFold, type FoldStore } from '../src/renderer/src/sim/inspector'
+import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_OF, FOLD_TITLES, joinCandidates, readFold, writeFold, type FoldStore } from '../src/renderer/src/sim/inspector'
 
 const G = 9.81
 let n = 0
@@ -240,12 +240,24 @@ describe('classroom-scale masses', () => {
 })
 
 describe('the inspector shows five rows and folds the rest', () => {
+  // The panel draws its rows from this table (Selected in panels/Sandbox.tsx), so what is
+  // asserted here is what the student sees, and the type of ControlKey makes the panel supply a
+  // row for every key named.
   it('names the five and files every other control under a fold', () => {
     expect([...ALWAYS_SHOWN]).toEqual(['name', 'material', 'mass', 'position', 'velocity'])
-    for (const k of ALWAYS_SHOWN) expect(FOLD_OF[k]).toBeUndefined()
+    for (const k of ALWAYS_SHOWN) expect((FOLD_OF as Record<string, string>)[k]).toBeUndefined()
     expect(FOLD_OF.friction).toBe('physics')
-    expect(FOLD_OF.trace).toBe('appearance')
+    expect(FOLD_OF.show).toBe('appearance')
     expect(FOLD_OF.linearDamping).toBe('advanced')
+  })
+
+  it('spreads every folded control over the three body folds, each with a title, in table order', () => {
+    const placed = BODY_FOLDS.flatMap((f) => controlsIn(f))
+    expect([...placed].sort()).toEqual(Object.keys(FOLD_OF).sort())
+    expect(controlsIn('physics')).toEqual(['size', 'rotation', 'motion', 'restitution', 'friction'])
+    for (const f of BODY_FOLDS) expect(FOLD_TITLES[f]).toBeTruthy()
+    // Nothing a body shows belongs to the world's folds.
+    expect(controlsIn('world-more')).toEqual([])
   })
 
   it('remembers whether a fold was open, and copes with no storage at all', () => {

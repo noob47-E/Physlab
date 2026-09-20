@@ -276,7 +276,10 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   },
   // Choosing nothing, or choosing the partner itself, ends the pair.
   select: (selection) => set({ selection, partner: selection === null || selection === get().partner ? null : get().partner }),
-  setPartner: (partner) => set({ partner: partner === get().selection ? null : partner }),
+  // The floor can never be a partner: nothing can be tied to it, and a shift-click anywhere on
+  // 200 m of ground is the easiest miss there is. The rule lives here so the list and the
+  // viewport cannot disagree about it.
+  setPartner: (partner) => set({ partner: partner === null || partner === get().selection || get().bodies.find((b) => b.id === partner)?.shape === 'ground' ? null : partner }),
   setWorld: (patch) => set({ world: { ...get().world, ...patch } }),
   pushContacts: (c) => (c.length ? set({ contacts: [...c].reverse().concat(get().contacts).slice(0, 60) }) : undefined),
   clearContacts: () => set({ contacts: [] }),

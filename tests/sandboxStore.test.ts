@@ -80,6 +80,12 @@ describe('the sandbox store', () => {
     // The selected object cannot be its own partner.
     state().setPartner(a.id)
     expect(state().partner).toBeNull()
+    // Nor can the floor: a shift-click anywhere on 200 m of ground used to light it up as the
+    // partner and open Connections with nothing to join to.
+    state().setPartner(b.id)
+    const floor = state().bodies.find((x) => x.shape === 'ground')!
+    state().setPartner(floor.id)
+    expect(state().partner).toBeNull()
     state().setPartner(b.id)
     // Selecting the partner itself ends the pair; selecting nothing does too.
     state().select(b.id)
