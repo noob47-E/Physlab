@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell } from 'electron'
 import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
@@ -66,12 +66,71 @@ function registerAppProtocol(): void {
   })
 }
 
+/** Chromium zoom levels: each step is ×1.2. Kept within what still leaves the shell usable. */
+const ZOOM_MIN = -3
+const ZOOM_MAX = 3
+const clampZoom = (level: number): number => (Number.isFinite(level) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(level * 2) / 2)) : 0)
+
+function setZoom(win: BrowserWindow, level: number): number {
+  const z = clampZoom(level)
+  win.webContents.setZoomLevel(z)
+  // The settings popover shows the zoom, so it has to hear about a keyboard change too.
+  win.webContents.send('app:zoom', z)
+  return z
+}
+
+/**
+ * The menu bar is hidden, but the menu still owns the keys. Electron's default menu bound Ctrl+R
+ * and F5 to a plain reload, which threw away unsaved work with no question asked; and without a
+ * menu of our own, zoom had no keys at all.
+ */
+function buildMenu(win: BrowserWindow): Menu {
+  const reload = () => {
+    if (dirty) {
+      const choice = dialog.showMessageBoxSync(win, {
+        type: 'question',
+        buttons: ['Reload anyway', 'Keep working'],
+        defaultId: 1,
+        cancelId: 1,
+        message: 'Reload PhysLab?',
+        detail: 'There is unsaved work. It will be offered back after the reload, but it is not saved in a file. Press Ctrl+S first to keep it.'
+      })
+      if (choice !== 0) return
+    }
+    win.webContents.reload()
+  }
+  const zoomBy = (delta: number) => setZoom(win, win.webContents.getZoomLevel() + delta)
+  return Menu.buildFromTemplate([
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Bigger text', accelerator: 'CmdOrCtrl+=', click: () => zoomBy(0.5) },
+        { label: 'Bigger text', accelerator: 'CmdOrCtrl+Plus', visible: false, click: () => zoomBy(0.5) },
+        { label: 'Bigger text', accelerator: 'CmdOrCtrl+numadd', visible: false, click: () => zoomBy(0.5) },
+        { label: 'Smaller text', accelerator: 'CmdOrCtrl+-', click: () => zoomBy(-0.5) },
+        { label: 'Smaller text', accelerator: 'CmdOrCtrl+numsub', visible: false, click: () => zoomBy(-0.5) },
+        { label: 'Normal size', accelerator: 'CmdOrCtrl+0', click: () => setZoom(win, 0) },
+        { type: 'separator' },
+        { label: 'Full screen', accelerator: 'F11', click: () => win.setFullScreen(!win.isFullScreen()) },
+        { type: 'separator' },
+        { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: reload },
+        { label: 'Reload', accelerator: 'F5', visible: false, click: reload },
+        { label: 'Developer tools', accelerator: 'F12', click: () => win.webContents.toggleDevTools() }
+      ]
+    }
+  ])
+}
+
 function createWindow(): void {
+  // Sized to the work area (the screen minus the taskbar), so a 1366×768 laptop at 125 % scaling
+  // is not handed a window wider than its screen. The old minimum of 1100 was wider than that
+  // laptop's 1093 usable pixels, and the top bar was clipped with no way to widen it.
+  const work = screen.getPrimaryDisplay().workAreaSize
   const win = new BrowserWindow({
-    width: 1680,
-    height: 1020,
-    minWidth: 1100,
-    minHeight: 700,
+    width: Math.min(1680, work.width),
+    height: Math.min(1020, work.height),
+    minWidth: 960,
+    minHeight: 600,
     title: 'PhysLab',
     // Packaged builds use the icon embedded in the .exe.
     icon: app.isPackaged ? undefined : join(__dirname, '../../build/icon.png'),
@@ -119,16 +178,16 @@ function createWindow(): void {
     })
   }
 
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return
-    if (input.key === 'F12') {
-      win.webContents.toggleDevTools()
-      event.preventDefault()
-    }
-    if (input.key === 'F11') {
-      win.setFullScreen(!win.isFullScreen())
-      event.preventDefault()
-    }
+  Menu.setApplicationMenu(buildMenu(win))
+
+  // Nothing in PhysLab opens a second window or leaves the app: a link in an example, or a
+  // dragged-in file, must not turn the window into a web browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isOwnUrl(url)) event.preventDefault()
   })
 
   // PHYSLAB_BENCH=1000000 opens straight into the GPU particle benchmark.
@@ -147,9 +206,22 @@ function createWindow(): void {
   }
 }
 
+/** The renderer's own pages: the app:// scheme when packaged, the Vite dev server otherwise. */
+function isOwnUrl(url: string): boolean {
+  if (url.startsWith('app://')) return true
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  return !!devUrl && !app.isPackaged && url.startsWith(devUrl)
+}
+
 let dirty = false
 ipcMain.on('app:dirty', (_e, value: boolean) => {
   dirty = !!value
+})
+
+ipcMain.handle('zoom:get', (e) => BrowserWindow.fromWebContents(e.sender)?.webContents.getZoomLevel() ?? 0)
+ipcMain.handle('zoom:set', (e, level: number) => {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  return win ? setZoom(win, level) : 0
 })
 
 ipcMain.handle('file:open', async () => {

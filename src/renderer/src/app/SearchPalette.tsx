@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
-import { MODES, useApp } from './modes'
-import { enterMode } from './TopBar'
+import { MODES, readyModes, useApp } from './modes'
+import { enterMode } from './layout'
 import { PANEL_LIST, showPanel } from './panels'
 import { CATALOG } from './CommandBar'
 import { scene } from '../core/store'
@@ -28,7 +28,8 @@ const CALC_MODES: CalcMode[] = ['COMP', 'CMPLX', 'BASE-N', 'MATRIX', 'VECTOR', '
 
 function buildItems(): Item[] {
   const items: Item[] = []
-  for (const m of MODES) items.push({ group: 'Modes', title: m.label, hint: m.ready ? m.description : `Coming soon — ${m.description}`, run: () => enterMode(m.id) })
+  // Only the modes that exist: a "coming soon" row that opened an empty mode was a dead end.
+  for (const m of readyModes()) items.push({ group: 'Modes', title: m.label, hint: m.description, run: () => enterMode(m.id) })
   for (const t of TOOLS) {
     items.push({
       group: 'Tools',
@@ -126,10 +127,10 @@ export function SearchPalette() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 pt-[12vh]" onMouseDown={() => setOpen(false)}>
-      <div className="w-[640px] max-w-[92vw] overflow-hidden rounded-xl border border-[#3d3f46] bg-[#1f2024] shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-[#2e3036] px-3">
-          <Search size={16} className="text-zinc-500" />
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-[var(--shadow)] pt-[12vh]" onMouseDown={() => setOpen(false)}>
+      <div className="w-[640px] max-w-[92vw] overflow-hidden rounded-xl border border-[var(--line-2)] bg-[var(--menu-bg)] text-[var(--text)] shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-[var(--line)] px-3">
+          <Search size={16} className="text-[var(--text-faint)]" />
           <input
             ref={input}
             className="h-11 flex-1 bg-transparent text-[15px] outline-none"
@@ -155,12 +156,12 @@ export function SearchPalette() {
           />
         </div>
         <div className="max-h-[55vh] overflow-auto py-1">
-          {results.length === 0 && <div className="px-4 py-6 text-center text-zinc-500">Nothing found.</div>}
+          {results.length === 0 && <div className="px-4 py-6 text-center text-[var(--text-faint)]">Nothing found.</div>}
           {results.map((r, i) => (
-            <button key={`${r.group}-${r.title}`} className={`flex w-full items-baseline gap-3 px-4 py-1.5 text-left ${i === active ? 'bg-[#2f4a7a]' : 'hover:bg-[#2a2c32]'}`} onMouseEnter={() => setActive(i)} onClick={() => choose(r)}>
-              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-zinc-500">{r.group}</span>
-              <span className="shrink-0 text-zinc-100">{r.title}</span>
-              <span className="truncate text-[12px] text-zinc-500">{r.hint}</span>
+            <button key={`${r.group}-${r.title}`} className={`flex w-full items-baseline gap-3 px-4 py-1.5 text-left ${i === active ? 'bg-[var(--sel-row)]' : 'hover:bg-[var(--bg-3)]'}`} onMouseEnter={() => setActive(i)} onClick={() => choose(r)}>
+              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{r.group}</span>
+              <span className="shrink-0 text-[var(--text-strong)]">{r.title}</span>
+              <span className="truncate text-[12px] text-[var(--text-faint)]">{r.hint}</span>
             </button>
           ))}
         </div>
