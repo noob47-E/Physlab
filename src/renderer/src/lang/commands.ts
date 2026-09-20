@@ -598,11 +598,8 @@ export function solutionFor(root: MathNode): VS.Solution | null {
       if (fname === 'mag' && args.length === 1 && geo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'))
       if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'))
       if (fname === 'proj' && args.length === 2) return VS.solveProjection(vecArg(args[0], 'B'), vecArg(args[1], 'A'))
-      if (fname === 'angleBetween' && args.length === 2) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'polarVec' && args.length === 2) {
-        const v = toV3(evaluateNode(node))
-        return VS.solveComponents('A', len(v), (heading(v) * 180) / Math.PI)
-      }
+      if (fname === 'angleBetween' && args.length === 2) return VS.solveAngleBetween(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
+      if (fname === 'polarVec' && args.length === 2) return VS.solveResolve({ name: 'A', v: toV3(evaluateNode(node)) })
     }
   } catch {
     return null
@@ -625,8 +622,9 @@ function trySolverCommand(input: string): boolean {
     case 'resolve':
       if (args.length === 2) sol = VS.solveComponents('A', num(args[0]), num(args[1]))
       else if (args.length === 1) {
-        const a = v(0, 'A')
-        sol = VS.solveComponents(a.name, len(a.v), (heading(a.v) * 180) / Math.PI)
+        // A 3-D vector's components are read off directly; resolving it at its heading in the
+        // plane reported Ax = 4.24 for 3i + 4j + 5k.
+        sol = VS.solveResolve(v(0, 'A'))
       }
       break
     case 'magnitude':
@@ -638,6 +636,8 @@ function trySolverCommand(input: string): boolean {
       sol = VS.solveUnitVector(v(0, 'A'))
       break
     case 'angle':
+      sol = VS.solveAngleBetween(v(0, 'A'), v(1, 'B'))
+      break
     case 'dot':
       sol = VS.solveDot(v(0, 'A'), v(1, 'B'))
       break

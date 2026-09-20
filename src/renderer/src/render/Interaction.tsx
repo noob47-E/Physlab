@@ -48,6 +48,9 @@ export function Interaction() {
   const drag = useRef<DragState | null>(null)
   const down = useRef<{ x: number; y: number; world: V3 | null; hit: Hit | null } | null>(null)
   const sketch = useRef<{ world: V3[]; lastX: number; lastY: number } | null>(null)
+  // The existing point a vector drag or first click started on, so a vector drawn from one
+  // point to another is tied to them and follows when either point moves.
+  const vectorTail = useRef<{ down: ObjId | null; first: ObjId | null }>({ down: null, first: null })
   const ctxRef = useRef({ camera, size, controls })
   ctxRef.current = { camera, size, controls }
 
@@ -181,6 +184,7 @@ export function Interaction() {
       }
       if (tool === 'vector') {
         const sn = snapAt(x, y, XY_PLANE, e.altKey)
+        vectorTail.current.down = sn?.pointId ?? null
         useTool.setState({ dragStart: sn ? sn.p : null })
       }
     }
@@ -461,15 +465,21 @@ export function Interaction() {
         if (!sn) return
         const tail = clickLike ? t.firstTail : t.dragStart
         if (!tail) {
+          vectorTail.current.first = vectorTail.current.down
           useTool.setState({ firstTail: t.dragStart, dragStart: null })
           return
         }
         const end = e.shiftKey && s.viewMode === '2d' ? constrainAngle(tail, sn.p) : sn.p
         if (dist(tail, end) > 1e-9) {
+          const tailId = clickLike ? vectorTail.current.first : vectorTail.current.down
+          const headId = e.shiftKey ? null : (sn.pointId ?? null)
           const b = new Builder()
-          b.vector({ kind: 'free', tail, comp: sub(end, tail) })
+          // Drawn from one existing point to another, the vector belongs to those points.
+          if (tailId && headId && tailId !== headId) b.vector({ kind: 'points', a: tailId, b: headId })
+          else b.vector({ kind: 'free', tail, comp: sub(end, tail) })
           b.commit()
         }
+        vectorTail.current = { down: null, first: null }
         resetTool()
         showTip(null)
         return

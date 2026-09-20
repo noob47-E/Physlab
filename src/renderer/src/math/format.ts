@@ -45,7 +45,13 @@ export function bearingText(rad: number, decimals = 2): string {
 // Measurements with units and precision (one place for every displayed value)
 // ---------------------------------------------------------------------------
 
-export type MeasureKind = 'length' | 'area' | 'volume' | 'angle' | 'number'
+/**
+ * 'angle' is an amount of turning (the corner of a triangle, the angle between two vectors);
+ * 'direction' is which way something points, measured from +x. Only a direction can be written
+ * as a compass bearing — "N 30° E" makes no sense for the corner of a triangle — so the bearing
+ * setting applies to 'direction' alone.
+ */
+export type MeasureKind = 'length' | 'area' | 'volume' | 'angle' | 'direction' | 'number'
 export type MeasureSettings = Pick<SceneSettings, 'decimals' | 'precisionMode' | 'unit' | 'unitPerSquare' | 'angleUnit'>
 
 export const UNIT_LABELS: Record<LengthUnit, string> = { unit: 'u', mm: 'mm', cm: 'cm', m: 'm', km: 'km', in: 'in', ft: 'ft' }
@@ -68,11 +74,16 @@ export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'pre
   return fmt(v, s.decimals)
 }
 
-const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, number: 0 }
+const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, direction: 0, number: 0 }
+
+const isAngular = (kind: MeasureKind): boolean => kind === 'angle' || kind === 'direction'
+
+/** A direction is written as a bearing only when the student asked for bearings, in degrees. */
+const asBearing = (kind: MeasureKind, s: MeasureSettings): boolean => kind === 'direction' && NOTATION.direction === 'bearing' && s.angleUnit === 'deg'
 
 /** Converts a world (grid) value into the chosen real unit. */
 export function measureValue(v: number, kind: MeasureKind, s: MeasureSettings): number {
-  if (kind === 'angle') return angleFrom(v, s.angleUnit)
+  if (isAngular(kind)) return angleFrom(v, s.angleUnit)
   return v * Math.pow(s.unitPerSquare, DIM[kind])
 }
 
@@ -82,28 +93,30 @@ const ANGLE_TEX: Record<AngleUnit, string> = { deg: '^\\circ', rad: '\\,\\text{r
 
 export function unitSuffix(kind: MeasureKind, s: MeasureSettings): string {
   // A ternary on 'deg' labelled a grad angle "rad": the number was converted, the name was not.
-  if (kind === 'angle') return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
+  if (isAngular(kind)) return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
   if (kind === 'number') return ''
   const u = UNIT_LABELS[s.unit]
   return ` ${u}${DIM[kind] === 2 ? '²' : DIM[kind] === 3 ? '³' : ''}`
 }
 
-/** "12 cm²", "53.13°", "5 u". */
+/** "12 cm²", "53.13°", "5 u" — and a direction as "N 36.87° E" when bearings are chosen. */
 export function formatMeasure(v: number, kind: MeasureKind, s: MeasureSettings): string {
+  if (asBearing(kind, s)) return bearingText(v, s.decimals)
   return `${fmtPrecise(measureValue(v, kind, s), s)}${unitSuffix(kind, s)}`
 }
 
 /** LaTeX version: "12\,\text{cm}^2". */
 export function texMeasure(v: number, kind: MeasureKind, s: MeasureSettings, withUnit = true): string {
+  if (asBearing(kind, s)) return `\\text{${bearingText(v, s.decimals)}}`
   const n = fmtPrecise(measureValue(v, kind, s), s).replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
   if (!withUnit || kind === 'number') return n
-  if (kind === 'angle') return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
+  if (isAngular(kind)) return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
   const d = DIM[kind]
   return `${n}\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
 }
 
 export function texUnit(kind: MeasureKind, s: MeasureSettings): string {
-  if (kind === 'angle') return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
+  if (isAngular(kind)) return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
   if (kind === 'number') return ''
   const d = DIM[kind]
   return `\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
@@ -245,6 +258,6 @@ export function toDMS(deg: number): string {
  * and it has to be the exact mirror of the display or the drawing will drift a little each time.
  */
 export function worldValue(shown: number, kind: MeasureKind, s: MeasureSettings): number {
-  if (kind === 'angle') return angleTo(shown, s.angleUnit)
+  if (isAngular(kind)) return angleTo(shown, s.angleUnit)
   return shown / Math.pow(s.unitPerSquare, DIM[kind])
 }

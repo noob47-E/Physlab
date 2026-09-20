@@ -24,6 +24,19 @@ describe('measurement formatting', () => {
     expect(formatMeasure(7, 'length', { ...S, precisionMode: 'sf', decimals: 4 })).toBe('7.000 cm')
     expect(texMeasure(12, 'area', S)).toBe('12\\,\\text{cm}^2')
   })
+  it('writes a direction as a bearing when asked, but never an angle', () => {
+    setNotation({ direction: 'bearing' })
+    expect(formatMeasure(Math.PI / 6, 'direction', S)).toBe('N 60° E')
+    expect(formatMeasure(Math.PI / 2, 'direction', S)).toBe('N')
+    expect(formatMeasure((5 * Math.PI) / 4, 'direction', S)).toBe('S 45° W')
+    expect(texMeasure(Math.PI / 6, 'direction', S)).toBe('\\text{N 60° E}')
+    // The corner of a triangle is an amount of turning, not a heading.
+    expect(formatMeasure(Math.PI / 6, 'angle', S)).toBe('30°')
+    // In radians a bearing makes no sense, so the direction is a plain angle again.
+    expect(formatMeasure(Math.PI / 6, 'direction', { ...S, angleUnit: 'rad' })).toBe('0.52 rad')
+    setNotation({ direction: 'standard' })
+    expect(formatMeasure(Math.PI / 6, 'direction', S)).toBe('30°')
+  })
   it('shows exact forms only when the decimal is rounded', () => {
     expect(answerTex(5.5, 'length', S)).toBe('5.5\\,\\text{cm}')
     expect(answerTex(Math.SQRT2 * 3, 'length', S)).toBe('3\\sqrt{2}\\,\\text{cm} \\approx 4.24\\,\\text{cm}')

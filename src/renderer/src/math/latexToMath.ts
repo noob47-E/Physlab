@@ -12,7 +12,25 @@ export interface LatexOptions {
 
 type Tok = string
 
-function tokenize(src: string): Tok[] {
+/**
+ * Characters a student pastes from a textbook or types with a Unicode keyboard, read as the
+ * LaTeX MathLive would have produced: î ĵ k̂ are the unit vectors, − is a minus, x² is a square.
+ * Without this a pasted "3î + 4ĵ" failed while the typed version worked.
+ */
+const UNICODE_ALIASES: [RegExp, string][] = [
+  [/î|î/g, '\\hat{i}'],
+  [/ĵ|ĵ/g, '\\hat{j}'],
+  [/k̂/g, '\\hat{k}'],
+  [/[−–]/g, '-'],
+  [/²/g, '^{2}'],
+  [/³/g, '^{3}'],
+  [/±/g, '\\pm']
+]
+
+const PM_REFUSAL = 'Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.'
+
+function tokenize(raw: string): Tok[] {
+  const src = UNICODE_ALIASES.reduce((s, [re, to]) => s.replace(re, to), raw)
   const out: Tok[] = []
   let i = 0
   while (i < src.length) {
@@ -53,6 +71,19 @@ const ARC: Record<string, string> = { arcsin: 'asin', arccos: 'acos', arctan: 'a
 const DELIMS: Record<string, string> = {
   '(': '(', ')': ')', '[': '[', ']': ']', '|': '|', '.': '', '\\vert': '|', '\\lvert': '|', '\\rvert': '|', '\\|': '|',
   '\\langle': '<', '\\rangle': '>', '\\lbrack': '[', '\\rbrack': ']', '\\{': '(', '\\}': ')'
+}
+
+/**
+ * latexToMath for code that runs while a panel is drawing itself: the ± refusal is an Error, and
+ * an Error thrown mid-render blanks the panel to the error boundary. This returns the sentence
+ * instead so the panel can show it beside the input.
+ */
+export function tryLatexToMath(latex: string, opts: LatexOptions = {}): { src: string; problem?: string } {
+  try {
+    return { src: latexToMath(latex, opts) }
+  } catch (e) {
+    return { src: '', problem: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 export function latexToMath(latex: string, opts: LatexOptions = {}): string {
@@ -194,7 +225,9 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       case 'div':
         return '/'
       case 'pm':
-        return '+'
+      case 'mp':
+        // Turning ± into + gave one of the two answers with no hint that the other existed.
+        throw new Error(PM_REFUSAL)
       case 'le':
       case 'leq':
         return '<='
@@ -229,6 +262,50 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       case 'placeholder':
         arg()
         return ''
+      case 'begin': {
+        // \begin{pmatrix} 3 \\ 4 \end{pmatrix}: a column vector, or any matrix, cell by cell.
+        // Rows are split at \\ and cells at &; each cell is a small expression of its own.
+        const env = arg().replace(/^\((.*)\)$/, '$1')
+        const rows: Tok[][] = [[]]
+        let cell: Tok[] = []
+        let depth = 0
+        while (i < t.length) {
+          const tok = next()
+          if (tok === '\\begin') depth++
+          if (tok === '\\end') {
+            if (depth === 0) {
+              arg()
+              break
+            }
+            depth--
+          }
+          if (depth === 0 && tok === '\\\\') {
+            rows[rows.length - 1].push(...cell)
+            cell = []
+            rows.push([])
+            continue
+          }
+          if (depth === 0 && tok === '&') {
+            rows[rows.length - 1].push(...cell, '&')
+            cell = []
+            continue
+          }
+          cell.push(tok)
+        }
+        rows[rows.length - 1].push(...cell)
+        const parsed = rows
+          .filter((r) => r.length)
+          .map((r) => {
+            const cells: Tok[][] = [[]]
+            for (const tok of r) {
+              if (tok === '&') cells.push([])
+              else cells[cells.length - 1].push(tok)
+            }
+            return cells.map((c) => latexToMath(c.join(' '), opts) || '0')
+          })
+        const body = `[${parsed.map((r) => `[${r.join(', ')}]`).join(', ')}]`
+        return env === 'vmatrix' ? `det(${body})` : body
+      }
       case 'int': {
         let lo = ''
         let hi = ''

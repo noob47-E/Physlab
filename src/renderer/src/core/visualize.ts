@@ -3,11 +3,16 @@
 import { Builder } from './factory'
 import { scene } from './store'
 import { add, type V3 } from '../math/vec'
-import type { Solution } from '../math/vectorSolver'
-import type { GraphKind } from './types'
+import { sceneName, type Solution, type VisualVector } from '../math/vectorSolver'
+import type { GraphKind, VectorObj } from './types'
 import { fitCamera } from '../render/viewState'
+import { themeColor } from '../app/theme'
 
 export type DrawStyle = 'head-to-tail' | 'parallelogram' | 'common-tail'
+
+/** The answer is drawn in the warning colour and helpers in the faint one, whichever theme is on. */
+const roleColor = (role: VisualVector['role']): string | undefined =>
+  role === 'result' ? themeColor('--warn', '#ffb84d') : role === 'helper' ? themeColor('--text-faint', '#6c707a') : undefined
 
 // ---------------------------------------------------------------------------
 // Drawing the current answer, not every answer ever asked for
@@ -40,48 +45,53 @@ function remember(tag: string, b: Builder): void {
   )
 }
 
+/**
+ * Draws a worked answer. `style` is only passed when the student chose a layout; otherwise the
+ * solution's own picture is used (a subtraction from a common tail, a sum head-to-tail).
+ *
+ * Every vector that is not an input is drawn from its own components. The parallelogram layout
+ * used to rebuild the result as "A + B" from the title, which drew A + B for a subtraction, a
+ * projection and a relative velocity — the answer card said (1, 5) and the drawing showed (5, 3).
+ */
 export function visualizeSolution(sol: Solution, style?: DrawStyle): void {
   const vis = sol.visual
   if (!vis) return
   clearTagged('solution')
   const b = new Builder()
-  const inputsCount = vis.vectors.filter((v) => v.role === 'input').length
-  let mode = style ?? vis.mode ?? 'common-tail'
-  if (mode === 'parallelogram' && inputsCount !== 2) mode = 'head-to-tail'
   const inputs = vis.vectors.filter((v) => v.role === 'input')
   const others = vis.vectors.filter((v) => v.role !== 'input')
+  let mode = style ?? vis.mode ?? 'common-tail'
+  if (mode === 'parallelogram' && inputs.length !== 2) mode = 'head-to-tail'
+
+  /** One arrow, named so the scene can read it back, helpers kept auxiliary whatever the layout. */
+  const draw = (v: VisualVector, tail: V3): VectorObj => {
+    const obj = b.vector({ kind: 'free', tail, comp: v.drawn ?? v.v }, { name: sceneName(v.name), color: roleColor(v.role), auxiliary: v.role === 'helper' })
+    if (v.note) obj.caption = v.note
+    return obj
+  }
 
   if (mode === 'head-to-tail') {
     let cursor: V3 = [0, 0, 0]
     for (const v of inputs) {
-      b.vector({ kind: 'free', tail: cursor, comp: v.v }, { name: v.name, color: v.color })
+      draw(v, cursor)
       cursor = add(cursor, v.v)
     }
-    for (const v of others) b.vector({ kind: 'free', tail: v.tail ?? [0, 0, 0], comp: v.v }, { name: v.name, color: v.color })
-  } else if (mode === 'parallelogram' && inputs.length === 2) {
+    for (const v of others) draw(v, v.tail ?? [0, 0, 0])
+  } else if (mode === 'parallelogram') {
     const [p, q] = inputs
-    const A = b.vector({ kind: 'free', tail: [0, 0, 0], comp: p.v }, { name: p.name, color: p.color })
-    const B = b.vector({ kind: 'free', tail: [0, 0, 0], comp: q.v }, { name: q.name, color: q.color })
+    const A = draw(p, [0, 0, 0])
+    const B = draw(q, [0, 0, 0])
     // Dashed opposite sides, linked to the originals so dragging keeps the parallelogram.
-    b.vector({ kind: 'placed', vector: B.id, tail: headPoint(b, A.id) }, { name: `${q.name}′`, color: '#868e96', auxiliary: true })
-    b.vector({ kind: 'placed', vector: A.id, tail: headPoint(b, B.id) }, { name: `${p.name}′`, color: '#868e96', auxiliary: true })
-    for (const v of others) {
-      if (v.role === 'result' && sol.title.includes('×')) {
-        b.vector({ kind: 'expr', expr: `cross(${A.name}, ${B.name})` }, { name: v.name, color: v.color })
-      } else if (v.role === 'result') {
-        b.vector({ kind: 'expr', expr: `${A.name} + ${B.name}` }, { name: v.name, color: v.color })
-      } else {
-        b.vector({ kind: 'free', tail: v.tail ?? [0, 0, 0], comp: v.v }, { name: v.name, color: v.color })
-      }
-    }
+    const faint = themeColor('--text-faint', '#6c707a')
+    b.vector({ kind: 'placed', vector: B.id, tail: headPoint(b, A.id) }, { name: `${B.name}_`, color: faint, auxiliary: true })
+    b.vector({ kind: 'placed', vector: A.id, tail: headPoint(b, B.id) }, { name: `${A.name}_`, color: faint, auxiliary: true })
+    for (const v of others) draw(v, v.tail ?? [0, 0, 0])
   } else {
-    for (const v of vis.vectors) {
-      b.vector({ kind: 'free', tail: v.tail ?? [0, 0, 0], comp: v.v }, { name: v.name, color: v.color, auxiliary: v.role === 'helper' })
-    }
+    for (const v of vis.vectors) draw(v, v.tail ?? [0, 0, 0])
   }
   b.commit()
   remember('solution', b)
-  if (vis.vectors.some((v) => Math.abs(v.v[2]) > 1e-9)) scene().setViewMode('3d')
+  if (vis.vectors.some((v) => Math.abs((v.drawn ?? v.v)[2]) > 1e-9)) scene().setViewMode('3d')
   scene().select(b.created.filter((o) => o.type === 'vector' && !o.auxiliary).map((o) => o.id).slice(-1))
   fitCamera()
 }
@@ -121,7 +131,7 @@ export function visualizeTangent(expr: string, a: number, fa: number, slope: num
   const b = new Builder()
   b.graph({ kind: 'explicit', source: `y = ${expr}`, exprs: [expr], showRoots: false, showExtrema: false })
   const tangent = `${fa} + ${slope} * (x - ${a})`
-  b.graph({ kind: 'explicit', source: `tangent at x = ${a}`, exprs: [tangent], width: 1.8 }, { color: '#ffa94d', name: 'tangent' })
+  b.graph({ kind: 'explicit', source: `tangent at x = ${a}`, exprs: [tangent], width: 1.8 }, { color: themeColor('--warn', '#ffb84d'), name: 'tangent' })
   b.point([a, fa, 0], { name: 'T' })
   b.text([a, fa, 0], `slope = ${Number(slope.toPrecision(6))}`, { name: 'slopeText' })
   b.commit()
@@ -134,7 +144,7 @@ export function visualizeArea(expr: string, a: number, bnd: number, label: strin
   clearTagged('calculus')
   const b = new Builder()
   b.graph({ kind: 'explicit', source: `y = ${expr}`, exprs: [expr], showRoots: false, showExtrema: false })
-  b.graph({ kind: 'area', source: label, exprs: [expr], tMin: Math.min(a, bnd), tMax: Math.max(a, bnd) }, { color: '#4dabf7', name: 'area' })
+  b.graph({ kind: 'area', source: label, exprs: [expr], tMin: Math.min(a, bnd), tMax: Math.max(a, bnd) }, { color: themeColor('--accent', '#4f8cff'), name: 'area' })
   b.commit()
   remember('calculus', b)
   scene().setViewMode('2d')

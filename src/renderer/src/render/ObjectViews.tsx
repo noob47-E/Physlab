@@ -12,9 +12,36 @@ import { angleAt, centroid, orientedAngleAt, triangleInfo } from '../math/geomet
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
+import { headingArc } from '../math/vectorSolver'
+import { themeColor, useTheme } from '../app/theme'
 
 const UP = new THREE.Vector3(0, 1, 0)
-const SELECT = '#ffd43b'
+
+/**
+ * The drawing's colours come from the stylesheet so both themes work; every view re-reads them
+ * when the theme flips. Literal hex values here were invisible in the light theme, and WebGPU
+ * compiles a material's colour in, so a colour change must arrive as a new material.
+ */
+function useDrawingColors() {
+  const theme = useTheme((s) => s.theme)
+  return useMemo(
+    () => ({
+      select: themeColor('--warn', '#ffb84d'),
+      xComp: themeColor('--bad', '#ff6b6b'),
+      yComp: themeColor('--good', '#58d68d'),
+      arc: themeColor('--warn', '#ffb84d'),
+      dashed: themeColor('--text-faint', '#6c707a'),
+      outline: themeColor('--bg-0', '#121315'),
+      derived: themeColor('--text-faint', '#6c707a'),
+      strong: themeColor('--text-strong', '#eef0f4')
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme]
+  )
+}
+
+/** Fill colours for the parts of a decomposed shape: evenly spaced hues, no literal hex. */
+const partColor = (i: number): string => `hsl(${(210 + i * 47) % 360}, 70%, 58%)`
 
 export interface ViewProps<T extends SceneObject, C extends Computed> {
   obj: T
@@ -46,18 +73,19 @@ export const PointView = memo(function PointView({ obj, c, selected, hovered, is
     labelAnchors.set(obj.id, { p: pos, dx: 10, dy: -12 })
   })
 
-  const fill = free ? obj.color : '#9aa1ab'
+  const colors = useDrawingColors()
+  const fill = free ? obj.color : colors.derived
   return (
     <group ref={group}>
       {selected && (
         <mesh renderOrder={20}>
           <ringGeometry args={[r + 3, r + 6, 32]} />
-          <meshBasicMaterial color={SELECT} transparent opacity={0.85} depthTest={false} depthWrite={false} />
+          <meshBasicMaterial color={colors.select} transparent opacity={0.85} depthTest={false} depthWrite={false} />
         </mesh>
       )}
       <mesh renderOrder={21}>
         <circleGeometry args={[r + 1.6, 28]} />
-        <meshBasicMaterial color="#0d0e10" depthTest={false} depthWrite={false} />
+        <meshBasicMaterial color={colors.outline} depthTest={false} depthWrite={false} />
       </mesh>
       <mesh renderOrder={22}>
         <circleGeometry args={[r, 28]} />
@@ -158,9 +186,13 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
   useEffect(() => () => pool.dispose(), [pool])
   const wpp = worldPerPixel(camera, size, head)
 
+  const colors = useDrawingColors()
   const showComps = obj.showComponents || selected
   const L = len(comp)
   const theta = heading(comp)
+  // From the +x axis the short way round: a vector at 300° gets a 60° arc below the axis, not
+  // a 300° sweep with the label stranded on the far side.
+  const arc = headingArc(theta)
   const planar = Math.abs(comp[2]) < 1e-9 && Math.abs(tail[2]) < 1e-9
 
   useFrame(({ camera: cam, size: sz }) => {
@@ -189,12 +221,12 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
       if (showComps && planar) {
         const ax = toScreen(cam, sz, [tail[0] + comp[0], tail[1], tail[2]])
         const ay = toScreen(cam, sz, [tail[0], tail[1] + comp[1], tail[2]])
-        pool.place(`${obj.name}x = ${formatMeasure(comp[0], 'length', settings)}`, (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', '#ff8787')
-        pool.place(`${obj.name}y = ${formatMeasure(comp[1], 'length', settings)}`, ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', '#8ce99a')
+        pool.place(`${obj.name}x = ${formatMeasure(comp[0], 'length', settings)}`, (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', colors.xComp)
+        pool.place(`${obj.name}y = ${formatMeasure(comp[1], 'length', settings)}`, ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', colors.yComp)
         if (L > 1e-9) {
-          const mid = theta / 2
+          const mid = arc.mid
           const lp = toScreen(cam, sz, [tail[0] + Math.cos(mid) * 46 * worldPerPixel(cam, sz, tail), tail[1] + Math.sin(mid) * 46 * worldPerPixel(cam, sz, tail), tail[2]])
-          pool.place(`θ`, lp.x, lp.y, 'center', '#ffc078')
+          pool.place(`θ`, lp.x, lp.y, 'center', colors.arc)
         }
       }
     }
@@ -204,18 +236,18 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
   const thick = selected ? 2.4 : hovered ? 2.1 : 1.7
   return (
     <>
-      {selected && <Arrow tail={tail} comp={comp} color={SELECT} is3D={is3D} thick={thick + 2.2} renderOrder={11} headPx={19} headRadPx={8.5} />}
+      {selected && <Arrow tail={tail} comp={comp} color={colors.select} is3D={is3D} thick={thick + 2.2} renderOrder={11} headPx={19} headRadPx={8.5} />}
       <Arrow tail={tail} comp={comp} color={obj.color} is3D={is3D} thick={thick} />
       {showComps && planar && L > 1e-9 && (
         <>
-          <Arrow tail={tail} comp={[comp[0], 0, 0]} color="#ff6b6b" is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
-          <Arrow tail={tail} comp={[0, comp[1], 0]} color="#51cf66" is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
-          <FatLine points={[[tail[0] + comp[0], tail[1], tail[2]], head, [tail[0], tail[1] + comp[1], tail[2]]]} color="#6c727c" width={1.2} dashed dashSize={6 * wpp} gapSize={4 * wpp} renderOrder={7} />
-          <FatLine points={arcPoints(tail, 30 * wpp, 0, theta)} color="#ffa94d" width={1.6} renderOrder={9} />
+          <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
+          <Arrow tail={tail} comp={[0, comp[1], 0]} color={colors.yComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
+          <FatLine points={[[tail[0] + comp[0], tail[1], tail[2]], head, [tail[0], tail[1] + comp[1], tail[2]]]} color={colors.dashed} width={1.2} dashed dashSize={6 * wpp} gapSize={4 * wpp} renderOrder={7} />
+          <FatLine points={arcPoints(tail, 30 * wpp, arc.from, arc.to)} color={colors.arc} width={1.6} renderOrder={9} />
         </>
       )}
       {showComps && !planar && L > 1e-9 && (
-        <FatLine points={[head, [head[0], head[1], tail[2]], tail]} color="#6c727c" width={1.2} dashed dashSize={0.12} gapSize={0.08} renderOrder={7} />
+        <FatLine points={[head, [head[0], head[1], tail[2]], tail]} color={colors.dashed} width={1.2} dashed dashSize={0.12} gapSize={0.08} renderOrder={7} />
       )}
     </>
   )
@@ -227,6 +259,7 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
 
 export const LineLikeView = memo(function LineLikeView({ obj, c, selected, hovered }: ViewProps<SceneObject, Extract<Computed, { type: 'segment' | 'ray' | 'line' }>>) {
   const { camera, size } = useThree()
+  const colors = useDrawingColors()
   const wpp = worldPerPixel(camera, size)
   const big = Math.max(wpp * 40000, 200)
   const { p, d } = c.line
@@ -253,7 +286,7 @@ export const LineLikeView = memo(function LineLikeView({ obj, c, selected, hover
   })
   return (
     <>
-      {selected && <FatLine points={pts} color={SELECT} width={width + 4} renderOrder={4} />}
+      {selected && <FatLine points={pts} color={colors.select} width={width + 4} renderOrder={4} />}
       <FatLine points={pts} color={obj.color} width={width} renderOrder={5} />
     </>
   )
@@ -265,6 +298,7 @@ export const LineLikeView = memo(function LineLikeView({ obj, c, selected, hover
 
 export const CircleView = memo(function CircleView({ obj, c, selected, hovered }: ViewProps<CircleObj, Extract<Computed, { type: 'circle' }>>) {
   const { c: center, r } = c.circle
+  const colors = useDrawingColors()
   const pts = useMemo(() => arcPoints(center, r, 0, Math.PI * 2, 160), [center, r])
   useFrame(() => labelAnchors.set(obj.id, { p: [center[0] + r * Math.SQRT1_2, center[1] + r * Math.SQRT1_2, center[2]], dx: 10, dy: -10 }))
   return (
@@ -275,7 +309,7 @@ export const CircleView = memo(function CircleView({ obj, c, selected, hovered }
           <meshBasicMaterial color={obj.color} transparent opacity={0.12} depthTest={false} depthWrite={false} />
         </mesh>
       )}
-      {selected && <FatLine points={pts} color={SELECT} width={6} renderOrder={4} />}
+      {selected && <FatLine points={pts} color={colors.select} width={6} renderOrder={4} />}
       <FatLine points={pts} color={obj.color} width={hovered ? 2.8 : 2.2} renderOrder={5} />
     </>
   )
@@ -295,6 +329,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
   const { camera, size } = useThree()
+  const colors = useDrawingColors()
   const wpp = worldPerPixel(camera, size, centroid(pts))
 
   const geometry = useMemo(() => {
@@ -324,7 +359,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
         if (pts.length > 3 && ang > Math.PI) bis = scale(bis, -1)
         const w = worldPerPixel(cam, sz, v)
         const lp = toScreen(cam, sz, add(v, scale(bis, 42 * w)))
-        pool.place(formatMeasure(ang, 'angle', settings), lp.x, lp.y, 'center', '#ffc078')
+        pool.place(formatMeasure(ang, 'angle', settings), lp.x, lp.y, 'center', colors.arc)
       })
     }
     pool.end()
@@ -354,13 +389,12 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
       )}
       {obj.decomposed && pts.length >= 3 && <DecomposedParts obj={obj} pts={pts} wpp={wpp} />}
       {arcs.map((a, i) => (
-        <FatLine key={i} points={a} color="#ffa94d" width={1.6} renderOrder={6} />
+        <FatLine key={i} points={a} color={colors.arc} width={1.6} renderOrder={6} />
       ))}
     </>
   )
 })
 
-const PART_COLORS = ['#4dabf7', '#ff922b', '#51cf66', '#cc5de8', '#fcc419', '#22b8cf', '#f06595', '#94d82d']
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 
 /** Right-angle marks where a cut meets a side of the shape at 90°. */
@@ -397,6 +431,7 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
     [objects, dec.newPoints.length]
   )
   const marks = useMemo(() => rightAngleMarks(dec.cuts, pts, 14 * wpp), [dec.cuts, pts, wpp])
+  const colors = useDrawingColors()
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label part-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
   const gap = 4 * wpp
@@ -419,12 +454,12 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
     if (dec.parts.length > 1) {
       dec.parts.forEach((part, i) => {
         const s = toScreen(camera, size, centroid(part.pts))
-        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', PART_COLORS[i % PART_COLORS.length])
+        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', partColor(i))
       })
       // Letters for the corners the cut created.
       dec.newPoints.forEach((p, i) => {
         const s = toScreen(camera, size, p)
-        pool.place(letters[i] ?? '', s.x + 12, s.y - 12, 'center', '#f8f9fa')
+        pool.place(letters[i] ?? '', s.x + 12, s.y - 12, 'center', colors.strong)
       })
     }
     pool.end()
@@ -433,14 +468,14 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
     <>
       {geos.map((g, i) => (
         <mesh key={i} geometry={g} renderOrder={0}>
-          <meshBasicMaterial color={PART_COLORS[i % PART_COLORS.length]} transparent opacity={0.28} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+          <meshBasicMaterial color={partColor(i)} transparent opacity={0.28} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {dec.cuts.map((cut, i) => (
-        <FatLine key={`c${i}`} points={cut} color="#f8f9fa" width={2} dashed dashSize={8 * wpp} gapSize={6 * wpp} renderOrder={7} />
+        <FatLine key={`c${i}`} points={cut} color={colors.strong} width={2} dashed dashSize={8 * wpp} gapSize={6 * wpp} renderOrder={7} />
       ))}
       {marks.map((m, i) => (
-        <FatLine key={`m${i}`} points={m} color="#ffa94d" width={1.6} renderOrder={8} />
+        <FatLine key={`m${i}`} points={m} color={colors.arc} width={1.6} renderOrder={8} />
       ))}
     </>
   )
