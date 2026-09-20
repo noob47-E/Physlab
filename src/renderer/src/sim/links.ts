@@ -4,6 +4,7 @@
 
 import type { BodyDef, Link, LinkKind } from './types'
 import type { V3 } from '../math/vec'
+import { rotateByEuler } from './rotate'
 
 export const LINK_KINDS: LinkKind[] = ['string', 'rod', 'spring', 'rope', 'pulley', 'hinge', 'weld']
 
@@ -24,17 +25,39 @@ export function reachOf(b: BodyDef): number {
 /** Segments a rope of this length is cut into: short enough to bend, few enough to stay stiff. */
 export const ropeSegments = (length: number): number => Math.max(3, Math.min(30, Math.round(length / 0.2)))
 
-/** Where a rope over the wheel leaves its rim: the side nearer each body. */
+const dist = (p: V3, q: V3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
+
+/**
+ * Where a rope over the wheel leaves its rim: the side nearer each body.
+ *
+ * The rim points are ±r along the wheel's own x axis, turned by its rotation. They used to be
+ * ±r along world x, so a wheel turned to face another way had its rope leaving from the middle
+ * of its face instead of its rim.
+ */
 export function pulleyRim(wheel: BodyDef, posA: V3, posB: V3): { p1: V3; p2: V3 } {
   const r = wheel.size[0]
   const w = wheel.position
-  const aLeft = posA[0] <= posB[0]
-  const left: V3 = [w[0] - r, w[1], w[2]]
-  const right: V3 = [w[0] + r, w[1], w[2]]
-  return aLeft ? { p1: left, p2: right } : { p1: right, p2: left }
+  const arm = rotateByEuler(wheel.rotation, [r, 0, 0])
+  const one: V3 = [w[0] + arm[0], w[1] + arm[1], w[2] + arm[2]]
+  const other: V3 = [w[0] - arm[0], w[1] - arm[1], w[2] - arm[2]]
+  // Whichever assignment keeps the two straight runs shortest is the one that does not cross.
+  const straight = dist(posA, one) + dist(posB, other)
+  const crossed = dist(posA, other) + dist(posB, one)
+  return straight <= crossed ? { p1: one, p2: other } : { p1: other, p2: one }
 }
 
-const dist = (p: V3, q: V3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
+/**
+ * Mass of each link of a rope carrying `loads` (the dynamic bodies it ties to), cut into `n`
+ * segments. A rope that weighs a tenth of what it carries hangs and swings like one; far lighter
+ * and the solver loses the fight against the mass ratio and the rope stretches. The old rule
+ * capped the whole rope at 5 kg, so under a heavy load it stretched anyway — the floor at a
+ * twentieth of the lightest load is what keeps the ratio the solver can hold.
+ */
+export function ropeLinkMass(loads: number[], n: number): number {
+  const lightest = loads.length ? Math.min(...loads) : 4
+  const total = Math.max(lightest / 20, Math.min(5, 0.1 * lightest))
+  return Math.max(0.02, total / Math.max(1, n))
+}
 
 /**
  * A link between a and b of the given kind, sized from where the bodies are now (the live

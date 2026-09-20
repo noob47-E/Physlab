@@ -3,9 +3,11 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { grabForceCap, SimWorld } from '../src/renderer/src/sim/world'
-import { DEFAULT_SIZE, halfHeight, spawnAt, startingScene, useSandbox } from '../src/renderer/src/sim/store'
+import { DEFAULT_MASS, DEFAULT_SIZE, halfHeight, makeBody, massOf, spawnAt, startingScene, useSandbox } from '../src/renderer/src/sim/store'
 import { shapeVolume } from '../src/renderer/src/sim/materials'
-import { DEFAULT_WORLD, type BodyDef, type WorldSettings } from '../src/renderer/src/sim/types'
+import { DEFAULT_WORLD, type BodyDef, type ShapeKind, type WorldSettings } from '../src/renderer/src/sim/types'
+import { PRESETS, START_PRESET_ID, startPreset } from '../src/renderer/src/sim/presets'
+import { ALWAYS_SHOWN, connectionsProminent, FOLD_OF, joinCandidates, readFold, writeFold, type FoldStore } from '../src/renderer/src/sim/inspector'
 
 const G = 9.81
 let n = 0
@@ -205,5 +207,76 @@ describe('the sandbox store', () => {
     expect(useSandbox.getState().recording).toEqual({})
     expect(useSandbox.getState().engineTime).toBe(0)
     expect(useSandbox.getState().runNonce).toBe(1)
+  })
+})
+
+describe('classroom-scale masses', () => {
+  const inRange = (kg: number) => kg >= 0.5 && kg <= 10
+
+  it('a new ball weighs a kilogram, not half a tonne', () => {
+    // Steel at r = 0.25 m is 514 kg — real, and alien to anyone who has lifted a ball. The size
+    // is for seeing; the mass is the textbook's, and "from density" is still one click away.
+    expect(massOf(makeBody('sphere', 'A'))).toBe(1)
+    expect(massOf(makeBody('box', 'B'))).toBe(2)
+    for (const shape of Object.keys(DEFAULT_MASS) as ShapeKind[]) expect(inRange(DEFAULT_MASS[shape]), shape).toBe(true)
+    for (const b of startingScene().filter((b) => b.motion === 'dynamic')) expect(inRange(massOf(b)), b.name).toBe(true)
+  })
+
+  it('every preset moves things a student could lift', () => {
+    for (const p of PRESETS) {
+      for (const b of p.build().bodies.filter((b) => b.motion === 'dynamic')) expect(inRange(massOf(b)), `${p.id}: ${b.name} ${massOf(b)} kg`).toBe(true)
+    }
+  })
+
+  it('"Start here" is one ball on one floor, in the list first', () => {
+    const p = startPreset()
+    expect(p.id).toBe(START_PRESET_ID)
+    expect(PRESETS[0].id).toBe(START_PRESET_ID)
+    const built = p.build()
+    expect(built.bodies.filter((b) => b.motion === 'dynamic')).toHaveLength(1)
+    expect(built.bodies.some((b) => b.shape === 'ground')).toBe(true)
+    expect(built.links ?? []).toHaveLength(0)
+  })
+})
+
+describe('the inspector shows five rows and folds the rest', () => {
+  it('names the five and files every other control under a fold', () => {
+    expect([...ALWAYS_SHOWN]).toEqual(['name', 'material', 'mass', 'position', 'velocity'])
+    for (const k of ALWAYS_SHOWN) expect(FOLD_OF[k]).toBeUndefined()
+    expect(FOLD_OF.friction).toBe('physics')
+    expect(FOLD_OF.trace).toBe('appearance')
+    expect(FOLD_OF.linearDamping).toBe('advanced')
+  })
+
+  it('remembers whether a fold was open, and copes with no storage at all', () => {
+    const memory = new Map<string, string>()
+    const store: FoldStore = { getItem: (k) => memory.get(k) ?? null, setItem: (k, v) => void memory.set(k, v) }
+    expect(readFold('physics', false, store)).toBe(false)
+    writeFold('physics', true, store)
+    expect(readFold('physics', false, store)).toBe(true)
+    writeFold('physics', false, store)
+    expect(readFold('physics', true, store)).toBe(false)
+    expect(readFold('advanced', true, null)).toBe(true)
+    const broken: FoldStore = {
+      getItem: () => {
+        throw new Error('blocked')
+      },
+      setItem: () => {
+        throw new Error('blocked')
+      }
+    }
+    expect(readFold('launcher', true, broken)).toBe(true)
+    expect(() => writeFold('launcher', true, broken)).not.toThrow()
+  })
+
+  it('brings Connections forward only while two different objects are chosen', () => {
+    expect(connectionsProminent('a', 'b')).toBe(true)
+    expect(connectionsProminent('a', null)).toBe(false)
+    expect(connectionsProminent(null, 'b')).toBe(false)
+    expect(connectionsProminent('a', 'a')).toBe(false)
+    const bodies = startingScene()
+    const [floor, ball, crate] = bodies
+    expect(joinCandidates(bodies, ball.id).map((b) => b.id)).toEqual([crate.id])
+    expect(joinCandidates(bodies, null).map((b) => b.id)).not.toContain(floor.id)
   })
 })

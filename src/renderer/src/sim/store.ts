@@ -28,6 +28,11 @@ export interface SandboxState {
   bodies: BodyDef[]
   world: WorldSettings
   selection: BodyId | null
+  /**
+   * A second chosen body, to join to the first. Shift-click picks it, in the viewport or the
+   * list; the Connections section comes to the front while a pair is chosen.
+   */
+  partner: BodyId | null
   /** Last collisions, newest first, for the log panel. */
   contacts: ContactEvent[]
   /** Set by the viewport so panels can show live values. */
@@ -57,6 +62,7 @@ export interface SandboxState {
   updateBody: (id: BodyId, patch: Partial<BodyDef>) => void
   removeBody: (id: BodyId) => void
   select: (id: BodyId | null) => void
+  setPartner: (id: BodyId | null) => void
   setWorld: (patch: Partial<WorldSettings>) => void
   pushContacts: (c: ContactEvent[]) => void
   clearContacts: () => void
@@ -95,6 +101,25 @@ export const DEFAULT_SIZE: Record<ShapeKind, [number, number, number]> = {
   pulley: [0.3, 0.15, 0.3],
   // Forty metres looked generous and was not: a ball on ice left it in seconds and fell for ever.
   ground: [200, 0.4, 200]
+}
+
+/**
+ * What a new object weighs, in kg. Worked out from the material it would be 514 kg for the
+ * default steel ball and 151 kg for the wooden crate — real for those sizes, and alien to
+ * anyone whose intuition comes from lifting things. The sizes are for seeing; the masses are
+ * the ones in the textbook. "From density" is still one click away.
+ */
+export const DEFAULT_MASS: Record<ShapeKind, number> = {
+  box: 2,
+  sphere: 1,
+  cylinder: 2,
+  capsule: 1,
+  cone: 1,
+  ramp: 10,
+  plank: 2,
+  wall: 10,
+  ground: 10,
+  pulley: 1
 }
 
 const DEFAULT_MATERIAL: Record<ShapeKind, string> = {
@@ -165,8 +190,8 @@ export function makeBody(shape: ShapeKind, name: string, at: [number, number, nu
     angularVelocity: [0, 0, 0],
     motion: fixed ? 'static' : 'dynamic',
     material: material.id,
-    massMode: 'density',
-    mass: 1,
+    massMode: 'mass',
+    mass: DEFAULT_MASS[shape],
     restitution: material.restitution,
     friction: material.friction,
     linearDamping: 0,
@@ -196,6 +221,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   bodies: startingScene(),
   world: { ...DEFAULT_WORLD },
   selection: null,
+  partner: null,
   contacts: [],
   engineTime: 0,
   live: {},
@@ -243,11 +269,14 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       bodies,
       links: get().links.filter((l) => l.a !== id && l.b !== id),
       selection: get().selection === id ? null : get().selection,
+      partner: get().partner === id ? null : get().partner,
       recording: prune(get().recording, bodies),
       live: prune(get().live, bodies)
     })
   },
-  select: (selection) => set({ selection }),
+  // Choosing nothing, or choosing the partner itself, ends the pair.
+  select: (selection) => set({ selection, partner: selection === null || selection === get().partner ? null : get().partner }),
+  setPartner: (partner) => set({ partner: partner === get().selection ? null : partner }),
   setWorld: (patch) => set({ world: { ...get().world, ...patch } }),
   pushContacts: (c) => (c.length ? set({ contacts: [...c].reverse().concat(get().contacts).slice(0, 60) }) : undefined),
   clearContacts: () => set({ contacts: [] }),
@@ -260,6 +289,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       world: { ...get().world, ...world },
       links: links ?? [],
       selection: null,
+      partner: null,
       contacts: [],
       recording: {},
       live: {},
@@ -310,13 +340,13 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     const { past, future, bodies, links } = get()
     const back = past[past.length - 1]
     if (!back) return
-    set({ bodies: back.bodies, links: back.links, past: past.slice(0, -1), future: [...future, { bodies, links }], selection: null })
+    set({ bodies: back.bodies, links: back.links, past: past.slice(0, -1), future: [...future, { bodies, links }], selection: null, partner: null })
   },
   redo: () => {
     const { past, future, bodies, links } = get()
     const next = future[future.length - 1]
     if (!next) return
-    set({ bodies: next.bodies, links: next.links, future: future.slice(0, -1), past: [...past, { bodies, links }], selection: null })
+    set({ bodies: next.bodies, links: next.links, future: future.slice(0, -1), past: [...past, { bodies, links }], selection: null, partner: null })
   },
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
@@ -330,6 +360,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       world: { ...DEFAULT_WORLD, ...(file?.world ?? {}) },
       sideView: file?.sideView ?? true,
       selection: null,
+      partner: null,
       contacts: [],
       recording: {},
       live: {},

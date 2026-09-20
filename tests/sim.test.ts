@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
 import type { BodyDef, BodyState, Link, WorldSettings } from '../src/renderer/src/sim/types'
 import { energyOf, systemEnergy, systemMomentum } from '../src/renderer/src/sim/energy'
-import { launchVelocity, PRESETS } from '../src/renderer/src/sim/presets'
+import { launchVelocity, presetById, PRESETS } from '../src/renderer/src/sim/presets'
 import { addSample, MAX_SAMPLES, RECORDING_COLUMNS, rowsFor, sampleOf, type Sample } from '../src/renderer/src/sim/recording'
 import type { V3 } from '../src/renderer/src/math/vec'
 
@@ -433,6 +433,22 @@ describe('setting up an experiment', () => {
     const first = PRESETS[0].build().bodies
     const second = PRESETS[0].build().bodies
     expect(first[0].id).not.toBe(second[0].id)
+  })
+
+  it('the pulley lift does what its label says: (4 − 3) g / 7 = 1.4 m/s²', async () => {
+    // The preset used to lift 30 kg with 40 kg — the same sum, at masses no one has carried.
+    const p = presetById('lift')!
+    const built = p.build()
+    const world = await makeWorld({ ...built.world })
+    world.rebuild(built.bodies, built.links ?? [])
+    const weight = built.bodies.find((b) => b.name === 'Weight')!
+    const crate = built.bodies.find((b) => b.name === 'Crate')!
+    run(world, 0.5)
+    const expected = 0.5 * ((4 - 3) * G / 7) * 0.25
+    expect(weight.position[1] - world.state(weight.id)!.position[1]).toBeGreaterThan(expected * 0.8)
+    expect(weight.position[1] - world.state(weight.id)!.position[1]).toBeLessThan(expected * 1.2)
+    expect(world.state(crate.id)!.position[1]).toBeGreaterThan(crate.position[1] + expected * 0.8)
+    world.destroy()
   })
 
   it('holds a body to one axis', async () => {

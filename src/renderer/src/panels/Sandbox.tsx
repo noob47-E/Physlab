@@ -1,14 +1,15 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
+import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, SkipForward, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
-import { launchVelocity, PRESETS } from '../sim/presets'
+import { launchVelocity, PRESETS, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
+import { connectionsProminent, FOLD_TITLES, joinCandidates, readFold, writeFold, type FoldId, type FoldStore } from '../sim/inspector'
 import { QUANTITIES, quantity, RECORDING_COLUMNS, rowsFor, type QuantityKey, type Sample } from '../sim/recording'
 import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
@@ -131,15 +132,28 @@ function Slider({ label, title, value, min, max, step, onChange, digits = 2 }: {
   )
 }
 
-/** A section a student can fold away; the rarely touched settings start folded. */
-function Fold({ title, open: initial = false, children }: { title: string; open?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(initial)
+const foldStore = (): FoldStore | null => (typeof localStorage === 'undefined' ? null : localStorage)
+
+/**
+ * A section a student can fold away. Whether it is open is remembered between sessions, so a
+ * student who always wants the launcher never has to open it twice. `force` holds it open and
+ * lit, for the moment it is the thing they need (Connections, once two objects are chosen).
+ */
+function Fold({ id, title, open: fallback = false, force = false, children }: { id: FoldId; title?: string; open?: boolean; force?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(() => readFold(id, fallback, foldStore()))
+  const shown = force || open
   return (
     <>
-      <button className="section-title mt-1 w-full text-left" onClick={() => setOpen(!open)}>
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {title}
+      <button
+        className={`section-title mt-1 w-full text-left ${force ? 'text-[color:var(--accent)]' : ''}`}
+        onClick={() => {
+          setOpen(!open)
+          writeFold(id, !open, foldStore())
+        }}
+      >
+        {shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {title ?? FOLD_TITLES[id]}
       </button>
-      {open && children}
+      {shown && children}
     </>
   )
 }
@@ -147,11 +161,13 @@ function Fold({ title, open: initial = false, children }: { title: string; open?
 export function Sandbox() {
   const bodies = useSandbox((s) => s.bodies)
   const selection = useSandbox((s) => s.selection)
+  const partner = useSandbox((s) => s.partner)
   const live = useSandbox((s) => s.live)
   const add = useSandbox((s) => s.addBody)
   const update = useSandbox((s) => s.updateBody)
   const remove = useSandbox((s) => s.removeBody)
   const select = useSandbox((s) => s.select)
+  const setPartner = useSandbox((s) => s.setPartner)
   const playing = useScene((s) => s.playing)
   const num = useNum()
   const sel = bodies.find((b) => b.id === selection)
@@ -184,12 +200,18 @@ export function Sandbox() {
 
       {bodies.map((b) => {
         const chosen = b.id === selection
+        const paired = b.id === partner
         const asleep = playing && live[b.id]?.asleep && b.motion === 'dynamic'
         return (
           <div
             key={b.id}
             className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${chosen ? 'bg-[var(--sel-row)]' : 'hover:bg-[var(--bg-3)]'}`}
-            onClick={() => select(chosen ? null : b.id)}
+            title={selection && !chosen ? 'Click to select; Shift+click to join it to the selected object' : undefined}
+            onClick={(e) => {
+              // Shift-click chooses the second object of a pair, the same as in the viewport.
+              if (e.shiftKey && selection && !chosen && b.shape !== 'ground') setPartner(paired ? null : b.id)
+              else select(chosen ? null : b.id)
+            }}
           >
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: b.color }} />
             <span className="w-14 shrink-0 truncate font-semibold text-[color:var(--text-strong)]">{b.name}</span>
@@ -198,6 +220,7 @@ export function Sandbox() {
                   ground weigh nine tonnes?" — for a static body the mass means nothing. */}
               {b.shape} {b.motion === 'static' ? '· fixed' : `· ${num(massOf(b), 'kg')}`}
               {asleep && <span title="At rest: the engine has let it settle. Drag it or press Reset to wake it."> · asleep</span>}
+              {paired && <span className="text-[color:var(--accent)]"> · joining</span>}
             </span>
             <button
               className="hidden text-[color:var(--text-dim)] hover:text-[color:var(--bad)] group-hover:block"
@@ -215,7 +238,7 @@ export function Sandbox() {
 
       {sel && <Selected sel={sel} live={playing ? (live[sel.id] ?? null) : null} update={update} />}
 
-      <Connections selected={selection} />
+      <Connections selected={selection} partner={partner} />
       <EnergyReadout />
       <Recording />
       <Collisions />
@@ -252,6 +275,17 @@ function Transport() {
       >
         <RotateCcw size={13} /> Reset
       </button>
+      <button
+        className="icon-btn"
+        onClick={() => {
+          setPlaying(false)
+          engine.world?.step(1 / 60)
+          useSandbox.setState({ engineTime: engine.world?.time ?? 0 })
+        }}
+        title="Step one frame (1/60 s)"
+      >
+        <SkipForward size={13} />
+      </button>
       <button className="icon-btn" disabled={past.length === 0} onClick={undo} title="Undo the last change to the objects (Ctrl+Z)">
         <Undo2 size={13} />
       </button>
@@ -270,6 +304,7 @@ function Transport() {
 
 function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null; update: (id: string, patch: Partial<BodyDef>) => void }) {
   const num = useNum()
+  const moves = sel.motion === 'dynamic'
   return (
     <>
       <div className="section-title mt-2 flex items-center">
@@ -284,6 +319,9 @@ function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null;
           Put back
         </button>
       </div>
+      {/* Five rows at first sight — the ones every mechanics question is about. The rest of the
+          twenty-odd controls sit under folds below, where the student who wants them finds them
+          and the one who does not never has to read past them. */}
       <div className="prop-row">
         <label>Name</label>
         <input className="field" value={sel.name} onChange={(e) => update(sel.id, { name: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
@@ -298,74 +336,95 @@ function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null;
           ))}
         </select>
       </div>
-      <div className="prop-row">
-        <label>Mass</label>
-        <div className="flex items-center gap-2">
-          <div className="seg">
-            <button className={sel.massMode === 'density' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'density' })} title="Work the mass out from the material and the size">
-              from density
-            </button>
-            {/* "set it" left you asking "set what?" */}
-            <button className={sel.massMode === 'mass' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'mass' })} title="Type the mass yourself">
-              type it
-            </button>
-          </div>
-          {sel.massMode === 'mass' ? <NumField value={sel.mass} onChange={(mass) => update(sel.id, { mass })} /> : <span className="tabular-nums text-[color:var(--text)]">{num(massOf(sel), 'kg')}</span>}
-        </div>
-      </div>
-      <SizeRow sel={sel} onChange={(size) => update(sel.id, { size })} />
-      <Vec3Row label="Position" unit="m" value={sel.position} live={live?.position ?? null} onChange={(position) => update(sel.id, { position })} />
-      <Vec3Row label="Rotation" unit="°" value={sel.rotation} onChange={(rotation) => update(sel.id, { rotation })} />
-      {sel.motion === 'dynamic' && <Vec3Row label="Velocity" unit="m/s" value={sel.velocity} live={live?.velocity ?? null} onChange={(velocity) => update(sel.id, { velocity })} />}
-      <Slider label="Bounciness e" value={sel.restitution} min={0} max={1} step={0.01} onChange={(restitution) => update(sel.id, { restitution })} />
-      <Slider label="Friction μ" value={sel.friction} min={0} max={1.5} step={0.01} onChange={(friction) => update(sel.id, { friction })} />
-      <div className="prop-row">
-        <label>Motion</label>
-        <div className="seg">
-          {(
-            [
-              ['dynamic', 'Moves'],
-              ['static', 'Fixed']
-            ] as const
-          ).map(([k, l]) => (
-            <button key={k} className={sel.motion === k ? 'on' : ''} onClick={() => update(sel.id, { motion: k })}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="prop-row">
-        <label>Show</label>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={!!sel.showArrows} onChange={(e) => update(sel.id, { showArrows: e.target.checked })} /> velocity arrow
-          </label>
-          <label className="flex items-center gap-1.5" title="Draw the path it takes, so a projectile leaves its parabola behind">
-            <input type="checkbox" checked={!!sel.trace} onChange={(e) => update(sel.id, { trace: e.target.checked })} /> trail
-          </label>
-        </div>
-      </div>
-      {sel.motion === 'dynamic' && (
+      {moves && (
         <div className="prop-row">
-          <label title="Hold it to one direction, the way a trolley is held to a track">Moves along</label>
+          <label>Mass</label>
+          <div className="flex items-center gap-2">
+            <div className="seg">
+              <button className={sel.massMode === 'density' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'density' })} title="Work the mass out from the material and the size">
+                from density
+              </button>
+              {/* "set it" left you asking "set what?" */}
+              <button className={sel.massMode === 'mass' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'mass' })} title="Type the mass yourself">
+                type it
+              </button>
+            </div>
+            {sel.massMode === 'mass' ? <NumField value={sel.mass} onChange={(mass) => update(sel.id, { mass: Math.max(0.001, mass) })} /> : <span className="tabular-nums text-[color:var(--text)]">{num(massOf(sel), 'kg')}</span>}
+          </div>
+        </div>
+      )}
+      <Vec3Row label="Position" unit="m" value={sel.position} live={live?.position ?? null} onChange={(position) => update(sel.id, { position })} />
+      {moves && <Vec3Row label="Velocity" unit="m/s" value={sel.velocity} live={live?.velocity ?? null} onChange={(velocity) => update(sel.id, { velocity })} />}
+
+      {moves && (
+        <Fold id="launcher">
+          <Launcher id={sel.id} />
+        </Fold>
+      )}
+
+      <Fold id="appearance">
+        <div className="prop-row">
+          <label>Colour</label>
+          <div className="flex items-center gap-2">
+            <input type="color" className="h-6 w-10 cursor-pointer rounded border border-[color:var(--line-2)] bg-transparent" value={sel.color} onChange={(e) => update(sel.id, { color: e.target.value })} title="Its own colour; choosing a material sets it back" />
+            <span className="text-[11.5px] text-[color:var(--text-faint)]">{materialById(sel.material).color === sel.color ? `the colour of ${materialById(sel.material).label.toLowerCase()}` : 'custom'}</span>
+          </div>
+        </div>
+        <div className="prop-row">
+          <label>Show</label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={!!sel.showArrows} onChange={(e) => update(sel.id, { showArrows: e.target.checked })} /> velocity arrow
+            </label>
+            <label className="flex items-center gap-1.5" title="Draw the path it takes, so a projectile leaves its parabola behind">
+              <input type="checkbox" checked={!!sel.trace} onChange={(e) => update(sel.id, { trace: e.target.checked })} /> trail
+            </label>
+          </div>
+        </div>
+      </Fold>
+
+      <Fold id="physics">
+        <SizeRow sel={sel} onChange={(size) => update(sel.id, { size })} />
+        <Vec3Row label="Rotation" unit="°" value={sel.rotation} onChange={(rotation) => update(sel.id, { rotation })} />
+        <div className="prop-row">
+          <label>Motion</label>
           <div className="seg">
             {(
               [
-                ['free', 'Any way'],
-                ['x', 'x only'],
-                ['y', 'y only']
+                ['dynamic', 'Moves'],
+                ['static', 'Fixed']
               ] as const
             ).map(([k, l]) => (
-              <button key={k} className={(sel.lock ?? 'free') === k ? 'on' : ''} onClick={() => update(sel.id, { lock: k })}>
+              <button key={k} className={sel.motion === k ? 'on' : ''} onClick={() => update(sel.id, { motion: k })}>
                 {l}
               </button>
             ))}
           </div>
         </div>
-      )}
-      {sel.motion === 'dynamic' && <Launcher id={sel.id} />}
-      <Fold title="More about this object">
-        {sel.motion === 'dynamic' && <Vec3Row label="Spin" unit="rad/s" value={sel.angularVelocity} live={live?.angularVelocity ?? null} onChange={(angularVelocity) => update(sel.id, { angularVelocity })} />}
+        <Slider label="Bounciness e" value={sel.restitution} min={0} max={1} step={0.01} onChange={(restitution) => update(sel.id, { restitution })} />
+        <Slider label="Friction μ" value={sel.friction} min={0} max={1.5} step={0.01} onChange={(friction) => update(sel.id, { friction })} />
+      </Fold>
+
+      <Fold id="advanced">
+        {moves && <Vec3Row label="Spin" unit="rad/s" value={sel.angularVelocity} live={live?.angularVelocity ?? null} onChange={(angularVelocity) => update(sel.id, { angularVelocity })} />}
+        {moves && (
+          <div className="prop-row">
+            <label title="Hold it to one direction, the way a trolley is held to a track">Moves along</label>
+            <div className="seg">
+              {(
+                [
+                  ['free', 'Any way'],
+                  ['x', 'x only'],
+                  ['y', 'y only']
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} className={(sel.lock ?? 'free') === k ? 'on' : ''} onClick={() => update(sel.id, { lock: k })}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {/* The engine has applied drag since the first version, using a default for the shape. A
             student matching a textbook figure needs to be able to set it. */}
         <Slider label="Air drag Cd" value={sel.dragCd ?? dragCoefficient(sel.shape)} min={0} max={1.5} step={0.01} onChange={(dragCd) => update(sel.id, { dragCd })} />
@@ -443,7 +502,7 @@ function WorldSection() {
           ))}
         </div>
       </div>
-      <Fold title="More about the world">
+      <Fold id="world-more">
         <div className="prop-row">
           <label>2D mode</label>
           <input type="checkbox" checked={world.twoD} title="Hold everything in one flat plane, the way textbook problems are drawn" onChange={(e) => setWorld({ twoD: e.target.checked })} />
@@ -532,7 +591,7 @@ function Collisions() {
   const shown = contacts.filter((c) => c.approachSpeed > 0.05).slice(0, 6)
   if (!shown.length) return null
   return (
-    <Fold title={`Collisions · ${contacts.length}`}>
+    <Fold id="collisions" title={`Collisions · ${contacts.length}`}>
       {shown.map((c, i) => (
         <div key={i} className="flex items-center gap-2 px-3 text-[11.5px] text-[color:var(--text-dim)]">
           <span className="w-16 tabular-nums">t = {num(c.t)} s</span>
@@ -556,25 +615,26 @@ function Presets() {
   const setScene = useSandbox((s) => s.setScene)
   const setPlaying = useScene((s) => s.setPlaying)
   const [open, setOpen] = useState(false)
+  const load = (p: Preset) => {
+    const built = p.build()
+    setPlaying(false)
+    setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
+    setOpen(false)
+  }
   return (
     <div className="px-2 pb-1">
-      <button className="btn h-7 w-full justify-start" onClick={() => setOpen((v) => !v)} title="Ready-made experiments">
+      {/* One ball, one floor, one Play button: the first thing to press, before any list. */}
+      <button className="btn primary h-7 w-full justify-start" onClick={() => load(startPreset())} title={startPreset().about}>
+        <Play size={13} /> Start here: {startPreset().label.toLowerCase()}
+      </button>
+      <button className="btn mt-1 h-7 w-full justify-start" onClick={() => setOpen((v) => !v)} title="Ready-made experiments">
         <Beaker size={13} /> Start from an experiment
         <ChevronDown size={13} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="mt-1 flex flex-col gap-1">
           {PRESETS.map((p) => (
-            <button
-              key={p.id}
-              className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]"
-              onClick={() => {
-                const built = p.build()
-                setPlaying(false)
-                setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
-                setOpen(false)
-              }}
-            >
+            <button key={p.id} className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]" onClick={() => load(p)}>
               <div className="font-semibold text-[color:var(--text-strong)]">{p.label}</div>
               <div className="text-[11.5px] leading-snug text-[color:var(--text-dim)]">{p.about}</div>
             </button>
@@ -619,29 +679,30 @@ function Launcher({ id }: { id: string }) {
  * Joining two objects. A pendulum and a spring-mass system are half of school mechanics and
  * neither was possible before: there was no way to connect anything to anything.
  */
-function Connections({ selected }: { selected: string | null }) {
+function Connections({ selected, partner }: { selected: string | null; partner: string | null }) {
   const bodies = useSandbox((s) => s.bodies)
   const links = useSandbox((s) => s.links)
   const addLink = useSandbox((s) => s.addLink)
   const updateLink = useSandbox((s) => s.updateLink)
   const removeLink = useSandbox((s) => s.removeLink)
-  const [to, setTo] = useState('')
+  const setPartner = useSandbox((s) => s.setPartner)
   const [kind, setKind] = useState<LinkKind>('string')
   const [over, setOver] = useState('')
   const name = (id: string) => bodies.find((b) => b.id === id)?.name ?? '?'
-  const others = bodies.filter((b) => b.id !== selected && b.shape !== 'ground')
-  const target = others.some((b) => b.id === to) ? to : ''
+  const others = joinCandidates(bodies, selected)
+  // The partner is the store's, so a shift-click in the viewport and this dropdown agree.
+  const target = others.some((b) => b.id === partner) ? partner! : ''
   const wheels = bodies.filter((b) => b.shape === 'pulley')
   const wheel = wheels.some((b) => b.id === over) ? over : (wheels[0]?.id ?? '')
+  const prominent = connectionsProminent(selected, partner)
 
   return (
-    <>
-      <div className="section-title mt-2">Connections</div>
+    <Fold id="connections" open force={prominent}>
       {selected ? (
-        <div className="prop-row">
-          <label>Join to</label>
+        <div className={`prop-row ${prominent ? 'mx-1 rounded-md border border-[color:var(--accent)]' : ''}`}>
+          <label>Join {name(selected)} to</label>
           <div className="flex flex-wrap items-center gap-1">
-            <select className="field w-auto" value={target} onChange={(e) => setTo(e.target.value)}>
+            <select className="field w-auto" value={target} onChange={(e) => setPartner(e.target.value || null)}>
               <option value="">choose…</option>
               {others.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -667,19 +728,20 @@ function Connections({ selected }: { selected: string | null }) {
               </select>
             )}
             <button
-              className="btn"
+              className={`btn ${prominent ? 'primary' : ''}`}
               disabled={!target || (kind === 'pulley' && !wheel)}
               onClick={() => {
-                if (target && addLink(selected, target, kind, kind === 'pulley' ? wheel : undefined)) setTo('')
+                if (target && addLink(selected, target, kind, kind === 'pulley' ? wheel : undefined)) setPartner(null)
               }}
               title={LINK_LABELS[kind]}
             >
               <Link2 size={12} /> Join
             </button>
+            {!target && <div className="w-full pt-0.5 text-[11px] text-[color:var(--text-faint)]">Or Shift+click the second object.</div>}
           </div>
         </div>
       ) : (
-        <div className="px-3 pb-1 text-[11.5px] text-[color:var(--text-faint)]">Pick an object to join it to another one.</div>
+        <div className="px-3 pb-1 text-[11.5px] text-[color:var(--text-faint)]">Pick an object, then Shift+click another to join them.</div>
       )}
 
       {links.map((l) => (
@@ -708,7 +770,7 @@ function Connections({ selected }: { selected: string | null }) {
           </div>
         </div>
       ))}
-    </>
+    </Fold>
   )
 }
 

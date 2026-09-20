@@ -51,8 +51,24 @@ const ball = (name: string, at: [number, number, number], over: Partial<BodyDef>
 
 const VACUUM = { airDensity: 0 }
 
+/**
+ * The experiment "Start here" loads: one ball, one floor, nothing to set up. A student who has
+ * never seen a simulator presses Play and something happens; every other preset is a step up.
+ */
+export const START_PRESET_ID = 'fall'
+
 export const PRESETS: Preset[] = [
   // ---------------------------------------------------------------- motion
+  {
+    id: START_PRESET_ID,
+    label: 'Drop a ball',
+    topic: 'Motion',
+    about: 'A 1 kg ball let go from 5 m. Press Play: it lands after √(2h/g) = 1.01 s at √(2gh) = 9.9 m/s. Read t off the clock.',
+    build: () => ({
+      bodies: [floor(), ball('A', [0, 5, 0], { size: [0.25, 0.25, 0.25], restitution: 0.3 })],
+      world: VACUUM
+    })
+  },
   {
     id: 'projectile',
     label: 'Projectile',
@@ -77,9 +93,9 @@ export const PRESETS: Preset[] = [
     id: 'drop',
     label: 'Free fall',
     topic: 'Motion',
-    about: 'Two very different masses, dropped together from 6 m. In a vacuum they land together after √(2h/g) = 1.11 s — switch the air back on and see what changes.',
+    about: 'A 5 kg ball and a 0.5 kg ball, dropped together from 6 m. In a vacuum they land together after √(2h/g) = 1.11 s — switch the air back on and see what changes.',
     build: () => ({
-      bodies: [floor(), put('sphere', 'Heavy', [-1, 6, 0], { size: [0.25, 0.25, 0.25], material: 'lead', trace: true }), put('sphere', 'Light', [1, 6, 0], { size: [0.25, 0.25, 0.25], material: 'foam', trace: true })],
+      bodies: [floor(), ball('Heavy', [-1, 6, 0], { size: [0.25, 0.25, 0.25], mass: 5, material: 'lead' }), ball('Light', [1, 6, 0], { size: [0.25, 0.25, 0.25], mass: 0.5, material: 'foam' })],
       world: VACUUM
     })
   },
@@ -97,9 +113,9 @@ export const PRESETS: Preset[] = [
     id: 'terminal',
     label: 'Terminal velocity',
     topic: 'Motion',
-    about: 'A foam ball falls 30 m through air. Watch the speed stop rising near √(2mg / ρ C_d A) ≈ 20 m/s.',
+    about: 'A 0.8 kg foam ball falls 30 m through air. Watch the speed stop rising near √(2mg / ρ C_d A) ≈ 20 m/s.',
     build: () => ({
-      bodies: [floor(), put('sphere', 'Foam', [0, 30, 0], { size: [0.15, 0.15, 0.15], material: 'foam', trace: true })],
+      bodies: [floor(), ball('Foam', [0, 30, 0], { size: [0.15, 0.15, 0.15], mass: 0.8, material: 'foam' })],
       world: { airDensity: 1.225 }
     })
   },
@@ -169,11 +185,11 @@ export const PRESETS: Preset[] = [
     id: 'lift',
     label: 'Lifting with a pulley',
     topic: 'Forces',
-    about: 'A 40 kg weight lifts a 30 kg crate off the floor. The pair accelerates at (40 − 30) g / 70 = 1.4 m/s²; the rope carries 30 × (g + a) = 336 N.',
+    about: 'A 4 kg weight lifts a 3 kg crate off the floor. The pair accelerates at (4 − 3) g / 7 = 1.4 m/s²; the rope carries 3 × (g + a) = 33.6 N.',
     build: () => {
       const wheel = put('pulley', 'Pulley', [0, 4.5, 0], { size: [0.3, 0.15, 0.3] })
-      const crate = put('box', 'Crate', [-0.3, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 30, material: 'wood', trace: true })
-      const weight = put('box', 'Weight', [0.3, 3, 0], { size: [0.35, 0.35, 0.35], massMode: 'mass', mass: 40, material: 'lead', trace: true })
+      const crate = put('box', 'Crate', [-0.3, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 3, material: 'wood', trace: true })
+      const weight = put('box', 'Weight', [0.3, 3, 0], { size: [0.35, 0.35, 0.35], massMode: 'mass', mass: 4, material: 'lead', trace: true })
       return { bodies: [floor(), wheel, crate, weight], world: VACUUM, links: [join('pulley', crate, weight, wheel)] }
     }
   },
@@ -184,7 +200,7 @@ export const PRESETS: Preset[] = [
     topic: 'Energy',
     about: 'A rubber ball with e = 0.8 dropped from 3 m comes back to e² × 3 = 1.92 m, then 1.23 m, then 0.79 m.',
     build: () => ({
-      bodies: [floor(), ball('Ball', [0, 3, 0], { material: 'rubber', restitution: 0.8, mass: 0.2 })],
+      bodies: [floor(), ball('Ball', [0, 3, 0], { material: 'rubber', restitution: 0.8, mass: 0.5 })],
       world: VACUUM
     })
   },
@@ -211,10 +227,10 @@ export const PRESETS: Preset[] = [
     build: () => ({
       bodies: [
         floor(),
-        put('box', 'A', [2, 0.3, 0], { size: [0.6, 0.6, 0.6] }),
-        put('box', 'B', [2, 0.9, 0], { size: [0.6, 0.6, 0.6] }),
-        put('box', 'C', [2, 1.5, 0], { size: [0.6, 0.6, 0.6] }),
-        put('sphere', 'Ball', [-4, 1, 0], { size: [0.3, 0.3, 0.3], material: 'steel', velocity: [9, 1, 0] })
+        put('box', 'A', [2, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 }),
+        put('box', 'B', [2, 0.9, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 }),
+        put('box', 'C', [2, 1.5, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 }),
+        ball('Ball', [-4, 1, 0], { size: [0.3, 0.3, 0.3], mass: 2, velocity: [9, 1, 0], trace: false })
       ]
     })
   },
@@ -251,12 +267,12 @@ export const PRESETS: Preset[] = [
     id: 'recoil',
     label: 'Recoil',
     topic: 'Momentum',
-    about: 'A heavy block fires a light one. They leave with equal and opposite momentum, so the small one goes eighty times faster.',
+    about: 'A 10 kg block fires a 0.5 kg ball. They leave with equal and opposite momentum, 25 kg m/s each way, so the small one goes twenty times faster.',
     build: () => ({
       bodies: [
         floor('ice'),
-        put('box', 'Gun', [0, 0.35, 0], { size: [1.2, 0.6, 0.6], massMode: 'mass', mass: 40, velocity: [-2.5, 0, 0], material: 'wood', trace: true }),
-        put('sphere', 'Bullet', [1.2, 0.35, 0], { size: [0.12, 0.12, 0.12], massMode: 'mass', mass: 0.5, velocity: [200, 0, 0], material: 'lead', trace: true })
+        put('box', 'Gun', [0, 0.35, 0], { size: [1.2, 0.6, 0.6], massMode: 'mass', mass: 10, velocity: [-2.5, 0, 0], material: 'wood', trace: true }),
+        put('sphere', 'Bullet', [1.2, 0.35, 0], { size: [0.12, 0.12, 0.12], massMode: 'mass', mass: 0.5, velocity: [50, 0, 0], material: 'lead', trace: true })
       ],
       world: { ...VACUUM, timeScale: 0.1 }
     })
@@ -265,9 +281,9 @@ export const PRESETS: Preset[] = [
     id: 'crash',
     label: 'Into a wall',
     topic: 'Momentum',
-    about: 'A 40 kg crate at 8 m/s hits a wall: 320 kg m/s of momentum gone in a few milliseconds. Watch the kinetic energy vanish in the Energy bar.',
+    about: 'A 5 kg crate at 8 m/s hits a wall: 40 kg m/s of momentum gone in a few milliseconds. Watch the kinetic energy vanish in the Energy bar.',
     build: () => ({
-      bodies: [floor(), put('wall', 'Wall', [3, 1, 0]), put('box', 'Crate', [-4, 0.35, 0], { size: [0.8, 0.7, 0.7], massMode: 'mass', mass: 40, material: 'wood', velocity: [8, 0, 0], restitution: 0.1, trace: true })],
+      bodies: [floor(), put('wall', 'Wall', [3, 1, 0]), put('box', 'Crate', [-4, 0.35, 0], { size: [0.8, 0.7, 0.7], massMode: 'mass', mass: 5, material: 'wood', velocity: [8, 0, 0], restitution: 0.1, trace: true })],
       world: VACUUM
     })
   },
@@ -352,6 +368,9 @@ export const PRESETS: Preset[] = [
 ]
 
 export const presetById = (id: string): Preset | undefined => PRESETS.find((p) => p.id === id)
+
+/** The preset behind the "Start here" button. */
+export const startPreset = (): Preset => presetById(START_PRESET_ID) ?? PRESETS[0]
 
 /** The world a preset wants, on top of the defaults, so one experiment cannot leave the next in slow motion. */
 export const worldFor = (p: Preset): WorldSettings => ({ ...DEFAULT_WORLD, ...(p.build().world ?? {}) })

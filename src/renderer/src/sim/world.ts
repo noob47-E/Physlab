@@ -8,7 +8,8 @@
 
 import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
-import { pulleyRim, reachOf, ropeSegments } from './links'
+import { pulleyRim, reachOf, ropeLinkMass, ropeSegments } from './links'
+import { eulerToQuat } from './rotate'
 import type { BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
 import type { V3 } from '../math/vec'
@@ -479,11 +480,11 @@ export class SimWorld {
     const n = link.segments ?? ropeSegments(length)
     const seg = length / n
     const half = seg / 2
-    // A rope that weighs a tenth of what it carries hangs and swings like one. Far lighter and the
-    // solver loses the fight against the mass ratio and the rope stretches; far heavier and it
-    // drags the load about.
+    // The rope's weight is a fraction of its load (see ropeLinkMass): far lighter and the solver
+    // loses the fight against the mass ratio and the rope stretches; far heavier and it drags the
+    // load about.
     const loads = [a, b].filter((e) => e.def.motion === 'dynamic').map((e) => e.mass)
-    const perLink = Math.max(0.02, Math.min(5, 0.1 * (loads.length ? Math.min(...loads) : 4)) / n)
+    const perLink = ropeLinkMass(loads, n)
     const filter = this.track(new J.GroupFilterTable(n))
     for (let i = 0; i + 1 < n; i++) filter.DisableCollision(i, i + 1)
     const group = this.ropeCount++
@@ -700,21 +701,10 @@ export class SimWorld {
 
   private quatFromEuler(deg: V3) {
     const J = this.jolt as unknown as AnyJolt & Jolt
-    const [x, y, z] = deg.map((d) => (d * Math.PI) / 180)
-    const cx = Math.cos(x / 2)
-    const sx = Math.sin(x / 2)
-    const cy = Math.cos(y / 2)
-    const sy = Math.sin(y / 2)
-    const cz = Math.cos(z / 2)
-    const sz = Math.sin(z / 2)
-    return this.track(
-      new J.Quat(
-        sx * cy * cz - cx * sy * sz,
-        cx * sy * cz + sx * cy * sz,
-        cx * cy * sz - sx * sy * cz,
-        cx * cy * cz + sx * sy * sz
-      )
-    )
+    // One formula for the engine and for anything that places a body-fixed point (a pulley's
+    // rim), so the drawn rope and the solved rope leave the wheel at the same place.
+    const [x, y, z, w] = eulerToQuat(deg)
+    return this.track(new J.Quat(x, y, z, w))
   }
 
   // -------------------------------------------------------------------------

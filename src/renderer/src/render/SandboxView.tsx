@@ -96,6 +96,7 @@ type Drag = {
 function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.RefObject<THREE.Group | null>) {
   const { gl, camera, size, controls, invalidate } = useThree()
   const select = useSandbox((s) => s.select)
+  const setPartner = useSandbox((s) => s.setPartner)
   const twoD = useSandbox((s) => s.world.twoD)
   const drag = useRef<Drag | null>(null)
 
@@ -134,6 +135,12 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       const hit = pick(e)
       if (!w || !hit) {
         if (!e.shiftKey) select(null)
+        return
+      }
+      // Shift-click on a second body chooses it as the partner to join to, and does not drag.
+      const chosen = useSandbox.getState().selection
+      if (e.shiftKey && chosen && chosen !== hit.id) {
+        setPartner(hit.id)
         return
       }
       select(hit.id)
@@ -234,13 +241,14 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         el.style.cursor = ''
       }
     }
-  }, [gl, camera, size, controls, select, twoD, sim, group, invalidate])
+  }, [gl, camera, size, controls, select, setPartner, twoD, sim, group, invalidate])
 }
 
 export function SandboxView() {
   const bodies = useSandbox((s) => s.bodies)
   const world = useSandbox((s) => s.world)
   const selection = useSandbox((s) => s.selection)
+  const partner = useSandbox((s) => s.partner)
   const links = useSandbox((s) => s.links)
   const runNonce = useSandbox((s) => s.runNonce)
   const pushContacts = useSandbox((s) => s.pushContacts)
@@ -424,11 +432,7 @@ export function SandboxView() {
           {/* A gold tint at a third strength was all but invisible on steel, concrete and lead —
               the three darkest materials and the three most used. The selected object is lit
               properly instead, so you can tell at a glance which one the panel is describing. */}
-          <meshLambertMaterial
-            color={def.color}
-            emissive={selection === def.id ? selectColour : '#000000'}
-            emissiveIntensity={selection === def.id ? 0.95 : 0}
-          />
+          <meshLambertMaterial color={def.color} emissive={selectColour} emissiveIntensity={selection === def.id ? 0.95 : partner === def.id ? 0.45 : 0} />
         </mesh>
       ))}
       <FloorGrid bodies={bodies} />
