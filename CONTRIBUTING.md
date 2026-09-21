@@ -31,7 +31,7 @@ If you teach, the most valuable report of all is: *my students got stuck here.*
 ```bash
 npm install
 npm run dev        # Electron with hot reload
-npm test           # ~150 tests, pure logic, no DOM
+npm test           # ~780 tests, pure logic, no DOM
 npm run typecheck  # must be clean
 npm run lint       # must report 0 errors; a suppression says why, after `--`
 ```

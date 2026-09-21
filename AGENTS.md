@@ -60,11 +60,11 @@ tests/             vitest, no DOM — pure logic only
 (`app/layoutMath.ts`). Copy how `lab` or `problems` was done.
 
 A mode's `panel` is its side panel; its optional `centre` takes over the big middle area instead of
-the viewport (Calculator mode uses it for `working`). `enterMode` (in `app/layout.ts`, re-exported
-from `TopBar`) sets `centre` with `showPanel` rather than `requestFocus`, because `requestFocus`
-holds one panel at a time and asking for two in a row would silently lose the first. A panel added
-after a user's layout was saved still appears: `showPanel` puts it back beside whichever
-`PANEL_GROUPS` neighbour is open.
+the viewport (Calculator mode uses it for `working`). `enterMode` (in `app/layout.ts`) sets
+`centre` with `showPanel` rather than `requestFocus`, because `requestFocus` holds one panel at a
+time and asking for two in a row would silently lose the first. A panel added after a user's
+layout was saved still appears: `showPanel` puts it back beside whichever `PANEL_GROUPS`
+neighbour is open.
 
 ## Traps that have already cost a day
 
@@ -158,11 +158,78 @@ after a user's layout was saved still appears: `showPanel` puts it back beside w
 - **Circular imports bite.** `App.tsx` imports the top bar and the search palette, so those two must
   not import `App`. Shared things live in their own module — that is why `app/panels.ts` exists.
 - **A dev-only global needs `typeof window !== 'undefined'`**, or the test runner fails on import.
+- **Every `.phys` file enters through `parseSceneFile` in `core/migrate.ts`**, and nothing else
+  decides whether a file is old. It checks the shape one level down (a lab table with no columns
+  and a body with no position used to crash the next render, after the old scene was already
+  gone), refuses a bad or newer file with a sentence, and steps the format up one version at a
+  time. `loadScene` calls it before touching any store. Bump `FILE_VERSION` when the file's shape
+  changes and add a step; every build through 0.3.10 wrote version 1 while adding lab tables, the
+  sandbox and `space` without a bump, which is why the v1 → v2 step has to work out from the file
+  itself whether a missing `space` was deliberate. `hasWork` in `app/autosave.ts` compares a
+  session with `blankSceneFile()` block by block, not "has objects" — a future panel's work would
+  otherwise be thrown away without a word.
+- **Renaming goes through `scene().renameObject`**, and `renameInObjects` rewrites a formula only
+  when the renamed object is the one that name resolves to: renaming the shadowed `a` used to turn
+  `b = a + 1` into `b = c + 1`. The Properties panel kept a private copy of the rename, so the fix
+  never ran in the app until `tests/sceneStore.test.ts` was made to read the panel.
+- **A LaTeX string in a template literal needs double backslashes.** Every string in
+  `math/vectorSolver.ts` had single ones, so `\theta` was a tab followed by "heta" and nobody saw
+  it until a student did. `tests/vectorSolver.test.ts` renders every step through KaTeX with
+  `throwOnError`; keep new solvers in its list. KaTeX also refuses an underscore inside `\text{}`
+  (`\text{x_1}` painted every `solve` answer red): symbols go in maths, words in text.
+- **Every Pure Math generator sets `Working.checked`.** The panel draws the tick from it and
+  nothing else; a generator that forgets shows a grey answer with no verdict. A complex
+  multiply-back check multiplies each conjugate pair straight into its real quadratic
+  x² − 2·Re(p)·x + |p|², because multiplying the pair term by term forms √2·√6, which a surd
+  cannot hold, and the throw read as a failed check on a correct answer.
+- **`latexToMath` is called inside the store (`runLatex`), never during render.** A converter
+  refusal (a ± it cannot use) is a sentence in the panel from there and a crash from a component.
+  `runSeq` in `math/pure/store.ts` is what stops a slow SymPy answer for an earlier question from
+  landing on a later one; keep it on any new async route.
+- **`warmupCas` posts a message with no id.** A real request through `cas()` showed "Working…"
+  and a Stop button for the whole SymPy load, and on a slow first launch hit the 30-second timer
+  and killed the half-loaded worker. Every real `cas()` call takes its degree flag from
+  `casInDegrees` in `calc/angle.ts`; the Working panel's fallback once sent none, so in DEG mode
+  `solve(sin(x) = 0.5)` answered 30 from the bar and π/6 from the panel.
+- **`×` is parsed as `timesOrCross`**, and the command bar resolves it to a cross product or a
+  plain product only once it knows what stands on either side; the evaluator's `timesOrCross`
+  scales a vector by a number. Still open: `splitArgs` does not group `<…>` (so
+  `cross(A, <1, 0>)` errors), `3 N × A` takes `N` alone as the left operand, and `inferKind` does
+  not know that × of two vectors is a vector. Helper vectors the bar makes for a drawing get
+  names a student never types — the hidden tail helper once took the name C and the help's own
+  next line replaced it.
+- **`fmtPrecise` writes anything below 10⁻¹² as 0.** That is a noise floor for a dragged point,
+  and it revealed an electron-scale 1.6×10⁻¹⁹ N practice answer as "0 N". A *known* answer goes
+  through `fmtSci`, which has no floor and rounds before it splits mantissa from exponent —
+  splitting first is how 9.99999×10⁻²⁰ read "10×10⁻¹⁹".
+- **A pulley constraint bakes the rim into its fixed points when the link is made**, so
+  `updateBody` in `sim/world.ts` lays the links again when a body a link touches is moved or
+  turned in place; without that a wheel dragged while paused was drawn with the rope over its new
+  rim while both masses hung from the old one. `pulleyRim` takes the rim from the level direction
+  across the wheel's *axle*, not the wheel's own x axis, which spins with it: rotation [90, 0, 90]
+  used to send the rope out of the top and bottom.
+- **A preset that says "dropped from 5 m" puts the ball's underside at 5 m**, not its centre; a
+  25 cm ball lands 3 % early otherwise and the clock contradicts the text beside it.
+- **`isDrawingMode` in `app/modes.ts` is the one rule for the 2D/3D switch.** The viewport, the 3
+  key and the View menu all follow it; a brushed 3 key used to drop the GPU Lab into a flat view
+  with no button on screen to bring 3D back.
+- **A WebGPU material with a themed colour is keyed on the theme** (`key={colors.theme}`), because
+  a new colour without a new material is never compiled in. `tests/themeTokens.test.ts` checks
+  that every token the renderer asks for is declared in both theme blocks — `themeColor()` returns
+  a grey stand-in for a misspelt or half-declared one, which is invisible until someone toggles
+  the theme with objects on screen. Read the colours once per theme in a memo, not per frame.
+- **A button that focuses itself on mount steals the keyboard on every remount.** "Let me try
+  first" in the Working panel takes the focus only when `go()` asks for it, once, for the answer
+  it belongs to (`invitesTry` in `math/pure/reveal.ts`); a focused button also has to hand editing
+  keys back to the field, or Backspace reaches the window shortcuts and deletes the selection.
+- **Graphs resets its recorded data only when the tracked expressions change.** The plot used to
+  rebuild on a theme switch with the same effect, so toggling Dark/Light mid-experiment lost
+  everything the timeline had recorded.
 
 ## How to check your work
 
 ```bash
-npm test          # vitest, ~770 tests, pure logic, no DOM
+npm test          # vitest, 784 tests in 39 files, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run lint      # eslint, 0 errors; a suppression carries its reason after `--`
 npm run dev       # Electron with hot reload
@@ -170,7 +237,28 @@ npm run dist      # builds dist/PhysLab Setup <version>.exe
 ```
 
 The test suite covers the maths, not the UI: put any decision worth trusting into a pure function in
-`math/`, `lab/` or `render/gridMath.ts` and test that, rather than testing through React.
+`math/`, `lab/` or `render/gridMath.ts` and test that, rather than testing through React. The
+second rule, since 0.5.0, is that a test should cross a boundary — a file into a store, a typed
+line into an answer, a generated string into KaTeX — because that is where every bug that shipped
+had been hiding.
+
+- `vitest.config.ts` limits the run to `tests/**/*.test.ts`; without it the runner walked into
+  `node_modules`, `out/`, `dist/` and any sibling worktree and found "tests" there too.
+- `tests/helpers/repo.ts` (`readSource`, `repoPath`, `RENDERER_SRC`) is how a test reads a source
+  file as text; a cwd-relative path works from the repo root and nowhere else.
+- `tests/helpers/globals.ts` — call `resetGlobals()` from a `beforeEach` in any file that touches
+  the notation or the angle mode, or the file only passes in one order.
+- `tests/colours.test.ts` scans every renderer `.tsx` for a hex colour, a palette utility, a
+  pixel or rem text size and a colour in a style object; `COLOUR_ALLOW` and `SIZE_ALLOW` are
+  empty and must stay empty (an entry that is clean or names a missing file fails the test too).
+  `tests/themeTokens.test.ts` checks every token asked for is declared in both theme blocks.
+- `tests/commands.test.ts` runs every example in the command bar's `HELP` text; a new command
+  goes into the help and is thereby tested. `tests/contracts.test.ts` and
+  `tests/sceneStore.test.ts` read the Python worker and the Properties panel as text to check the
+  joins.
+- `npm run lint` must report 0 errors. A suppression carries its reason after `--`, and a
+  suppression whose rule no longer fires is itself an error (`eslint.config.js` says which rules
+  are warnings and why).
 
 **Verifying the real app** matters, because the packaged build behaves differently from the dev one:
 
