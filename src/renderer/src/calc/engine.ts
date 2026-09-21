@@ -241,6 +241,14 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
 export function formatValue(v: unknown): string {
   if (typeof v === 'number') return calcNum(v)
   if (typeof v === 'boolean') return v ? 'true' : 'false'
+  // A complex number's two parts are numbers, and they follow the same never-pad rule as any
+  // other: mathjs's fixed notation wrote 2.00i on the same screen as a trimmed 5.
+  if (math.isComplex(v)) {
+    const c = v as { re: number; im: number }
+    if (c.im === 0) return calcNum(c.re)
+    const im = Math.abs(c.im) === 1 ? 'i' : `${calcNum(Math.abs(c.im))}i`
+    return c.re === 0 ? `${c.im < 0 ? '−' : ''}${im}` : `${calcNum(c.re)} ${c.im < 0 ? '−' : '+'} ${im}`
+  }
   try {
     return math.format(v as never, mathFormatOptions())
   } catch {
@@ -293,7 +301,8 @@ export function exactForm(v: number): string | null {
   const piF = toFraction(v / Math.PI, 360)
   if (piF) return fracTex(piF[0], piF[1], '\\pi')
   const sq = toFraction(v * v, 100000)
-  if (sq) {
+  // v² within 10⁻¹¹ of zero is read as the fraction 0/1, and the answer for 1 ÷ 500000 was √0.
+  if (sq && sq[0] !== 0) {
     // v = ±√(n/d) = ±√(n·d)/d, pull out square factors.
     let [n, d] = sq
     const sign = v < 0 ? -1 : 1
@@ -412,7 +421,9 @@ export function evaluateBaseN(input: string, base: Base): number {
     while (isOp('*') || isOp('/')) {
       const op = take().value
       const r = unary()
-      if (op === '*') v = toInt32(v * r)
+      // Math.imul is the exact 32-bit wrap-around; a double product of two 31-bit numbers loses
+      // its low bits, and 7FFFFFFF × 7FFFFFFF came out as 0.
+      if (op === '*') v = Math.imul(v, r)
       else {
         if (r === 0) throw new Error('Math ERROR')
         v = toInt32(Math.trunc(v / r))

@@ -47,6 +47,12 @@ export interface CalcStore {
    * character 0, because nothing ever updated that index.
    */
   pending: string | null
+  /**
+   * The keypad the student was using before a list mode (CONST, UNITS…) took the screen, so a
+   * picked constant goes back to it. The old `mode === 'CMPLX' ? mode : 'COMP'` inside insert()
+   * could never see CMPLX, because insert only runs while the CONST list is showing.
+   */
+  keypad: 'COMP' | 'CMPLX'
   shift: boolean
   alpha: boolean
   sto: boolean
@@ -68,6 +74,7 @@ export const useCalc = create<CalcStore>((set, get) => ({
   mode: 'COMP',
   input: '',
   pending: null,
+  keypad: 'COMP',
   shift: false,
   alpha: false,
   sto: false,
@@ -78,8 +85,7 @@ export const useCalc = create<CalcStore>((set, get) => ({
   vectors: { VctA: [3, 4], VctB: [2, -1], VctC: [1, 2, 3], VctD: [0, 0, 1] },
   setMode: (mode) => set({ mode }),
   insert: (latex) => {
-    const { mode } = get()
-    set({ pending: latex, mode: mode === 'CMPLX' ? mode : 'COMP', shift: false, alpha: false })
+    set({ pending: latex, mode: get().keypad, shift: false, alpha: false })
   },
   takePending: () => {
     const { pending } = get()
@@ -99,6 +105,12 @@ useCalc.subscribe((s) => {
   } catch {
     // Storage blocked: history just will not survive a restart.
   }
+})
+
+// Whichever way the mode changes (the chips, shift+2, a menu), the last keypad is what a picked
+// constant returns to.
+useCalc.subscribe((s) => {
+  if ((s.mode === 'COMP' || s.mode === 'CMPLX') && s.keypad !== s.mode) useCalc.setState({ keypad: s.mode })
 })
 
 export const clearCalcHistory = (): void => useCalc.setState({ history: [] })

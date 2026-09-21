@@ -188,18 +188,50 @@ export function spToPoly(p: SPoly): Poly | null {
   return pTrim(out)
 }
 
+/** The root of a monic linear factor x − p, or null for anything else. */
+function rootOfLinear(f: SPoly): CxS | null {
+  if (f.length !== 2 || !cxsEq(f[1], cxsOfRat(R1))) return null
+  return cxsNeg(f[0])
+}
+
+/**
+ * (x − p)(x − p̄) as the real quadratic x² − 2·Re(p)·x + |p|², built without ever multiplying the
+ * two parts of p together.
+ *
+ * Multiplying the pair out term by term forms Re(p)·Im(p), and when the real part is under one
+ * root and the imaginary part under another (x⁴ + 2x² + 4 has roots ½√2 ± ½√6·i) that product is
+ * a surd this arithmetic cannot hold. Those cross terms cancel in the end anyway; going straight
+ * to the quadratic only ever squares each part against itself, which stays under its own root.
+ */
+export function spConjugatePair(p: CxS): SPoly {
+  const norm = surdAdd(surdMul(p.re, p.re), surdMul(p.im, p.im))
+  return [cxs(norm), cxs(surdNeg(surdAdd(p.re, p.re))), cxsOfRat(R1)]
+}
+
 /**
  * Multiply the given factors together, in the order given, and say whether the product is the
  * polynomial that was factorised.
  *
- * The order matters: the surds are only ever combined when they sit under the same root, so a
- * conjugate pair has to be multiplied out before the next pair is brought in. Anything else throws
- * inside surdMul and is reported here as a failed check rather than a crash — the working still
- * appears, but says so.
+ * A conjugate pair of linear factors is multiplied into its real quadratic first (see
+ * spConjugatePair): that is the only way the check can pass for roots whose two parts sit under
+ * different roots, and it also mirrors the rule the working quotes. The remaining products then
+ * only ever share one root; anything else throws inside surdMul and is reported here as a failed
+ * check rather than a crash — the working still appears, but says so.
  */
 export function checkProduct(factors: SPoly[], expected: Poly): boolean {
   try {
-    const product = factors.reduce((acc, f) => spMul(acc, f), spConst(R1))
+    const paired: SPoly[] = []
+    for (let i = 0; i < factors.length; i++) {
+      const p = rootOfLinear(factors[i])
+      const q = i + 1 < factors.length ? rootOfLinear(factors[i + 1]) : null
+      if (p && q && !cxsIsReal(p) && cxsEq(q, cxsConj(p))) {
+        paired.push(spConjugatePair(p))
+        i++
+      } else {
+        paired.push(factors[i])
+      }
+    }
+    const product = paired.reduce((acc, f) => spMul(acc, f), spConst(R1))
     const back = spToPoly(product)
     return back !== null && pEq(back, expected)
   } catch {
@@ -209,7 +241,7 @@ export function checkProduct(factors: SPoly[], expected: Poly): boolean {
 
 // ---------------------------------------------------------------- roots
 
-/** Roots of a·x² + b·x + c with surd coefficients, or null when they would need a nested root. */
+/** Roots of a·x² + b·x + c with surd coefficients, or null when a surd cannot hold them exactly. */
 export function quadraticRoots(a: Surd, b: Surd, c: Surd): [CxS, CxS] | null {
   const disc = surdSub(surdMul(b, b), surdMul(surd(rat(4n)), surdMul(a, c)))
   // √(q + r√n) is a nested root; there is no exact way to write it that a student would recognise.
@@ -222,6 +254,9 @@ export function quadraticRoots(a: Surd, b: Surd, c: Surd): [CxS, CxS] | null {
     return [cxs(mid, im), cxs(mid, surdNeg(im))]
   }
   const half = surdDiv(surdSqrt(D), twoA)
+  // ½√7 ± ½√3 is exact, but two different roots in one number is more than a surd can hold, and
+  // it would throw inside surdAdd. Null lets the caller refuse with a sentence instead.
+  if (!surdIsRational(mid) && !surdIsRational(half) && mid.n !== half.n) return null
   return [cxs(surdAdd(mid, half)), cxs(surdSub(mid, half))]
 }
 

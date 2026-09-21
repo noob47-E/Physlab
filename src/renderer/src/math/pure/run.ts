@@ -5,11 +5,11 @@
 // working, which is what makes it all testable without a browser.
 
 import { math, preprocess, splitArgs } from '../expr'
-import { R0, R1, rAbs, rEq, rIsNeg, rMul, rSub, rTex, rat, type Rat } from './rat'
+import { R0, R1, rAbs, rAdd, rEq, rIsNeg, rMul, rSub, rTex, rat, type Rat } from './rat'
 import {
   NotPolynomial,
-  constExpr,
-  eMul,
+  eAdd,
+  eNeg,
   evalAt,
   exprTex,
   exprTexBracketed,
@@ -17,12 +17,13 @@ import {
   mulTerm,
   normalize,
   parseExpr,
-  parseFactors,
   parseFraction,
+  parseSummands,
   termTex,
   varTex,
   varsOf,
   type Expr,
+  type Summand,
   type Term
 } from './mono'
 import { pDeg, polyFromExpr } from './poly'
@@ -165,12 +166,19 @@ export function linearToLatex(src: string): string {
   const one = (s: string): string => {
     try {
       // mathjs writes a symbol as "{ x}" and implicit products with "~"; both render, neither reads.
+      // A command's braces have to stay: stripping them from a lone letter turned \frac{ x}{2}
+      // into \fracx{2}, which MathLive shows as an unknown command. Only a brace that follows
+      // nothing, an operator or another brace is needless ({x}^{2}), and only the space after a
+      // brace goes, along with every space that does not end a command (2\cdot x keeps its one).
       return math
         .parse(preprocess(s.trim()))
         .toTex({ parenthesis: 'auto', implicit: 'hide' })
         .replace(/~/g, '')
-        .replace(/\{\s*([a-zA-Z])\}/g, '$1')
-        .replace(/\s+/g, '')
+        .replace(/\{\s+/g, '{')
+        .replace(/(?<![A-Za-z\\}])\{([a-zA-Z])\}/g, '$1')
+        .replace(/(?<!\\[a-zA-Z]*)\s+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
     } catch {
       return s.trim()
     }
@@ -227,40 +235,66 @@ const factorTex = (f: Expr): string => (f.length > 1 ? exprTexBracketed(f) : exp
  */
 function expandWorking(src: string): Working {
   const title = 'Expand'
-  let factors: Expr[]
+  let summands: Summand[]
   try {
-    factors = parseFactors(src)
+    summands = parseSummands(src)
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
-  const whole = factors.reduce((a, b) => eMul(a, b), constExpr(R1))
-  const out = exprTex(whole)
-  const input = factors.map(factorTex).join('')
   const s = new Steps()
+  const shownOf = (sm: Summand): string => sm.factors.map(factorTex).join('')
+  const input = summands.map((sm, i) => `${i === 0 ? (sm.neg ? '-' : '') : sm.neg ? ' - ' : ' + '}${shownOf(sm)}`).join('')
+  const several = summands.length > 1
 
-  if (factors.length < 2) {
-    s.add('There is nothing to multiply out here, so collect the like terms and write the highest power first.', out)
-    return { title, input, moves: s.moves, answers: [{ label: 'Answer', tex: out }], check: 'No brackets were multiplied, so there is nothing to check.' }
+  // Each summand multiplied out on its own; a lone factor is already a sum and passes straight through.
+  const pieces: Expr[] = []
+  for (const sm of summands) {
+    const { factors } = sm
+    if (factors.length < 2) {
+      pieces.push(sm.neg ? eNeg(factors[0]) : factors[0])
+      continue
+    }
+    const where = several ? `In ${shownOf(sm)}, m` : 'M'
+    let acc = factors[0]
+    for (let i = 1; i < factors.length; i++) {
+      const f = factors[i]
+      const products: Term[] = []
+      for (const a of acc) for (const b of f) products.push(mulTerm(a, b))
+      s.add(
+        `${i === 1 ? where : 'Then m'}ultiply every term of ${factorTex(acc)} by every term of ${factorTex(f)}.`,
+        distributionTable(acc, f),
+        '\\text{each} \\times \\text{each}'
+      )
+      s.add('Write all the products out in a line.', rawSumTex(products))
+      const collected = normalize(products)
+      if (collected.length < products.length) {
+        s.add('Collect the like terms, and write the highest power first.', `${groupedTex(products)} = ${exprTex(collected)}`, '\\text{like terms: same letters, same powers}')
+      } else {
+        s.add('No two terms are alike, so just write the highest power first.', exprTex(collected))
+      }
+      acc = collected
+    }
+    pieces.push(sm.neg ? eNeg(acc) : acc)
+  }
+  const whole = pieces.reduce((a, b) => eAdd(a, b), [] as Expr)
+  const out = exprTex(whole)
+
+  if (!summands.some((sm) => sm.factors.length >= 2)) {
+    // Nothing was distributed: either there are no brackets to multiply, or one bracket is raised
+    // to a power too high to write out column by column and its expansion is simply stated.
+    const highPower = /\)\s*(\^|²|³)/.test(src)
+    s.add(
+      highPower
+        ? 'A bracket raised to a power that high is written out directly rather than multiplied column by column.'
+        : 'There is nothing to multiply out here, so collect the like terms and write the highest power first.',
+      out
+    )
+    return { title, input, moves: s.moves, answers: [{ label: 'Answer', tex: out }], check: 'No brackets were multiplied step by step, so there is nothing to check.' }
   }
 
-  let acc = factors[0]
-  for (let i = 1; i < factors.length; i++) {
-    const f = factors[i]
-    const products: Term[] = []
-    for (const a of acc) for (const b of f) products.push(mulTerm(a, b))
-    s.add(
-      `Multiply every term of ${factorTex(acc)} by every term of ${factorTex(f)}.`,
-      distributionTable(acc, f),
-      '\\text{each} \\times \\text{each}'
-    )
-    s.add('Write all the products out in a line.', rawSumTex(products))
-    const collected = normalize(products)
-    if (collected.length < products.length) {
-      s.add('Collect the like terms, and write the highest power first.', `${groupedTex(products)} = ${exprTex(collected)}`, '\\text{like terms: same letters, same powers}')
-    } else {
-      s.add('No two terms are alike, so just write the highest power first.', exprTex(collected))
-    }
-    acc = collected
+  if (several) {
+    const joined = pieces.map((p, i) => `${i === 0 ? '' : ' + '}\\left(${exprTex(p)}\\right)`).join('')
+    s.add('Add the pieces together, and collect the like terms once more.', `${joined} = ${out}`, '\\text{like terms: same letters, same powers}')
   }
 
   // Check by substituting a value: the brackets and the answer must give the same number.
@@ -268,10 +302,13 @@ function expandWorking(src: string): Working {
   const at: Record<string, Rat> = {}
   vars.forEach((v, i) => (at[v] = rat(2 + i)))
   let ok = true
-  let viaBrackets = R1
+  let viaBrackets = R0
   let viaAnswer = R0
   try {
-    viaBrackets = factors.reduce((p, f) => rMul(p, evalAt(f, at)), R1)
+    for (const sm of summands) {
+      const product = sm.factors.reduce((p, f) => rMul(p, evalAt(f, at)), R1)
+      viaBrackets = sm.neg ? rSub(viaBrackets, product) : rAdd(viaBrackets, product)
+    }
     viaAnswer = evalAt(whole, at)
     ok = rEq(viaBrackets, viaAnswer)
   } catch {
@@ -285,7 +322,7 @@ function expandWorking(src: string): Working {
     answers: [{ label: 'Answer', tex: out }],
     check: ok
       ? vars.length
-        ? `With ${atText}, the brackets multiply to ${rTex(viaBrackets)} and the answer also comes to ${rTex(viaAnswer)}.`
+        ? `With ${atText}, the brackets come to ${rTex(viaBrackets)} and the answer also comes to ${rTex(viaAnswer)}.`
         : `Both the brackets and the answer come to ${rTex(viaAnswer)}.`
       : 'Careful: the brackets and the answer give different numbers. Treat this answer with suspicion.',
     checked: ok ? 'ok' : 'failed'

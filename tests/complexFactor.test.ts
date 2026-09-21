@@ -11,9 +11,11 @@ import { rat, R0, R1 } from '../src/renderer/src/math/pure/rat'
 import {
   checkProduct,
   cxs,
+  cxsConj,
   cxsTex,
   linearFactorTex,
   quadraticRoots,
+  spConjugatePair,
   spLinear,
   splitBiquadratic,
   surd,
@@ -80,6 +82,27 @@ describe('roots and the multiply-back check', () => {
     expect(checkProduct([spLinear(wrong), spLinear(cxs(surd(R0), surd(rat(-3n))))], poly)).toBe(false)
   })
 
+  it('multiplies a conjugate pair into its real quadratic even when its two parts sit under different roots', () => {
+    // ½√2 ± ½√6·i: multiplying term by term forms √2·√6, which a surd cannot hold, and the
+    // check used to report this correct factorisation as failed.
+    const p = cxs(surd(R0, rat(1n, 2n), 2n), surd(R0, rat(1n, 2n), 6n))
+    const pair = spConjugatePair(p)
+    expect(cxsTex(pair[0])).toBe('2')
+    expect(cxsTex(pair[1])).toBe('-\\sqrt{2}')
+    const q = cxs(surd(R0, rat(-1n, 2n), 2n), surd(R0, rat(1n, 2n), 6n))
+    const whole = polyFromExpr(parseExpr('x^4 + 2x^2 + 4')).poly
+    expect(checkProduct([spLinear(p), spLinear(cxsConj(p)), spLinear(q), spLinear(cxsConj(q))], whole)).toBe(true)
+    // And the order still matters: a wrong pairing is still caught.
+    expect(checkProduct([spLinear(p), spLinear(q), spLinear(cxsConj(p)), spLinear(cxsConj(q))], whole)).toBe(false)
+  })
+
+  it('returns null, never throws, when the two real roots would need two different surds', () => {
+    // (√7 ± √3)/2 is exact, but not one surd; the old code threw a developer sentence that the
+    // store then showed to the student.
+    expect(quadraticRoots(surd(R1), surd(R0, rat(-1n), 7n), surd(R1))).toBeNull()
+    expect(runPure('factorComplex', 'x^4 - 5x^2 + 1').error).toMatch(/cannot write exactly/)
+  })
+
   it('splits x^4 + 4 and x^4 + 1 by completing the square', () => {
     const four = splitBiquadratic(polyFromExpr(parseExpr('x^4 + 4')).poly)!
     expect(surdTex(four.k)).toBe('2')
@@ -127,6 +150,16 @@ describe('Factorise with i', () => {
     expect(w.answers[0].tex).toContain('\\left(x - i\\right)\\left(x + i\\right)')
     expect(w.answers[0].tex).toContain('\\left(x - 2i\\right)\\left(x + 2i\\right)')
     expect(w.checked).toBe('ok')
+  })
+
+  it('really passes the check on biquadratics whose roots mix two surds', () => {
+    for (const src of ['x^4 + 2x^2 + 4', 'x^4 - 2x^2 + 4', 'x^4 + x^2 + 4', 'x^4 + 3x^2 + 4']) {
+      const w = runPure('factorComplex', src)
+      expect(w.error, src).toBeUndefined()
+      expect(w.checked, src).toBe('ok')
+    }
+    const w = runPure('factorComplex', 'x^4 + 2x^2 + 4')
+    expect(w.answers[0].tex).toContain('\\frac{1}{2}\\sqrt{2} - \\frac{1}{2}\\sqrt{6}i')
   })
 
   it('handles x^4 + 4 and x^4 + 1', () => {
@@ -212,6 +245,24 @@ describe('Solve', () => {
   it('says when a linear equation has no answer or every answer', () => {
     expect(runPure('solve', 'x + 1 = x + 2').error).toMatch(/no value/)
     expect(runPure('solve', '2x + 2 = 2(x + 1)').error).toMatch(/every value/)
+    // A square on each side is still the linear equation 0 = 1 once they are subtracted.
+    expect(runPure('solve', 'x^2 = x^2 + 1').error).toMatch(/no value/)
+  })
+
+  it('refuses a second equals sign instead of solving the first equation and dropping the rest', () => {
+    expect(runPure('solve', '2x = 6 = 3').error).toMatch(/more than one/)
+    expect(runPure('solve', 'x^2 = 4 = 4').error).toMatch(/more than one/)
+  })
+
+  it('clears a fraction in front of x by multiplying, the way it is taught', () => {
+    const w = runPure('solve', 'x/2 + 1 = 4')
+    expect(w.answers[0].tex).toBe('6')
+    expect(w.checked).toBe('ok')
+    expect(w.moves.map((m) => m.head).join(' ')).toMatch(/Multiply both sides by 2/)
+    expect(w.moves.map((m) => m.head).join(' ')).not.toMatch(/Divide both sides by \\frac/)
+    const t = runPure('solve', '3x/4 = 6')
+    expect(t.answers[0].tex).toBe('8')
+    expect(t.moves.map((m) => m.head)).toContain('Divide both sides by 3, the number in front of x.')
   })
 
   it('checks quadratic roots by substituting them back', () => {

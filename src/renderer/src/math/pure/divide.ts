@@ -12,6 +12,8 @@ import {
   pIsZero,
   pLead,
   pMonomial,
+  pAdd,
+  pEq,
   pMul,
   pSub,
   pTex,
@@ -161,12 +163,17 @@ export function divideWorking(src: string): Working {
     '\\text{dividend} = \\text{divisor} \\times \\text{quotient} + \\text{remainder}'
   )
 
+  // divisor × quotient + remainder has to land back on the dividend, exactly.
+  const ok = pEq(pAdd(pMul(b, q), rem), a)
   return {
     title,
     input,
     method: 'Long division',
     moves: s.moves,
     answers,
-    check: `${exprTex(exprFromPoly(pMul(b, q), name))}${pIsZero(rem) ? '' : ` + ${pTex(rem, name)}`} = ${exprTex(exprFromPoly(a, name))}`
+    check: ok
+      ? `${exprTex(exprFromPoly(pMul(b, q), name))}${pIsZero(rem) ? '' : ` + ${pTex(rem, name)}`} = ${exprTex(exprFromPoly(a, name))}`
+      : 'Careful: divisor × quotient + remainder did not give the original. Treat this answer with suspicion.',
+    checked: ok ? 'ok' : 'failed'
   }
 }

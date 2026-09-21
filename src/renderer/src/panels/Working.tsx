@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { BookOpen, Check, ChevronDown, ChevronUp, Copy, Eye, History, Lightbulb, Play, Trash2, TriangleAlert, X } from 'lucide-react'
 import { Tex } from '../ui/Tex'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
-import { latexToMath } from '../math/latexToMath'
 import { parseExpr, varsOf } from '../math/pure/mono'
 import { usePure, type PureEntry } from '../math/pure/store'
 import { JOBS, jobById, type JobId } from '../math/pure/run'
 import { texToPlain, type Working as WorkingDoc } from '../math/pure/work'
-import { STEP_PREF_KEY, checkTone, initialShown, offeredJob, resolveJob, stepPrefFrom, type StepPref, type TreatAs } from '../math/pure/reveal'
+import { STEP_PREF_KEY, checkTone, fieldHasText, initialShown, offeredJob, stepPrefFrom, type StepPref, type TreatAs } from '../math/pure/reveal'
 import { visualizeGraph } from '../core/visualize'
 import { showPanel } from '../app/panels'
 import { useCasStatus } from '../math/cas'
@@ -243,7 +242,7 @@ function graphable(src: string): boolean {
 }
 
 export function Working() {
-  const { job, input, inputLatex, working, asking, history, run, setJob, recall, remove, clearHistory } = usePure()
+  const { job, input, inputLatex, working, asking, history, run, runLatex, setJob, recall, remove, clearHistory } = usePure()
   const casStatus = useCasStatus((s) => s.status)
   const [latex, setLatex] = useState(inputLatex)
   // The history rail starts closed: the working needs the room more than the list does.
@@ -259,10 +258,10 @@ export function Working() {
   useEffect(() => setLatex(inputLatex), [inputLatex])
 
   const go = (which?: JobId): void => {
-    const text = latexToMath(latex).trim()
-    if (!text) return
+    if (!fieldHasText(latex)) return
     // Auto: the job is guessed from what was typed, and the title above the working says which.
-    run(which ?? resolveJob(treatAs, text), text, latex)
+    // The store converts the LaTeX itself, so a converter refusal reaches the student as a sentence.
+    runLatex(latex, which ?? treatAs)
   }
 
   const setPreference = (p: StepPref): void => {
@@ -304,7 +303,7 @@ export function Working() {
                 setTreatAs(v)
                 if (v !== 'auto') {
                   setJob(v)
-                  if (latexToMath(latex).trim()) go(v)
+                  if (fieldHasText(latex)) go(v)
                 }
               }}
             >

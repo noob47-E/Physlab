@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import katex from 'katex'
 import { isFieldSafeLatex, linearSyntaxIn } from '../src/renderer/src/ui/latexSafety'
 import { isActivatable, isTyping } from '../src/renderer/src/app/keyTargets'
 import { JOBS, linearToLatex, runPure } from '../src/renderer/src/math/pure/run'
@@ -90,6 +91,16 @@ describe('what may be written into a maths field', () => {
       expect(meaningOf(latexToMath(latex)), j.id).toBe(meaningOf(j.example))
     }
     expect(linearToLatex('x^2 + 4x + 13 = 0')).toBe('x^{2}+4x+13=0')
+    // A lone letter inside a command's braces keeps them: \\fracx{2} is an unknown command.
+    expect(linearToLatex('x/2')).toBe('\\frac{x}{2}')
+    expect(linearToLatex('sqrt(x)+1')).toBe('\\sqrt{x}+1')
+    expect(linearToLatex('2*x')).toBe('2\\cdot x')
+    expect(linearToLatex('x^2/(x+1)')).toBe('\\frac{x^{2}}{x+1}')
+    for (const src of ['x/2', 'sqrt(x)+1', '2*x', 'x^2/(x+1)', 'x/2+1=3']) {
+      const latex = linearToLatex(src)
+      expect(isFieldSafeLatex(latex), latex).toBe(true)
+      expect(() => katex.renderToString(latex, { throwOnError: true, strict: 'ignore' }), latex).not.toThrow()
+    }
   })
 
   it('a throw inside a generator becomes a readable refusal, never a crash', () => {

@@ -7,6 +7,7 @@ import {
   evaluateComp,
   exactForm,
   formatBase,
+  formatValue,
   integrate,
   inverseNormal,
   normalCdf,
@@ -56,6 +57,10 @@ describe('exact forms', () => {
     expect(exactForm(Math.SQRT2 / 2)).toBe('\\frac{\\sqrt{2}}{2}')
     expect(exactForm(Math.PI / 3)).toBe('\\frac{\\pi}{3}')
     expect(exactForm(2 * Math.sqrt(3))).toBe('2\\sqrt{3}')
+    // A small number is not √0: v² rounds to the fraction 0/1 and 1 ÷ 500000 showed \\sqrt{0}.
+    expect(exactForm(2e-6)).toBeNull()
+    expect(exactForm(1e-8)).toBeNull()
+    expect(exactForm(2.5e-9)).toBeNull()
   })
 })
 
@@ -178,6 +183,12 @@ describe('BASE-N arithmetic is whole-number arithmetic, one operator at a time',
     expect(evaluateBaseN('DEAD and FF', 16)).toBe(0xad)
     expect(evaluateBaseN('17 + 1', 8)).toBe(16)
   })
+  it('multiplies with 32-bit wrap-around, not through a rounded double', () => {
+    // Two 31-bit numbers need 62 bits; the double rounds and the low word came out as 0.
+    expect(evaluateBaseN('7FFFFFFF*7FFFFFFF', 16)).toBe(1)
+    expect(evaluateBaseN('10000*10000', 16)).toBe(0)
+    expect(evaluateBaseN('FFFF*FFFF', 16)).toBe(0xfffe0001 | 0)
+  })
   it('refuses what it cannot read, and division by zero, with the calculator words', () => {
     expect(() => evaluateBaseN('5/0', 10)).toThrow('Math ERROR')
     expect(() => evaluateBaseN('2 +', 10)).toThrow('Syntax ERROR')
@@ -225,6 +236,13 @@ describe('the calculator writes numbers with the precision setting', () => {
     expect(mathFormatOptions({ decimals: 4, precisionMode: 'sf' })).toEqual({ precision: 4 })
     expect(mathFormatOptions({ decimals: 2, precisionMode: 'dp' })).toEqual({ notation: 'fixed', precision: 2 })
     expect(math.format(math.complex(1 / 3, 2), mathFormatOptions({ decimals: 2, precisionMode: 'dp' }))).toBe('0.33 + 2.00i')
+    // On the screen a complex result follows the calculator's never-pad rule like any number.
+    setCalcPrecisionSource(() => ({ decimals: 2, precisionMode: 'dp' }))
+    expect(formatValue(math.complex(1 / 3, 2))).toBe('0.33 + 2i')
+    expect(formatValue(math.complex(0, -1))).toBe('−i')
+    expect(formatValue(math.complex(2, 0))).toBe('2')
+    expect(formatValue(math.complex(1.5, -2.25))).toBe('1.5 − 2.25i')
+    setCalcPrecisionSource(() => ({ decimals: 10, precisionMode: 'sf' }))
   })
   it('takes the precision from wherever the panel points it', () => {
     setCalcPrecisionSource(() => ({ decimals: 1, precisionMode: 'dp' }))
@@ -254,11 +272,18 @@ describe('a constant picked from the list', () => {
     expect(useCalc.getState().takePending()).toBe('c')
     expect(useCalc.getState().takePending()).toBeNull()
   })
-  it('stays in complex mode when that is where the student was', () => {
+  it('returns to the keypad the student left for the CONST list', () => {
+    // insert() only ever runs while the CONST list is on screen, so the mode at that moment is
+    // never the keypad; the keypad has to be remembered from before the list was opened.
     useCalc.setState({ mode: 'CMPLX' })
+    useCalc.setState({ mode: 'CONST' })
     useCalc.getState().insert('h')
     expect(useCalc.getState().mode).toBe('CMPLX')
     expect(useCalc.getState().takePending()).toBe('h')
+    useCalc.setState({ mode: 'COMP' })
+    useCalc.setState({ mode: 'CONST' })
+    useCalc.getState().insert('c')
+    expect(useCalc.getState().mode).toBe('COMP')
   })
 })
 
@@ -266,6 +291,10 @@ describe('numbers below the grid formatter’s floor', () => {
   it('are written as a power of ten, not as 0', () => {
     expect(calcNum(6.674e-11, { decimals: 3, precisionMode: 'sf' })).toBe('6.67×10^-11')
     expect(calcNum(9.9999e-15, { decimals: 2, precisionMode: 'sf' })).toBe('1×10^-14')
+    // Rounding the mantissa up to 10 makes the value exactly one power of ten: formatting it a
+    // second time rounded 0.95 down and printed the non-normalised 0.9×10^-12.
+    expect(calcNum(9.5e-13, { decimals: 1, precisionMode: 'sf' })).toBe('1×10^-12')
+    expect(calcNum(-9.5e-13, { decimals: 1, precisionMode: 'sf' })).toBe('−1×10^-12')
     expect(calcNum(-1.602176634e-19, { decimals: 4, precisionMode: 'sf' })).toBe('−1.602×10^-19')
   })
 })

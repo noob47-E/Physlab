@@ -5,7 +5,7 @@
 // two side by side is the point — students routinely mix up which way round it goes.
 
 import { R1, bgcd, blcm, rIsNeg, rIsOne, rMul, rNeg, rTex, rat, type Rat } from './rat'
-import { NotPolynomial, exprTex, exprTexBracketed, isConstant, parseExpr, varExpr, type Expr } from './mono'
+import { NotPolynomial, constExpr, eEq, eMul, ePow, exprTex, exprTexBracketed, isConstant, parseExpr, varExpr, type Expr } from './mono'
 import { factorsOf } from './factor'
 import { Steps, failed, type Working } from './work'
 
@@ -67,6 +67,17 @@ function split(e: Expr): Split {
   return { constant, parts }
 }
 
+/** The split multiplied back together, so it can be compared with what was typed. */
+const rebuild = (s: Split): Expr => s.parts.reduce((acc, p) => eMul(acc, ePow(p.atom, p.power)), constExpr(s.constant))
+
+/**
+ * Every split has to multiply back to its expression: the min/max of the powers is bookkeeping
+ * that cannot go wrong, but the factorisation each split was read from can.
+ */
+const splitsAgree = (splits: Split[], exprs: Expr[]): boolean => splits.every((sp, i) => eEq(rebuild(sp), exprs[i]))
+
+const SUSPECT = 'Careful: one of the factorisations does not multiply back to its expression. Treat this answer with suspicion.'
+
 const showSplit = (s: Split): string => {
   const num = rIsOne(s.constant) ? '' : rTex(s.constant)
   // exprTexBracketed already leaves a single term unbracketed, so x^2 does not become (x)^2.
@@ -126,7 +137,8 @@ export function hcfAlgebraWorking(srcs: string[]): Working {
 
   if (common.length === 0 && rIsOne(constant)) {
     s.add('No factor appears in every one of them, so they share nothing but 1.', '\\text{HCF} = 1')
-    return { title, input, moves: s.moves, answers: [{ label: 'HCF =', tex: '1' }], check: 'These expressions have no common factor.' }
+    const ok = splitsAgree(splits, exprs)
+    return { title, input, moves: s.moves, answers: [{ label: 'HCF =', tex: '1' }], check: ok ? 'These expressions have no common factor.' : SUSPECT, checked: ok ? 'ok' : 'failed' }
   }
 
   s.add(
@@ -135,13 +147,15 @@ export function hcfAlgebraWorking(srcs: string[]): Working {
     '\\text{HCF: common factors, } \\min \\text{ power}'
   )
   const answer = showSplit({ constant, parts: common })
+  const ok = splitsAgree(splits, exprs)
   return {
     title,
     input,
     method: 'Factorise, then take the common factors',
     moves: s.moves,
     answers: [{ label: 'HCF =', tex: answer }],
-    check: `Every expression above contains ${answer}.`
+    check: ok ? `Every factorisation above multiplies back to its expression, and each one contains ${answer}.` : SUSPECT,
+    checked: ok ? 'ok' : 'failed'
   }
 }
 
@@ -171,12 +185,14 @@ export function lcmAlgebraWorking(srcs: string[]): Working {
     '\\text{LCM: all factors, } \\max \\text{ power}'
   )
   const answer = showSplit({ constant, parts: all })
+  const ok = splitsAgree(splits, exprs)
   return {
     title,
     input,
     method: 'Factorise, then take every factor',
     moves: s.moves,
     answers: [{ label: 'LCM =', tex: answer }],
-    check: `${answer} divides by every expression above.`
+    check: ok ? `Every factorisation above multiplies back to its expression, and ${answer} divides by each one.` : SUSPECT,
+    checked: ok ? 'ok' : 'failed'
   }
 }

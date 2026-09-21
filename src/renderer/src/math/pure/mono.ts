@@ -234,17 +234,68 @@ function fromNode(node: MathNode): Expr {
   }
 }
 
-/** Read typed maths into an expanded expression. Throws NotPolynomial with a readable reason. */
-export function parseExpr(src: string): Expr {
+/**
+ * "x(x + 1)" means x times the bracket. mathjs reads a letter followed by a bracket as a call to a
+ * function named x, which is the first expand exercise a student meets being refused with
+ * '"x" is not something I can factorise'. A single letter (with or without a power) directly in
+ * front of a bracket gets its × written in; a letter inside a longer name (the n of sin) does not.
+ */
+const IMPLICIT_CALL = /(?<![A-Za-z_])([A-Za-z](?:\^\d+)?)\s*\(/g
+const writeTimes = (text: string): string => text.replace(IMPLICIT_CALL, '$1*(')
+
+/** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */
+function readNode(src: string): MathNode {
   const text = src.trim()
   if (!text) throw new NotPolynomial('Nothing to work on yet — type an expression first.')
-  let node: MathNode
   try {
-    node = math.parse(preprocess(text))
+    return math.parse(writeTimes(preprocess(text)))
   } catch {
     throw new NotPolynomial('I could not read that. Check the brackets and signs.')
   }
-  return fromNode(node)
+}
+
+/** Read typed maths into an expanded expression. Throws NotPolynomial with a readable reason. */
+export function parseExpr(src: string): Expr {
+  return fromNode(readNode(src))
+}
+
+type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode }
+
+/** How many times a bracket is written out for Expand: (x + 1)⁸ is eight columns, not one lump. */
+const MAX_UNROLLED_POWER = 8
+
+/** The factors of one product node — see parseFactors. */
+function factorsOfNode(node: MathNode): Expr[] {
+  const out: Expr[] = []
+  const walk = (n: MathNode): void => {
+    const v = n as unknown as Loose
+    if (v.type === 'ParenthesisNode' && v.content) return walk(v.content)
+    if (v.type === 'OperatorNode' && v.op === '*' && v.args) return v.args.forEach(walk)
+    if (v.type === 'OperatorNode' && v.op === '^' && v.args?.length === 2) {
+      const k = wholeNumberIn(v.args[1])
+      const base = fromNode(v.args[0])
+      // A power of a bracket is that bracket written k times; a power of a single term stays whole.
+      if (k !== null && k >= 2 && k <= MAX_UNROLLED_POWER && base.length > 1) {
+        for (let i = 0; i < k; i++) out.push(base)
+        return
+      }
+    }
+    out.push(fromNode(n))
+  }
+  walk(node)
+  // 2x is one term, not "2 times x": every single-term factor is gathered into one monomial, in
+  // the place of the first, so 2x(x + 1) distributes 2x over the bracket instead of starting with
+  // a grid for 2 × x.
+  const singles = out.filter((f) => f.length === 1)
+  if (singles.length < 2) return out
+  const mono = singles.reduce((a, b) => eMul(a, b))
+  let placed = false
+  return out.flatMap((f) => {
+    if (f.length !== 1) return [f]
+    if (placed) return []
+    placed = true
+    return [mono]
+  })
 }
 
 /**
@@ -255,31 +306,40 @@ export function parseExpr(src: string): Expr {
  * product at the top level comes back as a single factor.
  */
 export function parseFactors(src: string): Expr[] {
-  const text = src.trim()
-  if (!text) throw new NotPolynomial('Nothing to work on yet — type an expression first.')
-  let node: MathNode
-  try {
-    node = math.parse(preprocess(text))
-  } catch {
-    throw new NotPolynomial('I could not read that. Check the brackets and signs.')
-  }
-  const out: Expr[] = []
-  const walk = (n: MathNode): void => {
-    const v = n as unknown as { type: string; op?: string; args?: MathNode[]; content?: MathNode }
-    if (v.type === 'ParenthesisNode' && v.content) return walk(v.content)
-    if (v.type === 'OperatorNode' && v.op === '*' && v.args) return v.args.forEach(walk)
-    if (v.type === 'OperatorNode' && v.op === '^' && v.args?.length === 2) {
-      const k = wholeNumberIn(v.args[1])
-      const base = fromNode(v.args[0])
-      // A power of a bracket is that bracket written k times; a power of a single term stays whole.
-      if (k !== null && k >= 2 && k <= 6 && base.length > 1) {
-        for (let i = 0; i < k; i++) out.push(base)
-        return
+  return factorsOfNode(readNode(src))
+}
+
+/** One piece of a sum: its sign, and the factors of the product it is. */
+export interface Summand {
+  neg: boolean
+  factors: Expr[]
+}
+
+/**
+ * The top-level sum, each piece kept as a product of factors: (x + 2)² − (x − 2)² comes back as
+ * two summands of two factors each, so Expand can multiply each one out and then add the pieces,
+ * instead of saying there was nothing to multiply.
+ */
+export function parseSummands(src: string): Summand[] {
+  const out: Summand[] = []
+  const walk = (n: MathNode, neg: boolean): void => {
+    const v = n as unknown as Loose
+    if (v.type === 'ParenthesisNode' && v.content) return walk(v.content, neg)
+    if (v.type === 'OperatorNode' && v.args) {
+      if (v.op === '+' && v.args.length === 2) {
+        walk(v.args[0], neg)
+        return walk(v.args[1], neg)
       }
+      if (v.op === '-' && v.args.length === 2) {
+        walk(v.args[0], neg)
+        return walk(v.args[1], !neg)
+      }
+      if (v.op === '-' && v.args.length === 1) return walk(v.args[0], !neg)
+      if (v.op === '+' && v.args.length === 1) return walk(v.args[0], neg)
     }
-    out.push(fromNode(n))
+    out.push({ neg, factors: factorsOfNode(n) })
   }
-  walk(node)
+  walk(readNode(src), false)
   return out
 }
 
@@ -288,14 +348,7 @@ export function parseFactors(src: string): Expr[] {
  * everything uniformly.
  */
 export function parseFraction(src: string): { num: Expr; den: Expr } {
-  const text = src.trim().replace(/^=+|=+$/g, '')
-  if (!text) throw new NotPolynomial('Nothing to work on yet — type an expression first.')
-  let node: MathNode
-  try {
-    node = math.parse(preprocess(text))
-  } catch {
-    throw new NotPolynomial('I could not read that. Check the brackets and signs.')
-  }
+  const node = readNode(src.trim().replace(/^=+|=+$/g, ''))
   let top = node as unknown as { type: string; op?: string; args?: MathNode[]; content?: MathNode }
   while (top.type === 'ParenthesisNode' && top.content) top = top.content as unknown as typeof top
   if (top.type === 'OperatorNode' && top.op === '/' && top.args?.length === 2) {

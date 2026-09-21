@@ -6,6 +6,7 @@ import { calcEng, calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
 import { math, setAngleMode } from '../math/expr'
 import { latexToMath } from '../math/latexToMath'
+import { fieldHasText } from '../math/pure/reveal'
 import { cas, warmupCas } from '../math/cas'
 import { useScene } from '../core/store'
 import { themeColor } from '../app/theme'
@@ -15,7 +16,7 @@ import { Tex } from '../ui/Tex'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { ModePanel } from './calcModes'
 import { usePure } from '../math/pure/store'
-import { suggestJob, type JobId } from '../math/pure/run'
+import { type JobId } from '../math/pure/run'
 import { showPanel } from '../app/panels'
 
 // Every number the calculator shows follows the precision the student chose in Settings
@@ -145,13 +146,14 @@ function args(inner: string): string[] {
  * middle. Keeping the two apart means the keypad stays a keypad and long working gets real room.
  */
 function PureMathRow({ latex }: { latex: string }) {
-  const run = usePure((s) => s.run)
-  const text = latexToMath(latex).trim()
+  const runLatex = usePure((s) => s.runLatex)
+  const text = fieldHasText(latex)
   const go = (job?: JobId) => {
     if (!text) return
-    // The field's own LaTeX goes across with the linear form: the Working panel's field reads
-    // LaTeX, and handing it the linear form put x^(2) with a stray bracket in front of the student.
-    run(job ?? suggestJob(text), text, latex)
+    // The field's own LaTeX goes across: the Working panel's field reads LaTeX, and handing it
+    // the linear form put x^(2) with a stray bracket in front of the student. The store does the
+    // conversion, so a refusal thrown by the converter is shown as a sentence, not a crash.
+    runLatex(latex, job ?? 'auto')
     showPanel('working')
   }
   const QUICK: { id: JobId; label: string }[] = [
@@ -309,7 +311,15 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
 
   const evaluate = async (varsOverride?: Record<string, unknown>) => {
     const s = useCalc.getState()
-    const input = linear().trim()
+    // The conversion can refuse (a ± the engine cannot use); its sentence belongs on the LCD
+    // with every other error, not in an unhandled rejection.
+    let input: string
+    try {
+      input = linear().trim()
+    } catch (e) {
+      setResult({ main: 'Syntax ERROR', extra: [e instanceof Error ? e.message : String(e)], error: true })
+      return
+    }
     if (!input) return
     try {
       if (mode === 'BASE-N') {

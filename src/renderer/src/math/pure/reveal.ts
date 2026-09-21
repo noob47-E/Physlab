@@ -4,8 +4,21 @@
 // line gets, and what the "Allow i" offer runs — each is a small pure function here, and the panel
 // only wires them to buttons.
 
+import { latexToMath } from '../latexToMath'
 import { suggestJob, type JobId } from './run'
 import type { Working } from './work'
+
+/**
+ * Whether a maths field holds something worth running. A field the converter refuses still
+ * counts: the run is what shows the student the refusal, so its button must not be greyed out.
+ */
+export function fieldHasText(latex: string): boolean {
+  try {
+    return latexToMath(latex).trim().length > 0
+  } catch {
+    return latex.trim().length > 0
+  }
+}
 
 /** What the student wants to see first: nothing (work it out yourself) or every step. */
 export type StepPref = 'try' | 'all'

@@ -11,7 +11,8 @@
 
 import { create } from 'zustand'
 import { cas, type CasOp } from '../cas'
-import { jobById, runPure, type JobId } from './run'
+import { latexToMath } from '../latexToMath'
+import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
 
 export interface PureEntry {
@@ -71,6 +72,13 @@ interface PureState {
   setInput: (s: string) => void
   setJob: (j: JobId) => void
   run: (job?: JobId, input?: string, latex?: string) => void
+  /**
+   * Run straight from a maths field. The LaTeX is converted here, inside the same guard as the
+   * generators, so a refusal thrown by the converter (a ± the engine cannot use, say) is shown to
+   * the student as a sentence. Converting in the panel first put that throw in the middle of a
+   * render, where nothing catches it. 'auto' guesses the job from the shape of the text.
+   */
+  runLatex: (latex: string, job: JobId | 'auto') => void
   recall: (id: string) => void
   remove: (id: string) => void
   clearHistory: () => void
@@ -115,6 +123,20 @@ export const usePure = create<PureState>((set, get) => ({
     // The answer is not optional. When this engine cannot show working, SymPy is asked for the
     // result alone, and the panel says plainly that the steps are missing.
     void askCas(j, src, shown, runSeq, set, get)
+  },
+
+  runLatex: (latex, job) => {
+    let text: string
+    try {
+      text = latexToMath(latex).trim()
+    } catch (err) {
+      const label = jobById(job === 'auto' ? get().job : job).label
+      const working = failed(label, latex, err instanceof Error && err.message ? err.message : 'I could not read that.')
+      set({ inputLatex: latex, working, asking: false, runSeq: get().runSeq + 1 })
+      return
+    }
+    if (!text) return
+    get().run(job === 'auto' ? suggestJob(text) : job, text, latex)
   },
 
   recall: (id) => {

@@ -60,10 +60,12 @@ function exponentForm(v: number, s: CalcPrecision): string {
   const digits = Math.max(1, s.decimals)
   let e = Math.floor(Math.log10(Math.abs(v)))
   let mant = fmtPrecise(v / 10 ** e, { decimals: digits, precisionMode: 'sf' })
-  // 9.99… rounds up to 10 at few figures; that is one more power of ten, not a two-digit mantissa.
+  // 9.99… rounds up to 10 at few figures; that is one more power of ten, not a two-digit
+  // mantissa. The rounded value is then exactly one power of ten, so the mantissa is 1: formatting
+  // again would round 0.95 down to 0.9 and print 0.9×10⁻¹² for 9.5×10⁻¹³.
   if (/^[−-]?10/.test(mant)) {
     e += 1
-    mant = fmtPrecise(v / 10 ** e, { decimals: digits, precisionMode: 'sf' })
+    mant = `${v < 0 ? '−' : ''}1`
   }
   return `${trimZeros(mant)}×10^${e}`
 }
