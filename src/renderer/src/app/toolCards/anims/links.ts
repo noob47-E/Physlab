@@ -1,8 +1,8 @@
 // The cards for the ways two Sandbox objects can be joined, one per entry in sim/links.ts LINK_KINDS.
 //
 // The title is the plain name before the dash in sim/types.ts LINK_LABELS. Every card here is a real
-// animation; Rope is the pattern for a two-click card and AUTHORING.md explains it. The Connect
-// flow's kind cards are wired to these after P4 lands.
+// animation; Rope is the pattern for a two-click card and AUTHORING.md explains it. KindCard in
+// panels/Sandbox.tsx (the Connect flow) asks for them by `link:<kind>`.
 
 import type { ToolCardDef, ToolCardKey } from '../types'
 import { Hinge } from './Hinge'

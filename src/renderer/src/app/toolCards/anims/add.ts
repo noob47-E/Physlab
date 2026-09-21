@@ -1,7 +1,7 @@
 // The cards for the Sandbox ADD buttons, one per shape in panels/Sandbox.tsx ADD.
 //
 // The title is the button's label ("Ball" for a sphere, "Crate" for a box). These buttons have no
-// shortcut. The Sandbox panel itself is wired to these after P4 lands (it owns that file).
+// shortcut. AddButton in panels/Sandbox.tsx asks for them by `add:<shape>`.
 
 import type { ToolCardDef, ToolCardKey } from '../types'
 import { Ball } from './Ball'

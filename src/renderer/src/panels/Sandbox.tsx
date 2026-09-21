@@ -9,7 +9,7 @@ import { engine, massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
 import { groupedPresets, launchVelocity, presetBadges, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
-import { joinPrompt, LINK_CARDS, noWheelNote, wheelsAbove } from '../sim/join'
+import { joinPrompt, LINK_CARDS, linkCard, noWheelNote, wheelsAbove } from '../sim/join'
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_TITLES, joinCandidates, readFold, writeFold, type ControlKey, type FoldId, type FoldStore } from '../sim/inspector'
 import { QUANTITIES, quantity, tableFrom, type QuantityKey } from '../sim/recording'
 import { useLab } from '../lab/labStore'
@@ -19,6 +19,7 @@ import { enterMode } from '../app/layout'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
 import { formatMeasure } from '../math/format'
+import { useToolCard } from '../ui/useToolCard'
 
 /** Shapes that roll, so only they are offered a rolling-resistance figure. */
 const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
@@ -191,10 +192,7 @@ export function Sandbox() {
 
       <div className="flex flex-wrap gap-1.5 px-2 pb-2">
         {ADD.map((a) => (
-          <button key={a.shape} className="btn h-7" onClick={() => add(a.shape)} title={`Add a ${a.label.toLowerCase()}`}>
-            <Plus size={11} />
-            {a.icon} {a.label}
-          </button>
+          <AddButton key={a.shape} shape={a.shape} label={a.label} icon={a.icon} onClick={() => add(a.shape)} />
         ))}
         {/* Deleting the floor used to be final. */}
         {!hasFloor && (
@@ -733,9 +731,7 @@ function JoinGuide() {
         <div className="mt-1 flex flex-col gap-1">
           {LINK_CARDS.map((c) =>
             c.kind === 'pulley' ? (
-              <div key={c.kind} className="rounded-md border border-[color:var(--line-2)] px-2 py-1">
-                <div className="font-semibold text-[color:var(--text-strong)]">{c.title}</div>
-                <div className="text-small leading-snug text-[color:var(--text-dim)]">{c.line}</div>
+              <KindCard key={c.kind} kind={c.kind}>
                 {wheels.length ? (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {wheels.map((w) => (
@@ -747,16 +743,55 @@ function JoinGuide() {
                 ) : (
                   <div className="pt-0.5 text-small text-[color:var(--text-faint)]">{noWheelNote(bodies, paired.a, paired.b)}</div>
                 )}
-              </div>
+              </KindCard>
             ) : (
-              <button key={c.kind} className="rounded-md border border-[color:var(--line-2)] px-2 py-1 text-left hover:bg-[var(--bg-3)]" onClick={() => finishJoin(c.kind)}>
-                <div className="font-semibold text-[color:var(--text-strong)]">{c.title}</div>
-                <div className="text-small leading-snug text-[color:var(--text-dim)]">{c.line}</div>
-              </button>
+              <KindCard key={c.kind} kind={c.kind} onPick={() => finishJoin(c.kind)} />
             )
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * One ADD button. Resting on it opens its card (ui/ToolCard.tsx) — a looping picture of the shape
+ * and one sentence — the same way a tool on the shelf does; the card replaces the title tooltip.
+ */
+function AddButton({ shape, label, icon, onClick }: { shape: ShapeKind; label: string; icon: React.ReactNode; onClick: () => void }) {
+  const card = useToolCard(`add:${shape}`)
+  return (
+    <button className="btn h-7" onClick={onClick} {...card}>
+      <Plus size={11} />
+      {icon} {label}
+    </button>
+  )
+}
+
+/**
+ * One way of joining, in the Connect flow. With `onPick` it is the button that finishes the join;
+ * without, it is the pulley's card, whose choice is one of the wheel buttons in `children`.
+ * Resting on either opens the link's card with its picture, beside the one-line rule already shown.
+ */
+function KindCard({ kind, onPick, children }: { kind: LinkKind; onPick?: () => void; children?: React.ReactNode }) {
+  const card = useToolCard(`link:${kind}`)
+  const c = linkCard(kind)
+  const text = (
+    <>
+      <div className="font-semibold text-[color:var(--text-strong)]">{c.title}</div>
+      <div className="text-small leading-snug text-[color:var(--text-dim)]">{c.line}</div>
+    </>
+  )
+  if (onPick)
+    return (
+      <button className="rounded-md border border-[color:var(--line-2)] px-2 py-1 text-left hover:bg-[var(--bg-3)]" onClick={onPick} {...card}>
+        {text}
+      </button>
+    )
+  return (
+    <div className="rounded-md border border-[color:var(--line-2)] px-2 py-1" {...card}>
+      {text}
+      {children}
     </div>
   )
 }
