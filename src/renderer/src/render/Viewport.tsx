@@ -159,6 +159,10 @@ export function Viewport() {
   const particles = useParticleLab((s) => s.enabled)
   const layoutReady = useApp((s) => s.layoutReady)
   const mode = useApp((s) => s.mode)
+  const graphicsInfo = useApp((s) => s.graphicsInfo)
+  // The 2D/3D, grid, snap and label controls belong to the maths drawing. The Sandbox and the
+  // GPU Lab are 3D worlds of their own where those switches did nothing but confuse.
+  const drawing = mode !== 'sandbox' && mode !== 'gpu'
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
   const theme = useTheme((t) => t.theme)
   const canvasBg = themeColor('--canvas-bg', '#17181b')
@@ -204,36 +208,44 @@ export function Viewport() {
       {mode === 'sandbox' && <SandboxStrip />}
       {mode !== 'sandbox' && (
       <div className="absolute left-3 top-3 flex items-center gap-1">
-        <div className="seg">
-          <button className={viewMode === '2d' ? 'on' : ''} onClick={() => setViewMode('2d')} title="2D view (Tab)">
-            <Square size={13} /> 2D
-          </button>
-          <button className={viewMode === '3d' ? 'on' : ''} onClick={() => setViewMode('3d')} title="3D view (Tab)">
-            <Box size={13} /> 3D
-          </button>
-        </div>
+        {drawing && (
+          <div className="seg">
+            <button className={viewMode === '2d' ? 'on' : ''} onClick={() => setViewMode('2d')} title="2D view (3)">
+              <Square size={13} /> 2D
+            </button>
+            <button className={viewMode === '3d' ? 'on' : ''} onClick={() => setViewMode('3d')} title="3D view (3)">
+              <Box size={13} /> 3D
+            </button>
+          </div>
+        )}
         <button className="icon-btn" onClick={resetCamera} title="Reset view (Home)">
           <Home size={14} />
         </button>
-        <button className={`icon-btn ${settings.showGrid ? 'on' : ''}`} onClick={() => setSettings({ showGrid: !settings.showGrid })} title="Grid">
-          <Grid3x3 size={14} />
-        </button>
-        <button className={`icon-btn ${settings.snap ? 'on' : ''}`} onClick={() => setSettings({ snap: !settings.snap })} title="Snap to grid">
-          <Magnet size={14} />
-        </button>
+        {drawing && (
+          <>
+            <button className={`icon-btn ${settings.showGrid ? 'on' : ''}`} onClick={() => setSettings({ showGrid: !settings.showGrid })} title="Grid">
+              <Grid3x3 size={14} />
+            </button>
+            <button className={`icon-btn ${settings.snap ? 'on' : ''}`} onClick={() => setSettings({ snap: !settings.snap })} title="Snap to grid">
+              <Magnet size={14} />
+            </button>
+          </>
+        )}
         <button className="icon-btn" onClick={() => void saveViewportImage(2)} title="Save the drawing as an image (PNG)">
           <Camera size={14} />
         </button>
       </div>
       )}
-      {mode !== 'sandbox' && (
+      {drawing && (
       <div data-tour="labels" className="absolute left-3 top-11 flex items-center gap-1.5">
-        <span className="text-[11px] text-zinc-500">Labels</span>
+        <span className="text-[11px] text-[var(--text-faint)]">Labels</span>
         <LabelShowSwitch />
       </div>
       )}
 
-      <div className="absolute right-3 top-3 flex items-center gap-2 text-[11px] text-zinc-400">
+      {/* Which backend, which quality, how many frames: for whoever is diagnosing graphics, not
+          for a student doing homework. The setting is in the units-and-precision popover. */}
+      <div className={`absolute right-3 top-3 items-center gap-2 text-[11px] text-[var(--text-dim)] ${graphicsInfo ? 'flex' : 'hidden'}`}>
         <span className="badge" title={gpu.adapter || undefined}>
           {gpu.backend === 'WebGPU' ? '● WebGPU' : gpu.backend === 'WebGL2' ? '● WebGL2' : '○ starting'}
         </span>
@@ -267,7 +279,7 @@ export function Viewport() {
         <div className="tool-hint">
           <span>{hint}</span>
           {picks > 0 && (
-            <span className="pointer-events-auto ml-3 inline-flex items-center gap-1 border-l border-[#3a3c43] pl-3">
+            <span className="pointer-events-auto ml-3 inline-flex items-center gap-1 border-l border-[var(--line-2)] pl-3">
               <button className="btn h-6 primary" onClick={() => finishTool()} title="Finish this shape (right-click, Enter or double-click)">
                 <Check size={12} /> Finish
               </button>

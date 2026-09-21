@@ -12,6 +12,13 @@ import { isActivatable, isTyping as typingIn } from './keyTargets'
 
 const isTyping = (e: KeyboardEvent) => typingIn(e.target as HTMLElement)
 
+/**
+ * The key that flips the drawing between 2D and 3D. It used to be Tab, which also stopped Tab
+ * from moving keyboard focus anywhere in the app. V would have been the natural choice, but V is
+ * the Move tool; 3 reads as "3D".
+ */
+export const VIEW_KEY = '3'
+
 export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -67,8 +74,11 @@ export function useShortcuts() {
         return
       }
       if (ctrl) return
+      // Tab is the keyboard's way from one control to the next, so it is never taken here; the
+      // 2D/3D switch lives on its own key (VIEW_KEY) instead.
+      if (e.key === 'Tab') return
       // The Sandbox has its own objects and its own camera: Delete removes the selected body, Esc
-      // drops the selection, and the drawing tools, Tab and the 2D view do not apply.
+      // drops the selection, and the drawing tools and the 2D view do not apply.
       if (useApp.getState().mode === 'sandbox') {
         const sb = useSandbox.getState()
         if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -77,10 +87,6 @@ export function useShortcuts() {
         }
         if (e.key === 'Escape') {
           sb.select(null)
-          return
-        }
-        if (e.key === 'Tab') {
-          e.preventDefault()
           return
         }
         if (e.key === 'Home') {
@@ -104,8 +110,7 @@ export function useShortcuts() {
           if (undoLastPick()) return
           if (s.selection.length) s.removeObjects(s.selection)
           return
-        case 'Tab':
-          e.preventDefault()
+        case VIEW_KEY:
           s.setViewMode(s.viewMode === '2d' ? '3d' : '2d')
           return
         case 'Home':

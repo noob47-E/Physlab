@@ -3,6 +3,22 @@
 import { scene } from '../../core/store'
 import { useCalc } from '../../calc/calcStore'
 import type { ModeId } from '../modes'
+import type { JobId } from '../../math/pure/run'
+
+/**
+ * The worked example behind the Welcome screen's "Show your working" tile: a factorisation,
+ * because that is the homework question most students meet first and the working is short
+ * enough to read in one go. tests/layout.test.ts checks it really produces steps.
+ */
+export const WELCOME_JOB: JobId = 'factor'
+
+/**
+ * What the tile promises, in the notation a student writes. It has to match the job's own
+ * example, which is what the tile actually runs: tests/layout.test.ts holds the two together,
+ * so a changed example in math/pure/run.ts cannot leave the tile promising one problem and
+ * showing another.
+ */
+export const WELCOME_PROMISE = 'Factorise 6x² + 7x − 3'
 
 export interface TourStep {
   /** Element to spotlight (a data-tour name). Missing element: the card is centred. */
@@ -138,11 +154,13 @@ export const SHORTCUTS: [string, string][] = [
   ['Esc', 'Cancel the drawing, then back to the Move tool'],
   ['Alt (hold)', 'Draw without snapping'],
   ['Shift (hold)', 'Snap the direction to 15° steps'],
-  ['Tab', '2D / 3D view'],
+  ['3', '2D / 3D view'],
+  ['Tab', 'Move between the buttons and fields'],
   ['Home', 'Reset the view'],
   ['Space', 'Play or pause the timeline'],
   ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],
   ['Del', 'Delete what is selected'],
   ['Ctrl+S / Ctrl+O', 'Save / open a project'],
+  ['Ctrl+= / Ctrl+− / Ctrl+0', 'Bigger text, smaller text, normal size'],
   ['V P W S L C T G A D X K', 'Tools: move, point, vector, segment, line, circle, triangle, polygon, angle, measure, delete, sketch']
 ]

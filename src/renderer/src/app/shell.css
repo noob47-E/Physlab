@@ -1,0 +1,51 @@
+/* The shell's own behaviour styles: menus that fit a short screen, the folded top bar, the
+   icon-only tool shelf, and focus rings now that Tab reaches the controls again.
+   Colours are the theme tokens from styles.css; nothing here names a colour of its own.
+   Inside @layer components, or Tailwind's width/height utilities stop working (see AGENTS.md). */
+@layer components {
+  /* A 24-row View menu ran off the bottom of a 768 px screen with no way to reach the last rows. */
+  .menu {
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+  }
+  .menu button.on {
+    color: var(--text-strong);
+  }
+  .menu button:disabled {
+    cursor: default;
+  }
+  .menu button:disabled:hover {
+    background: transparent;
+  }
+
+  /* The bar never wraps; when it cannot fit, it folds (see barDensity in layoutMath.ts). No
+     overflow: hidden here: the dropdown menus hang below the bar and would be cut off. */
+  .topbar {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .topbar.tight .menu-btn {
+    padding: 0 6px;
+  }
+
+  /* Icon-only tools when the labels would not fit the window. */
+  .toolshelf.icons .tool {
+    min-width: 32px;
+    padding: 0 4px;
+  }
+  .toolshelf.icons .tool-sep {
+    margin: 0 3px;
+  }
+
+  /* Keyboard focus is visible again: the global handler no longer swallows Tab. */
+  .menu-btn:focus-visible,
+  .mode-tab:focus-visible,
+  .tool:focus-visible,
+  .icon-btn:focus-visible,
+  .seg button:focus-visible,
+  .btn:focus-visible,
+  .menu button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
