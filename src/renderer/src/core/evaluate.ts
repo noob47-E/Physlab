@@ -327,6 +327,11 @@ function stuckMessage(id: ObjId, stuck: ObjId[], objects: Record<ObjId, SceneObj
   const name = (x: ObjId) => objects[x]?.name ?? x
   // Objects this one needs, both by reference and by name inside a formula.
   const usedNames = new Set(exprRefs(objects[id]).flatMap((e) => e.match(/[A-Za-zͰ-Ͽ][\w']*/g) ?? []))
+  // "a = a + 1", or a midpoint of itself: the loop has one member, so the sentence below would
+  // have nobody to name and the student used to get the vague fallback instead.
+  if (parentRefs(objects[id]).includes(id) || usedNames.has(name(id))) {
+    return `${name(id)} needs itself. This is a loop — give it a value that does not depend on it.`
+  }
   const others = [
     ...parentRefs(objects[id]),
     ...stuck.filter((p) => usedNames.has(objects[p]?.name ?? ''))

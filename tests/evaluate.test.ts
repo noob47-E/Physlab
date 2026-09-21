@@ -68,9 +68,16 @@ describe('loops', () => {
     expect(ev.errors.get('n2')).toMatch(/^b needs a, which in turn needs b\. This is a loop/)
   })
 
-  it('a formula that needs itself is a loop too', () => {
+  it('a formula that needs itself is a loop too, and says so rather than falling back to "cannot be worked out"', () => {
     const ev = run([number('n1', 'a', 'a + 1')])
-    expect(ev.errors.get('n1')).toMatch(/loop/)
+    expect(ev.errors.get('n1')).toBe('a needs itself. This is a loop — give it a value that does not depend on it.')
+  })
+
+  it('an object that needs two others in the loop names both, with the verb to match', () => {
+    const ev = run([number('n1', 'a', 'b + c'), number('n2', 'b', 'a'), number('n3', 'c', 'a')])
+    expect(ev.errors.size).toBe(3)
+    expect(ev.errors.get('n1')).toMatch(/^a needs b and c, which in turn need a\. This is a loop/)
+    expect(ev.errors.get('n2')).toMatch(/^b needs a, which in turn needs b\./)
   })
 
   it('a three-way loop names the objects involved and spares the rest of the scene', () => {
@@ -83,7 +90,7 @@ describe('loops', () => {
   it('a loop through references (a midpoint of itself) is reported the same way', () => {
     const m: SceneObject = { ...base('m', 'M'), type: 'point', def: { kind: 'midpoint', a: 'pA', b: 'm' } }
     const ev = run([point('pA', 'A', [0, 0, 0]), m])
-    expect(ev.errors.get('m')).toMatch(/loop|cannot be worked out yet/)
+    expect(ev.errors.get('m')).toBe('M needs itself. This is a loop — give it a value that does not depend on it.')
     expect(value(ev, 'pA')).toBeDefined()
   })
 })
@@ -145,7 +152,8 @@ describe('time and angle', () => {
 })
 
 describe('the dependency graph helpers', () => {
-  const list = [point('pA', 'A', [0, 0, 0]), point('pB', 'B', [1, 1, 0]), segment('s', 'a', 'pA', 'pB'), number('n', 'k', '2*a'), number('bad', 'z', 'sqrt(')]
+  // z mentions a but cannot be parsed, so it must not be counted as one of a's dependents.
+  const list = [point('pA', 'A', [0, 0, 0]), point('pB', 'B', [1, 1, 0]), segment('s', 'a', 'pA', 'pB'), number('n', 'k', '2*a'), number('bad', 'z', 'a +')]
   const objects: Record<ObjId, SceneObject> = Object.fromEntries(list.map((o) => [o.id, o]))
 
   it('directDependents links by reference and by name, and skips a formula it cannot read', () => {

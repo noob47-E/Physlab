@@ -16,10 +16,17 @@ export function renameProblem(next: string, taken: Iterable<string>): string | n
 /**
  * The objects that change when `id` is called `next`: the object itself, and every object whose
  * formulas mention the old name as a whole word (A but not A1, AB or A').
+ *
+ * Two objects can share a name (a loaded file may say so), and the evaluator gives the name to
+ * the later one. Renaming the other must not touch anyone's formulas: "b = a + 1" never used it,
+ * and rewriting b to "c + 1" quietly changed b's value.
  */
 export function renameInObjects(objects: Record<ObjId, SceneObject>, id: ObjId, next: string): SceneObject[] {
   const obj = objects[id]
   if (!obj || obj.name === next) return []
+  // Last one wins, the same way `directDependents` and the evaluator resolve a name.
+  const owner = new Map(Object.values(objects).map((o) => [o.name, o.id])).get(obj.name)
+  if (owner !== id) return [{ ...obj, name: next }]
   const re = new RegExp(`(?<![\\w'])${obj.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w'])`, 'g')
   const swap = (e: string) => e.replace(re, next)
   const changed: SceneObject[] = [{ ...obj, name: next }]

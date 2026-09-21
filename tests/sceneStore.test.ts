@@ -164,6 +164,30 @@ describe('renameObject', () => {
     expect(g.type === 'graph' ? g.source : '').toBe('y = slope*x + slope')
   })
 
+  it('renaming an object whose name a later object shadows leaves every formula alone', () => {
+    // A loaded file may list two objects called a; the evaluator gives the name to the later
+    // one, so b = a + 1 is 3. Renaming the first used to rewrite b to "c + 1" and make it 2.
+    scene().addObjects([number('n1', 'a', '1'), number('n2', 'a', '2'), number('n3', 'b', 'a + 1')])
+    expect(scene().ev.names.get('a')).toBe('n2')
+    expect(scene().ev.scope.b).toBe(3)
+    expect(scene().renameObject('n1', 'c')).toBeNull()
+    expect(scene().objects.n1.name).toBe('c')
+    const b = scene().objects.n3
+    expect(b.type === 'number' ? b.expr : '').toBe('a + 1')
+    expect(scene().ev.scope.b).toBe(3)
+    expect(scene().ev.scope.c).toBe(1)
+  })
+
+  it('renaming the object that does own a shared name carries its dependents with it', () => {
+    scene().addObjects([number('n1', 'a', '1'), number('n2', 'a', '2'), number('n3', 'b', 'a + 1')])
+    expect(scene().renameObject('n2', 'c')).toBeNull()
+    const b = scene().objects.n3
+    expect(b.type === 'number' ? b.expr : '').toBe('c + 1')
+    expect(scene().ev.scope.b).toBe(3)
+    // The first a is now the only a.
+    expect(scene().ev.names.get('a')).toBe('n1')
+  })
+
   it('refuses a taken name, a reserved name or a name that is not a word, and changes nothing', () => {
     scene().addObjects(chain())
     const before = scene().objects

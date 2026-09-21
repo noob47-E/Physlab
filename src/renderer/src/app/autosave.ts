@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { migrate } from '../core/migrate'
 import { blankSceneFile, scene, useScene } from '../core/store'
 import type { SceneFile } from '../core/types'
+import { DEFAULT_WORLD } from '../sim/types'
 
 const INTERVAL_MS = 60_000
 const KEY = 'physlab.autosave'
@@ -32,7 +33,17 @@ interface Snapshot {
  * would have thrown away a future panel's work without a word.
  */
 export function hasWork(file: SceneFile, blank: SceneFile = blankSceneFile()): boolean {
-  return fingerprint(file) !== fingerprint(blank)
+  return fingerprint(asLoaded(file, blank)) !== fingerprint(blank)
+}
+
+/**
+ * The file as `loadScene` would take it in: a missing lab or sandbox block becomes the blank
+ * one, and world settings a file predates are filled from the defaults. Compared raw, an
+ * autosave from a build without those blocks read as work with "0 objects" in it.
+ */
+function asLoaded(file: SceneFile, blank: SceneFile): SceneFile {
+  const sandbox = file.sandbox && blank.sandbox ? { ...blank.sandbox, ...file.sandbox, world: { ...DEFAULT_WORLD, ...file.sandbox.world } } : blank.sandbox
+  return { ...file, lab: file.lab?.length ? file.lab : blank.lab, sandbox }
 }
 
 /** The file as text with ids replaced by their order of appearance, and the parts that are not work left out. */
