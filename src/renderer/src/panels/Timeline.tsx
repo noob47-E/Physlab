@@ -1,7 +1,7 @@
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react'
 import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
-import { engine, useSandbox } from '../sim/store'
+import { useSandbox } from '../sim/store'
 import { formatMeasure } from '../math/format'
 
 export function Timeline() {
@@ -11,54 +11,22 @@ export function Timeline() {
 
 /**
  * In the Sandbox the clock belongs to the physics engine, not to the animated drawing. This
- * panel used to show the drawing's clock here and its Reset did nothing to the experiment.
+ * panel used to carry a second set of Play, Step and Reset buttons that disagreed with the ones
+ * at the top of the Sandbox panel; now there is one set, there, and this is only the clock.
  */
 function SandboxTimeline() {
   const time = useSandbox((s) => s.engineTime)
   const timeScale = useSandbox((s) => s.world.timeScale)
-  const setWorld = useSandbox((s) => s.setWorld)
-  const resetRun = useSandbox((s) => s.resetRun)
   const playing = useScene((s) => s.playing)
-  const setPlaying = useScene((s) => s.setPlaying)
   const settings = useScene((s) => s.settings)
   return (
-    <div className="panel flex flex-col gap-3 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="btn primary" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
-          {playing ? <Pause size={14} /> : <Play size={14} />} {playing ? 'Pause' : 'Play'}
-        </button>
-        <button
-          className="btn"
-          onClick={() => {
-            setPlaying(false)
-            engine.world?.step(1 / 60)
-            useSandbox.setState({ engineTime: engine.world?.time ?? 0 })
-          }}
-          title="Step one frame (1/60 s)"
-        >
-          <SkipForward size={14} />
-        </button>
-        <button
-          className="btn"
-          onClick={() => {
-            setPlaying(false)
-            resetRun()
-          }}
-          title="Everything back to the start, t = 0"
-        >
-          <RotateCcw size={14} /> Reset
-        </button>
-        <span className="ml-3 font-mono text-[15px] tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
-        <span className="ml-4 text-[color:var(--text-dim)]">Speed</span>
-        <div className="seg">
-          {[0.1, 0.25, 0.5, 1].map((t) => (
-            <button key={t} className={timeScale === t ? 'on' : ''} onClick={() => setWorld({ timeScale: t })}>
-              {t === 1 ? 'normal' : `×${t}`}
-            </button>
-          ))}
-        </div>
+    <div className="panel flex flex-col gap-2 p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-mono text-[15px] tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
+        <span className="text-[color:var(--text-dim)]">{playing ? 'running' : 'paused'}</span>
+        {timeScale !== 1 && <span className="text-[color:var(--text-dim)]">slow motion ×{formatMeasure(timeScale, 'number', settings)}</span>}
       </div>
-      <p className="text-[color:var(--text-dim)]">The Sandbox clock. Slow motion is the same setting as in the Sandbox panel.</p>
+      <p className="text-[color:var(--text-dim)]">Play, Step, Reset and slow motion are at the top of the Sandbox panel. Space plays and pauses.</p>
     </div>
   )
 }

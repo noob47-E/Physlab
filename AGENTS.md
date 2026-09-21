@@ -120,9 +120,11 @@ a row would silently lose the first. A panel added after a user's layout was sav
 - **The engine outlives the view.** `engine.world` in `sim/store.ts` is created once; leaving the
   Sandbox and coming back must not call `SimWorld.create` again, which clears it.
 - **A rope is a chain of bodies, and the solver loses the fight when the mass ratio is large.** Ropes
-  in `world.ts` weigh a tenth of the lightest load, use 20 cm links and ten position steps; at a
-  twentieth with 12 cm links a 2 kg bob stretched a 2.2 m rope by nearly a metre. Rope links live
-  in `ropes`, not `order`, with user data 0, so contacts, transforms and the panel never see them.
+  weigh a tenth of the lightest load, capped at 5 kg but never below a twentieth of it
+  (`ropeLinkMass` in `sim/links.ts`), use 20 cm links and ten position steps; at a twentieth with
+  12 cm links a 2 kg bob stretched a 2.2 m rope by nearly a metre, and a flat 5 kg cap under a heavy
+  load stretched it anyway. Rope links live in `ropes`, not `order`, with user data 0, so contacts,
+  transforms and the panel never see them.
 - **A pulley's fixed points are always world space**, whatever `mSpace` says; the body points are
   local. A hinge stores its pivot as local offsets (`pivotA`/`pivotB`) because `setLinks` re-runs
   mid-run and world-space points would re-pin the bodies where they were when the link was made.

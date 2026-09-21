@@ -2,7 +2,8 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
-import { makeLink, pulleyRim, reachOf, ropeSegments } from '../src/renderer/src/sim/links'
+import { makeLink, pulleyRim, reachOf, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
+import { eulerToQuat, rotateByEuler } from '../src/renderer/src/sim/rotate'
 import { makeBody } from '../src/renderer/src/sim/store'
 import { PRESETS } from '../src/renderer/src/sim/presets'
 import { DEFAULT_WORLD, type BodyDef, type WorldSettings } from '../src/renderer/src/sim/types'
@@ -38,6 +39,68 @@ describe('links', () => {
     expect(makeLink('x', 'pulley', left, right)).toBeNull()
     const hinge = makeLink('h', 'hinge', left, right)!
     expect(hinge.pivotA).toEqual([0.6, 0, 0])
+  })
+
+  it('turns a body-fixed point the way the engine turns the body', () => {
+    const close = (v: number[], w: number[]) => v.forEach((x, i) => expect(x).toBeCloseTo(w[i], 9))
+    close(rotateByEuler([0, 0, 90], [1, 0, 0]), [0, 1, 0])
+    close(rotateByEuler([90, 0, 0], [0, 1, 0]), [0, 0, 1])
+    close(rotateByEuler([0, 90, 0], [1, 0, 0]), [0, 0, -1])
+    // x first, then y, then z — the order the engine's quaternion is built in.
+    close(rotateByEuler([90, 90, 0], [0, 1, 0]), [1, 0, 0])
+    close(eulerToQuat([0, 0, 0]), [0, 0, 0, 1])
+  })
+
+  it('a pulley turned to face another way still hands the rope its rim, not its face', () => {
+    // The default wheel stands with its axis along z; turned 90° about the vertical it faces x,
+    // and its rim points lie along z. The old rule put them along world x regardless.
+    const wheel = put('pulley', 'P', [0, 5, 0], { size: [0.3, 0.15, 0.3], rotation: [90, 90, 0] })
+    const near = put('box', 'N', [0, 2, -0.3])
+    const far = put('box', 'F', [0, 2, 0.3])
+    const close = (v: number[], w: number[]) => v.forEach((x, i) => expect(x).toBeCloseTo(w[i], 9))
+    const { p1, p2 } = pulleyRim(wheel, near.position, far.position)
+    close(p1, [0, 5, -0.3])
+    close(p2, [0, 5, 0.3])
+    // Swapping the bodies swaps the rim points: each gets the side nearer to it.
+    close(pulleyRim(wheel, far.position, near.position).p1, [0, 5, 0.3])
+    expect(makeLink('p', 'pulley', near, far, { over: wheel })!.length).toBeCloseTo(6, 6)
+  })
+
+  it('an Atwood machine over a pulley turned 90° about the vertical still accelerates at (m₂ − m₁) g / (m₁ + m₂)', async () => {
+    const world = await makeWorld({ twoD: false })
+    const wheel = put('pulley', 'P', [0, 5, 0], { size: [0.3, 0.15, 0.3], rotation: [90, 90, 0] })
+    const light = put('box', 'A', [0, 2.5, -0.3], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 1 })
+    const heavy = put('box', 'B', [0, 2.5, 0.3], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 2 })
+    world.rebuild([floor(), wheel, light, heavy], [makeLink('p', 'pulley', light, heavy, { over: wheel })!])
+    run(world, 0.5)
+    const expected = 0.5 * ((2 - 1) * G / 3) * 0.25
+    expect(2.5 - world.state(heavy.id)!.position[1]).toBeGreaterThan(expected * 0.85)
+    expect(2.5 - world.state(heavy.id)!.position[1]).toBeLessThan(expected * 1.15)
+    expect(world.state(light.id)!.position[1] - 2.5).toBeGreaterThan(expected * 0.85)
+    world.destroy()
+  })
+
+  it('a rope weighs a tenth of its load, and never less than a twentieth', () => {
+    const total = (loads: number[], n: number) => ropeLinkMass(loads, n) * n
+    expect(total([2], 10)).toBeCloseTo(0.2, 9)
+    expect(total([20, 50], 10)).toBeCloseTo(2, 9)
+    // The old cap of 5 kg is what let a heavy load stretch its rope; the floor lifts it.
+    expect(total([200], 10)).toBeCloseTo(10, 9)
+    expect(total([2000], 10)).toBeCloseTo(100, 9)
+    // A link is never lighter than 20 g, or the solver cannot hold it at all.
+    expect(ropeLinkMass([0.1], 30)).toBe(0.02)
+    expect(total([], 10)).toBeCloseTo(0.4, 9)
+  })
+
+  it('a two-tonne load on a rope hangs where a two-kilogram one does', async () => {
+    const world = await makeWorld()
+    const beam = put('box', 'Beam', [0, 5, 0], { size: [0.15, 0.15, 0.15], motion: 'static' })
+    const bob = put('sphere', 'Bob', [0, 2.5, 0], { size: [0.18, 0.18, 0.18], massMode: 'mass', mass: 2000 })
+    world.rebuild([floor(), beam, bob], [makeLink('r', 'rope', beam, bob)!])
+    run(world, 2)
+    // Under the old 5 kg cap it sagged to y ≈ 0.9; a 2 kg bob hangs at ≈ 2.47.
+    expect(world.state(bob.id)!.position[1]).toBeGreaterThan(2.3)
+    world.destroy()
   })
 
   it('an Atwood machine accelerates at (m₂ − m₁) g / (m₁ + m₂)', async () => {
