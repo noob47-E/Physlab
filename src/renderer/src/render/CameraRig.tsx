@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { MapControls, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three/webgpu'
@@ -8,6 +8,7 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { engine, useSandbox } from '../sim/store'
 import { visibleIn } from '../core/visibility'
+import { themeColor, useTheme } from '../app/theme'
 
 /** Bounding box of all visible geometry (graphs excluded). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -81,6 +82,9 @@ export function CameraRig() {
   const { camera, size, controls } = useThree()
   const command = useCameraCommand()
   const last = useRef({ cx: NaN, cy: NaN, wpp: NaN, w: 0, h: 0 })
+  // The fill light's tint comes from the stylesheet and is re-read when the theme flips.
+  const theme = useTheme((t) => t.theme)
+  const fillLight = useMemo(() => themeColor('--light-fill'), [theme])
 
   // The sandbox stands the world up the other way (y is up) and frames the floor.
   useEffect(() => {
@@ -234,7 +238,7 @@ export function CameraRig() {
       <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }} />
       <ambientLight intensity={0.55} />
       <directionalLight position={[6, -8, 14]} intensity={2.2} />
-      <directionalLight position={[-10, 6, -4]} intensity={0.6} color="#9ec5ff" />
+      <directionalLight position={[-10, 6, -4]} intensity={0.6} color={fillLight} />
     </>
   )
 }

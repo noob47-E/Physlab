@@ -12,9 +12,29 @@ import type { GraphObj } from '../core/types'
 import { compileScalar } from '../math/expr'
 import { implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
 import { fmt } from '../math/format'
+import { themeColor, useTheme } from '../app/theme'
 import type { V3 } from '../math/vec'
 
 const scopeNow = () => useScene.getState().ev.scope
+
+/**
+ * The graph's own colours (a curve's colour is the object's) come from the stylesheet and are
+ * re-read when the theme flips, so a root marked in the dark theme is still visible on the
+ * light canvas. WebGPU compiles a material's colour in, so the materials below are keyed on the
+ * theme and arrive new rather than being edited.
+ */
+function useGraphColors() {
+  const theme = useTheme((t) => t.theme)
+  const colors = useMemo(
+    () => ({
+      select: themeColor('--sel-glow'),
+      wireframe: themeColor('--wireframe'),
+      key: (kind: KeyPoint['kind']) => themeColor(kind === 'root' ? '--key-root' : kind === 'yIntercept' ? '--key-intercept' : '--key-extremum')
+    }),
+    [theme]
+  )
+  return { theme, colors }
+}
 
 export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D }: { obj: GraphObj; selected: boolean; hovered: boolean; is3D: boolean }) {
   const view = useView()
@@ -109,6 +129,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
   const { camera, size } = useThree()
+  const { theme, colors } = useGraphColors()
 
   useFrame(({ camera: cam, size: sz }) => {
     const firstPoly = labelPoints(data)
@@ -126,7 +147,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       for (const k of data.keys) {
         const s = toScreen(cam, sz, [k.x, k.y, 0])
         if (s.x < 0 || s.y < 0 || s.x > sz.width || s.y > sz.height) continue
-        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', k.kind === 'root' ? '#ffa8a8' : k.kind === 'yIntercept' ? '#a5d8ff' : '#b2f2bb')
+        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', colors.key(k.kind))
       }
     }
     pool.end()
@@ -134,12 +155,12 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   void camera
   void size
 
-  if (obj.kind === 'surface') return <SurfaceView obj={obj} F={fns.F} selected={selected} version={evVersion} />
+  if (obj.kind === 'surface') return <SurfaceView obj={obj} F={fns.F} selected={selected} version={evVersion} wireframe={colors.wireframe} theme={theme} />
 
   return (
     <>
       {data.fill && data.fill.length > 0 && <FillMesh positions={data.fill} color={obj.color} />}
-      {selected && data.polylines.map((p, i) => <FatLine key={`s${i}`} points={p} color="#ffd43b" width={width + 4} renderOrder={2} />)}
+      {selected && data.polylines.map((p, i) => <FatLine key={`s${i}`} points={p} color={colors.select} width={width + 4} renderOrder={2} />)}
       {data.polylines.map((p, i) => (
         <FatLine key={i} points={p} color={obj.color} width={width} renderOrder={3} />
       ))}
@@ -147,7 +168,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         <FatLine points={data.segments} segments color={obj.color} width={width} renderOrder={3} dashed={obj.op === '<' || obj.op === '>'} dashSize={8 * b.wpp} gapSize={5 * b.wpp} />
       )}
       {data.keys.map((k, i) => (
-        <KeyDot key={i} p={[k.x, k.y, 0]} color={k.kind === 'root' ? '#ff8787' : k.kind === 'yIntercept' ? '#74c0fc' : '#8ce99a'} />
+        <KeyDot key={`${theme}${i}`} p={[k.x, k.y, 0]} color={colors.key(k.kind)} />
       ))}
     </>
   )
@@ -195,7 +216,7 @@ function FillMesh({ positions, color }: { positions: Float32Array; color: string
   )
 }
 
-function SurfaceView({ obj, F, selected, version }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown }) {
+function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown; wireframe: string; theme: string }) {
   const geo = useMemo(() => {
     if (!F) return null
     const s = surfaceGeometry((x, y) => F({ x, y }), 6, 140)
@@ -216,7 +237,7 @@ function SurfaceView({ obj, F, selected, version }: { obj: GraphObj; F?: (v: Rec
         <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.55} metalness={0.05} transparent opacity={selected ? 0.8 : 0.95} />
       </mesh>
       <mesh geometry={geo}>
-        <meshBasicMaterial color="#000000" wireframe transparent opacity={0.12} />
+        <meshBasicMaterial key={theme} color={wireframe} wireframe transparent opacity={0.12} />
       </mesh>
     </group>
   )

@@ -56,7 +56,7 @@ function VecEditor({ value, onChange, onRemove }: { value: VecInput; onChange: (
         <div className="grid grid-cols-3 gap-1">
           {[0, 1, 2].map((i) => (
             <div key={i} className="relative">
-              <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-[color:var(--text-faint)]">{'xyz'[i]}</span>
+              <span className="pointer-events-none absolute left-1.5 top-1 text-fine text-[color:var(--text-faint)]">{'xyz'[i]}</span>
               <NumField value={value.comp[i]} onChange={(n) => onChange({ ...value, comp: value.comp.map((c, j) => (j === i ? n : c)) as V3 })} />
             </div>
           ))}
@@ -65,11 +65,11 @@ function VecEditor({ value, onChange, onRemove }: { value: VecInput; onChange: (
       {value.mode === 'polar' && (
         <div className="grid grid-cols-2 gap-1">
           <div className="relative">
-            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-[color:var(--text-faint)]">size</span>
+            <span className="pointer-events-none absolute left-1.5 top-1 text-fine text-[color:var(--text-faint)]">size</span>
             <NumField value={value.mag} onChange={(n) => onChange({ ...value, mag: n })} />
           </div>
           <div className="relative">
-            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-[color:var(--text-faint)]">θ°</span>
+            <span className="pointer-events-none absolute left-1.5 top-1 text-fine text-[color:var(--text-faint)]">θ°</span>
             <NumField value={value.angle} onChange={(n) => onChange({ ...value, angle: n })} />
           </div>
         </div>
@@ -115,7 +115,7 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
     <div className="steps">
       <div className="flex items-center gap-2 px-3 pt-3">
         <Sparkles size={15} className="text-[color:var(--warn)]" />
-        <div className="flex-1 text-[14px] font-semibold text-[color:var(--text-strong)]">{sol.title}</div>
+        <div className="flex-1 text-lead font-semibold text-[color:var(--text-strong)]">{sol.title}</div>
         {sol.visual && (
           <button className="btn" onClick={() => visualizeSolution(sol)}>
             <Eye size={13} /> Show in scene
@@ -129,7 +129,7 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
         {sol.steps.slice(0, shown).map((s, i) => (
           <li key={i} className="rounded-md bg-[var(--bg-3)] px-3 py-2">
             <div className="flex gap-2">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--sel-row)] text-[11px] text-[color:var(--text-strong)]">{i + 1}</span>
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--sel-row)] text-fine text-[color:var(--text-strong)]">{i + 1}</span>
               <div className="min-w-0 flex-1">
                 {s.text && <div className="text-[color:var(--text)]">{s.text}</div>}
                 {s.tex && <Tex tex={s.tex} display />}
@@ -151,11 +151,11 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
       )}
       {more === 0 && (
         <div className="card mx-3 mt-3 border-[color:var(--warn)] p-3" style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
+          <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
           {sol.answers.map((a) => (
             <div key={a.label} className="flex items-baseline gap-3 py-0.5">
               <span className="w-24 text-[color:var(--text-dim)]">{a.label}</span>
-              <Tex tex={a.tex} className="text-[15px] text-[color:var(--text-strong)]" />
+              <Tex tex={a.tex} className="text-lead text-[color:var(--text-strong)]" />
             </div>
           ))}
         </div>
@@ -275,7 +275,7 @@ export function Solver() {
       </div>
       {problem === 'add' && (
         <div className="mt-2 px-3">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--text-faint)]">Solve by</div>
+          <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--text-faint)]">Solve by</div>
           <div className="seg">
             {(
               [
@@ -289,7 +289,7 @@ export function Solver() {
               </button>
             ))}
           </div>
-          {method === 'cosine' && vecs.length !== 2 && <div className="mt-1 text-[11px] text-[color:var(--warn)]">The law of cosines works with exactly two vectors.</div>}
+          {method === 'cosine' && vecs.length !== 2 && <div className="mt-1 text-fine text-[color:var(--warn)]">The law of cosines works with exactly two vectors.</div>}
         </div>
       )}
       <div className="mt-2">

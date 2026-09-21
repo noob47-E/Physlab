@@ -264,7 +264,7 @@ export function SandboxView() {
   const { invalidate } = useThree()
   const check = useRef(location.hash.includes('sandbox') ? { last: -1, contacts: 0 } : null)
   useGrabAndThrow(sim, group)
-  const selectColour = useMemo(() => themeColor('--warn', '#ffd43b'), [theme])
+  const selectColour = useMemo(() => themeColor('--sel-glow'), [theme])
 
   // Start the engine the first time the sandbox is opened; afterwards pick the running one up
   // again, so switching modes and back does not restart the experiment.
@@ -433,7 +433,7 @@ export function SandboxView() {
           {/* A gold tint at a third strength was all but invisible on steel, concrete and lead —
               the three darkest materials and the three most used. The selected object is lit
               properly instead, so you can tell at a glance which one the panel is describing. */}
-          <meshLambertMaterial color={def.color} emissive={selectColour} emissiveIntensity={selection === def.id ? 0.95 : partner === def.id ? 0.45 : 0} />
+          <meshLambertMaterial key={selectColour} color={def.color} emissive={selectColour} emissiveIntensity={selection === def.id ? 0.95 : partner === def.id ? 0.45 : 0} />
         </mesh>
       ))}
       <FloorGrid bodies={bodies} />
@@ -473,7 +473,7 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
   if (!grid) return null
   return (
     <lineSegments geometry={grid} renderOrder={1}>
-      <lineBasicMaterial color={themeColor('--grid-major', theme === 'light' ? '#bcc8da' : '#34363d')} transparent opacity={0.85} />
+      <lineBasicMaterial key={theme} color={themeColor('--grid-major')} transparent opacity={0.85} />
     </lineSegments>
   )
 }
@@ -571,7 +571,7 @@ function applyTransforms(group: THREE.Group, transforms: Float32Array, order: Bo
 function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   const bodies = useSandbox((s) => s.bodies)
   const theme = useTheme((t) => t.theme)
-  const colour = useMemo(() => themeColor('--accent', '#4dabf7'), [theme])
+  const colour = useMemo(() => themeColor('--accent'), [theme])
   const shown = bodies.filter((d) => d.showArrows && d.motion !== 'static')
   const key = shown.map((d) => d.id).join(',')
   const slots = useMemo(() => new Map(shown.map((d) => [d.id, { tail: [0, 0, 0] as V3, comp: [0, 0, 0] as V3 }])), [key])
@@ -645,7 +645,7 @@ export function linkSegments(kind: LinkKind, from: V3, to: V3): number[] {
 function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   const links = useSandbox((s) => s.links)
   const theme = useTheme((t) => t.theme)
-  const colour = useMemo(() => themeColor('--tick-text', theme === 'light' ? '#59647a' : '#8a8f98'), [theme])
+  const colour = useMemo(() => themeColor('--tick-text'), [theme])
   return (
     <>
       {links.map((l) => (
@@ -679,7 +679,7 @@ function RopeLine({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>
   })
   return (
     <lineSegments ref={line} geometry={geo} renderOrder={12} frustumCulled={false} visible={false}>
-      <lineBasicMaterial color={colour} />
+      <lineBasicMaterial key={colour} color={colour} />
     </lineSegments>
   )
 }
@@ -710,7 +710,7 @@ function StraightLink({ sim, link, colour }: { sim: React.RefObject<SimWorld | n
   })
   return (
     <lineSegments geometry={geo} renderOrder={12} frustumCulled={false}>
-      <lineBasicMaterial color={colour} transparent opacity={link.kind === 'string' ? 0.7 : 1} />
+      <lineBasicMaterial key={colour} color={colour} transparent opacity={link.kind === 'string' ? 0.7 : 1} />
     </lineSegments>
   )
 }

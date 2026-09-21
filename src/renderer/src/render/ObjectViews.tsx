@@ -13,7 +13,7 @@ import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, typ
 import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
 import { headingArc } from '../math/vectorSolver'
-import { themeColor, useTheme } from '../app/theme'
+import { seriesColor, themeColor, useTheme } from '../app/theme'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -26,22 +26,21 @@ function useDrawingColors() {
   const theme = useTheme((s) => s.theme)
   return useMemo(
     () => ({
-      select: themeColor('--warn', '#ffb84d'),
-      xComp: themeColor('--bad', '#ff6b6b'),
-      yComp: themeColor('--good', '#58d68d'),
-      arc: themeColor('--warn', '#ffb84d'),
-      dashed: themeColor('--text-faint', '#6c707a'),
-      outline: themeColor('--bg-0', '#121315'),
-      derived: themeColor('--text-faint', '#6c707a'),
-      strong: themeColor('--text-strong', '#eef0f4')
+      select: themeColor('--sel-glow'),
+      xComp: themeColor('--bad'),
+      yComp: themeColor('--good'),
+      arc: themeColor('--warn'),
+      dashed: themeColor('--text-faint'),
+      outline: themeColor('--bg-0'),
+      derived: themeColor('--text-faint'),
+      strong: themeColor('--text-strong'),
+      /** Fill colours for the parts of a decomposed shape: the stylesheet's series colours in turn. */
+      part: (i: number) => seriesColor(i)
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme]
   )
 }
-
-/** Fill colours for the parts of a decomposed shape: evenly spaced hues, no literal hex. */
-const partColor = (i: number): string => `hsl(${(210 + i * 47) % 360}, 70%, 58%)`
 
 export interface ViewProps<T extends SceneObject, C extends Computed> {
   obj: T
@@ -454,7 +453,7 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
     if (dec.parts.length > 1) {
       dec.parts.forEach((part, i) => {
         const s = toScreen(camera, size, centroid(part.pts))
-        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', partColor(i))
+        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', colors.part(i))
       })
       // Letters for the corners the cut created.
       dec.newPoints.forEach((p, i) => {
@@ -468,7 +467,7 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
     <>
       {geos.map((g, i) => (
         <mesh key={i} geometry={g} renderOrder={0}>
-          <meshBasicMaterial color={partColor(i)} transparent opacity={0.28} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+          <meshBasicMaterial color={colors.part(i)} transparent opacity={0.28} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {dec.cuts.map((cut, i) => (

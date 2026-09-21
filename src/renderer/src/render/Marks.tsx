@@ -1,6 +1,7 @@
 // Tick marks on equal sides and arcs on equal angles: the marks a geometry book puts on two
 // congruent triangles. Set by the Compare card, drawn here.
 
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { FatLine } from './FatLine'
 import { useView } from './viewState'
@@ -19,9 +20,10 @@ export const useMarks = create<{ marks: Marks | null; set: (m: Marks | null) => 
 export function MarksView() {
   const marks = useMarks((s) => s.marks)
   const wpp = useView((s) => s.wpp)
+  // Re-read on a theme switch: the demand-driven canvas only repaints when something renders.
   const theme = useTheme((t) => t.theme)
+  const colour = useMemo(() => themeColor('--good'), [theme])
   if (!marks) return null
-  const colour = themeColor('--good', theme === 'light' ? '#1f8a4c' : '#58d68d')
   const lines: V3[][] = []
   for (const t of marks.ticks) {
     const mid = scale(add(t.a, t.b), 0.5)

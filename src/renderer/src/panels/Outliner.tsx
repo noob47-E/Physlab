@@ -7,7 +7,7 @@ import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
 import { modeOfSpace, SPACE_LABELS, visibleIn, type Space } from '../core/visibility'
-import { enterMode } from '../app/TopBar'
+import { enterMode } from '../app/layout'
 import { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 const GROUPS: { type: ObjType[]; label: string }[] = [
