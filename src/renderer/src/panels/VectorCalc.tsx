@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, Plus, Sigma, Trash2 } from 'lucide-react'
 import { useScene } from '../core/store'
 import type { EvalResult } from '../core/types'
-import { visualizeSolution, type DrawStyle } from '../core/visualize'
+import { isDrawnAnswer, visualizeSolution, type DrawStyle } from '../core/visualize'
 import { latexToMath } from '../math/latexToMath'
 import { inDegrees, math, preprocess, toV3 } from '../math/expr'
 import { formatMeasure, texIJK, texMeasure } from '../math/format'
@@ -18,7 +18,7 @@ import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { ijkLatex, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
+import { addVectorFromScene, cardForSelection, ijkLatex, linkCardToScene, newCardName, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
 
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
 
@@ -105,8 +105,10 @@ export function VectorCalc() {
   const settings = useScene((s) => s.settings)
   const objects = useScene((s) => s.objects)
   const ev = useScene((s) => s.ev)
+  const selection = useScene((s) => s.selection)
   const [error, setError] = useState('')
   const exprRef = useRef<MathInputHandle>(null)
+  const highlightRef = useRef<HTMLDivElement>(null)
   const set = useVC.setState
 
   const values = useMemo(() => st.cards.map((c) => cardValue(c, st.cards, ev)), [st.cards, ev])
@@ -124,8 +126,24 @@ export function VectorCalc() {
   }, [values, st.cards, set])
   useEffect(() => {
     const stale = st.cards.filter((c) => c.entry === 'scene' && c.sceneId && !objects[c.sceneId])
-    if (stale.length) set({ cards: st.cards.map((c) => (stale.includes(c) ? { ...c, entry: 'comp', sceneId: '', latex: c.last ? ijkLatex(c.last) : c.latex } : c)) })
+    if (stale.length) set({ cards: st.cards.map((c) => (stale.includes(c) ? { ...c, entry: 'comp', sceneId: '', wasSceneId: c.sceneId, latex: c.last ? ijkLatex(c.last) : c.latex } : c)) })
   }, [objects, st.cards, set])
+
+  // A vector drawn with the Vector tool arrives selected, and the panel answers by showing it: a
+  // card that reads it is added if none does (a blank card waiting since "Add vector" is used
+  // first), and that card is ringed and scrolled into view. Only the selection is watched, so a
+  // card the student removes stays removed until the vector is selected again; Remove deselects
+  // the vector for that reason, since a click on something already selected does not re-select.
+  useEffect(() => {
+    const match = cardForSelection(useVC.getState().cards, selection, useScene.getState().objects, isDrawnAnswer)
+    if (match.kind === 'none') set({ highlight: 0 })
+    else if (match.kind === 'card') set({ highlight: match.cardId })
+    else if (match.kind === 'link') set({ highlight: linkCardToScene(match.cardId, match.sceneId, match.name) })
+    else set({ highlight: addVectorFromScene(match.sceneId, match.name) })
+  }, [selection, set])
+  useEffect(() => {
+    if (st.highlight) highlightRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [st.highlight])
 
   const updateCard = (id: number, patch: Partial<Card>) => set({ cards: st.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)) })
 
@@ -242,8 +260,7 @@ export function VectorCalc() {
   }
 
   const addCard = () => {
-    const used = new Set(st.cards.map((c) => c.name))
-    const name = 'ABCDEFGHLMNPQRSTUVW'.split('').find((l) => !used.has(l)) ?? `V${peekCardId()}`
+    const name = newCardName(st.cards, peekCardId())
     set({ cards: [...st.cards, { id: nextCardId(), name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
   }
 
@@ -265,13 +282,16 @@ export function VectorCalc() {
         <span className="text-fine text-[color:var(--text-faint)]">Type like a textbook: 3i + 4j, 10∠30°, ½A</span>
       </div>
 
+      {st.cards.length === 0 && <div className="px-3 py-2 text-[color:var(--text-dim)]">Add a vector, or draw one on the graph.</div>}
+
       {st.cards.map((card, idx) => {
         const v = values[idx]
         const ok = typeof v !== 'string'
+        const lit = st.highlight === card.id
         // A typed vector is plain numbers; only one read off the drawing carries the drawing's unit.
         const sizeKind = card.entry === 'scene' ? 'length' : 'number'
         return (
-          <div key={card.id} className={`card p-2 ${ok ? '' : 'border-[color:var(--bad)]'}`}>
+          <div key={card.id} ref={lit ? highlightRef : undefined} className={`card p-2 ${ok ? '' : 'border-[color:var(--bad)]'} ${lit ? 'ring-2 ring-[color:var(--accent)]' : ''}`}>
             <div className="mb-1.5 flex items-center gap-2">
               <input
                 className="field w-11 text-center text-lead font-math font-semibold italic"
@@ -280,27 +300,34 @@ export function VectorCalc() {
                 onChange={(e) => updateCard(card.id, { name: VS.safeCardName(e.target.value, card.name, st.cards.filter((c) => c.id !== card.id).map((c) => c.name)) })}
                 onKeyDown={(e) => e.stopPropagation()}
               />
+              {/* One way in: the maths field, which takes 3i + 4j and 10∠30° alike. Size and angle
+                  as two boxes stay a chip away for a student whose book writes vectors that way. */}
               <div className="seg">
                 {(
                   [
-                    ['comp', 'î ĵ k̂'],
+                    ['comp', 'type it'],
                     ['polar', 'size ∠ angle'],
-                    ['scene', 'drawing']
+                    ['scene', 'from the graph']
                   ] as [Entry, string][]
                 ).map(([k, l]) => (
-                  <button key={k} className={card.entry === k ? 'on' : ''} onClick={() => updateCard(card.id, { entry: k })}>
+                  <button key={k} className={`min-h-[36px] ${card.entry === k ? 'on' : ''}`} onClick={() => updateCard(card.id, { entry: k })}>
                     {l}
                   </button>
                 ))}
               </div>
               <div className="flex-1" />
-              {st.cards.length > 1 && (
-                <button className="text-[color:var(--text-faint)] hover:text-[color:var(--bad)]" title="Remove" onClick={() => set({ cards: st.cards.filter((c) => c.id !== card.id) })}>
-                  <Trash2 size={14} />
-                </button>
-              )}
+              <button
+                className="min-h-[36px] min-w-[36px] rounded text-[color:var(--text-faint)] hover:text-[color:var(--bad)]"
+                title="Remove this vector"
+                onClick={() => {
+                  set({ cards: st.cards.filter((c) => c.id !== card.id) })
+                  if (card.sceneId && selection.includes(card.sceneId)) useScene.getState().select([])
+                }}
+              >
+                <Trash2 size={14} className="mx-auto" />
+              </button>
             </div>
-            {card.entry === 'comp' && <MathInput value={card.latex} onChange={(l) => updateCard(card.id, { latex: l })} onEnter={() => run('sum')} placeholder="3i + 4j" />}
+            {card.entry === 'comp' && <MathInput value={card.latex} onChange={(l) => updateCard(card.id, { latex: l })} onEnter={() => run('sum')} placeholder="3i + 4j  or  10∠30°" />}
             {card.entry === 'polar' && (
               <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
                 <MathInput size="sm" value={card.mag} onChange={(l) => updateCard(card.id, { mag: l })} placeholder="size" />
@@ -311,7 +338,7 @@ export function VectorCalc() {
             )}
             {card.entry === 'scene' && (
               <select
-                className="field"
+                className="field min-h-[36px]"
                 value={card.sceneId}
                 onChange={(e) => {
                   const picked = objects[e.target.value]
@@ -345,8 +372,8 @@ export function VectorCalc() {
       })}
 
       <div className="flex items-center gap-2 px-2">
-        <button className="btn ghost" onClick={addCard}>
-          <Plus size={13} /> Add vector
+        <button className="btn min-h-[44px] px-4" onClick={addCard}>
+          <Plus size={15} /> Add vector
         </button>
       </div>
 

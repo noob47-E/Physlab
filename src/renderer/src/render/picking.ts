@@ -4,6 +4,7 @@ import type * as THREE from 'three/webgpu'
 import { toScreen, type ViewSize } from './cameraUtils'
 import type { Computed, EvalResult, ObjId, SceneObject } from '../core/types'
 import { add, normalize, scale, type V3 } from '../math/vec'
+import { POINT_REACH_PX } from './viewMath'
 
 export type HitPart = 'body' | 'head' | 'tail'
 
@@ -96,7 +97,7 @@ export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: S
     switch (c.type) {
       case 'point': {
         const s = scr(c.p)
-        if (s.visible) offer({ id, part: 'body', dist: Math.hypot(s.x - sx, s.y - sy), priority: 0 }, 12)
+        if (s.visible) offer({ id, part: 'body', dist: Math.hypot(s.x - sx, s.y - sy), priority: 0 }, POINT_REACH_PX)
         break
       }
       case 'text': {

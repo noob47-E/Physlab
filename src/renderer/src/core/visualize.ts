@@ -6,6 +6,7 @@ import type { V3 } from '../math/vec'
 import { planDrawing, type DrawStyle, type Solution, type VisualVector } from '../math/vectorSolver'
 import type { GraphKind, SceneObject } from './types'
 import { fitCamera } from '../render/viewState'
+import { mixOklabMany, mixParents } from '../render/colourMix'
 import { themeColor } from '../app/theme'
 
 export type { DrawStyle }
@@ -32,10 +33,17 @@ const drawn = new Map<string, string[]>()
 /** Removes what the previous drawing of this kind left behind, if it is still there. */
 function clearTagged(tag: string): void {
   const s = scene()
-  const alive = (drawn.get(tag) ?? []).filter((id) => s.objects[id])
+  const ids = drawn.get(tag) ?? []
+  const alive = ids.filter((id) => s.objects[id])
   if (alive.length) s.removeObjects(alive)
+  // The answer's parents go with it: the map is not saved, and an id is never reused, but it
+  // would otherwise hold every answer ever drawn.
+  for (const id of ids) mixParents.delete(id)
   drawn.delete(tag)
 }
+
+/** Whether an object is something a drawing here put there: the Vector Calculator leaves those out of its cards. */
+export const isDrawnAnswer = (id: string): boolean => [...drawn.values()].some((ids) => ids.includes(id))
 
 /** Records what this drawing created, so the next one of the same kind can replace it. */
 function remember(tag: string, b: Builder): void {
@@ -62,12 +70,16 @@ export function visualizeSolution(sol: Solution, style?: DrawStyle): void {
   const plan = planDrawing(vis, style)
   const made = new Map<string, SceneObject>()
   const faint = themeColor('--text-faint', '#6c707a')
+  const inputs: SceneObject[] = []
+  const results: SceneObject[] = []
   for (const it of plan.items) {
     if (it.kind === 'arrow') {
       const o = b.vector({ kind: 'free', tail: it.tail, comp: it.comp }, { name: it.name, color: roleColor(it.role), auxiliary: it.auxiliary })
       if (it.labelMode) o.labelMode = it.labelMode
       if (it.label) o.label = it.label
       made.set(it.name, o)
+      if (it.role === 'input') inputs.push(o)
+      else if (it.role === 'result') results.push(o)
     } else if (it.kind === 'ghost') {
       // Dashed opposite sides, linked to the originals so dragging keeps the parallelogram.
       const of = made.get(it.of)
@@ -75,6 +87,15 @@ export function visualizeSolution(sol: Solution, style?: DrawStyle): void {
       if (of && at) b.vector({ kind: 'placed', vector: of.id, tail: headPoint(b, at.id) }, { name: it.name, color: faint, auxiliary: true })
     } else {
       b.text(it.at, it.text, { name: it.name, auxiliary: true })
+    }
+  }
+  // An answer with two or more parents is coloured between them (the vector view redoes the mix
+  // from the parents' live colours; the stored colour is what a reload falls back to). An answer
+  // of one input keeps the warning colour, which is the only thing that tells it from its input.
+  if (inputs.length >= 2) {
+    for (const o of results) {
+      o.color = mixOklabMany(inputs.map((p) => p.color))
+      mixParents.set(o.id, inputs.map((p) => p.id))
     }
   }
   b.commit()

@@ -7,6 +7,7 @@ import { labelAnchors, overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneObject, TextObj, VectorObj } from '../core/types'
 import { isFree } from '../core/evaluate'
+import { visibleIn } from '../core/visibility'
 import { freeCapitals } from '../core/naming'
 import { angleAt, centroid, orientedAngleAt } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
@@ -14,8 +15,38 @@ import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
 import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, themeColor, useTheme } from '../app/theme'
+import { mixOklabMany, mixParents } from './colourMix'
+import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 
 const UP = new THREE.Vector3(0, 1, 0)
+
+/**
+ * Every point on the drawing being looked at, projected to the screen once per frame and shared
+ * by every point's label placement. Each point used to project every other point for itself:
+ * n² projections a frame, 90 000 for a 300-point scatter sent to the drawing. R3F advances the
+ * clock once before any useFrame runs, so its reading tells one frame from the next.
+ */
+const pointsOnScreen = { at: -1, w: 0, h: 0, pts: [] as (Px & { id: ObjId })[] }
+function projectPoints(camera: THREE.Camera, size: { width: number; height: number }, at: number): (Px & { id: ObjId })[] {
+  const cache = pointsOnScreen
+  if (cache.at === at && cache.w === size.width && cache.h === size.height) return cache.pts
+  const { objects, order, ev, activeSpace } = useScene.getState()
+  const pts: (Px & { id: ObjId })[] = []
+  for (const id of order) {
+    const o = objects[id]
+    const oc = ev.values.get(id)
+    // The same rule SceneObjects draws by: a point in another drawing's space is not on screen
+    // and must not push a letter off its corner.
+    if (!o || !o.visible || !visibleIn(o, activeSpace) || oc?.type !== 'point') continue
+    const sp = toScreen(camera, size, oc.p)
+    if (sp.visible) pts.push({ id, x: sp.x, y: sp.y })
+  }
+  cache.at = at
+  cache.w = size.width
+  cache.h = size.height
+  cache.pts = pts
+  return pts
+}
 
 /**
  * The drawing's colours come from the stylesheet so both themes work; every view re-reads them
@@ -62,17 +93,24 @@ export interface ViewProps<T extends SceneObject, C extends Computed> {
 export const PointView = memo(function PointView({ obj, c, selected, hovered, is3D }: ViewProps<PointObj, Extract<Computed, { type: 'point' }>>) {
   const group = useRef<THREE.Group>(null)
   const free = isFree(obj)
-  const r = (obj.size ?? (free ? 5 : 4)) + (hovered ? 1 : 0)
+  const r = pointRadius(obj.size, free, hovered)
   const pos = c.p
 
-  useFrame(({ camera, size }) => {
+  useFrame(({ camera, size, clock }) => {
     const g = group.current
     if (!g) return
     g.position.set(pos[0], pos[1], pos[2])
     g.scale.setScalar(worldPerPixel(camera, size, pos))
     if (!is3D) g.quaternion.identity()
     else g.quaternion.copy(camera.quaternion)
-    labelAnchors.set(obj.id, { p: pos, dx: 10, dy: -12 })
+    // The letter sits up and to the right unless another point is there; then it takes the next
+    // free corner. Only points within reach are offered, so a crowded drawing costs little.
+    const me = toScreen(camera, size, pos)
+    const near: Px[] = []
+    for (const sp of projectPoints(camera, size, clock.elapsedTime)) {
+      if (sp.id !== obj.id && Math.abs(sp.x - me.x) < 40 && Math.abs(sp.y - me.y) < 40) near.push(sp)
+    }
+    labelAnchors.set(obj.id, { p: pos, ...pickLabelOffset({ x: me.x, y: me.y, r }, near) })
   })
 
   const colors = useDrawingColors()
@@ -86,7 +124,7 @@ export const PointView = memo(function PointView({ obj, c, selected, hovered, is
         </mesh>
       )}
       <mesh renderOrder={21}>
-        <circleGeometry args={[r + 1.6, 28]} />
+        <circleGeometry args={[pointHalo(r), 28]} />
         <meshBasicMaterial key={colors.theme} color={colors.outline} depthTest={false} depthWrite={false} />
       </mesh>
       <mesh renderOrder={22}>
@@ -110,7 +148,8 @@ function useArrowMaterials(color: string, is3D: boolean) {
       m.emissive = new THREE.Color(color).multiplyScalar(0.35)
       return m
     }
-    return new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false })
+    // Double-sided so the flat head is never culled when the quaternion that turns it flips it over.
+    return new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false, side: THREE.DoubleSide })
   }, [color, is3D])
   useEffect(() => () => mat.dispose(), [mat])
   return mat
@@ -118,38 +157,57 @@ function useArrowMaterials(color: string, is3D: boolean) {
 
 const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 14)
 const coneGeo = new THREE.ConeGeometry(1, 1, 18)
+/** A flat 2-D head: base across the x axis, apex at +y, scaled to the head's width and length. */
+const flatHeadGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 0, 1, 0], 3))
 
-/** Imperatively positions a shaft+head arrow mesh pair. */
-function placeArrow(shaft: THREE.Mesh, head: THREE.Mesh, tail: V3, comp: V3, wpp: number, thick: number, headPx = 15, headRadPx = 6) {
-  const L = len(comp)
-  const visible = L > 1e-9
+/**
+ * Imperatively positions a shaft+head arrow mesh pair. In 2-D the head is a flat triangle that
+ * keeps its pixel size at every zoom (`arrowHead`, 12 px and 25° unless told otherwise); the 3-D
+ * view keeps a cone, whose radius is `headRadPx`. `tipPx` pushes the tip that many pixels past
+ * the vector's end, for a halo that has to show all round the head.
+ */
+function placeArrow(shaft: THREE.Mesh, head: THREE.Mesh, tail: V3, comp: V3, wpp: number, thick: number, is3D: boolean, headPx?: number, headRadPx = 6, tipPx = 0) {
+  // The 2-D camera looks straight down z, so the arrow is laid out from its projection: turning
+  // the flat head to a direction with a z component tilts its base out of the screen plane, and
+  // what is seen of it is a skewed sliver (the cone was round, so this never showed).
+  const flat: V3 = is3D ? comp : [comp[0], comp[1], 0]
+  const L0 = len(flat)
+  const visible = L0 > 1e-9
   shaft.visible = head.visible = visible
   if (!visible) return
-  const dir = new THREE.Vector3(comp[0] / L, comp[1] / L, comp[2] / L)
+  const L = L0 + tipPx * wpp
+  const dir = new THREE.Vector3(flat[0] / L0, flat[1] / L0, flat[2] / L0)
   const q = new THREE.Quaternion().setFromUnitVectors(UP, dir)
-  const headLen = Math.min(headPx * wpp, L * 0.45)
-  const shaftLen = Math.max(L - headLen, 1e-6)
+  // The 3-D cone keeps the 15 px it always had; the flat head is the 12 px the 2-D drawing uses.
+  const { headLen, halfWidth, shaftLen } = arrowHead(L, wpp, headPx ?? (is3D ? 15 : HEAD_PX))
   shaft.quaternion.copy(q)
   shaft.position.set(tail[0] + dir.x * shaftLen * 0.5, tail[1] + dir.y * shaftLen * 0.5, tail[2] + dir.z * shaftLen * 0.5)
   shaft.scale.set(thick * wpp, shaftLen, thick * wpp)
   head.quaternion.copy(q)
-  head.position.set(tail[0] + dir.x * (L - headLen / 2), tail[1] + dir.y * (L - headLen / 2), tail[2] + dir.z * (L - headLen / 2))
-  const hr = Math.min(headRadPx * wpp, headLen * 0.6)
-  head.scale.set(hr, headLen, hr)
+  if (is3D) {
+    // The cone is centred on its own origin, so it sits half a head back from the tip.
+    head.position.set(tail[0] + dir.x * (L - headLen / 2), tail[1] + dir.y * (L - headLen / 2), tail[2] + dir.z * (L - headLen / 2))
+    const hr = Math.min(headRadPx * wpp, headLen * 0.6)
+    head.scale.set(hr, headLen, hr)
+  } else {
+    // The triangle's base is its origin, so it starts where the shaft ends.
+    head.position.set(tail[0] + dir.x * shaftLen, tail[1] + dir.y * shaftLen, tail[2] + dir.z * shaftLen)
+    head.scale.set(halfWidth, headLen, 1)
+  }
 }
 
-export function Arrow({ tail, comp, color, is3D, thick = 1.7, renderOrder = 12, headPx, headRadPx }: { tail: V3; comp: V3; color: string; is3D: boolean; thick?: number; renderOrder?: number; headPx?: number; headRadPx?: number }) {
+export function Arrow({ tail, comp, color, is3D, thick = 1.7, renderOrder = 12, headPx, headRadPx, tipPx }: { tail: V3; comp: V3; color: string; is3D: boolean; thick?: number; renderOrder?: number; headPx?: number; headRadPx?: number; tipPx?: number }) {
   const shaft = useRef<THREE.Mesh>(null)
   const head = useRef<THREE.Mesh>(null)
   const mat = useArrowMaterials(color, is3D)
   useFrame(({ camera, size }) => {
     if (!shaft.current || !head.current) return
-    placeArrow(shaft.current, head.current, tail, comp, worldPerPixel(camera, size, add(tail, scale(comp, 0.5))), thick, headPx, headRadPx)
+    placeArrow(shaft.current, head.current, tail, comp, worldPerPixel(camera, size, add(tail, scale(comp, 0.5))), thick, is3D, headPx, headRadPx, tipPx)
   })
   return (
     <>
       <mesh ref={shaft} geometry={cylGeo} material={mat} renderOrder={renderOrder} />
-      <mesh ref={head} geometry={coneGeo} material={mat} renderOrder={renderOrder} />
+      <mesh ref={head} geometry={is3D ? coneGeo : flatHeadGeo} material={mat} renderOrder={renderOrder} />
     </>
   )
 }
@@ -191,6 +249,15 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
   const wpp = worldPerPixel(camera, size, head)
 
   const colors = useDrawingColors()
+  // An answer drawn by the Vector Calculator is coloured between its parents. The mix is redone
+  // from the parents' current colours, keyed on the theme as well (WebGPU compiles a colour into
+  // its material, and useArrowMaterials makes a new one for a new colour string).
+  const parentColours = useScene((s) => mixParents.get(obj.id)?.map((id) => s.objects[id]?.color ?? '').join(' ') ?? '')
+  const color = useMemo(() => {
+    const parents = parentColours.split(' ').filter(Boolean)
+    return parents.length >= 2 ? mixOklabMany(parents) : obj.color
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- colors.theme is the signal that the stylesheet changed, not a value read here
+  }, [parentColours, obj.color, colors.theme])
   const showComps = obj.showComponents || selected
   // The θ arc from the x-axis is an angle mark; a student who wants a bare drawing turns it off.
   const showArc = useScene((s) => s.settings.showAngleMarks)
@@ -242,8 +309,10 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
   const thick = selected ? 2.4 : hovered ? 2.1 : 1.7
   return (
     <>
-      {selected && <Arrow tail={tail} comp={comp} color={colors.select} is3D={is3D} thick={thick + 2.2} renderOrder={11} headPx={19} headRadPx={8.5} />}
-      <Arrow tail={tail} comp={comp} color={obj.color} is3D={is3D} thick={thick} />
+      {/* The halo's head shares the arrow head's 25° edges, so it is pushed past the tip by enough
+          for its outline to be as wide along those edges as it is beside the shaft. */}
+      {selected && <Arrow tail={tail} comp={comp} color={colors.select} is3D={is3D} thick={thick + 2.2} renderOrder={11} headPx={15} headRadPx={8.5} tipPx={HALO_TIP_PX} />}
+      <Arrow tail={tail} comp={comp} color={color} is3D={is3D} thick={thick} />
       {showComps && planar && L > 1e-9 && (
         <>
           <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
