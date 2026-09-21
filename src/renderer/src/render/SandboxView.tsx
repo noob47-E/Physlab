@@ -16,7 +16,7 @@ import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
 import { niceStep, toScreen } from './cameraUtils'
 import { formatMeasure } from '../math/format'
-import { themeColor, useTheme, useThemed } from '../app/theme'
+import { themeColor, useThemed } from '../app/theme'
 
 /** Geometry for each shape, in metres. */
 function geometryFor(def: BodyDef): THREE.BufferGeometry {
@@ -449,7 +449,8 @@ export function SandboxView() {
  * seen. Fine lines near the origin, coarser ones out to the edge; the grid follows the theme.
  */
 function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
-  const theme = useTheme((t) => t.theme)
+  // Read once per theme, not on every render: the grid re-renders whenever the bodies change.
+  const gridColour = useThemed(() => themeColor('--grid-major'))
   const floor = bodies.find((b) => b.shape === 'ground')
   // Only the floor's footprint and height shape the grid, so a change to anything else about the
   // floor (its material, say) leaves the geometry alone.
@@ -477,7 +478,7 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
   if (!grid) return null
   return (
     <lineSegments geometry={grid} renderOrder={1}>
-      <lineBasicMaterial key={theme} color={themeColor('--grid-major')} transparent opacity={0.85} />
+      <lineBasicMaterial key={gridColour} color={gridColour} transparent opacity={0.85} />
     </lineSegments>
   )
 }
