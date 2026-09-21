@@ -1,7 +1,7 @@
 // The numbers behind a tool-card animation, kept apart from the SVG so they can be tested.
 //
-// Every animation shares three keyframes in styles.css (tc-cursor, tc-ripple, tc-appear) and one
-// 2.5 s loop. What differs per card is only *where* the cursor goes, and that travels as CSS
+// Every animation shares four keyframes in styles.css (tc-cursor, tc-ripple, tc-appear, tc-vanish)
+// and one 2.5 s loop. What differs per card is only *where* the cursor goes, and that travels as CSS
 // custom properties on the cursor element: --tc-a is where it rests, --tc-b the first click,
 // --tc-c the second click (when there is one). The keyframes read them with var(), so one rule
 // serves every card and an author never touches the timing.

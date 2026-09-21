@@ -79,22 +79,25 @@ export function Point() {
 - Give whatever the click makes the class `tc-appear`. For something that appears after the
   second click use `tc-appear tc-late`. Anything without a class is scenery and is there from the
   start (the beam and the ball in `Rope.tsx`).
+- Give whatever the first click takes away the class `tc-vanish`: the object in `Delete.tsx`, the
+  point in `Move.tsx` before it is dragged. Scenery that should go but stays reads as selected, or
+  as copied, on the still frame.
 
-## The loop and the three keyframes
+## The loop and the four keyframes
 
 Every card runs the same 2.5 s loop; the keyframes live in the "Tool cards" section of
 `styles.css` and you never write your own:
 
-| Time | `tc-cursor` | `tc-ripple` | `tc-appear` |
-|---|---|---|---|
-| 0 – 8 % | fades in at home | | |
-| 8 – 30 % | glides to the first click | | |
-| 30 % | | first ripple | |
-| 30 – 36 % | | | first result fades in |
-| 40 – 62 % | glides to the second click (if any) | | |
-| 62 % | | second ripple (`tc-late`) | |
-| 62 – 66 % | | | `tc-late` result fades in |
-| 90 – 100 % | fades out | | fades out |
+| Time | `tc-cursor` | `tc-ripple` | `tc-appear` | `tc-vanish` |
+|---|---|---|---|---|
+| 0 – 8 % | fades in at home | | | fades in |
+| 8 – 30 % | glides to the first click | | | |
+| 30 % | | first ripple | | |
+| 30 – 36 % | | | first result fades in | fades out |
+| 40 – 62 % | glides to the second click (if any) | | | |
+| 62 % | | second ripple (`tc-late`) | | |
+| 62 – 66 % | | | `tc-late` result fades in | |
+| 90 – 100 % | fades out | | fades out | |
 
 The cursor's stops travel as custom properties (`--tc-a` home, `--tc-b` first click, `--tc-c`
 second) that `<Cursor>` sets from `cursorStops()` in `../animMath.ts`; the keyframes read them, so
@@ -127,8 +130,8 @@ truly needed, draw it as a path.
   hex, `rgb()`, `currentColor` or other `var(--…)` anywhere.
 - `Point.tsx` and `Rope.tsx` each have a `<Scene>`, a `<Cursor>`, a `<Click>` and a `tc-appear`;
   `Rope.tsx` clicks twice. Add your own file to that list if you want the same guard on it.
-- `styles.css` declares the three keyframes once, on a 2.5 s loop, and freezes them under
-  `prefers-reduced-motion: reduce`.
+- `styles.css` declares the four keyframes once, on a 2.5 s loop, and freezes them under
+  `prefers-reduced-motion: reduce`; `Delete.tsx` and `Move.tsx` carry `tc-vanish`.
 
 Run `npm test`, `npm run typecheck` and `npm run lint` before committing, then hover the button in
 the app (`npm run web`) in all three themes.

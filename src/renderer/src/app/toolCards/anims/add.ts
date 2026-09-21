@@ -19,7 +19,8 @@ export const ADD_GROUP: Record<Extract<ToolCardKey, `add:${string}`>, ToolCardDe
   'add:box': { title: 'Crate', sentence: 'Click to add a crate that slides and tips over but never rolls.', Animation: Crate },
   'add:cylinder': { title: 'Cylinder', sentence: 'Click to add a cylinder that rolls on its side and stands upright on its end.', Animation: Cylinder },
   'add:capsule': { title: 'Capsule', sentence: 'Click to add a capsule, a rounded rod that rolls sideways like a pencil.', Animation: Capsule },
-  'add:cone': { title: 'Cone', sentence: 'Click to add a cone, which tips onto its side and rolls round in a circle.', Animation: Cone },
+  // It stands: makeBody gives it no tilt and its centre of mass sits low over a wide base.
+  'add:cone': { title: 'Cone', sentence: 'Click to add a cone; it stands on its base, and knocked onto its side it rolls round in a circle.', Animation: Cone },
   'add:ramp': { title: 'Ramp', sentence: 'Click to add a fixed slope for other objects to slide or roll down.', Animation: Ramp },
   'add:plank': { title: 'Plank', sentence: 'Click to add a long flat board, free to fall and tip or fixed in place.', Animation: Plank },
   'add:wall': { title: 'Wall', sentence: 'Click to add a fixed upright wall for things to bounce off.', Animation: Wall },

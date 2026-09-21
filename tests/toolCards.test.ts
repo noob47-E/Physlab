@@ -21,6 +21,7 @@ import { placeTourCard } from '../src/renderer/src/app/layoutMath'
 import { TOOLS } from '../src/renderer/src/render/tools'
 import { LINK_KINDS } from '../src/renderer/src/sim/links'
 import { SHORTCUTS, TOUR } from '../src/renderer/src/app/tour/steps'
+import { DEFAULT_SIZE, makeBody } from '../src/renderer/src/sim/store'
 
 const ANIMS = join(RENDERER_SRC, 'app', 'toolCards', 'anims')
 const animFiles = readdirSync(ANIMS).filter((n) => n.endsWith('.tsx'))
@@ -179,6 +180,26 @@ describe('the animations follow the one pattern', () => {
     expect(rope).toMatch(/<Click[^>]*second/)
     expect(rope).toMatch(/tc-appear tc-late/)
   })
+
+  it('takes away what a click removes: the deleted object and the moved point vanish', () => {
+    // A solid disc left under the dashed outline read as "selected"; a point left where the drag
+    // began read as a copy. Both go with the first click.
+    const del = readFileSync(join(ANIMS, 'Delete.tsx'), 'utf8')
+    expect(del).toMatch(/<circle className="tc-vanish"[^>]*fill="var\(--text-dim\)"/)
+    const move = readFileSync(join(ANIMS, 'Move.tsx'), 'utf8')
+    expect(move).toMatch(/<circle className="tc-vanish"[^>]*fill="var\(--text-dim\)"/)
+    expect(move).toMatch(/tc-appear tc-late/)
+  })
+
+  it('says the cone stands, because the Sandbox adds it upright and it stays that way', () => {
+    // No tilt from makeBody, and the centre of mass (a quarter of the height up) sits well inside
+    // the base: a cone that "tips onto its side" by itself would be a promise the engine breaks.
+    expect(makeBody('cone', 'Cone').rotation).toEqual([0, 0, 0])
+    const [radius, height] = DEFAULT_SIZE.cone
+    expect(height / 4).toBeLessThan(radius)
+    expect(ADD_GROUP['add:cone'].sentence).toMatch(/stands on its base/)
+    expect(ADD_GROUP['add:cone'].sentence).not.toMatch(/which tips/)
+  })
 })
 
 describe('the cursor is steered by custom properties, not by a keyframe per card', () => {
@@ -208,8 +229,8 @@ describe('the stylesheet carries the shared loop', () => {
     expect(end).toBeLessThan(css.indexOf('} /* end @layer components */'))
   })
 
-  it('declares the three keyframes, once each, on the 2.5 s loop', () => {
-    for (const k of ['tc-cursor', 'tc-ripple', 'tc-appear']) {
+  it('declares the four keyframes, once each, on the 2.5 s loop', () => {
+    for (const k of ['tc-cursor', 'tc-ripple', 'tc-appear', 'tc-vanish']) {
       expect(css.match(new RegExp(`@keyframes ${k} \\{`, 'g')), k).toHaveLength(1)
       expect(section).toMatch(new RegExp(`animation-name: ${k};`))
     }
@@ -226,6 +247,10 @@ describe('the stylesheet carries the shared loop', () => {
     const ripple = section.match(/@keyframes tc-ripple \{[\s\S]*?\n\}/)?.[0] ?? ''
     expect(ripple).toContain(`${BEATS.firstClick * 100}%`)
     expect(ripple).toContain(`${BEATS.secondClick * 100}%`)
+    // What vanishes is whole until the first click and gone well before the frozen frame.
+    const vanish = section.match(/@keyframes tc-vanish \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(vanish).toMatch(new RegExp(`${BEATS.firstClick * 100}% \\{\\s*opacity: 1;`))
+    expect(vanish).toMatch(/36%,\s*100% \{\s*opacity: 0;/)
   })
 
   it('freezes on a telling frame when the OS asks for less motion', () => {
@@ -233,6 +258,8 @@ describe('the stylesheet carries the shared loop', () => {
     expect(reduced).toBeDefined()
     expect(reduced).toMatch(/animation-play-state: paused;/)
     expect(reduced).toContain(`animation-delay: ${reducedMotionDelay()};`)
+    // Every shared keyframe is held, or a vanished object would come back on the still frame.
+    for (const k of ['tc-cursor', 'tc-ripple', 'tc-appear', 'tc-vanish']) expect(reduced, k).toContain(`.${k}`)
     expect(reducedMotionDelay()).toBe('-2.1s')
     // Past the second click and its ripple, before the fade: the result is on screen.
     expect(REDUCED_MOTION_FRAME).toBeGreaterThan(BEATS.secondClick + 0.18)

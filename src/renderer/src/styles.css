@@ -1238,10 +1238,13 @@ math-field.math-input::part(menu-toggle) {
    cursor arrives, clicks at 30 %, clicks again at 62 % when the tool needs two clicks, the result
    shows, and everything fades by the end so the loop restarts clean. Where the cursor goes comes
    from the element (--tc-a rest, --tc-b first click, --tc-c second), so one rule serves every
-   card; `tc-late` moves a ripple or a result to the second click. */
+   card; `tc-late` moves a ripple or a result to the second click. `tc-vanish` is the opposite of
+   `tc-appear`: what the first click takes away (the Delete card's object, the Move card's point
+   before it is moved) goes at 30 %, so the still frame shows it gone and not merely selected. */
 .tc-cursor,
 .tc-ripple,
-.tc-appear {
+.tc-appear,
+.tc-vanish {
   animation-duration: 2.5s;
   animation-iteration-count: infinite;
   animation-timing-function: ease-in-out;
@@ -1260,6 +1263,9 @@ math-field.math-input::part(menu-toggle) {
 .tc-appear {
   animation-name: tc-appear;
   opacity: 0;
+}
+.tc-vanish {
+  animation-name: tc-vanish;
 }
 .tc-late {
   --tc-first: 0;
@@ -1334,12 +1340,27 @@ math-field.math-input::part(menu-toggle) {
     opacity: 0;
   }
 }
+/* Fades in with the cursor, so the loop restarts clean, and goes with the first click. */
+@keyframes tc-vanish {
+  0% {
+    opacity: 0;
+  }
+  8%,
+  30% {
+    opacity: 1;
+  }
+  36%,
+  100% {
+    opacity: 0;
+  }
+}
 /* A student who has asked the OS for less motion gets a still picture of the finished step: the
    loop is held at 84 %, where the result shows, the ripples are spent and the cursor rests. */
 @media (prefers-reduced-motion: reduce) {
   .tc-cursor,
   .tc-ripple,
-  .tc-appear {
+  .tc-appear,
+  .tc-vanish {
     animation-play-state: paused;
     animation-delay: -2.1s;
   }
