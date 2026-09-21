@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell
 import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -127,6 +127,26 @@ function buildMenu(win: BrowserWindow): Menu {
   ])
 }
 
+// The window paints this before the renderer's first frame, so it must match the theme the
+// renderer is about to apply or every launch starts with a flash of the wrong colour. The renderer
+// tells us its --bg-0 whenever the theme changes and we keep it beside the autosave; a fresh
+// install has no file and gets Moonlight's, which is the renderer's default too.
+const DEFAULT_BACKGROUND = '#0b1020'
+const themeFile = () => join(app.getPath('userData'), 'theme.json')
+
+/** A '#rrggbb' colour and nothing else: the file is ours, but a half-written one must not reach Chromium. */
+const isHexColour = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)
+
+function readThemeBackground(): string {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(themeFile(), 'utf8'))
+    const bg = (parsed as { background?: unknown } | null)?.background
+    return isHexColour(bg) ? bg : DEFAULT_BACKGROUND
+  } catch {
+    return DEFAULT_BACKGROUND
+  }
+}
+
 function createWindow(): void {
   // Sized to the work area (the screen minus the taskbar), so a 1366×768 laptop at 125 % scaling
   // is not handed a window wider than its screen. The old minimum of 1100 was wider than that
@@ -140,7 +160,7 @@ function createWindow(): void {
     title: 'PhysLab',
     // Packaged builds use the icon embedded in the .exe.
     icon: app.isPackaged ? undefined : join(__dirname, '../../build/icon.png'),
-    backgroundColor: '#161618',
+    backgroundColor: readThemeBackground(),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -222,6 +242,27 @@ function isOwnUrl(url: string): boolean {
 let dirty = false
 ipcMain.on('app:dirty', (_e, value: boolean) => {
   dirty = !!value
+})
+
+// The renderer reports its colour on every start as well as on every switch, so this is what
+// stops the file being rewritten on each launch with the value it already holds.
+let rememberedBackground: string | undefined
+ipcMain.on('app:theme', (e, background: unknown) => {
+  if (!isHexColour(background)) return
+  BrowserWindow.fromWebContents(e.sender)?.setBackgroundColor(background)
+  rememberedBackground ??= readThemeBackground()
+  if (background === rememberedBackground) return
+  try {
+    mkdirSync(app.getPath('userData'), { recursive: true })
+    // Written beside and then renamed over, like the autosave, so a crash mid-write cannot leave
+    // a half file for the next launch to read.
+    const tmp = `${themeFile()}.saving`
+    writeFileSync(tmp, JSON.stringify({ background }), 'utf8')
+    renameSync(tmp, themeFile())
+    rememberedBackground = background
+  } catch {
+    // Not remembered: the next launch flashes the default colour, and nothing else is lost.
+  }
 })
 
 ipcMain.handle('zoom:get', (e) => BrowserWindow.fromWebContents(e.sender)?.webContents.getZoomLevel() ?? 0)
