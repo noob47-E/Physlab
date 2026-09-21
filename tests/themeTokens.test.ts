@@ -29,7 +29,8 @@ export function referencedTokens(source: string): Set<string> {
   for (const m of source.matchAll(/themeColor\(\s*['"`](--[a-z0-9-]+)['"`]/g)) out.add(m[1])
   // A conditional inside the call: themeColor(kind === 'root' ? '--key-root' : '--key-extremum').
   for (const m of source.matchAll(/themeColor\(([^)]*)\)/g)) for (const t of m[1].matchAll(/['"`](--[a-z0-9-]+)['"`]/g)) out.add(t[1])
-  for (const m of source.matchAll(/var\((--[a-z0-9-]+)\)/g)) out.add(m[1])
+  // var(--x) and var(--x, fallback) alike: a fallback would otherwise hide a misspelt token.
+  for (const m of source.matchAll(/var\((--[a-z0-9-]+)\s*[,)]/g)) out.add(m[1])
   return out
 }
 
@@ -77,5 +78,6 @@ describe('theme tokens', () => {
 
   it('reads the reference forms the sources use', () => {
     expect([...referencedTokens("themeColor('--warn'); themeColor(k ? '--key-root' : '--key-extremum'); className=\"text-[var(--text-dim)]\"")]).toEqual(['--warn', '--key-root', '--key-extremum', '--text-dim'])
+    expect([...referencedTokens('color: var(--x, red); border: var(--y , #000)')]).toEqual(['--x', '--y'])
   })
 })

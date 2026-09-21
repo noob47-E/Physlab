@@ -13,7 +13,7 @@ import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, typ
 import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
 import { headingArc } from '../math/vectorSolver'
-import { seriesColor, themeColor, useTheme } from '../app/theme'
+import { SERIES_COUNT, seriesColor, themeColor, useTheme } from '../app/theme'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -26,6 +26,7 @@ function useDrawingColors() {
   const theme = useTheme((s) => s.theme)
   return useMemo(
     () => ({
+      theme,
       select: themeColor('--sel-glow'),
       xComp: themeColor('--bad'),
       yComp: themeColor('--good'),
@@ -34,8 +35,11 @@ function useDrawingColors() {
       outline: themeColor('--bg-0'),
       derived: themeColor('--text-faint'),
       strong: themeColor('--text-strong'),
-      /** Fill colours for the parts of a decomposed shape: the stylesheet's series colours in turn. */
-      part: (i: number) => seriesColor(i)
+      /**
+       * Fill colours for the parts of a decomposed shape: the stylesheet's series colours in turn,
+       * read once here rather than through getComputedStyle for every part on every frame.
+       */
+      series: Array.from({ length: SERIES_COUNT }, (_, i) => seriesColor(i))
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme]
@@ -79,12 +83,12 @@ export const PointView = memo(function PointView({ obj, c, selected, hovered, is
       {selected && (
         <mesh renderOrder={20}>
           <ringGeometry args={[r + 3, r + 6, 32]} />
-          <meshBasicMaterial color={colors.select} transparent opacity={0.85} depthTest={false} depthWrite={false} />
+          <meshBasicMaterial key={colors.theme} color={colors.select} transparent opacity={0.85} depthTest={false} depthWrite={false} />
         </mesh>
       )}
       <mesh renderOrder={21}>
         <circleGeometry args={[r + 1.6, 28]} />
-        <meshBasicMaterial color={colors.outline} depthTest={false} depthWrite={false} />
+        <meshBasicMaterial key={colors.theme} color={colors.outline} depthTest={false} depthWrite={false} />
       </mesh>
       <mesh renderOrder={22}>
         <circleGeometry args={[r, 28]} />
@@ -453,7 +457,7 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
     if (dec.parts.length > 1) {
       dec.parts.forEach((part, i) => {
         const s = toScreen(camera, size, centroid(part.pts))
-        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', colors.part(i))
+        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', colors.series[i % SERIES_COUNT])
       })
       // Letters for the corners the cut created.
       dec.newPoints.forEach((p, i) => {
@@ -466,8 +470,10 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
   return (
     <>
       {geos.map((g, i) => (
-        <mesh key={i} geometry={g} renderOrder={0}>
-          <meshBasicMaterial color={colors.part(i)} transparent opacity={0.28} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+        // Keyed on the theme because WebGPU compiles the colour in; the series repeat after six,
+        // so a seventh part takes the first colour again at a lighter tint to stay tellable apart.
+        <mesh key={`${colors.theme}${i}`} geometry={g} renderOrder={0}>
+          <meshBasicMaterial color={colors.series[i % SERIES_COUNT]} transparent opacity={i < SERIES_COUNT ? 0.28 : 0.16} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {dec.cuts.map((cut, i) => (

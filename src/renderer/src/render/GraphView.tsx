@@ -12,7 +12,7 @@ import type { GraphObj } from '../core/types'
 import { compileScalar } from '../math/expr'
 import { implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
 import { fmt } from '../math/format'
-import { themeColor, useTheme } from '../app/theme'
+import { themeColor, useTheme, type Theme } from '../app/theme'
 import type { V3 } from '../math/vec'
 
 const scopeNow = () => useScene.getState().ev.scope
@@ -25,14 +25,13 @@ const scopeNow = () => useScene.getState().ev.scope
  */
 function useGraphColors() {
   const theme = useTheme((t) => t.theme)
-  const colors = useMemo(
-    () => ({
-      select: themeColor('--sel-glow'),
-      wireframe: themeColor('--wireframe'),
-      key: (kind: KeyPoint['kind']) => themeColor(kind === 'root' ? '--key-root' : kind === 'yIntercept' ? '--key-intercept' : '--key-extremum')
-    }),
-    [theme]
-  )
+  const colors = useMemo(() => {
+    // Resolved once per theme: reading the stylesheet inside useFrame for every key point made a
+    // graph with many roots pay a style read per root per frame.
+    const extremum = themeColor('--key-extremum')
+    const key: Record<KeyPoint['kind'], string> = { root: themeColor('--key-root'), yIntercept: themeColor('--key-intercept'), max: extremum, min: extremum }
+    return { select: themeColor('--sel-glow'), wireframe: themeColor('--wireframe'), key }
+  }, [theme])
   return { theme, colors }
 }
 
@@ -147,7 +146,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       for (const k of data.keys) {
         const s = toScreen(cam, sz, [k.x, k.y, 0])
         if (s.x < 0 || s.y < 0 || s.x > sz.width || s.y > sz.height) continue
-        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', colors.key(k.kind))
+        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', colors.key[k.kind])
       }
     }
     pool.end()
@@ -168,7 +167,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         <FatLine points={data.segments} segments color={obj.color} width={width} renderOrder={3} dashed={obj.op === '<' || obj.op === '>'} dashSize={8 * b.wpp} gapSize={5 * b.wpp} />
       )}
       {data.keys.map((k, i) => (
-        <KeyDot key={`${theme}${i}`} p={[k.x, k.y, 0]} color={colors.key(k.kind)} />
+        <KeyDot key={`${theme}${i}`} p={[k.x, k.y, 0]} color={colors.key[k.kind]} />
       ))}
     </>
   )
@@ -216,7 +215,7 @@ function FillMesh({ positions, color }: { positions: Float32Array; color: string
   )
 }
 
-function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown; wireframe: string; theme: string }) {
+function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown; wireframe: string; theme: Theme }) {
   const geo = useMemo(() => {
     if (!F) return null
     const s = surfaceGeometry((x, y) => F({ x, y }), 6, 140)

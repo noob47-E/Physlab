@@ -590,7 +590,7 @@ function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, 
 
 /**
  * What a tool draws before it has made anything: the rubber band in a quiet grey, the freehand
- * stroke and the snap rings in the same colours a selection uses. Read from the stylesheet and
+ * stroke in the accent colour and the snap rings in the same colours a selection uses. Read from the stylesheet and
  * re-read when the theme flips, so they show on the light canvas too.
  */
 function usePreviewColors() {
@@ -598,7 +598,9 @@ function usePreviewColors() {
   return useMemo(
     () => ({
       band: themeColor('--text-dim'),
-      stroke: themeColor('--sel-glow'),
+      // The stroke is the only thing on screen while a student draws, and the selection yellow
+      // was the faintest line on the light canvas; the accent blue reads in both themes.
+      stroke: themeColor('--accent'),
       snap: (kind: SnapInfo['kind']) => themeColor(kind === 'point' ? '--sel-glow' : kind === 'axis' ? '--accent' : kind === 'onObject' ? '--series-5' : '--good')
     }),
     [theme]
