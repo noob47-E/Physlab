@@ -50,6 +50,10 @@ describe('parseAnswer', () => {
     expect(parseAnswer('1,5')).toBeNull()
     expect(parseAnswer('1,23')).toBeNull()
     expect(parseAnswer('1,2345')).toBeNull()
+    // No number is grouped as 0,500: that is a decimal comma, and used to be read as 500.
+    expect(parseAnswer('0,500')).toBeNull()
+    expect(parseAnswer('0,5')).toBeNull()
+    expect(parseAnswer('1,234,5')).toBeNull()
   })
 
   it('grades in degrees whatever mode the calculator was left in, and puts the mode back', () => {
@@ -97,10 +101,17 @@ describe('checkAnswer', () => {
   })
 
   it('accepts the answer within tolerance, in any form', () => {
-    for (const text of ['12.5', '12.55', '12.4', '25/2', '12.5 N', '12,5'.replace(',', '.')]) {
+    const forms: [string, number][] = [
+      ['12.5', 12.5],
+      ['12.55', 12.55],
+      ['12.4', 12.4],
+      ['25/2', 12.5],
+      ['12.5 N', 12.5]
+    ]
+    for (const [text, parsed] of forms) {
       const c = checkAnswer(text, field())
       expect(c.verdict, text).toBe('right')
-      expect(c.parsed).toBeCloseTo(Number(text.replace(' N', '').replace('25/2', '12.5')), 12)
+      expect(c.parsed).toBeCloseTo(parsed, 12)
       expect(isCorrect(c)).toBe(true)
     }
     expect(checkAnswer('0', field({ value: 0, tol: 0.05 })).verdict).toBe('right')
@@ -155,6 +166,17 @@ describe('checkAnswer', () => {
     expect(checkAnswer('36.87', angle(143.13)).message).toMatch(wrongQuadrant)
     expect(checkAnswer('216.87', angle(143.13)).message).toMatch(wrongQuadrant)
     expect(checkAnswer('323.13', angle(143.13)).message).toMatch(wrongQuadrant)
+    // Practice fields are written between 0° and 360°, so a third- or fourth-quadrant field is
+    // the case the old plain-number comparison (216.87 against −143.13) missed.
+    expect(checkAnswer('36.87', angle(216.87)).message).toMatch(wrongQuadrant)
+    expect(checkAnswer('143.13', angle(216.87)).message).toMatch(wrongQuadrant)
+    expect(checkAnswer('323.13', angle(216.87)).message).toMatch(wrongQuadrant)
+    expect(checkAnswer('36.87', angle(323.13)).message).toMatch(wrongQuadrant)
+    expect(checkAnswer('143.13', angle(323.13)).message).toMatch(wrongQuadrant)
+    expect(checkAnswer('216.87', angle(323.13)).message).toMatch(wrongQuadrant)
+    // And the same answers written below zero.
+    expect(checkAnswer('-143.13', angle(323.13)).message).toMatch(wrongQuadrant)
+    expect(checkAnswer('-36.87', angle(216.87)).message).toMatch(wrongQuadrant)
     // The quadrant rule is only for angles: a length that is 180 − v is just wrong.
     expect(checkAnswer('167.5', field()).message).toMatch(/^Not quite/)
   })
@@ -218,11 +240,21 @@ describe('expectedText', () => {
     expect(expectedText(field({ value: 12.3456789 }), { decimals: 3, precisionMode: 'sf' })).toBe('12.3')
     expect(expectedText(field({ value: 2.5, unit: 'm' }), { decimals: 3, precisionMode: 'sf' })).toBe('2.50 m')
     expect(expectedText(field({ value: 0 }))).toBe('0')
-    expect(expectedText(field({ value: -7.25, unit: '°' }), { decimals: 1, precisionMode: 'dp' })).toBe('−7.3 °')
+    // A degree sign sits against its number, the way formatMeasure writes it.
+    expect(expectedText(field({ value: -7.25, unit: '°' }), { decimals: 1, precisionMode: 'dp' })).toBe('−7.3°')
+    expect(expectedText(angle(36.8698976), { decimals: 2, precisionMode: 'dp' })).toBe('36.87°')
     expect(expectedText(field({ value: 6.674e-11, unit: 'N' }), { decimals: 3, precisionMode: 'sf' })).toBe('6.67×10^-11 N')
-    // fmt treats anything under 1e-12 as floating-point noise and writes 0, on purpose (a dragged
-    // point must never read 3×10⁻¹⁷); a practice answer that small has to go through the vector
-    // solver's own `sci` writer, never this one.
-    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }), { decimals: 2, precisionMode: 'sf' })).toBe('0 N')
+    expect(expectedText(field({ value: 2.5e-7, unit: 'm' }), { decimals: 3, precisionMode: 'sf' })).toBe('2.50×10^-7 m')
+  })
+
+  it('reveals an answer smaller than the display noise floor instead of calling it 0', () => {
+    // fmt writes anything under 1e-12 as 0 for a dragged point; a known answer is not noise.
+    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }), { decimals: 2, precisionMode: 'sf' })).toBe('1.6×10^-19 N')
+    expect(expectedText(field({ value: -1.6e-19, unit: 'N' }), { decimals: 3, precisionMode: 'sf' })).toBe('−1.60×10^-19 N')
+    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }))).toBe('1.6×10^-19 N')
+    expect(parseAnswer(expectedText(field({ value: 1.6e-19 })))).toBeCloseTo(1.6e-19, 25)
+    expect(checkAnswer(expectedText(field({ value: 1.6e-19 }), { decimals: 2, precisionMode: 'sf' }), field({ value: 1.6e-19, tol: 1.6e-21 })).verdict).toBe('right')
+    // An answer of exactly zero is still 0.
+    expect(expectedText(field({ value: 0, unit: 'N' }))).toBe('0 N')
   })
 })

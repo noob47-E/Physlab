@@ -109,12 +109,16 @@ describe('chartSeries', () => {
     }
   })
 
-  it('agrees with a real least-squares fit', () => {
+  it('agrees with a least-squares line worked by hand', () => {
     const xs = [1, 2, 3, 4, 5]
     const ys = [2.1, 3.9, 6.2, 7.8, 10.1]
+    // Means 3 and 6.02; Sxy = 19.9, Sxx = 10, so the line is y = 1.99x + 0.05.
     const fit = fitOf(xs, ys, 'linear')!
     const s = chartSeries(xs, ys, fit)
-    s.x.forEach((x, i) => expect(s.curve[i]).toBeCloseTo(fit.predict(x), 12))
+    expect(s.curve[s.x.indexOf(1)]).toBeCloseTo(2.04, 6)
+    expect(s.curve[s.x.indexOf(3)]).toBeCloseTo(6.02, 6)
+    expect(s.curve[s.x.indexOf(5)]).toBeCloseTo(10.0, 6)
+    expect(s.points[s.x.indexOf(3)]).toBe(6.2)
   })
 })
 

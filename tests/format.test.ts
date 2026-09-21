@@ -11,6 +11,7 @@ import {
   fmtAngle,
   fmtIJK,
   fmtPrecise,
+  fmtSci,
   formatMeasure,
   measureValue,
   notation,
@@ -84,6 +85,34 @@ describe('fmtPrecise', () => {
     expect(fmtPrecise(-0.00005, DP(2))).toBe('−5×10^-5')
     // The calculator's own formatter writes it the same way, so the two never disagree.
     expect(fmt(-9.5e-11, 1)).toBe('−9.5×10^-11')
+  })
+
+  it('keeps the zeros that show significant figures in the scientific form too', () => {
+    // A detour through fmt() trimmed them: 3 s.f. of 2.5 read 2.50 but 3 s.f. of 2.5e-7 read 2.5×10^-7.
+    expect(fmtPrecise(2.5e-7, SF(3))).toBe('2.50×10^-7')
+    expect(fmtPrecise(1.5e-7, SF(3))).toBe('1.50×10^-7')
+    expect(fmtPrecise(1.2e10, SF(4))).toBe('1.200×10^10')
+    expect(fmtPrecise(2e12, SF(2))).toBe('2.0×10^12')
+    expect(fmtPrecise(-2e12, SF(2))).toBe('−2.0×10^12')
+    expect(fmtPrecise(1e9, SF(1))).toBe('1×10^9')
+    // Either side of the switch to scientific, the count of figures is the same.
+    expect(fmtPrecise(1e-6, SF(2))).toBe('0.0000010')
+    expect(fmtPrecise(9.9999e-7, SF(2))).toBe('1.0×10^-6')
+    expect(texPrecise(1.5e-7, SF(3))).toBe('1.50\\times 10^{-7}')
+    expect(texPrecise(-2e12, SF(2))).toBe('-2.0\\times 10^{12}')
+    // Decimal places trim as fmt does, so the two writers never disagree.
+    expect(fmtPrecise(2.5e-7, DP(4))).toBe('2.5×10^-7')
+  })
+
+  it('fmtSci writes any size in the student’s precision, with no noise floor', () => {
+    expect(fmtSci(1.6e-19, SF(2))).toBe('1.6×10^-19')
+    expect(fmtSci(1.6e-19, SF(3))).toBe('1.60×10^-19')
+    expect(fmtSci(-1.6e-19, DP(4))).toBe('−1.6×10^-19')
+    expect(fmtSci(12.5, SF(3))).toBe('1.25×10^1')
+    expect(fmtSci(12.5, DP(2))).toBe('1.25×10^1')
+    expect(fmtSci(0, SF(3))).toBe('0')
+    expect(fmtSci(NaN, SF(3))).toBe('undefined')
+    expect(fmtSci(-Infinity, SF(3))).toBe('−∞')
   })
 
   it('reads back as the number it was, to the precision asked for, at every scale', () => {

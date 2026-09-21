@@ -18,7 +18,25 @@ const ell = P(0, 0, 4, 0, 4, 2, 2, 2, 2, 4, 0, 4)
 /** A right trapezium: bottom 6, top 4, height 3. Area 15. */
 const rightTrap = P(0, 0, 6, 0, 4, 3, 0, 3)
 
-/** The parts add up to the whole, and every part is a real piece of it. */
+const centroid = (pts: V3[]): V3 => [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length, 0]
+
+/** Ray casting, the same test decompose uses for its own diagonals. */
+function inside(p: V3, pts: V3[]): boolean {
+  let hit = false
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i]
+    const b = pts[j]
+    if (a[1] > p[1] !== b[1] > p[1] && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) hit = !hit
+  }
+  return hit
+}
+
+/**
+ * The parts add up to the whole, every part is a real piece of it, and no two parts overlap.
+ * The area sum alone cannot tell an overlap from a gap of the same size, so each part's centre
+ * must sit inside the original shape and outside every other part (the parts are convex, so
+ * the centre of one inside another means the two share area).
+ */
 function tiles(pts: V3[], goal: DecomposeGoal, index = 0) {
   const d = decompose(pts, goal, index)
   const total = d.parts.reduce((s, p) => s + p.area, 0)
@@ -27,6 +45,10 @@ function tiles(pts: V3[], goal: DecomposeGoal, index = 0) {
     expect(part.area).toBeGreaterThan(0)
     expect(part.area).toBeCloseTo(polygonArea(part.pts), 12)
     expect(part.pts.length).toBeGreaterThanOrEqual(3)
+    expect(inside(centroid(part.pts), pts), 'part centre inside the shape').toBe(true)
+    for (const other of d.parts) {
+      if (other !== part) expect(inside(centroid(part.pts), other.pts), 'parts overlap').toBe(false)
+    }
   }
   return d
 }

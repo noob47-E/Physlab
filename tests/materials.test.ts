@@ -111,6 +111,24 @@ describe('frontalArea', () => {
     }
   })
 
+  it('reads a size as a length whichever way it was typed', () => {
+    // A negative size from an old file gave a negative volume, which world.ts clamped to a
+    // mass of a microgram: the ball then flew off at the first touch.
+    for (const shape of ['sphere', 'box', 'cylinder', 'capsule', 'cone', 'ramp', 'pulley']) {
+      const v = shapeVolume(shape, [0.5, 1, 0.7])
+      expect(v).toBeGreaterThan(0)
+      expect(shapeVolume(shape, [-0.5, 1, 0.7])).toBeCloseTo(v, 12)
+      expect(shapeVolume(shape, [0.5, -1, 0.7])).toBeCloseTo(v, 12)
+      expect(shapeVolume(shape, [-0.5, -1, -0.7])).toBeCloseTo(v, 12)
+      for (const d of [[1, 0, 0], [0, 1, 0], [0.6, -0.8, 0]] as Size[]) {
+        const a = frontalArea(shape, [0.5, 1, 0.7], d)
+        expect(a).toBeGreaterThan(0)
+        expect(frontalArea(shape, [-0.5, -1, -0.7], d)).toBeCloseTo(a, 12)
+      }
+    }
+    expect(shapeVolume('sphere', [-0.5, 0, 0])).toBeCloseTo(0.5236, 4)
+  })
+
   it('the Sandbox knows every material it names, and falls back to steel', () => {
     expect(materialById('nonsense')).toBe(MATERIALS[0])
     for (const m of MATERIALS) {

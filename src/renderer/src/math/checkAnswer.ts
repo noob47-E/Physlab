@@ -5,7 +5,7 @@
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
 import { getAngleMode, math, preprocess, setAngleMode } from './expr'
-import { fmtPrecise, type MeasureSettings } from './format'
+import { fmtPrecise, fmtSci, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 
@@ -26,7 +26,12 @@ const UNIT_TAIL = /(?<=[\d)\s])\s*(°|N\s*[·⋅]?\s*m|m\s*\/\s*s\s*\^?\s*2|m\s*
 export function parseAnswer(text: string): number | null {
   // Only a thousands separator goes: "1,234" is 1234, but the comma in "sin(30,40)" or "1,5" is
   // not, and stripping every comma turned those into different numbers instead of "unreadable".
-  let t = text.trim().replace(/−/g, '-').replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
+  // The leading group is one to three digits not starting with 0: "0,500" is a decimal written
+  // with a comma, and reading it as 500 told the student "wrong power of ten" for a right answer.
+  let t = text
+    .trim()
+    .replace(/−/g, '-')
+    .replace(/(?<![\d.,])([1-9]\d{0,2})((?:,\d{3})+)(?![\d,])/g, (_, head: string, tail: string) => head + tail.replace(/,/g, ''))
   if (!t) return null
   t = t.replace(UNIT_TAIL, '')
   if (!t.trim()) return null
@@ -101,7 +106,13 @@ export function checkAnswer(text: string, f: AnswerField): Check {
 
 /** The answer as PhysLab would write it, for the "show me" button — in the student's precision. */
 export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 4, precisionMode: 'dp' }): string {
-  return `${fmtPrecise(f.value, s)}${f.unit ? ` ${f.unit}` : ''}`
+  // fmtPrecise writes anything under 1e-12 as 0, which is right for a dragged point and wrong
+  // for a known answer: an electron's 1.6×10⁻¹⁹ N must never be revealed as "0 N".
+  const v = f.value
+  const n = v !== 0 && Math.abs(v) < 1e-12 ? fmtSci(v, s) : fmtPrecise(v, s)
+  // A degree sign sits against its number, as formatMeasure writes it: "36.87°", not "36.87 °".
+  const gap = f.unit === '°' ? '' : ' '
+  return `${n}${f.unit ? `${gap}${f.unit}` : ''}`
 }
 
 /** A right or close answer counts; empty and unreadable do not. */
