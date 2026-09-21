@@ -530,12 +530,21 @@ const stem = (w: string): string => w.replace(/(?<=[sxz]|ch|sh)es$|(?<!s)s$/, ''
 /** The lowercase words of a text, stemmed, with punctuation and apostrophes dropped ("Newton's" → newton). */
 const wordsOf = (text: string): string[] => (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).map(stem)
 
+/** How one query word may meet one word of a preset's text. */
+type WordMatch = (textWord: string, queryWord: string) => boolean
+
+/** The query word is the text word: "moment" meets "moment" (the seesaw's tag, stemmed) and nothing longer. */
+const wholeWord: WordMatch = (t, q) => t === q
+
 /**
- * Whether every query word begins some word of the text. A word-start match, not a substring
- * one: "swing" still finds "swings" and "grav" finds "gravity", but "air" no longer finds a
- * preset only because its sentence says "pair", and "moment" does not pull in every momentum one.
+ * The query word begins the text word: "grav" meets "gravity" and "swing" meets "swings". Never
+ * the middle of one, so "air" does not find a preset only because its sentence says "pair".
  */
-const covers = (textWords: string[], queryWords: string[]): boolean => queryWords.every((q) => textWords.some((t) => t.startsWith(q)))
+const wordStart: WordMatch = (t, q) => t.startsWith(q)
+
+/** Whether every query word meets some word of the text, under the given match. */
+const covers = (textWords: string[], queryWords: string[], match: WordMatch): boolean =>
+  queryWords.every((q) => textWords.some((t) => match(t, q)))
 
 /** Stemmed words from a preset's own text: its tags alone, and everything a search may look at. */
 function searchWords(p: Preset): { tagWords: string[]; allWords: string[] } {
@@ -549,18 +558,27 @@ function searchWords(p: Preset): { tagWords: string[]; allWords: string[] } {
  * Every word of the query has to match somewhere (so "rope pulley" needs both words), and a
  * preset whose tags alone cover the whole query is listed first. An empty query returns every
  * preset, in its usual order, so the picker can fall back to the grouped list unchanged.
+ *
+ * A whole word wins: when any preset has every query word as a word of its own, only those
+ * presets are listed, so "moments" finds the seesaw and not the nine momentum experiments too.
+ * Only when no preset has the whole word does a word-start match step in, so a half-typed
+ * "grav" still finds gravity.
  */
 export function searchPresets(query: string, presets: Preset[] = PRESETS): Preset[] {
   const words = wordsOf(query)
   if (words.length === 0) return presets.slice()
-  const tagRank = (p: Preset) => {
-    const { tagWords, allWords } = searchWords(p)
-    if (!covers(allWords, words)) return null
-    return covers(tagWords, words) ? 0 : 1
+  const found = (match: WordMatch): Preset[] => {
+    const tagRank = (p: Preset) => {
+      const { tagWords, allWords } = searchWords(p)
+      if (!covers(allWords, words, match)) return null
+      return covers(tagWords, words, match) ? 0 : 1
+    }
+    return presets
+      .map((p) => ({ p, rank: tagRank(p) }))
+      .filter((r): r is { p: Preset; rank: number } => r.rank !== null)
+      .sort((a, b) => a.rank - b.rank)
+      .map((r) => r.p)
   }
-  return presets
-    .map((p) => ({ p, rank: tagRank(p) }))
-    .filter((r): r is { p: Preset; rank: number } => r.rank !== null)
-    .sort((a, b) => a.rank - b.rank)
-    .map((r) => r.p)
+  const whole = found(wholeWord)
+  return whole.length > 0 ? whole : found(wordStart)
 }

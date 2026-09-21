@@ -80,6 +80,18 @@ describe('searchPresets', () => {
     expect(searchPresets('swing').map((p) => p.id)).toContain('pendulum')
   })
 
+  it('a whole word wins over a word it merely begins', () => {
+    // "moments" is the seesaw's own tag; "moment" also begins "momentum", but a student typing
+    // the physics word for the seesaw should not get the nine momentum experiments as well.
+    expect(searchPresets('moments').map((p) => p.id)).toEqual(['seesaw'])
+    expect(searchPresets('moment').map((p) => p.id)).toEqual(['seesaw'])
+    // Only when no preset has the whole word does the word-start match step in.
+    expect(searchPresets('mom').map((p) => p.id)).toContain('collision')
+    expect(searchPresets('mom').map((p) => p.id)).toContain('seesaw')
+    // Every query word has to meet a whole word for the whole-word tier to apply.
+    expect(searchPresets('moments lever').map((p) => p.id)).toEqual(['seesaw'])
+  })
+
   it('can search a narrower list than the full preset set', () => {
     const subset = PRESETS.filter((p) => p.topic === 'Oscillation')
     expect(searchPresets('spring', subset).map((p) => p.id).sort()).toEqual(['spring', 'springice'])
