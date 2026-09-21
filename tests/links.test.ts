@@ -2,7 +2,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
-import { makeLink, polylineLength, pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
+import { makeLink, polylineLength, pulleyPartnerMove, pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
 import { eulerToQuat, rotateByEuler } from '../src/renderer/src/sim/rotate'
 import { makeBody } from '../src/renderer/src/sim/store'
 import { PRESETS } from '../src/renderer/src/sim/presets'
@@ -101,6 +101,19 @@ describe('links', () => {
     expect(world.state(b.id)!.position[0]).toBeCloseTo(1.3, 1)
     expect(world.state(a.id)!.position[1]).toBeCloseTo(2.5, 1)
     world.destroy()
+  })
+
+  it('moving one end of a pulley rope sends the other end the same distance the other way, never past the rim', () => {
+    const wheel = put('pulley', 'P', [0, 4.5, 0], { size: [0.3, 0.15, 0.3] })
+    // A hangs under the left rim, B under the right: a metre down on A is a metre up on B.
+    expect(pulleyPartnerMove(wheel, [-0.3, 2, 0], [-0.3, 1, 0], [0.3, 2, 0])).toEqual([0.3, 3, 0])
+    expect(pulleyPartnerMove(wheel, [-0.3, 2, 0], [-0.3, 2.5, 0], [0.3, 2, 0])).toEqual([0.3, 1.5, 0])
+    // A sideways move lengthens A's run by less than it travelled, and B rises by that.
+    const [, y] = pulleyPartnerMove(wheel, [-0.3, 2, 0], [-1.3, 2, 0], [0.3, 2, 0])
+    expect(y - 2).toBeCloseTo(Math.hypot(1, 2.5) - 2.5, 9)
+    // B cannot be pulled through the wheel: it stops just under its rim.
+    const [, top] = pulleyPartnerMove(wheel, [-0.3, 2, 0], [-0.3, -2, 0], [0.3, 2, 0])
+    expect(top).toBeCloseTo(4.45, 9)
   })
 
   it('an Atwood machine over a pulley turned 90° about the vertical still accelerates at (m₂ − m₁) g / (m₁ + m₂)', async () => {

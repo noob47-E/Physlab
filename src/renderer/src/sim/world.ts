@@ -8,7 +8,7 @@
 
 import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
-import { pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from './links'
+import { pulleyPartnerMove, pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from './links'
 import { eulerToQuat } from './rotate'
 import type { BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
@@ -927,6 +927,23 @@ export class SimWorld {
   placeBody(id: BodyId, position: V3): void {
     const e = this.entries.get(id)
     if (!e) return
+    const from = this.positionOf(e)
+    this.put(e, position)
+    if (e.def.motion !== 'dynamic') this.wakeAll()
+    // A mass on a pulley takes its partner the other way, so the rope stays its length while it
+    // is dragged and nothing jumps on Play. `put`, not `placeBody`, for the partner: placing it
+    // would move this body back again.
+    for (const link of this.linkDefs) {
+      if (link.kind !== 'pulley' || (link.a !== id && link.b !== id)) continue
+      const partner = this.entries.get(link.a === id ? link.b : link.a)
+      const wheel = link.over ? this.entries.get(link.over) : undefined
+      if (!partner || !wheel || partner.def.motion !== 'dynamic') continue
+      this.put(partner, pulleyPartnerMove(wheel.def, from, position, this.positionOf(partner)))
+    }
+  }
+
+  /** Sets a body down at `position`, at rest, keeping the way it is turned. */
+  private put(e: Entry, position: V3): void {
     const J = this.jolt as unknown as AnyJolt & Jolt
     const p = this.rv3(position)
     const q = e.body.GetRotation()
@@ -934,10 +951,7 @@ export class SimWorld {
       const zero = this.v3([0, 0, 0])
       this.bodies.SetPositionRotationAndVelocity(e.body.GetID(), p, q, zero, zero)
       this.release(zero)
-    } else {
-      this.bodies.SetPositionAndRotation(e.body.GetID(), p, q, J.EActivation_DontActivate)
-      this.wakeAll()
-    }
+    } else this.bodies.SetPositionAndRotation(e.body.GetID(), p, q, J.EActivation_DontActivate)
     this.release(p)
   }
 

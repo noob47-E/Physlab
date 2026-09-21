@@ -87,6 +87,25 @@ describe('every sentence reads plainly', () => {
   }
 })
 
+describe('a link card speaks to a pair already chosen', () => {
+  // KindCard in panels/Sandbox.tsx is the only place that asks for a `link:` card, and it only
+  // shows on the last step of Connect, under "Join A and B with…". A sentence that opened with
+  // "Click one object, then another" was telling the student to do what they had just done.
+  it('the Sandbox asks for the link cards from the Connect flow alone', () => {
+    const src = readSource('src/renderer/src/panels/Sandbox.tsx')
+    expect(src.match(/useToolCard\(`link:/g)).toHaveLength(1)
+    expect(src).toMatch(/function KindCard[\s\S]*?useToolCard\(`link:\$\{kind\}`\)/)
+  })
+
+  for (const k of LINK_KINDS) {
+    it(`link:${k} says what the choice does to the two, not how to pick them`, () => {
+      const card = TOOL_CARDS[`link:${k}`]
+      expect(card.sentence).not.toMatch(/click/i)
+      expect(card.sentence).toMatch(/the two you chose/)
+    })
+  }
+})
+
 describe('the pan gesture is taught the same way everywhere', () => {
   // With the Move tool a left-drag on empty space draws a selection box, and the pan moved to
   // Space + drag (or a right-drag). The hover card, the tour and the shortcuts list are where a

@@ -10,6 +10,7 @@ import { PRESETS, START_PRESET_ID, startPreset } from '../src/renderer/src/sim/p
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_OF, FOLD_TITLES, joinCandidates, readFold, writeFold, type FoldStore } from '../src/renderer/src/sim/inspector'
 import { joinPick, joinPrompt, LINK_CARDS, linkRefusal, noWheelNote, START_JOIN, wheelsAbove } from '../src/renderer/src/sim/join'
 import { LINK_KINDS, ropeSegments } from '../src/renderer/src/sim/links'
+import { readSource } from './helpers/repo'
 
 const G = 9.81
 let n = 0
@@ -187,6 +188,26 @@ describe('the sandbox store', () => {
     expect(useSandbox.getState().bodies.find((b) => b.id === ball.id)).toBeUndefined()
   })
 
+  it('moving one mass of a pulley pair moves the other the same way back, in one undoable edit', () => {
+    fresh()
+    const built = PRESETS.find((p) => p.id === 'balance')!.build()
+    useSandbox.getState().setScene(built.bodies, built.world, built.links)
+    const a = built.bodies.find((b) => b.name === 'A')!
+    const b = built.bodies.find((b) => b.name === 'B')!
+    // The drag's release, or a number typed into the Position row, while paused. Reset and the
+    // file used to hold A a metre lower with B where it was, so the rope came out a metre long.
+    useSandbox.getState().updateBody(a.id, { position: [a.position[0], 1, a.position[2]] })
+    const at = (id: string) => useSandbox.getState().bodies.find((x) => x.id === id)!.position[1]
+    expect(at(a.id)).toBe(1)
+    expect(at(b.id)).toBeCloseTo(3, 9)
+    useSandbox.getState().undo()
+    expect(at(a.id)).toBe(2)
+    expect(at(b.id)).toBe(2)
+    // An edit that is not a move leaves the partner alone.
+    useSandbox.getState().updateBody(a.id, { friction: 0.1 })
+    expect(at(b.id)).toBe(2)
+  })
+
   it('joining refuses the same pair twice and an object to itself, and says why', () => {
     fresh()
     const s = useSandbox.getState()
@@ -243,6 +264,19 @@ describe('classroom-scale masses', () => {
     expect(built.bodies.filter((b) => b.motion === 'dynamic')).toHaveLength(1)
     expect(built.bodies.some((b) => b.shape === 'ground')).toBe(true)
     expect(built.links ?? []).toHaveLength(0)
+  })
+})
+
+describe('the Energy section', () => {
+  it('shows the momentum of everything together, the number the preset sentences quote', () => {
+    // "p in the Energy section reads 11.6 kg m/s" (tug), "18 kg m/s" (stack), "5 kg m/s"
+    // (collision): the section used to show p per body only, so a student looking for the
+    // sentence's number found two lines to add up by hand.
+    const src = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const readout = src.slice(src.indexOf('function EnergyReadout'), src.indexOf('function Collisions'))
+    expect(readout).toContain('systemMomentum(')
+    expect(readout).toMatch(/p \{num\(momentum, 'kg m\/s'\)\}/)
+    for (const p of PRESETS) if (/Energy section/.test(p.about)) expect(p.about, p.id).toMatch(/p in the Energy section reads/)
   })
 })
 

@@ -141,6 +141,25 @@ export function pulleyRim(wheel: BodyDef, posA: V3, posB: V3): { p1: V3; p2: V3 
 }
 
 /**
+ * Where the other end of a rope over a pulley goes when one end is moved by hand, from `from` to
+ * `to`: the rope keeps its length, so whatever the moved body adds to its run comes off the
+ * partner's, along the line from the partner up to its rim. This is what "drag one down 1 m and
+ * the other rises 1 m" means, and it is what a paused drag never did: the moved body was placed,
+ * the partner stayed, and the links were laid again over the same length, so the two runs added
+ * up to more rope than there was and on Play the solver yanked both masses back to fit — two
+ * equal masses jumped half a metre each. The partner is never sent past its rim.
+ */
+export function pulleyPartnerMove(wheel: BodyDef, from: V3, to: V3, partner: V3): V3 {
+  const { p1, p2 } = pulleyRim(wheel, from, partner)
+  const added = dist(to, p1) - dist(from, p1)
+  const up: V3 = [p2[0] - partner[0], p2[1] - partner[1], p2[2] - partner[2]]
+  const reach = Math.hypot(...up)
+  if (reach < 1e-6) return partner
+  const step = Math.min(added, reach - 0.05) / reach
+  return [partner[0] + up[0] * step, partner[1] + up[1] * step, partner[2] + up[2] * step]
+}
+
+/**
  * Mass of each link of a rope carrying `loads` (the dynamic bodies it ties to), cut into `n`
  * segments. A rope that weighs a tenth of what it carries hangs and swings like one; far lighter
  * and the solver loses the fight against the mass ratio and the rope stretches. The old rule

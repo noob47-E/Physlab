@@ -4,7 +4,7 @@ import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylind
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
-import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
+import { energyOf, groundTopOf, momentumSize, systemEnergy, systemMomentum } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
 import { groupedPresets, launchVelocity, presetBadges, startPreset, type Preset } from '../sim/presets'
@@ -580,6 +580,11 @@ function EnergyReadout() {
   const known = parts.filter((p) => p.energy)
   if (!known.length) return null
   const total = systemEnergy(known.map((p) => p.energy!))
+  // The vector sum, not the sum of the sizes: after a head-on bounce the two momenta point
+  // opposite ways and it is their difference that a collision leaves unchanged. Every preset
+  // sentence that quotes a kg m/s quotes this number; the per-body lines below only had to be
+  // added up by hand.
+  const momentum = Math.hypot(...systemMomentum(known.map((p) => p.state!)))
   // The split between movement and height, as a bar: watching it tip over as something falls is
   // the whole lesson.
   const pe = Math.max(0, total.potential)
@@ -597,6 +602,11 @@ function EnergyReadout() {
           <span className="text-[color:var(--accent)]">KE {num(total.kinetic, 'J')}</span>
           <span className="text-[color:var(--warn)]">PE {num(total.potential, 'J')}</span>
           <span className="font-semibold text-[color:var(--text-strong)]">total {num(total.total, 'J')}</span>
+        </div>
+        <div className="mt-0.5 flex justify-end text-small">
+          <span className="tabular-nums text-[color:var(--text)]" title="Momentum of everything together: the size of the vector sum of every mass × velocity">
+            p {num(momentum, 'kg m/s')}
+          </span>
         </div>
       </div>
       {known.map(({ def, state, energy }) => (

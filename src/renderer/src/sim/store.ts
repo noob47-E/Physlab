@@ -8,7 +8,8 @@ import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactE
 import { SimWorld } from './world'
 import { addSample, type Sample } from './recording'
 import type { SandboxFile } from '../core/types'
-import { makeLink, ropeSegments } from './links'
+import { makeLink, pulleyPartnerMove, ropeSegments } from './links'
+import type { V3 } from '../math/vec'
 import { joinPick, linkRefusal, START_JOIN, type JoinMode } from './join'
 
 /** What addLink hands back: the link, or the sentence that says why there is none. */
@@ -268,8 +269,25 @@ export const useSandbox = create<SandboxState>((set, get) => ({
 
   updateBody: (id, patch) => {
     remember(set, get, `edit:${id}:${Object.keys(patch).join(',')}`)
+    const bodies = get().bodies
+    // A mass moved on a pulley takes its partner the other way, in the same edit, so Reset, undo
+    // and the file all hold a rope of one length: with the partner left where it was, the two
+    // runs came to more rope than the link had and both masses jumped on Play.
+    const was = bodies.find((b) => b.id === id)
+    const to = patch.position
+    const follow = new Map<BodyId, V3>()
+    if (was && to && was.position.some((v, i) => v !== to[i])) {
+      for (const link of get().links) {
+        if (link.kind !== 'pulley' || (link.a !== id && link.b !== id)) continue
+        const partner = bodies.find((b) => b.id === (link.a === id ? link.b : link.a))
+        const wheel = bodies.find((b) => b.id === link.over)
+        if (partner && wheel && partner.motion === 'dynamic') follow.set(partner.id, pulleyPartnerMove(wheel, was.position, to, partner.position))
+      }
+    }
     set({
-      bodies: get().bodies.map((b) => {
+      bodies: bodies.map((b) => {
+        const moved = follow.get(b.id)
+        if (moved) return { ...b, position: moved }
         if (b.id !== id) return b
         const next = { ...b, ...patch }
         // Changing the material brings its density, friction and bounciness with it.

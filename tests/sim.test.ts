@@ -801,6 +801,24 @@ describe('the presets do what their sentences say', () => {
     world.destroy()
   })
 
+  it('on the balanced pulley, dragging A down 1 m while paused lifts B 1 m, and Play leaves both there', async () => {
+    const { world, by, built } = await open('balance')
+    const a = by('A')
+    const b = by('B')
+    // A paused drag places the body. The partner used to stay put, and the links were laid
+    // again over the same 5 m, so on Play the solver split the extra metre: A jumped back to
+    // 1.46 and B to 2.54.
+    world.placeBody(a.id, [a.position[0], 1, a.position[2]])
+    expect(world.state(b.id)!.position[1]).toBeCloseTo(3, 6)
+    // The release writes the drag into the definition, and the view lays the links again from it.
+    world.updateBody({ ...a, position: [a.position[0], 1, a.position[2]] })
+    world.setLinks(built.links!)
+    run(world, 1)
+    expect(world.state(a.id)!.position[1]).toBeCloseTo(1, 1)
+    expect(world.state(b.id)!.position[1]).toBeCloseTo(3, 1)
+    world.destroy()
+  })
+
   it('the crane holds its crate at the end of a 2.5 m rope, and a shorter rope lifts it', async () => {
     const { world, by, built } = await open('crane')
     const crate = by('Crate')
@@ -829,9 +847,10 @@ describe('the presets do what their sentences say', () => {
     world.destroy()
   })
 
-  it("on Galileo's ramps the ball climbs back to about 0.94 m of its 1.1", async () => {
+  it("on Galileo's ramps the ball's centre climbs back to about 1.14 m of its 1.31", async () => {
     const { world, by } = await open('galileo')
     const ball = by('A')
+    expect(ball.position[1]).toBeCloseTo(1.31, 2)
     let top = 0
     let over = false
     watch(world, 8, () => {
@@ -839,10 +858,10 @@ describe('the presets do what their sentences say', () => {
       if (st.position[0] > 0.5) over = true
       if (over) top = Math.max(top, st.position[1])
     })
-    // The sentence's 0.94 is this measurement, so hold it to the second decimal.
-    const underside = top - 0.2
-    expect(underside).toBeGreaterThan(0.925)
-    expect(underside).toBeLessThan(0.955)
+    // The sentence's 1.14 is this measurement of the centre — the number the Position row
+    // shows — so hold it to the second decimal.
+    expect(top).toBeGreaterThan(1.125)
+    expect(top).toBeLessThan(1.155)
     world.destroy()
   })
 
@@ -919,7 +938,8 @@ describe('the presets do what their sentences say', () => {
     expect(vc).toBeLessThan(2.7)
     expect(vp).toBeGreaterThan(1.5)
     expect(vp).toBeLessThan(1.8)
-    // The panel's p is the crates' alone: 12 less the 0.4 the 0.2 kg rope carries at 2 m/s.
+    // The Energy section's p is the two crates added up, and never the rope links, which the
+    // panel does not see: 12 less the 0.4 the 0.2 kg rope carries at 2 m/s.
     // It used to fall to 11.0 by 3 s because the slack rope dropped onto the ice and rubbed;
     // the crates are tall enough now that the rope never reaches it.
     const p = () => 2 * world.state(crate.id)!.velocity[0] + 4 * world.state(puller.id)!.velocity[0]

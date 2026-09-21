@@ -54,8 +54,9 @@ const EXPECTED: Record<string, [number, string][]> = {
   balance: [[2, 'kg'], [2 * G, 'N'], [1, 'm']],
   crane: [[3, 'kg'], [2.5, 'm'], [3 * G, 'N']],
   bounce: [[3, 'm'], [0.64 * 3, 'm'], [0.64 ** 2 * 3, 'm'], [0.64 ** 3 * 3, 'm']],
-  // The climb has no formula: it is what the two corners leave of the 1.106 m the underside starts at.
-  galileo: [[measured(0.94), 'm'], [1.306 - 0.2, 'm']],
+  // The sentence quotes the centre, the number the Position row shows. The climb has no formula:
+  // it is what the two corners leave of the 1.306 m the centre starts at.
+  galileo: [[1.306, 'm'], [measured(1.14), 'm'], [1.306 - measured(1.14), 'm']],
   stack: [[2, 'kg'], [9, 'm/s'], [18, 'kg m/s'], [0.5 * 2 * 81, 'J']],
   collision: [[1, 'kg'], [5, 'm/s'], [3, 'kg'], [5, 'kg m/s'], [Math.abs(((1 - 0.9 * 3) / 4) * 5), 'm/s'], [((1 * 1.9) / 4) * 5, 'm/s']],
   sticky: [[1, 'kg'], [4, 'm/s'], [3, 'kg'], [4 / 4, 'm/s']],
@@ -63,7 +64,8 @@ const EXPECTED: Record<string, [number, string][]> = {
   crash: [[5, 'kg'], [8, 'm/s'], [40, 'kg m/s']],
   cradle: [],
   trolleys: [[2, 'kg'], [1, 'kg'], [6, 'm/s'], [6, 'kg m/s'], [5, 'kg'], [6 / 5, 'm/s']],
-  // The panel sums the crates: the rope keeps its own share of the 12, at the pair's 2 m/s.
+  // The Energy section's p adds up the two crates and never sees the rope links: the rope keeps
+  // its own share of the 12, at the pair's 2 m/s.
   tug: [[4, 'kg'], [3, 'm/s'], [2, 'kg'], [12, 'kg m/s'], [6, 'kg'], [12 / 6, 'm/s'], [tugRope, 'kg'], [tugRope * 2, 'kg m/s'], [12 - tugRope * 2, 'kg m/s']],
   pendulum: [[2, 'm'], [TAU * Math.sqrt(2 / G), 's'], [pendulumPeriod(2, (53 * Math.PI) / 180), 's']],
   ropeswing: [[2, 'kg']],

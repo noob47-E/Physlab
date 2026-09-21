@@ -259,8 +259,11 @@ export const PRESETS: Preset[] = [
     id: 'galileo',
     label: "Galileo's ramps",
     topic: 'Energy',
-    about: 'Down one slope and up the other. Rolling, it climbs back to nearly the height it started from — about 0.94 m of the 1.1 m — whatever the second slope looks like. The little it loses goes at the two corners where slope meets floor.',
+    about: 'Down one slope and up the other. Rolling, it climbs back to nearly where it started, whatever the second slope looks like: watch its height in the Position row go from 1.31 m to about 1.14 m at the top of the climb. The 0.17 m it loses goes at the two corners where slope meets floor.',
     build: () => ({
+      // The sentence quotes the ball's centre, because that is the number on screen: the Position
+      // row, the Height recording and the energy all measure the centre. It used to quote the
+      // underside (0.94 of 1.1), which nothing shows, so the sentence read as wrong.
       // Steel slopes and a rolling ball: a ball with μ = 0.02 slid, and sliding friction over
       // fifteen metres ate half its energy. The Up slope sits 3 cm into the floor so its bottom
       // edge is buried: rolling into the exposed edge cost 17 % of the energy in one hit.
