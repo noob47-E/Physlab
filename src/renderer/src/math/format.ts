@@ -140,7 +140,9 @@ export function fmt(n: number, decimals = 4): string {
   const abs = Math.abs(n)
   if (abs >= 1e9 || abs < 1e-4) {
     const [m, e] = n.toExponential(decimals).split('e')
-    return `${trimZeros(m)}×10^${Number(e)}`
+    // The mantissa takes the same proper minus as every other number on screen (the calculator's
+    // own formatter already does); the exponent keeps the plain hyphen `texPrecise` looks for.
+    return `${trimZeros(m).replace('-', '−')}×10^${Number(e)}`
   }
   return trimZeros(n.toFixed(decimals)).replace('-', '−')
 }

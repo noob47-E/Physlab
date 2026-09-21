@@ -52,13 +52,17 @@ export function checkAnswer(text: string, f: AnswerField): Check {
 
   const near = (x: number, y: number, tol = f.tol) => Math.abs(x - y) <= tol
   const angle = f.kind === 'angle'
+  /** The same direction, however many turns apart: 216.87° and −143.13° are one answer. */
+  const sameWay = (x: number, y: number) => Math.abs((((x - y) % 360) + 540) % 360 - 180) <= f.tol
 
   // Right, in any form the question accepts.
   if (near(a, f.value)) return { verdict: 'right', parsed: a }
   if (angle) {
-    const diff = (((a - f.value) % 360) + 540) % 360 - 180
-    if (Math.abs(diff) <= f.tol) {
-      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(f.value, { decimals: 2, precisionMode: 'dp' })}°.` }
+    if (sameWay(a, f.value)) {
+      // The sentence promises a value between 0° and 360°, so it must not quote a field that was
+      // set as −30° as "−30".
+      const turn = ((f.value % 360) + 360) % 360
+      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(turn, { decimals: 2, precisionMode: 'dp' })}°.` }
     }
   }
 
@@ -69,7 +73,10 @@ export function checkAnswer(text: string, f: AnswerField): Check {
     return { verdict: 'wrong', parsed: a, message: 'Right size, wrong sign. Check the direction — or the signs of the components you started from.' }
   }
   if (angle) {
-    if (near(a, 180 - f.value) || near(a, f.value - 180) || near(a, 360 - f.value)) {
+    // The other three quadrants with the same reference angle, compared as directions: the
+    // third-quadrant answer written between 0° and 360° (216.87° for a 36.87° field) used to
+    // be checked against −143.13° as a plain number and fell through to "Not quite".
+    if (sameWay(a, 180 - f.value) || sameWay(a, f.value + 180) || sameWay(a, -f.value)) {
       return { verdict: 'wrong', parsed: a, message: 'Right reference angle, wrong quadrant. The signs of the two components decide which quadrant the vector is in.' }
     }
     if (near(a, toRad(f.value), Math.max(f.tol, 0.02))) {

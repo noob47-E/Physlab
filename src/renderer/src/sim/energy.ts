@@ -36,9 +36,12 @@ export function momentOfInertia(def: BodyDef, mass: number): number {
       return 0.4 * mass * a * a
     case 'cylinder':
     case 'capsule':
+    case 'pulley':
       return 0.5 * mass * a * a
     case 'cone':
-      return 0.3 * mass * a * a
+      // A cone's first size is its base width, not its radius (the hull, the mesh and
+      // `shapeVolume` all halve it); taking it as the radius quoted spin energy four times too big.
+      return 0.3 * mass * (a / 2) ** 2
     default:
       // A box about its centre: 1/12 m (w² + h²).
       return (mass * (a * a + b * b)) / 12

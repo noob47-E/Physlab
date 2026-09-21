@@ -62,9 +62,12 @@ export function frontalArea(shape: string, size: [number, number, number], dir: 
     case 'sphere':
       return Math.PI * a ** 2
     case 'cylinder':
-    case 'capsule':
       // Round end towards the motion, or the long side.
       return ay * Math.PI * a ** 2 + (1 - ay) * 2 * a * b
+    case 'capsule':
+      // Seen from the side a capsule is its rectangle plus the two half-discs on its ends, which
+      // together make one full circle; end-on it is that circle alone.
+      return Math.PI * a ** 2 + (1 - ay) * 2 * a * b
     case 'cone':
       return ay * Math.PI * (a / 2) ** 2 + (1 - ay) * a * b * 0.5
     default:

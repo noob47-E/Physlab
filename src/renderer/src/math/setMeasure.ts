@@ -6,7 +6,7 @@
 // nothing can move — a length that is a consequence of other things must not pretend to be
 // editable.
 
-import { add, dist, normalize, scale, sub, type V3 } from './vec'
+import { add, cross, dist, len, normalize, scale, sub, type V3 } from './vec'
 
 /**
  * Where B has to be for the distance from A to be `wanted`, keeping the direction it already has.
@@ -40,9 +40,12 @@ export function pointAtAngle(vertex: V3, fixedArm: V3, moving: V3, wanted: numbe
   const across: V3 = [w[0] - uh[0] * along, w[1] - uh[1] * along, w[2] - uh[2] * along]
   const acrossLen = Math.hypot(across[0], across[1], across[2])
   // The two arms are already in line, so there is no plane to turn in: fall back to the xy-plane,
-  // which is where a flat drawing lives.
-  const perp: V3 = acrossLen > 1e-9 ? normalize(across) : normalize([-uh[1], uh[0], 0])
-  if (!Number.isFinite(perp[0])) return null
+  // which is where a flat drawing lives. An arm standing along z has no xy-perpendicular at all
+  // (`normalize` hands back the zero vector, never NaN, so a finiteness check did not notice and
+  // the point collapsed onto the arm); it turns in the xz-plane instead.
+  const inPlane: V3 = [-uh[1], uh[0], 0]
+  const perp: V3 = acrossLen > 1e-9 ? normalize(across) : len(inPlane) > 1e-9 ? normalize(inPlane) : normalize(cross([0, 1, 0], uh))
+  if (len(perp) < 0.5) return null
 
   const c = Math.cos(wanted)
   const s = Math.sin(wanted)
