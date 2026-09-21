@@ -489,7 +489,9 @@ export class SimWorld {
     // be laid straight across the gap whatever length was typed, so editing L did nothing.
     const length = Math.max(0.1, link.length)
     const n = link.segments ?? ropeSegments(length)
-    const joints = ropeLayout(start, end, length, n)
+    // A joint laid inside the floor stays there: nothing pushes a link out once it is in.
+    const top = this.groundTop()
+    const joints = ropeLayout(start, end, length, n, top === undefined ? undefined : top + ROPE_RADIUS)
     const half = length / n / 2
     // The rope's weight is a fraction of its load (see ropeLinkMass): far lighter and the solver
     // loses the fight against the mass ratio and the rope stretches; far heavier and it drags the
@@ -592,6 +594,12 @@ export class SimWorld {
   private positionOf(e: Entry): V3 {
     const p = e.body.GetPosition()
     return [p.GetX(), p.GetY(), p.GetZ()]
+  }
+
+  /** The top of the floor, where it is now, or undefined when the scene has no floor. */
+  private groundTop(): number | undefined {
+    for (const e of this.entries.values()) if (e.def.shape === 'ground') return this.positionOf(e)[1] + e.def.size[1] / 2
+    return undefined
   }
 
   /** The rotation that stands a capsule (whose axis is y) along `dir`. */

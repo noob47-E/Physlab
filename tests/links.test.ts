@@ -238,6 +238,39 @@ describe('links', () => {
     expect(slope[5][1]).toBeLessThan(3.5 - 0.3)
   })
 
+  it('a lengthened rope between two crates on the floor is laid above the floor and falls onto it, never through', async () => {
+    // The sag was laid along gravity with no idea where the floor was: 1.5 m of slack between
+    // two crates on the ground put the joints at y = −0.87, and after two seconds the chain was
+    // still hanging under the floor, drawn through it, because nothing pushes a link back out.
+    const world = await makeWorld()
+    const a = put('box', 'A', [-1, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 })
+    const b = put('box', 'B', [1, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 })
+    const rope = makeLink('r', 'rope', a, b)!
+    const length = rope.length + 1.5
+    const link = { ...rope, length, segments: ropeSegments(length) }
+    world.rebuild([floor(), a, b], [link])
+    const laid = world.linkPath(link)
+    expect(laid.length).toBe(link.segments + 2)
+    // Laid as an arch above the chord, its full length.
+    for (const p of laid) expect(p[1]).toBeGreaterThanOrEqual(0.3 - 1e-6)
+    expect(Math.max(...laid.map((p) => p[1]))).toBeGreaterThan(0.8)
+    expect(polylineLength(laid.slice(1, -1))).toBeCloseTo(length - length / link.segments, 1)
+    run(world, 2)
+    // Every joint rests on the floor or above it: a 2 cm link's centre sits 2 cm up.
+    for (const p of world.linkPath(link).slice(1, -1)) expect(p[1]).toBeGreaterThan(0.01)
+    // The pure layout says the same, and only when told where the floor is.
+    const sag = ropeLayout([-0.7, 0.3, 0], [0.7, 0.3, 0], 2.9, 14)
+    expect(Math.min(...sag.map((p) => p[1]))).toBeLessThan(0)
+    const arch = ropeLayout([-0.7, 0.3, 0], [0.7, 0.3, 0], 2.9, 14, 0.02)
+    expect(Math.min(...arch.map((p) => p[1]))).toBeGreaterThanOrEqual(0.3 - 1e-9)
+    expect(polylineLength(arch)).toBeCloseTo(2.9, 6)
+    // A sag that fits above the floor is left as a sag.
+    const fits = ropeLayout([-0.7, 2, 0], [0.7, 2, 0], 1.7, 9, 0.02)
+    expect(fits[4][1]).toBeLessThan(2)
+    expect(fits[4][1]).toBeGreaterThan(0.02)
+    world.destroy()
+  })
+
   it('a rope is as long as its definition says: longer hangs lower, shorter lifts the load', async () => {
     // The chain used to be laid straight across the gap whatever length was typed, so editing L
     // in the panel did nothing at all.

@@ -8,7 +8,7 @@ import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactE
 import { SimWorld } from './world'
 import { addSample, type Sample } from './recording'
 import type { SandboxFile } from '../core/types'
-import { makeLink } from './links'
+import { makeLink, ropeSegments } from './links'
 import { joinPick, linkRefusal, START_JOIN, type JoinMode } from './join'
 
 /** What addLink hands back: the link, or the sentence that says why there is none. */
@@ -294,8 +294,9 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       links: get().links.filter((l) => l.a !== id && l.b !== id),
       selection: get().selection === id ? null : get().selection,
       partner: get().partner === id ? null : get().partner,
-      // Half a pair is no pair: start the connection again.
+      // Half a pair is no pair: start the connection again, without the old refusal.
       joinMode: join && (join.a === id || join.b === id) ? null : join,
+      joinNote: join && (join.a === id || join.b === id) ? null : get().joinNote,
       recording: prune(get().recording, bodies),
       live: prune(get().live, bodies)
     })
@@ -344,7 +345,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       posA: live[a]?.position ?? one.position,
       posB: live[b]?.position ?? two.position
     })
-    if (!link) return { ok: false, why: 'A rope over a pulley needs a Pulley object — add one and put it above both.' }
+    // linkRefusal has already said no to everything makeLink cannot build; this is the guard.
+    if (!link) return { ok: false, why: 'Those two cannot be joined that way.' }
     remember(set, get, 'link')
     set({ links: [...get().links, link], joined: get().joined + 1 })
     return { ok: true, link }
@@ -366,7 +368,16 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   cancelJoin: () => set({ joinMode: null, joinNote: null, partner: null }),
   updateLink: (id, patch) => {
     remember(set, get, `link:${id}`)
-    set({ links: get().links.map((l) => (l.id === id ? { ...l, ...patch } : l)) })
+    set({
+      links: get().links.map((l) => {
+        if (l.id !== id) return l
+        const next = { ...l, ...patch }
+        // A rope is cut into 20 cm links when it is made; a new length is cut again, or a
+        // rope lengthened from 2.5 m to 6 m kept its thirteen links, now 46 cm each and stiff.
+        if (next.kind === 'rope' && patch.length !== undefined) next.segments = ropeSegments(next.length)
+        return next
+      })
+    })
   },
   removeLink: (id) => {
     remember(set, get, 'unlink')

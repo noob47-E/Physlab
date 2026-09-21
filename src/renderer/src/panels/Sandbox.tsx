@@ -221,7 +221,7 @@ export function Sandbox() {
           <div
             key={b.id}
             className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${chosen ? 'bg-[var(--sel-row)]' : 'hover:bg-[var(--bg-3)]'}`}
-            title={selection && !chosen ? 'Click to select; Shift+click to join it to the selected object' : undefined}
+            title={joinMode ? 'Click to choose it' : selection && !chosen ? 'Click to select; Shift+click to join it to the selected object' : undefined}
             onClick={(e) => {
               // While connecting, a click is a pick — here or in the drawing, the same.
               if (joinMode) joinPick(b.id)

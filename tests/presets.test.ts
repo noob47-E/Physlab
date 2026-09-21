@@ -1,11 +1,13 @@
 // Every number a preset's sentence promises, checked against the formula it comes from. A
 // student reads "lands after 1.01 s" and then reads the clock; if the sentence is wrong the
-// simulator looks broken. The engine's side of the same promises is in sim.test.ts.
+// simulator looks broken. The engine's side of the same promises is in sim.test.ts, and the
+// few numbers that have no formula (a speed the engine's rolling contact settles on) are marked
+// `measured` here and held to the sentence by sim.test.ts.
 
 import { describe, expect, it } from 'vitest'
 import { groupedPresets, presetBadges, PRESET_TOPICS, presetById, PRESETS } from '../src/renderer/src/sim/presets'
 import { dragCoefficient, frontalArea } from '../src/renderer/src/sim/materials'
-import { LINK_KINDS } from '../src/renderer/src/sim/links'
+import { LINK_KINDS, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
 
 const G = 9.81
 const TAU = 2 * Math.PI
@@ -26,6 +28,12 @@ const terminal = (() => {
 /** T for a pendulum of length L let go from θ (radians): the series a textbook footnote gives. */
 const pendulumPeriod = (L: number, theta: number) => TAU * Math.sqrt(L / G) * (1 + theta ** 2 / 16 + (11 * theta ** 4) / 3072)
 
+/** A number the engine settles on rather than a formula: sim.test.ts holds the sentence to it. */
+const measured = (v: number) => v
+
+/** The tug's rope: a tenth of its lightest load, cut into 20 cm links (the rope mass rule). */
+const tugRope = ropeLinkMass([2, 4], ropeSegments(1.7)) * ropeSegments(1.7)
+
 /**
  * What each sentence may claim, by unit. A number in the `about` is right when some value here
  * with the same unit rounds to it at the digits the sentence shows. The formula is the test.
@@ -37,7 +45,7 @@ const EXPECTED: Record<string, [number, string][]> = {
   drop: [[5, 'kg'], [0.5, 'kg'], [6, 'm'], [Math.sqrt(12 / G), 's']],
   moon: [[1.62, 'm/s²'], [5, 'm'], [Math.sqrt(10 / 1.62), 's'], [Math.sqrt(10 / G), 's']],
   terminal: [[0.8, 'kg'], [45, 'm'], [30, 'm'], [terminal, 'm/s'], [100 * dragFraction(45, terminal), '%'], [100 * dragFraction(30, terminal), '%']],
-  ramp: [[1.5, 'm'], [Math.sqrt((10 * G * 1.5) / 7), 'm/s'], [Math.sqrt(2 * G * 1.5), 'm/s']],
+  ramp: [[1.5, 'm'], [Math.sqrt((10 * G * 1.5) / 7), 'm/s'], [Math.sqrt(2 * G * 1.5), 'm/s'], [measured(4.46), 'm/s']],
   rollslide: [],
   friction: [[6, 'm/s'], [36 / (2 * 0.4 * G), 'm']],
   seesaw: [[3, 'kg'], [1, 'm'], [1, 'kg'], [1.5, 'm'], [3, 'm']],
@@ -46,8 +54,8 @@ const EXPECTED: Record<string, [number, string][]> = {
   balance: [[2, 'kg'], [2 * G, 'N'], [1, 'm']],
   crane: [[3, 'kg'], [2.5, 'm'], [3 * G, 'N']],
   bounce: [[3, 'm'], [0.64 * 3, 'm'], [0.64 ** 2 * 3, 'm'], [0.64 ** 3 * 3, 'm']],
-  // The climb is measured (sim.test.ts): 0.95 of the 1.106 m the ball's underside starts at.
-  galileo: [[0.95, 'm'], [1.306 - 0.2, 'm']],
+  // The climb has no formula: it is what the two corners leave of the 1.106 m the underside starts at.
+  galileo: [[measured(0.94), 'm'], [1.306 - 0.2, 'm']],
   stack: [[2, 'kg'], [9, 'm/s'], [18, 'kg m/s'], [0.5 * 2 * 81, 'J']],
   collision: [[1, 'kg'], [5, 'm/s'], [3, 'kg'], [5, 'kg m/s'], [Math.abs(((1 - 0.9 * 3) / 4) * 5), 'm/s'], [((1 * 1.9) / 4) * 5, 'm/s']],
   sticky: [[1, 'kg'], [4, 'm/s'], [3, 'kg'], [4 / 4, 'm/s']],
@@ -55,7 +63,8 @@ const EXPECTED: Record<string, [number, string][]> = {
   crash: [[5, 'kg'], [8, 'm/s'], [40, 'kg m/s']],
   cradle: [],
   trolleys: [[2, 'kg'], [1, 'kg'], [6, 'm/s'], [6, 'kg m/s'], [5, 'kg'], [6 / 5, 'm/s']],
-  tug: [[4, 'kg'], [3, 'm/s'], [2, 'kg'], [12, 'kg m/s'], [6, 'kg'], [12 / 6, 'm/s']],
+  // The panel sums the crates: the rope keeps its own share of the 12, at the pair's 2 m/s.
+  tug: [[4, 'kg'], [3, 'm/s'], [2, 'kg'], [12, 'kg m/s'], [6, 'kg'], [12 / 6, 'm/s'], [tugRope, 'kg'], [tugRope * 2, 'kg m/s'], [12 - tugRope * 2, 'kg m/s']],
   pendulum: [[2, 'm'], [TAU * Math.sqrt(2 / G), 's'], [pendulumPeriod(2, (53 * Math.PI) / 180), 's']],
   ropeswing: [[2, 'kg']],
   swingbridge: [[2.5, 'm'], [2, 'm'], [TAU * Math.sqrt(2 / G), 's'], [TAU * Math.sqrt(2.5 / G), 's']],
@@ -100,6 +109,12 @@ describe('what the presets promise', () => {
     ])
     // A sentence with no units makes no claims, and "2π" is not 2 of anything.
     expect(claims('T = 2π√(L/g), 15° from the vertical')).toEqual([])
+  })
+
+  it('no sentence shows a student code: no braces, backslashes or underscore subscripts', () => {
+    // "C_d" in a sentence is read as C, an underscore and a d; the link cards are held to the
+    // same rule in sandbox.test.ts.
+    for (const p of PRESETS) expect(p.about, p.id).not.toMatch(/[{}_\\]/)
   })
 
   it('every sentence has a number to check, except the two that are only about what to watch', () => {

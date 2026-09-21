@@ -8,6 +8,7 @@
 
 import { makeBody } from './store'
 import { makeLink, ropeSegments } from './links'
+import { materialById } from './materials'
 import { DEFAULT_WORLD, type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
 
 export interface Preset {
@@ -35,15 +36,24 @@ export function launchVelocity(speed: number, angleDeg: number): [number, number
   return [speed * Math.cos(a), speed * Math.sin(a), 0]
 }
 
-const floor = (material = 'concrete'): BodyDef => {
-  const g = makeBody('ground', 'Floor', [0, -0.2, 0])
-  g.material = material
-  return g
+/**
+ * What naming a material brings with it: the friction, bounce and colour the panel's Material
+ * dropdown would give. `floor('ice')` used to change the label alone, so seven "ice" floors
+ * carried concrete's μ = 0.8 under a grey surface, and the panel showed Ice with friction 0.8.
+ */
+const ofMaterial = (id: string): Pick<BodyDef, 'material' | 'friction' | 'restitution' | 'color'> => {
+  const m = materialById(id)
+  return { material: m.id, friction: m.friction, restitution: m.restitution, color: m.color }
 }
 
-/** A body built and adjusted in one expression, so a preset reads like a setup, not a program. */
+const floor = (material = 'concrete'): BodyDef => ({ ...makeBody('ground', 'Floor', [0, -0.2, 0]), ...ofMaterial(material) })
+
+/**
+ * A body built and adjusted in one expression, so a preset reads like a setup, not a program. A
+ * material named in `over` is applied first, so a friction or bounce typed beside it still wins.
+ */
 function put(shape: Parameters<typeof makeBody>[0], name: string, at: [number, number, number], over: Partial<BodyDef> = {}): BodyDef {
-  return { ...makeBody(shape, name, at), ...over }
+  return { ...makeBody(shape, name, at), ...(over.material ? ofMaterial(over.material) : {}), ...over }
 }
 
 const ball = (name: string, at: [number, number, number], over: Partial<BodyDef> = {}) =>
@@ -116,7 +126,7 @@ export const PRESETS: Preset[] = [
     id: 'terminal',
     label: 'Terminal velocity',
     topic: 'Motion',
-    about: 'A 0.8 kg foam ball falls 45 m through air. Watch the speed stop rising near √(2mg / ρ C_d A) ≈ 20 m/s: it reaches 95 % of that by the floor, where a 30 m drop only got to 88 %.',
+    about: 'A 0.8 kg foam ball falls 45 m through air. Watch the speed stop rising near √(2mg / ρ C A) ≈ 20 m/s: it reaches 95 % of that by the floor, where a 30 m drop only got to 88 %.',
     build: () => ({
       // 45 m, not 30: the speed reaches 95 % of terminal on the way down, so the plateau shows.
       bodies: [floor(), ball('Foam', [0, 45.15, 0], { size: [0.15, 0.15, 0.15], mass: 0.8, material: 'foam' })],
@@ -128,7 +138,7 @@ export const PRESETS: Preset[] = [
     id: 'ramp',
     label: 'Down a slope',
     topic: 'Forces',
-    about: 'Potential energy becomes kinetic on the way down: a 1.5 m drop gives a rolling ball √(10gh/7) = 4.6 m/s at the bottom, not √(2gh) = 5.4 m/s, because two sevenths of the energy goes into the spin. Watch the energy bar tip over.',
+    about: 'Potential energy becomes kinetic on the way down: a 1.5 m drop gives a rolling ball √(10gh/7) = 4.6 m/s at the bottom, not √(2gh) = 5.4 m/s, because two sevenths of the energy goes into the spin. The readout gets to about 4.5 m/s — the rolling contact costs a little on the way. Watch the energy bar tip over.',
     build: () => ({
       // The ball rests on the slope with its centre 1.5 m above where it ends up on the floor,
       // so the drop in the sentence is the drop it makes. A steel slope: concrete's rolling
@@ -249,7 +259,7 @@ export const PRESETS: Preset[] = [
     id: 'galileo',
     label: "Galileo's ramps",
     topic: 'Energy',
-    about: 'Down one slope and up the other. Rolling, it climbs back to nearly the height it started from — about 0.95 m of the 1.1 m — whatever the second slope looks like. The little it loses goes at the two corners where slope meets floor.',
+    about: 'Down one slope and up the other. Rolling, it climbs back to nearly the height it started from — about 0.94 m of the 1.1 m — whatever the second slope looks like. The little it loses goes at the two corners where slope meets floor.',
     build: () => ({
       // Steel slopes and a rolling ball: a ball with μ = 0.02 slid, and sliding friction over
       // fifteen metres ate half its energy. The Up slope sits 3 cm into the floor so its bottom
@@ -275,7 +285,9 @@ export const PRESETS: Preset[] = [
         put('box', 'A', [2, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 }),
         put('box', 'B', [2, 0.9, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 }),
         put('box', 'C', [2, 1.5, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 }),
-        ball('Ball', [-4, 1, 0], { size: [0.3, 0.3, 0.3], mass: 2, velocity: [9, 0, 0], trace: false })
+        // On the floor and frictionless, so the 9 m/s arrives: in the air the ball landed on the
+        // floor before it reached the tower and hit crate A at 6.4 m/s with half its energy gone.
+        ball('Ball', [-4, 0.3, 0], { size: [0.3, 0.3, 0.3], mass: 2, velocity: [9, 0, 0], friction: 0, trace: false })
       ],
       world: VACUUM
     })
@@ -377,13 +389,14 @@ export const PRESETS: Preset[] = [
     id: 'tug',
     label: 'Tug on a slack rope',
     topic: 'Momentum',
-    about: 'A 4 kg crate sliding away at 3 m/s on ice, tied to a 2 kg crate by a rope with half a metre of slack. The rope snaps taut and yanks: the 12 kg m/s it had is shared by 6 kg, so the pair runs on at about 2 m/s — watch p in the Energy section stay at 12.',
+    about: 'A 4 kg crate sliding away at 3 m/s on ice, tied to a 2 kg crate by a rope with half a metre of slack. The rope snaps taut and yanks: the 12 kg m/s it had is shared by 6 kg, so the pair averages 2 m/s — the light crate is flung past that, the heavy one drops below it, and they trade speed through the rope for as long as they slide. p in the Energy section reads 11.6 kg m/s, not 12: the rope weighs 0.2 kg and carries the other 0.4 kg m/s.',
     build: () => {
-      // Tall crates, so the rope is tied high enough to hang in a sag without reaching the ice.
-      const crate = put('box', 'Crate', [-1.7, 0.6, 0], { size: [0.5, 1.2, 0.5], massMode: 'mass', mass: 2, material: 'wood', friction: 0, restitution: 0, trace: true })
-      const puller = put('box', 'Puller', [0, 0.6, 0], { size: [0.5, 1.2, 0.5], massMode: 'mass', mass: 4, material: 'wood', friction: 0, restitution: 0, velocity: [3, 0, 0], trace: true })
+      // Tall crates, so the rope is tied high enough that it never reaches the ice: 1.7 m of
+      // rope folded double reaches 0.85 m below the tie, and a rope lying on the ice rubs the
+      // momentum away (0.3 kg m/s a second, off the 12 the sentence promises).
+      const crate = put('box', 'Crate', [-1.7, 1, 0], { size: [0.5, 2, 0.5], massMode: 'mass', mass: 2, material: 'wood', friction: 0, restitution: 0, trace: true })
+      const puller = put('box', 'Puller', [0, 1, 0], { size: [0.5, 2, 0.5], massMode: 'mass', mass: 4, material: 'wood', friction: 0, restitution: 0, velocity: [3, 0, 0], trace: true })
       // 1.2 m between the facing sides, 1.7 m of rope: half a metre of slack, taken up in 0.17 s.
-      // Any more and the sag reached the ice.
       return { bodies: [floor('ice'), crate, puller], world: VACUUM, links: [join('rope', crate, puller, undefined, { length: 1.7, segments: ropeSegments(1.7) })] }
     }
   },

@@ -9,7 +9,7 @@ import { DEFAULT_WORLD, type BodyDef, type ShapeKind, type WorldSettings } from 
 import { PRESETS, START_PRESET_ID, startPreset } from '../src/renderer/src/sim/presets'
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_OF, FOLD_TITLES, joinCandidates, readFold, writeFold, type FoldStore } from '../src/renderer/src/sim/inspector'
 import { joinPick, joinPrompt, LINK_CARDS, linkRefusal, noWheelNote, START_JOIN, wheelsAbove } from '../src/renderer/src/sim/join'
-import { LINK_KINDS } from '../src/renderer/src/sim/links'
+import { LINK_KINDS, ropeSegments } from '../src/renderer/src/sim/links'
 
 const G = 9.81
 let n = 0
@@ -397,6 +397,41 @@ describe('connecting two objects, step by step', () => {
     useSandbox.getState().startJoin()
     useSandbox.getState().setScene(startingScene())
     expect(useSandbox.getState().joinMode).toBeNull()
+  })
+
+  it('typing a new length for a rope cuts it into 20 cm links again', () => {
+    // The link count was fixed when the rope was made: lengthened from 2.5 m to 6 m in the L
+    // field it kept its thirteen links, now 46 cm each, and the 60-link cap could never be
+    // reached from the panel.
+    useSandbox.getState().loadSandbox()
+    const s = useSandbox.getState()
+    const [, ball, crate] = s.bodies
+    const made = s.addLink(ball.id, crate.id, 'rope')
+    expect(made.ok).toBe(true)
+    const id = useSandbox.getState().links[0].id
+    useSandbox.getState().updateLink(id, { length: 6 })
+    expect(useSandbox.getState().links[0].segments).toBe(ropeSegments(6))
+    useSandbox.getState().updateLink(id, { length: 0.5 })
+    expect(useSandbox.getState().links[0].segments).toBe(ropeSegments(0.5))
+    useSandbox.getState().updateLink(id, { length: 14 })
+    expect(useSandbox.getState().links[0].segments).toBe(60)
+    // A string has no links to cut.
+    useSandbox.getState().removeLink(id)
+    useSandbox.getState().addLink(ball.id, crate.id, 'string')
+    useSandbox.getState().updateLink(useSandbox.getState().links[0].id, { length: 3 })
+    expect(useSandbox.getState().links[0].segments).toBeUndefined()
+  })
+
+  it('deleting half a pair ends the flow and forgets the last refusal', () => {
+    useSandbox.getState().loadSandbox()
+    const [floor, ball] = useSandbox.getState().bodies
+    useSandbox.getState().startJoin()
+    useSandbox.getState().joinPick(ball.id)
+    useSandbox.getState().joinPick(floor.id)
+    expect(useSandbox.getState().joinNote).toContain('floor')
+    useSandbox.getState().removeBody(ball.id)
+    expect(useSandbox.getState().joinMode).toBeNull()
+    expect(useSandbox.getState().joinNote).toBeNull()
   })
 
   it('a preset with links does not count as connecting something yourself', () => {

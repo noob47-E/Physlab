@@ -1,6 +1,6 @@
 // What the tour points at, and the little tasks that tick themselves off.
 
-import { scene } from '../../core/store'
+import { scene, useScene } from '../../core/store'
 import { useCalc } from '../../calc/calcStore'
 import { useSandbox } from '../../sim/store'
 import type { ModeId } from '../modes'
@@ -159,6 +159,13 @@ export const MISSIONS: Mission[] = [
     done: () => useSandbox.getState().joined > 0
   }
 ]
+
+/**
+ * The stores a mission's `done` reads, so the tour re-checks the list whenever one of them
+ * changes. A mission that watches a store not listed here only ticks itself off when some
+ * other store happens to change — the Sandbox mission sat undone until the next drawing edit.
+ */
+export const MISSION_STORES: { subscribe: (listener: () => void) => () => void }[] = [useScene, useCalc, useSandbox]
 
 export const SHORTCUTS: [string, string][] = [
   ['Ctrl+K', 'Search everything'],

@@ -4,14 +4,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
 import { Check, Keyboard, X } from 'lucide-react'
-import { useScene } from '../../core/store'
-import { useCalc } from '../../calc/calcStore'
-import { useSandbox } from '../../sim/store'
 import { enterMode } from '../layout'
 import { showPanel } from '../panels'
 import { usePure } from '../../math/pure/store'
 import { JOBS } from '../../math/pure/run'
-import { MISSIONS, SHORTCUTS, TOUR, WELCOME_JOB, WELCOME_PROMISE } from './steps'
+import { MISSION_STORES, MISSIONS, SHORTCUTS, TOUR, WELCOME_JOB, WELCOME_PROMISE } from './steps'
 import { isTyping } from '../keyTargets'
 import { placeTourCard } from '../layoutMath'
 
@@ -96,7 +93,7 @@ function useMissionWatcher() {
       }
     }
     check()
-    const unsubs = [useScene.subscribe(check), useCalc.subscribe(check), useSandbox.subscribe(check)]
+    const unsubs = MISSION_STORES.map((store) => store.subscribe(check))
     return () => unsubs.forEach((u) => u())
   }, [markDone])
 }

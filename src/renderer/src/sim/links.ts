@@ -56,8 +56,14 @@ function sagDirection(chord: V3, gap: number): V3 {
  * the joints are one rope's length apart along the polyline. Without this the chain was laid
  * straight across the gap whatever length was typed, so lengthening a rope could not make it
  * hang and shortening it could not lift.
+ *
+ * `floor` is the lowest height a joint may be laid at. A sag that would go through it is turned
+ * over into an arch above the chord instead, and the chain falls into a real heap on Play: the
+ * first rope a student lengthens is one between two crates on the floor, and that rope used to
+ * be laid straight through the floor and hang under it for good, because nothing pushes a link
+ * back out once it is inside.
  */
-export function ropeLayout(start: V3, end: V3, length: number, n: number): V3[] {
+export function ropeLayout(start: V3, end: V3, length: number, n: number, floor?: number): V3[] {
   const count = Math.max(1, Math.round(n))
   const chord: V3 = [end[0] - start[0], end[1] - start[1], end[2] - start[2]]
   const gap = Math.hypot(...chord)
@@ -67,13 +73,13 @@ export function ropeLayout(start: V3, end: V3, length: number, n: number): V3[] 
   // The parabola of depth d, sampled finely and then resampled at equal steps of arc length,
   // so every link is the same length whichever part of the curve it lies on.
   const fine = Math.max(200, 10 * count)
-  const shape = (d: number): V3[] => {
+  const shape = (d: number, dir: V3 = down): V3[] => {
     const curve: V3[] = []
     for (let i = 0; i <= fine; i++) {
       const t = i / fine
       const sag = d * 4 * t * (1 - t)
       const p = along(t)
-      curve.push([p[0] + down[0] * sag, p[1] + down[1] * sag, p[2] + down[2] * sag])
+      curve.push([p[0] + dir[0] * sag, p[1] + dir[1] * sag, p[2] + dir[2] * sag])
     }
     const cum = [0]
     for (let i = 1; i < curve.length; i++) cum.push(cum[i - 1] + dist(curve[i - 1], curve[i]))
@@ -102,7 +108,10 @@ export function ropeLayout(start: V3, end: V3, length: number, n: number): V3[] 
     if (polylineLength(shape(mid)) < length) lo = mid
     else hi = mid
   }
-  return shape((lo + hi) / 2)
+  const sag = shape((lo + hi) / 2)
+  // The mirrored curve is the same length, so the depth found for the sag serves the arch.
+  if (floor !== undefined && sag.some((p) => p[1] < floor)) return shape((lo + hi) / 2, [-down[0], -down[1], -down[2]])
+  return sag
 }
 
 /**

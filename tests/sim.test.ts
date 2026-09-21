@@ -734,7 +734,8 @@ describe('the presets do what their sentences say', () => {
       else landed = true
     })
     expect(landed).toBe(true)
-    expect(fastest).toBeGreaterThan(0.93 * vt)
+    // The sentence promises 95 %; the engine gives 94.7.
+    expect(fastest).toBeGreaterThan(0.94 * vt)
     expect(fastest).toBeLessThan(1.01 * vt)
     world.destroy()
   })
@@ -743,9 +744,10 @@ describe('the presets do what their sentences say', () => {
     const { world, by } = await open('ramp')
     let fastest = 0
     watch(world, 3, () => (fastest = Math.max(fastest, speed(world.state(by('A').id)!.velocity))))
-    // The engine's rolling contact loses a few percent over five metres; sliding would give 5.4.
-    expect(fastest).toBeGreaterThan(4.35)
-    expect(fastest).toBeLessThan(4.75)
+    // The engine's rolling contact loses 3 % over five metres of slope (burying the bottom edge
+    // changes nothing, so it is not the corner); the sentence says "about 4.5", so hold it there.
+    expect(fastest).toBeGreaterThan(4.4)
+    expect(fastest).toBeLessThan(4.55)
     world.destroy()
   })
 
@@ -761,7 +763,7 @@ describe('the presets do what their sentences say', () => {
     run(world, 5)
     const crate = by('Crate')
     expect(speed(world.state(crate.id)!.velocity)).toBeLessThan(0.05)
-    expect(world.state(crate.id)!.position[0] - crate.position[0]).toBeCloseTo(36 / (2 * 0.4 * G), 0)
+    expect(Math.abs(world.state(crate.id)!.position[0] - crate.position[0] - 36 / (2 * 0.4 * G))).toBeLessThan(0.3)
     world.destroy()
   })
 
@@ -827,7 +829,7 @@ describe('the presets do what their sentences say', () => {
     world.destroy()
   })
 
-  it("on Galileo's ramps the ball climbs back to about 0.95 m of its 1.1", async () => {
+  it("on Galileo's ramps the ball climbs back to about 0.94 m of its 1.1", async () => {
     const { world, by } = await open('galileo')
     const ball = by('A')
     let top = 0
@@ -837,9 +839,31 @@ describe('the presets do what their sentences say', () => {
       if (st.position[0] > 0.5) over = true
       if (over) top = Math.max(top, st.position[1])
     })
+    // The sentence's 0.94 is this measurement, so hold it to the second decimal.
     const underside = top - 0.2
-    expect(underside).toBeGreaterThan(0.88)
-    expect(underside).toBeLessThan(1.02)
+    expect(underside).toBeGreaterThan(0.925)
+    expect(underside).toBeLessThan(0.955)
+    world.destroy()
+  })
+
+  it('the ball reaches the tower at the 9 m/s and 81 J it brings, not after a bounce off the floor', async () => {
+    const { world, by } = await open('stack')
+    const ball = by('Ball').id
+    const crates = ['A', 'B', 'C'].map((n) => by(n).id)
+    // In the air the ball landed at 0.38 s and reached crate A at 6.4 m/s with half its energy
+    // spent on the floor, so the Energy bar fell before the crash the sentence points at.
+    let before = world.state(ball)!.velocity
+    let hit: { t: number; v: number } | null = null
+    const dt = 1 / 60
+    for (let t = 0; t < 2 && !hit; t += dt) {
+      const { contacts } = world.step(dt)
+      if (contacts.some((c) => (c.a === ball && crates.includes(c.b)) || (c.b === ball && crates.includes(c.a)))) hit = { t: world.time, v: speed(before) }
+      before = world.state(ball)!.velocity
+    }
+    expect(hit).not.toBeNull()
+    expect(hit!.t).toBeGreaterThan(0.5)
+    expect(hit!.v).toBeGreaterThan(8.8)
+    expect(hit!.v).toBeLessThan(9.2)
     world.destroy()
   })
 
@@ -880,7 +904,7 @@ describe('the presets do what their sentences say', () => {
     world.destroy()
   })
 
-  it('the tug shares 12 kg m/s between the two crates once the rope is taut', async () => {
+  it('the tug shares 12 kg m/s between the two crates and the rope, and the crates read 11.6', async () => {
     const { world, by } = await open('tug')
     const crate = by('Crate')
     const puller = by('Puller')
@@ -890,12 +914,20 @@ describe('the presets do what their sentences say', () => {
     run(world, 0.9)
     const vc = world.state(crate.id)!.velocity[0]
     const vp = world.state(puller.id)!.velocity[0]
-    expect(vc).toBeGreaterThan(1.5)
-    expect(vp).toBeGreaterThan(1.3)
-    expect(vp).toBeLessThan(2.3)
-    // The rope itself carries a little, and drags a little on the ice.
-    expect(2 * vc + 4 * vp).toBeGreaterThan(10.5)
-    expect(2 * vc + 4 * vp).toBeLessThan(12.5)
+    // The light crate is flung past the pair's 2 m/s and the heavy one drops below it.
+    expect(vc).toBeGreaterThan(2.3)
+    expect(vc).toBeLessThan(2.7)
+    expect(vp).toBeGreaterThan(1.5)
+    expect(vp).toBeLessThan(1.8)
+    // The panel's p is the crates' alone: 12 less the 0.4 the 0.2 kg rope carries at 2 m/s.
+    // It used to fall to 11.0 by 3 s because the slack rope dropped onto the ice and rubbed;
+    // the crates are tall enough now that the rope never reaches it.
+    const p = () => 2 * world.state(crate.id)!.velocity[0] + 4 * world.state(puller.id)!.velocity[0]
+    expect(p()).toBeGreaterThan(11.4)
+    expect(p()).toBeLessThan(11.8)
+    run(world, 2)
+    expect(p()).toBeGreaterThan(11.4)
+    expect(p()).toBeLessThan(11.8)
     world.destroy()
   })
 
