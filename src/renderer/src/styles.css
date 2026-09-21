@@ -1135,12 +1135,14 @@ math-field.math-input::part(menu-toggle) {
 }
 
 /* ---------- Tool cards ---------- */
-/* The card that opens when the mouse rests on a tool button (ui/ToolCard.tsx). Below the menus
-   (z-index 50): a click that opens a menu hides the card anyway, and a card must never cover one.
-   No pointer events, so the button underneath keeps every click. */
+/* The card that opens when the mouse rests on a tool button (ui/ToolCard.tsx). Above the command
+   bar's example list (.suggest, 60), which is up whenever the bar is focused: at 40 the card opened
+   under it and only its title strip showed. Below the tour (80). It never covers a menu because
+   useToolCard does not open one while a menu is on screen. No pointer events, so the button
+   underneath keeps every click. */
 .tool-card {
   position: fixed;
-  z-index: 40;
+  z-index: 70;
   display: flex;
   flex-direction: column;
   gap: 8px;

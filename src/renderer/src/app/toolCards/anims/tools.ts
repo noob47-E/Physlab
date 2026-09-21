@@ -11,11 +11,11 @@ import { Placeholder } from './Placeholder'
 import { Point } from './Point'
 
 export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCardDef> = {
-  'tool:select': { title: 'Move', shortcut: 'V', sentence: 'Click to select. Drag a point or a vector head to move it; drag empty space to pan.', Animation: Placeholder },
+  'tool:select': { title: 'Move', shortcut: 'V', sentence: 'Click to select, drag a point or a vector head to move it, or drag empty space to pan.', Animation: Placeholder },
   'tool:sketch': { title: 'Sketch', shortcut: 'K', sentence: 'Draw a rough shape with the mouse and it becomes a neat square, rectangle, triangle, circle or line.', Animation: Placeholder },
   'tool:point': { title: 'Point', shortcut: 'P', sentence: 'Click anywhere to place a point.', Animation: Point },
   'tool:vector': { title: 'Vector', shortcut: 'W', sentence: 'Drag from the tail to the head, or click the tail and then the head.', Animation: Placeholder },
-  'tool:segment': { title: 'Segment', shortcut: 'S', sentence: 'Click each end. Keep clicking for a chain, and close the loop to make a shape.', Animation: Placeholder },
+  'tool:segment': { title: 'Segment', shortcut: 'S', sentence: 'Click each end, keep clicking for a chain, and close the loop to make a shape.', Animation: Placeholder },
   'tool:line': { title: 'Line', shortcut: 'L', sentence: 'Click two points and a line runs through both, on and on in each direction.', Animation: Placeholder },
   'tool:ray': { title: 'Ray', shortcut: 'R', sentence: 'Click where the ray starts, then a point it passes through.', Animation: Placeholder },
   'tool:circle': { title: 'Circle', shortcut: 'C', sentence: 'Click the centre, then a point on the circle.', Animation: Placeholder },
@@ -30,5 +30,5 @@ export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCard
   'tool:angleBisector': { title: 'Angle bisector', sentence: 'Click a point on one arm, the vertex, then the other arm, for the line that halves the angle.', Animation: Placeholder },
   'tool:intersect': { title: 'Intersect', shortcut: 'I', sentence: 'Click two lines or circles to mark where they cross.', Animation: Placeholder },
   'tool:text': { title: 'Text', sentence: 'Click where the note should go, then type.', Animation: Placeholder },
-  'tool:delete': { title: 'Delete', shortcut: 'X', sentence: 'Click an object to remove it. Undo brings it back.', Animation: Placeholder }
+  'tool:delete': { title: 'Delete', shortcut: 'X', sentence: 'Click an object to remove it; Undo brings it back.', Animation: Placeholder }
 }

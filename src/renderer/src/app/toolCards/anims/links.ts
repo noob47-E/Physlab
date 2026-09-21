@@ -13,7 +13,7 @@ export const LINK_GROUP: Record<Extract<ToolCardKey, `link:${string}`>, ToolCard
   'link:rod': { title: 'Rod', sentence: 'Holds two objects a fixed distance apart; it pushes as well as pulls.', Animation: Placeholder },
   'link:spring': { title: 'Spring', sentence: 'Joins two objects with a spring that stretches and squashes; set how stiff it is.', Animation: Placeholder },
   'link:rope': { title: 'Rope', sentence: 'Hangs a rope between two objects; it bends, swings and goes slack.', Animation: Rope },
-  'link:pulley': { title: 'Rope over a pulley', sentence: 'Runs a rope from one object over a wheel to another; the wheel must sit above both.', Animation: Placeholder },
+  'link:pulley': { title: 'Rope over a pulley', sentence: 'Runs a rope from one object over a wheel to another; put the wheel above both.', Animation: Placeholder },
   'link:hinge': { title: 'Hinge', sentence: 'Lets one object swing about the centre of the other, like a door on its frame.', Animation: Placeholder },
   'link:weld': { title: 'Weld', sentence: 'Fixes two objects together so they move as one.', Animation: Placeholder }
 }

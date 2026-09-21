@@ -16,7 +16,7 @@ import { ADD_GROUP } from '../src/renderer/src/app/toolCards/anims/add'
 import { LINK_GROUP } from '../src/renderer/src/app/toolCards/anims/links'
 import { Placeholder } from '../src/renderer/src/app/toolCards/anims/Placeholder'
 import { BEATS, CURSOR_HOME, LOOP_SECONDS, REDUCED_MOTION_FRAME, VIEW_BOX, appearClass, cursorStops, reducedMotionDelay } from '../src/renderer/src/app/toolCards/animMath'
-import { TOOL_CARD_DELAY, hideCard, showCard } from '../src/renderer/src/ui/useToolCard'
+import { CARD_CLOSERS, POPUP_SELECTOR, TOOL_CARD_DELAY, TOOL_CARD_ID, hideCard, showCard } from '../src/renderer/src/ui/useToolCard'
 import { placeTourCard } from '../src/renderer/src/app/layoutMath'
 import { TOOLS } from '../src/renderer/src/render/tools'
 import { LINK_KINDS } from '../src/renderer/src/sim/links'
@@ -76,6 +76,8 @@ describe('every sentence reads plainly', () => {
     it(`${key}: one plain sentence under 120 characters, ending with a full stop`, () => {
       expect(card.sentence.length).toBeLessThanOrEqual(120)
       expect(card.sentence).toMatch(/\.$/)
+      // One sentence, not two: a full stop, question or exclamation mark before the end is a second one.
+      expect(card.sentence.slice(0, -1)).not.toMatch(/[.!?](\s|$)/)
       expect(card.sentence).not.toMatch(/\\|_\{|\^\{|[{}<>]|=>/)
       expect(card.sentence.trim()).toBe(card.sentence)
       expect(card.title.length).toBeGreaterThan(0)
@@ -95,9 +97,12 @@ describe('the animations follow the one pattern', () => {
   for (const name of animFiles) {
     const src = readFileSync(join(ANIMS, name), 'utf8')
     it(`${name} colours only through the three tokens`, () => {
-      const colours = [...src.matchAll(/\b(?:fill|stroke)=(?:"([^"]*)"|\{([^}]*)\})/g)].map((m) => m[1] ?? m[2])
-      for (const c of colours) expect(c).toMatch(/^(?:none|var\(--(?:accent|text-dim|good)\))$/)
-      expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
+      // Attributes and style-object keys alike: `stroke="…"`, `fill={…}` and `style={{ stroke: '…' }}`.
+      const colours = [...src.matchAll(/\b(?:fill|stroke|stopColor|color)\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)')\s*\})/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4])
+      for (const c of colours) expect(c, name).toMatch(/^(?:none|var\(--(?:accent|text-dim|good)\))$/)
+      expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|currentColor/)
+      // No other token either, however it is written: the three are what AUTHORING.md promises reads in every theme.
+      for (const v of src.match(/var\(--[a-z0-9-]+\)/g) ?? []) expect(v, name).toMatch(/^var\(--(?:accent|text-dim|good)\)$/)
     })
   }
 
@@ -182,14 +187,30 @@ describe('the stylesheet carries the shared loop', () => {
     expect(REDUCED_MOTION_FRAME).toBeLessThan(BEATS.fade)
   })
 
-  it('keeps the card under the menus and out of the pointer\'s way', () => {
+  const zOf = (selector: string): number => {
+    const z = css.match(new RegExp(`${selector.replace(/[.]/g, '\\.')} \\{[^}]*z-index: (\\d+)`))?.[1]
+    expect(z, `${selector} has a z-index`).toBeDefined()
+    return Number(z)
+  }
+
+  it('draws over the command bar\'s example list, under the tour, and out of the pointer\'s way', () => {
     const card = section.match(/\.tool-card \{[^}]*\}/)?.[0] ?? ''
     expect(card).toMatch(/position: fixed;/)
     expect(card).toMatch(/pointer-events: none;/)
     const z = Number(card.match(/z-index: (\d+)/)?.[1])
-    const menu = Number(css.match(/\.menu \{[^}]*z-index: (\d+)/)?.[1])
-    expect(z).toBeLessThan(menu)
+    // The list opens whenever the bar is focused, which is most of the time; at 40 the card was under it.
+    expect(z).toBeGreaterThan(zOf('.suggest'))
+    expect(z).toBeLessThan(zOf('.tour-backdrop'))
     expect(card).not.toMatch(/#[0-9a-f]{3,8}/i)
+  })
+
+  it('never covers a menu: no card opens while one is on screen, and the selector names real classes', () => {
+    for (const sel of POPUP_SELECTOR.split(',').map((s) => s.trim())) {
+      expect(sel).toMatch(/^\.[a-z-]+$/)
+      expect(css, sel).toMatch(new RegExp(`\n${sel.replace('.', '\\.')} \\{`))
+      expect(readSource('src/renderer/src/app/TopBar.tsx') + readSource('src/renderer/src/ui/ContextMenu.tsx')).toContain(`className="${sel.slice(1)}`)
+    }
+    expect(POPUP_SELECTOR).not.toContain('.suggest')
   })
 })
 
@@ -214,6 +235,25 @@ describe('the card opens late and closes for its own button only', () => {
     expect(hideCard(showCard('tool:point', box))).toBeNull()
     expect(hideCard(null, 'tool:point')).toBeNull()
     expect(hideCard(null)).toBeNull()
+  })
+
+  it('closes when its button may have moved: a resize, or a scroll anywhere, even inside a panel', () => {
+    // The Sandbox ADD buttons sit in a scrolling panel; its scroll never bubbles to the document,
+    // so the listener has to be a capture one, and pointerleave never fires for a scroll.
+    expect(CARD_CLOSERS).toContainEqual({ on: 'window', type: 'resize', capture: false })
+    expect(CARD_CLOSERS).toContainEqual({ on: 'document', type: 'scroll', capture: true })
+    expect(CARD_CLOSERS).toContainEqual({ on: 'window', type: 'blur', capture: false })
+    const host = readSource('src/renderer/src/ui/ToolCard.tsx')
+    expect(host).toMatch(/for \(const c of CARD_CLOSERS\) .*addEventListener\(c\.type, close, c\.capture\)/)
+    expect(host).toMatch(/for \(const c of CARD_CLOSERS\) .*removeEventListener\(c\.type, close, c\.capture\)/)
+  })
+
+  it('is what its button is described by, for a reader, and only while it shows', () => {
+    const host = readSource('src/renderer/src/ui/ToolCard.tsx')
+    expect(host).toMatch(/id=\{TOOL_CARD_ID\} className="tool-card" role="tooltip"/)
+    expect(TOOL_CARD_ID).toBe('tool-card')
+    const hook = readSource('src/renderer/src/ui/useToolCard.ts')
+    expect(hook).toContain("'aria-describedby': shownHere ? TOOL_CARD_ID : undefined")
   })
 })
 

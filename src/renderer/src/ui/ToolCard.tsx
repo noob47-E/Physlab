@@ -4,29 +4,33 @@
 // scrolling shelf or a clipped panel cannot cut it off. It is placed like the tour's card, by
 // measuring itself and asking placeTourCard for a spot inside the window. It takes no pointer
 // events and no focus: a tooltip that could be clicked would steal the click from the button.
+// It sits above the command bar's example list (which is up whenever the bar is focused) and
+// never opens while a menu is: useToolCard yields to POPUP_SELECTOR.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { placeTourCard } from '../app/layoutMath'
 import { toolCard } from '../app/toolCards/registry'
-import { useToolCardStore } from './useToolCard'
+import { CARD_CLOSERS, TOOL_CARD_ID, useToolCardStore } from './useToolCard'
 
 export function ToolCardHost() {
   const shown = useToolCardStore((s) => s.shown)
   const hide = useToolCardStore((s) => s.hide)
 
   // Esc closes the card without stopping anything else Esc does (a tool in progress, a menu).
+  // A scroll or a resize closes it too: the box it was placed beside is no longer where the
+  // button is, and a card floating where a button used to be reads as a glitch.
   useEffect(() => {
     if (!shown) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') hide()
     }
-    const onBlur = () => hide()
+    const close = () => hide()
     window.addEventListener('keydown', onKey)
-    window.addEventListener('blur', onBlur)
+    for (const c of CARD_CLOSERS) (c.on === 'window' ? window : document).addEventListener(c.type, close, c.capture)
     return () => {
       window.removeEventListener('keydown', onKey)
-      window.removeEventListener('blur', onBlur)
+      for (const c of CARD_CLOSERS) (c.on === 'window' ? window : document).removeEventListener(c.type, close, c.capture)
     }
   }, [shown, hide])
 
@@ -46,7 +50,7 @@ function ToolCard({ anchor, title, shortcut, sentence, Animation }: { anchor: { 
   }, [title, sentence])
   const at = placeTourCard(anchor, size, { w: window.innerWidth, h: window.innerHeight }, 8)
   return (
-    <div ref={ref} className="tool-card" role="tooltip" style={at}>
+    <div ref={ref} id={TOOL_CARD_ID} className="tool-card" role="tooltip" style={at}>
       <div className="flex items-center gap-2">
         <span className="text-body font-semibold text-[var(--text-strong)]">{title}</span>
         {shortcut && <kbd className="rounded border border-[var(--line)] bg-[var(--bg-3)] px-1 text-fine text-[var(--text-dim)]">{shortcut}</kbd>}

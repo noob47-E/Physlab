@@ -19,6 +19,17 @@ Every key is already there with a `Placeholder` animation (a pulsing dot). To au
 `Name.tsx` beside this file, import it in the group file and put it in place of `Placeholder`. Do
 not add keys, do not touch the other two group files, and never leave a key out: the registry is
 typed against the button lists, and `tests/toolCards.test.ts` fails on a missing or a stray card.
+(The `add:` keys are typed from `ShapeKind` in `sim/types.ts` less the ground, while the test reads
+the Sandbox panel's `ADD` list; the two agree today, and if a shape is ever added to one and not the
+other, the Sandbox list is the one the cards follow — a card is for a button.)
+
+## How the card behaves (nothing to author, but worth knowing)
+
+The card opens half a second after the pointer rests on the button and goes on leave, press, Esc,
+a resize or any scroll. It takes no clicks and no focus. It draws above the command bar's example
+list (which is up whenever the bar is focused), but it never opens while a menu or a right-click
+menu is on screen, so a card never covers one. The hovered button carries `aria-describedby`
+pointing at the card while it shows, so a screen reader gets the sentence.
 
 ## The card entry
 
@@ -28,8 +39,11 @@ typed against the button lists, and `tests/toolCards.test.ts` fails on a missing
 
 - `title` is the button's own label; for a tool it must equal `TOOLS[].label` and `shortcut` must
   equal `TOOLS[].key` (omit it when the key is empty). The test checks both.
-- `sentence` is one plain sentence of at most 120 characters, ending with a full stop. Plain words,
-  no maths notation, no `\`, no `_{`, no code. "Click the centre, then a point on the circle."
+- `sentence` is one plain sentence of at most 120 characters, ending with a full stop — one, not
+  two: a full stop before the end fails the test, so join with a comma or a semicolon ("Click an
+  object to remove it; Undo brings it back."). Plain words, no maths notation, no `\`, no `_{`,
+  no code. Say what the tool does, not what the app checks: "put the wheel above both ends", not
+  "the wheel must sit above both ends", unless the app really refuses otherwise.
 - `Animation` is a component that takes no props and returns a `<Scene>`.
 
 ## The picture
@@ -105,10 +119,11 @@ truly needed, draw it as a path.
 
 - Every `TOOLS` id, every Sandbox `ADD` shape and every `LINK_KINDS` entry has a card, and there is
   no card for anything else; a tool card's title and shortcut match `TOOLS`.
-- Every sentence is at most 120 characters, ends with a full stop, and has no `\`, `_{`, `^{`,
-  braces, angle brackets or `=>`.
-- Every `.tsx` in this folder uses only `none` and the three tokens above for `fill`/`stroke`, and
-  no hex or `rgb()` anywhere.
+- Every sentence is one sentence of at most 120 characters, ends with a full stop, and has no `\`,
+  `_{`, `^{`, braces, angle brackets or `=>`.
+- Every `.tsx` in this folder uses only `none` and the three tokens above wherever a colour is
+  written — `fill`/`stroke` attributes, `style={{ stroke: … }}`, `stopColor`, `color` — and no
+  hex, `rgb()`, `currentColor` or other `var(--…)` anywhere.
 - `Point.tsx` and `Rope.tsx` each have a `<Scene>`, a `<Cursor>`, a `<Click>` and a `tc-appear`;
   `Rope.tsx` clicks twice. Add your own file to that list if you want the same guard on it.
 - `styles.css` declares the three keyframes once, on a 2.5 s loop, and freezes them under
