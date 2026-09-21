@@ -7,7 +7,7 @@
 import { R1, bgcd, blcm, rIsNeg, rIsOne, rMul, rNeg, rTex, rat, type Rat } from './rat'
 import { NotPolynomial, constExpr, eEq, eMul, ePow, exprTex, exprTexBracketed, isConstant, parseExpr, varExpr, type Expr } from './mono'
 import { factorsOf } from './factor'
-import { Steps, failed, type Working } from './work'
+import { Steps, failed, texToPlain, type Working } from './work'
 
 /** One repeated factor: the thing being raised to a power, and the power. */
 interface SplitPart {
@@ -124,8 +124,8 @@ export function hcfAlgebraWorking(srcs: string[]): Working {
   const { splits, exprs, input } = prep
   const s = new Steps()
 
-  s.add('Factorise every expression completely — the HCF can only be read off once they are in factors.', undefined, '\\text{factorise first}')
-  splits.forEach((sp, i) => s.add(`Expression ${i + 1}:`, `${exprTex(exprs[i])} = ${showSplit(sp)}`))
+  s.goal('Factorise every expression').add('Take out common factors and split each expression as far as it goes — the HCF can only be read off once they are in factors.', undefined, '\\text{factorise first}')
+  splits.forEach((sp, i) => s.add(`Factorise ${texToPlain(exprTex(exprs[i]))}.`, `${exprTex(exprs[i])} = ${showSplit(sp)}`))
 
   const constant = numHcf(splits.map((sp) => sp.constant))
   const common = splits[0].parts
@@ -136,12 +136,12 @@ export function hcfAlgebraWorking(srcs: string[]): Working {
     .filter((p) => p.power > 0)
 
   if (common.length === 0 && rIsOne(constant)) {
-    s.add('No factor appears in every one of them, so they share nothing but 1.', '\\text{HCF} = 1')
+    s.goal('Look for a shared factor').add('No factor appears in every one of them, so they share nothing but 1.', '\\text{HCF} = 1')
     const ok = splitsAgree(splits, exprs)
     return { title, input, moves: s.moves, answers: [{ label: 'HCF =', tex: '1' }], check: ok ? 'These expressions have no common factor.' : SUSPECT, checked: ok ? 'ok' : 'failed' }
   }
 
-  s.add(
+  s.goal('Keep the shared factors').add(
     'Keep only the factors that appear in every expression, each at its lowest power.',
     showSplit({ constant, parts: common }),
     '\\text{HCF: common factors, } \\min \\text{ power}'
@@ -166,8 +166,8 @@ export function lcmAlgebraWorking(srcs: string[]): Working {
   const { splits, exprs, input } = prep
   const s = new Steps()
 
-  s.add('Factorise every expression completely.', undefined, '\\text{factorise first}')
-  splits.forEach((sp, i) => s.add(`Expression ${i + 1}:`, `${exprTex(exprs[i])} = ${showSplit(sp)}`))
+  s.goal('Factorise every expression').add('Take out common factors and split each expression as far as it goes — the LCM is built from those factors.', undefined, '\\text{factorise first}')
+  splits.forEach((sp, i) => s.add(`Factorise ${texToPlain(exprTex(exprs[i]))}.`, `${exprTex(exprs[i])} = ${showSplit(sp)}`))
 
   const constant = numLcm(splits.map((sp) => sp.constant))
   const all: SplitPart[] = []
@@ -179,7 +179,7 @@ export function lcmAlgebraWorking(srcs: string[]): Working {
     }
   }
 
-  s.add(
+  s.goal('Take every factor you see').add(
     'Take every factor that appears anywhere, each at its highest power.',
     showSplit({ constant, parts: all }),
     '\\text{LCM: all factors, } \\max \\text{ power}'

@@ -53,7 +53,7 @@ import {
   type SPoly,
   type Surd
 } from './cxpoly'
-import { Steps, failed, type Working } from './work'
+import { Steps, failed, texToPlain, type Working } from './work'
 
 export { simplifySurd }
 
@@ -174,7 +174,7 @@ export function complexWorking(src: string): Working {
   const s = new Steps()
 
   if (!isFraction) {
-    s.add('Multiply and collect, treating i as an ordinary letter for now.', iTex(num), '\\text{expand as usual}')
+    s.goal('Simplify to a + bi').add('Multiply out and collect, treating i as an ordinary letter for now.', iTex(num), '\\text{expand as usual}')
     powersOfIMove(num, s)
     const z = reduceI(num)
     s.add('Now gather the real parts and the i parts separately.', `= ${cxTex(z)}`, 'a + bi:\\ \\text{real part } a,\\ \\text{imaginary part } b')
@@ -184,7 +184,7 @@ export function complexWorking(src: string): Working {
   // Dividing: multiply top and bottom by the conjugate of the bottom.
   const dz = reduceI(den)
   if (rIsZero(dz.re) && rIsZero(dz.im)) return failed(title, input, 'The bottom comes to zero.')
-  s.add('Simplify the bottom first.', `${iTex(den)} = ${cxTex(dz)}`)
+  s.goal('Simplify the bottom').add('Work the bottom out first, so it is one number of the form a + bi.', `${iTex(den)} = ${cxTex(dz)}`)
   if (cxIsReal(dz)) {
     powersOfIMove(num, s)
     const nz = reduceI(num)
@@ -194,7 +194,7 @@ export function complexWorking(src: string): Working {
   }
 
   const conj = cxConj(dz)
-  s.add(
+  s.goal('Multiply by the conjugate').add(
     'A complex number on the bottom is not allowed in a final answer, so multiply top and bottom by the conjugate of the bottom.',
     `\\dfrac{${iTex(num)}}{${cxTex(dz)}} \\times \\dfrac{${cxTex(conj)}}{${cxTex(conj)}}`,
     '(a+bi)(a-bi) = a^2 + b^2'
@@ -238,7 +238,7 @@ function finishComplex(title: string, input: string, s: Steps, z: Cx, src: strin
   const modSq = rAdd(rMul(z.re, z.re), rMul(z.im, z.im))
   const exact = rSqrt(modSq)
   const modTex = exact ? rTex(exact) : modSq.d === 1n ? rootTex(modSq.n) : `\\sqrt{${rTex(modSq)}}`
-  s.add(
+  s.goal('Find modulus and argument').add(
     'The modulus is the distance from the origin on the Argand diagram.',
     `|z| = \\sqrt{${rTex(rMul(z.re, z.re))} + ${rTex(rMul(z.im, z.im))}} = ${modTex}`,
     '|a+bi| = \\sqrt{a^2 + b^2}'
@@ -336,7 +336,7 @@ export function solveLinearWorking(src: string): Working {
   const c = rSub(R[0] ?? R0, L[0] ?? R0)
   const moved = !rIsZero(R[1] ?? R0) || !rIsZero(L[0] ?? R0)
   if (moved) {
-    s.add(
+    s.goal('Collect like terms').add(
       `Take every ${name} term to the left and every number to the right. Anything that crosses the equals sign changes sign.`,
       `${pTex([R0, a], name)} = ${rTex(c)}`,
       '\\text{same thing done to both sides}'
@@ -351,13 +351,13 @@ export function solveLinearWorking(src: string): Working {
   }
   const x = rDiv(c, a)
   if (rIsOne(a)) {
-    s.add(`So ${name} is on its own.`, `${name} = ${rTex(x)}`)
+    s.goal('Isolate the letter').add(`So ${name} is on its own.`, `${name} = ${rTex(x)}`)
   } else if (a.d !== 1n) {
     // x/2 = 3 is taught as "multiply both sides by 2", never as "divide by a half".
     const d = rat(a.d)
     const an = rat(a.n)
     const cd = rMul(c, d)
-    s.add(
+    s.goal('Isolate the letter').add(
       `Multiply both sides by ${rTex(d)} to clear the fraction in front of ${name}.`,
       `${pTex([R0, an], name)} = ${rTex(cd)}`,
       '\\text{same thing done to both sides}'
@@ -365,7 +365,7 @@ export function solveLinearWorking(src: string): Working {
     if (rIsOne(an)) s.add(`So ${name} is on its own.`, `${name} = ${rTex(x)}`)
     else s.add(`Divide both sides by ${rTex(an)}, the number in front of ${name}.`, `${name} = \\dfrac{${rTex(cd)}}{${rTex(an)}} = ${rTex(x)}`, `a${name} = c \\;\\Rightarrow\\; ${name} = c/a`)
   } else {
-    s.add(
+    s.goal('Isolate the letter').add(
       `Divide both sides by ${rTex(a)}, the number in front of ${name}.`,
       `${name} = \\dfrac{${rTex(c)}}{${rTex(a)}} = ${rTex(x)}`,
       `a${name} = c \\;\\Rightarrow\\; ${name} = c/a`
@@ -374,7 +374,7 @@ export function solveLinearWorking(src: string): Working {
   const lv = evalAt(lhs, { [name]: x })
   const rv = evalAt(rhs, { [name]: x })
   const ok = rEq(lv, rv)
-  s.add(
+  s.goal('Check the answer').add(
     'Put the answer back into the original equation to check both sides agree.',
     `${name} = ${rTex(x)}:\\quad ${exprTex(lhs)} = ${rTex(lv)},\\quad ${exprTex(rhs)} = ${rTex(rv)}`
   )
@@ -416,14 +416,14 @@ export function solveQuadraticWorking(src: string): Working {
   const input = `${pTex(poly, name)} = 0`
   const s = new Steps()
 
-  s.add(
+  s.goal('Read off a, b, c').add(
     `Line the equation up as a${name}² + b${name} + c = 0 and read off the three numbers.`,
     `a = ${rTex(a)},\\quad b = ${rTex(b)},\\quad c = ${rTex(c)}`,
     `a${name}^2 + b${name} + c = 0`
   )
   const disc = rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
-  s.add(
-    'Work out the discriminant — it decides what kind of roots come out.',
+  s.goal('Work out the discriminant').add(
+    'Square b and take away 4ac — the sign of this number decides what kind of roots come out.',
     `\\Delta = b^2 - 4ac = \\left(${rTex(b)}\\right)^2 - 4\\left(${rTex(a)}\\right)\\left(${rTex(c)}\\right) = ${rTex(disc)}`,
     '\\Delta = b^2 - 4ac'
   )
@@ -431,27 +431,27 @@ export function solveQuadraticWorking(src: string): Working {
   const sign = rCmp(disc, R0)
   const exact = rSqrt(rAbs(disc))
   if (sign > 0) {
-    s.add(
+    s.goal('See what kind of root').add(
       exact
         ? 'The discriminant is positive and a perfect square, so there are two different rational roots.'
         : 'The discriminant is positive but not a perfect square, so the two roots are real and involve a surd.',
       '\\Delta > 0 \\Rightarrow \\text{two different real roots}'
     )
   } else if (sign === 0) {
-    s.add('The discriminant is zero, so both roots are the same.', '\\Delta = 0 \\Rightarrow \\text{one repeated root}')
+    s.goal('See what kind of root').add('The discriminant is zero, so both roots are the same.', '\\Delta = 0 \\Rightarrow \\text{one repeated root}')
   } else {
-    s.add(
+    s.goal('See what kind of root').add(
       'The discriminant is negative. A negative number has no real square root, so the roots are complex.',
       '\\Delta < 0 \\Rightarrow \\text{two complex roots}'
     )
     s.add(
-      'As we know, the square root of a negative number is written with i.',
+      'Write the square root of the negative number with i, since i² = −1.',
       `\\sqrt{${rTex(disc)}} = \\sqrt{${rTex(rAbs(disc))} \\times (-1)} = ${surdOf(rAbs(disc))}\\,i`,
       'i = \\sqrt{-1} \\;\\Rightarrow\\; \\sqrt{-k} = i\\sqrt{k}'
     )
   }
 
-  s.add(
+  s.goal('Use the quadratic formula').add(
     'Put everything into the quadratic formula.',
     `${name} = \\dfrac{-b \\pm \\sqrt{\\Delta}}{2a} = \\dfrac{${rTex(rNeg(b))} \\pm \\sqrt{${rTex(disc)}}}{${rTex(rMul(rat(2n), a))}}`,
     `${name} = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}`
@@ -471,7 +471,7 @@ export function solveQuadraticWorking(src: string): Working {
 
   const r1 = rootText(root, 1)
   const r2 = rootText(root, -1)
-  s.add(
+  s.goal('Read off the roots').add(
     sign === 0 ? 'Both signs give the same value.' : 'Take the plus and the minus in turn.',
     sign === 0 ? `${name} = ${rTex(re)}` : `${name} = ${r1} \\quad\\text{or}\\quad ${name} = ${r2}`
   )
@@ -487,8 +487,8 @@ export function solveQuadraticWorking(src: string): Working {
   // Vieta's relations are the cheapest possible check and are on the syllabus anyway.
   const sum = rDiv(rNeg(b), a)
   const product = rDiv(c, a)
-  s.add(
-    'Check the pair against the coefficients.',
+  s.goal('Check against the coefficients').add(
+    'Add the roots and multiply them: the sum must be −b/a and the product c/a.',
     `${name}_1 + ${name}_2 = ${rTex(sum)} = -\\dfrac{b}{a},\\qquad ${name}_1 ${name}_2 = ${rTex(product)} = \\dfrac{c}{a}`,
     '\\text{sum} = -b/a,\\quad \\text{product} = c/a'
   )
@@ -562,12 +562,14 @@ function splitQuadratic(coeffs: Surd[], name: string, s: Steps, out: CxCollect):
   // it. A perfect square there does not make the roots rational when a coefficient is a surd
   // (x² − 2√2x + 1 has Δ = 4 and roots √2 ± 1), and the sentence used to say it was not square.
   const square = surdIsRational(disc) && rSqrt(disc.q) !== null
-  s.add(
+  const bracketedPlain = texToPlain(bracketed)
+  const discPlain = texToPlain(surdTex(disc))
+  s.goal('Split each quadratic factor').add(
     complex
-      ? `${bracketed} has a negative discriminant (${surdTex(disc)}), so solve it with the quadratic formula and use its two roots.`
+      ? `${bracketedPlain} has a negative discriminant (${discPlain}), so solve it with the quadratic formula and use its two roots.`
       : square
-        ? `${bracketed} has a surd in it, so its roots are surds even though the discriminant (${surdTex(disc)}) is a perfect square.`
-        : `${bracketed} has a positive discriminant (${surdTex(disc)}) that is not a perfect square, so its roots are surds.`,
+        ? `${bracketedPlain} has a surd in it, so its roots are surds even though the discriminant (${discPlain}) is a perfect square.`
+        : `${bracketedPlain} has a positive discriminant (${discPlain}) that is not a perfect square, so its roots are surds.`,
     `${name} = ${cxsTex(p)} \\quad\\text{or}\\quad ${name} = ${cxsTex(q)}`,
     complex ? '\\sqrt{-k} = i\\sqrt{k}' : `${name} = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}`
   )
@@ -607,7 +609,7 @@ export function factoriseComplexWorking(src: string): Working {
   if (e.length === 0) return failed(title, src, 'That comes to zero, so there is nothing to factorise.')
 
   const s = new Steps()
-  s.add(
+  s.goal('Allow i into the answer').add(
     'Over the real numbers some quadratics will not factorise. Allowing i means every one of them will.',
     'i = \\sqrt{-1}',
     '\\text{every polynomial factorises over } \\mathbb{C}'
@@ -621,7 +623,7 @@ export function factoriseComplexWorking(src: string): Working {
       return pDeg(poly) === 0 ? pTex(poly, name) : pTexBracketed(poly, name)
     })
     .join('')
-  if (realParts.length > 1) s.add('Factorise as far as possible with real numbers first.', `${exprTex(e)} = ${realTex}`)
+  if (realParts.length > 1) s.goal('Factorise with real numbers first').add('Split off every factor that real numbers allow; i is only needed for what is left.', `${exprTex(e)} = ${realTex}`)
 
   const out: CxCollect = { lead: R1, brackets: [], factors: [], anyNew: false }
   for (const part of realParts) {
@@ -652,8 +654,8 @@ export function factoriseComplexWorking(src: string): Working {
       const kx = split.k
       const minus = [inner[0], surdNeg(kx), inner[2]]
       const plus = [inner[0], kx, inner[2]]
-      s.add(
-        `Complete the square: ${surdPolyTex(inner, name)} squared is this expression plus ${surdTex(surdMul(kx, kx))}${name}², so take that away again as a square.`,
+      s.goal('Complete the square').add(
+        `Write it as ${texToPlain(surdPolyTex(inner, name))} squared, which is this expression plus ${texToPlain(surdTex(surdMul(kx, kx)))}${name}², and take that away again as a square.`,
         `${pTex(poly, name)} = \\left(${surdPolyTex(inner, name)}\\right)^2 - \\left(${surdTex(kx)}${name}\\right)^2 = \\left(${surdPolyTex(minus, name)}\\right)\\left(${surdPolyTex(plus, name)}\\right)`,
         'a^2 - b^2 = (a-b)(a+b)'
       )
@@ -680,9 +682,9 @@ export function factoriseComplexWorking(src: string): Working {
   }
 
   const answer = `${leadTex(out.lead)}${out.brackets.join('')}`
-  s.add('Put the factors together, with the number at the front.', `${exprTex(e)} = ${answer}`)
+  s.goal('Write the finished factors').add('Put the factors together, with the number at the front.', `${exprTex(e)} = ${answer}`)
   if (ok) {
-    s.add(
+    s.goal('Check by multiplying back').add(
       'Multiply back to check. Each pair of conjugate roots multiplies to a real quadratic, and the whole product comes back to the original.',
       `${answer} = ${exprTex(e)}`,
       '(x-p)(x-\\bar{p}) = x^2 - 2\\,\\mathrm{Re}(p)\\,x + |p|^2'

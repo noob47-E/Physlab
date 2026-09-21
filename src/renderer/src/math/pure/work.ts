@@ -18,6 +18,13 @@ export interface Move {
   tex?: string
   /** A quieter aside — a warning, or why this choice and not another. */
   note?: string
+  /**
+   * A 2–5 word label of what this group of steps is for — "Find the common factor", "Split the
+   * fraction" — set on the first move of a new stage by `Steps.goal`. A plain sentence like `head`,
+   * never LaTeX: the panel shows it as a small heading above the move that carries it, so a student
+   * reads "what we are doing now" before "how".
+   */
+  subgoal?: string
 }
 
 export interface Answer {
@@ -95,8 +102,32 @@ export const failed = (title: string, input: string, error: string): Working => 
 export class Steps {
   readonly moves: Move[] = []
 
+  /** Set by `goal`, consumed by the next `add`: see `goal` below. */
+  private pendingGoal?: string
+  /** The label most recently stamped on a move, so the same stage named twice is not headed twice. */
+  private lastGoal?: string
+
+  /**
+   * Name the stage the following moves belong to — "Find the common factor", "Split the middle
+   * term". The label lands on the very next move added and then clears itself, so a stage that
+   * takes several moves still gets one heading, not one per step. Naming the stage that is already
+   * running does nothing: a helper called once per factor (splitting each quadratic of x⁴ + 1)
+   * would otherwise head every call with the same words, and a heading that repeats verbatim
+   * stops reading as "what we are doing now".
+   */
+  goal(label: string): this {
+    this.pendingGoal = label === this.lastGoal ? undefined : label
+    return this
+  }
+
   add(head: string, tex?: string, rule?: string, note?: string): this {
-    this.moves.push({ head, tex, rule, note })
+    const move: Move = { head, tex, rule, note }
+    if (this.pendingGoal !== undefined) {
+      move.subgoal = this.pendingGoal
+      this.lastGoal = this.pendingGoal
+      this.pendingGoal = undefined
+    }
+    this.moves.push(move)
     return this
   }
 

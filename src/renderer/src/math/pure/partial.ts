@@ -25,7 +25,7 @@ import {
 } from './poly'
 import { factorsOf } from './factor'
 import { evalDisplayedSum } from './latexCheck'
-import { Steps, failed, type Working } from './work'
+import { Steps, failed, texToPlain, type Working } from './work'
 
 const LETTERS = 'ABCDEFGHJKLMNP'.split('')
 
@@ -105,7 +105,7 @@ export function partialFractionsWorking(src: string): Working {
     const { q, r } = pDivMod(N, D)
     whole = q
     N = r
-    s.add(
+    s.goal('Divide out the whole part').add(
       `The top's power (${pDeg(N0)}) is not below the bottom's (${pDeg(D)}), so divide first and split only what is left over.`,
       `${input} = ${pTex(whole, name)} + \\dfrac{${pTex(N, name)}}{${pTex(D, name)}}`,
       '\\text{improper} \\Rightarrow \\text{divide out the whole part first}'
@@ -149,7 +149,7 @@ export function partialFractionsWorking(src: string): Working {
   const denTex = `${rTex(constant) === '1' ? '' : rTex(constant)}${grouped
     .map((g) => (g.power === 1 ? pTexBracketed(g.base, name) : `${pTexBracketed(g.base, name)}^{${g.power}}`))
     .join('')}`
-  s.add('Factorise the bottom — that is what decides the shape of the answer.', `${pTex(D, name)} = ${denTex}`, '\\text{factorise the denominator}')
+  s.goal('Break the bottom into factors').add('Factorise the bottom — that is what decides the shape of the answer.', `${pTex(D, name)} = ${denTex}`, '\\text{factorise the denominator}')
 
   // One unknown per linear piece, two per quadratic piece, one piece per power.
   const pieces: Piece[] = []
@@ -170,7 +170,7 @@ export function partialFractionsWorking(src: string): Working {
     `\\dfrac{${numeratorTex(p)}}{${pTexBracketed(p.base, name)}${p.j > 1 ? `^{${p.j}}` : ''}}`
 
   const setup = pieces.map(pieceTex).join(' + ')
-  s.add(
+  s.goal('One fraction per factor').add(
     `Each factor gets its own fraction. A linear factor takes a plain ${LETTERS[0]} on top; a quadratic one takes ${LETTERS[0]}${name} + ${LETTERS[1]}; a repeated factor gets one fraction for each power.`,
     `\\dfrac{${pTex(N, name)}}{${pTex(D, name)}} = ${setup}`,
     '\\text{one fraction per factor}'
@@ -185,7 +185,7 @@ export function partialFractionsWorking(src: string): Working {
       contributions[p.unknowns[d]] = pMul(pMonomial(p.unknowns.length - 1 - d), rest)
     }
   }
-  s.add(
+  s.goal('Clear the fractions').add(
     'Multiply every term by the bottom, so the fractions disappear.',
     `${pTex(N, name)} = ${pieces
       .map((p) => {
@@ -210,7 +210,7 @@ export function partialFractionsWorking(src: string): Working {
   // The cover-up rule, where it applies: it is the method students are expected to use.
   const allSimpleLinear = grouped.every((g) => g.power === 1 && pDeg(g.base) === 1)
   if (allSimpleLinear) {
-    s.add(
+    s.goal('Find each letter').add(
       'Because every factor is different and linear, each letter can be read off directly: put in the value of ' +
         `${name} that makes one bracket zero, and the other terms vanish.`,
       undefined,
@@ -223,13 +223,13 @@ export function partialFractionsWorking(src: string): Working {
       const top = pEval(N, root)
       const bottom = pEval(rest, root)
       s.add(
-        `Put ${name} = ${rTex(root)} in, which kills every term except ${LETTERS[p.unknowns[0]]}.`,
+        `Put ${name} = ${texToPlain(rTex(root))} in, which kills every term except ${LETTERS[p.unknowns[0]]}.`,
         `${LETTERS[p.unknowns[0]]} = \\dfrac{${rTex(top)}}{${rTex(bottom)}} = ${rTex(rDiv(top, bottom))}`,
         `${name} = ${rTex(root)}`
       )
     }
   } else {
-    s.add(
+    s.goal('Find each letter').add(
       'Multiply out and match the coefficient of each power on both sides — that gives one equation per power.',
       `\\begin{array}{rcl}\n${Array.from({ length: width }, (_, k) => {
         const lhs = M[k]
@@ -274,7 +274,7 @@ export function partialFractionsWorking(src: string): Working {
     head
   )
 
-  s.add('Put the values back into the fractions.', `${input} = ${answer}`)
+  s.goal('Write the final answer').add('Put the values back into the fractions.', `${input} = ${answer}`)
 
   // Recombine and insist on the original before showing anything.
   let back: Poly = []

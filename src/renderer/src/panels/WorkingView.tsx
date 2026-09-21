@@ -36,21 +36,30 @@ export const writeStepPref = (p: StepPref): void => {
  * "divide x^{3} by x" — is turned into ordinary characters first. Doing it here rather than in
  * each generator means a new tool cannot reintroduce the problem.
  */
-export function MoveRow({ n, head, rule, tex, note }: { n: number; head: string; rule?: string; tex?: string; note?: string }) {
+export function MoveRow({ n, head, rule, tex, note, subgoal }: { n: number; head: string; rule?: string; tex?: string; note?: string; subgoal?: string }) {
   return (
-    <li className="pure-move">
-      <span className="pure-num">{n}</span>
-      <div className="min-w-0 flex-1">
-        <div className="pure-head">{texToPlain(head)}</div>
-        {tex && <Tex tex={tex} display />}
-        {note && <div className="pure-note">{texToPlain(note)}</div>}
-      </div>
-      {rule && (
-        <div className="pure-rule" title="The formula this step uses">
-          <Tex tex={rule} />
-        </div>
+    <>
+      {subgoal && (
+        // Never `uppercase` here: CSS would turn "Allow i into the answer" into "ALLOW I…", and
+        // "Read off a, b and c" into letters that mean something else in the maths beside them.
+        <li className="list-none pt-2 text-fine font-semibold tracking-wide text-ink-dim first:pt-0">
+          {texToPlain(subgoal)}
+        </li>
       )}
-    </li>
+      <li className="pure-move">
+        <span className="pure-num">{n}</span>
+        <div className="min-w-0 flex-1">
+          <div className="pure-head">{texToPlain(head)}</div>
+          {tex && <Tex tex={tex} display />}
+          {note && <div className="pure-note">{texToPlain(note)}</div>}
+        </div>
+        {rule && (
+          <div className="pure-rule" title="The formula this step uses">
+            <Tex tex={rule} />
+          </div>
+        )}
+      </li>
+    </>
   )
 }
 
@@ -120,7 +129,8 @@ export function WorkingView({
   const copyAll = (): void => {
     const lines = [
       `${doc.title}:  ${doc.input}`,
-      ...doc.moves.map((m, i) => `${i + 1}. ${m.head}${m.rule ? `   [${m.rule}]` : ''}${m.tex ? `\n   ${m.tex}` : ''}`),
+      // A stage heading travels with its move, so the pasted working keeps the "what for" above the "how".
+      ...doc.moves.map((m, i) => `${m.subgoal ? `${texToPlain(m.subgoal)}\n` : ''}${i + 1}. ${m.head}${m.rule ? `   [${m.rule}]` : ''}${m.tex ? `\n   ${m.tex}` : ''}`),
       ...doc.answers.map((a) => `${a.label} ${a.tex}`),
       doc.check ? texToPlain(doc.check) : ''
     ]

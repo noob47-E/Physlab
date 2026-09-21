@@ -56,7 +56,7 @@ import {
 } from './poly'
 import { MAX_TRIAL, TOO_BIG_TO_SEARCH } from './limits'
 import { quadraticRoots, splitBiquadratic, surd, surdIsRational, surdNeg } from './cxpoly'
-import { Steps, failed, type Working } from './work'
+import { Steps, failed, texToPlain, type Working } from './work'
 
 /** The exact k-th root of a fraction, or null. */
 function rRoot(a: Rat, k: number): Rat | null {
@@ -210,14 +210,14 @@ function bySubstitution(e: Expr, ctx: Ctx, pending: Expr[]): { parts: Expr[]; na
   const content = rDiv(a, rat(roots[0].d * roots[1].d))
   const inU = pTrim([c, b, a])
 
-  ctx.s.add(
+  ctx.s.goal(`Substitute for ${name}^${k}`).add(
     `This is a quadratic in disguise: the powers are ${deg}, ${k} and 0. Write u = ${name}^${k} and it becomes a quadratic in u.`,
     `u = ${name}^{${k}} \\;\\Rightarrow\\; ${pTex(inU, 'u')}`,
     `\\text{substitute } u = ${name}^{${k}}`
   )
   const uBrackets = `${rIsOne(content) ? '' : rTex(content)}${uFactors.map((f) => pTexBracketed(f, 'u')).join('')}`
   ctx.s.add(
-    `Factorise the quadratic in u. Its roots are u = ${rTex(roots[0])} and u = ${rTex(roots[1])}.`,
+    `Factorise the quadratic in u. Its roots are u = ${texToPlain(rTex(roots[0]))} and u = ${texToPlain(rTex(roots[1]))}.`,
     `${pTex(inU, 'u')} = ${uBrackets}`,
     'a u^2 + b u + c = a(u - u_1)(u - u_2)'
   )
@@ -243,8 +243,9 @@ function byCompletingSquare(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
   const kx: Term = { c: split.k.q, v: { [name]: 1 } }
   const inner = exprFromPoly([s, rat(0n), alpha], name)
   const taken: Term = { c: rMul(kx.c, kx.c), v: { [name]: 2 } }
-  ctx.s.add(
-    `Complete the square: ${exprTex(inner)} squared is ${exprTex(eMul(inner, inner))}, which is this expression with ${termTex(taken)} added on. So take ${termTex(taken)} away again.`,
+  const takenPlain = texToPlain(termTex(taken))
+  ctx.s.goal('Complete the square').add(
+    `Write it as ${texToPlain(exprTex(inner))} squared, which is ${texToPlain(exprTex(eMul(inner, inner)))} — this expression with ${takenPlain} added on — and take ${takenPlain} away again as a square.`,
     `${exprTex(e)} = \\left(${exprTex(inner)}\\right)^2 - \\left(${termTex(kx)}\\right)^2`,
     '\\text{add and take away the middle term}'
   )
@@ -322,7 +323,7 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
   const coef = (v: bigint): string => (v === 1n || v === -1n ? '' : mag(v))
   const signedTerm = (v: bigint): string => `${v < 0n ? '-' : ''}${coef(v)}${name}`
 
-  ctx.s.add(
+  ctx.s.goal('Split the middle term').add(
     `Multiply the first and last coefficients: ${a.n} × ${c.n} = ${ac}. Now find two numbers that multiply to ${ac} and add to ${bb}.`,
     `${p} \\times ${q} = ${ac} \\quad\\text{and}\\quad ${p} ${sign(q)} ${mag(q)} = ${bb}`,
     'ax^2+bx+c:\\ \\text{split } b \\text{ using } ac'
@@ -358,13 +359,13 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
     r2 = flipped
   }
   ctx.s.add(
-    'Group the four terms in pairs and take the common factor out of each pair.',
+    'Put the four terms into two pairs and take the common factor out of each pair.',
     `${termTex(f1)}${exprTexBracketed(r1)} ${rIsNeg(g2.c) ? '-' : '+'} ${termTex({ c: rAbs(g2.c), v: g2.v })}${exprTexBracketed(r2)}`,
     '\\text{grouping}'
   )
   const outer = [...termExpr(f1), ...termExpr(g2)].filter((t) => !rIsZero(t.c))
   ctx.s.add(
-    `Both pieces now share ${exprTexBracketed(r1).replace(/\\left|\\right/g, '')}, so take that out as well.`,
+    `Both pieces now share ${texToPlain(exprTexBracketed(r1))}, so take that out as well.`,
     `${exprTexBracketed(r1)}${exprTexBracketed(outer)}`,
     '\\text{common bracket}'
   )
@@ -390,13 +391,16 @@ function peelRoot(e: Expr, ctx: Ctx): Expr[] | null {
   if (!pTrim(r).length) {
     const dExpr = exprFromPoly(divisor, name)
     const qExpr = exprFromPoly(q, name)
-    ctx.s.add(
-      `Try small values: ${name} = ${rTex(root)} makes the expression zero, so ${exprTexBracketed(dExpr)} is a factor.`,
+    // The root can be a fraction (2x − 1 comes from x = ½), so the stage is "try values", not
+    // "whole-number root". The bracket goes through texToPlain here because the head is spoken.
+    const dPlain = texToPlain(exprTexBracketed(dExpr))
+    ctx.s.goal(`Try small values of ${name}`).add(
+      `Put ${name} = ${texToPlain(rTex(root))} in: the expression comes to zero, so ${dPlain} is a factor.`,
       `f\\left(${rTex(root)}\\right) = 0 \\;\\Rightarrow\\; ${exprTexBracketed(dExpr)} \\text{ divides it}`,
       '\\text{factor theorem: } f(a)=0 \\Leftrightarrow (x-a)\\mid f'
     )
     ctx.s.add(
-      'Divide to find what is left.',
+      `Divide by ${dPlain} to find what is left.`,
       `${exprTexBracketed(exprFromPoly(prim, name))} \\div ${exprTexBracketed(dExpr)} = ${exprTexBracketed(qExpr)}`,
       '\\text{long division}'
     )
@@ -422,10 +426,10 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
     const rest = divideByTerm(e, cf)
     if (rest && rest.length > 0) {
       const bareMinus = rIsNeg(cf.c) && rIsOne(rAbs(cf.c)) && Object.keys(cf.v).length === 0
-      ctx.s.add(
+      ctx.s.goal(bareMinus ? 'Take out the minus sign' : 'Take out the common factor').add(
         bareMinus
           ? 'The highest power is negative, so take −1 out at the front and factorise what is left.'
-          : `Every term has ${termTex(cf)} in it, so take it out at the front.`,
+          : `Every term has ${texToPlain(termTex(cf))} in it, so take it out at the front.`,
         `${snapshot(ctx, [...pending, termExpr(cf), rest])}`,
         bareMinus ? '-1 \\text{ is a common factor too}' : '\\text{HCF of the terms}'
       )
@@ -439,8 +443,8 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   // 2. Two terms: squares, then cubes.
   const dos = diffOfSquares(e)
   if (dos) {
-    ctx.s.add(
-      `Two terms, and it is one square take away another: ${termTex(dos.a)} squared minus ${termTex(dos.b)} squared.`,
+    ctx.s.goal('Spot a difference of squares').add(
+      `Two terms, and it is one square take away another: ${texToPlain(termTex(dos.a))} squared minus ${texToPlain(termTex(dos.b))} squared.`,
       `${exprTex(e)} = \\left(${termTex(dos.a)}\\right)^2 - \\left(${termTex(dos.b)}\\right)^2`,
       'a^2 - b^2 = (a-b)(a+b)'
     )
@@ -452,20 +456,23 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   if (cubes) {
     const op = cubes.sign === 1 ? '+' : '-'
     const inner = cubes.sign === 1 ? '-' : '+'
-    ctx.s.add(
-      `Two terms, and both are perfect cubes: ${termTex(cubes.a)} cubed ${cubes.sign === 1 ? 'plus' : 'minus'} ${termTex(cubes.b)} cubed.`,
+    ctx.s.goal('Spot two perfect cubes').add(
+      `Two terms, and both are perfect cubes: ${texToPlain(termTex(cubes.a))} cubed ${cubes.sign === 1 ? 'plus' : 'minus'} ${texToPlain(termTex(cubes.b))} cubed.`,
       `${exprTex(e)} = \\left(${termTex(cubes.a)}\\right)^3 ${op} \\left(${termTex(cubes.b)}\\right)^3`,
       `a^3 ${op} b^3 = (a ${op} b)(a^2 ${inner} ab + b^2)`
     )
-    ctx.s.add('Apply the formula.', snapshot(ctx, [...pending, ...cubes.parts]))
+    ctx.s.add(
+      `Use the ${cubes.sign === 1 ? 'sum' : 'difference'} of cubes formula, with a = ${texToPlain(termTex(cubes.a))} and b = ${texToPlain(termTex(cubes.b))}.`,
+      snapshot(ctx, [...pending, ...cubes.parts])
+    )
     return cubes.parts.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
   }
 
   // 3. Three terms: perfect square, then splitting the middle term.
   const sq = perfectSquare(e)
   if (sq) {
-    ctx.s.add(
-      `The first and last terms are squares and the middle term is exactly twice ${termTex(sq.a)} × ${termTex(sq.b)}, so this is a perfect square.`,
+    ctx.s.goal('Spot a perfect square').add(
+      `The first and last terms are squares and the middle term is exactly twice ${texToPlain(termTex(sq.a))} × ${texToPlain(termTex(sq.b))}, so this is a perfect square.`,
       `${exprTex(e)} = \\left(${exprTex(sq.part)}\\right)^2`,
       `a^2 ${sq.sign === 1 ? '+' : '-'} 2ab + b^2 = (a ${sq.sign === 1 ? '+' : '-'} b)^2`
     )
@@ -486,8 +493,8 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   // 4. Four terms: grouping.
   const grp = byGrouping(e)
   if (grp) {
-    ctx.s.add(
-      'Four terms, so group them in pairs and take the common factor out of each pair.',
+    ctx.s.goal('Group the terms in pairs').add(
+      'Put the four terms into two pairs and take the common factor out of each pair.',
       `${termTex(grp.taken[0])}${exprTexBracketed(grp.parts[0])} ${rIsNeg(grp.taken[1].c) ? '-' : '+'} ${termTex({ c: rAbs(grp.taken[1].c), v: grp.taken[1].v })}${exprTexBracketed(grp.parts[0])}`,
       '\\text{grouping}'
     )
@@ -543,9 +550,12 @@ export function factorise(src: string): FactorOutcome {
   const ctx: Ctx = { s: new Steps(), done: [] }
   const expanded = exprTex(e)
   // Only worth a step when there really was a bracket to multiply out. Otherwise it just restates
-  // the question back at the student, which reads like the working has already gone wrong.
-  if (src.includes('(') && expanded !== src.trim()) {
-    ctx.s.add('Multiply everything out first, so the terms can be compared.', expanded, '\\text{expand, then collect like terms}')
+  // the question back at the student, which reads like the working has already gone wrong. A power
+  // bracket does not count: the Maths screen hands 6x² + 9x over as 6x^(2)+9x, and that used to
+  // open the working with a "multiply out" step whose maths was the question again.
+  const hasBracket = /(^|[^^])\(/.test(src)
+  if (hasBracket && expanded !== src.trim()) {
+    ctx.s.goal('Multiply out first').add('Multiply the brackets out and collect like terms, so there is one plain expression to factorise.', expanded, '\\text{expand, then collect like terms}')
   }
 
   const parts = factorAll(e, ctx, []).filter((p) => p.length > 0)

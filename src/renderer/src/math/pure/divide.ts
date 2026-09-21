@@ -22,7 +22,7 @@ import {
   polyFromExpr,
   type Poly
 } from './poly'
-import { Steps, failed, type Working } from './work'
+import { Steps, failed, texToPlain, type Working } from './work'
 
 /** One term of a polynomial as it should appear inside a row of the staircase. */
 const cell = (c: Rat, k: number, name: string, first: boolean): string => {
@@ -105,13 +105,21 @@ export function divideWorking(src: string): Working {
     const product = pMul(piece, b)
     const next = pSub(rem, product)
 
+    // One heading for the whole staircase: every row is the same two moves, and a heading that
+    // repeats on each row stops reading as "what we are doing now".
+    if (step === 1) s.goal('Divide term by term')
+    // A term can carry a fraction ((x² + 1) ÷ 2x starts with x/2, and the rows after it follow
+    // suit), so the head is given the plain forms; the tex keeps the LaTeX.
+    const leadTex = pTex(pMonomial(pDeg(rem), pLead(rem)), name)
+    const byTex = pTex(pMonomial(pDeg(b), pLead(b)), name)
+    const piecePlain = texToPlain(pTex(piece, name))
     s.add(
-      `Divide ${pTex(pMonomial(pDeg(rem), pLead(rem)), name)} by ${pTex(pMonomial(pDeg(b), pLead(b)), name)} to get ${pTex(piece, name)} — that is the next piece of the answer.`,
-      `\\dfrac{${pTex(pMonomial(pDeg(rem), pLead(rem)), name)}}{${pTex(pMonomial(pDeg(b), pLead(b)), name)}} = ${pTex(piece, name)}`,
+      `Divide ${texToPlain(leadTex)} by ${texToPlain(byTex)} to get ${piecePlain} — that is the next piece of the answer.`,
+      `\\dfrac{${leadTex}}{${byTex}} = ${pTex(piece, name)}`,
       '\\text{divide the leading terms}'
     )
     s.add(
-      `Multiply ${pTexBracketed(piece, name)} by the divisor and subtract.`,
+      `Multiply ${piecePlain} by the divisor and take the result away.`,
       `${pTexBracketed(rem, name)} - ${pTexBracketed(piece, name)}${pTexBracketed(b, name)} = ${pTexBracketed(next, name)}`,
       '\\text{multiply, then subtract}'
     )
@@ -126,8 +134,8 @@ export function divideWorking(src: string): Working {
   const body = rows
     .map((r, i) => `${r.join(' & ')}${i > 0 && i % 2 === 1 ? ' \\\\ \\hline' : ' \\\\'}`)
     .join('\n')
-  s.add(
-    'Written out as the full division:',
+  s.goal('Set out the long division').add(
+    'Write the whole division out as a staircase, with the quotient on top.',
     `\\begin{array}{r}\n\\text{quotient } ${pTex(q, name)} \\\\[4pt]\n\\end{array}\n\\begin{array}{${cols}}\n${body}\n\\end{array}`,
     `${pTexBracketed(b, name)} \\,\\overline{\\smash{)}\\,} ${pTexBracketed(a, name)}`
   )
@@ -136,7 +144,7 @@ export function divideWorking(src: string): Working {
   if (pDeg(b) === 1 && b[1].n === 1n && b[1].d === 1n) {
     const root = rDiv(rNeg(b[0] ?? R0), b[1])
     s.add(
-      `The divisor is ${pTex(b, name)}, so the remainder could have been read off in one line: put ${name} = ${rTex(root)} into the top.`,
+      `Check the remainder the quick way: the divisor is ${texToPlain(pTex(b, name))}, so put ${name} = ${texToPlain(rTex(root))} into the top and the remainder comes out in one line.`,
       `f\\left(${rTex(root)}\\right) = ${rTex(pEval(a, root))}`,
       '\\text{remainder theorem: } f(a) = \\text{remainder}'
     )
@@ -153,10 +161,10 @@ export function divideWorking(src: string): Working {
     })
   }
 
-  s.add(
+  s.goal('State the answer').add(
     pIsZero(rem)
-      ? `Nothing is left over, so ${exprTexBracketed(exprFromPoly(b, name))} divides exactly.`
-      : `${pTex(rem, name)} is left over, and its power is now below the divisor's, so the division stops.`,
+      ? `Nothing is left over, so ${texToPlain(exprTexBracketed(exprFromPoly(b, name)))} divides exactly.`
+      : `${texToPlain(pTex(rem, name))} is left over, and its power is now below the divisor's, so the division stops.`,
     pIsZero(rem)
       ? `${pTexBracketed(a, name)} = ${pTexBracketed(b, name)}${pTexBracketed(q, name)}`
       : `${pTexBracketed(a, name)} = ${pTexBracketed(b, name)}${pTexBracketed(q, name)} + ${pTex(rem, name)}`,

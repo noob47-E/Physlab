@@ -32,7 +32,7 @@ import { factoriseWorking, factorsOf, isNumericLine, wantsAllowI } from './facto
 import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
 import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
-import { Steps, failed, type Working } from './work'
+import { Steps, failed, texToPlain, type Working } from './work'
 
 export type JobId =
   | 'factor'
@@ -225,6 +225,9 @@ function groupedTex(products: Term[]): string {
 
 const factorTex = (f: Expr): string => (f.length > 1 ? exprTexBracketed(f) : exprTex(f))
 
+/** "first", "second", … for the stage headings; a sum with more pieces than that is numbered. */
+const ordinal = (n: number): string => ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'][n - 1] ?? `${n}th`
+
 /**
  * Expand, with the distribution shown.
  *
@@ -248,20 +251,24 @@ function expandWorking(src: string): Working {
 
   // Each summand multiplied out on its own; a lone factor is already a sum and passes straight through.
   const pieces: Expr[] = []
-  for (const sm of summands) {
+  summands.forEach((sm, n) => {
     const { factors } = sm
     if (factors.length < 2) {
       pieces.push(sm.neg ? eNeg(factors[0]) : factors[0])
-      continue
+      return
     }
-    const where = several ? `In ${shownOf(sm)}, m` : 'M'
+    // `shown` is LaTeX as typed; the head is spoken, so it goes through texToPlain here.
+    const where = several ? `In ${texToPlain(shownOf(sm))}, m` : 'M'
     let acc = factors[0]
     for (let i = 1; i < factors.length; i++) {
       const f = factors[i]
       const products: Term[] = []
       for (const a of acc) for (const b of f) products.push(mulTerm(a, b))
+      // One heading per piece, not one per bracket: (x + 1)⁵ is one stage of four multiplications,
+      // and a heading that repeats verbatim on each stops reading as "what we are doing now".
+      if (i === 1) s.goal(several ? `Multiply out the ${ordinal(n + 1)} piece` : 'Multiply the brackets out')
       s.add(
-        `${i === 1 ? where : 'Then m'}ultiply every term of ${factorTex(acc)} by every term of ${factorTex(f)}.`,
+        `${i === 1 ? where : 'Then m'}ultiply every term of ${texToPlain(factorTex(acc))} by every term of ${texToPlain(factorTex(f))}.`,
         distributionTable(acc, f),
         '\\text{each} \\times \\text{each}'
       )
@@ -275,7 +282,7 @@ function expandWorking(src: string): Working {
       acc = collected
     }
     pieces.push(sm.neg ? eNeg(acc) : acc)
-  }
+  })
   const whole = pieces.reduce((a, b) => eAdd(a, b), [] as Expr)
   const out = exprTex(whole)
 
@@ -283,7 +290,7 @@ function expandWorking(src: string): Working {
     // Nothing was distributed: either there are no brackets to multiply, or one bracket is raised
     // to a power too high to write out column by column and its expansion is simply stated.
     const highPower = /\)\s*(\^|²|³)/.test(src)
-    s.add(
+    s.goal(highPower ? 'Write out the power directly' : 'Collect the like terms').add(
       highPower
         ? 'A bracket raised to a power that high is written out directly rather than multiplied column by column.'
         : 'There is nothing to multiply out here, so collect the like terms and write the highest power first.',
@@ -294,7 +301,7 @@ function expandWorking(src: string): Working {
 
   if (several) {
     const joined = pieces.map((p, i) => `${i === 0 ? '' : ' + '}\\left(${exprTex(p)}\\right)`).join('')
-    s.add('Add the pieces together, and collect the like terms once more.', `${joined} = ${out}`, '\\text{like terms: same letters, same powers}')
+    s.goal('Add the pieces together').add('Put the pieces side by side and collect the like terms once more.', `${joined} = ${out}`, '\\text{like terms: same letters, same powers}')
   }
 
   // Check by substituting a value: the brackets and the answer must give the same number.

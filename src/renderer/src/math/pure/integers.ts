@@ -82,27 +82,29 @@ export function factoriseNumberWorking(input: bigint): Working {
   }
 
   const s = new Steps()
-  if (input < 0n) s.add('The number is negative, so factorise its size and keep the minus sign outside.', `${input} = -\\left(${abs}\\right)`)
+  if (input < 0n) {
+    s.goal('Deal with the minus sign').add('The number is negative, so factorise its size and keep the minus sign outside.', `${input} = -\\left(${abs}\\right)`)
+  }
 
   if (f.factors.length === 1 && f.factors[0][1] === 1) {
-    s.add(`${abs} has no factors except 1 and itself, so it is already prime.`, `${abs} = ${abs}`, '\\text{a prime has exactly two factors}')
+    s.goal('Check whether it is prime').add(`${abs} has no factors except 1 and itself, so it is already prime.`, `${abs} = ${abs}`, '\\text{a prime has exactly two factors}')
     return { title, input: tex, moves: s.moves, answers: [{ label: `${input}`, tex: factorTex(f) }], check: `${abs} is prime.`, checked: f.factors[0][0] === abs ? 'ok' : 'failed' }
   }
 
-  s.add(
+  s.goal('Split into primes').add(
     'Divide by the smallest prime that goes in, over and over, until 1 is left.',
     ladderTex(f),
     '\\text{try } 2,\\,3,\\,5,\\,7,\\,11 \\ldots'
   )
-  s.add(
+  s.goal('Count each prime').add(
     `Collect the ${plural(f.factors.length, 'prime down the left', 'primes down the left')}, counting how many times each one appeared.`,
     `${abs} = ${factorTex({ ...f, n: abs })}`,
     '\\text{index} = \\text{how many times it divided in}'
   )
   const total = f.factors.reduce((a, [, k]) => a + k, 0)
   const divisors = f.factors.reduce((a, [, k]) => a * (k + 1), 1)
-  s.add(
-    `That is ${total} prime ${plural(total, 'factor', 'factors')} altogether, which means ${abs} has ${divisors} ${plural(divisors, 'divisor', 'divisors')} in total.`,
+  s.goal('Count the divisors').add(
+    `That is ${total} prime ${plural(total, 'factor', 'factors')} altogether. Add 1 to each index and multiply: ${abs} has ${divisors} ${plural(divisors, 'divisor', 'divisors')} in all.`,
     f.factors.map(([, k]) => `(${k}+1)`).join(' \\times ') + ` = ${divisors}`,
     '\\text{divisors} = \\prod (\\text{index} + 1)'
   )
@@ -156,29 +158,29 @@ export function hcfWorking(ns: bigint[]): Working {
   const pair = lineUp(pos)
   const s = new Steps()
 
-  s.add('Write each number as a product of primes.', tableTex(pair), '\\text{HCF} = \\text{common primes, lowest index}')
+  s.goal('Break each number into primes').add('Write each number as a product of primes.', tableTex(pair), '\\text{HCF} = \\text{common primes, lowest index}')
   for (const r of pair.rows) {
     const f = primeFactorise(r.n)
-    s.add(`${r.n} broken down:`, `${r.n} = ${factorTex(f)}`)
+    s.add(`Break ${r.n} into primes.`, `${r.n} = ${factorTex(f)}`)
   }
 
   const commonPowers = pair.primes.map((p, i) => Math.min(...pair.rows.map((r) => r.powers[i])))
   const kept = pair.primes.map((p, i) => [p, commonPowers[i]] as [bigint, number]).filter(([, k]) => k > 0)
 
   if (kept.length === 0) {
-    s.add('No prime appears in every number, so they share nothing but 1.', '\\text{HCF} = 1', '\\text{numbers with HCF } 1 \\text{ are coprime}')
+    s.goal('Look for a shared prime').add('No prime appears in every number, so they share nothing but 1.', '\\text{HCF} = 1', '\\text{numbers with HCF } 1 \\text{ are coprime}')
     // Euclid's route is independent of the prime table, so agreeing with it is a real check.
     const coprime = ns.reduce((a, b) => bgcd(a, b), 0n) === 1n
     return { title, input: tex, moves: s.moves, answers: [{ label: 'HCF =', tex: '1' }], check: coprime ? `${pos.join(' and ')} are coprime.` : 'Careful: Euclid finds a common factor the table missed. Treat this answer with suspicion.', checked: coprime ? 'ok' : 'failed' }
   }
 
-  s.add(
+  s.goal('Keep the shared primes').add(
     'Keep only the primes that appear in every number, each at its lowest index.',
     kept.map(([p, k]) => powerTex(p, k)).join(' \\times '),
     '\\min(\\text{indices})'
   )
   const hcf = ns.reduce((a, b) => bgcd(a, b), 0n)
-  s.add('Multiply them out.', `\\text{HCF} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${hcf}`)
+  s.add('Multiply those primes together to get the HCF.', `\\text{HCF} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${hcf}`)
 
   // The primes kept from the table have to multiply to Euclid's answer, and that has to divide in.
   const ok = product(kept) === hcf && pos.every((n) => n % hcf === 0n)
@@ -201,21 +203,21 @@ export function lcmWorking(ns: bigint[]): Working {
   const pair = lineUp(pos)
   const s = new Steps()
 
-  s.add('Write each number as a product of primes.', tableTex(pair), '\\text{LCM} = \\text{every prime, highest index}')
+  s.goal('Break each number into primes').add('Write each number as a product of primes.', tableTex(pair), '\\text{LCM} = \\text{every prime, highest index}')
   for (const r of pair.rows) {
     const f = primeFactorise(r.n)
-    s.add(`${r.n} broken down:`, `${r.n} = ${factorTex(f)}`)
+    s.add(`Break ${r.n} into primes.`, `${r.n} = ${factorTex(f)}`)
   }
 
   const topPowers = pair.primes.map((p, i) => Math.max(...pair.rows.map((r) => r.powers[i])))
   const kept = pair.primes.map((p, i) => [p, topPowers[i]] as [bigint, number]).filter(([, k]) => k > 0)
-  s.add(
+  s.goal('Take every prime you see').add(
     'Take every prime that appears anywhere, each at its highest index.',
     kept.map(([p, k]) => powerTex(p, k)).join(' \\times '),
     '\\max(\\text{indices})'
   )
   const lcm = ns.reduce((a, b) => blcm(a, b), 1n)
-  s.add('Multiply them out.', `\\text{LCM} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${lcm}`)
+  s.add('Multiply those primes together to get the LCM.', `\\text{LCM} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${lcm}`)
 
   const moves = s.moves
   if (ns.length === 2) {

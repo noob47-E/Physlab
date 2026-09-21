@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { JOBS, runPure, suggestJob } from '../src/renderer/src/math/pure/run'
+import { JOBS, runPure, suggestJob, type JobId } from '../src/renderer/src/math/pure/run'
 import { JUST_A_NUMBER, JUST_A_WHOLE_NUMBER, isNumericLine } from '../src/renderer/src/math/pure/factor'
 import { readSource } from './helpers/repo'
-import { texToPlain } from '../src/renderer/src/math/pure/work'
+import { Steps, texToPlain } from '../src/renderer/src/math/pure/work'
 import { checkTone, fieldHasText, initialShown, offeredJob, resolveJob, stepPrefFrom } from '../src/renderer/src/math/pure/reveal'
 import { agreesNumerically } from '../src/renderer/src/math/pure/complex'
 import { evalDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
 import { rStr, rat } from '../src/renderer/src/math/pure/rat'
+import { latexToMath } from '../src/renderer/src/math/latexToMath'
 
 describe('long division', () => {
   it('divides exactly and says so', () => {
@@ -203,8 +204,13 @@ describe('the dispatcher', () => {
     expect(w.answers[0].tex).toBe('8x')
     expect(w.checked).toBe('ok')
     expect(w.moves.filter((m) => m.tex?.includes('\\begin{array}'))).toHaveLength(2)
-    expect(w.moves[0].head).toMatch(/^In .*x \+ 2.*multiply/)
-    expect(w.moves[w.moves.length - 1].head).toMatch(/Add the pieces/)
+    // The "In …" prefix names the piece as typed, in plain characters: it used to splice the
+    // LaTeX \left(x + 2\right) straight into the spoken sentence. Each piece gets its own heading.
+    expect(w.moves[0].head).toBe('In (x + 2)(x + 2), multiply every term of (x + 2) by every term of (x + 2).')
+    expect(w.moves[0].subgoal).toBe('Multiply out the first piece')
+    expect(w.moves.find((m) => m.subgoal === 'Multiply out the second piece')?.head).toBe('In (x - 2)(x - 2), multiply every term of (x - 2) by every term of (x - 2).')
+    expect(w.moves[w.moves.length - 1].head).toBe('Put the pieces side by side and collect the like terms once more.')
+    expect(w.moves[w.moves.length - 1].subgoal).toBe('Add the pieces together')
     expect(w.moves[w.moves.length - 1].tex).toBe('\\left(x^{2} + 4x + 4\\right) + \\left(-x^{2} + 4x - 4\\right) = 8x')
     expect(w.input).toBe('\\left(x + 2\\right)\\left(x + 2\\right) - \\left(x - 2\\right)\\left(x - 2\\right)')
     const plus = runPure('expand', '(x + 1)(x - 1) + 3')
@@ -219,7 +225,7 @@ describe('the dispatcher', () => {
     expect(w.error).toBeUndefined()
     expect(w.answers[0].tex).toBe('2x^{2} + 2x')
     // 2x is one term: the grid distributes 2x over the bracket, not 2 over x first.
-    expect(w.moves[0].head).toBe('Multiply every term of 2x by every term of \\left(x + 1\\right).')
+    expect(w.moves[0].head).toBe('Multiply every term of 2x by every term of (x + 1).')
     expect(w.moves[0].tex).toContain('\\begin{array}')
     expect(w.checked).toBe('ok')
     expect(runPure('expand', 'x(x + 1)').answers[0].tex).toBe('x^{2} + x')
@@ -247,7 +253,7 @@ describe('the dispatcher', () => {
     // mathjs reads −(x + 1)(x − 1) as (−(x + 1))·(x − 1); the grid used to multiply (−x − 1).
     const w = runPure('expand', '-(x + 1)(x - 1)')
     expect(w.input).toBe('-\\left(x + 1\\right)\\left(x - 1\\right)')
-    expect(w.moves[0].head).toBe('Multiply every term of \\left(x + 1\\right) by every term of \\left(x - 1\\right).')
+    expect(w.moves[0].head).toBe('Multiply every term of (x + 1) by every term of (x - 1).')
     expect(w.answers[0].tex).toBe('-x^{2} + 1')
     expect(w.checked).toBe('ok')
     expect(runPure('expand', '(x + 1)(-(x - 1))').answers[0].tex).toBe('-x^{2} + 1')
@@ -354,6 +360,57 @@ describe('the dispatcher', () => {
   })
 })
 
+// One representative input per branch of every generator this suite covers, chosen to walk
+// through several stages of each so more than the happy path is checked. Shared by the wording
+// checks below: a head that regresses on one of these branches has to fail, not only one that
+// regresses on the panel's ten examples.
+const STAGE_WALK: [JobId, string][] = [
+  ['primes', '360'],
+  ['primes', '97'], // already prime
+  ['primes', '-360'], // the minus sign kept outside
+  ['hcf', '12, 18, 30'],
+  ['lcm', '12, 18, 30'],
+  ['hcf', 'x^2 - 1, x^2 + 2x + 1'],
+  ['lcm', 'x^2 - 1, x^2 + 2x + 1'],
+  ['factor', '6x^2 + 7x - 3'], // splitting the middle term
+  ['factor', 'x^4 - 16'], // difference of squares, twice
+  ['factor', '27a^3 + 8b^3'], // sum of cubes
+  ['factor', 'x^2 + 6x + 9'], // perfect square
+  ['factor', 'x^3 - 6x^2 + 11x - 6'], // a root found by trial, peeled off
+  ['factor', '2x^3 - 3x^2 - 3x + 2'], // a fractional root: (2x − 1) peeled off
+  ['factor', 'x^4 + 5x^2 + 4'], // substitution
+  ['factor', 'x^4 + 4'], // completing the square
+  ['factor', '2x^3 - x^2 - 2x + 1'], // grouping
+  ['factor', '(x + 1)^2 - 4'], // a bracket multiplied out first
+  ['expand', '(2x + 3)(3x - 1)'],
+  ['expand', '(x + 2)^2 - (x - 2)^2'], // more than one piece
+  ['expand', '(x + 1)^5'], // one piece, several brackets
+  ['divide', '(x^3 - 6x^2 + 11x - 6)/(x - 1)'],
+  ['divide', '(x^3 + 1)/(2x + 1)'], // fractions on the staircase
+  ['partial', '(3x + 5)/((x + 1)(x + 2))'], // cover-up rule
+  ['partial', '(3x + 5)/((2x + 1)(x + 2))'], // cover-up with a fractional root
+  ['partial', '(2x + 1)/((x + 1)(x^2 + 1))'], // equating coefficients
+  ['partial', '(x^3)/((x + 1)(x + 2))'], // improper, divided first
+  ['complex', '(2 + 3i)(4 - 5i)'], // no fraction
+  ['complex', '(2 + 3i)/(1 - i)'], // division by the conjugate
+  ['complex', '3 + 4i'], // modulus, argument, conjugate
+  ['solve', 'x^2 + 4x + 13 = 0'], // complex roots
+  ['solve', 'x^2 - 5x + 6 = 0'], // real roots
+  ['solve', 'x/2 + 1 = 4'], // linear, a fraction in front
+  ['solve', '2x + 1 = 7'], // linear, whole coefficient
+  ['factorComplex', 'x^2 + 4'],
+  ['factorComplex', 'x^4 - 16'],
+  ['factorComplex', 'x^4 + 1'] // the surd-completed-square branch
+]
+
+type Walked = [where: string, w: ReturnType<typeof runPure>]
+
+/** Every worked answer the wording checks walk: the panel's examples and the branch walk above. */
+const everyWorking = (): Walked[] => [
+  ...JOBS.map((job): Walked => [`${job.id} "${job.example}"`, runPure(job.id, job.example)]),
+  ...STAGE_WALK.map(([job, src]): Walked => [`${job} "${src}"`, runPure(job, src)])
+]
+
 describe('the check sentence', () => {
   it('reads as words, not as LaTeX', () => {
     expect(texToPlain(String.raw`6x^{2} + 7x - 3`)).toBe('6x² + 7x - 3')
@@ -365,15 +422,90 @@ describe('the check sentence', () => {
   })
 
   it('leaves no backslashes or braces anywhere a student can see', () => {
-    // Everything read as a sentence — the check line, every step heading, every note — goes
-    // through texToPlain before it is shown, so none of it may still look like LaTeX afterwards.
-    for (const job of JOBS) {
-      const w = runPure(job.id, job.example)
-      const sentences = [w.check ?? '', ...w.moves.map((m) => m.head), ...w.moves.map((m) => m.note ?? '')]
+    // Everything read as a sentence — the check line, every step heading, every note, every
+    // stage heading — goes through texToPlain before it is shown, so none of it may still look
+    // like LaTeX afterwards.
+    for (const [where, w] of everyWorking()) {
+      const sentences = [w.check ?? '', ...w.moves.map((m) => m.head), ...w.moves.map((m) => m.note ?? ''), ...w.moves.map((m) => m.subgoal ?? '')]
       for (const raw of sentences) {
-        expect(texToPlain(raw), `${job.id}: ${raw}`).not.toMatch(/[\\{}]/)
+        expect(texToPlain(raw), `${where}: ${raw}`).not.toMatch(/[\\{}]/)
       }
     }
+  })
+
+  it('never puts LaTeX straight into a head, even before texToPlain runs', () => {
+    // A head is a spoken sentence; only `tex` and `rule` are meant to carry backslashes. Checking
+    // the raw string (not the texToPlain'd one) catches a head that was written as LaTeX by
+    // mistake, which texToPlain would otherwise quietly clean up and hide. The branch walk is in
+    // here as well as the panel's examples: the factor-theorem head and expand's "In …" prefix
+    // both spliced \left(…\right) into a sentence on branches the examples never reach.
+    for (const [where, w] of everyWorking()) {
+      expect(w.error, where).toBeUndefined()
+      for (const m of w.moves) {
+        expect(m.head, `${where}: ${m.head}`).not.toMatch(/\\/)
+      }
+    }
+  })
+})
+
+describe('subgoal labels', () => {
+  it('every generator names what each stage of its working is for', () => {
+    for (const [where, w] of everyWorking()) {
+      expect(w.error, where).toBeUndefined()
+      expect(w.moves.some((m) => m.subgoal), `${where} set no subgoal`).toBe(true)
+    }
+  })
+
+  it('a subgoal is a short plain label, never LaTeX', () => {
+    for (const [where, w] of everyWorking()) {
+      for (const m of w.moves) {
+        if (!m.subgoal) continue
+        expect(m.subgoal, `${where}: ${m.subgoal}`).not.toMatch(/\\/)
+        expect(m.subgoal.split(/\s+/).length, `${where}: ${m.subgoal}`).toBeLessThanOrEqual(5)
+      }
+    }
+  })
+
+  it('never heads two stages in a row with the same words', () => {
+    // A long division used to say "Divide the leading terms" above every row of the staircase,
+    // and (x + 1)⁵ said "Multiply the brackets out" four times: a heading that repeats verbatim
+    // stops reading as "what we are doing now".
+    for (const [where, w] of everyWorking()) {
+      const headings = w.moves.map((m) => m.subgoal).filter((g): g is string => g !== undefined)
+      headings.forEach((g, i) => {
+        if (i > 0) expect(g, `${where}: "${g}" twice in a row`).not.toBe(headings[i - 1])
+      })
+    }
+  })
+
+  it('a bracket typed as a power is not a bracket to multiply out', () => {
+    // The Maths screen hands 6x² + 9x over as 6x^(2)+9x, and that used to open the working with
+    // a "Multiply out first" stage whose maths was just the question again.
+    const w = runPure('factor', latexToMath('6x^2+9x'))
+    expect(w.moves).toHaveLength(1)
+    expect(w.moves[0].subgoal).toBe('Take out the common factor')
+    expect(w.moves[0].head).toBe('Every term has 3x in it, so take it out at the front.')
+    // A real bracket still is.
+    expect(runPure('factor', '(x + 1)^2 - 4').moves[0].subgoal).toBe('Multiply out first')
+  })
+
+  it('Steps.goal names the very next move, and only that one', () => {
+    const s = new Steps()
+    s.goal('Find the common factor').add('First step.')
+    s.add('Second step, no goal of its own.')
+    s.goal('Check by multiplying back').add('Third step.')
+    expect(s.moves.map((m) => m.subgoal)).toEqual(['Find the common factor', undefined, 'Check by multiplying back'])
+  })
+
+  it('Steps.goal ignores the stage that is already running', () => {
+    // splitQuadratic is called once per quadratic factor of x⁴ + 1 and names its stage each
+    // time; the second call must not put the same heading up again.
+    const s = new Steps()
+    s.goal('Split each quadratic factor').add('The first one.')
+    s.goal('Split each quadratic factor').add('The second one.')
+    s.goal('Write the finished factors').add('Together.')
+    s.goal('Split each quadratic factor').add('A later stage with the old name is a new heading.')
+    expect(s.moves.map((m) => m.subgoal)).toEqual(['Split each quadratic factor', undefined, 'Write the finished factors', 'Split each quadratic factor'])
   })
 })
 
