@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { FILE_VERSION, migrate, migrateLabelSettings, parseSceneFile, spacesForV1 } from '../src/renderer/src/core/migrate'
 import { blankSceneFile, DEFAULT_SETTINGS, useScene } from '../src/renderer/src/core/store'
 import type { SceneFile, SceneObject } from '../src/renderer/src/core/types'
-import { hasWork } from '../src/renderer/src/app/autosave'
+import { describeWork, hasWork } from '../src/renderer/src/app/autosave'
 import { emptyTable, setCell, useLab } from '../src/renderer/src/lab/labStore'
 import { startingScene, useSandbox } from '../src/renderer/src/sim/store'
 import { DEFAULT_WORLD, type WorldSettings } from '../src/renderer/src/sim/types'
@@ -349,5 +349,27 @@ describe('hasWork (what the autosave offers back)', () => {
     scene().newScene()
     const text = JSON.stringify(scene().serialize())
     expect(hasWork(parseSceneFile(text))).toBe(false)
+  })
+})
+
+describe('describeWork (what the recovery strip names)', () => {
+  it('names only what differs from a new file: readings alone are readings, not "0 objects" and a sandbox', () => {
+    const blank = blankSceneFile()
+    expect(describeWork(blank)).toBe('')
+    expect(describeWork({ ...blank, lab: [setCell(emptyTable('Experiment'), 0, 0, 1)] })).toBe('1 table of readings')
+    expect(describeWork({ ...blank, lab: [setCell(emptyTable('A'), 0, 0, 1), setCell(emptyTable('B'), 1, 1, 2), emptyTable('C')] })).toBe('2 tables of readings')
+    expect(describeWork({ ...blank, objects: [point('p', 'A', [0, 0, 0])] })).toBe('1 object')
+  })
+
+  it('counts the sandbox only once it differs from the starting scene', () => {
+    const blank = blankSceneFile()
+    const sandbox = blank.sandbox!
+    expect(describeWork({ ...blank, sandbox: { ...sandbox, bodies: [...sandbox.bodies, ...startingScene().slice(1, 2)] } })).toBe('a sandbox with 4 things')
+    const [floor, ball] = sandbox.bodies
+    const link = { id: 'l1', kind: 'string' as const, a: floor.id, b: ball.id, length: 2, stiffness: 0, damping: 0 }
+    expect(describeWork({ ...blank, sandbox: { ...sandbox, links: [link] } })).toBe('a sandbox with 3 things and 1 connection')
+    expect(describeWork({ ...blank, sandbox: { ...sandbox, world: { ...sandbox.world, gravity: 0 } } })).toBe('changed sandbox settings')
+    // Everything at once, in the order a student would look for it.
+    expect(describeWork({ ...fullFile(), sandbox: { ...sandbox, sideView: false } })).toBe('5 objects, 1 table of readings, changed sandbox settings')
   })
 })

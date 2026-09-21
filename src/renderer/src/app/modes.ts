@@ -120,6 +120,14 @@ export const modeById = (id: ModeId) => MODES.find((m) => m.id === id) ?? MODES[
 /** The modes a student can open today; the rest are announced, not clickable. */
 export const readyModes = (): ModeDef[] => MODES.filter((m) => m.ready)
 
+/**
+ * Whether the mode shows the maths drawing, whose 2D/3D switch, grid and snapping apply. The
+ * Sandbox and the GPU Lab are 3D worlds of their own: the viewport hides those switches there, and
+ * the keyboard and the View menu must agree, or a brushed 3 key dropped the particles into a flat
+ * 2D view with no button on screen to bring 3D back.
+ */
+export const isDrawingMode = (id: ModeId): boolean => id !== 'sandbox' && id !== 'gpu'
+
 const INFO_KEY = 'physlab.graphicsInfo'
 
 const readGraphicsInfo = (): boolean => {

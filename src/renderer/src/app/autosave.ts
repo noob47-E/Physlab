@@ -37,6 +37,27 @@ export function hasWork(file: SceneFile, blank: SceneFile = blankSceneFile()): b
 }
 
 /**
+ * What the recovery strip names inside the brackets: only the parts that differ from File ▸ New,
+ * or nothing. It used to count objects and sandbox bodies whatever the student had done, so
+ * readings typed into Lab Data came back as "0 objects, a sandbox with 3 things" — the three
+ * being the starting scene nobody had touched.
+ */
+export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile()): string {
+  const parts: string[] = []
+  const objects = file.objects.length
+  if (objects) parts.push(`${objects} ${objects === 1 ? 'object' : 'objects'}`)
+  const tables = (file.lab ?? []).filter((t) => t.rows.some((row) => row.some((cell) => cell !== null && cell !== undefined))).length
+  if (tables) parts.push(`${tables} ${tables === 1 ? 'table' : 'tables'} of readings`)
+  const sandbox = asLoaded(file, blank).sandbox
+  if (sandbox && blank.sandbox && fingerprint({ ...blank, sandbox }) !== fingerprint(blank)) {
+    const same = sandbox.bodies.length === blank.sandbox.bodies.length && !sandbox.links.length
+    // Bodies and links the student added are worth naming; a changed gravity alone is not a count.
+    parts.push(same ? 'changed sandbox settings' : `a sandbox with ${sandbox.bodies.length} things${sandbox.links.length ? ` and ${sandbox.links.length} ${sandbox.links.length === 1 ? 'connection' : 'connections'}` : ''}`)
+  }
+  return parts.join(', ')
+}
+
+/**
  * The file as `loadScene` would take it in: a missing lab or sandbox block becomes the blank
  * one, and world settings a file predates are filled from the defaults. Compared raw, an
  * autosave from a build without those blocks read as work with "0 objects" in it.

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
-import { useApp } from '../app/modes'
+import { isDrawingMode, useApp } from '../app/modes'
 import { Box, Camera, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
@@ -162,7 +162,7 @@ export function Viewport() {
   const graphicsInfo = useApp((s) => s.graphicsInfo)
   // The 2D/3D, grid, snap and label controls belong to the maths drawing. The Sandbox and the
   // GPU Lab are 3D worlds of their own where those switches did nothing but confuse.
-  const drawing = mode !== 'sandbox' && mode !== 'gpu'
+  const drawing = isDrawingMode(mode)
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
   const theme = useTheme((t) => t.theme)
   const canvasBg = themeColor('--canvas-bg')

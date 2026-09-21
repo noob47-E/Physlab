@@ -40,7 +40,7 @@ export function enterMode(id: ModeId) {
   // first question SymPy is asked gets its answer sooner; it used to start only when first asked.
   if (id === 'calculator' && !casWarmed) {
     casWarmed = true
-    void warmupCas().catch(() => {})
+    warmupCas()
   }
 }
 

@@ -182,6 +182,17 @@ describe('the contract with the Python worker', () => {
       if (req) expect(CAS_OPS, `${j.id} asks for an unknown op`).toContain(req.op)
     }
   })
+
+  it('a warm-up is not a question: it carries no id, so nothing waits, counts as busy or times out', () => {
+    // Sent through cas() it was a request like any other: the strip said "Working…" with a Stop
+    // button while SymPy loaded, and a slow first launch hit the 30 s timer and killed the worker.
+    const client = readSource('src/renderer/src/math/cas.ts')
+    expect(client).toMatch(/warmupCas = \(\): void => \{\s*getWorker\(\)\.postMessage\(\{ op: 'warmup'/)
+    expect(client).not.toMatch(/warmupCas = \(\) => cas\(/)
+    const worker = readSource('src/renderer/src/workers/cas.worker.ts')
+    expect(worker).toContain("if (id === undefined || op === 'warmup')")
+    expect(worker).toContain('if (id !== undefined) postMessage({ id, result: { error: String(err) } })')
+  })
 })
 
 describe('reading a displayed answer back', () => {

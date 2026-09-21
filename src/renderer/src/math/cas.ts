@@ -117,5 +117,15 @@ export function cas(op: string, payload: Record<string, unknown> = {}): Promise<
   })
 }
 
-/** Start loading SymPy in the background so the first real request is fast. */
-export const warmupCas = () => cas('warmup')
+/**
+ * Start loading SymPy in the background so the first real request is fast.
+ *
+ * This deliberately bypasses `cas()`: a warm-up is not a question. Sent as a request it counted as
+ * busy for the whole load, so opening the Calculator showed "Working…" and a Stop button for a
+ * question nobody had asked — and on a slow first launch the 30 s timer killed the half-loaded
+ * worker, which then booted again from nothing for the first real answer. With no id the worker
+ * loads and says nothing back; the status strip reads "Starting algebra…" meanwhile, which is true.
+ */
+export const warmupCas = (): void => {
+  getWorker().postMessage({ op: 'warmup', payload: {} })
+}

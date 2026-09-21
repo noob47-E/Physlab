@@ -3,7 +3,7 @@ import { newProject, openProject, saveProject } from './files'
 import { scene } from '../core/store'
 import { TOOLS, cancelTool, finishTool, resetTool, undoLastPick, useTool } from '../render/tools'
 import { resetCamera } from '../render/viewState'
-import { useApp } from './modes'
+import { isDrawingMode, useApp } from './modes'
 import { useSandbox } from '../sim/store'
 import { useLab } from '../lab/labStore'
 import { visibleOrder } from '../core/visibility'
@@ -111,6 +111,8 @@ export function useShortcuts() {
           if (s.selection.length) s.removeObjects(s.selection)
           return
         case VIEW_KEY:
+          // The GPU Lab hides the 2D/3D switch, so the key must not flip what no button can undo.
+          if (!isDrawingMode(useApp.getState().mode)) return
           s.setViewMode(s.viewMode === '2d' ? '3d' : '2d')
           return
         case 'Home':

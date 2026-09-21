@@ -24,7 +24,7 @@ import {
   Waypoints
 } from 'lucide-react'
 import { newProject, openProject, saveProject } from './files'
-import { MODES, modeById, useApp } from './modes'
+import { MODES, isDrawingMode, modeById, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
 import { TOOLS } from '../render/tools'
@@ -395,8 +395,9 @@ export function TopBar() {
       <Menu
         label="View"
         items={[
-          { label: '2D view', sc: '3', run: () => s().setViewMode('2d') },
-          { label: '3D view', sc: '3', run: () => s().setViewMode('3d') },
+          // Greyed where the drawing is not shown (Sandbox, GPU Lab), the same rule as the key.
+          { label: '2D view', sc: '3', disabled: !isDrawingMode(mode), run: () => s().setViewMode('2d') },
+          { label: '3D view', sc: '3', disabled: !isDrawingMode(mode), run: () => s().setViewMode('3d') },
           { label: 'Reset camera', sc: 'Home', run: resetCamera },
           '-',
           { label: `Grid: ${showGrid ? 'on' : 'off'}`, run: () => s().setSettings({ showGrid: !showGrid }) },

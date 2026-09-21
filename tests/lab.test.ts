@@ -7,6 +7,7 @@ import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/render
 import { chartSeries } from '../src/renderer/src/lab/chartData'
 import { applyPaste, cellNumber, csvFileName, parseTable, toCsv } from '../src/renderer/src/lab/csv'
 import type { LabTable } from '../src/renderer/src/lab/types'
+import { fmtPrecise } from '../src/renderer/src/math/format'
 
 /** A table of t and d with the readings filled in. */
 function freeFall(): LabTable {
@@ -27,6 +28,16 @@ describe('working out a column from the others', () => {
     const { values, errors } = resolveValues(table)
     expect(errors).toEqual({})
     expect(values.map((r) => r[2])).toEqual([0.2, 0.4, 0.6, 0.8, 1].map((t) => t * t))
+  })
+
+  it("shows a worked-out cell in the student's precision, not a fixed four decimals", () => {
+    // The panel prints resolved values through fmtPrecise; t = 0.45 gives t² = 0.2025, which a
+    // student who chose 2 d.p. must read as 0.2 like every other number on screen.
+    const table = addColumn(setCell(freeFall(), 0, 0, 0.45), { name: 'tsq', formula: 't^2' })
+    const cell = resolveValues(table).values[0][2] as number
+    expect(cell).toBeCloseTo(0.2025, 12)
+    expect(fmtPrecise(cell, { decimals: 2, precisionMode: 'dp' })).toBe('0.2')
+    expect(fmtPrecise(cell, { decimals: 3, precisionMode: 'sf' })).toBe('0.203')
   })
 
   it('leaves a cell empty when a reading it needs is missing', () => {

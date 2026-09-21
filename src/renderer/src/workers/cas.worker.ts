@@ -131,7 +131,7 @@ async function boot(): Promise<Py> {
   return instance
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; op: string; payload: object }>) => {
+self.onmessage = async (e: MessageEvent<{ id?: number; op: string; payload: object }>) => {
   const { id, op, payload } = e.data
   try {
     if (!py) {
@@ -146,8 +146,10 @@ self.onmessage = async (e: MessageEvent<{ id: number; op: string; payload: objec
       }
       postMessage({ status: 'ready' })
     }
-    if (op === 'warmup') {
-      postMessage({ id, result: { ok: true } })
+    // A message with no id is a warm-up: nothing is waiting for an answer, so none is sent. (The
+    // client's `cas()` always gives an id; only `warmupCas` leaves it out.)
+    if (id === undefined || op === 'warmup') {
+      if (id !== undefined) postMessage({ id, result: { ok: true } })
       return
     }
     const run = py.globals.get('cas_run')
@@ -155,6 +157,6 @@ self.onmessage = async (e: MessageEvent<{ id: number; op: string; payload: objec
     postMessage({ id, result: JSON.parse(json) })
   } catch (err) {
     postMessage({ status: 'error', message: String(err) })
-    postMessage({ id, result: { error: String(err) } })
+    if (id !== undefined) postMessage({ id, result: { error: String(err) } })
   }
 }

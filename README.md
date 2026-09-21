@@ -153,7 +153,7 @@ Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one c
 - `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `lcm(12, 18)`, `primes(360)`, `divide((x^3-1)/(x-1))`, `partial((3x+5)/((x+1)(x+2)))`, `complex((2+3i)/(1-i))` — each writes out its working in the Working panel
 - `k = 2` makes a slider; use `t` in formulas and press Play to animate. Type `help` for more.
 
-Shortcuts: `Ctrl+K` search · `Tab` 2D/3D · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project.
+Shortcuts: `Ctrl+K` search · `3` 2D/3D · `Tab` moves between the controls · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project · `Ctrl+=` / `Ctrl+−` / `Ctrl+0` bigger, smaller, normal text.
 
 ## Teachers and classrooms
 

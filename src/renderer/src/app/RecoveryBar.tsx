@@ -1,5 +1,5 @@
 import { RotateCcw, X } from 'lucide-react'
-import { clearAutosave, useRecovery } from './autosave'
+import { clearAutosave, describeWork, useRecovery } from './autosave'
 import { scene, useScene } from '../core/store'
 
 /** "Restore your last work" strip, shown when the app finds unsaved work from a previous run. */
@@ -9,12 +9,14 @@ export function RecoveryBar() {
   if (!found) return null
   const when = new Date(found.savedAt)
   const name = found.path ? found.path.split(/[\\/]/).pop() : 'untitled'
+  // Only what differs from a new file is named; a title typed into an empty table, say, has
+  // nothing to count, and then the time alone has to do.
+  const what = describeWork(found.file)
   return (
     <div className="flex items-center gap-3 border-b border-warn/40 bg-warn/10 px-3 py-1.5 text-ink">
       <RotateCcw size={14} />
       <span className="flex-1">
-        PhysLab closed with unsaved work in <b>{name}</b> ({found.file.objects.length} objects
-        {found.file.sandbox ? `, a sandbox with ${found.file.sandbox.bodies.length} things` : ''}, {when.toLocaleString()}).
+        PhysLab closed with unsaved work in <b>{name}</b> ({what ? `${what}, ` : ''}{when.toLocaleString()}).
       </span>
       <button
         className="btn h-6 primary"

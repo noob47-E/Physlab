@@ -19,7 +19,7 @@ import {
   windowClass,
   zoomPercent
 } from '../src/renderer/src/app/layoutMath'
-import { MODES } from '../src/renderer/src/app/modes'
+import { MODES, isDrawingMode } from '../src/renderer/src/app/modes'
 import { TOOLS } from '../src/renderer/src/render/tools'
 import { WELCOME_JOB, WELCOME_PROMISE } from '../src/renderer/src/app/tour/steps'
 import { JOBS, runPure } from '../src/renderer/src/math/pure/run'
@@ -249,5 +249,15 @@ describe('the Welcome screen tile "Show your working"', () => {
     const w = runPure(job.id, job.example)
     expect(w.answers[0].tex).toBe('\\left(3x - 1\\right)\\left(2x + 3\\right)')
     expect(w.check).toContain('the original')
+  })
+})
+
+describe('which modes show the maths drawing', () => {
+  it('the Sandbox and the GPU Lab are worlds of their own; every other mode draws', () => {
+    // The viewport hides the 2D/3D switch on this rule, and the 3 key and the View menu follow
+    // it: a key that flips a view no button can flip back is a trap.
+    expect(isDrawingMode('sandbox')).toBe(false)
+    expect(isDrawingMode('gpu')).toBe(false)
+    for (const m of MODES) if (m.id !== 'sandbox' && m.id !== 'gpu') expect(isDrawingMode(m.id), m.id).toBe(true)
   })
 })
