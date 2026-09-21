@@ -6,7 +6,7 @@ import type { MathNode } from 'mathjs'
 import { Builder } from '../core/factory'
 import { scene } from '../core/store'
 import { parseExpr } from '../core/evaluate'
-import { isValidName } from '../core/naming'
+import { freeCapitals, isValidName } from '../core/naming'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { visualizeGraph, visualizePoint, visualizeSolution, visualizeVector } from '../core/visualize'
 import { cas } from '../math/cas'
@@ -96,13 +96,21 @@ const isGeo = (node: MathNode) => {
  * `[0, 0, -11]` with no steps and `C = A × B` refused with "not a number". Once the operands are
  * known the call is rewritten into the cross product or the ordinary product it stands for.
  */
-function resolveTimes(node: MathNode, seen?: { product: boolean }): MathNode {
+function resolveTimes(node: MathNode, seen?: ('cross' | 'product')[]): MathNode {
   return node.transform((n) => {
     const fn = n as Node
     if (fn.type !== 'FunctionNode' || (fn.fn as { name?: string }).name !== 'timesOrCross') return n
-    const [a, b] = (fn.args as MathNode[]).map((arg) => resolveTimes(arg, seen))
-    if (isGeo(a) && isGeo(b)) return new math.FunctionNode('cross', [a, b])
-    if (seen) seen.product = true
+    // The left operand's own × signs come before this one in what was typed, and the right
+    // operand's after it, so recording between the two keeps `seen` in the order the student
+    // wrote them — which is what lets parseDefinition put each decision back on its own ×.
+    const a = resolveTimes((fn.args as MathNode[])[0], seen)
+    const at = seen?.length ?? 0
+    const b = resolveTimes((fn.args as MathNode[])[1], seen)
+    if (isGeo(a) && isGeo(b)) {
+      seen?.splice(at, 0, 'cross')
+      return new math.FunctionNode('cross', [a, b])
+    }
+    seen?.splice(at, 0, 'product')
     return new math.OperatorNode('*', 'multiply', [a, b])
   })
 }
@@ -110,15 +118,34 @@ function resolveTimes(node: MathNode, seen?: { product: boolean }): MathNode {
 const parseNode = (src: string): Node => resolveTimes(math.parse(preprocess(src))) as Node
 
 /**
+ * The × of "2×10^3" is part of a number, not an operator: preprocess folds it away before any
+ * × is read, so it has no decision in `seen` and must be skipped when the decisions are put back.
+ */
+const isScientificTimes = (src: string, at: number): boolean =>
+  /\d\s*$/.test(src.slice(0, at)) && /^\s*10\s*\^\s*\(?\s*-?\d+\s*\)?/.test(src.slice(at + 1))
+
+/**
  * The text an assignment keeps as its live definition. core/evaluate.ts re-parses it with the
  * runtime `timesOrCross`, which only knows vector × vector, so `C = 2 × A` stored as typed
- * failed with "Expected a vector or point" while the bare `2 × A` answered 2A. When a × was
- * resolved into a plain product, the resolved form (`2 * A`) is what gets kept.
+ * failed with "Expected a vector or point" while the bare `2 × A` answered 2A. A × that stands
+ * for a plain product is stored as `*`, in the line as the student typed it: rewriting the whole
+ * parsed tree instead kept `Z = 2 × A × B` as `cross(2 * A, B)`, and that function-call spelling
+ * is what the Properties panel then showed in its definition field.
  */
 function parseDefinition(src: string): { node: Node; expr: string } {
-  const seen = { product: false }
+  const seen: ('cross' | 'product')[] = []
   const node = resolveTimes(math.parse(preprocess(src)), seen) as Node
-  return { node, expr: seen.product ? node.toString() : src }
+  if (!seen.includes('product')) return { node, expr: src }
+  let expr = ''
+  let next = 0
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]
+    if (ch !== '×' || isScientificTimes(src, i)) expr += ch
+    else expr += seen[next++] === 'product' ? '*' : '×'
+  }
+  // Every decision has to land on a ×, or the text and the tree disagree: then the tree is the
+  // safer thing to keep, even in its plainer spelling.
+  return { node, expr: next === seen.length ? expr : node.toString() }
 }
 
 export function describeComputed(c: Computed | undefined, decimals = 3): string {
@@ -604,9 +631,25 @@ interface VecArg {
   v: V3
 }
 
-function vecArg(node: Node, fallback: string): VecArg {
-  const name = node.type === 'SymbolNode' ? (node.name as string) : fallback
-  return { name, v: toV3(evaluateNode(node)) }
+/**
+ * Names the operands of one command for its steps. A symbol keeps its own name; anything else —
+ * a literal `<1, 0>`, a sum `A + B` — needs a letter, and it must be one no object in the drawing
+ * has: falling back to a fixed A or B put "B = 1i" in the working of `A × <1, 0>` while the
+ * student's B was <2, −1>, and titled `cross(A + B, A)` "Vector product A×A". The result's own
+ * letter goes through the same namer so it cannot collide with an operand either.
+ */
+function operandNamer(): { arg: (node: Node, preferred: string) => VecArg; letter: (preferred: string) => string } {
+  const taken = new Set(scene().ev.names.keys())
+  const letter = (preferred: string): string => {
+    const name = taken.has(preferred) ? freeCapitals(taken, 1)[0] : preferred
+    taken.add(name)
+    return name
+  }
+  const arg = (node: Node, preferred: string): VecArg => {
+    const name = node.type === 'SymbolNode' ? (node.name as string) : letter(preferred)
+    return { name, v: toV3(evaluateNode(node)) }
+  }
+  return { arg, letter }
 }
 
 /**
@@ -621,6 +664,7 @@ export function solutionFor(root: MathNode, name?: string): VS.Solution | null {
   const result = name ?? 'R'
   while (node.type === 'ParenthesisNode') node = node.content as Node
   const vecSym = (n: Node) => n.type === 'SymbolNode' && kindOfName(n.name as string) === 'vector'
+  const { arg: vecArg, letter } = operandNamer()
   try {
     if (node.type === 'OperatorNode') {
       const args = node.args as Node[]
@@ -639,11 +683,11 @@ export function solutionFor(root: MathNode, name?: string): VS.Solution | null {
       const fname = (node.fn as { name: string }).name
       const args = node.args as Node[]
       if (fname === 'polarVec' && args.length === 2) return VS.solveResolve({ name: name ?? 'A', v: toV3(evaluateNode(node)) }, settings)
-      // Steps name their operands, and vecArg can only name a symbol or fall back to a default
-      // letter: `(A + B) × A` was titled "Vector product A×A" and worked through a B that was not
-      // the student's B. A compound operand gets the answer without the misleading working.
+      // A compound operand such as `(A + B) × A` gets the answer without working: the steps
+      // would have to call A + B by a letter of their own, and a line typed as an expression
+      // reads better with the answer alone than with a name the student never gave.
       if (!args.every((a) => vecSym(a) || isConstant(a))) return null
-      if (fname === 'cross' && args.length === 2 && args.every(isGeo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'), name ?? 'C', settings)
+      if (fname === 'cross' && args.length === 2 && args.every(isGeo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'), name ?? letter('C'), settings)
       if (fname === 'dot' && args.length === 2 && args.every(isGeo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
       if (fname === 'mag' && args.length === 1 && isGeo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'), settings)
       if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'), settings)
@@ -665,7 +709,8 @@ function trySolverCommand(input: string): boolean {
   const settings = scene().settings
   const args = splitArgs(m[2]).map((a) => parseNode(a))
   const num = (n: Node) => Number(evaluateNode(n))
-  const v = (i: number, name: string) => vecArg(args[i], name)
+  const namer = operandNamer()
+  const v = (i: number, name: string) => namer.arg(args[i], name)
   let sol: VS.Solution | null = null
   switch (fn) {
     case 'components':
@@ -692,7 +737,7 @@ function trySolverCommand(input: string): boolean {
       sol = VS.solveDot(v(0, 'A'), v(1, 'B'), settings)
       break
     case 'cross':
-      sol = VS.solveCross(v(0, 'A'), v(1, 'B'), 'C', settings)
+      sol = VS.solveCross(v(0, 'A'), v(1, 'B'), namer.letter('C'), settings)
       break
     case 'add':
       sol = VS.solveAddition(args.map((_, i) => v(i, String.fromCharCode(65 + i))), 'R', settings)
@@ -761,8 +806,15 @@ const PURE_WORDS: Record<string, JobId> = {
   solve: 'solve'
 }
 
-/** The Greek names the expression parser spells out (θ → theta), shown as the letter again. */
-const GREEK = new Set(['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'lambda', 'mu', 'phi', 'omega'])
+/**
+ * The Greek names the expression parser spells out (θ → theta), shown as the letter again. All of
+ * them: a list of the common few left a student's sigma or rho rendered as the word. pi is a
+ * constant and omicron has no KaTeX command, so neither is a name an unknown can carry.
+ */
+const GREEK = new Set([
+  'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
+  'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'
+])
 
 function tryPureMath(input: string): boolean {
   const m = input.match(/^\s*([a-z]+)\s*\((.*)\)\s*$/i)
@@ -771,6 +823,9 @@ function tryPureMath(input: string): boolean {
   if (!job) return false
 
   const args = splitArgs(m[2])
+  // A third argument has no meaning here, and sent on as it was, `x^3-1,x-1,3` reached SymPy as
+  // one string and came back as a parser complaint rather than the shape the bar wants.
+  if ((job === 'divide' || job === 'partial') && args.length > 2) throw new Error(`${m[1]}(numerator, denominator) or ${m[1]}(fraction)`)
   // solve(x^2-4, x) names the unknown; the pure solver works that out for itself.
   // divide(x^3-1, x-1) and partial(3x+5, (x+1)(x+2)) are the fraction written as two arguments.
   const body =
@@ -787,16 +842,23 @@ function tryPureMath(input: string): boolean {
   if (doc.error) {
     // A fraction of plain numbers is arithmetic: the refusal itself says "the calculator will do
     // that one", so it does, and divide(10, 2) answers 5 as it did before the two-argument form.
-    if ((job === 'divide' || job === 'partial') && !/[A-Za-z]/.test(body)) {
+    // "Plain" is decided by parsing, not by looking for letters: the e of 2e3 and the name pi
+    // are numbers too, and divide(2e3, 4) was being sent to SymPy for a 500 the calculator had.
+    if ((job === 'divide' || job === 'partial') && isPlainArithmetic(body)) {
       evaluatePlain(body, input)
       return true
     }
     // Not something the step engine can do. The Working panel's own fallback table
     // (math/pure/store.ts) says which jobs SymPy can take over, and the caller sends those on so
-    // an answer still appears; the rest have nowhere else to go, and falling through to plain
-    // evaluation answered divide(x^3-1, x-1) with `I don't know "x"`.
+    // an answer still appears. The rest are tried as a plain calculation, which is where
+    // complex(3, 4) is answered; only when that fails too is the refusal the last word, because
+    // its reason ("needs a whole number") is worth more than `I don't know "x"`.
     if (casRequestFor(job, body)) return false
-    logError(input, doc.error)
+    try {
+      evaluatePlain(input)
+    } catch {
+      logError(input, doc.error)
+    }
     return true
   }
 
@@ -927,6 +989,15 @@ const fmtNumeric = (n: { re: number; im?: number }) => (n.im === undefined ? tex
 // ---------------------------------------------------------------------------
 // Plain expressions
 // ---------------------------------------------------------------------------
+
+/** True when the text is a calculation in numbers, constants and units alone, with nothing to solve for. */
+function isPlainArithmetic(src: string): boolean {
+  try {
+    return isConstant(parseNode(src))
+  } catch {
+    return false
+  }
+}
 
 /** `shown` is the line the log quotes when the maths evaluated is a rewrite of what was typed. */
 function evaluatePlain(expr: string, shown = expr) {
