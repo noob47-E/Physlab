@@ -18,7 +18,7 @@ import { FIELD_MODES, MODE_HINTS, MODE_LABELS, clearCalcHistory, isFieldMode, us
 import { casioToMath, evaluateComp, type Base } from '../calc/engine'
 import { calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
-import { evaluateInput, isHeavy, lettersIn, mainLine, type EvalResult } from '../calc/evaluateInput'
+import { answerStillFor, evaluateInput, isHeavy, lettersIn, mainLine, type Answered, type EvalResult } from '../calc/evaluateInput'
 import { groupsForMode, type KeyDef, type KeyGroup, type KeyGroupId } from '../calc/keys'
 import { math } from '../math/expr'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
@@ -164,24 +164,23 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   // switch keeps the field's text (the store holds it) but an answer from the other mode's
   // rules is not shown under this one, and an answer to a line the student has since edited is
   // not shown under the new line either — on one screen it read as the answer to that line.
-  const [answered, setAnswered] = useState<{ mode: FieldMode; input: string; result: EvalResult } | null>(null)
+  const [answered, setAnswered] = useState<Answered | null>(null)
   const result = answered?.mode === mode ? answered.result : null
-  const setResult = (next: EvalResult | null | ((prev: EvalResult | null) => EvalResult | null)): void =>
-    setAnswered((prev) => {
-      const cur = prev?.mode === mode ? prev : null
-      const r = typeof next === 'function' ? next(cur?.result ?? null) : next
-      if (!r) return null
-      // A function only amends the answer already shown (the exact form arriving), so the line
-      // it belongs to is the one it had; a fresh answer belongs to what the field holds now.
-      return { mode, input: typeof next === 'function' ? (cur?.input ?? '') : useCalc.getState().input, result: r }
-    })
-  // Every keystroke lands here. The store is written first; the answer is dropped only on the
-  // first keystroke that leaves the line it answered (an unchanged state is no render), so a
-  // keystroke costs one store write and no render of this screen.
-  const onEdit = useCallback((latex: string) => {
-    useCalc.setState({ input: latex })
-    setAnswered((prev) => (prev && prev.input !== latex ? null : prev))
-  }, [])
+  /** A fresh answer belongs to what the field holds now. */
+  const setResult = (r: EvalResult | null): void => setAnswered(r ? { mode, input: useCalc.getState().input, result: r } : null)
+  // Every keystroke lands here: one store write, and no render of this screen.
+  const onEdit = useCallback((latex: string) => useCalc.setState({ input: latex }), [])
+  // The answer follows the store's line, not the keystroke: it is dropped on the first change
+  // that leaves the line it answered (an unchanged answer is no render), whichever way the line
+  // changed. Dropping it in onEdit alone missed every write that bypasses the field — a
+  // calculation recalled from History put 7×8 in the field with the answer to 2+3 still under it.
+  useEffect(
+    () =>
+      useCalc.subscribe((s, prev) => {
+        if (s.input !== prev.input) setAnswered((a) => answerStillFor(a, s.input))
+      }),
+    []
+  )
   const [showExact, setShowExact] = useState(true)
   const [eng, setEng] = useState(false)
   const [base, setBase] = useState<Base>(10)
@@ -235,7 +234,11 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       if (r.askExact) {
         cas('exact', { expr: casioToMath(r.src), deg: casInDegrees(angleUnit) }).then((res) => {
           if (!res.error && res.latex && !/\./.test(res.text) && res.text.length < 60) {
-            setResult((prev) => (prev && prev.value === r.value ? { ...prev, exact: res.latex } : prev))
+            // The exact form amends the answer it was asked for, and only while that answer is
+            // still the one held. SymPy can take seconds on a cold start, and an answer worked
+            // out in another mode meanwhile must stay: an amendment to an answer no longer held
+            // used to clear whatever had replaced it.
+            setAnswered((a) => (a && a.mode === mode && a.input === s.input && a.result.value === r.value ? { ...a, result: { ...a.result, exact: res.latex } } : a))
           }
         })
       }

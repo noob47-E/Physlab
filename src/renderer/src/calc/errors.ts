@@ -11,27 +11,52 @@ export interface ErrorSentence {
   detail?: string
 }
 
+/** The letters the calculator holds a value for: what the Variables drawer offers. */
+const OWN_LETTERS = /^[A-FMxy]$/
+
+/**
+ * Whether the engine's words are worth showing under the sentence. "Undefined symbol k" tells a
+ * student something; "Unexpected type of argument in function addScalar (expected: Unit, actual:
+ * number, index: 1)" is code, and Rule 2 applies to the small print too.
+ */
+const readable = (msg: string): boolean => !/function\b|\(char |index:|expected:/.test(msg)
+
 export function errorSentence(raw: unknown): ErrorSentence {
   const msg = raw instanceof Error ? raw.message : String(raw ?? '')
   // The engine's words are kept underneath for a student who wants them, except the Bases
   // engine's two handheld-style messages, which say nothing the sentence does not.
-  const detail = /^(Syntax|Math) ERROR$/.test(msg.trim()) ? undefined : msg.trim() || undefined
+  const detail = /^(Syntax|Math) ERROR$/.test(msg.trim()) || !readable(msg) ? undefined : msg.trim() || undefined
   // The converter's own refusals are already sentences written for the student.
   if (/^Choose \+ or −/.test(msg)) return { sentence: msg }
   if (/Empty/.test(msg)) return { sentence: 'Type something first.' }
   if (/No solution/i.test(msg)) return { sentence: 'No solution I can find near 0. Try giving x a value close to the answer first.', detail }
   // The Bases engine's one "Math ERROR" is a division by zero; everything else it refuses is syntax.
   if (/divi(de|sion) by zero|Infinity|^Math ERROR$/i.test(msg)) return { sentence: 'That divides by zero.', detail }
+  // mathjs knows t as a tonne, m as a metre and s as a second, so 2t + 1 adds a number to a unit.
+  // "Check the brackets" sent the student to the wrong place for it.
+  if (/expected: Unit/.test(msg)) {
+    return { sentence: 'A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.' }
+  }
   if (/Undefined symbol\s+(\S+)/.test(msg)) {
     const name = /Undefined symbol\s+(\S+)/.exec(msg)![1]
-    return { sentence: `I don't know what ${name} is. Give it a value under Variables, or check the spelling.`, detail }
+    // The Variables drawer holds A–F, M, x and y and nothing else, so "give it a value there"
+    // is only true of those.
+    const advice = OWN_LETTERS.test(name) ? 'Give it a value under Variables' : 'Use one of the letters A to F, M, x or y for a value'
+    return { sentence: `I don't know what ${name} is. ${advice}, or check the spelling.`, detail }
   }
-  if (/Undefined function\s+(\S+)/.test(msg)) {
-    const name = /Undefined function\s+(\S+)/.exec(msg)![1]
-    return { sentence: `There is no function called ${name}. Check the spelling, or pick one from the keypad.`, detail }
+  // "Undefined function re" from mathjs, or "'re' is not a function; its value is…" when a name
+  // in the constants list (r_e, the electron radius) shadows one.
+  if (/Undefined function\s+(\S+)|'(\S+)' is not a function/.test(msg)) {
+    const m = /Undefined function\s+(\S+)|'(\S+)' is not a function/.exec(msg)!
+    return { sentence: `There is no function called ${m[1] ?? m[2]}. Check the spelling, or pick one from the keypad.`, detail }
   }
+  // An = reaches mathjs only from the Complex field; Numbers mode solves it before mathjs sees it.
+  if (/assignment operator|left hand side/i.test(msg)) return { sentence: 'Equations are solved in Numbers mode: type both sides with = and press x = ?' }
   if (/Parenthesis|paren|bracket/i.test(msg)) return { sentence: "I can't read that — check the brackets.", detail }
-  if (/Unexpected end|Value expected|Unexpected|Syntax|Unexpected type|Cannot convert/i.test(msg)) {
+  // A complex number where a whole number was wanted (nCr), a matrix where a number was: the
+  // brackets are fine.
+  if (/Unexpected type of argument/.test(msg)) return { sentence: 'Those numbers do not fit this function.' }
+  if (/Unexpected end|Value expected|Unexpected|Syntax|Cannot convert/i.test(msg)) {
     return { sentence: "I can't read that — check the brackets, and that every operator has a number on each side.", detail }
   }
   if (/must be|out of range|not (a )?(valid|supported)|expected/i.test(msg)) return { sentence: 'Those numbers do not fit this function.', detail }

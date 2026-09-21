@@ -6,7 +6,7 @@
 // line, the extras, the exact form when one is known at once, and a sentence when it fails.
 // It never touches the store: the caller decides what to remember.
 
-import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, formatValue, type Base } from './engine'
+import { argOf, casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, formatValue, tidyComplex, type Base } from './engine'
 import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
 import { errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
@@ -39,6 +39,20 @@ export interface EvalResult {
   /** True when the input was an equation and its root should become x. */
   solved?: boolean
 }
+
+/** An answer on the screen: the mode it was worked out under and the line it answers. */
+export interface Answered {
+  mode: FieldMode
+  input: string
+  result: EvalResult
+}
+
+/**
+ * The answer that may stay under the field now that it holds `input`: the one it had if it still
+ * answers that line, else none. The same object comes back when nothing changed, so a setState
+ * with it is no render — a keystroke must not redraw the screen.
+ */
+export const answerStillFor = <A extends { input: string }>(answered: A | null, input: string): A | null => (answered && answered.input === input ? answered : null)
 
 /** The field's LaTeX as the engine's linear syntax; Bases mode types linear text already. */
 export function linearOf(mode: FieldMode, input: string): string {
@@ -74,9 +88,11 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     }
     if (mode === 'CMPLX') {
       setAngleMode(opts.angle)
-      const v = math.evaluate(casioToMath(src), { ...constantScope(), ...opts.vars, i: math.complex(0, 1), Ans: opts.ans }) as unknown
-      const c = math.complex(v as never) as unknown as { re: number; im: number }
-      if (!Number.isFinite(c.re) || !Number.isFinite(c.im)) return { main: '', src, error: nonFiniteSentence(Number.isNaN(c.re) || Number.isNaN(c.im) ? NaN : Infinity, src) }
+      // arg follows the angle switch like atan2 does: the extras line under it says "angle 45°".
+      const v = math.evaluate(casioToMath(src), { ...constantScope(), ...opts.vars, i: math.complex(0, 1), Ans: opts.ans, arg: argOf }) as unknown
+      const raw = math.complex(v as never) as unknown as { re: number; im: number }
+      if (!Number.isFinite(raw.re) || !Number.isFinite(raw.im)) return { main: '', src, error: nonFiniteSentence(Number.isNaN(raw.re) || Number.isNaN(raw.im) ? NaN : Infinity, src) }
+      const c = tidyComplex(raw)
       const r = Math.hypot(c.re, c.im)
       const th = Math.atan2(c.im, c.re)
       // The same formatter as the Numbers mode, so 2 + i never reads "2 + 1i" here and "2 + i" there.

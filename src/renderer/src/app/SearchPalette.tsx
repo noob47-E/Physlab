@@ -9,7 +9,7 @@ import { useTour } from './tour/Tour'
 import type { LengthUnit } from '../core/types'
 import { TOOLS } from '../render/tools'
 import { EXAMPLES, runExample } from '../panels/Examples'
-import { useCalc, type CalcMode } from '../calc/calcStore'
+import { MODE_HINTS, MODE_LABELS, useCalc, type CalcMode } from '../calc/calcStore'
 import { UNIT_NAMES } from '../math/format'
 import { GRID_STYLES } from '../render/gridMath'
 import { confirmClearDrawing } from './contextActions'
@@ -51,8 +51,9 @@ function buildItems(): Item[] {
   for (const cm of CALC_MODES) {
     items.push({
       group: 'Calculator',
-      title: `Calculator ${cm}`,
-      hint: 'Open this calculator mode',
+      // The words the Maths screen uses, never the ids: "Calculator CMPLX" was the handheld's look.
+      title: `Calculator: ${MODE_LABELS[cm]}`,
+      hint: MODE_HINTS[cm],
       run: () => {
         enterMode('calculator')
         useCalc.setState({ mode: cm })

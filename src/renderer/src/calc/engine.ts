@@ -1,7 +1,7 @@
 // Numeric engine behind the calculator panel (fx-991EX feature set and more).
 
 import type { MathNode } from 'mathjs'
-import { math, preprocess, setAngleMode, splitArgs } from '../math/expr'
+import { fromRadians, math, preprocess, setAngleMode, splitArgs } from '../math/expr'
 import { constantScope } from './constants'
 import { calcNum, mathFormatOptions } from './format'
 
@@ -184,6 +184,26 @@ math.import(
   { override: true }
 )
 
+/**
+ * The argument of a complex number in the angle unit the screen shows, the way atan2 and the
+ * inverse trig functions already do. mathjs's own arg answers in radians whatever the switch
+ * says, so in degrees arg(1 + i) read 0.79 under a card that called the same angle 45°.
+ */
+export const argOf = (z: unknown): number => {
+  const c = math.complex(z as never) as unknown as { re: number; im: number }
+  return fromRadians(Math.atan2(c.im, c.re))
+}
+
+/**
+ * A part that is only round-off beside the other is written as 0: the polar key gives 2∠90° a
+ * real part of cos(90°) × 2 = 1.2×10⁻¹⁶, and every handheld shows 2i. The floor is relative to
+ * the number's own size, never absolute — an answer of 1.6×10⁻¹⁹ on its own must survive.
+ */
+export function tidyComplex(c: { re: number; im: number }): { re: number; im: number } {
+  const eps = 1e-12 * Math.max(Math.abs(c.re), Math.abs(c.im))
+  return { re: Math.abs(c.re) < eps ? 0 : c.re, im: Math.abs(c.im) < eps ? 0 : c.im }
+}
+
 export interface CalcOutput {
   value: unknown
   /** Main display string. */
@@ -204,7 +224,7 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
   setAngleMode(ctx.angle)
   const src = input.trim()
   if (!src) throw new Error('Empty')
-  const scope: Record<string, unknown> = { ...constantScope(), ...ctx.vars, Ans: ctx.ans ?? 0 }
+  const scope: Record<string, unknown> = { ...constantScope(), ...ctx.vars, Ans: ctx.ans ?? 0, arg: argOf }
 
   // splitArgs, not a regex: Pol(max(1,3), 4) must split on the right comma.
   const pol = src.match(/^Pol\((.*)\)$/i)
@@ -252,7 +272,7 @@ export function formatValue(v: unknown): string {
   // A complex number's two parts are numbers, and they follow the same never-pad rule as any
   // other: mathjs's fixed notation wrote 2.00i on the same screen as a trimmed 5.
   if (math.isComplex(v)) {
-    const c = v as { re: number; im: number }
+    const c = tidyComplex(v as { re: number; im: number })
     if (c.im === 0) return calcNum(c.re)
     const im = Math.abs(c.im) === 1 ? 'i' : `${calcNum(Math.abs(c.im))}i`
     return c.re === 0 ? `${c.im < 0 ? '−' : ''}${im}` : `${calcNum(c.re)} ${c.im < 0 ? '−' : '+'} ${im}`

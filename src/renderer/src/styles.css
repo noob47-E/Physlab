@@ -1016,6 +1016,10 @@ math-field.math-input::part(menu-toggle) {
   flex: 1;
   min-width: 0;
   align-content: start;
+}
+/* Only the Constants group is tall enough to need a scrollbar. A scrolling group clips the
+   relatives that hang under its last row (polar → x, y), so the rest stay overflow: visible. */
+.keypad-body > .keys-constants {
   overflow-y: auto;
 }
 .keys {

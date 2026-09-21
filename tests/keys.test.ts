@@ -181,7 +181,8 @@ describe('nothing that looks like the fx-991EX survives', () => {
   // Maths screen turns every one into a sentence (calc/errors.ts, tests/maths.test.ts), and
   // tests/calc.test.ts pins them, so a `throw new Error('…')` and the pattern that recognises
   // it are stripped before the scan.
-  const BANNED = [/\bSHIFT\b/, /\bALPHA\b/, /\bSTO\b/, /\bRCL\b/, /S⇔D/, /Ran#/, /Math ERROR/, /Syntax ERROR/, /Math▲/]
+  // The last two are the search palette's old rows, "Calculator CMPLX" and "Calculator BASE-N".
+  const BANNED = [/\bSHIFT\b/, /\bALPHA\b/, /\bSTO\b/, /\bRCL\b/, /S⇔D/, /Ran#/, /Math ERROR/, /Syntax ERROR/, /Math▲/, /Calculator (COMP|CMPLX|BASE-N)/, /Calculator \$\{/]
   const onScreen = (src: string): string =>
     src
       .replace(/throw new Error\((['"`])[^)]*\1\)/g, '')
@@ -190,9 +191,9 @@ describe('nothing that looks like the fx-991EX survives', () => {
       .replace(/\/\/[^\n]*/g, '')
       .replace(/\/\*[\s\S]*?\*\//g, '')
 
-  it('shows none of the old legends in the panels or the calculator code', () => {
+  it('shows none of the old legends in the panels, the calculator code or the search palette', () => {
     const hits: string[] = []
-    for (const p of [...files(join(ROOT, 'panels')), ...files(join(ROOT, 'calc'))]) {
+    for (const p of [...files(join(ROOT, 'panels')), ...files(join(ROOT, 'calc')), join(ROOT, 'app', 'SearchPalette.tsx')]) {
       const rel = relative(ROOT, p).split(sep).join('/')
       const src = onScreen(readFileSync(p, 'utf8'))
       for (const re of BANNED) if (re.test(src)) hits.push(`${rel}: ${re.source}`)
@@ -215,6 +216,24 @@ describe('nothing that looks like the fx-991EX survives', () => {
     }
     expect(MODE_LABELS.CMPLX).toBe('Complex')
     expect(MODE_LABELS['BASE-N']).toBe('Bases')
+    // Ctrl+K offered "Calculator CMPLX" from the raw ids after every label on the screen had
+    // gone through MODE_LABELS.
+    const palette = readFileSource('app/SearchPalette.tsx')
+    expect(palette).toMatch(/title: `Calculator: \$\{MODE_LABELS\[cm\]\}`/)
+    expect(palette).toMatch(/hint: MODE_HINTS\[cm\]/)
+  })
+
+  it('lets a key’s relatives hang below the last row without being clipped', () => {
+    // A group with overflow-y: auto clips the relatives row of its last keys (polar → x, y;
+    // random → random 0–1) and grows a scrollbar instead; only the Constants group is tall
+    // enough to need one.
+    const css = readFileSource('styles.css')
+    expect(css).toMatch(/\.keypad-body > \.keys-constants \{\s*overflow-y: auto;\s*\}/)
+    const others = css.slice(css.indexOf('.keypad-body > .keys:not(.keys-numbers) {'), css.indexOf('.keypad-body > .keys-constants')).replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(others).not.toMatch(/overflow/)
+    const functions = KEY_GROUPS.find((g) => g.id === 'functions')!
+    expect(functions.keys.slice(-functions.cols).some((k) => k.more)).toBe(true)
+    expect(KEY_GROUPS.find((g) => g.id === 'constants')!.keys.some((k) => k.more)).toBe(false)
   })
 
   it('keeps the keypad from ever taking the focus, and MathLive’s own keyboard off', () => {
