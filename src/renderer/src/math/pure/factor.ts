@@ -210,8 +210,10 @@ function bySubstitution(e: Expr, ctx: Ctx, pending: Expr[]): { parts: Expr[]; na
   const content = rDiv(a, rat(roots[0].d * roots[1].d))
   const inU = pTrim([c, b, a])
 
-  ctx.s.goal(`Substitute for ${name}^${k}`).add(
-    `This is a quadratic in disguise: the powers are ${deg}, ${k} and 0. Write u = ${name}^${k} and it becomes a quadratic in u.`,
+  // The power is braced because texToPlain reads `^` the way LaTeX does, one digit at a time:
+  // x^10 came out as "x¹0" in the heading and both sentences for x²⁰ + 5x¹⁰ + 4.
+  ctx.s.goal(`Substitute for ${name}^{${k}}`).add(
+    `This is a quadratic in disguise: the powers are ${deg}, ${k} and 0. Write u = ${name}^{${k}} and it becomes a quadratic in u.`,
     `u = ${name}^{${k}} \\;\\Rightarrow\\; ${pTex(inU, 'u')}`,
     `\\text{substitute } u = ${name}^{${k}}`
   )
@@ -223,7 +225,7 @@ function bySubstitution(e: Expr, ctx: Ctx, pending: Expr[]): { parts: Expr[]; na
   )
   const parts = uFactors.map((f) => exprFromPoly([f[0], ...new Array(k - 1).fill(rat(0n)), f[1]], name))
   if (!rIsOne(content)) parts.unshift(constExpr(content))
-  ctx.s.add(`Put ${name}^${k} back in place of u.`, snapshot(ctx, [...pending, ...parts]))
+  ctx.s.add(`Put ${name}^{${k}} back in place of u.`, snapshot(ctx, [...pending, ...parts]))
   return { parts, name, k }
 }
 

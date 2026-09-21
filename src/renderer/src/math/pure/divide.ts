@@ -24,6 +24,16 @@ import {
 } from './poly'
 import { Steps, failed, texToPlain, type Working } from './work'
 
+/**
+ * One term as it is spoken in a sentence. A fractional coefficient is bracketed — "(1/2)x²", not
+ * "1/2x²" — because a student reads the unbracketed form as one over 2x². A bare fraction (the
+ * constant term) needs no bracket.
+ */
+const plainTerm = (c: Rat, k: number, name: string): string => {
+  if (c.d === 1n || k === 0) return texToPlain(pTex(pMonomial(k, c), name))
+  return `(${texToPlain(rTex(c))})${texToPlain(pTex(pMonomial(k), name))}`
+}
+
 /** One term of a polynomial as it should appear inside a row of the staircase. */
 const cell = (c: Rat, k: number, name: string, first: boolean): string => {
   if (rIsZero(c)) return ''
@@ -109,12 +119,14 @@ export function divideWorking(src: string): Working {
     // repeats on each row stops reading as "what we are doing now".
     if (step === 1) s.goal('Divide term by term')
     // A term can carry a fraction ((x² + 1) ÷ 2x starts with x/2, and the rows after it follow
-    // suit), so the head is given the plain forms; the tex keeps the LaTeX.
+    // suit), so the head is given the spoken forms from plainTerm; the tex keeps the LaTeX.
     const leadTex = pTex(pMonomial(pDeg(rem), pLead(rem)), name)
     const byTex = pTex(pMonomial(pDeg(b), pLead(b)), name)
-    const piecePlain = texToPlain(pTex(piece, name))
+    const leadPlain = plainTerm(pLead(rem), pDeg(rem), name)
+    const byPlain = plainTerm(pLead(b), pDeg(b), name)
+    const piecePlain = plainTerm(factor, shift, name)
     s.add(
-      `Divide ${texToPlain(leadTex)} by ${texToPlain(byTex)} to get ${piecePlain} — that is the next piece of the answer.`,
+      `Divide ${leadPlain} by ${byPlain} to get ${piecePlain} — that is the next piece of the answer.`,
       `\\dfrac{${leadTex}}{${byTex}} = ${pTex(piece, name)}`,
       '\\text{divide the leading terms}'
     )
@@ -141,9 +153,10 @@ export function divideWorking(src: string): Working {
   )
 
   // Synthetic division is quicker and is on the syllabus, so it is offered when the divisor is x − a.
+  // It is its own stage: without a heading the step sat under "Set out the long division".
   if (pDeg(b) === 1 && b[1].n === 1n && b[1].d === 1n) {
     const root = rDiv(rNeg(b[0] ?? R0), b[1])
-    s.add(
+    s.goal('Check the remainder quickly').add(
       `Check the remainder the quick way: the divisor is ${texToPlain(pTex(b, name))}, so put ${name} = ${texToPlain(rTex(root))} into the top and the remainder comes out in one line.`,
       `f\\left(${rTex(root)}\\right) = ${rTex(pEval(a, root))}`,
       '\\text{remainder theorem: } f(a) = \\text{remainder}'

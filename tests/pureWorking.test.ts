@@ -34,6 +34,19 @@ describe('long division', () => {
     const w = runPure('divide', '(x^3 - 2x^2 + 3x - 4)/(x - 1)')
     expect(w.moves.some((m) => m.rule?.includes('remainder theorem'))).toBe(true)
   })
+
+  it('brackets a fractional coefficient when it speaks a term', () => {
+    // "1/2x²" reads as one over 2x²; the sentence has to say (1/2)x². The tex is untouched.
+    const w = runPure('divide', '(x^3 + 1)/(2x + 1)')
+    const heads = w.moves.map((m) => texToPlain(m.head))
+    expect(heads[0]).toBe('Divide x³ by 2x to get (1/2)x² — that is the next piece of the answer.')
+    expect(heads[1]).toBe('Multiply (1/2)x² by the divisor and take the result away.')
+    expect(heads[2]).toBe('Divide (-1/2)x² by 2x to get (-1/4)x — that is the next piece of the answer.')
+    // The constant piece is a bare fraction and needs no bracket.
+    expect(heads[4]).toBe('Divide (1/4)x by 2x to get 1/8 — that is the next piece of the answer.')
+    expect(w.moves[0].tex).toBe(String.raw`\dfrac{x^{3}}{2x} = \frac{1}{2}x^{2}`)
+    for (const h of heads) expect(h).not.toMatch(/\d\/\d+[a-z]/)
+  })
 })
 
 describe('partial fractions', () => {
@@ -379,6 +392,7 @@ const STAGE_WALK: [JobId, string][] = [
   ['factor', 'x^3 - 6x^2 + 11x - 6'], // a root found by trial, peeled off
   ['factor', '2x^3 - 3x^2 - 3x + 2'], // a fractional root: (2x − 1) peeled off
   ['factor', 'x^4 + 5x^2 + 4'], // substitution
+  ['factor', 'x^20 + 5x^10 + 4'], // substitution with a two-digit power in the sentences
   ['factor', 'x^4 + 4'], // completing the square
   ['factor', '2x^3 - x^2 - 2x + 1'], // grouping
   ['factor', '(x + 1)^2 - 4'], // a bracket multiplied out first
@@ -476,6 +490,23 @@ describe('subgoal labels', () => {
         if (i > 0) expect(g, `${where}: "${g}" twice in a row`).not.toBe(headings[i - 1])
       })
     }
+  })
+
+  it('the remainder-theorem check is its own stage, not part of the staircase', () => {
+    // The check by f(a) used to sit under "Set out the long division" as if it were another row.
+    const w = runPure('divide', '(x^3 - 6x^2 + 11x - 6)/(x - 1)')
+    const check = w.moves.find((m) => m.head.startsWith('Check the remainder'))
+    expect(check?.subgoal).toBe('Check the remainder quickly')
+  })
+
+  it('a two-digit power in a heading is two superscript digits, not one and a digit', () => {
+    // texToPlain reads ^ the way LaTeX does, so an unbraced x^10 came out as "x¹0".
+    const w = runPure('factor', 'x^20 + 5x^10 + 4')
+    expect(w.moves[0].subgoal).toBe('Substitute for x^{10}')
+    expect(texToPlain(w.moves[0].subgoal ?? '')).toBe('Substitute for x¹⁰')
+    expect(texToPlain(w.moves[0].head)).toContain('Write u = x¹⁰ ')
+    expect(texToPlain(w.moves[2].head)).toBe('Put x¹⁰ back in place of u.')
+    expect(w.check).not.toMatch(/suspicion/)
   })
 
   it('a bracket typed as a power is not a bracket to multiply out', () => {
