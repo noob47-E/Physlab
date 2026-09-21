@@ -6,7 +6,7 @@
 // with no rounding anywhere. That multiply-back is the check; before it existed the "check" line
 // for a complex factorisation was a sentence claiming the product was real, with nothing behind it.
 
-import { R0, R1, rAbs, rAdd, rDiv, rEq, rIsNeg, rIsOne, rIsZero, rMul, rNeg, rSub, rTex, rat, type Rat } from './rat'
+import { R0, R1, rAbs, rAdd, rDiv, rEq, rIsNeg, rIsOne, rIsZero, rMul, rNeg, rSqrt, rSub, rTex, rat, type Rat } from './rat'
 import { MAX_TRIAL } from './limits'
 import { pEq, pTrim, type Poly } from './poly'
 
@@ -267,39 +267,27 @@ export function quadraticRoots(a: Surd, b: Surd, c: Surd): [CxS, CxS] | null {
  * a perfect square, s², and 2s − b to be positive; k = √(2s − b) may be a surd, which is how
  * x⁴ + 1 becomes (x² − √2·x + 1)(x² + √2·x + 1). Both signs of s are tried, because
  * x⁴ − 5x² + 4 works with s = −2 as well as s = 2. The leading coefficient may be a square too.
+ *
+ * When both signs work, the one with a whole-number k wins. Taking the first positive m used to
+ * hand x⁴ − 6x² + 1 the split with k = 2√2 (s = 1) and never look at s = −1, where k = 2; the
+ * real factoriser then refused the surd and told the student the expression does not factorise,
+ * when it is (x² − 2x − 1)(x² + 2x − 1).
  */
 export function splitBiquadratic(p: Poly): { alpha: Rat; k: Surd; s: Rat } | null {
   const t = pTrim(p)
   if (t.length !== 5 || !rIsZero(t[1]) || !rIsZero(t[3])) return null
   const [c, , b, , a] = t
-  const alpha = exactSqrt(a)
-  const s0 = exactSqrt(c)
+  const alpha = rSqrt(a)
+  const s0 = rSqrt(c)
   if (!alpha || !s0) return null
+  const found: { alpha: Rat; k: Surd; s: Rat }[] = []
   for (const s of [s0, rNeg(s0)]) {
     // (αx² + s)² = αx⁴ + 2αs·x² + s², so what is left over is (2αs − b)·x².
     const m = rSub(rMul(rMul(rat(2n), alpha), s), b)
     if (rIsNeg(m) || rIsZero(m)) continue
-    return { alpha, k: surdSqrt(m), s }
+    found.push({ alpha, k: surdSqrt(m), s })
   }
-  return null
-}
-
-/** √a when a is a perfect square of a fraction, else null. */
-function exactSqrt(a: Rat): Rat | null {
-  if (rIsNeg(a)) return null
-  const isq = (v: bigint): bigint | null => {
-    if (v < 2n) return v
-    let x = v
-    let y = (x + 1n) / 2n
-    while (y < x) {
-      x = y
-      y = (x + v / x) / 2n
-    }
-    return x * x === v ? x : null
-  }
-  const n = isq(a.n)
-  const d = isq(a.d)
-  return n !== null && d !== null ? rat(n, d) : null
+  return found.find((f) => surdIsRational(f.k)) ?? found[0] ?? null
 }
 
 /** A polynomial with surd coefficients written out: x^{2} − √2x + 1. */

@@ -91,6 +91,15 @@ describe('complex numbers', () => {
     expect(w.answers.find((a) => a.label === 'Modulus')?.tex).toBe('5')
     expect(w.answers.find((a) => a.label === 'Conjugate')?.tex).toBe('3 - 4i')
   })
+
+  it('still runs the numeric check on an implicit product like i(2 + 3i)', () => {
+    // mathjs alone reads "i(" as a call to a function named i, so the check used to end with no
+    // verdict at all while (1 + i)^2 got its tick.
+    const w = runPure('complex', 'i(2+3i)')
+    expect(w.answers[0].tex).toBe('-3 + 2i')
+    expect(w.checked).toBe('ok')
+    expect(w.check).toMatch(/same number/)
+  })
 })
 
 describe('solving quadratics', () => {
@@ -227,6 +236,19 @@ describe('the dispatcher', () => {
     expect(nine.moves[0].head).toMatch(/power that high/)
     expect(nine.check).toMatch(/nothing to check/)
     expect(nine.checked).toBeUndefined()
+    // The heading shows what was typed. It used to show the expanded answer as the "input".
+    expect(nine.input).toBe('\\left(x + 1\\right)^{9}')
+    expect(runPure('expand', '3(x + 1)^9 - 2').input).toBe('3\\left(x + 1\\right)^{9} - 2')
+  })
+
+  it('keeps a minus in front of a product as a sign, not as part of the first bracket', () => {
+    // mathjs reads −(x + 1)(x − 1) as (−(x + 1))·(x − 1); the grid used to multiply (−x − 1).
+    const w = runPure('expand', '-(x + 1)(x - 1)')
+    expect(w.input).toBe('-\\left(x + 1\\right)\\left(x - 1\\right)')
+    expect(w.moves[0].head).toBe('Multiply every term of \\left(x + 1\\right) by every term of \\left(x - 1\\right).')
+    expect(w.answers[0].tex).toBe('-x^{2} + 1')
+    expect(w.checked).toBe('ok')
+    expect(runPure('expand', '(x + 1)(-(x - 1))').answers[0].tex).toBe('-x^{2} + 1')
   })
 
   it('knows whether a field holds something to run, even when the converter refuses it', () => {
@@ -258,6 +280,12 @@ describe('the dispatcher', () => {
     expect(suggestJob('x^2 + x + 1')).toBe('factorComplex')
     expect(suggestJob('x^2 - 4')).toBe('factor')
     expect(suggestJob('x^4 + 4')).toBe('factor')
+    // x⁴ + 1 only splits with a surd middle term, which is the i tool's job; Auto used to send
+    // it to the real factoriser, which told the student it does not factorise.
+    expect(suggestJob('x^4 + 1')).toBe('factorComplex')
+    expect(suggestJob('x^4 + 2x^2 + 4')).toBe('factorComplex')
+    // Neither tool can write √3 ± √2 as one surd, so this stays with the honest real answer.
+    expect(suggestJob('x^4 - 10x^2 + 1')).toBe('factor')
   })
 
   it('never throws, whatever it is given', () => {

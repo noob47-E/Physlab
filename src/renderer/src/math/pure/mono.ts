@@ -241,7 +241,7 @@ function fromNode(node: MathNode): Expr {
  * front of a bracket gets its × written in; a letter inside a longer name (the n of sin) does not.
  */
 const IMPLICIT_CALL = /(?<![A-Za-z_])([A-Za-z](?:\^\d+)?)\s*\(/g
-const writeTimes = (text: string): string => text.replace(IMPLICIT_CALL, '$1*(')
+export const writeTimes = (text: string): string => text.replace(IMPLICIT_CALL, '$1*(')
 
 /** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */
 function readNode(src: string): MathNode {
@@ -264,38 +264,65 @@ type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode 
 /** How many times a bracket is written out for Expand: (x + 1)⁸ is eight columns, not one lump. */
 const MAX_UNROLLED_POWER = 8
 
-/** The factors of one product node — see parseFactors. */
-function factorsOfNode(node: MathNode): Expr[] {
-  const out: Expr[] = []
+/** One product, taken apart: its factors, its sign, and how it was typed. */
+interface Product {
+  neg: boolean
+  factors: Expr[]
+  shown: string
+}
+
+/**
+ * The factors of one product node — see parseFactors.
+ *
+ * A leading minus inside the product is peeled off as the sign: mathjs reads −(x + 1)(x − 1) as
+ * (−(x + 1))·(x − 1), and folding the minus into the bracket showed the student a grid for
+ * (−x − 1), which is not what they wrote.
+ */
+function productOfNode(node: MathNode): Product {
+  const out: { e: Expr; tex?: string }[] = []
+  let neg = false
   const walk = (n: MathNode): void => {
     const v = n as unknown as Loose
     if (v.type === 'ParenthesisNode' && v.content) return walk(v.content)
     if (v.type === 'OperatorNode' && v.op === '*' && v.args) return v.args.forEach(walk)
+    if (v.type === 'OperatorNode' && v.op === '-' && v.args?.length === 1) {
+      neg = !neg
+      return walk(v.args[0])
+    }
     if (v.type === 'OperatorNode' && v.op === '^' && v.args?.length === 2) {
       const k = wholeNumberIn(v.args[1])
       const base = fromNode(v.args[0])
       // A power of a bracket is that bracket written k times; a power of a single term stays whole.
-      if (k !== null && k >= 2 && k <= MAX_UNROLLED_POWER && base.length > 1) {
-        for (let i = 0; i < k; i++) out.push(base)
+      if (k !== null && k >= 2 && base.length > 1) {
+        if (k <= MAX_UNROLLED_POWER) {
+          for (let i = 0; i < k; i++) out.push({ e: base })
+          return
+        }
+        // Too high to unroll: the factor is stored expanded, but the heading must still show the
+        // power that was typed, not the answer.
+        out.push({ e: fromNode(n), tex: `\\left(${exprTex(base)}\\right)^{${k}}` })
         return
       }
     }
-    out.push(fromNode(n))
+    out.push({ e: fromNode(n) })
   }
   walk(node)
   // 2x is one term, not "2 times x": every single-term factor is gathered into one monomial, in
   // the place of the first, so 2x(x + 1) distributes 2x over the bracket instead of starting with
   // a grid for 2 × x.
-  const singles = out.filter((f) => f.length === 1)
-  if (singles.length < 2) return out
-  const mono = singles.reduce((a, b) => eMul(a, b))
-  let placed = false
-  return out.flatMap((f) => {
-    if (f.length !== 1) return [f]
-    if (placed) return []
-    placed = true
-    return [mono]
-  })
+  const singles = out.filter((f) => f.e.length === 1)
+  let merged = out
+  if (singles.length >= 2) {
+    const mono = singles.reduce((a, b) => eMul(a, b.e), constExpr(R1))
+    let placed = false
+    merged = out.flatMap((f) => {
+      if (f.e.length !== 1) return [f]
+      if (placed) return []
+      placed = true
+      return [{ e: mono }]
+    })
+  }
+  return { neg, factors: merged.map((f) => f.e), shown: merged.map((f) => f.tex ?? exprTexBracketed(f.e)).join('') }
 }
 
 /**
@@ -306,13 +333,15 @@ function factorsOfNode(node: MathNode): Expr[] {
  * product at the top level comes back as a single factor.
  */
 export function parseFactors(src: string): Expr[] {
-  return factorsOfNode(readNode(src))
+  return productOfNode(readNode(src)).factors
 }
 
-/** One piece of a sum: its sign, and the factors of the product it is. */
+/** One piece of a sum: its sign, the factors of the product it is, and the product as typed. */
 export interface Summand {
   neg: boolean
   factors: Expr[]
+  /** LaTeX of the factors as written: (x + 1)^{9} is stored as one expanded factor and must not be shown as one. */
+  shown: string
 }
 
 /**
@@ -337,7 +366,8 @@ export function parseSummands(src: string): Summand[] {
       if (v.op === '-' && v.args.length === 1) return walk(v.args[0], !neg)
       if (v.op === '+' && v.args.length === 1) return walk(v.args[0], neg)
     }
-    out.push({ neg, factors: factorsOfNode(n) })
+    const product = productOfNode(n)
+    out.push({ neg: neg !== product.neg, factors: product.factors, shown: product.shown })
   }
   walk(readNode(src), false)
   return out

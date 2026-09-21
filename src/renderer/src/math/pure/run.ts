@@ -26,10 +26,9 @@ import {
   type Summand,
   type Term
 } from './mono'
-import { pDeg, polyFromExpr } from './poly'
 import { factoriseNumberWorking, hcfWorking, lcmWorking } from './integers'
 import { hcfAlgebraWorking, lcmAlgebraWorking } from './algebraHcf'
-import { factoriseWorking, factorsOf } from './factor'
+import { factoriseWorking, factorsOf, wantsAllowI } from './factor'
 import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
 import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
@@ -242,7 +241,8 @@ function expandWorking(src: string): Working {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
   const s = new Steps()
-  const shownOf = (sm: Summand): string => sm.factors.map(factorTex).join('')
+  // As typed, not as parsed: for (x + 1)^9 the only factor is already the answer.
+  const shownOf = (sm: Summand): string => sm.shown
   const input = summands.map((sm, i) => `${i === 0 ? (sm.neg ? '-' : '') : sm.neg ? ' - ' : ' + '}${shownOf(sm)}`).join('')
   const several = summands.length > 1
 
@@ -402,9 +402,9 @@ export function suggestJob(src: string): JobId {
   if (/(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(s)) return 'complex'
   if (s.includes('=')) return 'solve'
   if (s.includes('/')) return fractionJob(s)
-  // A quadratic with no real roots is exactly what "Factorise with i" is for; sending it to the
-  // real factoriser would only produce "does not break into simpler factors".
-  return isIrreducibleQuadratic(s) ? 'factorComplex' : 'factor'
+  // A quadratic with no real roots, or x⁴ + 1, is exactly what "Factorise with i" is for; sending
+  // it to the real factoriser would only produce "does not break into simpler factors".
+  return wantsI(s) ? 'factorComplex' : 'factor'
 }
 
 /**
@@ -426,14 +426,10 @@ function fractionJob(s: string): JobId {
   }
 }
 
-function isIrreducibleQuadratic(s: string): boolean {
+/** The one place that decides what deserves i, shared with the offer under a real factorisation. */
+function wantsI(s: string): boolean {
   try {
-    const e = parseExpr(s)
-    if (varsOf(e).length !== 1) return false
-    const { poly } = polyFromExpr(e)
-    if (pDeg(poly) !== 2) return false
-    const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
-    return rIsNeg(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))
+    return wantsAllowI([parseExpr(s)])
   } catch {
     return false
   }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Eye, History, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { clearCalcHistory, useCalc, type CalcMode } from '../calc/calcStore'
-import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, type Base } from '../calc/engine'
+import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, formatValue, type Base } from '../calc/engine'
 import { calcEng, calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
 import { math, setAngleMode } from '../math/expr'
@@ -343,8 +343,9 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
         const c = math.complex(v as never) as unknown as { re: number; im: number }
         const r = Math.hypot(c.re, c.im)
         const th = Math.atan2(c.im, c.re)
-        const main = `${calcNum(c.re)} ${c.im < 0 ? '−' : '+'} ${calcNum(Math.abs(c.im))}i`
-        setResult({ main, extra: [`r∠θ = ${calcNum(r)} ∠ ${calcNum(angleUnit === 'deg' ? (th * 180) / Math.PI : th)}${angleUnit === 'deg' ? '°' : ''}`, `conjugate ${calcNum(c.re)} ${c.im < 0 ? '+' : '−'} ${calcNum(Math.abs(c.im))}i`], value: c })
+        // The same formatter as COMP mode, so 2 + i never reads "2 + 1i" here and "2 + i" there.
+        const main = formatValue(math.complex(c.re, c.im))
+        setResult({ main, extra: [`r∠θ = ${calcNum(r)} ∠ ${calcNum(angleUnit === 'deg' ? (th * 180) / Math.PI : th)}${angleUnit === 'deg' ? '°' : ''}`, `conjugate ${formatValue(math.conj(math.complex(c.re, c.im)))}`], value: c })
         useCalc.setState({ ans: v, history: [{ input: s.input, result: main, mode }, ...s.history].slice(0, 100) })
         return
       }

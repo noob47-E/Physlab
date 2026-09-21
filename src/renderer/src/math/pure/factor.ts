@@ -55,7 +55,7 @@ import {
   type Poly
 } from './poly'
 import { MAX_TRIAL, TOO_BIG_TO_SEARCH } from './limits'
-import { splitBiquadratic } from './cxpoly'
+import { quadraticRoots, splitBiquadratic, surd, surdIsRational, surdNeg } from './cxpoly'
 import { Steps, failed, type Working } from './work'
 
 /** The exact k-th root of a fraction, or null. */
@@ -550,7 +550,7 @@ export function factorise(src: string): FactorOutcome {
           ? TOO_BIG_TO_SEARCH
           : 'This one does not break into simpler factors with whole numbers.',
         error: undefined,
-        offer: leavesIrreducibleQuadratic([e]) ? ALLOW_I : undefined
+        offer: wantsAllowI([e]) ? ALLOW_I : undefined
       },
       factors: [e]
     }
@@ -578,7 +578,7 @@ export function factorise(src: string): FactorOutcome {
           ? `The most that can be taken out is the minus sign; ${exprTex(stillWhole)} does not break down further.`
           : `Multiplying back out gives ${expanded} — the original.`,
       checked: ok ? 'ok' : 'failed',
-      offer: leavesIrreducibleQuadratic(nonTrivial) ? ALLOW_I : undefined
+      offer: wantsAllowI(nonTrivial) ? ALLOW_I : undefined
     },
     factors: nonTrivial
   }
@@ -586,15 +586,40 @@ export function factorise(src: string): FactorOutcome {
 
 const ALLOW_I = { job: 'factorComplex', label: 'Allow i', hint: 'Carry on by allowing complex numbers: every quadratic factorises then.' }
 
-/** True when some factor is a quadratic with no real roots — the point where "Allow i" helps. */
-function leavesIrreducibleQuadratic(parts: Expr[]): boolean {
+/**
+ * True when the real factoriser stops short of something "Allow i" can finish: a quadratic with no
+ * real roots, or an even quartic whose completed square needs a surd in the middle term. x⁴ + 1
+ * used to get no offer, and Auto sent it to the real factoriser, which is a dead end for the
+ * student when the tool that answers it is one click away.
+ *
+ * Shared with suggestJob, so Auto and the offer can never disagree about what deserves i.
+ */
+export function wantsAllowI(parts: Expr[]): boolean {
   return parts.some((p) => {
     if (varsOf(p).length !== 1) return false
     const { poly } = polyFromExpr(p)
-    if (pDeg(poly) !== 2) return false
-    const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
-    return rIsNeg(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))
+    if (pDeg(poly) === 2) return hasNoRealRoots(poly)
+    return pDeg(poly) === 4 && splitsOnlyOverSurds(poly)
   })
+}
+
+/** b² − 4ac < 0. */
+function hasNoRealRoots(poly: Poly): boolean {
+  const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
+  return rIsNeg(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))
+}
+
+/**
+ * The quartic completes the square only with a surd middle term, and each half then has roots
+ * a surd can hold. A whole-number k is the real factoriser's job (byCompletingSquare), and a half
+ * whose roots need two different surds (x⁴ − 10x² + 1) is refused by "Allow i" too, so offering
+ * it would only swap one dead end for another.
+ */
+function splitsOnlyOverSurds(poly: Poly): boolean {
+  const split = splitBiquadratic(poly)
+  if (!split || surdIsRational(split.k)) return false
+  const [a, s] = [surd(split.alpha), surd(split.s)]
+  return quadraticRoots(a, surdNeg(split.k), s) !== null && quadraticRoots(a, split.k, s) !== null
 }
 
 /** Collapse repeated factors into powers: (x+2)(x+2) becomes (x+2)². */

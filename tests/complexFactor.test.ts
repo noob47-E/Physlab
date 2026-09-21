@@ -110,6 +110,16 @@ describe('roots and the multiply-back check', () => {
     expect(surdTex(one.k)).toBe('\\sqrt{2}')
     expect(splitBiquadratic(polyFromExpr(parseExpr('x^4 + 3')).poly)).toBeNull()
   })
+
+  it('prefers the sign of s that gives a whole-number k', () => {
+    // s = 1 gives k = 2√2 and s = −1 gives k = 2; the first positive one used to win, and the
+    // real factoriser then refused the surd and called x⁴ − 6x² + 1 unfactorisable.
+    const six = splitBiquadratic(polyFromExpr(parseExpr('x^4 - 6x^2 + 1')).poly)!
+    expect(surdTex(six.k)).toBe('2')
+    expect(surdTex(surd(six.s))).toBe('-1')
+    // With no whole-number k on either side the surd one is still handed back.
+    expect(surdTex(splitBiquadratic(polyFromExpr(parseExpr('x^4 - 10x^2 + 1')).poly)!.k)).toBe('2\\sqrt{3}')
+  })
 })
 
 describe('Factorise with i', () => {
@@ -228,6 +238,33 @@ describe('the real Factorise offers to allow i', () => {
     expect(w.answers[0].tex).toBe('\\left(x^{2} - 2x + 2\\right)\\left(x^{2} + 2x + 2\\right)')
     expect(w.checked).toBe('ok')
     expect(w.offer?.job).toBe('factorComplex')
+  })
+
+  it('completes the square with a negative s when that is the whole-number way', () => {
+    const six = runPure('factor', 'x^4 - 6x^2 + 1')
+    expect(six.answers[0].tex).toBe('\\left(x^{2} - 2x - 1\\right)\\left(x^{2} + 2x - 1\\right)')
+    expect(six.checked).toBe('ok')
+    expect(six.offer).toBeUndefined()
+    const three = runPure('factor', 'x^4 - 3x^2 + 1')
+    expect(three.answers[0].tex).toBe('\\left(x^{2} - x - 1\\right)\\left(x^{2} + x - 1\\right)')
+    expect(three.checked).toBe('ok')
+    // The i tool starts from the same whole-number split, and says truthfully why the roots are surds.
+    const over = runPure('factorComplex', 'x^4 - 6x^2 + 1')
+    expect(over.checked).toBe('ok')
+    expect(over.answers[0].tex).toBe(
+      '\\left(x - 1 - \\sqrt{2}\\right)\\left(x - 1 + \\sqrt{2}\\right)\\left(x + 1 - \\sqrt{2}\\right)\\left(x + 1 + \\sqrt{2}\\right)'
+    )
+    expect(over.moves.find((m) => m.head.includes('discriminant'))?.head).toMatch(/\(8\) that is not a perfect square/)
+  })
+
+  it('offers i for an even quartic that only splits with a surd middle term', () => {
+    // x⁴ + 1 is the example the spec named; it used to end at "does not break into simpler
+    // factors" with nothing to click.
+    expect(runPure('factor', 'x^4 + 1').offer?.job).toBe('factorComplex')
+    expect(runPure('factor', 'x^4 + 2x^2 + 4').offer?.job).toBe('factorComplex')
+    expect(runPure('factorComplex', 'x^4 + 2x^2 + 4').checked).toBe('ok')
+    // No offer when the i tool would refuse it too (√3 ± √2 is two roots in one number).
+    expect(runPure('factor', 'x^4 - 10x^2 + 1').offer).toBeUndefined()
   })
 })
 

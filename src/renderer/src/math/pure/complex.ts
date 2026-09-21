@@ -24,7 +24,7 @@ import {
   rat,
   type Rat
 } from './rat'
-import { NotPolynomial, evalAt, exprTex, parseExpr, parseFraction, varsOf, type Expr } from './mono'
+import { NotPolynomial, evalAt, exprTex, parseExpr, parseFraction, varsOf, writeTimes, type Expr } from './mono'
 import { math, preprocess } from '../expr'
 import { pDeg, pSub, pTex, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
 import { factorsOf } from './factor'
@@ -220,7 +220,9 @@ export function complexWorking(src: string): Working {
  */
 export function agreesNumerically(src: string, z: Cx): boolean | null {
   try {
-    const v = math.evaluate(preprocess(src)) as unknown
+    // The same reading as the exact route: mathjs on its own takes "i(2+3i)" as a call to a
+    // function named i and throws, which left the check with no verdict and no tick.
+    const v = math.evaluate(writeTimes(preprocess(src))) as unknown
     const re = typeof v === 'number' ? v : (v as { re?: number }).re
     const im = typeof v === 'number' ? 0 : (v as { im?: number }).im
     if (typeof re !== 'number' || typeof im !== 'number') return null
@@ -556,10 +558,16 @@ function splitQuadratic(coeffs: Surd[], name: string, s: Steps, out: CxCollect):
   const bracketed = `\\left(${shown}\\right)`
   const complex = !cxsIsReal(p)
   const disc = surdSub(surdMul(b, b), surdMul(surd(rat(4n)), surdMul(a, c)))
+  // quadraticRoots only answers when the discriminant is rational, so its q part is the whole of
+  // it. A perfect square there does not make the roots rational when a coefficient is a surd
+  // (x² − 2√2x + 1 has Δ = 4 and roots √2 ± 1), and the sentence used to say it was not square.
+  const square = surdIsRational(disc) && rSqrt(disc.q) !== null
   s.add(
     complex
       ? `${bracketed} has a negative discriminant (${surdTex(disc)}), so solve it with the quadratic formula and use its two roots.`
-      : `${bracketed} has a positive discriminant (${surdTex(disc)}) that is not a perfect square, so its roots are surds.`,
+      : square
+        ? `${bracketed} has a surd in it, so its roots are surds even though the discriminant (${surdTex(disc)}) is a perfect square.`
+        : `${bracketed} has a positive discriminant (${surdTex(disc)}) that is not a perfect square, so its roots are surds.`,
     `${name} = ${cxsTex(p)} \\quad\\text{or}\\quad ${name} = ${cxsTex(q)}`,
     complex ? '\\sqrt{-k} = i\\sqrt{k}' : `${name} = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}`
   )
