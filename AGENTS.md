@@ -90,12 +90,13 @@ neighbour is open.
 - **WebGPU compiles a material's colour in.** Changing `material.color` after the first render does
   nothing until `material.needsUpdate = true`. That is why a theme switch used to leave the old
   theme's grid on screen.
-- **Never hardcode a colour.** Both themes must work. Use CSS variables and `themeColor()`. Several
-  bugs came from literal hex values that were invisible in the light theme — menus, popups,
-  measurement labels, the focused tab. `tests/colours.test.ts` scans the renderer for hex, palette
-  utilities and pixel text sizes; its allow-lists are empty and must stay empty, and three.js code
-  reads its colours through `themeColor()`. `panels/LabChart.tsx` shows the right way; the token
-  utilities (`text-ink`, `bg-surface-1`, `text-body`, `font-math`, ...) are defined at the top of
+- **Never hardcode a colour.** All four themes must work. Use CSS variables and `themeColor()`.
+  Several bugs came from literal hex values that were invisible in the light theme — menus,
+  popups, measurement labels, the focused tab. `tests/colours.test.ts` scans the renderer for hex,
+  palette utilities and pixel text sizes; its allow-lists are empty and must stay empty, and
+  three.js code reads its colours through `themeColor()`. `panels/LabChart.tsx` shows the right
+  way; the token utilities (`text-ink`, `bg-surface-1`, `text-body`, `font-math`, ...) are defined
+  at the top of
   `styles.css`.
 - **Pure Math works in exact fractions, never in doubles.** `math/pure/rat.ts` is bigint over
   bigint, and everything above it — polynomials, factorisation, partial fractions — is built on
@@ -142,6 +143,18 @@ neighbour is open.
 - **A hover highlight names its `owner`**, and `ShapeInfo` clears the highlight when it unmounts.
   A mouse-leave never fires on an element that has just been removed, which is how a shaded area
   used to outlive the shape it belonged to.
+- **A shape's sides are not its `dependentsOf`.** The Triangle and Polygon tools draw a shape as a
+  polygon plus one segment per side; each side depends on its two corner points, not on the
+  polygon, so `dependentsOf(polygonId)` never reaches them. Deleting a shape has to walk its real
+  dependents *and* its sides (`sidesOf` + `doomedBy` in `core/store.ts`) together in one pass — a
+  snapshot of "what to delete" taken before that walk starts misses a second shape doomed along
+  the way (a point on one triangle's side that is also another triangle's corner). This was the
+  0.6.1 "deleted shape leaves its sides on screen" bug.
+- **A substring match on a search index is not a word match.** `panels/Sandbox.tsx`'s experiment
+  search used to treat "moments" as matching every preset whose tag merely *starts with* "moment"
+  (the nine momentum experiments), burying the seesaw preset actually tagged "moments". A whole
+  word beats a word it only begins; a search that matches nothing by whole word still falls back
+  to prefix matching, so a half-typed word keeps working.
 - **Custom CSS must live inside `@layer components`** or Tailwind's width/height utilities stop
   working. `.topbar` must never get `overflow: hidden`: its menus are absolutely positioned and hang
   below it.
@@ -215,9 +228,10 @@ neighbour is open.
   with no button on screen to bring 3D back.
 - **A WebGPU material with a themed colour is keyed on the theme** (`key={colors.theme}`), because
   a new colour without a new material is never compiled in. `tests/themeTokens.test.ts` checks
-  that every token the renderer asks for is declared in both theme blocks — `themeColor()` returns
-  a grey stand-in for a misspelt or half-declared one, which is invisible until someone toggles
-  the theme with objects on screen. Read the colours once per theme in a memo, not per frame.
+  that every token the renderer asks for is declared in every one of the four theme blocks
+  (Moonlight, Moonlight Gold, Dark, Light) — `themeColor()` returns a grey stand-in for a misspelt
+  or half-declared one, which is invisible until someone toggles the theme with objects on screen.
+  Read the colours once per theme in a memo, not per frame.
 - **A button that focuses itself on mount steals the keyboard on every remount.** "Let me try
   first" in the Working panel takes the focus only when `go()` asks for it, once, for the answer
   it belongs to (`invitesTry` in `math/pure/reveal.ts`); a focused button also has to hand editing
@@ -225,10 +239,10 @@ neighbour is open.
 - **Graphs resets its recorded data only when the tracked expressions change.** The plot used to
   rebuild on a theme switch with the same effect, so toggling Dark/Light mid-experiment lost
   everything the timeline had recorded.
-- **`color-scheme` only ever accepts `light` or `dark`.** Moonlight is a third theme but a second
-  *dark* one for this CSS property — its block sets `color-scheme: dark` like the ordinary Dark
-  theme, never a Moonlight value the browser would not understand, or the native scrollbars and
-  form controls default back to light.
+- **`color-scheme` only ever accepts `light` or `dark`.** Moonlight and Moonlight Gold are both
+  *dark* themes for this CSS property — each block sets `color-scheme: dark` like the ordinary
+  Dark theme, never a Moonlight-specific value the browser would not understand, or the native
+  scrollbars and form controls default back to light.
 - **Panel ids that appear in a saved layout need a `LAYOUT_VERSION` bump.** `layoutMath.ts` rebuilds
   the per-mode default layout whenever `v` does not match, so a renamed or removed panel id (the
   Maths screen replacing the old Calculator panel in 0.6.0 is why `LAYOUT_VERSION` is 3) does not
@@ -267,7 +281,7 @@ neighbour is open.
 ## How to check your work
 
 ```bash
-npm test          # vitest, 1101 tests in 46 files, pure logic, no DOM
+npm test          # vitest, 1200 tests in 51 files, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run lint      # eslint, 0 errors; a suppression carries its reason after `--`
 npm run dev       # Electron with hot reload
@@ -289,7 +303,8 @@ had been hiding.
 - `tests/colours.test.ts` scans every renderer `.tsx` for a hex colour, a palette utility, a
   pixel or rem text size and a colour in a style object; `COLOUR_ALLOW` and `SIZE_ALLOW` are
   empty and must stay empty (an entry that is clean or names a missing file fails the test too).
-  `tests/themeTokens.test.ts` checks every token asked for is declared in both theme blocks.
+  `tests/themeTokens.test.ts` checks every token asked for is declared in every one of the four
+  theme blocks.
 - `tests/commands.test.ts` runs every example in the command bar's `HELP` text; a new command
   goes into the help and is thereby tested. `tests/contracts.test.ts` and
   `tests/sceneStore.test.ts` read the Python worker and the Properties panel as text to check the

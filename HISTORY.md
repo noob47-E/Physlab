@@ -30,11 +30,11 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.6.0 (2026-09-21) |
-| Releases built | 16 |
-| Commits | 123 |
-| Source | 35,634 lines of TypeScript/TSX across 192 files, plus 1,495 lines of CSS |
-| Tests | 1101, across 46 files, all pure logic with no browser |
+| Current version | 0.6.1 (2026-09-22) |
+| Releases built | 17 |
+| Commits | 133 |
+| Source | 36,462 lines of TypeScript/TSX across 194 files, plus 1,562 lines of CSS |
+| Tests | 1200, across 51 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
 | Dock panels | 15 |
 | Licence | GPL-3.0 |
@@ -688,6 +688,94 @@ pixel on WebGPU, so a later feature that needs a sized point must draw a quad or
 marquee selection is 2D-only, because OrbitControls claims the left mouse button in the 3D view; and
 the Settings theme list reads Moonlight / Dark / Light, matching the View menu and the cycle order,
 rather than the plan's literal Dark / Light / Moonlight ordering (pinned by a cycle-order test).
+
+### 0.6.1 — 2026-09-22
+
+Five small tracks, each on its own files, one review pass per track plus a themes-focused review
+across all four themes.
+
+- **The Vector panel opens empty and follows what a student draws.** It no longer starts with a
+  fixed A/B pair nobody asked for: one entry style plus an "Add vector" button, and a vector drawn
+  on the graph is auto-selected in the panel instead of leaving the student to find it in a list.
+  A blank, untouched card shows a dim hint rather than turning red on sight — it only turns red
+  once an operation actually tries to read it.
+- **Flat 2-D arrows with an Oklab resultant.** The old `ConeGeometry` head is gone; arrows now
+  carry a zoom-invariant flat triangle head (12 px, 25°) on the same world-per-pixel maths, in
+  calmer colours, and a resultant vector is coloured as the Oklab mix of its parents (chroma
+  ×1.15) rather than a plain arithmetic average — a new `render/colourMix.ts` does the sRGB↔Oklab
+  conversion, fed by `themeColor()` at run time so no hex literal sneaks in (`tests/colours.test.ts`
+  stays empty). Geometry points are smaller, with their letters placed clear of the point and of
+  each other.
+- **The axes toggle lives everywhere it should.** "Hide axes" used to be buried; it now sits in
+  the grid picker, the right-click context menu and the search palette, all reading the same
+  `settings.showAxes`.
+- **Bug: deleting a shape used to leave its sides (and anything built on them) behind.** The
+  Triangle and Polygon tools draw a shape as a polygon plus one segment per side, and a side
+  depends on its corner points, not on the polygon — so `dependentsOf` never walked from the
+  shape to its own sides, and deleting a triangle left its three sides on screen, indistinguishable
+  from the triangle just deleted. A new `doomedBy` (`core/store.ts`) walks named objects, their
+  real dependents and a doomed polygon's sides together, catching a second shape doomed along the
+  way (a point on side BC that is also a corner of another triangle) rather than working from a
+  snapshot taken before the loop started. The corner points themselves stay, matching GeoGebra's
+  convention.
+- **Sandbox experiments are searchable by tag.** Typing a word like "gravity" or "rope pulley"
+  narrows the picker to matching presets instead of leaving the student to scroll all of them; a
+  whole-word match wins over a word it merely begins ("moments" finds the seesaw alone, not the
+  nine momentum experiments too), and a half-typed word still falls back to whatever it is heading
+  toward.
+- **Calculator steps say what a stage is for before showing how it is done.** Every generator's
+  heading is now a plain-words subgoal sentence with its own line, not a LaTeX fragment doing
+  double duty — a two-digit power in a substitution heading now reads x¹⁰ rather than x¹0, a
+  fractional quotient term is spoken as (1/2)x² rather than 1/2x², and the remainder-theorem check
+  sits under its own heading instead of inside "Set out the long division".
+- **Moonlight Gold, a fourth theme.** A second night theme beside the navy Moonlight: warm
+  charcoal backgrounds, a gold accent, cream ink, amber warn, gold-tinted grid axes and labels.
+  Every piece of text on it clears 4.5:1 against the surface it sits on; `--on-accent` is dark ink
+  because the accent itself is light. Moonlight stays the default on a fresh install.
+  `tests/themeTokens.test.ts` now checks all four theme blocks declare the same tokens, not two.
+
+`npm test`: 51 files, 1200 tests passed (baseline going into this phase set was 46 files / 1101).
+`npm run typecheck`: clean. `npm run lint`: 0 errors, 29 warnings, none of them new.
+
+**Still open**, honestly:
+- Point-label boxes wider than one letter (a selected point shows "C(13, −8)") can still straddle
+  the point, as in 0.6.0 — `pickLabelOffset` sizes for the nominal one-letter chip; a real fix
+  needs `render/Labels.tsx` to anchor by the label's corner.
+- No screenshots of the themes for the vector/point work — every check was done through the DOM
+  and R3F state, because the shared browser pane never composited for this session.
+- The arrow palette itself is still eight hex literals in `PALETTE.vector`
+  (`src/renderer/src/core/naming.ts:83`), stored on the object and saved in the `.phys` file; on
+  Light the palette arrows sit near 2.1–2.4:1 against the canvas. A themed fix means `--vec-1`
+  through `--vec-8` in every theme block, `nextColor()` through `themeColor()`, and a file-format
+  change to store a token rather than a colour — left for a dedicated pass.
+- Deleting a shape takes its sides but leaves its corner points, matching GeoGebra's convention;
+  if "remove a whole object" should take the points too, `doomedBy` in `core/store.ts` is the one
+  place to extend (mirroring `dropUnusedPicks` in `render/tools.ts`).
+- A plot typed in the command bar from Vectors mode is invisible, because `core/factory.ts:46`
+  stamps every graph with space `'graphing'` and nothing switches the app there — a curve typed
+  from Vectors or Geometry now switches the app to Graphing and says so, rather than drawing where
+  nobody is looking, but the underlying space-stamping stays as it was.
+- The viewport row shows two toggle styles side by side (the Axes badge vs. the grid/snap
+  icon-button toggles) — a one-line change to render Axes as an icon-button with an `on` state,
+  not done this round.
+- `hovered` in `core/store.ts` can keep a deleted object's id with no visual effect, and
+  `GraphView` never deletes its `labelAnchors` entry on unmount — a small leak, not visible to a
+  student.
+- A pre-existing contrast shortfall, pinned by expiring exemptions in `tests/contrast.test.ts`:
+  Dark `--on-accent` #ffffff on `--accent` #4f8cff (3.22:1); Dark `--text-dim` #9a9ea8 on `--bg-4`
+  #35363c (4.49:1); Light `--warn` #b26a00 on `bg-0..bg-3` (3.65/3.95/4.24/3.52); Light `--good`
+  #1f8a4c on `bg-0..bg-3` (3.77/4.08/4.38/3.63). Each exemption fails the day its token is fixed.
+- The Moonlight Gold selection glow stays gold rather than palette-aware, a declined fix: drawn
+  objects take `PALETTE` colours (blue first), and a gold halo beats ice blue against every
+  palette colour but the fourth.
+- The Electron window opening in Moonlight Gold after a restart (the main-process `theme.json`
+  path) was not verified live — `src/main/index.ts` accepts any `#rrggbb` and the path was
+  re-read, but this run could not launch Electron itself to confirm.
+- texToPlain still writes a fractional coefficient as "1/2x²" in a divide head — a texToPlain
+  limitation shared by every generator, not fixed this round.
+- One pre-existing flaky test: `tests/maths.test.ts` "loads the maths panels lazily…" timed out
+  once under machine contention during this work; it passes in isolation and passed on every merge
+  run.
 
 ## What is in it today
 
