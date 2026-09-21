@@ -34,6 +34,8 @@ import { useTour } from './tour/Tour'
 import { enterMode, resetLayout } from './layout'
 import { PANEL_LIST, togglePanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
+import { ToolCardHost } from '../ui/ToolCard'
+import { useToolCard } from '../ui/useToolCard'
 import { resetCamera } from '../render/viewState'
 import { useSandbox } from '../sim/store'
 import { UNIT_NAMES } from '../math/format'
@@ -521,22 +523,32 @@ export function ToolShelf() {
   const def = modeById(mode)
   const shelf = shelfMode(width, def.tools, toolLabel)
   // A mode whose only tool is Move (Sandbox, GPU Lab, Lab Data) has nothing to offer here, and
-  // the empty strip was 40 px taken from the drawing on a small screen.
-  if (shelf === 'hidden') return null
+  // the empty strip was 40 px taken from the drawing on a small screen. The card host stays: it
+  // draws through a portal, takes no room, and the Sandbox's own buttons will ask it for cards.
+  if (shelf === 'hidden') return <ToolCardHost />
   return (
-    <div ref={ref} data-tour="tools" className={`toolshelf ${shelf === 'icons' ? 'icons' : ''}`}>
-      {def.tools.map((id, i) => {
-        if (id === '|') return <div key={i} className="tool-sep" />
-        const info = TOOLS.find((t) => t.id === id)!
-        return (
-          <button key={id} className={`tool ${tool === id ? 'on' : ''}`} onClick={() => setTool(id)} title={`${info.label}${info.key ? ` (${info.key})` : ''}\n${info.hint[0]}`}>
-            {ICONS[id]}
-            {shelf === 'full' && <span>{info.label}</span>}
-          </button>
-        )
-      })}
-      <div className="flex-1" />
-      {shelf === 'full' && <span className="hidden truncate pr-2 text-fine text-[var(--text-faint)] xl:inline">{def.description}</span>}
-    </div>
+    <>
+      <ToolCardHost />
+      <div ref={ref} data-tour="tools" className={`toolshelf ${shelf === 'icons' ? 'icons' : ''}`}>
+        {def.tools.map((id, i) => {
+          if (id === '|') return <div key={i} className="tool-sep" />
+          return <ToolButton key={id} id={id} on={tool === id} label={shelf === 'full'} onClick={() => setTool(id)} />
+        })}
+        <div className="flex-1" />
+        {shelf === 'full' && <span className="hidden truncate pr-2 text-fine text-[var(--text-faint)] xl:inline">{def.description}</span>}
+      </div>
+    </>
+  )
+}
+
+/** One shelf button. Resting on it opens its card (ui/ToolCard.tsx), which replaced the old title tooltip. */
+function ToolButton({ id, on, label, onClick }: { id: ToolId; on: boolean; label: boolean; onClick: () => void }) {
+  const info = TOOLS.find((t) => t.id === id)!
+  const card = useToolCard(`tool:${id}`)
+  return (
+    <button className={`tool ${on ? 'on' : ''}`} onClick={onClick} aria-label={label ? undefined : info.label} {...card}>
+      {ICONS[id]}
+      {label && <span>{info.label}</span>}
+    </button>
   )
 }

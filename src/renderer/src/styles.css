@@ -1196,6 +1196,149 @@ math-field.math-input::part(menu-toggle) {
   white-space: normal;
 }
 
+/* ---------- Tool cards ---------- */
+/* The card that opens when the mouse rests on a tool button (ui/ToolCard.tsx). Above the command
+   bar's example list (.suggest, 60), which is up whenever the bar is focused: at 40 the card opened
+   under it and only its title strip showed. Below the tour (80). It never covers a menu because
+   useToolCard does not open one while a menu is on screen. No pointer events, so the button
+   underneath keeps every click. */
+.tool-card {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 15rem;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 50px var(--shadow);
+  pointer-events: none;
+}
+.tool-card-anim {
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+}
+.tc-scene {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* One 2.5 s loop shared by every animation (app/toolCards/animMath.ts holds the same beats): the
+   cursor arrives, clicks at 30 %, clicks again at 62 % when the tool needs two clicks, the result
+   shows, and everything fades by the end so the loop restarts clean. Where the cursor goes comes
+   from the element (--tc-a rest, --tc-b first click, --tc-c second), so one rule serves every
+   card; `tc-late` moves a ripple or a result to the second click. */
+.tc-cursor,
+.tc-ripple,
+.tc-appear {
+  animation-duration: 2.5s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+}
+.tc-cursor {
+  animation-name: tc-cursor;
+  translate: var(--tc-a);
+}
+.tc-ripple {
+  animation-name: tc-ripple;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+}
+.tc-appear {
+  animation-name: tc-appear;
+  opacity: 0;
+}
+.tc-late {
+  --tc-first: 0;
+  --tc-second: 1;
+  --tc-early: 0;
+}
+@keyframes tc-cursor {
+  0% {
+    translate: var(--tc-a);
+    opacity: 0;
+  }
+  8% {
+    translate: var(--tc-a);
+    opacity: 1;
+  }
+  30%,
+  40% {
+    translate: var(--tc-b);
+  }
+  62%,
+  90% {
+    translate: var(--tc-c, var(--tc-b));
+    opacity: 1;
+  }
+  100% {
+    translate: var(--tc-c, var(--tc-b));
+    opacity: 0;
+  }
+}
+@keyframes tc-ripple {
+  0%,
+  29% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  30% {
+    opacity: calc(0.9 * var(--tc-first, 1));
+    scale: 0.3;
+  }
+  48% {
+    opacity: 0;
+    scale: 1.6;
+  }
+  61% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  62% {
+    opacity: calc(0.9 * var(--tc-second, 0));
+    scale: 0.3;
+  }
+  80%,
+  100% {
+    opacity: 0;
+    scale: 1.6;
+  }
+}
+@keyframes tc-appear {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  36%,
+  62% {
+    opacity: var(--tc-early, 1);
+  }
+  66%,
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* A student who has asked the OS for less motion gets a still picture of the finished step: the
+   loop is held at 84 %, where the result shows, the ripples are spent and the cursor rests. */
+@media (prefers-reduced-motion: reduce) {
+  .tc-cursor,
+  .tc-ripple,
+  .tc-appear {
+    animation-play-state: paused;
+    animation-delay: -2.1s;
+  }
+}
+
 /* ---------- Smaller screens ---------- */
 /* A 1366×768 laptop at 125 % scaling has about 1090 px of width and 610 px of height to give. The
    bars give up their spare padding first, then their height, before any panel has to shrink. */
