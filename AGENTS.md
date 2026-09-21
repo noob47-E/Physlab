@@ -93,9 +93,10 @@ after a user's layout was saved still appears: `showPanel` puts it back beside w
 - **Never hardcode a colour.** Both themes must work. Use CSS variables and `themeColor()`. Several
   bugs came from literal hex values that were invisible in the light theme — menus, popups,
   measurement labels, the focused tab. `tests/colours.test.ts` scans the renderer for hex, palette
-  utilities and pixel text sizes; the files it still allows are listed there, and the list may only
-  shrink. `panels/LabChart.tsx` shows the right way; the token utilities (`text-ink`, `bg-surface-1`,
-  `text-body`, `font-math`, ...) are defined at the top of `styles.css`.
+  utilities and pixel text sizes; its allow-lists are empty and must stay empty, and three.js code
+  reads its colours through `themeColor()`. `panels/LabChart.tsx` shows the right way; the token
+  utilities (`text-ink`, `bg-surface-1`, `text-body`, `font-math`, ...) are defined at the top of
+  `styles.css`.
 - **Pure Math works in exact fractions, never in doubles.** `math/pure/rat.ts` is bigint over
   bigint, and everything above it — polynomials, factorisation, partial fractions — is built on
   that. A student reading a factorisation must never meet `0.30000000000000004`, and a step that
@@ -136,7 +137,8 @@ after a user's layout was saved still appears: `showPanel` puts it back beside w
 - **Every scene object carries the `space` it was drawn in** (`core/visibility.ts`), stamped by
   `Builder.base()` from `scene().activeSpace`, which `enterMode` sets. Rendering, labels, picking,
   the Outliner, Measure, sliders, Select-all and camera framing filter on it; evaluation, naming,
-  undo, save and `dependentsOf` never do. An object with no space (old files) shows everywhere.
+  undo, save and `dependentsOf` never do. An object with no space (made where no drawing is active,
+  or from a format-1 file where nothing said where it belongs) shows everywhere.
 - **A hover highlight names its `owner`**, and `ShapeInfo` clears the highlight when it unmounts.
   A mouse-leave never fires on an element that has just been removed, which is how a shaded area
   used to outlive the shape it belonged to.

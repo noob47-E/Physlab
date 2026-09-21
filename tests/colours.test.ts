@@ -20,24 +20,10 @@ import { RENDERER_SRC as ROOT } from './helpers/repo'
  * Files that still carry their own colours, waiting on the phase that owns them. Tighten after
  * merge: remove every entry that has become clean, and never add one for a new file.
  */
-const COLOUR_ALLOW = new Set([
-  'render/CameraRig.tsx',
-  'render/GraphView.tsx',
-  'render/Interaction.tsx',
-  'render/Marks.tsx',
-  'render/ObjectViews.tsx',
-  'render/SandboxView.tsx',
-  'render/Viewport.tsx'
-])
+const COLOUR_ALLOW = new Set<string>([])
 
 /** Files that still size text in pixels. Tighten after merge, as above. */
-const SIZE_ALLOW = new Set([
-  'panels/Sandbox.tsx',
-  'panels/Solver.tsx',
-  'panels/Timeline.tsx',
-  'panels/VectorCalc.tsx',
-  'render/Viewport.tsx'
-])
+const SIZE_ALLOW = new Set<string>([])
 
 const PALETTE = 'gray|zinc|neutral|slate|stone|white|black|amber|emerald|sky|violet|red|rose|green|blue|yellow|orange|indigo|lime|cyan|teal|pink|fuchsia|purple'
 const PROPS = 'text|bg|border|ring|divide|placeholder|outline|fill|stroke|accent|shadow|from|to|via|caret|decoration'
