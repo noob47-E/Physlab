@@ -7,7 +7,6 @@ import {
   angleBisector,
   circleCircleIntersection,
   circleFrom3,
-  footOfPerpendicular,
   lineCircleIntersection,
   lineLineIntersection,
   orientedAngleAt,
@@ -141,7 +140,7 @@ export function evaluateScene(
           case 'intersection': {
             const a = need(d.a)
             const b = need(d.b)
-            let pts: V3[] = []
+            let pts: V3[]
             const isLine = (c: Computed) => c.type === 'line' || c.type === 'segment' || c.type === 'ray' || c.type === 'vector'
             if (isLine(a) && isLine(b)) {
               const p = lineLineIntersection(needLine(d.a), needLine(d.b))

@@ -67,7 +67,7 @@ function WorkingView({ doc, pref, onPref, onOffer, onTry }: { doc: WorkingDoc; p
   useEffect(() => {
     setShown(initialShown(doc.moves.length, pref))
     setTrying(false)
-  }, [doc]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc])
 
   const hidden = doc.moves.length - shown
   const finished = hidden === 0

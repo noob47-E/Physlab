@@ -16,7 +16,7 @@ import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
 import { niceStep, toScreen } from './cameraUtils'
 import { formatMeasure } from '../math/format'
-import { themeColor, useTheme } from '../app/theme'
+import { themeColor, useTheme, useThemed } from '../app/theme'
 
 /** Geometry for each shape, in metres. */
 function geometryFor(def: BodyDef): THREE.BufferGeometry {
@@ -237,6 +237,7 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       // Unmounting mid-drag (a mode switch) must not leave the hand closed and the camera locked.
       if (drag.current) {
         drag.current = null
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- `sim` holds the physics world, not a DOM node: it is the same object for the life of the view, so reading it at cleanup is exactly what is wanted
         sim.current?.release_()
         setControls(true)
         el.style.cursor = ''
@@ -256,7 +257,6 @@ export function SandboxView() {
   const playing = useScene((s) => s.playing)
   const settings = useScene((s) => s.settings)
   const mode = useApp((s) => s.mode)
-  const theme = useTheme((t) => t.theme)
   const sim = useRef<SimWorld | null>(null)
   const group = useRef<THREE.Group>(null)
   const [ready, setReady] = useState(false)
@@ -264,7 +264,7 @@ export function SandboxView() {
   const { invalidate } = useThree()
   const check = useRef(location.hash.includes('sandbox') ? { last: -1, contacts: 0 } : null)
   useGrabAndThrow(sim, group)
-  const selectColour = useMemo(() => themeColor('--sel-glow'), [theme])
+  const selectColour = useThemed(() => themeColor('--sel-glow'))
 
   // Start the engine the first time the sandbox is opened; afterwards pick the running one up
   // again, so switching modes and back does not restart the experiment.
@@ -294,7 +294,6 @@ export function SandboxView() {
     return () => {
       alive = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // A change to the objects is applied to the running world where it can be, and only forces a
@@ -452,10 +451,15 @@ export function SandboxView() {
 function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
   const theme = useTheme((t) => t.theme)
   const floor = bodies.find((b) => b.shape === 'ground')
+  // Only the floor's footprint and height shape the grid, so a change to anything else about the
+  // floor (its material, say) leaves the geometry alone.
+  const width = floor?.size[0]
+  const thickness = floor?.size[1]
+  const y = floor?.position[1]
   const grid = useMemo(() => {
-    if (!floor) return null
-    const half = Math.max(4, floor.size[0] / 2)
-    const top = floor.position[1] + floor.size[1] / 2 + 0.002
+    if (width === undefined || thickness === undefined || y === undefined) return null
+    const half = Math.max(4, width / 2)
+    const top = y + thickness / 2 + 0.002
     const fine = Math.min(20, half)
     const coarse = niceStep(half / 10)
     const pts: number[] = []
@@ -468,7 +472,7 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
     return g
-  }, [floor?.size[0], floor?.size[1], floor?.position[1], floor])
+  }, [width, thickness, y])
   useEffect(() => () => grid?.dispose(), [grid])
   if (!grid) return null
   return (
@@ -570,11 +574,12 @@ function applyTransforms(group: THREE.Group, transforms: Float32Array, order: Bo
  */
 function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   const bodies = useSandbox((s) => s.bodies)
-  const theme = useTheme((t) => t.theme)
-  const colour = useMemo(() => themeColor('--accent'), [theme])
+  const colour = useThemed(() => themeColor('--accent'))
   const shown = bodies.filter((d) => d.showArrows && d.motion !== 'static')
+  // The slots are rebuilt only when the set of arrows changes, never on an edit to a body, or
+  // every arrow would jump back to zero for a frame each time a slider moved.
   const key = shown.map((d) => d.id).join(',')
-  const slots = useMemo(() => new Map(shown.map((d) => [d.id, { tail: [0, 0, 0] as V3, comp: [0, 0, 0] as V3 }])), [key])
+  const slots = useMemo(() => new Map(key.split(',').filter(Boolean).map((id) => [id, { tail: [0, 0, 0] as V3, comp: [0, 0, 0] as V3 }])), [key])
   useFrame(() => {
     const w = sim.current
     if (!w) return
@@ -644,8 +649,7 @@ export function linkSegments(kind: LinkKind, from: V3, to: V3): number[] {
  */
 function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   const links = useSandbox((s) => s.links)
-  const theme = useTheme((t) => t.theme)
-  const colour = useMemo(() => themeColor('--tick-text'), [theme])
+  const colour = useThemed(() => themeColor('--tick-text'))
   return (
     <>
       {links.map((l) => (

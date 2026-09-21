@@ -301,7 +301,7 @@ function expandWorking(src: string): Working {
   const vars = varsOf(whole)
   const at: Record<string, Rat> = {}
   vars.forEach((v, i) => (at[v] = rat(2 + i)))
-  let ok = true
+  let ok: boolean
   let viaBrackets = R0
   let viaAnswer = R0
   try {

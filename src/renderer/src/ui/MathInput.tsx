@@ -92,7 +92,6 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       mf.removeEventListener('input', onInput)
       mf.removeEventListener('keydown', onKey, { capture: true })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

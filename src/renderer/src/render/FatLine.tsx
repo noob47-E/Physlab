@@ -45,7 +45,6 @@ export function FatLine({
     if (dashed) line.computeLineDistances()
     line.frustumCulled = false
     return line
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashed, segments])
 
   useEffect(() => {

@@ -331,7 +331,8 @@ describe('a negative highest power', () => {
 
   it('writes the sign as a minus, never as -1(...)', () => {
     for (const src of ['-x^2 + 5x - 6', '-2x^2 - 5x - 2', '-x^3 + 6x^2 - 11x + 6']) {
-      expect(runPure('factor', src).answers[0].tex, src).not.toMatch(/-1\left/)
+      // `\l` in a regex is just `l`, so the old pattern looked for "-1left" and could never fail.
+      expect(runPure('factor', src).answers[0].tex, src).not.toMatch(/-1\\left/)
     }
   })
 

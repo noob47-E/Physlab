@@ -13,8 +13,9 @@ import { useMarks, type Marks } from '../render/Marks'
 import { NumField } from '../ui/fields'
 import { fitCamera } from '../render/viewState'
 
-function triOf(id: ObjId): Tri | null {
-  const s = useScene.getState()
+type SceneRead = Pick<ReturnType<typeof useScene.getState>, 'objects' | 'ev'>
+
+function triOf(id: ObjId, s: SceneRead): Tri | null {
   const o = s.objects[id]
   const c = s.ev.values.get(id)
   if (!o || o.type !== 'polygon' || c?.type !== 'polygon' || c.pts.length !== 3) return null
@@ -31,8 +32,8 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
   const [showMarks, setShowMarks] = useState(true)
 
   const result = useMemo(() => {
-    const A = triOf(a)
-    const B = triOf(b)
+    const A = triOf(a, { objects, ev })
+    const B = triOf(b, { objects, ev })
     if (!A || !B) return null
     return {
       A,
@@ -42,7 +43,6 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
         fmtAngle: (v) => formatMeasure(v, 'angle', settings)
       })
     }
-    // ev and objects are what the triangles are read from.
   }, [a, b, ev, objects, settings])
 
   // Equal parts get matching marks: one tick on the first equal pair, two on the next, and so on.
@@ -72,7 +72,7 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
   }, [result, showMarks, setMarks])
 
   if (!result) return null
-  const { A, B, r } = result
+  const { A, r } = result
   const len = (v: number) => formatMeasure(v, 'length', settings)
   const ang = (v: number) => formatMeasure(v, 'angle', settings)
   return (

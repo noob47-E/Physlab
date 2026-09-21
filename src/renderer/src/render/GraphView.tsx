@@ -12,7 +12,7 @@ import type { GraphObj } from '../core/types'
 import { compileScalar } from '../math/expr'
 import { implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
 import { fmt } from '../math/format'
-import { themeColor, useTheme, type Theme } from '../app/theme'
+import { themeColor, useTheme, useThemed, type Theme } from '../app/theme'
 import type { V3 } from '../math/vec'
 
 const scopeNow = () => useScene.getState().ev.scope
@@ -25,13 +25,13 @@ const scopeNow = () => useScene.getState().ev.scope
  */
 function useGraphColors() {
   const theme = useTheme((t) => t.theme)
-  const colors = useMemo(() => {
+  const colors = useThemed(() => {
     // Resolved once per theme: reading the stylesheet inside useFrame for every key point made a
     // graph with many roots pay a style read per root per frame.
     const extremum = themeColor('--key-extremum')
     const key: Record<KeyPoint['kind'], string> = { root: themeColor('--key-root'), yIntercept: themeColor('--key-intercept'), max: extremum, min: extremum }
     return { select: themeColor('--sel-glow'), wireframe: themeColor('--wireframe'), key }
-  }, [theme])
+  })
   return { theme, colors }
 }
 
@@ -113,7 +113,6 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       /* invalid function: draw nothing */
     }
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fns, b.xMin, b.xMax, b.yMin, b.yMax, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax])
 
   useEffect(() => {
@@ -225,7 +224,6 @@ function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: Gra
     g.setIndex(s.indices)
     g.computeVertexNormals()
     return g
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [F, version])
   useEffect(() => () => geo?.dispose(), [geo])
   useFrame(() => labelAnchors.set(obj.id, { p: [6, 6, 0] }))

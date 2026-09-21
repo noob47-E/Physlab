@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { R1, rAdd, rDiv, rFromNumber, rMul, rSqrt, rStr, rSub, rat, rTex } from '../src/renderer/src/math/pure/rat'
+import { rAdd, rDiv, rFromNumber, rMul, rSqrt, rStr, rSub, rat, rTex } from '../src/renderer/src/math/pure/rat'
 import { eMul, exprTex, parseExpr, parseFraction, commonFactor, varsOf } from '../src/renderer/src/math/pure/mono'
 import { pAdd, pDivMod, pEq, pGcd, pMul, pTex, polyFromExpr, findRationalRoot } from '../src/renderer/src/math/pure/poly'
 import { factorise } from '../src/renderer/src/math/pure/factor'

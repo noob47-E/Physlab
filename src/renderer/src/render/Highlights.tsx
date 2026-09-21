@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { FatLine } from './FatLine'
 import { useView } from './viewState'
 import { useScene } from '../core/store'
-import { themeColor, useTheme } from '../app/theme'
+import { themeColor, useThemed } from '../app/theme'
 import type { Highlight } from '../math/shapeFormulas'
 import type { V3 } from '../math/vec'
 
@@ -43,8 +43,7 @@ export function Highlights() {
   const hatch = useMemo(() => (h?.region ? hatchSegments(h.region, 7 * wpp) : []), [h, wpp])
   // The colours come from the stylesheet: a fixed light grey and yellow were invisible on the
   // light theme's pale canvas. Re-read when the theme changes.
-  const theme = useTheme((t) => t.theme)
-  const { hatchColour, glow } = useMemo(() => ({ hatchColour: themeColor('--grid-axis'), glow: themeColor('--warn') }), [theme])
+  const { hatchColour, glow } = useThemed(() => ({ hatchColour: themeColor('--grid-axis'), glow: themeColor('--warn') }))
   // A highlight whose shape has been deleted has nothing to shade.
   if (!h || !alive) return null
   return (

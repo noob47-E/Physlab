@@ -1,11 +1,10 @@
 // Tick marks on equal sides and arcs on equal angles: the marks a geometry book puts on two
 // congruent triangles. Set by the Compare card, drawn here.
 
-import { useMemo } from 'react'
 import { create } from 'zustand'
 import { FatLine } from './FatLine'
 import { useView } from './viewState'
-import { themeColor, useTheme } from '../app/theme'
+import { themeColor, useThemed } from '../app/theme'
 import { add, normalize, scale, sub, type V3 } from '../math/vec'
 
 export interface Marks {
@@ -21,8 +20,7 @@ export function MarksView() {
   const marks = useMarks((s) => s.marks)
   const wpp = useView((s) => s.wpp)
   // Re-read on a theme switch: the demand-driven canvas only repaints when something renders.
-  const theme = useTheme((t) => t.theme)
-  const colour = useMemo(() => themeColor('--good'), [theme])
+  const colour = useThemed(() => themeColor('--good'))
   if (!marks) return null
   const lines: V3[][] = []
   for (const t of marks.ticks) {
@@ -40,13 +38,13 @@ export function MarksView() {
     const u = normalize(sub(arc.a, arc.vertex))
     const v = normalize(sub(arc.b, arc.vertex))
     let a0 = Math.atan2(u[1], u[0])
-    let a1 = Math.atan2(v[1], v[0])
+    const a1 = Math.atan2(v[1], v[0])
     // Sweep the short way round, the inside of the corner.
     let d = a1 - a0
     while (d > Math.PI) d -= 2 * Math.PI
     while (d < -Math.PI) d += 2 * Math.PI
     if (d < 0) {
-      ;[a0, a1] = [a1, a0]
+      a0 = a1
       d = -d
     }
     for (let i = 0; i < arc.n; i++) {

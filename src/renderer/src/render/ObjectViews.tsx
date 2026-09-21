@@ -8,7 +8,7 @@ import { useScene } from '../core/store'
 import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneObject, TextObj, VectorObj } from '../core/types'
 import { isFree } from '../core/evaluate'
 import { freeCapitals } from '../core/naming'
-import { angleAt, centroid, orientedAngleAt, triangleInfo } from '../math/geometry'
+import { angleAt, centroid, orientedAngleAt } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
@@ -41,7 +41,6 @@ function useDrawingColors() {
        */
       series: Array.from({ length: SERIES_COUNT }, (_, i) => seriesColor(i))
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme]
   )
 }
@@ -532,7 +531,6 @@ export const AngleView = memo(function AngleView({ obj, c, selected }: ViewProps
     if (pts.length < 3 || isRight) return null
     const shape = new THREE.Shape([new THREE.Vector2(c.vertex[0], c.vertex[1]), ...pts.map((p) => new THREE.Vector2(p[0], p[1]))])
     return new THREE.ShapeGeometry(shape)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pts.map((p) => p.join(',')).join(';')])
   useEffect(() => () => sector?.dispose(), [sector])
   return (

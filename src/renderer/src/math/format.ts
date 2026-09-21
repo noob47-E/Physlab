@@ -275,7 +275,7 @@ export function texAngle(rad: number, unit: AngleUnit = 'deg', decimals = 2): st
 /** Degrees → D°M'S" string (like the calculator's ° ' " key). */
 export function toDMS(deg: number): string {
   const sign = deg < 0 ? '−' : ''
-  let d = Math.abs(deg)
+  const d = Math.abs(deg)
   let D = Math.floor(d)
   let M = Math.floor((d - D) * 60)
   let S = (d - D - M / 60) * 3600

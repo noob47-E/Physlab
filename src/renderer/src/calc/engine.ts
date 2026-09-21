@@ -1,7 +1,7 @@
 // Numeric engine behind the calculator panel (fx-991EX feature set and more).
 
 import type { MathNode } from 'mathjs'
-import { math, preprocess, setAngleMode, getAngleMode, splitArgs } from '../math/expr'
+import { math, preprocess, setAngleMode, splitArgs } from '../math/expr'
 import { constantScope } from './constants'
 import { calcNum, mathFormatOptions } from './format'
 
@@ -304,7 +304,7 @@ export function exactForm(v: number): string | null {
   // v² within 10⁻¹¹ of zero is read as the fraction 0/1, and the answer for 1 ÷ 500000 was √0.
   if (sq && sq[0] !== 0) {
     // v = ±√(n/d) = ±√(n·d)/d, pull out square factors.
-    let [n, d] = sq
+    const [n, d] = sq
     const sign = v < 0 ? -1 : 1
     let inside = n * d
     let outside = 1

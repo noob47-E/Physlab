@@ -503,7 +503,7 @@ describe('the × key', () => {
     let last = await run('A × B')
     expect(last.tex).toContain('-11\\hat{k}')
     expect(last.solution?.title).toBe('Vector product A×B')
-    last = await run('C = A × B')
+    await run('C = A × B')
     expect(errors()).toEqual([])
     vectorNamed('C', [0, 0, -11])
     expect((named('C') as VectorObj).def.kind).toBe('expr')

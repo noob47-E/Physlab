@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, Plus, Sigma, Trash2 } from 'lucide-react'
 import { create } from 'zustand'
 import { useScene } from '../core/store'
+import type { EvalResult } from '../core/types'
 import { visualizeSolution, type DrawStyle } from '../core/visualize'
 import { latexToMath } from '../math/latexToMath'
 import { getAngleMode, math, preprocess, setAngleMode, toV3 } from '../math/expr'
@@ -140,18 +141,18 @@ function inDegrees<T>(fn: () => T): T {
 }
 
 /** The vector value of a card, or an error message. */
-function cardValue(card: Card, cards: Card[]): V3 | string {
+function cardValue(card: Card, cards: Card[], ev: EvalResult): V3 | string {
   try {
-    return inDegrees(() => cardValueNow(card, cards))
+    return inDegrees(() => cardValueNow(card, cards, ev))
   } catch (e) {
     return friendly(e)
   }
 }
 
-function cardValueNow(card: Card, cards: Card[]): V3 | string {
+function cardValueNow(card: Card, cards: Card[], ev: EvalResult): V3 | string {
   if (card.entry === 'polar') return fromPolar(evalNumber(card.mag), toRad(evalNumber(card.angle)))
   if (card.entry === 'scene') {
-    const c = useScene.getState().ev.values.get(card.sceneId)
+    const c = ev.values.get(card.sceneId)
     if (c?.type === 'vector') return c.comp
     return 'Pick a vector from the drawing'
   }
@@ -159,7 +160,7 @@ function cardValueNow(card: Card, cards: Card[]): V3 | string {
   const scope: Record<string, unknown> = { ...UNIT_VECTORS }
   for (const other of cards) {
     if (other.id === card.id) break
-    const v = cardValue(other, cards)
+    const v = cardValue(other, cards, ev)
     if (typeof v !== 'string') scope[other.name] = v
   }
   return toV3(math.evaluate(preprocess(latexToMath(card.latex, { vectorOps: true })), scope))
@@ -212,11 +213,12 @@ export function VectorCalc() {
   const st = useVC()
   const settings = useScene((s) => s.settings)
   const objects = useScene((s) => s.objects)
+  const ev = useScene((s) => s.ev)
   const [error, setError] = useState('')
   const exprRef = useRef<MathInputHandle>(null)
   const set = useVC.setState
 
-  const values = useMemo(() => st.cards.map((c) => cardValue(c, st.cards)), [st.cards, objects])
+  const values = useMemo(() => st.cards.map((c) => cardValue(c, st.cards, ev)), [st.cards, ev])
   // Helpers are not offered: a force arrow drawn to a stand-in length would read as the wrong vector.
   const sceneVectors = Object.values(objects).filter((o) => o.type === 'vector' && !o.auxiliary)
 

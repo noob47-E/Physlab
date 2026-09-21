@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
@@ -17,7 +17,7 @@ import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '..
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
-import { themeColor, useTheme } from '../app/theme'
+import { themeColor, useThemed } from '../app/theme'
 
 interface DragState {
   hit: Hit
@@ -594,17 +594,13 @@ function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, 
  * re-read when the theme flips, so they show on the light canvas too.
  */
 function usePreviewColors() {
-  const theme = useTheme((t) => t.theme)
-  return useMemo(
-    () => ({
-      band: themeColor('--text-dim'),
-      // The stroke is the only thing on screen while a student draws, and the selection yellow
-      // was the faintest line on the light canvas; the accent blue reads in both themes.
-      stroke: themeColor('--accent'),
-      snap: (kind: SnapInfo['kind']) => themeColor(kind === 'point' ? '--sel-glow' : kind === 'axis' ? '--accent' : kind === 'onObject' ? '--series-5' : '--good')
-    }),
-    [theme]
-  )
+  return useThemed(() => ({
+    band: themeColor('--text-dim'),
+    // The stroke is the only thing on screen while a student draws, and the selection yellow
+    // was the faintest line on the light canvas; the accent blue reads in both themes.
+    stroke: themeColor('--accent'),
+    snap: (kind: SnapInfo['kind']) => themeColor(kind === 'point' ? '--sel-glow' : kind === 'axis' ? '--accent' : kind === 'onObject' ? '--series-5' : '--good')
+  }))
 }
 
 /** Rubber-band previews, the snap indicator and the freehand stroke. */

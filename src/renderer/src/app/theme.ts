@@ -1,5 +1,6 @@
 // Dark (default) or light for bright rooms and projectors.
 
+import { useMemo } from 'react'
 import { create } from 'zustand'
 
 export type Theme = 'dark' | 'light'
@@ -42,6 +43,19 @@ export const useTheme = create<{ theme: Theme; set: (t: Theme) => void; toggle: 
   },
   toggle: () => get().set(get().theme === 'dark' ? 'light' : 'dark')
 }))
+
+/**
+ * Something read from the stylesheet (usually through `themeColor`), re-read when the theme flips.
+ * The demand-driven canvas only repaints when something renders, so a plain `themeColor()` call
+ * in a component would keep the old theme's colour on screen until the next unrelated redraw.
+ */
+export function useThemed<T>(read: () => T): T {
+  const theme = useTheme((t) => t.theme)
+  // The stylesheet is the real dependency and `theme` is the signal that it changed; `read` is an
+  // inline closure with a new identity every render, so listing it would defeat the memo.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  return useMemo(() => read(), [theme])
+}
 
 function apply(theme: Theme) {
   document.documentElement.dataset.theme = theme

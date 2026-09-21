@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { MapControls, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three/webgpu'
@@ -8,7 +8,7 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { engine, useSandbox } from '../sim/store'
 import { visibleIn } from '../core/visibility'
-import { themeColor, useTheme } from '../app/theme'
+import { themeColor, useThemed } from '../app/theme'
 
 /** Bounding box of all visible geometry (graphs excluded). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -79,12 +79,11 @@ export function CameraRig() {
   const mode = useApp((s) => s.mode)
   const sideView = useSandbox((s) => s.sideView)
   const fineZoom = useFineZoom()
-  const { camera, size, controls } = useThree()
+  const { camera, size, controls, get } = useThree()
   const command = useCameraCommand()
   const last = useRef({ cx: NaN, cy: NaN, wpp: NaN, w: 0, h: 0 })
   // The fill light's tint comes from the stylesheet and is re-read when the theme flips.
-  const theme = useTheme((t) => t.theme)
-  const fillLight = useMemo(() => themeColor('--light-fill'), [theme])
+  const fillLight = useThemed(() => themeColor('--light-fill'))
 
   // The sandbox stands the world up the other way (y is up) and frames the floor.
   useEffect(() => {
@@ -105,6 +104,8 @@ export function CameraRig() {
   useEffect(() => {
     if (!command.nonce) return
     const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+    // Read at the moment of the command: a window resize must not repeat the last "fit".
+    const { width, height } = get().size
     if (useApp.getState().mode === 'sandbox') {
       // The maths presets below put the camera 12 m under the floor. Frame the objects instead,
       // where they are now rather than where they started.
@@ -153,7 +154,7 @@ export function CameraRig() {
         const h = Math.max(box.max[1] - box.min[1], 1)
         if (viewMode === '2d') {
           camera.position.set(cx, cy, 100)
-          ;(camera as THREE.OrthographicCamera).zoom = Math.max(2, Math.min(size.width / (w * 1.35), size.height / (h * 1.45), 400))
+          ;(camera as THREE.OrthographicCamera).zoom = Math.max(2, Math.min(width / (w * 1.35), height / (h * 1.45), 400))
           camera.updateProjectionMatrix()
           c?.target.set(cx, cy, 0)
         } else {
@@ -176,7 +177,7 @@ export function CameraRig() {
       c?.target.set(0, 0, 0)
     }
     c?.update()
-  }, [command.nonce, viewMode, camera, controls])
+  }, [command, viewMode, camera, controls, get])
 
   useFrame(() => {
     const L = last.current

@@ -9,7 +9,7 @@ import { startingScene, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD } from '../sim/types'
 import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
 import { renameInObjects, renameProblem } from './rename'
-import { visibleOrder, type Space } from './visibility'
+import type { Space } from './visibility'
 
 export interface LogEntry {
   id: number

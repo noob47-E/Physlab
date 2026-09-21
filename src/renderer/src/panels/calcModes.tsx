@@ -588,7 +588,7 @@ function EquationMode() {
   const [coef, setCoef] = useState<number[]>([1, -5, 6, 0, 0, 0, 0])
   const letters = ['x', 'y', 'z', 't', 'u', 'v']
 
-  let out: React.ReactNode = null
+  let out: React.ReactNode
   let visualize: (() => void) | null = null
   try {
     if (kind === 'simul') {
@@ -715,7 +715,7 @@ function InequalityMode() {
   const [coef, setCoef] = useState([1, -5, 6, 0, 0])
   const [op, setOp] = useState<'<' | '<=' | '>' | '>='>('<')
   const c = coef.slice(0, deg + 1)
-  let text = ''
+  let text: string
   try {
     const iv = polyInequality(c, op)
     const f = (v: number) => (Number.isFinite(v) ? calcNum(v) : v > 0 ? '∞' : '−∞')
@@ -918,13 +918,13 @@ function UnitsMode() {
   const [from, setFrom] = useState('km/h')
   const [to, setTo] = useState('m/s')
   const [free, setFree] = useState('5 N m to J')
-  let result = ''
+  let result: string
   try {
     result = calcNum(Number(math.unit(value, from).toNumber(to)))
   } catch (e) {
     result = String(e instanceof Error ? e.message : e)
   }
-  let freeOut = ''
+  let freeOut: string
   try {
     freeOut = math.format(math.evaluate(free), { precision: 10 })
   } catch (e) {
@@ -1028,7 +1028,7 @@ function MeasureMode() {
   }
   const numVal = Number(num.replace(/[×x]\s*10\^?/i, 'e'))
   const prop = propagate(op, a, op === '^' ? power : b)
-  let dims = ''
+  let dims: string
   try {
     dims = dimensionsOf(unitExpr)
   } catch (e) {
