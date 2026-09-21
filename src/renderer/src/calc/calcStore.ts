@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { usePure } from '../math/pure/store'
 
 /** History outlives the session: a student closing the app mid-homework should not lose it. */
 const HISTORY_KEY = 'physlab.calc.history'
@@ -155,3 +156,31 @@ useCalc.subscribe((s) => {
 })
 
 export const clearCalcHistory = (): void => useCalc.setState({ history: [] })
+
+/**
+ * What the maths field should hold once a working has arrived: the LaTeX the working was made
+ * from, in a mode that has the field on screen. Null when the field already shows it — a run
+ * started from the field itself — or when the working has no LaTeX of its own.
+ *
+ * The Working panel used to keep its own field and copy `inputLatex` into it; with one field
+ * for everything, a factorisation asked for in the command bar, a "Worked out" entry recalled
+ * from the history or the tour's example otherwise showed its steps under a field and an
+ * answer that still belonged to the previous line, and Enter then worked on the wrong one.
+ */
+export function fieldAfterWorking(calc: Pick<CalcStore, 'mode' | 'input'>, latex: string): Partial<CalcStore> | null {
+  if (!latex || latex === calc.input) return null
+  // The Bases field is plain text, and a list mode (matrices, statistics…) has no field at all.
+  const mode: CalcMode = calc.mode === 'COMP' || calc.mode === 'CMPLX' ? calc.mode : 'COMP'
+  return mode === calc.mode ? { input: latex } : { input: latex, mode }
+}
+
+// Joined here, at module level, rather than in the Maths screen: the command bar can ask for a
+// working before that screen has ever been loaded, and the field must still show the line when
+// it opens.
+let followedSeq = usePure.getState().runSeq
+usePure.subscribe((s) => {
+  if (s.runSeq === followedSeq) return
+  followedSeq = s.runSeq
+  const patch = fieldAfterWorking(useCalc.getState(), s.inputLatex)
+  if (patch) useCalc.setState(patch)
+})

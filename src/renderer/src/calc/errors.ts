@@ -39,8 +39,39 @@ export function errorSentence(raw: unknown): ErrorSentence {
   return { sentence: "I can't work that out.", detail }
 }
 
-/** A number that came back with no value in it: 1 ÷ 0, √−1 in real mode, 0 ÷ 0. */
-export function nonFiniteSentence(v: number): ErrorSentence {
+/** True when the linear source visibly divides by a zero: 1/0, 5 / (0), ((1)/(0)). */
+const dividesByZero = (src: string): boolean => /\/\s*\(*\s*0+(\.0*)?\s*\)*(\s*$|[^.\d])/.test(src)
+
+/**
+ * A number that came back with no value in it: 1 ÷ 0, √−1 in real mode, 0 ÷ 0, ln 0. The source
+ * decides between "divides by zero" and "runs off to infinity": ln(0) is −∞ and divides by
+ * nothing, and telling a student it did sent them looking for a fraction that was not there.
+ */
+export function nonFiniteSentence(v: number, src = ''): ErrorSentence {
   if (Number.isNaN(v)) return { sentence: 'That has no value here — perhaps a root of a negative number, or 0 ÷ 0.' }
-  return { sentence: 'That divides by zero, or is too big to hold.' }
+  if (dividesByZero(src)) return { sentence: 'That divides by zero.' }
+  return { sentence: 'That runs off to infinity — like 1 ÷ 0 or ln 0 does — so there is no number to show.' }
+}
+
+/** The characters a base allows, in the words a student reads. */
+const BASE_DIGITS: Record<number, { re: RegExp; words: string }> = {
+  2: { re: /[01]/, words: '0 and 1 in binary' },
+  8: { re: /[0-7]/, words: '0 to 7 in octal' },
+  10: { re: /[0-9]/, words: '0 to 9 in decimal' },
+  16: { re: /[0-9A-Fa-f]/, words: '0 to 9 and A to F in hexadecimal' }
+}
+
+/**
+ * The sentence for a digit that does not belong to the base — `12` typed in binary — or null
+ * when every character is a digit of the base, an operator, a bracket or one of the bitwise
+ * words. The Bases engine refuses such a line as a syntax error, and "check the brackets" was
+ * the wrong advice for it.
+ */
+export function outsideBaseSentence(src: string, base: number): ErrorSentence | null {
+  const digits = BASE_DIGITS[base]
+  if (!digits) return null
+  const rest = src.replace(/\b(and|or|xor|xnor|not|neg)\b/gi, ' ').replace(/[\s+\-*/()&|^~]/g, '')
+  const bad = [...rest].find((ch) => !digits.re.test(ch))
+  if (bad === undefined) return null
+  return { sentence: `Only the digits of this base are allowed here: ${digits.words}. "${bad}" is not one of them.` }
 }

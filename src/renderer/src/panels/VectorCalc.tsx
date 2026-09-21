@@ -8,7 +8,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, Plus, Sigma, Trash2 } from 'lucide-react'
-import { create } from 'zustand'
 import { useScene } from '../core/store'
 import type { EvalResult } from '../core/types'
 import { visualizeSolution, type DrawStyle } from '../core/visualize'
@@ -19,100 +18,10 @@ import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
+import { addVectorFromScene, ijkLatex, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
 
-type Entry = 'comp' | 'polar' | 'scene'
-
-interface Card {
-  id: number
-  name: string
-  entry: Entry
-  latex: string
-  mag: string
-  angle: string
-  sceneId: string
-  /** The components a drawing card last read, so it stays readable if that vector is deleted. */
-  last?: V3
-}
-
-/** A vector written the way a card is typed, at full precision, so nothing is lost in the copy. */
-const ijkLatex = (v: V3): string =>
-  v
-    .map((c, i) => (Math.abs(c) < 1e-12 ? '' : `${c < 0 ? '-' : '+'}${Math.abs(c)}\\hat{${'ijk'[i]}}`))
-    .join('')
-    .replace(/^\+/, '') || '0'
-
-const DEFAULT_CARDS: Card[] = [
-  { id: 1, name: 'A', entry: 'comp', latex: '3\\hat{i}+4\\hat{j}', mag: '10', angle: '30', sceneId: '' },
-  { id: 2, name: 'B', entry: 'polar', latex: '', mag: '5', angle: '120', sceneId: '' }
-]
-
-// ---------------------------------------------------------------------------
-// The cards survive a restart: a student comes back to the vectors of the problem they were on.
-// ---------------------------------------------------------------------------
-
-const CARDS_KEY = 'physlab.vectors.cards'
-
-function loadCards(): Card[] {
-  try {
-    const raw = localStorage.getItem(CARDS_KEY)
-    if (!raw) return DEFAULT_CARDS
-    const cards = JSON.parse(raw) as Card[]
-    // A card linked to a drawing's vector stays linked while the drawing still has it. If the
-    // vector is gone (the app restarted with an empty drawing, or it was deleted) the staleness
-    // check in the panel turns it into a typed card holding the last components it read —
-    // demoting every linked card here left a red, empty card on every restart.
-    const usable = cards.filter((c) => c && typeof c.name === 'string' && typeof c.latex === 'string')
-    return usable.length ? usable : DEFAULT_CARDS
-  } catch {
-    return DEFAULT_CARDS
-  }
-}
-
-function saveCards(cards: Card[]): void {
-  try {
-    localStorage.setItem(CARDS_KEY, JSON.stringify(cards))
-  } catch {
-    // Not remembered; the panel still works.
-  }
-}
-
-interface VCState {
-  cards: Card[]
-  expr: string
-  k: string
-  q: string
-  /** null = the solution's own picture; a style only overrides when the student chose one. */
-  style: DrawStyle | null
-  result: { sol: VS.Solution; label: string } | null
-  showSteps: boolean
-  showMore: boolean
-}
-
-const initialCards = loadCards()
-let nextCard = Math.max(2, ...initialCards.map((c) => c.id)) + 1
-
-const useVC = create<VCState>(() => ({
-  cards: initialCards,
-  expr: '\\vec{A}+\\vec{B}',
-  k: '2',
-  q: '1.6\\times10^{-19}',
-  style: null,
-  result: null,
-  showSteps: false,
-  showMore: false
-}))
-
-useVC.subscribe((s, prev) => {
-  if (s.cards !== prev.cards) saveCards(s.cards)
-})
-
-/** Add a card that reads one of the scene's vectors (used by the right-click menu). */
-export function addVectorFromScene(sceneId: string, name: string): void {
-  const st = useVC.getState()
-  if (st.cards.some((c) => c.entry === 'scene' && c.sceneId === sceneId)) return
-  const safe = VS.safeCardName(name, `V${nextCard}`, st.cards.map((c) => c.name))
-  useVC.setState({ cards: [...st.cards, { id: nextCard++, name: safe, entry: 'scene', latex: '', mag: '1', angle: '0', sceneId }] })
-}
+// Still exported from here for the right-click menu; the store module is the one to import.
+export { addVectorFromScene }
 
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
 
@@ -337,8 +246,8 @@ export function VectorCalc() {
 
   const addCard = () => {
     const used = new Set(st.cards.map((c) => c.name))
-    const name = 'ABCDEFGHLMNPQRSTUVW'.split('').find((l) => !used.has(l)) ?? `V${nextCard}`
-    set({ cards: [...st.cards, { id: nextCard++, name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
+    const name = 'ABCDEFGHLMNPQRSTUVW'.split('').find((l) => !used.has(l)) ?? `V${peekCardId()}`
+    set({ cards: [...st.cards, { id: nextCardId(), name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
   }
 
   const opButton = (op: Op) => (

@@ -910,8 +910,16 @@ math-field.math-input::part(menu-toggle) {
 }
 /* The stack scrolls as a whole; a card that scrolls sideways (a long answer) must not be squeezed
    shorter than its content to make the rest fit, which is what a flex child does by default. */
-.maths > * {
+.maths > *,
+.maths-head > * {
   flex-shrink: 0;
+}
+/* The block the popup keypad hangs under — the field, the toolbar, the answer and the drawers —
+   so the keypad never sits over the answer it produces. */
+.maths-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .maths-field {
   display: flex;

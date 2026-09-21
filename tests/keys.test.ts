@@ -10,7 +10,7 @@ import { join, relative, sep } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { RENDERER_SRC as ROOT } from './helpers/repo'
 import { resetGlobals } from './helpers/globals'
-import { KEY_GROUPS, LOWER_FIRST, allKeys, groupsForMode, type KeyDef, type KeyGroup } from '../src/renderer/src/calc/keys'
+import { KEY_GROUPS, allKeys, groupsForMode, type KeyDef, type KeyGroup } from '../src/renderer/src/calc/keys'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { casioToMath, evaluateBaseN, evaluateComp } from '../src/renderer/src/calc/engine'
 import { constantScope } from '../src/renderer/src/calc/constants'
@@ -20,11 +20,13 @@ import { MODE_LABELS } from '../src/renderer/src/calc/calcStore'
 beforeEach(resetGlobals)
 
 /**
- * A template with its boxes filled: the selection (#0) as 4 and each box to fill (#?) as 2.
- * Not 1 and 1: log base 1 of 1 is 0/0, and those two are the only values that break a key
- * that is otherwise fine.
+ * A template with its boxes filled: the selection (#0) as the letter x and each box to fill
+ * (#?) as 2. A letter, not a digit, for the selection, because a template that makes a new
+ * name out of it — x with a subscript became x1, a name the engine has no value for — passed
+ * with a digit (4 with a subscript read as 42) and failed on the first student. Not 1 for the
+ * box: log base 1 of anything is 0/0, and that breaks a key that is otherwise fine.
  */
-const filled = (tex: string): string => tex.replace(/#0/g, '4').replace(/#\?/g, '2')
+const filled = (tex: string): string => tex.replace(/#0/g, 'x').replace(/#\?/g, '2')
 
 /** A key that is not an expression on its own — an operator, a bracket, a degree sign — in a line that is. */
 function inContext(k: KeyDef): string {
@@ -80,8 +82,13 @@ describe('every key the keypad offers', () => {
       if (group.id === 'complex' || k.id === 'i') {
         const v = math.evaluate(casioToMath(src), { ...constantScope(), ...ctx.vars, i: math.complex(0, 1), Ans: ctx.ans })
         expect(isFiniteValue(v), `${k.id}: ${src}`).toBe(true)
+        if (k.texDeg) {
+          const d = math.evaluate(casioToMath(latexToMath(filled(k.texDeg))), { ...constantScope(), ...ctx.vars, i: math.complex(0, 1), Ans: ctx.ans })
+          expect(isFiniteValue(d), `${k.id} in degrees: ${k.texDeg}`).toBe(true)
+        }
         continue
       }
+      expect(k.texDeg, `${k.id}: only the complex polar key has a degrees form`).toBeUndefined()
       const out = evaluateComp(src, ctx)
       if (k.id === 'inf') {
         expect(out.value).toBe(Infinity)
@@ -91,7 +98,23 @@ describe('every key the keypad offers', () => {
     }
     // Two the student is likely to meet first, by value.
     expect(Number(evaluateComp(latexToMath(inContext(keys.find((k) => k.id === 'degree')!)), { ...ctx, angle: 'rad' }).value)).toBeCloseTo(0.5)
-    expect(Number(evaluateComp(latexToMath(filled(keys.find((k) => k.id === 'ncr')!.tex!)), ctx).value)).toBe(6)
+    expect(Number(evaluateComp(latexToMath(keys.find((k) => k.id === 'ncr')!.tex!.replace('#0', '4').replace('#?', '2')), ctx).value)).toBe(6)
+  })
+
+  it('writes the polar form in the angle unit shown beside the field', () => {
+    // e^{iθ} is radians whatever the switch says, so the degrees form turns θ into radians on
+    // the way in: 2∠90° is 2i, and the same key in radians gave −0.9 + 1.8i while the extras
+    // line under it reported the angle in degrees.
+    const polar = keys.find((k) => k.id === 'polar')!
+    const at = (tex: string, r: string, th: string): { re: number; im: number } =>
+      math.complex(math.evaluate(casioToMath(latexToMath(tex.replace('#0', r).replace('#?', th))), { ...constantScope(), i: math.complex(0, 1) }) as never) as unknown as { re: number; im: number }
+    const deg = at(polar.texDeg!, '2', '90')
+    expect(deg.re).toBeCloseTo(0, 9)
+    expect(deg.im).toBeCloseTo(2, 9)
+    const rad = at(polar.tex!, '2', '\\frac{\\pi}{2}')
+    expect(rad.re).toBeCloseTo(0, 9)
+    expect(rad.im).toBeCloseTo(2, 9)
+    expect(polar.hint).toMatch(/angle unit/)
   })
 
   it('gives the Bases field text its own engine reads', () => {
@@ -102,10 +125,25 @@ describe('every key the keypad offers', () => {
     }
   })
 
-  it('knows which templates fill their lower limit first', () => {
-    expect(LOWER_FIRST.test('\\int_{#?}^{#?}#0\\,dx')).toBe(true)
-    expect(LOWER_FIRST.test('\\sum_{x=#?}^{#?}#0')).toBe(true)
-    expect(LOWER_FIRST.test('\\frac{#0}{#?}')).toBe(false)
+  it('walks the boxes of ∫, Σ and Π top to bottom, and says so', () => {
+    // MathLive visits the boxes in its own order — the top limit, the bottom limit, then the
+    // expression — and the ▶ key follows it. The old hop into the bottom limit first sent ▶
+    // from there into the expression, then the top limit, then back into the bottom one: ∫ 0 ▶
+    // 1 ▶ x ▶ ▶ 5 typed \int_{05}^{x}1\,dx. So no key jumps after inserting, and every hint
+    // tells the student the order the boxes come in.
+    for (const id of ['integral', 'sum', 'prod']) {
+      const k = keys.find((x) => x.id === id)!
+      expect(k.tex, id).toMatch(/^\\(int|sum)|^\\prod/)
+      expect(k.hint, id).toMatch(/top (limit|number), ▶ for the bottom one, ▶ for the expression/)
+    }
+    expect(readFileSource('panels/Maths.tsx')).not.toMatch(/moveToNextPlaceholder/)
+  })
+
+  it('offers no key that makes a name the engine cannot use', () => {
+    // A subscript key made x₁, which the converter reads as x1: a name with no value, and the
+    // Variables drawer offers only A–F, M, x and y. Every template is filled with x above, so
+    // a template that turns the selection into a new name fails that test; this pins the shape.
+    for (const k of keys) if (k.tex) expect(k.tex, k.id).not.toMatch(/#0_\{/)
   })
 
   it('shows the digits in every mode, and the complex and bases groups only in theirs', () => {
@@ -128,7 +166,7 @@ describe('every key the keypad offers', () => {
       const k = functions.keys.find((x) => x.id === name)!
       expect(k.more?.map((m) => m.id)).toEqual([`a${name}`, `${name}h`])
     }
-    expect(latexToMath(filled(functions.keys.find((x) => x.id === 'sin')!.more![0].tex!))).toBe('asin(4)')
+    expect(latexToMath(filled(functions.keys.find((x) => x.id === 'sin')!.more![0].tex!))).toBe('asin(x)')
   })
 })
 
@@ -165,6 +203,10 @@ describe('nothing that looks like the fx-991EX survives', () => {
       }
     }
     expect(hits).toEqual([])
+  })
+
+  it('labels the polar keys in words, not with the handheld’s Pol and Rec', () => {
+    for (const k of allKeys()) expect(k.label, k.id).not.toMatch(/^(Pol|Rec)$/)
   })
 
   it('names the modes in words', () => {

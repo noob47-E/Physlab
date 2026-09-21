@@ -18,8 +18,8 @@ import { FIELD_MODES, MODE_HINTS, MODE_LABELS, clearCalcHistory, isFieldMode, us
 import { casioToMath, evaluateComp, type Base } from '../calc/engine'
 import { calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
-import { evaluateInput, isHeavy, lettersIn, type EvalResult } from '../calc/evaluateInput'
-import { LOWER_FIRST, groupsForMode, type KeyDef, type KeyGroup, type KeyGroupId } from '../calc/keys'
+import { evaluateInput, isHeavy, lettersIn, mainLine, type EvalResult } from '../calc/evaluateInput'
+import { groupsForMode, type KeyDef, type KeyGroup, type KeyGroupId } from '../calc/keys'
 import { math } from '../math/expr'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
 import { fieldHasText, type StepPref } from '../math/pure/reveal'
@@ -156,20 +156,48 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   const setSettings = useScene((s) => s.setSettings)
   const mathRef = useRef<MathInputHandle>(null)
   const baseRef = useRef<HTMLInputElement>(null)
-  const fieldBox = useRef<HTMLDivElement>(null)
-  // The answer remembers the mode it was worked out under: a mode switch keeps the field's text
-  // (the store holds it) but an answer from the other mode's rules is not shown under this one.
-  const [answered, setAnswered] = useState<{ mode: FieldMode; result: EvalResult } | null>(null)
+  // The field, the toolbar, the answer and the drawers: what the keypad hangs under and what a
+  // click inside leaves it open for. It used to hang under the field alone, exactly over the
+  // answer card, so = on the keypad showed nothing until the keypad was closed.
+  const headBox = useRef<HTMLDivElement>(null)
+  // The answer remembers the mode it was worked out under and the line it answers: a mode
+  // switch keeps the field's text (the store holds it) but an answer from the other mode's
+  // rules is not shown under this one, and an answer to a line the student has since edited is
+  // not shown under the new line either — on one screen it read as the answer to that line.
+  const [answered, setAnswered] = useState<{ mode: FieldMode; input: string; result: EvalResult } | null>(null)
   const result = answered?.mode === mode ? answered.result : null
   const setResult = (next: EvalResult | null | ((prev: EvalResult | null) => EvalResult | null)): void =>
     setAnswered((prev) => {
-      const r = typeof next === 'function' ? next(prev?.mode === mode ? prev.result : null) : next
-      return r ? { mode, result: r } : null
+      const cur = prev?.mode === mode ? prev : null
+      const r = typeof next === 'function' ? next(cur?.result ?? null) : next
+      if (!r) return null
+      // A function only amends the answer already shown (the exact form arriving), so the line
+      // it belongs to is the one it had; a fresh answer belongs to what the field holds now.
+      return { mode, input: typeof next === 'function' ? (cur?.input ?? '') : useCalc.getState().input, result: r }
     })
+  // Every keystroke lands here. The store is written first; the answer is dropped only on the
+  // first keystroke that leaves the line it answered (an unchanged state is no render), so a
+  // keystroke costs one store write and no render of this screen.
+  const onEdit = useCallback((latex: string) => {
+    useCalc.setState({ input: latex })
+    setAnswered((prev) => (prev && prev.input !== latex ? null : prev))
+  }, [])
   const [showExact, setShowExact] = useState(true)
   const [eng, setEng] = useState(false)
   const [base, setBase] = useState<Base>(10)
   const [asked, setAsked] = useState<{ mode: FieldMode; letters: string[] } | null>(null)
+  // A new working — from Work it out, the command bar, a recalled entry or the tour — takes the
+  // screen: the field now holds its line (calcStore follows the pure store), and the answer
+  // card and the with-values form belonged to the line before.
+  useEffect(
+    () =>
+      usePure.subscribe((s, prev) => {
+        if (s.runSeq === prev.runSeq) return
+        setAnswered(null)
+        setAsked(null)
+      }),
+    []
+  )
   const withValues = asked?.mode === mode ? asked.letters : null
   const setWithValues = (letters: string[] | null): void => setAsked(letters ? { mode, letters } : null)
   const [keypad, setKeypad] = useState(false)
@@ -193,11 +221,11 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
 
   const evaluate = (varsOverride?: Record<string, unknown>): void => {
     const s = useCalc.getState()
-    const opts = { vars: { ...s.vars, ...varsOverride }, ans: s.ans, angle: angleUnit, base, eng }
+    const opts = { vars: { ...s.vars, ...varsOverride }, ans: s.ans, angle: angleUnit, base }
     const run = (): void => {
       const r = evaluateInput(mode, s.input, opts)
       if (!r) return
-      setResult(r)
+      setAnswered({ mode, input: s.input, result: r })
       if (r.error) return
       useCalc.setState({
         ans: r.value,
@@ -253,7 +281,6 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       return
     }
     mathRef.current?.insert(tex)
-    if (LOWER_FIRST.test(tex)) mathRef.current?.command('moveToNextPlaceholder')
   }
 
   const press = (k: KeyDef): void => {
@@ -289,7 +316,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
         }
       }
     }
-    if (k.tex) insertTex(k.tex)
+    if (k.tex) insertTex(k.texDeg && angleUnit === 'deg' ? k.texDeg : k.tex)
   }
 
   // The keypad and toolbar callbacks read the latest handlers through this ref, so the keys —
@@ -298,10 +325,76 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   actions.current = { press }
   const onKey = useCallback((k: KeyDef) => actions.current.press(k), [])
   const closeKeypad = useCallback(() => setKeypad(false), [])
-  const anchor = useCallback(() => fieldBox.current?.getBoundingClientRect() ?? null, [])
+
+  /** Draws the line in the viewport; true when something was drawn. */
+  const draw = (input: string): boolean => {
+    const s = useCalc.getState()
+    const ddx = input.match(/^ddx\((.*)\)$/)
+    if (ddx) {
+      const [f, a] = args(ddx[1])
+      const x0 = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
+      const fx = Number(math.evaluate(casioToMath(f), { ...constantScope(), ...s.vars, x: x0 }))
+      const slope = Number(evaluateComp(input, { vars: s.vars, ans: s.ans, angle: 'rad' }).value)
+      visualizeTangent(casioToMath(f), x0, fx, slope)
+      return true
+    }
+    const integ = input.match(/^integral\((.*)\)$/)
+    if (integ) {
+      const [f, a, b] = args(integ[1])
+      const lo = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
+      const hi = Number(math.evaluate(casioToMath(b), { ...constantScope(), ...s.vars }))
+      visualizeArea(casioToMath(f), lo, hi, `∫ ${f} dx from ${a} to ${b}`)
+      return true
+    }
+    const pol = input.match(/^(Pol|Rec)\((.*)\)$/i)
+    if (pol) {
+      const [p, q] = args(pol[2]).map((t) => Number(math.evaluate(casioToMath(t), { ...constantScope(), ...s.vars })))
+      const rad = angleUnit === 'deg' ? (q * Math.PI) / 180 : q
+      visualizeVector(pol[1].toLowerCase() === 'pol' ? [p, q, 0] : [p * Math.cos(rad), p * Math.sin(rad), 0])
+      return true
+    }
+    if (mode === 'CMPLX' && result?.value && typeof result.value === 'object') {
+      const c = result.value as { re: number; im: number }
+      visualizeVector([c.re, c.im, 0], 'z')
+      return true
+    }
+    if (/=/.test(input) && /x/.test(input)) {
+      const [l, r] = input.split('=')
+      visualizeGraph(`y = ${l} − (${r})`, [`(${casioToMath(l)}) - (${casioToMath(r)})`], 'explicit')
+      return true
+    }
+    if (/(^|[^a-z])x([^a-z]|$)/.test(input)) {
+      visualizeGraph(`y = ${input}`, [casioToMath(input)], 'explicit')
+      return true
+    }
+    const sig = input.match(/^sigma\((.*)\)$/)
+    if (sig) {
+      const [f, a, b] = args(sig[1])
+      const lo = Number(math.evaluate(casioToMath(a)))
+      const hi = Math.min(Number(math.evaluate(casioToMath(b))), lo + 60)
+      const bld = new Builder()
+      bld.graph({ kind: 'explicit', source: `y = ${f}`, exprs: [casioToMath(f)] })
+      for (let k = lo; k <= hi; k++) {
+        const y = Number(math.evaluate(casioToMath(f), { x: k }))
+        const top = bld.point([k, y, 0], { auxiliary: true, showLabel: false })
+        const baseP = bld.point([k, 0, 0], { auxiliary: true, visible: false })
+        bld.segment(baseP.id, top.id, { color: themeColor('--accent'), showLabel: false })
+      }
+      bld.commit()
+      useScene.getState().setViewMode('2d')
+      return true
+    }
+    if (typeof result?.value === 'number') {
+      const b = new Builder()
+      b.number(String(result.value), { slider: { min: Math.min(0, result.value * 2), max: Math.max(10, result.value * 2), step: 0.01 } })
+      b.commit()
+      visualizePoint([result.value, 0, 0])
+      return true
+    }
+    return false
+  }
 
   const visualize = (): void => {
-    const s = useCalc.getState()
     let input: string
     try {
       input = linear().trim()
@@ -311,67 +404,9 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     }
     if (!input || mode === 'BASE-N') return
     try {
-      const ddx = input.match(/^ddx\((.*)\)$/)
-      if (ddx) {
-        const [f, a] = args(ddx[1])
-        const x0 = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
-        const fx = Number(math.evaluate(casioToMath(f), { ...constantScope(), ...s.vars, x: x0 }))
-        const slope = Number(evaluateComp(input, { vars: s.vars, ans: s.ans, angle: 'rad' }).value)
-        visualizeTangent(casioToMath(f), x0, fx, slope)
-        return
-      }
-      const integ = input.match(/^integral\((.*)\)$/)
-      if (integ) {
-        const [f, a, b] = args(integ[1])
-        const lo = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
-        const hi = Number(math.evaluate(casioToMath(b), { ...constantScope(), ...s.vars }))
-        visualizeArea(casioToMath(f), lo, hi, `∫ ${f} dx from ${a} to ${b}`)
-        return
-      }
-      const pol = input.match(/^(Pol|Rec)\((.*)\)$/i)
-      if (pol) {
-        const [p, q] = args(pol[2]).map((t) => Number(math.evaluate(casioToMath(t), { ...constantScope(), ...s.vars })))
-        const rad = angleUnit === 'deg' ? (q * Math.PI) / 180 : q
-        visualizeVector(pol[1].toLowerCase() === 'pol' ? [p, q, 0] : [p * Math.cos(rad), p * Math.sin(rad), 0])
-        return
-      }
-      if (mode === 'CMPLX' && result?.value && typeof result.value === 'object') {
-        const c = result.value as { re: number; im: number }
-        visualizeVector([c.re, c.im, 0], 'z')
-        return
-      }
-      if (/=/.test(input) && /x/.test(input)) {
-        const [l, r] = input.split('=')
-        visualizeGraph(`y = ${l} − (${r})`, [`(${casioToMath(l)}) - (${casioToMath(r)})`], 'explicit')
-        return
-      }
-      if (/(^|[^a-z])x([^a-z]|$)/.test(input)) {
-        visualizeGraph(`y = ${input}`, [casioToMath(input)], 'explicit')
-        return
-      }
-      const sig = input.match(/^sigma\((.*)\)$/)
-      if (sig) {
-        const [f, a, b] = args(sig[1])
-        const lo = Number(math.evaluate(casioToMath(a)))
-        const hi = Math.min(Number(math.evaluate(casioToMath(b))), lo + 60)
-        const bld = new Builder()
-        bld.graph({ kind: 'explicit', source: `y = ${f}`, exprs: [casioToMath(f)] })
-        for (let k = lo; k <= hi; k++) {
-          const y = Number(math.evaluate(casioToMath(f), { x: k }))
-          const top = bld.point([k, y, 0], { auxiliary: true, showLabel: false })
-          const baseP = bld.point([k, 0, 0], { auxiliary: true, visible: false })
-          bld.segment(baseP.id, top.id, { color: themeColor('--accent'), showLabel: false })
-        }
-        bld.commit()
-        useScene.getState().setViewMode('2d')
-        return
-      }
-      if (typeof result?.value === 'number') {
-        const b = new Builder()
-        b.number(String(result.value), { slider: { min: Math.min(0, result.value * 2), max: Math.max(10, result.value * 2), step: 0.01 } })
-        b.commit()
-        visualizePoint([result.value, 0, 0])
-      }
+      // The viewport is a tab beside this screen in the default layout, so a drawing made
+      // without bringing it forward went where the student could not see it.
+      if (draw(input)) showPanel('viewport')
     } catch (e) {
       setResult({ main: '', src: input, error: { sentence: 'I cannot draw that one.', detail: String(e) } })
     }
@@ -379,91 +414,93 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
 
   return (
     <>
-      <div className="maths-field" ref={fieldBox}>
-        <Expression mode={mode} mathRef={mathRef} baseRef={baseRef} onEnter={evaluate} />
-        <button
-          className={`btn ${keypad ? 'primary' : ''}`}
-          data-keypad-toggle
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setKeypad(!keypad)}
-          title={keypad ? 'Close the keypad' : 'Open a keypad for √, ∫, π and the rest; typing keeps working'}
-        >
-          <Keyboard size={14} /> Keypad
-        </button>
-      </div>
-      {keypad && <KeypadPopover mode={mode} anchor={anchor} onKey={onKey} onClose={closeKeypad} />}
+      <div className="maths-head" ref={headBox} data-keypad-keep>
+        <div className="maths-field">
+          <Expression mode={mode} mathRef={mathRef} baseRef={baseRef} onChange={onEdit} onEnter={evaluate} />
+          <button
+            className={`btn ${keypad ? 'primary' : ''}`}
+            data-keypad-toggle
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setKeypad(!keypad)}
+            title={keypad ? 'Close the keypad' : 'Open a keypad for √, ∫, π and the rest; typing keeps working'}
+          >
+            <Keyboard size={14} /> Keypad
+          </button>
+        </div>
+        {keypad && <KeypadPopover mode={mode} anchorRef={headBox} onKey={onKey} onClose={closeKeypad} />}
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button className="btn primary" onClick={() => evaluate()} title="Work out the answer (Enter does the same)">
-          =
-        </button>
-        <div className="relative flex items-center">
-          <button className="btn" onClick={() => workOut()} disabled={mode === 'BASE-N'} title="Show the steps, worked out exactly">
-            <Play size={13} /> Work it out
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button className="btn primary" onClick={() => evaluate()} title="Work out the answer (Enter does the same)">
+            =
           </button>
-          <button className="btn ghost px-1" onClick={() => setJobs(!jobs)} disabled={mode === 'BASE-N'} title="Work it out as a particular kind of question">
-            <ChevronDown size={12} />
+          <div className="relative flex items-center">
+            <button className="btn" onClick={() => workOut()} disabled={mode === 'BASE-N'} title="Show the steps, worked out exactly">
+              <Play size={13} /> Work it out
+            </button>
+            <button className="btn ghost px-1" onClick={() => setJobs(!jobs)} disabled={mode === 'BASE-N'} title="Work it out as a particular kind of question">
+              <ChevronDown size={12} />
+            </button>
+            {jobs && (
+              <div className="menu top-full mt-1" onMouseLeave={() => setJobs(false)}>
+                {JOBS.map((j) => (
+                  <button key={j.id} onClick={() => workOut(j.id)} title={j.about}>
+                    <span>{j.label}</span>
+                    <span className="sc">{j.example}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button className="btn" onClick={visualize} disabled={mode === 'BASE-N'} title="Show this calculation in the viewport (graph, tangent, area, vector…)">
+            <Eye size={13} /> Visualize
           </button>
-          {jobs && (
-            <div className="menu top-full mt-1" onMouseLeave={() => setJobs(false)}>
-              {JOBS.map((j) => (
-                <button key={j.id} onClick={() => workOut(j.id)} title={j.about}>
-                  <span>{j.label}</span>
-                  <span className="sc">{j.example}</span>
+          <div className="seg" title="The angle unit for sin, cos and tan">
+            <button className={angleUnit === 'deg' ? 'on' : ''} onClick={() => setSettings({ angleUnit: 'deg' })}>
+              DEG
+            </button>
+            <button className={angleUnit === 'rad' ? 'on' : ''} onClick={() => setSettings({ angleUnit: 'rad' })}>
+              RAD
+            </button>
+          </div>
+          {mode === 'BASE-N' && (
+            <div className="seg" title="The base the field is typed in">
+              {([10, 16, 2, 8] as Base[]).map((b) => (
+                <button key={b} className={base === b ? 'on' : ''} onClick={() => setBase(b)}>
+                  {b === 10 ? 'Decimal' : b === 16 ? 'Hex' : b === 2 ? 'Binary' : 'Octal'}
                 </button>
               ))}
             </div>
           )}
-        </div>
-        <button className="btn" onClick={visualize} disabled={mode === 'BASE-N'} title="Show this calculation in the viewport (graph, tangent, area, vector…)">
-          <Eye size={13} /> Visualize
-        </button>
-        <div className="seg" title="The angle unit for sin, cos and tan">
-          <button className={angleUnit === 'deg' ? 'on' : ''} onClick={() => setSettings({ angleUnit: 'deg' })}>
-            DEG
+          <div className="flex-1" />
+          <button className={`btn ghost ${showVars ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowVars(!showVars)} title="The letters you can use in a calculation, and their values">
+            Variables
           </button>
-          <button className={angleUnit === 'rad' ? 'on' : ''} onClick={() => setSettings({ angleUnit: 'rad' })}>
-            RAD
+          <button className={`btn ghost ${showHistory ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowHistory(!showHistory)}>
+            <History size={13} /> History
           </button>
         </div>
-        {mode === 'BASE-N' && (
-          <div className="seg" title="The base the field is typed in">
-            {([10, 16, 2, 8] as Base[]).map((b) => (
-              <button key={b} className={base === b ? 'on' : ''} onClick={() => setBase(b)}>
-                {b === 10 ? 'Decimal' : b === 16 ? 'Hex' : b === 2 ? 'Binary' : 'Octal'}
-              </button>
-            ))}
+
+        {result && (
+          <Answer result={result} showExact={showExact} onExact={setShowExact} eng={eng} onEng={mode === 'COMP' ? () => setEng(!eng) : undefined} />
+        )}
+
+        {withValues && (
+          <div className="card p-2">
+            <div className="mb-1 text-fine text-[color:var(--text-dim)]">Give each letter a value, then press Calculate</div>
+            <WithValuesForm
+              vars={withValues}
+              initial={useCalc.getState().vars}
+              onSubmit={(vals) => {
+                useCalc.setState({ vars: { ...useCalc.getState().vars, ...vals } })
+                evaluate(vals)
+              }}
+            />
           </div>
         )}
-        <div className="flex-1" />
-        <button className={`btn ghost ${showVars ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowVars(!showVars)} title="The letters you can use in a calculation, and their values">
-          Variables
-        </button>
-        <button className={`btn ghost ${showHistory ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowHistory(!showHistory)}>
-          <History size={13} /> History
-        </button>
+
+        {showVars && <VariablesDrawer onInsert={(name) => insertTex(name)} onClose={() => setShowVars(false)} />}
+        {showHistory && <HistoryDrawer onClose={() => setShowHistory(false)} />}
       </div>
-
-      {result && (
-        <Answer result={result} showExact={showExact} onExact={setShowExact} eng={eng} onEng={mode === 'COMP' ? () => setEng(!eng) : undefined} />
-      )}
-
-      {withValues && (
-        <div className="card p-2">
-          <div className="mb-1 text-fine text-[color:var(--text-dim)]">Give each letter a value, then press Calculate</div>
-          <WithValuesForm
-            vars={withValues}
-            initial={useCalc.getState().vars}
-            onSubmit={(vals) => {
-              useCalc.setState({ vars: { ...useCalc.getState().vars, ...vals } })
-              evaluate(vals)
-            }}
-          />
-        </div>
-      )}
-
-      {showVars && <VariablesDrawer onInsert={(name) => insertTex(name)} onClose={() => setShowVars(false)} />}
-      {showHistory && <HistoryDrawer onClose={() => setShowHistory(false)} />}
 
       <WorkingArea
         invited={() => invite.current}
@@ -487,7 +524,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
  * The field itself. This is the one component that follows the store's text, so a keystroke
  * re-renders it and nothing else on the screen.
  */
-function Expression({ mode, mathRef, baseRef, onEnter }: { mode: FieldMode; mathRef: RefObject<MathInputHandle | null>; baseRef: RefObject<HTMLInputElement | null>; onEnter: () => void }) {
+function Expression({ mode, mathRef, baseRef, onChange, onEnter }: { mode: FieldMode; mathRef: RefObject<MathInputHandle | null>; baseRef: RefObject<HTMLInputElement | null>; onChange: (latex: string) => void; onEnter: () => void }) {
   const input = useCalc((s) => s.input)
 
   // A constant chosen from the Constants list arrives here, because that list was on screen
@@ -511,7 +548,7 @@ function Expression({ mode, mathRef, baseRef, onEnter }: { mode: FieldMode; math
         value={input}
         spellCheck={false}
         placeholder="e.g. FF + 1A   or   1010 and 0110"
-        onChange={(e) => useCalc.setState({ input: e.target.value })}
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           e.stopPropagation()
           if (e.key === 'Enter') onEnter()
@@ -519,12 +556,12 @@ function Expression({ mode, mathRef, baseRef, onEnter }: { mode: FieldMode; math
       />
     )
   }
-  return <MathInput ref={mathRef} size="lg" value={input} onChange={(l) => useCalc.setState({ input: l })} onEnter={onEnter} placeholder={mode === 'CMPLX' ? '(3+4i)(1-2i)' : 'type here, or open the keypad'} />
+  return <MathInput ref={mathRef} size="lg" value={input} onChange={onChange} onEnter={onEnter} placeholder={mode === 'CMPLX' ? '(3+4i)(1-2i)' : 'type here, or open the keypad'} />
 }
 
 // ---------------------------------------------------------------------------
 
-const KeypadPopover = memo(function KeypadPopover({ mode, anchor, onKey, onClose }: { mode: FieldMode; anchor: () => DOMRect | null; onKey: (k: KeyDef) => void; onClose: () => void }) {
+const KeypadPopover = memo(function KeypadPopover({ mode, anchorRef, onKey, onClose }: { mode: FieldMode; anchorRef: RefObject<HTMLElement | null>; onKey: (k: KeyDef) => void; onClose: () => void }) {
   const box = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const groups = useMemo(() => groupsForMode(mode), [mode])
@@ -535,23 +572,37 @@ const KeypadPopover = memo(function KeypadPopover({ mode, anchor, onKey, onClose
   const [moreOf, setMoreOf] = useState<string | null>(null)
 
   const place = useCallback(() => {
-    const a = anchor()
+    const a = anchorRef.current?.getBoundingClientRect()
     const el = box.current
     if (!a || !el) return
-    setPos(placeTourCard({ left: a.left, top: a.top, width: a.width, height: a.height }, { w: el.offsetWidth, h: el.offsetHeight }, { w: window.innerWidth, h: window.innerHeight }))
-  }, [anchor])
+    const next = placeTourCard({ left: a.left, top: a.top, width: a.width, height: a.height }, { w: el.offsetWidth, h: el.offsetHeight }, { w: window.innerWidth, h: window.innerHeight })
+    setPos((cur) => (cur && cur.left === next.left && cur.top === next.top ? cur : next))
+  }, [anchorRef])
   useLayoutEffect(place, [place, tab, mode])
   useEffect(() => {
+    // The popover is fixed while the panel under it scrolls (capture catches the panel's own
+    // scroll), and the block it hangs from grows when an answer or a drawer appears.
     window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
-  }, [place])
+    document.addEventListener('scroll', place, true)
+    const watched = anchorRef.current
+    const ro = typeof ResizeObserver !== 'undefined' && watched ? new ResizeObserver(place) : null
+    if (watched) ro?.observe(watched)
+    return () => {
+      window.removeEventListener('resize', place)
+      document.removeEventListener('scroll', place, true)
+      ro?.disconnect()
+    }
+  }, [place, anchorRef])
 
-  // Esc, or a press anywhere but the keypad and its own button, closes it. A press on a key never
-  // reaches here as "outside", and the field keeps the focus throughout (mousedown is cancelled).
+  // Esc, or a press anywhere but the keypad, its own button and the block it hangs from, closes
+  // it. A click in the field to move the caret, on =, on DEG/RAD or on a variable's letter
+  // keeps it open — a student building an integral clicks into a limit box between key
+  // presses. A press on a key never reaches here as "outside", and the field keeps the focus
+  // throughout (mousedown is cancelled).
   useEffect(() => {
     const down = (e: PointerEvent): void => {
       const t = e.target as Element | null
-      if (box.current?.contains(t) || t?.closest?.('[data-keypad-toggle]')) return
+      if (box.current?.contains(t) || t?.closest?.('[data-keypad-toggle],[data-keypad-keep]')) return
       onClose()
     }
     const key = (e: KeyboardEvent): void => {
@@ -682,10 +733,13 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
   }
   const exact = result.exact ?? null
   const exactShown = showExact && !!exact
+  // Decided here, not when = was pressed, so the eng chip changes the number at once like the
+  // exact/decimal chip beside it does.
+  const main = mainLine(result, eng)
   return (
     <div className="maths-answer">
-      <div className="maths-result">{exactShown ? <Tex tex={exact} /> : result.main}</div>
-      {exactShown && !/^-?\d+$/.test(exact) && <div className="text-lead text-[color:var(--text-dim)]">≈ {result.main}</div>}
+      <div className="maths-result">{exactShown ? <Tex tex={exact} /> : main}</div>
+      {exactShown && !/^-?\d+$/.test(exact) && <div className="text-lead text-[color:var(--text-dim)]">≈ {main}</div>}
       {result.extra && (
         <div className="text-small leading-5 text-[color:var(--text-dim)]">
           {result.extra.map((x, i) => (
@@ -852,7 +906,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
         <div key={h.id} className="pure-hist-row" onClick={() => recall(h.id)} title={`${h.title}: ${h.input}`}>
           <div className="min-w-0 flex-1">
             <span className="text-[color:var(--text-faint)]">{jobById(h.job).label} · </span>
-            <span className="text-[color:var(--text)]">{h.input}</span>
+            <span className="text-[color:var(--text)]">{h.latex ? <Tex tex={h.latex} /> : h.input}</span>
             {h.answer && (
               <span className="ml-2 text-[color:var(--text-dim)]">
                 <Tex tex={h.answer} />
@@ -891,6 +945,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
 function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; settled: () => void; onTry: () => void }) {
   const working = usePure((s) => s.working)
   const asking = usePure((s) => s.asking)
+  const job = usePure((s) => s.job)
   const input = usePure((s) => s.input)
   const inputLatex = usePure((s) => s.inputLatex)
   const run = usePure((s) => s.run)
@@ -934,6 +989,24 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
   }
   return (
     <div className="maths-working">
+      <div className="flex flex-wrap items-center gap-2 px-3 pt-2 text-[color:var(--text-dim)]">
+        <label className="flex items-center gap-1">
+          Treat as
+          <select
+            className="field w-auto"
+            value={job}
+            title="What to do with what you typed: the same line, worked out as a different kind of question"
+            onChange={(e) => run(e.target.value as JobId, input, inputLatex)}
+          >
+            {JOBS.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="text-[color:var(--text-faint)]">{jobById(job).about}</span>
+      </div>
       <WorkingView
         doc={working}
         pref={pref}

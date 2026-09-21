@@ -9,7 +9,7 @@
 import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, formatValue, type Base } from './engine'
 import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
-import { errorSentence, nonFiniteSentence, type ErrorSentence } from './errors'
+import { errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
 import { math, setAngleMode } from '../math/expr'
 import { latexToMath } from '../math/latexToMath'
 import type { FieldMode } from './calcStore'
@@ -60,6 +60,10 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
   try {
     if (mode === 'BASE-N') {
       const base = opts.base ?? 10
+      // Checked before the engine sees it: the engine calls a 2 in binary a syntax error, and
+      // the sentence for that sends the student to check the brackets.
+      const outside = outsideBaseSentence(src, base)
+      if (outside) return { main: '', src, error: outside }
       const v = evaluateBaseN(src, base)
       return {
         main: formatBase(v, base),
@@ -72,7 +76,7 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       setAngleMode(opts.angle)
       const v = math.evaluate(casioToMath(src), { ...constantScope(), ...opts.vars, i: math.complex(0, 1), Ans: opts.ans }) as unknown
       const c = math.complex(v as never) as unknown as { re: number; im: number }
-      if (!Number.isFinite(c.re) || !Number.isFinite(c.im)) return { main: '', src, error: nonFiniteSentence(Number.isNaN(c.re) || Number.isNaN(c.im) ? NaN : Infinity) }
+      if (!Number.isFinite(c.re) || !Number.isFinite(c.im)) return { main: '', src, error: nonFiniteSentence(Number.isNaN(c.re) || Number.isNaN(c.im) ? NaN : Infinity, src) }
       const r = Math.hypot(c.re, c.im)
       const th = Math.atan2(c.im, c.re)
       // The same formatter as the Numbers mode, so 2 + i never reads "2 + 1i" here and "2 + i" there.
@@ -87,7 +91,7 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     }
     const out = evaluateComp(src, { vars: opts.vars, ans: opts.ans, angle: opts.angle })
     const num = typeof out.value === 'number' ? out.value : NaN
-    if (typeof out.value === 'number' && !Number.isFinite(out.value)) return { main: '', src, error: nonFiniteSentence(out.value) }
+    if (typeof out.value === 'number' && !Number.isFinite(out.value)) return { main: '', src, error: nonFiniteSentence(out.value, src) }
     const solved = /=/.test(src)
     const exact = Number.isFinite(num) && !solved && !/^(Pol|Rec)/i.test(src) ? exactForm(num) : null
     return {
@@ -103,6 +107,16 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
   } catch (e) {
     return { main: '', src, error: errorSentence(e) }
   }
+}
+
+/**
+ * The main line as the screen shows it: engineering notation is a way of reading the same
+ * number, decided when the answer is drawn, so the eng chip changes the answer on screen at
+ * once instead of at the next =. An equation's "x = …" and a complex number keep their text.
+ */
+export function mainLine(r: EvalResult, eng: boolean): string {
+  if (!eng || r.solved || typeof r.value !== 'number' || !Number.isFinite(r.value)) return r.main
+  return calcEng(r.value)
 }
 
 /**

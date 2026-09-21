@@ -18,6 +18,8 @@ export interface KeyDef {
   label: string
   /** LaTeX to insert: #0 is the selection (or nothing), #? a box the student fills. */
   tex?: string
+  /** What to insert instead of `tex` while the angle unit is degrees (the polar-form key). */
+  texDeg?: string
   act?: KeyAction
   /** One plain sentence, shown on hover. Every key has one. */
   hint: string
@@ -41,9 +43,6 @@ export interface KeyGroup {
   /** Shown only while one of these modes is on; every mode when absent. */
   modes?: CalcMode[]
 }
-
-/** Templates whose first box to fill is the lower limit (subscript). */
-export const LOWER_FIRST = /^\\(int|sum|prod)_/
 
 const fn = (name: string, args = 1): string => `\\${name}\\left(#0${',#?'.repeat(args - 1)}\\right)`
 const op = (name: string, args = 1): string => `\\operatorname{${name}}\\left(#0${',#?'.repeat(args - 1)}\\right)`
@@ -165,10 +164,10 @@ const FUNCTIONS: KeyDef[] = [
   { id: 'degree', label: '°', tex: '#0^{\\circ}', hint: 'Degrees, whatever the angle unit is set to' },
   {
     id: 'pol',
-    label: 'Pol',
+    label: 'polar',
     tex: op('Pol', 2),
     hint: 'Polar form of a point: distance r and angle θ from (x, y)',
-    more: [{ id: 'rec', label: 'Rec', tex: op('Rec', 2), hint: 'Back to (x, y) from a distance r and an angle θ' }]
+    more: [{ id: 'rec', label: 'x, y', tex: op('Rec', 2), hint: 'Back to (x, y) from a distance r and an angle θ' }]
   },
   {
     id: 'random',
@@ -181,9 +180,11 @@ const FUNCTIONS: KeyDef[] = [
 
 const CALCULUS: KeyDef[] = [
   { id: 'ddx', label: 'd/dx', tex: op('ddx', 2), hint: 'The gradient of an expression at a point: d/dx(x², 3) is 6' },
-  { id: 'integral', label: '∫', tex: '\\int_{#?}^{#?}#0\\,dx', hint: 'The area under a curve between two limits' },
-  { id: 'sum', label: 'Σ', tex: '\\sum_{x=#?}^{#?}#0', hint: 'Add up an expression for x from the first number to the second' },
-  { id: 'prod', label: 'Π', tex: '\\prod_{x=#?}^{#?}#0', hint: 'Multiply an expression for x from the first number to the second' },
+  // The boxes are walked the way MathLive orders them — top limit, bottom limit, then the
+  // expression — so ▶ goes top to bottom and never back into a limit already filled.
+  { id: 'integral', label: '∫', tex: '\\int_{#?}^{#?}#0\\,dx', hint: 'The area under a curve between two limits: fill the top limit, ▶ for the bottom one, ▶ for the expression' },
+  { id: 'sum', label: 'Σ', tex: '\\sum_{x=#?}^{#?}#0', hint: 'Add up an expression for x from one number to another: fill the top number, ▶ for the bottom one, ▶ for the expression' },
+  { id: 'prod', label: 'Π', tex: '\\prod_{x=#?}^{#?}#0', hint: 'Multiply an expression for x from one number to another: fill the top number, ▶ for the bottom one, ▶ for the expression' },
   { id: 'solve', label: 'x = ?', act: 'solve', hint: 'Solve the equation for x: type both sides with an = between them, then press this' },
   { id: 'calc', label: 'with values…', act: 'calc', hint: 'Work out an expression with letters by giving each letter a value' }
 ]
@@ -200,14 +201,21 @@ const TEMPLATES: KeyDef[] = [
   { id: 'frac', label: '▭⁄▭', tex: '\\frac{#0}{#?}', hint: 'A fraction: top over bottom' },
   { id: 'tpow', label: '▭ʸ', tex: '#0^{#?}', hint: 'A power' },
   { id: 'troot', label: 'ⁿ√▭', tex: '\\sqrt[#?]{#0}', hint: 'A root of any order' },
-  { id: 'sub', label: 'x₁', tex: '#0_{#?}', hint: 'A subscript, for names like x₁' },
   { id: 'matrix', label: '[▭]', tex: '\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}', hint: 'A 2 × 2 matrix; use ▶ to move between the boxes' },
   { id: 'e10', label: '×10ˣ', tex: '#0\\times10^{#?}', hint: 'Standard form: 3 × 10⁸' }
 ]
 
 const COMPLEX: KeyDef[] = [
   { id: 'ci', label: 'i', tex: 'i', hint: 'The imaginary unit, √−1' },
-  { id: 'polar', label: 'r∠θ', tex: '#0\\times e^{i\\times#?}', hint: 'Polar form: a size times e to the i θ, with θ in radians' },
+  {
+    id: 'polar',
+    label: 'r∠θ',
+    tex: '#0\\times e^{i\\times#?}',
+    // e^{iθ} wants radians whatever the switch says, and a ° inside the power is a unit the
+    // engine cannot raise e to; in degrees the angle is turned into radians on the way in.
+    texDeg: '#0\\times e^{i\\times\\frac{#?\\times\\pi}{180}}',
+    hint: 'Polar form: a size times e to the iθ, with θ in the angle unit shown beside the field'
+  },
   { id: 'arg', label: 'arg', tex: op('arg'), hint: 'The argument: the angle of a complex number' },
   { id: 'conj', label: 'conj', tex: op('conj'), hint: 'The conjugate: the same number with the sign of i flipped' },
   { id: 're', label: 'Re', tex: op('Re'), hint: 'The real part' },
