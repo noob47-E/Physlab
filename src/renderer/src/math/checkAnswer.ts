@@ -5,7 +5,7 @@
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
 import { getAngleMode, math, preprocess, setAngleMode } from './expr'
-import { fmtPrecise, type MeasureSettings } from './format'
+import { fmtPrecise, fmtSci, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 
@@ -26,7 +26,12 @@ const UNIT_TAIL = /(?<=[\d)\s])\s*(°|N\s*[·⋅]?\s*m|m\s*\/\s*s\s*\^?\s*2|m\s*
 export function parseAnswer(text: string): number | null {
   // Only a thousands separator goes: "1,234" is 1234, but the comma in "sin(30,40)" or "1,5" is
   // not, and stripping every comma turned those into different numbers instead of "unreadable".
-  let t = text.trim().replace(/−/g, '-').replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
+  // The leading group is one to three digits not starting with 0: "0,500" is a decimal written
+  // with a comma, and reading it as 500 told the student "wrong power of ten" for a right answer.
+  let t = text
+    .trim()
+    .replace(/−/g, '-')
+    .replace(/(?<![\d.,])([1-9]\d{0,2})((?:,\d{3})+)(?![\d,])/g, (_, head: string, tail: string) => head + tail.replace(/,/g, ''))
   if (!t) return null
   t = t.replace(UNIT_TAIL, '')
   if (!t.trim()) return null
@@ -52,13 +57,17 @@ export function checkAnswer(text: string, f: AnswerField): Check {
 
   const near = (x: number, y: number, tol = f.tol) => Math.abs(x - y) <= tol
   const angle = f.kind === 'angle'
+  /** The same direction, however many turns apart: 216.87° and −143.13° are one answer. */
+  const sameWay = (x: number, y: number) => Math.abs((((x - y) % 360) + 540) % 360 - 180) <= f.tol
 
   // Right, in any form the question accepts.
   if (near(a, f.value)) return { verdict: 'right', parsed: a }
   if (angle) {
-    const diff = (((a - f.value) % 360) + 540) % 360 - 180
-    if (Math.abs(diff) <= f.tol) {
-      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(f.value, { decimals: 2, precisionMode: 'dp' })}°.` }
+    if (sameWay(a, f.value)) {
+      // The sentence promises a value between 0° and 360°, so it must not quote a field that was
+      // set as −30° as "−30".
+      const turn = ((f.value % 360) + 360) % 360
+      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(turn, { decimals: 2, precisionMode: 'dp' })}°.` }
     }
   }
 
@@ -69,7 +78,10 @@ export function checkAnswer(text: string, f: AnswerField): Check {
     return { verdict: 'wrong', parsed: a, message: 'Right size, wrong sign. Check the direction — or the signs of the components you started from.' }
   }
   if (angle) {
-    if (near(a, 180 - f.value) || near(a, f.value - 180) || near(a, 360 - f.value)) {
+    // The other three quadrants with the same reference angle, compared as directions: the
+    // third-quadrant answer written between 0° and 360° (216.87° for a 36.87° field) used to
+    // be checked against −143.13° as a plain number and fell through to "Not quite".
+    if (sameWay(a, 180 - f.value) || sameWay(a, f.value + 180) || sameWay(a, -f.value)) {
       return { verdict: 'wrong', parsed: a, message: 'Right reference angle, wrong quadrant. The signs of the two components decide which quadrant the vector is in.' }
     }
     if (near(a, toRad(f.value), Math.max(f.tol, 0.02))) {
@@ -94,7 +106,13 @@ export function checkAnswer(text: string, f: AnswerField): Check {
 
 /** The answer as PhysLab would write it, for the "show me" button — in the student's precision. */
 export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 4, precisionMode: 'dp' }): string {
-  return `${fmtPrecise(f.value, s)}${f.unit ? ` ${f.unit}` : ''}`
+  // fmtPrecise writes anything under 1e-12 as 0, which is right for a dragged point and wrong
+  // for a known answer: an electron's 1.6×10⁻¹⁹ N must never be revealed as "0 N".
+  const v = f.value
+  const n = v !== 0 && Math.abs(v) < 1e-12 ? fmtSci(v, s) : fmtPrecise(v, s)
+  // A degree sign sits against its number, as formatMeasure writes it: "36.87°", not "36.87 °".
+  const gap = f.unit === '°' ? '' : ' '
+  return `${n}${f.unit ? `${gap}${f.unit}` : ''}`
 }
 
 /** A right or close answer counts; empty and unreadable do not. */

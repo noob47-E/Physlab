@@ -31,7 +31,9 @@ export const materialById = (id: string): Material => MATERIALS.find((m) => m.id
 
 /** Volume of a shape in m³, so density can give a mass the student can check. */
 export function shapeVolume(shape: string, size: [number, number, number]): number {
-  const [a, b, c] = size
+  // A size is a length whichever way it was typed: a negative one from an old file gave a
+  // negative volume, which world.ts clamped to a mass of a microgram.
+  const [a, b, c] = size.map(Math.abs)
   switch (shape) {
     case 'sphere':
       return (4 / 3) * Math.PI * a ** 3
@@ -54,7 +56,7 @@ export function shapeVolume(shape: string, size: [number, number, number]): numb
 
 /** Area facing the direction of travel (m²), used for air drag. */
 export function frontalArea(shape: string, size: [number, number, number], dir: [number, number, number]): number {
-  const [a, b, c] = size
+  const [a, b, c] = size.map(Math.abs)
   const ax = Math.abs(dir[0])
   const ay = Math.abs(dir[1])
   const az = Math.abs(dir[2])
@@ -62,9 +64,12 @@ export function frontalArea(shape: string, size: [number, number, number], dir: 
     case 'sphere':
       return Math.PI * a ** 2
     case 'cylinder':
-    case 'capsule':
       // Round end towards the motion, or the long side.
       return ay * Math.PI * a ** 2 + (1 - ay) * 2 * a * b
+    case 'capsule':
+      // Seen from the side a capsule is its rectangle plus the two half-discs on its ends, which
+      // together make one full circle; end-on it is that circle alone.
+      return Math.PI * a ** 2 + (1 - ay) * 2 * a * b
     case 'cone':
       return ay * Math.PI * (a / 2) ** 2 + (1 - ay) * a * b * 0.5
     default:

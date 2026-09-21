@@ -71,10 +71,11 @@ export const UNIT_NAMES: Record<LengthUnit, string> = { unit: 'grid units', mm: 
 export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
   if (!Number.isFinite(v)) return fmt(v)
   if (s.precisionMode === 'sf') {
-    if (v === 0) return '0'
     const abs = Math.abs(v)
+    // The same noise floor as fmt: a point dragged onto the axis reads 0, not 3×10⁻¹⁷.
+    if (abs < 1e-12) return '0'
+    if (abs >= 1e9 || abs < 1e-6) return fmtSci(v, s)
     const digits = Math.max(1, s.decimals)
-    if (abs >= 1e9 || abs < 1e-6) return fmt(Number(v.toPrecision(digits)), digits)
     // Keep the string from toPrecision: Number(...) would drop the zeros that show the precision
     // (3 s.f. of 2.5 must read 2.50), but trim the exponent form and any padding zeros before the point.
     const text = v.toPrecision(digits)
@@ -82,6 +83,27 @@ export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'pre
     return plain.replace('-', '−')
   }
   return fmt(v, s.decimals)
+}
+
+/**
+ * The scientific form in the student's precision, whatever the size of the number. Unlike
+ * fmtPrecise it has no noise floor: a known answer of 1.6×10⁻¹⁹ N is not drag noise and must
+ * not be revealed as "0 N". Significant figures keep their zeros (2.50×10^-7); decimal places
+ * trim them, as fmt does.
+ */
+export function fmtSci(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  if (!Number.isFinite(v)) return fmt(v)
+  if (v === 0) return '0'
+  if (s.precisionMode === 'sf') return sci(v, Math.max(1, s.decimals) - 1, false)
+  return sci(v, s.decimals, true)
+}
+
+/** "m×10^e" from toExponential; the mantissa's zeros are kept or trimmed as the caller asks. */
+function sci(n: number, decimals: number, trim: boolean): string {
+  const [m, e] = n.toExponential(decimals).split('e')
+  // The mantissa takes the same proper minus as every other number on screen (the calculator's
+  // own formatter already does); the exponent keeps the plain hyphen `texPrecise` looks for.
+  return `${(trim ? trimZeros(m) : m).replace('-', '−')}×10^${Number(e)}`
 }
 
 const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, direction: 0, number: 0 }
@@ -138,10 +160,7 @@ export function fmt(n: number, decimals = 4): string {
   if (!Number.isFinite(n)) return n > 0 ? '∞' : '−∞'
   if (Math.abs(n) < 1e-12) return '0'
   const abs = Math.abs(n)
-  if (abs >= 1e9 || abs < 1e-4) {
-    const [m, e] = n.toExponential(decimals).split('e')
-    return `${trimZeros(m)}×10^${Number(e)}`
-  }
+  if (abs >= 1e9 || abs < 1e-4) return sci(n, decimals, true)
   return trimZeros(n.toFixed(decimals)).replace('-', '−')
 }
 
