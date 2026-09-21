@@ -847,7 +847,8 @@ math-field.math-input::part(menu-toggle) {
   --lcd-bad: #8a1c1c;
   --lcd-shift: #a86a00;
   --lcd-alpha: #a8205a;
-  /* A rule and a field drawn on the LCD: a shade of its own green, so the panel needs no black/white utility. */
+  /* A rule and a field drawn on the LCD: translucent black and white that take the LCD's own
+     green from underneath, so the panel needs no black/white utility. */
   --lcd-line: rgba(0, 0, 0, 0.2);
   --lcd-field: rgba(255, 255, 255, 0.4);
 }

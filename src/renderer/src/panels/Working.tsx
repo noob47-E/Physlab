@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronDown, ChevronUp, Copy, Eye, History, Lightbulb, Play, Trash2, TriangleAlert, X } from 'lucide-react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { BookOpen, Check, ChevronDown, ChevronUp, Copy, Eye, History, Lightbulb, Pencil, Play, Trash2, TriangleAlert, X } from 'lucide-react'
 import { Tex } from '../ui/Tex'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { parseExpr, varsOf } from '../math/pure/mono'
 import { usePure, type PureEntry } from '../math/pure/store'
 import { JOBS, jobById, type JobId } from '../math/pure/run'
 import { texToPlain, type Working as WorkingDoc } from '../math/pure/work'
-import { STEP_PREF_KEY, checkTone, fieldHasText, initialShown, offeredJob, stepPrefFrom, type StepPref, type TreatAs } from '../math/pure/reveal'
+import { STEP_PREF_KEY, checkTone, fieldHasText, initialShown, invitesTry, offeredJob, stepPrefFrom, type StepPref, type TreatAs } from '../math/pure/reveal'
 import { visualizeGraph } from '../core/visualize'
 import { showPanel } from '../app/panels'
 import { useCasStatus } from '../math/cas'
@@ -54,7 +54,28 @@ function MoveRow({ n, head, rule, tex, note }: { n: number; head: string; rule?:
   )
 }
 
-function WorkingView({ doc, pref, onPref, onOffer, onTry }: { doc: WorkingDoc; pref: StepPref; onPref: (p: StepPref) => void; onOffer: (job: JobId) => void; onTry: () => void }) {
+/** Keys that mean "I am editing": any of them on the invitation button hands the keyboard back to the field. */
+const isEditingKey = (e: KeyboardEvent): boolean => !e.ctrlKey && !e.metaKey && !e.altKey && !['Enter', ' ', 'Tab', 'Escape'].includes(e.key) && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')
+
+function WorkingView({
+  doc,
+  pref,
+  invited,
+  settled,
+  onPref,
+  onOffer,
+  onTry
+}: {
+  doc: WorkingDoc
+  pref: StepPref
+  /** Whether the student asked for this answer from the field, and so may have the focus moved. */
+  invited: () => boolean
+  /** The answer has decided about the focus; the container forgets the request. */
+  settled: () => void
+  onPref: (p: StepPref) => void
+  onOffer: (job: JobId) => void
+  onTry: () => void
+}) {
   const [shown, setShown] = useState(() => initialShown(doc.moves.length, pref))
   const [copied, setCopied] = useState(false)
   // "Let me try first" has been pressed for this piece of working: the invitation goes, the
@@ -73,10 +94,25 @@ function WorkingView({ doc, pref, onPref, onOffer, onTry }: { doc: WorkingDoc; p
   const finished = hidden === 0
   const offer = offeredJob(doc, JOB_IDS)
   // A new answer with its steps hidden asks the student to try: that button is the primary
-  // one and takes the focus, so Enter after "Work it out" chooses trying rather than a reveal.
-  const inviting = doc.moves.length > 0 && shown === 0 && !trying
+  // one, so Enter after "Work it out" chooses trying rather than a reveal.
+  const inviting = invitesTry(doc.moves.length, shown, trying)
+  // It takes the focus only when the answer was asked for from the field. Focusing whenever the
+  // invitation appeared pulled the keyboard away on every remount (switching back to Calculator
+  // mode re-mounts this view with the old answer) and off the "Treat as" select mid-arrow-key,
+  // because each arrow re-runs the working. The flag is cleared on the answer that consumes it,
+  // or on one that cannot invite (every step showing, or a refusal), so it never outlives its
+  // own answer. The reset effect above lands a render later than the new doc, which is why this
+  // waits for `inviting` rather than deciding from the stale `shown`.
   useEffect(() => {
-    if (inviting) tryBtn.current?.focus()
+    if (!invited()) return
+    if (!invitesTry(doc.moves.length, initialShown(doc.moves.length, pref), false)) {
+      settled()
+      return
+    }
+    if (inviting) {
+      settled()
+      tryBtn.current?.focus()
+    }
   }, [doc, inviting])
 
   const copyAll = (): void => {
@@ -143,8 +179,17 @@ function WorkingView({ doc, pref, onPref, onOffer, onTry }: { doc: WorkingDoc; p
                 setTrying(true)
                 onTry()
               }}
+              onKeyDown={(e) => {
+                // A student who presses Enter, sees the answer and starts correcting a typo is
+                // typing at this button. Those keys go back to the field, and never on to the
+                // window, where Backspace deletes the selection and a letter switches tools.
+                if (!isEditingKey(e)) return
+                e.stopPropagation()
+                setTrying(true)
+                onTry()
+              }}
             >
-              <Lightbulb size={13} /> Let me try first
+              <Pencil size={13} /> Let me try first
             </button>
           )}
           {hidden > 0 && (
@@ -285,14 +330,19 @@ export function Working() {
   const [pref, setPref] = useState<StepPref>(readStepPref)
   const [showExamples, setShowExamples] = useState(false)
   const field = useRef<MathInputHandle>(null)
+  // True from "Work it out" until the answer it produced has decided about taking the focus.
+  const invite = useRef(false)
 
   // A recalled entry has to appear in the input box, not just in the working below. This must
   // follow inputLatex and never input: input is the linear form, and MathLive reads whatever it is
   // handed as LaTeX, so x^(2) would come back as a stray bracket in the student's expression.
   useEffect(() => setLatex(inputLatex), [inputLatex])
 
-  const go = (which?: JobId): void => {
+  // `fromField` says the student asked from the field or its button, so the answer may take the
+  // focus; a change of "Treat as" re-runs the working too, and must leave the select alone.
+  const go = (which?: JobId, fromField = true): void => {
     if (!fieldHasText(latex)) return
+    invite.current = fromField
     // Auto: the job is guessed from what was typed, and the title above the working says which.
     // The store converts the LaTeX itself, so a converter refusal reaches the student as a sentence.
     runLatex(latex, which ?? treatAs)
@@ -337,7 +387,7 @@ export function Working() {
                 setTreatAs(v)
                 if (v !== 'auto') {
                   setJob(v)
-                  if (fieldHasText(latex)) go(v)
+                  if (fieldHasText(latex)) go(v, false)
                 }
               }}
             >
@@ -400,7 +450,19 @@ export function Working() {
               )}
             </div>
           )}
-          {working && <WorkingView doc={working} pref={pref} onPref={setPreference} onOffer={(j) => run(j, input, inputLatex)} onTry={() => field.current?.focus()} />}
+          {working && (
+            <WorkingView
+              doc={working}
+              pref={pref}
+              invited={() => invite.current}
+              settled={() => {
+                invite.current = false
+              }}
+              onPref={setPreference}
+              onOffer={(j) => run(j, input, inputLatex)}
+              onTry={() => field.current?.focus()}
+            />
+          )}
           {asking && (
             <div className="px-3 pb-3 text-[color:var(--text-dim)]">
               Checking that one a different way{casStatus === 'loading' ? ' (starting the algebra engine, this takes a moment the first time)' : ''}…
