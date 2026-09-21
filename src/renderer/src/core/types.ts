@@ -68,7 +68,8 @@ export interface ObjectBase {
   auxiliary?: boolean
   /** Free-text caption shown in the outliner. */
   caption?: string
-  /** The drawing this belongs to (Vectors, Geometry, Graphing, Lab Data). Missing = shown everywhere. */
+  /** The drawing this belongs to (Vectors, Geometry, Graphing, Lab Data). Missing = shown everywhere,
+   *  which is what an object made where no drawing is active (the Sandbox, say) gets. */
   space?: Space
 }
 
@@ -226,7 +227,8 @@ export type ToolId =
 
 export interface SceneFile {
   app: 'PhysLab'
-  version: 1
+  /** The format this file is written in. `core/migrate.ts` lists the formats and steps older ones up. */
+  version: 2
   objects: SceneObject[]
   settings: SceneSettings
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens

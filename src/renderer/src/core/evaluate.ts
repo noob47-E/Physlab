@@ -332,15 +332,16 @@ function stuckMessage(id: ObjId, stuck: ObjId[], objects: Record<ObjId, SceneObj
     ...stuck.filter((p) => usedNames.has(objects[p]?.name ?? ''))
   ].filter((p, i, arr) => p !== id && stuck.includes(p) && arr.indexOf(p) === i)
   if (others.length) {
-    return `${name(id)} needs ${others.map(name).join(' and ')}, which in turn need ${name(id)}. This is a loop — make one of them independent.`
+    // "b, which in turn needs a" for one, "b and c, which in turn need a" for more.
+    return `${name(id)} needs ${others.map(name).join(' and ')}, which in turn ${others.length === 1 ? 'needs' : 'need'} ${name(id)}. This is a loop — make one of them independent.`
   }
   const missing = parentRefs(objects[id]).filter((p) => !objects[p])
   if (missing.length) return `${name(id)} refers to something that no longer exists.`
   return `${name(id)} cannot be worked out yet: one of the things it depends on is missing or forms a loop.`
 }
 
-/** Ids of objects that (directly or indirectly) depend on `id`. */
-export function dependentsOf(id: ObjId, objects: Record<ObjId, SceneObject>): Set<ObjId> {
+/** Parent id → the ids that use it directly, by reference or by name inside a formula. */
+export function directDependents(objects: Record<ObjId, SceneObject>): Map<ObjId, Set<ObjId>> {
   const direct = new Map<ObjId, Set<ObjId>>()
   const byName = new Map(Object.values(objects).map((o) => [o.name, o.id]))
   const link = (parent: ObjId | undefined, child: ObjId) => {
@@ -359,6 +360,12 @@ export function dependentsOf(id: ObjId, objects: Record<ObjId, SceneObject>): Se
     for (const ref of parentRefs(o)) link(ref, o.id)
     for (const e of exprRefs(o)) linkExpr(e, o.id)
   }
+  return direct
+}
+
+/** Ids of objects that (directly or indirectly) depend on `id`. */
+export function dependentsOf(id: ObjId, objects: Record<ObjId, SceneObject>): Set<ObjId> {
+  const direct = directDependents(objects)
   const out = new Set<ObjId>()
   const stack = [id]
   while (stack.length) {
