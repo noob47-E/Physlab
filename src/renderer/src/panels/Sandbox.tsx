@@ -1,14 +1,15 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
 import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, SkipForward, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
-import { launchVelocity, PRESETS, startPreset, type Preset } from '../sim/presets'
+import { groupedPresets, launchVelocity, presetBadges, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
+import { joinPrompt, LINK_CARDS, noWheelNote, wheelsAbove } from '../sim/join'
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_TITLES, joinCandidates, readFold, writeFold, type ControlKey, type FoldId, type FoldStore } from '../sim/inspector'
 import { QUANTITIES, quantity, tableFrom, type QuantityKey } from '../sim/recording'
 import { useLab } from '../lab/labStore'
@@ -171,6 +172,9 @@ export function Sandbox() {
   const remove = useSandbox((s) => s.removeBody)
   const select = useSandbox((s) => s.select)
   const setPartner = useSandbox((s) => s.setPartner)
+  const joinMode = useSandbox((s) => s.joinMode)
+  const startJoin = useSandbox((s) => s.startJoin)
+  const joinPick = useSandbox((s) => s.joinPick)
   const playing = useScene((s) => s.playing)
   const num = useNum()
   const sel = bodies.find((b) => b.id === selection)
@@ -199,7 +203,15 @@ export function Sandbox() {
             <Square size={13} /> Floor
           </button>
         )}
+        {/* The guided way to a rope, a spring or a pulley. Joining used to need a selection, a
+            Shift+click and a fold nobody had opened: "there are no ropes" was the report. */}
+        {!joinMode && (
+          <button className="btn h-7" data-tour="connect" onClick={startJoin} title="Click one object, then another, then pick a string, rod, spring, rope, pulley, hinge or weld">
+            <Link2 size={13} /> Connect two objects
+          </button>
+        )}
       </div>
+      {joinMode && <JoinGuide />}
 
       {bodies.map((b) => {
         const chosen = b.id === selection
@@ -209,10 +221,12 @@ export function Sandbox() {
           <div
             key={b.id}
             className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${chosen ? 'bg-[var(--sel-row)]' : 'hover:bg-[var(--bg-3)]'}`}
-            title={selection && !chosen ? 'Click to select; Shift+click to join it to the selected object' : undefined}
+            title={joinMode ? 'Click to choose it' : selection && !chosen ? 'Click to select; Shift+click to join it to the selected object' : undefined}
             onClick={(e) => {
+              // While connecting, a click is a pick — here or in the drawing, the same.
+              if (joinMode) joinPick(b.id)
               // Shift-click chooses the second object of a pair, the same as in the viewport.
-              if (e.shiftKey && selection && !chosen) setPartner(paired ? null : b.id)
+              else if (e.shiftKey && selection && !chosen) setPartner(paired ? null : b.id)
               else select(chosen ? null : b.id)
             }}
           >
@@ -635,6 +649,9 @@ function Presets() {
   const setScene = useSandbox((s) => s.setScene)
   const setPlaying = useScene((s) => s.setPlaying)
   const [open, setOpen] = useState(false)
+  // One group per topic, and each row says what it joins things with, so a student looking for
+  // a rope or a pulley can see where they are without opening twenty-nine experiments.
+  const groups = useMemo(() => groupedPresets().map((g) => ({ ...g, rows: g.presets.map((p) => ({ p, badges: presetBadges(p) })) })), [])
   const load = (p: Preset) => {
     const built = p.build()
     setPlaying(false)
@@ -653,12 +670,91 @@ function Presets() {
       </button>
       {open && (
         <div className="mt-1 flex flex-col gap-1">
-          {PRESETS.map((p) => (
-            <button key={p.id} className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]" onClick={() => load(p)}>
-              <div className="font-semibold text-[color:var(--text-strong)]">{p.label}</div>
-              <div className="text-small leading-snug text-[color:var(--text-dim)]">{p.about}</div>
-            </button>
+          {groups.map((g) => (
+            <Fragment key={g.topic}>
+              <div className="section-title px-1 pb-0">{g.topic}</div>
+              {g.rows.map(({ p, badges }) => (
+                <button key={p.id} className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]" onClick={() => load(p)} title={p.about}>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-[color:var(--text-strong)]">{p.label}</span>
+                    {badges.map((b) => (
+                      <span key={b} className="badge text-fine text-[color:var(--text-dim)]">
+                        {b === 'pulley' ? 'rope over a pulley' : b}
+                      </span>
+                    ))}
+                  </div>
+                  {/* Two lines here; the whole sentence is the tooltip and the panel once loaded. */}
+                  <div className="line-clamp-2 text-small leading-snug text-[color:var(--text-dim)]">{p.about}</div>
+                </button>
+              ))}
+            </Fragment>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The three steps of Connect: which object, which other object, and what joins them — each kind
+ * on a card that says in one line what it does. The picks come from the drawing or the list;
+ * the rules (no floor, not the same object twice, a wheel above both for a pulley) live in
+ * sim/join.ts and the store, so a refused click always comes with the reason.
+ */
+function JoinGuide() {
+  const joinMode = useSandbox((s) => s.joinMode)
+  const joinNote = useSandbox((s) => s.joinNote)
+  const bodies = useSandbox((s) => s.bodies)
+  const finishJoin = useSandbox((s) => s.finishJoin)
+  const cancelJoin = useSandbox((s) => s.cancelJoin)
+  // Esc stops connecting, from anywhere in the window.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancelJoin()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cancelJoin])
+  if (!joinMode) return null
+  const paired = joinMode.a && joinMode.b ? { a: joinMode.a, b: joinMode.b } : null
+  const wheels = paired ? wheelsAbove(bodies, paired.a, paired.b) : []
+  return (
+    <div className="mx-2 mb-2 rounded-md border border-[color:var(--accent)] px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <Link2 size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="flex-1 font-semibold text-[color:var(--text-strong)]">{joinPrompt(joinMode, bodies)}</span>
+        <button className="icon-btn" title="Stop connecting (Esc)" onClick={cancelJoin}>
+          <X size={13} />
+        </button>
+      </div>
+      {joinMode.step !== 'kind' && <div className="text-small text-[color:var(--text-faint)]">Click it in the drawing or in the list below. Esc stops.</div>}
+      {joinNote && <div className="pt-0.5 text-small text-[color:var(--warn)]">{joinNote}</div>}
+      {joinMode.step === 'kind' && paired && (
+        <div className="mt-1 flex flex-col gap-1">
+          {LINK_CARDS.map((c) =>
+            c.kind === 'pulley' ? (
+              <div key={c.kind} className="rounded-md border border-[color:var(--line-2)] px-2 py-1">
+                <div className="font-semibold text-[color:var(--text-strong)]">{c.title}</div>
+                <div className="text-small leading-snug text-[color:var(--text-dim)]">{c.line}</div>
+                {wheels.length ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {wheels.map((w) => (
+                      <button key={w.id} className="btn" onClick={() => finishJoin('pulley', w.id)} title={`Run the rope over ${w.name}`}>
+                        over {w.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="pt-0.5 text-small text-[color:var(--text-faint)]">{noWheelNote(bodies, paired.a, paired.b)}</div>
+                )}
+              </div>
+            ) : (
+              <button key={c.kind} className="rounded-md border border-[color:var(--line-2)] px-2 py-1 text-left hover:bg-[var(--bg-3)]" onClick={() => finishJoin(c.kind)}>
+                <div className="font-semibold text-[color:var(--text-strong)]">{c.title}</div>
+                <div className="text-small leading-snug text-[color:var(--text-dim)]">{c.line}</div>
+              </button>
+            )
+          )}
         </div>
       )}
     </div>
@@ -706,15 +802,18 @@ function Connections({ selected, partner }: { selected: string | null; partner: 
   const updateLink = useSandbox((s) => s.updateLink)
   const removeLink = useSandbox((s) => s.removeLink)
   const setPartner = useSandbox((s) => s.setPartner)
+  const joinMode = useSandbox((s) => s.joinMode)
   const [kind, setKind] = useState<LinkKind>('string')
   const [over, setOver] = useState('')
+  const [note, setNote] = useState<string | null>(null)
   const name = (id: string) => bodies.find((b) => b.id === id)?.name ?? '?'
   const others = joinCandidates(bodies, selected)
   // The partner is the store's, so a shift-click in the viewport and this dropdown agree.
   const target = others.some((b) => b.id === partner) ? (partner ?? '') : ''
   const wheels = bodies.filter((b) => b.shape === 'pulley')
   const wheel = wheels.some((b) => b.id === over) ? over : (wheels[0]?.id ?? '')
-  const prominent = connectionsProminent(selected, partner)
+  // The guide above has its own cards while it is up; the fold stays where it was.
+  const prominent = connectionsProminent(selected, partner) && !joinMode
 
   return (
     <Fold id="connections" open force={prominent}>
@@ -751,13 +850,17 @@ function Connections({ selected, partner }: { selected: string | null; partner: 
               className={`btn ${prominent ? 'primary' : ''}`}
               disabled={!target || (kind === 'pulley' && !wheel)}
               onClick={() => {
-                if (target && addLink(selected, target, kind, kind === 'pulley' ? wheel : undefined)) setPartner(null)
+                if (!target) return
+                const made = addLink(selected, target, kind, kind === 'pulley' ? wheel : undefined)
+                setNote(made.ok ? null : made.why)
+                if (made.ok) setPartner(null)
               }}
               title={LINK_LABELS[kind]}
             >
               <Link2 size={12} /> Join
             </button>
             {!target && <div className="w-full pt-0.5 text-fine text-[color:var(--text-faint)]">Or Shift+click the second object.</div>}
+            {note && <div className="w-full pt-0.5 text-small text-[color:var(--warn)]">{note}</div>}
           </div>
         </div>
       ) : (

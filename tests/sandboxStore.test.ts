@@ -105,14 +105,14 @@ describe('the sandbox store', () => {
   it('joins two bodies from where they are now, and a delete takes the link with it', () => {
     const [a, b] = moving()
     useSandbox.setState({ live: { [a.id]: { position: [0, 4, 0], rotation: [0, 0, 0, 1], velocity: [0, 0, 0], angularVelocity: [0, 0, 0], mass: 1, asleep: false } } })
-    expect(state().addLink(a.id, b.id, 'rod')).toBe(true)
+    expect(state().addLink(a.id, b.id, 'rod').ok).toBe(true)
     const link = state().links[0]
     expect(link.kind).toBe('rod')
     // Sized from the live position of A, not its definition.
     expect(link.length).toBeCloseTo(Math.hypot(b.position[0] - 0, b.position[1] - 4, b.position[2] - 0), 6)
     state().updateLink(link.id, { length: 2 })
     expect(state().links[0].length).toBe(2)
-    expect(state().addLink(a.id, 'nobody', 'string')).toBe(false)
+    expect(state().addLink(a.id, 'nobody', 'string')).toEqual({ ok: false, why: 'One of those objects is no longer here.' })
     state().removeBody(a.id)
     expect(state().links).toHaveLength(0)
     state().undo()
@@ -123,9 +123,9 @@ describe('the sandbox store', () => {
 
   it('a pulley link needs a wheel', () => {
     const [a, b] = moving()
-    expect(state().addLink(a.id, b.id, 'pulley')).toBe(false)
+    expect(state().addLink(a.id, b.id, 'pulley').ok).toBe(false)
     const wheel = state().addBody('pulley')
-    expect(state().addLink(a.id, b.id, 'pulley', wheel.id)).toBe(true)
+    expect(state().addLink(a.id, b.id, 'pulley', wheel.id).ok).toBe(true)
     expect(state().links[0].over).toBe(wheel.id)
   })
 

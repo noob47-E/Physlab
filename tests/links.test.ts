@@ -2,7 +2,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
-import { makeLink, pulleyRim, reachOf, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
+import { makeLink, polylineLength, pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
 import { eulerToQuat, rotateByEuler } from '../src/renderer/src/sim/rotate'
 import { makeBody } from '../src/renderer/src/sim/store'
 import { PRESETS } from '../src/renderer/src/sim/presets'
@@ -190,6 +190,105 @@ describe('links', () => {
     world.rebuild([floor(), post, crate], [makeLink('w', 'weld', crate, post)!])
     run(world, 1)
     expect(world.state(crate.id)!.position[1]).toBeCloseTo(2, 1)
+    world.destroy()
+  })
+
+  it('cuts a rope into 20 cm links, three at least and sixty at most', () => {
+    expect(ropeSegments(0.1)).toBe(3)
+    expect(ropeSegments(2)).toBe(10)
+    expect(ropeSegments(6)).toBe(30)
+    // A 12 m rope used to get the same thirty links as a 6 m one: 40 cm links that hung stiff.
+    expect(ropeSegments(12)).toBe(60)
+    expect(ropeSegments(100)).toBe(60)
+  })
+
+  it('lays a rope no longer than the gap straight along it', () => {
+    const pts = ropeLayout([0, 5, 0], [3, 1, 0], 5, 4)
+    expect(pts).toHaveLength(5)
+    expect(pts[0]).toEqual([0, 5, 0])
+    expect(pts[4]).toEqual([3, 1, 0])
+    // Evenly spaced, and on the chord: the rope is exactly as long as the gap.
+    expect(pts[2]).toEqual([1.5, 3, 0])
+    expect(polylineLength(pts)).toBeCloseTo(5, 9)
+    // Shorter than the gap it is still laid along the chord; the engine pulls the ends in.
+    expect(ropeLayout([0, 5, 0], [3, 1, 0], 2, 4)[2]).toEqual([1.5, 3, 0])
+  })
+
+  it('lays a longer rope in a sag below the chord, exactly its own length', () => {
+    const close = (v: number[], w: number[]) => v.forEach((x, i) => expect(x).toBeCloseTo(w[i], 6))
+    const pts = ropeLayout([0, 5, 0], [3, 5, 0], 4, 20)
+    expect(pts).toHaveLength(21)
+    close(pts[0], [0, 5, 0])
+    close(pts[20], [3, 5, 0])
+    expect(polylineLength(pts)).toBeCloseTo(4, 6)
+    // The middle hangs below the ends, and every joint is below the chord.
+    expect(pts[10][1]).toBeLessThan(4.2)
+    for (const p of pts.slice(1, -1)) expect(p[1]).toBeLessThan(5)
+    // The links are all the same length, so each capsule fits its piece of the curve.
+    const lengths = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1], p[2] - pts[i][2]))
+    for (const l of lengths) expect(l).toBeCloseTo(4 / 20, 2)
+    // A vertical rope has nowhere to sag but sideways.
+    const hang = ropeLayout([0, 5, 0], [0, 2, 0], 4, 20)
+    expect(polylineLength(hang)).toBeCloseTo(4, 6)
+    expect(Math.abs(hang[10][0])).toBeGreaterThan(0.5)
+    expect(hang[10][1]).toBeCloseTo(3.5, 1)
+    // A sloping rope sags down, not along itself: its middle is below the chord's middle.
+    const slope = ropeLayout([0, 5, 0], [3, 2, 0], 5, 10)
+    expect(polylineLength(slope)).toBeCloseTo(5, 6)
+    expect(slope[5][1]).toBeLessThan(3.5 - 0.3)
+  })
+
+  it('a lengthened rope between two crates on the floor is laid above the floor and falls onto it, never through', async () => {
+    // The sag was laid along gravity with no idea where the floor was: 1.5 m of slack between
+    // two crates on the ground put the joints at y = −0.87, and after two seconds the chain was
+    // still hanging under the floor, drawn through it, because nothing pushes a link back out.
+    const world = await makeWorld()
+    const a = put('box', 'A', [-1, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 })
+    const b = put('box', 'B', [1, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 2 })
+    const rope = makeLink('r', 'rope', a, b)!
+    const length = rope.length + 1.5
+    const link = { ...rope, length, segments: ropeSegments(length) }
+    world.rebuild([floor(), a, b], [link])
+    const laid = world.linkPath(link)
+    expect(laid.length).toBe(link.segments + 2)
+    // Laid as an arch above the chord, its full length.
+    for (const p of laid) expect(p[1]).toBeGreaterThanOrEqual(0.3 - 1e-6)
+    expect(Math.max(...laid.map((p) => p[1]))).toBeGreaterThan(0.8)
+    expect(polylineLength(laid.slice(1, -1))).toBeCloseTo(length - length / link.segments, 1)
+    run(world, 2)
+    // Every joint rests on the floor or above it: a 2 cm link's centre sits 2 cm up.
+    for (const p of world.linkPath(link).slice(1, -1)) expect(p[1]).toBeGreaterThan(0.01)
+    // The pure layout says the same, and only when told where the floor is.
+    const sag = ropeLayout([-0.7, 0.3, 0], [0.7, 0.3, 0], 2.9, 14)
+    expect(Math.min(...sag.map((p) => p[1]))).toBeLessThan(0)
+    const arch = ropeLayout([-0.7, 0.3, 0], [0.7, 0.3, 0], 2.9, 14, 0.02)
+    expect(Math.min(...arch.map((p) => p[1]))).toBeGreaterThanOrEqual(0.3 - 1e-9)
+    expect(polylineLength(arch)).toBeCloseTo(2.9, 6)
+    // A sag that fits above the floor is left as a sag.
+    const fits = ropeLayout([-0.7, 2, 0], [0.7, 2, 0], 1.7, 9, 0.02)
+    expect(fits[4][1]).toBeLessThan(2)
+    expect(fits[4][1]).toBeGreaterThan(0.02)
+    world.destroy()
+  })
+
+  it('a rope is as long as its definition says: longer hangs lower, shorter lifts the load', async () => {
+    // The chain used to be laid straight across the gap whatever length was typed, so editing L
+    // in the panel did nothing at all.
+    const world = await makeWorld()
+    const beam = put('box', 'Beam', [0, 5, 0], { size: [0.15, 0.15, 0.15], motion: 'static' })
+    const bob = put('sphere', 'Bob', [0, 2.5, 0], { size: [0.18, 0.18, 0.18], massMode: 'mass', mass: 2 })
+    const rope = makeLink('r', 'rope', beam, bob)!
+    const hangsAt = (length: number) => {
+      world.rebuild([floor(), beam, bob], [{ ...rope, length, segments: ropeSegments(length) }])
+      run(world, 3)
+      return world.state(bob.id)!.position[1]
+    }
+    // Beam surface at 4.925, bob surface at length below, centre 0.18 further down.
+    expect(hangsAt(rope.length)).toBeCloseTo(2.5, 1)
+    expect(hangsAt(1.5)).toBeCloseTo(5 - 0.075 - 1.5 - 0.18, 1)
+    expect(hangsAt(3.5)).toBeCloseTo(5 - 0.075 - 3.5 - 0.18, 1)
+    // A long rope has more links, and the whole chain is drawn.
+    expect(world.linkPath({ ...rope, length: 3.5, segments: ropeSegments(3.5) }).length).toBe(ropeSegments(3.5) + 2)
     world.destroy()
   })
 

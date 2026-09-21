@@ -8,7 +8,11 @@ import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactE
 import { SimWorld } from './world'
 import { addSample, type Sample } from './recording'
 import type { SandboxFile } from '../core/types'
-import { makeLink } from './links'
+import { makeLink, ropeSegments } from './links'
+import { joinPick, linkRefusal, START_JOIN, type JoinMode } from './join'
+
+/** What addLink hands back: the link, or the sentence that says why there is none. */
+export type LinkResult = { ok: true; link: Link } | { ok: false; why: string }
 
 let counter = 0
 const nextId = () => `sb${Date.now().toString(36)}${(counter++).toString(36)}`
@@ -33,6 +37,16 @@ export interface SandboxState {
    * list; the Connections section comes to the front while a pair is chosen.
    */
   partner: BodyId | null
+  /**
+   * The guided way to join two objects: Connect, click one, click the other, pick a kind. Null
+   * when nothing is being connected. The picks land in `selection` and `partner` too, so the
+   * viewport lights the chosen objects the way it does for a Shift+click pair.
+   */
+  joinMode: JoinMode | null
+  /** Why the last click or Join in the guided flow was refused, in a sentence, until the next step. */
+  joinNote: string | null
+  /** Connections the student has made by hand this session (presets and files do not count). */
+  joined: number
   /** Last collisions, newest first, for the log panel. */
   contacts: ContactEvent[]
   /** Set by the viewport so panels can show live values. */
@@ -67,7 +81,13 @@ export interface SandboxState {
   pushContacts: (c: ContactEvent[]) => void
   clearContacts: () => void
   setScene: (bodies: BodyDef[], world?: Partial<WorldSettings>, links?: Link[]) => void
-  addLink: (a: BodyId, b: BodyId, kind: LinkKind, over?: BodyId) => boolean
+  addLink: (a: BodyId, b: BodyId, kind: LinkKind, over?: BodyId) => LinkResult
+  startJoin: () => void
+  /** A click on a body while connecting: the next step, or a sentence saying why not. */
+  joinPick: (id: BodyId) => void
+  /** The last step: make the link, or keep the cards up with the reason it could not be made. */
+  finishJoin: (kind: LinkKind, over?: BodyId) => void
+  cancelJoin: () => void
   updateLink: (id: string, patch: Partial<Link>) => void
   removeLink: (id: string) => void
   record: (samples: Record<BodyId, Sample>) => void
@@ -222,6 +242,9 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   world: { ...DEFAULT_WORLD },
   selection: null,
   partner: null,
+  joinMode: null,
+  joinNote: null,
+  joined: 0,
   contacts: [],
   engineTime: 0,
   live: {},
@@ -265,11 +288,15 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     remember(set, get, 'remove')
     // A rod to an object that no longer exists would leave the engine holding a dead reference.
     const bodies = get().bodies.filter((b) => b.id !== id)
+    const join = get().joinMode
     set({
       bodies,
       links: get().links.filter((l) => l.a !== id && l.b !== id),
       selection: get().selection === id ? null : get().selection,
       partner: get().partner === id ? null : get().partner,
+      // Half a pair is no pair: start the connection again, without the old refusal.
+      joinMode: join && (join.a === id || join.b === id) ? null : join,
+      joinNote: join && (join.a === id || join.b === id) ? null : get().joinNote,
       recording: prune(get().recording, bodies),
       live: prune(get().live, bodies)
     })
@@ -293,6 +320,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       links: links ?? [],
       selection: null,
       partner: null,
+      joinMode: null,
+      joinNote: null,
       contacts: [],
       recording: {},
       live: {},
@@ -302,13 +331,12 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   },
 
   addLink: (a, b, kind, over) => {
-    if (a === b) return false
     const bodies = get().bodies
-    const one = bodies.find((x) => x.id === a)
-    const two = bodies.find((x) => x.id === b)
-    if (!one || !two) return false
-    // Joining the same pair twice would double the force between them without anything to show it.
-    if (get().links.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a))) return false
+    // Every refusal is a sentence: a Join that silently did nothing read as a bug, not a rule.
+    const why = linkRefusal(bodies, get().links, a, b, kind, over)
+    if (why) return { ok: false, why }
+    const one = bodies.find((x) => x.id === a)!
+    const two = bodies.find((x) => x.id === b)!
     // The natural length is however far apart they are right now — where they actually are, if
     // the run has moved them — so making a connection never starts by yanking them together.
     const live = get().live
@@ -317,14 +345,39 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       posA: live[a]?.position ?? one.position,
       posB: live[b]?.position ?? two.position
     })
-    if (!link) return false
+    // linkRefusal has already said no to everything makeLink cannot build; this is the guard.
+    if (!link) return { ok: false, why: 'Those two cannot be joined that way.' }
     remember(set, get, 'link')
-    set({ links: [...get().links, link] })
-    return true
+    set({ links: [...get().links, link], joined: get().joined + 1 })
+    return { ok: true, link }
   },
+  startJoin: () => set({ joinMode: START_JOIN, joinNote: null, selection: null, partner: null }),
+  joinPick: (id) => {
+    const mode = get().joinMode
+    if (!mode) return
+    const next = joinPick(mode, id, get().bodies)
+    set({ joinMode: next.mode, joinNote: next.why ?? null, selection: next.mode.a ?? null, partner: next.mode.b ?? null })
+  },
+  finishJoin: (kind, over) => {
+    const mode = get().joinMode
+    if (!mode?.a || !mode.b) return
+    const made = get().addLink(mode.a, mode.b, kind, over)
+    if (made.ok) set({ joinMode: null, joinNote: null, partner: null })
+    else set({ joinNote: made.why })
+  },
+  cancelJoin: () => set({ joinMode: null, joinNote: null, partner: null }),
   updateLink: (id, patch) => {
     remember(set, get, `link:${id}`)
-    set({ links: get().links.map((l) => (l.id === id ? { ...l, ...patch } : l)) })
+    set({
+      links: get().links.map((l) => {
+        if (l.id !== id) return l
+        const next = { ...l, ...patch }
+        // A rope is cut into 20 cm links when it is made; a new length is cut again, or a
+        // rope lengthened from 2.5 m to 6 m kept its thirteen links, now 46 cm each and stiff.
+        if (next.kind === 'rope' && patch.length !== undefined) next.segments = ropeSegments(next.length)
+        return next
+      })
+    })
   },
   removeLink: (id) => {
     remember(set, get, 'unlink')
@@ -364,6 +417,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       sideView: file?.sideView ?? true,
       selection: null,
       partner: null,
+      joinMode: null,
+      joinNote: null,
       contacts: [],
       recording: {},
       live: {},
