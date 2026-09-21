@@ -1,7 +1,9 @@
 // Which drawing an object belongs to. Vectors, Geometry, Graphing and Lab Data share one scene
 // store, so a triangle drawn in Geometry used to turn up behind the vectors and the other way
-// round. Every object now remembers the space it was made in and is only shown there; an object
-// with no space (from a file older than 0.3.6) is shown everywhere, as before.
+// round. Every object now remembers the space it was made in and is only shown there. An object
+// with no space is shown everywhere: that is what an object made where no drawing is active gets,
+// and what a format-1 file's objects keep when nothing in the file says where they belong
+// (`core/migrate.ts` stamps the ones it can tell).
 
 import type { ModeId } from '../app/modes'
 import type { ObjId, SceneObject } from './types'

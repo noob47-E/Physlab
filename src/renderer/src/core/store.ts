@@ -4,8 +4,11 @@ import { dependentsOf, evaluateScene } from './evaluate'
 import { setNotation } from '../math/format'
 import type { EvalResult, ObjId, SceneFile, SceneObject, SceneSettings, ToolId, ViewMode } from './types'
 import type { Solution } from '../math/vectorSolver'
-import { useLab } from '../lab/labStore'
-import { useSandbox } from '../sim/store'
+import { emptyTable, useLab } from '../lab/labStore'
+import { startingScene, useSandbox } from '../sim/store'
+import { DEFAULT_WORLD } from '../sim/types'
+import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
+import { renameInObjects, renameProblem } from './rename'
 import { visibleOrder, type Space } from './visibility'
 
 export interface LogEntry {
@@ -68,6 +71,8 @@ export interface SceneState {
   endGesture: () => void
   undo: () => void
   redo: () => void
+  /** Gives an object a new name, inside every formula that used the old one. Returns a sentence when it cannot. */
+  renameObject: (id: ObjId, next: string) => string | null
 
   select: (ids: ObjId[], additive?: boolean) => void
   setHovered: (id: ObjId | null) => void
@@ -87,7 +92,8 @@ export interface SceneState {
   requestFocus: (panelId: string) => void
 
   newScene: () => void
-  loadScene: (file: SceneFile, path?: string | null) => void
+  /** Opens a parsed .phys file of any format. Throws, with a readable message, before touching any store. */
+  loadScene: (file: unknown, path?: string | null) => void
   serialize: () => SceneFile
   markSaved: (path: string) => void
 }
@@ -116,7 +122,7 @@ const PREFS_KEY = 'physlab.labelPrefs'
 function loadLabelPrefs(): Partial<SceneSettings> {
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<SceneSettings>
-    return migrateLabels(saved)
+    return migrateLabelSettings(saved)
   } catch {
     return {}
   }
@@ -128,12 +134,6 @@ function saveLabelPrefs(s: SceneSettings) {
   } catch {
     // Storage unavailable: preferences just last for this session.
   }
-}
-
-/** Older files used measureLabels: 'off' for hidden labels. */
-function migrateLabels(s: Partial<SceneSettings>): Partial<SceneSettings> {
-  if ((s.measureLabels as string) === 'off') return { ...s, measureLabels: 'measure', labelShow: s.labelShow ?? 'never' }
-  return s
 }
 
 const INITIAL_SETTINGS: SceneSettings = { ...DEFAULT_SETTINGS, ...loadLabelPrefs() }
@@ -256,6 +256,17 @@ export const useScene = create<SceneState>()((set, get) => {
       commit(next.objects, next.order, { past: [...past, { objects, order }], future: future.slice(0, -1) })
     },
 
+    renameObject: (id, next) => {
+      const { objects, ev } = get()
+      const obj = objects[id]
+      if (!obj) return 'That object no longer exists.'
+      if (obj.name === next) return null
+      const problem = renameProblem(next, ev.names.keys())
+      if (problem) return problem
+      get().addObjects(renameInObjects(objects, id, next))
+      return null
+    },
+
     select: (ids, additive = false) => {
       if (!additive) return set({ selection: ids })
       const cur = new Set(get().selection)
@@ -321,9 +332,9 @@ export const useScene = create<SceneState>()((set, get) => {
         solution: null
       })
     },
-    loadScene: (file, path = null) => {
-      // Check before touching anything: a bad file used to wipe the lab tables and then throw.
-      if (!Array.isArray(file.objects)) throw new Error('This is not a PhysLab project: it has no objects in it.')
+    loadScene: (raw, path = null) => {
+      // Check and convert before touching anything: a bad file used to wipe the lab tables and then throw.
+      const file = migrate(raw)
       useLab.getState().setTables(file.lab ?? [])
       useSandbox.getState().loadSandbox(file.sandbox)
       const objects: Record<ObjId, SceneObject> = {}
@@ -333,7 +344,7 @@ export const useScene = create<SceneState>()((set, get) => {
       const current = get().settings
       const settings: SceneSettings = {
         ...DEFAULT_SETTINGS,
-        ...migrateLabels(file.settings ?? {}),
+        ...file.settings,
         ...Object.fromEntries(LABEL_PREFS.map((k) => [k, current[k]]))
       }
       set({
@@ -352,7 +363,7 @@ export const useScene = create<SceneState>()((set, get) => {
     },
     serialize: () => {
       const { objects, order, settings } = get()
-      return { app: 'PhysLab', version: 1, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot() }
+      return { app: 'PhysLab', version: FILE_VERSION, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot() }
     },
     markSaved: (path) => set({ filePath: path, dirty: false })
   }
@@ -360,6 +371,19 @@ export const useScene = create<SceneState>()((set, get) => {
 
 /** Convenience: read the current state outside React. */
 export const scene = () => useScene.getState()
+
+/**
+ * What `serialize` gives straight after File ▸ New: the yardstick for "is there any work here?".
+ * Built from the same pieces `newScene` uses, so a panel added later is measured too.
+ */
+export const blankSceneFile = (): SceneFile => ({
+  app: 'PhysLab',
+  version: FILE_VERSION,
+  objects: [],
+  settings: DEFAULT_SETTINGS,
+  lab: [emptyTable('Experiment')],
+  sandbox: { bodies: startingScene(), links: [], world: DEFAULT_WORLD, sideView: true }
+})
 
 // Typing readings into a lab table changes the project as much as moving a point does, so Ctrl+S
 // and the autosave have to notice. newScene and loadScene set dirty back to false afterwards.
