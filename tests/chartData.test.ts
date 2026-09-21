@@ -60,6 +60,27 @@ describe('chartSeries', () => {
     expect(s.x.filter((x) => x === 0 || x === 60 || x === 120)).toHaveLength(3)
   })
 
+  it('never puts a curve point one ulp beside a reading either', () => {
+    // Floating point can land the dense point just below the reading as well as on it, and the
+    // old check only ran when it was on or above: 3e-9 got a curve-only x of 2.9999999999999996e-9
+    // right beside it, and readings around 1e12 the same.
+    const noNeighbours = (x: number[]) => {
+      for (let i = 1; i < x.length; i++) expect(Math.abs(x[i] - x[i - 1]), `${x[i - 1]} beside ${x[i]}`).toBeGreaterThan(1e-9 * Math.abs(x[i]))
+    }
+    for (const xs of [
+      [1e-9, 3e-9, 7e-9],
+      [1e12, 3e12, 7e12],
+      [0.1, 0.7, 1.3],
+      [-7, -3, 1]
+    ]) {
+      const s = chartSeries(xs, xs, fake((x) => x))
+      noNeighbours(s.x)
+      // The readings themselves are all still there, at their own x.
+      for (const x of xs) expect(s.points[s.x.indexOf(x)]).toBe(x)
+      expect(s.points.filter((p) => p !== null)).toHaveLength(xs.length)
+    }
+  })
+
   it('draws the curve through a reading’s x even when the fit disagrees with the reading', () => {
     const s = chartSeries([1, 2, 3], [2.1, 3.9, 6.2], fake((x) => 2 * x))
     const at2 = s.x.indexOf(2)

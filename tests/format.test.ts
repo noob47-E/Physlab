@@ -10,6 +10,7 @@ import {
   fmt,
   fmtAngle,
   fmtIJK,
+  fmtPoint,
   fmtPrecise,
   fmtSci,
   formatMeasure,
@@ -51,6 +52,20 @@ describe('fmtPrecise', () => {
     expect(fmtPrecise(-0, DP(3))).toBe('0')
     expect(fmtPrecise(-0, SF(3))).toBe('0')
     expect(fmtPrecise(0, DP(0))).toBe('0')
+    // A small negative that rounds away at this precision is 0 too: a midpoint at −0.0004
+    // read "(−0, 5)" and a unit vector "1i − 0j".
+    expect(fmt(-0.001, 2)).toBe('0')
+    expect(fmtPrecise(-0.004, DP(2))).toBe('0')
+    expect(fmtPrecise(-0.4, DP(0))).toBe('0')
+    expect(formatMeasure(-0.001, 'length', DP(2))).toBe('0 cm')
+    expect(formatMeasure(-0.00001, 'angle', DP(2))).toBe('0°')
+    expect(fmtPoint([-0.0004, 5, 0])).toBe('(0, 5)')
+    expect(fmtIJK([1, -0.0004, 0])).toBe('1i − 0j')
+    expect(tex(-0.001, 2)).toBe('0')
+    expect(texPrecise(-0.004, DP(2))).toBe('0')
+    // But a negative that survives the rounding keeps its sign.
+    expect(fmtPrecise(-0.005, DP(2))).toBe('−0.01')
+    expect(fmt(-0.006, 2)).toBe('−0.01')
   })
 
   it('rounds to decimal places and trims the zeros, keeping a proper minus', () => {
@@ -97,7 +112,20 @@ describe('fmtPrecise', () => {
     expect(fmtPrecise(1e9, SF(1))).toBe('1×10^9')
     // Either side of the switch to scientific, the count of figures is the same.
     expect(fmtPrecise(1e-6, SF(2))).toBe('0.0000010')
-    expect(fmtPrecise(9.9999e-7, SF(2))).toBe('1.0×10^-6')
+    expect(fmtPrecise(9.9e-7, SF(2))).toBe('9.9×10^-7')
+    // The form is chosen after rounding, so a value prints the same as the value it rounds to:
+    // 999 999 999.9 at 3 s.f. is 1.00×10^9, and choosing on the raw value used to print it as
+    // 1000000000, ten digits for a three-figure setting.
+    expect(fmtPrecise(9.9999e8, SF(3))).toBe('1.00×10^9')
+    expect(fmtPrecise(999999999.9, SF(3))).toBe('1.00×10^9')
+    expect(fmtPrecise(-999999999.9, SF(3))).toBe('−1.00×10^9')
+    expect(fmtPrecise(999999999.9, SF(3))).toBe(fmtPrecise(1e9, SF(3)))
+    // And a tiny value that rounds up to 10^-6 is written the way 10^-6 is.
+    expect(fmtPrecise(9.9999e-7, SF(2))).toBe('0.0000010')
+    expect(fmtPrecise(9.99999999e-7, SF(3))).toBe('0.00000100')
+    expect(fmtPrecise(9.99e-7, SF(1))).toBe('0.000001')
+    expect(fmtPrecise(9.99e-7, SF(1))).toBe(fmtPrecise(1e-6, SF(1)))
+    expect(fmtPrecise(0.0000015, SF(2))).toBe('0.0000015')
     expect(texPrecise(1.5e-7, SF(3))).toBe('1.50\\times 10^{-7}')
     expect(texPrecise(-2e12, SF(2))).toBe('-2.0\\times 10^{12}')
     // Decimal places trim as fmt does, so the two writers never disagree.

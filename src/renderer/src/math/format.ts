@@ -71,14 +71,17 @@ export const UNIT_NAMES: Record<LengthUnit, string> = { unit: 'grid units', mm: 
 export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
   if (!Number.isFinite(v)) return fmt(v)
   if (s.precisionMode === 'sf') {
-    const abs = Math.abs(v)
     // The same noise floor as fmt: a point dragged onto the axis reads 0, not 3×10⁻¹⁷.
-    if (abs < 1e-12) return '0'
-    if (abs >= 1e9 || abs < 1e-6) return fmtSci(v, s)
+    if (Math.abs(v) < 1e-12) return '0'
     const digits = Math.max(1, s.decimals)
+    // Round before choosing the form: 999 999 999.9 at 3 s.f. is 1.00×10^9, and deciding on the
+    // unrounded value sent it down the plain path, where it came out as "1000000000".
+    const r = Number(v.toPrecision(digits))
+    const abs = Math.abs(r)
+    if (abs >= 1e9 || abs < 1e-6) return fmtSci(r, s)
     // Keep the string from toPrecision: Number(...) would drop the zeros that show the precision
     // (3 s.f. of 2.5 must read 2.50), but trim the exponent form and any padding zeros before the point.
-    const text = v.toPrecision(digits)
+    const text = r.toPrecision(digits)
     const plain = /e/i.test(text) ? String(Number(text)) : text
     return plain.replace('-', '−')
   }
@@ -161,7 +164,10 @@ export function fmt(n: number, decimals = 4): string {
   if (Math.abs(n) < 1e-12) return '0'
   const abs = Math.abs(n)
   if (abs >= 1e9 || abs < 1e-4) return sci(n, decimals, true)
-  return trimZeros(n.toFixed(decimals)).replace('-', '−')
+  // A small negative that rounds away at this precision is 0, not "−0": a midpoint at −0.0004
+  // read "(−0, 5)" and a unit vector "1i − 0j".
+  const t = trimZeros(n.toFixed(decimals))
+  return (t === '-0' ? '0' : t).replace('-', '−')
 }
 
 function trimZeros(s: string): string {
@@ -179,7 +185,8 @@ export function tex(n: number, decimals = 4): string {
     const [m, e] = n.toExponential(decimals).split('e')
     return `${trimZeros(m)}\\times 10^{${Number(e)}}`
   }
-  return trimZeros(n.toFixed(decimals))
+  const t = trimZeros(n.toFixed(decimals))
+  return t === '-0' ? '0' : t
 }
 
 /** fmtPrecise for KaTeX: an ASCII minus and a real exponent. */

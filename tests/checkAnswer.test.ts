@@ -4,10 +4,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkAnswer, expectedText, isCorrect, parseAnswer } from '../src/renderer/src/math/checkAnswer'
 import { getAngleMode, setAngleMode } from '../src/renderer/src/math/expr'
-import type { AnswerField } from '../src/renderer/src/math/problems'
+import { generate, type AnswerField } from '../src/renderer/src/math/problems'
 
 const field = (over: Partial<AnswerField> = {}): AnswerField => ({ key: 'a', label: 'A', value: 12.5, tol: 0.125, ...over })
-const angle = (value: number, over: Partial<AnswerField> = {}): AnswerField => field({ value, tol: 0.6, kind: 'angle', unit: '°', ...over })
+/** A direction from +x, as the magnitude-and-direction question asks for. */
+const angle = (value: number, over: Partial<AnswerField> = {}): AnswerField => field({ value, tol: 0.6, kind: 'direction', unit: '°', ...over })
+/** An amount of turning, as the angle between two vectors. */
+const between = (value: number, over: Partial<AnswerField> = {}): AnswerField => field({ value, tol: 0.6, kind: 'angle', unit: '°', ...over })
 
 // The angle mode is a mutable global: put it back so no other file inherits a stray setting.
 beforeEach(() => setAngleMode('deg'))
@@ -130,6 +133,40 @@ describe('checkAnswer', () => {
     expect(neg.message).toBe('Same direction. Written between 0° and 360° it is 300°.')
     // The number in the message is written in the student's precision, not with raw digits.
     expect(checkAnswer('-323.13', angle(36.8698976)).message).toBe('Same direction. Written between 0° and 360° it is 36.87°.')
+    expect(checkAnswer('-323.13', angle(36.8698976), { decimals: 3, precisionMode: 'sf' }).message).toBe('Same direction. Written between 0° and 360° it is 36.9°.')
+    expect(checkAnswer('-323.13', angle(36.8698976), { decimals: 1, precisionMode: 'dp' }).message).toBe('Same direction. Written between 0° and 360° it is 36.9°.')
+  })
+
+  it('does not go round in a circle for the angle between two vectors', () => {
+    // 60° between A and B is an amount of turning: a full turn more is not the same answer, and
+    // 240° is not "the wrong quadrant" — there are no quadrants in an angle between two vectors.
+    // Both used to be graded as directions: 420 was accepted and 240 blamed on the quadrant.
+    const f = between(60)
+    expect(checkAnswer('60', f).verdict).toBe('right')
+    expect(checkAnswer('420', f)).toEqual({ verdict: 'wrong', parsed: 420, message: 'Not quite. Press Hint to see the next step.' })
+    expect(checkAnswer('240', f)).toEqual({ verdict: 'wrong', parsed: 240, message: 'Not quite. Press Hint to see the next step.' })
+    expect(checkAnswer('120', f)).toEqual({ verdict: 'wrong', parsed: 120, message: 'Not quite. Press Hint to see the next step.' })
+    expect(checkAnswer('300', f)).toEqual({ verdict: 'wrong', parsed: 300, message: 'Not quite. Press Hint to see the next step.' })
+    expect(checkAnswer('-60', f).message).toMatch(/^Right size, wrong sign/)
+    // It is still an angle: radians handed in for degrees, and degrees converted twice, are named.
+    expect(checkAnswer('1.0472', f).message).toMatch(/in radians/)
+    expect(checkAnswer('3437.7', f).message).toMatch(/converted a second time/)
+    // A field with no kind is a plain number and gets none of the angle rules.
+    expect(checkAnswer('420', field({ value: 60, tol: 0.6 })).message).toMatch(/^Not quite/)
+  })
+
+  it('the problem bank marks its one direction as a direction and its angles between vectors as angles', () => {
+    for (const seed of [1, 2, 3, 17, 4242]) {
+      const dir = generate('magdir', seed).fields.find((f) => f.key === 'theta')!
+      expect(dir.kind).toBe('direction')
+      expect(checkAnswer(String(dir.value + 360), dir).verdict).toBe('right')
+      for (const [topic, key] of [['twoforces', 'alpha'], ['dot', 'theta']] as const) {
+        const f = generate(topic, seed).fields.find((x) => x.key === key)!
+        expect(f.kind, `${topic} ${key}`).toBe('angle')
+        expect(checkAnswer(String(f.value + 360), f).verdict, `${topic} ${key} + 360`).toBe('wrong')
+        expect(checkAnswer(String(f.value), f).verdict).toBe('right')
+      }
+    }
   })
 
   it('names sin instead of cos, and cos instead of sin, from the question’s own traps', () => {

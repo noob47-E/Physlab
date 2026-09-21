@@ -49,25 +49,32 @@ export function parseAnswer(text: string): number | null {
   }
 }
 
-/** Marks one answer and, when it is wrong, tries to say which mistake produced it. */
-export function checkAnswer(text: string, f: AnswerField): Check {
+/**
+ * Marks one answer and, when it is wrong, tries to say which mistake produced it. `s` is the
+ * student's precision, for the number quoted in a note (Rule 4).
+ */
+export function checkAnswer(text: string, f: AnswerField, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 2, precisionMode: 'dp' }): Check {
   if (!text.trim()) return { verdict: 'empty' }
   const a = parseAnswer(text)
   if (a === null) return { verdict: 'unreadable', message: 'I could not read that. Type a number like 12.5, or an expression like 5*sqrt(2).' }
 
   const near = (x: number, y: number, tol = f.tol) => Math.abs(x - y) <= tol
-  const angle = f.kind === 'angle'
+  // Only a direction goes round in a circle. The angle between two vectors is an amount of
+  // turning, so 420° for a 60° field is wrong, not "the same direction", and its three
+  // "other quadrants" are not mistakes anyone makes.
+  const direction = f.kind === 'direction'
+  const angle = f.kind === 'angle' || direction
   /** The same direction, however many turns apart: 216.87° and −143.13° are one answer. */
   const sameWay = (x: number, y: number) => Math.abs((((x - y) % 360) + 540) % 360 - 180) <= f.tol
 
   // Right, in any form the question accepts.
   if (near(a, f.value)) return { verdict: 'right', parsed: a }
-  if (angle) {
+  if (direction) {
     if (sameWay(a, f.value)) {
       // The sentence promises a value between 0° and 360°, so it must not quote a field that was
       // set as −30° as "−30".
       const turn = ((f.value % 360) + 360) % 360
-      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(turn, { decimals: 2, precisionMode: 'dp' })}°.` }
+      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(turn, s)}°.` }
     }
   }
 
@@ -77,13 +84,15 @@ export function checkAnswer(text: string, f: AnswerField): Check {
   if (near(a, -f.value)) {
     return { verdict: 'wrong', parsed: a, message: 'Right size, wrong sign. Check the direction — or the signs of the components you started from.' }
   }
-  if (angle) {
+  if (direction) {
     // The other three quadrants with the same reference angle, compared as directions: the
     // third-quadrant answer written between 0° and 360° (216.87° for a 36.87° field) used to
     // be checked against −143.13° as a plain number and fell through to "Not quite".
     if (sameWay(a, 180 - f.value) || sameWay(a, f.value + 180) || sameWay(a, -f.value)) {
       return { verdict: 'wrong', parsed: a, message: 'Right reference angle, wrong quadrant. The signs of the two components decide which quadrant the vector is in.' }
     }
+  }
+  if (angle) {
     if (near(a, toRad(f.value), Math.max(f.tol, 0.02))) {
       return { verdict: 'wrong', parsed: a, message: 'That is the answer in radians. This box wants degrees — check your calculator is in DEG.' }
     }

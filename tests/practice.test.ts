@@ -133,13 +133,16 @@ describe('checking an answer', () => {
     expect(checkAnswer('70', tenfold).message).toMatch(/power of ten/i)
   })
 
-  it('understands angles', () => {
-    const th = field({ value: 233.13, tol: 0.6, kind: 'angle' })
+  it('understands directions', () => {
+    // 233.13° is which way a vector points, so it is a 'direction': an angle between two vectors
+    // has no quadrants and no full turns.
+    const th = field({ value: 233.13, tol: 0.6, kind: 'direction' })
     // The same direction written as a negative angle is still the same direction.
     expect(checkAnswer('-126.87', th).verdict).toBe('right')
     // The reference angle from tan⁻¹ without looking at the signs.
     expect(checkAnswer('53.13', th).message).toMatch(/quadrant/i)
     // Calculator left in radians.
+    expect(checkAnswer('4.0691', field({ value: 233.13, tol: 0.6, kind: 'direction' })).message).toMatch(/radians/i)
     expect(checkAnswer('4.0691', field({ value: 233.13, tol: 0.6, kind: 'angle' })).message).toMatch(/radians/i)
   })
 

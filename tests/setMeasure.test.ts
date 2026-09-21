@@ -98,6 +98,26 @@ describe('pointAtAngle', () => {
     expect(dist(vertex, folded!)).toBeCloseTo(3, 12)
   })
 
+  it('an arm a hair off the line still opens to the side it is on', () => {
+    // Near enough collinear to take the fallback, but the fallback used to point at +y whatever
+    // side the arm was on: a point just below the fixed arm was opened upwards.
+    close(pointAtAngle(vertex, [2, 0, 0], [2, -1e-10, 0], deg(60)), [1, -Math.sqrt(3), 0])
+    close(pointAtAngle(vertex, [2, 0, 0], [2, 1e-10, 0], deg(60)), [1, Math.sqrt(3), 0])
+    close(pointAtAngle(vertex, [2, 0, 0], [-2, -1e-10, 0], deg(90)), [0, -2, 0])
+    // Along z, the same: a hair towards −x opens towards −x.
+    close(pointAtAngle(vertex, [0, 0, 1], [-1e-10, 0, 2], deg(90)), [-2, 0, 0])
+    close(pointAtAngle(vertex, [0, 0, 1], [1e-10, 0, 2], deg(90)), [2, 0, 0])
+  })
+
+  it('judges "in line" against the size of the drawing, not in absolute units', () => {
+    // A drawing measured in micrometres: an across-component of 1e-7 is a real angle there, and
+    // the point below the arm must stay below it.
+    const to = pointAtAngle(vertex, [2e-6, 0, 0], [2e-6, -1e-7, 0], deg(60))!
+    expect(to[1]).toBeLessThan(0)
+    expect(angleBetween([1, 0, 0], to)).toBeCloseTo(deg(60), 10)
+    expect(dist(vertex, to)).toBeCloseTo(Math.hypot(2e-6, 1e-7), 16)
+  })
+
   it('still turns when the collinear arms stand along z (there is no in-page perpendicular)', () => {
     // Used to hand back the vertex itself: the fallback perpendicular was the zero vector.
     const up: V3 = [0, 0, 1]
