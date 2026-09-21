@@ -135,6 +135,15 @@ describe('the pan gesture is taught the same way everywhere', () => {
     for (const card of Object.values(TOOL_CARDS)) expect(card.sentence).not.toMatch(oldGesture)
     const space = SHORTCUTS.find(([key]) => key === 'Space')!
     expect(space[1]).toMatch(/drag to move the view/)
+    // The box and Ctrl+A are in the list too, or a student who reads it finds the pan gesture
+    // has moved and nothing that says what the old one does now.
+    const box = SHORTCUTS.find(([key]) => /drag on empty space/i.test(key))!
+    expect(box, 'a row for the selection box').toBeDefined()
+    expect(box[1]).toMatch(/box/)
+    expect(box[1]).toMatch(/Shift/)
+    const all = SHORTCUTS.find(([key]) => key === 'Ctrl+A')!
+    expect(all, 'a row for Ctrl+A').toBeDefined()
+    expect(all[1]).toMatch(/Select everything/)
   })
 })
 

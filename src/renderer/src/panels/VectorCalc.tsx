@@ -18,10 +18,7 @@ import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { addVectorFromScene, ijkLatex, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
-
-// Still exported from here for the right-click menu; the store module is the one to import.
-export { addVectorFromScene }
+import { ijkLatex, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
 
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
 

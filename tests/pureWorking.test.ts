@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { JOBS, runPure, suggestJob } from '../src/renderer/src/math/pure/run'
+import { JUST_A_NUMBER, JUST_A_WHOLE_NUMBER, isNumericLine } from '../src/renderer/src/math/pure/factor'
+import { readSource } from './helpers/repo'
 import { texToPlain } from '../src/renderer/src/math/pure/work'
 import { checkTone, fieldHasText, initialShown, offeredJob, resolveJob, stepPrefFrom } from '../src/renderer/src/math/pure/reveal'
 import { agreesNumerically } from '../src/renderer/src/math/pure/complex'
@@ -286,6 +288,39 @@ describe('the dispatcher', () => {
     expect(suggestJob('x^4 + 2x^2 + 4')).toBe('factorComplex')
     // Neither tool can write √3 ± √2 as one surd, so this stays with the honest real answer.
     expect(suggestJob('x^4 - 10x^2 + 1')).toBe('factor')
+  })
+
+  it('tells a plain sum apart from an expression', () => {
+    expect(isNumericLine('2/3+sqrt(2)')).toBe(true)
+    expect(isNumericLine('1/2+1/3')).toBe(true)
+    expect(isNumericLine('sin(30)*pi')).toBe(true)
+    expect(isNumericLine('2*3+4')).toBe(true)
+    expect(isNumericLine('x^2-4')).toBe(false)
+    expect(isNumericLine('sqrt(x)')).toBe(false)
+    expect(isNumericLine('2+3i')).toBe(false)
+  })
+
+  it('refuses a plain sum in one sentence that says what to do instead', () => {
+    // Work it out on 2/3 + √2 went to Divide and said "sqrt is not something I can factorise";
+    // on 1/2 + 1/3 it named "Factorise number", a job the Treat-as list had stopped offering.
+    // A whole number is the one that has working of its own, and the sentence names that job
+    // by the label the list shows.
+    expect(suggestJob('2/3+sqrt(2)')).toBe('factor')
+    expect(suggestJob('1/2+1/3')).toBe('factor')
+    expect(runPure('factor', '2/3+sqrt(2)').error).toBe(JUST_A_NUMBER)
+    expect(runPure('factor', '1/2+1/3').error).toBe(JUST_A_NUMBER)
+    expect(JUST_A_NUMBER).toMatch(/= gives its value/)
+    expect(runPure('divide', '5/6').error).toBeTruthy()
+    const primes = JOBS.find((j) => j.id === 'primes')!
+    expect(JUST_A_WHOLE_NUMBER).toContain(`"${primes.label}"`)
+    expect(JUST_A_WHOLE_NUMBER).toContain('Treat as')
+    expect(JUST_A_WHOLE_NUMBER).not.toMatch(/Factorise number/)
+    // A whole number written as a sum still gets its primes, and its own title.
+    expect(suggestJob('2*3+4')).toBe('factor')
+    expect(runPure('factor', '2*3+4').error).toBeUndefined()
+    expect(runPure('factor', '2*3+4').title).toBe('Factorise 10 into primes')
+    // The old sentence is gone from the engine altogether.
+    expect(readSource('src/renderer/src/math/pure/factor.ts')).not.toMatch(/Factorise number/)
   })
 
   it('never throws, whatever it is given', () => {

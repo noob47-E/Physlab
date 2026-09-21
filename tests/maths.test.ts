@@ -3,7 +3,7 @@
 // evaluateInput is the join between MathLive's LaTeX, the converter and the engine, and the
 // sentence a student reads when any of them refuses. It never throws and never says "ERROR".
 
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { answerStillFor, evaluateInput, isHeavy, lettersIn, linearOf, mainLine } from '../src/renderer/src/calc/evaluateInput'
@@ -345,12 +345,20 @@ describe('the store, without the handheld', () => {
     expect(eager.has('panels/Maths.tsx')).toBe(false)
     expect(eager.has('panels/WorkingView.tsx')).toBe(false)
     const withField = [...eager].filter((f) => /from '(\.\.?\/)*(\.\.\/)?ui\/MathInput'|from 'mathlive'/.test(readSource(join('src/renderer/src', f)))).sort()
-    // The one path left is app/contextActions.ts → panels/VectorCalc.tsx → ui/MathInput.tsx.
-    // The store it wants, addVectorFromScene, now lives in panels/vectorCalcStore.ts with no
-    // field in it; the import line in contextActions.ts belongs to another track and is
-    // repointed at merge, and this list becomes empty then.
-    expect(withField).toEqual(['panels/VectorCalc.tsx', 'ui/MathInput.tsx'])
+    // The last path was app/contextActions.ts → panels/VectorCalc.tsx → ui/MathInput.tsx, for
+    // the one menu item that adds a card. The store it wants, addVectorFromScene, lives in
+    // panels/vectorCalcStore.ts with no field in it, and the menu imports that.
+    expect(withField).toEqual([])
+    expect(eager.has('panels/VectorCalc.tsx')).toBe(false)
     expect(eager.has('panels/vectorCalcStore.ts')).toBe(true)
+    // The panel is imported statically by nothing outside panels/: only App.tsx's lazy() may
+    // name it, or the lazy() is a no-op for the bundle again.
+    for (const f of rendererFiles()) {
+      if (f.startsWith('panels/')) continue
+      const src = readSource(join('src/renderer/src', f))
+      const importsPanel = /^import[^\n]*from '(\.\.?\/)+panels\/VectorCalc'/m.test(src)
+      expect(importsPanel, `${f} imports panels/VectorCalc statically`).toBe(false)
+    }
   })
 
   it('keeps an answer only while the field still holds the line it answers', () => {
@@ -370,6 +378,28 @@ describe('the store, without the handheld', () => {
     // that answer is still held; it never replaces or clears the answer of another mode.
     expect(maths).toMatch(/setAnswered\(\(a\) => \(a && a\.mode === mode && a\.input === s\.input && a\.result\.value === r\.value \? \{ \.\.\.a, result: \{ \.\.\.a\.result, exact: res\.latex \} \} : a\)\)/)
     expect(maths).not.toMatch(/setResult\(\(prev\)/)
+  })
+
+  it('keeps the answer card when Work it out is pressed on the very line it answers', () => {
+    // = then Work it out on 2/3 + √2: the working arrives for the same line, and the ≈ 2.08 card
+    // with its exact form used to vanish, leaving only the working's refusal. A working for any
+    // other line — the tour's example, a recalled entry — still takes the card with it.
+    const maths = readSource('src/renderer/src/panels/Maths.tsx')
+    expect(maths).toMatch(/usePure\.subscribe\(\(s, prev\) => \{\s*if \(s\.runSeq === prev\.runSeq\) return\s*setAnswered\(\(a\) => answerStillFor\(a, s\.inputLatex\)\)/)
+    // The keypad hangs over exactly where the steps appear, so the same run closes it.
+    expect(maths).toMatch(/if \(s\.runSeq === prev\.runSeq\) return[\s\S]{0,200}setKeypad\(false\)/)
+    // The line the field holds is the line the working is for, character for character, so the
+    // comparison the subscriber makes is the one answerStillFor already makes for a keystroke.
+    const latex = '\\frac{2}{3}+\\sqrt{2}'
+    useCalc.setState({ mode: 'COMP', input: latex })
+    const answered = { mode: 'COMP', input: useCalc.getState().input, result: 2 }
+    usePure.getState().runLatex(latex, 'auto')
+    expect(usePure.getState().inputLatex).toBe(latex)
+    expect(useCalc.getState().input).toBe(latex)
+    expect(answerStillFor(answered, usePure.getState().inputLatex)).toBe(answered)
+    usePure.getState().run('primes', '360', '360')
+    expect(answerStillFor(answered, usePure.getState().inputLatex)).toBeNull()
+    useCalc.setState({ mode: 'COMP', input: '' })
   })
 
   it('keeps the keypad off the answer and open across a click in the field', () => {
@@ -398,6 +428,17 @@ describe('the store, without the handheld', () => {
     expect(readSource('src/renderer/src/app/layout.ts')).toMatch(/if \(id === 'calculator' && !casWarmed\)/)
   })
 })
+
+/** Every .ts/.tsx file under src/renderer/src, as paths relative to it. */
+function rendererFiles(dir = RENDERER_SRC): string[] {
+  const out: string[] = []
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name)
+    if (statSync(p).isDirectory()) out.push(...rendererFiles(p))
+    else if (/\.tsx?$/.test(name)) out.push(relative(RENDERER_SRC, p).split(sep).join('/'))
+  }
+  return out
+}
 
 /** Every renderer file an eager import chain from `entry` reaches, as paths relative to src/renderer/src. */
 function eagerlyReachable(entry: string): Set<string> {

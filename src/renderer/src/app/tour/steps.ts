@@ -180,6 +180,8 @@ export const SHORTCUTS: [string, string][] = [
   ['Tab', 'Move between the buttons and fields'],
   ['Home', 'Reset the view'],
   ['Space', 'Play or pause the timeline; hold it and drag to move the view'],
+  ['Drag on empty space', 'Select everything inside the box (Shift adds to the selection)'],
+  ['Ctrl+A', 'Select everything on this drawing'],
   ['Shift+click (Sandbox)', 'Choose the second object to join to the selected one'],
   ['Esc (Sandbox)', 'Stop connecting two objects'],
   ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],

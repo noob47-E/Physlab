@@ -3,14 +3,16 @@
 // round. Every object now remembers the space it was made in and is only shown there. An object
 // with no space is shown everywhere: that is what an object made where no drawing is active gets,
 // and what a format-1 file's objects keep when nothing in the file says where they belong
-// (`core/migrate.ts` stamps the ones it can tell).
+// (`core/migrate.ts` stamps the ones it can tell). A mode with no drawing of its own (the Sandbox,
+// the GPU Lab) shows only those: its space is null, and null once meant "show all", which put the
+// Geometry points' letters over the Sandbox's falling ball.
 
 import type { ModeId } from '../app/modes'
 import type { ObjId, SceneObject } from './types'
 
 export type Space = 'vectors' | 'shapes' | 'graphing' | 'lab'
 
-/** The drawing a mode looks at; null means the mode has no drawing of its own and shows all. */
+/** The drawing a mode looks at; null means the mode has no drawing of its own. */
 export function spaceOf(mode: ModeId): Space | null {
   switch (mode) {
     case 'calculator':
@@ -33,8 +35,7 @@ export const modeOfSpace: Record<Space, ModeId> = { vectors: 'vectors', shapes: 
 
 export const SPACE_LABELS: Record<Space, string> = { vectors: 'Vectors', shapes: 'Geometry', graphing: 'Graphing', lab: 'Lab Data' }
 
-export const visibleIn = (o: SceneObject | undefined, space: Space | null): boolean => !!o && (!space || !o.space || o.space === space)
+export const visibleIn = (o: SceneObject | undefined, space: Space | null): boolean => !!o && (!o.space || o.space === space)
 
 /** The ids to draw, list and pick right now, in scene order. */
-export const visibleOrder = (order: ObjId[], objects: Record<ObjId, SceneObject>, space: Space | null): ObjId[] =>
-  space ? order.filter((id) => visibleIn(objects[id], space)) : order
+export const visibleOrder = (order: ObjId[], objects: Record<ObjId, SceneObject>, space: Space | null): ObjId[] => order.filter((id) => visibleIn(objects[id], space))

@@ -245,7 +245,7 @@ export const useScene = create<SceneState>()((set, get) => {
     clearDrawing: () => {
       const { order, objects, activeSpace } = get()
       // "This drawing" needs a drawing. With none active (the Sandbox, the GPU Lab) visibleOrder
-      // is every object in every drawing, and the command once wiped all four from a mode where
+      // was once every object in every drawing, and the command wiped all four from a mode where
       // none of them was even on screen — and where Ctrl+Z went to the sandbox's own history.
       if (!activeSpace) return
       get().removeObjects(visibleOrder(order, objects, activeSpace))

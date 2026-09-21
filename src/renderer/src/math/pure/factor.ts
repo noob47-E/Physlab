@@ -509,23 +509,35 @@ export interface FactorOutcome {
   factors: Expr[]
 }
 
+/**
+ * True when the line is numbers, operators and function names only — a sum to work out, not
+ * an expression to factorise or solve. The function names are the ones latexToMath writes.
+ */
+export const isNumericLine = (src: string): boolean => !/[a-zA-Z]/.test(src.replace(/\b(sqrt|cbrt|nthRoot|abs|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|ln|log|log10|log2|exp|pi)\b/g, ''))
+
+// The label is spelt out rather than read from run.ts (which imports this file), and the test in
+// pureWorking.test.ts checks it against the Treat-as list, so it cannot drift again: this
+// sentence once named a job the list had stopped offering, and the student could not find it.
+export const JUST_A_NUMBER = 'That is just a number: = gives its value. Working is for a line with a letter in it, like x² − 4.'
+export const JUST_A_WHOLE_NUMBER = 'That is just a number. Choose "Prime factors" under Treat as to break it into primes.'
+
 export function factorise(src: string): FactorOutcome {
   const title = 'Factorise'
   let e: Expr
   try {
     e = parseExpr(src)
   } catch (err) {
-    const msg = err instanceof NotPolynomial ? err.message : 'I could not read that.'
+    // 2/3 + √2 is a sum, not a thing to factorise; "sqrt is not something I can factorise" read
+    // as the calculator failing at a plain sum whose answer sat right above it.
+    const msg = isNumericLine(src) ? JUST_A_NUMBER : err instanceof NotPolynomial ? err.message : 'I could not read that.'
     return { working: failed(title, src, msg), factors: [] }
   }
   const input = exprTex(e)
 
   if (e.length === 0) return { working: failed(title, input, 'That comes to zero, so there is nothing to factorise.'), factors: [] }
   if (isConstant(e)) {
-    return {
-      working: failed(title, input, 'That is just a number. Use "Factorise number" to break it into primes.'),
-      factors: []
-    }
+    const whole = e[0]?.c.d === 1n
+    return { working: failed(title, input, whole ? JUST_A_WHOLE_NUMBER : JUST_A_NUMBER), factors: [] }
   }
 
   const ctx: Ctx = { s: new Steps(), done: [] }

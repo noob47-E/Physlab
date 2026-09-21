@@ -28,7 +28,7 @@ import {
 } from './mono'
 import { factoriseNumberWorking, hcfWorking, lcmWorking } from './integers'
 import { hcfAlgebraWorking, lcmAlgebraWorking } from './algebraHcf'
-import { factoriseWorking, factorsOf, wantsAllowI } from './factor'
+import { factoriseWorking, factorsOf, isNumericLine, wantsAllowI } from './factor'
 import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
 import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
@@ -401,6 +401,9 @@ export function suggestJob(src: string): JobId {
   if (s.includes(',')) return 'hcf'
   if (/(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(s)) return 'complex'
   if (s.includes('=')) return 'solve'
+  // A plain sum — 2/3 + √2, 1/2 + 1/3 — has nothing to divide out or split; Factorise says so in
+  // one sentence, where Divide used to complain that sqrt is not something it can factorise.
+  if (isNumericLine(s)) return 'factor'
   if (s.includes('/')) return fractionJob(s)
   // A quadratic with no real roots, or x⁴ + 1, is exactly what "Factorise with i" is for; sending
   // it to the real factoriser would only produce "does not break into simpler factors".

@@ -11,7 +11,7 @@ import { useTool } from '../render/tools'
 import { GRID_STYLES } from '../render/gridMath'
 import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 import { fitCamera, resetCamera } from '../render/viewState'
-import { addVectorFromScene } from '../panels/VectorCalc'
+import { addVectorFromScene } from '../panels/vectorCalcStore'
 import type { MenuGroup, MenuItem } from '../ui/ContextMenu'
 import { useApp } from './modes'
 

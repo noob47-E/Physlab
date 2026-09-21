@@ -185,21 +185,25 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   const [eng, setEng] = useState(false)
   const [base, setBase] = useState<Base>(10)
   const [asked, setAsked] = useState<{ mode: FieldMode; letters: string[] } | null>(null)
+  const [keypad, setKeypad] = useState(false)
   // A new working — from Work it out, the command bar, a recalled entry or the tour — takes the
-  // screen: the field now holds its line (calcStore follows the pure store), and the answer
-  // card and the with-values form belonged to the line before.
+  // screen: the field now holds its line (calcStore follows the pure store), and the
+  // with-values form belonged to the line before. The answer card stays while it answers the
+  // very line the working is for: = and then Work it out on 2/3 + √2 used to drop the ≈ 2.08
+  // card the student had a second ago and leave only the working's refusal under an empty
+  // space. The keypad closes because it hangs over exactly where the steps appear.
   useEffect(
     () =>
       usePure.subscribe((s, prev) => {
         if (s.runSeq === prev.runSeq) return
-        setAnswered(null)
+        setAnswered((a) => answerStillFor(a, s.inputLatex))
         setAsked(null)
+        setKeypad(false)
       }),
     []
   )
   const withValues = asked?.mode === mode ? asked.letters : null
   const setWithValues = (letters: string[] | null): void => setAsked(letters ? { mode, letters } : null)
-  const [keypad, setKeypad] = useState(false)
   const [showVars, setShowVars] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [jobs, setJobs] = useState(false)

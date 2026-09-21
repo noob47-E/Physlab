@@ -75,8 +75,10 @@ describe('the visibility filter', () => {
     expect(visibleIn(legacy, null)).toBe(true)
   })
 
-  it('shows everything when the mode has no drawing of its own', () => {
-    for (const own of SPACES) expect(visibleIn(obj('A', own), null), own).toBe(true)
+  it('hides every tagged object from a mode with no drawing of its own', () => {
+    // The Sandbox and the GPU Lab have a null space, and null once meant "show all": the points
+    // drawn in Geometry were rendered, labelled and pickable over the Sandbox's falling ball.
+    for (const own of SPACES) expect(visibleIn(obj('A', own), null), own).toBe(false)
   })
 
   it('never shows an object that does not exist', () => {
@@ -96,8 +98,8 @@ describe('the visibility filter', () => {
     expect(visibleOrder(order, objects, 'vectors')).toEqual(['v1', 'old', 'v2'])
     expect(visibleOrder(order, objects, 'shapes')).toEqual(['t1', 'old'])
     expect(visibleOrder(order, objects, 'lab')).toEqual(['old'])
-    // No space: the same array, untouched, not a filtered copy.
-    expect(visibleOrder(order, objects, null)).toBe(order)
+    // No drawing active: only the objects that belong to no drawing.
+    expect(visibleOrder(order, objects, null)).toEqual(['old'])
   })
 })
 
