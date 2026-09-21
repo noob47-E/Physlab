@@ -104,6 +104,19 @@ describe('serialize → loadScene', () => {
     expect(useSandbox.getState().world.gravity).toBe(1.62)
   })
 
+  it('carries the grid style with the drawing, and an older file without one draws lines', () => {
+    const file = fullFile()
+    file.settings = { ...file.settings, gridStyle: 'dots' }
+    scene().loadScene(file)
+    expect(scene().settings.gridStyle).toBe('dots')
+    expect(scene().serialize().settings.gridStyle).toBe('dots')
+    // A format-2 file saved before grid styles existed: the same format, one setting short.
+    const { gridStyle: _g, ...older } = fullFile().settings
+    scene().loadScene({ ...fullFile(), settings: older })
+    expect(scene().settings.gridStyle).toBe('lines')
+    expect(FILE_VERSION).toBe(2)
+  })
+
   it('keeps the label preferences of whoever is opening the file', () => {
     scene().setSettings({ labelShow: 'always', vectorNotation: 'bold' })
     const file = fullFile()

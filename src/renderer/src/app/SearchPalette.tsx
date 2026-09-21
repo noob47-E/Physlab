@@ -11,6 +11,9 @@ import { TOOLS } from '../render/tools'
 import { EXAMPLES, runExample } from '../panels/Examples'
 import { useCalc, type CalcMode } from '../calc/calcStore'
 import { UNIT_NAMES } from '../math/format'
+import { GRID_STYLES } from '../render/gridMath'
+import { confirmClearDrawing } from './contextActions'
+import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 
 interface Item {
   group: string
@@ -72,6 +75,11 @@ function buildItems(): Item[] {
     { group: 'Settings', title: 'Precision: 2 decimal places', hint: '', run: () => scene().setSettings({ precisionMode: 'dp', decimals: 2 }) },
     { group: 'Settings', title: 'Precision: 3 significant figures', hint: '', run: () => scene().setSettings({ precisionMode: 'sf', decimals: 3 }) },
     { group: 'Settings', title: 'Toggle grid', hint: '', run: () => scene().setSettings({ showGrid: !scene().settings.showGrid }) },
+    ...GRID_STYLES.map((g) => ({ group: 'Settings', title: `Grid: ${g.label.toLowerCase()}`, hint: g.hint, run: () => scene().setSettings({ showGrid: true, gridStyle: g.id }) })),
+    { group: 'Settings', title: 'Grid: off', hint: 'No grid; the axes stay', run: () => scene().setSettings({ showGrid: false }) },
+    { group: 'Settings', title: 'Angle marks: show', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: true }) },
+    { group: 'Settings', title: 'Angle marks: hide', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: false }) },
+    { group: 'Edit', title: 'Delete everything on this drawing…', hint: 'Only the drawing you are looking at; asks first; Undo brings it all back', run: () => confirmClearDrawing() },
     { group: 'Settings', title: 'Toggle snapping', hint: 'Hold Alt while drawing to skip snapping once', run: () => scene().setSettings({ snap: !scene().settings.snap }) },
     { group: 'Settings', title: 'Angles in degrees', hint: '', run: () => scene().setSettings({ angleUnit: 'deg' }) },
     { group: 'Settings', title: 'Angles in radians', hint: '', run: () => scene().setSettings({ angleUnit: 'rad' }) }

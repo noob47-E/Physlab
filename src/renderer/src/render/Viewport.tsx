@@ -15,15 +15,18 @@ import { overlay } from './overlay'
 import { resetCamera, useView } from './viewState'
 import { GpuParticles, useParticleLab } from './GpuParticles'
 import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
+import { GRID_STYLES } from './gridMath'
+import { normalizeRect } from './selectMath'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
 import { SandboxView } from './SandboxView'
 import { MarksView } from './Marks'
 import { useSandbox } from '../sim/store'
 import { formatMeasure } from '../math/format'
-import { LabelShowSwitch } from '../ui/LabelControls'
+import { AngleMarksSwitch, LabelShowSwitch } from '../ui/LabelControls'
 import { themeColor, useTheme } from '../app/theme'
 import { saveViewportImage, setExportContext } from './exportImage'
+import type { GridStyle } from '../core/types'
 
 let fpsEl: HTMLSpanElement | null = null
 const sizeProbe = new THREE.Vector2()
@@ -165,7 +168,9 @@ export function Viewport() {
   const drawing = isDrawingMode(mode)
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
   const theme = useTheme((t) => t.theme)
-  const canvasBg = themeColor('--canvas-bg')
+  // The "paper" grid is a tinted page under the lines; the tint is the canvas colour itself.
+  const paper = drawing && settings.showGrid && settings.gridStyle === 'paper'
+  const canvasBg = themeColor(paper ? '--grid-paper' : '--canvas-bg')
   void theme // re-reads the colour whenever the theme changes
 
   useEffect(() => {
@@ -226,6 +231,7 @@ export function Viewport() {
             <button className={`icon-btn ${settings.showGrid ? 'on' : ''}`} onClick={() => setSettings({ showGrid: !settings.showGrid })} title="Grid">
               <Grid3x3 size={14} />
             </button>
+            <GridStylePicker />
             <button className={`icon-btn ${settings.snap ? 'on' : ''}`} onClick={() => setSettings({ snap: !settings.snap })} title="Snap to grid">
               <Magnet size={14} />
             </button>
@@ -240,8 +246,10 @@ export function Viewport() {
       <div data-tour="labels" className="absolute left-3 top-11 flex items-center gap-1.5">
         <span className="text-fine text-[var(--text-faint)]">Labels</span>
         <LabelShowSwitch />
+        <AngleMarksSwitch />
       </div>
       )}
+      {mode !== 'sandbox' && <MarqueeBox />}
 
       {/* Which backend, which quality, how many frames: for whoever is diagnosing graphics, not
           for a student doing homework. The setting is in the units-and-precision popover. */}
@@ -253,7 +261,12 @@ export function Viewport() {
           className="badge pointer-events-auto cursor-pointer outline-none"
           title="Graphics quality (Auto picks a level for this computer)"
           value={gpu.choice}
-          onChange={(e) => useGpuInfo.setState({ choice: e.target.value as 'auto' })}
+          onChange={(e) => {
+            useGpuInfo.setState({ choice: e.target.value as 'auto' })
+            // A focused <select> counts as typing, so every viewport shortcut would stay dead
+            // until the canvas was clicked; the choice is made, give the keys back.
+            e.currentTarget.blur()
+          }}
         >
           <option value="auto">Auto ({gpu.detected})</option>
           <option value="low">Low</option>
@@ -296,6 +309,43 @@ export function Viewport() {
       <SliderDock />
     </div>
   )
+}
+
+/** Lines / Dots / Fine / Paper / Off: the style is saved with the drawing, "Off" is the grid switch. */
+function GridStylePicker() {
+  const showGrid = useScene((s) => s.settings.showGrid)
+  const gridStyle = useScene((s) => s.settings.gridStyle)
+  const setSettings = useScene((s) => s.setSettings)
+  return (
+    <select
+      className="badge pointer-events-auto cursor-pointer outline-none"
+      title="How the grid is drawn"
+      value={showGrid ? gridStyle : 'off'}
+      onChange={(e) => {
+        const v = e.target.value
+        if (v === 'off') setSettings({ showGrid: false })
+        else setSettings({ showGrid: true, gridStyle: v as GridStyle })
+        // Once chosen, hand the keys back: a focused <select> swallows V, P, Esc, Delete, Space
+        // and Ctrl+Z (isTyping treats it as a text field) until the canvas is clicked.
+        e.currentTarget.blur()
+      }}
+    >
+      {GRID_STYLES.map((g) => (
+        <option key={g.id} value={g.id}>
+          {g.label}
+        </option>
+      ))}
+      <option value="off">Off</option>
+    </select>
+  )
+}
+
+/** The selection box while it is being dragged, over the canvas in the same pixels the pointer uses. */
+function MarqueeBox() {
+  const m = useTool((s) => s.marquee)
+  if (!m) return null
+  const r = normalizeRect(m)
+  return <div className="marquee" style={{ left: r.left, top: r.top, width: r.right - r.left, height: r.bottom - r.top }} />
 }
 
 /**

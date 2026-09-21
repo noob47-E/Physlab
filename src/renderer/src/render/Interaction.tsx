@@ -3,20 +3,24 @@ import { useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './cameraUtils'
-import { overlay, showTip } from './overlay'
-import { pickAt, type Hit } from './picking'
-import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type SnapInfo } from './tools'
+import { labelAnchors, overlay, showTip } from './overlay'
+import { CURVE_PICK_PX, pickAll, pickAt, type Hit } from './picking'
+import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type Marquee, type SnapInfo } from './tools'
+import { marqueeStarted, mergeSelection, normalizeRect, objectInRect, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
+import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { showContextMenu } from '../ui/ContextMenu'
 import { Arrow } from './ObjectViews'
 import { Builder } from '../core/factory'
-import { isFree, parentRefs } from '../core/evaluate'
+import { asGLine, dependentsOf, isFree, parentRefs } from '../core/evaluate'
+import { intersectionsOf } from '../math/intersections'
 import { scene, useScene } from '../core/store'
-import type { ObjId, SceneObject } from '../core/types'
+import type { Computed, ObjId, SceneObject } from '../core/types'
 import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
+import { minorStepOf, snapStep } from './gridMath'
 import { themeColor, useThemed } from '../app/theme'
 
 interface DragState {
@@ -35,6 +39,42 @@ interface DragState {
 const SNAP_POINT_PX = 12
 const SNAP_GRID_PX = 9
 const SNAP_AXIS_PX = 6
+/** How far from a line or circle the cursor may be for it to count towards a crossing. */
+const SNAP_CURVE_PX = 12
+
+/** A line, segment, ray, vector or circle: something that can cross something else. */
+const isCurve = (c: Computed) => !!asGLine(c) || c.type === 'circle'
+
+/**
+ * The positions that decide whether a selection box takes an object: the whole of what defines
+ * it has to be inside (see `objectInRect`). A graph has no geometry of its own here, so its label
+ * anchor stands for it; a number has nowhere on the drawing at all.
+ */
+function keyPoints(id: ObjId, c: Computed): V3[] {
+  switch (c.type) {
+    case 'point':
+    case 'text':
+      return [c.p]
+    case 'vector':
+      return [c.tail, add(c.tail, c.comp)]
+    case 'segment':
+    case 'ray':
+    case 'line':
+      return [c.line.p, add(c.line.p, c.line.d)]
+    case 'circle':
+      return [c.circle.c]
+    case 'polygon':
+      return c.pts
+    case 'angle':
+      return [c.vertex]
+    case 'graph': {
+      const a = labelAnchors.get(id)
+      return a ? [a.p] : []
+    }
+    case 'number':
+      return []
+  }
+}
 
 /** Rounds an angle to 15° steps (Shift while drawing). */
 function constrainAngle(from: V3, to: V3): V3 {
@@ -49,6 +89,8 @@ export function Interaction() {
   const drag = useRef<DragState | null>(null)
   const down = useRef<{ x: number; y: number; world: V3 | null; hit: Hit | null } | null>(null)
   const sketch = useRef<{ world: V3[]; lastX: number; lastY: number } | null>(null)
+  // A selection box in progress: where the left button went down on empty space with the Move tool.
+  const box = useRef<{ x0: number; y0: number } | null>(null)
   // The existing point a vector drag or first click started on, so a vector drawn from one
   // point to another is tied to them and follows when either point moves.
   const vectorTail = useRef<{ down: ObjId | null; first: ObjId | null }>({ down: null, first: null })
@@ -72,14 +114,12 @@ export function Interaction() {
       const c = ctxRef.current.controls as unknown as { enabled: boolean } | null
       if (c) c.enabled = enabled
     }
-    /** Minor grid step at the current zoom. */
+    /** The step a point snaps to at the current zoom: the minor grid step, halved with the Fine style, the same rule the grid is drawn by. */
     const gridStep = () => {
       const { camera: cam, size: sz } = ctxRef.current
-      if (scene().viewMode === '2d') {
-        const major = niceStep(100 * worldPerPixel(cam, sz))
-        return major / (String(major).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
-      }
-      return niceStep(cam.position.length() / 12) / 2
+      const s = scene()
+      const minor = s.viewMode === '2d' ? minorStepOf(niceStep(100 * worldPerPixel(cam, sz))) : niceStep(cam.position.length() / 12) / 2
+      return snapStep(minor, s.settings.gridStyle)
     }
     const worldOn = (x: number, y: number, plane: THREE.Plane = XY_PLANE) => screenToPlane(ctxRef.current.camera, ctxRef.current.size, x, y, plane)
     const scr = (p: V3) => toScreen(ctxRef.current.camera, ctxRef.current.size, p)
@@ -100,6 +140,12 @@ export function Interaction() {
         const c = s.ev.values.get(hit.id)
         if (c?.type === 'point') return { p: c.p, kind: 'point', pointId: hit.id, label: s.objects[hit.id]?.name }
       }
+      // Where two lines or circles cross. A point placed here is defined by the crossing, so it
+      // follows when either parent moves; before this a student had to aim at a crossing by eye
+      // and got a free point that stayed behind. Tried before the grid, because a crossing that
+      // happens to sit near a grid line used to lose to the grid.
+      const crossing = crossingNear(x, y, exclude)
+      if (crossing) return crossing
       const g: V3 = [Math.round(w[0] / step) * step, Math.round(w[1] / step) * step, w[2]]
       const gs = scr(g)
       if (Math.hypot(gs.x - x, gs.y - y) <= SNAP_GRID_PX) return { p: g, kind: 'grid' }
@@ -130,11 +176,40 @@ export function Interaction() {
       return { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
     }
 
+    /** The nearest crossing of two curves under the cursor, within `SNAP_POINT_PX`, or null. */
+    const crossingNear = (x: number, y: number, exclude?: Set<ObjId>): SnapInfo | null => {
+      const s = scene()
+      // Each curve's own reach, widened so that both lines of a crossing are found when the
+      // cursor is near the crossing rather than exactly on both.
+      const curves = pickAll(pickCtx(), x, y, (o, c) => !exclude?.has(o.id) && isCurve(c), SNAP_CURVE_PX - CURVE_PICK_PX)
+      if (curves.length < 2) return null
+      let best: SnapInfo | null = null
+      let bestD = SNAP_POINT_PX
+      for (let i = 0; i < curves.length; i++) {
+        for (let j = i + 1; j < curves.length; j++) {
+          const a = curves[i].id
+          const b = curves[j].id
+          const ca = s.ev.values.get(a)
+          const cb = s.ev.values.get(b)
+          if (!ca || !cb) continue
+          // Numbered by intersectionsOf, which is what the evaluator uses to place the point later.
+          intersectionsOf(ca, cb).forEach((p, index) => {
+            const sp = scr(p)
+            const d = Math.hypot(sp.x - x, sp.y - y)
+            if (!sp.visible || d >= bestD) return
+            bestD = d
+            best = { p, kind: 'intersection', a, b, index, label: `${s.objects[a]?.name} ∩ ${s.objects[b]?.name}` }
+          })
+        }
+      }
+      return best
+    }
+
     const fmtL = (v: number) => formatMeasure(v, 'length', scene().settings)
     const fmtA = (r: number) => formatMeasure(r, 'angle', scene().settings)
     const coordText = (p: V3) => `(${[p[0], p[1]].map((v) => fmtL(v).replace(/ \S+$/, '')).join(', ')})`
     const snapNote = (sn: SnapInfo) =>
-      sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'onObject' ? `  • ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : ''
+      sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'onObject' || sn.kind === 'intersection' ? `  • ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : ''
 
     /** Existing point under the cursor (snapped), or a new free point there. */
     const pointAt = (x: number, y: number, alt: boolean): ObjId | null => {
@@ -142,8 +217,14 @@ export function Interaction() {
       if (!sn) return null
       if (sn.pointId) return sn.pointId
       const b = new Builder()
-      // A point placed on a side belongs to it and slides along it afterwards.
-      const p = sn.kind === 'onObject' && sn.onId ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 }) : b.point(sn.p)
+      // A point placed on a side belongs to it and slides along it afterwards; one placed on a
+      // crossing belongs to both lines and stays on the crossing when they move.
+      const p =
+        sn.kind === 'intersection' && sn.a && sn.b && sn.index !== undefined
+          ? b.point({ kind: 'intersection', a: sn.a, b: sn.b, index: sn.index })
+          : sn.kind === 'onObject' && sn.onId
+            ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 })
+            : b.point(sn.p)
       b.commit(false)
       // Remember that the tool made this point, so Esc may take it away again — and only this.
       useTool.setState((t) => ({ created: [...t.created, p.id] }))
@@ -167,7 +248,15 @@ export function Interaction() {
       if (tool === 'select') {
         if (!hit) {
           if (!e.shiftKey) s.select([])
-          return // empty space: the camera controls pan/orbit
+          // Empty space. With Space held the camera pans, and in 3D the left button is the only
+          // way to turn the view; otherwise the drag draws a selection box.
+          if (isSpaceHeld() || s.viewMode === '3d') {
+            markSpaceUsed()
+            return
+          }
+          setControls(false)
+          box.current = { x0: x, y0: y }
+          return
         }
         setControls(false)
         if (e.shiftKey) s.select([hit.id], true)
@@ -209,6 +298,11 @@ export function Interaction() {
       }
       const starts = new Map<ObjId, V3>()
       collectFreePoints(o, s.objects, starts)
+      // Nothing that moves with the drag may be snapped onto: the object, the points it is
+      // moved by, and everything built on those. A dragged corner used to snap onto its own
+      // side, which moved away as it did.
+      const exclude = new Set<ObjId>([o.id, ...starts.keys()])
+      for (const id of [...exclude]) for (const d of dependentsOf(id, s.objects)) exclude.add(d)
       drag.current = {
         hit,
         plane,
@@ -217,7 +311,7 @@ export function Interaction() {
         startComp: c.type === 'vector' ? c.comp : undefined,
         startTail: c.type === 'vector' ? c.tail : undefined,
         moved: false,
-        exclude: new Set([o.id, ...starts.keys()])
+        exclude
       }
     }
 
@@ -237,6 +331,14 @@ export function Interaction() {
             useTool.setState({ stroke: [...sk.world] })
           }
         }
+        return
+      }
+
+      const bx = box.current
+      if (bx) {
+        const m: Marquee = { x0: bx.x0, y0: bx.y0, x1: x, y1: y }
+        // A few pixels of wobble on a click is not a box.
+        useTool.setState({ marquee: marqueeStarted(m) ? m : null })
         return
       }
 
@@ -279,6 +381,22 @@ export function Interaction() {
         s.setHovered(hit?.id ?? null)
         host.style.cursor = hit ? (s.tool === 'select' ? (isDraggable(hit) ? 'grab' : 'pointer') : 'pointer') : s.tool === 'select' ? '' : 'crosshair'
       }
+    }
+
+    /** Everything on this drawing that the box holds whole. */
+    const idsInRect = (m: Marquee): ObjId[] => {
+      const rect = normalizeRect(m)
+      const s = scene()
+      const out: ObjId[] = []
+      for (const id of visibleOrder(s.order, s.objects, s.activeSpace)) {
+        const o = s.objects[id]
+        const c = s.ev.values.get(id)
+        if (!o || !c || !o.visible) continue
+        const pts = keyPoints(id, c).map(scr)
+        if (!pts.every((p) => p.visible)) continue
+        if (objectInRect(o.type, pts as S2[], rect)) out.push(id)
+      }
+      return out
     }
 
     const lastPickPoint = (): V3 | null => {
@@ -443,6 +561,19 @@ export function Interaction() {
         finishSketch()
         return
       }
+      if (box.current) {
+        const bx = box.current
+        box.current = null
+        setControls(true)
+        useTool.setState({ marquee: null })
+        const { x, y } = local(e)
+        const m: Marquee = { x0: bx.x0, y0: bx.y0, x1: x, y1: y }
+        // Shift adds what the box holds to the selection; without it the box is the selection.
+        // (A Shift-click toggles one object, but a box that took away what it covered surprised.)
+        if (marqueeStarted(m)) s.select(mergeSelection(s.selection, idsInRect(m), e.shiftKey))
+        down.current = null
+        return
+      }
       const d = drag.current
       drag.current = null
       if (d) {
@@ -526,6 +657,8 @@ export function Interaction() {
     // Right-click finishes a drawing; otherwise it opens the menu for whatever is under the cursor.
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
+      // A right button pressed during a selection box is part of the box, never a menu.
+      if (box.current) return
       if (useTool.getState().picks.length && finishTool()) {
         e.stopPropagation()
         return
@@ -599,7 +732,7 @@ function usePreviewColors() {
     const good = themeColor('--good')
     // Every snap colour is resolved here, once per theme, rather than in a closure that read the
     // stylesheet again on each mouse move over a point.
-    const snap: Record<SnapInfo['kind'], string> = { point: themeColor('--sel-glow'), axis: accent, onObject: themeColor('--series-5'), grid: good, free: good }
+    const snap: Record<SnapInfo['kind'], string> = { point: themeColor('--sel-glow'), axis: accent, onObject: themeColor('--series-5'), intersection: themeColor('--key-intercept'), grid: good, free: good }
     return {
       band: themeColor('--text-dim'),
       // The stroke is the only thing on screen while a student draws, and the selection yellow
@@ -668,7 +801,7 @@ function ToolPreview() {
 
 function SnapMarker({ p, kind, color }: { p: V3; kind: SnapInfo['kind']; color: string }) {
   const wpp = useThreeWpp()
-  const r = (kind === 'point' || kind === 'onObject' ? 9 : 6) * wpp
+  const r = (kind === 'point' || kind === 'onObject' || kind === 'intersection' ? 9 : 6) * wpp
   const ring: V3[] = Array.from({ length: 33 }, (_, i) => {
     const t = (i / 32) * Math.PI * 2
     return [p[0] + r * Math.cos(t), p[1] + r * Math.sin(t), p[2]]

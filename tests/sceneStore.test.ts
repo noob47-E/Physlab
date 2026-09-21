@@ -2,9 +2,9 @@
 // from them (names, values, who depends on whom) and the order they are drawn in; renaming an
 // object must reach every formula that mentioned it.
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { dependentsOf } from '../src/renderer/src/core/evaluate'
-import { useScene } from '../src/renderer/src/core/store'
+import { blankSceneFile, LABEL_PREFS, useScene } from '../src/renderer/src/core/store'
 import type { SceneObject } from '../src/renderer/src/core/types'
 import { readSource } from './helpers/repo'
 
@@ -206,5 +206,108 @@ describe('renameObject', () => {
     expect(panel).toContain('scene().renameObject(o.id, n.trim())')
     expect(panel).not.toMatch(/function renameObject/)
     expect(panel).not.toContain('exprRefs')
+  })
+})
+
+describe('angle marks: a viewer preference, not part of the file', () => {
+  // The store writes its preferences to localStorage inside a try/catch, so the test runner's
+  // lack of one goes unnoticed; a stand-in here lets the test read what would have been saved.
+  const stored = new Map<string, string>()
+  const fakeStorage = { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => void stored.set(k, v) }
+  beforeAll(() => {
+    ;(globalThis as { localStorage?: unknown }).localStorage = fakeStorage
+  })
+  afterAll(() => {
+    delete (globalThis as { localStorage?: unknown }).localStorage
+    scene().setSettings({ showAngleMarks: true })
+  })
+
+  it('is on by default and listed with the label preferences', () => {
+    expect(scene().settings.showAngleMarks).toBe(true)
+    expect(LABEL_PREFS).toContain('showAngleMarks')
+  })
+
+  it('lands in physlab.labelPrefs when switched off', () => {
+    scene().setSettings({ showAngleMarks: false })
+    expect(scene().settings.showAngleMarks).toBe(false)
+    expect(JSON.parse(stored.get('physlab.labelPrefs') ?? '{}').showAngleMarks).toBe(false)
+  })
+
+  it('survives opening a file that says otherwise', () => {
+    scene().setSettings({ showAngleMarks: false })
+    const file = blankSceneFile()
+    scene().loadScene({ ...file, settings: { ...file.settings, showAngleMarks: true } })
+    expect(scene().settings.showAngleMarks).toBe(false)
+  })
+
+  it('no vector carries its own dead switch any more', () => {
+    // `VectorObj.showAngle` was set on every vector and read by nothing.
+    expect(readSource('src/renderer/src/core/types.ts')).not.toMatch(/showAngle\?: boolean/)
+    expect(readSource('src/renderer/src/core/factory.ts')).not.toContain('showAngle:')
+  })
+})
+
+describe('clearDrawing: delete everything on this drawing', () => {
+  const stamped = (o: SceneObject, space: 'shapes' | 'vectors'): SceneObject => ({ ...o, space })
+
+  it('removes what is on the drawing being looked at and leaves the other drawings alone', () => {
+    scene().setActiveSpace('shapes')
+    scene().addObjects([
+      stamped(point('pA', 'A', [1, 2, 0]), 'shapes'),
+      stamped(point('pB', 'B', [4, 6, 0]), 'shapes'),
+      stamped({ ...base('sAB', 'a'), type: 'segment', a: 'pA', b: 'pB' }, 'shapes'),
+      stamped(number('nV', 'v', '7'), 'vectors'),
+      // Made where no drawing was active: shown everywhere, so it goes too.
+      number('nE', 'e', '1')
+    ])
+    scene().select(['pA', 'nV'])
+    scene().clearDrawing()
+    expect(scene().order).toEqual(['nV'])
+    expect(scene().ev.scope.v).toBe(7)
+    // The selection is trimmed to what is left, not cleared wholesale.
+    expect(scene().selection).toEqual(['nV'])
+  })
+
+  it('is one undo step, and undo brings everything back', () => {
+    scene().setActiveSpace('shapes')
+    scene().addObjects(chain().map((o) => stamped(o, 'shapes')))
+    const before = graph()
+    scene().clearDrawing()
+    expect(scene().order).toEqual([])
+    scene().undo()
+    expect(graph()).toEqual(before)
+    // One step: a second undo takes away the objects that were added, not something in between.
+    scene().undo()
+    expect(scene().order).toEqual([])
+  })
+
+  it('does nothing on an empty drawing (no undo step is recorded)', () => {
+    scene().setActiveSpace('shapes')
+    const past = scene().past.length
+    scene().clearDrawing()
+    expect(scene().past.length).toBe(past)
+  })
+
+  it('refuses where no drawing is active, rather than clearing every drawing at once', () => {
+    // The Sandbox and the GPU Lab have no space of their own; there visibleOrder is everything,
+    // and the palette's row once wiped all four drawings from a mode that showed none of them.
+    scene().setActiveSpace(null)
+    scene().addObjects([stamped(point('pA', 'A', [1, 2, 0]), 'shapes'), stamped(number('nV', 'v', '7'), 'vectors'), number('nE', 'e', '1')])
+    const past = scene().past.length
+    scene().clearDrawing()
+    expect(scene().order).toEqual(['pA', 'nV', 'nE'])
+    expect(scene().past.length).toBe(past)
+    // The menu row is greyed on the same rule, and the palette says so instead of staying silent.
+    expect(readSource('src/renderer/src/app/TopBar.tsx')).toMatch(/Delete everything on this drawing…', disabled: spaceOf\(mode\) === null/)
+    const actions = readSource('src/renderer/src/app/contextActions.ts')
+    expect(actions).toMatch(/if \(!s\(\)\.activeSpace\) \{\s*alert\(NO_DRAWING_TO_CLEAR\)/)
+  })
+
+  it('is what the Edit menu, the background menu and the palette call, with a question first', () => {
+    for (const f of ['src/renderer/src/app/TopBar.tsx', 'src/renderer/src/app/contextActions.ts', 'src/renderer/src/app/SearchPalette.tsx']) {
+      expect(readSource(f)).toContain('confirmClearDrawing')
+    }
+    const actions = readSource('src/renderer/src/app/contextActions.ts')
+    expect(actions).toMatch(/confirm\('Delete every object on this drawing\? Undo brings them back\.'\)/)
   })
 })

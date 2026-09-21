@@ -37,7 +37,9 @@ import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useSandbox } from '../sim/store'
 import { UNIT_NAMES } from '../math/format'
-import { visibleOrder } from '../core/visibility'
+import { spaceOf, visibleOrder } from '../core/visibility'
+import { GRID_STYLES } from '../render/gridMath'
+import { confirmClearDrawing } from './contextActions'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
 
 // The panels still import enterMode from here; it now lives with the rest of the layout code.
@@ -353,8 +355,10 @@ export function TopBar() {
   const filePath = useScene((s) => s.filePath)
   const dirty = useScene((s) => s.dirty)
   const showGrid = useScene((s) => s.settings.showGrid)
+  const gridStyle = useScene((s) => s.settings.gridStyle)
   const showAxes = useScene((s) => s.settings.showAxes)
   const snap = useScene((s) => s.settings.snap)
+  const angleMarks = useScene((s) => s.settings.showAngleMarks)
   const theme = useTheme((t) => t.theme)
   const openPanels = useOpenPanels((s) => s.open)
   const mode = useApp((a) => a.mode)
@@ -400,7 +404,11 @@ export function TopBar() {
               if (sb.selection) sb.removeBody(sb.selection)
             }
           },
-          { label: 'Select all', sc: 'Ctrl+A', run: () => s().select(visibleOrder(s().order, s().objects, s().activeSpace)) }
+          { label: 'Select all', sc: 'Ctrl+A', run: () => s().select(visibleOrder(s().order, s().objects, s().activeSpace)) },
+          '-',
+          // One undo step, and only this drawing: the other modes keep what they have. Greyed
+          // where no drawing is open, the same rule as the 2D/3D rows below.
+          { label: 'Delete everything on this drawing…', disabled: spaceOf(mode) === null, run: () => confirmClearDrawing() }
         ]}
       />
       <Menu
@@ -411,9 +419,12 @@ export function TopBar() {
           { label: '3D view', sc: '3', disabled: !isDrawingMode(mode), run: () => s().setViewMode('3d') },
           { label: 'Reset camera', sc: 'Home', run: resetCamera },
           '-',
-          { label: `Grid: ${showGrid ? 'on' : 'off'}`, run: () => s().setSettings({ showGrid: !showGrid }) },
+          // One row per grid style plus Off, ticked on the current one, like the themes below.
+          ...GRID_STYLES.map((g) => ({ label: `Grid: ${g.label.toLowerCase()}`, on: showGrid && gridStyle === g.id, run: () => s().setSettings({ showGrid: true, gridStyle: g.id }) })),
+          { label: 'Grid: off', on: !showGrid, run: () => s().setSettings({ showGrid: false }) },
           { label: `Axes: ${showAxes ? 'on' : 'off'}`, run: () => s().setSettings({ showAxes: !showAxes }) },
           { label: `Snapping: ${snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s().setSettings({ snap: !snap }) },
+          { label: `Angle marks: ${angleMarks ? 'shown' : 'hidden'}`, run: () => s().setSettings({ showAngleMarks: !angleMarks }) },
           '-',
           // One row per theme, ticked on the current one, so a third theme is a choice and not a
           // guess at what the next press of a toggle would do.

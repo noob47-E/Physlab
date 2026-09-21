@@ -67,6 +67,7 @@
   --grid-minor: #26272c;
   --grid-major: #34363d;
   --grid-axis: #7d828c;
+  --grid-paper: #1d1b17;
   --tick-text: #7d828c;
   --label-bg: rgba(16, 17, 20, 0.78);
   --label-text: #e9ecef;
@@ -139,6 +140,7 @@
   --grid-minor: #d6dfec;
   --grid-major: #bcc8da;
   --grid-axis: #59647a;
+  --grid-paper: #fbf6e6;
   --tick-text: #59647a;
   --label-bg: rgba(250, 252, 255, 0.9);
   --label-text: #1c1e22;
@@ -198,6 +200,7 @@
   --grid-minor: #1a2140;
   --grid-major: #273052;
   --grid-axis: #7f8bbf;
+  --grid-paper: #181529;
   --tick-text: #8b96c9;
   --label-bg: rgba(12, 16, 34, 0.82);
   --label-text: #e2e7ff;
@@ -1242,6 +1245,17 @@ math-field.math-input::part(menu-toggle) {
   .suggest {
     top: 30px;
   }
+}
+
+/* ---------- Viewport overlays ---------- */
+/* The box dragged with the Move tool over empty space: whatever it fully contains gets selected. */
+.marquee {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: var(--sel-fill-faint);
+  border-radius: 2px;
 }
 
 } /* end @layer components */

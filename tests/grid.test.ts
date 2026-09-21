@@ -2,7 +2,8 @@
 // leaving the viewport black on the first open until something else asked for a new frame.
 
 import { describe, expect, it } from 'vitest'
-import { finiteArea, gridKey, needsGridRebuild, usableSize } from '../src/renderer/src/render/gridMath'
+import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, GRID_STYLES, minorStepOf, needsGridRebuild, snapStep, usableSize } from '../src/renderer/src/render/gridMath'
+import { readSource } from './helpers/repo'
 import { axisTitle, tickDecimals, tickText } from '../src/renderer/src/render/gridLabels'
 import type { MeasureSettings } from '../src/renderer/src/math/format'
 import { labelPoints } from '../src/renderer/src/math/graphs'
@@ -124,5 +125,100 @@ describe('numbering the axes', () => {
     expect(tickDecimals(0.25)).toBe(2)
     expect(tickDecimals(2.5)).toBe(1)
     expect(tickDecimals(0)).toBe(0)
+  })
+})
+
+describe('grid styles', () => {
+  // A 4 × 3 area with a major line every 1 and a minor line every 0.25.
+  const box = area(0, 4, 0, 3)
+  const lines = (flat: number[]) => flat.length / 6
+  const crossings = (minor: number) => (Math.floor(4 / minor) + 1) * (Math.floor(3 / minor) + 1)
+
+  it('lines: a minor line at every minor step and a major one at every major step', () => {
+    const v = gridVertices('lines', box, 1, 0.25)
+    expect(lines(v.minor)).toBe(17 + 13)
+    expect(lines(v.major)).toBe(5 + 4)
+    expect(v.dots).toEqual([])
+  })
+
+  it('dots: one vertex per crossing of the minor grid and no lines at all', () => {
+    const v = gridVertices('dots', box, 1, 0.25)
+    expect(v.minor).toEqual([])
+    expect(v.major).toEqual([])
+    expect(v.dots.length / 3).toBe(crossings(0.25))
+    // The first dot is the bottom-left crossing, at the given height.
+    expect(v.dots.slice(0, 3)).toEqual([0, 0, 0])
+    expect(gridVertices('dots', box, 1, 0.25, 0.5).dots[2]).toBe(0.5)
+  })
+
+  it('fine: halves the minor step and keeps the major lines', () => {
+    const v = gridVertices('fine', box, 1, 0.25)
+    expect(lines(v.minor)).toBe(33 + 25)
+    expect(lines(v.major)).toBe(5 + 4)
+  })
+
+  it('paper: the same lines as lines (the tint is the canvas colour, not a vertex)', () => {
+    expect(gridVertices('paper', box, 1, 0.25)).toEqual(gridVertices('lines', box, 1, 0.25))
+  })
+
+  it('puts every vertex at the asked-for height', () => {
+    const v = gridVertices('lines', box, 1, 0.5, 2)
+    for (let i = 2; i < v.minor.length; i += 3) expect(v.minor[i]).toBe(2)
+  })
+
+  it('changes the cache key with the style, so a switch rebuilds the grid', () => {
+    const size = { width: 1200, height: 800 }
+    const keys = new Set(GRID_STYLES.map((g) => gridKey(1, size, 50, g.id)))
+    expect(keys.size).toBe(GRID_STYLES.length)
+    expect(gridKey(1, size, 50)).toBe(gridKey(1, size, 50, 'lines'))
+  })
+
+  it('lists the four styles in the order every picker shows them, each with a plain hint', () => {
+    expect(GRID_STYLES.map((g) => g.id)).toEqual(['lines', 'dots', 'fine', 'paper'])
+    for (const g of GRID_STYLES) expect(g.hint.length).toBeGreaterThan(10)
+  })
+
+  it('draws each dot as a small square, two triangles wide enough to be seen', () => {
+    // WebGPU draws a THREE.Points vertex as one device pixel and ignores PointsMaterial.size,
+    // so the dots style was invisible on the default renderer; each dot is a quad instead.
+    const q = dotQuads([1, 2, 0, 3, 4, 0.5], 0.1)
+    expect(q.length).toBe(2 * 18)
+    const xs = q.filter((_, i) => i % 3 === 0).slice(0, 6)
+    const ys = q.filter((_, i) => i % 3 === 1).slice(0, 6)
+    expect(Math.min(...xs)).toBeCloseTo(0.9)
+    expect(Math.max(...xs)).toBeCloseTo(1.1)
+    expect(Math.min(...ys)).toBeCloseTo(1.9)
+    expect(Math.max(...ys)).toBeCloseTo(2.1)
+    // Each vertex keeps its dot's height, and both triangles wind the same way (a and c share a diagonal).
+    expect(q.slice(18).filter((_, i) => i % 3 === 2)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+    expect(q.slice(0, 3)).toEqual(q.slice(9, 12))
+    expect(dotQuads([], 1)).toEqual([])
+    // Three pixels across: a two-pixel square off the pixel grid blends to a smudge.
+    expect(DOT_HALF_PX * 2).toBe(3)
+    const grid = readSource('src/renderer/src/render/Grid.tsx')
+    expect(grid).not.toMatch(/new THREE\.Points(Material)?\(/)
+    expect(grid).toContain('dotQuads(')
+  })
+})
+
+describe('the step a point snaps to', () => {
+  it('is the minor step of the grid: four squares to a major line that starts with 2, five otherwise', () => {
+    expect(minorStepOf(1)).toBe(0.2)
+    expect(minorStepOf(2)).toBe(0.5)
+    expect(minorStepOf(0.2)).toBe(0.05)
+    expect(minorStepOf(5)).toBe(1)
+    expect(minorStepOf(20)).toBe(5)
+  })
+
+  it('halves with the fine style, as the drawn grid does, and is unchanged by the others', () => {
+    // Before this, Fine drew squares of minor/2 while a point still snapped to every second crossing.
+    expect(snapStep(0.25, 'fine')).toBe(0.125)
+    for (const style of ['lines', 'dots', 'paper'] as const) expect(snapStep(0.25, style)).toBe(0.25)
+    const box = area(0, 4, 0, 3)
+    expect(gridVertices('fine', box, 1, 0.25).minor.length / 6).toBe(Math.floor(4 / snapStep(0.25, 'fine')) + 1 + Math.floor(3 / snapStep(0.25, 'fine')) + 1)
+    // Interaction.tsx snaps by the same rule the grid is drawn by.
+    const interaction = readSource('src/renderer/src/render/Interaction.tsx')
+    expect(interaction).toMatch(/snapStep\(minor, s\.settings\.gridStyle\)/)
+    expect(readSource('src/renderer/src/render/Grid.tsx')).toContain('minorStepOf(majorStep)')
   })
 })

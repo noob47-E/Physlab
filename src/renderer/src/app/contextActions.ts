@@ -8,6 +8,8 @@ import type { Computed, ObjId, SceneObject } from '../core/types'
 import { heading, len, neg, normalize, toDeg, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { useTool } from '../render/tools'
+import { GRID_STYLES } from '../render/gridMath'
+import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 import { fitCamera, resetCamera } from '../render/viewState'
 import { addVectorFromScene } from '../panels/VectorCalc'
 import type { MenuGroup, MenuItem } from '../ui/ContextMenu'
@@ -191,6 +193,21 @@ export function menuForObject(id: ObjId): MenuGroup[] {
   return groups
 }
 
+/** The sentence shown where the command is offered but no drawing is open (the Sandbox, the GPU Lab). */
+export const NO_DRAWING_TO_CLEAR = 'No drawing is open here. Go to Vectors, Geometry, Graphing or Lab Data: each has a drawing of its own.'
+
+/** Asks before clearing the drawing. Undo brings everything back, but a whole drawing is worth a question. */
+export function confirmClearDrawing(): void {
+  // The palette offers the command everywhere; with no drawing active there is nothing to ask
+  // about, and the store refuses anyway. Say so rather than do nothing.
+  if (!s().activeSpace) {
+    alert(NO_DRAWING_TO_CLEAR)
+    return
+  }
+  if (!confirm('Delete every object on this drawing? Undo brings them back.')) return
+  s().clearDrawing()
+}
+
 /** Menu for empty space. */
 export function menuForBackground(world: V3 | null): MenuGroup[] {
   const st = s()
@@ -204,9 +221,11 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
   items.push(
     { label: 'Fit everything in view', run: () => fitCamera() },
     { label: 'Reset the view', shortcut: 'Home', run: () => resetCamera() },
-    { label: 'Select everything', shortcut: 'Ctrl+A', run: () => st.select(visibleOrder(st.order, st.objects, st.activeSpace)) }
+    { label: 'Select everything', shortcut: 'Ctrl+A', run: () => st.select(visibleOrder(st.order, st.objects, st.activeSpace)) },
+    { label: 'Delete everything on this drawing…', hint: 'Only this drawing; Undo brings it back', danger: true, run: () => confirmClearDrawing() }
   )
   const labels = st.settings.labelShow
+  const { showGrid, gridStyle } = st.settings
   return [
     { items },
     {
@@ -214,12 +233,19 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
       items: [
         { label: 'Always', checked: labels === 'always', run: () => st.setSettings({ labelShow: 'always' }) },
         { label: 'On hover', checked: labels === 'hover', run: () => st.setSettings({ labelShow: 'hover' }) },
-        { label: 'Hidden', checked: labels === 'never', run: () => st.setSettings({ labelShow: 'never' }) }
+        { label: 'Hidden', checked: labels === 'never', run: () => st.setSettings({ labelShow: 'never' }) },
+        { label: 'Angle marks', hint: ANGLE_MARKS_HELP, checked: st.settings.showAngleMarks, run: () => st.setSettings({ showAngleMarks: !st.settings.showAngleMarks }) }
+      ]
+    },
+    {
+      title: 'Grid',
+      items: [
+        ...GRID_STYLES.map((g): MenuItem => ({ label: g.label, hint: g.hint, checked: showGrid && gridStyle === g.id, run: () => st.setSettings({ showGrid: true, gridStyle: g.id }) })),
+        { label: 'Off', checked: !showGrid, run: () => st.setSettings({ showGrid: false }) }
       ]
     },
     {
       items: [
-        { label: 'Grid', checked: st.settings.showGrid, run: () => st.setSettings({ showGrid: !st.settings.showGrid }) },
         { label: 'Snapping', checked: st.settings.snap, run: () => st.setSettings({ snap: !st.settings.snap }) },
         { label: 'Search everything…', shortcut: 'Ctrl+K', run: () => useApp.getState().setSearchOpen(true) }
       ]
