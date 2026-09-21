@@ -39,6 +39,16 @@ export function initialShown(total: number, pref: StepPref): number {
   return pref === 'all' ? total : 0
 }
 
+/**
+ * Whether a piece of working should invite the student to try it first: there are steps, none is
+ * showing yet, and the student has not already said "let me try". A student whose preference is
+ * to see every step is never invited (initialShown gives them all of it), and neither is one who
+ * has pressed the button once and is now revealing steps.
+ */
+export function invitesTry(moves: number, shown: number, trying: boolean): boolean {
+  return moves > 0 && shown === 0 && !trying
+}
+
 /** "Treat as": the job chosen by hand, or the one guessed from what was typed. */
 export type TreatAs = JobId | 'auto'
 

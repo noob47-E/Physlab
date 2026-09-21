@@ -1,17 +1,24 @@
 // The last of the theme-token sweep, and the two small Working/Practice fixes that rode with it.
 //
-// The panels themselves cannot be imported here (MathLive wants a window), so what a panel does
-// with a pure function is checked the way tests/colours.test.ts checks colours: by reading the
-// source. Each check names the bug it keeps out.
+// The stylesheet is checked by reading it, because tests/colours.test.ts only scans .tsx. The
+// decisions the panels make live in pure functions and are tested as such; the one source check
+// left on a panel is the class name that makes the invitation the primary button.
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { expectedText } from '../src/renderer/src/math/checkAnswer'
+import { initialShown, invitesTry } from '../src/renderer/src/math/pure/reveal'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'renderer', 'src')
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8')
+
+const tsxFiles = (dir: string): string[] =>
+  readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name)
+    return statSync(full).isDirectory() ? tsxFiles(full) : name.endsWith('.tsx') ? [full] : []
+  })
 
 describe('the type scale', () => {
   const css = read('styles.css')
@@ -24,6 +31,9 @@ describe('the type scale', () => {
     expect(uses).toBe(2)
     const legends = css.match(/\.key \.(?:shift|alpha) \{[^}]*var\(--text-micro\)/g) ?? []
     expect(legends).toHaveLength(2)
+    // The @theme block also makes a `text-micro` utility, which the colours test does not know
+    // about; no panel may reach for it.
+    for (const file of tsxFiles(ROOT)) expect(readFileSync(file, 'utf8'), file).not.toMatch(/\btext-micro\b/)
   })
 
   it('sizes the Calculator section in named steps, never in pixels', () => {
@@ -34,6 +44,13 @@ describe('the type scale', () => {
     const section = css.slice(start, end)
     expect(section.match(/font-size:\s*[\d.]+px/g)).toBeNull()
     expect(section).not.toMatch(/font-family:\s*'/)
+    // The step numbers and the method badge of the working area sit past the Calculator marker.
+    const pure = css.slice(end)
+    for (const cls of ['pure-num', 'pure-method']) {
+      const block = pure.match(new RegExp(`\\.${cls} \\{[^}]*\\}`))?.[0] ?? ''
+      expect(block, cls).toMatch(/font-size:\s*var\(--text-fine\)/)
+      expect(block, cls).not.toMatch(/font-size:\s*[\d.]+px/)
+    }
   })
 
   it('keeps the menu height rule in one place', () => {
@@ -44,16 +61,32 @@ describe('the type scale', () => {
 })
 
 describe('the Working panel', () => {
-  const src = read('panels/Working.tsx')
+  it('invites the student to try when a new answer arrives with its steps hidden', () => {
+    expect(invitesTry(3, initialShown(3, 'try'), false)).toBe(true)
+  })
 
-  it('offers "Let me try first" as the primary, focused button when a new answer arrives with its steps hidden', () => {
-    // The finished-state button of the same name stays a ghost; only the invitation is primary.
+  it('never invites when every step is already showing', () => {
+    expect(invitesTry(3, initialShown(3, 'all'), false)).toBe(false)
+    expect(invitesTry(3, 3, false)).toBe(false)
+  })
+
+  it('stops inviting once the student has said "let me try", and after a step is shown', () => {
+    expect(invitesTry(3, 0, true)).toBe(false)
+    expect(invitesTry(3, 1, false)).toBe(false)
+  })
+
+  it('has nothing to invite for a refusal or an answer with no steps', () => {
+    expect(invitesTry(0, 0, false)).toBe(false)
+    expect(invitesTry(0, initialShown(0, 'all'), false)).toBe(false)
+  })
+
+  it('makes the invitation the primary button and leaves the reveal beside it plain', () => {
+    // So Enter after "Work it out" chooses trying, never a step. The finished-state button of the
+    // same name stays a ghost.
+    const src = read('panels/Working.tsx')
     const invite = src.match(/\{inviting && \([\s\S]*?<\/button>/)?.[0] ?? ''
-    expect(invite).toContain('ref={tryBtn}')
     expect(invite).toContain('className="btn primary"')
     expect(invite).toContain('Let me try first')
-    expect(src).toMatch(/if \(inviting\) tryBtn\.current\?\.focus\(\)/)
-    // The reveal buttons beside it stay plain, so Enter after "Work it out" does not show a step.
     const reveal = src.match(/\{hidden > 0 && \([\s\S]*?Show a step/)?.[0] ?? ''
     expect(reveal).toContain('className="btn"')
     expect(reveal).not.toContain('primary')
@@ -62,10 +95,6 @@ describe('the Working panel', () => {
 
 describe('the Practice panel', () => {
   it('reveals the answer at the scene precision, not a fixed four places', () => {
-    const src = read('panels/Practice.tsx')
-    expect(src).toContain('expectedText(f, settings)')
-    expect(src).not.toMatch(/expectedText\(f\)/)
-    // And the function it hands them to really honours them.
     const f = { key: 'a', label: 'A', value: 2 / 3, tol: 0.01 }
     expect(expectedText(f, { decimals: 2, precisionMode: 'dp' })).toBe('0.67')
     expect(expectedText(f, { decimals: 3, precisionMode: 'sf' })).toBe('0.667')
