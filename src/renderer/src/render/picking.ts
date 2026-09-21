@@ -93,8 +93,11 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
         const a = scr(c.tail)
         const b = scr(head)
         if (!a.visible || !b.visible) break
+        // Head and tail share a priority so the nearer end wins. With the head ranked above the
+        // tail, a short arrow could not be picked up by its tail at all: the head, 14 px away,
+        // always took the click.
         offer({ id, part: 'head', dist: Math.hypot(b.x - sx, b.y - sy), priority: 1 }, 14)
-        offer({ id, part: 'tail', dist: Math.hypot(a.x - sx, a.y - sy), priority: 2 }, 10)
+        offer({ id, part: 'tail', dist: Math.hypot(a.x - sx, a.y - sy), priority: 1 }, 12)
         offer({ id, part: 'body', dist: segDist(P, a, b), priority: 3 }, 8)
         break
       }

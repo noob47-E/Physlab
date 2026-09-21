@@ -30,22 +30,38 @@ export function vecTex(name: string): string {
   return `\\vec{${name}}`
 }
 
-/** A compass bearing such as "N 30° E" for a direction measured from +x. */
-export function bearingText(rad: number, decimals = 2): string {
+/** Decimal places, or the student's precision settings (which may mean significant figures). */
+export type Precision = number | Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+
+const fmtAt = (n: number, p: Precision): string => (typeof p === 'number' ? fmt(n, p) : fmtPrecise(n, p))
+const texAt = (n: number, p: Precision): string => (typeof p === 'number' ? tex(n, p) : texPrecise(n, p))
+
+/**
+ * A compass bearing such as "N 30° E" for a direction measured from +x. The zero vector has
+ * no direction, so it is said so rather than written as "S undefined° W".
+ */
+export function bearingText(rad: number, precision: Precision = 2): string {
+  if (!Number.isFinite(rad)) return 'undefined'
   const fromNorth = ((90 - (rad * 180) / Math.PI) % 360 + 360) % 360
   const exact = ['N', 'E', 'S', 'W'][Math.round(fromNorth / 90) % 4]
   if (Math.abs(fromNorth - Math.round(fromNorth / 90) * 90) < 1e-9) return exact
   const ns = fromNorth < 90 || fromNorth > 270 ? 'N' : 'S'
   const ew = fromNorth < 180 ? 'E' : 'W'
   const off = ns === 'N' ? (fromNorth < 90 ? fromNorth : 360 - fromNorth) : Math.abs(180 - fromNorth)
-  return `${ns} ${fmt(off, decimals)}° ${ew}`
+  return `${ns} ${fmtAt(off, precision)}° ${ew}`
 }
 
 // ---------------------------------------------------------------------------
 // Measurements with units and precision (one place for every displayed value)
 // ---------------------------------------------------------------------------
 
-export type MeasureKind = 'length' | 'area' | 'volume' | 'angle' | 'number'
+/**
+ * 'angle' is an amount of turning (the corner of a triangle, the angle between two vectors);
+ * 'direction' is which way something points, measured from +x. Only a direction can be written
+ * as a compass bearing — "N 30° E" makes no sense for the corner of a triangle — so the bearing
+ * setting applies to 'direction' alone.
+ */
+export type MeasureKind = 'length' | 'area' | 'volume' | 'angle' | 'direction' | 'number'
 export type MeasureSettings = Pick<SceneSettings, 'decimals' | 'precisionMode' | 'unit' | 'unitPerSquare' | 'angleUnit'>
 
 export const UNIT_LABELS: Record<LengthUnit, string> = { unit: 'u', mm: 'mm', cm: 'cm', m: 'm', km: 'km', in: 'in', ft: 'ft' }
@@ -68,11 +84,16 @@ export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'pre
   return fmt(v, s.decimals)
 }
 
-const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, number: 0 }
+const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, direction: 0, number: 0 }
+
+const isAngular = (kind: MeasureKind): boolean => kind === 'angle' || kind === 'direction'
+
+/** A direction is written as a bearing only when the student asked for bearings, in degrees. */
+const asBearing = (kind: MeasureKind, s: MeasureSettings): boolean => kind === 'direction' && NOTATION.direction === 'bearing' && s.angleUnit === 'deg'
 
 /** Converts a world (grid) value into the chosen real unit. */
 export function measureValue(v: number, kind: MeasureKind, s: MeasureSettings): number {
-  if (kind === 'angle') return angleFrom(v, s.angleUnit)
+  if (isAngular(kind)) return angleFrom(v, s.angleUnit)
   return v * Math.pow(s.unitPerSquare, DIM[kind])
 }
 
@@ -82,28 +103,30 @@ const ANGLE_TEX: Record<AngleUnit, string> = { deg: '^\\circ', rad: '\\,\\text{r
 
 export function unitSuffix(kind: MeasureKind, s: MeasureSettings): string {
   // A ternary on 'deg' labelled a grad angle "rad": the number was converted, the name was not.
-  if (kind === 'angle') return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
+  if (isAngular(kind)) return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
   if (kind === 'number') return ''
   const u = UNIT_LABELS[s.unit]
   return ` ${u}${DIM[kind] === 2 ? '²' : DIM[kind] === 3 ? '³' : ''}`
 }
 
-/** "12 cm²", "53.13°", "5 u". */
+/** "12 cm²", "53.13°", "5 u" — and a direction as "N 36.87° E" when bearings are chosen. */
 export function formatMeasure(v: number, kind: MeasureKind, s: MeasureSettings): string {
+  if (asBearing(kind, s)) return bearingText(v, s)
   return `${fmtPrecise(measureValue(v, kind, s), s)}${unitSuffix(kind, s)}`
 }
 
 /** LaTeX version: "12\,\text{cm}^2". */
 export function texMeasure(v: number, kind: MeasureKind, s: MeasureSettings, withUnit = true): string {
-  const n = fmtPrecise(measureValue(v, kind, s), s).replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
+  if (asBearing(kind, s)) return `\\text{${bearingText(v, s)}}`
+  const n = texPrecise(measureValue(v, kind, s), s)
   if (!withUnit || kind === 'number') return n
-  if (kind === 'angle') return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
+  if (isAngular(kind)) return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
   const d = DIM[kind]
   return `${n}\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
 }
 
 export function texUnit(kind: MeasureKind, s: MeasureSettings): string {
-  if (kind === 'angle') return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
+  if (isAngular(kind)) return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
   if (kind === 'number') return ''
   const d = DIM[kind]
   return `\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
@@ -140,6 +163,11 @@ export function tex(n: number, decimals = 4): string {
   return trimZeros(n.toFixed(decimals))
 }
 
+/** fmtPrecise for KaTeX: an ASCII minus and a real exponent. */
+export function texPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  return fmtPrecise(v, s).replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
+}
+
 /** Number wrapped in parentheses when negative, for substituting into formulas. */
 export function texP(n: number, decimals = 4): string {
   const s = tex(n, decimals)
@@ -149,48 +177,52 @@ export function texP(n: number, decimals = 4): string {
 export const fmtPoint = (p: V3, decimals = 3): string =>
   Math.abs(p[2]) < 1e-12 ? `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)})` : `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)}, ${fmt(p[2], decimals)})`
 
-/** "3i + 4j − 2k" style, or whatever the notation setting asks for. */
-export function fmtIJK(v: V3, decimals = 3): string {
+/**
+ * "3i + 4j − 2k" style, or whatever the notation setting asks for. `precision` is a number of
+ * decimal places or the student's settings, so a solution in significant figures writes its
+ * components the same way as its magnitudes.
+ */
+export function fmtIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'pair' || NOTATION.components === 'column') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => fmt(c, decimals))
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => fmtAt(c, precision))
     return NOTATION.components === 'pair' ? `(${nums.join(', ')})` : `[${nums.join('; ')}]`
   }
   if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
-    return `${fmt(m, decimals)} ∠ ${NOTATION.direction === 'bearing' ? bearingText(ang, decimals) : fmtAngle(ang < 0 ? ang + 2 * Math.PI : ang, 'deg', 2)}`
+    return `${fmtAt(m, precision)} ∠ ${NOTATION.direction === 'bearing' ? bearingText(ang, precision) : fmtAngle(ang < 0 ? ang + 2 * Math.PI : ang, 'deg', 2)}`
   }
   const parts: string[] = []
   const names = ['i', 'j', 'k']
   v.forEach((c, idx) => {
     if (Math.abs(c) < 1e-12) return
-    const mag = fmt(Math.abs(c), decimals)
+    const mag = fmtAt(Math.abs(c), precision)
     const sign = c < 0 ? '−' : '+'
     parts.push(parts.length === 0 ? `${c < 0 ? '−' : ''}${mag}${names[idx]}` : ` ${sign} ${mag}${names[idx]}`)
   })
   return parts.length ? parts.join('') : '0'
 }
 
-export function texIJK(v: V3, decimals = 3): string {
+export function texIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'pair') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => tex(c, decimals))
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
     return `\\left(${nums.join(',\\; ')}\\right)`
   }
   if (NOTATION.components === 'column') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => tex(c, decimals))
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
     return `\\begin{pmatrix}${nums.join(' \\\\ ')}\\end{pmatrix}`
   }
   if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
     const a = ang < 0 ? ang + 2 * Math.PI : ang
-    return `${tex(m, decimals)}\\,\\angle\\,${NOTATION.direction === 'bearing' ? `\\text{${bearingText(a, 2)}}` : texAngle(a, 'deg', 2)}`
+    return `${texAt(m, precision)}\\,\\angle\\,${NOTATION.direction === 'bearing' ? `\\text{${bearingText(a, 2)}}` : texAngle(a, 'deg', 2)}`
   }
   const parts: string[] = []
   const names = ['\\hat{i}', '\\hat{j}', '\\hat{k}']
   v.forEach((c, idx) => {
     if (Math.abs(c) < 1e-12) return
-    const mag = tex(Math.abs(c), decimals)
+    const mag = texAt(Math.abs(c), precision)
     if (parts.length === 0) parts.push(`${c < 0 ? '-' : ''}${mag}${names[idx]}`)
     else parts.push(` ${c < 0 ? '-' : '+'} ${mag}${names[idx]}`)
   })
@@ -245,6 +277,6 @@ export function toDMS(deg: number): string {
  * and it has to be the exact mirror of the display or the drawing will drift a little each time.
  */
 export function worldValue(shown: number, kind: MeasureKind, s: MeasureSettings): number {
-  if (kind === 'angle') return angleTo(shown, s.angleUnit)
+  if (isAngular(kind)) return angleTo(shown, s.angleUnit)
   return shown / Math.pow(s.unitPerSquare, DIM[kind])
 }

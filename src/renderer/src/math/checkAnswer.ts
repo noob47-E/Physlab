@@ -4,8 +4,8 @@
 // (quadrant, sign, sin instead of cos, radians instead of degrees, a factor of ten) instead of
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
-import { math, preprocess } from './expr'
-import { fmt } from './format'
+import { getAngleMode, math, preprocess, setAngleMode } from './expr'
+import { fmtPrecise, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 
@@ -24,15 +24,23 @@ const UNIT_TAIL = /(?<=[\d)\s])\s*(°|N\s*[·⋅]?\s*m|m\s*\/\s*s\s*\^?\s*2|m\s*
 
 /** Reads "12.5", "5*sqrt(2)", "−3.4 N" or "37°" as a number. Returns null if it makes no sense. */
 export function parseAnswer(text: string): number | null {
-  let t = text.trim().replace(/−/g, '-').replace(/,/g, '')
+  // Only a thousands separator goes: "1,234" is 1234, but the comma in "sin(30,40)" or "1,5" is
+  // not, and stripping every comma turned those into different numbers instead of "unreadable".
+  let t = text.trim().replace(/−/g, '-').replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
   if (!t) return null
   t = t.replace(UNIT_TAIL, '')
   if (!t.trim()) return null
+  // The practice questions are set in degrees whatever the calculator was last switched to:
+  // "sin(30)" typed as an answer must be 0.5 even after a session in radians.
+  const prev = getAngleMode()
+  setAngleMode('deg')
   try {
     const v = Number(math.evaluate(preprocess(t)))
     return Number.isFinite(v) ? v : null
   } catch {
     return null
+  } finally {
+    setAngleMode(prev)
   }
 }
 
@@ -50,7 +58,7 @@ export function checkAnswer(text: string, f: AnswerField): Check {
   if (angle) {
     const diff = (((a - f.value) % 360) + 540) % 360 - 180
     if (Math.abs(diff) <= f.tol) {
-      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmt(f.value, 2)}°.` }
+      return { verdict: 'right', parsed: a, message: `Same direction. Written between 0° and 360° it is ${fmtPrecise(f.value, { decimals: 2, precisionMode: 'dp' })}°.` }
     }
   }
 
@@ -84,9 +92,9 @@ export function checkAnswer(text: string, f: AnswerField): Check {
   return { verdict: 'wrong', parsed: a, message: 'Not quite. Press Hint to see the next step.' }
 }
 
-/** The answer as PhysLab would write it, for the "show me" button. */
-export function expectedText(f: AnswerField): string {
-  return `${fmt(f.value, 4)}${f.unit ? ` ${f.unit}` : ''}`
+/** The answer as PhysLab would write it, for the "show me" button — in the student's precision. */
+export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 4, precisionMode: 'dp' }): string {
+  return `${fmtPrecise(f.value, s)}${f.unit ? ` ${f.unit}` : ''}`
 }
 
 /** A right or close answer counts; empty and unreadable do not. */

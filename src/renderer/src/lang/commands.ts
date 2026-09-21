@@ -573,18 +573,20 @@ function vecArg(node: Node, fallback: string): VecArg {
 /** Recognises vector operations written directly (A + B, A × B, |A|…) and builds a step-by-step solution. */
 export function solutionFor(root: MathNode): VS.Solution | null {
   let node = root as Node
+  // The command bar answers in the student's own precision and angle unit, like the panels.
+  const settings = scene().settings
   while (node.type === 'ParenthesisNode') node = node.content as Node
   const vecSym = (n: Node) => n.type === 'SymbolNode' && kindOfName(n.name as string) === 'vector'
   try {
     if (node.type === 'OperatorNode') {
       const args = node.args as Node[]
       const sum = sumOperands(node)
-      if (sum) return VS.solveAddition(sum.map((n) => vecArg({ type: 'SymbolNode', name: n } as unknown as Node, n)))
-      if (node.fn === 'subtract' && args.every(vecSym)) return VS.solveSubtraction(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
+      if (sum) return VS.solveAddition(sum.map((n) => vecArg({ type: 'SymbolNode', name: n } as unknown as Node, n)), 'R', settings)
+      if (node.fn === 'subtract' && args.every(vecSym)) return VS.solveSubtraction(vecArg(args[0], 'A'), vecArg(args[1], 'B'), 'R', settings)
       if (node.fn === 'multiply' && args.length === 2) {
-        if (vecSym(args[1]) && isConstant(args[0])) return VS.solveScalarMultiply(Number(evaluateNode(args[0])), vecArg(args[1], 'A'))
-        if (vecSym(args[0]) && isConstant(args[1])) return VS.solveScalarMultiply(Number(evaluateNode(args[1])), vecArg(args[0], 'A'))
-        if (vecSym(args[0]) && vecSym(args[1])) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
+        if (vecSym(args[1]) && isConstant(args[0])) return VS.solveScalarMultiply(Number(evaluateNode(args[0])), vecArg(args[1], 'A'), 'R', settings)
+        if (vecSym(args[0]) && isConstant(args[1])) return VS.solveScalarMultiply(Number(evaluateNode(args[1])), vecArg(args[0], 'A'), 'R', settings)
+        if (vecSym(args[0]) && vecSym(args[1])) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
       }
     }
     if (node.type === 'FunctionNode') {
@@ -594,16 +596,13 @@ export function solutionFor(root: MathNode): VS.Solution | null {
         const k = inferKind(n, kindOfName)
         return k === 'vector' || k === 'point'
       }
-      if (fname === 'cross' && args.length === 2 && args.every(geo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'dot' && args.length === 2 && args.every(geo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'mag' && args.length === 1 && geo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'))
-      if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'))
-      if (fname === 'proj' && args.length === 2) return VS.solveProjection(vecArg(args[0], 'B'), vecArg(args[1], 'A'))
-      if (fname === 'angleBetween' && args.length === 2) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'polarVec' && args.length === 2) {
-        const v = toV3(evaluateNode(node))
-        return VS.solveComponents('A', len(v), (heading(v) * 180) / Math.PI)
-      }
+      if (fname === 'cross' && args.length === 2 && args.every(geo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'), 'C', settings)
+      if (fname === 'dot' && args.length === 2 && args.every(geo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
+      if (fname === 'mag' && args.length === 1 && geo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'), settings)
+      if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'), settings)
+      if (fname === 'proj' && args.length === 2) return VS.solveProjection(vecArg(args[0], 'B'), vecArg(args[1], 'A'), settings)
+      if (fname === 'angleBetween' && args.length === 2) return VS.solveAngleBetween(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
+      if (fname === 'polarVec' && args.length === 2) return VS.solveResolve({ name: 'A', v: toV3(evaluateNode(node)) }, settings)
     }
   } catch {
     return null
@@ -617,6 +616,7 @@ function trySolverCommand(input: string): boolean {
   const m = input.match(/^\s*([A-Za-z]+)\s*\((.*)\)\s*$/)
   if (!m || !SOLVER_FNS.has(m[1].toLowerCase())) return false
   const fn = m[1].toLowerCase()
+  const settings = scene().settings
   const args = splitArgs(m[2]).map((a) => math.parse(preprocess(a)) as Node)
   const num = (n: Node) => Number(evaluateNode(n))
   const v = (i: number, name: string) => vecArg(args[i], name)
@@ -624,51 +624,54 @@ function trySolverCommand(input: string): boolean {
   switch (fn) {
     case 'components':
     case 'resolve':
-      if (args.length === 2) sol = VS.solveComponents('A', num(args[0]), num(args[1]))
+      if (args.length === 2) sol = VS.solveComponents('A', num(args[0]), num(args[1]), '', settings)
       else if (args.length === 1) {
-        const a = v(0, 'A')
-        sol = VS.solveComponents(a.name, len(a.v), (heading(a.v) * 180) / Math.PI)
+        // A 3-D vector's components are read off directly; resolving it at its heading in the
+        // plane reported Ax = 4.24 for 3i + 4j + 5k.
+        sol = VS.solveResolve(v(0, 'A'), settings)
       }
       break
     case 'magnitude':
     case 'magdir':
     case 'direction':
-      sol = VS.solveMagnitudeDirection(v(0, 'A'))
+      sol = VS.solveMagnitudeDirection(v(0, 'A'), settings)
       break
     case 'unit':
-      sol = VS.solveUnitVector(v(0, 'A'))
+      sol = VS.solveUnitVector(v(0, 'A'), settings)
       break
     case 'angle':
+      sol = VS.solveAngleBetween(v(0, 'A'), v(1, 'B'), settings)
+      break
     case 'dot':
-      sol = VS.solveDot(v(0, 'A'), v(1, 'B'))
+      sol = VS.solveDot(v(0, 'A'), v(1, 'B'), settings)
       break
     case 'cross':
-      sol = VS.solveCross(v(0, 'A'), v(1, 'B'))
+      sol = VS.solveCross(v(0, 'A'), v(1, 'B'), 'C', settings)
       break
     case 'add':
-      sol = VS.solveAddition(args.map((_, i) => v(i, String.fromCharCode(65 + i))))
+      sol = VS.solveAddition(args.map((_, i) => v(i, String.fromCharCode(65 + i))), 'R', settings)
       break
     case 'subtract':
-      sol = VS.solveSubtraction(v(0, 'A'), v(1, 'B'))
+      sol = VS.solveSubtraction(v(0, 'A'), v(1, 'B'), 'R', settings)
       break
     case 'projection':
-      sol = VS.solveProjection(v(0, 'B'), v(1, 'A'))
+      sol = VS.solveProjection(v(0, 'B'), v(1, 'A'), settings)
       break
     case 'resultant':
     case 'twoforces':
-      sol = VS.solveTwoForces(num(args[0]), num(args[1]), num(args[2]))
+      sol = VS.solveTwoForces(num(args[0]), num(args[1]), num(args[2]), 'N', settings)
       break
     case 'equilibrium':
-      sol = VS.solveEquilibrium(args.map((_, i) => v(i, `F${i + 1}`)))
+      sol = VS.solveEquilibrium(args.map((_, i) => v(i, `F${i + 1}`)), settings)
       break
     case 'torque':
-      sol = VS.solveTorque(v(0, 'r').v, v(1, 'F').v)
+      sol = VS.solveTorque(v(0, 'r').v, v(1, 'F').v, settings)
       break
     case 'work':
-      sol = VS.solveWork(v(0, 'F').v, v(1, 'd').v)
+      sol = VS.solveWork(v(0, 'F').v, v(1, 'd').v, settings)
       break
     case 'magforce':
-      sol = VS.solveMagneticForce(num(args[0]), v(1, 'v').v, v(2, 'B').v)
+      sol = VS.solveMagneticForce(num(args[0]), v(1, 'v').v, v(2, 'B').v, settings)
       break
   }
   if (!sol) throw new Error(`Wrong inputs for ${m[1]}. Type "help" for examples.`)

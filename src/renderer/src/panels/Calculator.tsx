@@ -5,7 +5,7 @@ import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, type B
 import { calcEng, calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
 import { math, setAngleMode } from '../math/expr'
-import { latexToMath } from '../math/latexToMath'
+import { latexToMath, tryLatexToMath } from '../math/latexToMath'
 import { fieldHasText } from '../math/pure/reveal'
 import { cas, warmupCas } from '../math/cas'
 import { useScene } from '../core/store'
@@ -303,10 +303,19 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
     }
   }
 
-  /** The current input as PhysLab's linear syntax. */
+  /** The current input as PhysLab's linear syntax. Throws the converter's sentence on a ± it cannot use. */
   const linear = (): string => {
     const s = useCalc.getState().input
     return mode === 'BASE-N' ? s : latexToMath(s)
+  }
+
+  /**
+   * The same, but empty instead of thrown, for key handlers that only peek at the text: a ± typed
+   * before SOLVE or CALC must fall through to evaluate(), which puts the refusal on the LCD.
+   */
+  const linearOrEmpty = (): string => {
+    const s = useCalc.getState().input
+    return mode === 'BASE-N' ? s : tryLatexToMath(s).src
   }
 
   const evaluate = async (varsOverride?: Record<string, unknown>) => {
@@ -491,12 +500,12 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
           useCalc.setState({ shift: false })
           return setResult({ main: 'Variables', extra: Object.entries(s.vars).map(([n, v]) => `${n} = ${typeof v === 'number' ? calcNum(v) : String(v)}`) })
         case 'solve':
-          if (!linear().includes('=')) insertTex('=')
+          if (!linearOrEmpty().includes('=')) insertTex('=')
           else void evaluate()
           return
         case 'calc': {
           useCalc.setState({ shift: false })
-          const used = [...new Set((linear().match(/\b[A-FMxy]\b/g) ?? []).filter((v) => v !== 'e'))]
+          const used = [...new Set((linearOrEmpty().match(/\b[A-FMxy]\b/g) ?? []).filter((v) => v !== 'e'))]
           if (used.length) setCalcVars(used)
           else void evaluate()
           return

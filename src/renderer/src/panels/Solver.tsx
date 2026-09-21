@@ -47,7 +47,7 @@ function VecEditor({ value, onChange, onRemove }: { value: VecInput; onChange: (
         </div>
         <div className="flex-1" />
         {onRemove && (
-          <button className="text-zinc-500 hover:text-red-400" onClick={onRemove}>
+          <button className="text-[color:var(--text-faint)] hover:text-[color:var(--bad)]" onClick={onRemove}>
             <X size={14} />
           </button>
         )}
@@ -56,7 +56,7 @@ function VecEditor({ value, onChange, onRemove }: { value: VecInput; onChange: (
         <div className="grid grid-cols-3 gap-1">
           {[0, 1, 2].map((i) => (
             <div key={i} className="relative">
-              <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-zinc-500">{'xyz'[i]}</span>
+              <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-[color:var(--text-faint)]">{'xyz'[i]}</span>
               <NumField value={value.comp[i]} onChange={(n) => onChange({ ...value, comp: value.comp.map((c, j) => (j === i ? n : c)) as V3 })} />
             </div>
           ))}
@@ -65,11 +65,11 @@ function VecEditor({ value, onChange, onRemove }: { value: VecInput; onChange: (
       {value.mode === 'polar' && (
         <div className="grid grid-cols-2 gap-1">
           <div className="relative">
-            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-zinc-500">size</span>
+            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-[color:var(--text-faint)]">size</span>
             <NumField value={value.mag} onChange={(n) => onChange({ ...value, mag: n })} />
           </div>
           <div className="relative">
-            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-zinc-500">θ°</span>
+            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-[color:var(--text-faint)]">θ°</span>
             <NumField value={value.angle} onChange={(n) => onChange({ ...value, angle: n })} />
           </div>
         </div>
@@ -91,7 +91,7 @@ function VecEditor({ value, onChange, onRemove }: { value: VecInput; onChange: (
           ))}
         </select>
       )}
-      {value.mode === 'scene' && value.sceneId && !ev.values.has(value.sceneId) && <div className="text-red-400">That vector no longer exists.</div>}
+      {value.mode === 'scene' && value.sceneId && !ev.values.has(value.sceneId) && <div className="text-[color:var(--bad)]">That vector no longer exists.</div>}
     </div>
   )
 }
@@ -114,8 +114,8 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
   return (
     <div className="steps">
       <div className="flex items-center gap-2 px-3 pt-3">
-        <Sparkles size={15} className="text-amber-300" />
-        <div className="flex-1 text-[14px] font-semibold text-white">{sol.title}</div>
+        <Sparkles size={15} className="text-[color:var(--warn)]" />
+        <div className="flex-1 text-[14px] font-semibold text-[color:var(--text-strong)]">{sol.title}</div>
         {sol.visual && (
           <button className="btn" onClick={() => visualizeSolution(sol)}>
             <Eye size={13} /> Show in scene
@@ -123,15 +123,15 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
         )}
       </div>
       {shown === 0 && (
-        <div className="px-3 pt-2 text-zinc-400">Work it out yourself first. Press Hint when you are stuck — one step at a time.</div>
+        <div className="px-3 pt-2 text-[color:var(--text-dim)]">Work it out yourself first. Press Hint when you are stuck — one step at a time.</div>
       )}
       <ol className="mt-2 space-y-1.5 px-3">
         {sol.steps.slice(0, shown).map((s, i) => (
-          <li key={i} className="rounded-md bg-black/20 px-3 py-2">
+          <li key={i} className="rounded-md bg-[var(--bg-3)] px-3 py-2">
             <div className="flex gap-2">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2f4a7a] text-[11px] text-white">{i + 1}</span>
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--sel-row)] text-[11px] text-[color:var(--text-strong)]">{i + 1}</span>
               <div className="min-w-0 flex-1">
-                {s.text && <div className="text-zinc-300">{s.text}</div>}
+                {s.text && <div className="text-[color:var(--text)]">{s.text}</div>}
                 {s.tex && <Tex tex={s.tex} display />}
               </div>
             </div>
@@ -146,16 +146,16 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
           <button className="btn ghost" onClick={() => setShown(sol.steps.length)}>
             Show all {sol.steps.length} steps
           </button>
-          <span className="text-zinc-500">{more} to go</span>
+          <span className="text-[color:var(--text-faint)]">{more} to go</span>
         </div>
       )}
       {more === 0 && (
-        <div className="card mx-3 mt-3 border-amber-400/40 bg-amber-400/5 p-3">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-amber-300">Answer</div>
+        <div className="card mx-3 mt-3 border-[color:var(--warn)] p-3" style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
           {sol.answers.map((a) => (
             <div key={a.label} className="flex items-baseline gap-3 py-0.5">
-              <span className="w-24 text-zinc-400">{a.label}</span>
-              <Tex tex={a.tex} className="text-[15px] text-white" />
+              <span className="w-24 text-[color:var(--text-dim)]">{a.label}</span>
+              <Tex tex={a.tex} className="text-[15px] text-[color:var(--text-strong)]" />
             </div>
           ))}
         </div>
@@ -167,6 +167,7 @@ export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; s
 export function Solver() {
   const solution = useScene((s) => s.solution)
   const showSolution = useScene((s) => s.showSolution)
+  const settings = useScene((s) => s.settings)
   const [problem, setProblem] = useState<ProblemId>('add')
   const [vecs, setVecs] = useState<VecInput[]>([newVec('A', [3, 4, 0]), newVec('B', [2, -1, 0])])
   const [nums, setNums] = useState({ F: 10, theta: 30, F1: 5, F2: 5, angle: 120, k: 2, q: 2 })
@@ -199,51 +200,51 @@ export function Solver() {
       let sol: VS.Solution
       switch (problem) {
         case 'components':
-          sol = VS.solveComponents('F', nums.F, nums.theta)
+          sol = VS.solveComponents('F', nums.F, nums.theta, '', settings)
           break
         case 'magdir':
-          sol = VS.solveMagnitudeDirection(vs[0])
+          sol = VS.solveMagnitudeDirection(vs[0], settings)
           break
         case 'add':
           sol =
             method === 'cosine' && vs.length === 2
-              ? VS.solveAdditionCosineLaw(vs[0], vs[1])
+              ? VS.solveAdditionCosineLaw(vs[0], vs[1], 'R', settings)
               : method === 'graphical'
-                ? VS.solveAdditionGraphical(vs)
-                : VS.solveAddition(vs)
+                ? VS.solveAdditionGraphical(vs, 'R', settings)
+                : VS.solveAddition(vs, 'R', settings)
           break
         case 'subtract':
-          sol = VS.solveSubtraction(vs[0], vs[1])
+          sol = VS.solveSubtraction(vs[0], vs[1], 'R', settings)
           break
         case 'scale':
-          sol = VS.solveScalarMultiply(nums.k, vs[0])
+          sol = VS.solveScalarMultiply(nums.k, vs[0], 'R', settings)
           break
         case 'unit':
-          sol = VS.solveUnitVector(vs[0])
+          sol = VS.solveUnitVector(vs[0], settings)
           break
         case 'dot':
-          sol = VS.solveDot(vs[0], vs[1])
+          sol = VS.solveDot(vs[0], vs[1], settings)
           break
         case 'cross':
-          sol = VS.solveCross(vs[0], vs[1])
+          sol = VS.solveCross(vs[0], vs[1], 'C', settings)
           break
         case 'projection':
-          sol = VS.solveProjection(vs[1], vs[0])
+          sol = VS.solveProjection(vs[1], vs[0], settings)
           break
         case 'twoforces':
-          sol = VS.solveTwoForces(nums.F1, nums.F2, nums.angle)
+          sol = VS.solveTwoForces(nums.F1, nums.F2, nums.angle, 'N', settings)
           break
         case 'equilibrium':
-          sol = VS.solveEquilibrium(vs)
+          sol = VS.solveEquilibrium(vs, settings)
           break
         case 'torque':
-          sol = VS.solveTorque(vs[0].v, vs[1].v)
+          sol = VS.solveTorque(vs[0].v, vs[1].v, settings)
           break
         case 'work':
-          sol = VS.solveWork(vs[0].v, vs[1].v)
+          sol = VS.solveWork(vs[0].v, vs[1].v, settings)
           break
         case 'magforce':
-          sol = VS.solveMagneticForce(nums.q, vs[0].v, vs[1].v)
+          sol = VS.solveMagneticForce(nums.q, vs[0].v, vs[1].v, settings)
           break
       }
       showSolution(sol)
@@ -274,7 +275,7 @@ export function Solver() {
       </div>
       {problem === 'add' && (
         <div className="mt-2 px-3">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">Solve by</div>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--text-faint)]">Solve by</div>
           <div className="seg">
             {(
               [
@@ -288,7 +289,7 @@ export function Solver() {
               </button>
             ))}
           </div>
-          {method === 'cosine' && vecs.length !== 2 && <div className="mt-1 text-[11px] text-amber-300">The law of cosines works with exactly two vectors.</div>}
+          {method === 'cosine' && vecs.length !== 2 && <div className="mt-1 text-[11px] text-[color:var(--warn)]">The law of cosines works with exactly two vectors.</div>}
         </div>
       )}
       <div className="mt-2">
@@ -331,10 +332,10 @@ export function Solver() {
         <button className="btn" onClick={() => solve(true)} title="One step at a time, so you can carry on yourself">
           <Lightbulb size={13} /> Give me a hint
         </button>
-        {error && <span className="text-red-400">{error}</span>}
+        {error && <span className="text-[color:var(--bad)]">{error}</span>}
       </div>
       {solution && (
-        <div className="mt-3 border-t border-[#2a2b30]">
+        <div className="mt-3 border-t border-[color:var(--line)]">
           <SolutionView sol={solution} startHidden={hintFirst} />
         </div>
       )}

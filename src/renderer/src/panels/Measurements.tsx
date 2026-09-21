@@ -19,7 +19,7 @@ import { CongruenceCard, TriangleFromSides } from './Congruence'
 type Row = {
   label: string
   value: number | string
-  kind?: 'num' | 'length' | 'area' | 'angle' | 'text'
+  kind?: 'num' | 'length' | 'area' | 'angle' | 'direction' | 'text'
   accent?: boolean
   /**
    * Set when PhysLab can make the value be whatever is typed — a length whose far end is a free
@@ -40,7 +40,7 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
         { label: 'y', value: c.p[1], kind: 'length' }
       ]
       if (Math.abs(c.p[2]) > 1e-12) rows.push({ label: 'z', value: c.p[2], kind: 'length' })
-      rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' }, { label: 'Angle from +x', value: heading(c.p), kind: 'angle' })
+      rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' }, { label: 'Angle from +x', value: heading(c.p), kind: 'direction' })
       return [{ title: `Point ${o.name}`, rows }]
     }
     case 'vector': {
@@ -52,7 +52,7 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       const threeD = Math.abs(v[2]) > 1e-12
       if (threeD) rows.push({ label: `${o.name}z (z-component)`, value: v[2], kind: 'length' })
       rows.push({ label: `|${o.name}| magnitude`, value: len(v), kind: 'length', accent: true })
-      if (!threeD) rows.push({ label: 'θ with +x axis', value: heading(v), kind: 'angle', accent: true })
+      if (!threeD) rows.push({ label: 'θ with +x axis', value: heading(v), kind: 'direction', accent: true })
       else {
         const [a, b, g] = directionAngles(v)
         rows.push({ label: 'α with x-axis', value: a, kind: 'angle' }, { label: 'β with y-axis', value: b, kind: 'angle' }, { label: 'γ with z-axis', value: g, kind: 'angle' })
@@ -278,7 +278,8 @@ function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; ro
 }
 
 function RowView({ row, base, settings }: { row: Row; base?: Row; settings: SceneSettings }) {
-  const k = row.kind === 'angle' || row.kind === 'length' || row.kind === 'area' ? row.kind : 'number'
+  // 'direction' is a heading from +x, so the compass-bearing setting applies to it; corner angles stay 'angle'.
+  const k = row.kind === 'angle' || row.kind === 'direction' || row.kind === 'length' || row.kind === 'area' ? row.kind : 'number'
   const show = (v: number | string) => (typeof v === 'string' ? v : formatMeasure(v, k, settings))
   const delta = base && typeof row.value === 'number' && typeof base.value === 'number' ? row.value - base.value : 0
   return (
@@ -299,7 +300,8 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
         {Math.abs(delta) > 1e-9 && (
           <span className={`ml-2 text-[11px] ${delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             Δ {delta > 0 ? '+' : '−'}
-            {formatMeasure(Math.abs(delta), k, settings)}
+            {/* A change of heading is an amount of turning, never a bearing. */}
+            {formatMeasure(Math.abs(delta), k === 'direction' ? 'angle' : k, settings)}
           </span>
         )}
       </div>

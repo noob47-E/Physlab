@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { latexToMath } from '../src/renderer/src/math/latexToMath'
+import { latexToMath, tryLatexToMath } from '../src/renderer/src/math/latexToMath'
 import { evaluateComp } from '../src/renderer/src/calc/engine'
 import { math, preprocess, setAngleMode, toV3 } from '../src/renderer/src/math/expr'
 
@@ -37,5 +37,35 @@ describe('latexToMath', () => {
     expect(math.evaluate(preprocess(latexToMath('\\vec{A}\\cdot\\vec{B}', { vectorOps: true })), scope)).toBe(11)
     expect(math.evaluate(preprocess(latexToMath('\\left|\\vec{A}\\right|', { vectorOps: true })), scope)).toBe(5)
     expect(latexToMath('F_{1}+F_2', { vectorOps: true })).toBe('F1+F2')
+  })
+  it('reads what a student types or pastes from a book', () => {
+    // Implicit multiplication and a Unicode square, minus and unit vectors.
+    expect(latexToMath('2x')).toBe('2x')
+    expect(calc('3^{2}+4²')).toBeCloseTo(25)
+    expect(latexToMath('x²+1')).toBe('x^(2)+1')
+    expect(calc('5−8')).toBeCloseTo(-3)
+    setAngleMode('deg')
+    const scope = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
+    const vec = (latex: string) => toV3(math.evaluate(preprocess(latexToMath(latex, { vectorOps: true })), scope))
+    expect(vec('3î + 4ĵ')).toEqual([3, 4, 0])
+    expect(vec('3i\u0302 + 4j\u0302 - 2k\u0302')).toEqual([3, 4, -2])
+    expect(vec('\\begin{pmatrix}3\\\\4\\end{pmatrix}')).toEqual([3, 4, 0])
+    expect(vec('\\begin{pmatrix} 1 \\\\ -2 \\\\ \\frac{1}{2} \\end{pmatrix}')).toEqual([1, -2, 0.5])
+    expect(latexToMath('\\begin{bmatrix}1 & 2 \\\\ 3 & 4\\end{bmatrix}')).toBe('([[1, 2], [3, 4]])')
+    expect(calc('\\begin{vmatrix}1 & 2 \\\\ 3 & 4\\end{vmatrix}')).toBeCloseTo(-2)
+    // A scalar in front of a column vector, the way a book writes 2a once columns are chosen.
+    expect(vec('2\\begin{pmatrix}3\\\\4\\end{pmatrix}')).toEqual([6, 8, 0])
+    expect(vec('\\begin{pmatrix}3\\\\4\\end{pmatrix}+\\begin{pmatrix}1\\\\1\\end{pmatrix}')).toEqual([4, 5, 0])
+    // Vulgar fractions: the hint on the Vectors panel promises ½A.
+    expect(vec('½(6\\hat{i}+8\\hat{j})')).toEqual([3, 4, 0])
+    expect(calc('¾+¼')).toBeCloseTo(1)
+  })
+  it('refuses ± with a sentence instead of quietly picking +', () => {
+    expect(() => latexToMath('x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}')).toThrow(/Choose \+ or −/)
+    expect(() => latexToMath('3±2')).toThrow(/one case at a time/)
+    expect(() => latexToMath('3\\mp2')).toThrow()
+    // The render-safe form hands the sentence back instead of throwing.
+    expect(tryLatexToMath('3±2')).toEqual({ src: '', problem: expect.stringMatching(/Choose \+ or −/) })
+    expect(tryLatexToMath('3+2')).toEqual({ src: '3+2' })
   })
 })

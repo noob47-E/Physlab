@@ -37,7 +37,7 @@ export function measureText(o: SceneObject, c: Computed | undefined, s: SceneSet
     case 'vector': {
       const m = formatMeasure(len(c.comp), 'length', s)
       const planar = Math.abs(c.comp[2]) < 1e-12
-      const base = planar ? `${m} ∠ ${formatMeasure(heading(c.comp), 'angle', s)}` : m
+      const base = planar ? `${m} ∠ ${formatMeasure(heading(c.comp), 'direction', s)}` : m
       if (!full) return base
       const comps = c.comp.slice(0, planar ? 2 : 3).map((v) => formatMeasure(v, 'length', s).replace(/ \S+$/, ''))
       return `${base}  (${comps.join(', ')})`

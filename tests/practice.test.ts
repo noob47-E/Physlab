@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { generate, generateSet, TOPICS, type AnswerField } from '../src/renderer/src/math/problems'
-import { checkAnswer, isCorrect, parseAnswer } from '../src/renderer/src/math/checkAnswer'
+import { checkAnswer, expectedText, isCorrect, parseAnswer } from '../src/renderer/src/math/checkAnswer'
+import { getAngleMode, setAngleMode } from '../src/renderer/src/math/expr'
 
 /** Every number written anywhere in a worked solution, as plain magnitudes. */
 function numbersIn(text: string): number[] {
@@ -66,6 +67,12 @@ describe('practice problems', () => {
     }
   })
 
+  it('reveals the answer in the student’s own precision', () => {
+    expect(expectedText(field({ value: 12.3456789, unit: 'N' }))).toBe('12.3457 N')
+    expect(expectedText(field({ value: 12.3456789, unit: 'N' }), { decimals: 2, precisionMode: 'dp' })).toBe('12.35 N')
+    expect(expectedText(field({ value: 12.3456789 }), { decimals: 3, precisionMode: 'sf' })).toBe('12.3')
+  })
+
   it('spreads a set over the chosen topics', () => {
     const set = generateSet(['dot', 'cross'], 6, 7)
     expect(set).toHaveLength(6)
@@ -87,6 +94,15 @@ describe('reading what the student typed', () => {
 
   it('does not eat the maths', () => {
     expect(parseAnswer('sin(30)')).toBeCloseTo(0.5)
+    // Thousands separators go; a comma anywhere else is not silently dropped.
+    expect(parseAnswer('1,234.5')).toBeCloseTo(1234.5)
+    expect(parseAnswer('12,345,678')).toBe(12345678)
+    expect(parseAnswer('1,5')).toBeNull()
+    // The question is set in degrees whatever mode the calculator was left in.
+    setAngleMode('rad')
+    expect(parseAnswer('sin(30)')).toBeCloseTo(0.5)
+    expect(getAngleMode()).toBe('rad')
+    setAngleMode('deg')
     expect(parseAnswer('')).toBeNull()
     expect(parseAnswer('no idea')).toBeNull()
   })
