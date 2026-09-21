@@ -11,7 +11,7 @@ added, and the bugs that were worth remembering.
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.5.0.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.6.0.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
@@ -32,7 +32,7 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 
 | Mode | What it does |
 | --- | --- |
-| **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). Every number shown follows your precision setting (decimal places or significant figures). Beside the keypad is the **Working** area — see Pure Math below. |
+| **Calculator** | One **Maths screen**: a single natural-math field (fractions, roots, powers, ∫, Σ look like a book, and physical typing answers exactly like the on-screen keys) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. A **popup keypad** opens under the field for the keys you need and stays open between entries — there is no permanent bank of buttons or a tiny fixed display, so the screen is not trying to look like a handheld calculator. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). Every number shown follows your precision setting (decimal places or significant figures). Beside the field is the **Working** area — see Pure Math below. |
 | **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ`, `size ∠ angle` or a column, or paste them straight from a book (î ĵ k̂ and x² are read as written). The answer sits right under the vector cards; the six everyday operations are one click and the rest (projection, equilibrium, torque, work, magnetic force, relative velocity…) wait behind **More**. Every operation can show its steps the way the book does — components, the cosine law for a sum, the angle between — in your precision and angle unit, and **Draw on graph** draws exactly the vectors the working found, with the triangle or parallelogram to prove it. Your cards are remembered between sessions. |
 | **Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. **Congruent triangles**: Shift-click two triangles and the Measure panel says whether they are the same triangle and by which rule (SSS, SAS, ASA, AAS, RHS), with every equal side and angle written out and marked on the drawing; or type three sides and have the triangle drawn. Each mode keeps its own drawing: what you draw in Geometry stays in Geometry. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
@@ -88,8 +88,11 @@ open PhysLab. The calculator's own history is remembered now too.
 ## Drawing, finishing and the right-click menu
 
 - While you draw: **right-click, Enter or double-click** finishes the shape, **Backspace** removes the last point, **Esc** cancels. The same three buttons appear next to the hint at the bottom of the drawing.
-- **Right-click** any object for what you can do with it: show components, resolve with steps, midpoint, perpendicular bisector, decompose, show angles, pin its label, rename, delete. Right-clicking empty space gives view, grid, snapping and label options. The same menu works in the Outliner and the Measure list.
-- A point clicked **on a side or a circle** sticks to it and slides along it when dragged.
+- **Right-click** any object for what you can do with it: show components, resolve with steps, midpoint, perpendicular bisector, decompose, show angles, hide its angle marks, pin its label, rename, delete. Right-clicking empty space gives view, grid, snapping and label options. The same menu works in the Outliner and the Measure list.
+- A point clicked **on a side or a circle** sticks to it and slides along it when dragged; a point dropped on the **crossing of two lines** snaps there and follows both of them if either moves.
+- **Drag a box** round several objects to select all of them at once; **Delete** with nothing selected offers to clear the whole drawing, and refuses instead of doing it by accident.
+- **Grid styles**: lines, dots, fine or paper, from the grid picker or the right-click menu on empty space — whichever one is showing has its own tick in the View menu.
+- Hover any tool, shape or link button and a **card** appears after half a second with a short looping picture and one sentence saying what it does.
 
 ## Practice and hints
 
@@ -159,11 +162,11 @@ Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one c
 - `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `lcm(12, 18)`, `primes(360)`, `divide((x^3-1)/(x-1))`, `partial((3x+5)/((x+1)(x+2)))`, `complex((2+3i)/(1-i))` — each writes out its working in the Working panel
 - `k = 2` makes a slider; use `t` in formulas and press Play to animate. Type `help` for more.
 
-Shortcuts: `Ctrl+K` search · `3` 2D/3D · `Tab` moves between the controls · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project · `Ctrl+=` / `Ctrl+−` / `Ctrl+0` bigger, smaller, normal text.
+Shortcuts: `Ctrl+K` search · `3` 2D/3D · `Tab` moves between the controls · `Home` reset view · tap `Space` to play/pause, hold it and drag (or right-drag) to pan the view · `Ctrl+A` select all · drag a box round objects to select several · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete (with nothing selected, clear the drawing) · `Esc` back to Move · `Ctrl+S` save a `.phys` project · `Ctrl+=` / `Ctrl+−` / `Ctrl+0` bigger, smaller, normal text.
 
 ## Teachers and classrooms
 
-- **Light theme** for bright rooms and projectors (View ▸ Light theme); dark stays the default.
+- **Three themes** — Moonlight, Dark and Light — cycle with View ▸ Theme or the Settings menu; a fresh install opens in **Moonlight**. **Light theme** suits bright rooms and projectors.
 - **Export the drawing** as a PNG at 1× or 2×, labels and axis numbers included (camera button on the drawing, or File ▸ Export).
 - **Auto-save**: unsaved work is copied aside every minute, and offered back if the app closes unexpectedly.
 - The panel arrangement and the mode you were in are remembered (View ▸ Reset the panel layout puts them back).

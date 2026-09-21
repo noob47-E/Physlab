@@ -30,13 +30,13 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.5.0 (2026-09-21) |
-| Releases built | 15 |
-| Commits | 99 |
-| Source | 32,149 lines of TypeScript/TSX across 138 files, plus 1,171 lines of CSS |
-| Tests | 784, across 39 files, all pure logic with no browser |
+| Current version | 0.6.0 (2026-09-21) |
+| Releases built | 16 |
+| Commits | 123 |
+| Source | 35,634 lines of TypeScript/TSX across 192 files, plus 1,495 lines of CSS |
+| Tests | 1101, across 46 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
-| Dock panels | 16 |
+| Dock panels | 15 |
 | Licence | GPL-3.0 |
 | Runtime cost | none — no servers, no API, no per-user cost |
 
@@ -591,6 +591,104 @@ as 0 on purpose (a noise floor for dragged points — known answers go through `
 none); and there is no preview port for a worktree, where vite refuses the KaTeX and MathLive
 fonts outside its allowed folders.
 
+### 0.6.0 — Moonlight, one Maths screen, a viewport that behaves, and a Sandbox worth trusting · 2026-09-21
+
+Five phases in parallel worktrees (theme, the calculator, the viewport, the Sandbox, hover cards),
+merged in order and then given a five-area review of their own. 26 files touched in the version
+commit alone; the whole run is 125 files, +8,309/−1,760 across the phase and review-fix commits.
+
+- **Moonlight, a third theme, on by default for a fresh install.** It sits beside Dark and Light —
+  same cycle, same Settings list, same `THEMES` order — and a fresh install now opens in it rather
+  than Dark. `color-scheme` still only ever says `light` or `dark`; Moonlight's block says `dark`,
+  same as the ordinary Dark theme, so native scrollbars and controls behave. The View menu's grid
+  rows and the Settings segment both carry a tick (`sc`) for whichever grid or theme is actually
+  showing, which they did not before.
+- **One Maths screen replaces the handheld-style calculator.** The buttons-and-tiny-LCD, Casio-101
+  look is gone: a single natural-maths field with a popup keypad that opens under the field and
+  stays open for the next click, physical typing answers exactly like the keypad, and the field
+  keeps up with the student rather than the other way round. `MathLive` no longer sits in the
+  start-up bundle for a layout with no maths field open — `app/contextActions.ts` was found to
+  still import `panels/VectorCalc.tsx` eagerly, pulling it back in for a Sandbox-only layout, and
+  was fixed to import `addVectorFromScene` from `panels/vectorCalcStore` instead. A plain
+  arithmetic sum is refused in one sentence naming a real job a calculator app already does,
+  rather than working it out.
+  - **Render work per keystroke, React Profiler `actualDuration` over 15 inserted characters of
+    `2+3*4+5-6/7+8*9`, same dev build:** before, 15 commits / 211.96 ms total = 14.1 ms per
+    keystroke, re-rendering the whole Calculator panel (`ScientificMode` + 3 keypads +
+    `PureMathRow` + `MathInput` + history, 50 `.key` buttons). After, 16 commits / 4.76 ms total =
+    0.30 ms per keystroke, re-rendering 2 components (`Expression` + `MathInput`) — about 47×
+    less render work.
+  - **`evaluateInput` timing in the browser (20-run average, 2 d.p.):** `\sqrt{2}+\frac{1}{3}` →
+    0.19 ms (answers `1.75`); `\int_0^1 x^2 dx` → 0.28 ms (answers `0.33`).
+  - **`solveNumeric`'s new cap (vitest, 5-run averages, before = main's engine):** a
+    no-root `x^2 + 1 = 0` went from 19.6 ms to 5.8 ms; a far root (`x^3 = 125000000000`, root
+    5000) from 15.1 ms to 6.1 ms, still finding the root; `cos(x) = x` unchanged at 0.2 ms
+    (Newton's method never runs the capped search); `integral(x^2, 0, 1)` from 0.5 ms to 0.3 ms;
+    a bare `solveNumeric(x²+1)` from 0.5 ms to 0.1 ms. In the browser, `x^{2}=-1` now answers "No
+    solution I can find near 0" in 7 ms end to end, instead of searching forever.
+- **The viewport behaves the way its own menus and tools say it does.** A point can be dropped on
+  the crossing of two lines and follows them if they move — `intersectionsOf`'s own order is what
+  both the click target and the stored point's `index` read, so they now agree. Angle marks can be
+  hidden. The grid comes as lines, dots (drawn as sized quads so WebGPU shows them), fine, or
+  paper. A box drag selects several objects at once, and one command clears the whole drawing —
+  refusing without a word if there is nothing to clear. A right-drag pans the view instead of
+  opening the context menu; the Move tool card, the tour and the shortcuts list all teach
+  Space+drag (or right-drag) to pan, not the old left-drag-empty-space. Point letters read against
+  the Light theme now too.
+- **The Sandbox is worth trusting.** Send to Lab Data lands the capture on a new table with
+  `appendTable`, not `setTables` — the earlier version would have replaced every table the student
+  already had. A guided Connect flow joins any two objects the student has already picked, with
+  link-kind cards that speak to that specific pair rather than a generic list. Experiments are
+  grouped, and every preset's sentence was audited against what the engine actually produces:
+  four new presets were added, and the audit's numbers are below. A paused drag on a pulley now
+  moves its partner the other way, matching the wheel; the Energy section reports the whole
+  system's momentum, not one body's; Galileo's presets quote the height the panel itself shows.
+  - **Rope length in the engine (2 kg bob, beam at y = 5, exact against `5 − 0.075 − L − 0.18`):**
+    L = 2.245 hangs at 2.500 (before: 2.468); L = 1.5 at 3.245 (before: 2.467); L = 3.5 at 1.245
+    (before: 1.074).
+  - **Ramp max speed:** 4.46 m/s against a formula of 4.59 — 2.4% lost rolling over 5 m plus 6.6%
+    at the floor corner (same with `collisionSteps: 4`).
+  - **Friction stop distance:** 4.56 m against a formula of 4.59, after the floor's own `mu` was
+    fixed to match the preset's text (was 3.22 m before the fix).
+  - **Collision after-speeds:** −2.125 / 2.375 m/s against a formula of −2.125 / 2.375; the sticky
+    case settles at 1.000 / 1.000.
+  - **Newton's cradle, ball 5 against ball 1:** 0.39 touching; 0.36 at a 2 mm gap; 0.34 at 1 cm;
+    0.43 at 3 mm with `collisionSteps: 4`; 0.96 at 6 mm with `collisionSteps: 8` — the setting the
+    preset uses.
+  - **Pendulum period:** 2.850 s at 15° against a formula of 2.838 s; 3.0 s at 53°.
+  - **Swingbridge period:** ropes run 2.72–2.75 s, strings 2.85–2.87 s, against a formula of
+    2.84 s — kept as "Bob on two strings" rather than the plan's rope version.
+  - **Spring period:** 0.617–0.633 s against a formula of 0.628 s; the ice-floor spring preset
+    runs 1.25–1.267 s after its own post-launch fix (formula 1.257 s; it was 1.33–1.5 s before).
+  - **Galileo's ramp:** the original climbs 0.66 m of 2.2 m (30%); steel ramps with rolling reach
+    64–77%; with the Up ramp sunk 3 cm into the floor it reaches about 0.95 of 1.1 m (85%).
+  - **Terminal velocity:** 17.3 m/s from a 30 m drop (88% of 19.6 m/s); 18.6 m/s from 45 m (95%).
+  - **Tug of war at 1 s:** the crate at 2.51 m/s, the puller at 1.65 m/s, `2·v_crate + 4·v_puller`
+    = 11.6 kg·m/s (a rope dragging on ice leaks about 0.3 N).
+  - **Seesaw:** balanced with a light ball at 3 m, max tilt 0.00° over 3 s; unbalanced, it tips to
+    12° in 1 s.
+- **Every tool, shape and link teaches itself.** Resting the pointer on a tool, shape or link
+  button for 500 ms opens a card beside it with a looping picture and one sentence naming the
+  gesture; the loop runs every 2.5 s, the card is 15rem wide and sits under any open menu
+  (`z-index: 40` against menus' 50). The registry holds 36 cards (20 tools, 9 add-shape buttons, 7
+  link kinds); 34 are placeholders today and 2 are drawn for real.
+
+`npm test`: 46 files, 1101 tests passed (baseline going into this phase set was 39 files / 789).
+`npm run typecheck`: clean. `npm run lint`: 0 errors, 29 warnings, none of them new.
+
+**Still open**, verified against the code at this release: Visualize of an x-expression typed in
+Calculator mode brings the Viewport tab forward but
+draws nothing, because `core/visibility.ts` tags Calculator's own space `'vectors'` while the
+Builder stamps graphs `'graphing'` (pre-existing since 0.3.6; vectors, points and complex numbers
+still show); pressing ▶ from a filled lower limit of an integral, sum or product visits the body
+before the upper limit, because MathLive's own placeholder order visits superscript before
+subscript (unchanged since 0.5.0); the keypad's tabs deliberately keep digits pinned to the left of
+the popover rather than following the plan's own tab order; a `THREE.Points` vertex is one device
+pixel on WebGPU, so a later feature that needs a sized point must draw a quad or sprite instead;
+marquee selection is 2D-only, because OrbitControls claims the left mouse button in the 3D view; and
+the Settings theme list reads Moonlight / Dark / Light, matching the View menu and the cycle order,
+rather than the plan's literal Dark / Light / Moonlight ordering (pinned by a cycle-order test).
+
 ## What is in it today
 
 Eight working modes, eight reserved.
@@ -760,8 +858,8 @@ Electron-only dependencies so that port stays possible.
 
 Agreed, in order:
 
-1. **A third "moonlight" theme** beside dark and light. (Congruence, which headed this list,
-   shipped in 0.3.6.)
+1. **A UI/UX redesign**, after the talk. (Moonlight, which headed this list, shipped in 0.6.0,
+   alongside the Maths screen, the viewport work and the Sandbox trust work it was bundled with.)
 2. **Graph plotting with a sound toggle** — hear a curve as it is traced.
 3. **A formula library** for maths, browsable and searchable.
 4. **3D shapes** — solids with their volume and surface-area formulas, and a 2D shape upgrading

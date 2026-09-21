@@ -225,11 +225,49 @@ neighbour is open.
 - **Graphs resets its recorded data only when the tracked expressions change.** The plot used to
   rebuild on a theme switch with the same effect, so toggling Dark/Light mid-experiment lost
   everything the timeline had recorded.
+- **`color-scheme` only ever accepts `light` or `dark`.** Moonlight is a third theme but a second
+  *dark* one for this CSS property — its block sets `color-scheme: dark` like the ordinary Dark
+  theme, never a Moonlight value the browser would not understand, or the native scrollbars and
+  form controls default back to light.
+- **Panel ids that appear in a saved layout need a `LAYOUT_VERSION` bump.** `layoutMath.ts` rebuilds
+  the per-mode default layout whenever `v` does not match, so a renamed or removed panel id (the
+  Maths screen replacing the old Calculator panel in 0.6.0 is why `LAYOUT_VERSION` is 3) does not
+  leave a saved layout pointing at a panel that no longer exists.
+- **An intersection point's stored `index` is only meaningful against `intersectionsOf`'s own
+  order.** `core/evaluate.ts` reads `intersectionsOf(a, b)[d.index]` and `render/Interaction.tsx`
+  numbers the click targets by walking the same call in the same order; change what
+  `intersectionsOf` returns or the order it returns them in, and every point already placed on a
+  crossing jumps to the other one.
+- **`useLab.setTables` replaces every table in the file; `appendTable` adds one.** A live capture
+  (Sandbox's Send to Lab Data) must call `appendTable`, never `setTables` — `setTables` is for
+  loading a `.phys` file wholesale, and using it for a capture would silently throw away every
+  table the student already had.
+- **A `THREE.Points` vertex is one device pixel on WebGPU** — `PointsMaterial.size` is read on
+  WebGL2 but ignored on the WebGPU backend. A point that must read as a visible dot at any zoom
+  has to be drawn as a sized quad or an instanced sprite, not a raw `Points` vertex.
+- **A rope's length is a hidden cap, not the gap it is drawn across.** `addRope` in `sim/world.ts`
+  lays the chain to `link.length`, sagging or pulling taut as needed — a rope stretched across a
+  shorter gap than it was drawn on used to lie straight across it regardless of the typed length.
+  A rope also weighs a tenth of its load (capped at 5 kg, floored at a twentieth of the load) in
+  `ropeLinkMass` (`sim/links.ts`), which makes a rope pendulum swing about 4% quick; use a string,
+  not a rope, for a period demonstration.
+- **Jolt combines a contact's friction as `sqrt(mu1 * mu2)` and its restitution as `max(e1, e2)`,
+  never either surface's own value alone.** A preset that quotes a coefficient of friction for a
+  ball must set the floor's material too, or the combined value the ball actually feels will not
+  match the number in the preset's own text.
+- **Touching bodies in a contact chain settle as one lump, not as separate collisions.** A
+  Newton's-cradle style chain needs real separation and several sub-steps to resolve ball by ball
+  — 6 mm gaps with `collisionSteps: 8` is what the Galileo/cradle presets use; balls placed
+  touching, or resolved in one step, transfer momentum through the whole chain at once instead of
+  ball to ball.
+- **A convex-hull ramp's bottom edge sits exactly at floor level unless it is buried.** That edge
+  is a real collision feature a rolling ball can catch on; sinking the ramp a few centimetres into
+  the floor keeps a ball rolling off the bottom smoothly instead of catching on the seam.
 
 ## How to check your work
 
 ```bash
-npm test          # vitest, 789 tests in 39 files, pure logic, no DOM
+npm test          # vitest, 1101 tests in 46 files, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run lint      # eslint, 0 errors; a suppression carries its reason after `--`
 npm run dev       # Electron with hot reload
