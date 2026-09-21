@@ -1,26 +1,26 @@
-// Three themes: Moonlight (the default: a calm, cool night blue), dark, and light for bright rooms
-// and projectors.
+// Four themes: Moonlight (the default: a calm, cool night blue), Moonlight Gold (the same warm
+// dim room, but candlelight instead of moonlight), dark, and light for bright rooms and projectors.
 
 import { useMemo } from 'react'
 import { create } from 'zustand'
 
-export type Theme = 'dark' | 'light' | 'moonlight'
+export type Theme = 'dark' | 'light' | 'moonlight' | 'moongold'
 const KEY = 'physlab.theme'
 
 /** Every theme, in the order the menu lists them and `cycle` walks through them. */
-export const THEMES: readonly Theme[] = ['moonlight', 'dark', 'light']
+export const THEMES: readonly Theme[] = ['moonlight', 'moongold', 'dark', 'light']
 
 /** What a fresh install opens in. A stored choice always wins over this. */
 export const DEFAULT_THEME: Theme = 'moonlight'
 
 /** What a student calls each theme; the menu and the settings popover both read this. */
-export const THEME_LABELS: Record<Theme, string> = { moonlight: 'Moonlight', dark: 'Dark', light: 'Light' }
+export const THEME_LABELS: Record<Theme, string> = { moonlight: 'Moonlight', moongold: 'Moonlight Gold', dark: 'Dark', light: 'Light' }
 
 /**
  * `style.colorScheme` accepts only "light" or "dark" and silently ignores anything else, so a
- * third theme has to say which of the two its scrollbars and form controls follow.
+ * third (or fourth) theme has to say which of the two its scrollbars and form controls follow.
  */
-export const COLOR_SCHEME: Record<Theme, 'dark' | 'light'> = { moonlight: 'dark', dark: 'dark', light: 'light' }
+export const COLOR_SCHEME: Record<Theme, 'dark' | 'light'> = { moonlight: 'dark', moongold: 'dark', dark: 'dark', light: 'light' }
 
 const isTheme = (v: unknown): v is Theme => typeof v === 'string' && (THEMES as readonly string[]).includes(v)
 

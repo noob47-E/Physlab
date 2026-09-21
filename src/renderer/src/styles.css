@@ -238,6 +238,73 @@
   color-scheme: dark;
 }
 
+/* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
+   a warm charcoal night with a gold accent instead of a cool blue one. Moonlight itself stays the
+   default; this is a second choice for the same time of day. */
+:root[data-theme='moongold'] {
+  --bg-0: #1a140d;
+  --bg-1: #221a10;
+  --bg-2: #2c2116;
+  --bg-3: #362a1c;
+  --bg-4: #423422;
+  --line: #3a2f20;
+  --line-2: #4a3c28;
+  --text: #f0e6d2;
+  --text-dim: #c9b98f;
+  --text-faint: #93855f;
+  --accent: #e0b84a;
+  --accent-2: #c99a2e;
+  --warn: #f0a840;
+  --good: #7ac488;
+  /* Lifted from #e2685a, which read 4.2:1 as an error line on a card and 3.6:1 on a key. */
+  --bad: #f28474;
+  --text-strong: #fff6e0;
+  --input-bg: #17110a;
+  --canvas-bg: #1c150e;
+  --grid-minor: #2e2416;
+  --grid-major: #453520;
+  --grid-axis: #b99a55;
+  --grid-paper: #2a2013;
+  --tick-text: #b99a55;
+  --label-bg: rgba(26, 20, 13, 0.82);
+  --label-text: #f0e6d2;
+  --label-shadow: rgba(5, 3, 1, 0.9);
+  --sel-row: #4a3a1c;
+  --shadow: rgba(10, 6, 2, 0.6);
+  --menu-bg: #241b11;
+  --measure-text: #ffd98a;
+  --code-text: #ffd98a;
+  --log-in: #e0c088;
+  /* The gold accent is light, like Moonlight's periwinkle, so the text on it is the night ink. */
+  --on-accent: #1a140d;
+  --on-danger: #ffffff;
+  --axis-x: #ff6b5a;
+  --axis-y: #b9d15a;
+  --axis-z: #6fb4ff;
+  --series-1: #e0b84a;
+  --series-2: #ff8f6b;
+  --series-3: #8fd18a;
+  /* Gold is series 1, so the fourth series is a lavender rather than a second gold. */
+  --series-4: #c9a8ff;
+  --series-5: #d79bd1;
+  --series-6: #6fc9c9;
+  /* Gold, like every theme's glow: objects take their colours from PALETTE in core/naming.ts, blue
+     first, and a gold halo shows against each of them better than any cool one tried. */
+  --sel-glow: #ffdb7a;
+  --key-root: #ff8f6b;
+  --key-intercept: #7cc4ff;
+  --key-extremum: #8fe08a;
+  --wireframe: #0a0602;
+  --light-fill: #e8d9a8;
+  --sel-label: rgba(255, 219, 122, 0.6);
+  --sel-label-ring: rgba(255, 219, 122, 0.35);
+  --scrim: rgba(10, 6, 2, 0.6);
+  --focus-ring: rgba(224, 184, 74, 0.25);
+  --sel-fill: rgba(224, 184, 74, 0.35);
+  --sel-fill-faint: rgba(224, 184, 74, 0.12);
+  color-scheme: dark;
+}
+
 html,
 body,
 #root {

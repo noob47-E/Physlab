@@ -1,4 +1,4 @@
-// Three themes, and the joins that carry the choice: what a stored value means, how the cycle
+// Four themes, and the joins that carry the choice: what a stored value means, how the cycle
 // walks, which color-scheme each theme maps to, and how the desktop window learns the page colour
 // so the next launch does not flash the wrong one.
 //
@@ -11,6 +11,7 @@ import { readSource } from './helpers/repo'
 describe('reading the stored theme', () => {
   it('keeps a stored choice', () => {
     expect(readTheme('moonlight')).toBe('moonlight')
+    expect(readTheme('moongold')).toBe('moongold')
     expect(readTheme('dark')).toBe('dark')
     expect(readTheme('light')).toBe('light')
   })
@@ -38,23 +39,25 @@ describe('the theme cycle', () => {
     expect(seen).toEqual([...THEMES])
   })
 
-  it('walks Moonlight → Dark → Light, the order the View menu and the settings seg list', () => {
+  it('walks Moonlight → Moonlight Gold → Dark → Light, the order the View menu and the settings seg list', () => {
     // The walk above is defined by THEMES, so it would pass in any order; this pins the order.
-    expect(nextTheme('moonlight')).toBe('dark')
+    expect(nextTheme('moonlight')).toBe('moongold')
+    expect(nextTheme('moongold')).toBe('dark')
     expect(nextTheme('dark')).toBe('light')
     expect(nextTheme('light')).toBe('moonlight')
-    expect(THEMES).toEqual(['moonlight', 'dark', 'light'])
+    expect(THEMES).toEqual(['moonlight', 'moongold', 'dark', 'light'])
   })
 
-  it('lists three themes, each with a plain name', () => {
-    expect([...THEMES].sort()).toEqual(['dark', 'light', 'moonlight'])
-    for (const t of THEMES) expect(THEME_LABELS[t]).toMatch(/^[A-Z][a-z]+$/)
+  it('lists four themes, each with a plain name', () => {
+    expect([...THEMES].sort()).toEqual(['dark', 'light', 'moongold', 'moonlight'])
+    for (const t of THEMES) expect(THEME_LABELS[t]).toMatch(/^[A-Z][a-z]+( [A-Z][a-z]+)?$/)
   })
 })
 
 describe('color-scheme', () => {
   it('maps every theme to light or dark, because the browser knows no third value', () => {
     expect(COLOR_SCHEME.moonlight).toBe('dark')
+    expect(COLOR_SCHEME.moongold).toBe('dark')
     expect(COLOR_SCHEME.dark).toBe('dark')
     expect(COLOR_SCHEME.light).toBe('light')
     for (const t of THEMES) expect(['dark', 'light']).toContain(COLOR_SCHEME[t])

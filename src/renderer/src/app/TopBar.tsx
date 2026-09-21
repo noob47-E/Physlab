@@ -316,11 +316,13 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
             </div>
           </div>
           <Heading>Window</Heading>
-          <div className="mb-2 flex items-center gap-2">
+          {/* Four theme names are wider than the popover, and a wrapped segment would put each name on
+              its own line (.menu button is full width), so the segment is a two-by-two grid under its label. */}
+          <div className="mb-2 flex flex-col items-start gap-1">
             <span className="text-[var(--text)]">Theme</span>
-            <div className="seg">
+            <div className="seg grid grid-cols-2">
               {THEMES.map((id) => (
-                <button key={id} className={theme === id ? 'on' : ''} onClick={() => useTheme.getState().set(id)} title={id === 'light' ? 'For bright rooms and projectors' : undefined}>
+                <button key={id} className={`justify-center ${theme === id ? 'on' : ''}`} onClick={() => useTheme.getState().set(id)} title={id === 'light' ? 'For bright rooms and projectors' : undefined}>
                   {THEME_LABELS[id]}
                 </button>
               ))}

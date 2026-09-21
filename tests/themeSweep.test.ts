@@ -69,7 +69,7 @@ describe('the type scale', () => {
     expect(chip).toMatch(/\n\s*color: var\(--label-text\);/)
     expect(chip).not.toMatch(/color: var\(--c/)
     // The token it reads is declared in every theme block.
-    expect(css.match(/--label-text:/g)?.length).toBe(3)
+    expect(css.match(/--label-text:/g)?.length).toBe(4)
   })
 
   it('keeps the menu height rule in one place', () => {
