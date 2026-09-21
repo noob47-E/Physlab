@@ -193,8 +193,17 @@ export function menuForObject(id: ObjId): MenuGroup[] {
   return groups
 }
 
+/** The sentence shown where the command is offered but no drawing is open (the Sandbox, the GPU Lab). */
+export const NO_DRAWING_TO_CLEAR = 'No drawing is open here. Go to Vectors, Geometry, Graphing or Lab Data: each has a drawing of its own.'
+
 /** Asks before clearing the drawing. Undo brings everything back, but a whole drawing is worth a question. */
 export function confirmClearDrawing(): void {
+  // The palette offers the command everywhere; with no drawing active there is nothing to ask
+  // about, and the store refuses anyway. Say so rather than do nothing.
+  if (!s().activeSpace) {
+    alert(NO_DRAWING_TO_CLEAR)
+    return
+  }
   if (!confirm('Delete every object on this drawing? Undo brings them back.')) return
   s().clearDrawing()
 }

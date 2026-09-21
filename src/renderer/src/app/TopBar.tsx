@@ -37,7 +37,7 @@ import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { resetCamera } from '../render/viewState'
 import { useSandbox } from '../sim/store'
 import { UNIT_NAMES } from '../math/format'
-import { visibleOrder } from '../core/visibility'
+import { spaceOf, visibleOrder } from '../core/visibility'
 import { GRID_STYLES } from '../render/gridMath'
 import { confirmClearDrawing } from './contextActions'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
@@ -406,8 +406,9 @@ export function TopBar() {
           },
           { label: 'Select all', sc: 'Ctrl+A', run: () => s().select(visibleOrder(s().order, s().objects, s().activeSpace)) },
           '-',
-          // One undo step, and only this drawing: the other modes keep what they have.
-          { label: 'Delete everything on this drawing…', disabled: mode === 'sandbox', run: () => confirmClearDrawing() }
+          // One undo step, and only this drawing: the other modes keep what they have. Greyed
+          // where no drawing is open, the same rule as the 2D/3D rows below.
+          { label: 'Delete everything on this drawing…', disabled: spaceOf(mode) === null, run: () => confirmClearDrawing() }
         ]}
       />
       <Menu

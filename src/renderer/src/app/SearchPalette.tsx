@@ -79,7 +79,7 @@ function buildItems(): Item[] {
     { group: 'Settings', title: 'Grid: off', hint: 'No grid; the axes stay', run: () => scene().setSettings({ showGrid: false }) },
     { group: 'Settings', title: 'Angle marks: show', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: true }) },
     { group: 'Settings', title: 'Angle marks: hide', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: false }) },
-    { group: 'Edit', title: 'Delete everything on this drawing…', hint: 'Asks first; Undo brings it all back', run: () => confirmClearDrawing() },
+    { group: 'Edit', title: 'Delete everything on this drawing…', hint: 'Only the drawing you are looking at; asks first; Undo brings it all back', run: () => confirmClearDrawing() },
     { group: 'Settings', title: 'Toggle snapping', hint: 'Hold Alt while drawing to skip snapping once', run: () => scene().setSettings({ snap: !scene().settings.snap }) },
     { group: 'Settings', title: 'Angles in degrees', hint: '', run: () => scene().setSettings({ angleUnit: 'deg' }) },
     { group: 'Settings', title: 'Angles in radians', hint: '', run: () => scene().setSettings({ angleUnit: 'rad' }) }

@@ -2,7 +2,8 @@
 // leaving the viewport black on the first open until something else asked for a new frame.
 
 import { describe, expect, it } from 'vitest'
-import { finiteArea, gridKey, gridVertices, GRID_STYLES, needsGridRebuild, usableSize } from '../src/renderer/src/render/gridMath'
+import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, GRID_STYLES, minorStepOf, needsGridRebuild, snapStep, usableSize } from '../src/renderer/src/render/gridMath'
+import { readSource } from './helpers/repo'
 import { axisTitle, tickDecimals, tickText } from '../src/renderer/src/render/gridLabels'
 import type { MeasureSettings } from '../src/renderer/src/math/format'
 import { labelPoints } from '../src/renderer/src/math/graphs'
@@ -175,5 +176,49 @@ describe('grid styles', () => {
   it('lists the four styles in the order every picker shows them, each with a plain hint', () => {
     expect(GRID_STYLES.map((g) => g.id)).toEqual(['lines', 'dots', 'fine', 'paper'])
     for (const g of GRID_STYLES) expect(g.hint.length).toBeGreaterThan(10)
+  })
+
+  it('draws each dot as a small square, two triangles wide enough to be seen', () => {
+    // WebGPU draws a THREE.Points vertex as one device pixel and ignores PointsMaterial.size,
+    // so the dots style was invisible on the default renderer; each dot is a quad instead.
+    const q = dotQuads([1, 2, 0, 3, 4, 0.5], 0.1)
+    expect(q.length).toBe(2 * 18)
+    const xs = q.filter((_, i) => i % 3 === 0).slice(0, 6)
+    const ys = q.filter((_, i) => i % 3 === 1).slice(0, 6)
+    expect(Math.min(...xs)).toBeCloseTo(0.9)
+    expect(Math.max(...xs)).toBeCloseTo(1.1)
+    expect(Math.min(...ys)).toBeCloseTo(1.9)
+    expect(Math.max(...ys)).toBeCloseTo(2.1)
+    // Each vertex keeps its dot's height, and both triangles wind the same way (a and c share a diagonal).
+    expect(q.slice(18).filter((_, i) => i % 3 === 2)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+    expect(q.slice(0, 3)).toEqual(q.slice(9, 12))
+    expect(dotQuads([], 1)).toEqual([])
+    // Three pixels across: a two-pixel square off the pixel grid blends to a smudge.
+    expect(DOT_HALF_PX * 2).toBe(3)
+    const grid = readSource('src/renderer/src/render/Grid.tsx')
+    expect(grid).not.toMatch(/new THREE\.Points(Material)?\(/)
+    expect(grid).toContain('dotQuads(')
+  })
+})
+
+describe('the step a point snaps to', () => {
+  it('is the minor step of the grid: four squares to a major line that starts with 2, five otherwise', () => {
+    expect(minorStepOf(1)).toBe(0.2)
+    expect(minorStepOf(2)).toBe(0.5)
+    expect(minorStepOf(0.2)).toBe(0.05)
+    expect(minorStepOf(5)).toBe(1)
+    expect(minorStepOf(20)).toBe(5)
+  })
+
+  it('halves with the fine style, as the drawn grid does, and is unchanged by the others', () => {
+    // Before this, Fine drew squares of minor/2 while a point still snapped to every second crossing.
+    expect(snapStep(0.25, 'fine')).toBe(0.125)
+    for (const style of ['lines', 'dots', 'paper'] as const) expect(snapStep(0.25, style)).toBe(0.25)
+    const box = area(0, 4, 0, 3)
+    expect(gridVertices('fine', box, 1, 0.25).minor.length / 6).toBe(Math.floor(4 / snapStep(0.25, 'fine')) + 1 + Math.floor(3 / snapStep(0.25, 'fine')) + 1)
+    // Interaction.tsx snaps by the same rule the grid is drawn by.
+    const interaction = readSource('src/renderer/src/render/Interaction.tsx')
+    expect(interaction).toMatch(/snapStep\(minor, s\.settings\.gridStyle\)/)
+    expect(readSource('src/renderer/src/render/Grid.tsx')).toContain('minorStepOf(majorStep)')
   })
 })

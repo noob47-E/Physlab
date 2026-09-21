@@ -288,6 +288,21 @@ describe('clearDrawing: delete everything on this drawing', () => {
     expect(scene().past.length).toBe(past)
   })
 
+  it('refuses where no drawing is active, rather than clearing every drawing at once', () => {
+    // The Sandbox and the GPU Lab have no space of their own; there visibleOrder is everything,
+    // and the palette's row once wiped all four drawings from a mode that showed none of them.
+    scene().setActiveSpace(null)
+    scene().addObjects([stamped(point('pA', 'A', [1, 2, 0]), 'shapes'), stamped(number('nV', 'v', '7'), 'vectors'), number('nE', 'e', '1')])
+    const past = scene().past.length
+    scene().clearDrawing()
+    expect(scene().order).toEqual(['pA', 'nV', 'nE'])
+    expect(scene().past.length).toBe(past)
+    // The menu row is greyed on the same rule, and the palette says so instead of staying silent.
+    expect(readSource('src/renderer/src/app/TopBar.tsx')).toMatch(/Delete everything on this drawing…', disabled: spaceOf\(mode\) === null/)
+    const actions = readSource('src/renderer/src/app/contextActions.ts')
+    expect(actions).toMatch(/if \(!s\(\)\.activeSpace\) \{\s*alert\(NO_DRAWING_TO_CLEAR\)/)
+  })
+
   it('is what the Edit menu, the background menu and the palette call, with a question first', () => {
     for (const f of ['src/renderer/src/app/TopBar.tsx', 'src/renderer/src/app/contextActions.ts', 'src/renderer/src/app/SearchPalette.tsx']) {
       expect(readSource(f)).toContain('confirmClearDrawing')

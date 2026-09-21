@@ -261,7 +261,12 @@ export function Viewport() {
           className="badge pointer-events-auto cursor-pointer outline-none"
           title="Graphics quality (Auto picks a level for this computer)"
           value={gpu.choice}
-          onChange={(e) => useGpuInfo.setState({ choice: e.target.value as 'auto' })}
+          onChange={(e) => {
+            useGpuInfo.setState({ choice: e.target.value as 'auto' })
+            // A focused <select> counts as typing, so every viewport shortcut would stay dead
+            // until the canvas was clicked; the choice is made, give the keys back.
+            e.currentTarget.blur()
+          }}
         >
           <option value="auto">Auto ({gpu.detected})</option>
           <option value="low">Low</option>
@@ -320,6 +325,9 @@ function GridStylePicker() {
         const v = e.target.value
         if (v === 'off') setSettings({ showGrid: false })
         else setSettings({ showGrid: true, gridStyle: v as GridStyle })
+        // Once chosen, hand the keys back: a focused <select> swallows V, P, Esc, Delete, Space
+        // and Ctrl+Z (isTyping treats it as a text field) until the canvas is clicked.
+        e.currentTarget.blur()
       }}
     >
       {GRID_STYLES.map((g) => (

@@ -2,7 +2,8 @@
 // The rule is pure so that it can be tested without a canvas.
 
 import { describe, expect, it } from 'vitest'
-import { insideRect, MARQUEE_MIN_PX, marqueeStarted, normalizeRect, objectInRect, type Rect } from '../src/renderer/src/render/selectMath'
+import { insideRect, MARQUEE_MIN_PX, marqueeStarted, mergeSelection, normalizeRect, objectInRect, type Rect } from '../src/renderer/src/render/selectMath'
+import { readSource } from './helpers/repo'
 import { isSpaceHeld, markSpaceUsed, pressSpace, releaseSpace, resetSpace } from '../src/renderer/src/render/panKey'
 
 const rect: Rect = { left: 100, top: 100, right: 300, bottom: 250 }
@@ -66,6 +67,26 @@ describe('marqueeStarted', () => {
     expect(marqueeStarted({ x0: 10, y0: 10, x1: 12, y1: 11 })).toBe(false)
     expect(marqueeStarted({ x0: 10, y0: 10, x1: 10 + MARQUEE_MIN_PX, y1: 10 })).toBe(true)
     expect(marqueeStarted({ x0: 10, y0: 10, x1: 0, y1: 0 })).toBe(true)
+  })
+})
+
+describe('mergeSelection: what a let-go box selects', () => {
+  it('without Shift the box is the selection', () => {
+    expect(mergeSelection(['A', 'C'], ['B'], false)).toEqual(['B'])
+    expect(mergeSelection(['A'], [], false)).toEqual([])
+  })
+
+  it('with Shift the box adds to the selection and keeps what was already selected', () => {
+    // A Shift-box over A and B with A selected used to leave only B: the store's additive
+    // select toggles, which is right for a Shift-click and wrong for a box.
+    expect(mergeSelection(['A'], ['A', 'B'], true)).toEqual(['A', 'B'])
+    expect(mergeSelection(['A', 'C'], ['B'], true)).toEqual(['A', 'C', 'B'])
+    expect(mergeSelection([], ['B'], true)).toEqual(['B'])
+  })
+
+  it('is what the viewport uses when the box is let go', () => {
+    const src = readSource('src/renderer/src/render/Interaction.tsx')
+    expect(src).toMatch(/s\.select\(mergeSelection\(s\.selection, idsInRect\(m\), e\.shiftKey\)\)/)
   })
 })
 

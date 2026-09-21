@@ -53,6 +53,9 @@ function insidePolygon(p: S2, pts: S2[]): boolean {
   return inside
 }
 
+/** How far from a segment, ray, line or circle the cursor may be, in pixels, and still pick it. `Interaction.tsx` widens its crossing search from it. */
+export const CURVE_PICK_PX = 8
+
 export interface PickContext {
   camera: THREE.Camera
   size: ViewSize
@@ -126,7 +129,7 @@ export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: S
         const a = scr(c.line.p)
         const b = scr(add(c.line.p, c.type === 'line' || c.type === 'ray' ? scale(normalize(c.line.d), Math.max(1, Math.hypot(...c.line.d))) : c.line.d))
         const d = c.type === 'segment' ? segDist(P, a, b) : c.type === 'ray' ? rayDist(P, a, b) : lineDist(P, a, b)
-        offer({ id, part: 'body', dist: d, priority: 5 }, 8)
+        offer({ id, part: 'body', dist: d, priority: 5 }, CURVE_PICK_PX)
         break
       }
       case 'circle': {
@@ -138,7 +141,7 @@ export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: S
           if (prev) min = Math.min(min, segDist(P, prev, s))
           prev = s
         }
-        offer({ id, part: 'body', dist: min, priority: 6 }, 8)
+        offer({ id, part: 'body', dist: min, priority: 6 }, CURVE_PICK_PX)
         break
       }
       case 'graph': {

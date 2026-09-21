@@ -43,6 +43,42 @@ export const GRID_STYLES: { id: GridStyle; label: string; hint: string }[] = [
   { id: 'paper', label: 'Paper', hint: 'Squared paper: lines on a tinted page' }
 ]
 
+/**
+ * The minor step that goes with a major step: four squares to a major line when the major step
+ * starts with a 2 (0.2, 2, 20 …), five otherwise. The grid and the snap both use it, so a point
+ * always snaps to a line the student can see.
+ */
+export const minorStepOf = (major: number): number => major / (String(major).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
+
+/**
+ * The step a point snaps to: the minor step, halved for the "fine" style. `gridVertices` draws
+ * the fine grid at half the minor step, and snapping used to ignore the style, so with Fine on a
+ * point snapped to every second crossing the student could see.
+ */
+export const snapStep = (minor: number, style: GridStyle): number => (style === 'fine' ? minor / 2 : minor)
+
+/** Half the width of a grid dot on screen, in pixels: a 3 px square. A 2 px square that does not sit on pixel boundaries blends into a faint smudge under MSAA. */
+export const DOT_HALF_PX = 1.5
+
+/**
+ * The dots of the dots style as small squares, two triangles each (18 numbers per dot), `h` being
+ * half the square's side in world units. WebGPU draws a point primitive as exactly one device
+ * pixel and ignores `PointsMaterial.size` (three.js says so in `PointsNodeMaterial`), so the
+ * dots were invisible specks on the default renderer; a square the caller sizes from
+ * `worldPerPixel` reads the same on both backends.
+ */
+export function dotQuads(dots: number[], h: number): number[] {
+  const out: number[] = []
+  for (let i = 0; i < dots.length; i += 3) {
+    const x = dots[i]
+    const y = dots[i + 1]
+    const z = dots[i + 2]
+    out.push(x - h, y - h, z, x + h, y - h, z, x + h, y + h, z)
+    out.push(x - h, y - h, z, x + h, y + h, z, x - h, y + h, z)
+  }
+  return out
+}
+
 /** Flat xyz triples: line ends for `minor` and `major` (two per line), one point per dot. */
 export interface GridVertices {
   minor: number[]
@@ -58,7 +94,7 @@ export interface GridVertices {
  */
 export function gridVertices(style: GridStyle, area: GridArea, major: number, minor: number, z = 0): GridVertices {
   const out: GridVertices = { minor: [], major: [], dots: [] }
-  const step = style === 'fine' ? minor / 2 : minor
+  const step = snapStep(minor, style)
   const x0 = Math.ceil(area.xMin / step)
   const x1 = Math.floor(area.xMax / step)
   const y0 = Math.ceil(area.yMin / step)

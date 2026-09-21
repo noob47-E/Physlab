@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
-import { niceStep, orthoBounds, toScreen } from './cameraUtils'
-import { finiteArea, gridKey, gridVertices, needsGridRebuild, usableSize, type GridArea } from './gridMath'
+import { niceStep, orthoBounds, toScreen, worldPerPixel } from './cameraUtils'
+import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, minorStepOf, needsGridRebuild, usableSize, type GridArea } from './gridMath'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
@@ -30,7 +30,7 @@ const AXIS_COLORS = {
 }
 
 /** The three drawables a grid is made of: minor lines, major lines and (for the dots style) a dot at each crossing. */
-type GridLines = [THREE.LineSegments, THREE.LineSegments, THREE.Points]
+type GridLines = [THREE.LineSegments, THREE.LineSegments, THREE.Mesh]
 
 function useGridLines(): GridLines {
   const lines = useMemo(() => {
@@ -46,9 +46,11 @@ function useGridLines(): GridLines {
       l.renderOrder = -10
       return l
     }
-    // Dots are a fixed size on screen (no attenuation), so the grid reads the same at every zoom.
-    const pm = new THREE.PointsMaterial({ color: MAJOR(), size: 3, sizeAttenuation: false, depthTest: false, depthWrite: false })
-    const dots = new THREE.Points(geom(), pm)
+    // Each dot is a small square mesh, not a THREE.Points vertex: WebGPU draws a point primitive
+    // as exactly one device pixel and ignores PointsMaterial.size, so the dots style was a field
+    // of invisible specks on the default renderer. `fillGrid` sizes the squares from the zoom.
+    const pm = new THREE.MeshBasicMaterial({ color: MAJOR(), side: THREE.DoubleSide, depthTest: false, depthWrite: false })
+    const dots = new THREE.Mesh(geom(), pm)
     dots.frustumCulled = false
     dots.renderOrder = -10
     return [mk(MINOR()), mk(MAJOR()), dots] as GridLines
@@ -58,7 +60,7 @@ function useGridLines(): GridLines {
   useEffect(() => {
     const colors = [MINOR(), MAJOR(), MAJOR()]
     lines.forEach((l, i) => {
-      const m = l.material as THREE.LineBasicMaterial | THREE.PointsMaterial
+      const m = l.material as THREE.LineBasicMaterial | THREE.MeshBasicMaterial
       m.color.set(colors[i])
       // The WebGPU backend compiles the colour into the material, so it has to be told.
       m.needsUpdate = true
@@ -68,7 +70,8 @@ function useGridLines(): GridLines {
   return lines
 }
 
-function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridArea, majorStep: number, minorStep: number, z = 0) {
+/** Rebuild the grid for one style; `dotHalf` is half a dot's side in world units (see `dotQuads`). */
+function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridArea, majorStep: number, minorStep: number, dotHalf: number, z = 0) {
   const v = gridVertices(style, area, majorStep, minorStep, z)
   const put = (obj: THREE.Object3D & { geometry: THREE.BufferGeometry }, pos: number[]) => {
     obj.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
@@ -76,12 +79,12 @@ function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridA
   }
   put(minor, v.minor)
   put(major, v.major)
-  put(dots, v.dots)
+  put(dots, dotQuads(v.dots, dotHalf))
 }
 
-/** Show or hide the whole grid; an empty vertex list draws nothing, so every part can stay on. */
+/** Show or hide the grid. A part the style does not use is hidden rather than drawn empty: a zero-vertex draw call is still a draw call, and WebGPU warns about each one. */
 function showGridLines(lines: GridLines, show: boolean) {
-  for (const l of lines) l.visible = show
+  for (const l of lines) l.visible = show && ((l.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0) > 0
 }
 
 /** Adaptive 2D graph-paper grid with numbered axes. */
@@ -116,14 +119,15 @@ export function Grid2D() {
       return
     }
     const majorStep = niceStep(100 / zoom)
-    const minorStep = majorStep / (String(majorStep).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
+    const minorStep = minorStepOf(majorStep)
     const prev = built.current
     const key = gridKey(majorStep, size, zoom, gridStyle)
     if (needsGridRebuild(prev, b, key)) {
       const w = b.xMax - b.xMin
       const h = b.yMax - b.yMin
       const ext = { xMin: b.xMin - w, xMax: b.xMax + w, yMin: b.yMin - h, yMax: b.yMax + h }
-      fillGrid(lines, gridStyle, ext, majorStep, minorStep)
+      // The key holds the zoom, so the dots are re-sized whenever the zoom changes.
+      fillGrid(lines, gridStyle, ext, majorStep, minorStep, DOT_HALF_PX * worldPerPixel(camera, size))
       built.current = { key, ...ext }
       setAxes({ x: [[ext.xMin, 0, 0], [ext.xMax, 0, 0]], y: [[0, ext.yMin, 0], [0, ext.yMax, 0]] })
     }
@@ -174,7 +178,7 @@ export function Grid2D() {
 
 /** Floor grid on the xy-plane with coloured x, y, z axes (z is up). */
 export function Grid3D() {
-  const { camera, size } = useThree()
+  const { camera, size, invalidate } = useThree()
   const lines = useGridLines()
   const showGrid = useScene((s) => s.settings.showGrid)
   const gridStyle = useScene((s) => s.settings.gridStyle)
@@ -213,8 +217,13 @@ export function Grid3D() {
 
   useEffect(() => {
     const { size: half, step } = extent
-    fillGrid(lines, gridStyle, { xMin: -half, xMax: half, yMin: -half, yMax: half }, step * 2, step / 2)
-  }, [extent, lines, gridStyle])
+    // The dots are sized for the camera's distance when the step last changed; in a perspective
+    // view they shrink and grow with the rest of the floor between steps, which is what a floor does.
+    fillGrid(lines, gridStyle, { xMin: -half, xMax: half, yMin: -half, yMax: half }, step * 2, step / 2, DOT_HALF_PX * worldPerPixel(camera, size))
+    // The parts a style uses changed with the vertex lists; the canvas draws on demand.
+    showGridLines(lines, useScene.getState().settings.showGrid)
+    invalidate()
+  }, [extent, lines, gridStyle, camera, size, invalidate])
 
   const h = extent.size
   return (

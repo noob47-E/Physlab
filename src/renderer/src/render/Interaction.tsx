@@ -4,9 +4,9 @@ import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './cameraUtils'
 import { labelAnchors, overlay, showTip } from './overlay'
-import { pickAll, pickAt, type Hit } from './picking'
+import { CURVE_PICK_PX, pickAll, pickAt, type Hit } from './picking'
 import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type Marquee, type SnapInfo } from './tools'
-import { marqueeStarted, normalizeRect, objectInRect, type S2 } from './selectMath'
+import { marqueeStarted, mergeSelection, normalizeRect, objectInRect, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { showContextMenu } from '../ui/ContextMenu'
@@ -20,6 +20,7 @@ import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '..
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
+import { minorStepOf, snapStep } from './gridMath'
 import { themeColor, useThemed } from '../app/theme'
 
 interface DragState {
@@ -113,14 +114,12 @@ export function Interaction() {
       const c = ctxRef.current.controls as unknown as { enabled: boolean } | null
       if (c) c.enabled = enabled
     }
-    /** Minor grid step at the current zoom. */
+    /** The step a point snaps to at the current zoom: the minor grid step, halved with the Fine style, the same rule the grid is drawn by. */
     const gridStep = () => {
       const { camera: cam, size: sz } = ctxRef.current
-      if (scene().viewMode === '2d') {
-        const major = niceStep(100 * worldPerPixel(cam, sz))
-        return major / (String(major).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
-      }
-      return niceStep(cam.position.length() / 12) / 2
+      const s = scene()
+      const minor = s.viewMode === '2d' ? minorStepOf(niceStep(100 * worldPerPixel(cam, sz))) : niceStep(cam.position.length() / 12) / 2
+      return snapStep(minor, s.settings.gridStyle)
     }
     const worldOn = (x: number, y: number, plane: THREE.Plane = XY_PLANE) => screenToPlane(ctxRef.current.camera, ctxRef.current.size, x, y, plane)
     const scr = (p: V3) => toScreen(ctxRef.current.camera, ctxRef.current.size, p)
@@ -182,7 +181,7 @@ export function Interaction() {
       const s = scene()
       // Each curve's own reach, widened so that both lines of a crossing are found when the
       // cursor is near the crossing rather than exactly on both.
-      const curves = pickAll(pickCtx(), x, y, (o, c) => !exclude?.has(o.id) && isCurve(c), SNAP_CURVE_PX - 8)
+      const curves = pickAll(pickCtx(), x, y, (o, c) => !exclude?.has(o.id) && isCurve(c), SNAP_CURVE_PX - CURVE_PICK_PX)
       if (curves.length < 2) return null
       let best: SnapInfo | null = null
       let bestD = SNAP_POINT_PX
@@ -569,8 +568,9 @@ export function Interaction() {
         useTool.setState({ marquee: null })
         const { x, y } = local(e)
         const m: Marquee = { x0: bx.x0, y0: bx.y0, x1: x, y1: y }
-        // Shift adds to (or removes from) what was selected, like a Shift-click.
-        if (marqueeStarted(m)) s.select(idsInRect(m), e.shiftKey)
+        // Shift adds what the box holds to the selection; without it the box is the selection.
+        // (A Shift-click toggles one object, but a box that took away what it covered surprised.)
+        if (marqueeStarted(m)) s.select(mergeSelection(s.selection, idsInRect(m), e.shiftKey))
         down.current = null
         return
       }

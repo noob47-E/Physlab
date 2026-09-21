@@ -2,7 +2,7 @@
 // canvas. The box is dragged with the Move tool on empty space; whichever corner the drag started
 // from, the rectangle is the same.
 
-import type { ObjType } from '../core/types'
+import type { ObjId, ObjType } from '../core/types'
 import type { Marquee } from './tools'
 
 export interface Rect {
@@ -49,3 +49,15 @@ export const MARQUEE_MIN_PX = 5
 
 /** Has the pointer moved far enough from where it went down for the drag to count as a box? */
 export const marqueeStarted = (m: Marquee): boolean => Math.hypot(m.x1 - m.x0, m.y1 - m.y0) >= MARQUEE_MIN_PX
+
+/**
+ * What is selected once the box is let go: the box's contents, or with Shift held the old
+ * selection plus them. Shift adds and never removes — a box that took away the objects it
+ * covered read as a bug, unlike a Shift-click on one object, which toggles it.
+ */
+export function mergeSelection(current: readonly ObjId[], boxed: readonly ObjId[], shift: boolean): ObjId[] {
+  if (!shift) return [...boxed]
+  const out = [...current]
+  for (const id of boxed) if (!out.includes(id)) out.push(id)
+  return out
+}
