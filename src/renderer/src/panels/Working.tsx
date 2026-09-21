@@ -54,17 +54,30 @@ function MoveRow({ n, head, rule, tex, note }: { n: number; head: string; rule?:
   )
 }
 
-function WorkingView({ doc, pref, onPref, onOffer }: { doc: WorkingDoc; pref: StepPref; onPref: (p: StepPref) => void; onOffer: (job: JobId) => void }) {
+function WorkingView({ doc, pref, onPref, onOffer, onTry }: { doc: WorkingDoc; pref: StepPref; onPref: (p: StepPref) => void; onOffer: (job: JobId) => void; onTry: () => void }) {
   const [shown, setShown] = useState(() => initialShown(doc.moves.length, pref))
   const [copied, setCopied] = useState(false)
+  // "Let me try first" has been pressed for this piece of working: the invitation goes, the
+  // step buttons stay.
+  const [trying, setTrying] = useState(false)
+  const tryBtn = useRef<HTMLButtonElement>(null)
   // A new piece of working starts the way the student prefers: hidden, so they can try first,
   // or all at once. The preference is read when the document changes, not on every render, so
   // pressing "Show all" is not undone by the next keystroke.
-  useEffect(() => setShown(initialShown(doc.moves.length, pref)), [doc]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setShown(initialShown(doc.moves.length, pref))
+    setTrying(false)
+  }, [doc]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hidden = doc.moves.length - shown
   const finished = hidden === 0
   const offer = offeredJob(doc, JOB_IDS)
+  // A new answer with its steps hidden asks the student to try: that button is the primary
+  // one and takes the focus, so Enter after "Work it out" chooses trying rather than a reveal.
+  const inviting = doc.moves.length > 0 && shown === 0 && !trying
+  useEffect(() => {
+    if (inviting) tryBtn.current?.focus()
+  }, [doc, inviting])
 
   const copyAll = (): void => {
     const lines = [
@@ -97,7 +110,7 @@ function WorkingView({ doc, pref, onPref, onOffer }: { doc: WorkingDoc; pref: St
     <div className="pure-doc">
       <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
         <BookOpen size={15} className="text-[color:var(--accent)]" />
-        <div className="text-[14px] font-semibold text-[color:var(--text-strong)]">{doc.title}</div>
+        <div className="text-lead font-semibold text-[color:var(--text-strong)]">{doc.title}</div>
         <Tex tex={doc.input} className="text-[color:var(--text-dim)]" />
         {doc.method && <span className="pure-method">{doc.method}</span>}
         <div className="flex-1" />
@@ -120,7 +133,20 @@ function WorkingView({ doc, pref, onPref, onOffer }: { doc: WorkingDoc; pref: St
 
       {doc.moves.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
-          {shown === 0 && <span className="text-[color:var(--text-dim)]">Try it yourself first, then check a step at a time.</span>}
+          {shown === 0 && <span className="text-ink-dim">{trying ? 'Whenever you are ready, check a step.' : 'Try it yourself first, then check a step at a time.'}</span>}
+          {inviting && (
+            <button
+              ref={tryBtn}
+              className="btn primary"
+              title="Keep the steps hidden and go back to the field"
+              onClick={() => {
+                setTrying(true)
+                onTry()
+              }}
+            >
+              <Lightbulb size={13} /> Let me try first
+            </button>
+          )}
           {hidden > 0 && (
             <>
               <button className="btn" onClick={() => setShown((n) => n + 1)}>
@@ -133,7 +159,15 @@ function WorkingView({ doc, pref, onPref, onOffer }: { doc: WorkingDoc; pref: St
             </>
           )}
           {finished && (
-            <button className="btn ghost" onClick={() => setShown(0)} title="Hide the working so you can try it yourself">
+            <button
+              className="btn ghost"
+              title="Hide the working so you can try it yourself"
+              onClick={() => {
+                setShown(0)
+                setTrying(true)
+                onTry()
+              }}
+            >
               <Lightbulb size={13} /> Let me try first
             </button>
           )}
@@ -159,11 +193,11 @@ function AnswerCard({ doc }: { doc: WorkingDoc }) {
   const tone = checkTone(doc)
   return (
     <div className="pure-answer mx-3 mt-3">
-      <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
+      <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
       {doc.answers.map((a, i) => (
         <div key={`${a.label}-${i}`} className="flex items-baseline gap-3 py-0.5">
           <span className="w-24 shrink-0 text-[color:var(--text-dim)]">{a.label}</span>
-          <Tex tex={a.tex} className="text-[16px] text-[color:var(--text-strong)]" />
+          <Tex tex={a.tex} className="text-lead text-ink-strong" />
         </div>
       ))}
       {doc.noWorking && (
@@ -366,7 +400,7 @@ export function Working() {
               )}
             </div>
           )}
-          {working && <WorkingView doc={working} pref={pref} onPref={setPreference} onOffer={(j) => run(j, input, inputLatex)} />}
+          {working && <WorkingView doc={working} pref={pref} onPref={setPreference} onOffer={(j) => run(j, input, inputLatex)} onTry={() => field.current?.focus()} />}
           {asking && (
             <div className="px-3 pb-3 text-[color:var(--text-dim)]">
               Checking that one a different way{casStatus === 'loading' ? ' (starting the algebra engine, this takes a moment the first time)' : ''}…

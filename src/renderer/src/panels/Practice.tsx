@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronRight, Eye, Lightbulb, RotateCcw, Sparkles, Timer, X } from 'lucide-react'
 import { visualizeSolution } from '../core/visualize'
+import { useScene } from '../core/store'
 import { checkAnswer, expectedText, isCorrect, type Check as AnswerCheck } from '../math/checkAnswer'
 import { generateSet, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import { Tex } from '../ui/Tex'
@@ -65,6 +66,9 @@ export function Practice() {
   const [results, setResults] = useState<Result[]>([])
   const [startedAt, setStartedAt] = useState(Date.now())
   const [now, setNow] = useState(Date.now())
+  // The revealed answer is written the way the rest of the app writes numbers: at the precision
+  // the student chose, not a fixed four places.
+  const settings = useScene((s) => s.settings)
 
   const problem: Problem | undefined = set[index]
   const finished = set.length > 0 && index >= set.length
@@ -272,7 +276,7 @@ export function Practice() {
                 <div className={`mt-1 pl-[72px] ${isCorrect(c) ? 'text-warn/80' : 'text-bad'}`}>{c.message}</div>
               )}
               {c?.verdict === 'empty' && <div className="mt-1 pl-[72px] text-ink-faint">Fill this one in too.</div>}
-              {revealed && <div className="mt-1 pl-[72px] text-good">Answer: {expectedText(f)}</div>}
+              {revealed && <div className="mt-1 pl-[72px] text-good">Answer: {expectedText(f, settings)}</div>}
             </div>
           )
         })}

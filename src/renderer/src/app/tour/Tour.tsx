@@ -180,7 +180,7 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
   return (
     <div className="tour-backdrop">
       <div className="tour-card w-[34rem]">
-        <div className="mb-1 text-[18px] font-semibold text-[var(--text-strong)]">Welcome to PhysLab</div>
+        <div className="mb-1 text-title font-semibold text-[var(--text-strong)]">Welcome to PhysLab</div>
         <div className="mb-3 text-[var(--text)]">Maths and physics you can see. What would you like to do first?</div>
         <div className="mb-3 grid grid-cols-2 gap-2">
           <button
@@ -215,7 +215,7 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
             Skip
           </button>
           <span className="flex-1" />
-          <span className="text-[11px] text-[var(--text-faint)]">You can start it again from the Help menu.</span>
+          <span className="text-fine text-[var(--text-faint)]">You can start it again from the Help menu.</span>
         </div>
       </div>
     </div>
@@ -257,7 +257,7 @@ function Spotlight({
       {hole && <div className="tour-hole" style={hole} />}
       <div ref={cardRef} className="tour-card w-[22rem]" style={{ position: 'fixed', ...cardStyle }} role="dialog" aria-label={current.title}>
         <div className="mb-1 flex items-center gap-2">
-          <span className="text-[11px] text-[var(--text-faint)]">
+          <span className="text-fine text-[var(--text-faint)]">
             {step + 1} / {TOUR.length}
           </span>
           <span className="flex-1" />
@@ -265,7 +265,7 @@ function Spotlight({
             <X size={14} />
           </button>
         </div>
-        <div className="mb-1 text-[15px] font-semibold text-[var(--text-strong)]">{current.title}</div>
+        <div className="mb-1 text-lead font-semibold text-[var(--text-strong)]">{current.title}</div>
         <div className="mb-3 text-[var(--text)]">{current.body}</div>
         <div className="flex items-center gap-2">
           <button className="btn" onClick={onBack} disabled={step === 0}>
@@ -289,9 +289,9 @@ function Missions({ done, onClose }: { done: string[]; onClose: () => void }) {
     <div className="tour-backdrop" onClick={onClose}>
       <div className="tour-card w-[28rem]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-center gap-2">
-          <span className="text-[15px] font-semibold text-[var(--text-strong)]">Practice tasks</span>
+          <span className="text-lead font-semibold text-[var(--text-strong)]">Practice tasks</span>
           <span className="flex-1" />
-          <span className="text-[11px] text-[var(--text-faint)]">
+          <span className="text-fine text-[var(--text-faint)]">
             {done.length} / {MISSIONS.length} done
           </span>
           <button className="text-[var(--text-faint)] hover:text-[var(--text-strong)]" onClick={onClose}>
@@ -313,7 +313,7 @@ function Missions({ done, onClose }: { done: string[]; onClose: () => void }) {
               <span className={`mt-0.5 ${ok ? 'text-[var(--good)]' : 'text-[var(--text-faint)]'}`}>{ok ? <Check size={14} /> : '○'}</span>
               <span className="min-w-0 flex-1">
                 <span className={ok ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-strong)]'}>{m.label}</span>
-                <span className="block text-[11.5px] text-[var(--text-faint)]">{m.hint}</span>
+                <span className="block text-fine text-[var(--text-faint)]">{m.hint}</span>
               </span>
             </button>
           )
@@ -329,7 +329,7 @@ function Shortcuts({ onClose }: { onClose: () => void }) {
       <div className="tour-card w-[32rem]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-2 flex items-center gap-2">
           <Keyboard size={15} className="text-[var(--accent)]" />
-          <span className="text-[15px] font-semibold text-[var(--text-strong)]">Keyboard and mouse</span>
+          <span className="text-lead font-semibold text-[var(--text-strong)]">Keyboard and mouse</span>
           <span className="flex-1" />
           <button className="text-[var(--text-faint)] hover:text-[var(--text-strong)]" onClick={onClose}>
             <X size={14} />

@@ -133,7 +133,7 @@ export function SearchPalette() {
           <Search size={16} className="text-[var(--text-faint)]" />
           <input
             ref={input}
-            className="h-11 flex-1 bg-transparent text-[15px] outline-none"
+            className="h-11 flex-1 bg-transparent text-lead outline-none"
             placeholder="Search modes, tools, examples, commands, settings…"
             value={q}
             onChange={(e) => {
@@ -159,9 +159,9 @@ export function SearchPalette() {
           {results.length === 0 && <div className="px-4 py-6 text-center text-[var(--text-faint)]">Nothing found.</div>}
           {results.map((r, i) => (
             <button key={`${r.group}-${r.title}`} className={`flex w-full items-baseline gap-3 px-4 py-1.5 text-left ${i === active ? 'bg-[var(--sel-row)]' : 'hover:bg-[var(--bg-3)]'}`} onMouseEnter={() => setActive(i)} onClick={() => choose(r)}>
-              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{r.group}</span>
+              <span className="w-20 shrink-0 text-fine uppercase tracking-wide text-[var(--text-faint)]">{r.group}</span>
               <span className="shrink-0 text-[var(--text-strong)]">{r.title}</span>
-              <span className="truncate text-[12px] text-[var(--text-faint)]">{r.hint}</span>
+              <span className="truncate text-small text-[var(--text-faint)]">{r.hint}</span>
             </button>
           ))}
         </div>
