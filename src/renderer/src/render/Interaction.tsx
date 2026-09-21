@@ -594,13 +594,20 @@ function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, 
  * re-read when the theme flips, so they show on the light canvas too.
  */
 function usePreviewColors() {
-  return useThemed(() => ({
-    band: themeColor('--text-dim'),
-    // The stroke is the only thing on screen while a student draws, and the selection yellow
-    // was the faintest line on the light canvas; the accent blue reads in both themes.
-    stroke: themeColor('--accent'),
-    snap: (kind: SnapInfo['kind']) => themeColor(kind === 'point' ? '--sel-glow' : kind === 'axis' ? '--accent' : kind === 'onObject' ? '--series-5' : '--good')
-  }))
+  return useThemed(() => {
+    const accent = themeColor('--accent')
+    const good = themeColor('--good')
+    // Every snap colour is resolved here, once per theme, rather than in a closure that read the
+    // stylesheet again on each mouse move over a point.
+    const snap: Record<SnapInfo['kind'], string> = { point: themeColor('--sel-glow'), axis: accent, onObject: themeColor('--series-5'), grid: good, free: good }
+    return {
+      band: themeColor('--text-dim'),
+      // The stroke is the only thing on screen while a student draws, and the selection yellow
+      // was the faintest line on the light canvas; the accent blue reads in both themes.
+      stroke: accent,
+      snap
+    }
+  })
 }
 
 /** Rubber-band previews, the snap indicator and the freehand stroke. */
@@ -617,7 +624,7 @@ function ToolPreview() {
   const pts = picks.map((id) => ev.values.get(id)).filter((c): c is { type: 'point'; p: V3 } => c?.type === 'point').map((c) => c.p)
   const is3D = viewMode === '3d'
 
-  const snapMark = snap && cursor ? <SnapMarker p={snap.p} color={colors.snap(snap.kind)} kind={snap.kind} /> : null
+  const snapMark = snap && cursor ? <SnapMarker p={snap.p} color={colors.snap[snap.kind]} kind={snap.kind} /> : null
 
   if (tool === 'sketch') return stroke.length > 1 ? <FatLine points={stroke} color={colors.stroke} width={2.5} renderOrder={35} /> : null
   if (!cursor) return snapMark

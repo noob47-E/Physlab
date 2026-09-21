@@ -91,7 +91,9 @@ export const PointView = memo(function PointView({ obj, c, selected, hovered, is
       </mesh>
       <mesh renderOrder={22}>
         <circleGeometry args={[r, 28]} />
-        <meshBasicMaterial color={fill} depthTest={false} depthWrite={false} />
+        {/* Keyed like its siblings: a derived point's grey follows the theme, and a free point's
+            colour can be edited; WebGPU ignores either change without a fresh material. */}
+        <meshBasicMaterial key={`${colors.theme}${fill}`} color={fill} depthTest={false} depthWrite={false} />
       </mesh>
     </group>
   )
