@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Eye, History, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { casInDegrees } from '../calc/angle'
 import { clearCalcHistory, useCalc, type CalcMode } from '../calc/calcStore'
 import { casioToMath, evaluateBaseN, evaluateComp, exactForm, formatBase, formatValue, type Base } from '../calc/engine'
 import { calcEng, calcNum, setCalcPrecisionSource } from '../calc/format'
@@ -355,7 +356,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
       setResult({ main: eng && Number.isFinite(num) ? calcEng(num) : out.text, extra: out.extra, exact: exact && exact !== String(num) ? exact : null, value: out.value })
       useCalc.setState({ ans: out.value, vars: /=/.test(input) ? { ...s.vars, x: out.value } : s.vars, history: [{ input: s.input, result: out.text, mode }, ...s.history].slice(0, 100) })
       if (!exact && Number.isFinite(num) && !Number.isInteger(num) && !/[xy=]|ddx|integral|sigma|product|Ran/.test(input)) {
-        cas('exact', { expr: casioToMath(input), deg: angleUnit === 'deg' }).then((r) => {
+        cas('exact', { expr: casioToMath(input), deg: casInDegrees(angleUnit) }).then((r) => {
           if (!r.error && r.latex && !/\./.test(r.text) && r.text.length < 60) {
             setResult((prev) => (prev && prev.value === out.value ? { ...prev, exact: r.latex } : prev))
           }

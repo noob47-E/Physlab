@@ -1,40 +1,12 @@
 import { ListOrdered, Trash2 } from 'lucide-react'
 import { useScene, scene } from '../core/store'
-import { exprRefs, isFree } from '../core/evaluate'
-import { isValidName } from '../core/naming'
+import { isFree } from '../core/evaluate'
 import type { SceneObject } from '../core/types'
 import { heading, len, toDeg, toRad, type V3 } from '../math/vec'
 import { fmt } from '../math/format'
 import * as VS from '../math/vectorSolver'
 import { Check, ColorField, NumField, TextField } from '../ui/fields'
 import { runCommand } from '../lang/commands'
-
-function renameObject(obj: SceneObject, next: string) {
-  const s = scene()
-  if (!isValidName(next) || s.ev.names.has(next)) {
-    s.pushLog({ input: `rename ${obj.name}`, kind: 'error', text: `"${next}" is not available as a name.` })
-    return
-  }
-  const re = new RegExp(`(?<![\\w'])${obj.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w'])`, 'g')
-  const changed: SceneObject[] = [{ ...obj, name: next }]
-  for (const o of Object.values(s.objects)) {
-    if (o.id === obj.id || !exprRefs(o).some((e) => re.test(e))) continue
-    re.lastIndex = 0
-    const copy = JSON.parse(JSON.stringify(o)) as SceneObject
-    if (copy.type === 'point' && copy.def.kind === 'expr') copy.def.expr = copy.def.expr.replace(re, next)
-    if (copy.type === 'vector' && copy.def.kind === 'expr') copy.def.expr = copy.def.expr.replace(re, next)
-    if (copy.type === 'circle' && copy.def.kind === 'centerRadius') copy.def.r = copy.def.r.replace(re, next)
-    if (copy.type === 'number') copy.expr = copy.expr.replace(re, next)
-    if (copy.type === 'graph') {
-      copy.exprs = copy.exprs.map((e) => e.replace(re, next))
-      // The source is what the Outliner shows and what editing starts from, so it renames too.
-      re.lastIndex = 0
-      copy.source = copy.source.replace(re, next)
-    }
-    changed.push(copy)
-  }
-  s.addObjects(changed)
-}
 
 function V3Fields({ v, onChange }: { v: V3; onChange: (v: V3) => void }) {
   return (
@@ -85,7 +57,15 @@ export function Properties() {
       {err && <div className="mx-3 mb-2 rounded bg-bad/10 px-2 py-1 text-bad">{err}</div>}
       <div className="prop-row">
         <label>Name</label>
-        <TextField value={o.name} onCommit={(n) => renameObject(o, n.trim())} />
+        <TextField
+          value={o.name}
+          onCommit={(n) => {
+            // The store does the renaming (core/rename.ts): it knows which object owns a name, so
+            // a second "a" renamed here never rewrites formulas that were pointing at the other one.
+            const problem = scene().renameObject(o.id, n.trim())
+            if (problem) scene().pushLog({ input: `rename ${o.name}`, kind: 'error', text: problem })
+          }}
+        />
       </div>
       <div className="prop-row">
         <label>Colour</label>

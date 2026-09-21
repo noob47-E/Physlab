@@ -10,13 +10,13 @@ import { freeCapitals, isValidName } from '../core/naming'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { visualizeGraph, visualizePoint, visualizeSolution, visualizeVector } from '../core/visualize'
 import { cas } from '../math/cas'
-import { inferKind, math, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
-import { fmt, fmtAngle, tex, texIJK } from '../math/format'
+import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
+import { fmtPrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
-import { casInDegrees } from '../calc/angle'
+import { calculusUnitNote, casInDegrees } from '../calc/angle'
 import { casRequestFor, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
 
@@ -96,78 +96,42 @@ const isGeo = (node: MathNode) => {
  * `[0, 0, -11]` with no steps and `C = A × B` refused with "not a number". Once the operands are
  * known the call is rewritten into the cross product or the ordinary product it stands for.
  */
-function resolveTimes(node: MathNode, seen?: ('cross' | 'product')[]): MathNode {
+function resolveTimes(node: MathNode): MathNode {
   return node.transform((n) => {
     const fn = n as Node
     if (fn.type !== 'FunctionNode' || (fn.fn as { name?: string }).name !== 'timesOrCross') return n
-    // The left operand's own × signs come before this one in what was typed, and the right
-    // operand's after it, so recording between the two keeps `seen` in the order the student
-    // wrote them — which is what lets parseDefinition put each decision back on its own ×.
-    const a = resolveTimes((fn.args as MathNode[])[0], seen)
-    const at = seen?.length ?? 0
-    const b = resolveTimes((fn.args as MathNode[])[1], seen)
-    if (isGeo(a) && isGeo(b)) {
-      seen?.splice(at, 0, 'cross')
-      return new math.FunctionNode('cross', [a, b])
-    }
-    seen?.splice(at, 0, 'product')
+    const a = resolveTimes((fn.args as MathNode[])[0])
+    const b = resolveTimes((fn.args as MathNode[])[1])
+    if (isGeo(a) && isGeo(b)) return new math.FunctionNode('cross', [a, b])
     return new math.OperatorNode('*', 'multiply', [a, b])
   })
 }
 
 const parseNode = (src: string): Node => resolveTimes(math.parse(preprocess(src))) as Node
 
-/**
- * The × of "2×10^3" is part of a number, not an operator: preprocess folds it away before any
- * × is read, so it has no decision in `seen` and must be skipped when the decisions are put back.
- */
-const isScientificTimes = (src: string, at: number): boolean =>
-  /\d\s*$/.test(src.slice(0, at)) && /^\s*10\s*\^\s*\(?\s*-?\d+\s*\)?/.test(src.slice(at + 1))
+/** A number in LaTeX at a fixed number of decimals, or in the student's own precision. */
+const texAt = (n: number, p: Precision): string => (typeof p === 'number' ? tex(n, p) : texPrecise(n, p))
 
-/**
- * The text an assignment keeps as its live definition. core/evaluate.ts re-parses it with the
- * runtime `timesOrCross`, which only knows vector × vector, so `C = 2 × A` stored as typed
- * failed with "Expected a vector or point" while the bare `2 × A` answered 2A. A × that stands
- * for a plain product is stored as `*`, in the line as the student typed it: rewriting the whole
- * parsed tree instead kept `Z = 2 × A × B` as `cross(2 * A, B)`, and that function-call spelling
- * is what the Properties panel then showed in its definition field.
- */
-function parseDefinition(src: string): { node: Node; expr: string } {
-  const seen: ('cross' | 'product')[] = []
-  const node = resolveTimes(math.parse(preprocess(src)), seen) as Node
-  if (!seen.includes('product')) return { node, expr: src }
-  let expr = ''
-  let next = 0
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i]
-    if (ch !== '×' || isScientificTimes(src, i)) expr += ch
-    else expr += seen[next++] === 'product' ? '*' : '×'
-  }
-  // Every decision has to land on a ×, or the text and the tree disagree: then the tree is the
-  // safer thing to keep, even in its plainer spelling.
-  return { node, expr: next === seen.length ? expr : node.toString() }
-}
-
-export function describeComputed(c: Computed | undefined, decimals = 3): string {
+export function describeComputed(c: Computed | undefined, decimals: Precision = 3): string {
   if (!c) return '—'
   switch (c.type) {
     case 'point':
-      return `(${c.p.map((v) => tex(v, decimals)).join(', ')})`
+      return `(${c.p.map((v) => texAt(v, decimals)).join(', ')})`
     case 'vector':
       return `${texIJK(c.comp, decimals)}`
     case 'number':
-      return tex(c.value, decimals)
+      return texAt(c.value, decimals)
     case 'segment':
-      return `\\text{length } ${tex(len(c.line.d), decimals)}`
+      return `\\text{length } ${texAt(len(c.line.d), decimals)}`
     case 'ray':
     case 'line':
-      return `\\text{line through } (${c.line.p.slice(0, 2).map((v) => tex(v, decimals)).join(', ')})`
+      return `\\text{line through } (${c.line.p.slice(0, 2).map((v) => texAt(v, decimals)).join(', ')})`
     case 'circle':
-      return `\\text{circle, } r = ${tex(c.circle.r, decimals)}`
+      return `\\text{circle, } r = ${texAt(c.circle.r, decimals)}`
     case 'polygon':
-      return `\\text{${c.pts.length === 3 ? 'triangle' : 'polygon'}, area } ${tex(polygonArea(c.pts), decimals)}`
+      return `\\text{${c.pts.length === 3 ? 'triangle' : 'polygon'}, area } ${texAt(polygonArea(c.pts), decimals)}`
     case 'angle':
-      return fmtAngle(c.value, scene().settings.angleUnit)
+      return texMeasure(c.value, 'angle', scene().settings)
     default:
       return ''
   }
@@ -308,7 +272,10 @@ function tryAssignment(input: string): boolean {
   if (!isValidName(name)) throw new Error(`"${name}" is a reserved name. Try another.`)
   if (tryGeometryCommand(rhs, name, input)) return true
 
-  const { node, expr } = parseDefinition(rhs)
+  // The line is kept as typed: the runtime × (math/expr.ts, timesOrCross) reads every case the
+  // bar does, so `C = 2 × A` stays `2 × A` in the Properties field instead of becoming `2 * A`.
+  const node = parseNode(rhs)
+  const expr = rhs
   const unknown = unknownSymbols(node).filter((s) => s !== name)
   if (unknown.length) assertKnown(node)
   const kind = inferKind(node, kindOfName)
@@ -352,16 +319,17 @@ function tryAssignment(input: string): boolean {
   scene().pushLog({
     input,
     kind: 'result',
-    tex: `${name} = ${describeComputed(c)}${c?.type === 'vector' ? vectorExtras(c.comp) : ''}`,
+    tex: `${name} = ${describeComputed(c, scene().settings)}${c?.type === 'vector' ? vectorExtras(c.comp) : ''}`,
     solution: solution ?? undefined
   })
   return true
 }
 
 function vectorExtras(v: V3): string {
-  const m = len(v)
-  if (Math.abs(v[2]) > 1e-12) return `,\\quad \\text{magnitude } ${tex(m, 3)}`
-  return `,\\quad \\text{magnitude } ${tex(m, 3)},\\ \\theta = ${fmtAngle(heading(v), scene().settings.angleUnit).replace('°', '^\\circ')}`
+  const s = scene().settings
+  const m = texPrecise(len(v), s)
+  if (Math.abs(v[2]) > 1e-12) return `,\\quad \\text{magnitude } ${m}`
+  return `,\\quad \\text{magnitude } ${m},\\ \\theta = ${texMeasure(heading(v), 'direction', s)}`
 }
 
 function unitOf(node: MathNode): string | undefined {
@@ -617,7 +585,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
   scene().pushLog(
     err
       ? { input: fullInput, kind: 'error', text: `${scene().objects[id]?.name}: ${err}` }
-      : { input: fullInput, kind: 'result', tex: `${scene().objects[id]?.name} = ${describeComputed(scene().ev.values.get(id))}` }
+      : { input: fullInput, kind: 'result', tex: `${scene().objects[id]?.name} = ${describeComputed(scene().ev.values.get(id), scene().settings)}` }
   )
   return true
 }
@@ -853,7 +821,7 @@ function tryPureMath(input: string): boolean {
     // an answer still appears. The rest are tried as a plain calculation, which is where
     // complex(3, 4) is answered; only when that fails too is the refusal the last word, because
     // its reason ("needs a whole number") is worth more than `I don't know "x"`.
-    if (casRequestFor(job, body)) return false
+    if (casRequestFor(job, body, casInDegrees(scene().settings.angleUnit))) return false
     try {
       evaluatePlain(input)
     } catch {
@@ -954,7 +922,7 @@ async function tryCas(input: string): Promise<boolean> {
       return true
     }
     const texOut = rows
-      .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !/^-?\d+$/.test(v.text) ? ` \\approx ${fmtNumeric(v.numeric)}` : ''}`).join(',\\ '))
+      .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !/^-?\d+$/.test(v.text) ? ` \\approx ${fmtNumeric(v.numeric, s.settings)}` : ''}`).join(',\\ '))
       .join('\\quad\\text{or}\\quad ')
     const single = args.length === 1 && rows.every((row) => Object.keys(row).length === 1 && 'x' in row)
     const roots = single ? rows.map((row) => row.x.numeric).filter((n) => n && n.im === undefined).map((n) => n!.re) : []
@@ -972,19 +940,21 @@ async function tryCas(input: string): Promise<boolean> {
     })
     return true
   }
-  const numeric = r.numeric && casOp !== 'diff' && casOp !== 'series' && casOp !== 'expand' && casOp !== 'factor' ? ` \\approx ${fmtNumeric(r.numeric)}` : ''
+  const numeric = r.numeric && casOp !== 'diff' && casOp !== 'series' && casOp !== 'expand' && casOp !== 'factor' ? ` \\approx ${fmtNumeric(r.numeric, s.settings)}` : ''
   const label = casOp === 'diff' ? `\\frac{d}{dx}\\left(${args[0]}\\right)` : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int') + `${args[0]}\\,dx` : ''
   const isFunctionResult = (casOp === 'diff' || (casOp === 'integrate' && args.length < 3)) && /x/.test(r.text)
+  const unitNote = calculusUnitNote(casOp, args[0] ?? '', deg)
   s.updateLog(id, {
     kind: 'result',
     text: undefined,
-    tex: `${label ? label + ' = ' : ''}${r.latex}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}`,
+    tex: `${label ? label + ' = ' : ''}${r.latex}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}${unitNote ? `\\quad\\text{(${unitNote})}` : ''}`,
     visualize: isFunctionResult ? () => visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit') : undefined
   })
   return true
 }
 
-const fmtNumeric = (n: { re: number; im?: number }) => (n.im === undefined ? tex(n.re, 6) : `${tex(n.re, 6)} ${n.im < 0 ? '-' : '+'} ${tex(Math.abs(n.im), 6)}i`)
+/** The decimal beside an exact answer, in the student's precision (rule 4), real or complex. */
+const fmtNumeric = (n: { re: number; im?: number }, p: Precision) => (n.im === undefined ? texAt(n.re, p) : `${texAt(n.re, p)} ${n.im < 0 ? '-' : '+'} ${texAt(Math.abs(n.im), p)}i`)
 
 // ---------------------------------------------------------------------------
 // Plain expressions
@@ -1013,16 +983,19 @@ function evaluatePlain(expr: string, shown = expr) {
     s.pushLog({
       input,
       kind: 'result',
-      tex: kind === 'vector' ? `${texIJK(v, 4)}${vectorExtras(v)}` : `(${v.map((c) => tex(c, 4)).join(', ')})`,
+      tex: kind === 'vector' ? `${texIJK(v, s.settings)}${vectorExtras(v)}` : `(${v.map((c) => texPrecise(c, s.settings)).join(', ')})`,
       solution: solution ?? undefined,
       visualize: () => (kind === 'vector' ? (solution ? visualizeSolution(solution) : visualizeVector(v)) : visualizePoint(v))
     })
     return
   }
-  const text = typeof value === 'number' ? fmt(value, 10) : math.format(value, { precision: 10 })
+  // The student's precision, not a fixed ten digits (rule 4): with decimals set to 2, `1/3` used
+  // to answer 0.3333333333 beside a panel showing |A| = 5.00. The ≈ tail after an exact form is
+  // the one place the full display stays, the way the calculator's S⇔D key shows it.
+  const text = typeof value === 'number' ? fmtPrecise(value, s.settings) : isUnit(value) ? `${fmtPrecise(plainNumber(value), s.settings)} ${value.formatUnits()}` : math.format(value, { precision: 10 })
   const id = s.pushLog({ input, kind: 'result', text: `= ${text}`, solution: solution ?? undefined })
   if (typeof value === 'number' && !Number.isInteger(value) && Number.isFinite(value) && isConstant(node)) {
-    cas('exact', { expr: preprocess(expr), deg: s.settings.angleUnit === 'deg' }).then((r) => {
+    cas('exact', { expr: preprocess(expr), deg: casInDegrees(s.settings.angleUnit) }).then((r) => {
       if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text) {
         s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${tex(value, 10)}` })
       }

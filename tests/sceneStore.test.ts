@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { dependentsOf } from '../src/renderer/src/core/evaluate'
 import { useScene } from '../src/renderer/src/core/store'
 import type { SceneObject } from '../src/renderer/src/core/types'
+import { readSource } from './helpers/repo'
 
 const scene = () => useScene.getState()
 
@@ -197,5 +198,13 @@ describe('renameObject', () => {
     expect(scene().renameObject('nK', 'k')).toBeNull()
     expect(scene().renameObject('nope', 'k')).toMatch(/no longer exists/)
     expect(scene().objects).toBe(before)
+  })
+  it('is what the Properties panel calls: the only place a student can rename anything', () => {
+    // The panel kept a private copy of the old search-and-replace with no owner check, so the
+    // shadowed-name fix above never ran in the app: renaming n1 there still rewrote b to "c + 1".
+    const panel = readSource('src/renderer/src/panels/Properties.tsx')
+    expect(panel).toContain('scene().renameObject(o.id, n.trim())')
+    expect(panel).not.toMatch(/function renameObject/)
+    expect(panel).not.toContain('exprRefs')
   })
 })

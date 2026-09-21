@@ -11,6 +11,8 @@
 
 import { create } from 'zustand'
 import { cas, type CasOp } from '../cas'
+import { casInDegrees } from '../../calc/angle'
+import { scene } from '../../core/store'
 import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
@@ -198,10 +200,12 @@ function remember(job: JobId, src: string, latex: string, working: Working, set:
  * `solve` was sent `equations` while the worker reads `eqs`, so every fallback failed silently.
  * Stated once, it can be pinned by a test.
  */
-export function casRequestFor(job: JobId, src: string): { op: CasOp; payload: Record<string, unknown> } | null {
+export function casRequestFor(job: JobId, src: string, deg: boolean): { op: CasOp; payload: Record<string, unknown> } | null {
   const op = CAS_OP[job]
   if (!op) return null
-  return op === 'solve' ? { op, payload: { eqs: [src] } } : { op, payload: { expr: src } }
+  // Sent with every request: without it the worker read radians, so solve(sin(x) = 0.5) answered
+  // π/6 here and 30 in the command bar, in the same DEG mode on the same screen.
+  return op === 'solve' ? { op, payload: { eqs: [src], deg } } : { op, payload: { expr: src, deg } }
 }
 
 /** True when a SymPy answer that was asked for by run `asked` may still be shown. */
@@ -215,7 +219,7 @@ async function askCas(
   set: (p: Partial<PureState>) => void,
   get: () => PureState
 ): Promise<void> {
-  const req = casRequestFor(job, src)
+  const req = casRequestFor(job, src, casInDegrees(scene().settings.angleUnit))
   if (!req) return
   set({ asking: true })
   try {

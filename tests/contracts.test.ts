@@ -158,14 +158,14 @@ describe('who owns a keypress', () => {
 describe('the contract with the Python worker', () => {
   it('sends solve the key the worker actually reads', () => {
     // This was `equations` while the worker read `eqs`, so every solve fallback failed silently.
-    expect(casRequestFor('solve', 'x^3 = 1')).toEqual({ op: 'solve', payload: { eqs: ['x^3 = 1'] } })
+    expect(casRequestFor('solve', 'x^3 = 1', true)).toEqual({ op: 'solve', payload: { eqs: ['x^3 = 1'], deg: true } })
   })
 
   it('sends everything else an expression', () => {
-    expect(casRequestFor('factor', 'x^2-1')).toEqual({ op: 'factor', payload: { expr: 'x^2-1' } })
-    expect(casRequestFor('partial', '1/(x^2-1)')).toEqual({ op: 'apart', payload: { expr: '1/(x^2-1)' } })
+    expect(casRequestFor('factor', 'x^2-1', true)).toEqual({ op: 'factor', payload: { expr: 'x^2-1', deg: true } })
+    expect(casRequestFor('partial', '1/(x^2-1)', false)).toEqual({ op: 'apart', payload: { expr: '1/(x^2-1)', deg: false } })
     // Over the complex numbers, not the rationals: plain factor would hand x² + 4 straight back.
-    expect(casRequestFor('factorComplex', 'x^2+4')).toEqual({ op: 'factor_complex', payload: { expr: 'x^2+4' } })
+    expect(casRequestFor('factorComplex', 'x^2+4', true)).toEqual({ op: 'factor_complex', payload: { expr: 'x^2+4', deg: true } })
     expect(readSource('src/renderer/src/workers/cas.worker.ts')).toContain('extension=[sp.I]')
   })
 
@@ -178,7 +178,7 @@ describe('the contract with the Python worker', () => {
       expect(worker, `worker has no branch for '${op}'`).toContain(`if op == '${op}'`)
     }
     for (const j of JOBS) {
-      const req = casRequestFor(j.id, 'x')
+      const req = casRequestFor(j.id, 'x', true)
       if (req) expect(CAS_OPS, `${j.id} asks for an unknown op`).toContain(req.op)
     }
   })

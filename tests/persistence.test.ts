@@ -6,6 +6,8 @@ import { FILE_VERSION, migrate, migrateLabelSettings, parseSceneFile, spacesForV
 import { blankSceneFile, DEFAULT_SETTINGS, useScene } from '../src/renderer/src/core/store'
 import type { SceneFile, SceneObject } from '../src/renderer/src/core/types'
 import { describeWork, hasWork } from '../src/renderer/src/app/autosave'
+import { openFailureText, saveFailureText } from '../src/renderer/src/core/fileErrors'
+import { readSource } from './helpers/repo'
 import { emptyTable, setCell, useLab } from '../src/renderer/src/lab/labStore'
 import { startingScene, useSandbox } from '../src/renderer/src/sim/store'
 import { DEFAULT_WORLD, type WorldSettings } from '../src/renderer/src/sim/types'
@@ -371,5 +373,39 @@ describe('describeWork (what the recovery strip names)', () => {
     expect(describeWork({ ...blank, sandbox: { ...sandbox, world: { ...sandbox.world, gravity: 0 } } })).toBe('changed sandbox settings')
     // Everything at once, in the order a student would look for it.
     expect(describeWork({ ...fullFile(), sandbox: { ...sandbox, sideView: false } })).toBe('5 objects, 1 table of readings, changed sandbox settings')
+  })
+})
+
+describe('what the console says when a file cannot be opened or saved', () => {
+  it('names the file and the reason, never the parser', () => {
+    // File ▸ Open used to do its own JSON.parse and report "Could not open: SyntaxError:
+    // Unexpected end of JSON input" for a half-copied .phys.
+    const halfCopied = (() => {
+      try {
+        parseSceneFile('{"app": "PhysLab", "vers')
+      } catch (e) {
+        return e
+      }
+    })()
+    expect(openFailureText(String.raw`C:\work\bounce.phys`, halfCopied)).toBe('Could not open bounce.phys: This file cannot be read: it is not complete, or it is not a PhysLab project.')
+    expect(openFailureText('/home/s/notes.phys', new Error('This file was not saved by PhysLab.'))).toBe('Could not open notes.phys: This file was not saved by PhysLab.')
+    // The app goes through parseSceneFile, which is where those sentences live.
+    const files = readSource('src/renderer/src/app/files.ts')
+    expect(files).toContain('parseSceneFile(content)')
+    expect(files).not.toContain('JSON.parse')
+  })
+
+  it('a failed save is reported, with the sentence from the main process and not the IPC wrapper', () => {
+    // Electron wraps a rejection as "Error invoking remote method 'file:save': Error: …".
+    const e = new Error("Error invoking remote method 'file:save': Error: PhysLab is not allowed to write in that folder.")
+    expect(saveFailureText(e)).toBe('Could not save: PhysLab is not allowed to write in that folder. Your work is still here — try Save As to another folder.')
+    expect(saveFailureText('disk full')).toBe('Could not save: disk full Your work is still here — try Save As to another folder.')
+    // saveProject has to catch the rejection: it used to be unhandled, and the title kept its
+    // unsaved mark while the student believed Ctrl+S had worked.
+    expect(readSource('src/renderer/src/app/files.ts')).toMatch(/try \{\s*path = await bridge\.saveFile\([^)]*\)\s*\} catch \(e\) \{\s*s\.pushLog\(\{ input: 'save', kind: 'error', text: saveFailureText\(e\) \}\)/)
+    // And the main process turns Node's EACCES/ENOSPC into a sentence before it rethrows.
+    const main = readSource('src/main/index.ts')
+    expect(main).toContain('throw new Error(writeFailureText(e)')
+    for (const code of ['EACCES', 'ENOSPC', 'ENOENT']) expect(main).toContain(`case '${code}':`)
   })
 })

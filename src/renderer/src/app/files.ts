@@ -1,5 +1,6 @@
 import { scene } from '../core/store'
-import type { SceneFile } from '../core/types'
+import { parseSceneFile } from '../core/migrate'
+import { openFailureText, saveFailureText } from '../core/fileErrors'
 
 type Bridge = {
   isDesktop: boolean
@@ -30,12 +31,12 @@ export async function openProject() {
 
 function load(content: string, path: string) {
   try {
-    const file = JSON.parse(content) as SceneFile
-    if (file.app !== 'PhysLab') throw new Error('Not a PhysLab project')
-    scene().loadScene(file, path)
+    // parseSceneFile says in a sentence what is wrong with a half-copied or foreign file; parsing
+    // the text here used to put "SyntaxError: Unexpected end of JSON input" in the console.
+    scene().loadScene(parseSceneFile(content), path)
     scene().pushLog({ input: 'open', kind: 'info', text: `Opened ${path}` })
   } catch (e) {
-    scene().pushLog({ input: 'open', kind: 'error', text: `Could not open: ${String(e)}` })
+    scene().pushLog({ input: 'open', kind: 'error', text: openFailureText(path, e) })
   }
 }
 
@@ -43,7 +44,13 @@ export async function saveProject(saveAs = false) {
   const s = scene()
   const content = JSON.stringify(s.serialize(), null, 1)
   if (bridge) {
-    const path = await bridge.saveFile(content, saveAs ? null : s.filePath)
+    let path: string | null
+    try {
+      path = await bridge.saveFile(content, saveAs ? null : s.filePath)
+    } catch (e) {
+      s.pushLog({ input: 'save', kind: 'error', text: saveFailureText(e) })
+      return
+    }
     if (path) {
       s.markSaved(path)
       s.pushLog({ input: 'save', kind: 'info', text: `Saved ${path}` })

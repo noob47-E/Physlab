@@ -32,7 +32,7 @@ export function inDegrees<T>(fn: () => T): T {
 
 type AnyVal = unknown
 
-const isUnit = (x: AnyVal): x is { toNumber: (u: string) => number; formatUnits: () => string } =>
+export const isUnit = (x: AnyVal): x is { toNumber: (u: string) => number; formatUnits: () => string } =>
   typeof x === 'object' && x !== null && typeof (x as { toNumber?: unknown }).toNumber === 'function' && typeof (x as { formatUnits?: unknown }).formatUnits === 'function'
 
 /** Angle argument → radians (numbers follow the angle mode, units convert). */
@@ -97,12 +97,15 @@ math.import(
     },
     cross: (a: AnyVal, b: AnyVal) => vcross(toV3(a), toV3(b)),
     // What the × key means depends on what is on either side of it: a cross product between
-    // vectors, ordinary multiplication between numbers. Rewriting every × to cross() made
-    // "2 × 3" unreadable — and worse, PhysLab prints small numbers as "1.234×10^-5", so it
-    // could not read back what it had just written.
+    // vectors, ordinary multiplication otherwise — two numbers, or a number scaling a vector.
+    // Rewriting every × to cross() made "2 × 3" unreadable — and worse, PhysLab prints small
+    // numbers as "1.234×10^-5", so it could not read back what it had just written. The number
+    // × vector case is what lets a definition be kept exactly as typed: `C = 2 × A` used to be
+    // stored as `2 * A` because this function refused it, and the same line typed into the
+    // Properties panel's formula field failed with "Expected a vector or point".
     timesOrCross: (a: AnyVal, b: AnyVal) => {
       const scalar = (v: AnyVal) => typeof v === 'number' || isUnit(v)
-      if (scalar(a) && scalar(b)) return math.multiply(a as never, b as never)
+      if (scalar(a) || scalar(b)) return math.multiply(a as never, b as never)
       return vcross(toV3(a), toV3(b))
     },
     dot: (a: AnyVal, b: AnyVal) => vdot(toV3(a), toV3(b)),

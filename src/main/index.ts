@@ -254,17 +254,44 @@ ipcMain.handle('file:save', async (_e, content: string, path: string | null) => 
   }
   // Write beside the file first, then swap it in, so a crash cannot leave a half-written project.
   const tmp = `${target}.saving`
-  await writeFile(tmp, content, 'utf8')
   try {
-    await rename(tmp, target)
-  } catch {
-    // Windows refuses the swap while a backup tool or virus scanner holds the file open.
-    // Copying over it is not atomic, but losing the student's work would be worse.
-    await copyFile(tmp, target)
+    await writeFile(tmp, content, 'utf8')
+    try {
+      await rename(tmp, target)
+    } catch {
+      // Windows refuses the swap while a backup tool or virus scanner holds the file open.
+      // Copying over it is not atomic, but losing the student's work would be worse.
+      await copyFile(tmp, target)
+      await unlink(tmp).catch(() => {})
+    }
+  } catch (e) {
+    // The renderer shows this to the student; the raw "EACCES: permission denied, open '…'" is
+    // what would reach them otherwise.
     await unlink(tmp).catch(() => {})
+    throw new Error(writeFailureText(e), { cause: e })
   }
   return target
 })
+
+/** Why a write failed, in a sentence, from the code Node puts on the error. */
+function writeFailureText(e: unknown): string {
+  const code = (e as { code?: string } | null)?.code
+  switch (code) {
+    case 'EACCES':
+    case 'EPERM':
+      return 'PhysLab is not allowed to write in that folder.'
+    case 'EROFS':
+      return 'That drive is read-only.'
+    case 'ENOSPC':
+      return 'There is no room left on that drive.'
+    case 'ENOENT':
+      return 'That folder is no longer there.'
+    case 'EBUSY':
+      return 'Another program is holding that file open.'
+    default:
+      return `The file could not be written${code ? ` (${code})` : ''}.`
+  }
+}
 
 ipcMain.handle('file:saveImage', async (_e, dataUrl: string) => {
   const result = await dialog.showSaveDialog({

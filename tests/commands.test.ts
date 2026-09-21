@@ -579,17 +579,19 @@ describe('the × key', () => {
     expect(errors()).toEqual([])
   })
 
-  it('stores a definition the way it was typed, with only a product × spelt as *', async () => {
+  it('stores a definition exactly the way it was typed', async () => {
     // The whole parsed tree used to be written back when any × was a product, so the Properties
-    // field showed `Z = 2 × A × B` as cross(2 * A, B) and `2 × 10^3 × A` as (2000) * A.
+    // field showed `Z = 2 × A × B` as cross(2 * A, B); then a product × was spelt `*` because the
+    // evaluator's × refused a number on one side. Now the evaluator reads every × the bar does.
     const def = (name: string) => (named(name) as VectorObj).def as { kind: string; expr?: string }
     await run('Z = 2 × A × B', 'H = 2 × 10^3 × A', 'k = 3 N × 2')
     expect(errors()).toEqual([])
-    expect(def('Z').expr).toBe('2 * A × B')
-    expect(def('H').expr).toBe('2 × 10^3 * A')
-    expect((named('k') as { expr: string }).expr).toBe('3 N * 2')
+    expect(def('Z').expr).toBe('2 × A × B')
+    expect(def('H').expr).toBe('2 × 10^3 × A')
+    expect((named('k') as { expr: string }).expr).toBe('3 N × 2')
     vectorNamed('Z', [0, 0, -22])
     vectorNamed('H', [6000, 8000, 0])
+    expect(computedOf('k')).toEqual({ type: 'number', value: 6 })
     // And the stored text is live: the evaluator reads it back after A changes.
     await run('A = <1, 0>')
     expect(errors()).toEqual([])
@@ -598,6 +600,29 @@ describe('the × key', () => {
     // A vector × vector definition is kept exactly as typed.
     await run('W = A × B')
     expect(def('W').expr).toBe('A × B')
+  })
+
+  it('is read the same way when a definition is edited in the Properties panel', async () => {
+    // The panel's formula field hands the text straight to the evaluator, with no bar in between
+    // to rewrite it: `2 × A` typed there used to fail with "Expected a vector or point", and
+    // `2 × 3` in a number's field the same way, although the bar accepted both.
+    await run('C = A', 'k = 1')
+    const cId = scene().ev.names.get('C')!
+    const kId = scene().ev.names.get('k')!
+    scene().updateObject(cId, (d) => {
+      if (d.type === 'vector' && d.def.kind === 'expr') d.def.expr = '2 × A'
+    })
+    scene().updateObject(kId, (d) => {
+      if (d.type === 'number') d.expr = '2 × 3 × 4'
+    })
+    expect([...scene().ev.errors.values()]).toEqual([])
+    vectorNamed('C', [6, 8, 0])
+    expect(computedOf('k')).toEqual({ type: 'number', value: 24 })
+    scene().updateObject(cId, (d) => {
+      if (d.type === 'vector' && d.def.kind === 'expr') d.def.expr = 'A × B × 2'
+    })
+    expect([...scene().ev.errors.values()]).toEqual([])
+    vectorNamed('C', [0, 0, -22])
   })
 })
 
@@ -748,6 +773,91 @@ describe('Pure Math from the command bar', () => {
     forgetCasCalls()
     await run('solve(x^3 - x = 0)')
     expect(casCalls()).toEqual([['solve', { eqs: ['x^3 - x = 0'], vars: [], deg: true }]])
+  })
+})
+
+describe("the algebra engine's angle unit", () => {
+  // newScene keeps the settings, so the mode a test switched to would otherwise leak into the next.
+  beforeEach(() => {
+    fresh()
+    scene().setSettings({ angleUnit: 'deg' })
+  })
+
+  it("is the scene's angle mode, whichever door the question came through", async () => {
+    // The bar sent the flag; the Working panel's SymPy fallback sent none, so in DEG mode
+    // solve(sin(x) = 0.5) answered 30 from the bar and π/6 from the panel, on the same screen.
+    const fromWorkingPanel = async () => {
+      forgetCasCalls()
+      usePure.getState().run('solve', 'sin(x) = 0.5')
+      await new Promise((r) => setTimeout(r, 0))
+      return casCalls()
+    }
+    expect(scene().settings.angleUnit).toBe('deg')
+    await run('solve(sin(x) = 0.5)')
+    expect(casCalls()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], vars: [], deg: true }]])
+    expect(await fromWorkingPanel()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], deg: true }]])
+
+    scene().setSettings({ angleUnit: 'rad' })
+    forgetCasCalls()
+    await run('solve(sin(x) = 0.5)')
+    expect(casCalls()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], vars: [], deg: false }]])
+    expect(await fromWorkingPanel()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], deg: false }]])
+    // The exact-form lookup after a plain calculation goes through the same decision.
+    forgetCasCalls()
+    await run('divide(pi, 2)')
+    expect(casCalls()).toEqual([['exact', { expr: '(pi)/(2)', deg: false }]])
+    scene().setSettings({ angleUnit: 'deg' })
+  })
+
+  it('says so when calculus was done in degrees, and only then', async () => {
+    // In DEG mode integrate(sin(x), 0, pi) is ≈0.048 where every textbook says 2: the calculator
+    // follows the fx-991EX, but the line has to say which unit it used.
+    const note = /\\text\{\(angles in degrees; switch to RAD for the textbook form\)\}/
+    let last = await run('integrate(sin(x), 0, pi)')
+    expect(last.tex).toMatch(note)
+    expect(renders(last.tex)).toBe(true)
+    last = await run('diff(cos(x))')
+    expect(last.tex).toMatch(note)
+    // No angle in it: nothing to say.
+    last = await run('integrate(x^2, 0, 3)')
+    expect(last.tex).not.toMatch(note)
+    // Not calculus: sin(x) means the same thing whichever way it is solved.
+    last = await run('simplify(sin(x)^2 + cos(x)^2)')
+    expect(last.tex).not.toMatch(note)
+    scene().setSettings({ angleUnit: 'rad' })
+    last = await run('integrate(sin(x), 0, pi)')
+    expect(last.tex).not.toMatch(note)
+    scene().setSettings({ angleUnit: 'deg' })
+  })
+})
+
+describe("the bar answers in the student's precision", () => {
+  // Rule 4: the answer line used to print numbers at ten digits, vectors and points at four and
+  // the decimal beside an exact form at six, whatever the settings said, so `1/3` read
+  // 0.3333333333 next to a panel showing |A| = 5.00.
+  const refuse = () => vi.mocked(cas).mockResolvedValueOnce({ error: 'not now', latex: '', text: '', numeric: null })
+  beforeEach(() => {
+    fresh()
+    scene().setSettings({ decimals: 2, precisionMode: 'dp' })
+  })
+
+  it('for numbers, units, vectors, points and the decimal beside an exact form', async () => {
+    await run('A = <1, 2>')
+    refuse()
+    expect((await run('1/3')).text).toBe('= 0.33')
+    expect((await run('7/3 N')).text).toBe('= 2.33 N')
+    expect((await run('A / 3')).tex).toContain('0.33\\hat{i} + 0.67\\hat{j}')
+    expect((await run('(1/3, 2/3)')).tex).toBe('(0.33, 0.67, 0)')
+    vi.mocked(cas).mockResolvedValueOnce({ latex: '\\sqrt{2}', text: 'sqrt(2)', numeric: { re: Math.SQRT2 } })
+    expect((await run('simplify(sqrt(2))')).tex).toBe('\\sqrt{2} \\approx 1.41')
+    // Significant figures keep their zeros, the way the panels do.
+    scene().setSettings({ decimals: 3, precisionMode: 'sf' })
+    refuse()
+    expect((await run('2/3')).text).toBe('= 0.667')
+    refuse()
+    expect((await run('1/2')).text).toBe('= 0.500')
+    expect((await run('A / 3')).tex).toContain('0.333\\hat{i} + 0.667\\hat{j}')
+    scene().setSettings({ decimals: 2, precisionMode: 'dp' })
   })
 })
 
