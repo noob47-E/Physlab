@@ -73,6 +73,12 @@ let applied: BodyDef[] = []
 let appliedNonce = -1
 /** Engine time the live values were last published at. */
 let published = 0
+/**
+ * Where the cursor is while the second object of a connection is being chosen, in the world,
+ * so the preview line from the first object can follow it. Written by the pointer handler and
+ * read in a frame; the store never sees it, or every mouse move would re-render the panel.
+ */
+const joinCursor: { p: V3 | null } = { p: null }
 
 /** How far below the floor a body may fall before it is put back where it started. */
 const FALL_LIMIT = 10
@@ -97,6 +103,7 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
   const { gl, camera, size, controls, invalidate } = useThree()
   const select = useSandbox((s) => s.select)
   const setPartner = useSandbox((s) => s.setPartner)
+  const joinPick = useSandbox((s) => s.joinPick)
   const twoD = useSandbox((s) => s.world.twoD)
   const drag = useRef<Drag | null>(null)
 
@@ -133,6 +140,12 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       if (e.button !== 0 || useApp.getState().mode !== 'sandbox') return
       const w = sim.current
       const hit = pick(e)
+      // Connecting: a click on an object is a pick, and a click on nothing is nothing — it must
+      // not clear the first choice, or the student who missed the ball has to start again.
+      if (useSandbox.getState().joinMode) {
+        if (hit) joinPick(hit.id)
+        return
+      }
       if (!w || !hit) {
         if (!e.shiftKey) select(null)
         return
@@ -170,8 +183,22 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       if (!w) return
       if (!d) {
         if (useApp.getState().mode !== 'sandbox') return
-        // Say what a click would do: arrange, or pull.
         const hit = pick(e)
+        const join = useSandbox.getState().joinMode
+        if (join) {
+          // The line from the first object follows the cursor, in the plane the object is in,
+          // until the second is chosen. The canvas draws on demand, so ask for the frame.
+          const st = join.step === 'second' && join.a ? w.state(join.a) : null
+          if (st) {
+            const plane = twoD ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -st.position[2]) : new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), new THREE.Vector3(...st.position))
+            const p = onPlane(e, plane)
+            joinCursor.p = p ? [p.x, p.y, p.z] : null
+            invalidate()
+          }
+          el.style.cursor = hit ? 'crosshair' : ''
+          return
+        }
+        // Say what a click would do: arrange, or pull.
         const playing = useScene.getState().playing
         el.style.cursor = hit ? (playing && defOf(hit.id)?.motion === 'dynamic' ? 'grab' : 'move') : ''
         return
@@ -243,7 +270,7 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         el.style.cursor = ''
       }
     }
-  }, [gl, camera, size, controls, select, setPartner, twoD, sim, group, invalidate])
+  }, [gl, camera, size, controls, select, setPartner, joinPick, twoD, sim, group, invalidate])
 }
 
 export function SandboxView() {
@@ -440,6 +467,7 @@ export function SandboxView() {
       {ready && <VelocityArrows sim={sim} />}
       {ready && <Traces sim={sim} />}
       {ready && <LinkLines sim={sim} />}
+      {ready && <JoinPreview sim={sim} />}
     </group>
   )
 }
@@ -661,9 +689,48 @@ function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   )
 }
 
+/**
+ * The connection being made: a line from the first object to the cursor, until the second is
+ * chosen. Drawn into a buffer the frame updates, like the links themselves.
+ */
+function JoinPreview({ sim }: { sim: React.RefObject<SimWorld | null> }) {
+  const joinMode = useSandbox((s) => s.joinMode)
+  const colour = useThemed(() => themeColor('--accent'))
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3))
+    return g
+  }, [])
+  useEffect(() => () => geo.dispose(), [geo])
+  const line = useRef<THREE.LineSegments>(null)
+  const from = joinMode?.step === 'second' ? joinMode.a : undefined
+  // Leaving the second step drops the last cursor point, or the next Connect would start with a
+  // stale line before the mouse moved.
+  useEffect(() => {
+    if (!from) joinCursor.p = null
+  }, [from])
+  useFrame(() => {
+    const w = sim.current
+    const st = from && w ? w.state(from) : null
+    const p = joinCursor.p
+    const show = !!st && !!p
+    if (line.current) line.current.visible = show
+    if (!st || !p) return
+    const attr = geo.getAttribute('position') as THREE.BufferAttribute
+    attr.array.set([...st.position, ...p])
+    attr.needsUpdate = true
+  })
+  return (
+    <lineSegments ref={line} geometry={geo} renderOrder={15} frustumCulled={false} visible={false}>
+      <lineBasicMaterial key={colour} color={colour} transparent opacity={0.9} />
+    </lineSegments>
+  )
+}
+
 /** A rope, drawn through the centres of its links; a pulley rope as two straight runs. */
 function RopeLine({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
-  const capacity = 64
+  // Room for the longest rope (60 links) plus the two ends.
+  const capacity = 96
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(capacity * 6), 3))

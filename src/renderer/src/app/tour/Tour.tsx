@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { Check, Keyboard, X } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { useCalc } from '../../calc/calcStore'
+import { useSandbox } from '../../sim/store'
 import { enterMode } from '../layout'
 import { showPanel } from '../panels'
 import { usePure } from '../../math/pure/store'
@@ -95,7 +96,7 @@ function useMissionWatcher() {
       }
     }
     check()
-    const unsubs = [useScene.subscribe(check), useCalc.subscribe(check)]
+    const unsubs = [useScene.subscribe(check), useCalc.subscribe(check), useSandbox.subscribe(check)]
     return () => unsubs.forEach((u) => u())
   }, [markDone])
 }

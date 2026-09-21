@@ -8,6 +8,8 @@ import { shapeVolume } from '../src/renderer/src/sim/materials'
 import { DEFAULT_WORLD, type BodyDef, type ShapeKind, type WorldSettings } from '../src/renderer/src/sim/types'
 import { PRESETS, START_PRESET_ID, startPreset } from '../src/renderer/src/sim/presets'
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_OF, FOLD_TITLES, joinCandidates, readFold, writeFold, type FoldStore } from '../src/renderer/src/sim/inspector'
+import { joinPick, joinPrompt, LINK_CARDS, linkRefusal, noWheelNote, START_JOIN, wheelsAbove } from '../src/renderer/src/sim/join'
+import { LINK_KINDS } from '../src/renderer/src/sim/links'
 
 const G = 9.81
 let n = 0
@@ -185,14 +187,19 @@ describe('the sandbox store', () => {
     expect(useSandbox.getState().bodies.find((b) => b.id === ball.id)).toBeUndefined()
   })
 
-  it('joining refuses the same pair twice and an object to itself', () => {
+  it('joining refuses the same pair twice and an object to itself, and says why', () => {
     fresh()
     const s = useSandbox.getState()
     const [a, b] = s.bodies.filter((x) => x.shape !== 'ground')
-    expect(s.addLink(a.id, a.id, 'rod')).toBe(false)
-    expect(s.addLink(a.id, b.id, 'string')).toBe(true)
-    expect(useSandbox.getState().addLink(b.id, a.id, 'spring')).toBe(false)
+    const floor = s.bodies.find((x) => x.shape === 'ground')!
+    expect(s.addLink(a.id, a.id, 'rod')).toEqual({ ok: false, why: 'Choose two different objects.' })
+    expect(s.addLink(a.id, floor.id, 'rod')).toEqual({ ok: false, why: 'Floor is the floor — nothing can be tied to it.' })
+    expect(s.addLink(a.id, b.id, 'string').ok).toBe(true)
+    const again = useSandbox.getState().addLink(b.id, a.id, 'spring')
+    expect(again.ok).toBe(false)
+    if (!again.ok) expect(again.why).toBe('B and A are already joined — remove that connection first.')
     expect(useSandbox.getState().links).toHaveLength(1)
+    expect(useSandbox.getState().joined).toBe(1)
   })
 
   it('a new scene and a deleted body take their readings with them', () => {
@@ -290,5 +297,114 @@ describe('the inspector shows five rows and folds the rest', () => {
     const [floor, ball, crate] = bodies
     expect(joinCandidates(bodies, ball.id).map((b) => b.id)).toEqual([crate.id])
     expect(joinCandidates(bodies, null).map((b) => b.id)).not.toContain(floor.id)
+  })
+})
+
+describe('connecting two objects, step by step', () => {
+  const scene = () => {
+    const bodies = startingScene()
+    const [floor, ball, crate] = bodies
+    return { bodies, floor, ball, crate }
+  }
+
+  it('walks first → second → kind, and refuses the floor and the same object with a sentence', () => {
+    const { bodies, floor, ball, crate } = scene()
+    expect(START_JOIN).toEqual({ step: 'first' })
+    const one = joinPick(START_JOIN, floor.id, bodies)
+    expect(one.mode).toEqual(START_JOIN)
+    expect(one.why).toBe('The floor cannot be tied to anything — click an object instead.')
+    const two = joinPick(START_JOIN, ball.id, bodies)
+    expect(two).toEqual({ mode: { step: 'second', a: ball.id } })
+    const same = joinPick(two.mode, ball.id, bodies)
+    expect(same.mode).toEqual(two.mode)
+    expect(same.why).toBe('That is A again — click a different object.')
+    const three = joinPick(two.mode, crate.id, bodies)
+    expect(three).toEqual({ mode: { step: 'kind', a: ball.id, b: crate.id } })
+    // In the last step a click swaps the second object; a body that is not there changes nothing.
+    expect(joinPick(three.mode, 'gone', bodies)).toEqual({ mode: three.mode })
+    expect(joinPrompt(START_JOIN, bodies)).toBe('Click the first object.')
+    expect(joinPrompt(two.mode, bodies)).toBe('Now click the object to join A to.')
+    expect(joinPrompt(three.mode, bodies)).toBe('Join A and B with…')
+  })
+
+  it('has a one-line card for every kind of connection, in plain words', () => {
+    expect(LINK_CARDS.map((c) => c.kind)).toEqual(LINK_KINDS)
+    for (const c of LINK_CARDS) {
+      expect(c.title.length).toBeGreaterThan(2)
+      expect(c.line.length).toBeLessThan(110)
+      expect(c.line.endsWith('.')).toBe(true)
+      expect(c.line).not.toMatch(/[{}_\\]/)
+    }
+    expect(LINK_CARDS.find((c) => c.kind === 'pulley')!.line).toContain('above both')
+  })
+
+  it('a pulley needs a wheel above both objects, and says so', () => {
+    const { bodies, ball, crate } = scene()
+    expect(wheelsAbove(bodies, ball.id, crate.id)).toEqual([])
+    expect(noWheelNote(bodies, ball.id, crate.id)).toBe('No pulley yet — add one and put it above both A and B.')
+    const low = { ...makeBody('pulley', 'P', [0, 1, 0]) }
+    const high = { ...makeBody('pulley', 'Q', [0, 4, 0]) }
+    const withWheels = [...bodies, low, high]
+    expect(wheelsAbove(withWheels, ball.id, crate.id).map((w) => w.name)).toEqual(['Q'])
+    expect(noWheelNote([...bodies, low], ball.id, crate.id)).toBe('No pulley sits above both A and B — drag one up there.')
+    expect(linkRefusal(withWheels, [], ball.id, crate.id, 'pulley')).toBe('A rope over a pulley needs a Pulley object — add one and put it above both.')
+    expect(linkRefusal(withWheels, [], ball.id, crate.id, 'pulley', low.id)).toBe('P must sit above both A and B — drag it up.')
+    expect(linkRefusal(withWheels, [], ball.id, crate.id, 'pulley', high.id)).toBeNull()
+    expect(linkRefusal(withWheels, [], ball.id, crate.id, 'rope')).toBeNull()
+  })
+
+  it('the store runs the flow: Connect, two picks, a card, a link — and Esc cancels', () => {
+    useSandbox.getState().loadSandbox()
+    // The count of hand-made connections is the session's, not the file's.
+    useSandbox.setState({ joined: 0 })
+    const s = useSandbox.getState()
+    const [floor, ball, crate] = s.bodies
+    s.startJoin()
+    expect(useSandbox.getState().joinMode).toEqual({ step: 'first' })
+    useSandbox.getState().joinPick(floor.id)
+    expect(useSandbox.getState().joinMode).toEqual({ step: 'first' })
+    expect(useSandbox.getState().joinNote).toContain('floor')
+    useSandbox.getState().joinPick(ball.id)
+    expect(useSandbox.getState().joinMode).toEqual({ step: 'second', a: ball.id })
+    expect(useSandbox.getState().joinNote).toBeNull()
+    // The picks light up like a Shift+click pair.
+    expect(useSandbox.getState().selection).toBe(ball.id)
+    useSandbox.getState().joinPick(crate.id)
+    expect(useSandbox.getState().joinMode).toEqual({ step: 'kind', a: ball.id, b: crate.id })
+    expect(useSandbox.getState().partner).toBe(crate.id)
+    // No wheel: the pulley card's refusal stays on screen with the cards.
+    useSandbox.getState().finishJoin('pulley')
+    expect(useSandbox.getState().joinMode?.step).toBe('kind')
+    expect(useSandbox.getState().joinNote).toContain('Pulley')
+    useSandbox.getState().finishJoin('rope')
+    expect(useSandbox.getState().joinMode).toBeNull()
+    expect(useSandbox.getState().joinNote).toBeNull()
+    expect(useSandbox.getState().partner).toBeNull()
+    expect(useSandbox.getState().links).toHaveLength(1)
+    expect(useSandbox.getState().links[0].kind).toBe('rope')
+    expect(useSandbox.getState().joined).toBe(1)
+    // Esc half way through.
+    useSandbox.getState().startJoin()
+    useSandbox.getState().joinPick(ball.id)
+    useSandbox.getState().cancelJoin()
+    expect(useSandbox.getState().joinMode).toBeNull()
+    expect(useSandbox.getState().links).toHaveLength(1)
+    // Deleting half a pair ends the flow; a new scene ends it too.
+    useSandbox.getState().startJoin()
+    useSandbox.getState().joinPick(ball.id)
+    useSandbox.getState().removeBody(ball.id)
+    expect(useSandbox.getState().joinMode).toBeNull()
+    useSandbox.getState().startJoin()
+    useSandbox.getState().setScene(startingScene())
+    expect(useSandbox.getState().joinMode).toBeNull()
+  })
+
+  it('a preset with links does not count as connecting something yourself', () => {
+    useSandbox.getState().loadSandbox()
+    useSandbox.setState({ joined: 0 })
+    const built = PRESETS.find((p) => p.id === 'atwood')!.build()
+    useSandbox.getState().setScene(built.bodies, built.world, built.links)
+    expect(useSandbox.getState().links.length).toBeGreaterThan(0)
+    expect(useSandbox.getState().joined).toBe(0)
   })
 })

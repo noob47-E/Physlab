@@ -2,6 +2,7 @@
 
 import { scene } from '../../core/store'
 import { useCalc } from '../../calc/calcStore'
+import { useSandbox } from '../../sim/store'
 import type { ModeId } from '../modes'
 import type { JobId } from '../../math/pure/run'
 
@@ -69,6 +70,12 @@ export const TOUR: TourStep[] = [
     anchor: 'search',
     title: 'Find anything',
     body: 'Ctrl+K searches modes, tools, lessons, settings and commands. If you cannot remember where something is, look there.'
+  },
+  {
+    anchor: 'connect',
+    title: 'Join things together',
+    body: 'In the Sandbox, press Connect two objects: click one, click the other, then pick a string, rod, spring, real rope, hinge, weld, or a rope over a pulley. Lengthen a rope in Connections and it sags; shorten it and it lifts.',
+    mode: 'sandbox'
   },
   {
     title: 'That is the tour',
@@ -142,6 +149,14 @@ export const MISSIONS: Mission[] = [
     hint: 'Type y = x^2 - 4 in the command bar.',
     mode: 'graphing',
     done: () => objectsOf('graph').length > 0
+  },
+  {
+    id: 'join',
+    label: 'Connect two objects in the Sandbox',
+    hint: 'Press Connect two objects, click the ball, click the crate, and choose Rope. Then press Play.',
+    mode: 'sandbox',
+    // A preset that comes with its links does not count: the task is to make one.
+    done: () => useSandbox.getState().joined > 0
   }
 ]
 
@@ -158,6 +173,8 @@ export const SHORTCUTS: [string, string][] = [
   ['Tab', 'Move between the buttons and fields'],
   ['Home', 'Reset the view'],
   ['Space', 'Play or pause the timeline'],
+  ['Shift+click (Sandbox)', 'Choose the second object to join to the selected one'],
+  ['Esc (Sandbox)', 'Stop connecting two objects'],
   ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],
   ['Del', 'Delete what is selected'],
   ['Ctrl+S / Ctrl+O', 'Save / open a project'],

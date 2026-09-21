@@ -23,9 +23,87 @@ export function reachOf(b: BodyDef): number {
 }
 
 /** Segments a rope of this length is cut into: short enough to bend, few enough to stay stiff. */
-export const ropeSegments = (length: number): number => Math.max(3, Math.min(30, Math.round(length / 0.2)))
+export const ropeSegments = (length: number): number => Math.max(3, Math.min(60, Math.round(length / 0.2)))
 
 const dist = (p: V3, q: V3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
+
+/** Length of a polyline through these points. */
+export const polylineLength = (pts: V3[]): number => pts.reduce((sum, p, i) => (i ? sum + dist(pts[i - 1], p) : 0), 0)
+
+/**
+ * The way a slack rope hangs from a chord: with gravity, as far as the chord allows. A level rope
+ * sags straight down; a vertical one has nowhere to sag but sideways, because "down" is along
+ * the chord and would fold the rope on top of itself.
+ */
+function sagDirection(chord: V3, gap: number): V3 {
+  if (gap < 1e-9) return [0, -1, 0]
+  const u: V3 = [chord[0] / gap, chord[1] / gap, chord[2] / gap]
+  // Gravity with its along-the-chord part taken out.
+  const perp: V3 = [0 + u[1] * u[0], -1 + u[1] * u[1], 0 + u[1] * u[2]]
+  const size = Math.hypot(...perp)
+  if (size > 1e-6) return [perp[0] / size, perp[1] / size, perp[2] / size]
+  const side: V3 = [u[1], -u[0], 0]
+  const s = Math.hypot(...side) || 1
+  return [side[0] / s, side[1] / s, side[2] / s]
+}
+
+/**
+ * Where the joints of a rope of `length`, cut into `n` links, sit when it is first laid between
+ * `start` and `end`: n + 1 points, the two ends included.
+ *
+ * A rope no longer than the gap is laid straight along it. A longer one hangs: the slack goes
+ * into a sag below the chord — a parabola, close enough to how a rope hangs — deep enough that
+ * the joints are one rope's length apart along the polyline. Without this the chain was laid
+ * straight across the gap whatever length was typed, so lengthening a rope could not make it
+ * hang and shortening it could not lift.
+ */
+export function ropeLayout(start: V3, end: V3, length: number, n: number): V3[] {
+  const count = Math.max(1, Math.round(n))
+  const chord: V3 = [end[0] - start[0], end[1] - start[1], end[2] - start[2]]
+  const gap = Math.hypot(...chord)
+  const along = (t: number): V3 => [start[0] + chord[0] * t, start[1] + chord[1] * t, start[2] + chord[2] * t]
+  if (length <= gap + 1e-9) return Array.from({ length: count + 1 }, (_, i) => along(i / count))
+  const down = sagDirection(chord, gap)
+  // The parabola of depth d, sampled finely and then resampled at equal steps of arc length,
+  // so every link is the same length whichever part of the curve it lies on.
+  const fine = Math.max(200, 10 * count)
+  const shape = (d: number): V3[] => {
+    const curve: V3[] = []
+    for (let i = 0; i <= fine; i++) {
+      const t = i / fine
+      const sag = d * 4 * t * (1 - t)
+      const p = along(t)
+      curve.push([p[0] + down[0] * sag, p[1] + down[1] * sag, p[2] + down[2] * sag])
+    }
+    const cum = [0]
+    for (let i = 1; i < curve.length; i++) cum.push(cum[i - 1] + dist(curve[i - 1], curve[i]))
+    const total = cum[cum.length - 1]
+    const out: V3[] = []
+    let k = 0
+    for (let i = 0; i <= count; i++) {
+      const s = (total * i) / count
+      while (k + 1 < cum.length - 1 && cum[k + 1] < s) k++
+      const span = cum[k + 1] - cum[k] || 1
+      const f = Math.min(1, Math.max(0, (s - cum[k]) / span))
+      const p = curve[k]
+      const q = curve[k + 1]
+      out.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f])
+    }
+    out[0] = [...start]
+    out[count] = [...end]
+    return out
+  }
+  // Deeper is longer, so the depth that gives the rope its length lies between none and the
+  // length itself (a rope folded double).
+  let lo = 0
+  let hi = length
+  for (let i = 0; i < 48; i++) {
+    const mid = (lo + hi) / 2
+    if (polylineLength(shape(mid)) < length) lo = mid
+    else hi = mid
+  }
+  return shape((lo + hi) / 2)
+}
 
 /**
  * Where a rope over the wheel leaves its rim: the side nearer each body.

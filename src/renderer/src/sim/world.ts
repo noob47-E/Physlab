@@ -8,7 +8,7 @@
 
 import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
-import { pulleyRim, reachOf, ropeLinkMass, ropeSegments } from './links'
+import { pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from './links'
 import { eulerToQuat } from './rotate'
 import type { BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
@@ -484,10 +484,13 @@ export class SimWorld {
     const reachB = reachOf(b.def)
     const start: V3 = [pa[0] + dir[0] * reachA, pa[1] + dir[1] * reachA, pa[2] + dir[2] * reachA]
     const end: V3 = [pb[0] - dir[0] * reachB, pb[1] - dir[1] * reachB, pb[2] - dir[2] * reachB]
-    const length = Math.max(0.1, Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]))
+    // The rope is as long as its definition says, not as long as the gap happens to be: a
+    // longer rope hangs in a sag, a shorter one pulls the two ends together. The chain used to
+    // be laid straight across the gap whatever length was typed, so editing L did nothing.
+    const length = Math.max(0.1, link.length)
     const n = link.segments ?? ropeSegments(length)
-    const seg = length / n
-    const half = seg / 2
+    const joints = ropeLayout(start, end, length, n)
+    const half = length / n / 2
     // The rope's weight is a fraction of its load (see ropeLinkMass): far lighter and the solver
     // loses the fight against the mass ratio and the rope stretches; far heavier and it drags the
     // load about.
@@ -496,11 +499,17 @@ export class SimWorld {
     const filter = this.track(new J.GroupFilterTable(n))
     for (let i = 0; i + 1 < n; i++) filter.DisableCollision(i, i + 1)
     const group = this.ropeCount++
-    const rot = this.quatFromY(dir)
     const rope: Rope = { bodies: [], constraints: [] }
 
     for (let i = 0; i < n; i++) {
-      const centre: V3 = [start[0] + dir[0] * (i + 0.5) * seg, start[1] + dir[1] * (i + 0.5) * seg, start[2] + dir[2] * (i + 0.5) * seg]
+      const p = joints[i]
+      const q = joints[i + 1]
+      const centre: V3 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2]
+      // Each link stands along its own piece of the curve, so a sagging rope is laid sagging.
+      let seg: V3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]]
+      const len = Math.hypot(...seg)
+      seg = len > 1e-9 ? [seg[0] / len, seg[1] / len, seg[2] / len] : dir
+      const rot = this.quatFromY(seg)
       const shape = new J.CapsuleShape(Math.max(0.005, half - ROPE_RADIUS), ROPE_RADIUS) as unknown as InstanceType<Jolt['Shape']>
       const pos = this.rv3(centre)
       const settings = this.track(new J.BodyCreationSettings(shape, pos, rot, J.EMotionType_Dynamic, LAYER_MOVING))
@@ -523,8 +532,8 @@ export class SimWorld {
       rope.bodies.push(body)
       this.release(settings)
       this.release(pos)
+      this.release(rot)
     }
-    this.release(rot)
 
     const pin = (b1: Body, p1: V3, b2: Body, p2: V3) => {
       const s = this.track(new J.PointConstraintSettings())
@@ -538,6 +547,21 @@ export class SimWorld {
     pin(a.body, [dir[0] * reachA, dir[1] * reachA, dir[2] * reachA], rope.bodies[0], [0, -half, 0])
     for (let i = 0; i + 1 < n; i++) pin(rope.bodies[i], [0, half, 0], rope.bodies[i + 1], [0, -half, 0])
     pin(rope.bodies[n - 1], [0, half, 0], b.body, [-dir[0] * reachB, -dir[1] * reachB, -dir[2] * reachB])
+    // The joints are solved one at a time, and against a load a hundred times heavier than a
+    // link each pass moves the link and hardly the load: a hanging load stretched the chain a
+    // few centimetres, and a chain shorter than the gap could not reel its load in at all, so
+    // shortening a rope changed nothing. One straight string from end to end, no longer than the
+    // rope, holds the length exactly. It does nothing while the rope hangs slack or bends round
+    // something, and takes the load the moment the rope is straight.
+    const cap = this.track(new J.DistanceConstraintSettings())
+    cap.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+    cap.set_mPoint1(this.rv3([0, 0, 0]))
+    cap.set_mPoint2(this.rv3([0, 0, 0]))
+    cap.set_mMinDistance(0)
+    cap.set_mMaxDistance(length + reachA + reachB)
+    const straight = cap.Create(a.body, b.body)
+    this.physics.AddConstraint(straight)
+    rope.constraints.push(straight)
     this.ropes.set(link.id, rope)
   }
 
