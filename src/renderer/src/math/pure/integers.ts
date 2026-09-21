@@ -4,6 +4,9 @@
 // of an algorithm, because the point is that the student recognises what they are looking at.
 
 import { bgcd, blcm } from './rat'
+
+/** The primes multiplied back together — the check behind every tick in this file. */
+const product = (factors: [bigint, number][]): bigint => factors.reduce((a, [p, k]) => a * p ** BigInt(k), 1n)
 import { Steps, failed, type Working } from './work'
 
 import { MAX_TRIAL } from './limits'
@@ -83,7 +86,7 @@ export function factoriseNumberWorking(input: bigint): Working {
 
   if (f.factors.length === 1 && f.factors[0][1] === 1) {
     s.add(`${abs} has no factors except 1 and itself, so it is already prime.`, `${abs} = ${abs}`, '\\text{a prime has exactly two factors}')
-    return { title, input: tex, moves: s.moves, answers: [{ label: `${input}`, tex: factorTex(f) }], check: `${abs} is prime.` }
+    return { title, input: tex, moves: s.moves, answers: [{ label: `${input}`, tex: factorTex(f) }], check: `${abs} is prime.`, checked: f.factors[0][0] === abs ? 'ok' : 'failed' }
   }
 
   s.add(
@@ -104,12 +107,14 @@ export function factoriseNumberWorking(input: bigint): Working {
     '\\text{divisors} = \\prod (\\text{index} + 1)'
   )
 
+  const ok = product(f.factors) === abs
   return {
     title,
     input: tex,
     moves: s.moves,
     answers: [{ label: `${input} =`, tex: factorTex(f) }],
-    check: `${f.factors.map(([p, k]) => (k === 1 ? `${p}` : `${p}^${k}`)).join(' × ')} = ${abs}`
+    check: ok ? `${f.factors.map(([p, k]) => (k === 1 ? `${p}` : `${p}^${k}`)).join(' × ')} = ${abs}` : `Careful: those primes do not multiply back to ${abs}. Treat this answer with suspicion.`,
+    checked: ok ? 'ok' : 'failed'
   }
 }
 
@@ -162,7 +167,9 @@ export function hcfWorking(ns: bigint[]): Working {
 
   if (kept.length === 0) {
     s.add('No prime appears in every number, so they share nothing but 1.', '\\text{HCF} = 1', '\\text{numbers with HCF } 1 \\text{ are coprime}')
-    return { title, input: tex, moves: s.moves, answers: [{ label: 'HCF =', tex: '1' }], check: `${pos.join(' and ')} are coprime.` }
+    // Euclid's route is independent of the prime table, so agreeing with it is a real check.
+    const coprime = ns.reduce((a, b) => bgcd(a, b), 0n) === 1n
+    return { title, input: tex, moves: s.moves, answers: [{ label: 'HCF =', tex: '1' }], check: coprime ? `${pos.join(' and ')} are coprime.` : 'Careful: Euclid finds a common factor the table missed. Treat this answer with suspicion.', checked: coprime ? 'ok' : 'failed' }
   }
 
   s.add(
@@ -173,12 +180,15 @@ export function hcfWorking(ns: bigint[]): Working {
   const hcf = ns.reduce((a, b) => bgcd(a, b), 0n)
   s.add('Multiply them out.', `\\text{HCF} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${hcf}`)
 
+  // The primes kept from the table have to multiply to Euclid's answer, and that has to divide in.
+  const ok = product(kept) === hcf && pos.every((n) => n % hcf === 0n)
   return {
     title,
     input: tex,
     moves: s.moves,
     answers: [{ label: 'HCF =', tex: String(hcf) }],
-    check: `${pos.map((n) => `${n} ÷ ${hcf} = ${n / hcf}`).join(',  ')} — all whole, so ${hcf} divides every one.`
+    check: ok ? `${pos.map((n) => `${n} ÷ ${hcf} = ${n / hcf}`).join(',  ')} — all whole, so ${hcf} divides every one.` : `Careful: ${hcf} does not divide every number. Treat this answer with suspicion.`,
+    checked: ok ? 'ok' : 'failed'
   }
 }
 
@@ -217,11 +227,13 @@ export function lcmWorking(ns: bigint[]): Working {
     })
   }
 
+  const ok = product(kept) === lcm && pos.every((n) => lcm % n === 0n)
   return {
     title,
     input: tex,
     moves,
     answers: [{ label: 'LCM =', tex: String(lcm) }],
-    check: `${pos.map((n) => `${lcm} ÷ ${n} = ${lcm / n}`).join(',  ')} — all whole, so every one divides ${lcm}.`
+    check: ok ? `${pos.map((n) => `${lcm} ÷ ${n} = ${lcm / n}`).join(',  ')} — all whole, so every one divides ${lcm}.` : `Careful: not every number divides ${lcm}. Treat this answer with suspicion.`,
+    checked: ok ? 'ok' : 'failed'
   }
 }

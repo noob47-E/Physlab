@@ -8,10 +8,11 @@
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import katex from 'katex'
 import { isFieldSafeLatex, linearSyntaxIn } from '../src/renderer/src/ui/latexSafety'
 import { isActivatable, isTyping } from '../src/renderer/src/app/keyTargets'
-import { JOBS, runPure } from '../src/renderer/src/math/pure/run'
-import { casRequestFor, usePure } from '../src/renderer/src/math/pure/store'
+import { JOBS, linearToLatex, runPure } from '../src/renderer/src/math/pure/run'
+import { casAnswerIsCurrent, casRequestFor, usePure } from '../src/renderer/src/math/pure/store'
 import { CAS_OPS } from '../src/renderer/src/math/cas'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { evalDisplayedSum, splitDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
@@ -80,6 +81,48 @@ describe('what may be written into a maths field', () => {
     }
   })
 
+  it('the command bar route converts its linear syntax before the field sees it', () => {
+    // factor(6x^2+7x-3) typed in the command bar used to be written into the Working field as
+    // it was, so the student saw x^(2) with a stray bracket. Every example must convert cleanly
+    // and still mean the same thing.
+    for (const j of JOBS) {
+      const latex = linearToLatex(j.example)
+      expect(isFieldSafeLatex(latex), `${j.id}: ${latex}`).toBe(true)
+      expect(meaningOf(latexToMath(latex)), j.id).toBe(meaningOf(j.example))
+    }
+    expect(linearToLatex('x^2 + 4x + 13 = 0')).toBe('x^{2}+4x+13=0')
+    // A lone letter inside a command's braces keeps them: \\fracx{2} is an unknown command.
+    expect(linearToLatex('x/2')).toBe('\\frac{x}{2}')
+    expect(linearToLatex('sqrt(x)+1')).toBe('\\sqrt{x}+1')
+    expect(linearToLatex('2*x')).toBe('2\\cdot x')
+    expect(linearToLatex('x^2/(x+1)')).toBe('\\frac{x^{2}}{x+1}')
+    for (const src of ['x/2', 'sqrt(x)+1', '2*x', 'x^2/(x+1)', 'x/2+1=3']) {
+      const latex = linearToLatex(src)
+      expect(isFieldSafeLatex(latex), latex).toBe(true)
+      expect(() => katex.renderToString(latex, { throwOnError: true, strict: 'ignore' }), latex).not.toThrow()
+    }
+  })
+
+  it('a throw inside a generator becomes a readable refusal, never a crash', () => {
+    // The store's guard is the last line of defence: whatever a generator throws, the panel
+    // shows a sentence and keeps working.
+    expect(() => usePure.getState().run('factorComplex', 'x^2 + 2i', 'x^2+2i')).not.toThrow()
+    expect(usePure.getState().working?.error).toMatch(/already has i/)
+    expect(() => usePure.getState().run('solve', '(1+i)x = 3', '(1+i)x=3')).not.toThrow()
+    expect(usePure.getState().working?.error).toBeTruthy()
+  })
+
+  it('drops a slow SymPy answer that belongs to an earlier run', () => {
+    // Problem 1 asks SymPy; the student types problems 2 and 3 meanwhile. Only an answer to the
+    // latest run may be shown, whatever the input text happens to be.
+    expect(casAnswerIsCurrent(1, 3)).toBe(false)
+    expect(casAnswerIsCurrent(3, 3)).toBe(true)
+    const before = usePure.getState().runSeq
+    usePure.getState().run('factor', 'x^2 - 1', 'x^{2}-1')
+    usePure.getState().run('factor', 'x^2 - 1', 'x^{2}-1')
+    expect(usePure.getState().runSeq).toBe(before + 2)
+  })
+
   it('recalling an entry restores the LaTeX, not the linear form', () => {
     usePure.getState().clearHistory()
     usePure.getState().run('factor', '6x^2 + 7x - 3', '6x^{2}+7x-3')
@@ -121,6 +164,9 @@ describe('the contract with the Python worker', () => {
   it('sends everything else an expression', () => {
     expect(casRequestFor('factor', 'x^2-1')).toEqual({ op: 'factor', payload: { expr: 'x^2-1' } })
     expect(casRequestFor('partial', '1/(x^2-1)')).toEqual({ op: 'apart', payload: { expr: '1/(x^2-1)' } })
+    // Over the complex numbers, not the rationals: plain factor would hand x² + 4 straight back.
+    expect(casRequestFor('factorComplex', 'x^2+4')).toEqual({ op: 'factor_complex', payload: { expr: 'x^2+4' } })
+    expect(readFileSync('src/renderer/src/workers/cas.worker.ts', 'utf8')).toContain('extension=[sp.I]')
   })
 
   it('only asks for operations the worker implements', () => {

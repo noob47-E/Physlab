@@ -62,7 +62,16 @@ describe('the LaTeX Pure Math writes', () => {
       ['factorComplex', 'x^2 + 4'],
       ['factorComplex', 'x^4 - 16'],
       ['factorComplex', '2x^2 + 2x + 5'],
-      ['expand', '(x + 2)(x - 3)(x + 1)']
+      ['expand', '(x + 2)(x - 3)(x + 1)'],
+      ['expand', '(x + 2)^2 - (x - 2)^2'],
+      ['expand', '2x(x + 1)'],
+      ['expand', '(x + 1)^9'],
+      ['solve', 'x/2 + 1 = 4'],
+      ['solve', '3x/4 = 6'],
+      ['factorComplex', 'x^4 + 2x^2 + 4'],
+      ['factorComplex', 'x^4 + 1'],
+      ['hcf', 'x^2 - 1, x^2 + 2x + 1'],
+      ['lcm', '4x, 6x^2']
     ]
     for (const [job, src] of cases) checkAll(job, src)
   })

@@ -4,15 +4,36 @@
 // and nothing else. Everything below is pure: given the same text it always produces the same
 // working, which is what makes it all testable without a browser.
 
-import { splitArgs } from '../expr'
-import { NotPolynomial, exprTex, isConstant, parseExpr, varsOf } from './mono'
+import { math, preprocess, splitArgs } from '../expr'
+import { R0, R1, rAbs, rAdd, rEq, rIsNeg, rMul, rSub, rTex, rat, type Rat } from './rat'
+import {
+  NotPolynomial,
+  eAdd,
+  eNeg,
+  evalAt,
+  exprTex,
+  exprTexBracketed,
+  isConstant,
+  mulTerm,
+  normalize,
+  parseExpr,
+  parseFraction,
+  parseSummands,
+  termTex,
+  varTex,
+  varsOf,
+  type Expr,
+  type Summand,
+  type Term
+} from './mono'
+import { pDeg, polyFromExpr } from './poly'
 import { factoriseNumberWorking, hcfWorking, lcmWorking } from './integers'
 import { hcfAlgebraWorking, lcmAlgebraWorking } from './algebraHcf'
-import { factoriseWorking } from './factor'
+import { factoriseWorking, factorsOf } from './factor'
 import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
 import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
-import { failed, type Working } from './work'
+import { Steps, failed, type Working } from './work'
 
 export type JobId =
   | 'factor'
@@ -133,6 +154,40 @@ export const JOBS: JobDef[] = [
 
 export const jobById = (id: JobId): JobDef => JOBS.find((j) => j.id === id) ?? JOBS[0]
 
+/**
+ * LaTeX for a linear-syntax source, so it can be written into a maths field.
+ *
+ * The command bar hands Pure Math linear syntax ("6x^2+7x-3"). MathLive reads whatever it is
+ * given as LaTeX, so that has to be converted first or a power turns into a stray bracket on
+ * screen. A list ("12, 18") is not one expression; it is passed through as it is.
+ */
+export function linearToLatex(src: string): string {
+  const parts = splitArgs(src)
+  const one = (s: string): string => {
+    try {
+      // mathjs writes a symbol as "{ x}" and implicit products with "~"; both render, neither reads.
+      // A command's braces have to stay: stripping them from a lone letter turned \frac{ x}{2}
+      // into \fracx{2}, which MathLive shows as an unknown command. Only a brace that follows
+      // nothing, an operator or another brace is needless ({x}^{2}), and only the space after a
+      // brace goes, along with every space that does not end a command (2\cdot x keeps its one).
+      return math
+        .parse(preprocess(s.trim()))
+        .toTex({ parenthesis: 'auto', implicit: 'hide' })
+        .replace(/~/g, '')
+        .replace(/\{\s+/g, '{')
+        .replace(/(?<![A-Za-z\\}])\{([a-zA-Z])\}/g, '$1')
+        .replace(/(?<!\\[a-zA-Z]*)\s+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    } catch {
+      return s.trim()
+    }
+  }
+  // An equation is two expressions; mathjs would read "a = b" as an assignment or refuse it.
+  const sides = (s: string): string => s.split('=').map(one).join('=')
+  return parts.map(sides).join(',\\ ')
+}
+
 const WHOLE = /^-?\d+$/
 
 /** Split "12, 18" into parts, respecting brackets so (x+1)(x+2) stays whole. */
@@ -141,30 +196,136 @@ const asList = (src: string): string[] =>
     .map((p) => p.trim())
     .filter(Boolean)
 
+const signedTerm = (t: Term, first: boolean): string => {
+  const body = termTex({ c: rAbs(t.c), v: t.v })
+  if (first) return rIsNeg(t.c) ? `-${body}` : body
+  return rIsNeg(t.c) ? ` - ${body}` : ` + ${body}`
+}
+
+/** Terms written out in the order given, signs joined up, nothing collected. */
+const rawSumTex = (terms: Term[]): string => (terms.length ? terms.map((t, i) => signedTerm(t, i === 0)).join('') : '0')
+
+/** The "each times each" grid: a row for every term on the left, a column for every term on the right. */
+function distributionTable(left: Expr, right: Expr): string {
+  const cols = `c|${'c'.repeat(right.length)}`
+  const header = `\\times & ${right.map((t) => termTex(t)).join(' & ')} \\\\ \\hline`
+  const rows = left.map((a) => `${termTex(a)} & ${right.map((b) => termTex(mulTerm(a, b))).join(' & ')}`).join(' \\\\ ')
+  return `\\begin{array}{${cols}} ${header} ${rows} \\end{array}`
+}
+
+/** Like terms gathered into brackets, in the order the collected answer will have them. */
+function groupedTex(products: Term[]): string {
+  // Ordered like the answer will be, but with every coefficient set to 1 first so that a pair
+  // which cancels to nothing (−2x² + 2x²) still keeps its place instead of dropping out.
+  const order = normalize(products.map((p) => ({ c: R1, v: p.v })))
+  const groups = order.map((o) => products.filter((p) => varTex(p.v) === varTex(o.v)))
+  return groups
+    .map((g, i) => (g.length === 1 ? signedTerm(g[0], i === 0) : `${i === 0 ? '' : ' + '}\\left(${rawSumTex(g)}\\right)`))
+    .join('')
+}
+
+const factorTex = (f: Expr): string => (f.length > 1 ? exprTexBracketed(f) : exprTex(f))
+
+/**
+ * Expand, with the distribution shown.
+ *
+ * The old version's two steps both displayed the finished answer, which taught nothing. Now the
+ * parsed factors are kept apart, each pair is multiplied through a grid, the products are written
+ * out in a line, and only then are the like terms collected — the way it is set out on a board.
+ */
 function expandWorking(src: string): Working {
   const title = 'Expand'
+  let summands: Summand[]
   try {
-    const e = parseExpr(src)
-    const out = exprTex(e)
-    return {
-      title,
-      input: src.trim(),
-      moves: [
-        {
-          head: 'Multiply every term in the first bracket by every term in the second.',
-          rule: '\\text{each} \\times \\text{each}',
-          tex: out
-        },
-        {
-          head: 'Then collect the like terms together, highest power first.',
-          tex: `= ${out}`
-        }
-      ],
-      answers: [{ label: 'Answer', tex: out }],
-      check: 'Factorise this result to get back to where you started.'
-    }
+    summands = parseSummands(src)
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
+  }
+  const s = new Steps()
+  const shownOf = (sm: Summand): string => sm.factors.map(factorTex).join('')
+  const input = summands.map((sm, i) => `${i === 0 ? (sm.neg ? '-' : '') : sm.neg ? ' - ' : ' + '}${shownOf(sm)}`).join('')
+  const several = summands.length > 1
+
+  // Each summand multiplied out on its own; a lone factor is already a sum and passes straight through.
+  const pieces: Expr[] = []
+  for (const sm of summands) {
+    const { factors } = sm
+    if (factors.length < 2) {
+      pieces.push(sm.neg ? eNeg(factors[0]) : factors[0])
+      continue
+    }
+    const where = several ? `In ${shownOf(sm)}, m` : 'M'
+    let acc = factors[0]
+    for (let i = 1; i < factors.length; i++) {
+      const f = factors[i]
+      const products: Term[] = []
+      for (const a of acc) for (const b of f) products.push(mulTerm(a, b))
+      s.add(
+        `${i === 1 ? where : 'Then m'}ultiply every term of ${factorTex(acc)} by every term of ${factorTex(f)}.`,
+        distributionTable(acc, f),
+        '\\text{each} \\times \\text{each}'
+      )
+      s.add('Write all the products out in a line.', rawSumTex(products))
+      const collected = normalize(products)
+      if (collected.length < products.length) {
+        s.add('Collect the like terms, and write the highest power first.', `${groupedTex(products)} = ${exprTex(collected)}`, '\\text{like terms: same letters, same powers}')
+      } else {
+        s.add('No two terms are alike, so just write the highest power first.', exprTex(collected))
+      }
+      acc = collected
+    }
+    pieces.push(sm.neg ? eNeg(acc) : acc)
+  }
+  const whole = pieces.reduce((a, b) => eAdd(a, b), [] as Expr)
+  const out = exprTex(whole)
+
+  if (!summands.some((sm) => sm.factors.length >= 2)) {
+    // Nothing was distributed: either there are no brackets to multiply, or one bracket is raised
+    // to a power too high to write out column by column and its expansion is simply stated.
+    const highPower = /\)\s*(\^|²|³)/.test(src)
+    s.add(
+      highPower
+        ? 'A bracket raised to a power that high is written out directly rather than multiplied column by column.'
+        : 'There is nothing to multiply out here, so collect the like terms and write the highest power first.',
+      out
+    )
+    return { title, input, moves: s.moves, answers: [{ label: 'Answer', tex: out }], check: 'No brackets were multiplied step by step, so there is nothing to check.' }
+  }
+
+  if (several) {
+    const joined = pieces.map((p, i) => `${i === 0 ? '' : ' + '}\\left(${exprTex(p)}\\right)`).join('')
+    s.add('Add the pieces together, and collect the like terms once more.', `${joined} = ${out}`, '\\text{like terms: same letters, same powers}')
+  }
+
+  // Check by substituting a value: the brackets and the answer must give the same number.
+  const vars = varsOf(whole)
+  const at: Record<string, Rat> = {}
+  vars.forEach((v, i) => (at[v] = rat(2 + i)))
+  let ok = true
+  let viaBrackets = R0
+  let viaAnswer = R0
+  try {
+    for (const sm of summands) {
+      const product = sm.factors.reduce((p, f) => rMul(p, evalAt(f, at)), R1)
+      viaBrackets = sm.neg ? rSub(viaBrackets, product) : rAdd(viaBrackets, product)
+    }
+    viaAnswer = evalAt(whole, at)
+    ok = rEq(viaBrackets, viaAnswer)
+  } catch {
+    ok = false
+  }
+  const atText = vars.map((v) => `${v} = ${rTex(at[v])}`).join(', ')
+  return {
+    title,
+    input,
+    moves: s.moves,
+    answers: [{ label: 'Answer', tex: out }],
+    check: ok
+      ? vars.length
+        ? `With ${atText}, the brackets come to ${rTex(viaBrackets)} and the answer also comes to ${rTex(viaAnswer)}.`
+        : `Both the brackets and the answer come to ${rTex(viaAnswer)}.`
+      : 'Careful: the brackets and the answer give different numbers. Treat this answer with suspicion.',
+    checked: ok ? 'ok' : 'failed'
   }
 }
 
@@ -240,11 +401,40 @@ export function suggestJob(src: string): JobId {
   if (s.includes(',')) return 'hcf'
   if (/(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(s)) return 'complex'
   if (s.includes('=')) return 'solve'
-  // A fraction whose bottom is a product or has a square in it is a partial-fractions question;
-  // anything else over a single bracket is ordinary division.
-  if (s.includes('/')) {
+  if (s.includes('/')) return fractionJob(s)
+  // A quadratic with no real roots is exactly what "Factorise with i" is for; sending it to the
+  // real factoriser would only produce "does not break into simpler factors".
+  return isIrreducibleQuadratic(s) ? 'factorComplex' : 'factor'
+}
+
+/**
+ * Partial fractions when the bottom breaks into more than one factor, otherwise long division.
+ *
+ * The bottom is actually factorised to decide: 1/(x² − 4) has no visible bracket pair, but its
+ * bottom is (x − 2)(x + 2), and a student typing it wants it split. Anything that cannot be read
+ * falls back to looking for a bracket pair or a square, as before.
+ */
+function fractionJob(s: string): JobId {
+  try {
+    const { den } = parseFraction(s)
+    if (isConstant(den)) return 'factor'
+    const pieces = factorsOf(den).filter((p) => !isConstant(p))
+    return pieces.length >= 2 ? 'partial' : 'divide'
+  } catch {
     const bottom = s.slice(s.indexOf('/') + 1)
     return /\)\s*\(/.test(bottom) || /\^\s*2/.test(bottom) ? 'partial' : 'divide'
   }
-  return 'factor'
+}
+
+function isIrreducibleQuadratic(s: string): boolean {
+  try {
+    const e = parseExpr(s)
+    if (varsOf(e).length !== 1) return false
+    const { poly } = polyFromExpr(e)
+    if (pDeg(poly) !== 2) return false
+    const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
+    return rIsNeg(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))
+  } catch {
+    return false
+  }
 }

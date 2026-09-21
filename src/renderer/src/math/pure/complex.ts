@@ -11,6 +11,7 @@ import {
   rAdd,
   rCmp,
   rDiv,
+  rEq,
   rIsNeg,
   rIsOne,
   rIsZero,
@@ -23,12 +24,38 @@ import {
   rat,
   type Rat
 } from './rat'
-import { NotPolynomial, exprTex, parseExpr, parseFraction, varsOf, type Expr } from './mono'
-import { MAX_TRIAL } from './limits'
-import { pDeg, pTex, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
+import { NotPolynomial, evalAt, exprTex, parseExpr, parseFraction, varsOf, type Expr } from './mono'
+import { math, preprocess } from '../expr'
+import { pDeg, pSub, pTex, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
 import { factorsOf } from './factor'
 import { texAngle } from '../format'
+import {
+  checkProduct,
+  cxsAdd,
+  cxsIsReal,
+  cxsMul,
+  cxsOfRat,
+  cxsTex,
+  linearFactorTex,
+  quadraticRoots,
+  simplifySurd,
+  spFromPoly,
+  spLinear,
+  splitBiquadratic,
+  surd,
+  surdIsRational,
+  surdMul,
+  surdNeg,
+  surdPolyTex,
+  surdSub,
+  surdTex,
+  type CxS,
+  type SPoly,
+  type Surd
+} from './cxpoly'
 import { Steps, failed, type Working } from './work'
+
+export { simplifySurd }
 
 /** An exact complex number: both parts are fractions. */
 export interface Cx {
@@ -51,26 +78,6 @@ export function cxTex(z: Cx): string {
   const body = `${coef}i`
   if (rIsZero(z.re)) return rIsNeg(z.im) ? `-${body}` : body
   return `${rTex(z.re)} ${rIsNeg(z.im) ? '-' : '+'} ${body}`
-}
-
-/**
- * Largest square taken out of a root: 72 becomes 6√2.
- *
- * Gives up after MAX_TRIAL divisors and says so. √n left unsimplified is still the right
- * number, which is what matters — an answer that is correct but untidy beats a frozen window.
- */
-export function simplifySurd(n: bigint): { out: bigint; in: bigint; tooBig?: boolean } {
-  let out = 1n
-  let rest = n < 0n ? -n : n
-  let steps = 0
-  for (let d = 2n; d * d <= rest; d++) {
-    if (steps++ > MAX_TRIAL) return { out: 1n, in: n < 0n ? -n : n, tooBig: true }
-    while (rest % (d * d) === 0n) {
-      out *= d
-      rest /= d * d
-    }
-  }
-  return { out, in: rest }
 }
 
 /** √n as LaTeX, already simplified: 6\sqrt{2}, or just 6 when it is exact. */
@@ -171,7 +178,7 @@ export function complexWorking(src: string): Working {
     powersOfIMove(num, s)
     const z = reduceI(num)
     s.add('Now gather the real parts and the i parts separately.', `= ${cxTex(z)}`, 'a + bi:\\ \\text{real part } a,\\ \\text{imaginary part } b')
-    return finishComplex(title, input, s, z)
+    return finishComplex(title, input, s, z, src)
   }
 
   // Dividing: multiply top and bottom by the conjugate of the bottom.
@@ -183,7 +190,7 @@ export function complexWorking(src: string): Working {
     const nz = reduceI(num)
     const z = cx(rDiv(nz.re, dz.re), rDiv(nz.im, dz.re))
     s.add('The bottom is already a real number, so divide both parts by it.', `\\dfrac{${cxTex(nz)}}{${rTex(dz.re)}} = ${cxTex(z)}`)
-    return finishComplex(title, input, s, z)
+    return finishComplex(title, input, s, z, src)
   }
 
   const conj = cxConj(dz)
@@ -203,11 +210,29 @@ export function complexWorking(src: string): Working {
   s.add('Multiply out the top the same way.', `\\left(${cxTex(nz)}\\right)\\left(${cxTex(conj)}\\right) = ${cxTex(newTop)}`)
   const z = cx(rDiv(newTop.re, newBottom), rDiv(newTop.im, newBottom))
   s.add('Divide each part by the bottom.', `= ${cxTex(z)}`)
-  return finishComplex(title, input, s, z)
+  return finishComplex(title, input, s, z, src)
+}
+
+/**
+ * The exact answer against mathjs's own complex arithmetic on the same source: an independent
+ * route to the same number, so a tick here is a real comparison and not a restatement. Null when
+ * mathjs cannot evaluate the source, in which case the check line carries no verdict.
+ */
+export function agreesNumerically(src: string, z: Cx): boolean | null {
+  try {
+    const v = math.evaluate(preprocess(src)) as unknown
+    const re = typeof v === 'number' ? v : (v as { re?: number }).re
+    const im = typeof v === 'number' ? 0 : (v as { im?: number }).im
+    if (typeof re !== 'number' || typeof im !== 'number') return null
+    const near = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b))
+    return near(re, rNum(z.re)) && near(im, rNum(z.im))
+  } catch {
+    return null
+  }
 }
 
 /** Every complex answer also gets its modulus, argument and conjugate — they are always asked for. */
-function finishComplex(title: string, input: string, s: Steps, z: Cx): Working {
+function finishComplex(title: string, input: string, s: Steps, z: Cx, src: string): Working {
   const modSq = rAdd(rMul(z.re, z.re), rMul(z.im, z.im))
   const exact = rSqrt(modSq)
   const modTex = exact ? rTex(exact) : modSq.d === 1n ? rootTex(modSq.n) : `\\sqrt{${rTex(modSq)}}`
@@ -225,14 +250,20 @@ function finishComplex(title: string, input: string, s: Steps, z: Cx): Working {
     answers.push({ label: 'Argument', tex: argTex })
     answers.push({ label: 'Conjugate', tex: cxTex(cxConj(z)) })
   }
+  const agrees = agreesNumerically(src, z)
+  const said = cxIsReal(z) ? 'The i parts cancelled, so the answer is an ordinary real number.' : `Real part ${rTex(z.re)}, imaginary part ${rTex(z.im)}.`
   return {
     title,
     input,
     moves: s.moves,
     answers,
-    check: cxIsReal(z)
-      ? 'The i parts cancelled, so the answer is an ordinary real number.'
-      : `Real part ${rTex(z.re)}, imaginary part ${rTex(z.im)}.`
+    check:
+      agrees === false
+        ? 'Careful: working it out numerically gives a different number. Treat this answer with suspicion.'
+        : agrees
+          ? `${said} Working it out numerically gives the same number.`
+          : said,
+    checked: agrees === null ? undefined : agrees ? 'ok' : 'failed'
   }
 }
 
@@ -262,8 +293,103 @@ function rootText(r: Root, sign: 1 | -1): string {
   return `${rTex(r.re)} ${s} ${body}`
 }
 
+const HAS_I = 'This has i in it. Solve works on an equation in one ordinary letter; for sums with i, use Complex.'
+
+/**
+ * A linear equation, solved the way it is solved on the board: collect, move across, divide.
+ *
+ * Solve used to refuse anything that was not a quadratic, which meant the simplest equations a
+ * student meets were the ones the panel could not do.
+ */
+const TWO_EQUALS = 'An equation has one equals sign, and I found more than one.'
+
+export function solveLinearWorking(src: string): Working {
+  const title = 'Solve'
+  const sides = src.split('=')
+  // "2x = 6 = 3" used to be solved as 2x = 6, with the rest silently dropped.
+  if (sides.length > 2) return failed(title, src, TWO_EQUALS)
+  const [lhsSrc, rhsSrc = '0'] = sides
+  let lhs: Expr
+  let rhs: Expr
+  try {
+    lhs = parseExpr(lhsSrc)
+    rhs = parseExpr(rhsSrc)
+  } catch (err) {
+    return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
+  }
+  const vars = [...new Set([...varsOf(lhs), ...varsOf(rhs)])]
+  if (vars.includes('i')) return failed(title, src, HAS_I)
+  if (vars.length !== 1) return failed(title, src, `I need exactly one letter to solve for, and I found ${vars.length || 'none'}.`)
+  const name = vars[0]
+  const { poly: L } = polyFromExpr(lhs, name)
+  const { poly: R } = polyFromExpr(rhs, name)
+  // The difference is what matters: x² = x² + 1 has a square on each side and is still the
+  // linear (and impossible) equation 0 = 1 once they are subtracted.
+  if (pDeg(pSub(L, R)) > 1) return failed(title, src, 'That is not a linear equation.')
+
+  const input = `${exprTex(lhs)} = ${exprTex(rhs)}`
+  const s = new Steps()
+  // a·x = c once every letter is on the left and every number on the right.
+  const a = rSub(L[1] ?? R0, R[1] ?? R0)
+  const c = rSub(R[0] ?? R0, L[0] ?? R0)
+  const moved = !rIsZero(R[1] ?? R0) || !rIsZero(L[0] ?? R0)
+  if (moved) {
+    s.add(
+      `Take every ${name} term to the left and every number to the right. Anything that crosses the equals sign changes sign.`,
+      `${pTex([R0, a], name)} = ${rTex(c)}`,
+      '\\text{same thing done to both sides}'
+    )
+  }
+  if (rIsZero(a)) {
+    return failed(
+      title,
+      input,
+      rIsZero(c) ? `Both sides are the same, so every value of ${name} works.` : `The ${name} terms cancel and ${rTex(L[0] ?? R0)} = ${rTex(R[0] ?? R0)} is false, so no value of ${name} works.`
+    )
+  }
+  const x = rDiv(c, a)
+  if (rIsOne(a)) {
+    s.add(`So ${name} is on its own.`, `${name} = ${rTex(x)}`)
+  } else if (a.d !== 1n) {
+    // x/2 = 3 is taught as "multiply both sides by 2", never as "divide by a half".
+    const d = rat(a.d)
+    const an = rat(a.n)
+    const cd = rMul(c, d)
+    s.add(
+      `Multiply both sides by ${rTex(d)} to clear the fraction in front of ${name}.`,
+      `${pTex([R0, an], name)} = ${rTex(cd)}`,
+      '\\text{same thing done to both sides}'
+    )
+    if (rIsOne(an)) s.add(`So ${name} is on its own.`, `${name} = ${rTex(x)}`)
+    else s.add(`Divide both sides by ${rTex(an)}, the number in front of ${name}.`, `${name} = \\dfrac{${rTex(cd)}}{${rTex(an)}} = ${rTex(x)}`, `a${name} = c \\;\\Rightarrow\\; ${name} = c/a`)
+  } else {
+    s.add(
+      `Divide both sides by ${rTex(a)}, the number in front of ${name}.`,
+      `${name} = \\dfrac{${rTex(c)}}{${rTex(a)}} = ${rTex(x)}`,
+      `a${name} = c \\;\\Rightarrow\\; ${name} = c/a`
+    )
+  }
+  const lv = evalAt(lhs, { [name]: x })
+  const rv = evalAt(rhs, { [name]: x })
+  const ok = rEq(lv, rv)
+  s.add(
+    'Put the answer back into the original equation to check both sides agree.',
+    `${name} = ${rTex(x)}:\\quad ${exprTex(lhs)} = ${rTex(lv)},\\quad ${exprTex(rhs)} = ${rTex(rv)}`
+  )
+  return {
+    title,
+    input,
+    method: 'Linear equation',
+    moves: s.moves,
+    answers: [{ label: `${name} =`, tex: rTex(x) }],
+    check: ok ? `With ${name} = ${rTex(x)} both sides come to ${rTex(lv)}.` : 'Careful: the two sides do not agree. Treat this answer with suspicion.',
+    checked: ok ? 'ok' : 'failed'
+  }
+}
+
 export function solveQuadraticWorking(src: string): Working {
   const title = 'Solve'
+  if (src.split('=').length > 2) return failed(title, src, TWO_EQUALS)
   let left: Expr
   try {
     // "x^2 + 4 = 0" and "x^2 + 4" both mean the same thing here.
@@ -272,11 +398,17 @@ export function solveQuadraticWorking(src: string): Working {
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
-  const vars = varsOf(left).filter((v) => v !== 'i')
+  // Refused with a sentence: with i counted as a letter, polyFromExpr below would throw instead.
+  if (varsOf(left).includes('i')) return failed(title, src, HAS_I)
+  const vars = varsOf(left)
+  // "x + 1 = x + 2" has no letter left once the sides are subtracted; the linear solver reads
+  // the two sides separately and can say why there is no answer.
+  if (vars.length === 0 && src.includes('=')) return solveLinearWorking(src)
   if (vars.length !== 1) return failed(title, src, `I need exactly one letter to solve for, and I found ${vars.length || 'none'}.`)
   const name = vars[0]
   const { poly } = polyFromExpr(left, name)
-  if (pDeg(poly) !== 2) return failed(title, src, `This is a power-${pDeg(poly)} equation. The step-by-step solver here does quadratics.`)
+  if (pDeg(poly) <= 1) return solveLinearWorking(src)
+  if (pDeg(poly) !== 2) return failed(title, src, `This is a power-${pDeg(poly)} equation. The step-by-step solver here does linear equations and quadratics.`)
 
   const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
   const input = `${pTex(poly, name)} = 0`
@@ -359,20 +491,96 @@ export function solveQuadraticWorking(src: string): Working {
     '\\text{sum} = -b/a,\\quad \\text{product} = c/a'
   )
 
+  // The real check: each root, substituted exactly, has to make the polynomial zero.
+  const ok = [rootValue(root, 1), rootValue(root, -1)].every((z) => isRootOf(poly, z))
+
   return {
     title,
     input,
     method: 'Quadratic formula',
     moves: s.moves,
     answers,
-    check:
-      sign < 0
-        ? 'The two roots are conjugates — that always happens when the coefficients are real.'
-        : `Sum of roots ${rTex(sum)}, product ${rTex(product)} — both match the coefficients.`
+    check: !ok
+      ? 'Careful: putting the roots back in does not give zero. Treat this answer with suspicion.'
+      : sign < 0
+        ? 'The two roots are conjugates — that always happens when the coefficients are real — and each one makes the equation zero exactly.'
+        : `Sum of roots ${rTex(sum)}, product ${rTex(product)} — both match the coefficients.`,
+    checked: ok ? 'ok' : 'failed'
+  }
+}
+
+/** The exact value of a root written as re ± coef·√rad, as a complex surd. */
+function rootValue(r: Root, sign: 1 | -1): CxS {
+  const part: Surd = surd(R0, sign === 1 ? r.coef : rNeg(r.coef), r.rad)
+  const re = surd(r.re)
+  return r.imaginary ? { re, im: part } : { re: surd(rAdd(re.q, part.q), part.r, part.n), im: surd(R0) }
+}
+
+/** p(z) = 0, evaluated exactly (Horner's rule over complex surds). */
+function isRootOf(p: Poly, z: CxS): boolean {
+  try {
+    let acc: CxS = cxsOfRat(R0)
+    for (let i = p.length - 1; i >= 0; i--) acc = cxsAdd(cxsMul(acc, z), cxsOfRat(p[i]))
+    return cxsIsReal(acc) && surdIsRational(acc.re) && rIsZero(acc.re.q)
+  } catch {
+    return false
   }
 }
 
 // ---------------------------------------------------------------- factorising over ℂ
+
+/** Everything gathered while the factors are being split, so the answer and the check agree. */
+interface CxCollect {
+  /** The number at the front: leading coefficients and any bare −1, multiplied together. */
+  lead: Rat
+  /** Brackets to print, in order, without the lead. */
+  brackets: string[]
+  /** The same factors as polynomials, in an order the check can multiply exactly. */
+  factors: SPoly[]
+  /** Set once any root that is not rational has been used: the answer is new. */
+  anyNew: boolean
+}
+
+const leadTex = (lead: Rat): string => (rIsOne(lead) ? '' : rIsOne(rAbs(lead)) && rIsNeg(lead) ? '-' : rTex(lead))
+
+/**
+ * Split a quadratic with surd coefficients into its two linear factors, pushing the working.
+ * Returns false when the roots would need a nested root, which no student is expected to write.
+ */
+function splitQuadratic(coeffs: Surd[], name: string, s: Steps, out: CxCollect): boolean {
+  const [c, b, a] = coeffs
+  const roots = quadraticRoots(a, b, c)
+  if (!roots) return false
+  const [p, q] = roots
+  const shown = surdPolyTex(coeffs, name)
+  const bracketed = `\\left(${shown}\\right)`
+  const complex = !cxsIsReal(p)
+  const disc = surdSub(surdMul(b, b), surdMul(surd(rat(4n)), surdMul(a, c)))
+  s.add(
+    complex
+      ? `${bracketed} has a negative discriminant (${surdTex(disc)}), so solve it with the quadratic formula and use its two roots.`
+      : `${bracketed} has a positive discriminant (${surdTex(disc)}) that is not a perfect square, so its roots are surds.`,
+    `${name} = ${cxsTex(p)} \\quad\\text{or}\\quad ${name} = ${cxsTex(q)}`,
+    complex ? '\\sqrt{-k} = i\\sqrt{k}' : `${name} = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}`
+  )
+  // The leading coefficient of a quadratic is not rational when it came from a surd split; the
+  // only such splits produced here are monic, so anything else is refused rather than mis-printed.
+  if (!surdIsRational(a)) return false
+  const lead = a.q
+  const pair = `${linearFactorTex(name, p)}${linearFactorTex(name, q)}`
+  s.add(
+    `A quadratic with roots p and q is a(${name} − p)(${name} − q), so subtract each root from ${name}.`,
+    `${bracketed} = ${leadTex(lead)}${pair}`,
+    `a(${name}-p)(${name}-q)`
+  )
+  out.lead = rMul(out.lead, lead)
+  out.brackets.push(pair)
+  out.factors.push(spLinear(p), spLinear(q))
+  out.anyNew = true
+  return true
+}
+
+const NOT_EXACT = 'would need a root inside a root, or two different roots in one number, which I cannot write exactly.'
 
 export function factoriseComplexWorking(src: string): Working {
   const title = 'Factorise over complex numbers'
@@ -382,9 +590,13 @@ export function factoriseComplexWorking(src: string): Working {
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
-  const vars = varsOf(e).filter((v) => v !== 'i')
+  if (varsOf(e).includes('i')) {
+    return failed(title, src, 'This already has i in it. Factorising with i starts from an ordinary expression, like x² + 4; the i appears in the answer, not the question.')
+  }
+  const vars = varsOf(e)
   if (vars.length !== 1) return failed(title, src, 'I need exactly one letter for this.')
   const name = vars[0]
+  if (e.length === 0) return failed(title, src, 'That comes to zero, so there is nothing to factorise.')
 
   const s = new Steps()
   s.add(
@@ -393,6 +605,7 @@ export function factoriseComplexWorking(src: string): Working {
     '\\text{every polynomial factorises over } \\mathbb{C}'
   )
 
+  const { poly: whole } = polyFromExpr(e, name)
   const realParts = factorsOf(e)
   const realTex = realParts
     .map((p) => {
@@ -402,66 +615,79 @@ export function factoriseComplexWorking(src: string): Working {
     .join('')
   if (realParts.length > 1) s.add('Factorise as far as possible with real numbers first.', `${exprTex(e)} = ${realTex}`)
 
-  const out: string[] = []
-  let anyComplex = false
+  const out: CxCollect = { lead: R1, brackets: [], factors: [], anyNew: false }
   for (const part of realParts) {
     const { poly } = polyFromExpr(part, name)
     const deg = pDeg(poly)
-    if (deg <= 1) {
-      out.push(deg === 0 ? pTex(poly, name) : pTexBracketed(poly, name))
+    if (deg === 0) {
+      out.lead = rMul(out.lead, poly[0])
       continue
     }
-    if (deg > 2) {
-      return failed(title, exprTex(e), `There is a factor of power ${deg} left that I cannot split any further.`)
-    }
-    const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
-    const disc = rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
-    if (rCmp(disc, R0) >= 0) {
-      out.push(pTexBracketed(poly, name))
+    if (deg === 1) {
+      out.brackets.push(pTexBracketed(poly, name))
+      out.factors.push(spFromPoly(poly))
       continue
     }
-    anyComplex = true
-    const denom = rMul(rat(2n), a)
-    const re = rDiv(rNeg(b), denom)
-    const exact = rSqrt(rAbs(disc))
-    const root: Root = exact
-      ? { re, coef: rDiv(exact, denom), rad: 1n, imaginary: true }
-      : { re, coef: rDiv(rat(1n, rAbs(disc).d), denom), rad: rAbs(disc).n * rAbs(disc).d, imaginary: true }
-    s.add(
-      `${pTexBracketed(poly, name)} has a negative discriminant (${rTex(disc)}), so solve it with the quadratic formula and use its two roots.`,
-      `${name} = ${rootText(root, 1)} \\quad\\text{or}\\quad ${name} = ${rootText(root, -1)}`,
-      `\\sqrt{-k} = i\\sqrt{k}`
-    )
-    const lead = rIsOne(a) ? '' : rTex(a)
-    s.add(
-      'A quadratic with roots p and q is a(x − p)(x − q), so subtract each root from ' + name + '.',
-      `${pTexBracketed(poly, name)} = ${lead}\\left(${name} - \\left[${rootText(root, 1)}\\right]\\right)\\left(${name} - \\left[${rootText(root, -1)}\\right]\\right)`,
-      'a(x-p)(x-q)'
-    )
-    if (lead) out.push(lead)
-    out.push(`\\left(${name} - \\left[${rootText(root, 1)}\\right]\\right)`)
-    out.push(`\\left(${name} - \\left[${rootText(root, -1)}\\right]\\right)`)
+    if (deg === 2) {
+      if (!splitQuadratic(poly.map((c) => surd(c)), name, s, out)) {
+        return failed(title, exprTex(e), `The roots of ${pTex(poly, name)} ${NOT_EXACT}`)
+      }
+      continue
+    }
+    // x⁴ + 1 = (x² + 1)² − (√2·x)²: the same completing-the-square move as over the reals, but
+    // the middle term is a surd, so the two quadratics only exist once surds are allowed.
+    const split = deg === 4 ? splitBiquadratic(poly) : null
+    if (split) {
+      const inner = [surd(split.s), surd(R0), surd(split.alpha)]
+      // splitBiquadratic already hands back a tidy surd; a rational k (x⁴ + 4 has k = 2) lives
+      // in its q part, so copying only the root part would drop it and print the inner square twice.
+      const kx = split.k
+      const minus = [inner[0], surdNeg(kx), inner[2]]
+      const plus = [inner[0], kx, inner[2]]
+      s.add(
+        `Complete the square: ${surdPolyTex(inner, name)} squared is this expression plus ${surdTex(surdMul(kx, kx))}${name}², so take that away again as a square.`,
+        `${pTex(poly, name)} = \\left(${surdPolyTex(inner, name)}\\right)^2 - \\left(${surdTex(kx)}${name}\\right)^2 = \\left(${surdPolyTex(minus, name)}\\right)\\left(${surdPolyTex(plus, name)}\\right)`,
+        'a^2 - b^2 = (a-b)(a+b)'
+      )
+      if (!splitQuadratic(minus, name, s, out) || !splitQuadratic(plus, name, s, out)) {
+        return failed(title, exprTex(e), `The roots of ${pTex(poly, name)} ${NOT_EXACT}`)
+      }
+      continue
+    }
+    return failed(title, exprTex(e), `There is a factor of power ${deg} left that I cannot split any further.`)
   }
 
-  if (!anyComplex) {
+  const ok = checkProduct([[cxsOfRat(out.lead)], ...out.factors], whole)
+  const checked = ok ? 'ok' : 'failed'
+
+  if (!out.anyNew) {
     return {
       title,
       input: exprTex(e),
       moves: s.moves,
       answers: [{ label: 'Answer', tex: realTex }],
-      check: 'Every factor was already real, so nothing new appears by allowing i.'
+      check: ok ? 'Every factor was already real, so nothing new appears by allowing i.' : 'Careful: multiplying back out did not match. Treat this answer with suspicion.',
+      checked
     }
   }
 
-  const answer = out.join('')
-  s.add('Put the factors together.', `${exprTex(e)} = ${answer}`)
+  const answer = `${leadTex(out.lead)}${out.brackets.join('')}`
+  s.add('Put the factors together, with the number at the front.', `${exprTex(e)} = ${answer}`)
+  if (ok) {
+    s.add(
+      'Multiply back to check. Each pair of conjugate roots multiplies to a real quadratic, and the whole product comes back to the original.',
+      `${answer} = ${exprTex(e)}`,
+      '(x-p)(x-\\bar{p}) = x^2 - 2\\,\\mathrm{Re}(p)\\,x + |p|^2'
+    )
+  }
   return {
     title,
     input: exprTex(e),
     method: 'Roots over ℂ',
     moves: s.moves,
     answers: [{ label: 'Answer', tex: answer }],
-    check: 'The complex factors come in conjugate pairs, which is why multiplying them back gives real coefficients.'
+    check: ok ? `Multiplying the factors back out gives ${exprTex(e)} — the original.` : 'Careful: multiplying back out did not match. Treat this answer with suspicion.',
+    checked
   }
 }
 

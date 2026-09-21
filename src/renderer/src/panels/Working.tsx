@@ -1,15 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Check, Copy, Eye, History, Lightbulb, Play, Trash2, TriangleAlert, X } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, ChevronUp, Copy, Eye, History, Lightbulb, Play, Trash2, TriangleAlert, X } from 'lucide-react'
 import { Tex } from '../ui/Tex'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
-import { latexToMath } from '../math/latexToMath'
 import { parseExpr, varsOf } from '../math/pure/mono'
 import { usePure, type PureEntry } from '../math/pure/store'
 import { JOBS, jobById, type JobId } from '../math/pure/run'
 import { texToPlain, type Working as WorkingDoc } from '../math/pure/work'
+import { STEP_PREF_KEY, checkTone, fieldHasText, initialShown, offeredJob, stepPrefFrom, type StepPref, type TreatAs } from '../math/pure/reveal'
 import { visualizeGraph } from '../core/visualize'
 import { showPanel } from '../app/panels'
 import { useCasStatus } from '../math/cas'
+
+const JOB_IDS: readonly JobId[] = JOBS.map((j) => j.id)
+
+const readStepPref = (): StepPref => {
+  try {
+    return stepPrefFrom(localStorage.getItem(STEP_PREF_KEY))
+  } catch {
+    return 'try'
+  }
+}
+
+const writeStepPref = (p: StepPref): void => {
+  try {
+    localStorage.setItem(STEP_PREF_KEY, p)
+  } catch {
+    // Not remembered; the buttons still work.
+  }
+}
 
 /**
  * One step of the working: what happened, the rule that allowed it, and the maths.
@@ -36,13 +54,17 @@ function MoveRow({ n, head, rule, tex, note }: { n: number; head: string; rule?:
   )
 }
 
-function WorkingView({ doc }: { doc: WorkingDoc }) {
-  const [shown, setShown] = useState(doc.moves.length)
+function WorkingView({ doc, pref, onPref, onOffer }: { doc: WorkingDoc; pref: StepPref; onPref: (p: StepPref) => void; onOffer: (job: JobId) => void }) {
+  const [shown, setShown] = useState(() => initialShown(doc.moves.length, pref))
   const [copied, setCopied] = useState(false)
-  useEffect(() => setShown(doc.moves.length), [doc])
+  // A new piece of working starts the way the student prefers: hidden, so they can try first,
+  // or all at once. The preference is read when the document changes, not on every render, so
+  // pressing "Show all" is not undone by the next keystroke.
+  useEffect(() => setShown(initialShown(doc.moves.length, pref)), [doc]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hidden = doc.moves.length - shown
   const finished = hidden === 0
+  const offer = offeredJob(doc, JOB_IDS)
 
   const copyAll = (): void => {
     const lines = [
@@ -82,18 +104,44 @@ function WorkingView({ doc }: { doc: WorkingDoc }) {
         <button className="btn ghost" onClick={copyAll} title="Copy the whole working">
           {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
         </button>
-        {finished && doc.moves.length > 0 && (
-          <button className="btn ghost" onClick={() => setShown(0)} title="Hide the working so you can try it yourself">
-            <Lightbulb size={13} /> Let me try first
-          </button>
-        )}
       </div>
 
-      {finished && doc.answers.length > 0 && <AnswerCard doc={doc} />}
+      {/* The answer is never hidden: it is pinned here, above the steps, whatever is shown below. */}
+      {doc.answers.length > 0 && <AnswerCard doc={doc} />}
 
-      {shown === 0 && (
-        <div className="px-3 pt-3 text-[color:var(--text-dim)]">
-          Work it out yourself first. Press Hint when you are stuck — one step at a time.
+      {offer && doc.offer && (
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+          <button className="btn" onClick={() => onOffer(offer)} title={doc.offer.hint}>
+            {doc.offer.label}
+          </button>
+          <span className="text-[color:var(--text-faint)]">{doc.offer.hint}</span>
+        </div>
+      )}
+
+      {doc.moves.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
+          {shown === 0 && <span className="text-[color:var(--text-dim)]">Try it yourself first, then check a step at a time.</span>}
+          {hidden > 0 && (
+            <>
+              <button className="btn" onClick={() => setShown((n) => n + 1)}>
+                <Lightbulb size={13} /> {shown === 0 ? 'Show a step' : 'Next step'}
+              </button>
+              <button className="btn ghost" onClick={() => setShown(doc.moves.length)}>
+                Show all {doc.moves.length} steps
+              </button>
+              {shown > 0 && <span className="text-[color:var(--text-faint)]">{hidden} to go</span>}
+            </>
+          )}
+          {finished && (
+            <button className="btn ghost" onClick={() => setShown(0)} title="Hide the working so you can try it yourself">
+              <Lightbulb size={13} /> Let me try first
+            </button>
+          )}
+          <div className="flex-1" />
+          <label className="flex items-center gap-1 text-[color:var(--text-faint)]" title="Whether new working starts with every step showing">
+            <input type="checkbox" checked={pref === 'all'} onChange={(e) => onPref(e.target.checked ? 'all' : 'try')} />
+            Always show all steps
+          </label>
         </div>
       )}
 
@@ -102,24 +150,13 @@ function WorkingView({ doc }: { doc: WorkingDoc }) {
           <MoveRow key={i} n={i + 1} {...m} />
         ))}
       </ol>
-
-      {hidden > 0 && (
-        <div className="flex items-center gap-2 px-3 pt-3">
-          <button className="btn" onClick={() => setShown((n) => n + 1)}>
-            <Lightbulb size={13} /> {shown === 0 ? 'Hint' : 'Next step'}
-          </button>
-          <button className="btn ghost" onClick={() => setShown(doc.moves.length)}>
-            Show all {doc.moves.length} steps
-          </button>
-          <span className="text-[color:var(--text-faint)]">{hidden} to go</span>
-        </div>
-      )}
       <div className="h-3" />
     </div>
   )
 }
 
 function AnswerCard({ doc }: { doc: WorkingDoc }) {
+  const tone = checkTone(doc)
   return (
     <div className="pure-answer mx-3 mt-3">
       <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
@@ -132,11 +169,12 @@ function AnswerCard({ doc }: { doc: WorkingDoc }) {
       {doc.noWorking && (
         <div className="mt-2 text-[color:var(--text-dim)]">
           That answer is right, but this one is past the methods I can write out by hand, so there are no steps for it.
+          {doc.reason && <div className="mt-1 text-[color:var(--text-faint)]">Why: {texToPlain(doc.reason)}</div>}
         </div>
       )}
       {doc.check && !doc.noWorking && (
-        <div className={`mt-2 ${doc.check.includes('suspicion') ? 'text-[color:var(--bad)]' : 'text-[color:var(--good)]'}`}>
-          {doc.check.includes('suspicion') ? '' : '✓ '}
+        <div className={`mt-2 ${tone === 'failed' ? 'text-[color:var(--bad)]' : tone === 'ok' ? 'text-[color:var(--good)]' : 'text-[color:var(--text-dim)]'}`}>
+          {tone === 'ok' ? '✓ ' : ''}
           {texToPlain(doc.check)}
         </div>
       )}
@@ -144,7 +182,7 @@ function AnswerCard({ doc }: { doc: WorkingDoc }) {
   )
 }
 
-function HistoryList({ items, onPick, onDrop, onClear }: { items: PureEntry[]; onPick: (id: string) => void; onDrop: (id: string) => void; onClear: () => void }) {
+function HistoryList({ items, onPick, onDrop, onClear, onClose }: { items: PureEntry[]; onPick: (id: string) => void; onDrop: (id: string) => void; onClear: () => void; onClose: () => void }) {
   return (
     <div className="pure-history">
       <div className="flex items-center gap-2 border-b border-[color:var(--line)] px-2 py-1.5">
@@ -155,6 +193,9 @@ function HistoryList({ items, onPick, onDrop, onClear }: { items: PureEntry[]; o
             <Trash2 size={13} />
           </button>
         )}
+        <button className="icon-btn" title="Close the history" onClick={onClose}>
+          <X size={13} />
+        </button>
       </div>
       {items.length === 0 && <div className="p-2 text-[color:var(--text-faint)]">Nothing worked out yet.</div>}
       <div className="min-h-0 flex-1 overflow-auto">
@@ -201,10 +242,14 @@ function graphable(src: string): boolean {
 }
 
 export function Working() {
-  const { job, input, inputLatex, working, asking, history, run, setJob, recall, remove, clearHistory } = usePure()
+  const { job, input, inputLatex, working, asking, history, run, runLatex, setJob, recall, remove, clearHistory } = usePure()
   const casStatus = useCasStatus((s) => s.status)
   const [latex, setLatex] = useState(inputLatex)
-  const [showHistory, setShowHistory] = useState(true)
+  // The history rail starts closed: the working needs the room more than the list does.
+  const [showHistory, setShowHistory] = useState(false)
+  const [treatAs, setTreatAs] = useState<TreatAs>('auto')
+  const [pref, setPref] = useState<StepPref>(readStepPref)
+  const [showExamples, setShowExamples] = useState(false)
   const field = useRef<MathInputHandle>(null)
 
   // A recalled entry has to appear in the input box, not just in the working below. This must
@@ -213,12 +258,19 @@ export function Working() {
   useEffect(() => setLatex(inputLatex), [inputLatex])
 
   const go = (which?: JobId): void => {
-    const text = latexToMath(latex).trim()
-    if (!text) return
-    run(which ?? job, text, latex)
+    if (!fieldHasText(latex)) return
+    // Auto: the job is guessed from what was typed, and the title above the working says which.
+    // The store converts the LaTeX itself, so a converter refusal reaches the student as a sentence.
+    runLatex(latex, which ?? treatAs)
   }
 
-  const def = jobById(job)
+  const setPreference = (p: StepPref): void => {
+    setPref(p)
+    writeStepPref(p)
+  }
+
+  // The example belongs to the chosen job, or to the last job run when the choice is automatic.
+  const def = jobById(treatAs === 'auto' ? job : treatAs)
 
   return (
     <div className="panel flex h-full min-h-0 flex-col">
@@ -229,7 +281,7 @@ export function Working() {
               ref={field}
               value={latex}
               onChange={setLatex}
-              placeholder={def.placeholder}
+              placeholder={treatAs === 'auto' ? 'Type an expression, an equation, or a list of numbers' : def.placeholder}
               onEnter={() => go()}
               className="w-full"
             />
@@ -239,36 +291,46 @@ export function Working() {
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1">
-          {JOBS.map((j) => (
-            <button
-              key={j.id}
-              className={`btn ${j.id === job ? 'primary' : 'ghost'}`}
-              title={j.about}
-              onClick={() => {
-                setJob(j.id)
-                if (latexToMath(latex).trim()) go(j.id)
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1 text-[color:var(--text-dim)]">
+            Treat as
+            <select
+              className="field w-auto"
+              value={treatAs}
+              title="What to do with what you typed. Auto guesses from the shape of it."
+              onChange={(e) => {
+                const v = e.target.value as TreatAs
+                setTreatAs(v)
+                if (v !== 'auto') {
+                  setJob(v)
+                  if (fieldHasText(latex)) go(v)
+                }
               }}
             >
-              {j.label}
-            </button>
-          ))}
-          <div className="flex-1" />
+              <option value="auto">Auto (guess from what I typed)</option>
+              {JOBS.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="btn ghost"
             title={`Load an example: ${def.example}`}
             onClick={() => {
               setLatex(def.exampleLatex)
-              run(job, def.example, def.exampleLatex)
+              run(def.id, def.example, def.exampleLatex)
             }}
           >
             Example
           </button>
+          <div className="flex-1" />
           <button className={`icon-btn ${showHistory ? 'on' : ''}`} title="History" onClick={() => setShowHistory(!showHistory)}>
             <History size={14} />
           </button>
         </div>
-        <div className="mt-1 text-[color:var(--text-faint)]">{def.about}</div>
+        {treatAs !== 'auto' && <div className="mt-1 text-[color:var(--text-faint)]">{def.about}</div>}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -278,28 +340,33 @@ export function Working() {
               <div className="mb-2 text-[color:var(--text)]">Type something above and press Work it out.</div>
               <div>
                 Every answer here is worked out exactly — in fractions, never in rounded decimals — and checked by putting it
-                back together before it is shown to you.
+                back together before it is shown to you. The steps stay hidden until you ask, so you can try first.
               </div>
-              <ul className="mt-3 space-y-1">
-                {JOBS.map((j) => (
-                  <li key={j.id}>
-                    <button
-                      className="btn ghost"
-                      onClick={() => {
-                        setJob(j.id)
-                        setLatex(j.exampleLatex)
-                        run(j.id, j.example, j.exampleLatex)
-                      }}
-                    >
-                      {j.label}
-                    </button>
-                    <span className="ml-2 text-[color:var(--text-faint)]">{j.example}</span>
-                  </li>
-                ))}
-              </ul>
+              <button className="btn ghost mt-3" onClick={() => setShowExamples(!showExamples)}>
+                {showExamples ? <ChevronUp size={13} /> : <ChevronDown size={13} />} What can it do?
+              </button>
+              {showExamples && (
+                <ul className="mt-2 space-y-1">
+                  {JOBS.map((j) => (
+                    <li key={j.id}>
+                      <button
+                        className="btn ghost"
+                        onClick={() => {
+                          setJob(j.id)
+                          setLatex(j.exampleLatex)
+                          run(j.id, j.example, j.exampleLatex)
+                        }}
+                      >
+                        {j.label}
+                      </button>
+                      <span className="ml-2 text-[color:var(--text-faint)]">{j.example}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
-          {working && <WorkingView doc={working} />}
+          {working && <WorkingView doc={working} pref={pref} onPref={setPreference} onOffer={(j) => run(j, input, inputLatex)} />}
           {asking && (
             <div className="px-3 pb-3 text-[color:var(--text-dim)]">
               Checking that one a different way{casStatus === 'loading' ? ' (starting the algebra engine, this takes a moment the first time)' : ''}…
@@ -322,9 +389,7 @@ export function Working() {
             </div>
           )}
         </div>
-        {showHistory && (
-          <HistoryList items={history} onPick={recall} onDrop={remove} onClear={clearHistory} />
-        )}
+        {showHistory && <HistoryList items={history} onPick={recall} onDrop={remove} onClear={clearHistory} onClose={() => setShowHistory(false)} />}
       </div>
     </div>
   )

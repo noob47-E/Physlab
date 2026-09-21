@@ -15,7 +15,8 @@ import { fmt, fmtAngle, tex, texIJK } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import * as VS from '../math/vectorSolver'
-import { runPure, type JobId } from '../math/pure/run'
+import { linearToLatex, runPure, type JobId } from '../math/pure/run'
+import { casInDegrees } from '../calc/angle'
 import { usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
 
@@ -727,17 +728,20 @@ function tryPureMath(input: string): boolean {
   if (doc.error) return false
 
   const s = scene()
+  // The Working panel's maths field reads LaTeX, so the linear form typed here has to be
+  // converted or 6x^2 arrives on screen as x^(2) with a stray bracket.
+  const latex = linearToLatex(body)
   const label = (text: string): string => String.raw`\text{` + text.replace(/[=]/g, '') + String.raw`}\;`
   s.pushLog({
     input,
     kind: 'result',
     tex: doc.answers.map((a) => `${a.label === 'Answer' ? '' : label(a.label)}${a.tex}`).join(String.raw`,\quad `),
     working: () => {
-      usePure.getState().run(job, body)
+      usePure.getState().run(job, body, latex)
       showPanel('working')
     }
   })
-  usePure.getState().run(job, body)
+  usePure.getState().run(job, body, latex)
   showPanel('working')
   return true
 }
@@ -748,7 +752,8 @@ async function tryCas(input: string): Promise<boolean> {
   const op = m[1].toLowerCase()
   const args = splitArgs(m[2])
   const s = scene()
-  const deg = s.settings.angleUnit === 'deg' && !/x|y|t/.test(m[2])
+  // In DEG mode the calculator's own d/dx works in degrees; the algebra engine must agree.
+  const deg = casInDegrees(s.settings.angleUnit)
   const id = s.pushLog({ input, kind: 'info', text: 'Solving… (the algebra engine takes a few seconds to start the first time)' })
   let payload: Record<string, unknown>
   let casOp = op

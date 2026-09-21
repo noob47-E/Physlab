@@ -40,7 +40,19 @@ export interface HistoryItem {
 export interface CalcStore {
   mode: CalcMode
   input: string
-  cursor: number
+  /**
+   * LaTeX waiting to go into the maths field at its caret — a constant picked from the CONST
+   * list while that list, not the field, was on screen. The field takes it when it mounts.
+   * Splicing the text into `input` here by a stored cursor index put every constant at
+   * character 0, because nothing ever updated that index.
+   */
+  pending: string | null
+  /**
+   * The keypad the student was using before a list mode (CONST, UNITS…) took the screen, so a
+   * picked constant goes back to it. The old `mode === 'CMPLX' ? mode : 'COMP'` inside insert()
+   * could never see CMPLX, because insert only runs while the CONST list is showing.
+   */
+  keypad: 'COMP' | 'CMPLX'
   shift: boolean
   alpha: boolean
   sto: boolean
@@ -50,8 +62,10 @@ export interface CalcStore {
   matrices: Record<string, number[][]>
   vectors: Record<string, number[]>
   setMode: (m: CalcMode) => void
-  insert: (text: string) => void
-  setInput: (text: string, cursor?: number) => void
+  /** Queue LaTeX for the scientific keypad's field and switch to it. */
+  insert: (latex: string) => void
+  /** The field's own way of collecting what was queued; returns null when nothing is waiting. */
+  takePending: () => string | null
 }
 
 const mat = (r: number, c: number) => Array.from({ length: r }, (_, i) => Array.from({ length: c }, (_, j) => (i === j ? 1 : 0)))
@@ -59,7 +73,8 @@ const mat = (r: number, c: number) => Array.from({ length: r }, (_, i) => Array.
 export const useCalc = create<CalcStore>((set, get) => ({
   mode: 'COMP',
   input: '',
-  cursor: 0,
+  pending: null,
+  keypad: 'COMP',
   shift: false,
   alpha: false,
   sto: false,
@@ -69,12 +84,14 @@ export const useCalc = create<CalcStore>((set, get) => ({
   matrices: { MatA: mat(2, 2), MatB: [[2, 1], [1, 3]], MatC: mat(3, 3), MatD: mat(3, 3) },
   vectors: { VctA: [3, 4], VctB: [2, -1], VctC: [1, 2, 3], VctD: [0, 0, 1] },
   setMode: (mode) => set({ mode }),
-  insert: (text) => {
-    const { input, cursor } = get()
-    const c = Math.min(cursor, input.length)
-    set({ input: input.slice(0, c) + text + input.slice(c), cursor: c + text.length, shift: false, alpha: false })
+  insert: (latex) => {
+    set({ pending: latex, mode: get().keypad, shift: false, alpha: false })
   },
-  setInput: (input, cursor) => set({ input, cursor: cursor ?? input.length })
+  takePending: () => {
+    const { pending } = get()
+    if (pending !== null) set({ pending: null })
+    return pending
+  }
 }))
 
 // Written straight from the store rather than from the panel, so every place that pushes a
@@ -88,6 +105,12 @@ useCalc.subscribe((s) => {
   } catch {
     // Storage blocked: history just will not survive a restart.
   }
+})
+
+// Whichever way the mode changes (the chips, shift+2, a menu), the last keypad is what a picked
+// constant returns to.
+useCalc.subscribe((s) => {
+  if ((s.mode === 'COMP' || s.mode === 'CMPLX') && s.keypad !== s.mode) useCalc.setState({ keypad: s.mode })
 })
 
 export const clearCalcHistory = (): void => useCalc.setState({ history: [] })

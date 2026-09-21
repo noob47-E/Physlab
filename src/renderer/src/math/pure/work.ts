@@ -36,6 +36,12 @@ export interface Working {
   answers: Answer[]
   /** A line that proves the answer, by multiplying back out or substituting. */
   check?: string
+  /**
+   * Whether the check actually passed. The panel used to decide by searching `check` for the
+   * word "suspicion", which is a sentence doing a boolean's job; a reworded sentence would have
+   * turned a failed check green. Left unset when there was nothing to verify.
+   */
+  checked?: 'ok' | 'failed'
   /** Set instead of the rest when the input could not be handled; always a readable sentence. */
   error?: string
   /**
@@ -43,6 +49,13 @@ export interface Working {
    * first, which is the rule this whole project is built on.
    */
   noWorking?: boolean
+  /** Why the step engine gave up, when `noWorking` is set: the student deserves the reason. */
+  reason?: string
+  /**
+   * A follow-up the panel can offer with one button — "Allow i" after a real factorisation stops
+   * at x² + 4. `job` is a JobId; it is a string here only because this file sits below run.ts.
+   */
+  offer?: { job: string; label: string; hint: string }
 }
 
 

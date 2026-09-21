@@ -300,7 +300,8 @@ export function partialFractionsWorking(src: string): Working {
     answers: [{ label: 'Answer', tex: answer }],
     check: ok
       ? `Adding the pieces back over a common denominator gives ${pTex(N, name)} on top — the original.`
-      : 'Careful: adding the pieces back did not give the original. Treat this answer with suspicion.'
+      : 'Careful: adding the pieces back did not give the original. Treat this answer with suspicion.',
+    checked: ok ? 'ok' : 'failed'
   }
 }
 
