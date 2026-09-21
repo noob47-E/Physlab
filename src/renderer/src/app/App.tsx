@@ -13,7 +13,6 @@ import { Measurements } from '../panels/Measurements'
 import { Console } from '../panels/Console'
 import { Timeline } from '../panels/Timeline'
 import { Examples } from '../panels/Examples'
-import { VectorCalc } from '../panels/VectorCalc'
 import { useParticleLab } from '../render/GpuParticles'
 import { useScene } from '../core/store'
 import { useApp } from './modes'
@@ -26,8 +25,10 @@ import { PANEL_TITLES, refreshOpenPanels, setDockApi, showPanel } from './panels
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
-const Calculator = lazy(() => import('../panels/Calculator').then((m) => ({ default: m.Calculator })))
-const Working = lazy(() => import('../panels/Working').then((m) => ({ default: m.Working })))
+// The Vector Calculator was the one eager import of MathLive, so every start-up paid for the
+// whole maths-field library before the first frame; lazy, it loads with the panel that needs it.
+const VectorCalc = lazy(() => import('../panels/VectorCalc').then((m) => ({ default: m.VectorCalc })))
+const Maths = lazy(() => import('../panels/Maths').then((m) => ({ default: m.Maths })))
 const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.Graphs })))
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
@@ -44,8 +45,7 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   solver: Solver,
   practice: Practice,
   labdata: LabData,
-  calculator: Calculator,
-  working: Working,
+  maths: Maths,
   console: Console,
   timeline: Timeline,
   graphs: Graphs,

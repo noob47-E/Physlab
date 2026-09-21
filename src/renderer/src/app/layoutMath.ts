@@ -73,7 +73,9 @@ export interface LayoutStamp {
   h: number
 }
 
-export const LAYOUT_VERSION = 2
+// 3: the `calculator` and `working` panels became one `maths` panel. A saved layout that still
+// names the dead ids would restore with empty tabs, so the version bump rebuilds it.
+export const LAYOUT_VERSION = 3
 
 /**
  * A saved layout is used again only when it was made by this schema for this size of window.
@@ -91,7 +93,7 @@ export type PanelHome = 'centre' | 'left' | 'right' | 'below'
 export function panelHome(id: string): PanelHome {
   switch (id) {
     case 'viewport':
-    case 'working':
+    case 'maths':
       return 'centre'
     case 'outliner':
     case 'examples':

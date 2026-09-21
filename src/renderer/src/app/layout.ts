@@ -33,7 +33,7 @@ export function enterMode(id: ModeId) {
   // The centre panel is switched directly: requestFocus holds one panel at a time, so asking
   // for two in a row would lose the first.
   if (m.centre) showPanel(m.centre)
-  else if (isPanelOpen('working')) showPanel('viewport')
+  else if (isPanelOpen('maths')) showPanel('viewport')
   if (m.panel) s.requestFocus(m.panel)
   if (!m.ready) s.pushLog({ input: m.label, kind: 'info', text: `${m.label} is coming in the next build stages: ${m.description}` })
   // Pyodide takes several seconds to wake. Starting it the moment the calculator opens means the

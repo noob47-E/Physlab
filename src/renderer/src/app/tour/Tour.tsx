@@ -166,8 +166,8 @@ export function showWorkingExample(): void {
   enterMode('calculator')
   const job = JOBS.find((j) => j.id === WELCOME_JOB) ?? JOBS[0]
   usePure.getState().run(job.id, job.example, job.exampleLatex)
-  // enterMode already opened Working; asking again makes it the active tab of its group.
-  showPanel('working')
+  // enterMode already opened the Maths screen; asking again makes it the active tab of its group.
+  showPanel('maths')
 }
 
 function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void }) {

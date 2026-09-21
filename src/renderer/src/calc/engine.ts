@@ -84,7 +84,9 @@ export function solveNumeric(f: (x: number) => number, guess = 0): number {
       if (Number.isFinite(py) && Number.isFinite(cy) && Math.sign(py) !== Math.sign(cy)) {
         let a = px
         let b = cx
-        for (let k = 0; k < 200; k++) {
+        // 60 halvings take a 2 000 000-wide bracket below 10⁻¹²; the 200 it used to do were
+        // 140 evaluations of f for nothing, on every bracket, on the main thread.
+        for (let k = 0; k < 60; k++) {
           const m = (a + b) / 2
           if (Math.sign(f(m)) === Math.sign(f(a))) a = m
           else b = m
@@ -97,8 +99,10 @@ export function solveNumeric(f: (x: number) => number, guess = 0): number {
     }
     return NaN
   }
+  // 1 000 points per sweep, not 4 000: an equation with no root used to cost 16 000 evaluations
+  // of f (each a mathjs evaluate) before "No solution", a visible freeze after Enter.
   for (const R of [10, 100, 1e4, 1e6]) {
-    const r = scan(guess - R, guess + R, 4000)
+    const r = scan(guess - R, guess + R, 1000)
     if (Number.isFinite(r)) return r
   }
   throw new Error('No solution found')
@@ -171,7 +175,11 @@ math.import(
     Ran: () => Math.round(Math.random() * 1000) / 1000,
     GCD: (...a: number[]) => math.gcd(...(a as [number, number])),
     LCM: (...a: number[]) => math.lcm(...(a as [number, number])),
-    Abs: (x: number) => math.abs(x)
+    Abs: (x: number) => math.abs(x),
+    // Capitalised because the constants list defines r_e (the classical electron radius) under
+    // the spelling `re` as well, and that number shadowed mathjs's own re() in every scope.
+    Re: (z: unknown) => math.re(z as never),
+    Im: (z: unknown) => math.im(z as never)
   },
   { override: true }
 )
@@ -257,7 +265,7 @@ export function formatValue(v: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
-// Exact forms (S⇔D): fractions, surds, π multiples — offline recognition
+// Exact forms (the "exact / decimal" chip): fractions, surds, π multiples — offline recognition
 // ---------------------------------------------------------------------------
 
 export function toFraction(v: number, maxDen = 100000): [number, number] | null {

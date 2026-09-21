@@ -65,7 +65,7 @@ export function ModePanel({ mode }: { mode: CalcMode }) {
   }
 }
 
-const Screen = ({ children }: { children: React.ReactNode }) => <div className="lcd min-h-0 text-lead">{children}</div>
+const Screen = ({ children }: { children: React.ReactNode }) => <div className="maths-screen text-lead">{children}</div>
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="flex items-center gap-2">
     <span className="w-28 shrink-0 text-right text-[color:var(--text-dim)]">{label}</span>
@@ -370,7 +370,7 @@ function StatMode() {
           {res.expr && (
             <div className="mt-1 flex items-center gap-2 text-small">
               ŷ at x =
-              <input className="w-16 rounded border border-[color:var(--lcd-line)] bg-[color:var(--lcd-field)] px-1" type="number" value={predictX} onChange={(e) => setPredictX(Number(e.target.value))} onKeyDown={(e) => e.stopPropagation()} />
+              <input className="w-16 rounded border border-[color:var(--line-2)] bg-[color:var(--input-bg)] px-1" type="number" value={predictX} onChange={(e) => setPredictX(Number(e.target.value))} onKeyDown={(e) => e.stopPropagation()} />
               → <b>{calcNum(predict)}</b>
             </div>
           )}
@@ -490,7 +490,7 @@ function DistMode() {
         f('lambda', 'λ')
       )}
       <Screen>
-        {error ? <span className="text-[color:var(--lcd-bad)]">{error}</span> : <div className="text-right text-display">{calcNum(result)}</div>}
+        {error ? <span className="text-[color:var(--bad)]">{error}</span> : <div className="text-right text-display">{calcNum(result)}</div>}
       </Screen>
       <button className="btn w-fit" onClick={visualize}>
         <Eye size={13} /> Visualize
@@ -626,7 +626,7 @@ function EquationMode() {
             </div>
           ))}
           {deg === 2 && c[0] !== 0 && (
-            <div className="mt-1 border-t border-[color:var(--lcd-line)] pt-1 text-small">
+            <div className="mt-1 border-t border-[color:var(--line-2)] pt-1 text-small">
               Turning point: ({calcNum(-c[1] / (2 * c[0]))}, {calcNum(c[2] - (c[1] * c[1]) / (4 * c[0]))}) · discriminant b²−4ac = {calcNum(c[1] * c[1] - 4 * c[0] * c[2])}
             </div>
           )}
@@ -635,7 +635,7 @@ function EquationMode() {
       visualize = () => visualizeGraph(`y = ${expr}`, [expr], 'explicit')
     }
   } catch (e) {
-    out = <span className="text-[color:var(--lcd-bad)]">{e instanceof Error ? e.message : String(e)}</span>
+    out = <span className="text-[color:var(--bad)]">{e instanceof Error ? e.message : String(e)}</span>
   }
 
   return (

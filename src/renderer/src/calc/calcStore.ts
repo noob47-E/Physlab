@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { usePure } from '../math/pure/store'
 
 /** History outlives the session: a student closing the app mid-homework should not lose it. */
 const HISTORY_KEY = 'physlab.calc.history'
@@ -31,6 +32,53 @@ export type CalcMode =
   | 'CONST'
   | 'MEASURE'
 
+/**
+ * What each mode is called on screen. The ids above are the calculator's own and stay as they
+ * are — stored history and tests name them — but a student reads "Complex numbers", never
+ * "CMPLX": those abbreviations were a handheld's, and the screen has room for words.
+ */
+export const MODE_LABELS: Record<CalcMode, string> = {
+  COMP: 'Numbers',
+  CMPLX: 'Complex',
+  'BASE-N': 'Bases',
+  MATRIX: 'Matrices',
+  VECTOR: 'Vectors',
+  STAT: 'Statistics',
+  DIST: 'Distributions',
+  TABLE: 'Table',
+  EQUATION: 'Equations',
+  INEQUALITY: 'Inequalities',
+  RATIO: 'Ratio',
+  SHEET: 'Sheet',
+  UNITS: 'Units',
+  CONST: 'Constants',
+  MEASURE: 'Measure'
+}
+
+/** One line under each mode's name, for the picker. */
+export const MODE_HINTS: Record<CalcMode, string> = {
+  COMP: 'Everyday calculating: fractions, roots, powers, trigonometry, calculus',
+  CMPLX: 'Complex numbers, with modulus, argument and conjugate',
+  'BASE-N': 'Binary, octal and hexadecimal',
+  MATRIX: 'Matrices',
+  VECTOR: 'Vectors',
+  STAT: 'Statistics and regression',
+  DIST: 'Probability distributions',
+  TABLE: 'A table of values for a function',
+  EQUATION: 'Simultaneous and polynomial equations',
+  INEQUALITY: 'Polynomial inequalities',
+  RATIO: 'Proportions',
+  SHEET: 'A small spreadsheet',
+  UNITS: 'Unit conversion',
+  CONST: 'Physical constants',
+  MEASURE: 'Significant figures and uncertainty'
+}
+
+/** The three modes that share the maths field; the rest have a screen of their own. */
+export const FIELD_MODES = ['COMP', 'CMPLX', 'BASE-N'] as const satisfies readonly CalcMode[]
+export type FieldMode = (typeof FIELD_MODES)[number]
+export const isFieldMode = (m: CalcMode): m is FieldMode => (FIELD_MODES as readonly CalcMode[]).includes(m)
+
 export interface HistoryItem {
   input: string
   result: string
@@ -53,9 +101,6 @@ export interface CalcStore {
    * could never see CMPLX, because insert only runs while the CONST list is showing.
    */
   keypad: 'COMP' | 'CMPLX'
-  shift: boolean
-  alpha: boolean
-  sto: boolean
   vars: Record<string, unknown>
   ans: unknown
   history: HistoryItem[]
@@ -75,9 +120,6 @@ export const useCalc = create<CalcStore>((set, get) => ({
   input: '',
   pending: null,
   keypad: 'COMP',
-  shift: false,
-  alpha: false,
-  sto: false,
   vars: { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, M: 0, x: 0, y: 0 },
   ans: 0,
   history: loadHistory(),
@@ -85,7 +127,7 @@ export const useCalc = create<CalcStore>((set, get) => ({
   vectors: { VctA: [3, 4], VctB: [2, -1], VctC: [1, 2, 3], VctD: [0, 0, 1] },
   setMode: (mode) => set({ mode }),
   insert: (latex) => {
-    set({ pending: latex, mode: get().keypad, shift: false, alpha: false })
+    set({ pending: latex, mode: get().keypad })
   },
   takePending: () => {
     const { pending } = get()
@@ -107,10 +149,38 @@ useCalc.subscribe((s) => {
   }
 })
 
-// Whichever way the mode changes (the chips, shift+2, a menu), the last keypad is what a picked
-// constant returns to.
+// Whichever way the mode changes (the chips, the palette, a menu), the last keypad is what a
+// picked constant returns to.
 useCalc.subscribe((s) => {
   if ((s.mode === 'COMP' || s.mode === 'CMPLX') && s.keypad !== s.mode) useCalc.setState({ keypad: s.mode })
 })
 
 export const clearCalcHistory = (): void => useCalc.setState({ history: [] })
+
+/**
+ * What the maths field should hold once a working has arrived: the LaTeX the working was made
+ * from, in a mode that has the field on screen. Null when the field already shows it — a run
+ * started from the field itself — or when the working has no LaTeX of its own.
+ *
+ * The Working panel used to keep its own field and copy `inputLatex` into it; with one field
+ * for everything, a factorisation asked for in the command bar, a "Worked out" entry recalled
+ * from the history or the tour's example otherwise showed its steps under a field and an
+ * answer that still belonged to the previous line, and Enter then worked on the wrong one.
+ */
+export function fieldAfterWorking(calc: Pick<CalcStore, 'mode' | 'input'>, latex: string): Partial<CalcStore> | null {
+  if (!latex || latex === calc.input) return null
+  // The Bases field is plain text, and a list mode (matrices, statistics…) has no field at all.
+  const mode: CalcMode = calc.mode === 'COMP' || calc.mode === 'CMPLX' ? calc.mode : 'COMP'
+  return mode === calc.mode ? { input: latex } : { input: latex, mode }
+}
+
+// Joined here, at module level, rather than in the Maths screen: the command bar can ask for a
+// working before that screen has ever been loaded, and the field must still show the line when
+// it opens.
+let followedSeq = usePure.getState().runSeq
+usePure.subscribe((s) => {
+  if (s.runSeq === followedSeq) return
+  followedSeq = s.runSeq
+  const patch = fieldAfterWorking(useCalc.getState(), s.inputLatex)
+  if (patch) useCalc.setState(patch)
+})

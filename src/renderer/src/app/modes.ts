@@ -41,11 +41,14 @@ export const MODES: ModeDef[] = [
   {
     id: 'calculator',
     label: 'Calculator',
-    description: 'Scientific calculator in natural textbook math, plus Pure Math: factorising, division, partial fractions, HCF/LCM and complex numbers worked out step by step.',
+    description: 'One Maths screen: type in natural textbook maths, get the answer, then the working step by step — factorising, division, partial fractions, HCF/LCM and complex numbers.',
     ready: true,
     tools: ['select', '|', 'point', 'distance', '|', 'delete'],
-    panel: 'calculator',
-    centre: 'working'
+    // One screen holds the field, the answer and the working, so it is the mode's panel and its
+    // centre at once: the keypad used to live in a side panel and the working in the middle,
+    // and every "Work it out" was a jump between the two.
+    panel: 'maths',
+    centre: 'maths'
   },
   {
     id: 'vectors',

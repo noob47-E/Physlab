@@ -33,7 +33,8 @@ export const calcPrecision = (): CalcPrecision => source()
  * fmtPrecise itself.
  */
 export function calcNum(v: number, s: CalcPrecision = calcPrecision()): string {
-  if (Number.isNaN(v)) return 'Math ERROR'
+  // Words, not a handheld's "ERROR": a cell of a table or a distribution with no value says so.
+  if (Number.isNaN(v)) return 'no value'
   if (!Number.isFinite(v)) return v > 0 ? '∞' : '−∞'
   if (v === 0) return '0'
   // fmtPrecise calls anything below 10⁻¹² zero, which is right for a length on the grid and
