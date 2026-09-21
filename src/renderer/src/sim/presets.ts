@@ -18,6 +18,8 @@ export interface Preset {
   about: string
   /** Where it belongs in the list. */
   topic: 'Motion' | 'Forces' | 'Energy' | 'Momentum' | 'Oscillation'
+  /** Plain words a student might search by — physics ideas and everyday terms, 3–6 per preset. */
+  tags: string[]
   build: () => { bodies: BodyDef[]; world?: Partial<WorldSettings>; links?: Link[] }
 }
 
@@ -73,6 +75,7 @@ export const PRESETS: Preset[] = [
     id: START_PRESET_ID,
     label: 'Drop a ball',
     topic: 'Motion',
+    tags: ['gravity', 'free fall', 'drop', 'height', 'speed'],
     about: 'A 1 kg ball let go with its underside 5 m up. Press Play: it lands after √(2h/g) = 1.01 s at √(2gh) = 9.9 m/s. Read t off the clock.',
     build: () => ({
       // The ball's underside, not its centre, is what lands: a 25 cm ball sits 25 cm higher.
@@ -84,6 +87,7 @@ export const PRESETS: Preset[] = [
     id: 'projectile',
     label: 'Projectile',
     topic: 'Motion',
+    tags: ['projectile', 'gravity', 'launch', 'angle', 'range'],
     about: 'A ball launched at 14 m/s and 30°. Range v² sin 2θ / g = 17.3 m; greatest height 2.5 m. Read both off the trail.',
     build: () => ({
       bodies: [floor(), ball('P', [-8, 0.3, 0], { size: [0.3, 0.3, 0.3], mass: 0.5, velocity: launchVelocity(14, 30), restitution: 0.3 })],
@@ -94,6 +98,7 @@ export const PRESETS: Preset[] = [
     id: 'cliff',
     label: 'Off a cliff',
     topic: 'Motion',
+    tags: ['projectile', 'gravity', 'edge', 'falling'],
     about: 'Slides off a 4 m ledge at 3 m/s. It falls for √(2h/g) = 0.90 s, so it lands 2.7 m out from the edge, at x ≈ −1.3 — however fast it was going.',
     build: () => ({
       // Frictionless, so it leaves the edge at the 3 m/s in the sentence: with friction the
@@ -106,6 +111,7 @@ export const PRESETS: Preset[] = [
     id: 'drop',
     label: 'Free fall',
     topic: 'Motion',
+    tags: ['gravity', 'free fall', 'mass', 'vacuum', 'air'],
     about: 'A 5 kg ball and a 0.5 kg ball, dropped together with their undersides 6 m up. In a vacuum they land together after √(2h/g) = 1.11 s — switch the air back on and see what changes.',
     build: () => ({
       bodies: [floor(), ball('Heavy', [-1, 6.25, 0], { size: [0.25, 0.25, 0.25], mass: 5, material: 'lead' }), ball('Light', [1, 6.25, 0], { size: [0.25, 0.25, 0.25], mass: 0.5, material: 'foam' })],
@@ -116,6 +122,7 @@ export const PRESETS: Preset[] = [
     id: 'moon',
     label: 'Drop on the Moon',
     topic: 'Motion',
+    tags: ['gravity', 'moon', 'free fall', 'drop'],
     about: 'The same drop with g = 1.62 m/s². With its underside 5 m up it takes √(2h/g) = 2.48 s instead of 1.01 s.',
     build: () => ({
       bodies: [floor(), ball('A', [0, 5.2, 0])],
@@ -126,6 +133,7 @@ export const PRESETS: Preset[] = [
     id: 'terminal',
     label: 'Terminal velocity',
     topic: 'Motion',
+    tags: ['air resistance', 'drag', 'terminal velocity', 'gravity', 'falling'],
     about: 'A 0.8 kg foam ball falls 45 m through air. Watch the speed stop rising near √(2mg / ρ C A) ≈ 20 m/s: it reaches 95 % of that by the floor, where a 30 m drop only got to 88 %.',
     build: () => ({
       // 45 m, not 30: the speed reaches 95 % of terminal on the way down, so the plateau shows.
@@ -138,6 +146,7 @@ export const PRESETS: Preset[] = [
     id: 'ramp',
     label: 'Down a slope',
     topic: 'Forces',
+    tags: ['ramp', 'slope', 'energy', 'rolling', 'gravity'],
     about: 'Potential energy becomes kinetic on the way down: a 1.5 m drop gives a rolling ball √(10gh/7) = 4.6 m/s at the bottom, not √(2gh) = 5.4 m/s, because two sevenths of the energy goes into the spin. The readout gets to about 4.5 m/s — the rolling contact costs a little on the way. Watch the energy bar tip over.',
     build: () => ({
       // The ball rests on the slope with its centre 1.5 m above where it ends up on the floor,
@@ -151,6 +160,7 @@ export const PRESETS: Preset[] = [
     id: 'rollslide',
     label: 'Rolling against sliding',
     topic: 'Forces',
+    tags: ['ramp', 'friction', 'ice', 'rolling', 'energy'],
     about: 'A ball rolls down one side, a block slides down the other on ice. The block wins: the ball spends two sevenths of its energy on spinning, v = √(10gh/7) against √(2gh).',
     build: () => ({
       bodies: [
@@ -166,6 +176,7 @@ export const PRESETS: Preset[] = [
     id: 'friction',
     label: 'Sliding to a stop',
     topic: 'Forces',
+    tags: ['friction', 'crate', 'stopping', 'floor'],
     about: 'A crate shoved along at 6 m/s with μ = 0.4 stops after v² / 2μg = 4.6 m. Check the distance on the floor grid.',
     build: () => ({
       // The engine takes the friction between two surfaces as √(μ₁ μ₂), so the floor has to be
@@ -178,6 +189,7 @@ export const PRESETS: Preset[] = [
     id: 'seesaw',
     label: 'Seesaw',
     topic: 'Forces',
+    tags: ['balance', 'lever', 'moments', 'torque'],
     about: 'A plank on a hinge. 3 kg at 1 m against 1 kg at 1.5 m: moments 3 against 1.5, so the heavy side goes down. Drag the light ball out to 3 m to balance it.',
     build: () => {
       const stand = put('box', 'Stand', [0, 0.35, 0], { size: [0.2, 0.7, 0.4], motion: 'static', material: 'steel' })
@@ -198,6 +210,7 @@ export const PRESETS: Preset[] = [
     id: 'atwood',
     label: 'Atwood machine',
     topic: 'Forces',
+    tags: ['pulley', 'rope', 'mass', 'acceleration'],
     about: '1 kg and 2 kg on a rope over a pulley. Both accelerate at (m₂ − m₁) g / (m₁ + m₂) = 3.27 m/s², a third of free fall. Watch m₂: it falls ½at² = 0.41 m in the first 0.5 s, and m₁ rises the same.',
     build: () => {
       const wheel = put('pulley', 'Pulley', [0, 5, 0], { size: [0.3, 0.15, 0.3] })
@@ -210,6 +223,7 @@ export const PRESETS: Preset[] = [
     id: 'lift',
     label: 'Lifting with a pulley',
     topic: 'Forces',
+    tags: ['pulley', 'rope', 'weight', 'crate', 'lifting'],
     about: 'A 4 kg weight lifts a 3 kg crate off the floor. The pair accelerates at (4 − 3) g / 7 = 1.4 m/s²; the rope carries 3 × (g + a) = 33.6 N. Watch the crate leave the floor at once, and how slowly it gains speed compared with a drop.',
     build: () => {
       const wheel = put('pulley', 'Pulley', [0, 4.5, 0], { size: [0.3, 0.15, 0.3] })
@@ -222,6 +236,7 @@ export const PRESETS: Preset[] = [
     id: 'balance',
     label: 'Balanced pulley',
     topic: 'Forces',
+    tags: ['pulley', 'rope', 'balance', 'equal mass'],
     about: 'Equal 2 kg masses on a rope over a pulley: nothing moves, because the rope pulls both up with the same 19.6 N. Drag one down 1 m and the other rises 1 m — that is all a pulley does: it turns the pull round.',
     build: () => {
       const wheel = put('pulley', 'Pulley', [0, 4.5, 0], { size: [0.3, 0.15, 0.3] })
@@ -234,6 +249,7 @@ export const PRESETS: Preset[] = [
     id: 'crane',
     label: 'Crane',
     topic: 'Forces',
+    tags: ['rope', 'crane', 'hanging', 'tension', 'weight'],
     about: 'A 3 kg crate hangs from a beam on a 2.5 m rope. At rest the rope carries the whole weight, mg = 29.4 N. Shorten L in Connections and the crate lifts; lengthen it and the crate is lowered.',
     build: () => {
       const beam = put('box', 'Beam', [0, 5, 0], { size: [0.15, 0.15, 0.15], motion: 'static', material: 'steel' })
@@ -247,6 +263,7 @@ export const PRESETS: Preset[] = [
     id: 'bounce',
     label: 'Bouncing ball',
     topic: 'Energy',
+    tags: ['bounce', 'energy', 'restitution', 'gravity'],
     about: 'A rubber ball with e = 0.8 dropped from 3 m comes back to e² × 3 = 1.92 m, then 1.23 m, then 0.79 m.',
     build: () => ({
       // The underside is what drops 3 m: a 20 cm ball whose centre was at 3.0 fell 2.8 and came
@@ -259,6 +276,7 @@ export const PRESETS: Preset[] = [
     id: 'galileo',
     label: "Galileo's ramps",
     topic: 'Energy',
+    tags: ['ramp', 'energy', 'rolling', 'gravity'],
     about: 'Down one slope and up the other. Rolling, it climbs back to nearly where it started, whatever the second slope looks like: watch its height in the Position row go from 1.31 m to about 1.14 m at the top of the climb. The 0.17 m it loses goes at the two corners where slope meets floor.',
     build: () => ({
       // The sentence quotes the ball's centre, because that is the number on screen: the Position
@@ -281,6 +299,7 @@ export const PRESETS: Preset[] = [
     id: 'stack',
     label: 'Knock it over',
     topic: 'Energy',
+    tags: ['collision', 'momentum', 'energy', 'crates'],
     about: 'A 2 kg ball at 9 m/s into a tower of three 2 kg crates. It brings 18 kg m/s and ½mv² = 81 J — watch the Energy bar to see how much survives the crash, and where the momentum goes.',
     build: () => ({
       bodies: [
@@ -300,6 +319,7 @@ export const PRESETS: Preset[] = [
     id: 'collision',
     label: 'Head-on collision',
     topic: 'Momentum',
+    tags: ['collision', 'momentum', 'bounce', 'ice'],
     about: 'A 1 kg ball at 5 m/s into a 3 kg ball at rest, e = 0.9. Momentum before (5 kg m/s) equals momentum after, whatever the bounce does to the energy: A comes back at 2.1 m/s and B goes on at 2.4 m/s.',
     build: () => ({
       // Frictionless balls: with friction the floor spun A up on the way in and it arrived at
@@ -316,6 +336,7 @@ export const PRESETS: Preset[] = [
     id: 'sticky',
     label: 'Sticky collision',
     topic: 'Momentum',
+    tags: ['collision', 'momentum', 'sticking', 'energy'],
     about: '1 kg at 4 m/s hits 3 kg at rest and they move off together: 4 = (1 + 3) v, so v = 1 m/s. Three quarters of the kinetic energy is gone.',
     build: () => ({
       bodies: [
@@ -330,6 +351,7 @@ export const PRESETS: Preset[] = [
     id: 'recoil',
     label: 'Recoil',
     topic: 'Momentum',
+    tags: ['momentum', 'recoil', 'collision', 'ice'],
     about: 'A 10 kg block fires a 0.5 kg ball. They leave with equal and opposite momentum, 25 kg m/s each way, so the small one goes twenty times faster.',
     build: () => ({
       bodies: [
@@ -344,6 +366,7 @@ export const PRESETS: Preset[] = [
     id: 'crash',
     label: 'Into a wall',
     topic: 'Momentum',
+    tags: ['collision', 'momentum', 'wall', 'energy'],
     about: 'A 5 kg crate at 8 m/s hits a wall: 40 kg m/s of momentum gone in a few milliseconds. Watch the kinetic energy vanish in the Energy bar.',
     build: () => ({
       bodies: [floor(), put('wall', 'Wall', [3, 1, 0]), put('box', 'Crate', [-4, 0.35, 0], { size: [0.8, 0.7, 0.7], massMode: 'mass', mass: 5, material: 'wood', velocity: [8, 0, 0], restitution: 0.1, trace: true })],
@@ -354,6 +377,7 @@ export const PRESETS: Preset[] = [
     id: 'cradle',
     label: "Newton's cradle",
     topic: 'Momentum',
+    tags: ['collision', 'momentum', 'swing', 'string'],
     about: 'Five steel balls on strings. One in, one out: momentum and energy both pass straight through the middle three, and the last ball leaves with nearly all of the speed the first one arrived with.',
     build: () => {
       const bodies: BodyDef[] = [floor()]
@@ -375,6 +399,7 @@ export const PRESETS: Preset[] = [
     id: 'trolleys',
     label: 'Two trolleys and a rod',
     topic: 'Momentum',
+    tags: ['momentum', 'collision', 'rod', 'ice'],
     about: 'Two 2 kg crates joined by a rod on ice, hit by a 1 kg ball at 6 m/s that sticks. They move off together: the rod carries the push from one to the other, and 6 kg m/s shared by 5 kg is 1.2 m/s for everything.',
     build: () => {
       // Nothing here has friction or bounce: on the old ice the crates stopped in a second and
@@ -392,6 +417,7 @@ export const PRESETS: Preset[] = [
     id: 'tug',
     label: 'Tug on a slack rope',
     topic: 'Momentum',
+    tags: ['rope', 'momentum', 'slack', 'ice'],
     about: 'A 4 kg crate sliding away at 3 m/s on ice, tied to a 2 kg crate by a rope with half a metre of slack. The rope snaps taut and yanks: the 12 kg m/s it had is shared by 6 kg, so the pair averages 2 m/s — the light crate is flung past that, the heavy one drops below it, and they trade speed through the rope for as long as they slide. p in the Energy section reads 11.6 kg m/s, not 12: the rope weighs 0.2 kg and carries the other 0.4 kg m/s.',
     build: () => {
       // Tall crates, so the rope is tied high enough that it never reaches the ice: 1.7 m of
@@ -408,6 +434,7 @@ export const PRESETS: Preset[] = [
     id: 'pendulum',
     label: 'Pendulum',
     topic: 'Oscillation',
+    tags: ['pendulum', 'swing', 'period', 'string'],
     about: 'A bob on a 2 m string, let go from 15°. Time ten swings: T = 2π√(L/g) = 2.84 s, whatever the mass. Drag it out to 53° and a swing takes 3.0 s — the formula is for small swings.',
     build: () => {
       const pivot = put('box', 'Pivot', [0, 4, 0], { size: [0.12, 0.12, 0.12], motion: 'static', material: 'steel' })
@@ -420,6 +447,7 @@ export const PRESETS: Preset[] = [
     id: 'ropeswing',
     label: 'Rope swing',
     topic: 'Oscillation',
+    tags: ['rope', 'swing', 'pendulum'],
     about: 'A 2 kg bob on a real rope that bends and hangs. Let go from the side and the rope goes slack at the top of a big swing — a string could not show that.',
     build: () => {
       const pivot = put('box', 'Beam', [0, 5, 0], { size: [0.15, 0.15, 0.15], motion: 'static', material: 'steel' })
@@ -431,6 +459,7 @@ export const PRESETS: Preset[] = [
     id: 'swingbridge',
     label: 'Bob on two strings',
     topic: 'Oscillation',
+    tags: ['swing', 'string', 'pendulum', 'period'],
     about: 'A bob hung from two beams on two 2.5 m strings, making a V. It swings across the V like a pendulum of its vertical drop h = 2 m: T = 2π√(h/g) = 2.84 s, not 3.17 s for 2.5 m. In the side view the two strings line up; switch to 3D to see the V.',
     build: () => {
       // The beams stand either side of the swing, along z, so the swing itself is across the
@@ -446,6 +475,7 @@ export const PRESETS: Preset[] = [
     id: 'spring',
     label: 'Mass on a spring',
     topic: 'Oscillation',
+    tags: ['spring', 'oscillation', 'period'],
     about: 'Pull it down and let go. The period is T = 2π√(m/k) = 0.63 s for 2 kg on 200 N/m — check it against the clock.',
     build: () => {
       const hook = put('box', 'Hook', [0, 4, 0], { size: [0.12, 0.12, 0.12], motion: 'static', material: 'steel' })
@@ -457,6 +487,7 @@ export const PRESETS: Preset[] = [
     id: 'springice',
     label: 'Spring on ice',
     topic: 'Oscillation',
+    tags: ['spring', 'ice', 'oscillation', 'energy'],
     about: 'A 2 kg block on ice, on a 50 N/m spring stretched by 0.6 m. It oscillates with T = 2π√(m/k) = 1.26 s, and the energy swaps between spring and motion.',
     build: () => {
       // The post's centre is at the block's height, so the spring is level. It used to run from
@@ -487,3 +518,49 @@ export const groupedPresets = (): { topic: Preset['topic']; presets: Preset[] }[
  * rope can see which experiments have one without opening each.
  */
 export const presetBadges = (p: Preset): LinkKind[] => Array.from(new Set((p.build().links ?? []).map((l) => l.kind)))
+
+/**
+ * A word with its plural taken off, so "springs" finds the spring presets and "rope" finds an
+ * `about` sentence that says "ropes". Only a real plural ending goes: "mass" keeps its double s,
+ * "masses" loses its "es", and both then read "mass". Both sides of a comparison are stemmed the
+ * same way, so a word that stems oddly ("physics" → "physic") still meets itself.
+ */
+const stem = (w: string): string => w.replace(/(?<=[sxz]|ch|sh)es$|(?<!s)s$/, '')
+
+/** The lowercase words of a text, stemmed, with punctuation and apostrophes dropped ("Newton's" → newton). */
+const wordsOf = (text: string): string[] => (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).map(stem)
+
+/**
+ * Whether every query word begins some word of the text. A word-start match, not a substring
+ * one: "swing" still finds "swings" and "grav" finds "gravity", but "air" no longer finds a
+ * preset only because its sentence says "pair", and "moment" does not pull in every momentum one.
+ */
+const covers = (textWords: string[], queryWords: string[]): boolean => queryWords.every((q) => textWords.some((t) => t.startsWith(q)))
+
+/** Stemmed words from a preset's own text: its tags alone, and everything a search may look at. */
+function searchWords(p: Preset): { tagWords: string[]; allWords: string[] } {
+  const tagWords = wordsOf(p.tags.join(' '))
+  const allWords = [...wordsOf(`${p.label} ${p.topic} ${p.about}`), ...tagWords]
+  return { tagWords, allWords }
+}
+
+/**
+ * Experiments a search box can find by label, topic, tag or a word from the `about` sentence.
+ * Every word of the query has to match somewhere (so "rope pulley" needs both words), and a
+ * preset whose tags alone cover the whole query is listed first. An empty query returns every
+ * preset, in its usual order, so the picker can fall back to the grouped list unchanged.
+ */
+export function searchPresets(query: string, presets: Preset[] = PRESETS): Preset[] {
+  const words = wordsOf(query)
+  if (words.length === 0) return presets.slice()
+  const tagRank = (p: Preset) => {
+    const { tagWords, allWords } = searchWords(p)
+    if (!covers(allWords, words)) return null
+    return covers(tagWords, words) ? 0 : 1
+  }
+  return presets
+    .map((p) => ({ p, rank: tagRank(p) }))
+    .filter((r): r is { p: Preset; rank: number } => r.rank !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .map((r) => r.p)
+}

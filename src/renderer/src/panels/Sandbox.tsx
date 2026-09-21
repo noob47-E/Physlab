@@ -1,13 +1,13 @@
 // The sandbox control panel: what is in the world, and how the world behaves.
 
-import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, SkipForward, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
+import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylinder, Eraser, Link2, Minus, Pause, Pill, Play, Plus, RectangleHorizontal, Redo2, Rocket, RotateCcw, Search, SkipForward, Square, TableProperties, Trash2, Triangle, Undo2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy, systemMomentum } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
-import { groupedPresets, launchVelocity, presetBadges, startPreset, type Preset } from '../sim/presets'
+import { groupedPresets, launchVelocity, presetBadges, PRESETS, searchPresets, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
 import { joinPrompt, LINK_CARDS, linkCard, noWheelNote, wheelsAbove } from '../sim/join'
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_TITLES, joinCandidates, readFold, writeFold, type ControlKey, type FoldId, type FoldStore } from '../sim/inspector'
@@ -657,9 +657,17 @@ function Presets() {
   const setScene = useSandbox((s) => s.setScene)
   const setPlaying = useScene((s) => s.setPlaying)
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   // One group per topic, and each row says what it joins things with, so a student looking for
-  // a rope or a pulley can see where they are without opening twenty-nine experiments.
-  const groups = useMemo(() => groupedPresets().map((g) => ({ ...g, rows: g.presets.map((p) => ({ p, badges: presetBadges(p) })) })), [])
+  // a rope or a pulley can see where they are without opening twenty-nine experiments. The
+  // badges come from building every preset, so that happens once, not on every keystroke.
+  const all = useMemo(() => groupedPresets().map((g) => ({ topic: g.topic, rows: g.presets.map((p) => ({ p, badges: presetBadges(p) })) })), [])
+  // A search word narrows the matches, and empty groups drop out rather than showing with nothing
+  // in them; an empty query behaves exactly like the plain grouped list did before search existed.
+  // The search's own tag-first order is not shown: the list stays grouped by topic on purpose,
+  // so a student finds "Bouncing ball" under Energy whether they searched for it or scrolled.
+  const matches = useMemo(() => new Set(searchPresets(query, PRESETS).map((p) => p.id)), [query])
+  const groups = useMemo(() => all.map((g) => ({ ...g, rows: g.rows.filter((r) => matches.has(r.p.id)) })).filter((g) => g.rows.length > 0), [all, matches])
   const load = (p: Preset) => {
     const built = p.build()
     setPlaying(false)
@@ -678,25 +686,49 @@ function Presets() {
       </button>
       {open && (
         <div className="mt-1 flex flex-col gap-1">
-          {groups.map((g) => (
-            <Fragment key={g.topic}>
-              <div className="section-title px-1 pb-0">{g.topic}</div>
-              {g.rows.map(({ p, badges }) => (
-                <button key={p.id} className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]" onClick={() => load(p)} title={p.about}>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-semibold text-[color:var(--text-strong)]">{p.label}</span>
-                    {badges.map((b) => (
-                      <span key={b} className="badge text-fine text-[color:var(--text-dim)]">
-                        {b === 'pulley' ? 'rope over a pulley' : b}
-                      </span>
-                    ))}
-                  </div>
-                  {/* Two lines here; the whole sentence is the tooltip and the panel once loaded. */}
-                  <div className="line-clamp-2 text-small leading-snug text-[color:var(--text-dim)]">{p.about}</div>
-                </button>
-              ))}
-            </Fragment>
-          ))}
+          {/* 44 px in px, not h-11: the root font is 13 px, so the rem height came out at 36. The
+              placeholder is this field's only visible label, so it reads in --text-dim (above
+              4.5:1 in every theme) rather than the fainter house placeholder colour. */}
+          <div className="flex h-[44px] items-center gap-2 rounded-md border border-[color:var(--line-2)] px-2">
+            <Search size={14} className="shrink-0 text-[color:var(--text-dim)]" />
+            <input
+              className="h-full flex-1 bg-transparent text-body outline-none placeholder:text-[color:var(--text-dim)]"
+              placeholder="Search experiments — gravity, rope, spring…"
+              aria-label="Search experiments"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Escape clears a search and goes no further; with nothing to clear it is not ours.
+                if (e.key === 'Escape' && query) {
+                  e.stopPropagation()
+                  setQuery('')
+                }
+              }}
+            />
+          </div>
+          {groups.length === 0 ? (
+            <div className="px-1 py-2 text-small text-[color:var(--text-dim)]">No experiment matches that. Try gravity, spring or collision.</div>
+          ) : (
+            groups.map((g) => (
+              <Fragment key={g.topic}>
+                <div className="section-title px-1 pb-0">{g.topic}</div>
+                {g.rows.map(({ p, badges }) => (
+                  <button key={p.id} className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]" onClick={() => load(p)} title={p.about}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold text-[color:var(--text-strong)]">{p.label}</span>
+                      {badges.map((b) => (
+                        <span key={b} className="badge text-fine text-[color:var(--text-dim)]">
+                          {b === 'pulley' ? 'rope over a pulley' : b}
+                        </span>
+                      ))}
+                    </div>
+                    {/* Two lines here; the whole sentence is the tooltip and the panel once loaded. */}
+                    <div className="line-clamp-2 text-small leading-snug text-[color:var(--text-dim)]">{p.about}</div>
+                  </button>
+                ))}
+              </Fragment>
+            ))
+          )}
         </div>
       )}
     </div>
