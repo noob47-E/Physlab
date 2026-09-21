@@ -6,7 +6,7 @@
 //
 // These do. They are still pure — no DOM, no browser.
 
-import { readFileSync } from 'node:fs'
+import { readSource } from './helpers/repo'
 import { describe, expect, it } from 'vitest'
 import katex from 'katex'
 import { isFieldSafeLatex, linearSyntaxIn } from '../src/renderer/src/ui/latexSafety'
@@ -166,13 +166,13 @@ describe('the contract with the Python worker', () => {
     expect(casRequestFor('partial', '1/(x^2-1)')).toEqual({ op: 'apart', payload: { expr: '1/(x^2-1)' } })
     // Over the complex numbers, not the rationals: plain factor would hand x² + 4 straight back.
     expect(casRequestFor('factorComplex', 'x^2+4')).toEqual({ op: 'factor_complex', payload: { expr: 'x^2+4' } })
-    expect(readFileSync('src/renderer/src/workers/cas.worker.ts', 'utf8')).toContain('extension=[sp.I]')
+    expect(readSource('src/renderer/src/workers/cas.worker.ts')).toContain('extension=[sp.I]')
   })
 
   it('only asks for operations the worker implements', () => {
     // Reading the Python as text is the only thing that can tie a TypeScript constant to a string
     // literal in another language. It is ugly, and it is the check that was missing.
-    const worker = readFileSync('src/renderer/src/workers/cas.worker.ts', 'utf8')
+    const worker = readSource('src/renderer/src/workers/cas.worker.ts')
     for (const op of CAS_OPS) {
       if (op === 'warmup') continue // handled before the dispatch, not as a branch
       expect(worker, `worker has no branch for '${op}'`).toContain(`if op == '${op}'`)

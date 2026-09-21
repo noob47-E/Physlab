@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { bearingText, fmtIJK, formatMeasure, setNotation, texMeasure, vecTex, type MeasureSettings } from '../src/renderer/src/math/format'
 import { answerTex, circleReport, polygonReport } from '../src/renderer/src/math/shapeFormulas'
 import type { V3 } from '../src/renderer/src/math/vec'
+import { resetGlobals } from './helpers/globals'
+
+beforeEach(resetGlobals)
 
 const S: MeasureSettings = { decimals: 2, precisionMode: 'dp', unit: 'cm', unitPerSquare: 1, angleUnit: 'deg' }
 const P = (...xy: number[]): V3[] => {

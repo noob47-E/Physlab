@@ -11,6 +11,7 @@ import { setNotation, type MeasureSettings } from '../src/renderer/src/math/form
 import { fromPolar, toRad } from '../src/renderer/src/math/vec'
 import { pickAt } from '../src/renderer/src/render/picking'
 import type { Computed, ObjId, SceneObject } from '../src/renderer/src/core/types'
+import { resetGlobals } from './helpers/globals'
 
 const renders = (tex: string, where: string): void => {
   expect(() => katex.renderToString(tex, { displayMode: true, throwOnError: true, strict: 'ignore' }), `${where}: ${tex}`).not.toThrow()
@@ -42,7 +43,7 @@ const A3: VS.NamedVec = { name: 'A', v: [3, 4, 5] }
 const B3: VS.NamedVec = { name: 'B', v: [-1, 2, 2] }
 const vAB: VS.NamedVec = { name: 'v_{AB}', v: [1, 2, 0] }
 
-beforeEach(() => setNotation({ vector: 'arrow', components: 'ijk', direction: 'standard' }))
+beforeEach(resetGlobals)
 
 describe('every solver renders through KaTeX', () => {
   const cases: [string, () => VS.Solution][] = [

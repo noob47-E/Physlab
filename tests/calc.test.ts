@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   binomialPd,
   countSigFigs,
@@ -23,8 +23,13 @@ import { useCalc } from '../src/renderer/src/calc/calcStore'
 import { parseAnswer } from '../src/renderer/src/math/checkAnswer'
 import { fmt } from '../src/renderer/src/math/format'
 import { math, preprocess } from '../src/renderer/src/math/expr'
+import { resetGlobals } from './helpers/globals'
 
 const ctx = { vars: {}, ans: 0, angle: 'deg' as const }
+
+// evaluateComp sets the angle mode from its context on every call, so each case leaves the
+// global wherever it last was.
+beforeEach(resetGlobals)
 
 describe('COMP mode', () => {
   it('evaluates calculator-style input', () => {

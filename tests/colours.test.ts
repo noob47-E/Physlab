@@ -11,11 +11,10 @@
 // pixel value in a class or an inline font, so a panel cannot quietly invent a 10.5 px label.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, relative, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { RENDERER_SRC as ROOT } from './helpers/repo'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'renderer', 'src')
 
 /**
  * Files that still carry their own colours, waiting on the phase that owns them. Tighten after

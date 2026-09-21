@@ -17,7 +17,7 @@ import { polygonArea } from '../math/geometry'
 import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
 import { casInDegrees } from '../calc/angle'
-import { usePure } from '../math/pure/store'
+import { casRequestFor, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
 
 type Node = MathNode & Record<string, unknown>
@@ -84,6 +84,42 @@ function assertKnown(node: MathNode) {
 }
 
 const evaluateNode = (node: MathNode) => node.compile().evaluate({ ...scene().ev.scope })
+
+const isGeo = (node: MathNode) => {
+  const k = inferKind(node, kindOfName)
+  return k === 'vector' || k === 'point'
+}
+
+/**
+ * The × key is parsed as `timesOrCross`, which only decides what it means at evaluation time.
+ * Kind inference and the step solver never learned that name, so `A × B` printed a bare
+ * `[0, 0, -11]` with no steps and `C = A × B` refused with "not a number". Once the operands are
+ * known the call is rewritten into the cross product or the ordinary product it stands for.
+ */
+function resolveTimes(node: MathNode, seen?: { product: boolean }): MathNode {
+  return node.transform((n) => {
+    const fn = n as Node
+    if (fn.type !== 'FunctionNode' || (fn.fn as { name?: string }).name !== 'timesOrCross') return n
+    const [a, b] = (fn.args as MathNode[]).map((arg) => resolveTimes(arg, seen))
+    if (isGeo(a) && isGeo(b)) return new math.FunctionNode('cross', [a, b])
+    if (seen) seen.product = true
+    return new math.OperatorNode('*', 'multiply', [a, b])
+  })
+}
+
+const parseNode = (src: string): Node => resolveTimes(math.parse(preprocess(src))) as Node
+
+/**
+ * The text an assignment keeps as its live definition. core/evaluate.ts re-parses it with the
+ * runtime `timesOrCross`, which only knows vector × vector, so `C = 2 × A` stored as typed
+ * failed with "Expected a vector or point" while the bare `2 × A` answered 2A. When a × was
+ * resolved into a plain product, the resolved form (`2 * A`) is what gets kept.
+ */
+function parseDefinition(src: string): { node: Node; expr: string } {
+  const seen = { product: false }
+  const node = resolveTimes(math.parse(preprocess(src)), seen) as Node
+  return { node, expr: seen.product ? node.toString() : src }
+}
 
 export function describeComputed(c: Computed | undefined, decimals = 3): string {
   if (!c) return '—'
@@ -245,7 +281,7 @@ function tryAssignment(input: string): boolean {
   if (!isValidName(name)) throw new Error(`"${name}" is a reserved name. Try another.`)
   if (tryGeometryCommand(rhs, name, input)) return true
 
-  const node = math.parse(preprocess(rhs)) as Node
+  const { node, expr } = parseDefinition(rhs)
   const unknown = unknownSymbols(node).filter((s) => s !== name)
   if (unknown.length) assertKnown(node)
   const kind = inferKind(node, kindOfName)
@@ -254,7 +290,7 @@ function tryAssignment(input: string): boolean {
   let obj: SceneObject
 
   if (kind === 'point') {
-    obj = isConstant(node) ? b.point(toV3(evaluateNode(node)), { name }) : b.point({ kind: 'expr', expr: rhs }, { name })
+    obj = isConstant(node) ? b.point(toV3(evaluateNode(node)), { name }) : b.point({ kind: 'expr', expr }, { name })
   } else if (kind === 'vector') {
     const unit = unitOf(node)
     if (isConstant(node)) {
@@ -262,7 +298,7 @@ function tryAssignment(input: string): boolean {
     } else {
       const addends = sumOperands(node)
       const first = addends?.[0] ? scene().ev.names.get(addends[0]) : undefined
-      obj = b.vector({ kind: 'expr', expr: rhs, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
+      obj = b.vector({ kind: 'expr', expr, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
       if (addends && addends.length >= 2) addHeadToTailHelpers(b, addends)
     }
   } else {
@@ -270,9 +306,9 @@ function tryAssignment(input: string): boolean {
     const value = constant ? Number(evaluateNode(node)) : NaN
     if (constant && Number.isFinite(value)) {
       const span = Math.max(10, Math.ceil(Math.abs(value) * 2))
-      obj = b.number(rhs, { name, slider: { min: value < 0 ? -span : Math.min(0, -span / 2), max: span, step: Math.abs(value) < 1 && value !== 0 ? 0.01 : 0.1 } })
+      obj = b.number(expr, { name, slider: { min: value < 0 ? -span : Math.min(0, -span / 2), max: span, step: Math.abs(value) < 1 && value !== 0 ? 0.01 : 0.1 } })
     } else {
-      obj = b.number(rhs, { name })
+      obj = b.number(expr, { name })
     }
   }
 
@@ -285,7 +321,7 @@ function tryAssignment(input: string): boolean {
     scene().pushLog({ input, kind: 'error', text: `${name}: ${err}` })
     return true
   }
-  const solution = solutionFor(node)
+  const solution = solutionFor(node, name)
   scene().pushLog({
     input,
     kind: 'result',
@@ -332,7 +368,10 @@ function addHeadToTailHelpers(b: Builder, names: string[]) {
   const ids = names.map((n) => scene().ev.names.get(n)!)
   let prev = ids[0]
   for (let i = 1; i < ids.length; i++) {
-    const head = b.point({ kind: 'vectorHead', vector: prev }, { auxiliary: true, visible: false })
+    // The hidden tail point is named after the copy it carries, not from the shared A, B, C…
+    // alphabet: after `R = A + B` it used to take the name C, and the student's next line
+    // `C = <-1, 2>` quietly replaced it, leaving B′ hanging off a vector instead of a point.
+    const head = b.point({ kind: 'vectorHead', vector: prev }, { name: `${names[i]}′tail`, auxiliary: true, visible: false })
     const placed = b.vector({ kind: 'placed', vector: ids[i], tail: head.id }, { name: `${names[i]}′`, color: '#868e96', auxiliary: true })
     prev = placed.id
   }
@@ -390,7 +429,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
     const trimmed = arg.trim()
     const id = names.get(trimmed)
     if (id) return id
-    const node = math.parse(preprocess(trimmed))
+    const node = parseNode(trimmed)
     const kind = inferKind(node, kindOfName)
     if (kind === 'point' || kind === 'vector') {
       return isConstant(node)
@@ -429,7 +468,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
       else if (a.length === 2) {
         const c = ref(a[0])
         const second = a[1].trim()
-        const kind = names.has(second) ? kindOfName(second) : inferKind(math.parse(preprocess(second)), kindOfName)
+        const kind = names.has(second) ? kindOfName(second) : inferKind(parseNode(second), kindOfName)
         primary = kind === 'point'
           ? b.circle({ kind: 'centerPoint', c, p: ref(second) }, opts)
           : b.circle({ kind: 'centerRadius', c, r: second }, opts)
@@ -510,7 +549,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
     case 'Vector': {
       if (a.length === 2) primary = b.vector({ kind: 'points', a: ref(a[0]), b: ref(a[1]) }, opts)
       else if (a.length === 1) {
-        const node = math.parse(preprocess(a[0]))
+        const node = parseNode(a[0])
         primary = b.vector({ kind: 'free', tail: [0, 0, 0], comp: toV3(evaluateNode(node)) }, opts)
       }
       break
@@ -570,39 +609,46 @@ function vecArg(node: Node, fallback: string): VecArg {
   return { name, v: toV3(evaluateNode(node)) }
 }
 
-/** Recognises vector operations written directly (A + B, A × B, |A|…) and builds a step-by-step solution. */
-export function solutionFor(root: MathNode): VS.Solution | null {
+/**
+ * Recognises vector operations written directly (A + B, A × B, |A|…) and builds a step-by-step
+ * solution. `name` is what the result is being assigned to, so the steps say F for
+ * `F = 10 N ∠ 30°` rather than the solver's default A.
+ */
+export function solutionFor(root: MathNode, name?: string): VS.Solution | null {
   let node = root as Node
   // The command bar answers in the student's own precision and angle unit, like the panels.
   const settings = scene().settings
+  const result = name ?? 'R'
   while (node.type === 'ParenthesisNode') node = node.content as Node
   const vecSym = (n: Node) => n.type === 'SymbolNode' && kindOfName(n.name as string) === 'vector'
   try {
     if (node.type === 'OperatorNode') {
       const args = node.args as Node[]
       const sum = sumOperands(node)
-      if (sum) return VS.solveAddition(sum.map((n) => vecArg({ type: 'SymbolNode', name: n } as unknown as Node, n)), 'R', settings)
-      if (node.fn === 'subtract' && args.every(vecSym)) return VS.solveSubtraction(vecArg(args[0], 'A'), vecArg(args[1], 'B'), 'R', settings)
+      // A real SymbolNode, because vecArg evaluates it: a plain object shaped like one has no
+      // compile(), and the throw was swallowed below, so `R = A + B` never had any steps.
+      if (sum) return VS.solveAddition(sum.map((n) => vecArg(new math.SymbolNode(n) as unknown as Node, n)), result, settings)
+      if (node.fn === 'subtract' && args.every(vecSym)) return VS.solveSubtraction(vecArg(args[0], 'A'), vecArg(args[1], 'B'), result, settings)
       if (node.fn === 'multiply' && args.length === 2) {
-        if (vecSym(args[1]) && isConstant(args[0])) return VS.solveScalarMultiply(Number(evaluateNode(args[0])), vecArg(args[1], 'A'), 'R', settings)
-        if (vecSym(args[0]) && isConstant(args[1])) return VS.solveScalarMultiply(Number(evaluateNode(args[1])), vecArg(args[0], 'A'), 'R', settings)
+        if (vecSym(args[1]) && isConstant(args[0])) return VS.solveScalarMultiply(Number(evaluateNode(args[0])), vecArg(args[1], 'A'), result, settings)
+        if (vecSym(args[0]) && isConstant(args[1])) return VS.solveScalarMultiply(Number(evaluateNode(args[1])), vecArg(args[0], 'A'), result, settings)
         if (vecSym(args[0]) && vecSym(args[1])) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
       }
     }
     if (node.type === 'FunctionNode') {
       const fname = (node.fn as { name: string }).name
       const args = node.args as Node[]
-      const geo = (n: Node) => {
-        const k = inferKind(n, kindOfName)
-        return k === 'vector' || k === 'point'
-      }
-      if (fname === 'cross' && args.length === 2 && args.every(geo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'), 'C', settings)
-      if (fname === 'dot' && args.length === 2 && args.every(geo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
-      if (fname === 'mag' && args.length === 1 && geo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'), settings)
+      if (fname === 'polarVec' && args.length === 2) return VS.solveResolve({ name: name ?? 'A', v: toV3(evaluateNode(node)) }, settings)
+      // Steps name their operands, and vecArg can only name a symbol or fall back to a default
+      // letter: `(A + B) × A` was titled "Vector product A×A" and worked through a B that was not
+      // the student's B. A compound operand gets the answer without the misleading working.
+      if (!args.every((a) => vecSym(a) || isConstant(a))) return null
+      if (fname === 'cross' && args.length === 2 && args.every(isGeo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'), name ?? 'C', settings)
+      if (fname === 'dot' && args.length === 2 && args.every(isGeo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
+      if (fname === 'mag' && args.length === 1 && isGeo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'), settings)
       if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'), settings)
       if (fname === 'proj' && args.length === 2) return VS.solveProjection(vecArg(args[0], 'B'), vecArg(args[1], 'A'), settings)
       if (fname === 'angleBetween' && args.length === 2) return VS.solveAngleBetween(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
-      if (fname === 'polarVec' && args.length === 2) return VS.solveResolve({ name: 'A', v: toV3(evaluateNode(node)) }, settings)
     }
   } catch {
     return null
@@ -617,7 +663,7 @@ function trySolverCommand(input: string): boolean {
   if (!m || !SOLVER_FNS.has(m[1].toLowerCase())) return false
   const fn = m[1].toLowerCase()
   const settings = scene().settings
-  const args = splitArgs(m[2]).map((a) => math.parse(preprocess(a)) as Node)
+  const args = splitArgs(m[2]).map((a) => parseNode(a))
   const num = (n: Node) => Number(evaluateNode(n))
   const v = (i: number, name: string) => vecArg(args[i], name)
   let sol: VS.Solution | null = null
@@ -715,6 +761,9 @@ const PURE_WORDS: Record<string, JobId> = {
   solve: 'solve'
 }
 
+/** The Greek names the expression parser spells out (θ → theta), shown as the letter again. */
+const GREEK = new Set(['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'lambda', 'mu', 'phi', 'omega'])
+
 function tryPureMath(input: string): boolean {
   const m = input.match(/^\s*([a-z]+)\s*\((.*)\)\s*$/i)
   if (!m) return false
@@ -723,18 +772,53 @@ function tryPureMath(input: string): boolean {
 
   const args = splitArgs(m[2])
   // solve(x^2-4, x) names the unknown; the pure solver works that out for itself.
-  const body = job === 'hcf' || job === 'lcm' ? args.join(', ') : job === 'solve' ? args[0] ?? '' : m[2]
+  // divide(x^3-1, x-1) and partial(3x+5, (x+1)(x+2)) are the fraction written as two arguments.
+  const body =
+    job === 'hcf' || job === 'lcm'
+      ? args.join(', ')
+      : job === 'solve'
+        ? args[0] ?? ''
+        : (job === 'divide' || job === 'partial') && args.length === 2
+          ? `(${args[0]})/(${args[1]})`
+          : m[2]
   if (!body.trim()) return false
 
   const doc = runPure(job, body)
-  // Not something the step engine can do: let the SymPy path have it, so an answer still appears.
-  if (doc.error) return false
+  if (doc.error) {
+    // A fraction of plain numbers is arithmetic: the refusal itself says "the calculator will do
+    // that one", so it does, and divide(10, 2) answers 5 as it did before the two-argument form.
+    if ((job === 'divide' || job === 'partial') && !/[A-Za-z]/.test(body)) {
+      evaluatePlain(body, input)
+      return true
+    }
+    // Not something the step engine can do. The Working panel's own fallback table
+    // (math/pure/store.ts) says which jobs SymPy can take over, and the caller sends those on so
+    // an answer still appears; the rest have nowhere else to go, and falling through to plain
+    // evaluation answered divide(x^3-1, x-1) with `I don't know "x"`.
+    if (casRequestFor(job, body)) return false
+    logError(input, doc.error)
+    return true
+  }
 
   const s = scene()
   // The Working panel's maths field reads LaTeX, so the linear form typed here has to be
   // converted or 6x^2 arrives on screen as x^(2) with a stray bracket.
   const latex = linearToLatex(body)
-  const label = (text: string): string => String.raw`\text{` + text.replace(/[=]/g, '') + String.raw`}\;`
+  // A label is a word ("Quotient", "HCF =") or a symbol ("x_1 =", "theta_2 ="). The word goes in
+  // \text{}; the symbol must not, because KaTeX refuses an underscore inside \text and every
+  // solve line rendered red — and it still did for θ, which the parser spells "theta", until the
+  // subscript was split off the name. The = stays where the label has one, so it reads x_1 = 3,
+  // not x_1 3; and a label that is only the number itself (primes(7) → "7") is not repeated.
+  const label = (text: string): string => {
+    const eq = text.trim().endsWith('=')
+    const bare = text.replace(/=/g, '').trim()
+    if (/^-?\d+$/.test(bare)) return eq ? `${bare} = ` : ''
+    const sym = /^([A-Za-z]+)(_\d+)?$/.exec(bare)
+    const shown = !sym
+      ? String.raw`\text{${bare}}`
+      : (GREEK.has(sym[1]) ? '\\' + sym[1] : sym[1].length === 1 ? sym[1] : String.raw`\text{${sym[1]}}`) + (sym[2] ?? '')
+    return eq ? `${shown} = ` : shown + String.raw`\;`
+  }
   s.pushLog({
     input,
     kind: 'result',
@@ -750,9 +834,10 @@ function tryPureMath(input: string): boolean {
 }
 
 async function tryCas(input: string): Promise<boolean> {
-  const m = input.match(/^\s*(solve|nsolve|diff|derivative|d\/dx|integrate|integral|limit|series|simplify|expand|factor|exact)\s*\((.*)\)\s*$/i)
+  const m = input.match(/^\s*(solve|nsolve|diff|derivative|d\/dx|integrate|integral|limit|series|simplify|expand|factor|factorise|factorize|divide|partial|partialfractions|exact)\s*\((.*)\)\s*$/i)
   if (!m) return false
-  const op = m[1].toLowerCase()
+  // The step engine spells it three ways; SymPy knows one.
+  const op = m[1].toLowerCase().replace(/^factori[sz]e$/, 'factor')
   const args = splitArgs(m[2])
   const s = scene()
   // In DEG mode the calculator's own d/dx works in degrees; the algebra engine must agree.
@@ -782,6 +867,14 @@ async function tryCas(input: string): Promise<boolean> {
       break
     case 'series':
       payload = { expr: args[0], var: 'x', at: args[1] ?? '0', n: args[2] ?? 6 }
+      break
+    case 'divide':
+    case 'partial':
+    case 'partialfractions':
+      // What the step engine refused (divide(sin(x), x)) goes to SymPy's apart, the same route
+      // the Working panel takes, as the one fraction the two arguments stand for.
+      casOp = 'apart'
+      payload = { expr: args.length === 2 ? `(${args[0]})/(${args[1]})` : args.join(',') }
       break
     default:
       payload = { expr: args.join(',') }
@@ -835,8 +928,10 @@ const fmtNumeric = (n: { re: number; im?: number }) => (n.im === undefined ? tex
 // Plain expressions
 // ---------------------------------------------------------------------------
 
-function evaluatePlain(input: string) {
-  const node = math.parse(preprocess(input)) as Node
+/** `shown` is the line the log quotes when the maths evaluated is a rewrite of what was typed. */
+function evaluatePlain(expr: string, shown = expr) {
+  const input = shown
+  const node = parseNode(expr)
   assertKnown(node)
   const kind = inferKind(node, kindOfName)
   const value = evaluateNode(node)
@@ -856,7 +951,7 @@ function evaluatePlain(input: string) {
   const text = typeof value === 'number' ? fmt(value, 10) : math.format(value, { precision: 10 })
   const id = s.pushLog({ input, kind: 'result', text: `= ${text}`, solution: solution ?? undefined })
   if (typeof value === 'number' && !Number.isInteger(value) && Number.isFinite(value) && isConstant(node)) {
-    cas('exact', { expr: preprocess(input), deg: s.settings.angleUnit === 'deg' }).then((r) => {
+    cas('exact', { expr: preprocess(expr), deg: s.settings.angleUnit === 'deg' }).then((r) => {
       if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text) {
         s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${tex(value, 10)}` })
       }
