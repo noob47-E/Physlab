@@ -2,7 +2,7 @@
 // The rule is pure so that it can be tested without a canvas.
 
 import { describe, expect, it } from 'vitest'
-import { insideRect, MARQUEE_MIN_PX, marqueeStarted, mergeSelection, normalizeRect, objectInRect, type Rect } from '../src/renderer/src/render/selectMath'
+import { insideRect, MARQUEE_MIN_PX, marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, type Rect } from '../src/renderer/src/render/selectMath'
 import { readSource } from './helpers/repo'
 import { isSpaceHeld, markSpaceUsed, pressSpace, releaseSpace, resetSpace } from '../src/renderer/src/render/panKey'
 
@@ -87,6 +87,37 @@ describe('mergeSelection: what a let-go box selects', () => {
   it('is what the viewport uses when the box is let go', () => {
     const src = readSource('src/renderer/src/render/Interaction.tsx')
     expect(src).toMatch(/s\.select\(mergeSelection\(s\.selection, idsInRect\(m\), e\.shiftKey\)\)/)
+  })
+})
+
+describe('a right-drag pans; only a right-click opens the menu', () => {
+  it('a right-click, wobble included, is a click', () => {
+    expect(rightDragPanned({ x: 10, y: 10 }, 10, 10)).toBe(false)
+    expect(rightDragPanned({ x: 10, y: 10 }, 12, 11)).toBe(false)
+  })
+
+  it('a right-drag as long as a selection box is a pan, whichever way it went', () => {
+    expect(rightDragPanned({ x: 10, y: 10 }, 10 + MARQUEE_MIN_PX, 10)).toBe(true)
+    expect(rightDragPanned({ x: 10, y: 10 }, 0, 0)).toBe(true)
+  })
+
+  it('a menu with no right button down on the canvas (the keyboard menu key) still opens', () => {
+    expect(rightDragPanned(null, 300, 200)).toBe(false)
+  })
+
+  it('is what the viewport asks before opening a menu, from where the right button went down', () => {
+    // On Windows the contextmenu event fires when the right button comes up, wherever the
+    // pointer has been dragged to, so without this every right-drag pan ended in the
+    // background menu, and mid-polygon it finished the shape instead.
+    const src = readSource('src/renderer/src/render/Interaction.tsx')
+    expect(src).toMatch(/if \(e\.button === 2\) \{\s*rightDown\.current = local\(e\)\s*return\s*\}/)
+    const menu = src.match(/const onContextMenu = [\s\S]*?\n {4}\}\n/)?.[0] ?? ''
+    expect(menu).toContain('const from = rightDown.current')
+    expect(menu).toContain('rightDown.current = null')
+    expect(menu).toMatch(/if \(rightDragPanned\(from, at\.x, at\.y\)\) return/)
+    // The check comes before a drawing is finished and before any menu is picked.
+    expect(menu.indexOf('rightDragPanned(')).toBeLessThan(menu.indexOf('finishTool()'))
+    expect(menu.indexOf('rightDragPanned(')).toBeLessThan(menu.indexOf('showContextMenu('))
   })
 })
 

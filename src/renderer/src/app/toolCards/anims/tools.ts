@@ -29,7 +29,7 @@ import { Text } from './Text'
 import { Delete } from './Delete'
 
 export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCardDef> = {
-  'tool:select': { title: 'Move', shortcut: 'V', sentence: 'Click to select, drag a point or a vector head to move it, or drag empty space to pan.', Animation: Move },
+  'tool:select': { title: 'Move', shortcut: 'V', sentence: 'Click to select, drag a box round several objects, drag points or vector heads, or hold Space and drag to pan.', Animation: Move },
   'tool:sketch': { title: 'Sketch', shortcut: 'K', sentence: 'Draw a rough shape with the mouse and it becomes a neat square, rectangle, triangle, circle or line.', Animation: Sketch },
   'tool:point': { title: 'Point', shortcut: 'P', sentence: 'Click anywhere to place a point.', Animation: Point },
   'tool:vector': { title: 'Vector', shortcut: 'W', sentence: 'Drag from the tail to the head, or click the tail and then the head.', Animation: Vector },

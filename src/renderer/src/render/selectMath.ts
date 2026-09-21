@@ -51,6 +51,16 @@ export const MARQUEE_MIN_PX = 5
 export const marqueeStarted = (m: Marquee): boolean => Math.hypot(m.x1 - m.x0, m.y1 - m.y0) >= MARQUEE_MIN_PX
 
 /**
+ * Whether the contextmenu event that ends a right-button gesture ends a pan, not a click. On
+ * Windows the event fires when the right button comes up, wherever the pointer has been dragged
+ * to, so every right-drag pan used to finish by opening the background menu (or, mid-polygon, by
+ * finishing the shape). The same few pixels that turn a left-drag into a box turn a right-drag
+ * into a pan; `from` is null when the right button never went down on the canvas.
+ */
+export const rightDragPanned = (from: { x: number; y: number } | null, x: number, y: number): boolean =>
+  from !== null && marqueeStarted({ x0: from.x, y0: from.y, x1: x, y1: y })
+
+/**
  * What is selected once the box is let go: the box's contents, or with Shift held the old
  * selection plus them. Shift adds and never removes — a box that took away the objects it
  * covered read as a bug, unlike a Shift-click on one object, which toggles it.

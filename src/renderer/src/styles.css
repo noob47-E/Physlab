@@ -509,7 +509,9 @@ input[type='range'] {
   border: 1px solid var(--line);
   border-left: 3px solid var(--c, #888);
   text-shadow: none;
-  color: var(--c, #ddd);
+  /* The object's colour is the left border, never the text: a point is drawn near-white, and on
+     the Light theme's near-white --label-bg the letter M was a blank box. */
+  color: var(--label-text);
 }
 .obj-label.chip .nm {
   font-size: 14px;

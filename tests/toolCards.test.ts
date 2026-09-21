@@ -20,6 +20,7 @@ import { CARD_CLOSERS, POPUP_SELECTOR, TOOL_CARD_DELAY, TOOL_CARD_ID, hideCard, 
 import { placeTourCard } from '../src/renderer/src/app/layoutMath'
 import { TOOLS } from '../src/renderer/src/render/tools'
 import { LINK_KINDS } from '../src/renderer/src/sim/links'
+import { SHORTCUTS, TOUR } from '../src/renderer/src/app/tour/steps'
 
 const ANIMS = join(RENDERER_SRC, 'app', 'toolCards', 'anims')
 const animFiles = readdirSync(ANIMS).filter((n) => n.endsWith('.tsx'))
@@ -84,6 +85,37 @@ describe('every sentence reads plainly', () => {
       expect(typeof card.Animation).toBe('function')
     })
   }
+})
+
+describe('the pan gesture is taught the same way everywhere', () => {
+  // With the Move tool a left-drag on empty space draws a selection box, and the pan moved to
+  // Space + drag (or a right-drag). The hover card, the tour and the shortcuts list are where a
+  // student first learns the gesture, and each of them once still said "drag empty space".
+  const oldGesture = /drag(ging)? empty space to (pan|move)/i
+  const shelfHint = TOOLS.find((t) => t.id === 'select')!.hint[0]
+
+  it("the Move tool's own hint says Space + drag, and mentions the box", () => {
+    expect(shelfHint).toMatch(/Space/)
+    expect(shelfHint).toMatch(/box/)
+    expect(shelfHint).not.toMatch(oldGesture)
+  })
+
+  it('the Move card teaches the same gesture as the hint', () => {
+    const card = TOOL_CARDS['tool:select']
+    expect(card.sentence).toMatch(/hold Space and drag to pan/i)
+    expect(card.sentence).toMatch(/box/)
+    expect(card.sentence).not.toMatch(oldGesture)
+  })
+
+  it('the tour and the shortcuts list agree', () => {
+    const drawing = TOUR.find((step) => step.title === 'The drawing')!
+    expect(drawing.body).toMatch(/Hold Space and drag to move the view/)
+    expect(drawing.body).toMatch(/box/)
+    for (const step of TOUR) expect(step.body).not.toMatch(oldGesture)
+    for (const card of Object.values(TOOL_CARDS)) expect(card.sentence).not.toMatch(oldGesture)
+    const space = SHORTCUTS.find(([key]) => key === 'Space')!
+    expect(space[1]).toMatch(/drag to move the view/)
+  })
 })
 
 describe('the animations follow the one pattern', () => {

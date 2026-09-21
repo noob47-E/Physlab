@@ -60,6 +60,18 @@ describe('the type scale', () => {
     }
   })
 
+  it("colours a label chip's text from the theme, and only its edge from the object", () => {
+    // A point is drawn near-white in every theme, and the Light theme's --label-bg is near-white
+    // too: with the chip's text taking the object's colour, the letters M, N, R, S were blank
+    // boxes on the projector theme. The 3 px left border keeps the object's colour.
+    const chip = css.match(/\n\.obj-label\.chip \{[^}]*\}/)?.[0] ?? ''
+    expect(chip).toMatch(/border-left: 3px solid var\(--c/)
+    expect(chip).toMatch(/\n\s*color: var\(--label-text\);/)
+    expect(chip).not.toMatch(/color: var\(--c/)
+    // The token it reads is declared in every theme block.
+    expect(css.match(/--label-text:/g)?.length).toBe(3)
+  })
+
   it('keeps the menu height rule in one place', () => {
     const shell = read('app/shell.css')
     expect(shell).not.toMatch(/\.menu \{/)

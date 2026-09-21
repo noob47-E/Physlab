@@ -178,6 +178,20 @@ describe('grid styles', () => {
     for (const g of GRID_STYLES) expect(g.hint.length).toBeGreaterThan(10)
   })
 
+  it('the View menu ticks the grid that is showing, the way it ticks the theme', () => {
+    // `on` alone puts a class on the row that the menu never styles; the tick the student sees
+    // is the shortcut text, which is how the theme rows do it. With Paper on, the five Grid rows
+    // showed no mark at all.
+    const src = readSource('src/renderer/src/app/TopBar.tsx')
+    const view = src.match(/label="View"[\s\S]*?label="Help"/)?.[0] ?? ''
+    const rows = view.match(/GRID_STYLES\.map\([\s\S]*?\n\s*\}\),/)?.[0] ?? ''
+    expect(rows).toMatch(/const current = showGrid && gridStyle === g\.id/)
+    expect(rows).toMatch(/sc: current \? '✓' : undefined/)
+    expect(view).toMatch(/label: 'Grid: off', sc: showGrid \? undefined : '✓'/)
+    // And the themes still use the same mark, so the menu reads as one.
+    expect(view).toMatch(/sc: theme === id \? '✓' : undefined/)
+  })
+
   it('draws each dot as a small square, two triangles wide enough to be seen', () => {
     // WebGPU draws a THREE.Points vertex as one device pixel and ignores PointsMaterial.size,
     // so the dots style was invisible on the default renderer; each dot is a quad instead.

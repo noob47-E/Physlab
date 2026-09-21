@@ -421,9 +421,14 @@ export function TopBar() {
           { label: '3D view', sc: '3', disabled: !isDrawingMode(mode), run: () => s().setViewMode('3d') },
           { label: 'Reset camera', sc: 'Home', run: resetCamera },
           '-',
-          // One row per grid style plus Off, ticked on the current one, like the themes below.
-          ...GRID_STYLES.map((g) => ({ label: `Grid: ${g.label.toLowerCase()}`, on: showGrid && gridStyle === g.id, run: () => s().setSettings({ showGrid: true, gridStyle: g.id }) })),
-          { label: 'Grid: off', on: !showGrid, run: () => s().setSettings({ showGrid: false }) },
+          // One row per grid style plus Off, ticked on the current one, like the themes below. The
+          // tick is the `sc` text: `on` alone has no menu style, and a View menu with five Grid
+          // rows and no mark on any of them could not say which grid was showing.
+          ...GRID_STYLES.map((g) => {
+            const current = showGrid && gridStyle === g.id
+            return { label: `Grid: ${g.label.toLowerCase()}`, sc: current ? '✓' : undefined, on: current, run: () => s().setSettings({ showGrid: true, gridStyle: g.id }) }
+          }),
+          { label: 'Grid: off', sc: showGrid ? undefined : '✓', on: !showGrid, run: () => s().setSettings({ showGrid: false }) },
           { label: `Axes: ${showAxes ? 'on' : 'off'}`, run: () => s().setSettings({ showAxes: !showAxes }) },
           { label: `Snapping: ${snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s().setSettings({ snap: !snap }) },
           { label: `Angle marks: ${angleMarks ? 'shown' : 'hidden'}`, run: () => s().setSettings({ showAngleMarks: !angleMarks }) },

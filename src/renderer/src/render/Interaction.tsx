@@ -6,7 +6,7 @@ import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './ca
 import { labelAnchors, overlay, showTip } from './overlay'
 import { CURVE_PICK_PX, pickAll, pickAt, type Hit } from './picking'
 import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type Marquee, type SnapInfo } from './tools'
-import { marqueeStarted, mergeSelection, normalizeRect, objectInRect, type S2 } from './selectMath'
+import { marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { showContextMenu } from '../ui/ContextMenu'
@@ -91,6 +91,9 @@ export function Interaction() {
   const sketch = useRef<{ world: V3[]; lastX: number; lastY: number } | null>(null)
   // A selection box in progress: where the left button went down on empty space with the Move tool.
   const box = useRef<{ x0: number; y0: number } | null>(null)
+  // Where the right button went down on the canvas, so the contextmenu event that follows can
+  // tell a right-drag pan from a right-click (see rightDragPanned).
+  const rightDown = useRef<{ x: number; y: number } | null>(null)
   // The existing point a vector drag or first click started on, so a vector drawn from one
   // point to another is tied to them and follows when either point moves.
   const vectorTail = useRef<{ down: ObjId | null; first: ObjId | null }>({ down: null, first: null })
@@ -232,12 +235,20 @@ export function Interaction() {
     }
 
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return
       // The buttons floating over the drawing — 2D/3D, grid, snap, the label choices — live inside
       // the same container this listener is attached to, and it listens in the capture phase, so a
       // click on one of them used to reach the canvas as well: pressing "Always" with a drawing
       // tool selected dropped a point behind the button. Only the canvas draws.
-      if (!(e.target instanceof HTMLCanvasElement)) return
+      if (!(e.target instanceof HTMLCanvasElement)) {
+        rightDown.current = null
+        return
+      }
+      // The camera controls own the right button (a pan); this only remembers where it started.
+      if (e.button === 2) {
+        rightDown.current = local(e)
+        return
+      }
+      if (e.button !== 0) return
       const { x, y } = local(e)
       const s = scene()
       const tool = s.tool
@@ -657,20 +668,24 @@ export function Interaction() {
     // Right-click finishes a drawing; otherwise it opens the menu for whatever is under the cursor.
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
+      const from = rightDown.current
+      rightDown.current = null
       // A right button pressed during a selection box is part of the box, never a menu.
       if (box.current) return
+      // A right-drag panned the view: the button coming up is the end of the pan, not a click.
+      const at = local(e)
+      if (rightDragPanned(from, at.x, at.y)) return
       if (useTool.getState().picks.length && finishTool()) {
         e.stopPropagation()
         return
       }
-      const { x, y } = local(e)
-      const hit = pickAt(pickCtx(), x, y)
+      const hit = pickAt(pickCtx(), at.x, at.y)
       if (hit) {
         const s = scene()
         if (!s.selection.includes(hit.id)) s.select([hit.id])
         showContextMenu(e, menuForObject(hit.id))
       } else {
-        showContextMenu(e, menuForBackground(worldOn(x, y)))
+        showContextMenu(e, menuForBackground(worldOn(at.x, at.y)))
       }
     }
 

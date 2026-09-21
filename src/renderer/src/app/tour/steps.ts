@@ -49,7 +49,7 @@ export const TOUR: TourStep[] = [
   {
     anchor: 'viewport',
     title: 'The drawing',
-    body: 'Drag empty space to move, scroll to zoom, and drag points or vector heads to change them. Everything is measured live.'
+    body: 'Hold Space and drag to move the view, scroll to zoom, and drag points or vector heads to change them. Drag a box on empty space to select several things. Everything is measured live.'
   },
   {
     anchor: 'labels',
@@ -179,7 +179,7 @@ export const SHORTCUTS: [string, string][] = [
   ['3', '2D / 3D view'],
   ['Tab', 'Move between the buttons and fields'],
   ['Home', 'Reset the view'],
-  ['Space', 'Play or pause the timeline'],
+  ['Space', 'Play or pause the timeline; hold it and drag to move the view'],
   ['Shift+click (Sandbox)', 'Choose the second object to join to the selected one'],
   ['Esc (Sandbox)', 'Stop connecting two objects'],
   ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],
