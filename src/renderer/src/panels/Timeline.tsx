@@ -26,7 +26,7 @@ function SandboxTimeline() {
         <span className="text-[color:var(--text-dim)]">{playing ? 'running' : 'paused'}</span>
         {timeScale !== 1 && <span className="text-[color:var(--text-dim)]">slow motion ×{formatMeasure(timeScale, 'number', settings)}</span>}
       </div>
-      <p className="text-[color:var(--text-dim)]">Play, Step, Reset and slow motion are at the top of the Sandbox panel. Space plays and pauses.</p>
+      <p className="text-[color:var(--text-dim)]">Play, Step and Reset are at the top of the Sandbox panel; slow motion is under World. Space plays and pauses.</p>
     </div>
   )
 }

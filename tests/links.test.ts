@@ -66,6 +66,43 @@ describe('links', () => {
     expect(makeLink('p', 'pulley', near, far, { over: wheel })!.length).toBeCloseTo(6, 6)
   })
 
+  it('spinning a pulley about its own axle leaves the rim points where the rope hangs', () => {
+    const close = (v: number[], w: number[]) => v.forEach((x, i) => expect(x).toBeCloseTo(w[i], 9))
+    const left = put('box', 'L', [-0.3, 2, 0])
+    const right = put('box', 'R', [0.3, 2, 0])
+    // The default wheel's axle is z; any turn about z is the wheel itself turning. The rule
+    // that used the wheel's own x axis sent the rope out of the top and bottom at 90°.
+    for (const theta of [30, 90, 135, 270]) {
+      const wheel = put('pulley', 'P', [0, 5, 0], { size: [0.3, 0.15, 0.3], rotation: [90, 0, theta] })
+      const { p1, p2 } = pulleyRim(wheel, left.position, right.position)
+      close(p1, [-0.3, 5, 0])
+      close(p2, [0.3, 5, 0])
+    }
+    // A wheel lying flat has no level direction across its axle: its own x axis stands in.
+    const flat = put('pulley', 'F', [0, 5, 0], { size: [0.3, 0.15, 0.3], rotation: [0, 90, 0] })
+    const { p1, p2 } = pulleyRim(flat, [0, 2, 0.3], [0, 2, -0.3])
+    close(p1, [0, 5, 0.3])
+    close(p2, [0, 5, -0.3])
+  })
+
+  it('moving the wheel after the join hangs the masses under its new rim', async () => {
+    const world = await makeWorld()
+    const wheel = put('pulley', 'P', [0, 5, 0], { size: [0.3, 0.15, 0.3] })
+    const a = put('box', 'A', [-0.3, 2.5, 0], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 1 })
+    const b = put('box', 'B', [0.3, 2.5, 0], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 1 })
+    world.rebuild([floor(), wheel, a, b], [makeLink('p', 'pulley', a, b, { over: wheel })!])
+    // Arranged while paused: the masses are placed under where the wheel is about to go, then
+    // the wheel is dragged there. The constraint used to keep the rim where the wheel had been.
+    world.setPosition(a.id, [0.7, 2.5, 0])
+    world.setPosition(b.id, [1.3, 2.5, 0])
+    expect(world.updateBody({ ...wheel, position: [1, 5, 0] })).toBe(true)
+    run(world, 1)
+    expect(world.state(a.id)!.position[0]).toBeCloseTo(0.7, 1)
+    expect(world.state(b.id)!.position[0]).toBeCloseTo(1.3, 1)
+    expect(world.state(a.id)!.position[1]).toBeCloseTo(2.5, 1)
+    world.destroy()
+  })
+
   it('an Atwood machine over a pulley turned 90° about the vertical still accelerates at (m₂ − m₁) g / (m₁ + m₂)', async () => {
     const world = await makeWorld({ twoD: false })
     const wheel = put('pulley', 'P', [0, 5, 0], { size: [0.3, 0.15, 0.3], rotation: [90, 90, 0] })

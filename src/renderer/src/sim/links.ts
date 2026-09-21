@@ -30,14 +30,21 @@ const dist = (p: V3, q: V3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
 /**
  * Where a rope over the wheel leaves its rim: the side nearer each body.
  *
- * The rim points are ±r along the wheel's own x axis, turned by its rotation. They used to be
- * ±r along world x, so a wheel turned to face another way had its rope leaving from the middle
- * of its face instead of its rim.
+ * The rim points are ±r along the level direction across the wheel's axle: a rope hangs off the
+ * two sides of a wheel, whichever way the wheel is turned. Turning the wheel about its own axle
+ * (rotation z on a default pulley) must not move them — the first rule after "±r along world x"
+ * used the wheel's own x axis, which spun with the axle and sent the rope out of the top and
+ * bottom of the wheel. Only a wheel lying flat has no level direction across its axle; then the
+ * wheel's own x axis is the best there is.
  */
 export function pulleyRim(wheel: BodyDef, posA: V3, posB: V3): { p1: V3; p2: V3 } {
   const r = wheel.size[0]
   const w = wheel.position
-  const arm = rotateByEuler(wheel.rotation, [r, 0, 0])
+  // A pulley is a cylinder, so its axle is its own y axis.
+  const axle = rotateByEuler(wheel.rotation, [0, 1, 0])
+  const across: V3 = [axle[2], 0, -axle[0]]
+  const flat = Math.hypot(across[0], across[2])
+  const arm: V3 = flat < 1e-6 ? rotateByEuler(wheel.rotation, [r, 0, 0]) : [(r * across[0]) / flat, 0, (r * across[2]) / flat]
   const one: V3 = [w[0] + arm[0], w[1] + arm[1], w[2] + arm[2]]
   const other: V3 = [w[0] - arm[0], w[1] - arm[1], w[2] - arm[2]]
   // Whichever assignment keeps the two straight runs shortest is the one that does not cross.

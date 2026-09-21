@@ -63,9 +63,10 @@ export const PRESETS: Preset[] = [
     id: START_PRESET_ID,
     label: 'Drop a ball',
     topic: 'Motion',
-    about: 'A 1 kg ball let go from 5 m. Press Play: it lands after √(2h/g) = 1.01 s at √(2gh) = 9.9 m/s. Read t off the clock.',
+    about: 'A 1 kg ball let go with its underside 5 m up. Press Play: it lands after √(2h/g) = 1.01 s at √(2gh) = 9.9 m/s. Read t off the clock.',
     build: () => ({
-      bodies: [floor(), ball('A', [0, 5, 0], { size: [0.25, 0.25, 0.25], restitution: 0.3 })],
+      // The ball's underside, not its centre, is what lands: a 25 cm ball sits 25 cm higher.
+      bodies: [floor(), ball('A', [0, 5.25, 0], { size: [0.25, 0.25, 0.25], restitution: 0.3 })],
       world: VACUUM
     })
   },
@@ -93,9 +94,9 @@ export const PRESETS: Preset[] = [
     id: 'drop',
     label: 'Free fall',
     topic: 'Motion',
-    about: 'A 5 kg ball and a 0.5 kg ball, dropped together from 6 m. In a vacuum they land together after √(2h/g) = 1.11 s — switch the air back on and see what changes.',
+    about: 'A 5 kg ball and a 0.5 kg ball, dropped together with their undersides 6 m up. In a vacuum they land together after √(2h/g) = 1.11 s — switch the air back on and see what changes.',
     build: () => ({
-      bodies: [floor(), ball('Heavy', [-1, 6, 0], { size: [0.25, 0.25, 0.25], mass: 5, material: 'lead' }), ball('Light', [1, 6, 0], { size: [0.25, 0.25, 0.25], mass: 0.5, material: 'foam' })],
+      bodies: [floor(), ball('Heavy', [-1, 6.25, 0], { size: [0.25, 0.25, 0.25], mass: 5, material: 'lead' }), ball('Light', [1, 6.25, 0], { size: [0.25, 0.25, 0.25], mass: 0.5, material: 'foam' })],
       world: VACUUM
     })
   },
@@ -103,9 +104,9 @@ export const PRESETS: Preset[] = [
     id: 'moon',
     label: 'Drop on the Moon',
     topic: 'Motion',
-    about: 'The same drop with g = 1.62 m/s². From 5 m it takes √(2h/g) = 2.48 s instead of 1.01 s.',
+    about: 'The same drop with g = 1.62 m/s². With its underside 5 m up it takes √(2h/g) = 2.48 s instead of 1.01 s.',
     build: () => ({
-      bodies: [floor(), ball('A', [0, 5, 0])],
+      bodies: [floor(), ball('A', [0, 5.2, 0])],
       world: { ...VACUUM, gravity: 1.62 }
     })
   },
@@ -161,7 +162,9 @@ export const PRESETS: Preset[] = [
     about: 'A plank on a hinge. 3 kg at 1 m against 1 kg at 1.5 m: moments 3 against 1.5, so the heavy side goes down. Drag the light ball out to 3 m to balance it.',
     build: () => {
       const stand = put('box', 'Stand', [0, 0.35, 0], { size: [0.2, 0.7, 0.4], motion: 'static', material: 'steel' })
-      const plank = put('plank', 'Plank', [0, 0.78, 0], { size: [4, 0.1, 0.5], massMode: 'mass', mass: 2, material: 'wood' })
+      // Long enough for the instruction in `about`: a 4 m plank ended at 2 m, so a ball dragged
+      // out to 3 m fell off the end instead of balancing.
+      const plank = put('plank', 'Plank', [0, 0.78, 0], { size: [7, 0.1, 0.5], massMode: 'mass', mass: 2, material: 'wood' })
       return {
         bodies: [floor(), stand, plank, ball('Heavy', [-1, 1.03, 0], { mass: 3, material: 'lead' }), ball('Light', [1.5, 1.03, 0], { mass: 1, material: 'wood' })],
         world: VACUUM,

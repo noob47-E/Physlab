@@ -300,12 +300,20 @@ export class SimWorld {
     }
     // Position and velocity are only pushed when they really changed, so a body mid-flight is not
     // yanked back to the number sitting in the panel on every unrelated edit.
-    if (was.position.some((v, i) => v !== def.position[i])) this.setPosition(def.id, def.position)
+    const moved = was.position.some((v, i) => v !== def.position[i])
+    if (moved) this.setPosition(def.id, def.position)
     if (was.velocity.some((v, i) => v !== def.velocity[i])) this.setVelocity(def.id, def.velocity)
     // Rotation and spin were neither structural nor applied, so typing them did nothing at all.
-    if (was.rotation.some((v, i) => v !== def.rotation[i])) this.setRotation(def.id, def.rotation)
+    const turned = was.rotation.some((v, i) => v !== def.rotation[i])
+    if (turned) this.setRotation(def.id, def.rotation)
     if (was.angularVelocity.some((v, i) => v !== def.angularVelocity[i])) this.setAngularVelocity(def.id, def.angularVelocity)
     e.def = def
+    // A pulley bakes its wheel's rim into the constraint when the link is made, and a rope is a
+    // chain laid between its two ends. Moving or turning the wheel, or moving an end, used to
+    // leave that where it was: the rope was drawn over the moved wheel while both masses still
+    // hung from the old rim. The links are laid again when one of them touches this body.
+    const touches = (l: Link) => l.over === def.id || ((l.kind === 'pulley' || l.kind === 'rope') && (l.a === def.id || l.b === def.id))
+    if ((moved || turned) && this.linkDefs.some(touches)) this.setLinks(this.linkDefs)
     return true
   }
 

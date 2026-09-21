@@ -162,7 +162,7 @@ after a user's layout was saved still appears: `showPanel` puts it back beside w
 ## How to check your work
 
 ```bash
-npm test          # vitest, ~460 tests, pure logic, no DOM
+npm test          # vitest, ~770 tests, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run lint      # eslint, 0 errors; a suppression carries its reason after `--`
 npm run dev       # Electron with hot reload

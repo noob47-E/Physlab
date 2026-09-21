@@ -394,6 +394,53 @@ falling through the floor.
 262 tests. `tests/congruence.test.ts` covers SSS in a different corner order, a side that differs,
 a similar triangle with its ratio, a mirrored right triangle, and drawing from three sides.
 
+### 0.3.7 — Pure Math shows its working for every tool · 2026-09-21
+
+- **Every Pure Math tool checks its own answer and says so.** Factorising with i prints
+  (x − 2i)(x + 2i) instead of (x − [2i])(x − [−2i]); x⁴ + 4, x⁴ + 1 and x⁴ + 5x² + 4 factorise;
+  an input that already has i in it is refused with a sentence, not a throw. Solve does linear
+  equations step by step and checks by substitution; Expand shows the each-times-each grid and
+  what was typed. `Working.checked` replaces the panel's search for the word "suspicion".
+- **The calculator rounds the way you asked.** It honours the scene precision setting (2 dp by
+  default) instead of printing nine trailing digits.
+
+### 0.3.8 — vectors, resolved and added with the drawing to prove it · 2026-09-21
+
+- Every LaTeX string in the vector solver was a template literal with single backslashes, so
+  `\theta` was a tab and "heta"; the cosine-law angle used arcsine and gave 70.89° for 109.11°;
+  a 3-D vector was resolved at its planar heading. All fixed, and a test renders every step of
+  every solver through KaTeX. The solvers take the scene's precision and angle settings, draw
+  what they find, and a ± the converter cannot use is refused with a sentence.
+
+### 0.3.9 — the Sandbox is calmer, and pulleys and ropes pull the way real ones do · 2026-09-21
+
+- **Five things about an object, the rest folded.** The inspector shows Name, Material, Mass,
+  Position and Velocity; the other twenty controls sit under Appearance, Physics and Advanced
+  folds that remember whether they were open. Shift-click chooses a second body as the partner
+  for a join; the floor is never a partner.
+- **Classroom masses.** A new ball weighs 1 kg and a crate 2 kg (`DEFAULT_MASS`, `massMode`
+  'mass' by default) instead of steel-by-volume at 514 kg; every preset's moving parts weigh
+  0.5–10 kg. "Start here" loads one ball and one floor at the top of the list — twenty-five
+  experiments now.
+- **One transport.** The Sandbox panel's sticky bar has Play, Reset and Step; the Timeline in
+  Sandbox mode is only the clock. Space still plays and pauses.
+- **Ropes hold and pulleys turn.** A rope's links weigh a tenth of the lightest load and never
+  less than a twentieth (`ropeLinkMass`): a two-tonne bob used to sag a metre and a half. The rim
+  points of a pulley follow the wheel's rotation (`sim/rotate.ts`, shared with the engine), so a
+  wheel turned to face another way hands the rope its rim, not its face.
+
+### 0.3.10 — one look for the whole app, in plain words · 2026-09-21
+
+- **Every colour and text size is a named token**, and `tests/colours.test.ts` keeps them that
+  way: no hex, no palette utility, no pixel size anywhere in the renderer, so a theme switch
+  re-colours everything on screen, including the graph. Hover states that were white on light
+  grey — invisible in the light theme — read in both.
+- **The window fits a laptop.** Sized to the work area, min 960×600; the top bar measures itself
+  and folds; a mode opens three panels, not sixteen; "Reset the panel layout" is no longer undone
+  by the save on the way out; an application menu owns reload (asks first), F11, F12 and zoom,
+  with one owner for the zoom. The command bar greets a student with one plain line; the CAS
+  badge speaks only when it has something to say; the tour keeps its promise.
+
 ## What is in it today
 
 Eight working modes, eight reserved.

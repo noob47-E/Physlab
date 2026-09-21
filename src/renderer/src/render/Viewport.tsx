@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
 import { useApp } from '../app/modes'
-import { Box, Camera, Check, Grid3x3, Home, Magnet, Pause, Play, RotateCcw, Square, Undo2, X } from 'lucide-react'
+import { Box, Camera, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
 import { createRenderer, QUALITY, useGpuInfo } from './renderer'
@@ -298,28 +298,16 @@ export function Viewport() {
   )
 }
 
-/** Play, Reset, the clock and a way to find the objects again, on the drawing itself. */
+/**
+ * The clock and a way to find the objects again, on the drawing itself. Play, Step and Reset
+ * live in the Sandbox panel's bar: this strip used to carry its own Play and Reset, so a student
+ * saw two of each with different tooltips. Space still plays and pauses with the panel closed.
+ */
 function SandboxStrip() {
-  const playing = useScene((s) => s.playing)
-  const setPlaying = useScene((s) => s.setPlaying)
   const settings = useScene((s) => s.settings)
   const time = useSandbox((s) => s.engineTime)
-  const resetRun = useSandbox((s) => s.resetRun)
   return (
     <div className="absolute left-3 top-3 flex items-center gap-1">
-      <button className="btn primary" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
-        {playing ? <Pause size={13} /> : <Play size={13} />} {playing ? 'Pause' : 'Play'}
-      </button>
-      <button
-        className="btn"
-        onClick={() => {
-          setPlaying(false)
-          resetRun()
-        }}
-        title="Everything back to the start, t = 0"
-      >
-        <RotateCcw size={13} /> Reset
-      </button>
       <button className="icon-btn" onClick={resetCamera} title="Find the objects (Home)">
         <Home size={14} />
       </button>
