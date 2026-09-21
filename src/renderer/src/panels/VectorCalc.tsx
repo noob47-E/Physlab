@@ -292,7 +292,9 @@ export function VectorCalc() {
         const sizeKind = card.entry === 'scene' ? 'length' : 'number'
         return (
           <div key={card.id} ref={lit ? highlightRef : undefined} className={`card p-2 ${ok ? '' : 'border-[color:var(--bad)]'} ${lit ? 'ring-2 ring-[color:var(--accent)]' : ''}`}>
-            <div className="mb-1.5 flex items-center gap-2">
+            {/* The row wraps and the switch may shrink: at the 960 px minimum window the three
+                labels once pushed the Remove button out of the card, with no way to remove it. */}
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <input
                 className="field w-11 text-center text-lead font-math font-semibold italic"
                 value={card.name}
@@ -302,22 +304,23 @@ export function VectorCalc() {
               />
               {/* One way in: the maths field, which takes 3i + 4j and 10∠30° alike. Size and angle
                   as two boxes stay a chip away for a student whose book writes vectors that way. */}
-              <div className="seg">
+              <div className="seg min-w-0 shrink overflow-x-auto">
                 {(
                   [
-                    ['comp', 'type it'],
-                    ['polar', 'size ∠ angle'],
-                    ['scene', 'from the graph']
-                  ] as [Entry, string][]
-                ).map(([k, l]) => (
-                  <button key={k} className={`min-h-[36px] ${card.entry === k ? 'on' : ''}`} onClick={() => updateCard(card.id, { entry: k })}>
+                    ['comp', 'typed', 'Type it, like 3i + 4j or 10∠30°'],
+                    ['polar', 'size ∠ angle', 'Size and angle in two boxes'],
+                    ['scene', 'graph', 'Read it off a vector on the graph']
+                  ] as [Entry, string, string][]
+                ).map(([k, l, tip]) => (
+                  <button key={k} className={`min-h-[36px] ${card.entry === k ? 'on' : ''}`} title={tip} onClick={() => updateCard(card.id, { entry: k })}>
                     {l}
                   </button>
                 ))}
               </div>
-              <div className="flex-1" />
+              {/* ml-auto rather than a spacer: a zero-width spacer stays on the first line when
+                  the button alone wraps, which left the wrapped button hanging at the left. */}
               <button
-                className="min-h-[36px] min-w-[36px] rounded text-[color:var(--text-faint)] hover:text-[color:var(--bad)]"
+                className="ml-auto min-h-[36px] min-w-[36px] rounded text-[color:var(--text-faint)] hover:text-[color:var(--bad)]"
                 title="Remove this vector"
                 onClick={() => {
                   set({ cards: st.cards.filter((c) => c.id !== card.id) })

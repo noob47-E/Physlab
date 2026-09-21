@@ -30,10 +30,15 @@ export interface Card {
   wasSceneId?: string
 }
 
-/** A vector written the way a card is typed, at full precision, so nothing is lost in the copy. */
+/**
+ * A vector written the way a card is typed, so nothing is lost in the copy. Twelve significant
+ * digits keep any coordinate a student can draw or type exact while dropping the last-bit error
+ * a drag leaves behind: a vector drawn to (2.875, 1.275) is stored as 2.875000000000001, and a
+ * demoted card used to hand that string to the student's own field.
+ */
 export const ijkLatex = (v: V3): string =>
   v
-    .map((c, i) => (Math.abs(c) < 1e-12 ? '' : `${c < 0 ? '-' : '+'}${Math.abs(c)}\\hat{${'ijk'[i]}}`))
+    .map((c, i) => (Math.abs(c) < 1e-12 ? '' : `${c < 0 ? '-' : '+'}${Number(Math.abs(c).toPrecision(12))}\\hat{${'ijk'[i]}}`))
     .join('')
     .replace(/^\+/, '') || '0'
 

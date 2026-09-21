@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { SceneObject } from '../src/renderer/src/core/types'
-import { CARDS_KEY, OLD_CARDS_KEY, addVectorFromScene, cardForSelection, cardToReuse, cardsFromStorage, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
+import { CARDS_KEY, OLD_CARDS_KEY, addVectorFromScene, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
 import { readSource } from './helpers/repo'
 
 const card = (id: number, name: string, extra: Partial<Card> = {}): Card => ({ id, name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '', ...extra })
@@ -94,8 +94,29 @@ describe('one way in', () => {
   it('opens a new card on the maths field, with size ∠ angle a chip away', () => {
     const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
     expect(src).toMatch(/entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' \}\] \}\)\n\s*\}/)
-    expect(src).toContain("['polar', 'size ∠ angle']")
+    expect(src).toContain("['polar', 'size ∠ angle'")
     expect(src).toContain('10∠30°')
+  })
+
+  it('keeps the Remove button inside the card at the smallest window', () => {
+    // At the 960 px minimum the three switch labels once pushed the trash icon off the card.
+    // The row wraps and the switch may shrink, so the button is always somewhere on the card.
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    const header = src.slice(src.indexOf('flex-wrap items-center gap-2'), src.indexOf('Remove this vector'))
+    expect(header).toContain('seg min-w-0 shrink')
+    for (const label of ['typed', 'size ∠ angle', 'graph']) expect(header).toContain(`'${label}'`)
+  })
+
+  it('writes a demoted card without float noise', () => {
+    // A vector dragged to (2.875, 1.275) is stored as 2.875000000000001; the field the student
+    // then edits must read 2.875, not the last bit of a double.
+    expect(ijkLatex([2.875000000000001, 1.275, 0])).toBe('2.875\\hat{i}+1.275\\hat{j}')
+    expect(ijkLatex([0.1 + 0.2, -0.30000000000000004, 0])).toBe('0.3\\hat{i}-0.3\\hat{j}')
+    // Twelve digits keep anything a student can type or draw exactly.
+    expect(ijkLatex([3, -4, 0])).toBe('3\\hat{i}-4\\hat{j}')
+    expect(ijkLatex([1.23456789, 0, 2.5])).toBe('1.23456789\\hat{i}+2.5\\hat{k}')
+    expect(ijkLatex([0, 0, 0])).toBe('0')
+    expect(ijkLatex([1e-13, 0, 0])).toBe('0')
   })
 })
 
