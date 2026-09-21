@@ -2,10 +2,13 @@
 // for a right answer, and the number they are checked against is the number PhysLab's own
 // step-by-step solution works out.
 
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { generate, generateSet, TOPICS, type AnswerField } from '../src/renderer/src/math/problems'
 import { checkAnswer, expectedText, isCorrect, parseAnswer } from '../src/renderer/src/math/checkAnswer'
 import { getAngleMode, setAngleMode } from '../src/renderer/src/math/expr'
+import { resetGlobals } from './helpers/globals'
+
+beforeEach(resetGlobals)
 
 /** Every number written anywhere in a worked solution, as plain magnitudes. */
 function numbersIn(text: string): number[] {

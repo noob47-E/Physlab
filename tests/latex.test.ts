@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { latexToMath, tryLatexToMath } from '../src/renderer/src/math/latexToMath'
 import { evaluateComp } from '../src/renderer/src/calc/engine'
 import { math, preprocess, setAngleMode, toV3 } from '../src/renderer/src/math/expr'
+import { resetGlobals } from './helpers/globals'
+
+beforeEach(resetGlobals)
 
 const calc = (latex: string, angle: 'deg' | 'rad' = 'deg') => Number(evaluateComp(latexToMath(latex), { vars: {}, ans: 0, angle }).value)
 

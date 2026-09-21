@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { directionAngles, toDeg } from '../src/renderer/src/math/vec'
 import { compileScalar, inferKind, math, preprocess, setAngleMode, symbolsOf, toV3 } from '../src/renderer/src/math/expr'
+import { resetGlobals } from './helpers/globals'
+
+beforeEach(resetGlobals)
 
 describe('preprocess', () => {
   it('turns tuples into points but leaves calls alone', () => {
