@@ -58,7 +58,7 @@ export class Builder {
   }
 
   vector(def: VectorDef, opts: Common & { unit?: string; showComponents?: boolean } = {}): VectorObj {
-    return this.push({ ...this.base('vector', opts), type: 'vector', def, unit: opts.unit, showComponents: opts.showComponents, showAngle: true })
+    return this.push({ ...this.base('vector', opts), type: 'vector', def, unit: opts.unit, showComponents: opts.showComponents })
   }
 
   segment(a: ObjId, b: ObjId, opts: Common = {}): SegmentObj {

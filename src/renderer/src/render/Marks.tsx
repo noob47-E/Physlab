@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { FatLine } from './FatLine'
 import { useView } from './viewState'
+import { useScene } from '../core/store'
 import { themeColor, useThemed } from '../app/theme'
 import { add, normalize, scale, sub, type V3 } from '../math/vec'
 
@@ -19,6 +20,8 @@ export const useMarks = create<{ marks: Marks | null; set: (m: Marks | null) => 
 export function MarksView() {
   const marks = useMarks((s) => s.marks)
   const wpp = useView((s) => s.wpp)
+  // The equal-angle arcs are angle marks too; the ticks on equal sides are not.
+  const showArcs = useScene((s) => s.settings.showAngleMarks)
   // Re-read on a theme switch: the demand-driven canvas only repaints when something renders.
   const colour = useThemed(() => themeColor('--good'))
   if (!marks) return null
@@ -34,7 +37,7 @@ export function MarksView() {
       lines.push([add(c, scale(perp, half)), sub(c, scale(perp, half))])
     }
   }
-  for (const arc of marks.arcs) {
+  for (const arc of showArcs ? marks.arcs : []) {
     const u = normalize(sub(arc.a, arc.vertex))
     const v = normalize(sub(arc.b, arc.vertex))
     let a0 = Math.atan2(u[1], u[0])

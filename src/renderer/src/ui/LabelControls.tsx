@@ -1,4 +1,4 @@
-import { Eye, EyeOff, MousePointer2, Pin } from 'lucide-react'
+import { Angle, Eye, EyeOff, MousePointer2, Pin } from 'lucide-react'
 import { useScene } from '../core/store'
 import type { ObjId, SceneSettings } from '../core/types'
 
@@ -28,6 +28,19 @@ export function LabelShowSwitch({ className = '', compact = false }: { className
         </button>
       ))}
     </div>
+  )
+}
+
+export const ANGLE_MARKS_HELP = 'The arcs at the corners of a shape, the angle a vector makes with the x-axis and the marks on equal angles. Angles you drew with the Angle tool stay.'
+
+/** Shows or hides every angle mark on the drawing; a viewer preference, kept between sessions like the label choices. */
+export function AngleMarksSwitch({ className = '' }: { className?: string }) {
+  const on = useScene((s) => s.settings.showAngleMarks)
+  const set = useScene((s) => s.setSettings)
+  return (
+    <button className={`icon-btn ${on ? 'on' : ''} ${className}`} onClick={() => set({ showAngleMarks: !on })} title={`Angle marks: ${on ? 'shown' : 'hidden'}. ${ANGLE_MARKS_HELP}`}>
+      <Angle size={14} />
+    </button>
   )
 }
 

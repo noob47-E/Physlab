@@ -61,14 +61,27 @@ export interface PickContext {
   ev: EvalResult
 }
 
+/** The one object under the cursor: the first of `pickAll`, so the two never disagree. */
 export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: SceneObject, c: Computed) => boolean): Hit | null {
+  return pickAll(ctx, sx, sy, accept)[0] ?? null
+}
+
+/**
+ * Every object within reach of the cursor, best first: a lower priority number wins (a point over
+ * a line over a shape), and among equals the nearer one. `slack` widens every tolerance by that
+ * many pixels, for a caller that wants the lines near a crossing and not only the one under the
+ * cursor. A vector offers up to three hits (head, tail, body); only its best one is kept.
+ */
+export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: SceneObject, c: Computed) => boolean, slack = 0): Hit[] {
   const { camera, size, objects, order, ev } = ctx
   const P = { x: sx, y: sy }
   const scr = (v: V3) => toScreen(camera, size, v)
-  let best: Hit | null = null
+  const found = new Map<ObjId, Hit>()
+  const better = (a: Hit, b: Hit) => a.priority < b.priority || (a.priority === b.priority && a.dist < b.dist)
   const offer = (h: Hit, tol: number) => {
-    if (h.dist > tol) return
-    if (!best || h.priority < best.priority || (h.priority === best.priority && h.dist < best.dist)) best = h
+    if (h.dist > tol + slack) return
+    const prev = found.get(h.id)
+    if (!prev || better(h, prev)) found.set(h.id, h)
   }
 
   for (let idx = order.length - 1; idx >= 0; idx--) {
@@ -151,5 +164,6 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
       }
     }
   }
-  return best
+  // Stable: two hits that tie keep the order they were offered in (the top of the drawing first).
+  return [...found.values()].sort((a, b) => a.priority - b.priority || a.dist - b.dist)
 }

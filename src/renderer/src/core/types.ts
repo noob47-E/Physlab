@@ -85,7 +85,6 @@ export interface VectorObj extends ObjectBase {
   type: 'vector'
   def: VectorDef
   showComponents?: boolean
-  showAngle?: boolean
   unit?: string
 }
 
@@ -242,9 +241,14 @@ export interface SceneFile {
 
 export type LengthUnit = 'unit' | 'mm' | 'cm' | 'm' | 'km' | 'in' | 'ft'
 
+/** How the grid is drawn: squared lines, a dot at each crossing, finer squares, or squared paper with a tinted page. "Off" is `showGrid: false`. */
+export type GridStyle = 'lines' | 'dots' | 'fine' | 'paper'
+
 export interface SceneSettings {
   angleUnit: 'deg' | 'rad'
   showGrid: boolean
+  /** Saved with the drawing, like the unit. A file from before this setting existed draws lines. */
+  gridStyle: GridStyle
   showAxes: boolean
   snap: boolean
   /** Digits: decimal places ('dp') or significant figures ('sf'). */
@@ -259,6 +263,10 @@ export interface SceneSettings {
   measureLabels: 'name' | 'measure' | 'full'
   /** Keep point letters (A, B, C…) on the drawing even when other labels are hidden. */
   pointLetters: boolean
+  /** The arcs at a polygon's corners, a vector's angle from the x-axis and the congruence marks.
+   *  A viewer preference like the label choices: it follows the person, not the file. Angle
+   *  objects a student drew on purpose stay whatever this says. */
+  showAngleMarks: boolean
   /** How vectors are written, so PhysLab matches whatever book is in front of the student. */
   vectorNotation: 'arrow' | 'bold' | 'underline'
   componentForm: 'ijk' | 'pair' | 'column' | 'polar'

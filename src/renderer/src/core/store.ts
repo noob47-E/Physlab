@@ -9,7 +9,7 @@ import { startingScene, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD } from '../sim/types'
 import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
 import { renameInObjects, renameProblem } from './rename'
-import type { Space } from './visibility'
+import { visibleOrder, type Space } from './visibility'
 
 export interface LogEntry {
   id: number
@@ -74,6 +74,9 @@ export interface SceneState {
   /** Gives an object a new name, inside every formula that used the old one. Returns a sentence when it cannot. */
   renameObject: (id: ObjId, next: string) => string | null
 
+  /** Removes every object on the drawing being looked at, as one undo step; the other drawings keep theirs. */
+  clearDrawing: () => void
+
   select: (ids: ObjId[], additive?: boolean) => void
   setHovered: (id: ObjId | null) => void
   setTool: (tool: ToolId) => void
@@ -101,6 +104,7 @@ export interface SceneState {
 export const DEFAULT_SETTINGS: SceneSettings = {
   angleUnit: 'deg',
   showGrid: true,
+  gridStyle: 'lines',
   showAxes: true,
   snap: true,
   decimals: 2,
@@ -110,13 +114,14 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   labelShow: 'hover',
   measureLabels: 'measure',
   pointLetters: true,
+  showAngleMarks: true,
   vectorNotation: 'arrow',
   componentForm: 'ijk',
   directionStyle: 'standard'
 }
 
 /** Label preferences belong to the person using the app, so they survive restarts and opening files. */
-const LABEL_PREFS = ['labelShow', 'measureLabels', 'pointLetters', 'vectorNotation', 'componentForm', 'directionStyle'] as const
+export const LABEL_PREFS = ['labelShow', 'measureLabels', 'pointLetters', 'showAngleMarks', 'vectorNotation', 'componentForm', 'directionStyle'] as const
 const PREFS_KEY = 'physlab.labelPrefs'
 
 function loadLabelPrefs(): Partial<SceneSettings> {
@@ -235,6 +240,11 @@ export const useScene = create<SceneState>()((set, get) => {
         order.filter((id) => !doomed.has(id)),
         { ...history, selection: selection.filter((id) => !doomed.has(id)) }
       )
+    },
+
+    clearDrawing: () => {
+      const { order, objects, activeSpace } = get()
+      get().removeObjects(visibleOrder(order, objects, activeSpace))
     },
 
     beginGesture: () => {

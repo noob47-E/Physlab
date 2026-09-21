@@ -192,6 +192,8 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
 
   const colors = useDrawingColors()
   const showComps = obj.showComponents || selected
+  // The θ arc from the x-axis is an angle mark; a student who wants a bare drawing turns it off.
+  const showArc = useScene((s) => s.settings.showAngleMarks)
   const L = len(comp)
   const theta = heading(comp)
   // From the +x axis the short way round: a vector at 300° gets a 60° arc below the axis, not
@@ -227,7 +229,7 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
         const ay = toScreen(cam, sz, [tail[0], tail[1] + comp[1], tail[2]])
         pool.place(`${obj.name}x = ${formatMeasure(comp[0], 'length', settings)}`, (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', colors.xComp)
         pool.place(`${obj.name}y = ${formatMeasure(comp[1], 'length', settings)}`, ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', colors.yComp)
-        if (L > 1e-9) {
+        if (showArc && L > 1e-9) {
           const mid = arc.mid
           const lp = toScreen(cam, sz, [tail[0] + Math.cos(mid) * 46 * worldPerPixel(cam, sz, tail), tail[1] + Math.sin(mid) * 46 * worldPerPixel(cam, sz, tail), tail[2]])
           pool.place(`θ`, lp.x, lp.y, 'center', colors.arc)
@@ -247,7 +249,7 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
           <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
           <Arrow tail={tail} comp={[0, comp[1], 0]} color={colors.yComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
           <FatLine points={[[tail[0] + comp[0], tail[1], tail[2]], head, [tail[0], tail[1] + comp[1], tail[2]]]} color={colors.dashed} width={1.2} dashed dashSize={6 * wpp} gapSize={4 * wpp} renderOrder={7} />
-          <FatLine points={arcPoints(tail, 30 * wpp, arc.from, arc.to)} color={colors.arc} width={1.6} renderOrder={9} />
+          {showArc && <FatLine points={arcPoints(tail, 30 * wpp, arc.from, arc.to)} color={colors.arc} width={1.6} renderOrder={9} />}
         </>
       )}
       {showComps && !planar && L > 1e-9 && (
@@ -346,7 +348,8 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   }, [pts])
   useEffect(() => () => geometry?.dispose(), [geometry])
 
-  const showMeasures = selected || sideSelected || obj.showAngles
+  // The viewer's "angle marks" switch wins over every polygon's own setting.
+  const showMeasures = (selected || sideSelected || obj.showAngles) && settings.showAngleMarks
   const orientation = pts.length >= 3 ? Math.sign(signedArea(pts)) || 1 : 1
 
   useFrame(({ camera: cam, size: sz }) => {

@@ -7,6 +7,7 @@ import { isDrawingMode, useApp } from './modes'
 import { useSandbox } from '../sim/store'
 import { useLab } from '../lab/labStore'
 import { visibleOrder } from '../core/visibility'
+import { pressSpace, releaseSpace, resetSpace } from '../render/panKey'
 
 import { isActivatable, isTyping as typingIn } from './keyTargets'
 
@@ -21,6 +22,15 @@ export const VIEW_KEY = '3'
 
 export function useShortcuts() {
   useEffect(() => {
+    // Space plays or pauses on the way up, unless it was held to pan the drawing (see panKey.ts).
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== ' ') return
+      if (releaseSpace() && !isTyping(e) && !isActivatable(e.target as HTMLElement)) {
+        const s = scene()
+        s.setPlaying(!s.playing)
+      }
+    }
+    const onBlur = () => resetSpace()
     const onKey = (e: KeyboardEvent) => {
       const s = scene()
       const ctrl = e.ctrlKey || e.metaKey
@@ -122,7 +132,8 @@ export function useShortcuts() {
           // Space on a focused button is that button's click, not play/pause.
           if (isActivatable(e.target as HTMLElement)) return
           e.preventDefault()
-          s.setPlaying(!s.playing)
+          // Held for a pan or released for play/pause: the key-up decides.
+          pressSpace()
           return
         case '/':
         case 'Enter':
@@ -138,6 +149,12 @@ export function useShortcuts() {
       if (tool) s.setTool(tool.id)
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+    }
   }, [])
 }

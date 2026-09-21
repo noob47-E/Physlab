@@ -5,10 +5,7 @@ import type { MathNode } from 'mathjs'
 import {
   angleAt,
   angleBisector,
-  circleCircleIntersection,
   circleFrom3,
-  lineCircleIntersection,
-  lineLineIntersection,
   orientedAngleAt,
   perpendicularBisector,
   tangentPointsFromPoint,
@@ -16,9 +13,13 @@ import {
   type GCircle,
   type GLine
 } from '../math/geometry'
+import { asGLine, canIntersect, intersectionsOf } from '../math/intersections'
 import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode } from '../math/expr'
 import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
 import type { Computed, EvalResult, ObjId, SceneObject, SceneSettings } from './types'
+
+// The viewport's snapping reads a line the same way the evaluator does; one definition keeps them agreeing.
+export { asGLine }
 
 interface ParsedExpr {
   node: MathNode
@@ -74,9 +75,8 @@ export function evaluateScene(
     throw new Error(`${objects[id]?.name} is not a point`)
   }
   const needLine = (id: ObjId): GLine => {
-    const v = need(id)
-    if (v.type === 'line' || v.type === 'segment' || v.type === 'ray') return v.line
-    if (v.type === 'vector') return { kind: 'segment', p: v.tail, d: v.comp }
+    const l = asGLine(need(id))
+    if (l) return l
     throw new Error(`${objects[id]?.name} is not a line`)
   }
   const needCircle = (id: ObjId): GCircle => {
@@ -140,16 +140,9 @@ export function evaluateScene(
           case 'intersection': {
             const a = need(d.a)
             const b = need(d.b)
-            let pts: V3[]
-            const isLine = (c: Computed) => c.type === 'line' || c.type === 'segment' || c.type === 'ray' || c.type === 'vector'
-            if (isLine(a) && isLine(b)) {
-              const p = lineLineIntersection(needLine(d.a), needLine(d.b))
-              pts = p ? [p] : []
-            } else if (isLine(a) && b.type === 'circle') pts = lineCircleIntersection(needLine(d.a), b.circle)
-            else if (a.type === 'circle' && isLine(b)) pts = lineCircleIntersection(needLine(d.b), a.circle)
-            else if (a.type === 'circle' && b.type === 'circle') pts = circleCircleIntersection(a.circle, b.circle)
-            else throw new Error('cannot intersect these objects')
-            const p = pts[d.index]
+            if (!canIntersect(a, b)) throw new Error('cannot intersect these objects')
+            // The same function, in the same order, that the viewport snapped the point with.
+            const p = intersectionsOf(a, b)[d.index]
             if (!p) throw new Error('no intersection')
             return { type: 'point', p }
           }
