@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
@@ -17,6 +17,7 @@ import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '..
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
+import { themeColor, useTheme } from '../app/theme'
 
 interface DragState {
   hit: Hit
@@ -587,12 +588,32 @@ function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, 
   }
 }
 
+/**
+ * What a tool draws before it has made anything: the rubber band in a quiet grey, the freehand
+ * stroke in the accent colour and the snap rings in the same colours a selection uses. Read from the stylesheet and
+ * re-read when the theme flips, so they show on the light canvas too.
+ */
+function usePreviewColors() {
+  const theme = useTheme((t) => t.theme)
+  return useMemo(
+    () => ({
+      band: themeColor('--text-dim'),
+      // The stroke is the only thing on screen while a student draws, and the selection yellow
+      // was the faintest line on the light canvas; the accent blue reads in both themes.
+      stroke: themeColor('--accent'),
+      snap: (kind: SnapInfo['kind']) => themeColor(kind === 'point' ? '--sel-glow' : kind === 'axis' ? '--accent' : kind === 'onObject' ? '--series-5' : '--good')
+    }),
+    [theme]
+  )
+}
+
 /** Rubber-band previews, the snap indicator and the freehand stroke. */
 function ToolPreview() {
   const tool = useScene((s) => s.tool)
   const viewMode = useScene((s) => s.viewMode)
   const { picks, cursor, dragStart, firstTail, snap, stroke } = useTool()
   const ev = useScene((s) => s.ev)
+  const colors = usePreviewColors()
   useEffect(() => {
     resetTool()
     showTip(null)
@@ -600,16 +621,16 @@ function ToolPreview() {
   const pts = picks.map((id) => ev.values.get(id)).filter((c): c is { type: 'point'; p: V3 } => c?.type === 'point').map((c) => c.p)
   const is3D = viewMode === '3d'
 
-  const snapMark = snap && cursor ? <SnapMarker p={snap.p} kind={snap.kind} /> : null
+  const snapMark = snap && cursor ? <SnapMarker p={snap.p} color={colors.snap(snap.kind)} kind={snap.kind} /> : null
 
-  if (tool === 'sketch') return stroke.length > 1 ? <FatLine points={stroke} color="#ffe066" width={2.5} renderOrder={35} /> : null
+  if (tool === 'sketch') return stroke.length > 1 ? <FatLine points={stroke} color={colors.stroke} width={2.5} renderOrder={35} /> : null
   if (!cursor) return snapMark
   if (tool === 'vector') {
     const tail = dragStart ?? firstTail
     if (!tail || dist(tail, cursor) < 1e-9) return snapMark
     return (
       <>
-        <Arrow tail={tail} comp={sub(cursor, tail)} color="#9aa1ab" is3D={is3D} thick={1.4} renderOrder={30} />
+        <Arrow tail={tail} comp={sub(cursor, tail)} color={colors.band} is3D={is3D} thick={1.4} renderOrder={30} />
         {snapMark}
       </>
     )
@@ -624,7 +645,7 @@ function ToolPreview() {
     })
     return (
       <>
-        <FatLine points={ring} color="#9aa1ab" width={1.5} renderOrder={30} />
+        <FatLine points={ring} color={colors.band} width={1.5} renderOrder={30} />
         {snapMark}
       </>
     )
@@ -634,7 +655,7 @@ function ToolPreview() {
     if ((tool === 'triangle' && pts.length === 2) || tool === 'polygon') chain.push(pts[0])
     return (
       <>
-        <FatLine points={chain} color="#9aa1ab" width={1.5} renderOrder={30} />
+        <FatLine points={chain} color={colors.band} width={1.5} renderOrder={30} />
         {snapMark}
       </>
     )
@@ -642,9 +663,8 @@ function ToolPreview() {
   return snapMark
 }
 
-function SnapMarker({ p, kind }: { p: V3; kind: SnapInfo['kind'] }) {
+function SnapMarker({ p, kind, color }: { p: V3; kind: SnapInfo['kind']; color: string }) {
   const wpp = useThreeWpp()
-  const color = kind === 'point' ? '#ffd43b' : kind === 'axis' ? '#74c0fc' : kind === 'onObject' ? '#e599f7' : '#8ce99a'
   const r = (kind === 'point' || kind === 'onObject' ? 9 : 6) * wpp
   const ring: V3[] = Array.from({ length: 33 }, (_, i) => {
     const t = (i / 32) * Math.PI * 2

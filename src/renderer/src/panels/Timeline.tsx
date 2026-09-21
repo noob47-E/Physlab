@@ -22,7 +22,7 @@ function SandboxTimeline() {
   return (
     <div className="panel flex flex-col gap-2 p-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-mono text-[15px] tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
+        <span className="font-mono text-lead tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
         <span className="text-[color:var(--text-dim)]">{playing ? 'running' : 'paused'}</span>
         {timeScale !== 1 && <span className="text-[color:var(--text-dim)]">slow motion ×{formatMeasure(timeScale, 'number', settings)}</span>}
       </div>
@@ -60,7 +60,7 @@ function MathsTimeline() {
         >
           <RotateCcw size={14} />
         </button>
-        <span className="ml-3 w-24 font-mono text-[15px] tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
+        <span className="ml-3 w-24 font-mono text-lead tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
         <span className="ml-4 text-[color:var(--text-dim)]">Speed</span>
         <div className="seg">
           {[0.25, 0.5, 1, 2, 4].map((s) => (

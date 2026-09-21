@@ -15,7 +15,7 @@ import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
 import type { SceneSettings } from '../core/types'
 import { LabChart } from './LabChart'
-import { enterMode } from '../app/TopBar'
+import { enterMode } from '../app/layout'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
 import { formatMeasure } from '../math/format'
@@ -59,7 +59,7 @@ function Vec3Row({ label, value, unit, live, onChange }: { label: string; value:
         <div className="flex gap-1 tabular-nums text-[color:var(--text)]" title="Live value; pause to edit the starting value">
           {(['x', 'y', 'z'] as const).map((axis, i) => (
             <span key={axis} className="min-w-0 flex-1 truncate">
-              <span className="text-[10px] italic text-[color:var(--text-faint)]">{axis} </span>
+              <span className="text-fine italic text-[color:var(--text-faint)]">{axis} </span>
               {num(live[i])}
             </span>
           ))}
@@ -68,7 +68,7 @@ function Vec3Row({ label, value, unit, live, onChange }: { label: string; value:
         <div className="flex gap-1">
           {(['x', 'y', 'z'] as const).map((axis, i) => (
             <label key={axis} className="flex min-w-0 flex-1 items-center gap-1">
-              <span className="text-[10px] italic text-[color:var(--text-faint)]">{axis}</span>
+              <span className="text-fine italic text-[color:var(--text-faint)]">{axis}</span>
               <NumField
                 value={value[i]}
                 onChange={(n) => {
@@ -109,7 +109,7 @@ function SizeRow({ sel, onChange }: { sel: BodyDef; onChange: (size: V) => void 
       <div className="flex gap-1">
         {fields.map((f) => (
           <label key={f.label} className="flex min-w-0 flex-1 items-center gap-1" title={f.label}>
-            <span className="text-[10px] text-[color:var(--text-faint)]">{f.label[0]}</span>
+            <span className="text-fine text-[color:var(--text-faint)]">{f.label[0]}</span>
             <NumField value={f.value} onChange={(v) => onChange(f.set(Math.max(0.01, v)))} />
           </label>
         ))}
@@ -219,7 +219,7 @@ export function Sandbox() {
           >
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: b.color }} />
             <span className="w-14 shrink-0 truncate font-semibold text-[color:var(--text-strong)]">{b.name}</span>
-            <span className="min-w-0 flex-1 truncate text-[11.5px] text-[color:var(--text-dim)]">
+            <span className="min-w-0 flex-1 truncate text-small text-[color:var(--text-dim)]">
               {/* A bolted-down floor reporting "9408 kg" only invites the question "why does the
                   ground weigh nine tonnes?" — for a static body the mass means nothing. */}
               {b.shape} {b.motion === 'static' ? '· fixed' : `· ${num(massOf(b), 'kg')}`}
@@ -356,7 +356,7 @@ function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null;
         <label>Colour</label>
         <div className="flex items-center gap-2">
           <input type="color" className="h-6 w-10 cursor-pointer rounded border border-[color:var(--line-2)] bg-transparent" value={sel.color} onChange={(e) => update(sel.id, { color: e.target.value })} title="Its own colour; choosing a material sets it back" />
-          <span className="text-[11.5px] text-[color:var(--text-faint)]">{materialById(sel.material).color === sel.color ? `the colour of ${materialById(sel.material).label.toLowerCase()}` : 'custom'}</span>
+          <span className="text-small text-[color:var(--text-faint)]">{materialById(sel.material).color === sel.color ? `the colour of ${materialById(sel.material).label.toLowerCase()}` : 'custom'}</span>
         </div>
       </div>
     ),
@@ -582,14 +582,14 @@ function EnergyReadout() {
           <div className="bg-[var(--accent)]" style={{ width: `${share * 100}%` }} title="Kinetic" />
           <div className="flex-1 bg-[var(--warn)]" title="Potential" />
         </div>
-        <div className="mt-1 flex justify-between text-[11.5px]">
+        <div className="mt-1 flex justify-between text-small">
           <span className="text-[color:var(--accent)]">KE {num(total.kinetic, 'J')}</span>
           <span className="text-[color:var(--warn)]">PE {num(total.potential, 'J')}</span>
           <span className="font-semibold text-[color:var(--text-strong)]">total {num(total.total, 'J')}</span>
         </div>
       </div>
       {known.map(({ def, state, energy }) => (
-        <div key={def.id} className="flex items-center gap-2 px-3 text-[11.5px] text-[color:var(--text-dim)]">
+        <div key={def.id} className="flex items-center gap-2 px-3 text-small text-[color:var(--text-dim)]">
           <span className="w-14 shrink-0 truncate text-[color:var(--text)]">{def.name}</span>
           <span className="w-20 tabular-nums">KE {num(energy!.kinetic)}</span>
           <span className="w-20 tabular-nums">PE {num(energy!.potential)}</span>
@@ -598,7 +598,7 @@ function EnergyReadout() {
           </span>
         </div>
       ))}
-      <div className="px-3 pt-1 text-[11px] text-[color:var(--text-faint)]">Heights are measured from the top of the floor.</div>
+      <div className="px-3 pt-1 text-fine text-[color:var(--text-faint)]">Heights are measured from the top of the floor.</div>
     </>
   )
 }
@@ -614,7 +614,7 @@ function Collisions() {
   return (
     <Fold id="collisions" title={`Collisions · ${contacts.length}`}>
       {shown.map((c, i) => (
-        <div key={i} className="flex items-center gap-2 px-3 text-[11.5px] text-[color:var(--text-dim)]">
+        <div key={i} className="flex items-center gap-2 px-3 text-small text-[color:var(--text-dim)]">
           <span className="w-16 tabular-nums">t = {num(c.t)} s</span>
           <span className="text-[color:var(--text)]">
             {name(c.a)} – {name(c.b)}
@@ -657,7 +657,7 @@ function Presets() {
           {PRESETS.map((p) => (
             <button key={p.id} className="rounded-md border border-[color:var(--line-2)] px-2 py-1.5 text-left hover:bg-[var(--bg-3)]" onClick={() => load(p)}>
               <div className="font-semibold text-[color:var(--text-strong)]">{p.label}</div>
-              <div className="text-[11.5px] leading-snug text-[color:var(--text-dim)]">{p.about}</div>
+              <div className="text-small leading-snug text-[color:var(--text-dim)]">{p.about}</div>
             </button>
           ))}
         </div>
@@ -688,7 +688,7 @@ function Launcher({ id }: { id: string }) {
         <button className="btn" onClick={() => update(id, { velocity: v })}>
           <Rocket size={12} /> Set
         </button>
-        <div className="w-full pt-0.5 text-[11.5px] tabular-nums text-[color:var(--text-faint)]">
+        <div className="w-full pt-0.5 text-small tabular-nums text-[color:var(--text-faint)]">
           vₓ = {num(v[0], 'm/s')} · v_y = {num(v[1], 'm/s')}
         </div>
       </div>
@@ -758,11 +758,11 @@ function Connections({ selected, partner }: { selected: string | null; partner: 
             >
               <Link2 size={12} /> Join
             </button>
-            {!target && <div className="w-full pt-0.5 text-[11px] text-[color:var(--text-faint)]">Or Shift+click the second object.</div>}
+            {!target && <div className="w-full pt-0.5 text-fine text-[color:var(--text-faint)]">Or Shift+click the second object.</div>}
           </div>
         </div>
       ) : (
-        <div className="px-3 pb-1 text-[11.5px] text-[color:var(--text-faint)]">Pick an object, then Shift+click another to join them.</div>
+        <div className="px-3 pb-1 text-small text-[color:var(--text-faint)]">Pick an object, then Shift+click another to join them.</div>
       )}
 
       {links.map((l) => (
@@ -773,13 +773,13 @@ function Connections({ selected, partner }: { selected: string | null; partner: 
           <div className="flex items-center gap-1">
             {l.kind !== 'hinge' && l.kind !== 'weld' && (
               <>
-                <span className="text-[11px] text-[color:var(--text-faint)]">L</span>
+                <span className="text-fine text-[color:var(--text-faint)]">L</span>
                 <NumField value={l.length} onChange={(length) => updateLink(l.id, { length: Math.max(0.05, length) })} />
               </>
             )}
             {l.kind === 'spring' && (
               <>
-                <span className="text-[11px] text-[color:var(--text-faint)]" title="Spring constant in newtons per metre">
+                <span className="text-fine text-[color:var(--text-faint)]" title="Spring constant in newtons per metre">
                   k
                 </span>
                 <NumField value={l.stiffness} onChange={(stiffness) => updateLink(l.id, { stiffness: Math.max(0.01, stiffness) })} />
@@ -839,7 +839,7 @@ function Recording() {
           <LabChart xs={xs} ys={ys} fit={null} xLabel="t / s" yLabel={`${q.label} / ${q.unit}`} height={150} />
         </div>
       ) : (
-        <div className="px-3 pt-1 text-[11.5px] text-[color:var(--text-faint)]">Press Play and the readings start arriving.</div>
+        <div className="px-3 pt-1 text-small text-[color:var(--text-faint)]">Press Play and the readings start arriving.</div>
       )}
       <div className="mt-1 flex flex-wrap gap-2 px-3">
         <button

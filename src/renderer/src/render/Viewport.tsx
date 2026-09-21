@@ -165,7 +165,7 @@ export function Viewport() {
   const drawing = mode !== 'sandbox' && mode !== 'gpu'
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
   const theme = useTheme((t) => t.theme)
-  const canvasBg = themeColor('--canvas-bg', '#17181b')
+  const canvasBg = themeColor('--canvas-bg')
   void theme // re-reads the colour whenever the theme changes
 
   useEffect(() => {
@@ -238,14 +238,14 @@ export function Viewport() {
       )}
       {drawing && (
       <div data-tour="labels" className="absolute left-3 top-11 flex items-center gap-1.5">
-        <span className="text-[11px] text-[var(--text-faint)]">Labels</span>
+        <span className="text-fine text-[var(--text-faint)]">Labels</span>
         <LabelShowSwitch />
       </div>
       )}
 
       {/* Which backend, which quality, how many frames: for whoever is diagnosing graphics, not
           for a student doing homework. The setting is in the units-and-precision popover. */}
-      <div className={`absolute right-3 top-3 items-center gap-2 text-[11px] text-[var(--text-dim)] ${graphicsInfo ? 'flex' : 'hidden'}`}>
+      <div className={`absolute right-3 top-3 items-center gap-2 text-fine text-[var(--text-dim)] ${graphicsInfo ? 'flex' : 'hidden'}`}>
         <span className="badge" title={gpu.adapter || undefined}>
           {gpu.backend === 'WebGPU' ? '● WebGPU' : gpu.backend === 'WebGL2' ? '● WebGL2' : '○ starting'}
         </span>

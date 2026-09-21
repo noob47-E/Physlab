@@ -357,8 +357,8 @@ export function VectorCalc() {
 
   const opButton = (op: Op) => (
     <button key={op.id} className="btn h-auto flex-col items-start gap-0 py-1 text-left" title={op.help} onClick={() => run(op.id)}>
-      <span className="text-[12px] text-[color:var(--text-strong)]">{op.label}</span>
-      <span className="text-[11px] text-[color:var(--text-dim)]">
+      <span className="text-small text-[color:var(--text-strong)]">{op.label}</span>
+      <span className="text-fine text-[color:var(--text-dim)]">
         <Tex tex={op.tex} />
       </span>
     </button>
@@ -370,7 +370,7 @@ export function VectorCalc() {
         <Sigma size={16} className="text-[color:var(--accent)]" />
         <div className="font-semibold text-[color:var(--text-strong)]">Vector Calculator</div>
         <div className="flex-1" />
-        <span className="text-[11px] text-[color:var(--text-faint)]">Type like a textbook: 3i + 4j, 10∠30°, ½A</span>
+        <span className="text-fine text-[color:var(--text-faint)]">Type like a textbook: 3i + 4j, 10∠30°, ½A</span>
       </div>
 
       {st.cards.map((card, idx) => {
@@ -382,8 +382,7 @@ export function VectorCalc() {
           <div key={card.id} className={`card p-2 ${ok ? '' : 'border-[color:var(--bad)]'}`}>
             <div className="mb-1.5 flex items-center gap-2">
               <input
-                className="field w-11 text-center text-[15px] font-semibold italic"
-                style={{ fontFamily: 'Cambria, serif' }}
+                className="field w-11 text-center text-lead font-math font-semibold italic"
                 value={card.name}
                 title="Letters and digits, not i, j or k (those are the unit vectors)"
                 onChange={(e) => updateCard(card.id, { name: VS.safeCardName(e.target.value, card.name, st.cards.filter((c) => c.id !== card.id).map((c) => c.name)) })}
@@ -413,7 +412,7 @@ export function VectorCalc() {
             {card.entry === 'polar' && (
               <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
                 <MathInput size="sm" value={card.mag} onChange={(l) => updateCard(card.id, { mag: l })} placeholder="size" />
-                <span className="text-lg text-[color:var(--text-dim)]">∠</span>
+                <span className="text-title text-[color:var(--text-dim)]">∠</span>
                 <MathInput size="sm" value={card.angle} onChange={(l) => updateCard(card.id, { angle: l })} placeholder="angle" />
                 <span className="text-[color:var(--text-dim)]">°</span>
               </div>
@@ -436,7 +435,7 @@ export function VectorCalc() {
                 ))}
               </select>
             )}
-            <div className="mt-1 min-h-5 pl-1 text-[13px]">
+            <div className="mt-1 min-h-5 pl-1 text-body">
               {ok ? (
                 <span className="text-[color:var(--text)]">
                   <Tex tex={`\\vec{${card.name}} = ${texIJK(v as V3, settings)}`} />
@@ -470,7 +469,7 @@ export function VectorCalc() {
             {st.result.sol.answers.map((a) => (
               <div key={a.label} className="flex items-baseline gap-3 py-0.5">
                 <span className="w-24 shrink-0 text-[color:var(--text-dim)]">{a.label}</span>
-                <Tex tex={a.tex} className="text-[18px] text-[color:var(--text-strong)]" />
+                <Tex tex={a.tex} className="text-title text-[color:var(--text-strong)]" />
               </div>
             ))}
           </div>
@@ -499,7 +498,7 @@ export function VectorCalc() {
             <ol className="steps space-y-1 px-2 pb-2">
               {st.result.sol.steps.map((s, i) => (
                 <li key={i} className="rounded bg-[var(--bg-3)] px-2 py-1.5">
-                  <span className="mr-2 text-[11px] text-[color:var(--text-faint)]">{i + 1}.</span>
+                  <span className="mr-2 text-fine text-[color:var(--text-faint)]">{i + 1}.</span>
                   {s.text && <span className="text-[color:var(--text)]">{s.text}</span>}
                   {s.tex && <Tex tex={s.tex} display />}
                 </li>
@@ -531,7 +530,7 @@ export function VectorCalc() {
       )}
 
       <div className="card mt-2 p-2">
-        <div className="mb-1 text-[11px] uppercase tracking-wide text-[color:var(--text-faint)]">Or type any vector expression</div>
+        <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--text-faint)]">Or type any vector expression</div>
         <div className="flex items-center gap-1.5">
           <div className="flex-1">
             <MathInput ref={exprRef} value={st.expr} onChange={(l) => set({ expr: l })} onEnter={runExpr} />

@@ -4,7 +4,7 @@ import { runCommand } from '../lang/commands'
 import { scene } from '../core/store'
 import { useParticleLab } from '../render/GpuParticles'
 import { fitCamera, resetCamera } from '../render/viewState'
-import { enterMode } from '../app/TopBar'
+import { enterMode } from '../app/layout'
 import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
 
