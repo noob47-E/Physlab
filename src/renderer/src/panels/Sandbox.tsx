@@ -848,9 +848,14 @@ function Recording() {
           title="Put these readings in a new Lab Data table, ready to plot and fit"
           onClick={() => {
             // A new table beside the ones already there: this used to replace every table the
-            // student had typed.
+            // student had typed. setTables always points currentId at the first table (it exists
+            // to replace everything when a project opens), so without setCurrent here the new
+            // table lands at the end of the list and Lab Data keeps showing whatever was open
+            // before — the send looked like it did nothing.
             const lab = useLab.getState()
-            lab.setTables([...lab.tables, tableFrom(watched.name, samples)])
+            const table = tableFrom(watched.name, samples)
+            lab.setTables([...lab.tables, table])
+            lab.setCurrent(table.id)
             enterMode('lab')
           }}
         >

@@ -1,7 +1,7 @@
 // The lab table: what gets worked out from what, and what reaches the graph.
 
 import { describe, expect, it } from 'vitest'
-import { addColumn, addRow, addUncertainty, emptyTable, removeColumn, setCell, setColumn } from '../src/renderer/src/lab/labStore'
+import { addColumn, addRow, addUncertainty, emptyTable, removeColumn, setCell, setColumn, useLab } from '../src/renderer/src/lab/labStore'
 import { headerOf, isUsableName, plotPairs, plotSeries, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
 import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/renderer/src/lab/fit'
 import { chartSeries } from '../src/renderer/src/lab/chartData'
@@ -370,5 +370,23 @@ describe('readings pasted in or read from a file', () => {
     expect(csvFileName('Free fall')).toBe('Free-fall.csv')
     expect(csvFileName('  ')).toBe('lab-data.csv')
     expect(csvFileName('g: from d/t?')).toBe('g-from-dt.csv')
+  })
+})
+
+describe('sending a Sandbox recording to Lab Data', () => {
+  it('setTables always points current at the first table, so appending one needs setCurrent too', () => {
+    // This is the Sandbox "Send to Lab Data" flow: the existing tables stay, a new one lands at
+    // the end, and the student switches to Lab expecting to see it. setTables alone leaves
+    // currentId on tables[0] (it exists to replace everything when a project opens) — a caller
+    // that appends without also calling setCurrent shows the same old table, and the send looks
+    // like it did nothing.
+    const before = useLab.getState().tables
+    const added = emptyTable('From the Sandbox')
+    useLab.getState().setTables([...before, added])
+    expect(useLab.getState().currentId).not.toBe(added.id)
+
+    useLab.getState().setCurrent(added.id)
+    expect(useLab.getState().currentId).toBe(added.id)
+    expect(useLab.getState().tables.find((t) => t.id === added.id)).toEqual(added)
   })
 })
