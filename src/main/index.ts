@@ -244,12 +244,22 @@ ipcMain.on('app:dirty', (_e, value: boolean) => {
   dirty = !!value
 })
 
+// The renderer reports its colour on every start as well as on every switch, so this is what
+// stops the file being rewritten on each launch with the value it already holds.
+let rememberedBackground: string | undefined
 ipcMain.on('app:theme', (e, background: unknown) => {
   if (!isHexColour(background)) return
   BrowserWindow.fromWebContents(e.sender)?.setBackgroundColor(background)
+  rememberedBackground ??= readThemeBackground()
+  if (background === rememberedBackground) return
   try {
     mkdirSync(app.getPath('userData'), { recursive: true })
-    writeFileSync(themeFile(), JSON.stringify({ background }), 'utf8')
+    // Written beside and then renamed over, like the autosave, so a crash mid-write cannot leave
+    // a half file for the next launch to read.
+    const tmp = `${themeFile()}.saving`
+    writeFileSync(tmp, JSON.stringify({ background }), 'utf8')
+    renameSync(tmp, themeFile())
+    rememberedBackground = background
   } catch {
     // Not remembered: the next launch flashes the default colour, and nothing else is lost.
   }

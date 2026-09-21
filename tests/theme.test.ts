@@ -38,6 +38,14 @@ describe('the theme cycle', () => {
     expect(seen).toEqual([...THEMES])
   })
 
+  it('walks Moonlight → Dark → Light, the order the View menu and the settings seg list', () => {
+    // The walk above is defined by THEMES, so it would pass in any order; this pins the order.
+    expect(nextTheme('moonlight')).toBe('dark')
+    expect(nextTheme('dark')).toBe('light')
+    expect(nextTheme('light')).toBe('moonlight')
+    expect(THEMES).toEqual(['moonlight', 'dark', 'light'])
+  })
+
   it('lists three themes, each with a plain name', () => {
     expect([...THEMES].sort()).toEqual(['dark', 'light', 'moonlight'])
     for (const t of THEMES) expect(THEME_LABELS[t]).toMatch(/^[A-Z][a-z]+$/)
@@ -77,6 +85,17 @@ describe('the window background hand-off', () => {
   it('remembers the colour beside the autosave and reads it back before the window is made', () => {
     expect(main).toMatch(/theme\.json/)
     expect(main).toMatch(/backgroundColor: readThemeBackground\(\)/)
+  })
+
+  it('writes the file only when the colour changes, and never in place', () => {
+    // The renderer reports its colour on every launch, not only on a switch, so without the
+    // early return the file was rewritten at every start with what it already held.
+    const handler = main.slice(main.indexOf("ipcMain.on('app:theme'"), main.indexOf("ipcMain.handle('zoom:get'"))
+    expect(handler).toMatch(/if \(background === rememberedBackground\) return/)
+    // Written beside and renamed over, like the autosave, so a crash mid-write leaves the old file.
+    expect(handler).toMatch(/writeFileSync\(tmp,/)
+    expect(handler).toMatch(/renameSync\(tmp, themeFile\(\)\)/)
+    expect(handler).not.toMatch(/writeFileSync\(themeFile\(\)/)
   })
 
   it("falls back to Moonlight's page colour, the same one the stylesheet declares", () => {

@@ -131,6 +131,25 @@ describe('theme tokens', () => {
     }
   })
 
+  it('keeps the ink on the hovered Delete row readable in every theme', () => {
+    // The row's red is mixed 60 % towards black, so it is dark in every theme, and the ink on it
+    // must be light in every theme. --on-accent is not that: Moonlight's accent is light, so its
+    // --on-accent is a dark ink, and the Delete row once borrowed it and read at 3.4:1.
+    const danger = themeBlock(css, '.menu-item.is-danger.is-active')
+    expect(danger).toMatch(/color: var\(--on-danger\)/)
+    expect(danger).not.toMatch(/var\(--on-accent\)/)
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      const block = themeBlock(css, selector)
+      const bad = tokenValue(block, '--bad')
+      const ink = tokenValue(block, '--on-danger')
+      expect(bad, `${theme} --bad`).toBeDefined()
+      expect(ink, `${theme} --on-danger`).toBeDefined()
+      // color-mix(in srgb, --bad 60%, black), the row's background, channel by channel.
+      const row = '#' + [1, 3, 5].map((i) => Math.round(parseInt(bad!.slice(i, i + 2), 16) * 0.6).toString(16).padStart(2, '0')).join('')
+      expect(contrast(ink!, row), `${theme} ${ink} on ${row}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('reads the reference forms the sources use', () => {
     expect([...referencedTokens("themeColor('--warn'); themeColor(k ? '--key-root' : '--key-extremum'); className=\"text-[var(--text-dim)]\"")]).toEqual(['--warn', '--key-root', '--key-extremum', '--text-dim'])
     expect([...referencedTokens('color: var(--x, red); border: var(--y , #000)')]).toEqual(['--x', '--y'])

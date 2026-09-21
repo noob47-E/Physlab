@@ -83,8 +83,11 @@
   --measure-text: #ffe8a3;
   --code-text: #ffe8a3;
   --log-in: #8fb6ff;
-  /* Text on an accent-coloured button or row: the accent is blue in both themes, so this is white in both. */
+  /* Text on an accent-coloured button or row: the accent is blue here and in light, so this is white in both. */
   --on-accent: #ffffff;
+  /* Text on the hovered Delete row, whose red is darkened towards black in every theme, so this
+     is white in every theme even where --on-accent is a dark ink. */
+  --on-danger: #ffffff;
   /* The x, y, z axes keep the colours every textbook uses; the light theme only deepens them. */
   --axis-x: #ff4d6a;
   --axis-y: #8fd12e;
@@ -152,6 +155,7 @@
   --code-text: #8a5a00;
   --log-in: #1c4fa1;
   --on-accent: #ffffff;
+  --on-danger: #ffffff;
   --axis-x: #d6224a;
   --axis-y: #4f8f0e;
   --axis-z: #1f6fd0;
@@ -211,6 +215,7 @@
   --log-in: #a7b6ff;
   /* The periwinkle accent is light, so the text on it is the night ink, not white. */
   --on-accent: #0b1020;
+  --on-danger: #ffffff;
   --axis-x: #ff6b85;
   --axis-y: #a6e05a;
   --axis-z: #6fb4ff;
@@ -652,7 +657,9 @@ input[type='range'] {
 .menu-item.is-danger.is-active {
   /* Darkened rather than a fixed dark red, so it follows whichever red the theme uses. */
   background: color-mix(in srgb, var(--bad) 60%, black);
-  color: var(--on-accent);
+  /* Not --on-accent: Moonlight's is a dark ink for its light accent, and dark ink on this
+     darkened red read at 3.4:1. The mixed red is dark in every theme, so the ink is always white. */
+  color: var(--on-danger);
 }
 
 /* ---------- Top bar ---------- */
