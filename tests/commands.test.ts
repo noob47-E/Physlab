@@ -37,6 +37,9 @@ function fresh(): void {
   scene().newScene()
   scene().clearLog()
   scene().setActiveSpace('vectors')
+  // newScene keeps the view: without this the `3d` example passed by whatever the test before
+  // it had left, and reordering the table would have made it prove nothing.
+  scene().setViewMode('2d')
   forgetCasCalls()
 }
 
@@ -334,7 +337,7 @@ const HELP_EXAMPLES: Example[] = [
   { line: 'clear', check: () => expect(scene().order).toEqual([]) },
   // 2d and paused are the defaults, so each is checked from the other state or it proves nothing.
   { line: '2d', setup: ['3d'], check: () => expect(scene().viewMode).toBe('2d') },
-  { line: '3d', check: () => expect(scene().viewMode).toBe('3d') },
+  { line: '3d', setup: ['2d'], check: () => expect(scene().viewMode).toBe('3d') },
   { line: 'play', check: () => expect(scene().playing).toBe(true) },
   { line: 'pause', setup: ['play'], check: () => expect(scene().playing).toBe(false) }
 ]
@@ -353,7 +356,9 @@ function examplesOn(line: string): string[] {
 }
 /** One-word notes the help uses that could otherwise be read as commands. */
 const NOTES = new Set(['point', 'vector'])
-const looksLikeCommand = (c: string): boolean => /[=·×|<>^]|\w\(/.test(c) || (/^[a-z0-9]+$/.test(c) && !NOTES.has(c))
+/** The bar's word commands take a name after a space, so they have no operator or bracket to be seen by. */
+const WORD_COMMANDS = /^(delete|del|remove|help)\b/
+const looksLikeCommand = (c: string): boolean => /[=·×|<>^]|\w\(/.test(c) || WORD_COMMANDS.test(c) || (/^[a-z0-9]+$/.test(c) && !NOTES.has(c))
 
 describe('every example in the help text works', () => {
   beforeEach(fresh)
@@ -371,6 +376,7 @@ describe('every example in the help text works', () => {
     expect(looksLikeCommand('live resultant (updates when you drag A or B)')).toBe(false)
     expect(looksLikeCommand('dot(A, B)')).toBe(true)
     expect(looksLikeCommand('redo')).toBe(true)
+    expect(looksLikeCommand('delete A'), 'a word command with a name after it').toBe(true)
   })
 
   for (const e of HELP_EXAMPLES) {
@@ -452,15 +458,16 @@ describe('routing to the vector solvers', () => {
   })
 
   it('reads the components of a 3-D vector straight off it: 3, 4, 5 for 3i + 4j + 5k', async () => {
+    // The literal is not the student's A = <3, 4>, so it is worked under the next free letter.
     for (const line of ['components(3i + 4j + 5k)', 'resolve(3i + 4j + 5k)']) {
       const last = await run(line)
       expect(errors(), line).toEqual([])
-      expect(last.solution?.title, line).toBe('Components of A')
+      expect(last.solution?.title, line).toBe('Components of C')
       const byLabel = Object.fromEntries((last.solution?.answers ?? []).map((a) => [a.label, a.tex]))
-      expect(byLabel.Ax, line).toBe('3')
-      expect(byLabel.Ay, line).toBe('4')
-      expect(byLabel.Az, line).toBe('5')
-      expect(byLabel['|A|'], line).toBe('7.07')
+      expect(byLabel.Cx, line).toBe('3')
+      expect(byLabel.Cy, line).toBe('4')
+      expect(byLabel.Cz, line).toBe('5')
+      expect(byLabel['|C|'], line).toBe('7.07')
     }
   })
 
@@ -485,8 +492,31 @@ describe('routing to the vector solvers', () => {
       expect(last.solution, line).toBeUndefined()
     }
     expect((await run('(A + B) × A')).tex).toContain('11\\hat{k}')
-    // A literal operand is still fine: it is shown under the default letter, which is its name.
-    expect((await run('A × <1, 0>')).solution?.title).toBe('Vector product A×B')
+  })
+
+  it('never lends a working the letter of a vector the student already has', async () => {
+    // The fallback letter was fixed at A or B: `A × <1, 0>` worked through "B = 1i" while the
+    // student's B was <2, −1>, and the word-form `cross(A + B, A)` was "Vector product A×A".
+    // A literal or compound operand takes the first letter no object in the drawing has.
+    const steps = (last: LogEntry) => (last.solution?.steps ?? []).map((st) => st.tex ?? '').join(' ')
+    let last = await run('A × <1, 0>')
+    expect(last.solution?.title).toBe('Vector product A×C')
+    expect(steps(last)).toContain('\\vec{C} = 1\\hat{i}')
+    expect(steps(last)).not.toContain('\\vec{B}')
+    last = await run('cross(A + B, A)')
+    expect(errors()).toEqual([])
+    expect(last.solution?.title).toBe('Vector product C×A')
+    expect(steps(last)).toContain('\\vec{C} = 5\\hat{i} + 3\\hat{j}')
+    expect(last.tex).toContain('11\\hat{k}')
+    expect((await run('dot(A + B, A)')).solution?.title).toBe('Scalar product C·A')
+    expect((await run('unit(A + B)')).solution?.title).toBe('Unit vector along C')
+    expect((await run('components(A + B)')).tex).toBe('Cx = 5,\\quad Cy = 3')
+    // Two nameless operands get two different letters, and the result a third.
+    await run('C = <0, 0, 1>')
+    last = await run('cross(A + B, 2B)')
+    expect(last.solution?.title).toBe('Vector product D×E')
+    expect(steps(last)).toContain('\\vec{F} =')
+    expect(errors()).toEqual([])
   })
 })
 
@@ -500,7 +530,7 @@ describe('the × key', () => {
   it('is a cross product between vectors, with steps, and the result can be kept as an object', async () => {
     // Before: `A × B` printed a bare "[0, 0, -11]" with no steps, and `C = A × B` refused with
     // "C: not a number", because the × is parsed as timesOrCross and nothing downstream knew it.
-    let last = await run('A × B')
+    const last = await run('A × B')
     expect(last.tex).toContain('-11\\hat{k}')
     expect(last.solution?.title).toBe('Vector product A×B')
     await run('C = A × B')
@@ -511,6 +541,8 @@ describe('the × key', () => {
 
   it('is ordinary multiplication between numbers and between a number and a vector', async () => {
     expect((await run('2 × 3')).text).toBe('= 6')
+    // Only with a number on the other side: `3 N × A` still fails, because the parser takes `N`
+    // alone as the left operand of the × and then does not know it (math/expr.ts, infixToCall).
     expect((await run('3 N × 2')).text).toBe('= 6 N')
     // The way fmt prints a small number must read back as one number.
     expect((await run('2.5×10^3')).text).toBe('= 2500')
@@ -545,6 +577,27 @@ describe('the × key', () => {
     const last = await run('(A × B) · A')
     expect(last.text).toBe('= 0')
     expect(errors()).toEqual([])
+  })
+
+  it('stores a definition the way it was typed, with only a product × spelt as *', async () => {
+    // The whole parsed tree used to be written back when any × was a product, so the Properties
+    // field showed `Z = 2 × A × B` as cross(2 * A, B) and `2 × 10^3 × A` as (2000) * A.
+    const def = (name: string) => (named(name) as VectorObj).def as { kind: string; expr?: string }
+    await run('Z = 2 × A × B', 'H = 2 × 10^3 × A', 'k = 3 N × 2')
+    expect(errors()).toEqual([])
+    expect(def('Z').expr).toBe('2 * A × B')
+    expect(def('H').expr).toBe('2 × 10^3 * A')
+    expect((named('k') as { expr: string }).expr).toBe('3 N * 2')
+    vectorNamed('Z', [0, 0, -22])
+    vectorNamed('H', [6000, 8000, 0])
+    // And the stored text is live: the evaluator reads it back after A changes.
+    await run('A = <1, 0>')
+    expect(errors()).toEqual([])
+    vectorNamed('Z', [0, 0, -2])
+    vectorNamed('H', [2000, 0, 0])
+    // A vector × vector definition is kept exactly as typed.
+    await run('W = A × B')
+    expect(def('W').expr).toBe('A × B')
   })
 })
 
@@ -613,6 +666,12 @@ describe('Pure Math from the command bar', () => {
     last = await run('solve(x1 + 2 = 5)')
     expect(last.tex).toBe('\\text{x1} = 3')
     expect(renders(last.tex)).toBe(true)
+    // Every Greek letter, not a favourite few: sigma and rho came out as the words.
+    for (const [word, letter] of [['sigma', '\\sigma'], ['rho', '\\rho'], ['kappa', '\\kappa'], ['psi', '\\psi']]) {
+      last = await run(`solve(${word}^2 = 4)`)
+      expect(last.tex, word).toBe(`${letter}_1 = 2,\\quad ${letter}_2 = -2`)
+      expect(renders(last.tex), word).toBe(true)
+    }
     // A prime's label is the number itself, which is not worth printing twice.
     expect((await run('primes(7)')).tex).toBe('7')
     expect((await run('primes(12)')).tex).toBe('12 = 2^{2} \\times 3')
@@ -636,12 +695,35 @@ describe('Pure Math from the command bar', () => {
     expect(casCalls()).toHaveLength(0)
   })
 
+  it('still answers what the calculator can when the step engine refuses', async () => {
+    // complex(3, 4) is mathjs's own complex(re, im); logging the refusal as the end of the road
+    // took away an answer the bar used to give.
+    const last = await run('complex(3, 4)')
+    expect(errors()).toEqual([])
+    expect(last.text).toBe('= 3 + 4i')
+    expect(casCalls()).toHaveLength(0)
+  })
+
+  it('asks for two arguments, in words, when divide is given three', async () => {
+    const last = await run('divide(x^3-1, x-1, 3)')
+    expect(last.kind).toBe('error')
+    expect(last.text).toBe('divide(numerator, denominator) or divide(fraction)')
+    expect(casCalls()).toHaveLength(0)
+  })
+
   it('divides plain numbers with the calculator, as its own refusal promises', async () => {
     // The refusal said "the calculator will do that one" and then the bar stopped.
     const last = await run('divide(10, 2)')
     expect(errors()).toEqual([])
     expect(last.text).toBe('= 5')
     expect(last.input, 'the log quotes what was typed').toBe('divide(10, 2)')
+    // The e of 2e3 is not a letter to solve for: it went to SymPy's apart for a 500.
+    expect((await run('divide(2e3, 4)')).text).toBe('= 500')
+    expect(casCalls()).toHaveLength(0)
+    // Nor is pi, which the calculator answers at once and then offers exactly (the stand-in
+    // algebra engine answers before the line is even logged, so the exact form is already there).
+    expect((await run('divide(pi, 2)')).tex).toMatch(/\\approx 1\.5707963/)
+    expect(casCalls()).toEqual([['exact', { expr: '(pi)/(2)', deg: true }]])
   })
 
   it('sends a fraction the step engine refuses to the algebra engine, the way the Working panel does', async () => {

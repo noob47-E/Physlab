@@ -25,6 +25,10 @@ import { scene } from '../src/renderer/src/core/store'
 import { runCommand } from '../src/renderer/src/lang/commands'
 
 const SPACES: Space[] = ['vectors', 'shapes', 'graphing', 'lab']
+// One list each, used by both tests below: written twice, a new mode added to only one of them
+// would have failed the completeness guard or silently missed the null check.
+const WITH_DRAWING: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab']
+const NO_DRAWING: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
 
 const obj = (name: string, space?: Space): SceneObject =>
   ({ id: name, name, type: 'point', def: [0, 0, 0], color: '#fff', visible: true, locked: false, showLabel: true, space }) as unknown as SceneObject
@@ -40,16 +44,13 @@ describe('which drawing a mode looks at', () => {
   })
 
   it('gives a mode without a drawing of its own the whole scene', () => {
-    const noDrawing: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
-    for (const m of noDrawing) expect(spaceOf(m), m).toBeNull()
+    for (const m of NO_DRAWING) expect(spaceOf(m), m).toBeNull()
   })
 
   it('has placed every mode there is in one list or the other', () => {
     // spaceOf answers null for anything it was not told about, so a new mode would pass the
     // test above by default; it has to be placed here on purpose.
-    const withDrawing: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab']
-    const noDrawing: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
-    expect(MODES.map((m) => m.id).sort()).toEqual([...withDrawing, ...noDrawing].sort())
+    expect(MODES.map((m) => m.id).sort()).toEqual([...WITH_DRAWING, ...NO_DRAWING].sort())
   })
 
   it('can send every space back to a mode that shows it, with a label in words', () => {
