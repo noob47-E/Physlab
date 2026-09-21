@@ -14,7 +14,7 @@ const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'
 function Hover({ h, owner, children, className = '' }: { h: Highlight; owner: ObjId; children: React.ReactNode; className?: string }) {
   const set = useHighlight((s) => s.set)
   return (
-    <div className={`cursor-help rounded px-1 hover:bg-[#2f4a7a55] ${className}`} onMouseEnter={() => set({ ...h, owner })} onMouseLeave={() => set(null)}>
+    <div className={`cursor-help rounded px-1 hover:bg-sel/40 ${className}`} onMouseEnter={() => set({ ...h, owner })} onMouseLeave={() => set(null)}>
       {children}
     </div>
   )
@@ -23,14 +23,14 @@ function Hover({ h, owner, children, className = '' }: { h: Highlight; owner: Ob
 function Row({ row, owner, piFactor }: { row: FormulaRow; owner: ObjId; piFactor?: boolean }) {
   const settings = useScene((s) => s.settings)
   return (
-    <div className="border-t border-[#2a2b30] px-2 py-2 first:border-t-0">
-      <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">{row.title}</div>
-      <Hover h={row.highlight} owner={owner} className="text-[15px]">
+    <div className="border-t border-line px-2 py-2 first:border-t-0">
+      <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">{row.title}</div>
+      <Hover h={row.highlight} owner={owner} className="text-lead">
         <Tex tex={row.general} />
-        <span className="ml-2 text-[11px] text-zinc-500">hover to shade</span>
+        <span className="ml-2 text-fine text-ink-faint">hover to shade</span>
       </Hover>
       {row.symbols.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-1 text-zinc-300">
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-1 text-ink">
           {row.symbols.map((s) => (
             <Hover key={s.sym + s.label} h={s.highlight} owner={owner}>
               <Tex tex={`${s.sym} = ${/^[A-Z][\w]*$/.test(s.label) ? `\\mathit{${s.label}} = ` : ''}${answerTex(s.value, s.kind, settings)}`} />
@@ -38,10 +38,10 @@ function Row({ row, owner, piFactor }: { row: FormulaRow; owner: ObjId; piFactor
           ))}
         </div>
       )}
-      <div className="mt-1 pl-1 text-zinc-300">
+      <div className="mt-1 pl-1 text-ink">
         <Tex tex={row.substitution} />
       </div>
-      <div className="mt-1 pl-1 text-[16px] text-white">
+      <div className="mt-1 pl-1 text-title text-ink-strong">
         <Tex tex={`${row.general.split('=')[0]}= ${answerTex(row.value, row.kind, settings, piFactor)}`} />
       </div>
     </div>
@@ -109,11 +109,11 @@ export function ShapeInfo({ id }: { id: ObjId }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-[#2a2b30] px-2 py-1.5">
-        <Shapes size={15} className="text-violet-300" />
+      <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
+        <Shapes size={15} className="text-accent" />
         <div className="flex-1">
-          <span className="font-semibold text-white">{data.report.name}</span>{' '}
-          {data.kind === 'polygon' && <span className="italic text-zinc-400" style={{ fontFamily: 'Cambria, serif' }}>{data.names.join('')}</span>}
+          <span className="font-semibold text-ink-strong">{data.report.name}</span>{' '}
+          {data.kind === 'polygon' && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
         </div>
         {data.kind === 'polygon' && data.pts.length >= 4 && (
           <button
@@ -132,8 +132,8 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       </div>
 
       {data.kind === 'polygon' && data.dec && data.dec.parts.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-[#2a2b30] px-2 py-1.5 text-[12px]">
-          <span className="text-zinc-500">Split into</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-2 py-1.5 text-small">
+          <span className="text-ink-faint">Split into</span>
           <div className="seg">
             <button className={goal === 'basic' ? 'on' : ''} onClick={() => setGoal('basic')} title="Only rectangles, squares and triangles">
               Rectangles &amp; triangles
@@ -163,9 +163,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       {data.kind === 'polygon' && data.dec ? (
         <div>
           {data.dec.parts.length === 1 ? (
-            <div className="px-2 py-2 text-zinc-400">
+            <div className="px-2 py-2 text-ink-dim">
               This is already a simple shape; no need to split it.
-              {goal === 'basic' && <span className="text-zinc-500"> It is a rectangle, square or triangle already.</span>}
+              {goal === 'basic' && <span className="text-ink-faint"> It is a rectangle, square or triangle already.</span>}
             </div>
           ) : (
             <>
@@ -175,23 +175,23 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                 const rep = polygonReport(part.pts, partNames, settings)
                 const areaRow = rep.rows.find((r) => r.title.startsWith('Area'))
                 return (
-                  <div key={i} className="border-t border-[#2a2b30]">
+                  <div key={i} className="border-t border-line">
                     <Hover h={{ region: part.pts }} owner={id} className="mx-1 mt-1 flex items-center gap-2">
-                      <span className="rounded bg-[#3a3f4a] px-1.5 text-[11px] font-bold text-white">{ROMAN[i]}</span>
-                      <span className="text-zinc-200">
+                      <span className="rounded bg-surface-4 px-1.5 text-fine font-bold text-ink-strong">{ROMAN[i]}</span>
+                      <span className="text-ink-strong">
                         {part.cls.name}{' '}
-                        <span className="italic text-zinc-400" style={{ fontFamily: 'Cambria, serif' }}>
+                        <span className="font-math italic text-ink-dim">
                           {partNames.join('')}
                         </span>
                       </span>
                       <span className="flex-1" />
-                      <Tex tex={`A_{${ROMAN[i]}} = ${answerTex(part.area, 'area', settings)}`} className="text-white" />
+                      <Tex tex={`A_{${ROMAN[i]}} = ${answerTex(part.area, 'area', settings)}`} className="text-ink-strong" />
                     </Hover>
                     {areaRow && <Row row={{ ...areaRow, highlight: { ...areaRow.highlight, region: part.pts } }} owner={id} />}
                   </div>
                 )
               })}
-              <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-[#2a2b30] pt-2 text-[15px] text-white">
+              <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-line pt-2 text-lead text-ink-strong">
                 <Tex
                   tex={`A = ${data.dec.parts.map((_, i) => `A_{${ROMAN[i]}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
                 />
@@ -202,7 +202,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       ) : (
         <ShapeReportView report={data.report} owner={id} piFactor={data.kind === 'circle'} />
       )}
-      {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-[#2a2b30] px-2 py-1.5 text-[12px] text-amber-200">{data.report.note}</div>}
+      {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
     </div>
   )
 }

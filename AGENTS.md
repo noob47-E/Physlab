@@ -54,14 +54,17 @@ tests/             vitest, no DOM — pure logic only
 ```
 
 **Adding a mode and a panel** touches exactly four files: `app/modes.ts` (the `ModeId` union and a
-`MODES` entry), `app/panels.ts` (`PANEL_TITLES`, `PANEL_GROUPS`), `app/App.tsx` (lazy import,
-`PANEL_VIEWS`, `buildLayout`), and the panel component itself. Copy how `lab` or `problems` was done.
+`MODES` entry with `panel`, optional `centre` and `examples`), `app/panels.ts` (`PANEL_TITLES`,
+`PANEL_GROUPS`), `app/App.tsx` (lazy import, `PANEL_VIEWS`), and the panel component itself.
+`buildLayout` in `app/layout.ts` needs nothing: it reads the `MODES` entry through `panelsForMode`
+(`app/layoutMath.ts`). Copy how `lab` or `problems` was done.
 
 A mode's `panel` is its side panel; its optional `centre` takes over the big middle area instead of
-the viewport (Calculator mode uses it for `working`). `enterMode` sets `centre` with `showPanel`
-rather than `requestFocus`, because `requestFocus` holds one panel at a time and asking for two in
-a row would silently lose the first. A panel added after a user's layout was saved still appears:
-`showPanel` puts it back beside whichever `PANEL_GROUPS` neighbour is open.
+the viewport (Calculator mode uses it for `working`). `enterMode` (in `app/layout.ts`, re-exported
+from `TopBar`) sets `centre` with `showPanel` rather than `requestFocus`, because `requestFocus`
+holds one panel at a time and asking for two in a row would silently lose the first. A panel added
+after a user's layout was saved still appears: `showPanel` puts it back beside whichever
+`PANEL_GROUPS` neighbour is open.
 
 ## Traps that have already cost a day
 
@@ -89,8 +92,10 @@ a row would silently lose the first. A panel added after a user's layout was sav
   theme's grid on screen.
 - **Never hardcode a colour.** Both themes must work. Use CSS variables and `themeColor()`. Several
   bugs came from literal hex values that were invisible in the light theme — menus, popups,
-  measurement labels, the focused tab. `panels/Graphs.tsx` still has hardcoded chart colours; fix it
-  if you touch that file. `panels/LabChart.tsx` shows the right way.
+  measurement labels, the focused tab. `tests/colours.test.ts` scans the renderer for hex, palette
+  utilities and pixel text sizes; the files it still allows are listed there, and the list may only
+  shrink. `panels/LabChart.tsx` shows the right way; the token utilities (`text-ink`, `bg-surface-1`,
+  `text-body`, `font-math`, ...) are defined at the top of `styles.css`.
 - **Pure Math works in exact fractions, never in doubles.** `math/pure/rat.ts` is bigint over
   bigint, and everything above it — polynomials, factorisation, partial fractions — is built on
   that. A student reading a factorisation must never meet `0.30000000000000004`, and a step that
@@ -136,7 +141,16 @@ a row would silently lose the first. A panel added after a user's layout was sav
   A mouse-leave never fires on an element that has just been removed, which is how a shaded area
   used to outlive the shape it belonged to.
 - **Custom CSS must live inside `@layer components`** or Tailwind's width/height utilities stop
-  working.
+  working. `.topbar` must never get `overflow: hidden`: its menus are absolutely positioned and hang
+  below it.
+- **The saved layout is `{ v, app, w, h, layout, mode }`** and is rebuilt (per-mode default) when
+  `v` or the window class changes, never squeezed. "Reset the panel layout" reloads on purpose, and
+  depends on the `resetting` flag in `app/layout.ts` skipping the `beforeunload` save — without it
+  the save on the way out put the old layout straight back.
+- **Chromium remembers the window zoom per host.** Never keep a second copy in the renderer; a
+  second owner is why Ctrl+= and the settings popover used to disagree after a restart.
+- **The 2D/3D switch is `VIEW_KEY` ('3') in `app/shortcuts.ts`**, because V is the Move tool and
+  Tab must reach the controls.
 - **MathLive options must wait for the `mount` event.** Line2 geometry needs positions before the
   first render. The async R3F renderer needs a manual `setSize` sync.
 - **Circular imports bite.** `App.tsx` imports the top bar and the search palette, so those two must
@@ -146,7 +160,7 @@ a row would silently lose the first. A panel added after a user's layout was sav
 ## How to check your work
 
 ```bash
-npm test          # vitest, ~210 tests, pure logic, no DOM
+npm test          # vitest, ~460 tests, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run dev       # Electron with hot reload
 npm run dist      # builds dist/PhysLab Setup <version>.exe

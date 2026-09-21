@@ -82,12 +82,12 @@ export function LabChart({ xs, ys, fit, xLabel, yLabel, xErr = [], yErr = [], he
   useEffect(() => {
     const el = host.current
     if (!el) return
-    const axis = themeColor('--tick-text', '#8a8f98')
-    const grid = themeColor('--grid-major', '#2a2c31')
-    const point = themeColor('--accent', '#4dabf7')
+    const axis = themeColor('--tick-text')
+    const grid = themeColor('--grid-major')
+    const point = themeColor('--accent')
     // The fitted curve follows the theme's warning amber: the hardcoded yellow it used to be is
     // washed out on a light background, which is the bug this project keeps re-learning.
-    const line = themeColor('--warn', '#fcc419')
+    const line = themeColor('--warn')
     const series = chartSeries(xs, ys, fit)
     const spread = Math.max(0, ...yErr)
 
@@ -145,9 +145,9 @@ export function ResidualStrip({ xs, fit, xLabel, height = 96 }: { xs: number[]; 
   useEffect(() => {
     const el = host.current
     if (!el || !fit) return
-    const axis = themeColor('--tick-text', '#8a8f98')
-    const grid = themeColor('--grid-major', '#2a2c31')
-    const point = themeColor('--accent', '#4dabf7')
+    const axis = themeColor('--tick-text')
+    const grid = themeColor('--grid-major')
+    const point = themeColor('--accent')
     const { x, e } = residualSeries(xs, fit)
     const biggest = Math.max(1e-9, ...e.map(Math.abs))
 

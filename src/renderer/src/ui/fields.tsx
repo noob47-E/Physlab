@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { math, preprocess } from '../math/expr'
 import { fmt } from '../math/format'
+import { SWATCHES } from './swatches'
 
 /** Number input that accepts expressions (e.g. "sqrt(2)", "10cos(30)") and commits on Enter/blur. */
 export function NumField({ value, onChange, decimals = 4, className = '' }: { value: number; onChange: (v: number) => void; decimals?: number; className?: string }) {
@@ -46,8 +47,7 @@ export function TextField({ value, onCommit, className = '', mono = false }: { v
   useEffect(() => setText(value), [value])
   return (
     <input
-      className={`field ${className}`}
-      style={mono ? { fontFamily: 'Cascadia Code, Consolas, monospace' } : undefined}
+      className={`field ${mono ? 'font-mono' : ''} ${className}`}
       value={text}
       spellCheck={false}
       onChange={(e) => setText(e.target.value)}
@@ -63,20 +63,20 @@ export function TextField({ value, onCommit, className = '', mono = false }: { v
 
 export function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-zinc-300">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[#4f8cff]" />
+    <label className="flex cursor-pointer items-center gap-2 text-ink">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   )
 }
 
-export const SWATCHES = ['#4dabf7', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595', '#e9ecef', '#adb5bd', '#63e6be', '#9775fa']
+export { SWATCHES } from './swatches'
 
 export function ColorField({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
     <div className="flex flex-wrap items-center gap-1">
       {SWATCHES.map((c) => (
-        <button key={c} onClick={() => onChange(c)} className="h-4 w-4 rounded-sm" style={{ background: c, outline: value === c ? '2px solid white' : 'none', outlineOffset: 1 }} />
+        <button key={c} onClick={() => onChange(c)} className="h-4 w-4 rounded-sm" style={{ background: c, outline: value === c ? '2px solid var(--text-strong)' : 'none', outlineOffset: 1 }} />
       ))}
       <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0" />
     </div>

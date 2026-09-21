@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CornerDownLeft, TerminalSquare } from 'lucide-react'
+import { Calculator, CornerDownLeft } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { runCommand } from '../lang/commands'
 import { useScene } from '../core/store'
 import { cancelCas, useCasStatus } from '../math/cas'
+import { describeCasStatus } from '../ui/casStatus'
+
+/**
+ * One line, in plain words. The placeholder used to be a wall of syntax; a student who typed
+ * "vector 3,4" in words, saw nothing happen and then read that wall felt stupid and closed the app.
+ * The examples it listed live in QUICK_EXAMPLES and the suggestion list under the bar instead.
+ */
+export const PLACEHOLDER = 'Type a sum, an equation or a shape…  ·  Ctrl+K to search'
+
+/** The handful of things worth trying first, for the palette and the help text to show. */
+export { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 export const CATALOG: { insert: string; desc: string; group: string }[] = [
   { insert: 'A = (3, 4)', desc: 'Point', group: 'Create' },
@@ -71,6 +82,8 @@ export function CommandBar() {
   const names = useScene(useShallow((s) => s.order.map((id) => s.objects[id]?.name).filter(Boolean)))
   const casStatus = useCasStatus((s) => s.status)
   const casBusy = useCasStatus((s) => s.busy)
+  const casMessage = useCasStatus((s) => s.message)
+  const cas = describeCasStatus(casStatus, casBusy, casMessage)
 
   useEffect(() => {
     // Search and other panels can prefill the command bar.
@@ -102,14 +115,14 @@ export function CommandBar() {
 
   return (
     <div className="cmdbar">
-      <TerminalSquare size={16} className="text-zinc-500" />
+      <Calculator size={16} className="text-ink-faint" />
       <div className="relative flex-1">
         <input
           id="command-input" data-tour="command"
           className="cmd-input w-full"
           value={text}
           spellCheck={false}
-          placeholder="Type anything:  A = <3, 4>    R = A + B    A × B    Triangle((0,0),(4,0),(0,3))    y = sin(x)    solve(x^2 = 4)    (Enter to run, ↑ for history)"
+          placeholder={PLACEHOLDER}
           onChange={(e) => {
             setText(e.target.value)
             setOpen(true)
@@ -154,7 +167,7 @@ export function CommandBar() {
             {suggestions.map((s, i) => (
               <button
                 key={s.insert}
-                className={i === active ? 'active' : ''}
+                className={`group ${i === active ? 'active' : ''}`}
                 onMouseDown={(e) => {
                   e.preventDefault()
                   setText(s.insert)
@@ -162,30 +175,33 @@ export function CommandBar() {
                 }}
               >
                 <code>{s.insert}</code>
-                <span className="text-zinc-300">
-                  {s.desc} <span className="text-zinc-500">· {s.group}</span>
+                {/* The highlighted row is accent-coloured, so its words switch to the on-accent ink. */}
+                <span className={i === active ? 'text-on-accent' : 'text-ink group-hover:text-on-accent'}>
+                  {s.desc} <span className={i === active ? 'text-on-accent/80' : 'text-ink-faint group-hover:text-on-accent/80'}>· {s.group}</span>
                 </span>
               </button>
             ))}
-            {names.length > 0 && <div className="px-3 py-1 text-[11px] text-zinc-500">Objects: {names.join(', ')}</div>}
+            {names.length > 0 && <div className="px-3 py-1 text-fine text-ink-faint">Objects: {names.join(', ')}</div>}
           </div>
         )}
       </div>
-      <button className="btn primary" onClick={() => submit(text)}>
+      {/* Enter is the way to run; the button is there for the mouse and stays quiet. */}
+      <button className="btn" title="Run (Enter)" onClick={() => submit(text)}>
         <CornerDownLeft size={13} /> Run
       </button>
-      <span className="badge text-[11px] text-zinc-400" title="Symbolic algebra engine (SymPy, offline)">
-        CAS {casBusy ? '◌ working' : casStatus === 'ready' ? '● ready' : casStatus === 'loading' ? '◌ loading' : casStatus === 'error' ? '✕ error' : '○ idle'}
+      <span className="flex shrink-0 items-center gap-1.5 text-fine text-ink-faint" title={cas.tip}>
+        <span className={`h-2 w-2 rounded-full ${cas.tone === 'good' ? 'bg-good' : cas.tone === 'warn' ? 'animate-pulse bg-warn' : cas.tone === 'bad' ? 'bg-bad' : 'bg-line-2'}`} />
+        {cas.words}
         {casBusy > 0 && (
           <button
-            className="ml-1 text-amber-300 hover:text-white"
-            title="Stop the algebra engine"
+            className="text-warn hover:text-ink-strong"
+            title="Stop working on this question"
             onClick={(e) => {
               e.stopPropagation()
               cancelCas()
             }}
           >
-            Cancel
+            Stop
           </button>
         )}
       </span>

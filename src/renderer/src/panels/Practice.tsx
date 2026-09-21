@@ -38,11 +38,11 @@ function Steps({ steps, shown }: { steps: { text?: string; tex?: string }[]; sho
   return (
     <ol className="mt-2 space-y-1.5">
       {steps.slice(0, shown).map((s, i) => (
-        <li key={i} className="rounded-md bg-black/20 px-3 py-2">
+        <li key={i} className="rounded-md bg-surface-0 px-3 py-2">
           <div className="flex gap-2">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2f4a7a] text-[11px] text-white">{i + 1}</span>
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sel text-fine text-ink-strong">{i + 1}</span>
             <div className="min-w-0 flex-1">
-              {s.text && <div className="text-zinc-300">{s.text}</div>}
+              {s.text && <div className="text-ink">{s.text}</div>}
               {s.tex && <Tex tex={s.tex} display />}
             </div>
           </div>
@@ -132,15 +132,15 @@ export function Practice() {
     return (
       <div className="panel pb-8">
         <div className="section-title">Practice</div>
-        <div className="px-3 text-zinc-400">
+        <div className="px-3 text-ink-dim">
           Pick what you want to practise. PhysLab makes fresh numbers every time, gives you a hint whenever you are stuck, and checks the answer you worked out yourself.
         </div>
         {LEVELS.map((level) => (
           <div key={level} className="mt-3 px-3">
-            <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">{level}</div>
+            <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">{level}</div>
             <div className="space-y-1">
               {TOPICS.filter((t) => t.level === level).map((t) => (
-                <label key={t.id} className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-white/5">
+                <label key={t.id} className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-surface-3">
                   <input
                     type="checkbox"
                     className="mt-0.5"
@@ -148,8 +148,8 @@ export function Practice() {
                     onChange={(e) => setChosen((c) => (e.target.checked ? [...c, t.id] : c.filter((x) => x !== t.id)))}
                   />
                   <span className="min-w-0">
-                    <span className="text-zinc-200">{t.label}</span>
-                    <span className="block text-[11px] text-zinc-500">{t.about}</span>
+                    <span className="text-ink-strong">{t.label}</span>
+                    <span className="block text-fine text-ink-faint">{t.about}</span>
                   </span>
                 </label>
               ))}
@@ -157,7 +157,7 @@ export function Practice() {
           </div>
         ))}
         <div className="mt-3 px-3">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">How many questions</div>
+          <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">How many questions</div>
           <div className="seg">
             {[3, 5, 10].map((n) => (
               <button key={n} className={count === n ? 'on' : ''} onClick={() => setCount(n)}>
@@ -170,7 +170,7 @@ export function Practice() {
           <button className="btn primary" disabled={chosen.length === 0} onClick={startSet}>
             <Sparkles size={13} /> Start practice
           </button>
-          {chosen.length === 0 && <div className="mt-1 text-amber-300">Choose at least one topic.</div>}
+          {chosen.length === 0 && <div className="mt-1 text-warn">Choose at least one topic.</div>}
         </div>
       </div>
     )
@@ -185,27 +185,27 @@ export function Practice() {
     return (
       <div className="panel pb-8">
         <div className="section-title">Practice finished</div>
-        <div className="card mx-3 border-amber-400/40 bg-amber-400/5 p-3">
-          <div className="text-[22px] font-semibold text-white">
+        <div className="card mx-3 border-warn/40 bg-warn/5 p-3">
+          <div className="text-display font-semibold text-ink-strong">
             {right} / {total} right
           </div>
-          <div className="text-zinc-400">
+          <div className="text-ink-dim">
             {mmss(time)} altogether, about {mmss(Math.round(time / Math.max(1, total)))} a question.
           </div>
           {slowest && slowest.seconds > 120 && (
-            <div className="mt-1 text-amber-300">
+            <div className="mt-1 text-warn">
               {slowest.title} took {mmss(slowest.seconds)} — that is slow for an exam. Practise that one again.
             </div>
           )}
         </div>
         <div className="mt-3 px-3">
           {results.map((r, i) => (
-            <div key={r.id} className="flex items-baseline gap-2 border-b border-[#2a2b30] py-1.5">
-              {r.right ? <Check size={14} className="text-emerald-400" /> : <X size={14} className="text-red-400" />}
-              <span className="w-5 text-zinc-500">{i + 1}</span>
-              <span className="min-w-0 flex-1 truncate text-zinc-300">{r.title}</span>
-              <span className="text-zinc-500">{mmss(r.seconds)}</span>
-              {r.hints > 0 && <span className="text-amber-300/70">{r.hints} hint{r.hints > 1 ? 's' : ''}</span>}
+            <div key={r.id} className="flex items-baseline gap-2 border-b border-line py-1.5">
+              {r.right ? <Check size={14} className="text-good" /> : <X size={14} className="text-bad" />}
+              <span className="w-5 text-ink-faint">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate text-ink">{r.title}</span>
+              <span className="text-ink-faint">{mmss(r.seconds)}</span>
+              {r.hints > 0 && <span className="text-warn/70">{r.hints} hint{r.hints > 1 ? 's' : ''}</span>}
             </div>
           ))}
         </div>
@@ -235,24 +235,24 @@ export function Practice() {
           Question {index + 1} of {set.length}
         </span>
         <span className="flex-1" />
-        <Timer size={12} className="text-zinc-500" />
-        <span className="font-normal text-zinc-500">{mmss(elapsed)}</span>
+        <Timer size={12} className="text-ink-faint" />
+        <span className="font-normal text-ink-faint">{mmss(elapsed)}</span>
       </div>
 
       <div className="card mx-3 p-3">
-        <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">{problem.title}</div>
-        <div className="text-[14px] leading-relaxed text-zinc-100">{problem.prompt}</div>
+        <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">{problem.title}</div>
+        <div className="text-lead leading-relaxed text-ink-strong">{problem.prompt}</div>
       </div>
 
       <div className="mt-3 px-3">
-        <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">Your answer</div>
+        <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">Your answer</div>
         {problem.fields.map((f) => {
           const c = checks[f.key]
           return (
             <div key={f.key} className="mb-2">
               <div className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-right font-semibold italic text-zinc-300">{f.label}</span>
-                <span className="text-zinc-500">=</span>
+                <span className="w-16 shrink-0 text-right font-semibold italic text-ink">{f.label}</span>
+                <span className="text-ink-faint">=</span>
                 <input
                   className="field num flex-1"
                   value={typed[f.key] ?? ''}
@@ -264,15 +264,15 @@ export function Practice() {
                     e.stopPropagation()
                   }}
                 />
-                {f.unit && <span className="w-8 text-zinc-500">{f.unit}</span>}
-                {c && isCorrect(c) && <Check size={16} className="text-emerald-400" />}
-                {c && !isCorrect(c) && c.verdict !== 'empty' && <X size={16} className="text-red-400" />}
+                {f.unit && <span className="w-8 text-ink-faint">{f.unit}</span>}
+                {c && isCorrect(c) && <Check size={16} className="text-good" />}
+                {c && !isCorrect(c) && c.verdict !== 'empty' && <X size={16} className="text-bad" />}
               </div>
               {c?.message && (
-                <div className={`mt-1 pl-[72px] ${isCorrect(c) ? 'text-amber-300/80' : 'text-red-300'}`}>{c.message}</div>
+                <div className={`mt-1 pl-[72px] ${isCorrect(c) ? 'text-warn/80' : 'text-bad'}`}>{c.message}</div>
               )}
-              {c?.verdict === 'empty' && <div className="mt-1 pl-[72px] text-zinc-500">Fill this one in too.</div>}
-              {revealed && <div className="mt-1 pl-[72px] text-emerald-300">Answer: {expectedText(f)}</div>}
+              {c?.verdict === 'empty' && <div className="mt-1 pl-[72px] text-ink-faint">Fill this one in too.</div>}
+              {revealed && <div className="mt-1 pl-[72px] text-good">Answer: {expectedText(f)}</div>}
             </div>
           )
         })}
@@ -302,14 +302,14 @@ export function Practice() {
       </div>
 
       {allRight && !revealed && (
-        <div className="mx-3 mt-3 rounded-md border border-emerald-400/40 bg-emerald-400/5 px-3 py-2 text-emerald-300">
+        <div className="mx-3 mt-3 rounded-md border border-good/40 bg-good/5 px-3 py-2 text-good">
           All right. {hints > 0 ? 'Try the next one without a hint.' : 'No hints used — well done.'}
         </div>
       )}
 
       {shown > 0 && (
         <div className="mt-3 px-3">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">
+          <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">
             {revealed ? 'Full solution' : `Hint ${shown} of ${steps.length}`}
           </div>
           <Steps steps={steps} shown={shown} />
@@ -319,12 +319,12 @@ export function Practice() {
             </button>
           )}
           {revealed && (
-            <div className="card mt-3 border-amber-400/40 bg-amber-400/5 p-3">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-amber-300">Answer</div>
+            <div className="card mt-3 border-warn/40 bg-warn/5 p-3">
+              <div className="mb-1 text-fine uppercase tracking-wide text-warn">Answer</div>
               {problem.solution.answers.map((a) => (
                 <div key={a.label} className="flex items-baseline gap-3 py-0.5">
-                  <span className="w-24 text-zinc-400">{a.label}</span>
-                  <Tex tex={a.tex} className="text-[15px] text-white" />
+                  <span className="w-24 text-ink-dim">{a.label}</span>
+                  <Tex tex={a.tex} className="text-lead text-ink-strong" />
                 </div>
               ))}
             </div>

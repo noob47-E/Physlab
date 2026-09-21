@@ -13,11 +13,21 @@ const read = (): Theme => {
   }
 }
 
-/** Colours the viewport uses; they come from the stylesheet so both themes stay in one place. */
-export function themeColor(name: string, fallback: string): string {
+/**
+ * Colours the viewport and the charts use; they come from the stylesheet so both themes stay in
+ * one place. The fallback is only reached when the stylesheet has not loaded, so callers need not
+ * repeat a hex value next to every token name (tests/colours.test.ts keeps hex out of the .tsx files).
+ */
+export function themeColor(name: string, fallback = '#888888'): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return v || fallback
 }
+
+/** How many `--series-N` colours the stylesheet defines for plotted quantities. */
+export const SERIES_COUNT = 6
+
+/** The stylesheet's colour for the i-th plotted quantity, wrapping round after SERIES_COUNT. */
+export const seriesColor = (i: number): string => themeColor(`--series-${(((i % SERIES_COUNT) + SERIES_COUNT) % SERIES_COUNT) + 1}`)
 
 export const useTheme = create<{ theme: Theme; set: (t: Theme) => void; toggle: () => void }>((set, get) => ({
   theme: read(),
