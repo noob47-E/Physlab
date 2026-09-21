@@ -12,7 +12,8 @@
     "build": "electron-vite build",
     "dist": "electron-vite build && electron-builder --win",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
   },
   "build": {
     "appId": "com.physlab.desktop",

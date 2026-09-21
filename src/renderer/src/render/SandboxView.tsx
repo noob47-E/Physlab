@@ -294,6 +294,7 @@ export function SandboxView() {
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount: the engine outlives the view and must not be created twice; `invalidate` is R3F's stable function
   }, [])
 
   // A change to the objects is applied to the running world where it can be, and only forces a

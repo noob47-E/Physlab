@@ -113,7 +113,10 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       /* invalid function: draw nothing */
     }
     return out
-  }, [fns, b.xMin, b.xMax, b.yMin, b.yMax, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax])
+    // `evVersion` is not read here: the compiled functions read the scene's scope through a
+    // closure, so a moved slider changes the curve without changing `fns`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax])
 
   useEffect(() => {
     const polys = data.segments ? pairsToPolys(data.segments) : data.polylines
@@ -224,6 +227,7 @@ function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: Gra
     g.setIndex(s.indices)
     g.computeVertexNormals()
     return g
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is the evaluator's result: F reads the scope through a closure, so the same F gives a new surface once a slider moves
   }, [F, version])
   useEffect(() => () => geo?.dispose(), [geo])
   useFrame(() => labelAnchors.set(obj.id, { p: [6, 6, 0] }))

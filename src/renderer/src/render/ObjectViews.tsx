@@ -533,6 +533,7 @@ export const AngleView = memo(function AngleView({ obj, c, selected }: ViewProps
     if (pts.length < 3 || isRight) return null
     const shape = new THREE.Shape([new THREE.Vector2(c.vertex[0], c.vertex[1]), ...pts.map((p) => new THREE.Vector2(p[0], p[1]))])
     return new THREE.ShapeGeometry(shape)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the arc's coordinates: `pts` is a fresh array every render, and keying on it would rebuild the geometry each time
   }, [pts.map((p) => p.join(',')).join(';')])
   useEffect(() => () => sector?.dispose(), [sector])
   return (

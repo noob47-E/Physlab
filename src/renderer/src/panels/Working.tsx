@@ -88,6 +88,7 @@ function WorkingView({
   useEffect(() => {
     setShown(initialShown(doc.moves.length, pref))
     setTrying(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `pref` is read, not followed: see above
   }, [doc])
 
   const hidden = doc.moves.length - shown
@@ -113,6 +114,7 @@ function WorkingView({
       settled()
       tryBtn.current?.focus()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs for a new answer or a change of invitation only; `invited`/`settled` are the container's stable readers and `pref` is read the way the reset effect reads it
   }, [doc, inviting])
 
   const copyAll = (): void => {

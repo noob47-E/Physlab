@@ -1,6 +1,7 @@
-// ESLint 9 flat config. `npm run lint` must report 0 errors. The warnings below are the rules that
-// would demand a mass rewrite for no behaviour gain; each says why it is only a warning, and a
-// suppression in the code must carry its reason after `--` or the lint fails on it.
+// ESLint flat config. `npm run lint` must report 0 errors. The warnings below are the rules that
+// would demand a mass rewrite for no behaviour gain; each says why it is only a warning. House
+// style: a suppression in the code carries its reason after `--`, so the next reader knows what
+// was weighed, and a suppression whose rule no longer fires is itself an error (see below).
 //
 // typescript-eslint parses through the JavaScript compiler API, which the native TypeScript 7
 // package no longer ships, so `typescript` in package.json stays on the 6.x line.
@@ -50,7 +51,10 @@ export default tseslint.config(
       'react-hooks/purity': 'warn',
       'react-hooks/refs': 'warn',
       'react-hooks/use-memo': 'warn',
-      'react-hooks/error-boundaries': 'warn'
+      'react-hooks/error-boundaries': 'warn',
+      // Fires on a useMemo whose result is mutated afterwards — the velocity arrows' scratch
+      // slots, filled in every frame. Without the compiler there is no memoisation to lose.
+      'react-hooks/preserve-manual-memoization': 'warn'
     }
   }
 )

@@ -9,7 +9,7 @@ MathfieldElement.fontsDirectory = null
 MathfieldElement.soundsDirectory = null
 
 declare module 'react' {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- React's own JSX types live in a namespace, and a custom element is declared by adding to it
   namespace JSX {
     interface IntrinsicElements {
       'math-field': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>
@@ -92,6 +92,7 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       mf.removeEventListener('input', onInput)
       mf.removeEventListener('keydown', onKey, { capture: true })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount: the listeners read the latest callbacks through `cbs`, `value` and `placeholder` have their own effects below, and autoFocus is a first-render decision
   }, [])
 
   useEffect(() => {
@@ -102,6 +103,17 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       /* not mounted yet: applied on mount */
     }
   }, [value])
+
+  // The Calculator changes its hint with the mode (CMPLX shows a complex example), and a hint set
+  // only on mount stayed on the old mode's words.
+  useEffect(() => {
+    const mf = el.current
+    try {
+      if (mf && placeholder) mf.placeholder = `\\text{${placeholder.replace(/[{}\\]/g, '')}}`
+    } catch {
+      /* not mounted yet: applied on mount */
+    }
+  }, [placeholder])
 
   useImperativeHandle(ref, () => ({
     insert: (latex) => {

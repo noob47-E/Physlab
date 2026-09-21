@@ -45,6 +45,7 @@ export function FatLine({
     if (dashed) line.computeLineDistances()
     line.frustumCulled = false
     return line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- colour, width and dash sizes are applied by the effect below; only a change of geometry type needs a new line
   }, [dashed, segments])
 
   useEffect(() => {

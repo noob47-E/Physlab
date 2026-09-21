@@ -33,6 +33,7 @@ npm install
 npm run dev        # Electron with hot reload
 npm test           # ~150 tests, pure logic, no DOM
 npm run typecheck  # must be clean
+npm run lint       # must report 0 errors; a suppression says why, after `--`
 ```
 
 The test suite covers the maths, not the interface. Put any decision worth trusting into a pure
