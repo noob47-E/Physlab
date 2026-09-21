@@ -429,7 +429,8 @@ export function TopBar() {
             return { label: `Grid: ${g.label.toLowerCase()}`, sc: current ? '✓' : undefined, on: current, run: () => s().setSettings({ showGrid: true, gridStyle: g.id }) }
           }),
           { label: 'Grid: off', sc: showGrid ? undefined : '✓', on: !showGrid, run: () => s().setSettings({ showGrid: false }) },
-          { label: `Axes: ${showAxes ? 'on' : 'off'}`, run: () => s().setSettings({ showAxes: !showAxes }) },
+          // Ticked like the grid rows above: the same word in the grid picker and the right-click menu.
+          { label: 'Axes', sc: showAxes ? '✓' : undefined, on: showAxes, run: () => s().setSettings({ showAxes: !showAxes }) },
           { label: `Snapping: ${snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s().setSettings({ snap: !snap }) },
           { label: `Angle marks: ${angleMarks ? 'shown' : 'hidden'}`, run: () => s().setSettings({ showAngleMarks: !angleMarks }) },
           '-',

@@ -225,7 +225,7 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
     { label: 'Delete everything on this drawing…', hint: 'Only this drawing; Undo brings it back', danger: true, run: () => confirmClearDrawing() }
   )
   const labels = st.settings.labelShow
-  const { showGrid, gridStyle } = st.settings
+  const { showGrid, gridStyle, showAxes } = st.settings
   return [
     { items },
     {
@@ -241,7 +241,9 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
       title: 'Grid',
       items: [
         ...GRID_STYLES.map((g): MenuItem => ({ label: g.label, hint: g.hint, checked: showGrid && gridStyle === g.id, run: () => st.setSettings({ showGrid: true, gridStyle: g.id }) })),
-        { label: 'Off', checked: !showGrid, run: () => st.setSettings({ showGrid: false }) }
+        { label: 'Off', checked: !showGrid, run: () => st.setSettings({ showGrid: false }) },
+        // Not a style: the grid can be off with the axes on, or the other way round.
+        { label: 'Axes', hint: 'The axes with their numbers', checked: showAxes, run: () => st.setSettings({ showAxes: !showAxes }) }
       ]
     },
     {

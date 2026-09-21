@@ -78,6 +78,9 @@ function buildItems(): Item[] {
     { group: 'Settings', title: 'Toggle grid', hint: '', run: () => scene().setSettings({ showGrid: !scene().settings.showGrid }) },
     ...GRID_STYLES.map((g) => ({ group: 'Settings', title: `Grid: ${g.label.toLowerCase()}`, hint: g.hint, run: () => scene().setSettings({ showGrid: true, gridStyle: g.id }) })),
     { group: 'Settings', title: 'Grid: off', hint: 'No grid; the axes stay', run: () => scene().setSettings({ showGrid: false }) },
+    // The hints say "axis" too: a student types "x axis" or "hide axis", and only the hint can carry the singular.
+    { group: 'Settings', title: 'Axes: show', hint: 'The x axis and the y axis (and z in 3D), with their numbers', run: () => scene().setSettings({ showAxes: true }) },
+    { group: 'Settings', title: 'Axes: hide', hint: 'Takes each axis and its numbers off the drawing; the grid stays', run: () => scene().setSettings({ showAxes: false }) },
     { group: 'Settings', title: 'Angle marks: show', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: true }) },
     { group: 'Settings', title: 'Angle marks: hide', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: false }) },
     { group: 'Edit', title: 'Delete everything on this drawing…', hint: 'Only the drawing you are looking at; asks first; Undo brings it all back', run: () => confirmClearDrawing() },
@@ -88,7 +91,8 @@ function buildItems(): Item[] {
   return items
 }
 
-function score(item: Item, q: string): number {
+/** Exported for the test that keeps the singular a student types ("x axis") reaching the Axes rows. */
+export function score(item: Item, q: string): number {
   const t = item.title.toLowerCase()
   const h = item.hint.toLowerCase()
   const words = q.toLowerCase().split(/\s+/).filter(Boolean)

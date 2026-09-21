@@ -236,3 +236,81 @@ describe('the step a point snaps to', () => {
     expect(readSource('src/renderer/src/render/Grid.tsx')).toContain('minorStepOf(majorStep)')
   })
 })
+
+describe('the axes switch', () => {
+  // `showAxes` was drawn correctly from the start but reachable only as a View menu row; a
+  // student looking at the grid picker, the right-click menu or the search box never found it.
+  it('round-trips through setSettings and starts on', async () => {
+    const { useScene } = await import('../src/renderer/src/core/store')
+    const scene = () => useScene.getState()
+    scene().newScene()
+    expect(scene().settings.showAxes).toBe(true)
+    scene().setSettings({ showAxes: false })
+    expect(scene().settings.showAxes).toBe(false)
+    // The grid is untouched by the axes switch: a student can have a grid with no axes.
+    expect(scene().settings.showGrid).toBe(true)
+    scene().setSettings({ showAxes: true })
+    expect(scene().settings.showAxes).toBe(true)
+  })
+
+  it('is not part of the cached grid geometry, so toggling it needs no rebuild', () => {
+    // The axes are their own FatLines, shown or hidden by React; the lines, dots and their
+    // cache key know nothing about them. A rebuild on every toggle would be wasted work, and a
+    // key that ignored a *drawn* part would be the black-viewport bug again — so this pins both:
+    // the key has no axes term, and the drawing reads the flag outside the cache.
+    const size = { width: 1200, height: 800 }
+    expect(gridKey(1, size, 50, 'lines')).not.toContain('axes')
+    const grid = readSource('src/renderer/src/render/Grid.tsx')
+    expect(grid).not.toMatch(/gridKey\([^)]*showAxes/)
+    expect(grid).toMatch(/\{showAxes && axes\.x\.length > 0 && \(/)
+    expect(grid).toMatch(/\{showAxes && \(\s*<>\s*<FatLine points=\{\[\[-h, 0, 0\]/)
+  })
+
+  it('takes the tick numbers and the x/y titles with it, in 2D and 3D', () => {
+    // The tick labels are HTML spans placed every frame; the ones not placed in a frame are hidden
+    // by `ticks.end()`. Both grids place every tick and title inside `if (showAxes)`, and call
+    // `end()` outside it, so hiding the axes hides their numbers on the same frame.
+    const grid = readSource('src/renderer/src/render/Grid.tsx')
+    const frames = grid.match(/ticks\.begin\(\)[\s\S]*?ticks\.end\(\)/g) ?? []
+    expect(frames.length).toBe(2)
+    for (const f of frames) {
+      expect(f).toMatch(/ticks\.begin\(\)\s*\n\s*if \(showAxes\) \{/)
+      expect(f).toMatch(/\}\s*\n\s*ticks\.end\(\)$/)
+      // Every place() sits inside the showAxes block: nothing between begin() and the if.
+      expect(f.indexOf('ticks.place')).toBeGreaterThan(f.indexOf('if (showAxes)'))
+      expect(f).toContain("axisTitle('x', settings)")
+      expect(f).toContain("axisTitle('y', settings)")
+    }
+    expect(readSource('src/renderer/src/render/overlay.ts')).toMatch(/end\(\) \{\s*for \(let i = this\.used; i < this\.spans\.length; i\+\+\) this\.spans\[i\]\.style\.display = 'none'/)
+  })
+
+  it('is offered wherever the grid style is, with the same word and a tick', () => {
+    const picker = readSource('src/renderer/src/render/Viewport.tsx').match(/function GridStylePicker\(\)[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(picker).toMatch(/aria-pressed=\{showAxes\}/)
+    expect(picker).toMatch(/\{showAxes \? '✓ Axes' : 'Axes'\}/)
+    expect(picker).toMatch(/setSettings\(\{ showAxes: !showAxes \}\)/)
+    const menu = readSource('src/renderer/src/app/contextActions.ts').match(/title: 'Grid',[\s\S]*?\]\s*\}/)?.[0] ?? ''
+    expect(menu).toMatch(/label: 'Axes', hint: [^,]+, checked: showAxes, run: \(\) => st\.setSettings\(\{ showAxes: !showAxes \}\)/)
+    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
+    expect(palette).toMatch(/title: 'Axes: show'.*setSettings\(\{ showAxes: true \}\)/)
+    expect(palette).toMatch(/title: 'Axes: hide'.*setSettings\(\{ showAxes: false \}\)/)
+    const view = readSource('src/renderer/src/app/TopBar.tsx').match(/label="View"[\s\S]*?label="Help"/)?.[0] ?? ''
+    expect(view).toMatch(/label: 'Axes', sc: showAxes \? '✓' : undefined, on: showAxes/)
+  })
+
+  it('is found in the search box by the singular a student types', async () => {
+    // `score` matches the title and the hint; the titles say "Axes", so "axis", "hide axis" and
+    // "x axis" once found only the angle marks. The hints carry the singular. The rows are read
+    // from the source and scored by the real scorer.
+    const { score } = await import('../src/renderer/src/app/SearchPalette')
+    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
+    const rows = [...palette.matchAll(/title: '(Axes: \w+)', hint: '([^']+)'/g)].map((m) => ({ group: 'Settings', title: m[1], hint: m[2], run: () => {} }))
+    expect(rows.map((r) => r.title)).toEqual(['Axes: show', 'Axes: hide'])
+    for (const q of ['axes', 'axis', 'x axis', 'hide axis', 'show axis']) {
+      const hit = rows.filter((r) => score(r, q) > 0).map((r) => r.title)
+      expect(hit, q).toContain(q.startsWith('show') ? 'Axes: show' : 'Axes: hide')
+    }
+    // An unrelated row does not match through the hint by accident.
+    expect(score({ group: 'Settings', title: 'Angle marks: hide', hint: 'The arcs at the corners', run: () => {} }, 'axis')).toBe(0)
+  })
+})

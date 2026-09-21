@@ -311,32 +311,52 @@ export function Viewport() {
   )
 }
 
-/** Lines / Dots / Fine / Paper / Off: the style is saved with the drawing, "Off" is the grid switch. */
+/**
+ * Lines / Dots / Fine / Paper / Off: the style is saved with the drawing, "Off" is the grid switch.
+ * The axes have their own tick beside it: they are not a grid style (the grid can be off with the
+ * axes on, and the other way round), and until 0.6.1 the only way to hide them was a View menu row
+ * a student looking at the grid picker never found.
+ */
 function GridStylePicker() {
   const showGrid = useScene((s) => s.settings.showGrid)
   const gridStyle = useScene((s) => s.settings.gridStyle)
+  const showAxes = useScene((s) => s.settings.showAxes)
   const setSettings = useScene((s) => s.setSettings)
   return (
-    <select
-      className="badge pointer-events-auto cursor-pointer outline-none"
-      title="How the grid is drawn"
-      value={showGrid ? gridStyle : 'off'}
-      onChange={(e) => {
-        const v = e.target.value
-        if (v === 'off') setSettings({ showGrid: false })
-        else setSettings({ showGrid: true, gridStyle: v as GridStyle })
-        // Once chosen, hand the keys back: a focused <select> swallows V, P, Esc, Delete, Space
-        // and Ctrl+Z (isTyping treats it as a text field) until the canvas is clicked.
-        e.currentTarget.blur()
-      }}
-    >
-      {GRID_STYLES.map((g) => (
-        <option key={g.id} value={g.id}>
-          {g.label}
-        </option>
-      ))}
-      <option value="off">Off</option>
-    </select>
+    <>
+      <select
+        className="badge pointer-events-auto cursor-pointer outline-none"
+        title="How the grid is drawn"
+        value={showGrid ? gridStyle : 'off'}
+        onChange={(e) => {
+          const v = e.target.value
+          if (v === 'off') setSettings({ showGrid: false })
+          else setSettings({ showGrid: true, gridStyle: v as GridStyle })
+          // Once chosen, hand the keys back: a focused <select> swallows V, P, Esc, Delete, Space
+          // and Ctrl+Z (isTyping treats it as a text field) until the canvas is clicked.
+          e.currentTarget.blur()
+        }}
+      >
+        {GRID_STYLES.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.label}
+          </option>
+        ))}
+        <option value="off">Off</option>
+      </select>
+      <button
+        type="button"
+        className="badge pointer-events-auto cursor-pointer outline-none"
+        title={showAxes ? 'Hide the axes and their numbers' : 'Show the axes and their numbers'}
+        aria-pressed={showAxes}
+        onClick={(e) => {
+          setSettings({ showAxes: !showAxes })
+          e.currentTarget.blur()
+        }}
+      >
+        {showAxes ? '✓ Axes' : 'Axes'}
+      </button>
+    </>
   )
 }
 
