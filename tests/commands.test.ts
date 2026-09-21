@@ -323,23 +323,54 @@ const HELP_EXAMPLES: Example[] = [
     }
   },
   { line: 'delete A', check: () => expect(named('A')).toBeUndefined() },
-  { line: 'undo', check: () => expect(errors()).toEqual([]) },
+  {
+    line: 'undo',
+    check: () => {
+      // q = 2 is the last line of the preamble, so it is what an undo takes back.
+      expect(named('q'), 'the last thing made is gone').toBeUndefined()
+      expect(scene().order).toHaveLength(PREAMBLE.length - 1)
+    }
+  },
   { line: 'clear', check: () => expect(scene().order).toEqual([]) },
-  { line: '2d', check: () => expect(scene().viewMode).toBe('2d') },
+  // 2d and paused are the defaults, so each is checked from the other state or it proves nothing.
+  { line: '2d', setup: ['3d'], check: () => expect(scene().viewMode).toBe('2d') },
   { line: '3d', check: () => expect(scene().viewMode).toBe('3d') },
   { line: 'play', check: () => expect(scene().playing).toBe(true) },
-  { line: 'pause', check: () => expect(scene().playing).toBe(false) }
+  { line: 'pause', setup: ['play'], check: () => expect(scene().playing).toBe(false) }
 ]
+
+/**
+ * A help line is examples separated by runs of spaces (or "or", or "/"), then a note in words.
+ * Splitting it this way is what lets the guard below see every example on a line, not just one:
+ * `dot(A, B)` appended to the products line used to slip through untested.
+ */
+function examplesOn(line: string): string[] {
+  return line
+    .trim()
+    .split(/\s{2,}/)
+    .filter((c) => c !== 'or')
+    .flatMap((c) => (HELP_EXAMPLES.some((e) => e.line === c) ? [c] : c.split(' / ')))
+}
+/** One-word notes the help uses that could otherwise be read as commands. */
+const NOTES = new Set(['point', 'vector'])
+const looksLikeCommand = (c: string): boolean => /[=·×|<>^]|\w\(/.test(c) || (/^[a-z0-9]+$/.test(c) && !NOTES.has(c))
 
 describe('every example in the help text works', () => {
   beforeEach(fresh)
 
-  it('is tested here: the list above is the help text, line for line', () => {
-    for (const e of HELP_EXAMPLES) expect(HELP, `help mentions ${e.line}`).toContain(e.line)
-    // And no line of the help is untested: a line added to the text has to be added here too.
+  it('is tested here: the list above is the help text, example for example', () => {
     const lines = HELP.split('\n').slice(1)
     expect(lines.length).toBeGreaterThan(10)
-    for (const l of lines) expect(HELP_EXAMPLES.some((e) => l.includes(e.line)), `tested: ${l.trim()}`).toBe(true)
+    const chunks = lines.flatMap(examplesOn)
+    for (const e of HELP_EXAMPLES) expect(chunks, `help shows ${e.line}`).toContain(e.line)
+    // And no example in the help is untested: one added to the text has to be added here too,
+    // whether it is a new line or a sixth entry on the products line.
+    const tested = new Set(HELP_EXAMPLES.map((e) => e.line))
+    for (const c of chunks) if (!tested.has(c)) expect(looksLikeCommand(c), `untested example: ${c}`).toBe(false)
+    // The splitter itself: a note is not mistaken for an example, and an example is not a note.
+    expect(looksLikeCommand('live resultant (updates when you drag A or B)')).toBe(false)
+    expect(looksLikeCommand('dot(A, B)')).toBe(true)
+    expect(looksLikeCommand('redo')).toBe(true)
   })
 
   for (const e of HELP_EXAMPLES) {
@@ -443,6 +474,20 @@ describe('routing to the vector solvers', () => {
     expect(last.tex).toMatch(/^N = /)
     vectorNamed('N', [0, 0, -11])
   })
+
+  it('gives a compound operand the answer without working that names the wrong vector', async () => {
+    // The steps can only name a symbol, and fell back to a default letter: `(A + B) × A` was
+    // titled "Vector product A×A", and `A × (A + B)` worked through a B that was not B.
+    for (const line of ['(A + B) × A', 'A × (A + B)', 'A × B × A', '(A + B) · A']) {
+      const last = await run(line)
+      expect(errors(), line).toEqual([])
+      expect(last.kind, line).toBe('result')
+      expect(last.solution, line).toBeUndefined()
+    }
+    expect((await run('(A + B) × A')).tex).toContain('11\\hat{k}')
+    // A literal operand is still fine: it is shown under the default letter, which is its name.
+    expect((await run('A × <1, 0>')).solution?.title).toBe('Vector product A×B')
+  })
 })
 
 describe('the × key', () => {
@@ -473,6 +518,27 @@ describe('the × key', () => {
     expect(last.tex).toContain('6\\hat{i} + 8\\hat{j}')
     expect(last.solution?.title).toBe('R = 2A')
     expect(errors()).toEqual([])
+  })
+
+  it('keeps a number × vector assignment as a live object, whichever side the number is on', async () => {
+    // The bar resolved the × for its own answer but stored the line as typed, and the evaluator's
+    // own × only knows vector × vector: `C = 2 × A` logged 2A and then errored with
+    // "Expected a vector or point" on the object it had just made.
+    let last = await run('C = 2 × A')
+    expect(errors()).toEqual([])
+    expect(last.solution?.title).toBe('C = 2A')
+    vectorNamed('C', [6, 8, 0])
+    expect((named('C') as VectorObj).def.kind, 'live, follows A').toBe('expr')
+    await run('D = A × 2', 'G = 10 N ∠ 30°', 'H = 2 × G', 'k = 2 × 3')
+    expect(errors()).toEqual([])
+    vectorNamed('D', [6, 8, 0])
+    vectorNamed('H', [17.321, 10, 0])
+    expect(computedOf('k')).toEqual({ type: 'number', value: 6 })
+    last = await run('A = <1, 1>')
+    expect(errors()).toEqual([])
+    vectorNamed('C', [2, 2, 0])
+    vectorNamed('D', [2, 2, 0])
+    expect(last.kind).toBe('result')
   })
 
   it('works inside a bigger expression', async () => {
@@ -537,6 +603,19 @@ describe('Pure Math from the command bar', () => {
     last = await run('divide((x^3-1)/(x-1))')
     expect(last.tex).toBe('\\text{Quotient}\\;x^{2} + x + 1,\\quad \\text{Remainder}\\;0')
     expect(renders(last.tex)).toBe(true)
+    // The parser spells θ as "theta", so the subscript has to be split off a longer name too:
+    // \text{theta_1} was the same parse error over again.
+    for (const line of ['solve(θ^2 = 4)', 'solve(theta^2 = 4)']) {
+      last = await run(line)
+      expect(last.tex, line).toBe('\\theta_1 = 2,\\quad \\theta_2 = -2')
+      expect(renders(last.tex), line).toBe(true)
+    }
+    last = await run('solve(x1 + 2 = 5)')
+    expect(last.tex).toBe('\\text{x1} = 3')
+    expect(renders(last.tex)).toBe(true)
+    // A prime's label is the number itself, which is not worth printing twice.
+    expect((await run('primes(7)')).tex).toBe('7')
+    expect((await run('primes(12)')).tex).toBe('12 = 2^{2} \\times 3')
   })
 
   it('reads divide(a, b) and partial(a, b) as the fraction a over b', async () => {
@@ -555,6 +634,26 @@ describe('Pure Math from the command bar', () => {
     expect(last.kind).toBe('error')
     expect(last.text).toBe('Prime factors need a whole number, like 360.')
     expect(casCalls()).toHaveLength(0)
+  })
+
+  it('divides plain numbers with the calculator, as its own refusal promises', async () => {
+    // The refusal said "the calculator will do that one" and then the bar stopped.
+    const last = await run('divide(10, 2)')
+    expect(errors()).toEqual([])
+    expect(last.text).toBe('= 5')
+    expect(last.input, 'the log quotes what was typed').toBe('divide(10, 2)')
+  })
+
+  it('sends a fraction the step engine refuses to the algebra engine, the way the Working panel does', async () => {
+    // The refusal used to be logged as the end of the road, although math/pure/store.ts maps
+    // divide and partial to SymPy's apart.
+    for (const line of ['divide(sin(x), x)', 'partial(sin(x), x)', 'partial((sin(x))/(x))']) {
+      forgetCasCalls()
+      const last = await run(line)
+      expect(errors(), line).toEqual([])
+      expect(casCalls(), line).toEqual([['apart', { expr: '(sin(x))/(x)', deg: true }]])
+      expect(last.kind, line).toBe('result')
+    }
   })
 
   it('sends what the step engine refuses on to the algebra engine, under any spelling', async () => {

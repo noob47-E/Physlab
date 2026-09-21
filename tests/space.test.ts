@@ -19,7 +19,7 @@ vi.mock('../src/renderer/src/app/theme', () => ({
 }))
 
 import { modeOfSpace, spaceOf, SPACE_LABELS, visibleIn, visibleOrder, type Space } from '../src/renderer/src/core/visibility'
-import type { ModeId } from '../src/renderer/src/app/modes'
+import { MODES, type ModeId } from '../src/renderer/src/app/modes'
 import type { ObjId, SceneObject } from '../src/renderer/src/core/types'
 import { scene } from '../src/renderer/src/core/store'
 import { runCommand } from '../src/renderer/src/lang/commands'
@@ -42,6 +42,14 @@ describe('which drawing a mode looks at', () => {
   it('gives a mode without a drawing of its own the whole scene', () => {
     const noDrawing: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
     for (const m of noDrawing) expect(spaceOf(m), m).toBeNull()
+  })
+
+  it('has placed every mode there is in one list or the other', () => {
+    // spaceOf answers null for anything it was not told about, so a new mode would pass the
+    // test above by default; it has to be placed here on purpose.
+    const withDrawing: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab']
+    const noDrawing: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
+    expect(MODES.map((m) => m.id).sort()).toEqual([...withDrawing, ...noDrawing].sort())
   })
 
   it('can send every space back to a mode that shows it, with a label in words', () => {
