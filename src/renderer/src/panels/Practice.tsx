@@ -111,7 +111,7 @@ export function Practice() {
   const check = () => {
     if (!problem) return
     const next: Record<string, AnswerCheck> = {}
-    for (const f of problem.fields) next[f.key] = checkAnswer(typed[f.key] ?? '', f)
+    for (const f of problem.fields) next[f.key] = checkAnswer(typed[f.key] ?? '', f, settings)
     setChecks(next)
   }
 

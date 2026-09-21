@@ -38,8 +38,13 @@ export interface AnswerField {
   value: number
   /** How far off still counts as right (absolute). */
   tol: number
-  /** Angles are also checked for quadrant and full-turn mistakes. */
-  kind?: 'number' | 'angle'
+  /**
+   * A 'direction' is which way a vector points, measured from +x: it is also checked for
+   * quadrant and full-turn mistakes, and 420° counts as 60°. An 'angle' is an amount of turning
+   * (between two vectors, at a corner), where 420° is simply wrong; it only gets the
+   * radians-for-degrees checks.
+   */
+  kind?: 'number' | 'angle' | 'direction'
   traps?: Trap[]
 }
 
@@ -161,7 +166,7 @@ export const TOPICS: Topic[] = [
             unit: '°',
             value: th,
             tol: ANGLE_TOL,
-            kind: 'angle',
+            kind: 'direction',
             traps:
               Math.abs(ref - th) > 1
                 ? [{ value: ref, why: 'That is the reference angle, from tan⁻¹ of the sizes only. Use the signs of Ax and Ay to place it in the right quadrant.' }]
