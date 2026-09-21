@@ -106,7 +106,8 @@ describe('the animations follow the one pattern', () => {
     })
   }
 
-  for (const name of ['Point.tsx', 'Rope.tsx']) {
+  // Every card, not just the two patterns: a card without the gesture would show a still picture.
+  for (const name of animFiles.filter((n) => n !== 'parts.tsx' && n !== 'Placeholder.tsx')) {
     const src = readFileSync(join(ANIMS, name), 'utf8')
     it(`${name} has a cursor, a click and something that appears`, () => {
       expect(src).toMatch(/<Cursor\b/)

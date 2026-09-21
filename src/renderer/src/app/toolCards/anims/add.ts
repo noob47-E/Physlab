@@ -1,20 +1,27 @@
 // The cards for the Sandbox ADD buttons, one per shape in panels/Sandbox.tsx ADD.
 //
 // The title is the button's label ("Ball" for a sphere, "Crate" for a box). These buttons have no
-// shortcut. Replace `Placeholder` with a real animation one card at a time; AUTHORING.md has the
-// pattern. The Sandbox panel itself is wired to these after P4 lands (it owns that file).
+// shortcut. The Sandbox panel itself is wired to these after P4 lands (it owns that file).
 
 import type { ToolCardDef, ToolCardKey } from '../types'
-import { Placeholder } from './Placeholder'
+import { Ball } from './Ball'
+import { Crate } from './Crate'
+import { Cylinder } from './Cylinder'
+import { Capsule } from './Capsule'
+import { Cone } from './Cone'
+import { Ramp } from './Ramp'
+import { Plank } from './Plank'
+import { Wall } from './Wall'
+import { Pulley } from './Pulley'
 
 export const ADD_GROUP: Record<Extract<ToolCardKey, `add:${string}`>, ToolCardDef> = {
-  'add:sphere': { title: 'Ball', sentence: 'Adds a ball that rolls and bounces; set its size and mass in the panel.', Animation: Placeholder },
-  'add:box': { title: 'Crate', sentence: 'Adds a crate that slides and tips over but does not roll.', Animation: Placeholder },
-  'add:cylinder': { title: 'Cylinder', sentence: 'Adds a cylinder that rolls on its side and stands on its end.', Animation: Placeholder },
-  'add:capsule': { title: 'Capsule', sentence: 'Adds a capsule, a rounded rod that rolls sideways.', Animation: Placeholder },
-  'add:cone': { title: 'Cone', sentence: 'Adds a cone, which tips over and rolls round in a circle.', Animation: Placeholder },
-  'add:ramp': { title: 'Ramp', sentence: 'Adds a fixed slope for things to slide or roll down.', Animation: Placeholder },
-  'add:plank': { title: 'Plank', sentence: 'Adds a long flat board to fix in place, or to let fall and tip over.', Animation: Placeholder },
-  'add:wall': { title: 'Wall', sentence: 'Adds a fixed upright wall for things to bounce off.', Animation: Placeholder },
-  'add:pulley': { title: 'Pulley', sentence: 'Adds a wheel for a rope to run over; put it above both ends of the rope.', Animation: Placeholder }
+  'add:sphere': { title: 'Ball', sentence: 'Click to add a ball that rolls and bounces; set its size and mass in the panel.', Animation: Ball },
+  'add:box': { title: 'Crate', sentence: 'Click to add a crate that slides and tips over but never rolls.', Animation: Crate },
+  'add:cylinder': { title: 'Cylinder', sentence: 'Click to add a cylinder that rolls on its side and stands upright on its end.', Animation: Cylinder },
+  'add:capsule': { title: 'Capsule', sentence: 'Click to add a capsule, a rounded rod that rolls sideways like a pencil.', Animation: Capsule },
+  'add:cone': { title: 'Cone', sentence: 'Click to add a cone, which tips onto its side and rolls round in a circle.', Animation: Cone },
+  'add:ramp': { title: 'Ramp', sentence: 'Click to add a fixed slope for other objects to slide or roll down.', Animation: Ramp },
+  'add:plank': { title: 'Plank', sentence: 'Click to add a long flat board, free to fall and tip or fixed in place.', Animation: Plank },
+  'add:wall': { title: 'Wall', sentence: 'Click to add a fixed upright wall for things to bounce off.', Animation: Wall },
+  'add:pulley': { title: 'Pulley', sentence: 'Click to add a wheel for a rope to run over; place it above both ends of the rope.', Animation: Pulley }
 }

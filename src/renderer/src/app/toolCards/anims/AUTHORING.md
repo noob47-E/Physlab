@@ -15,10 +15,11 @@ The registry (`../registry.tsx`) joins three files in this folder, and each auth
 | `add.ts` | `add:sphere` … | the Sandbox ADD buttons (`panels/Sandbox.tsx` `ADD`) |
 | `links.ts` | `link:rope` … | the ways two Sandbox objects can be joined (`sim/links.ts` `LINK_KINDS`) |
 
-Every key is already there with a `Placeholder` animation (a pulsing dot). To author a card, add
-`Name.tsx` beside this file, import it in the group file and put it in place of `Placeholder`. Do
-not add keys, do not touch the other two group files, and never leave a key out: the registry is
-typed against the button lists, and `tests/toolCards.test.ts` fails on a missing or a stray card.
+Every key already has a card. A key that is new, or a card being redrawn, starts from `Placeholder`
+(a pulsing dot): add `Name.tsx` beside this file, import it in the group file and put it in place
+of `Placeholder`. Do not add keys, do not touch the other two group files, and never leave a key
+out: the registry is typed against the button lists, and `tests/toolCards.test.ts` fails on a
+missing or a stray card.
 (The `add:` keys are typed from `ShapeKind` in `sim/types.ts` less the ground, while the test reads
 the Sandbox panel's `ADD` list; the two agree today, and if a shape is ever added to one and not the
 other, the Sandbox list is the one the cards follow — a card is for a button.)
