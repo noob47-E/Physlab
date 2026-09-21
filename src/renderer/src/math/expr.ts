@@ -15,6 +15,21 @@ export const setAngleMode = (m: 'deg' | 'rad') => {
 }
 export const getAngleMode = () => angleMode
 
+/**
+ * Runs `fn` with the calculator in degrees and puts the mode back after. A vector card's 10∠30°
+ * and a practice question's "sin(30)" are always degrees, but a student working in radians in
+ * the Calculator must not find it silently switched.
+ */
+export function inDegrees<T>(fn: () => T): T {
+  const prev = angleMode
+  angleMode = 'deg'
+  try {
+    return fn()
+  } finally {
+    angleMode = prev
+  }
+}
+
 type AnyVal = unknown
 
 const isUnit = (x: AnyVal): x is { toNumber: (u: string) => number; formatUnits: () => string } =>

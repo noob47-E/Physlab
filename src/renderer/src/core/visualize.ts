@@ -66,6 +66,7 @@ export function visualizeSolution(sol: Solution, style?: DrawStyle): void {
     if (it.kind === 'arrow') {
       const o = b.vector({ kind: 'free', tail: it.tail, comp: it.comp }, { name: it.name, color: roleColor(it.role), auxiliary: it.auxiliary })
       if (it.labelMode) o.labelMode = it.labelMode
+      if (it.label) o.label = it.label
       made.set(it.name, o)
     } else if (it.kind === 'ghost') {
       // Dashed opposite sides, linked to the originals so dragging keeps the parallelogram.

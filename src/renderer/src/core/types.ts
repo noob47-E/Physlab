@@ -68,6 +68,8 @@ export interface ObjectBase {
   auxiliary?: boolean
   /** Free-text caption shown in the outliner. */
   caption?: string
+  /** Shown on the drawing and in the Outliner instead of `name`, when the name a student reads (−B, â) is not one the scene can hold. */
+  label?: string
   /** The drawing this belongs to (Vectors, Geometry, Graphing, Lab Data). Missing = shown everywhere,
    *  which is what an object made where no drawing is active (the Sandbox, say) gets. */
   space?: Space

@@ -26,10 +26,11 @@ export function renameInObjects(objects: Record<ObjId, SceneObject>, id: ObjId, 
   if (!obj || obj.name === next) return []
   // Last one wins, the same way `directDependents` and the evaluator resolve a name.
   const owner = new Map(Object.values(objects).map((o) => [o.name, o.id])).get(obj.name)
-  if (owner !== id) return [{ ...obj, name: next }]
+  // A student who renames the arrow chose its name; the working's label (−B) no longer applies.
+  if (owner !== id) return [{ ...obj, name: next, label: undefined }]
   const re = new RegExp(`(?<![\\w'])${obj.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w'])`, 'g')
   const swap = (e: string) => e.replace(re, next)
-  const changed: SceneObject[] = [{ ...obj, name: next }]
+  const changed: SceneObject[] = [{ ...obj, name: next, label: undefined }]
   for (const o of Object.values(objects)) {
     if (o.id === id || !exprRefs(o).some((e) => re.test(e))) continue
     re.lastIndex = 0

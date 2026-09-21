@@ -189,9 +189,26 @@ export function tex(n: number, decimals = 4): string {
   return t === '-0' ? '0' : t
 }
 
+/** A plain-text number made ready for KaTeX: an ASCII minus and a real exponent. */
+const toTex = (text: string): string => text.replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
+
 /** fmtPrecise for KaTeX: an ASCII minus and a real exponent. */
 export function texPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
-  return fmtPrecise(v, s).replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
+  return toTex(fmtPrecise(v, s))
+}
+
+/** fmtSci for KaTeX. */
+export function texSci(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  return toTex(fmtSci(v, s))
+}
+
+/**
+ * The power of ten fmtSci writes for `v`, so a vector can be scaled to the same power as its
+ * size. It is read from the rounded form, not from log10: 9.99999×10⁻²⁰ rounds to 1×10⁻¹⁹, and
+ * taking the exponent before rounding wrote it as "10×10⁻²⁰".
+ */
+export function sciExponent(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): number {
+  return Number(fmtSci(v, s).match(/×10\^(-?\d+)/)?.[1] ?? 0)
 }
 
 /** Number wrapped in parentheses when negative, for substituting into formulas. */
@@ -202,6 +219,19 @@ export function texP(n: number, decimals = 4): string {
 
 export const fmtPoint = (p: V3, decimals = 3): string =>
   Math.abs(p[2]) < 1e-12 ? `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)})` : `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)}, ${fmt(p[2], decimals)})`
+
+/**
+ * The direction in polar notation follows the student's angle unit and precision whenever the
+ * whole settings are given; a bare number of decimals means degrees, as the Measurements panel
+ * asks for. Hard-wired degrees at 2 d.p. put "R = 5.66 ∠ 45°" directly above "θ = 0.785 rad".
+ */
+const withAngleUnit = (p: Precision): p is MeasureSettings => typeof p === 'object' && 'angleUnit' in p
+function polarDirection(rad: number, p: Precision, forTex: boolean): string {
+  if (withAngleUnit(p)) return forTex ? texMeasure(rad, 'direction', p) : formatMeasure(rad, 'direction', p)
+  const d = typeof p === 'number' ? p : 2
+  if (NOTATION.direction === 'bearing') return forTex ? `\\text{${bearingText(rad, p)}}` : bearingText(rad, p)
+  return forTex ? texAngle(rad, 'deg', d) : fmtAngle(rad, 'deg', d)
+}
 
 /**
  * "3i + 4j − 2k" style, or whatever the notation setting asks for. `precision` is a number of
@@ -216,7 +246,7 @@ export function fmtIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
-    return `${fmtAt(m, precision)} ∠ ${NOTATION.direction === 'bearing' ? bearingText(ang, precision) : fmtAngle(ang < 0 ? ang + 2 * Math.PI : ang, 'deg', 2)}`
+    return `${fmtAt(m, precision)} ∠ ${polarDirection(ang < 0 ? ang + 2 * Math.PI : ang, precision, false)}`
   }
   const parts: string[] = []
   const names = ['i', 'j', 'k']
@@ -242,7 +272,7 @@ export function texIJK(v: V3, precision: Precision = 3): string {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
     const a = ang < 0 ? ang + 2 * Math.PI : ang
-    return `${texAt(m, precision)}\\,\\angle\\,${NOTATION.direction === 'bearing' ? `\\text{${bearingText(a, 2)}}` : texAngle(a, 'deg', 2)}`
+    return `${texAt(m, precision)}\\,\\angle\\,${polarDirection(a, precision, true)}`
   }
   const parts: string[] = []
   const names = ['\\hat{i}', '\\hat{j}', '\\hat{k}']

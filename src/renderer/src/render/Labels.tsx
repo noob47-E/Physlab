@@ -12,9 +12,11 @@ import { classifyPolygon } from '../math/shapes'
 
 /**
  * What the chip calls an object: a side of a shape is named by its corners (AB, not c),
- * and a shape by what it is (Trapezium ABCD, not poly1).
+ * a shape by what it is (Trapezium ABCD, not poly1), and a drawn answer by the name the
+ * working used (−B, not negB).
  */
 export function displayName(o: SceneObject, objects: Record<ObjId, SceneObject>, c?: Computed): string {
+  if (o.label) return o.label
   if (o.type === 'segment') {
     const inShape = Object.values(objects).some((p) => p.type === 'polygon' && p.points.includes(o.a) && p.points.includes(o.b))
     const a = objects[o.a]?.name

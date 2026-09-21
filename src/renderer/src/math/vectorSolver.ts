@@ -10,7 +10,7 @@
 // (decimals, significant figures, degrees or radians), never a fixed 4 d.p.
 
 import { add, angleBetween, cross, dot, heading, len, neg, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
-import { formatMeasure, texIJK, texMeasure, vecTex, type MeasureSettings } from './format'
+import { fmtSci, formatMeasure, sciExponent, texIJK, texMeasure, texSci, vecTex, type MeasureSettings } from './format'
 
 export interface Step {
   /** Plain explanation sentence. */
@@ -91,25 +91,23 @@ const is3D = (...vs: V3[]) => vs.some((v) => Math.abs(v[2]) > 1e-12)
 /** The number/angle writers for one solution, bound to the student's settings. */
 function writers(s: SolverSettings) {
   const num = (n: number) => texMeasure(n, 'number', s)
-  const parts = (n: number) => {
-    const e = Math.floor(Math.log10(Math.abs(n)))
-    return { e, m: n / Math.pow(10, e) }
-  }
   const tiny = (n: number) => n !== 0 && Math.abs(n) < 1e-12
   return {
     /** A number in LaTeX. */
     num,
     /**
      * A number that may be far below the noise floor: fmt writes anything under 1e-12 as 0 so
-     * a dragged point never shows 3×10⁻¹⁷, but a charge of 1.6×10⁻¹⁹ C is a real number.
+     * a dragged point never shows 3×10⁻¹⁷, but a charge of 1.6×10⁻¹⁹ C is a real number. The
+     * split into mantissa and exponent is fmtSci's, which rounds before choosing the power of
+     * ten; splitting by hand here wrote 9.99999×10⁻²⁰ as "10×10⁻²⁰".
      */
-    sci: (n: number) => (tiny(n) ? `${num(parts(n).m)}\\times 10^{${parts(n).e}}` : num(n)),
-    sciText: (n: number) => (tiny(n) ? `${formatMeasure(parts(n).m, 'number', s)}×10^${parts(n).e}` : formatMeasure(n, 'number', s)),
+    sci: (n: number) => (tiny(n) ? texSci(n, s) : num(n)),
+    sciText: (n: number) => (tiny(n) ? fmtSci(n, s) : formatMeasure(n, 'number', s)),
     /** A vector whose components are all that tiny, written as (mantissa vector) × 10ⁿ. */
     sciIJK: (v: V3) => {
       const big = Math.max(...v.map(Math.abs))
       if (!tiny(big)) return texIJK(v, s)
-      const { e } = parts(big)
+      const e = sciExponent(big, s)
       return `\\left(${texIJK(scale(v, Math.pow(10, -e)), s)}\\right)\\times 10^{${e}}`
     },
     /** A number wrapped in brackets when negative, for substituting into a formula. */
@@ -606,6 +604,26 @@ export function solveProjection(B: NamedVec, A: NamedVec, s: SolverSettings = DE
   const w = writers(s)
   const d = dot(A.v, B.v)
   const mA = len(A.v)
+  const title = `Projection of ${B.name} on ${A.name}`
+  const visual: Solution['visual'] = {
+    vectors: [
+      { name: A.name, v: A.v, role: 'input' },
+      { name: B.name, v: B.v, role: 'input' }
+    ],
+    mode: 'common-tail'
+  }
+  // Dividing by |A| = 0 printed "undefined" three times over; a zero vector has no direction to project onto.
+  if (mA < 1e-12) {
+    return finish({
+      title,
+      steps: [{ text: `${A.name} has zero length, so there is no direction to project ${B.name} onto.` }],
+      answers: [
+        { label: `${B.name} cos θ`, tex: '\\text{undefined}' },
+        { label: `proj of ${B.name} on ${A.name}`, tex: '\\text{undefined}' }
+      ],
+      visual
+    })
+  }
   const sc = d / mA
   const p = scale(A.v, d / (mA * mA))
   const steps: Step[] = [
@@ -619,21 +637,27 @@ export function solveProjection(B: NamedVec, A: NamedVec, s: SolverSettings = DE
     }
   ]
   return finish({
-    title: `Projection of ${B.name} on ${A.name}`,
+    title,
     steps,
     answers: [
       { label: `${B.name} cos θ`, tex: w.num(sc) },
       { label: `proj of ${B.name} on ${A.name}`, tex: w.ijk(p) }
     ],
-    visual: {
-      vectors: [
-        { name: A.name, v: A.v, role: 'input' },
-        { name: B.name, v: B.v, role: 'input' },
-        { name: 'proj', v: p, role: 'result' }
-      ],
-      mode: 'common-tail'
-    }
+    visual: { ...visual, vectors: [...visual.vectors, { name: 'proj', v: p, role: 'result' }] }
   })
+}
+
+/**
+ * v_AB = v_A − v_B, named from the cards. A card already called v_1 keeps its name — "v_v_1" is
+ * a double subscript KaTeX paints red — and gives just its subscript to the answer: v_1 − v_2
+ * is v_{12}, as a book writes it, while A − B is v_{A} − v_{B} = v_{AB}.
+ */
+export function solveRelativeVelocity(A: NamedVec, B: NamedVec, s: SolverSettings = DEFAULT_SETTINGS): Solution {
+  const subscript = (n: string) => n.match(/^[A-Za-z][A-Za-z0-9]*_\{?([A-Za-z0-9]+)\}?$/)?.[1]
+  const velocity = (n: string) => (subscript(n) ? n : `v_{${n}}`)
+  const tag = (n: string) => subscript(n) ?? n
+  const sol = solveSubtraction({ name: velocity(A.name), v: A.v }, { name: velocity(B.name), v: B.v }, `v_{${tag(A.name)}${tag(B.name)}}`, s)
+  return { ...sol, title: `Velocity of ${plain(A.name)} relative to ${plain(B.name)}` }
 }
 
 // ---------------------------------------------------------------------------
@@ -793,18 +817,29 @@ export function safeCardName(typed: string, current: string, others: string[]): 
 
 /**
  * A solution's vector name written so the scene can read it back: the drawing evaluates
- * expressions with mathjs, which cannot parse −B, â, v_{AB} or v×B as identifiers.
- *   −B → negB     â → ahat     v_{AB} → v_AB     v×B → vxB     τ → tau     A′ → A_
+ * expressions with mathjs, which cannot parse −B, â, v_{AB} or v×B as identifiers. A Greek
+ * letter is an identifier to mathjs and a valid scene name, so τ stays τ; it used to be
+ * spelled out as "tau", which is what the arrow was then labelled on the drawing.
+ *   −B → negB     â → ahat     v_{AB} → v_AB     v×B → vxB     A′ → A_
+ * The label a student reads on the picture is the original name (`sceneLabel`).
  */
 export function sceneName(name: string): string {
-  const GREEK: Record<string, string> = { τ: 'tau', θ: 'theta', α: 'alpha', β: 'beta', ω: 'omega', λ: 'lambda', μ: 'mu' }
   let s = name.normalize('NFD')
   s = s.replace(/^[−-]/, 'neg').replace(/̂/g, 'hat').replace(/[×⋅·]/g, 'x').replace(/′/g, '_')
-  s = s.replace(/[τθαβωλμ]/g, (g) => GREEK[g])
-  s = s.replace(/[^A-Za-z0-9_]/g, '')
+  s = s.replace(/[^A-Za-z0-9_Ͱ-Ͽ]/g, '')
   if (!s) return 'v'
-  if (!/^[A-Za-z]/.test(s)) s = `v${s}`
+  if (!/^[A-Za-zͰ-Ͽ]/.test(s)) s = `v${s}`
   return s
+}
+
+/**
+ * What the drawing calls the arrow, when that is not its scene name: −B, â and v×B are read by a
+ * student on the picture, so they must not appear as "negB", "ahat" and "vxB". A name the
+ * scene can hold as it is (R, τ, v_AB once the braces are gone) needs no separate label.
+ */
+export function sceneLabel(name: string): string | undefined {
+  const shown = plain(name)
+  return shown === sceneName(name) ? undefined : shown
 }
 
 // ---------------------------------------------------------------------------
@@ -832,6 +867,8 @@ export type DrawItem =
   | {
       kind: 'arrow'
       name: string
+      /** What the drawing shows for the arrow when its scene name is not readable: −B, â, v×B. */
+      label?: string
       tail: V3
       comp: V3
       role: VisualVector['role']
@@ -873,7 +910,7 @@ export function planDrawing(vis: NonNullable<Solution['visual']>, style?: DrawSt
   const arrow = (v: VisualVector, tail: V3): string => {
     const name = sceneName(v.name)
     const scaled = standIn(v)
-    items.push({ kind: 'arrow', name, tail, comp: v.drawn ?? v.v, role: v.role, auxiliary: v.role === 'helper' || scaled, labelMode: scaled ? 'name' : undefined })
+    items.push({ kind: 'arrow', name, label: sceneLabel(v.name), tail, comp: v.drawn ?? v.v, role: v.role, auxiliary: v.role === 'helper' || scaled, labelMode: scaled ? 'name' : undefined })
     if (scaled && v.note) items.push({ kind: 'note', name: `${name}note`, at: add(tail, v.drawn!), text: v.note })
     if (v.role !== 'helper' && !scaled) select = name
     return name

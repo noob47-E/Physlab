@@ -97,7 +97,7 @@ export function Outliner() {
                 >
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color, opacity: o.visible ? 1 : 0.3 }} />
                   <span className={`w-12 shrink-0 truncate font-math font-semibold italic ${o.auxiliary ? 'text-ink-faint' : 'text-ink-strong'}`}>
-                    {o.name}
+                    {o.label ?? o.name}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-fine text-ink-dim">
                     {err ? <span className="text-bad">{err}</span> : o.type === 'graph' ? o.source : <Tex tex={describeComputed(ev.values.get(o.id), 2)} />}

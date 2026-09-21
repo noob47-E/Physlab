@@ -7,10 +7,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import katex from 'katex'
 import * as THREE from 'three/webgpu'
 import * as VS from '../src/renderer/src/math/vectorSolver'
-import { setNotation, type MeasureSettings } from '../src/renderer/src/math/format'
+import { fmtIJK, setNotation, type MeasureSettings } from '../src/renderer/src/math/format'
 import { fromPolar, toRad } from '../src/renderer/src/math/vec'
 import { pickAt } from '../src/renderer/src/render/picking'
 import type { Computed, ObjId, SceneObject } from '../src/renderer/src/core/types'
+import { isValidName } from '../src/renderer/src/core/naming'
+import { math } from '../src/renderer/src/math/expr'
 import { resetGlobals } from './helpers/globals'
 
 const renders = (tex: string, where: string): void => {
@@ -77,7 +79,11 @@ describe('every solver renders through KaTeX', () => {
     ['magnetic force', () => VS.solveMagneticForce(1.6e-19, [1, 0, 0], [0, 0, 1])],
     ['magnetic force on an electron', () => VS.solveMagneticForce(-1.6e-19, [2e6, 0, 0], [0, 0.5, 0])],
     ['work', () => VS.solveWork(fromPolar(20, toRad(30)), [5, 0, 0])],
-    ['relative velocity (double subscript)', () => VS.solveSubtraction({ name: 'v_A', v: [3, 0, 0] }, { name: 'v_B', v: [0, 4, 0] }, 'v_{AB}')]
+    ['relative velocity (double subscript)', () => VS.solveSubtraction({ name: 'v_A', v: [3, 0, 0] }, { name: 'v_B', v: [0, 4, 0] }, 'v_{AB}')],
+    ['relative velocity of cards A and B', () => VS.solveRelativeVelocity(A, B)],
+    ['relative velocity of cards v_1 and v_2', () => VS.solveRelativeVelocity({ name: 'v_1', v: [3, 0, 0] }, { name: 'v_2', v: [0, 4, 0] })],
+    ['relative velocity of a four-letter card', () => VS.solveRelativeVelocity({ name: 'Boat', v: [3, 0, 0] }, { name: 'v_r', v: [0, 4, 0] })],
+    ['projection onto a zero vector', () => VS.solveProjection(B, { name: 'O', v: [0, 0, 0] })]
   ]
   for (const [name, make] of cases) {
     it(name, () => {
@@ -97,6 +103,22 @@ describe('every solver renders through KaTeX', () => {
     rendersAll(VS.solveAddition([A, B]), 'column')
     setNotation({ components: 'polar', direction: 'bearing' })
     rendersAll(VS.solveSubtraction(A, B), 'polar + bearing')
+    // The direction in polar notation follows the scene's unit and precision like everything
+    // else: in radians at 3 s.f. the answer card read "5.66 ∠ 45°" directly above "θ = 0.785 rad".
+    setNotation({ components: 'polar', direction: 'standard' })
+    const polar = VS.solveAddition([{ name: 'A', v: [4, 0, 0] }, { name: 'B', v: [0, 4, 0] }], 'R', rad)
+    expect(polar.answers[0].tex).toBe('5.66\\,\\angle\\,0.785\\,\\text{rad}')
+    expect(VS.solveAddition([{ name: 'A', v: [4, 0, 0] }, { name: 'B', v: [0, 4, 0] }], 'R', dp2).answers[0].tex).toBe('5.66\\,\\angle\\,0.79\\,\\text{rad}')
+    const deg3: MeasureSettings = { ...rad, angleUnit: 'deg' }
+    expect(VS.solveAddition([{ name: 'A', v: [4, 0, 0] }, { name: 'B', v: [0, 4, 0] }], 'R', deg3).answers[0].tex).toBe('5.66\\,\\angle\\,45.0^\\circ')
+    setNotation({ direction: 'bearing' })
+    expect(VS.solveAddition([{ name: 'A', v: [4, 0, 0] }, { name: 'B', v: [0, 4.001, 0] }], 'R', deg3).answers[0].tex).toBe('5.66\\,\\angle\\,\\text{N 45.0° E}')
+    expect(fmtIJK([4, 4.001, 0], deg3)).toBe('5.66 ∠ N 45.0° E')
+    // Bearings are degrees; a scene in radians writes the direction in radians.
+    expect(fmtIJK([4, 4, 0], rad)).toBe('5.66 ∠ 0.785 rad')
+    // The Measurements panel's bare number of decimals still means degrees.
+    setNotation({ direction: 'standard' })
+    expect(fmtIJK([4, 4, 0], 2)).toBe('5.66 ∠ 45°')
   })
 })
 
@@ -172,6 +194,17 @@ describe('textbook values', () => {
     expect(plain.visual!.vectors.find((v) => v.name === 'F')!.note).toBeUndefined()
   })
 
+  it('a tiny force whose mantissa rounds up is 1×10⁻¹⁸, never 10×10⁻¹⁹', () => {
+    const sol = VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0])
+    expect(sol.answers[0].tex).toBe('\\left(1\\hat{k}\\right)\\times 10^{-18}\\,\\text{N}')
+    expect(sol.answers[1].tex).toBe('1\\times 10^{-18}\\,\\text{N}')
+    expect(sol.visual!.vectors.find((v) => v.name === 'F')!.note).toContain('|F| = 1×10^-18 N')
+    const sf: MeasureSettings = { decimals: 3, precisionMode: 'sf', unit: 'unit', unitPerSquare: 1, angleUnit: 'deg' }
+    expect(VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0], sf).answers[1].tex).toBe('1.00\\times 10^{-18}\\,\\text{N}')
+    // The charge in the sentence takes the same form.
+    expect(VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0]).steps.map((s) => s.text ?? '').join(' ')).toContain('q = 1×10^-19 C')
+  })
+
   it('the drawing method picks a 1-2-5 scale so the longest vector is about ten squares', () => {
     expect(VS.drawingScale(5)).toBe(0.5)
     expect(VS.drawingScale(50)).toBe(5)
@@ -219,7 +252,8 @@ describe('textbook values', () => {
       ['work', VS.solveWork([0, 0, 0], [1, 2, 0])],
       ['cosine law', VS.solveAdditionCosineLaw(A, O)],
       ['scale by 0', VS.solveScalarMultiply(0, A)],
-      ['magnitude', VS.solveMagnitudeDirection(O)]
+      ['magnitude', VS.solveMagnitudeDirection(O)],
+      ['projection', VS.solveProjection(A, O)]
     ] as [string, VS.Solution][]) {
       rendersAll(sol, name)
       const text = sol.steps.map((st) => st.text ?? '').join(' ')
@@ -232,6 +266,12 @@ describe('textbook values', () => {
     expect(VS.solveDot(A, O).steps.map((st) => st.text).join(' ')).toContain('O has zero length')
     expect(VS.solveDot(A, O).answers[1].tex).toBe('\\text{undefined}')
     expect(VS.solveScalarMultiply(0, A).steps[2].text).toContain('k is zero')
+    // Projecting onto the zero vector divided by |O| = 0 and printed "undefined" three times.
+    const proj = VS.solveProjection(A, O)
+    expect(proj.steps[0].text).toBe('O has zero length, so there is no direction to project A onto.')
+    expect(proj.answers.map((a) => a.tex)).toEqual(['\\text{undefined}', '\\text{undefined}'])
+    expect(JSON.stringify(proj)).not.toMatch(/[^{]undefined/)
+    expect(VS.solveProjection(A, B).answers[0].tex).toBe('0.8944')
     setNotation({ direction: 'bearing' })
     expect(VS.solveMagnitudeDirection(O).answers[1].tex).toBe('\\text{undefined}')
     setNotation({ direction: 'standard' })
@@ -252,6 +292,20 @@ describe('names', () => {
     renders(VS.sub_('v_{AB}', 'x'), 'subscript')
   })
 
+  it('relative velocity names the velocities from the cards without a double subscript', () => {
+    const plainCards = VS.solveRelativeVelocity(A, B)
+    expect(plainCards.title).toBe('Velocity of A relative to B')
+    expect(plainCards.steps[0].tex).toContain('\\vec{v_{A}} - \\vec{v_{B}}')
+    expect(plainCards.visual!.vectors.find((v) => v.role === 'result')!.name).toBe('v_{AB}')
+    // Cards already called v_1 and v_2 gave \vec{v_v_1}, a double subscript KaTeX paints red.
+    const numbered = VS.solveRelativeVelocity({ name: 'v_1', v: [3, 0, 0] }, { name: 'v_2', v: [0, 4, 0] })
+    expect(numbered.steps[0].tex).toContain('\\vec{v_1} - \\vec{v_2}')
+    expect(numbered.visual!.vectors.find((v) => v.role === 'result')!.name).toBe('v_{12}')
+    expect(numbered.title).toBe('Velocity of v_1 relative to v_2')
+    // A longer card name is braced, or KaTeX subscripts its first letter only.
+    expect(VS.solveRelativeVelocity({ name: 'Boat', v: [3, 0, 0] }, { name: 'v_r', v: [0, 4, 0] }).steps[0].tex).toContain('\\vec{v_{Boat}} - \\vec{v_r}')
+  })
+
   it('scene names are ones mathjs can read back', () => {
     expect(VS.sceneName('R')).toBe('R')
     expect(VS.sceneName('−B')).toBe('negB')
@@ -259,11 +313,36 @@ describe('names', () => {
     expect(VS.sceneName('â')).toBe('ahat')
     expect(VS.sceneName('v_{AB}')).toBe('v_AB')
     expect(VS.sceneName('v×B')).toBe('vxB')
-    expect(VS.sceneName('τ')).toBe('tau')
+    // A Greek letter is an identifier to mathjs and a valid scene name; it used to be "tau".
+    expect(VS.sceneName('τ')).toBe('τ')
+    expect(VS.sceneName('θ_1')).toBe('θ_1')
     expect(VS.sceneName('(-B)')).toBe('B')
     expect(VS.sceneName('2A')).toBe('v2A')
     expect(VS.sceneName('')).toBe('v')
-    for (const n of ['negB', 'ahat', 'v_AB', 'vxB', 'tau', 'v2A']) expect(n).toMatch(/^[A-Za-z][A-Za-z0-9_]*$/)
+    for (const n of ['negB', 'ahat', 'v_AB', 'vxB', 'τ', 'v2A']) {
+      expect(isValidName(n), n).toBe(true)
+      expect(math.evaluate(`${n} + 1`, { [n]: 2 }), n).toBe(3)
+    }
+  })
+
+  it('the drawing labels an arrow by the name in the working, not its scene name', () => {
+    expect(VS.sceneLabel('−B')).toBe('−B')
+    expect(VS.sceneLabel('â')).toBe('â')
+    expect(VS.sceneLabel('v×B')).toBe('v×B')
+    // Names the scene can hold as they are need no separate label.
+    expect(VS.sceneLabel('R')).toBeUndefined()
+    expect(VS.sceneLabel('τ')).toBeUndefined()
+    expect(VS.sceneLabel('v_{AB}')).toBeUndefined()
+    const torque = VS.planDrawing(VS.solveTorque([0.5, 0, 0], [0, 20, 0]).visual!)
+    const tau = torque.items.find((it) => it.kind === 'arrow' && it.role === 'result')
+    expect(tau && tau.kind === 'arrow' && tau.name).toBe('τ')
+    expect(tau && tau.kind === 'arrow' && tau.label).toBeUndefined()
+    const sub = VS.planDrawing(VS.solveSubtraction(A, B).visual!)
+    const helper = sub.items.find((it) => it.kind === 'arrow' && it.name === 'negB')
+    expect(helper && helper.kind === 'arrow' && helper.label).toBe('−B')
+    const unit = VS.planDrawing(VS.solveUnitVector(A).visual!)
+    // The solver writes â as a plus a combining hat, and that is what the label carries.
+    expect(unit.items.map((it) => (it.kind === 'arrow' ? it.label : undefined))).toContain('â')
   })
 
   it('a card cannot be renamed to i, j, k, an empty name or another card’s name', () => {

@@ -4,7 +4,7 @@
 // (quadrant, sign, sin instead of cos, radians instead of degrees, a factor of ten) instead of
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
-import { getAngleMode, math, preprocess, setAngleMode } from './expr'
+import { inDegrees, math, preprocess } from './expr'
 import { fmtPrecise, fmtSci, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
@@ -37,15 +37,11 @@ export function parseAnswer(text: string): number | null {
   if (!t.trim()) return null
   // The practice questions are set in degrees whatever the calculator was last switched to:
   // "sin(30)" typed as an answer must be 0.5 even after a session in radians.
-  const prev = getAngleMode()
-  setAngleMode('deg')
   try {
-    const v = Number(math.evaluate(preprocess(t)))
+    const v = inDegrees(() => Number(math.evaluate(preprocess(t))))
     return Number.isFinite(v) ? v : null
   } catch {
     return null
-  } finally {
-    setAngleMode(prev)
   }
 }
 

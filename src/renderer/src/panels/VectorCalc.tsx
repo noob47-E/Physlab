@@ -13,8 +13,8 @@ import { useScene } from '../core/store'
 import type { EvalResult } from '../core/types'
 import { visualizeSolution, type DrawStyle } from '../core/visualize'
 import { latexToMath } from '../math/latexToMath'
-import { getAngleMode, math, preprocess, setAngleMode, toV3 } from '../math/expr'
-import { formatMeasure, texIJK } from '../math/format'
+import { inDegrees, math, preprocess, toV3 } from '../math/expr'
+import { formatMeasure, texIJK, texMeasure } from '../math/format'
 import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
@@ -124,21 +124,6 @@ function evalNumber(latex: string): number {
 }
 
 const friendly = (e: unknown): string => (e instanceof Error ? e.message.replace(/^Undefined symbol/, 'Unknown name') : 'Cannot read this vector')
-
-/**
- * Runs `fn` with the calculator in degrees — a card's 10∠30° is always degrees — and puts the
- * mode back after, so opening the Vectors panel does not silently switch a student working in
- * radians in the Calculator.
- */
-function inDegrees<T>(fn: () => T): T {
-  const prev = getAngleMode()
-  setAngleMode('deg')
-  try {
-    return fn()
-  } finally {
-    setAngleMode(prev)
-  }
-}
 
 /** The vector value of a card, or an error message. */
 function cardValue(card: Card, cards: Card[], ev: EvalResult): V3 | string {
@@ -307,11 +292,9 @@ export function VectorCalc() {
         case 'lorentz':
           sol = VS.solveMagneticForce(evalNumber(st.q), A.v, B.v, settings)
           break
-        case 'relvel': {
-          const s = VS.solveSubtraction({ name: `v_${A.name}`, v: A.v }, { name: `v_${B.name}`, v: B.v }, `v_{${A.name}${B.name}}`, settings)
-          sol = { ...s, title: `Velocity of ${A.name} relative to ${B.name}` }
+        case 'relvel':
+          sol = VS.solveRelativeVelocity(A, B, settings)
           break
-        }
         default:
           return
       }
@@ -332,7 +315,8 @@ export function VectorCalc() {
       const src = preprocess(latexToMath(st.expr, { vectorOps: true }))
       const out = inDegrees(() => math.parse(src).compile().evaluate(scope))
       if (typeof out === 'number') {
-        const shown = formatMeasure(out, 'number', settings)
+        // Both strings are KaTeX: the plain-text form's "×10^-5" put only the minus in the superscript.
+        const shown = texMeasure(out, 'number', settings)
         set({ result: { label: 'Expression', sol: { title: 'Result', steps: [{ tex: `${st.expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } } })
         return
       }
