@@ -10,7 +10,7 @@ export function RecoveryBar() {
   const when = new Date(found.savedAt)
   const name = found.path ? found.path.split(/[\\/]/).pop() : 'untitled'
   return (
-    <div className="flex items-center gap-3 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-amber-100">
+    <div className="flex items-center gap-3 border-b border-warn/40 bg-warn/10 px-3 py-1.5 text-ink">
       <RotateCcw size={14} />
       <span className="flex-1">
         PhysLab closed with unsaved work in <b>{name}</b> ({found.file.objects.length} objects

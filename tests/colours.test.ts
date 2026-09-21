@@ -22,10 +22,6 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'rendere
  * merge: remove every entry that has become clean, and never add one for a new file.
  */
 const COLOUR_ALLOW = new Set([
-  'app/RecoveryBar.tsx',
-  'app/TopBar.tsx',
-  'panels/Calculator.tsx',
-  'panels/calcModes.tsx',
   'render/CameraRig.tsx',
   'render/GraphView.tsx',
   'render/Interaction.tsx',
@@ -37,16 +33,10 @@ const COLOUR_ALLOW = new Set([
 
 /** Files that still size text in pixels. Tighten after merge, as above. */
 const SIZE_ALLOW = new Set([
-  'app/SearchPalette.tsx',
-  'app/TopBar.tsx',
-  'app/tour/Tour.tsx',
-  'panels/Calculator.tsx',
   'panels/Sandbox.tsx',
   'panels/Solver.tsx',
   'panels/Timeline.tsx',
   'panels/VectorCalc.tsx',
-  'panels/Working.tsx',
-  'panels/calcModes.tsx',
   'render/Viewport.tsx'
 ])
 

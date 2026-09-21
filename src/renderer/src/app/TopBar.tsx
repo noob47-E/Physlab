@@ -190,7 +190,7 @@ function Menu({ label, items, title, className = '' }: { label: React.ReactNode;
 
 const UNITS: LengthUnit[] = ['unit', 'mm', 'cm', 'm', 'km', 'in', 'ft']
 
-const Heading = ({ children }: { children: React.ReactNode }) => <div className="mb-1 text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{children}</div>
+const Heading = ({ children }: { children: React.ReactNode }) => <div className="mb-1 text-fine uppercase tracking-wide text-[var(--text-faint)]">{children}</div>
 
 /** Units, precision, what every object shows on the drawing, and the size of the whole window. */
 function MeasureSettingsMenu({ density }: { density: BarDensity }) {
@@ -246,7 +246,7 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
           </div>
           <Heading>Show labels on the drawing</Heading>
           <LabelShowSwitch className="mb-1" />
-          <div className="mb-2 text-[11px] leading-snug text-[var(--text-faint)]">
+          <div className="mb-2 text-fine leading-snug text-[var(--text-faint)]">
             {LABEL_SHOW_HELP[settings.labelShow]} Pin a label to keep it on (Properties, Outliner or Measure panel).
           </div>
           <label className="mb-3 flex cursor-pointer items-center gap-2 text-[var(--text)]">
@@ -358,7 +358,8 @@ export function TopBar() {
   return (
     <div ref={barRef} className={`topbar ${density}`}>
       <div className="mr-2 flex items-center gap-2 pl-1 font-semibold tracking-wide text-[var(--text-strong)]">
-        <span className="inline-block h-4 w-4 rounded-sm bg-gradient-to-br from-sky-400 to-fuchsia-500" />
+        {/* The logo sweeps between two series colours, so it deepens in the light theme the way the charts do. */}
+        <span className="inline-block h-4 w-4 rounded-sm" style={{ background: 'linear-gradient(135deg, var(--series-1), var(--series-5))' }} />
         {density !== 'tight' && 'PhysLab'}
       </div>
       <Menu
@@ -470,13 +471,13 @@ export function TopBar() {
         <Search size={14} />
         {density !== 'tight' && (
           <>
-            Search <kbd className="rounded border border-[var(--line)] bg-[var(--bg-3)] px-1 text-[10px] text-[var(--text-dim)]">Ctrl K</kbd>
+            Search <kbd className="rounded border border-[var(--line)] bg-[var(--bg-3)] px-1 text-fine text-[var(--text-dim)]">Ctrl K</kbd>
           </>
         )}
       </button>
       <MeasureSettingsMenu density={density} />
       {density !== 'tight' && (
-        <span className="ml-2 max-w-[14rem] truncate text-[12px] text-[var(--text-dim)]" title={filePath ?? undefined}>
+        <span className="ml-2 max-w-[14rem] truncate text-small text-[var(--text-dim)]" title={filePath ?? undefined}>
           {title}
           {dirty ? ' •' : ''}
         </span>
@@ -510,7 +511,7 @@ export function ToolShelf() {
         )
       })}
       <div className="flex-1" />
-      {shelf === 'full' && <span className="hidden truncate pr-2 text-[11px] text-[var(--text-faint)] xl:inline">{def.description}</span>}
+      {shelf === 'full' && <span className="hidden truncate pr-2 text-fine text-[var(--text-faint)] xl:inline">{def.description}</span>}
     </div>
   )
 }

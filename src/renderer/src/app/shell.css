@@ -1,13 +1,9 @@
-/* The shell's own behaviour styles: menus that fit a short screen, the folded top bar, the
-   icon-only tool shelf, and focus rings now that Tab reaches the controls again.
+/* The shell's own behaviour styles: the folded top bar, the icon-only tool shelf, and focus rings
+   now that Tab reaches the controls again. The menu's own box (and the max-height that keeps a
+   24-row View menu on a 768 px screen) lives with .menu in styles.css.
    Colours are the theme tokens from styles.css; nothing here names a colour of its own.
    Inside @layer components, or Tailwind's width/height utilities stop working (see AGENTS.md). */
 @layer components {
-  /* A 24-row View menu ran off the bottom of a 768 px screen with no way to reach the last rows. */
-  .menu {
-    max-height: calc(100vh - 80px);
-    overflow-y: auto;
-  }
   .menu button.on {
     color: var(--text-strong);
   }

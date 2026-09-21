@@ -165,7 +165,7 @@ function PureMathRow({ latex }: { latex: string }) {
   ]
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[11px] text-[color:var(--text-faint)]">Pure Math</span>
+      <span className="text-fine text-[color:var(--text-faint)]">Pure Math</span>
       <button
         className="btn"
         disabled={!text}
@@ -213,7 +213,7 @@ interface Result {
   error?: boolean
 }
 
-const CHIP = 'rounded px-2 py-0.5 text-[11px] font-semibold'
+const CHIP = 'rounded px-2 py-0.5 text-fine font-semibold'
 const CHIP_ON = 'bg-[color:var(--accent-2)] text-[color:var(--text-strong)]'
 const CHIP_OFF = 'bg-[color:var(--bg-3)] text-[color:var(--text-dim)] hover:text-[color:var(--text-strong)]'
 
@@ -420,7 +420,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
           const y = Number(math.evaluate(casioToMath(f), { x: k }))
           const top = bld.point([k, y, 0], { auxiliary: true, showLabel: false })
           const baseP = bld.point([k, 0, 0], { auxiliary: true, visible: false })
-          bld.segment(baseP.id, top.id, { color: themeColor('--accent', '#4dabf7'), showLabel: false })
+          bld.segment(baseP.id, top.id, { color: themeColor('--accent'), showLabel: false })
         }
         bld.commit()
         useScene.getState().setViewMode('2d')
@@ -569,7 +569,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
         {mode === 'BASE-N' ? (
           <input
             ref={baseRef}
-            className="w-full bg-transparent font-mono text-[16px] text-[color:var(--lcd-text)] outline-none"
+            className="w-full bg-transparent font-mono text-lead text-[color:var(--lcd-text)] outline-none"
             value={calc.input}
             spellCheck={false}
             placeholder="e.g. FF + 1A   or   1010 and 0110"
@@ -586,12 +586,12 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
           {result && (
             <>
               {showExact && exactTex && !result.error ? <Tex tex={exactTex} /> : <span className={result.error ? 'text-[color:var(--lcd-bad)]' : ''}>{result.main}</span>}
-              {showExact && exactTex && !result.error && !/^-?\d+$/.test(exactTex) && <div className="text-[13px] opacity-70">≈ {result.main}</div>}
+              {showExact && exactTex && !result.error && !/^-?\d+$/.test(exactTex) && <div className="text-body opacity-70">≈ {result.main}</div>}
             </>
           )}
         </div>
         {result?.extra && (
-          <div className="text-right text-[12px] leading-5 text-[color:var(--lcd-dim)]">
+          <div className="text-right text-small leading-5 text-[color:var(--lcd-dim)]">
             {result.extra.map((x, i) => (
               <div key={i}>{x}</div>
             ))}
@@ -601,7 +601,7 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
 
       {calcVars && (
         <div className="card p-2">
-          <div className="mb-1 text-[11px] text-[color:var(--text-dim)]">CALC: enter the values, then press Calculate</div>
+          <div className="mb-1 text-fine text-[color:var(--text-dim)]">CALC: enter the values, then press Calculate</div>
           <CalcVarForm
             vars={calcVars}
             initial={calc.vars}
@@ -667,13 +667,13 @@ function ScientificMode({ mode }: { mode: 'COMP' | 'CMPLX' | 'BASE-N' }) {
       {mode === 'BASE-N' && <Keypad keys={baseKeys} cols={6} onKey={onKey} />}
       {mode === 'CMPLX' && <Keypad keys={cmplxKeys} cols={6} onKey={onKey} />}
       {mode !== 'BASE-N' && (
-        <button className="flex items-center gap-1 self-start text-[11px] text-[color:var(--text-faint)] hover:text-[color:var(--text)]" onClick={toggleFn} title={fnOpen ? 'Fold the function keys away' : 'Show the function keys'}>
+        <button className="flex items-center gap-1 self-start text-fine text-[color:var(--text-faint)] hover:text-[color:var(--text)]" onClick={toggleFn} title={fnOpen ? 'Fold the function keys away' : 'Show the function keys'}>
           {fnOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Function keys
         </button>
       )}
       {mode !== 'BASE-N' && fnOpen && <Keypad keys={FN_KEYS} cols={6} onKey={onKey} />}
       <Keypad keys={NUM_KEYS} cols={5} onKey={onKey} />
-      <div className="flex items-center gap-1.5 text-[11px] text-[color:var(--text-faint)]">
+      <div className="flex items-center gap-1.5 text-fine text-[color:var(--text-faint)]">
         <Sparkles size={12} /> Tip: type straight on your keyboard too: <code className="text-[color:var(--code-text)]">/</code> makes a fraction, <code className="text-[color:var(--code-text)]">^</code> a power, <code className="text-[color:var(--code-text)]">sqrt</code> a root.
       </div>
     </>
