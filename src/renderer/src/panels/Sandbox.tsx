@@ -10,9 +10,8 @@ import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodySta
 import { launchVelocity, PRESETS, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
 import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_TITLES, joinCandidates, readFold, writeFold, type ControlKey, type FoldId, type FoldStore } from '../sim/inspector'
-import { QUANTITIES, quantity, RECORDING_COLUMNS, rowsFor, type QuantityKey, type Sample } from '../sim/recording'
+import { QUANTITIES, quantity, tableFrom, type QuantityKey } from '../sim/recording'
 import { useLab } from '../lab/labStore'
-import type { LabTable } from '../lab/types'
 import type { SceneSettings } from '../core/types'
 import { LabChart } from './LabChart'
 import { enterMode } from '../app/layout'
@@ -847,15 +846,10 @@ function Recording() {
           disabled={samples.length < 2}
           title="Put these readings in a new Lab Data table, ready to plot and fit"
           onClick={() => {
-            // A new table beside the ones already there: this used to replace every table the
-            // student had typed. setTables always points currentId at the first table (it exists
-            // to replace everything when a project opens), so without setCurrent here the new
-            // table lands at the end of the list and Lab Data keeps showing whatever was open
-            // before — the send looked like it did nothing.
-            const lab = useLab.getState()
-            const table = tableFrom(watched.name, samples)
-            lab.setTables([...lab.tables, table])
-            lab.setCurrent(table.id)
+            // appendTable, not setTables: setTables replaces the file's tables, points at the
+            // first one and forgets the undo history, so the send used to land its table at the
+            // end of a list Lab Data had no way to reach — it looked like it did nothing.
+            useLab.getState().appendTable(tableFrom(watched.name, samples))
             enterMode('lab')
           }}
         >
@@ -867,17 +861,4 @@ function Recording() {
       </div>
     </>
   )
-}
-
-/** The samples as a Lab Data table, with the columns named and carrying their units. */
-function tableFrom(name: string, samples: Sample[]): LabTable {
-  const columns = RECORDING_COLUMNS.map((c, i) => ({ id: `rc${i}`, name: c.name, unit: c.unit }))
-  return {
-    id: `rec${Date.now().toString(36)}`,
-    title: `${name} — from the Sandbox`,
-    columns,
-    rows: rowsFor(samples),
-    // Height against time to begin with; the student picks the pair they actually want.
-    plot: { x: columns[0].id, y: columns[2].id, fit: 'linear' }
-  }
 }

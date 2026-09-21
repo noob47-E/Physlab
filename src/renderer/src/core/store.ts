@@ -381,7 +381,7 @@ export const blankSceneFile = (): SceneFile => ({
   version: FILE_VERSION,
   objects: [],
   settings: DEFAULT_SETTINGS,
-  lab: [emptyTable('Experiment')],
+  lab: [emptyTable()],
   sandbox: { bodies: startingScene(), links: [], world: DEFAULT_WORLD, sideView: true }
 })
 

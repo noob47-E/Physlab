@@ -6,7 +6,7 @@ import { saveTextFile } from '../app/files'
 import { useScene } from '../core/store'
 import { visualizeReadings } from '../core/visualize'
 import { applyPaste, csvFileName, parseTable, toCsv } from '../lab/csv'
-import { addColumn, addRow, addUncertainty, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
+import { addColumn, addRow, addUncertainty, DEFAULT_TABLE_TITLE, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
 import { columnHeader, headerOf, isUsableName, plotSeries, ratioUnit, resolveValues, uncertaintyIndex } from '../lab/values'
 import { betterFit, fitOf, gradientMeaning, gradientRange, MIN_POINTS, pmText, rankFits, type Fit } from '../lab/fit'
 import { FIT_LABELS, type FitShape, type LabColumn, type LabTable } from '../lab/types'
@@ -160,6 +160,9 @@ export function LabData() {
   const tables = useLab((s) => s.tables)
   const currentId = useLab((s) => s.currentId)
   const update = useLab((s) => s.update)
+  const setCurrent = useLab((s) => s.setCurrent)
+  const addTable = useLab((s) => s.addTable)
+  const removeTable = useLab((s) => s.removeTable)
   // Worked-out columns and the fitted numbers follow the student's precision like every other
   // number on screen; they used to be hard-wired to four decimals whatever the settings said.
   const settings = useScene((s) => s.settings)
@@ -203,6 +206,25 @@ export function LabData() {
         Type the readings you measured. A column can also be worked out from the others — press{' '}
         <Sigma size={11} className="inline" /> and write something like <code>t^2</code>. Press ± to say how uncertain a
         reading is.
+      </div>
+
+      {/* One tab per table. A recording sent from the Sandbox lands beside the readings the
+          student typed, and this is how they get back to those — without it the older tables
+          were still in the file but nothing on screen could reach them. */}
+      <div className="mt-2 flex items-center gap-2 px-3">
+        <div className="seg min-w-0 shrink overflow-x-auto">
+          {tables.map((t) => (
+            <button key={t.id} className={t.id === table.id ? 'on' : ''} title={t.title || DEFAULT_TABLE_TITLE} onClick={() => setCurrent(t.id)}>
+              <span className="max-w-40 truncate">{t.title || DEFAULT_TABLE_TITLE}</span>
+            </button>
+          ))}
+        </div>
+        <button className="icon-btn" title="Start another table" onClick={addTable}>
+          <Plus size={13} />
+        </button>
+        <button className="icon-btn" title="Remove this table (Ctrl+Z brings it back)" onClick={() => removeTable(table.id)}>
+          <X size={13} />
+        </button>
       </div>
 
       <div className="mt-2 px-3">

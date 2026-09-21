@@ -1,7 +1,9 @@
 // The lab table: what gets worked out from what, and what reaches the graph.
 
-import { describe, expect, it } from 'vitest'
-import { addColumn, addRow, addUncertainty, emptyTable, removeColumn, setCell, setColumn, useLab } from '../src/renderer/src/lab/labStore'
+import { describe, expect, it, vi } from 'vitest'
+import { addColumn, addRow, addUncertainty, DEFAULT_TABLE_TITLE, emptyTable, removeColumn, setCell, setColumn, uniqueTitle, useLab } from '../src/renderer/src/lab/labStore'
+import { rowsFor, tableFrom } from '../src/renderer/src/sim/recording'
+import { readSource } from './helpers/repo'
 import { headerOf, isUsableName, plotPairs, plotSeries, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
 import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/renderer/src/lab/fit'
 import { chartSeries } from '../src/renderer/src/lab/chartData'
@@ -374,19 +376,75 @@ describe('readings pasted in or read from a file', () => {
 })
 
 describe('sending a Sandbox recording to Lab Data', () => {
-  it('setTables always points current at the first table, so appending one needs setCurrent too', () => {
-    // This is the Sandbox "Send to Lab Data" flow: the existing tables stay, a new one lands at
-    // the end, and the student switches to Lab expecting to see it. setTables alone leaves
-    // currentId on tables[0] (it exists to replace everything when a project opens) — a caller
-    // that appends without also calling setCurrent shows the same old table, and the send looks
-    // like it did nothing.
-    const before = useLab.getState().tables
-    const added = emptyTable('From the Sandbox')
-    useLab.getState().setTables([...before, added])
-    expect(useLab.getState().currentId).not.toBe(added.id)
+  const samples = [
+    { t: 0, x: 0, y: 5, v: 0, ke: 0, pe: 49.05, p: 0 },
+    { t: 0.5, x: 0, y: 3.77375, v: 4.905, ke: 12.0295125, pe: 37.0204875, p: 4.905 },
+    { t: 1, x: 0, y: 0.095, v: 9.81, ke: 48.11805, pe: 0.93195, p: 9.81 }
+  ]
 
-    useLab.getState().setCurrent(added.id)
-    expect(useLab.getState().currentId).toBe(added.id)
-    expect(useLab.getState().tables.find((t) => t.id === added.id)).toEqual(added)
+  it('tableFrom gives the recording columns with their units, height against time to begin with', () => {
+    const t = tableFrom('Ball', samples)
+    expect(t.title).toBe('Ball — from the Sandbox')
+    expect(t.columns.map((c) => `${c.name}/${c.unit}`)).toEqual(['t/s', 'x/m', 'y/m', 'v/m/s', 'KE/J'])
+    expect(t.rows).toEqual(rowsFor(samples))
+    expect(t.rows[1]).toEqual([0.5, 0, 3.7738, 4.905, 12.03])
+    expect(t.columns.find((c) => c.id === t.plot.x)?.name).toBe('t')
+    expect(t.columns.find((c) => c.id === t.plot.y)?.name).toBe('y')
+  })
+
+  it('appendTable keeps the typed tables, opens the new one, and Ctrl+Z takes it back', () => {
+    // setTables exists to replace everything when a project opens: it points at the first table
+    // and forgets the undo history. The send used to go through it, so the recording landed at
+    // the end of a list Lab Data was not showing — "it does not send data to lab at all".
+    useLab.getState().setTables([freeFall()])
+    const typed = useLab.getState().tables[0]
+    useLab.getState().update(typed.id, (t) => setCell(t, 0, 0, 0.25))
+    const stepsBefore = useLab.getState().past.length
+
+    // Edits under 700 ms apart fold into one undo step (a burst of keystrokes); the student
+    // switched modes between typing and pressing Send, so the clock has moved on.
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.now() + 5000)
+    const sent = tableFrom('Ball', samples)
+    useLab.getState().appendTable(sent)
+    vi.useRealTimers()
+    const state = useLab.getState()
+    expect(state.currentId).toBe(sent.id)
+    expect(state.tables.map((t) => t.id)).toEqual([typed.id, sent.id])
+    expect(state.tables[0].rows[0][0]).toBe(0.25)
+    expect(state.past.length).toBeGreaterThan(stepsBefore)
+
+    useLab.getState().undo()
+    expect(useLab.getState().tables.map((t) => t.id)).toEqual([typed.id])
+    expect(useLab.getState().currentId).toBe(typed.id)
+  })
+
+  it('numbers a second recording of the same body so the two tabs can be told apart', () => {
+    useLab.getState().setTables([freeFall()])
+    useLab.getState().appendTable(tableFrom('Ball', samples))
+    useLab.getState().appendTable({ ...tableFrom('Ball', samples), id: 'rec2' })
+    useLab.getState().appendTable({ ...tableFrom('Ball', samples), id: 'rec3' })
+    expect(useLab.getState().tables.map((t) => t.title)).toEqual(['Free fall', 'Ball — from the Sandbox', 'Ball — from the Sandbox (2)', 'Ball — from the Sandbox (3)'])
+    expect(uniqueTitle([], 'Ball')).toBe('Ball')
+  })
+
+  it('a fresh session and File ▸ New start from the same table, so an untouched launch is not work', () => {
+    expect(emptyTable().title).toBe(DEFAULT_TABLE_TITLE)
+    expect(readSource('src/renderer/src/core/store.ts')).toMatch(/lab: \[emptyTable\(\)\]/)
+  })
+
+  it('the Send button goes through appendTable and Lab Data can reach every table', () => {
+    // The fix once lived in the store while the button kept its own copy, so the tests were green
+    // and the app was not. Reading the panels as text is how sceneStore.test.ts caught the same
+    // thing in Properties.
+    const sandbox = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const button = sandbox.lastIndexOf('Send to Lab Data')
+    const send = sandbox.slice(button - 900, button)
+    expect(send).toContain('appendTable(tableFrom(watched.name, samples))')
+    expect(send).not.toContain('setTables(')
+
+    const lab = readSource('src/renderer/src/panels/LabData.tsx')
+    for (const action of ['setCurrent', 'addTable', 'removeTable']) expect(lab).toContain(`useLab((s) => s.${action})`)
+    expect(lab).toContain('onClick={() => setCurrent(t.id)}')
   })
 })

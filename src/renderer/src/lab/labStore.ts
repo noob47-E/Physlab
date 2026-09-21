@@ -15,8 +15,15 @@ const column = (name: string, unit: string, extra: Partial<LabColumn> = {}): Lab
   ...extra
 })
 
+/**
+ * What a table is called before the student names it. One constant, because the store's first
+ * table used to say "Free fall" while File ▸ New's said "Experiment", and the autosave, which
+ * compares a session with File ▸ New block by block, read an untouched launch as work worth keeping.
+ */
+export const DEFAULT_TABLE_TITLE = 'Experiment'
+
 /** A new table starts the way a practical does: a column for what you set, one for what you measure. */
-export function emptyTable(title = 'Experiment'): LabTable {
+export function emptyTable(title = DEFAULT_TABLE_TITLE): LabTable {
   const t = column('t', 's')
   const d = column('d', 'm')
   return {
@@ -33,8 +40,10 @@ interface LabStore {
   currentId: string
   setCurrent: (id: string) => void
   addTable: () => void
+  /** Puts a table made elsewhere (a Sandbox recording) beside the others and opens it. Undoable. */
+  appendTable: (t: LabTable) => void
   removeTable: (id: string) => void
-  /** Replace everything (opening a project). */
+  /** Replace everything (opening a project). Not undoable: the old tables belong to the old file. */
   setTables: (tables: LabTable[]) => void
   update: (id: string, patch: (t: LabTable) => LabTable) => void
   /** Previous table lists, newest last. Deleting a column used to be final. */
@@ -52,7 +61,17 @@ function remember(get: () => LabStore, set: (p: Partial<LabStore>) => void): voi
   set({ past: [...get().past, get().tables].slice(-50) })
 }
 
-const first = emptyTable('Free fall')
+/**
+ * "Ball — from the Sandbox (2)" for a second recording of the same body: two tables with one
+ * name are two identical tabs, and the student cannot tell which drop they are looking at.
+ */
+export function uniqueTitle(tables: LabTable[], title: string): string {
+  const taken = new Set(tables.map((t) => t.title))
+  if (!taken.has(title)) return title
+  for (let n = 2; ; n++) if (!taken.has(`${title} (${n})`)) return `${title} (${n})`
+}
+
+const first = emptyTable()
 
 export const useLab = create<LabStore>((set, get) => ({
   tables: [first],
@@ -70,14 +89,19 @@ export const useLab = create<LabStore>((set, get) => ({
     const t = emptyTable(`Experiment ${get().tables.length + 1}`)
     set({ tables: [...get().tables, t], currentId: t.id })
   },
+  appendTable: (t) => {
+    remember(get, set)
+    const table = { ...t, title: uniqueTitle(get().tables, t.title) }
+    set({ tables: [...get().tables, table], currentId: table.id })
+  },
   removeTable: (id) => {
     remember(get, set)
     const tables = get().tables.filter((t) => t.id !== id)
-    const left = tables.length ? tables : [emptyTable('Experiment')]
+    const left = tables.length ? tables : [emptyTable()]
     set({ tables: left, currentId: left.some((t) => t.id === get().currentId) ? get().currentId : left[0].id })
   },
   setTables: (tables) => {
-    const left = tables.length ? tables : [emptyTable('Experiment')]
+    const left = tables.length ? tables : [emptyTable()]
     set({ tables: left, currentId: left[0].id, past: [] })
   },
   update: (id, patch) => {
