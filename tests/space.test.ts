@@ -19,7 +19,7 @@ vi.mock('../src/renderer/src/app/theme', () => ({
 }))
 
 import { modeOfSpace, spaceOf, SPACE_LABELS, visibleIn, visibleOrder, type Space } from '../src/renderer/src/core/visibility'
-import { MODES, type ModeId } from '../src/renderer/src/app/modes'
+import { MODES, useApp, type ModeId } from '../src/renderer/src/app/modes'
 import type { ObjId, SceneObject } from '../src/renderer/src/core/types'
 import { scene } from '../src/renderer/src/core/store'
 import { runCommand } from '../src/renderer/src/lang/commands'
@@ -128,13 +128,31 @@ describe('objects made through the command bar carry the drawing they were made 
     expect(visibleNames('shapes')).toContain('poly1')
   })
 
-  it('puts a graph in Graphing wherever it was asked for', async () => {
+  it('puts a graph in Graphing wherever it was asked for, and takes the student there to see it', async () => {
     scene().setActiveSpace('vectors')
+    useApp.getState().setMode('vectors')
     await runCommand('y = sin(x)')
     const graph = Object.values(scene().objects).find((o) => o.type === 'graph')
     expect(graph?.space).toBe('graphing')
     expect(visibleNames('vectors')).toEqual([])
     expect(visibleNames('graphing')).toEqual([graph!.name])
+    // Typed in Vectors, the curve used to land in a drawing the student was not looking at: the
+    // bar cleared, the Console logged "Graph created", and the viewport showed nothing.
+    expect(useApp.getState().mode).toBe('graphing')
+    expect(scene().activeSpace).toBe('graphing')
+    expect(scene().log.at(-1)?.text).toContain('Switched to Graphing')
+    // Already in Graphing: no switch, and no sentence saying there was one.
+    await runCommand('x^2 + y^2 = 9')
+    expect(scene().log.at(-1)?.text).toBe('Implicit curve created.')
+  })
+
+  it('stays put when the curve is refused, so an unknown name does not move the student', async () => {
+    scene().setActiveSpace('vectors')
+    useApp.getState().setMode('vectors')
+    await runCommand('y = k x^2')
+    expect(scene().log.at(-1)?.kind).toBe('error')
+    expect(useApp.getState().mode).toBe('vectors')
+    expect(scene().activeSpace).toBe('vectors')
   })
 
   it('keeps a legacy object without a space visible from every mode, and still lets it be used', async () => {

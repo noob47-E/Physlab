@@ -18,7 +18,7 @@ import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { addVectorFromScene, cardForSelection, ijkLatex, linkCardToScene, newCardName, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
+import { addVectorFromScene, cardForSelection, ijkLatex, isBlankCard, linkCardToScene, newCardName, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
 
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
 
@@ -47,7 +47,7 @@ function cardValueNow(card: Card, cards: Card[], ev: EvalResult): V3 | string {
     if (c?.type === 'vector') return c.comp
     return 'Pick a vector from the drawing'
   }
-  if (!card.latex.trim()) return 'Type the vector, e.g. 3i + 4j or 10∠30°'
+  if (!card.latex.trim()) return 'nothing typed yet'
   const scope: Record<string, unknown> = { ...UNIT_VECTORS }
   for (const other of cards) {
     if (other.id === card.id) break
@@ -287,11 +287,16 @@ export function VectorCalc() {
       {st.cards.map((card, idx) => {
         const v = values[idx]
         const ok = typeof v !== 'string'
+        // A card nobody has typed in yet, or a graph card with nothing picked, is waiting, not
+        // wrong: "Add vector" used to answer with a red border and a red sentence before the
+        // student had done anything. Red is kept for a vector that cannot be read, and an
+        // operation that reaches an empty card says so in its own error line.
+        const waiting = !ok && (isBlankCard(card) || (card.entry === 'scene' && !card.sceneId))
         const lit = st.highlight === card.id
         // A typed vector is plain numbers; only one read off the drawing carries the drawing's unit.
         const sizeKind = card.entry === 'scene' ? 'length' : 'number'
         return (
-          <div key={card.id} ref={lit ? highlightRef : undefined} className={`card p-2 ${ok ? '' : 'border-[color:var(--bad)]'} ${lit ? 'ring-2 ring-[color:var(--accent)]' : ''}`}>
+          <div key={card.id} ref={lit ? highlightRef : undefined} className={`card p-2 ${ok || waiting ? '' : 'border-[color:var(--bad)]'} ${lit ? 'ring-2 ring-[color:var(--accent)]' : ''}`}>
             {/* The row wraps and the switch may shrink: at the 960 px minimum window the three
                 labels once pushed the Remove button out of the card, with no way to remove it. */}
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
@@ -366,6 +371,8 @@ export function VectorCalc() {
                     {Math.abs((v as V3)[2]) < 1e-12 && <> · θ = {formatMeasure(heading(v as V3), 'direction', settings)}</>}
                   </span>
                 </span>
+              ) : waiting ? (
+                <span className="text-[color:var(--text-dim)]">{card.entry === 'scene' ? (v as string) : 'Type a vector above, or draw one on the graph.'}</span>
               ) : (
                 <span className="text-[color:var(--bad)]">{v as string}</span>
               )}
@@ -407,9 +414,11 @@ export function VectorCalc() {
             </button>
             {st.result.sol.visual && (
               // Its own row: beside the button the layout names wrapped mid-word in a narrow panel.
-              <div className="seg basis-full">
+              // A two-by-two grid, not one nowrap row: .seg clips what overflows, and at the
+              // panel's default width the fourth choice read "From origi" with no way to see the rest.
+              <div className="seg grid basis-full grid-cols-2">
                 {STYLES.map(([k, l]) => (
-                  <button key={l} className={`whitespace-nowrap ${st.style === k ? 'on' : ''}`} title={k ? '' : "The solution's own picture"} onClick={() => set({ style: k })}>
+                  <button key={l} className={`justify-center whitespace-nowrap ${st.style === k ? 'on' : ''}`} title={k ? '' : "The solution's own picture"} onClick={() => set({ style: k })}>
                     {l}
                   </button>
                 ))}

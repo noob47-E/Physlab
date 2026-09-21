@@ -19,6 +19,7 @@ import { linearToLatex, runPure, type JobId } from '../math/pure/run'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
 import { casRequestFor, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
+import { enterMode } from '../app/layout'
 
 type Node = MathNode & Record<string, unknown>
 
@@ -192,6 +193,18 @@ function friendlyError(e: unknown): string {
 // Graphs: y = f(x), f(x) = ..., z = f(x,y), r = f(θ), implicit, inequalities, curves
 // ---------------------------------------------------------------------------
 
+/**
+ * A graph is stamped 'graphing' wherever it was typed (Builder.base), but nothing used to follow
+ * it there: y = x² − 3 typed in Vectors mode cleared the bar, logged "Graph created" to a Console
+ * that was not open, and drew nothing until the student found Graphing by hand. Called after the
+ * graph exists, so a refused line (an unknown name) leaves the student where they were.
+ */
+function landInGraphing(): string {
+  if (scene().activeSpace === 'graphing') return ''
+  enterMode('graphing')
+  return ' Switched to Graphing to show it.'
+}
+
 function tryGraph(input: string): boolean {
   let m: RegExpMatchArray | null
   const s = scene()
@@ -206,12 +219,12 @@ function tryGraph(input: string): boolean {
   }
   if ((m = input.match(/^\s*z\s*=\s*(.+)$/))) {
     visualizeGraph(input, [m[1]], 'surface')
-    s.pushLog({ input, kind: 'result', text: 'Surface created in the 3D view.' })
+    s.pushLog({ input, kind: 'result', text: 'Surface created in the 3D view.' + landInGraphing() })
     return true
   }
   if ((m = input.match(/^\s*r\s*=\s*(.+)$/)) && /θ|theta/.test(m[1])) {
     visualizeGraph(input, [m[1].replace(/θ/g, 'theta')], 'polar', { tMin: 0, tMax: 2 * Math.PI })
-    s.pushLog({ input, kind: 'result', text: 'Polar curve created.' })
+    s.pushLog({ input, kind: 'result', text: 'Polar curve created.' + landInGraphing() })
     return true
   }
   if ((m = input.match(/^\s*curve\s*\((.+)\)\s*$/i))) {
@@ -220,14 +233,14 @@ function tryGraph(input: string): boolean {
     const tMin = parts[2] ? Number(math.evaluate(preprocess(parts[2]))) : 0
     const tMax = parts[3] ? Number(math.evaluate(preprocess(parts[3]))) : 2 * Math.PI
     visualizeGraph(input, [parts[0], parts[1]], 'parametric', { tMin, tMax })
-    s.pushLog({ input, kind: 'result', text: 'Parametric curve created.' })
+    s.pushLog({ input, kind: 'result', text: 'Parametric curve created.' + landInGraphing() })
     return true
   }
   const ineq = input.match(/^(.+?)(<=|>=|<|>)(.+)$/)
   if (ineq && !/[<>].*[<>]/.test(input.replace(ineq[2], '')) && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
     const op = ineq[2] as '<' | '<=' | '>' | '>='
     visualizeGraph(input, [`(${ineq[1]}) - (${ineq[3]})`], 'inequality', { op })
-    s.pushLog({ input, kind: 'result', text: 'Shaded region created.' })
+    s.pushLog({ input, kind: 'result', text: 'Shaded region created.' + landInGraphing() })
     return true
   }
   const eq = input.match(/^([^=]+)=([^=]+)$/)
@@ -236,7 +249,7 @@ function tryGraph(input: string): boolean {
     const isName = /^[A-Za-zͰ-Ͽ][\w']*$/.test(lhs) && !GRAPH_VARS.has(lhs)
     if (!isName) {
       visualizeGraph(input, [`(${eq[1]}) - (${eq[2]})`], 'implicit')
-      s.pushLog({ input, kind: 'result', text: 'Implicit curve created.' })
+      s.pushLog({ input, kind: 'result', text: 'Implicit curve created.' + landInGraphing() })
       return true
     }
   }
@@ -249,7 +262,7 @@ function graphIfFunctionOfX(input: string, rhs: string, name?: string) {
   const unknown = syms.filter((n) => n !== 'x')
   if (unknown.length) throw new Error(`Unknown name "${unknown[0]}" in the function. Make a slider first, e.g. ${unknown[0]} = 1`)
   visualizeGraph(input, [rhs], 'explicit', { name })
-  scene().pushLog({ input, kind: 'result', text: 'Graph created. Roots and turning points are marked.' })
+  scene().pushLog({ input, kind: 'result', text: 'Graph created. Roots and turning points are marked.' + landInGraphing() })
 }
 
 function usesSymbol(src: string, sym: string): boolean {

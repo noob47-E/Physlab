@@ -98,6 +98,32 @@ describe('one way in', () => {
     expect(src).toContain('10∠30°')
   })
 
+  it('greets a new blank card with a dim hint, not a red error', () => {
+    // "Add vector" is the one button on an empty panel; its reward used to be a --bad border and
+    // a red sentence under a field nobody had typed in. Red waits for a vector that cannot be
+    // read, or for an operation that reaches the empty card.
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    expect(src).toMatch(/const waiting = !ok && \(isBlankCard\(card\) \|\| \(card\.entry === 'scene' && !card\.sceneId\)\)/)
+    expect(src).toMatch(/\$\{ok \|\| waiting \? '' : 'border-\[color:var\(--bad\)\]'\}/)
+    expect(src).toMatch(/waiting \? \(\s*<span className="text-\[color:var\(--text-dim\)\]">/)
+    expect(src).toContain('Type a vector above, or draw one on the graph.')
+    expect(src).not.toContain('Type the vector, e.g.')
+    // The field's placeholder carries the example, once.
+    expect(src).toContain('placeholder="3i + 4j  or  10∠30°"')
+    // An operation that reads the empty card still says so, in plain words.
+    expect(src).toContain("return 'nothing typed yet'")
+    expect(src).toMatch(/Card \$\{wanted\[i\]\.name\} cannot be read: \$\{v\}/)
+  })
+
+  it('shows all four drawing styles under the answer, two by two', () => {
+    // .seg is a nowrap row that clips its overflow, so at the panel's default width the fourth
+    // choice read "From origi". The same two-column grid the theme chooser uses fits all four.
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    const seg = src.slice(src.indexOf('STYLES.map') - 200, src.indexOf('STYLES.map'))
+    expect(seg).toContain('className="seg grid basis-full grid-cols-2"')
+    expect(src).toMatch(/\[null, 'Auto'\],\s*\['head-to-tail', 'Head-to-tail'\],\s*\['parallelogram', 'Parallelogram'\],\s*\['common-tail', 'From origin'\]/)
+  })
+
   it('keeps the Remove button inside the card at the smallest window', () => {
     // At the 960 px minimum the three switch labels once pushed the trash icon off the card.
     // The row wraps and the switch may shrink, so the button is always somewhere on the card.
