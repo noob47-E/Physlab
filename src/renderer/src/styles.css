@@ -105,6 +105,15 @@
   --key-extremum: #8ce99a;
   --wireframe: #000000;
   --light-fill: #9ec5ff;
+  /* Chrome colours the rules further down used to hardcode: the ring round a selected label, the
+     dimming behind the tour, the focus ring of a text or maths field and the fill of a selection
+     inside one. Each is the accent or the selection glow at a set opacity, in the theme's own hue. */
+  --sel-label: rgba(255, 212, 59, 0.6);
+  --sel-label-ring: rgba(255, 212, 59, 0.35);
+  --scrim: rgba(8, 10, 14, 0.55);
+  --focus-ring: rgba(79, 140, 255, 0.2);
+  --sel-fill: rgba(79, 140, 255, 0.35);
+  --sel-fill-faint: rgba(79, 140, 255, 0.12);
   color-scheme: dark;
 }
 
@@ -127,7 +136,7 @@
   --good: #1f8a4c;
   --bad: #c92a2a;
   --input-bg: #ffffff;
-  /* Moonlight, not paper: a soft cool surface that is easy on the eyes and still projects well. */
+  /* Cool, not paper: a soft cool surface that is easy on the eyes and still projects well. */
   --canvas-bg: #e9eef6;
   --grid-minor: #d6dfec;
   --grid-major: #bcc8da;
@@ -158,7 +167,72 @@
   --key-extremum: #2b8a3e;
   --wireframe: #1c1e22;
   --light-fill: #dbe7fa;
+  --sel-label: rgba(196, 134, 0, 0.7);
+  --sel-label-ring: rgba(196, 134, 0, 0.35);
+  --scrim: rgba(30, 40, 60, 0.45);
+  --focus-ring: rgba(47, 111, 228, 0.25);
+  --sel-fill: rgba(47, 111, 228, 0.3);
+  --sel-fill-faint: rgba(47, 111, 228, 0.12);
   color-scheme: light;
+}
+
+/* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
+:root[data-theme='moonlight'] {
+  --bg-0: #0b1020;
+  --bg-1: #10162b;
+  --bg-2: #161d36;
+  --bg-3: #1d2542;
+  --bg-4: #252e4f;
+  --line: #232c4a;
+  --line-2: #2f3a5e;
+  --text: #c9d1f0;
+  --text-dim: #8f9ac4;
+  --text-faint: #667198;
+  --text-strong: #e6eaff;
+  --accent: #8b9cff;
+  --accent-2: #6f82e8;
+  --warn: #f7c66b;
+  --good: #7fd8a4;
+  --bad: #ff8b94;
+  --input-bg: #0d1226;
+  --canvas-bg: #101630;
+  --grid-minor: #1a2140;
+  --grid-major: #273052;
+  --grid-axis: #7f8bbf;
+  --tick-text: #8b96c9;
+  --label-bg: rgba(12, 16, 34, 0.82);
+  --label-text: #e2e7ff;
+  --label-shadow: rgba(4, 6, 16, 0.9);
+  --sel-row: #2c3a6e;
+  --shadow: rgba(2, 4, 12, 0.6);
+  --menu-bg: #1a2140;
+  --measure-text: #ffe0a6;
+  --code-text: #ffe0a6;
+  --log-in: #a7b6ff;
+  /* The periwinkle accent is light, so the text on it is the night ink, not white. */
+  --on-accent: #0b1020;
+  --axis-x: #ff6b85;
+  --axis-y: #a6e05a;
+  --axis-z: #6fb4ff;
+  --series-1: #7cb8ff;
+  --series-2: #ff8fa3;
+  --series-3: #7fdc9a;
+  --series-4: #f9d56e;
+  --series-5: #d29bf5;
+  --series-6: #6fd6e6;
+  --sel-glow: #f5c76b;
+  --key-root: #ff8fa3;
+  --key-intercept: #7cc4ff;
+  --key-extremum: #8fe3b0;
+  --wireframe: #05070f;
+  --light-fill: #b4c4ff;
+  --sel-label: rgba(245, 199, 107, 0.6);
+  --sel-label-ring: rgba(245, 199, 107, 0.35);
+  --scrim: rgba(4, 6, 16, 0.6);
+  --focus-ring: rgba(139, 156, 255, 0.25);
+  --sel-fill: rgba(139, 156, 255, 0.35);
+  --sel-fill-faint: rgba(139, 156, 255, 0.12);
+  color-scheme: dark;
 }
 
 html,
@@ -446,8 +520,8 @@ input[type='range'] {
   font-variant-numeric: tabular-nums;
 }
 .obj-label.is-selected {
-  border-color: rgba(255, 212, 59, 0.6);
-  box-shadow: 0 0 0 1px rgba(255, 212, 59, 0.35);
+  border-color: var(--sel-label);
+  box-shadow: 0 0 0 1px var(--sel-label-ring);
 }
 .obj-label.is-text {
   font-style: normal;
@@ -525,7 +599,7 @@ input[type='range'] {
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(8, 10, 14, 0.55);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -534,7 +608,7 @@ input[type='range'] {
   position: fixed;
   border-radius: 8px;
   border: 2px solid var(--accent);
-  box-shadow: 0 0 0 9999px rgba(8, 10, 14, 0.55);
+  box-shadow: 0 0 0 9999px var(--scrim);
   pointer-events: none;
 }
 .tour-card {
@@ -723,7 +797,7 @@ input[type='range'] {
 }
 .cmd-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 .suggest {
   position: absolute;
@@ -794,15 +868,15 @@ math-field.math-input {
   border: 1px solid var(--line-2);
   font-size: var(--text-title);
   --caret-color: var(--accent);
-  --selection-background-color: rgba(79, 140, 255, 0.35);
-  --contains-highlight-background-color: rgba(79, 140, 255, 0.12);
+  --selection-background-color: var(--sel-fill);
+  --contains-highlight-background-color: var(--sel-fill-faint);
   --placeholder-color: var(--text-faint);
   --smart-fence-color: var(--text-dim);
 }
 math-field.math-input:focus-within {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 math-field.math-input-sm {
   font-size: var(--text-lead);

@@ -3,8 +3,8 @@
 // themeColor('--name') returns a grey stand-in when the name is not declared, so a misspelt token
 // or one added to only the dark block is invisible until someone toggles the theme with objects on
 // screen. This reads styles.css and every renderer source and checks that (1) each token a file
-// asks for is declared, and (2) the dark and light blocks declare the same set, so no colour can
-// be right in one theme and missing in the other.
+// asks for is declared, and (2) the three theme blocks declare the same set, so no colour can
+// be right in one theme and missing in another.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -64,16 +64,36 @@ export function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-const dark = declaredTokens(css, ':root')
-const light = declaredTokens(css, ":root[data-theme='light']")
+/** The selector of each theme's block; the dark theme is the bare :root, so it needs no attribute. */
+const BLOCKS = { dark: ':root', light: ":root[data-theme='light']", moonlight: ":root[data-theme='moonlight']" } as const
+const dark = declaredTokens(css, BLOCKS.dark)
 // Type tokens and the calculator's LCD colours are declared once, outside the theme blocks: the
 // LCD looks the same in a bright room, so those are deliberately not themed.
 const anywhere = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]))
 
 describe('theme tokens', () => {
-  it('declares the same colours for the dark and the light theme', () => {
-    expect([...dark].filter((t) => !light.has(t)), 'dark only').toEqual([])
-    expect([...light].filter((t) => !dark.has(t)), 'light only').toEqual([])
+  it('declares the same colours in all three themes', () => {
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      if (theme === 'dark') continue
+      const other = declaredTokens(css, selector)
+      expect([...dark].filter((t) => !other.has(t)), `dark only, missing from ${theme}`).toEqual([])
+      expect([...other].filter((t) => !dark.has(t)), `${theme} only`).toEqual([])
+    }
+    // A third block with no tokens at all would pass the check above against an empty set.
+    expect(declaredTokens(css, BLOCKS.moonlight).size).toBeGreaterThan(40)
+  })
+
+  it('gives each theme its own values, not a copy of another', () => {
+    // A block pasted from another theme and left unedited would pass every other check here.
+    const bg = Object.values(BLOCKS).map((sel) => tokenValue(themeBlock(css, sel), '--bg-0'))
+    expect(new Set(bg).size).toBe(3)
+  })
+
+  it('tells the scrollbars and form controls whether each theme is light or dark', () => {
+    // `color-scheme` accepts only light or dark; a third theme has to pick one.
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      expect(themeBlock(css, selector), theme).toMatch(/color-scheme:\s*(dark|light);/)
+    }
   })
 
   it('has every token the viewport and the panels ask for', () => {
@@ -96,11 +116,11 @@ describe('theme tokens', () => {
     }
   })
 
-  it('draws selection and key-point marks that show against the canvas in both themes', () => {
+  it('draws selection and key-point marks that show against the canvas in every theme', () => {
     // The light theme's selection ring at 1.5:1 against the canvas was the faintest line on
     // screen. These marks are often drawn on their own, so the canvas is what they must beat.
-    const blocks = { dark: themeBlock(css, ':root'), light: themeBlock(css, ":root[data-theme='light']") }
-    for (const [theme, block] of Object.entries(blocks)) {
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      const block = themeBlock(css, selector)
       const canvas = tokenValue(block, '--canvas-bg')
       expect(canvas, `${theme} --canvas-bg`).toBeDefined()
       for (const t of ['--sel-glow', '--key-root', '--key-intercept', '--key-extremum', '--accent']) {

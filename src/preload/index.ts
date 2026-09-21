@@ -13,6 +13,8 @@ const api = {
   autosaveWriteSync: (content: string): boolean => ipcRenderer.sendSync('autosave:writeSync', content) as boolean,
   /** So the window can ask before closing on unsaved work. */
   setDirty: (dirty: boolean): void => ipcRenderer.send('app:dirty', dirty),
+  /** The theme's page colour, so the window paints it on the next launch before the page does. */
+  setThemeBackground: (hex: string): void => ipcRenderer.send('app:theme', hex),
   saveImage: (dataUrl: string): Promise<string | null> => ipcRenderer.invoke('file:saveImage', dataUrl),
   /** Any text file the renderer makes: a CSV of readings, and whatever is exported next. */
   saveText: (content: string, defaultName: string, filterName: string, ext: string): Promise<string | null> =>

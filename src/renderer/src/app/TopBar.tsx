@@ -29,7 +29,7 @@ import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
 import { TOOLS } from '../render/tools'
 import { saveViewportImage } from '../render/exportImage'
-import { useTheme } from './theme'
+import { THEMES, THEME_LABELS, useTheme } from './theme'
 import { useTour } from './tour/Tour'
 import { enterMode, resetLayout } from './layout'
 import { PANEL_LIST, togglePanel, useOpenPanels } from './panels'
@@ -202,6 +202,7 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
   const graphicsInfo = useApp((a) => a.graphicsInfo)
   const setGraphicsInfo = useApp((a) => a.setGraphicsInfo)
   const [zoom, setZoom, zoomable] = useZoom()
+  const theme = useTheme((t) => t.theme)
   const summary = `1 □ = ${settings.unitPerSquare} ${settings.unit === 'unit' ? 'unit' : settings.unit} · ${settings.decimals} ${settings.precisionMode === 'dp' ? 'd.p.' : 's.f.'}`
   return (
     <div ref={ref} className="relative">
@@ -311,6 +312,16 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
             </div>
           </div>
           <Heading>Window</Heading>
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[var(--text)]">Theme</span>
+            <div className="seg">
+              {THEMES.map((id) => (
+                <button key={id} className={theme === id ? 'on' : ''} onClick={() => useTheme.getState().set(id)} title={id === 'light' ? 'For bright rooms and projectors' : undefined}>
+                  {THEME_LABELS[id]}
+                </button>
+              ))}
+            </div>
+          </div>
           {zoomable && (
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[var(--text)]">Text size</span>
@@ -404,7 +415,9 @@ export function TopBar() {
           { label: `Axes: ${showAxes ? 'on' : 'off'}`, run: () => s().setSettings({ showAxes: !showAxes }) },
           { label: `Snapping: ${snap ? 'on' : 'off'}`, sc: 'hold Alt', run: () => s().setSettings({ snap: !snap }) },
           '-',
-          { label: theme === 'dark' ? 'Light theme (for projectors)' : 'Dark theme', run: () => useTheme.getState().toggle() },
+          // One row per theme, ticked on the current one, so a third theme is a choice and not a
+          // guess at what the next press of a toggle would do.
+          ...THEMES.map((id) => ({ label: `${THEME_LABELS[id]} theme${id === 'light' ? ' (for projectors)' : ''}`, sc: theme === id ? '✓' : undefined, on: theme === id, run: () => useTheme.getState().set(id) })),
           '-',
           // A panel row opens a closed panel and closes an open one. Closing used to be a
           // one-way door, then opening was: now the row does both.
