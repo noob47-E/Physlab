@@ -6,16 +6,11 @@
  * 10.5 px label again: there are six sizes in the whole app, and the smallest is one step under
  * the base. `static` keeps every variable in the output even where no utility uses it, because the
  * rules further down refer to them with var().
- *
- * --text-micro is the one exception below fine, and only the calculator keypad's SHIFT and ALPHA
- * legends use it: they sit in the corner of a 34 px key, where even fine would collide with the
- * key's own label.
  */
 @theme static {
   --font-ui: 'Segoe UI', 'Inter', system-ui, sans-serif;
   --font-math: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
   --font-mono: 'Cascadia Code', 'Consolas', monospace;
-  --text-micro: 9px;
   --text-fine: 11px;
   --text-small: 12px;
   --text-body: 13px;
@@ -897,143 +892,199 @@ math-field.math-input::part(virtual-keyboard-toggle),
 math-field.math-input::part(menu-toggle) {
   display: none;
 }
-.lcd math-field.math-input {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  color: #11140f;
-  --caret-color: #11140f;
-  --placeholder-color: #5d6a55;
-  --selection-background-color: rgba(0, 0, 0, 0.15);
-  padding: 0;
-}
 
-/* ---------- Calculator ---------- */
-.calc {
+/* ---------- Maths ---------- */
+/* One flat stack of cards: the field, the answer, the working. Tokens only, so the screen
+   follows every theme; the old green LCD and bevelled keys were the same in all of them. */
+.maths {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  /* The panel scrolls; it used to grow past its dock instead, and on a short window the number
-     keys and the = button were simply off the bottom with no way to reach them. */
+  /* The panel scrolls; it used to grow past its dock instead, and on a short window the keys
+     and the = button were simply off the bottom with no way to reach them. */
   height: 100%;
   min-height: 0;
   overflow: auto;
   box-sizing: border-box;
-  background: linear-gradient(180deg, var(--bg-2), var(--input-bg));
-  /* The LCD is the same green in both themes, so its ink is named here rather than by hex in
-     the panel: dark text, a dimmer note, the error red, and the SHIFT/ALPHA indicators. */
-  --lcd-text: #11140f;
-  --lcd-dim: #2c3328;
-  --lcd-bad: #8a1c1c;
-  --lcd-shift: #a86a00;
-  --lcd-alpha: #a8205a;
-  /* A rule and a field drawn on the LCD: translucent black and white that take the LCD's own
-     green from underneath, so the panel needs no black/white utility. */
-  --lcd-line: rgba(0, 0, 0, 0.2);
-  --lcd-field: rgba(255, 255, 255, 0.4);
 }
-.lcd {
+/* The stack scrolls as a whole; a card that scrolls sideways (a long answer) must not be squeezed
+   shorter than its content to make the rest fit, which is what a flex child does by default. */
+.maths > * {
+  flex-shrink: 0;
+}
+.maths-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.maths-field math-field.math-input,
+.maths-field .field {
+  flex: 1;
+  min-width: 0;
+}
+.maths-field .field {
+  height: 46px;
+}
+.maths-answer {
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+.maths-answer.is-error {
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+}
+.maths-result {
+  font-size: var(--text-display);
+  color: var(--text-strong);
+  min-height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* The screens of the list modes (matrices, statistics, distributions…): a plain result card. */
+.maths-screen {
   border-radius: 8px;
   padding: 8px 10px;
-  background: linear-gradient(180deg, #c9d4c1, #b6c3ad);
-  color: #1b1f1a;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
-  min-height: 118px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--text-strong);
+  min-height: 0;
 }
-.lcd .status {
+.maths-working {
+  border-top: 1px solid var(--line);
+}
+
+/* The popup keypad: under the field, over everything, never focused. */
+.keypad-pop {
+  position: fixed;
+  z-index: 55;
+  width: min(560px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 16px));
   display: flex;
-  gap: 8px;
-  font-size: var(--text-fine);
-  font-weight: 700;
-  color: #394235;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 50px var(--shadow);
+  user-select: none;
 }
-.lcd input {
-  width: 100%;
-  background: transparent;
-  border: 0;
-  outline: none;
-  font-family: var(--font-mono);
-  font-size: var(--text-lead);
-  color: #11140f;
+.keypad-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
 }
-.lcd .pretty {
-  min-height: 34px;
-  font-size: var(--text-lead);
-  overflow-x: auto;
-  overflow-y: hidden;
+.keypad-tabs > button {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: var(--text-small);
 }
-.lcd .result {
-  text-align: right;
-  font-size: var(--text-display);
-  min-height: 34px;
-  overflow-x: auto;
-  overflow-y: hidden;
+.keypad-tabs > button:hover {
+  color: var(--text-strong);
+  background: var(--bg-3);
+}
+.keypad-tabs > button.on {
+  color: var(--on-accent);
+  background: var(--accent-2);
+}
+.keypad-body {
+  display: flex;
+  gap: 10px;
+  min-height: 0;
+}
+.keypad-body > .keys-numbers {
+  flex: 0 0 236px;
+  align-content: start;
+}
+.keypad-body > .keys:not(.keys-numbers) {
+  flex: 1;
+  min-width: 0;
+  align-content: start;
+  overflow-y: auto;
 }
 .keys {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
+  gap: 4px;
 }
-.keys.num {
-  grid-template-columns: repeat(5, 1fr);
+.key-cell {
+  position: relative;
+  min-width: 0;
+}
+.key-cell.wide {
+  grid-column: span 2;
 }
 .key {
   position: relative;
+  width: 100%;
   height: 34px;
-  border-radius: 7px;
-  background: linear-gradient(180deg, #3b3d44, #2e3035);
-  border: 1px solid #484a52;
-  color: #f1f3f5;
-  font-size: var(--text-small);
-  box-shadow: 0 2px 0 var(--bg-0);
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  color: var(--text-strong);
+  font-size: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.key:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 var(--bg-0);
+.key:hover {
+  background: var(--bg-4);
+  border-color: var(--accent);
 }
-.key .shift {
+.key:active,
+.key.open {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.key.primary {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.key.primary:hover {
+  background: var(--accent);
+}
+.keys-numbers .key {
+  font-size: var(--text-body);
+  padding: 0 2px;
+}
+/* The chevron that opens a key's relatives (sin → sin⁻¹, sinh); a long press does the same. */
+.key-more {
   position: absolute;
-  top: -1px;
-  left: 4px;
-  font-size: var(--text-micro);
-  color: #ffb84d;
-}
-.key .alpha {
-  position: absolute;
-  top: -1px;
-  right: 4px;
-  font-size: var(--text-micro);
-  color: #ff6b9a;
-}
-.key.fn {
-  background: linear-gradient(180deg, #2a2c31, #212226);
+  right: 2px;
+  bottom: 0;
   font-size: var(--text-fine);
+  color: var(--text-faint);
+  line-height: 1;
+  padding: 2px 3px;
 }
-.key.digit {
-  background: linear-gradient(180deg, #4a4c54, var(--line-2));
-  font-size: var(--text-lead);
+.key:hover .key-more,
+.key.open .key-more {
+  color: inherit;
 }
-.key.del {
-  background: linear-gradient(180deg, #4d7bd6, #3b64b8);
+.key-variants {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 3px);
+  left: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 7px;
+  background: var(--menu-bg);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 10px 24px var(--shadow);
 }
-.key.ac {
-  background: linear-gradient(180deg, #d9534f, #b8403c);
-}
-.key.eq {
-  background: linear-gradient(180deg, #3aa66a, #2e8a57);
-}
-.key.shift-key {
-  background: linear-gradient(180deg, #d99a2b, #b37b1b);
-  color: #1b1405;
-  font-weight: 700;
-}
-.key.alpha-key {
-  background: linear-gradient(180deg, #d94c80, #b33a67);
-  font-weight: 700;
-}
-.key.lit {
-  outline: 2px solid #fff;
+.key-variants .key {
+  width: auto;
+  min-width: 52px;
+  padding: 0 8px;
 }
 
 /* ---------- Pure Math: the step-by-step working area ---------- */

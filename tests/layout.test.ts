@@ -104,9 +104,18 @@ describe('what a mode opens by default', () => {
     expect(panelsForMode(vectors)).toEqual(['viewport', 'examples', 'vectorcalc'])
   })
 
-  it('opens the calculator with its working in the centre and the keypad beside it', () => {
+  it('opens the calculator as one Maths screen in the centre, with no side panel', () => {
+    // 0.6: the keypad panel and the Working panel became one screen (field → answer → working),
+    // so the mode's panel and its centre are the same id and the list has two entries, not three.
     const calc = MODES.find((m) => m.id === 'calculator')!
-    expect(panelsForMode(calc)).toEqual(['viewport', 'working', 'calculator'])
+    expect(panelsForMode(calc)).toEqual(['viewport', 'maths'])
+  })
+
+  it('rebuilds a layout saved with the old calculator panels', () => {
+    // A saved layout naming `calculator` or `working` would restore with empty tabs; the schema
+    // version went up so it is thrown away and rebuilt instead.
+    expect(LAYOUT_VERSION).toBeGreaterThanOrEqual(3)
+    expect(needsLayoutRebuild({ v: 2, app: '0.5.0', w: 1920, h: 1080 }, { w: 1920, h: 1080 })).toBe(true)
   })
 
   it('gives the sandbox just the world and its panel', () => {
@@ -134,7 +143,7 @@ describe('what a mode opens by default', () => {
 
   it('knows where each panel lives when it has no neighbour', () => {
     expect(panelHome('viewport')).toBe('centre')
-    expect(panelHome('working')).toBe('centre')
+    expect(panelHome('maths')).toBe('centre')
     expect(panelHome('examples')).toBe('left')
     expect(panelHome('console')).toBe('below')
     expect(panelHome('labdata')).toBe('right')

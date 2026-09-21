@@ -19,8 +19,7 @@ export const PANEL_TITLES: Record<string, string> = {
   solver: 'Solver',
   practice: 'Practice',
   labdata: 'Lab Data',
-  calculator: 'Calculator',
-  working: 'Working',
+  maths: 'Maths',
   console: 'Console',
   timeline: 'Timeline',
   graphs: 'Graphs',
@@ -33,10 +32,10 @@ export const PANEL_LIST = Object.entries(PANEL_TITLES).map(([id, title]) => ({ i
 /** Which panels share a home, so a closed one comes back beside the ones it lived with. */
 const PANEL_GROUPS: string[][] = [
   ['outliner', 'examples'],
-  ['viewport', 'working'],
+  ['viewport', 'maths'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
-  ['vectorcalc', 'measure', 'calculator', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab'],
+  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab'],
   ['console', 'timeline', 'graphs']
 ]
 
@@ -80,7 +79,7 @@ export function showPanel(id: string): void {
     // appearing as a tab inside the drawing, for instance.
     const home = panelHome(id)
     const c = columns(api.width, api.height)
-    const anchor = api.getPanel('viewport') ?? api.getPanel('working') ?? api.panels[0]
+    const anchor = api.getPanel('viewport') ?? api.getPanel('maths') ?? api.panels[0]
     const size =
       home === 'right'
         ? { initialWidth: c.side, minimumWidth: c.sideMin }

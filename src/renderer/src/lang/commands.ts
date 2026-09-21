@@ -855,11 +855,11 @@ function tryPureMath(input: string): boolean {
     tex: doc.answers.map((a) => `${a.label === 'Answer' ? '' : label(a.label)}${a.tex}`).join(String.raw`,\quad `),
     working: () => {
       usePure.getState().run(job, body, latex)
-      showPanel('working')
+      showPanel('maths')
     }
   })
   usePure.getState().run(job, body, latex)
-  showPanel('working')
+  showPanel('maths')
   return true
 }
 

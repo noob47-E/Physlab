@@ -228,7 +228,8 @@ describe('the calculator writes numbers with the precision setting', () => {
   it('uses exponent form for very large and very small values, and the error words', () => {
     expect(calcNum(6.02214076e23, { decimals: 3, precisionMode: 'sf' })).toBe('6.02×10^23')
     expect(calcNum(1.6e-19, { decimals: 2, precisionMode: 'dp' })).toBe('1.6×10^-19')
-    expect(calcNum(NaN)).toBe('Math ERROR')
+    // Words, not a handheld's "Math ERROR" (0.6: nothing on the Maths screen reads like the fx-991EX).
+    expect(calcNum(NaN)).toBe('no value')
     expect(calcNum(Infinity)).toBe('∞')
     expect(calcNum(-Infinity)).toBe('−∞')
   })

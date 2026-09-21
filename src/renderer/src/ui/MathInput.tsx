@@ -17,6 +17,15 @@ declare module 'react' {
   }
 }
 
+/**
+ * MathLive's placeholder commands are its Tab key: with no box left in that direction it leaves
+ * the field for the next control on the page. The ▶ key of the popup keypad ran into that — the
+ * caret went to the Keypad button and the next digit typed switched the drawing tool.
+ */
+const keepFocus = (mf: MathfieldElement): void => {
+  if (!mf.hasFocus()) mf.focus()
+}
+
 export interface MathInputHandle {
   insert: (latex: string) => void
   command: (cmd: string) => void
@@ -42,6 +51,10 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
   const el = useRef<MathfieldElement | null>(null)
   const cbs = useRef({ onChange, onEnter })
   cbs.current = { onChange, onEnter }
+  // The LaTeX this field last handed to onChange. When the value prop comes back equal to it,
+  // the change was the student's own typing and the field already shows it: serialising the
+  // whole expression again to find that out was a second getValue on every keystroke.
+  const lastEmitted = useRef<string | null>(null)
 
   useEffect(() => {
     const mf = el.current
@@ -64,7 +77,11 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       }
     }
     if (!configure()) mf.addEventListener('mount', configure, { once: true })
-    const onInput = () => cbs.current.onChange?.(mf.getValue('latex-unstyled'))
+    const onInput = () => {
+      const latex = mf.getValue('latex-unstyled')
+      lastEmitted.current = latex
+      cbs.current.onChange?.(latex)
+    }
     /**
      * Only a plain Enter is taken. Everything else must reach MathLive.
      *
@@ -97,6 +114,10 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
 
   useEffect(() => {
     const mf = el.current
+    if (value === lastEmitted.current) return
+    // A value set from outside (history, a recalled entry) is now what the field shows too, so
+    // the same value arriving again later is not mistaken for a fresh change.
+    lastEmitted.current = value
     try {
       if (mf && mf.getValue('latex-unstyled') !== value) mf.setValue(value, { silenceNotifications: true })
     } catch {
@@ -121,14 +142,19 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       if (!mf) return
       mf.focus()
       mf.executeCommand(['insert', latex, { focus: true, feedback: false, selectionMode: 'placeholder' }])
-      cbs.current.onChange?.(mf.getValue('latex-unstyled'))
+      const next = mf.getValue('latex-unstyled')
+      lastEmitted.current = next
+      cbs.current.onChange?.(next)
     },
     command: (cmd) => {
       const mf = el.current
       if (!mf) return
       mf.focus()
       mf.executeCommand(cmd as never)
-      cbs.current.onChange?.(mf.getValue('latex-unstyled'))
+      keepFocus(mf)
+      const next = mf.getValue('latex-unstyled')
+      lastEmitted.current = next
+      cbs.current.onChange?.(next)
     },
     nextBox: (dir) => {
       const mf = el.current
@@ -136,17 +162,22 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       mf.focus()
       const before = mf.position
       const hasBoxes = mf.getValue('latex-unstyled').includes('placeholder')
-      if (hasBoxes) {
-        mf.executeCommand(dir > 0 ? 'moveToNextPlaceholder' : 'moveToPreviousPlaceholder')
-        if (mf.position === before) mf.executeCommand(dir > 0 ? 'moveToPreviousPlaceholder' : 'moveToNextPlaceholder')
-        if (mf.position !== before) return
+      const moved = (cmd: string): boolean => {
+        mf.executeCommand(cmd as never)
+        keepFocus(mf)
+        return mf.position !== before
       }
-      mf.executeCommand(dir > 0 ? 'moveToNextChar' : 'moveToPreviousChar')
+      if (hasBoxes) {
+        if (moved(dir > 0 ? 'moveToNextPlaceholder' : 'moveToPreviousPlaceholder')) return
+        if (moved(dir > 0 ? 'moveToPreviousPlaceholder' : 'moveToNextPlaceholder')) return
+      }
+      moved(dir > 0 ? 'moveToNextChar' : 'moveToPreviousChar')
     },
     focus: () => el.current?.focus(),
     getLatex: () => el.current?.getValue('latex-unstyled') ?? '',
     setLatex: (latex) => {
       el.current?.setValue(latex, { silenceNotifications: true })
+      lastEmitted.current = latex
       cbs.current.onChange?.(latex)
     }
   }))

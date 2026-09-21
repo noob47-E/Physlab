@@ -67,8 +67,7 @@ export function contrast(a: string, b: string): number {
 /** The selector of each theme's block; the dark theme is the bare :root, so it needs no attribute. */
 const BLOCKS = { dark: ':root', light: ":root[data-theme='light']", moonlight: ":root[data-theme='moonlight']" } as const
 const dark = declaredTokens(css, BLOCKS.dark)
-// Type tokens and the calculator's LCD colours are declared once, outside the theme blocks: the
-// LCD looks the same in a bright room, so those are deliberately not themed.
+// Type tokens are declared once, outside the theme blocks (the @theme block at the top).
 const anywhere = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]))
 
 describe('theme tokens', () => {

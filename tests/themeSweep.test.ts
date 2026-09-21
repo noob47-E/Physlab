@@ -23,28 +23,35 @@ const tsxFiles = (dir: string): string[] =>
 describe('the type scale', () => {
   const css = read('styles.css')
 
-  it('has exactly one step under fine, and only the keypad legends use it', () => {
-    // 9 px is as small as anything in the app gets; a second "just a bit smaller" step is how
-    // 8.5 px and 10.5 px labels crept in before.
-    expect(css.match(/--text-micro:\s*9px;/g)).toHaveLength(1)
-    const uses = [...css.matchAll(/var\(--text-micro\)/g)].length
-    expect(uses).toBe(2)
-    const legends = css.match(/\.key \.(?:shift|alpha) \{[^}]*var\(--text-micro\)/g) ?? []
-    expect(legends).toHaveLength(2)
-    // The @theme block also makes a `text-micro` utility, which the colours test does not know
-    // about; no panel may reach for it.
-    for (const file of tsxFiles(ROOT)) expect(readFileSync(file, 'utf8'), file).not.toMatch(/\btext-micro\b/)
+  it('has no step under fine any more: the keypad legends that used --text-micro are gone', () => {
+    // 11 px is as small as anything in the app gets. The 9 px step existed for the SHIFT and
+    // ALPHA legends in the corner of a key; with the popup keypad there are no legends, and a
+    // second "just a bit smaller" step is how 8.5 px and 10.5 px labels crept in before.
+    expect(css).not.toMatch(/--text-micro/)
+    expect(css).not.toMatch(/font-size:\s*(?:9|10|10\.5)px/)
+    // No panel may reach for it either, and no LCD survives anywhere in the stylesheet.
+    for (const file of tsxFiles(ROOT)) expect(readFileSync(file, 'utf8'), file).not.toMatch(/\btext-micro\b|\blcd\b/)
+    expect(css).not.toMatch(/\blcd\b/)
   })
 
-  it('sizes the Calculator section in named steps, never in pixels', () => {
-    const start = css.indexOf('/* ---------- Calculator ---------- */')
+  it('sizes the Maths section in named steps and theme tokens, never in pixels or hex', () => {
+    const start = css.indexOf('/* ---------- Maths ---------- */')
     const end = css.indexOf('/* ---------- Pure Math')
     expect(start).toBeGreaterThan(0)
     expect(end).toBeGreaterThan(start)
     const section = css.slice(start, end)
     expect(section.match(/font-size:\s*[\d.]+px/g)).toBeNull()
     expect(section).not.toMatch(/font-family:\s*'/)
-    // The step numbers and the method badge of the working area sit past the Calculator marker.
+    // The keys are flat and themed: no hex, no rgba, no gradient — the old keypad was the same
+    // grey-and-green in every theme.
+    expect(section).not.toMatch(/#[0-9a-f]{3,8}\b/i)
+    expect(section).not.toMatch(/rgba?\(|linear-gradient/)
+    for (const cls of ['.maths', '.maths-field', '.maths-answer', '.keypad-pop', '.key', '.key.primary', '.key-more']) {
+      expect(section, cls).toContain(`\n${cls} {`)
+    }
+    expect(section.match(/\n\.key \{[^}]*\}/)?.[0]).toMatch(/background: var\(--bg-3\)/)
+    expect(section.match(/\n\.key \{[^}]*\}/)?.[0]).toMatch(/border: 1px solid var\(--line-2\)/)
+    // The step numbers and the method badge of the working area sit past the Maths marker.
     const pure = css.slice(end)
     for (const cls of ['pure-num', 'pure-method']) {
       const block = pure.match(new RegExp(`\\.${cls} \\{[^}]*\\}`))?.[0] ?? ''
@@ -83,7 +90,7 @@ describe('the Working panel', () => {
   it('makes the invitation the primary button and leaves the reveal beside it plain', () => {
     // So Enter after "Work it out" chooses trying, never a step. The finished-state button of the
     // same name stays a ghost.
-    const src = read('panels/Working.tsx')
+    const src = read('panels/WorkingView.tsx')
     const invite = src.match(/\{inviting && \([\s\S]*?<\/button>/)?.[0] ?? ''
     expect(invite).toContain('className="btn primary"')
     expect(invite).toContain('Let me try first')
