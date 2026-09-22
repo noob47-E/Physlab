@@ -2,9 +2,10 @@
 
 # PhysLab
 
-A general math and physics engine for students and teachers: vectors, shapes and geometry,
-graphing, a natural textbook-math calculator, step-by-step solutions and GPU simulations.
-Everything runs offline.
+A general math and physics engine for anyone curious about them — a kid dropping balls in the
+Sandbox, a Matric, O-Level or A-Level student, a university student, or a teacher running a
+classroom. Vectors, shapes and geometry, graphing, a natural textbook-math calculator,
+step-by-step solutions and GPU simulations. Everything runs offline.
 
 <br clear="left" />
 
@@ -75,6 +76,9 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 | **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
 | **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern. |
+
+**Platforms.** Windows today. As the physics and the maths engine mature, precision keeps
+improving and a mobile release is planned.
 
 ## Drawing, finishing and the right-click menu
 
