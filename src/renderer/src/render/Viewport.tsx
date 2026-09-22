@@ -15,7 +15,7 @@ import { overlay } from './overlay'
 import { resetCamera, useView } from './viewState'
 import { GpuParticles, useParticleLab } from './GpuParticles'
 import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
-import { GRID_STYLES } from './gridMath'
+import { GRID_STYLES, normaliseGridStyle } from './gridMath'
 import { normalizeRect } from './selectMath'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
@@ -319,7 +319,8 @@ export function Viewport() {
  */
 function GridStylePicker() {
   const showGrid = useScene((s) => s.settings.showGrid)
-  const gridStyle = useScene((s) => s.settings.gridStyle)
+  // Normalised, so a file naming a style this build lacks shows the lines it draws, not a blank picker.
+  const gridStyle = useScene((s) => normaliseGridStyle(s.settings.gridStyle))
   const showAxes = useScene((s) => s.settings.showAxes)
   const setSettings = useScene((s) => s.setSettings)
   return (

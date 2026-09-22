@@ -8,7 +8,7 @@ import type { Computed, ObjId, SceneObject } from '../core/types'
 import { heading, len, neg, normalize, toDeg, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { useTool } from '../render/tools'
-import { GRID_STYLES } from '../render/gridMath'
+import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 import { fitCamera, resetCamera } from '../render/viewState'
 import { addVectorFromScene } from '../panels/vectorCalcStore'
@@ -243,7 +243,8 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
     { label: 'Delete everything on this drawing…', hint: 'Only this drawing; Undo brings it back', danger: true, run: () => confirmClearDrawing() }
   )
   const labels = st.settings.labelShow
-  const { showGrid, gridStyle, showAxes } = st.settings
+  const { showGrid, showAxes } = st.settings
+  const gridStyle = normaliseGridStyle(st.settings.gridStyle)
   return [
     { items },
     {

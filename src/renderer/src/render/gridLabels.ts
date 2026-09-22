@@ -37,3 +37,26 @@ export function tickText(v: number, step: number, s: MeasureSettings): string {
 export function axisTitle(axis: string, s: MeasureSettings): string {
   return s.unit === 'unit' ? axis : `${axis} (${UNIT_LABELS[s.unit]})`
 }
+
+/**
+ * The angle written beside each ray of the polar grid, at every 30° and every 45°, in the
+ * drawing's angle unit. Radians are exact fractions of π written the way a textbook does —
+ * π/6, π/4, π/3, π/2, 2π/3 … 11π/6 — never 0.5236; degrees go through the formatter with no
+ * decimals, so a ray never reads 30.0°.
+ */
+export function ringLabels(angleUnit: 'deg' | 'rad'): { angle: number; text: string }[] {
+  // Twelfths of a turn that are also sixths, quarters or thirds: every multiple of π/6 and π/4.
+  const twelfths = Array.from({ length: 24 }, (_, n) => n).filter((n) => n % 2 === 0 || n % 3 === 0)
+  return twelfths.map((n) => ({ angle: (n * Math.PI) / 12, text: angleUnit === 'deg' ? `${fmtPrecise(n * 15, { decimals: 0, precisionMode: 'dp' })}°` : piFraction(n, 12) }))
+}
+
+/** `num/den` of π as plain text: 0 → '0', 12/12 → 'π', 2/12 → 'π/6', 9/12 → '3π/4'. */
+function piFraction(num: number, den: number): string {
+  if (num === 0) return '0'
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+  const g = gcd(num, den)
+  const n = num / g
+  const d = den / g
+  const top = n === 1 ? 'π' : `${n}π`
+  return d === 1 ? top : `${top}/${d}`
+}

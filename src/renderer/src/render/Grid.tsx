@@ -3,11 +3,11 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { niceStep, orthoBounds, toScreen, worldPerPixel } from './cameraUtils'
-import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, minorStepOf, needsGridRebuild, usableSize, type GridArea } from './gridMath'
+import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, minorStepOf, needsGridRebuild, normaliseGridStyle, styleFor3D, usableSize, type GridArea } from './gridMath'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
-import { axisTitle, tickText } from './gridLabels'
+import { axisTitle, ringLabels, tickText } from './gridLabels'
 import type { V3 } from '../math/vec'
 import type { GridStyle } from '../core/types'
 
@@ -70,9 +70,9 @@ function useGridLines(): GridLines {
   return lines
 }
 
-/** Rebuild the grid for one style; `dotHalf` is half a dot's side in world units (see `dotQuads`). */
-function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridArea, majorStep: number, minorStep: number, dotHalf: number, z = 0) {
-  const v = gridVertices(style, area, majorStep, minorStep, z)
+/** Rebuild the grid for one style; `dotHalf` is half a dot's side in world units (see `dotQuads`), `wpp` the world units one pixel spans (it sizes the chords of the polar circles). */
+function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridArea, majorStep: number, minorStep: number, dotHalf: number, wpp: number, z = 0) {
+  const v = gridVertices(style, area, majorStep, minorStep, z, wpp)
   const put = (obj: THREE.Object3D & { geometry: THREE.BufferGeometry }, pos: number[]) => {
     obj.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
     obj.geometry.computeBoundingSphere()
@@ -93,7 +93,8 @@ export function Grid2D() {
   const lines = useGridLines()
   const [minor] = lines
   const showGrid = useScene((s) => s.settings.showGrid)
-  const gridStyle = useScene((s) => s.settings.gridStyle)
+  // A style this build does not know draws lines rather than nothing.
+  const gridStyle = useScene((s) => normaliseGridStyle(s.settings.gridStyle))
   const showAxes = useScene((s) => s.settings.showAxes)
   // Ticks are written in the drawing's unit and scale, like every other number on screen.
   const settings = useScene((s) => s.settings)
@@ -127,7 +128,8 @@ export function Grid2D() {
       const h = b.yMax - b.yMin
       const ext = { xMin: b.xMin - w, xMax: b.xMax + w, yMin: b.yMin - h, yMax: b.yMax + h }
       // The key holds the zoom, so the dots are re-sized whenever the zoom changes.
-      fillGrid(lines, gridStyle, ext, majorStep, minorStep, DOT_HALF_PX * worldPerPixel(camera, size))
+      const wpp = worldPerPixel(camera, size)
+      fillGrid(lines, gridStyle, ext, majorStep, minorStep, DOT_HALF_PX * wpp, wpp)
       built.current = { key, ...ext }
       setAxes({ x: [[ext.xMin, 0, 0], [ext.xMax, 0, 0]], y: [[0, ext.yMin, 0], [0, ext.yMax, 0]] })
     }
@@ -155,6 +157,19 @@ export function Grid2D() {
         ticks.place(tickText(j * majorStep, majorStep, settings), axisX, sy, 'right')
       }
       ticks.place('0', origin.x - 8, origin.y + 12, 'right')
+      if (showGrid && gridStyle === 'polar') {
+        // The angle of each ray, written just outside the biggest major circle that fits in the
+        // view whole (or the first circle when none does), and only where that point is on screen.
+        // "Grid: off" clears showGrid and leaves gridStyle alone, so the labels must follow the circles.
+        const fits = Math.min(b.xMax, -b.xMin, b.yMax, -b.yMin)
+        const r = Math.max(majorStep, Math.floor(fits / majorStep) * majorStep)
+        for (const { angle, text } of ringLabels(settings.angleUnit)) {
+          const p = toScreen(camera, size, [r * Math.cos(angle), r * Math.sin(angle), 0])
+          const sx = p.x + 16 * Math.cos(angle)
+          const sy = p.y - 16 * Math.sin(angle)
+          if (sx >= 12 && sx <= size.width - 12 && sy >= 10 && sy <= size.height - 10) ticks.place(text, sx, sy)
+        }
+      }
       ticks.place(axisTitle('x', settings), size.width - 12, Math.min(Math.max(origin.y - 12, 12), size.height - 20), 'right', AXIS_COLORS.x)
       ticks.place(axisTitle('y', settings), Math.min(Math.max(origin.x + 12, 12), size.width - 12), 14, 'left', AXIS_COLORS.y)
     }
@@ -181,7 +196,8 @@ export function Grid3D() {
   const { camera, size, invalidate } = useThree()
   const lines = useGridLines()
   const showGrid = useScene((s) => s.settings.showGrid)
-  const gridStyle = useScene((s) => s.settings.gridStyle)
+  // The floor knows only the square styles: circles and lattices are drawing paper, so it draws lines for them.
+  const gridStyle = useScene((s) => styleFor3D(normaliseGridStyle(s.settings.gridStyle)))
   const showAxes = useScene((s) => s.settings.showAxes)
   const settings = useScene((s) => s.settings)
   const [extent, setExtent] = useState({ size: 10, step: 1 })
@@ -219,7 +235,8 @@ export function Grid3D() {
     const { size: half, step } = extent
     // The dots are sized for the camera's distance when the step last changed; in a perspective
     // view they shrink and grow with the rest of the floor between steps, which is what a floor does.
-    fillGrid(lines, gridStyle, { xMin: -half, xMax: half, yMin: -half, yMax: half }, step * 2, step / 2, DOT_HALF_PX * worldPerPixel(camera, size))
+    const wpp = worldPerPixel(camera, size)
+    fillGrid(lines, gridStyle, { xMin: -half, xMax: half, yMin: -half, yMax: half }, step * 2, step / 2, DOT_HALF_PX * wpp, wpp)
     // The parts a style uses changed with the vertex lists; the canvas draws on demand.
     showGridLines(lines, useScene.getState().settings.showGrid)
     invalidate()

@@ -20,7 +20,7 @@ import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '..
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
-import { minorStepOf, snapStep } from './gridMath'
+import { minorStepOf, normaliseGridStyle, snapStep, snapToGrid, styleFor3D } from './gridMath'
 import { themeColor, useThemed } from '../app/theme'
 
 interface DragState {
@@ -117,12 +117,22 @@ export function Interaction() {
       const c = ctxRef.current.controls as unknown as { enabled: boolean } | null
       if (c) c.enabled = enabled
     }
-    /** The step a point snaps to at the current zoom: the minor grid step, halved with the Fine style, the same rule the grid is drawn by. */
-    const gridStep = () => {
+    /** The grid as it is drawn at the current zoom: its style and its major and minor steps, by the same rules `Grid2D` and `Grid3D` build it. */
+    const gridNow = () => {
       const { camera: cam, size: sz } = ctxRef.current
       const s = scene()
-      const minor = s.viewMode === '2d' ? minorStepOf(niceStep(100 * worldPerPixel(cam, sz))) : niceStep(cam.position.length() / 12) / 2
-      return snapStep(minor, s.settings.gridStyle)
+      const style = normaliseGridStyle(s.settings.gridStyle)
+      if (s.viewMode === '2d') {
+        const major = niceStep(100 * worldPerPixel(cam, sz))
+        return { style, major, minor: minorStepOf(major) }
+      }
+      const step = niceStep(cam.position.length() / 12)
+      return { style: styleFor3D(style), major: step * 2, minor: step / 2 }
+    }
+    /** The step a point snaps to at the current zoom: the minor grid step, halved with the Fine style, the same rule the grid is drawn by. */
+    const gridStep = () => {
+      const g = gridNow()
+      return snapStep(g.minor, g.style)
     }
     const worldOn = (x: number, y: number, plane: THREE.Plane = XY_PLANE) => screenToPlane(ctxRef.current.camera, ctxRef.current.size, x, y, plane)
     const scr = (p: V3) => toScreen(ctxRef.current.camera, ctxRef.current.size, p)
@@ -149,7 +159,10 @@ export function Interaction() {
       // happens to sit near a grid line used to lose to the grid.
       const crossing = crossingNear(x, y, exclude)
       if (crossing) return crossing
-      const g: V3 = [Math.round(w[0] / step) * step, Math.round(w[1] / step) * step, w[2]]
+      // The nearest crossing of whatever grid is drawn: a circle and a ray, a lattice point, a
+      // hexagon's centre or corner — not always a multiple of the step on each axis.
+      const grid = gridNow()
+      const g = snapToGrid(grid.style, w, grid.major, grid.minor)
       const gs = scr(g)
       if (Math.hypot(gs.x - x, gs.y - y) <= SNAP_GRID_PX) return { p: g, kind: 'grid' }
       // On a side or a circle: the new point sticks to it and slides along it.

@@ -40,7 +40,7 @@ import { resetCamera } from '../render/viewState'
 import { useSandbox } from '../sim/store'
 import { UNIT_NAMES } from '../math/format'
 import { spaceOf, visibleOrder } from '../core/visibility'
-import { GRID_STYLES } from '../render/gridMath'
+import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { confirmClearDrawing } from './contextActions'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
 
@@ -359,7 +359,7 @@ export function TopBar() {
   const filePath = useScene((s) => s.filePath)
   const dirty = useScene((s) => s.dirty)
   const showGrid = useScene((s) => s.settings.showGrid)
-  const gridStyle = useScene((s) => s.settings.gridStyle)
+  const gridStyle = useScene((s) => normaliseGridStyle(s.settings.gridStyle))
   const showAxes = useScene((s) => s.settings.showAxes)
   const snap = useScene((s) => s.settings.snap)
   const angleMarks = useScene((s) => s.settings.showAngleMarks)
@@ -425,10 +425,12 @@ export function TopBar() {
           '-',
           // One row per grid style plus Off, ticked on the current one, like the themes below. The
           // tick is the `sc` text: `on` alone has no menu style, and a View menu with five Grid
-          // rows and no mark on any of them could not say which grid was showing.
+          // rows and no mark on any of them could not say which grid was showing. A label with a
+          // description after a dash ("Polar — circles and angles") keeps only its name here:
+          // the menu is narrow and the long form wrapped onto two lines.
           ...GRID_STYLES.map((g) => {
             const current = showGrid && gridStyle === g.id
-            return { label: `Grid: ${g.label.toLowerCase()}`, sc: current ? '✓' : undefined, on: current, run: () => s().setSettings({ showGrid: true, gridStyle: g.id }) }
+            return { label: `Grid: ${g.label.split(' — ')[0].toLowerCase()}`, sc: current ? '✓' : undefined, on: current, run: () => s().setSettings({ showGrid: true, gridStyle: g.id }) }
           }),
           { label: 'Grid: off', sc: showGrid ? undefined : '✓', on: !showGrid, run: () => s().setSettings({ showGrid: false }) },
           // Ticked like the grid rows above: the same word in the grid picker and the right-click menu.

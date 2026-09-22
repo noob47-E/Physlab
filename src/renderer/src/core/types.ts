@@ -256,8 +256,8 @@ export interface SceneFile {
 
 export type LengthUnit = 'unit' | 'mm' | 'cm' | 'm' | 'km' | 'in' | 'ft'
 
-/** How the grid is drawn: squared lines, a dot at each crossing, finer squares, or squared paper with a tinted page. "Off" is `showGrid: false`. */
-export type GridStyle = 'lines' | 'dots' | 'fine' | 'paper'
+/** How the grid is drawn: squared lines, a dot at each crossing, finer squares, squared paper with a tinted page, polar circles and rays, a 60° isometric lattice, or a hexagon tiling. "Off" is `showGrid: false`; a file naming a style this build does not know draws lines (`normaliseGridStyle`). */
+export type GridStyle = 'lines' | 'dots' | 'fine' | 'paper' | 'polar' | 'isometric' | 'hex'
 
 export interface SceneSettings {
   angleUnit: 'deg' | 'rad'
