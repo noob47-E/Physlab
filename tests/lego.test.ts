@@ -12,17 +12,24 @@ import {
   flipPiece,
   fuseResult,
   GAP_SENTENCE,
+  HANDLE_GAP_PX,
+  handleAnchor,
+  legoSnap,
   legoStatus,
   matchesSignature,
   ONE_PIECE_SENTENCE,
   outlineOf,
   OVERLAP_SENTENCE,
+  pieceSnapTolerance,
   piecesOverlap,
   sameShape,
   signatureOf,
+  slideAlong,
+  SNAP_PIECE_PX,
   snapToCorners,
   snapTolerance,
   tintPiece,
+  turnFromDrag,
   turnPiece
 } from '../src/renderer/src/math/lego'
 import { parseColour } from '../src/renderer/src/render/colourMix'
@@ -266,6 +273,130 @@ describe('snapToCorners', () => {
   it('reaches a fiftieth of the longest side', () => {
     expect(snapTolerance(triA)).toBeCloseTo(0.1, 12)
     expect(snapTolerance(rect)).toBeCloseTo(0.08, 12)
+  })
+})
+
+describe('legoSnap while a piece is dragged', () => {
+  it('reaches 12 px at the current zoom', () => {
+    expect(SNAP_PIECE_PX).toBe(12)
+    expect(pieceSnapTolerance(0.05)).toBeCloseTo(0.6, 12)
+    expect(pieceSnapTolerance(0.01)).toBeCloseTo(0.12, 12)
+  })
+
+  it("pulls a corner onto a neighbour's corner first, and leaves a far move alone", () => {
+    // triB's corner (0,0) moved by (4.05, 0.02) lands 0.054 from triA's corner (4,0) — and
+    // 0.02 from triA's bottom side, yet the corner wins.
+    const near = legoSnap(triB, [4.05, 0.02, 0], [triA], 0.6)
+    expect(near.how).toBe('corner')
+    expect(near.delta).toEqual([4, 0, 0])
+    const far = legoSnap(triB, [10, 10, 0], [triA], 0.6)
+    expect(far.how).toBe('none')
+    expect(far.delta).toEqual([10, 10, 0])
+  })
+
+  it("pulls a corner onto the middle of a neighbour's side, so a piece slid along it sticks to it", () => {
+    // The unit triangle under the trapezium: its corner (1,1) moved by (1, -1.05) sits at
+    // (2, -0.05), 0.05 below the side from (0,0) to (6,0) and 2 from that side's nearest corner.
+    const under = legoSnap(halfA, [1, -1.05, 0], [rightTrap], 0.2)
+    expect(under.how).toBe('edge')
+    expect(under.delta[0]).toBeCloseTo(1, 12)
+    expect(under.delta[1]).toBeCloseTo(-1, 12)
+    // Sliding further along the side keeps it there: still an edge fit, no sideways pull.
+    const along = legoSnap(halfA, [2.3, -1.02, 0], [rightTrap], 0.2)
+    expect(along.how).toBe('edge')
+    expect(along.delta[0]).toBeCloseTo(2.3, 12)
+    expect(along.delta[1]).toBeCloseTo(-1, 12)
+    // Lifted clear of the tolerance it lets go.
+    expect(legoSnap(halfA, [2.3, -1.5, 0], [rightTrap], 0.2).how).toBe('none')
+  })
+
+  it("pulls a neighbour's corner onto the middle of the dragged piece's side", () => {
+    // The trapezium dragged so its bottom side (0,0)–(6,0) passes 0.04 above the unit square's
+    // top-left corner (0,1), with no corner of either within reach.
+    const s = legoSnap(rightTrap, [-2, 1.04, 0], [square], 0.2)
+    expect(s.how).toBe('edge')
+    expect(s.delta[0]).toBeCloseTo(-2, 12)
+    expect(s.delta[1]).toBeCloseTo(1, 12)
+  })
+
+  it('takes the nearest fit when two are within reach', () => {
+    // halfA's corner (0,0) moved to (0.5, 0.03): 0.03 from the square's bottom side and 0.5
+    // from its corner — no corner fit at tol 0.1, the side wins by distance.
+    const s = legoSnap(halfA, [0.5, 0.03, 0], [square], 0.1)
+    expect(s.how).toBe('edge')
+    expect(s.delta[1]).toBeCloseTo(0, 12)
+  })
+
+  it('says which way the side runs on an edge fit, as a unit vector', () => {
+    // The unit triangle's corner onto the trapezium's bottom side (0,0)→(6,0): along is +x.
+    const under = legoSnap(halfA, [1, -1.05, 0], [rightTrap], 0.2)
+    expect(under.how).toBe('edge')
+    if (under.how === 'edge') expect(under.along).toEqual([1, 0, 0])
+    // The square's corner (0,1) onto the trapezium's bottom side dragged over it: the piece's
+    // own side (0,0)→(6,0), still +x.
+    const over = legoSnap(rightTrap, [-2, 1.04, 0], [square], 0.2)
+    expect(over.how).toBe('edge')
+    if (over.how === 'edge') expect(over.along).toEqual([1, 0, 0])
+    // A slanted side: the trapezium's (6,0)→(4,3) as a unit vector, so the caller can project
+    // onto it without scaling.
+    const slant = legoSnap(square, [5.6, 0.5, 0], [rightTrap], 0.2)
+    expect(slant.how).toBe('edge')
+    if (slant.how === 'edge') {
+      expect(Math.hypot(slant.along[0], slant.along[1])).toBeCloseTo(1, 12)
+      expect(slant.along[0]).toBeCloseTo(-2 / Math.sqrt(13), 12)
+      expect(slant.along[1]).toBeCloseTo(3 / Math.sqrt(13), 12)
+    }
+    // No corner or side fit carries no direction.
+    expect('along' in legoSnap(halfA, [10, 10, 0], [rightTrap], 0.2)).toBe(false)
+    expect('along' in legoSnap(triB, [4.05, 0.02, 0], [triA], 0.6)).toBe(false)
+  })
+
+  it('lets the grid tidy the move along the side and leaves the fit across it untouched', () => {
+    // Glued to a vertical side (along +y) at x = 2 exactly, the grid asks to pull the first
+    // corner by (0.3, −0.042): only the −0.042 down the side is taken, x stays 2.
+    const slid = slideAlong([2, -0.457967552, 0], [0, 1, 0], [0.3, -0.042032448, 0])
+    expect(slid[0]).toBe(2)
+    expect(slid[1]).toBeCloseTo(-0.5, 12)
+    // A slanted side: the part of the correction across the side is dropped.
+    const along: V3 = [Math.SQRT1_2, Math.SQRT1_2, 0]
+    const d = slideAlong([1, 1, 0], along, [0.1, 0, 0])
+    expect(d[0]).toBeCloseTo(1.05, 12)
+    expect(d[1]).toBeCloseTo(1.05, 12)
+    // A correction straight across the side changes nothing.
+    expect(slideAlong([1, 1, 0], [1, 0, 0], [0, 0.3, 0])).toEqual([1, 1, 0])
+  })
+})
+
+describe('the turn-and-flip handle', () => {
+  it('sits a fixed number of pixels above the piece, over its middle', () => {
+    const a = handleAnchor(rightTrap, 0.05)
+    expect(a[0]).toBeCloseTo(centroid(rightTrap)[0], 12)
+    expect(a[1]).toBeCloseTo(3 + HANDLE_GAP_PX * 0.05, 12)
+    // Zoomed in twice as far the gap on the drawing halves, so it is the same gap on screen.
+    expect(handleAnchor(rightTrap, 0.025)[1]).toBeCloseTo(3 + HANDLE_GAP_PX * 0.025, 12)
+    // With no room above, the same gap under the lowest corner.
+    const b = handleAnchor(rightTrap, 0.05, 'below')
+    expect(b[0]).toBeCloseTo(centroid(rightTrap)[0], 12)
+    expect(b[1]).toBeCloseTo(0 - HANDLE_GAP_PX * 0.05, 12)
+  })
+
+  it('reads a drag round the centre as a turn in 15° steps, anticlockwise positive', () => {
+    const c: V3 = [1, 1, 0]
+    const from: V3 = [3, 1, 0]
+    expect(turnFromDrag(c, from, [1, 3, 0])).toBe(90)
+    expect(turnFromDrag(c, from, [1, -1, 0])).toBe(-90)
+    // 37° rounds to 30, 38° to 45 (halfway is 37.5).
+    expect(turnFromDrag(c, from, add(c, rotateZ([2, 0, 0], toRad(37))))).toBe(30)
+    expect(turnFromDrag(c, from, add(c, rotateZ([2, 0, 0], toRad(38))))).toBe(45)
+    // A drag the other way round the far side reads as the short way: 210° is −150°.
+    expect(turnFromDrag(c, from, add(c, rotateZ([2, 0, 0], toRad(210))))).toBe(-150)
+    expect(turnFromDrag(c, from, add(c, rotateZ([2, 0, 0], toRad(180))))).toBe(180)
+    expect(turnFromDrag(c, from, add(c, rotateZ([2, 0, 0], toRad(-180))))).toBe(180)
+    // The pointer on the centre has no direction.
+    expect(turnFromDrag(c, from, c)).toBe(0)
+    expect(turnFromDrag(c, c, from)).toBe(0)
+    // Every answer is a turn the buttons could have made.
+    for (let d = 0; d < 360; d += 7) expect(Math.abs(turnFromDrag(c, from, add(c, rotateZ([2, 0, 0], toRad(d)))) % 15)).toBe(0)
   })
 })
 

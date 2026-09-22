@@ -21,6 +21,7 @@ import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
 import { minorStepOf, normaliseGridStyle, snapStep, snapToGrid, styleFor3D } from './gridMath'
+import { legoSnap, pieceSnapTolerance, slideAlong } from '../math/lego'
 import { themeColor, useThemed } from '../app/theme'
 
 interface DragState {
@@ -519,10 +520,38 @@ export function Interaction() {
       // snapping the whole shape by its first corner so it lands neatly on the grid.
       const raw = worldOn(x, y, d.plane) ?? w
       let delta = sub(raw, d.startWorld)
+      // REGION L2: a Lego piece is pulled onto a piece of the same shape the moment a corner
+      // comes within 12 px of a neighbour's corner or side, before the grid gets a say — a
+      // neighbour is what the student is aiming at, and the grid used to pull the piece a few
+      // pixels off it. Alt turns this off like every other snap. The corners are the piece's
+      // own free points, taken where they stood when the drag began.
+      let met: 'corner' | 'edge' | 'none' = 'none'
+      let along: V3 | null = null
+      if (o.type === 'polygon' && o.lego && !e.altKey) {
+        const source = o.lego.sourceId
+        const own = o.points.map((pid) => d.starts.get(pid)).filter((p): p is V3 => !!p)
+        const neighbours = Object.values(s.objects).flatMap((n) => {
+          if (n.type !== 'polygon' || !n.lego || n.id === o.id || n.lego.sourceId !== source) return []
+          const c = s.ev.values.get(n.id)
+          return c?.type === 'polygon' ? [c.pts] : []
+        })
+        const tol = pieceSnapTolerance(worldPerPixel(ctxRef.current.camera, ctxRef.current.size))
+        const pull = legoSnap(own, delta, neighbours, tol)
+        met = pull.how
+        delta = pull.delta
+        if (pull.how === 'edge') along = pull.along
+      }
       const first = d.starts.values().next().value as V3 | undefined
-      if (first) {
+      if (met === 'none' && first) {
         const target = snapNear(add(first, delta), e.altKey, d.exclude)
         delta = sub(target.p, first)
+      } else if (met === 'edge' && along && first) {
+        // Glued to a neighbour's side, the piece is still free to run along it — and along it
+        // the grid keeps its say, so a piece let go part-way down a side lands on a grid line
+        // (or a tidy step) as a plain move would, not at y = −0.457967552. Only the part of the
+        // grid's pull that runs along the side is taken; across the side the fit stays exact.
+        const target = snapNear(add(first, delta), e.altKey, d.exclude)
+        delta = slideAlong(delta, along, sub(sub(target.p, first), delta))
       }
       for (const [pid, p0] of d.starts) {
         s.updateObject(pid, (dr) => {
@@ -530,7 +559,7 @@ export function Interaction() {
           if (dr.type === 'vector' && dr.def.kind === 'free') dr.def.tail = add(p0, delta)
         }, false)
       }
-      showTip(`move ${coordText(delta)}`, x, y)
+      showTip(`move ${coordText(delta)}${met === 'corner' ? '  • corner to corner' : met === 'edge' ? '  • side to side' : ''}`, x, y)
     }
 
     /** Snap a world position (not the cursor) using the same magnetic rules. */

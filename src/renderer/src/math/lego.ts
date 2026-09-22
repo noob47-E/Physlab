@@ -7,7 +7,7 @@
 // "the shape they came from" remembered once the parent polygon is gone — on plain point lists,
 // so every answer is testable without the scene.
 
-import { add, dist, mid, rotateZ, sub, toDeg, toRad, type V3 } from './vec'
+import { add, dist, dot, mid, normalize, rotateZ, scale, sub, toDeg, toRad, type V3 } from './vec'
 import { centroid, perimeter, polygonArea, signedArea2D } from './geometry'
 import { classifyPolygon, cleanPolygon, interiorAngles, sideLengths } from './shapes'
 import { formatColour, oklabToSrgb, parseColour, srgbToOklab } from '../render/colourMix'
@@ -324,6 +324,115 @@ export function snapToCorners(corners: V3[], delta: V3, targets: V3[], tol: numb
 /** How close a released piece's corner must come to a neighbour's to be pulled onto it: a fiftieth of its longest side. */
 export function snapTolerance(pts: V3[]): number {
   return 0.02 * Math.max(...sideLengths(pts), 0)
+}
+
+/** How close, on screen, a dragged piece comes to a neighbour before it is pulled onto it. */
+export const SNAP_PIECE_PX = 12
+
+/** The screen tolerance as a distance on the drawing, at a zoom of `wpp` world units per pixel. */
+export const pieceSnapTolerance = (wpp: number, px = SNAP_PIECE_PX): number => px * wpp
+
+/**
+ * Where a dragged piece was pulled to: a neighbour's corner, a neighbour's side, or nowhere. An
+ * edge fit also says which way the side runs (`along`, a unit vector), so the caller can let the
+ * grid tidy the piece's movement along the side while the fit keeps it glued across the side.
+ */
+export type LegoSnap =
+  | { delta: V3; how: 'corner' }
+  | { delta: V3; how: 'edge'; along: V3 }
+  | { delta: V3; how: 'none' }
+
+/** The point of the segment a–b nearest to `p`, with how far along it lies (0 at a, 1 at b). */
+function footOn(p: V3, a: V3, b: V3): { foot: V3; t: number } {
+  const d = sub(b, a)
+  const l2 = d[0] * d[0] + d[1] * d[1]
+  const t = l2 > 0 ? ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / l2 : 0
+  return { foot: add(a, [d[0] * t, d[1] * t, 0]), t }
+}
+
+/**
+ * Adjust a piece's move while it is being dragged so it lands on a neighbour the moment it comes
+ * within `tol` (world units) of one. A corner meeting a neighbour's corner wins, because pieces
+ * cut from one shape share their corners exactly and one corner meeting is a whole side meeting.
+ * Failing that, a corner is pulled onto the middle of a neighbour's side, or a neighbour's corner
+ * onto the middle of this piece's side, so a piece slid along another sticks to it and can be
+ * run along the side without drifting off. Only the nearest fit is taken.
+ */
+export function legoSnap(corners: V3[], delta: V3, neighbours: V3[][], tol: number): LegoSnap {
+  const byCorner = snapToCorners(corners, delta, neighbours.flat(), tol)
+  if (byCorner.snapped) return { delta: byCorner.delta, how: 'corner' }
+  const moved = corners.map((c) => add(c, delta))
+  const fits: { d: number; fix: V3; along: V3 }[] = []
+  const consider = (d: number, fix: V3, a: V3, b: V3) => {
+    if (d <= tol) fits.push({ d, fix, along: normalize(sub(b, a)) })
+  }
+  for (const other of neighbours) {
+    for (let k = 0; k < other.length; k++) {
+      const a = other[k]
+      const b = other[(k + 1) % other.length]
+      // This piece's corner onto the neighbour's side: strictly between its ends, since an end
+      // is a corner and corners were tried first.
+      for (const c of moved) {
+        const { foot, t } = footOn(c, a, b)
+        if (t > EPS && t < 1 - EPS) consider(dist(c, foot), sub(foot, c), a, b)
+      }
+    }
+    for (const q of other) {
+      // The neighbour's corner onto this piece's side: the piece moves so its side runs through q.
+      for (let k = 0; k < moved.length; k++) {
+        const a = moved[k]
+        const b = moved[(k + 1) % moved.length]
+        const { foot, t } = footOn(q, a, b)
+        if (t > EPS && t < 1 - EPS) consider(dist(q, foot), sub(q, foot), a, b)
+      }
+    }
+  }
+  if (fits.length === 0) return { delta, how: 'none' }
+  const nearest = fits.reduce((p, q) => (q.d < p.d ? q : p))
+  return { delta: add(delta, nearest.fix), how: 'edge', along: nearest.along }
+}
+
+/**
+ * A piece glued to a neighbour's side is still free to run along it, and along it the grid keeps
+ * its say: of a correction `corr` some other snap would make to the move `delta` (the grid pulling
+ * the piece's first corner onto a line, say), only the part that runs along the side is taken, so
+ * the piece stays exactly on the side and still lands on a grid line when let go part-way down it.
+ */
+export function slideAlong(delta: V3, along: V3, corr: V3): V3 {
+  return add(delta, scale(along, dot(corr, along)))
+}
+
+/** How far, in pixels, the on-canvas handle floats above the top of a piece. */
+export const HANDLE_GAP_PX = 30
+
+/**
+ * Where the turn-and-flip handle sits: above the highest corner (or below the lowest, when the
+ * piece is up against the top of the view), over the piece's middle, a fixed number of pixels
+ * clear of the piece at a zoom of `wpp` world units per pixel — so it never covers the piece
+ * and never drifts away from it when the view is zoomed.
+ */
+export function handleAnchor(pts: V3[], wpp: number, side: 'above' | 'below' = 'above'): V3 {
+  const c = centroid(pts)
+  const ys = pts.map((p) => p[1])
+  return side === 'above' ? [c[0], Math.max(...ys) + HANDLE_GAP_PX * wpp, 0] : [c[0], Math.min(...ys) - HANDLE_GAP_PX * wpp, 0]
+}
+
+/**
+ * The turn a drag of the handle asks for: the angle swept about the piece's centre from where
+ * the drag started to where the pointer is now, anticlockwise positive, rounded to the nearest
+ * `step` degrees so a piece turned by hand lands on the same angles the buttons give. A pointer
+ * sitting on the centre has no direction, and asks for no turn.
+ */
+export function turnFromDrag(centre: V3, from: V3, to: V3, step = 15): number {
+  const a = sub(from, centre)
+  const b = sub(to, centre)
+  if (Math.hypot(a[0], a[1]) < EPS || Math.hypot(b[0], b[1]) < EPS) return 0
+  let deg = toDeg(Math.atan2(b[1], b[0]) - Math.atan2(a[1], a[0]))
+  deg = ((deg + 540) % 360) - 180
+  const turned = Math.round(deg / step) * step
+  // A half-turn either way is the same turn; say it one way so the piece never flickers between
+  // them. A tiny clockwise wobble rounds to −0, which is 0 said with a sign.
+  return turned <= -180 ? 180 : turned === 0 ? 0 : turned
 }
 
 /** The piece turned about its own centre, anticlockwise by `deg`. */
