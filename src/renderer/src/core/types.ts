@@ -111,6 +111,19 @@ export interface CircleObj extends ObjectBase {
   fill?: boolean
 }
 
+/**
+ * Where a Lego piece came from: a polygon broken apart into its simple shapes. Every piece of
+ * one shape shares `sourceId`, and `sourceSignature` (`math/lego.ts` signatureOf) is the shape
+ * itself, remembered so the pieces can be recognised as the original once the parent is gone.
+ */
+export interface LegoRecord {
+  sourceId: ObjId
+  sourceSignature: string
+  pieceIndex: number
+  /** The parent's colour, given back to the shape when the pieces fuse into it again. */
+  originalColor: string
+}
+
 export interface PolygonObj extends ObjectBase {
   type: 'polygon'
   points: ObjId[]
@@ -122,6 +135,8 @@ export interface PolygonObj extends ObjectBase {
   decomposeGoal?: 'basic' | 'formula'
   /** Which of the possible splits to show ("Other way" cycles it). */
   decomposeIndex?: number
+  /** Set on a piece of a shape that was broken apart; absent on an ordinary polygon. */
+  lego?: LegoRecord
 }
 
 export interface AngleObj extends ObjectBase {
@@ -229,7 +244,7 @@ export type ToolId =
 export interface SceneFile {
   app: 'PhysLab'
   /** The format this file is written in. `core/migrate.ts` lists the formats and steps older ones up. */
-  version: 2
+  version: 3
   objects: SceneObject[]
   settings: SceneSettings
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens

@@ -11,15 +11,18 @@
 //      is older than 0.3.6 and nothing was ever stamped, or it is newer and the object was made
 //      where no drawing was active (the Sandbox, say) and was meant to show everywhere. Whether
 //      any object in the file is stamped tells the two apart.
-//   2  from this build: written by a PhysLab that knows about spaces, so a missing `space` is
+//   2  0.3.11 to 0.6.1: written by a PhysLab that knows about spaces, so a missing `space` is
 //      always deliberate and is left alone.
+//   3  from 0.7: a polygon may carry `lego`, the record of the shape it was broken off from
+//      (Geometry Lego). Nothing else changed; a format-2 file has no `lego` and comes through as
+//      it was.
 
 import { directDependents } from './evaluate'
 import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
 import type { Space } from './visibility'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
-export const FILE_VERSION: SceneFile['version'] = 2
+export const FILE_VERSION: SceneFile['version'] = 3
 
 type Raw = Record<string, unknown>
 
@@ -137,7 +140,8 @@ function checkObjects(file: Raw): void {
 // ---------------------------------------------------------------------------
 
 const STEPS: Record<number, (file: Raw) => Raw> = {
-  1: v1ToV2
+  1: v1ToV2,
+  2: v2ToV3
 }
 
 function v1ToV2(file: Raw): Raw {
@@ -153,6 +157,34 @@ function v1ToV2(file: Raw): Raw {
     settings: migrateLabelSettings((file.settings ?? {}) as Partial<SceneSettings>),
     objects: objects.map((o) => (spaces.has(o.id) ? { ...o, space: spaces.get(o.id) } : o))
   }
+}
+
+/**
+ * Format 3 only adds the Lego record a piece carries. A format-2 file never has one, but a file
+ * edited by hand or written by a build in between might carry something under that name: a
+ * record that is not `{ sourceId, pieceIndex, originalColor }` in the right types is dropped
+ * without a word, and the polygon opens as an ordinary polygon, rather than the whole file being
+ * refused over a field that only affects the Fuse button.
+ */
+function v2ToV3(file: Raw): Raw {
+  const objects = file.objects as Raw[]
+  return {
+    ...file,
+    version: 3,
+    objects: objects.map((o) => {
+      if (o.type !== 'polygon' || o.lego === undefined) return o
+      // The signature is only what lets the pieces be recognised as the original shape; without
+      // it they still move, turn and fuse into "a new shape".
+      if (isLegoRecord(o.lego)) return typeof o.lego.sourceSignature === 'string' ? o : { ...o, lego: { ...o.lego, sourceSignature: '' } }
+      const { lego: _dropped, ...rest } = o
+      void _dropped
+      return rest
+    })
+  }
+}
+
+function isLegoRecord(v: unknown): v is Raw {
+  return isRecord(v) && typeof v.sourceId === 'string' && typeof v.pieceIndex === 'number' && typeof v.originalColor === 'string'
 }
 
 /**

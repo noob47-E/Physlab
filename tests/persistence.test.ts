@@ -110,11 +110,11 @@ describe('serialize → loadScene', () => {
     scene().loadScene(file)
     expect(scene().settings.gridStyle).toBe('dots')
     expect(scene().serialize().settings.gridStyle).toBe('dots')
-    // A format-2 file saved before grid styles existed: the same format, one setting short.
+    // A format-2 file saved before grid styles existed: one setting short, and a step behind.
     const { gridStyle: _g, ...older } = fullFile().settings
-    scene().loadScene({ ...fullFile(), settings: older })
+    scene().loadScene({ ...fullFile(), version: 2, settings: older })
     expect(scene().settings.gridStyle).toBe('lines')
-    expect(FILE_VERSION).toBe(2)
+    expect(FILE_VERSION).toBe(3)
   })
 
   it('keeps the label preferences of whoever is opening the file', () => {
@@ -148,6 +148,41 @@ describe('migrate', () => {
     const space = Object.fromEntries(out.objects.map((o) => [o.name, o.space]))
     // k = 2a is only used by the vector F, so it goes where F is looked at.
     expect(space).toEqual({ A: 'shapes', B: 'shapes', a: 'shapes', k: 'vectors', F: 'vectors' })
+  })
+
+  it('steps a format-2 file without lego up to format 3 and changes nothing else', () => {
+    const v2 = { ...fullFile(), version: 2 as const }
+    const out = migrate(v2)
+    expect(out.version).toBe(3)
+    expect({ ...out, version: 2 }).toEqual(v2)
+    expect((v2 as { version: number }).version).toBe(2)
+    scene().loadScene(v2)
+    expect(scene().ev.errors.size).toBe(0)
+    expect(scene().serialize().version).toBe(3)
+  })
+
+  it("keeps a piece's lego record through save and open, and drops a damaged one without a word", () => {
+    const lego = { sourceId: 'poly0', sourceSignature: '3,90;4,90;3,90;4,90', pieceIndex: 1, originalColor: '#000' }
+    const corners = [point('q1', 'P', [0, 0, 0], { space: 'shapes', visible: false, auxiliary: true }), point('q2', 'Q', [4, 0, 0], { space: 'shapes', visible: false, auxiliary: true }), point('q3', 'R', [4, 3, 0], { space: 'shapes', visible: false, auxiliary: true })]
+    const piece: SceneObject = { id: 'pc1', name: 'poly2', type: 'polygon', points: ['q1', 'q2', 'q3'], fill: true, visible: true, locked: false, color: '#000', showLabel: true, space: 'shapes', lego }
+    const file: SceneFile = { ...fullFile(), objects: [...corners, piece] }
+    scene().loadScene(parseSceneFile(JSON.stringify(file)))
+    const saved = scene().serialize()
+    expect(saved.version).toBe(3)
+    const back = saved.objects.find((o) => o.id === 'pc1')
+    expect(back?.type === 'polygon' && back.lego).toEqual(lego)
+    expect(parseSceneFile(JSON.stringify(saved)).objects.find((o) => o.id === 'pc1')).toEqual(piece)
+    // A record missing its colour, or not a record at all, is dropped and the polygon opens as an ordinary one.
+    for (const bad of [{ sourceId: 'poly0', pieceIndex: 1 }, 'poly0', null, 7]) {
+      const out = migrate({ ...file, version: 2, objects: [...corners, { ...piece, lego: bad }] })
+      const o = out.objects.find((x) => x.id === 'pc1')
+      expect(o?.type === 'polygon' && 'lego' in o, JSON.stringify(bad)).toBe(false)
+    }
+    // A record from a build that wrote no signature still counts as a piece; only "original" is lost.
+    const { sourceSignature: _s, ...unsigned } = lego
+    const out = migrate({ ...file, version: 2, objects: [...corners, { ...piece, lego: unsigned }] })
+    const o = out.objects.find((x) => x.id === 'pc1')
+    expect(o?.type === 'polygon' && o.lego).toEqual({ ...unsigned, sourceSignature: '' })
   })
 
   it('a format-1 file opens in the store with every dependent working', () => {

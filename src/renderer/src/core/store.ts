@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { produce, type Draft } from 'immer'
 import { dependentsOf, evaluateScene } from './evaluate'
 import { setNotation } from '../math/format'
-import type { EvalResult, ObjId, PolygonObj, SceneFile, SceneObject, SceneSettings, ToolId, ViewMode } from './types'
+import type { EvalResult, ObjId, PointObj, PolygonObj, SceneFile, SceneObject, SceneSettings, SegmentObj, ToolId, ViewMode } from './types'
 import type { Solution } from '../math/vectorSolver'
 import { emptyTable, useLab } from '../lab/labStore'
 import { startingScene, useSandbox } from '../sim/store'
@@ -10,6 +10,12 @@ import { DEFAULT_WORLD } from '../sim/types'
 import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
 import { renameInObjects, renameProblem } from './rename'
 import { visibleOrder, type Space } from './visibility'
+import { newId, nextName, uniqueName } from './naming'
+import { themeColor } from '../app/theme'
+import { decompose } from '../math/decompose'
+import { formatMeasure } from '../math/format'
+import { flipPiece as flipCorners, fuseResult, legoStatus, ONE_PIECE_SENTENCE, signatureOf, snapToCorners, snapTolerance, tintPiece, turnPiece as turnCorners } from '../math/lego'
+import type { V3 } from '../math/vec'
 
 export interface LogEntry {
   id: number
@@ -67,6 +73,16 @@ export interface SceneState {
   addObjects: (objs: SceneObject[], opts?: { select?: boolean; record?: boolean }) => void
   updateObject: (id: ObjId, recipe: (draft: Draft<SceneObject>) => void, record?: boolean) => void
   removeObjects: (ids: ObjId[]) => void
+  /**
+   * Geometry Lego. `breakApart` turns a decomposed polygon into one free polygon per part, each
+   * a rigid piece the student slides, turns and flips; `fusePieces` joins pieces of one shape
+   * back into a polygon and returns the sentence that says why it could not, or null when it
+   * did. Each is one undo step.
+   */
+  breakApart: (id: ObjId) => void
+  fusePieces: (ids: ObjId[]) => string | null
+  turnPiece: (id: ObjId, deg: number) => void
+  flipPiece: (id: ObjId) => void
   beginGesture: () => void
   endGesture: () => void
   undo: () => void
@@ -155,6 +171,143 @@ export function doomedBy(ids: ObjId[], objects: Record<ObjId, SceneObject>, orde
   return doomed
 }
 
+// ---------------------------------------------------------------------------
+// REGION L: Geometry Lego — the scene-side helpers behind breakApart and fusePieces.
+// ---------------------------------------------------------------------------
+
+/** A polygon that is a piece of a broken-apart shape. */
+type Piece = PolygonObj & { lego: NonNullable<PolygonObj['lego']> }
+const isPiece = (o: SceneObject | undefined): o is Piece => o?.type === 'polygon' && !!o.lego
+
+/** The corners of a polygon as evaluated, or null when it cannot be drawn. */
+function cornersOf(id: ObjId, ev: EvalResult): V3[] | null {
+  const c = ev.values.get(id)
+  return c?.type === 'polygon' && c.pts.length >= 3 ? c.pts : null
+}
+
+/**
+ * The corner points of `polygons` that nothing outside `doomed` uses, added to `doomed`. The
+ * Polygon tool's own rule ("drop a corner nothing else needs", private to render/tools.ts),
+ * applied here after the shape and its sides are already on the list: a corner that is also a
+ * corner of a neighbouring triangle, or carries a student's own segment, stays. Repeats until
+ * nothing changes, because a corner defined from another corner (a midpoint, say) frees that
+ * one only once it is gone itself.
+ */
+function dropUnusedCorners(polygons: PolygonObj[], objects: Record<ObjId, SceneObject>, doomed: Set<ObjId>): void {
+  for (;;) {
+    let changed = false
+    for (const poly of polygons) {
+      for (const pid of poly.points) {
+        if (doomed.has(pid) || !objects[pid]) continue
+        if ([...dependentsOf(pid, objects)].every((d) => doomed.has(d))) {
+          doomed.add(pid)
+          changed = true
+        }
+      }
+    }
+    if (!changed) return
+  }
+}
+
+/**
+ * A deleted piece takes its hidden corners with it. `doomedBy` keeps a shape's corners because
+ * they are the student's points; a piece's corners are not — they are invisible helpers named
+ * after the piece — and left behind they sat in the scene unseen, were written into the file
+ * and counted as unsaved work. Only a hidden helper corner goes, and only when everything built
+ * on it is going too (a segment a student drew between two of them keeps both).
+ */
+function dropHiddenCorners(doomed: Set<ObjId>, objects: Record<ObjId, SceneObject>): void {
+  const pieces = [...doomed].map((id) => objects[id]).filter(isPiece)
+  if (pieces.length === 0) return
+  const hidden = pieces.map((p) => ({ ...p, points: p.points.filter((pid) => objects[pid]?.auxiliary && !objects[pid]?.visible) }))
+  dropUnusedCorners(hidden, objects, doomed)
+}
+
+/** Objects a piece or a fused shape is made of: corner points, the polygon and its sides. */
+function makePolygon(
+  pts: V3[],
+  opts: { color: string; space: Space | undefined; lego?: PolygonObj['lego']; hiddenCorners: boolean; decomposed?: boolean; label?: string },
+  pool: Record<ObjId, SceneObject>
+): SceneObject[] {
+  const out: SceneObject[] = []
+  const take = <T extends SceneObject>(o: T): T => {
+    out.push(o)
+    pool[o.id] = o
+    return o
+  }
+  const base = { visible: true, locked: false, showLabel: true, space: opts.space }
+  const polyName = nextName('polygon', pool)
+  const polyId = newId()
+  const corners = pts.map((p, k) =>
+    take<PointObj>({
+      ...base,
+      id: newId(),
+      // A piece's corners are not the student's points: they are hidden, named after the piece
+      // so they never take a letter the student's next point would have had, and never dragged
+      // on their own — which is what keeps a piece rigid.
+      name: opts.hiddenCorners ? uniqueName(`${polyName}_${k + 1}`, pool) : nextName('point', pool),
+      type: 'point',
+      def: { kind: 'free', p },
+      color: opts.color,
+      visible: !opts.hiddenCorners,
+      showLabel: !opts.hiddenCorners,
+      auxiliary: opts.hiddenCorners || undefined
+    })
+  )
+  const ids = corners.map((c) => c.id)
+  take<PolygonObj>({
+    ...base,
+    id: polyId,
+    name: polyName,
+    type: 'polygon',
+    points: ids,
+    fill: true,
+    showAngles: false,
+    color: opts.color,
+    decomposed: opts.decomposed,
+    // A shape's chip on the drawing spells out its corners (Rectangle ABCD); a piece's corners are
+    // hidden helpers with names nobody should read, so the chip says what the piece is instead.
+    label: opts.label,
+    lego: opts.lego
+  })
+  // Sides follow the polygon in `order`, one per side, which is how sidesOf finds them again.
+  // A piece's sides are locked: dragging a side moves only its two corners, and a piece must
+  // move as one brick or not at all.
+  ids.forEach((a, k) =>
+    take<SegmentObj>({
+      ...base,
+      id: newId(),
+      name: nextName('segment', pool),
+      type: 'segment',
+      a,
+      b: ids[(k + 1) % ids.length],
+      color: opts.color,
+      locked: opts.hiddenCorners,
+      showLabel: !opts.hiddenCorners,
+      auxiliary: opts.hiddenCorners || undefined
+    })
+  )
+  return out
+}
+
+/** The colour of a shape fused into a new outline, from the theme; a test has no stylesheet and keeps the piece's colour. */
+const legoNewColor = (fallback: string): string => (typeof document === 'undefined' ? fallback : themeColor('--lego-new', fallback))
+
+/** Pieces of a shape whose corners changed place between two states of the scene: what the student just dragged. */
+function movedPieces(before: Record<ObjId, SceneObject>, after: Record<ObjId, SceneObject>): Piece[] {
+  const out: Piece[] = []
+  for (const o of Object.values(after)) {
+    if (!isPiece(o) || before[o.id] !== o) continue
+    const moved = o.points.some((pid) => {
+      const a = before[pid]
+      const b = after[pid]
+      return a?.type === 'point' && b?.type === 'point' && a.def.kind === 'free' && b.def.kind === 'free' && (a.def.p[0] !== b.def.p[0] || a.def.p[1] !== b.def.p[1])
+    })
+    if (moved) out.push(o)
+  }
+  return out
+}
+
 export const DEFAULT_SETTINGS: SceneSettings = {
   angleUnit: 'deg',
   showGrid: true,
@@ -222,6 +375,38 @@ export const useScene = create<SceneState>()((set, get) => {
     set({ objects, order, ev: evalOf(objects, order, settings, time), dirty: true, ...extra })
   }
 
+  // REGION L: Geometry Lego.
+  /** Puts a piece's free corners where `place` says, as one undo step (none when `rec` is false). */
+  const moveCorners = (id: ObjId, place: (pts: V3[]) => V3[], rec = true) => {
+    const { objects, order, ev, gesture } = get()
+    const piece = objects[id]
+    const pts = cornersOf(id, ev)
+    if (piece?.type !== 'polygon' || !pts) return
+    const next = place(pts)
+    const history = rec && !gesture ? record() : {}
+    const nextObjects = { ...objects }
+    piece.points.forEach((pid, k) => {
+      const pt = nextObjects[pid]
+      if (pt?.type === 'point' && pt.def.kind === 'free') nextObjects[pid] = { ...pt, def: { kind: 'free', p: next[k] } }
+    })
+    commit(nextObjects, order, history)
+  }
+
+  /** A piece just let go: pull it corner to corner against its siblings, then fuse if they make a shape. */
+  const settlePiece = (piece: Piece) => {
+    const { objects, ev } = get()
+    const siblings = Object.values(objects).filter((o): o is Piece => isPiece(o) && o.id !== piece.id && o.lego.sourceId === piece.lego.sourceId)
+    const own = cornersOf(piece.id, ev)
+    if (!own || siblings.length === 0) return
+    const targets = siblings.flatMap((s) => cornersOf(s.id, ev) ?? [])
+    const snap = snapToCorners(own, [0, 0, 0], targets, snapTolerance(own))
+    if (snap.snapped) moveCorners(piece.id, (pts) => pts.map((p) => [p[0] + snap.delta[0], p[1] + snap.delta[1], 0] as V3), false)
+    const after = get().ev
+    const all = [piece, ...siblings].map((p) => cornersOf(p.id, after))
+    if (all.some((c) => !c)) return
+    if (legoStatus(all as V3[][], piece.lego.sourceSignature).kind !== 'apart') get().fusePieces([piece, ...siblings].map((p) => p.id))
+  }
+
   return {
     objects: {},
     order: [],
@@ -282,6 +467,7 @@ export const useScene = create<SceneState>()((set, get) => {
       const { objects, order, selection, hovered } = get()
       const doomed = doomedBy(ids, objects, order)
       if (doomed.size === 0) return
+      dropHiddenCorners(doomed, objects) // REGION L: a Lego piece's hidden corners go with it
       const history = record()
       const nextObjects = { ...objects }
       for (const id of doomed) delete nextObjects[id]
@@ -292,6 +478,100 @@ export const useScene = create<SceneState>()((set, get) => {
         { ...history, selection: selection.filter((id) => !doomed.has(id)), hovered: hovered && doomed.has(hovered) ? null : hovered }
       )
     },
+
+    // ---- REGION L: Geometry Lego ----
+    breakApart: (id) => {
+      const { objects, order, ev, selection, hovered } = get()
+      const parent = objects[id]
+      const pts = cornersOf(id, ev)
+      if (parent?.type !== 'polygon' || !pts) return
+      const dec = decompose(pts, parent.decomposeGoal ?? 'basic', parent.decomposeIndex ?? 0)
+      // A sliver with no area is nothing to pick up.
+      const parts = dec.parts.filter((p) => p.pts.length >= 3 && p.area > 1e-9)
+      if (parts.length < 2) {
+        get().pushLog({ input: 'break apart', kind: 'info', text: 'This is already a simple shape: there is nothing to break apart.' })
+        return
+      }
+      const doomed = doomedBy([id], objects, order)
+      dropUnusedCorners([parent], objects, doomed)
+      const history = record()
+      const nextObjects: Record<ObjId, SceneObject> = {}
+      for (const [k, o] of Object.entries(objects)) if (!doomed.has(k)) nextObjects[k] = o
+      const nextOrder = order.filter((k) => !doomed.has(k))
+      const signature = signatureOf(pts)
+      const pieceIds: ObjId[] = []
+      parts.forEach((part, i) => {
+        const made = makePolygon(
+          part.pts,
+          {
+            color: tintPiece(parent.color, i, parts.length),
+            space: parent.space,
+            lego: { sourceId: parent.id, sourceSignature: signature, pieceIndex: i, originalColor: parent.color },
+            hiddenCorners: true,
+            label: part.cls.name
+          },
+          nextObjects
+        )
+        for (const o of made) nextOrder.push(o.id)
+        pieceIds.push(made.find((o) => o.type === 'polygon')!.id)
+      })
+      commit(nextObjects, nextOrder, {
+        ...history,
+        selection: [...selection.filter((k) => !doomed.has(k)), ...pieceIds],
+        hovered: hovered && doomed.has(hovered) ? null : hovered
+      })
+      get().pushLog({ input: 'break apart', kind: 'info', text: `${parent.name} is now ${parts.length} pieces. Slide, turn and flip them; put back together, they fuse on their own.` })
+    },
+
+    fusePieces: (ids) => {
+      const { objects, order, ev, settings, selection, hovered } = get()
+      const pieces = ids.map((k) => objects[k]).filter(isPiece)
+      const say = (text: string): string => {
+        get().pushLog({ input: 'fuse', kind: 'info', text })
+        return text
+      }
+      if (pieces.length < 2) return say(ONE_PIECE_SENTENCE)
+      const source = pieces[0].lego
+      if (pieces.some((p) => p.lego.sourceId !== source.sourceId)) return say('These pieces come from different shapes, so they do not fit together.')
+      const corners = pieces.map((p) => cornersOf(p.id, ev))
+      if (corners.some((c) => !c)) return say('One of the pieces cannot be drawn, so they cannot be fused.')
+      const result = fuseResult(corners as V3[][], source.sourceSignature)
+      if (!result.ok) return say(result.sentence)
+      const doomed = doomedBy(
+        pieces.map((p) => p.id),
+        objects,
+        order
+      )
+      dropUnusedCorners(pieces, objects, doomed)
+      const history = record()
+      const nextObjects: Record<ObjId, SceneObject> = {}
+      for (const [k, o] of Object.entries(objects)) if (!doomed.has(k)) nextObjects[k] = o
+      const nextOrder = order.filter((k) => !doomed.has(k))
+      const original = result.kind === 'original'
+      const made = makePolygon(
+        result.outline,
+        { color: original ? source.originalColor : legoNewColor(pieces[0].color), space: pieces[0].space, hiddenCorners: false, decomposed: true },
+        nextObjects
+      )
+      for (const o of made) nextOrder.push(o.id)
+      const poly = made.find((o) => o.type === 'polygon')!
+      commit(nextObjects, nextOrder, {
+        ...history,
+        selection: [...selection.filter((k) => !doomed.has(k)), poly.id],
+        hovered: hovered && doomed.has(hovered) ? null : hovered
+      })
+      get().pushLog({
+        input: 'fuse',
+        kind: 'info',
+        text: original
+          ? 'Back to the original shape.'
+          : `A new shape — same area, different outline: ${result.name}, area ${formatMeasure(result.area, 'area', settings)}, perimeter ${formatMeasure(result.perimeter, 'length', settings)}.`
+      })
+      return null
+    },
+
+    turnPiece: (id, deg) => moveCorners(id, (pts) => turnCorners(pts, deg)),
+    flipPiece: (id) => moveCorners(id, flipCorners),
 
     clearDrawing: () => {
       const { order, objects, activeSpace } = get()
@@ -306,7 +586,17 @@ export const useScene = create<SceneState>()((set, get) => {
       if (get().gesture) return
       set({ ...record(), gesture: true, baseline: get().ev.values })
     },
-    endGesture: () => set({ gesture: false, baseline: null }),
+    endGesture: () => {
+      const { gesture, past, objects } = get()
+      set({ gesture: false, baseline: null })
+      // REGION L: a piece let go near its neighbours is pulled corner to corner, and pieces
+      // that now make one shape fuse on their own. Only a single piece dragged as a whole counts;
+      // the snap folds into the drag's own undo step, the fuse is a step of its own.
+      const before = past[past.length - 1]
+      if (!gesture || !before) return
+      const moved = movedPieces(before.objects, objects)
+      if (moved.length === 1) settlePiece(moved[0])
+    },
 
     undo: () => {
       const { past, future, objects, order } = get()

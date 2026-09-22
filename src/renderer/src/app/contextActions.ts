@@ -127,6 +127,7 @@ function lineItems(o: SceneObject, c: Extract<Computed, { type: 'segment' | 'ray
   return items
 }
 
+// REGION L: Geometry Lego rows live in polygonItems.
 function polygonItems(o: SceneObject): MenuItem[] {
   if (o.type !== 'polygon') return []
   const items: MenuItem[] = [
@@ -138,10 +139,27 @@ function polygonItems(o: SceneObject): MenuItem[] {
     }
   ]
   if (o.decomposed) {
-    items.push({
-      label: 'Split it another way',
-      run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
+    items.push(
+      {
+        label: 'Split it another way',
+        run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
+      },
+      { label: 'Break apart', hint: 'Turn the pieces into shapes you can slide, turn and flip', run: () => (s().breakApart(o.id), focusPanel('measure')) }
+    )
+  }
+  if (o.lego) {
+    // Every selected piece of the same shape; the right-clicked piece counts even when it was not selected.
+    const source = o.lego.sourceId
+    const chosen = [...new Set([...s().selection, o.id])].filter((id) => {
+      const p = s().objects[id]
+      return p?.type === 'polygon' && p.lego?.sourceId === source
     })
+    if (chosen.length >= 2) items.push({ label: 'Fuse pieces', hint: 'Join the selected pieces into one shape', run: () => (s().fusePieces(chosen), focusPanel('measure')) })
+    items.push(
+      { label: 'Turn 90°', run: () => s().turnPiece(o.id, 90) },
+      { label: 'Turn 15°', run: () => s().turnPiece(o.id, 15) },
+      { label: 'Flip', hint: 'Its mirror image, left for right', run: () => s().flipPiece(o.id) }
+    )
   }
   items.push({
     label: o.showAngles ? 'Hide angles' : 'Show angles',

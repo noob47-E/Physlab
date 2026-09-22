@@ -114,6 +114,7 @@
   --sel-fill: rgba(79, 140, 255, 0.35);
   --sel-fill-faint: rgba(79, 140, 255, 0.12);
   color-scheme: dark;
+  --lego-new: #4fd1a5;
 }
 
 /* Light theme for bright rooms and classroom projectors. */
@@ -175,6 +176,7 @@
   --sel-fill: rgba(47, 111, 228, 0.3);
   --sel-fill-faint: rgba(47, 111, 228, 0.12);
   color-scheme: light;
+  --lego-new: #0f766e;
 }
 
 /* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
@@ -236,6 +238,7 @@
   --sel-fill: rgba(139, 156, 255, 0.35);
   --sel-fill-faint: rgba(139, 156, 255, 0.12);
   color-scheme: dark;
+  --lego-new: #6fe0c4;
 }
 
 /* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
@@ -303,6 +306,7 @@
   --sel-fill: rgba(224, 184, 74, 0.35);
   --sel-fill-faint: rgba(224, 184, 74, 0.12);
   color-scheme: dark;
+  --lego-new: #8fd9b6;
 }
 
 html,

@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react'
-import { RotateCcw, Scissors, Shapes } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Combine, FlipHorizontal2, Puzzle, RotateCcw, RotateCw, Scissors, Shapes } from 'lucide-react'
 import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
 import { freeCapitals } from '../core/naming'
@@ -65,6 +65,13 @@ export function ShapeInfo({ id }: { id: ObjId }) {
   const settings = useScene((s) => s.settings)
   const update = useScene((s) => s.updateObject)
   const setHighlight = useHighlight((s) => s.set)
+  const selection = useScene((s) => s.selection)
+  const breakApart = useScene((s) => s.breakApart)
+  const fusePieces = useScene((s) => s.fusePieces)
+  const turnPiece = useScene((s) => s.turnPiece)
+  const flipPiece = useScene((s) => s.flipPiece)
+  // What the last Fuse said when it could not: a gap, an overlap. Cleared by the next Fuse.
+  const [fuseNote, setFuseNote] = useState<string | null>(null)
 
   const obj = objects[id]
   const c = ev.values.get(id)
@@ -81,6 +88,15 @@ export function ShapeInfo({ id }: { id: ObjId }) {
 
   const goal: DecomposeGoal = (obj?.type === 'polygon' && obj.decomposeGoal) || 'basic'
   const decIndex = (obj?.type === 'polygon' && obj.decomposeIndex) || 0
+  const lego = obj?.type === 'polygon' ? obj.lego : undefined
+  // The selected pieces of the same shape as this one, this one included: what Fuse joins.
+  const fusable = useMemo(() => {
+    if (!lego) return []
+    return [...new Set([...selection, id])].filter((k) => {
+      const p = objects[k]
+      return p?.type === 'polygon' && p.lego?.sourceId === lego.sourceId
+    })
+  }, [lego, selection, objects, id])
 
   const data = useMemo(() => {
     if (!obj || !c) return null
@@ -113,7 +129,8 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         <Shapes size={15} className="text-accent" />
         <div className="flex-1">
           <span className="font-semibold text-ink-strong">{data.report.name}</span>{' '}
-          {data.kind === 'polygon' && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
+          {data.kind === 'polygon' && !lego && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
+          {lego && <span className="text-ink-dim">a piece of a shape</span>}
         </div>
         {data.kind === 'polygon' && data.pts.length >= 4 && (
           <button
@@ -130,6 +147,37 @@ export function ShapeInfo({ id }: { id: ObjId }) {
           </button>
         )}
       </div>
+
+      {data.kind === 'polygon' && ((data.dec && data.dec.parts.length > 1) || lego) && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5 text-small">
+          {data.dec && data.dec.parts.length > 1 && (
+            <button className="btn min-h-[44px]" title="Turn the pieces into shapes you can slide, turn and flip" onClick={() => (setHighlight(null), breakApart(id))}>
+              <Puzzle size={14} /> Break apart
+            </button>
+          )}
+          {lego && (
+            <>
+              <button
+                className="btn min-h-[44px]"
+                disabled={fusable.length < 2}
+                title={fusable.length < 2 ? 'Select two or more pieces of the same shape, then fuse them' : 'Join the selected pieces into one shape'}
+                onClick={() => setFuseNote(fusePieces(fusable))}
+              >
+                <Combine size={14} /> Fuse
+              </button>
+              <button className="btn min-h-[44px]" title="Turn this piece a quarter turn anticlockwise" onClick={() => turnPiece(id, 90)}>
+                <RotateCw size={14} /> Turn 90°
+              </button>
+              <button className="btn min-h-[44px]" title="Turn this piece a little anticlockwise" onClick={() => turnPiece(id, 15)}>
+                <RotateCw size={14} /> Turn 15°
+              </button>
+              <button className="btn min-h-[44px]" title="Its mirror image, left for right" onClick={() => flipPiece(id)}>
+                <FlipHorizontal2 size={14} /> Flip
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {data.kind === 'polygon' && data.dec && data.dec.parts.length > 1 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-2 py-1.5 text-small">
@@ -203,6 +251,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         <ShapeReportView report={data.report} owner={id} piFactor={data.kind === 'circle'} />
       )}
       {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
+      {fuseNote && lego && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{fuseNote}</div>}
     </div>
   )
 }
