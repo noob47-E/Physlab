@@ -1,22 +1,53 @@
+<img src="Images/icon.png" width="72" align="left" />
+
 # PhysLab
 
 A general math and physics engine for students and teachers: vectors, shapes and geometry,
 graphing, a natural textbook-math calculator, step-by-step solutions and GPU simulations.
 Everything runs offline.
 
+<br clear="left" />
+
 ## Screenshots
 
-Add your app image here. Place the screenshot in `docs/images/physlab-screenshot.png` and the image below will render automatically.
-
-![PhysLab screenshot](docs/images/physlab-screenshot.png)
-
-> If you want, send a real image file and I can place it in the repo and wire it into this exact section.
+<table>
+<tr>
+<td width="33%"><img src="Images/PhysLab_kOOgbLY8dU.png" alt="Calculator: factorising with step-by-step working"></td>
+<td width="33%"><img src="Images/PhysLab_Js269g26dQ.png" alt="Vectors: vector calculator with steps"></td>
+<td width="33%"><img src="Images/PhysLab_8jG7iSDixv.png" alt="Geometry: congruence proof by SSS"></td>
+</tr>
+<tr>
+<td align="center"><b>Calculator</b> — natural maths in, checked working out</td>
+<td align="center"><b>Vectors</b> — add, resolve and see the steps</td>
+<td align="center"><b>Geometry</b> — congruence proofs, every equality marked</td>
+</tr>
+<tr>
+<td width="33%"><img src="Images/PhysLab_qdglEHbgWU.png" alt="Geometry: decomposing a trapezium into a rectangle and triangle"></td>
+<td width="33%"><img src="Images/graphing-2d.png" alt="Graphing: a polar rose alongside a line and a polygon"></td>
+<td width="33%"><img src="Images/graphing-3d.png" alt="Graphing: a 3-D surface plot"></td>
+</tr>
+<tr>
+<td align="center"><b>Geometry</b> — decomposition into simple parts</td>
+<td align="center"><b>Graphing</b> — explicit, polar and more, in 2-D</td>
+<td align="center"><b>Graphing</b> — 3-D surfaces</td>
+</tr>
+<tr>
+<td width="33%"><img src="Images/PhysLab_mbDERDHe3G.png" alt="Sandbox: a dropped ball with live energy and momentum"></td>
+<td width="33%"><img src="Images/PhysLab_uGbG69WO17.png" alt="Sandbox: a ball rolling off a ledge, its path recorded"></td>
+<td width="33%"><img src="Images/PhysLab_ZSBJRE2EJr.png" alt="Lab Data: a table of readings with a best-fit line"></td>
+</tr>
+<tr>
+<td align="center"><b>Sandbox</b> — real objects, live energy and momentum</td>
+<td align="center"><b>Sandbox</b> — every run can be recorded and plotted</td>
+<td align="center"><b>Lab Data</b> — readings, best-fit line, gradient and its unit</td>
+</tr>
+</table>
 
 ## Run it
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.3.1.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.6.1.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
