@@ -4,6 +4,14 @@ A general math and physics engine for students and teachers: vectors, shapes and
 graphing, a natural textbook-math calculator, step-by-step solutions and GPU simulations.
 Everything runs offline.
 
+## Screenshots
+
+Add your app image here. Place the screenshot in `docs/images/physlab-screenshot.png` and the image below will render automatically.
+
+![PhysLab screenshot](docs/images/physlab-screenshot.png)
+
+> If you want, send a real image file and I can place it in the repo and wire it into this exact section.
+
 ## Run it
 
 | What | Command |
@@ -14,7 +22,7 @@ Everything runs offline.
 | Rebuild the installer | `npm run dist` |
 | Unit tests | `npm test` |
 
-**Panels.** Closing a panel is not a dead end: **View** lists every panel with open/closed beside it, click one to bring it back. Ctrl+K finds them too, and entering a mode reopens the panel that mode uses.
+**Panels.** Closing a panel is not a dead end: **View** lists every panel with open/closed beside it, click one to bring it back. Ctrl+K finds them too, and entering a mode reopens the panel that mode uses. **View ▸ Reset the panel layout** puts everything back the way the mode starts.
 
 **Updating.** Run the new setup: it swaps itself over the build you already have, keeps your
 settings, your layout and your autosaved work, and starts the new version. Nothing to uninstall
@@ -27,14 +35,14 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 
 | Mode | What it does |
 | --- | --- |
-| **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). |
-| **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity), big answers, optional steps, **Draw on graph**. |
-| **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. |
+| **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. A **popup keypad** opens under the field for the keys you need and stays open between entries — there is no permanent bank of buttons or a tiny fixed display, so the screen is not trying to look like a handheld calculator. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). Every number shown follows your precision setting (decimal places or significant figures). |
+| **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity…) and step-by-step working. |
+| **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form**. |
 | **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
-| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Join any two with a **rod, string or spring**. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
+| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
 | **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
-| **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. |
+| **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern. |
 
 ## Drawing, finishing and the right-click menu
@@ -108,6 +116,7 @@ Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one c
 - `components(10, 30)`, `resultant(5, 5, 120)`, `equilibrium(A, B)`
 - `Triangle((0,0), (4,0), (0,3))`, `Polygon((0,0), (6,0), (6,4), (3,7), (0,4))`, `Circle(P, 3)`
 - `solve(x^2 - 5x + 6 = 0)`, `diff(x^3)`, `integrate(x^2, 0, 3)`
+- `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `lcm(12, 18)`, `primes(360)`, `divide((x^3-1)/(x-1))`, `partial((3x+5)/((x+1)(x+2)))`, `complex((2+3i)/(1-i))` — each writes out its working in the Working panel
 - `k = 2` makes a slider; use `t` in formulas and press Play to animate. Type `help` for more.
 
 Shortcuts: `Ctrl+K` search · `Tab` 2D/3D · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project.
