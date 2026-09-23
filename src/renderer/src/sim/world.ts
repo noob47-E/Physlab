@@ -10,7 +10,7 @@ import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
 import { pulleyPartnerMove, pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from './links'
 import { eulerToQuat } from './rotate'
-import type { BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
+import type { Actuator, BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
 import type { V3 } from '../math/vec'
 
@@ -42,6 +42,9 @@ const ROLLING_SHAPES = new Set(['sphere', 'cylinder', 'capsule'])
 
 /** A rope link's radius in metres. */
 const ROPE_RADIUS = 0.02
+
+/** The one empty list handed back for a body nothing is pushing. */
+const NO_ACTUATORS: Actuator[] = []
 
 interface Entry {
   def: BodyDef
@@ -84,6 +87,11 @@ export class SimWorld {
   private ropeCount = 0
   /** The definitions behind them, so a rebuild can put them back. */
   private linkDefs: Link[] = []
+  /**
+   * Forces a question drives bodies with, by body. They belong to the experiment, not to one
+   * run: a Reset rebuilds the bodies and must find the same push waiting at t = 0.
+   */
+  private actuators = new Map<BodyId, Actuator[]>()
   /** Simulated time in seconds since the last reset. */
   time = 0
 
@@ -129,6 +137,9 @@ export class SimWorld {
     if (!SimWorld.instance) SimWorld.instance = new SimWorld(jolt)
     const world = SimWorld.instance
     world.clear()
+    // A new scene starts with nothing pushing it; `clear()` alone keeps the actuators because
+    // Reset goes through it too and must not lose them.
+    world.actuators.clear()
     world.settings = { ...DEFAULT_WORLD, ...settings }
     world.applyWorldSettings()
     return world
@@ -772,17 +783,48 @@ export class SimWorld {
     return { transforms: this.transforms, contacts: this.contacts }
   }
 
-  /** Forces that PhysLab applies itself: air drag, wind, and the grab spring. */
+  /**
+   * Forces a question applies while the run plays, replacing whatever was set before. They are
+   * kept by body id, so a body the list names that is not in the scene is simply never pushed,
+   * and a Reset that rebuilds the bodies finds the same pushes waiting.
+   */
+  setActuators(list: Actuator[]): void {
+    this.actuators.clear()
+    for (const a of list) {
+      const mine = this.actuators.get(a.bodyId)
+      if (mine) mine.push(a)
+      else this.actuators.set(a.bodyId, [a])
+    }
+  }
+
+  /** The pushes on one body that are switched on during the step that starts now and lasts dt. */
+  private activeActuators(id: BodyId, dt: number): Actuator[] {
+    const mine = this.actuators.get(id)
+    // Sixty times a second for every body: the ordinary case, no actuator at all, must not
+    // allocate anything.
+    if (!mine) return NO_ACTUATORS
+    // The window is judged at the middle of the step, not its start. The clock is a running sum
+    // of 1/60, so at a nominal 2 s it reads 1.9999999999999978 and a window "from 1 s to 2 s"
+    // judged on the raw reading acted for 61 steps while "2 s to 3 s" got 59: a question saying
+    // 3 N for one second read 3.05 m/s in the panel. A step whose midpoint lies inside the
+    // window is half a step from either edge, further than the rounding can ever drift.
+    const t = this.time + dt / 2
+    return mine.filter((a) => a.from <= t && t < a.until)
+  }
+
+  /** Forces that PhysLab applies itself: air drag, wind, a question's actuators, and the grab spring. */
   private beforeStep(dt: number) {
     const rho = this.settings.airDensity
     for (const id of this.order) {
       const e = this.entries.get(id)!
       if (e.def.motion !== 'dynamic') continue
       const body = e.body
+      const pushes = this.activeActuators(id, dt)
       // A body Jolt has put to sleep is skipped — except the one in the hand, which the grab
-      // block below wakes. It used to be skipped too, so anything that had settled for a third
-      // of a second could never be picked up again.
-      if (!body.IsActive() && this.grabbed?.id !== id) continue
+      // block below wakes, and one a question is pushing, which the actuator block wakes. It
+      // used to be skipped too, so anything that had settled for a third of a second could
+      // never be picked up again.
+      if (!body.IsActive() && this.grabbed?.id !== id && pushes.length === 0) continue
 
       if (rho > 0) {
         const v = body.GetLinearVelocity()
@@ -824,6 +866,24 @@ export class SimWorld {
           body.AddTorque(t)
           this.release(t)
         }
+      }
+
+      // A question's push: F(t) read at the middle of the step, so a force that grows with the
+      // clock is not read a half-step early every step — F = 4t used to give 1.967 m/s at 1 s,
+      // not 2. A body that had settled and gone to sleep would swallow the force otherwise —
+      // Jolt ignores a force on a sleeping body — so it is woken first, the way the grab spring
+      // wakes the body in the hand; a push that has cut out by returning zero leaves the body
+      // alone, or it could never settle again. A force the expression cannot give a number for
+      // (a division by zero near t = 0) is left out of that step rather than handed to the
+      // engine as NaN, which would take the body with it.
+      for (const a of pushes) {
+        const f = a.force(this.time + dt / 2)
+        if (!Number.isFinite(f[0]) || !Number.isFinite(f[1]) || !Number.isFinite(f[2])) continue
+        if (f[0] === 0 && f[1] === 0 && f[2] === 0) continue
+        this.bodies.ActivateBody(body.GetID())
+        const force = this.v3(f)
+        body.AddForce(force)
+        this.release(force)
       }
 
       if (this.grabbed && this.grabbed.id === id) {

@@ -80,6 +80,19 @@ export interface BodyState {
   asleep: boolean
 }
 
+/**
+ * A force a question applies to one body while the run plays — an engine pushing a train, a
+ * thrust that cuts out — as a function of the clock, so a student can watch F(t) act and read
+ * the result off the trail. It acts while `from ≤ t < until`, in seconds since Reset.
+ */
+export interface Actuator {
+  bodyId: BodyId
+  /** The force at clock reading t, in newtons, as [x, y, z]. */
+  force: (t: number) => V3
+  from: number
+  until: number
+}
+
 export const DEFAULT_WORLD: WorldSettings = {
   gravity: 9.81,
   twoD: true,

@@ -4,13 +4,17 @@
 import { create } from 'zustand'
 import { materialById } from './materials'
 import { groundTopOf } from './energy'
-import { DEFAULT_WORLD, type BodyDef, type BodyId, type BodyState, type ContactEvent, type Link, type LinkKind, type ShapeKind, type WorldSettings } from './types'
+import { DEFAULT_WORLD, type Actuator, type BodyDef, type BodyId, type BodyState, type ContactEvent, type Link, type LinkKind, type ShapeKind, type WorldSettings } from './types'
 import { SimWorld } from './world'
 import { addSample, type Sample } from './recording'
 import type { SandboxFile } from '../core/types'
 import { makeLink, pulleyPartnerMove, ropeSegments } from './links'
 import type { V3 } from '../math/vec'
 import { joinPick, linkRefusal, START_JOIN, type JoinMode } from './join'
+// presets.ts imports makeBody from this file, so this is a circular import. It is safe only
+// because neither side reads the other at load time: presets builds its bodies inside build(),
+// and presetById is called from loadPreset, never while the module is evaluating.
+import { presetById } from './presets'
 
 /** What addLink hands back: the link, or the sentence that says why there is none. */
 export type LinkResult = { ok: true; link: Link } | { ok: false; why: string }
@@ -25,9 +29,24 @@ const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'.split('')
  * The running engine, for the panels that need to reach it (putting a lost object back, framing
  * the view). The viewport owns its lifetime; nothing else creates or clears it.
  */
-export const engine: { world: SimWorld | null } = { world: null }
+let running: SimWorld | null = null
+export const engine: { world: SimWorld | null } = {
+  get world() {
+    return running
+  },
+  // The viewport creates the engine, and it knows nothing about questions. A question that
+  // loads a preset and attaches its pushes before the Sandbox view has ever been opened would
+  // otherwise talk to a world that does not exist yet and be forgotten; handing the pending
+  // list over the moment the engine arrives is what keeps "Show it" honest from Practice.
+  set world(w: SimWorld | null) {
+    running = w
+    if (w) w.setActuators(useSandbox.getState().actuators)
+  }
+}
 
-type Snapshot = { bodies: BodyDef[]; links: Link[] }
+// A question's pushes travel with the bodies they name: Ctrl+Z after removing a pushed body used
+// to bring the body back without its push, so pressing Play showed it sitting still.
+type Snapshot = { bodies: BodyDef[]; links: Link[]; actuators: Actuator[] }
 
 export interface SandboxState {
   bodies: BodyDef[]
@@ -72,6 +91,12 @@ export interface SandboxState {
   runNonce: number
   /** Bumped by "Clear trails": the trails are drawn from a buffer the store never sees. */
   trailNonce: number
+  /**
+   * Forces a question drives bodies with while the run plays (F(t) on a named body between two
+   * clock readings). They belong to the loaded experiment: a Reset keeps them, a new scene
+   * drops them, and removing a body removes its pushes.
+   */
+  actuators: Actuator[]
 
   addBody: (shape: ShapeKind, at?: [number, number, number]) => BodyDef
   updateBody: (id: BodyId, patch: Partial<BodyDef>) => void
@@ -106,6 +131,15 @@ export interface SandboxState {
   snapshot: () => SandboxFile
   /** Opening a project, or starting a new one when nothing is given. Not undoable: it is a new history. */
   loadSandbox: (file?: SandboxFile) => void
+  /**
+   * Starts a ready-made experiment by its id (the Presets list, or a question's sandbox
+   * binding). False when no preset has that id, and nothing changes. The bodies get fresh ids
+   * each time, so a question resolves its body names against `bodies` afterwards and then
+   * calls `setActuators`.
+   */
+  loadPreset: (id: string) => boolean
+  /** Replaces the pushes on the loaded experiment; a running engine picks them up at once. */
+  setActuators: (list: Actuator[]) => void
 }
 
 /** Sensible starting sizes in metres, so a scene looks like a lab bench, not a galaxy. */
@@ -255,6 +289,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   past: [],
   future: [],
   runNonce: 0,
+  actuators: [],
   trailNonce: 0,
 
   addBody: (shape, at) => {
@@ -316,8 +351,10 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       joinMode: join && (join.a === id || join.b === id) ? null : join,
       joinNote: join && (join.a === id || join.b === id) ? null : get().joinNote,
       recording: prune(get().recording, bodies),
-      live: prune(get().live, bodies)
+      live: prune(get().live, bodies),
+      actuators: get().actuators.filter((a) => a.bodyId !== id)
     })
+    engine.world?.setActuators(get().actuators)
   },
   // Choosing nothing, or choosing the partner itself, ends the pair.
   select: (selection) => set({ selection, partner: selection === null || selection === get().partner ? null : get().partner }),
@@ -330,8 +367,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   clearContacts: () => set({ contacts: [] }),
   setScene: (bodies, world, links) => {
     remember(set, get, 'scene')
-    // A new scene is a new run: the old readings, live values and clock would describe objects
-    // that are no longer there.
+    // A new scene is a new run: the old readings, live values, clock and pushes would describe
+    // objects that are no longer there.
     set({
       bodies,
       world: { ...get().world, ...world },
@@ -344,8 +381,21 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       recording: {},
       live: {},
       engineTime: 0,
-      runNonce: get().runNonce + 1
+      runNonce: get().runNonce + 1,
+      actuators: []
     })
+    engine.world?.setActuators([])
+  },
+  loadPreset: (id) => {
+    const p = presetById(id)
+    if (!p) return false
+    const built = p.build()
+    get().setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
+    return true
+  },
+  setActuators: (actuators) => {
+    set({ actuators })
+    engine.world?.setActuators(actuators)
   },
 
   addLink: (a, b, kind, over) => {
@@ -411,23 +461,25 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   setSideView: (sideView) => set({ sideView }),
 
   undo: () => {
-    const { past, future, bodies, links } = get()
+    const { past, future, bodies, links, actuators } = get()
     const back = past[past.length - 1]
     if (!back) return
-    set({ bodies: back.bodies, links: back.links, past: past.slice(0, -1), future: [...future, { bodies, links }], selection: null, partner: null })
+    set({ bodies: back.bodies, links: back.links, actuators: back.actuators, past: past.slice(0, -1), future: [...future, { bodies, links, actuators }], selection: null, partner: null })
+    engine.world?.setActuators(back.actuators)
   },
   redo: () => {
-    const { past, future, bodies, links } = get()
+    const { past, future, bodies, links, actuators } = get()
     const next = future[future.length - 1]
     if (!next) return
-    set({ bodies: next.bodies, links: next.links, future: future.slice(0, -1), past: [...past, { bodies, links }], selection: null, partner: null })
+    set({ bodies: next.bodies, links: next.links, actuators: next.actuators, future: future.slice(0, -1), past: [...past, { bodies, links, actuators }], selection: null, partner: null })
+    engine.world?.setActuators(next.actuators)
   },
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
 
   resetRun: () => set({ runNonce: get().runNonce + 1, engineTime: 0, live: {}, recording: {}, contacts: [] }),
   snapshot: () => ({ bodies: get().bodies, links: get().links, world: get().world, sideView: get().sideView }),
-  loadSandbox: (file) =>
+  loadSandbox: (file) => {
     set({
       bodies: file?.bodies ?? startingScene(),
       links: file?.links ?? [],
@@ -443,8 +495,11 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       engineTime: 0,
       past: [],
       future: [],
-      runNonce: get().runNonce + 1
-    }),
+      runNonce: get().runNonce + 1,
+      actuators: []
+    })
+    engine.world?.setActuators([])
+  },
   clearTrails: () => set({ trailNonce: get().trailNonce + 1 })
 }))
 
@@ -465,7 +520,7 @@ function remember(set: (p: Partial<SandboxState>) => void, get: () => SandboxSta
   lastRemembered = now
   lastTag = tag
   if (burst) return
-  set({ past: [...get().past, { bodies: get().bodies, links: get().links }].slice(-30), future: [] })
+  set({ past: [...get().past, { bodies: get().bodies, links: get().links, actuators: get().actuators }].slice(-30), future: [] })
 }
 
 /** Mass a body will have, for the panels (the engine works it out the same way). */

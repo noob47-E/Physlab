@@ -6,7 +6,7 @@ import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
 import { energyOf, groundTopOf, momentumSize, systemEnergy, systemMomentum } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
-import { DEFAULT_WORLD, GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
+import { GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
 import { groupedPresets, launchVelocity, presetBadges, PRESETS, searchPresets, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
 import { joinPrompt, LINK_CARDS, linkCard, noWheelNote, wheelsAbove } from '../sim/join'
@@ -654,7 +654,7 @@ function Collisions() {
  * who has never opened a physics simulator; every one of these is a question with an answer.
  */
 function Presets() {
-  const setScene = useSandbox((s) => s.setScene)
+  const loadPreset = useSandbox((s) => s.loadPreset)
   const setPlaying = useScene((s) => s.setPlaying)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -668,10 +668,11 @@ function Presets() {
   // so a student finds "Bouncing ball" under Energy whether they searched for it or scrolled.
   const matches = useMemo(() => new Set(searchPresets(query, PRESETS).map((p) => p.id)), [query])
   const groups = useMemo(() => all.map((g) => ({ ...g, rows: g.rows.filter((r) => matches.has(r.p.id)) })).filter((g) => g.rows.length > 0), [all, matches])
+  // The same path a question's "Show it" takes, so an experiment opened from the list and one
+  // opened from Practice cannot drift apart.
   const load = (p: Preset) => {
-    const built = p.build()
     setPlaying(false)
-    setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
+    loadPreset(p.id)
     setOpen(false)
   }
   return (

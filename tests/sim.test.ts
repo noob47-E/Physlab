@@ -5,6 +5,7 @@ import { SimWorld } from '../src/renderer/src/sim/world'
 import { DEFAULT_WORLD, type BodyDef, type BodyState, type Link, type WorldSettings } from '../src/renderer/src/sim/types'
 import { energyOf, systemEnergy, systemMomentum } from '../src/renderer/src/sim/energy'
 import { launchVelocity, presetById, PRESETS } from '../src/renderer/src/sim/presets'
+import { engine, useSandbox } from '../src/renderer/src/sim/store'
 import { addSample, MAX_SAMPLES, RECORDING_COLUMNS, rowsFor, sampleOf, type Sample } from '../src/renderer/src/sim/recording'
 import type { V3 } from '../src/renderer/src/math/vec'
 
@@ -262,6 +263,231 @@ describe('the sandbox engine agrees with the formulas', () => {
     }
     // The ShapeSettings behind every hull has to be freed once the body holds the shape.
     expect(world.handleCount).toBeLessThanOrEqual(base + 4)
+  })
+})
+
+describe('a question can push a body with a force in t', () => {
+  /** A steady push along x between two clock readings. */
+  const push = (bodyId: string, newtons: number, from = 0, until = 1) => ({ bodyId, force: (_t: number): V3 => [newtons, 0, 0], from, until })
+
+  it('an actuator of 2 N on a 1 kg body reaches 2 m/s after 1 s', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    world.setActuators([push(b.id, 2)])
+    run(world, 1)
+    // F = ma: 2 N on 1 kg for 1 s is 2 m/s, and ½at² = 1 m along.
+    expect(world.state(b.id)!.velocity[0]).toBeCloseTo(2, 1)
+    expect(Math.abs(world.state(b.id)!.velocity[0] - 2) / 2).toBeLessThan(0.02)
+    expect(world.state(b.id)!.position[0]).toBeCloseTo(1, 1)
+    world.destroy()
+  })
+
+  it('stops pushing when the window closes and only starts when it opens', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    // 3 N from t = 1 s to t = 2 s: nothing for the first second, 3 m/s by the end of the second, then coasting.
+    world.setActuators([push(b.id, 3, 1, 2)])
+    run(world, 1)
+    expect(world.state(b.id)!.velocity[0]).toBeCloseTo(0, 6)
+    run(world, 1)
+    // Exactly sixty steps of push: the clock is a running sum of 1/60 that reads 1.9999999999999978
+    // at a nominal 2 s, and a window judged on that raw reading acted for a sixty-first step
+    // (3.05 m/s, which a 2 % tolerance let through).
+    expect(Math.abs(world.state(b.id)!.velocity[0] - 3) / 3).toBeLessThan(0.005)
+    run(world, 1)
+    expect(Math.abs(world.state(b.id)!.velocity[0] - 3) / 3).toBeLessThan(0.005)
+    world.destroy()
+  })
+
+  it('every one-second window gets sixty steps, whichever way the float clock rounds at its edges', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    // 1 N for each of [1, 2), [2, 3) and [0.5, 1.5) on a fresh 1 kg body: 1 m/s each, exactly.
+    for (const [from, until] of [[1, 2], [2, 3], [0.5, 1.5]]) {
+      world.rebuild([b], [])
+      world.setActuators([push(b.id, 1, from, until)])
+      run(world, 4)
+      expect(Math.abs(world.state(b.id)!.velocity[0] - 1)).toBeLessThan(0.005)
+    }
+    world.destroy()
+  })
+
+  it('reads the force off the clock: F = 4t N gives v = 2t² and so 2 m/s at 1 s', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    world.setActuators([{ bodyId: b.id, force: (t) => [4 * t, 0, 0], from: 0, until: 10 }])
+    run(world, 1)
+    // The force is read at the middle of each step, which for a force linear in t sums to the
+    // exact integral; read at the start it ran a half-step short, 1.967 m/s.
+    expect(Math.abs(world.state(b.id)!.velocity[0] - 2) / 2).toBeLessThan(0.005)
+    world.destroy()
+  })
+
+  it('a push that has cut out by returning zero lets the body go back to sleep', async () => {
+    const world = await makeWorld({ allowSleeping: true })
+    world.addBody(ground({ friction: 0 }))
+    const b = body({ shape: 'box', size: [0.3, 0.3, 0.3], position: [0, 0.15, 0], friction: 0 })
+    world.addBody(b)
+    // An engine that runs for nothing: zero newtons with no end to the window. It must not keep
+    // waking the box sixty times a second, or the box could never settle.
+    world.setActuators([{ bodyId: b.id, force: () => [0, 0, 0], from: 0, until: Infinity }])
+    run(world, 2)
+    expect(world.state(b.id)!.asleep).toBe(true)
+    expect(world.state(b.id)!.velocity[0]).toBeCloseTo(0, 6)
+    world.destroy()
+  })
+
+  it('wakes a body that had gone to sleep, so a delayed push still moves it', async () => {
+    const world = await makeWorld({ allowSleeping: true })
+    world.addBody(ground({ friction: 0 }))
+    const b = body({ shape: 'box', size: [0.3, 0.3, 0.3], position: [0, 0.15, 0], friction: 0 })
+    world.addBody(b)
+    // Two seconds resting on the floor is enough for Jolt to put the box to sleep.
+    run(world, 2)
+    expect(world.state(b.id)!.asleep).toBe(true)
+    world.setActuators([push(b.id, 2, 2, 3)])
+    run(world, 1)
+    expect(world.state(b.id)!.asleep).toBe(false)
+    expect(world.state(b.id)!.velocity[0]).toBeGreaterThan(1.5)
+    world.destroy()
+  })
+
+  it('survives Reset — the same push acts again from t = 0 — and is dropped by a new scene', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    world.setActuators([push(b.id, 2)])
+    run(world, 1)
+    // Reset in the app is rebuild() with the same definitions.
+    world.rebuild([b], [])
+    expect(world.time).toBe(0)
+    expect(world.state(b.id)!.velocity[0]).toBeCloseTo(0, 6)
+    run(world, 1)
+    expect(Math.abs(world.state(b.id)!.velocity[0] - 2) / 2).toBeLessThan(0.02)
+    // A new scene is SimWorld.create again; the old question's push must not follow the next one in.
+    const fresh = await makeWorld({ gravity: 0 })
+    fresh.addBody(b)
+    run(fresh, 1)
+    expect(fresh.state(b.id)!.velocity[0]).toBeCloseTo(0, 6)
+    fresh.destroy()
+  })
+
+  it('leaves out a step whose force is not a number, instead of handing NaN to the engine', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    // Not a number for the first step (its midpoint is t = 1/120 s); from the second step on it
+    // is a real push, so the body ends up 59/60 of the way to 2 m/s.
+    world.setActuators([{ bodyId: b.id, force: (t) => [t < 0.02 ? NaN : 2, 0, 0], from: 0, until: 1 }])
+    run(world, 1)
+    const v = world.state(b.id)!.velocity[0]
+    expect(Number.isFinite(v)).toBe(true)
+    expect(Math.abs(v - 2 * (59 / 60)) / 2).toBeLessThan(0.005)
+    world.destroy()
+  })
+
+  it('never pushes a body the list names that is not in the scene', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    const b = body({ position: [0, 0, 0] })
+    world.addBody(b)
+    world.setActuators([push('nobody', 2)])
+    run(world, 1)
+    expect(world.state(b.id)!.velocity[0]).toBeCloseTo(0, 6)
+    world.destroy()
+  })
+})
+
+describe('a question loads an experiment by its id and pushes its bodies', () => {
+  const store = () => useSandbox.getState()
+  const push = (bodyId: string, newtons: number, from = 0, until = 1) => ({ bodyId, force: (_t: number): V3 => [newtons, 0, 0], from, until })
+
+  it('loadPreset puts the projectile on the bench, and says no to an id it does not know', () => {
+    store().loadSandbox()
+    const nonce = store().runNonce
+    expect(store().loadPreset('projectile')).toBe(true)
+    expect(store().bodies.map((b) => b.name)).toEqual(['Floor', 'P'])
+    expect(store().world.airDensity).toBe(0)
+    expect(store().runNonce).toBe(nonce + 1)
+    const before = store().bodies
+    expect(store().loadPreset('no-such-experiment')).toBe(false)
+    expect(store().bodies).toBe(before)
+    expect(store().runNonce).toBe(nonce + 1)
+  })
+
+  it('the pushes reach the running engine, and a body removed takes its push with it', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    engine.world = world
+    try {
+      store().loadPreset('projectile')
+      const ball = store().bodies.find((b) => b.name === 'P')!
+      world.rebuild(store().bodies, store().links)
+      store().setActuators([push(ball.id, 1)])
+      expect(store().actuators).toHaveLength(1)
+      run(world, 1)
+      // 1 N on the 0.5 kg ball for a second adds 2 m/s to its launch speed along x.
+      const vx0 = launchVelocity(14, 30)[0]
+      expect(Math.abs(world.state(ball.id)!.velocity[0] - (vx0 + 2)) / 2).toBeLessThan(0.05)
+      store().removeBody(ball.id)
+      expect(store().actuators).toEqual([])
+      // A fresh scene drops the old question's pushes as well.
+      store().setActuators([push('anything', 1)])
+      expect(store().actuators).toHaveLength(1)
+      store().loadPreset('projectile')
+      expect(store().actuators).toEqual([])
+    } finally {
+      engine.world = null
+      world.destroy()
+    }
+  })
+
+  it('undo of a removed body brings its push back, and redo takes it away again', async () => {
+    const world = await makeWorld({ gravity: 0 })
+    engine.world = world
+    try {
+      store().loadPreset('projectile')
+      const ball = store().bodies.find((b) => b.name === 'P')!
+      store().setActuators([push(ball.id, 1)])
+      store().removeBody(ball.id)
+      expect(store().actuators).toEqual([])
+      store().undo()
+      expect(store().bodies.map((b) => b.name)).toEqual(['Floor', 'P'])
+      expect(store().actuators.map((a) => a.bodyId)).toEqual([ball.id])
+      // The engine got the push back too, not just the list in the store.
+      world.rebuild(store().bodies, store().links)
+      run(world, 1)
+      const vx0 = launchVelocity(14, 30)[0]
+      expect(Math.abs(world.state(ball.id)!.velocity[0] - (vx0 + 2)) / 2).toBeLessThan(0.05)
+      store().redo()
+      expect(store().bodies.map((b) => b.name)).toEqual(['Floor'])
+      expect(store().actuators).toEqual([])
+    } finally {
+      engine.world = null
+      world.destroy()
+    }
+  })
+
+  it('a push attached before the engine exists is handed over the moment the viewport makes one', async () => {
+    engine.world = null
+    store().loadPreset('projectile')
+    store().setActuators([push(store().bodies.find((b) => b.name === 'P')!.id, 2)])
+    // The viewport's own sequence: create, assign to engine.world, rebuild.
+    const world = await makeWorld({ gravity: 0 })
+    engine.world = world
+    try {
+      const ball = store().bodies.find((b) => b.name === 'P')!
+      world.rebuild(store().bodies, store().links)
+      run(world, 1)
+      const vx0 = launchVelocity(14, 30)[0]
+      expect(Math.abs(world.state(ball.id)!.velocity[0] - (vx0 + 4)) / 4).toBeLessThan(0.05)
+    } finally {
+      engine.world = null
+      world.destroy()
+      store().loadSandbox()
+    }
   })
 })
 
