@@ -14,16 +14,19 @@ import {
   GAP_SENTENCE,
   HANDLE_GAP_PX,
   handleAnchor,
+  legoParts,
   legoSnap,
   legoStatus,
   matchesSignature,
   ONE_PIECE_SENTENCE,
   outlineOf,
+  pieceMeasures,
   OVERLAP_SENTENCE,
   pieceSnapTolerance,
   piecesOverlap,
   sameShape,
   signatureOf,
+  simpleCut,
   slideAlong,
   SNAP_PIECE_PX,
   snapToCorners,
@@ -36,6 +39,7 @@ import { parseColour } from '../src/renderer/src/render/colourMix'
 import { add, rotateZ, toRad, type V3 } from '../src/renderer/src/math/vec'
 import { BLOCKS, THEME_CSS, contrast, themeBlock, tokenValue } from './helpers/theme'
 import { readSource } from './helpers/repo'
+import { cssColor, shownColor } from '../src/renderer/src/app/theme'
 
 const P = (...xy: number[]): V3[] => {
   const out: V3[] = []
@@ -544,12 +548,44 @@ describe('breakApart in the scene', () => {
     expect(sc().objects.own).toBeDefined()
   })
 
-  it('does nothing to a shape that is already simple', () => {
+  it('cuts a triangle in two along the median to its longest side', () => {
     sc().addObjects([pointObj('a', 'A', [0, 0, 0]), pointObj('b', 'B', [4, 0, 0]), pointObj('c', 'C', [0, 3, 0]), { ...base('tri', 'poly1'), type: 'polygon', points: ['a', 'b', 'c'], fill: true }])
-    const before = sc().order
     sc().breakApart('tri')
-    expect(sc().order).toEqual(before)
-    expect(sc().log.at(-1)?.text).toMatch(/already a simple shape/)
+    const ps = pieces()
+    expect(ps.length).toBe(2)
+    for (const p of ps) expect(polygonArea(cornersOf(p.id))).toBeCloseTo(3, 9)
+    // The cut meets the hypotenuse BC at its middle, (2, 1.5).
+    expect(ps.every((p) => cornersOf(p.id).some((q) => Math.hypot(q[0] - 2, q[1] - 1.5) < 1e-9))).toBe(true)
+    expect(legoStatus(ps.map((p) => cornersOf(p.id)), P(0, 0, 4, 0, 0, 3)).kind).toBe('original')
+  })
+
+  it("measures a piece by numbered sides, never by its hidden corners' helper names", () => {
+    sc().addObjects(ellScene())
+    sc().breakApart('poly')
+    expect(pieces()[0].points.map((pid) => sc().objects[pid].name).join(' ')).toMatch(/_\d/)
+    for (const p of pieces()) {
+      const rows = pieceMeasures(cornersOf(p.id))
+      expect(rows.map((r) => r.label).join(' ')).not.toMatch(/_\d/)
+      expect(rows.slice(0, p.points.length).map((r) => r.label)).toEqual(p.points.map((_, k) => `Side ${k + 1}`))
+      expect(rows.at(-1)).toMatchObject({ label: 'Area', value: polygonArea(cornersOf(p.id)) })
+    }
+    const src = readSource('src/renderer/src/panels/Measurements.tsx')
+    expect(src).toMatch(/o\.lego\)[\s\S]{0,200}pieceMeasures\(pts\)/)
+  })
+
+  it('cuts a rectangle along a diagonal, decomposed or not, and the halves fuse back into it', () => {
+    const rectangle = P(0, 0, 4, 0, 4, 2, 0, 2)
+    const corners = rectangle.map((p, k) => pointObj(`r${k}`, 'ABCD'[k], p))
+    sc().addObjects([...corners, { ...base('rect', 'poly1'), type: 'polygon', points: corners.map((c) => c.id), fill: true, decomposed: true }])
+    expect(simpleCut(rectangle).map((p) => p.cls.kind)).toEqual(['right-triangle', 'right-triangle'])
+    expect(legoParts(rectangle).length).toBe(2)
+    sc().breakApart('rect')
+    const ps = pieces()
+    expect(ps.length).toBe(2)
+    expect(ps.map((p) => p.label)).toEqual(['Right-angled triangle', 'Right-angled triangle'])
+    expect(sc().fusePieces(ps.map((p) => p.id))).toBeNull()
+    expect(sc().log.at(-1)?.text).toBe('Back to the original shape.')
+    expect(sameShape(cornersOf(polygonsInScene()[0].id), rectangle)).toBe(true)
   })
 })
 
@@ -669,6 +705,31 @@ describe('Break apart and Fuse from the search palette', () => {
     fuseSelection()
     expect(sc().log.at(-1)?.text).toBe('Back to the original shape.')
     expect(pieces()).toEqual([])
+    // Written by buttons, not typed: no "› break apart" in the Console for the bar to refuse.
+    expect(sc().log.every((e) => e.input === '')).toBe(true)
+    expect(readSource('src/renderer/src/panels/Console.tsx')).toMatch(/\{e\.input && <div className="log-in">/)
+  })
+
+  it('turns and flips the selected pieces from the palette, and says so when none is selected', async () => {
+    const { turnSelection, flipSelection, TURN_NEEDS_PIECE } = await import('../src/renderer/src/app/contextActions')
+    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
+    expect(palette).toMatch(/title: 'Turn the selected pieces 90°'[^\n]*run: \(\) => turnSelection\(90\)/)
+    expect(palette).toMatch(/title: 'Turn the selected pieces 15°'[^\n]*run: \(\) => turnSelection\(15\)/)
+    expect(palette).toMatch(/title: 'Flip the selected pieces'[^\n]*run: \(\) => flipSelection\(\)/)
+    sc().addObjects(ellScene())
+    sc().breakApart('poly')
+    sc().select([])
+    turnSelection(90)
+    expect(sc().log.at(-1)?.text).toBe(TURN_NEEDS_PIECE)
+    const piece = pieces()[0]
+    const before = cornersOf(piece.id)
+    sc().select([piece.id])
+    turnSelection(90)
+    const after = cornersOf(piece.id)
+    expect(after).not.toEqual(before)
+    expect(polygonArea(after)).toBeCloseTo(polygonArea(before), 9)
+    flipSelection()
+    expect(cornersOf(piece.id)).not.toEqual(after)
   })
 })
 
@@ -689,7 +750,13 @@ describe('fusing into a different shape', () => {
     const shape = polygonsInScene()
     expect(shape.length).toBe(1)
     expect(shape[0].lego).toBeUndefined()
-    expect(shape[0].decomposed).toBe(true)
+    // Drawn whole, in the theme's new-shape colour looked up when it is drawn, never a saved hex.
+    expect(shape[0].decomposed).toBe(false)
+    expect(shape[0].themed).toBe('--lego-new')
+    for (const sid of sidesOf(shape[0], sc().objects, sc().order)) expect(sc().objects[sid].themed).toBe('--lego-new')
+    expect(shownColor(shape[0])).toBe(shape[0].color)
+    expect(cssColor(shape[0])).toBe(`var(--lego-new, ${shape[0].color})`)
+    expect(cssColor({ color: '#123456', themed: 'red; x' })).toBe('#123456')
     expect(sc().log.at(-1)?.text).toBe('A new shape — same area, different outline: Parallelogram, area 12 u², perimeter 18 u.')
     // The pieces' own corners went; the new shape has visible corners of its own.
     expect(sc().objects.t1p0).toBeUndefined()
@@ -699,6 +766,23 @@ describe('fusing into a different shape', () => {
     sc().addObjects([...pieceObjs('t1', triA, 0), ...pieceObjs('t2', triB, 0, 'other')])
     expect(sc().fusePieces(['t1', 't2'])).toMatch(/different shapes/)
     expect(polygonsInScene().length).toBe(2)
+  })
+
+  it('leaves pieces that make a new outline apart for the student to Fuse, and still fuses the original by itself', () => {
+    const sig = signatureOf(rect)
+    const pieceObjs = (id: string, pts: V3[], i: number): SceneObject[] => [
+      ...pts.map((p, k) => pointObj(`${id}p${k}`, `${id}_${k}`, p)),
+      { ...base(id, id, '#a08cff'), type: 'polygon', points: pts.map((_, k) => `${id}p${k}`), fill: true, lego: { sourceId: 'src', sourceSignature: sig, pieceIndex: i, originalColor: '#9775fa' } }
+    ]
+    sc().addObjects([...pieceObjs('t1', triA, 0), ...pieceObjs('t2', moved(triB, [20, 0, 0]), 1)])
+    // Laid as a parallelogram: a shape, but not the one they came from, so nothing fuses yet.
+    dragPiece('t2', [-16, 0, 0])
+    expect(pieces().length).toBe(2)
+    expect(legoStatus(['t1', 't2'].map(cornersOf), sig).kind).toBe('different')
+    // Slid on into the rectangle they came from, they fuse on their own.
+    dragPiece('t2', [-4, 0, 0])
+    expect(pieces().length).toBe(0)
+    expect(sc().log.at(-1)?.text).toBe('Back to the original shape.')
   })
 
   it('fusing only some of the pieces makes a bigger piece that still fuses back with the rest', () => {

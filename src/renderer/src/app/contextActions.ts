@@ -139,13 +139,13 @@ function polygonItems(o: SceneObject): MenuItem[] {
     }
   ]
   if (o.decomposed) {
-    items.push(
-      {
-        label: 'Split it another way',
-        run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
-      },
-      { label: 'Break apart', hint: 'Turn the pieces into shapes you can slide, turn and flip', run: () => (s().breakApart(o.id), focusPanel('measure')) }
-    )
+    items.push({
+      label: 'Split it another way',
+      run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
+    })
+  }
+  if (canBreakApart(o)) {
+    items.push({ label: 'Break apart', hint: 'Turn the pieces into shapes you can slide, turn and flip', run: () => (s().breakApart(o.id), focusPanel('measure')) })
   }
   if (o.lego) {
     // Every selected piece of the same shape; the right-clicked piece counts even when it was not selected.
@@ -169,6 +169,12 @@ function polygonItems(o: SceneObject): MenuItem[] {
   return items
 }
 
+/**
+ * A decomposed shape breaks into its parts, and a triangle (which has no Decompose) is cut in two
+ * along a median; a piece is already a piece.
+ */
+const canBreakApart = (o: SceneObject): boolean => o.type === 'polygon' && !o.lego && (!!o.decomposed || o.points.length === 3)
+
 /** What the search palette says when Break apart has no decomposed shape to work on. */
 export const BREAK_APART_NEEDS_SHAPE = 'Select a shape and decompose it first; then it can be broken apart.'
 
@@ -178,13 +184,39 @@ export const BREAK_APART_NEEDS_SHAPE = 'Select a shape and decompose it first; t
  */
 export function breakApartSelection(): void {
   const st = s()
-  const shape = st.selection.map((id) => st.objects[id]).find((o) => o?.type === 'polygon' && o.decomposed && !o.lego)
+  const shape = st.selection.map((id) => st.objects[id]).find((o) => o !== undefined && canBreakApart(o))
   if (!shape) {
-    st.pushLog({ input: 'break apart', kind: 'info', text: BREAK_APART_NEEDS_SHAPE })
+    st.pushLog({ input: '', kind: 'info', text: BREAK_APART_NEEDS_SHAPE })
     return
   }
   st.breakApart(shape.id)
   focusPanel('measure')
+}
+
+/** The selected Lego pieces, for the palette's Turn and Flip rows. */
+const selectedPieces = (): string[] => {
+  const st = s()
+  return st.selection.filter((id) => {
+    const o = st.objects[id]
+    return o?.type === 'polygon' && !!o.lego
+  })
+}
+
+/** What the palette's Turn and Flip say when no piece is selected. */
+export const TURN_NEEDS_PIECE = 'Select a piece first: Break apart a shape, then pick one of its pieces.'
+
+/** Turns every selected piece about its own centre, or says why nothing turned. */
+export function turnSelection(deg: number): void {
+  const ids = selectedPieces()
+  if (!ids.length) return void s().pushLog({ input: '', kind: 'info', text: TURN_NEEDS_PIECE })
+  for (const id of ids) s().turnPiece(id, deg)
+}
+
+/** Flips every selected piece left for right, or says why nothing flipped. */
+export function flipSelection(): void {
+  const ids = selectedPieces()
+  if (!ids.length) return void s().pushLog({ input: '', kind: 'info', text: TURN_NEEDS_PIECE })
+  for (const id of ids) s().flipPiece(id)
 }
 
 /** Fuses the selected pieces; `fusePieces` itself says why when they are fewer than two or from different shapes. */

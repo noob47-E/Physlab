@@ -4,6 +4,7 @@ import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
 import { freeCapitals } from '../core/naming'
 import { decompose, type DecomposeGoal } from '../math/decompose'
+import { legoStatus } from '../math/lego'
 import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
@@ -98,6 +99,22 @@ export function ShapeInfo({ id }: { id: ObjId }) {
     })
   }, [lego, selection, objects, id])
 
+  // Every piece of this shape on the table, and what they make together: a new outline is not
+  // fused by itself, so the panel says so and Fuse joins them all.
+  const together = useMemo(() => {
+    if (!lego) return null
+    const ids = Object.values(objects)
+      .filter((o) => o.type === 'polygon' && o.lego?.sourceId === lego.sourceId)
+      .map((o) => o.id)
+    const pts = ids.map((k) => {
+      const v = ev.values.get(k)
+      return v?.type === 'polygon' ? v.pts : null
+    })
+    if (ids.length < 2 || pts.some((p) => !p)) return null
+    return { ids, status: legoStatus(pts as V3[][], lego.sourceSignature) }
+  }, [lego, objects, ev])
+  const fuseIds = fusable.length >= 2 ? fusable : together && together.status.kind !== 'apart' ? together.ids : fusable
+
   const data = useMemo(() => {
     if (!obj || !c) return null
     if (obj.type === 'polygon' && c.type === 'polygon' && c.pts.length >= 3) {
@@ -122,6 +139,10 @@ export function ShapeInfo({ id }: { id: ObjId }) {
   }, [obj, c, objects, settings, goal, decIndex])
 
   if (!data || !obj) return null
+  // A decomposed shape breaks into its parts; a simple one (and a triangle, which has no
+  // Decompose) is cut in two instead, so Break apart works on the shapes a student draws most.
+  const canBreak = data.kind === 'polygon' && !lego && (data.dec !== null || data.pts.length === 3)
+  const simple = canBreak && data.kind === 'polygon' && (!data.dec || data.dec.parts.length < 2)
 
   return (
     <div className="card overflow-hidden">
@@ -148,10 +169,14 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         )}
       </div>
 
-      {data.kind === 'polygon' && ((data.dec && data.dec.parts.length > 1) || lego) && (
+      {data.kind === 'polygon' && (canBreak || lego) && (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5 text-small">
-          {data.dec && data.dec.parts.length > 1 && (
-            <button className="btn min-h-[44px]" title="Turn the pieces into shapes you can slide, turn and flip" onClick={() => (setHighlight(null), breakApart(id))}>
+          {canBreak && (
+            <button
+              className="btn min-h-[44px]"
+              title={simple ? `Cut it in two along ${data.pts.length === 3 ? 'a median' : 'a diagonal'}, then slide, turn and flip the halves` : 'Turn the pieces into shapes you can slide, turn and flip'}
+              onClick={() => (setHighlight(null), breakApart(id))}
+            >
               <Puzzle size={14} /> Break apart
             </button>
           )}
@@ -159,9 +184,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
             <>
               <button
                 className="btn min-h-[44px]"
-                disabled={fusable.length < 2}
-                title={fusable.length < 2 ? 'Select two or more pieces of the same shape, then fuse them' : 'Join the selected pieces into one shape'}
-                onClick={() => setFuseNote(fusePieces(fusable))}
+                disabled={fuseIds.length < 2}
+                title={fuseIds.length < 2 ? 'Select two or more pieces of the same shape, then fuse them' : fuseIds === fusable ? 'Join the selected pieces into one shape' : 'Join all the pieces into the new shape'}
+                onClick={() => setFuseNote(fusePieces(fuseIds))}
               >
                 <Combine size={14} /> Fuse
               </button>
@@ -214,6 +239,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
             <div className="px-2 py-2 text-ink-dim">
               This is already a simple shape; no need to split it.
               {goal === 'basic' && <span className="text-ink-faint"> It is a rectangle, square or triangle already.</span>}
+              <span className="text-ink-faint"> Break apart still cuts it in two, so you can see what its halves make.</span>
             </div>
           ) : (
             <>
@@ -252,6 +278,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       )}
       {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
       {fuseNote && lego && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{fuseNote}</div>}
+      {lego && together?.status.kind === 'different' && (
+        <div className="border-t border-line px-2 py-1.5 text-small text-accent">These pieces make a new shape: {together.status.name}. Press Fuse to join them.</div>
+      )}
     </div>
   )
 }

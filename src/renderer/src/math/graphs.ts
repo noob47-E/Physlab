@@ -455,3 +455,42 @@ export function slopeAt(f: Fx, a: number): number {
   if (v1 > 0.01 * scale && Math.abs(fine - central(h / 4)) > v1 / 2) return NaN
   return slope
 }
+
+/** A box on the drawing, lowest corner and highest corner. */
+export interface Box {
+  min: V3
+  max: V3
+}
+
+/**
+ * The box a set of curves fills, each on its own stretch of x, sampled `n` times a stretch. A
+ * question's picture runs where the default view is not: a region under y = 6x to x = 6 reaches
+ * y = 36 and a cyclist's position 87 m, both far above the top of the screen, and the camera has
+ * to come to them. A value past 10⁹ is an asymptote, not somewhere to frame, and is left out.
+ * Null when no curve has a finite value anywhere on its stretch.
+ */
+export function curveBox(curves: { f: Fx; from: number; to: number }[], n = 64): Box | null {
+  let x0 = Infinity
+  let x1 = -Infinity
+  let y0 = Infinity
+  let y1 = -Infinity
+  for (const { f, from, to } of curves) {
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue
+    for (let i = 0; i <= n; i++) {
+      const x = from + ((to - from) * i) / n
+      let y: number
+      try {
+        y = f(x)
+      } catch {
+        continue
+      }
+      if (!Number.isFinite(y) || Math.abs(y) > 1e9) continue
+      x0 = Math.min(x0, x)
+      x1 = Math.max(x1, x)
+      y0 = Math.min(y0, y)
+      y1 = Math.max(y1, y)
+    }
+  }
+  if (!Number.isFinite(x0)) return null
+  return { min: [x0, y0, 0], max: [x1, y1, 0] }
+}

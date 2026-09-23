@@ -140,6 +140,8 @@ export interface SandboxState {
   loadPreset: (id: string) => boolean
   /** Replaces the pushes on the loaded experiment; a running engine picks them up at once. */
   setActuators: (list: Actuator[]) => void
+  /** Takes one push off (the panel's Remove), as a step Undo brings back. */
+  removeActuator: (index: number) => void
 }
 
 /** Sensible starting sizes in metres, so a scene looks like a lab bench, not a galaxy. */
@@ -394,6 +396,14 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     return true
   },
   setActuators: (actuators) => {
+    set({ actuators })
+    engine.world?.setActuators(actuators)
+  },
+  removeActuator: (index) => {
+    const list = get().actuators
+    if (index < 0 || index >= list.length) return
+    remember(set, get, 'actuator')
+    const actuators = list.filter((_, i) => i !== index)
     set({ actuators })
     engine.world?.setActuators(actuators)
   },

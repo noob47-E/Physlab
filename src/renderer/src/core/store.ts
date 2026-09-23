@@ -12,13 +12,13 @@ import { renameInObjects, renameProblem } from './rename'
 import { visibleOrder, type Space } from './visibility'
 import { newId, nextName, uniqueName } from './naming'
 import { themeColor } from '../app/theme'
-import { decompose } from '../math/decompose'
 import { formatMeasure } from '../math/format'
-import { flipPiece as flipCorners, fuseResult, legoStatus, ONE_PIECE_SENTENCE, signatureOf, snapToCorners, snapTolerance, tintPiece, turnPiece as turnCorners } from '../math/lego'
+import { flipPiece as flipCorners, fuseResult, legoParts, legoStatus, ONE_PIECE_SENTENCE, signatureOf, snapToCorners, snapTolerance, tintPiece, turnPiece as turnCorners } from '../math/lego'
 import type { V3 } from '../math/vec'
 
 export interface LogEntry {
   id: number
+  /** What was typed into the bar; empty for a line a button wrote. */
   input: string
   kind: 'result' | 'error' | 'info'
   /** Plain text output. */
@@ -228,7 +228,7 @@ function dropHiddenCorners(doomed: Set<ObjId>, objects: Record<ObjId, SceneObjec
 /** Objects a piece or a fused shape is made of: corner points, the polygon and its sides. */
 function makePolygon(
   pts: V3[],
-  opts: { color: string; space: Space | undefined; lego?: PolygonObj['lego']; hiddenCorners: boolean; decomposed?: boolean; label?: string },
+  opts: { color: string; themed?: string; space: Space | undefined; lego?: PolygonObj['lego']; hiddenCorners: boolean; decomposed?: boolean; label?: string },
   pool: Record<ObjId, SceneObject>
 ): SceneObject[] {
   const out: SceneObject[] = []
@@ -237,7 +237,7 @@ function makePolygon(
     pool[o.id] = o
     return o
   }
-  const base = { visible: true, locked: false, showLabel: true, space: opts.space }
+  const base = { visible: true, locked: false, showLabel: true, space: opts.space, ...(opts.themed ? { themed: opts.themed } : {}) }
   const polyName = nextName('polygon', pool)
   const polyId = newId()
   const corners = pts.map((p, k) =>
@@ -394,7 +394,7 @@ export const useScene = create<SceneState>()((set, get) => {
     commit(nextObjects, order, history)
   }
 
-  /** A piece just let go: pull it corner to corner against its siblings, then fuse if they make a shape. */
+  /** A piece just let go: pull it corner to corner against its siblings, then fuse if they make the original shape again. */
   const settlePiece = (piece: Piece) => {
     const { objects, ev } = get()
     const siblings = Object.values(objects).filter((o): o is Piece => isPiece(o) && o.id !== piece.id && o.lego.sourceId === piece.lego.sourceId)
@@ -406,7 +406,10 @@ export const useScene = create<SceneState>()((set, get) => {
     const after = get().ev
     const all = [piece, ...siblings].map((p) => cornersOf(p.id, after))
     if (all.some((c) => !c)) return
-    if (legoStatus(all as V3[][], piece.lego.sourceSignature).kind !== 'apart') get().fusePieces([piece, ...siblings].map((p) => p.id))
+    // Only the shape they came from fuses by itself. A new outline is somewhere on the way for a
+    // student still arranging the pieces: an L's foot lifted by one unit turned at once into a
+    // "Concave octagon" nobody asked for. The Measure panel offers Fuse for that instead.
+    if (legoStatus(all as V3[][], piece.lego.sourceSignature).kind === 'original') get().fusePieces([piece, ...siblings].map((p) => p.id))
   }
 
   return {
@@ -487,11 +490,10 @@ export const useScene = create<SceneState>()((set, get) => {
       const parent = objects[id]
       const pts = cornersOf(id, ev)
       if (parent?.type !== 'polygon' || !pts) return
-      const dec = decompose(pts, parent.decomposeGoal ?? 'basic', parent.decomposeIndex ?? 0)
-      // A sliver with no area is nothing to pick up.
-      const parts = dec.parts.filter((p) => p.pts.length >= 3 && p.area > 1e-9)
+      // A simple shape (a rectangle, a triangle) is cut in two rather than refused.
+      const parts = legoParts(pts, parent.decomposeGoal ?? 'basic', parent.decomposeIndex ?? 0)
       if (parts.length < 2) {
-        get().pushLog({ input: 'break apart', kind: 'info', text: 'This is already a simple shape: there is nothing to break apart.' })
+        get().pushLog({ input: '', kind: 'info', text: 'This is already a simple shape: there is nothing to break apart.' })
         return
       }
       const doomed = doomedBy([id], objects, order)
@@ -522,14 +524,14 @@ export const useScene = create<SceneState>()((set, get) => {
         selection: [...selection.filter((k) => !doomed.has(k)), ...pieceIds],
         hovered: hovered && doomed.has(hovered) ? null : hovered
       })
-      get().pushLog({ input: 'break apart', kind: 'info', text: `${parent.name} is now ${parts.length} pieces. Slide, turn and flip them; put back together, they fuse on their own.` })
+      get().pushLog({ input: '', kind: 'info', text: `${parent.name} is now ${parts.length} pieces. Slide, turn and flip them; put back together, they fuse on their own.` })
     },
 
     fusePieces: (ids) => {
       const { objects, order, ev, settings, selection, hovered } = get()
       const pieces = ids.map((k) => objects[k]).filter(isPiece)
       const say = (text: string): string => {
-        get().pushLog({ input: 'fuse', kind: 'info', text })
+        get().pushLog({ input: '', kind: 'info', text })
         return text
       }
       if (pieces.length < 2) return say(ONE_PIECE_SENTENCE)
@@ -565,7 +567,11 @@ export const useScene = create<SceneState>()((set, get) => {
               label: result.name,
               lego: { ...source, pieceIndex: Math.min(...pieces.map((p) => p.lego.pieceIndex)) }
             }
-          : { color: original ? source.originalColor : legoNewColor(pieces[0].color), space: pieces[0].space, hiddenCorners: false, decomposed: true },
+          : original
+            ? { color: source.originalColor, space: pieces[0].space, hiddenCorners: false, decomposed: true }
+            : // A new shape is drawn in the theme's own new-shape colour, looked up at draw time
+              // so it follows a theme switch, and whole: the I/II split drawn over it hid the fill.
+              { color: legoNewColor(pieces[0].color), themed: '--lego-new', space: pieces[0].space, hiddenCorners: false, decomposed: false },
         nextObjects
       )
       for (const o of made) nextOrder.push(o.id)
@@ -577,7 +583,7 @@ export const useScene = create<SceneState>()((set, get) => {
       })
       const measures = `area ${formatMeasure(result.area, 'area', settings)}, perimeter ${formatMeasure(result.perimeter, 'length', settings)}`
       get().pushLog({
-        input: 'fuse',
+        input: '',
         kind: 'info',
         text: original
           ? 'Back to the original shape.'

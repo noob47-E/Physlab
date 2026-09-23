@@ -30,11 +30,14 @@ import { bundledSets, loadBundled, loadTeacherFile } from '../src/renderer/src/q
 import { serializePQFile } from '../src/renderer/src/questions/pqjson'
 import { fromExam, toExam } from '../src/renderer/src/questions/numbas'
 import { UNITS } from '../src/renderer/src/questions/units'
-import { lettersBeforeBrackets } from '../src/renderer/src/questions/parts'
+import { graphBox } from '../src/renderer/src/core/visualize'
+import { useCameraCommand } from '../src/renderer/src/render/viewState'
+import { lettersBeforeBrackets, withoutNameEquals } from '../src/renderer/src/questions/parts'
 import katex from 'katex'
 import {
   bindValues,
   checkPlayedPart,
+  describePush,
   picturePlan,
   plainFormula,
   playQuestion,
@@ -510,6 +513,23 @@ describe('the bundled sample set', () => {
     expect(crate.friction).toBe(played.variant.values.mu)
     expect(actuators[0]).toMatchObject({ bodyId: crate.id, from: 0, until: 2 })
     expect(actuators[0].force(1)[0]).toBe(played.variant.values.F)
+    // The Sandbox panel says what is pushing the crate, and the student can take it off.
+    expect(actuators[0].label).toBe(`Push from the question: ${played.variant.values.F} N on Crate, 0–2 s`)
+    const panel = readSource('src/renderer/src/panels/Sandbox.tsx')
+    expect(panel).toMatch(/<Pushes \/>/)
+    expect(panel).toMatch(/onClick=\{\(\) => removeActuator\(i\)\}/)
+    expect(readSource('src/renderer/src/render/SandboxView.tsx')).toMatch(/\{ready && <PushArrows sim=\{sim\} \/>\}/)
+    useSandbox.getState().removeActuator(0)
+    expect(useSandbox.getState().actuators).toEqual([])
+    useSandbox.getState().undo()
+    expect(useSandbox.getState().actuators[0].label).toBe(actuators[0].label)
+  })
+
+  it('describes a push that changes with time, and one that never stops, in words', () => {
+    const grows = { body: 'Rocket', force: (t: number): [number, number, number] => [0, 4 * t, 0], from: 1, until: Infinity }
+    expect(describePush(grows)).toBe('Push from the question: a force that changes with time on Rocket, from 1 s on')
+    const steady = { body: 'Cart', force: (): [number, number, number] => [3, 4, 0], from: 0.5, until: 1.25 }
+    expect(describePush(steady)).toBe('Push from the question: 5 N on Cart, 0.5–1.25 s')
   })
 
   it('lands the recorded crate\'s run in Lab Data as one new table, keeping the student\'s own', () => {
@@ -551,6 +571,57 @@ describe('the bundled sample set', () => {
     scene().setPlaying(true)
     showSandbox(sandboxPlan(q.sandbox!, played))
     expect(scene().playing).toBe(false)
+  })
+
+  it('keeps the area off the picture until the question is answered, then writes it', () => {
+    scene().newScene()
+    const q = byId('physlab-sample-area-between')
+    const played = playQuestion(q, 4, SETTINGS)
+    const k = played.variant.values.k
+    const area = String(Number((k ** 3 / 6).toFixed(2)))
+    const texts = () => Object.values(scene().objects).filter((o) => o.type === 'text').map((o) => (o.type === 'text' ? o.text : ''))
+    const hidden = showPicture(picturePlan(q.picture!, played, SETTINGS), SETTINGS, true)
+    expect(hidden.value).toBeUndefined()
+    expect(hidden.note).not.toContain(area)
+    expect(hidden.note).toContain('the one whose area you are finding')
+    expect(texts().some((t) => t.startsWith('area ='))).toBe(false)
+    expect(graphs().filter((g) => g.kind === 'between')).toHaveLength(1)
+    // Answered: the same button writes the number on the drawing and in the note.
+    const shown = showPicture(picturePlan(q.picture!, played, SETTINGS), SETTINGS)
+    expect(shown.note).toContain(`has area ${area}`)
+    expect(texts()).toContain(`area = ${area}`)
+    expect(graphs().filter((g) => g.kind === 'between')).toHaveLength(1)
+  })
+
+  it("replaces the last question's picture with the next one's and frames the camera on it", () => {
+    scene().newScene()
+    vi.useFakeTimers()
+    try {
+      const area = byId('physlab-sample-area-between')
+      showPicture(picturePlan(area.picture!, playQuestion(area, 4, SETTINGS), SETTINGS), SETTINGS)
+      vi.runAllTimers()
+      const k = playQuestion(area, 4, SETTINGS).variant.values.k
+      // The region runs to y = k², far above the default view: the camera is sent to it.
+      const regionBox = useCameraCommand.getState().box!
+      expect(regionBox.max[0]).toBeCloseTo(k, 6)
+      expect(regionBox.max[1]).toBeCloseTo(k * k, 6)
+
+      const cyclist = byId('physlab-sample-cyclist-journey')
+      const played = playQuestion(cyclist, 9, SETTINGS)
+      const shown = showMotion(cyclist.motion!, played, SETTINGS)
+      vi.runAllTimers()
+      // Question 4's region and its label are gone from under question 5's motion.
+      expect(graphs().some((g) => g.kind === 'between' || g.kind === 'explicit')).toBe(false)
+      expect(Object.values(scene().objects).some((o) => o.type === 'text')).toBe(false)
+      const box = useCameraCommand.getState().box!
+      expect(box.max[0]).toBeCloseTo(shown.pieces.total, 6)
+      expect(box.max[1]).toBeGreaterThanOrEqual(played.problem.fields[1].value - 1e-6)
+      // Fit everything in view reads the same box off the x–t graph, which it used to skip.
+      const xt = graphs().find((g) => g.name === 'xt')!
+      expect(graphBox(xt)!.max[1]).toBeCloseTo(played.problem.fields[1].value, 6)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -671,6 +742,20 @@ describe('a letter before a bracket', () => {
       expect(checkPlayedPart(p, `t(${u} - 4.9t)`, played, SETTINGS).verdict, `seed ${seed}`).toBe('right')
       expect(checkPlayedPart(p, `t(${u} - 9.8t)`, played, SETTINGS).verdict, `seed ${seed}`).toBe('wrong')
     }
+  })
+
+  it('reads "h = 17t − 4.9t²" as the formula after h =, and still refuses a letter the part does not use', () => {
+    const q = loadBundled().questions.find((x) => x.id === 'physlab-sample-thrown-ball')!
+    const played = playQuestion(q, 3, SETTINGS)
+    const p = played.parts.find((x) => x.part.type === 'expression')!
+    const u = played.variant.values.u
+    expect(checkPlayedPart(p, `h = ${u}t - 4.9t^2`, played, SETTINGS).verdict).toBe('right')
+    expect(checkPlayedPart(p, `h(t) = ${u}t - 4.9t^2`, played, SETTINGS).verdict).toBe('right')
+    expect(checkPlayedPart(p, `h = ${u}t - 9.8t^2`, played, SETTINGS).verdict).toBe('wrong')
+    expect(checkPlayedPart(p, `${u}t - 4.9t^2 + h`, played, SETTINGS).message).toBe('The answer should only use t.')
+    expect(withoutNameEquals('t = 3t', ['t'])).toBe('t = 3t')
+    expect(withoutNameEquals('h == 3t', ['t'])).toBe('h == 3t')
+    expect(withoutNameEquals('h = ', ['t'])).toBe('h = ')
   })
 
   it('needs no rewrite from the player: the marker reads the product itself', () => {

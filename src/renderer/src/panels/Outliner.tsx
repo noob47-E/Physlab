@@ -8,6 +8,7 @@ import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
 import { modeOfSpace, SPACE_LABELS, visibleIn, type Space } from '../core/visibility'
 import { enterMode } from '../app/layout'
+import { cssColor } from '../app/theme'
 import { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 const GROUPS: { type: ObjType[]; label: string }[] = [
@@ -95,7 +96,7 @@ export function Outliner() {
                   }}
                   className={`group flex h-7 cursor-pointer items-center gap-2 px-2 ${sel ? 'bg-sel' : hovered === o.id ? 'bg-surface-3' : ''}`}
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color, opacity: o.visible ? 1 : 0.3 }} />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cssColor(o), opacity: o.visible ? 1 : 0.3 }} />
                   <span className={`w-12 shrink-0 truncate font-math font-semibold italic ${o.auxiliary ? 'text-ink-faint' : 'text-ink-strong'}`}>
                     {o.label ?? o.name}
                   </span>

@@ -48,6 +48,15 @@ export function themeColor(name: string, fallback = '#888888'): string {
   return v || fallback
 }
 
+/** A token name a file may carry in `themed`; anything else is ignored rather than handed to CSS. */
+const isToken = (t: string | undefined): t is string => !!t && /^--[a-z0-9-]+$/.test(t)
+
+/** The colour an object is drawn in now: its theme token's when it has one (`themed`), else its own. */
+export const shownColor = (o: { color: string; themed?: string }): string => (isToken(o.themed) && typeof document !== 'undefined' ? themeColor(o.themed, o.color) : o.color)
+
+/** The same for a style attribute: the token itself, so the page follows a theme switch without a render. */
+export const cssColor = (o: { color: string; themed?: string }): string => (isToken(o.themed) ? `var(${o.themed}, ${o.color})` : o.color)
+
 /** How many `--series-N` colours the stylesheet defines for plotted quantities. */
 export const SERIES_COUNT = 6
 

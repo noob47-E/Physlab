@@ -488,10 +488,12 @@ export function Practice() {
           {nextButton}
         </div>
 
+        {/* The picture's area or slope is held back until the question is answered right or the
+            solution shown: it is usually exactly what the question asks for. */}
         {(q.picture || q.motion || q.sandbox) && (
           <div className="mt-2 flex flex-wrap items-center gap-2 px-3">
             {q.picture && (
-              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showPicture(picturePlan(q.picture!, played, settings), settings).note, 'graphing')}>
+              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showPicture(picturePlan(q.picture!, played, settings), settings, !(revealed || allRight)).note, 'graphing')}>
                 <Eye size={13} /> Show the picture
               </button>
             )}

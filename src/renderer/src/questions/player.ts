@@ -10,7 +10,7 @@
 
 import type { ConstantNode, EvalFunction, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
 import { scene } from '../core/store'
-import { visualizeBetween, visualizeGraph, visualizePiecewise, visualizeTangentAt } from '../core/visualize'
+import { frameGraphs, visualizeBetween, visualizeGraph, visualizePiecewise, visualizeTangentAt } from '../core/visualize'
 import { useLab } from '../lab/labStore'
 import type { Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
@@ -342,38 +342,66 @@ export interface PictureShown {
 }
 
 /**
+ * Everything the last "Show the picture" or "Draw the motion" put on the drawing, so the next
+ * one replaces it. Each used to clear only its own kind: question 4's shaded region and its
+ * "area = 20.83" stayed under question 5's motion plots.
+ */
+let questionDrawn: string[] = []
+
+/**
+ * Takes the previous question drawing away, runs this one and frames the camera on it. The old
+ * one goes first so the new curves take the same names (xt, vt), not xt1 beside a deleted xt.
+ */
+function drawForQuestion<T>(draw: () => T): T {
+  const s = scene()
+  const alive = questionDrawn.filter((id) => s.objects[id])
+  if (alive.length) s.removeObjects(alive)
+  questionDrawn = []
+  const before = new Set(scene().order)
+  const out = draw()
+  questionDrawn = scene().order.filter((id) => !before.has(id))
+  frameGraphs(questionDrawn)
+  return out
+}
+
+/**
  * Draws the picture in Graphing and says in one sentence what it shows. The shaded region's area
  * and the tangent's slope are written in the student's precision, the same numbers the drawing
  * carries on its labels.
+ *
+ * `hideValue` is for a question not yet answered: the area or the slope is usually exactly what
+ * the question asks for, and "Show the picture" sits beside the answer box from the start. The
+ * drawing then carries no "area =" or "slope =" label and the note says what was drawn without
+ * the number.
  */
-export function showPicture(plan: PicturePlan, settings: MeasureSettings): PictureShown {
+export function showPicture(plan: PicturePlan, settings: MeasureSettings, hideValue = false): PictureShown {
   const n = (v: number): string => fmtPrecise(v, settings)
-  switch (plan.kind) {
-    case 'curve': {
-      const shown = `y = ${plainFormula(plan.expr)}`
-      visualizeGraph(shown, [plan.expr], 'explicit', { tMin: plan.xMin, tMax: plan.xMax })
-      return { note: `Drawn: ${shown}.` }
+  return drawForQuestion((): PictureShown => {
+    switch (plan.kind) {
+      case 'curve': {
+        const shown = `y = ${plainFormula(plan.expr)}`
+        visualizeGraph(shown, [plan.expr], 'explicit', { tMin: plan.xMin, tMax: plan.xMax })
+        return { note: `Drawn: ${shown}.` }
+      }
+      case 'piecewise':
+        visualizePiecewise(plan.pieces)
+        return { note: `Drawn: one curve in ${n(plan.pieces.length)} pieces.` }
+      case 'between': {
+        const area = visualizeBetween(plan.upper, plan.lower, plan.from, plan.to, plan.label, hideValue)
+        const where = `The shaded region between x = ${n(Math.min(plan.from, plan.to))} and x = ${n(Math.max(plan.from, plan.to))}`
+        return hideValue ? { note: `${where} is the one whose area you are finding.` } : { note: `${where} has area ${n(area)}.`, value: area }
+      }
+      case 'tangent': {
+        const { slope } = visualizeTangentAt(plan.expr, plan.at, hideValue)
+        return hideValue ? { note: `Drawn: the tangent at x = ${n(plan.at)}.` } : { note: `The tangent at x = ${n(plan.at)} has slope ${n(slope)}.`, value: slope }
+      }
     }
-    case 'piecewise':
-      visualizePiecewise(plan.pieces)
-      return { note: `Drawn: one curve in ${n(plan.pieces.length)} pieces.` }
-    case 'between': {
-      const area = visualizeBetween(plan.upper, plan.lower, plan.from, plan.to, plan.label)
-      return { note: `The shaded region between x = ${n(Math.min(plan.from, plan.to))} and x = ${n(Math.max(plan.from, plan.to))} has area ${n(area)}.`, value: area }
-    }
-    case 'tangent': {
-      const { slope } = visualizeTangentAt(plan.expr, plan.at)
-      return { note: `The tangent at x = ${n(plan.at)} has slope ${n(slope)}.`, value: slope }
-    }
-  }
+  })
 }
 
 // ---------------------------------------------------------------------------
 // Motion
 // ---------------------------------------------------------------------------
-
-/** What the last "Show it" of a motion drew, so the next one replaces it instead of stacking. */
-let motionDrawn: string[] = []
 
 /**
  * The Lab Data table each played question's readings went into, by the problem's id (question
@@ -401,15 +429,12 @@ export function showMotion(m: PQMotion, played: Played, settings: MeasureSetting
   if (pieces.problems.length > 0) throw new Error(pieces.problems[0])
   if (pieces.x.length === 0) throw new Error('This motion has no stretch that lasts any time, so there is nothing to draw.')
 
-  const s = scene()
-  const alive = motionDrawn.filter((id) => s.objects[id])
-  if (alive.length) s.removeObjects(alive)
-  const before = new Set(scene().order)
-  for (const plot of m.plots) {
-    const set = plot === 'x-t' ? pieces.x : plot === 'v-t' ? pieces.v : pieces.a
-    visualizePiecewise(set, plot === 'x-t' ? 'xt' : plot === 'v-t' ? 'vt' : 'at')
-  }
-  motionDrawn = scene().order.filter((id) => !before.has(id))
+  drawForQuestion(() => {
+    for (const plot of m.plots) {
+      const set = plot === 'x-t' ? pieces.x : plot === 'v-t' ? pieces.v : pieces.a
+      visualizePiecewise(set, plot === 'x-t' ? 'xt' : plot === 'v-t' ? 'vt' : 'at')
+    }
+  })
 
   const note = `Drawn: ${plotWords(m)} against time for ${fmtPrecise(pieces.total, settings)} s (time runs along x).`
   let rows = 0
@@ -493,6 +518,23 @@ export function sandboxPlan(sb: PQSandbox, played: Played): SandboxPlan {
 }
 
 /**
+ * What the Sandbox panel says about a question's push: its size when it is steady, and when it
+ * acts. "Push from the question: 25 N on Crate, 0–2 s" — without it the crate sped up from 6 to
+ * 8 m/s with nothing on screen to say why.
+ */
+export function describePush(p: PushPlan): string {
+  const n = (v: number): string => fmtPrecise(v, { decimals: 2, precisionMode: 'dp' })
+  const end = Number.isFinite(p.until) ? p.until : p.from + 10
+  const samples = Array.from({ length: 9 }, (_, i) => p.force(p.from + ((end - p.from) * i) / 8))
+  const first = samples[0]
+  const size = Math.hypot(...first)
+  const steady = samples.every((f) => f.every((c, k) => Math.abs(c - first[k]) <= 1e-9 * Math.max(1, size)))
+  const what = steady ? `${n(size)} N` : 'a force that changes with time'
+  const when = Number.isFinite(p.until) ? `${n(p.from)}–${n(p.until)} s` : `from ${n(p.from)} s on`
+  return `Push from the question: ${what} on ${p.body}, ${when}`
+}
+
+/**
  * Loads the experiment by its id and puts the pushes on the bodies it names. `loadPreset` builds
  * the bodies with fresh ids every time, so the names are resolved against the bodies it has just
  * made, and only then are the pushes handed over. The recorded body (or the first pushed one) is
@@ -518,7 +560,7 @@ export function showSandbox(plan: SandboxPlan): string {
     if (!b) throw new Error(`The experiment has no body called ${name}, so PhysLab cannot push it.`)
     return b.id
   }
-  const actuators: Actuator[] = plan.pushes.map((p) => ({ bodyId: idOf(p.body), force: p.force, from: p.from, until: p.until }))
+  const actuators: Actuator[] = plan.pushes.map((p) => ({ bodyId: idOf(p.body), force: p.force, from: p.from, until: p.until, label: describePush(p) }))
   useSandbox.getState().setActuators(actuators)
   const watched = plan.record ?? plan.pushes[0]?.body
   if (watched !== undefined) useSandbox.getState().select(idOf(watched))

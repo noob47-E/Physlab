@@ -27,7 +27,9 @@ export const useView = create<ViewInfo>(() => ({
 }))
 
 /** Request to reset / frame the camera; CameraRig listens. */
-export const useCameraCommand = create<{ nonce: number; kind: 'home' | 'fit' }>(() => ({ nonce: 0, kind: 'home' }))
-export const resetCamera = () => useCameraCommand.setState({ nonce: Date.now(), kind: 'home' })
-/** Zoom and pan so every visible object fits in the view. */
-export const fitCamera = () => setTimeout(() => useCameraCommand.setState({ nonce: Date.now(), kind: 'fit' }), 30)
+/** A box on the drawing to frame, lowest corner and highest corner. */
+export type FitBox = { min: [number, number, number]; max: [number, number, number] }
+export const useCameraCommand = create<{ nonce: number; kind: 'home' | 'fit'; box?: FitBox }>(() => ({ nonce: 0, kind: 'home' }))
+export const resetCamera = () => useCameraCommand.setState({ nonce: Date.now(), kind: 'home', box: undefined })
+/** Zoom and pan so every visible object fits in the view, or just `box` when one is given. */
+export const fitCamera = (box?: FitBox) => setTimeout(() => useCameraCommand.setState({ nonce: Date.now(), kind: 'fit', box }), 30)

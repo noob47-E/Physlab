@@ -14,7 +14,7 @@ import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, typ
 import { formatMeasure } from '../math/format'
 import { decompose } from '../math/decompose'
 import { headingArc } from '../math/vectorSolver'
-import { SERIES_COUNT, seriesColor, themeColor, useTheme } from '../app/theme'
+import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
 import { mixOklabMany, mixParents } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 
@@ -114,7 +114,7 @@ export const PointView = memo(function PointView({ obj, c, selected, hovered, is
   })
 
   const colors = useDrawingColors()
-  const fill = free ? obj.color : colors.derived
+  const fill = free ? shownColor(obj) : colors.derived
   return (
     <group ref={group}>
       {selected && (
@@ -362,7 +362,7 @@ export const LineLikeView = memo(function LineLikeView({ obj, c, selected, hover
   return (
     <>
       {selected && <FatLine points={pts} color={colors.select} width={width + 4} renderOrder={4} />}
-      <FatLine points={pts} color={obj.color} width={width} renderOrder={5} />
+      <FatLine points={pts} color={shownColor(obj)} width={width} renderOrder={5} />
     </>
   )
 })
@@ -405,6 +405,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   useEffect(() => () => pool.dispose(), [pool])
   const { camera, size } = useThree()
   const colors = useDrawingColors()
+  const fillColor = shownColor(obj)
   const wpp = worldPerPixel(camera, size, centroid(pts))
 
   const geometry = useMemo(() => {
@@ -460,7 +461,8 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
     <>
       {geometry && !obj.decomposed && (
         <mesh geometry={geometry} renderOrder={0}>
-          <meshBasicMaterial color={obj.color} transparent opacity={selected ? 0.3 : hovered ? 0.24 : obj.fill ? 0.16 : 0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+          {/* Keyed on the colour: WebGPU compiles it in, and a themed shape changes colour with the theme. */}
+          <meshBasicMaterial key={fillColor} color={fillColor} transparent opacity={selected ? 0.3 : hovered ? 0.24 : obj.fill ? 0.16 : 0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
       {obj.decomposed && pts.length >= 3 && <DecomposedParts obj={obj} pts={pts} wpp={wpp} />}

@@ -26,7 +26,9 @@ export function Console() {
         {log.length === 0 && <div className="p-4 text-ink-faint">Nothing yet. Try typing <code className="text-warn">A = &lt;3, 4&gt;</code> in the command bar and press Enter.</div>}
         {log.map((e) => (
           <div key={e.id} className="log-entry">
-            <div className="log-in">› {e.input}</div>
+            {/* A line from a button (Break apart, Fuse) has nothing typed: a "› break apart" here
+                read as a command the bar would then refuse. */}
+            {e.input && <div className="log-in">› {e.input}</div>}
             <div className={`log-out ${e.kind === 'error' ? 'err' : e.kind === 'info' ? 'info' : ''}`}>
               {e.tex ? <Tex tex={e.tex} /> : e.text}
             </div>

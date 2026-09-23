@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber'
 import { toScreen } from './cameraUtils'
 import { labelAnchors, overlay } from './overlay'
 import { useScene } from '../core/store'
+import { cssColor } from '../app/theme'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { formatMeasure } from '../math/format'
 import { heading, len } from '../math/vec'
@@ -143,7 +144,7 @@ export function LabelLayer() {
 
         if (o.type === 'graph') {
           return (
-            <span key={id} data-oid={id} className={`obj-label ${visible ? '' : 'is-away'}`} style={{ color: o.color, display: 'none' }}>
+            <span key={id} data-oid={id} className={`obj-label ${visible ? '' : 'is-away'}`} style={{ color: cssColor(o), display: 'none' }}>
               {o.name}
             </span>
           )
@@ -168,7 +169,7 @@ export function LabelLayer() {
             key={id}
             data-oid={id}
             className={`obj-label chip ${sel ? 'is-selected' : ''} ${visible ? '' : 'is-away'}`}
-            style={{ ['--c' as string]: o.color, display: 'none' }}
+            style={{ ['--c' as string]: cssColor(o), display: 'none' }}
           >
             {showName && <span className={`nm ${o.type === 'vector' ? 'vec-name' : ''}`}>{displayName(o, objects, c)}</span>}
             {text && <span className="ms">{text}</span>}

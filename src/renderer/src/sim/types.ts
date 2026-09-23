@@ -91,6 +91,12 @@ export interface Actuator {
   force: (t: number) => V3
   from: number
   until: number
+  /**
+   * What the Sandbox panel says about it ("25 N on Crate, 0–2 s"). A question's push used to act
+   * with nothing on screen saying so: the crate simply sped up, and stayed pushed through the
+   * student's own edits with no way to see or take the push off.
+   */
+  label?: string
 }
 
 export const DEFAULT_WORLD: WorldSettings = {

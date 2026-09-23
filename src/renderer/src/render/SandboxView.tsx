@@ -465,6 +465,7 @@ export function SandboxView() {
       ))}
       <FloorGrid bodies={bodies} />
       {ready && <VelocityArrows sim={sim} />}
+      {ready && <PushArrows sim={sim} />}
       {ready && <Traces sim={sim} />}
       {ready && <LinkLines sim={sim} />}
       {ready && <JoinPreview sim={sim} />}
@@ -639,6 +640,45 @@ function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
         if (!s) return null
         return <Arrow key={def.id} tail={s.tail} comp={s.comp} color={colour} is3D thick={3.5} renderOrder={14} />
       })}
+    </>
+  )
+}
+
+/**
+ * The force arrow of a question's push, drawn from the body's centre while the push acts (and
+ * before Play, when it is waiting at t = 0). The push used to be invisible: the crate sped up
+ * from 6 to 8 m/s with nothing on screen to say a 25 N force was on it. A metre of arrow for
+ * every 20 N, never longer than 3 m so a large force stays on screen.
+ */
+function PushArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
+  const actuators = useSandbox((s) => s.actuators)
+  const colour = useThemed(() => themeColor('--warn'))
+  const slots = useMemo(() => actuators.map(() => ({ tail: [0, 0, 0] as V3, comp: [0, 0, 0] as V3 })), [actuators])
+  useFrame(() => {
+    const w = sim.current
+    if (!w) return
+    actuators.forEach((a, i) => {
+      const slot = slots[i]
+      const st = w.state(a.bodyId)
+      const t = w.time
+      const f = st && a.from <= t && t < a.until ? a.force(t) : null
+      const size = f ? Math.hypot(f[0], f[1], f[2]) : 0
+      if (!st || !f || !(size > 1e-9)) {
+        slot.comp[0] = slot.comp[1] = slot.comp[2] = 0
+        return
+      }
+      const k = Math.min(1 / 20, 3 / size)
+      for (let c = 0; c < 3; c++) {
+        slot.tail[c] = st.position[c]
+        slot.comp[c] = f[c] * k
+      }
+    })
+  })
+  return (
+    <>
+      {slots.map((s, i) => (
+        <Arrow key={i} tail={s.tail} comp={s.comp} color={colour} is3D thick={3.5} renderOrder={14} />
+      ))}
     </>
   )
 }

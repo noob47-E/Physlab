@@ -8,9 +8,10 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { engine, useSandbox } from '../sim/store'
 import { visibleIn } from '../core/visibility'
+import { graphBox } from '../core/visualize'
 import { themeColor, useThemed } from '../app/theme'
 
-/** Bounding box of all visible geometry (graphs excluded). */
+/** Bounding box of all visible geometry (graphs only where they have ends). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
   const { ev, objects, activeSpace } = useScene.getState()
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
@@ -46,6 +47,17 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
       case 'polygon':
         c.pts.forEach(add)
         break
+      case 'graph': {
+        // A graph with ends (a piecewise curve, a shaded region) has a box; one that runs for
+        // ever does not, and is left out as before.
+        const o = objects[id]
+        const g = o?.type === 'graph' ? graphBox(o) : null
+        if (g) {
+          add(g.min)
+          add(g.max)
+        }
+        break
+      }
     }
   }
   if (!Number.isFinite(min[0])) return null
@@ -145,7 +157,7 @@ export function CameraRig() {
       return
     }
     if (command.kind === 'fit') {
-      const box = sceneBounds()
+      const box = command.box ?? sceneBounds()
       if (box) {
         const cx = (box.min[0] + box.max[0]) / 2
         const cy = (box.min[1] + box.max[1]) / 2

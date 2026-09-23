@@ -7,6 +7,7 @@ import { fmt } from '../math/format'
 import * as VS from '../math/vectorSolver'
 import { Check, ColorField, NumField, TextField } from '../ui/fields'
 import { runCommand } from '../lang/commands'
+import { shownColor } from '../app/theme'
 
 function V3Fields({ v, onChange }: { v: V3; onChange: (v: V3) => void }) {
   return (
@@ -69,7 +70,16 @@ export function Properties() {
       </div>
       <div className="prop-row">
         <label>Colour</label>
-        <ColorField value={o.color} onChange={(col) => set((d) => void (d.color = col))} />
+        <ColorField
+          value={shownColor(o)}
+          onChange={(col) =>
+            set((d) => {
+              // A colour the student picks is theirs: it no longer follows the theme.
+              d.color = col
+              delete d.themed
+            })
+          }
+        />
       </div>
       <div className="prop-row">
         <label>Show</label>

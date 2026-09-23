@@ -6,6 +6,7 @@ import { distanceToLineLike, footOfPerpendicular, lineEquation, lineLineIntersec
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
 import { fmt, fmtIJK, fmtPoint, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
+import { pieceMeasures } from '../math/lego'
 import * as VS from '../math/vectorSolver'
 import { visualizeSolution } from '../core/visualize'
 import { ShapeInfo } from './ShapeInfo'
@@ -30,7 +31,7 @@ type Row = {
 }
 type Get = (id: ObjId) => Computed | undefined
 
-function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>): { title: string; rows: Row[] }[] {
+export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>): { title: string; rows: Row[] }[] {
   const c = get(o.id)
   if (!c) return []
   switch (c.type) {
@@ -123,6 +124,10 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
     }
     case 'polygon': {
       const pts = c.pts
+      if (o.type === 'polygon' && o.lego) {
+        // Numbered sides, never the hidden corners' helper names (pieceMeasures says why).
+        return [{ title: `${o.label ?? 'Piece'}, a piece of a shape`, rows: pieceMeasures(pts).map((r) => ({ ...r, accent: r.kind === 'area' })) }]
+      }
       const names = (o.type === 'polygon' ? o.points : []).map((id) => objects[id]?.name ?? '?')
       if (pts.length === 3) {
         const t = triangleInfo(pts[0], pts[1], pts[2])
@@ -400,7 +405,9 @@ export function Measurements() {
   ]
 
   // Two triangles: are they the same triangle, and by which rule?
-  const triangles = sel.filter((o) => o.type === 'polygon' && o.points.length === 3 && ev.values.get(o.id)?.type === 'polygon')
+  // Lego pieces are left out: the card names a triangle by its corners, and a piece's corners are
+  // hidden helpers ("△poly2_1poly2_2poly2_3"), which read like code.
+  const triangles = sel.filter((o) => o.type === 'polygon' && !o.lego && o.points.length === 3 && ev.values.get(o.id)?.type === 'polygon')
 
   return (
     <div className="panel pb-6">

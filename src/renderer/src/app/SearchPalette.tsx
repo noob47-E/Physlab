@@ -12,7 +12,7 @@ import { EXAMPLES, runExample } from '../panels/Examples'
 import { MODE_HINTS, MODE_LABELS, useCalc, type CalcMode } from '../calc/calcStore'
 import { UNIT_NAMES } from '../math/format'
 import { GRID_STYLES } from '../render/gridMath'
-import { breakApartSelection, confirmClearDrawing, fuseSelection } from './contextActions'
+import { breakApartSelection, confirmClearDrawing, flipSelection, fuseSelection, turnSelection } from './contextActions'
 import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 
 interface Item {
@@ -87,6 +87,9 @@ function buildItems(): Item[] {
     // REGION L: Geometry Lego, reachable without a right-click as the design asks.
     { group: 'Edit', title: 'Break apart the selected shape', hint: 'A decomposed shape becomes pieces you can slide, turn and flip (lego)', run: () => breakApartSelection() },
     { group: 'Edit', title: 'Fuse the selected pieces', hint: 'Join pieces of one broken-apart shape back into one shape (lego)', run: () => fuseSelection() },
+    { group: 'Edit', title: 'Turn the selected pieces 90°', hint: 'A quarter turn anticlockwise about each piece’s centre (lego, rotate)', run: () => turnSelection(90) },
+    { group: 'Edit', title: 'Turn the selected pieces 15°', hint: 'A small turn anticlockwise about each piece’s centre (lego, rotate)', run: () => turnSelection(15) },
+    { group: 'Edit', title: 'Flip the selected pieces', hint: 'Each piece’s mirror image, left for right (lego, reflect)', run: () => flipSelection() },
     { group: 'Settings', title: 'Toggle snapping', hint: 'Hold Alt while drawing to skip snapping once', run: () => scene().setSettings({ snap: !scene().settings.snap }) },
     { group: 'Settings', title: 'Angles in degrees', hint: '', run: () => scene().setSettings({ angleUnit: 'deg' }) },
     { group: 'Settings', title: 'Angles in radians', hint: '', run: () => scene().setSettings({ angleUnit: 'rad' }) }

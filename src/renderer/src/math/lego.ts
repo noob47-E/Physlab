@@ -12,6 +12,7 @@ import { centroid, perimeter, polygonArea, signedArea2D } from './geometry'
 import { classifyPolygon, cleanPolygon, interiorAngles, sideLengths } from './shapes'
 import { formatColour, oklabToSrgb, parseColour, srgbToOklab } from '../render/colourMix'
 import type { LegoRecord } from '../core/types'
+import { decompose, type DecomposeGoal, type Part } from './decompose'
 
 export type { LegoRecord }
 
@@ -464,4 +465,46 @@ export function tintPiece(color: string, i: number, n: number): string {
   const hue = Math.atan2(b, a) + toRad((i - (n - 1) / 2) * 16)
   const light = Math.min(0.92, L + 0.06)
   return formatColour(oklabToSrgb([light, chroma * Math.cos(hue), chroma * Math.sin(hue)]))
+}
+
+/**
+ * The pieces a shape breaks apart into. A shape the decomposer already calls simple — a
+ * rectangle, a square, a triangle, the shapes a student draws most — has only one part, and
+ * Break apart used to refuse it outright, so the design's own example (the two triangles of a
+ * square) could not be played. Such a shape is cut in two instead: a triangle along the median
+ * to its longest side, anything else along the diagonal from its first corner.
+ */
+export function legoParts(pts: V3[], goal: DecomposeGoal = 'basic', index = 0): Part[] {
+  const parts = decompose(pts, goal, index).parts.filter((p) => p.pts.length >= 3 && p.area > 1e-9)
+  return parts.length >= 2 ? parts : simpleCut(pts)
+}
+
+/** A simple shape cut in two (see legoParts); empty when it has no area to cut. */
+export function simpleCut(input: V3[]): Part[] {
+  const pts = toCCW(cleanPolygon(input.map((p) => [p[0], p[1], 0] as V3)))
+  if (pts.length < 3 || polygonArea(pts) <= 1e-9) return []
+  const part = (q: V3[]): Part => {
+    const clean = cleanPolygon(q)
+    return { pts: clean, cls: classifyPolygon(clean, 0.5, 0.005), area: polygonArea(clean) }
+  }
+  if (pts.length === 3) {
+    const lens = [0, 1, 2].map((i) => dist(pts[i], pts[(i + 1) % 3]))
+    const i = lens.indexOf(Math.max(...lens))
+    const a = pts[i]
+    const b = pts[(i + 1) % 3]
+    const o = pts[(i + 2) % 3]
+    const m = mid(a, b)
+    return [part([a, m, o]), part([m, b, o])]
+  }
+  return [part([pts[0], pts[1], pts[2]]), part([pts[0], ...pts.slice(2)])]
+}
+
+/**
+ * What the Measure panel lists for a piece: its sides numbered round it, then its perimeter and
+ * area. A piece's corners are hidden helpers named after the piece (poly2_1), never the
+ * student's letters, and "Side poly2_1poly2_2" read like code.
+ */
+export function pieceMeasures(pts: V3[]): { label: string; value: number; kind: 'length' | 'area' }[] {
+  const sides = pts.map((p, i) => ({ label: `Side ${i + 1}`, value: dist(p, pts[(i + 1) % pts.length]), kind: 'length' as const }))
+  return [...sides, { label: 'Perimeter', value: perimeter(pts), kind: 'length' }, { label: 'Area', value: polygonArea(pts), kind: 'area' }]
 }

@@ -172,6 +172,19 @@ export function lettersBeforeBrackets(text: string, letters: readonly string[]):
   return changed ? out.toString() : text
 }
 
+/**
+ * The formula after a leading "h =" or "h(t) =". A prompt says "write its height h ... as a
+ * formula in t", and a student naturally writes h = 17t − 4.9t²: the h was counted as a stray
+ * letter and the right formula refused with "The answer should only use t." Only a single name
+ * the part does not use is taken off, so "t = …" for a part in t is still read (and refused) as
+ * written.
+ */
+export function withoutNameEquals(text: string, symbols: readonly string[]): string {
+  const m = /^\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:\(\s*[A-Za-z][A-Za-z0-9_]*\s*\))?\s*=(?!=)([\s\S]*)$/.exec(text)
+  if (!m || symbols.includes(m[1]) || !m[2].trim()) return text
+  return m[2]
+}
+
 /** Runs `fn` with the calculator in radians and puts the mode back after. */
 function inRadians<T>(fn: () => T): T {
   const prev = getAngleMode()
@@ -212,6 +225,7 @@ export function checkExpressionPart(
   units: Record<string, UnitId | undefined> = {}
 ): Check {
   if (!text.trim()) return { verdict: 'empty' }
+  text = withoutNameEquals(text, part.symbols)
   text = lettersBeforeBrackets(text, [...part.symbols, ...Object.keys(values)])
 
   let studentNode: MathNode

@@ -70,6 +70,13 @@ export interface ObjectBase {
   labelPin?: 'always' | 'never'
   /** Hidden helper objects (e.g. auxiliary points) are not listed prominently. */
   auxiliary?: boolean
+  /**
+   * A stylesheet colour token (`--lego-new`) this object is drawn in, whichever theme is on;
+   * `color` is then only what a reader without the stylesheet falls back to. A colour read once
+   * and saved stayed Moonlight Gold's pale mint in the Light theme, where it nearly vanished.
+   * Choosing a colour in Properties drops it.
+   */
+  themed?: string
   /** Free-text caption shown in the outliner. */
   caption?: string
   /** Shown on the drawing and in the Outliner instead of `name`, when the name a student reads (−B, â) is not one the scene can hold. */
