@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "web": "vite --config vite.web.config.ts",
+    "build:web": "vite build --config vite.web.config.ts",
     "build": "electron-vite build",
     "dist": "electron-vite build && electron-builder --win",
     "test": "vitest run",
