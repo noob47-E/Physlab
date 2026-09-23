@@ -183,6 +183,12 @@ export interface TextObj extends ObjectBase {
   type: 'text'
   p: V3
   text: string
+  /**
+   * The object this text describes, when it describes one: deleting that object deletes the text
+   * too (`doomedBy`). The shaded region's "area = 4.5" was a free text, and a student who deleted
+   * the region was left with the number floating over two bare curves.
+   */
+  owner?: ObjId
 }
 
 export type SceneObject =

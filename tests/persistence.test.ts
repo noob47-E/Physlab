@@ -185,6 +185,28 @@ describe('migrate', () => {
     expect(o?.type === 'polygon' && o.lego).toEqual({ ...unsigned, sourceSignature: '' })
   })
 
+  it('checks the lego record of a file already in format 3, so letting go of a dragged shape cannot throw', () => {
+    // Only the step up from format 2 used to look at the record: a format-3 file carrying
+    // lego: { junk: 1 } opened as a piece, and releasing a drag reached cleanPolygon(undefined).
+    const corners = [point('q1', 'P', [0, 0, 0], { space: 'shapes' }), point('q2', 'Q', [4, 0, 0], { space: 'shapes' }), point('q3', 'R', [4, 3, 0], { space: 'shapes' })]
+    const poly = { id: 'pc1', name: 'poly2', type: 'polygon', points: ['q1', 'q2', 'q3'], fill: true, visible: true, locked: false, color: '#000', showLabel: true, space: 'shapes', lego: { junk: 1 } }
+    const opened = parseSceneFile(JSON.stringify({ ...fullFile(), version: 3, objects: [...corners, poly] }))
+    const o = opened.objects.find((x) => x.id === 'pc1')
+    expect(o?.type === 'polygon' && 'lego' in o).toBe(false)
+    const unsigned = parseSceneFile(JSON.stringify({ ...fullFile(), version: 3, objects: [...corners, { ...poly, lego: { sourceId: 'p', pieceIndex: 0, originalColor: '#000' } }] }))
+    expect(unsigned.objects.find((x) => x.id === 'pc1')).toMatchObject({ lego: { sourceSignature: '' } })
+    scene().loadScene(opened)
+    expect(() => {
+      scene().beginGesture()
+      for (const id of ['q1', 'q2', 'q3']) {
+        scene().updateObject(id, (d) => {
+          if (d.type === 'point' && d.def.kind === 'free') d.def.p = [d.def.p[0] + 1, d.def.p[1], 0]
+        }, false)
+      }
+      scene().endGesture()
+    }).not.toThrow()
+  })
+
   it('a format-1 file opens in the store with every dependent working', () => {
     scene().loadScene(v1File())
     expect(scene().ev.errors.size).toBe(0)

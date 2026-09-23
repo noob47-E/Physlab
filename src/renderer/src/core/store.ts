@@ -168,6 +168,8 @@ export function doomedBy(ids: ObjId[], objects: Record<ObjId, SceneObject>, orde
     const o = objects[id]
     if (o?.type === 'polygon') for (const side of sidesOf(o, objects, order)) take(side)
   }
+  // A caption goes with what it describes; it is not a dependency, since nothing in it is computed from its owner.
+  for (const o of Object.values(objects)) if (o.type === 'text' && o.owner && doomed.has(o.owner)) doomed.add(o.id)
   return doomed
 }
 
@@ -547,10 +549,23 @@ export const useScene = create<SceneState>()((set, get) => {
       const nextObjects: Record<ObjId, SceneObject> = {}
       for (const [k, o] of Object.entries(objects)) if (!doomed.has(k)) nextObjects[k] = o
       const nextOrder = order.filter((k) => !doomed.has(k))
-      const original = result.kind === 'original'
+      // Only some of the shape's pieces: the result is a bigger piece of the same shape, not a
+      // new shape. Said as "same area" it was false (12 u² against the original's 20 u²), and
+      // made a plain shape it left the pieces still apart with no sibling to fuse back into.
+      const inFuse = new Set(pieces.map((p) => p.id))
+      const partial = Object.values(objects).some((o) => isPiece(o) && o.lego.sourceId === source.sourceId && !inFuse.has(o.id))
+      const original = !partial && result.kind === 'original'
       const made = makePolygon(
         result.outline,
-        { color: original ? source.originalColor : legoNewColor(pieces[0].color), space: pieces[0].space, hiddenCorners: false, decomposed: true },
+        partial
+          ? {
+              color: pieces[0].color,
+              space: pieces[0].space,
+              hiddenCorners: true,
+              label: result.name,
+              lego: { ...source, pieceIndex: Math.min(...pieces.map((p) => p.lego.pieceIndex)) }
+            }
+          : { color: original ? source.originalColor : legoNewColor(pieces[0].color), space: pieces[0].space, hiddenCorners: false, decomposed: true },
         nextObjects
       )
       for (const o of made) nextOrder.push(o.id)
@@ -560,12 +575,15 @@ export const useScene = create<SceneState>()((set, get) => {
         selection: [...selection.filter((k) => !doomed.has(k)), poly.id],
         hovered: hovered && doomed.has(hovered) ? null : hovered
       })
+      const measures = `area ${formatMeasure(result.area, 'area', settings)}, perimeter ${formatMeasure(result.perimeter, 'length', settings)}`
       get().pushLog({
         input: 'fuse',
         kind: 'info',
         text: original
           ? 'Back to the original shape.'
-          : `A new shape — same area, different outline: ${result.name}, area ${formatMeasure(result.area, 'area', settings)}, perimeter ${formatMeasure(result.perimeter, 'length', settings)}.`
+          : partial
+            ? `These pieces make a ${result.name}: ${measures}.`
+            : `A new shape — same area, different outline: ${result.name}, ${measures}.`
       })
       return null
     },

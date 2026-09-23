@@ -35,6 +35,7 @@ import {
 import { parseColour } from '../src/renderer/src/render/colourMix'
 import { add, rotateZ, toRad, type V3 } from '../src/renderer/src/math/vec'
 import { BLOCKS, THEME_CSS, contrast, themeBlock, tokenValue } from './helpers/theme'
+import { readSource } from './helpers/repo'
 
 const P = (...xy: number[]): V3[] => {
   const out: V3[] = []
@@ -643,6 +644,34 @@ describe('moving, turning, flipping and fusing pieces in the scene', () => {
   })
 })
 
+describe('Break apart and Fuse from the search palette', () => {
+  beforeEach(() => sc().newScene())
+
+  it('has rows that act on the selection and say why when there is nothing to act on', async () => {
+    const { breakApartSelection, fuseSelection, BREAK_APART_NEEDS_SHAPE } = await import('../src/renderer/src/app/contextActions')
+    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
+    expect(palette).toMatch(/title: 'Break apart the selected shape'[^\n]*run: \(\) => breakApartSelection\(\)/)
+    expect(palette).toMatch(/title: 'Fuse the selected pieces'[^\n]*run: \(\) => fuseSelection\(\)/)
+    sc().addObjects(ellScene())
+    sc().select([])
+    breakApartSelection()
+    expect(sc().log.at(-1)?.text).toBe(BREAK_APART_NEEDS_SHAPE)
+    expect(pieces()).toEqual([])
+    sc().select(['poly'])
+    breakApartSelection()
+    const n = pieces().length
+    expect(n).toBeGreaterThanOrEqual(2)
+    sc().select([pieces()[0].id])
+    fuseSelection()
+    expect(sc().log.at(-1)?.text).toBe(ONE_PIECE_SENTENCE)
+    expect(pieces().length).toBe(n)
+    sc().select(pieces().map((p) => p.id))
+    fuseSelection()
+    expect(sc().log.at(-1)?.text).toBe('Back to the original shape.')
+    expect(pieces()).toEqual([])
+  })
+})
+
 describe('fusing into a different shape', () => {
   beforeEach(() => sc().newScene())
 
@@ -670,5 +699,33 @@ describe('fusing into a different shape', () => {
     sc().addObjects([...pieceObjs('t1', triA, 0), ...pieceObjs('t2', triB, 0, 'other')])
     expect(sc().fusePieces(['t1', 't2'])).toMatch(/different shapes/)
     expect(polygonsInScene().length).toBe(2)
+  })
+
+  it('fusing only some of the pieces makes a bigger piece that still fuses back with the rest', () => {
+    // A 6 × 3 rectangle cut into three 2 × 3 strips; fuse two, then the third.
+    const whole = P(0, 0, 6, 0, 6, 3, 0, 3)
+    const strip = (x: number) => P(x, 0, x + 2, 0, x + 2, 3, x, 3)
+    const sig = signatureOf(whole)
+    const pieceObjs = (id: string, pts: V3[], i: number): SceneObject[] => [
+      ...pts.map((p, k) => pointObj(`${id}p${k}`, `${id}_${k}`, p)),
+      { ...base(id, id, '#a08cff'), type: 'polygon', points: pts.map((_, k) => `${id}p${k}`), fill: true, lego: { sourceId: 'src', sourceSignature: sig, pieceIndex: i, originalColor: '#9775fa' } }
+    ]
+    sc().addObjects([...pieceObjs('a', strip(0), 0), ...pieceObjs('b', strip(2), 1), ...pieceObjs('c', strip(4), 2)])
+    sc().setSettings({ decimals: 1 })
+    expect(sc().fusePieces(['a', 'b'])).toBeNull()
+    const text = sc().log.at(-1)?.text ?? ''
+    expect(text).not.toMatch(/same area/)
+    expect(text).toMatch(/^These pieces make a .*area 12 u², perimeter 14 u\.$/)
+    const ps = pieces()
+    expect(ps.length).toBe(2)
+    const joined = ps.find((p) => p.id !== 'c')!
+    expect(joined.lego).toMatchObject({ sourceId: 'src', sourceSignature: sig, pieceIndex: 0, originalColor: '#9775fa' })
+    // The joined piece still has its sibling, and the two make the original again.
+    expect(sc().fusePieces([joined.id, 'c'])).toBeNull()
+    expect(sc().log.at(-1)?.text).toBe('Back to the original shape.')
+    const shape = polygonsInScene()
+    expect(shape.length).toBe(1)
+    expect(shape[0].color).toBe('#9775fa')
+    expect(shape[0].lego).toBeUndefined()
   })
 })

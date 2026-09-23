@@ -58,7 +58,7 @@ export function migrate(raw: unknown): SceneFile {
     file = step(file)
     version = file.version as number
   }
-  return file as unknown as SceneFile
+  return { ...file, objects: (file.objects as Raw[]).map(checkLego) } as unknown as SceneFile
 }
 
 /** The things every format has had: what makes a file a PhysLab project at all. */
@@ -159,28 +159,27 @@ function v1ToV2(file: Raw): Raw {
   }
 }
 
-/**
- * Format 3 only adds the Lego record a piece carries. A format-2 file never has one, but a file
- * edited by hand or written by a build in between might carry something under that name: a
- * record that is not `{ sourceId, pieceIndex, originalColor }` in the right types is dropped
- * without a word, and the polygon opens as an ordinary polygon, rather than the whole file being
- * refused over a field that only affects the Fuse button.
- */
+/** Format 3 only adds the Lego record a piece carries, which `checkLego` looks after for every format. */
 function v2ToV3(file: Raw): Raw {
-  const objects = file.objects as Raw[]
-  return {
-    ...file,
-    version: 3,
-    objects: objects.map((o) => {
-      if (o.type !== 'polygon' || o.lego === undefined) return o
-      // The signature is only what lets the pieces be recognised as the original shape; without
-      // it they still move, turn and fuse into "a new shape".
-      if (isLegoRecord(o.lego)) return typeof o.lego.sourceSignature === 'string' ? o : { ...o, lego: { ...o.lego, sourceSignature: '' } }
-      const { lego: _dropped, ...rest } = o
-      void _dropped
-      return rest
-    })
-  }
+  return { ...file, version: 3 }
+}
+
+/**
+ * A polygon's Lego record, checked on every file whatever its format. A format-2 file never has
+ * one, but a file edited by hand or written by a build in between might carry something under that
+ * name: a record that is not `{ sourceId, pieceIndex, originalColor }` in the right types is dropped
+ * without a word, and the polygon opens as an ordinary polygon, rather than the whole file being
+ * refused over a field that only affects the Fuse button. Checked only on the way up from format 2,
+ * a bad record in a format-3 file opened as a piece, and letting go of it after a drag threw.
+ */
+function checkLego(o: Raw): Raw {
+  if (o.type !== 'polygon' || o.lego === undefined) return o
+  // The signature is only what lets the pieces be recognised as the original shape; without
+  // it they still move, turn and fuse into "a new shape".
+  if (isLegoRecord(o.lego)) return typeof o.lego.sourceSignature === 'string' ? o : { ...o, lego: { ...o.lego, sourceSignature: '' } }
+  const { lego: _dropped, ...rest } = o
+  void _dropped
+  return rest
 }
 
 function isLegoRecord(v: unknown): v is Raw {

@@ -328,6 +328,27 @@ function nearest(x: number, y: number, candidates: [number, number][]): [number,
 }
 
 /**
+ * How a sketched shape's corners snap for a grid style. Square styles round to the snap step on
+ * each axis, which lets the recogniser also snap lengths and keep rectangles square to the axes.
+ * Any other pattern must snap to its own points instead: rounding to a square step put a triangle
+ * sketched on isometric paper on points nobody could see. The isometric lattice is as fine as the
+ * squares, so a corner always goes to its nearest lattice point; polar crossings spread apart
+ * away from the centre and hexagon corners sit a major step apart, so there a corner moves only
+ * when it is within half a minor step of one — rounding every corner would bend the shape.
+ */
+export function sketchSnap(style: GridStyle, major: number, minor: number): { gridStep: number; snapPoint?: (p: V3) => V3 } {
+  if (style !== 'polar' && style !== 'isometric' && style !== 'hex') return { gridStep: snapStep(minor, style) }
+  const reach = style === 'isometric' ? Infinity : minor / 2
+  return {
+    gridStep: 0,
+    snapPoint: (p) => {
+      const g = snapToGrid(style, p, major, minor)
+      return Math.hypot(g[0] - p[0], g[1] - p[1]) <= reach ? g : p
+    }
+  }
+}
+
+/**
  * The grid point nearest to `p` for a style — the crossing a student sees, so a snapped point
  * always lands on the drawn grid. Square styles: the nearest multiple of the snap step on each
  * axis. Polar: the nearest crossing of a circle (every minor step) and a ray (every 15°).

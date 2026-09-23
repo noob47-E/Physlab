@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyPolygon, recognizeStroke } from '../src/renderer/src/math/shapes'
+import { sketchSnap, snapToGrid } from '../src/renderer/src/render/gridMath'
 import { decompose } from '../src/renderer/src/math/decompose'
 import { polygonArea } from '../src/renderer/src/math/geometry'
 import { angleBetween, dist, sub, type V3 } from '../src/renderer/src/math/vec'
@@ -87,6 +88,25 @@ describe('recognizeStroke', () => {
     expect(t.kind === 'polygon' && t.label).toBe('Right-angled triangle')
     const line = Array.from({ length: 50 }, (_, k) => [k * 0.1, k * 0.05 + (k % 3) * 0.01, 0] as V3)
     expect(recognizeStroke(line, { gridStep: 0.5 }).kind).toBe('segment')
+  })
+
+  it('snaps a sketch to the grid that is drawn, not to invisible squares', () => {
+    // On isometric paper (minor step 1) a triangle's corners land on lattice points; the apex
+    // sits at a height of 3·√3/2, which a square step of 1 would have rounded to 3.
+    const apex: V3 = [1.5, (3 * Math.sqrt(3)) / 2, 0]
+    const t = recognizeStroke(strokeAround([[0, 0, 0], [4, 0, 0], apex], 0.1, 40, 5), sketchSnap('isometric', 5, 1))
+    expect(t.kind).toBe('polygon')
+    if (t.kind !== 'polygon') return
+    for (const c of t.pts) expect(dist(snapToGrid('isometric', c, 5, 1), c)).toBeLessThan(1e-9)
+    expect(t.pts.some((c) => Math.abs(c[1] - apex[1]) < 1e-9)).toBe(true)
+    // Square styles keep rounding to the snap step, halved with Fine.
+    expect(sketchSnap('lines', 5, 1)).toEqual({ gridStep: 1 })
+    expect(sketchSnap('fine', 5, 1)).toEqual({ gridStep: 0.5 })
+    // Polar crossings spread apart: a corner far from one stays where it was drawn.
+    const polar = sketchSnap('polar', 5, 1)
+    expect(polar.gridStep).toBe(0)
+    expect(polar.snapPoint!([4.4, 1.9, 0])).toEqual([4.4, 1.9, 0])
+    expect(polar.snapPoint!([3.05, 0.02, 0])).toEqual([3, 0, 0])
   })
 })
 

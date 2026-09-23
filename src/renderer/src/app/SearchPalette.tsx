@@ -12,7 +12,7 @@ import { EXAMPLES, runExample } from '../panels/Examples'
 import { MODE_HINTS, MODE_LABELS, useCalc, type CalcMode } from '../calc/calcStore'
 import { UNIT_NAMES } from '../math/format'
 import { GRID_STYLES } from '../render/gridMath'
-import { confirmClearDrawing } from './contextActions'
+import { breakApartSelection, confirmClearDrawing, fuseSelection } from './contextActions'
 import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 
 interface Item {
@@ -84,6 +84,9 @@ function buildItems(): Item[] {
     { group: 'Settings', title: 'Angle marks: show', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: true }) },
     { group: 'Settings', title: 'Angle marks: hide', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: false }) },
     { group: 'Edit', title: 'Delete everything on this drawing…', hint: 'Only the drawing you are looking at; asks first; Undo brings it all back', run: () => confirmClearDrawing() },
+    // REGION L: Geometry Lego, reachable without a right-click as the design asks.
+    { group: 'Edit', title: 'Break apart the selected shape', hint: 'A decomposed shape becomes pieces you can slide, turn and flip (lego)', run: () => breakApartSelection() },
+    { group: 'Edit', title: 'Fuse the selected pieces', hint: 'Join pieces of one broken-apart shape back into one shape (lego)', run: () => fuseSelection() },
     { group: 'Settings', title: 'Toggle snapping', hint: 'Hold Alt while drawing to skip snapping once', run: () => scene().setSettings({ snap: !scene().settings.snap }) },
     { group: 'Settings', title: 'Angles in degrees', hint: '', run: () => scene().setSettings({ angleUnit: 'deg' }) },
     { group: 'Settings', title: 'Angles in radians', hint: '', run: () => scene().setSettings({ angleUnit: 'rad' }) }

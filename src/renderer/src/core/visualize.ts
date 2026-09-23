@@ -165,9 +165,10 @@ export function visualizeTangent(expr: string, a: number, fa: number, slope: num
   const b = new Builder()
   b.graph({ kind: 'explicit', source: `y = ${expr}`, exprs: [expr], showRoots: false, showExtrema: false })
   const tangent = `${fa} + ${slope} * (x - ${a})`
-  b.graph({ kind: 'explicit', source: `tangent at x = ${fmtPrecise(a, precision())}`, exprs: [tangent], width: 1.8 }, { color: themeColor('--warn', '#ffb84d'), name: 'tangent' })
+  const line = b.graph({ kind: 'explicit', source: `tangent at x = ${fmtPrecise(a, precision())}`, exprs: [tangent], width: 1.8 }, { color: themeColor('--warn', '#ffb84d'), name: 'tangent' })
   inGraphing(b.point([a, fa, 0], { name: 'T' }))
-  inGraphing(b.text([a, fa, 0], `slope = ${fmtPrecise(slope, precision())}`, { name: 'slopeText' }))
+  // The slope goes with the tangent line when the student deletes it, as the area goes with its region.
+  inGraphing(b.text([a, fa, 0], `slope = ${fmtPrecise(slope, precision())}`, { name: 'slopeText' })).owner = line.id
   b.commit()
   remember('calculus', b)
   scene().setViewMode('2d')
@@ -236,7 +237,9 @@ export function visualizeBetween(upper: string, lower: string, a: number, bnd: n
   const um = u(xm)
   const lm = l(xm)
   const ym = Number.isFinite(um) && Number.isFinite(lm) ? (um + lm) / 2 : 0
-  inGraphing(b.text([xm, ym, 0], `area = ${fmtPrecise(area, s)}`, { name: 'areaText' }))
+  const areaText = b.text([xm, ym, 0], `area = ${fmtPrecise(area, s)}`, { name: 'areaText' })
+  areaText.owner = region.id
+  inGraphing(areaText)
   b.commit()
   remember('calculus', b)
   scene().setViewMode('2d')

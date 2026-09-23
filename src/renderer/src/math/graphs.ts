@@ -378,9 +378,10 @@ export function betweenMesh(upper: Fx, lower: Fx, a: number, b: number, n: numbe
  * that swap over part way still gives the whole region, not the difference of two parts. Simpson's
  * rule over `n` columns, with a column the curves cross inside split at the crossing so the kink
  * in |upper − lower| does not sit inside a parabola. A column where a curve has no value (√x left
- * of 0) is left out, since there is no region there; but a column where the gap between the curves
- * is infinite or beyond any drawing (1/x at 0) makes the whole area NaN, because the integral
- * diverges and a number for it would be a lie.
+ * of 0) is left out, since there is no region there; but a sample where the gap between the curves
+ * is infinite, or towers over the samples either side of it (1/x at 0), makes the whole area NaN,
+ * because the integral diverges and a number for it would be a lie. A gap that is merely large is
+ * not that: e^x on [0, 20] reaches 4.85 × 10⁸ and has a perfectly good area.
  */
 export function betweenArea(upper: Fx, lower: Fx, a: number, b: number, n = 2000): number {
   const x0 = Math.min(a, b)
@@ -388,27 +389,36 @@ export function betweenArea(upper: Fx, lower: Fx, a: number, b: number, n = 2000
   const steps = Math.max(1, n)
   const dx = (x1 - x0) / steps
   const d = (x: number) => upper(x) - lower(x)
-  const simpson = (p: number, q: number, dp: number, dq: number) => {
-    const m = d((p + q) / 2)
-    return ((q - p) / 6) * (Math.abs(dp) + 4 * Math.abs(m) + Math.abs(dq))
+  const simpson = (p: number, q: number, dp: number, dq: number, m: number) => ((q - p) / 6) * (Math.abs(dp) + 4 * Math.abs(m) + Math.abs(dq))
+  const xs = (i: number) => (i === 0 ? x0 : i === steps ? x1 : x0 + i * dx)
+  // Every column's two ends and middle, in order along x: s[2i] at xs(i), s[2i + 1] half way on.
+  const s: number[] = []
+  for (let i = 0; i <= steps; i++) {
+    s.push(d(xs(i)))
+    if (i < steps) s.push(d((xs(i) + xs(i + 1)) / 2))
   }
-  const diverges = (v: number) => !Number.isNaN(v) && (!Number.isFinite(v) || Math.abs(v) > 1e7)
+  // An asymptote shows as one sample a thousand times anything either side of it. A fixed ceiling
+  // (the old test was 10⁷) also refused every steep but finite region; the neighbour test alone
+  // would refuse a narrow spike of height 1, so a sample must clear both to count.
+  const towers = (j: number): boolean => {
+    const v = Math.abs(s[j])
+    if (Number.isNaN(v)) return false
+    if (!Number.isFinite(v)) return true
+    if (v <= 1e7) return false
+    const near = [s[j - 1], s[j + 1]].filter((w) => w !== undefined && Number.isFinite(w)).map(Math.abs)
+    return v > 1e3 * Math.max(0, ...near)
+  }
+  for (let j = 0; j < s.length; j++) if (towers(j)) return NaN
   let area = 0
-  let dPrev = d(x0)
   for (let i = 0; i < steps; i++) {
-    const xa = i === 0 ? x0 : x0 + i * dx
-    const xb = i + 1 === steps ? x1 : x0 + (i + 1) * dx
-    const dNext = d(xb)
-    if (diverges(dPrev) || diverges(dNext)) return NaN
-    if (Number.isFinite(dPrev) && Number.isFinite(dNext)) {
-      const dm = d((xa + xb) / 2)
-      if (diverges(dm)) return NaN
-      if (dPrev * dNext < 0) {
-        const xc = xa + (dPrev / (dPrev - dNext)) * (xb - xa)
-        area += simpson(xa, xc, dPrev, 0) + simpson(xc, xb, 0, dNext)
-      } else area += simpson(xa, xb, dPrev, dNext)
-    }
-    dPrev = dNext
+    const xa = xs(i)
+    const xb = xs(i + 1)
+    const [dPrev, dm, dNext] = [s[2 * i], s[2 * i + 1], s[2 * i + 2]]
+    if (!Number.isFinite(dPrev) || !Number.isFinite(dNext)) continue
+    if (dPrev * dNext < 0) {
+      const xc = xa + (dPrev / (dPrev - dNext)) * (xb - xa)
+      area += simpson(xa, xc, dPrev, 0, d((xa + xc) / 2)) + simpson(xc, xb, 0, dNext, d((xc + xb) / 2))
+    } else area += simpson(xa, xb, dPrev, dNext, dm)
   }
   return area
 }
@@ -424,7 +434,10 @@ export function betweenArea(upper: Fx, lower: Fx, a: number, b: number, n = 2000
  * small: tan x near π/2 has a slope of thousands and a real tangent.
  */
 export function slopeAt(f: Fx, a: number): number {
-  const h = 1e-3 * Math.max(1, Math.abs(a))
+  // The step grows with |a| so f(a ± h) still differ in their last digits far from 0, but only up
+  // to ten times: uncapped it was h = 1 at a = 1000, and sin x there read 0.56124 for cos 1000 =
+  // 0.56238. At h = 0.01 the rounding error stays below 10⁻⁸ of the slope out to |a| = 10⁶.
+  const h = 1e-3 * Math.min(Math.max(1, Math.abs(a)), 10)
   const central = (step: number) => (f(a + step) - f(a - step)) / (2 * step)
   const coarse = central(h)
   const fine = central(h / 2)

@@ -169,6 +169,36 @@ function polygonItems(o: SceneObject): MenuItem[] {
   return items
 }
 
+/** What the search palette says when Break apart has no decomposed shape to work on. */
+export const BREAK_APART_NEEDS_SHAPE = 'Select a shape and decompose it first; then it can be broken apart.'
+
+/**
+ * Break apart and Fuse for the search palette, which has no object under the cursor: they read
+ * the selection, and say in the log why nothing happened rather than doing nothing silently.
+ */
+export function breakApartSelection(): void {
+  const st = s()
+  const shape = st.selection.map((id) => st.objects[id]).find((o) => o?.type === 'polygon' && o.decomposed && !o.lego)
+  if (!shape) {
+    st.pushLog({ input: 'break apart', kind: 'info', text: BREAK_APART_NEEDS_SHAPE })
+    return
+  }
+  st.breakApart(shape.id)
+  focusPanel('measure')
+}
+
+/** Fuses the selected pieces; `fusePieces` itself says why when they are fewer than two or from different shapes. */
+export function fuseSelection(): void {
+  const st = s()
+  st.fusePieces(
+    st.selection.filter((id) => {
+      const o = st.objects[id]
+      return o?.type === 'polygon' && !!o.lego
+    })
+  )
+  focusPanel('measure')
+}
+
 function graphItems(o: SceneObject): MenuItem[] {
   if (o.type !== 'graph') return []
   return [

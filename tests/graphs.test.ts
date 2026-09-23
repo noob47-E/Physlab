@@ -176,6 +176,15 @@ describe('betweenArea', () => {
     // The same pole outside the stretch is no trouble.
     expect(betweenArea((x) => 1 / x, zero, 1, 2)).toBeCloseTo(Math.LN2, 6)
   })
+
+  it('gives a steep but finite region its area rather than calling it infinite', () => {
+    // e^x reaches 4.85 × 10⁸ at 20 and x⁴ reaches 1.3 × 10⁷ at 60; both were once refused.
+    const exact = Math.exp(20) - 1
+    expect(betweenArea(Math.exp, zero, 0, 20) / exact).toBeCloseTo(1, 8)
+    expect(betweenArea((x) => x ** 4, zero, 0, 60) / (60 ** 5 / 5)).toBeCloseTo(1, 8)
+    // A narrow spike is not a pole either.
+    expect(betweenArea((x) => Math.exp(-((x - 0.5) ** 2) / 1e-8), zero, 0, 1)).toBeGreaterThan(0)
+  })
 })
 
 describe('slopeAt', () => {
@@ -184,6 +193,13 @@ describe('slopeAt', () => {
     expect(slopeAt((x) => x * x * x - 2 * x, 2)).toBeCloseTo(10, 9)
     expect(slopeAt(Math.sin, 0)).toBeCloseTo(1, 9)
     expect(slopeAt(Math.exp, 1)).toBeCloseTo(Math.E, 8)
+  })
+
+  it('stays accurate far from the origin', () => {
+    // The step once grew with |a| without limit: h = 1 at 1000 put sin x's slope out in the third digit.
+    expect(slopeAt(Math.sin, 1000)).toBeCloseTo(Math.cos(1000), 8)
+    expect(slopeAt(sq, 1e6)).toBeCloseTo(2e6, 3)
+    expect(slopeAt(Math.abs, -1e5)).toBeCloseTo(-1, 6)
   })
 
   it('is NaN where the function has no value on one side', () => {
@@ -348,5 +364,20 @@ describe('picture bindings into the scene', () => {
     visualizePiecewise([{ expr: 'x', from: 0, to: 1 }])
     scene().removeObjects(Object.keys(scene().objects))
     expect(Object.keys(scene().objects)).toHaveLength(0)
+  })
+
+  it('deleting the shaded region takes its area with it, and deleting the tangent its slope', () => {
+    visualizeBetween('x + 2', 'x^2', -1, 2)
+    const region = graphs().find((g) => g.kind === 'between')!
+    scene().removeObjects([region.id])
+    expect(texts()).toEqual([])
+    // The curves stay: only the region and what it said are gone. Undo brings both back.
+    expect(graphs()).toHaveLength(2)
+    scene().undo()
+    expect(texts().map((t) => t.text)).toEqual(['area = 4.5'])
+
+    visualizeTangentAt('x^2', 1)
+    scene().removeObjects([graphs().find((g) => g.name === 'tangent')!.id])
+    expect(texts()).toEqual([])
   })
 })

@@ -202,6 +202,11 @@ function pathLength(points: V3[]): number {
 export interface RecognizeOptions {
   /** Grid step used to snap corners, centres and radii (0 = no snapping). */
   gridStep: number
+  /**
+   * For a grid that is not squares (polar, isometric, hex): where a corner, an end or a centre
+   * goes instead. Used with a `gridStep` of 0, since that grid has no step to round lengths to.
+   */
+  snapPoint?: (p: V3) => V3
 }
 
 const snapTo = (v: number, step: number) => (step > 0 ? Math.round(v / step) * step : v)
@@ -209,6 +214,7 @@ const snapPt = (p: V3, step: number): V3 => [snapTo(p[0], step), snapTo(p[1], st
 
 /** Turn a rough freehand stroke into a clean segment, circle or polygon. */
 export function recognizeStroke(raw: V3[], opts: RecognizeOptions): Recognized {
+  const snapP = (p: V3): V3 => (opts.snapPoint ? opts.snapPoint(p) : snapPt(p, opts.gridStep))
   const flat = raw.map((p) => [p[0], p[1], 0] as V3)
   const L = pathLength(flat)
   if (flat.length < 3 || L < 1e-6) return { kind: 'none', reason: 'The stroke is too short.' }
@@ -222,7 +228,7 @@ export function recognizeStroke(raw: V3[], opts: RecognizeOptions): Recognized {
   if (!closed) {
     const chord = dist(pts[0], pts[pts.length - 1])
     const dev = Math.max(...pts.map((p) => Math.abs(cross(sub(pts[pts.length - 1], pts[0]), sub(p, pts[0]))[2]) / Math.max(chord, 1e-12)))
-    if (dev < 0.08 * chord) return { kind: 'segment', a: snapPt(pts[0], opts.gridStep), b: snapPt(pts[pts.length - 1], opts.gridStep) }
+    if (dev < 0.08 * chord) return { kind: 'segment', a: snapP(pts[0]), b: snapP(pts[pts.length - 1]) }
     return { kind: 'none', reason: 'Open curve: close the shape (end where you started) or draw a straight line.' }
   }
 
@@ -241,12 +247,12 @@ export function recognizeStroke(raw: V3[], opts: RecognizeOptions): Recognized {
   const looksPolygon = corners.length >= 3 && corners.length <= 8 && polyErr < 0.035
   if (circleErr < 0.1 && (!looksPolygon || corners.length > 6 || circleErr < polyErr * 1.2)) {
     const step = opts.gridStep
-    const center = snapPt(c, step)
+    const center = snapP(c)
     const r = step > 0 ? Math.max(step, snapTo(meanR, step)) : meanR
     return { kind: 'circle', center, r }
   }
   if (!looksPolygon) return { kind: 'none', reason: 'Could not recognise this shape. Try drawing straighter sides or a rounder circle.' }
-  return beautifyPolygon(corners, opts.gridStep)
+  return beautifyPolygon(corners, opts.gridStep, opts.snapPoint)
 }
 
 function mergeStraight(pts: V3[], tolRad: number): V3[] {
@@ -287,7 +293,8 @@ function meanDistanceToPolygon(points: V3[], poly: V3[]): number {
 }
 
 /** Makes nearly-regular shapes exact (right angles, equal sides, parallel sides) and snaps to the grid. */
-export function beautifyPolygon(corners: V3[], step: number): Recognized {
+export function beautifyPolygon(corners: V3[], step: number, snapPoint?: (p: V3) => V3): Recognized {
+  const snapP = (p: V3): V3 => (snapPoint ? snapPoint(p) : step > 0 ? snapPt(p, step) : p)
   const n = corners.length
   let pts = corners.map((p) => [p[0], p[1], 0] as V3)
   if (signedArea2D(pts) < 0) pts = pts.reverse()
@@ -334,12 +341,12 @@ export function beautifyPolygon(corners: V3[], step: number): Recognized {
     const c = centroid(pts)
     const R = pts.reduce((s, p) => s + dist(p, c), 0) / n
     const start = Math.atan2(pts[0][1] - c[1], pts[0][0] - c[0])
-    const center = step > 0 ? snapPt(c, step) : c
+    const center = snapP(c)
     const out: V3[] = Array.from({ length: n }, (_, k) => [center[0] + R * Math.cos(start + (2 * Math.PI * k) / n), center[1] + R * Math.sin(start + (2 * Math.PI * k) / n), 0])
     return { kind: 'polygon', label: `Regular ${polygonName(n)}`, pts: out }
   }
 
-  let snapped = pts.map((p) => (step > 0 ? snapPt(p, step) : p))
+  let snapped = pts.map(snapP)
   if (n === 4) {
     const d = snapped.map((p, i) => sub(snapped[(i + 1) % 4], p))
     const p02 = angleBetween(d[0], scale(d[2], -1)) < (10 * Math.PI) / 180

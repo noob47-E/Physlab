@@ -20,7 +20,7 @@ import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '..
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
-import { minorStepOf, normaliseGridStyle, snapStep, snapToGrid, styleFor3D } from './gridMath'
+import { minorStepOf, normaliseGridStyle, sketchSnap, snapStep, snapToGrid, styleFor3D } from './gridMath'
 import { legoSnap, pieceSnapTolerance, slideAlong } from '../math/lego'
 import { themeColor, useThemed } from '../app/theme'
 
@@ -575,7 +575,10 @@ export function Interaction() {
       setControls(true)
       if (!sk || sk.world.length < 4) return
       const s = scene()
-      const result = recognizeStroke(sk.world, { gridStep: s.settings.snap ? gridStep() : 0 })
+      // The grid's own points, not a square step: on isometric paper a sketched triangle's corners
+      // used to land on square-grid points that were not drawn.
+      const g = gridNow()
+      const result = recognizeStroke(sk.world, s.settings.snap ? sketchSnap(g.style, g.major, g.minor) : { gridStep: 0 })
       const b = new Builder()
       let primary: SceneObject | undefined
       if (result.kind === 'none') {
