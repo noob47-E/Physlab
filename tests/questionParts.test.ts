@@ -3,7 +3,7 @@
 // distractors that stand for named misconceptions.
 
 import { describe, expect, it } from 'vitest'
-import { checkExpressionPart, checkNumberPart } from '../src/renderer/src/questions/parts'
+import { checkExpressionPart, checkNumberPart, lettersBeforeBrackets } from '../src/renderer/src/questions/parts'
 import { checkChoicePart, generateChoices } from '../src/renderer/src/questions/distractors'
 import { UNIT_IDS, type PQPart } from '../src/renderer/src/questions/pqjson'
 import { UNITS } from '../src/renderer/src/questions/units'
@@ -40,8 +40,8 @@ describe('checkNumberPart — tolerance', () => {
     const p = numberPart({ answer: '50', tolerance: { kind: 'relative', value: 0.02 } })
     expect(checkNumberPart('49', p, {}, PRECISION).verdict).toBe('right')
     expect(checkNumberPart('51', p, {}, PRECISION).verdict).toBe('right')
-    // Inherited from checkAnswer: within four tolerances is "close", and `isCorrect` there counts
-    // close as accepted. Whether a close number part earns its marks is the player's call (WAVE 3).
+    // Inherited from checkAnswer: within four tolerances is "close". The player marks a close
+    // number part wrong (tests/questionPlayer.test.ts), keeping the sentence.
     expect(checkNumberPart('48.99', p, {}, PRECISION).verdict).toBe('close')
     expect(checkNumberPart('45', p, {}, PRECISION).verdict).toBe('wrong')
   })
@@ -76,6 +76,30 @@ describe('checkNumberPart — units', () => {
     const c = checkNumberPart('20 kg', p, {}, PRECISION)
     expect(c.verdict).toBe('wrong')
     expect(c.message).toBe('That is in kilograms; this box wants newtons.')
+  })
+
+  it('reads the units as a plain keyboard types them, and refuses them in the wrong box', () => {
+    // "9.8 m/s^2" in a newtons box used to lose its unit silently and be marked on 9.8 alone.
+    const newtons = numberPart({ answer: '9.8', unit: 'N', tolerance: { kind: 'relative', value: 0.02 } })
+    expect(checkNumberPart('9.8 m/s^2', newtons, {}, PRECISION)).toMatchObject({ verdict: 'wrong', message: 'That is in metres per second squared; this box wants newtons.' })
+    expect(checkNumberPart('9.8 deg', newtons, {}, PRECISION).message).toBe('That is in degrees; this box wants newtons.')
+    const typed: [string, string][] = [
+      ['m/s^2', 'm/s²'], ['m/s2', 'm/s²'], ['deg', '°'], ['degrees', '°'], ['Nm', 'N·m'], ['N m', 'N·m'],
+      ['kgm/s', 'kg·m/s'], ['kg m/s', 'kg·m/s'], ['hz', 'Hz'], ['m^2', 'm²'], ['ohms', 'Ω']
+    ]
+    for (const [spelling, unit] of typed) {
+      const p = numberPart({ answer: '50', unit: unit as NumberPart['unit'] })
+      expect(checkNumberPart(`50 ${spelling}`, p, {}, PRECISION).verdict, spelling).toBe('right')
+    }
+  })
+
+  it('refuses a unit tail it cannot read rather than marking the number alone', () => {
+    const p = numberPart({ answer: '50', unit: 'N' })
+    const c = checkNumberPart('50 KG', p, {}, PRECISION)
+    expect(c.verdict).toBe('unreadable')
+    expect(c.message).toBe('PhysLab could not read the unit "KG". Type it as N, or leave the unit off.')
+    // "units" is not a unit and still just goes.
+    expect(checkNumberPart('50 units', numberPart(), {}, PRECISION).verdict).toBe('right')
   })
 })
 
@@ -142,6 +166,55 @@ describe('checkExpressionPart', () => {
     const p = expressionPart({ answer: 'm*x', symbols: ['x'] })
     expect(checkExpressionPart('3*x', p, { m: 3 }).verdict).toBe('right')
     expect(checkExpressionPart('4*x', p, { m: 3 }).verdict).toBe('wrong')
+  })
+
+  it('samples trig in radians, so a wrong trig answer is wrong and not "right up to rounding"', () => {
+    // In degrees the samples were 1°…2°, where sin is a straight line and cos is 1: all three
+    // came back "close", which isCorrect counts as right.
+    expect(checkExpressionPart('2*sin(x)', expressionPart({ answer: 'sin(2x)' }), {}).verdict).toBe('wrong')
+    expect(checkExpressionPart('1', expressionPart({ answer: 'cos(x)' }), {}).verdict).toBe('wrong')
+    expect(checkExpressionPart('sin(x)', expressionPart({ answer: 'tan(x)' }), {}).verdict).toBe('wrong')
+    // Identities still hold, and a Numbas answer written with radian constants means what Numbas meant.
+    expect(checkExpressionPart('2*sin(x)*cos(x)', expressionPart({ answer: 'sin(2x)' }), {}).verdict).toBe('right')
+    expect(checkExpressionPart('cos(x)', expressionPart({ answer: 'sin(x + pi/2)' }), {}).verdict).toBe('right')
+  })
+
+  it('reads a question\'s angle in degrees as degrees, whether the student leaves it in or types its value', () => {
+    const p = expressionPart({ answer: 'F * cos(theta) * x' })
+    const values = { F: 30, theta: 30 }
+    const units = { F: 'N' as const, theta: '°' as const }
+    expect(checkExpressionPart('F*cos(theta)*x', p, values, units).verdict).toBe('right')
+    expect(checkExpressionPart(`${30 * Math.cos(Math.PI / 6)}*x`, p, values, units).verdict).toBe('right')
+    expect(checkExpressionPart('30*x', p, values, units).verdict).toBe('wrong')
+  })
+
+  it('does not depend on the angle mode the calculator was left in', async () => {
+    const { setAngleMode, getAngleMode } = await import('../src/renderer/src/math/expr')
+    const before = getAngleMode()
+    setAngleMode('deg')
+    try {
+      expect(checkExpressionPart('2*sin(x)', expressionPart({ answer: 'sin(2x)' }), {}).verdict).toBe('wrong')
+      expect(getAngleMode()).toBe('deg')
+    } finally {
+      setAngleMode(before)
+    }
+  })
+
+  it('reads a letter straight before a bracket as a product, and a real function as a function', () => {
+    const p = expressionPart({ answer: 'x^2 + x' })
+    expect(checkExpressionPart('x(x+1)', p, {}).verdict).toBe('right')
+    expect(checkExpressionPart('x(x+2)', p, {}).verdict).toBe('wrong')
+    expect(checkExpressionPart('sin(x)', expressionPart({ answer: 'sin(x)' }), {}).verdict).toBe('right')
+    expect(checkExpressionPart('sqrt(x)', expressionPart({ answer: 'x^(1/2)' }), {}).verdict).toBe('right')
+    expect(checkExpressionPart('2ln(x)', expressionPart({ answer: 'ln(x^2)' }), {}).verdict).toBe('right')
+    // A question's own variable before a bracket is a product too.
+    expect(checkExpressionPart('m(x+1)', expressionPart({ answer: 'm*x + m' }), { m: 3 }).verdict).toBe('right')
+  })
+
+  it('rewrites only the letters it is given', () => {
+    expect(lettersBeforeBrackets('x(x+1)', ['x'])).toBe('x * (x + 1)')
+    expect(lettersBeforeBrackets('sin(x)', ['x', 'sin'])).toBe('sin(x)')
+    expect(lettersBeforeBrackets('t(1 + t(2))', ['t'])).toBe('t * (1 + t * (2))')
   })
 })
 

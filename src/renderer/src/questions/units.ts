@@ -4,7 +4,7 @@
 // Headless: no React, no store, no DOM.
 
 import type { LengthUnit } from '../core/types'
-import { fmtPrecise, fmtSci, type MeasureSettings } from '../math/format'
+import { fmtPrecise, fmtSci, texPrecise, texSci, type MeasureSettings } from '../math/format'
 import { UNIT_IDS, type UnitId } from './pqjson'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
@@ -150,16 +150,54 @@ export function formatQuantity(v: number, unit: UnitId, settings: Precision): st
 }
 
 /**
- * The labels a student might type after a number, longest first so `m/s²` is read whole instead
- * of being cut down to `m`. Escaped for use inside a regular expression.
+ * The same units as a plain keyboard types them. The labels have ², · and ° in them, which no
+ * keyboard has a key for; "9.8 m/s^2" or "50 deg" was not read here, fell through to
+ * `checkAnswer`, whose own tail list dropped the unit without a word, and a number in the wrong
+ * unit was marked on its number alone.
+ */
+const TYPED_UNITS: Record<string, UnitId> = {
+  'm/s^2': 'm/s²',
+  'm/s2': 'm/s²',
+  'm s^-2': 'm/s²',
+  'ms^-2': 'm/s²',
+  'm/s/s': 'm/s²',
+  deg: '°',
+  degree: '°',
+  degrees: '°',
+  degC: '°C',
+  Nm: 'N·m',
+  'N m': 'N·m',
+  'N*m': 'N·m',
+  'N.m': 'N·m',
+  'kgm/s': 'kg·m/s',
+  'kg m/s': 'kg·m/s',
+  'kg*m/s': 'kg·m/s',
+  'kg.m/s': 'kg·m/s',
+  hz: 'Hz',
+  HZ: 'Hz',
+  'km/hr': 'km/h',
+  kph: 'km/h',
+  'm^2': 'm²',
+  m2: 'm²',
+  'm^3': 'm³',
+  m3: 'm³',
+  ohm: 'Ω',
+  ohms: 'Ω'
+}
+
+/** Every spelling a tail may use → its unit: the labels themselves, then the typed spellings. */
+const TAIL_SPELLINGS: Map<string, UnitId> = new Map([
+  ...(UNIT_IDS as readonly UnitId[]).filter((u) => u !== 'none' && UNITS[u].label !== '').map((u) => [UNITS[u].label, u] as [string, UnitId]),
+  ...Object.entries(TYPED_UNITS)
+])
+
+/**
+ * The spellings a student might type after a number, longest first so `m/s²` is read whole
+ * instead of being cut down to `m`. Escaped for use inside a regular expression.
  */
 function buildTailPattern(): RegExp {
-  const labels = (UNIT_IDS as readonly UnitId[])
-    .filter((u) => u !== 'none' && UNITS[u].label !== '')
-    .map((u) => UNITS[u].label)
-    .sort((a, b) => b.length - a.length)
-    .map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  return new RegExp(`(?<=[\\d)\\s])\\s*(${labels.join('|')})\\s*$`)
+  const spellings = [...TAIL_SPELLINGS.keys()].sort((a, b) => b.length - a.length).map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  return new RegExp(`(?<=[\\d)\\s])\\s*(${spellings.join('|')})\\s*$`)
 }
 
 const TAIL_PATTERN = buildTailPattern()
@@ -175,7 +213,111 @@ export function unitFromTail(text: string): { value: string; unit: UnitId | null
   if (trimmed === '') return { value: trimmed, unit: null }
   const m = trimmed.match(TAIL_PATTERN)
   if (!m || m.index === undefined) return { value: trimmed, unit: null }
-  const found = m[1]
-  const unit = (UNIT_IDS as readonly UnitId[]).find((u) => UNITS[u].label === found) ?? null
+  const unit = TAIL_SPELLINGS.get(m[1]) ?? null
   return { value: trimmed.slice(0, m.index).trim(), unit }
+}
+
+// ---------------------------------------------------------------------------
+// Units in LaTeX, for the steps and the chips inside maths
+// ---------------------------------------------------------------------------
+
+/**
+ * A unit as KaTeX sets it. `substitute` writes units as plain text ("2.5 m/s"), which is right
+ * in a sentence and wrong in maths, where `m/s` would be three italic letters and `°` a stray
+ * symbol. Only the units with a special character need a spelling of their own.
+ */
+const TEX_UNITS: Partial<Record<UnitId, string>> = {
+  '°': '^{\\circ}',
+  '°C': '^{\\circ}\\mathrm{C}',
+  Ω: '\\Omega',
+  'm/s²': '\\mathrm{m/s^{2}}',
+  'N·m': '\\mathrm{N\\cdot m}',
+  'kg·m/s': '\\mathrm{kg\\cdot m/s}',
+  'm²': '\\mathrm{m^{2}}',
+  'm³': '\\mathrm{m^{3}}'
+}
+
+export function texUnit(unit: UnitId | undefined): string {
+  if (unit === undefined || unit === 'none') return ''
+  return TEX_UNITS[unit] ?? `\\mathrm{${unit}}`
+}
+
+/**
+ * A drawn value as LaTeX with its unit: the same numbers and the same scientific threshold as
+ * the chips in the statement, so a step never contradicts the question above it. A degree sign
+ * sits against its number; every other unit takes a thin space.
+ */
+export function texQuantity(v: number, unit: UnitId | undefined, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  const abs = Math.abs(v)
+  let number = abs >= 1e6 || (abs > 0 && abs < 1e-3) ? texSci(v, s) : texPrecise(v, s)
+  // formatQuantity's rule, so a step never shows 0 A where the statement shows 2.4×10⁻³ A.
+  if (v !== 0 && /^[-−]?0$/.test(fmtPrecise(v, s))) number = texSci(v, s)
+  const u = texUnit(unit)
+  if (u === '') return number
+  if (unit === '°' || unit === '°C') {
+    // A degree is a superscript, and a scientific number already carries one: KaTeX refuses
+    // 10^{-19}^{\circ} as a double superscript unless the number is grouped first.
+    return number.includes('^') ? `{${number}}${u}` : `${number}${u}`
+  }
+  return `${number}\\,${u}`
+}
+
+// --- units named in a prompt ------------------------------------------------
+
+/** Longest first, so "m/s²" is found before "m/s" and both before "m". */
+const UNIT_WORDS: [string, UnitId][] = [
+  ['m\\/s\\^?2|m s\\^?-2|ms\\^?-2|m\\/s²|met(?:re|er)s per second squared', 'm/s²'],
+  ['kg m\\/s|kg m s\\^?-1|kgms\\^?-1|kg·m\\/s', 'kg·m/s'],
+  ['rad\\/s|rad s\\^?-1|radians per second', 'rad/s'],
+  ['m\\/s|m s\\^?-1|ms\\^?-1|met(?:re|er)s per second', 'm/s'],
+  ['km\\/h|km h\\^?-1|kmh\\^?-1|kilomet(?:re|er)s per hour', 'km/h'],
+  ['N m|N·m|Nm|newton met(?:re|er)s', 'N·m'],
+  ['m\\^?2|m²|square met(?:re|er)s', 'm²'],
+  ['m\\^?3|m³|cubic met(?:re|er)s', 'm³'],
+  ['°C|degrees celsius|degrees centigrade', '°C'],
+  ['°|degrees', '°'],
+  ['kilograms?|kg', 'kg'],
+  ['grams?|g', 'g'],
+  ['newtons?|N', 'N'],
+  ['joules?|J', 'J'],
+  ['watts?|W', 'W'],
+  ['pascals?|Pa', 'Pa'],
+  ['hertz|Hz', 'Hz'],
+  ['coulombs?|C', 'C'],
+  ['volts?|V', 'V'],
+  ['amp(?:ere)?s?|A', 'A'],
+  ['ohms?|Ω', 'Ω'],
+  ['kelvin|K', 'K'],
+  ['moles?|mol', 'mol'],
+  ['radians?|rad', 'rad'],
+  ['milliseconds?|ms', 'ms'],
+  ['minutes?|min', 'min'],
+  ['hours?|h', 'h'],
+  ['seconds?|s', 's'],
+  ['kilomet(?:re|er)s?|km', 'km'],
+  ['centimet(?:re|er)s?|cm', 'cm'],
+  ['millimet(?:re|er)s?|mm', 'mm'],
+  ['met(?:re|er)s?|m', 'm']
+]
+
+const PROMPT_UNIT_TAIL = UNIT_WORDS.map(
+  ([words, unit]) =>
+    [new RegExp(`(?:\\bin\\b|\\bunits? of\\b|\\(|\\[)\\s*(?:the\\s+)?(?:${words})\\s*[)\\]]?\\s*[.?:!]*\\s*$`), unit] as const
+)
+
+/**
+ * The unit a prompt asks for, read from its tail: "… in m/s", "… (in metres per second)",
+ * "… in \(\mathrm{ms^{-1}}\)". Numbas has no unit field on a number part, so the words are all
+ * there is; nothing found means `none`, never a guess.
+ */
+export function unitInPrompt(prompt: string): UnitId {
+  const plain = prompt
+    .replace(/\\[()[\]]/g, ' ')
+    .replace(/\\(?:mathrm|text|textrm|mathit|,|;| )\s*\{?/g, ' ')
+    .replace(/\^\{(-?\d)\}/g, '^$1')
+    .replace(/[{}]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  for (const [re, unit] of PROMPT_UNIT_TAIL) if (re.test(plain)) return unit
+  return 'none'
 }

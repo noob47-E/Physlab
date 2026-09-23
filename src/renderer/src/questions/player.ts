@@ -8,7 +8,7 @@
 // functions are the only ones that reach a store, and they go through the same entry points the
 // command bar and the Sandbox's own preset list use.
 
-import type { EvalFunction, FunctionNode, MathNode, SymbolNode } from 'mathjs'
+import type { ConstantNode, EvalFunction, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
 import { scene } from '../core/store'
 import { visualizeBetween, visualizeGraph, visualizePiecewise, visualizeTangentAt } from '../core/visualize'
 import { useLab } from '../lab/labStore'
@@ -16,27 +16,26 @@ import type { Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
 import { fmtPrecise, type MeasureSettings } from '../math/format'
 import type { AnswerField, Problem } from '../math/problems'
-import { texToPlain, type Working } from '../math/pure/work'
+import type { Working } from '../math/pure/work'
 import type { V3 } from '../math/vec'
 import { useSandbox } from '../sim/store'
+import { presetById } from '../sim/presets'
+import { tableFrom } from '../sim/recording'
 import type { Actuator } from '../sim/types'
 import { checkChoicePart, generateChoices, type Choice } from './distractors'
 import { motionPieces, motionTable, type MotionPieces } from './motion'
 import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTol } from './parts'
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
-import { stepsToWorking, substituteTex } from './steps'
+import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
 import { formatQuantity, UNITS } from './units'
 import { drawVariables, substitute, type Variant } from './variables'
 
 /** The Problem shape without the vector topic and level a generated vector problem carries. */
 export type QuestionProblem = Omit<Problem, 'topic' | 'level'>
 
-/**
- * A piece of what the student reads: plain words, or maths set by KaTeX — inline, or a display
- * line of its own. A teacher's Numbas file keeps its inline maths as `\(…\)`; handed to the panel
- * as plain text, the student read the backslashes and the LaTeX.
- */
-export type Segment = { text: string } | { tex: string; display: boolean }
+// The text helpers live beside the steps, which need them too (a step's heading is read the same
+// way as a prompt); the panel and the tests still reach them here.
+export { lineSegments, spokenOf, textLines, type Segment } from './steps'
 
 /** One option of a choice part: `text` spoken plainly (for marking and reading aloud), `segments` for the eye. */
 export interface PlayedChoice extends Choice {
@@ -88,46 +87,6 @@ export interface Played {
 }
 
 const unitsOf = (q: PQQuestion): Record<string, UnitId | undefined> => Object.fromEntries(q.variables.map((v) => [v.name, v.unit]))
-
-type Fill = { values: Record<string, number>; units: Record<string, UnitId | undefined>; settings: MeasureSettings }
-
-const INLINE = /\\\(([\s\S]*?)\\\)/
-
-/**
- * One line of an author's text → segments with the numbers in. A line starting `$$` is display
- * maths; otherwise every `\(…\)` span is inline maths. Chips in words get the plain number and
- * unit, chips in maths the LaTeX one (`substituteTex`), exactly as the steps do.
- */
-export function lineSegments(line: string, f: Fill): Segment[] {
-  const trimmed = line.trim()
-  if (trimmed.startsWith('$$')) {
-    return [{ tex: substituteTex(trimmed.replace(/^\$\$|\$\$$/g, ''), f.values, f.units, f.settings), display: true }]
-  }
-  const out: Segment[] = []
-  // split with one capture group alternates words (even) and the maths inside \(…\) (odd).
-  line.split(new RegExp(INLINE.source, 'g')).forEach((piece, k) => {
-    if (k % 2 === 1) out.push({ tex: substituteTex(piece, f.values, f.units, f.settings), display: false })
-    else if (piece !== '') out.push({ text: substitute(piece, f.values, f.units, f.settings) })
-  })
-  return out
-}
-
-/** A block of text → its non-empty lines as segments. */
-export function textLines(text: string, f: Fill): Segment[][] {
-  return text
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((l) => lineSegments(l, f))
-}
-
-/** Segments read as one plain sentence: the maths spoken (texToPlain), never raw LaTeX. */
-export function spokenOf(segments: Segment[]): string {
-  return segments
-    .map((s) => ('text' in s ? s.text : texToPlain(s.tex)))
-    .join('')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 /**
  * A question and a seed → everything the panel needs to play it. The number parts become the
@@ -225,32 +184,6 @@ function safeValue(expr: string, values: Record<string, number>): number {
 const CANNOT_MARK = 'PhysLab could not work out the answer to this part, so it cannot mark it.'
 
 /**
- * A letter written straight before a bracket is a product: t(u − 4.9t) is t × (u − 4.9t). mathjs
- * reads it as a call to a function called t, every sample point failed, and a student who
- * factored out t was told the answer could not be read. Only the part's own letters and the
- * question's variables are read this way — sin(x) stays sine.
- */
-export function lettersBeforeBrackets(text: string, letters: readonly string[]): string {
-  let node: MathNode
-  try {
-    node = math.parse(preprocess(text))
-  } catch {
-    return text
-  }
-  const products = new Set(letters.filter((n) => typeof (math as unknown as Record<string, unknown>)[n] !== 'function'))
-  let changed = false
-  const rewrite = (n: MathNode): MathNode => {
-    if (n.type !== 'FunctionNode') return n
-    const call = n as FunctionNode
-    if (call.fn.type !== 'SymbolNode' || !products.has((call.fn as SymbolNode).name) || call.args.length !== 1) return n
-    changed = true
-    return new math.OperatorNode('*', 'multiply', [call.fn as SymbolNode, new math.ParenthesisNode(call.args[0].transform(rewrite))])
-  }
-  const out = node.transform(rewrite)
-  return changed ? out.toString() : text
-}
-
-/**
  * Marks one part. A number part goes through `checkNumberPart` (units read and converted, then
  * `checkAnswer` with every diagnosis), an expression part through the three-stage check, a choice
  * part by the set of options ticked. A teacher's formula that cannot be worked out is a sentence
@@ -262,16 +195,18 @@ export function checkPlayedPart(p: PlayedPart, answer: string | number[], played
   try {
     if (p.part.type === 'choice') return checkChoicePart(Array.isArray(answer) ? answer : [], p.choices ?? [])
     const text = Array.isArray(answer) ? '' : answer
-    if (p.part.type === 'expression') {
-      return checkExpressionPart(lettersBeforeBrackets(text, [...p.part.symbols, ...Object.keys(values)]), p.part, values)
-    }
+    if (p.part.type === 'expression') return checkExpressionPart(text, p.part, values, unitsOf(played.question))
     // A trap that cannot be worked out is left out, so the student's answer is still marked; the
     // reason under a wrong answer is read with the numbers in, like everything else they see.
     const fill: Fill = { values, units: unitsOf(played.question), settings }
     const traps = (p.part.traps ?? [])
       .filter((t) => Number.isFinite(safeValue(t.value, values)))
       .map((t) => ({ ...t, why: spokenOf(textLines(t.why, fill).flat()) }))
-    return checkNumberPart(text, { ...p.part, traps }, values, settings)
+    const c = checkNumberPart(text, { ...p.part, traps }, values, settings)
+    // `checkAnswer`'s "close" reaches four times the tolerance — the vector problems' kindness to
+    // a student who rounded early. A question's tolerance is its author's: 48.99 on 50 at 2 % is
+    // outside it, and isCorrect counting "close" as right ticked it. The sentence stays.
+    return c.verdict === 'close' ? { ...c, verdict: 'wrong' } : c
   } catch {
     return { verdict: 'wrong', message: CANNOT_MARK }
   }
@@ -355,6 +290,50 @@ export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSet
   }
 }
 
+/** The powers the calculator reads back as superscripts (preprocess turns ², ³ and ⁻¹ into ^). */
+const SUPERSCRIPT: Record<string, string> = { '2': '²', '3': '³', '-1': '⁻¹' }
+
+/**
+ * A bound formula written the way a student writes it: 3x² − 2x, not mathjs's 3 * x ^ 2 - 2 * x,
+ * which is programming (rule 2). It stays something the command bar reads back, because it
+ * becomes the graph's equation and editing that equation runs it as a command: ² ³ ⁻¹ and −
+ * are what `preprocess` understands, a number before a letter or a bracket is a product, and
+ * every other product is ×.
+ */
+export function plainFormula(expr: string): string {
+  const letterLike = (n: MathNode): boolean =>
+    n.type === 'SymbolNode' ||
+    n.type === 'FunctionNode' ||
+    n.type === 'ParenthesisNode' ||
+    (n.type === 'OperatorNode' && (n as OperatorNode).fn === 'pow' && letterLike((n as OperatorNode).args[0]))
+  const options = {
+    handler: (node: MathNode, o: unknown): string | undefined => {
+      if (node.type !== 'OperatorNode') return undefined
+      const op = node as OperatorNode
+      const s = (n: MathNode): string => n.toString(o as never)
+      if (op.fn === 'pow' && op.args.length === 2) {
+        const [base, exp] = op.args
+        const inner = exp.type === 'ParenthesisNode' ? (exp as ParenthesisNode).content : exp
+        const negated = inner.type === 'OperatorNode' && (inner as OperatorNode).fn === 'unaryMinus' ? (inner as OperatorNode).args[0] : null
+        const key =
+          inner.type === 'ConstantNode'
+            ? String((inner as ConstantNode).value)
+            : negated?.type === 'ConstantNode'
+              ? `-${String((negated as ConstantNode).value)}`
+              : ''
+        return SUPERSCRIPT[key] ? `${s(base)}${SUPERSCRIPT[key]}` : `${s(base)}^${s(exp)}`
+      }
+      if (op.fn === 'multiply' && op.args.length === 2) {
+        const [a, b] = op.args
+        return a.type === 'ConstantNode' && letterLike(b) ? `${s(a)}${s(b)}` : `${s(a)} × ${s(b)}`
+      }
+      return undefined
+    }
+  }
+  // The proper minus, except inside a number's own exponent (1e-7).
+  return math.parse(preprocess(expr)).toString(options).replace(/(?<![0-9]e)-/g, '−')
+}
+
 export interface PictureShown {
   /** One sentence on what was drawn, for the panel. */
   note: string
@@ -370,9 +349,11 @@ export interface PictureShown {
 export function showPicture(plan: PicturePlan, settings: MeasureSettings): PictureShown {
   const n = (v: number): string => fmtPrecise(v, settings)
   switch (plan.kind) {
-    case 'curve':
-      visualizeGraph(`y = ${plan.expr}`, [plan.expr], 'explicit', { tMin: plan.xMin, tMax: plan.xMax })
-      return { note: `Drawn: y = ${plan.expr}.` }
+    case 'curve': {
+      const shown = `y = ${plainFormula(plan.expr)}`
+      visualizeGraph(shown, [plan.expr], 'explicit', { tMin: plan.xMin, tMax: plan.xMax })
+      return { note: `Drawn: ${shown}.` }
+    }
     case 'piecewise':
       visualizePiecewise(plan.pieces)
       return { note: `Drawn: one curve in ${n(plan.pieces.length)} pieces.` }
@@ -516,10 +497,21 @@ export function sandboxPlan(sb: PQSandbox, played: Played): SandboxPlan {
  * the bodies with fresh ids every time, so the names are resolved against the bodies it has just
  * made, and only then are the pushes handed over. The recorded body (or the first pushed one) is
  * selected, which is what the Sandbox's recording chart and its Send to Lab Data follow.
+ *
+ * Every name is checked against what the preset builds before the student's own scene is
+ * replaced: a misspelt body used to leave the Sandbox swapped for the experiment with no push on
+ * it. The run is paused first, as the Sandbox's own preset list does, or a running simulation
+ * started the push before the student pressed the Play the note asks for.
  */
 export function showSandbox(plan: SandboxPlan): string {
-  const sb = useSandbox.getState()
-  if (!sb.loadPreset(plan.preset)) throw new Error(`This question's experiment, '${plan.preset}', is not in this PhysLab.`)
+  const preset = presetById(plan.preset)
+  if (!preset) throw new Error(`This question's experiment, '${plan.preset}', is not in this PhysLab.`)
+  const built = new Set(preset.build().bodies.map((b) => b.name))
+  for (const p of plan.pushes) if (!built.has(p.body)) throw new Error(`The experiment has no body called ${p.body}, so PhysLab cannot push it.`)
+  if (plan.record !== undefined && !built.has(plan.record)) throw new Error(`The experiment has no body called ${plan.record}, so PhysLab cannot record it.`)
+
+  scene().setPlaying(false)
+  if (!useSandbox.getState().loadPreset(plan.preset)) throw new Error(`This question's experiment, '${plan.preset}', is not in this PhysLab.`)
   const bodies = useSandbox.getState().bodies
   const idOf = (name: string): string => {
     const b = bodies.find((x) => x.name === name)
@@ -532,9 +524,40 @@ export function showSandbox(plan: SandboxPlan): string {
   if (watched !== undefined) useSandbox.getState().select(idOf(watched))
   const names = [...new Set(plan.pushes.map((p) => p.body))]
   const loaded = names.length > 0 ? `Loaded the experiment with a push on ${names.join(' and ')}.` : 'Loaded the experiment.'
-  // The readings reach Lab Data through the Sandbox's own Send to Lab Data; nothing said so, and
-  // a student waiting for a table to appear by itself waited for nothing.
+  // Nothing reaches Lab Data by itself; the note says which button sends the readings, or a
+  // student waiting for a table to appear waited for nothing.
   return plan.record === undefined
     ? `${loaded} Press Play and watch the readings.`
-    : `${loaded} Press Play and watch ${plan.record} on the Recording chart; when it has run, Send to Lab Data under the chart puts the readings in a table.`
+    : `${loaded} Press Play and watch ${plan.record} on the Recording chart; when it has run, Send the readings to Lab Data here puts them in a table.`
+}
+
+/** The Lab Data table each run's readings went into, so a second press shows it instead of copying it. */
+const sandboxTables = new Map<string, string>()
+
+/**
+ * The question's recorded body's readings from the Sandbox run, as a new Lab Data table — the
+ * `record` → `tableFrom` → `appendTable` of the design, which nothing did: the question named a
+ * body to record and the readings stayed in the Sandbox. `appendTable`, never `setTables`, so
+ * the student's own tables stay. Throws a sentence when there is nothing to send yet.
+ */
+export function sendSandboxReadings(sb: PQSandbox, played: Played): { rows: number; note: string } {
+  const name = sb.record
+  if (name === undefined) throw new Error('This question does not ask for readings from the experiment.')
+  const s = useSandbox.getState()
+  const body = s.bodies.find((b) => b.name === name)
+  if (!body) throw new Error(`The Sandbox has no body called ${name} just now. Press Open the experiment first, then Play.`)
+  const samples = s.recording[body.id] ?? []
+  if (samples.length < 2) throw new Error(`There are no readings of ${name} yet. Press Play in the Sandbox, let it run, then send them.`)
+  // One run, one table: the same body, run and readings pressed twice are the same table.
+  const key = `${played.problem.id}|${body.id}|${s.runNonce}|${samples.length}|${samples[samples.length - 1].t}`
+  const lab = useLab.getState()
+  const already = lab.tables.find((t) => t.id === sandboxTables.get(key))
+  if (already) {
+    lab.setCurrent(already.id)
+    return { rows: 0, note: `These readings are already in Lab Data, in "${already.title}".` }
+  }
+  const table = { ...tableFrom(name, samples), title: `${name} — ${played.problem.title}` }
+  lab.appendTable(table)
+  sandboxTables.set(key, table.id)
+  return { rows: table.rows.length, note: `${fmtPrecise(table.rows.length, { decimals: 0, precisionMode: 'dp' })} readings of ${name} are in a new Lab Data table, "${table.title}".` }
 }

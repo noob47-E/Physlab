@@ -3,6 +3,7 @@ import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { openDialogOptions } from './openDialog'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -271,10 +272,9 @@ ipcMain.handle('zoom:set', (e, level: number) => {
   return win ? setZoom(win, level) : 0
 })
 
-ipcMain.handle('file:open', async () => {
+ipcMain.handle('file:open', async (_e, filters?: unknown, title?: unknown) => {
   const result = await dialog.showOpenDialog({
-    title: 'Open PhysLab project',
-    filters: [{ name: 'PhysLab project', extensions: ['phys'] }],
+    ...openDialogOptions(filters, title),
     properties: ['openFile']
   })
   if (result.canceled || result.filePaths.length === 0) return null

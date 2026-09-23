@@ -4,13 +4,13 @@
 // check (exact, algebraic, numeric) since `checkAnswer` only ever compares two numbers.
 // Headless: no React, no store, no DOM.
 
-import type { MathNode } from 'mathjs'
-import { inDegrees, math, preprocess, symbolsOf } from '../math/expr'
+import type { FunctionNode, MathNode, SymbolNode } from 'mathjs'
+import { getAngleMode, inDegrees, math, preprocess, setAngleMode, symbolsOf } from '../math/expr'
 import type { MeasureSettings } from '../math/format'
-import { checkAnswer, parseAnswer, type Check } from '../math/checkAnswer'
+import { checkAnswer, parseAnswer, UNIT_TAIL, type Check } from '../math/checkAnswer'
 import type { AnswerField, Trap } from '../math/problems'
 import { rngFor } from '../math/problems'
-import type { PQPart } from './pqjson'
+import type { PQPart, UnitId } from './pqjson'
 import { convertQuantity, unitFromTail, UNITS } from './units'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
@@ -61,6 +61,13 @@ export function checkNumberPart(text: string, part: NumberPart, values: Record<s
       }
       return checkAnswer(String(converted), field, settings)
     }
+  }
+  // A tail `checkAnswer` would drop without a word, but not one read above ("5 KG", "5 S"):
+  // marked on its number alone, a value in some other unit could come back right.
+  const dropped = tail.unit === null ? UNIT_TAIL.exec(text.trim()) : null
+  if (dropped && !/^units?$/i.test(dropped[1])) {
+    const how = part.unit === 'none' ? 'This box wants just the number' : `Type it as ${UNITS[part.unit].label}, or leave the unit off`
+    return { verdict: 'unreadable', message: `PhysLab could not read the unit "${dropped[1]}". ${how}.` }
   }
   return checkAnswer(text, field, settings)
 }
@@ -139,13 +146,73 @@ function sampleGrid(symbols: string[], n: number, range: [number, number], seed:
 }
 
 /**
+ * A letter written straight before a bracket is a product: t(u − 4.9t) is t × (u − 4.9t). mathjs
+ * reads it as a call to a function called t, every sample point failed, and a student who
+ * factored out t was told the answer could not be read. Only `letters` (the part's own symbols and
+ * the question's variables) are read this way, and never a name mathjs knows as a function, so
+ * sin(x), sqrt(x) and ln(x) stay what they are.
+ */
+export function lettersBeforeBrackets(text: string, letters: readonly string[]): string {
+  let node: MathNode
+  try {
+    node = math.parse(preprocess(text))
+  } catch {
+    return text
+  }
+  const products = new Set(letters.filter((n) => typeof (math as unknown as Record<string, unknown>)[n] !== 'function'))
+  let changed = false
+  const rewrite = (n: MathNode): MathNode => {
+    if (n.type !== 'FunctionNode') return n
+    const call = n as FunctionNode
+    if (call.fn.type !== 'SymbolNode' || !products.has((call.fn as SymbolNode).name) || call.args.length !== 1) return n
+    changed = true
+    return new math.OperatorNode('*', 'multiply', [call.fn as SymbolNode, new math.ParenthesisNode(call.args[0].transform(rewrite))])
+  }
+  const out = node.transform(rewrite)
+  return changed ? out.toString() : text
+}
+
+/** Runs `fn` with the calculator in radians and puts the mode back after. */
+function inRadians<T>(fn: () => T): T {
+  const prev = getAngleMode()
+  setAngleMode('rad')
+  try {
+    return fn()
+  } finally {
+    setAngleMode(prev)
+  }
+}
+
+/**
+ * The question's values as an expression part is sampled: in radians, like Numbas, so a variable
+ * the author measured in degrees enters as its radian size and cos(θ) with θ = 30° is still
+ * cos 30°, whether the student leaves θ in or types the number it comes to.
+ */
+function radianScope(values: Record<string, number>, units: Record<string, UnitId | undefined>): Record<string, number> {
+  const out: Record<string, number> = { ...values }
+  for (const [name, unit] of Object.entries(units)) if (unit === '°' && Number.isFinite(out[name])) out[name] = (out[name] * Math.PI) / 180
+  return out
+}
+
+/**
  * Marks an expression part in three stages: parsed, then checked symbolically (exact for a
  * polynomial identity like `x²−1 ≡ (x−1)(x+1)`) and sampled numerically (catches everything
  * else, `sin(x)²+cos(x)² ≡ 1` among them). A symbol the part does not list — the student
- * answered in `t` when the part wants `x` — is wrong without any of that.
+ * answered in `t` when the part wants `x` — is wrong without any of that. `units` are the
+ * question's variables' units, so an angle in degrees is read as one.
+ *
+ * Both sides are worked out in radians. In degrees the samples at x = 1…2 were 1°…2°, where sin
+ * is a straight line and cos is 1: 2 sin x for sin 2x, 1 for cos x and sin x for tan x all came
+ * back "right up to rounding", which counts as right.
  */
-export function checkExpressionPart(text: string, part: ExpressionPart, values: Record<string, number>): Check {
+export function checkExpressionPart(
+  text: string,
+  part: ExpressionPart,
+  values: Record<string, number>,
+  units: Record<string, UnitId | undefined> = {}
+): Check {
   if (!text.trim()) return { verdict: 'empty' }
+  text = lettersBeforeBrackets(text, [...part.symbols, ...Object.keys(values)])
 
   let studentNode: MathNode
   try {
@@ -166,13 +233,16 @@ export function checkExpressionPart(text: string, part: ExpressionPart, values: 
   // constant within 1e-15 of zero to 0, so with e = 1.6e-19 substituted (e·E) − (2·e·E)
   // "simplified" to 0 and a student's answer twice the right one was marked right. Algebra can
   // still rescue noise near a zero crossing or too few finite points, never a wrong sample.
-  const sampled = sampledCheck(text, part, values)
-  if (sampled.verdict === 'right') return sampled
-  if (sampled.verdict !== 'wrong' && symbolicallyZero(`(${part.answer}) - (${text})`, values)) return { verdict: 'right' }
-  return sampled
+  const scope = radianScope(values, units)
+  return inRadians(() => {
+    const sampled = sampledCheck(text, part, scope)
+    if (sampled.verdict === 'right') return sampled
+    if (sampled.verdict !== 'wrong' && symbolicallyZero(`(${part.answer}) - (${text})`, scope)) return { verdict: 'right' }
+    return sampled
+  })
 }
 
-/** The numeric stage on its own: the two sides at 7 points per symbol across `sampleRange`. */
+/** The numeric stage on its own: the two sides at 7 points per symbol across `sampleRange`, in whatever angle mode the caller set. */
 function sampledCheck(text: string, part: ExpressionPart, values: Record<string, number>): Check {
   const range = part.sampleRange ?? [1, 2]
   const points = sampleGrid(part.symbols, 7, range, 1)
@@ -183,8 +253,8 @@ function sampledCheck(text: string, part: ExpressionPart, values: Record<string,
     let a: number
     let b: number
     try {
-      a = Number(inDegrees(() => math.evaluate(preprocess(part.answer), { ...scope })))
-      b = Number(inDegrees(() => math.evaluate(preprocess(text), { ...scope })))
+      a = Number(math.evaluate(preprocess(part.answer), { ...scope }))
+      b = Number(math.evaluate(preprocess(text), { ...scope }))
     } catch {
       continue
     }

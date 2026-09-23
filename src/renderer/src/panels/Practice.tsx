@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import { BookOpen, Check, ChevronRight, Eye, FolderOpen, Lightbulb, Play, RotateCcw, Sparkles, Timer, X } from 'lucide-react'
+import { BookOpen, Check, ChevronRight, Eye, FolderOpen, Lightbulb, Play, RotateCcw, Sparkles, TableProperties, Timer, X } from 'lucide-react'
 import { visualizeSolution } from '../core/visualize'
 import { useScene } from '../core/store'
 import { enterMode } from '../app/layout'
@@ -10,7 +10,7 @@ import { checkAnswer, expectedText, isCorrect, type Check as AnswerCheck } from 
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import type { FadingLevel, PQQuestion } from '../questions/pqjson'
 import { bundledSets, loadTeacherFile, type QuestionSet } from '../questions/bank'
-import { checkPlayedPart, picturePlan, playQuestion, sandboxPlan, showMotion, showPicture, showSandbox, type Played } from '../questions/player'
+import { checkPlayedPart, picturePlan, playQuestion, sandboxPlan, sendSandboxReadings, showMotion, showPicture, showSandbox, type Played } from '../questions/player'
 import { nextLevel } from '../questions/steps'
 import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
@@ -59,11 +59,15 @@ interface Session {
   revealed: boolean
   results: Result[]
   startedAt: number
-  /** Where the fading has got to across the set, and the right answers in a row that move it. */
-  level: FadingLevel
+  /**
+   * Where the fading has got to across the set, and the right answers in a row that move it. Null
+   * until the student has answered a question from a set: each question then plays at its
+   * author's own steps.level, which used to be overridden by a starting "worked" every time.
+   */
+  level: FadingLevel | null
   streak: number
   /** The level this question was started at: the steps do not change under the student mid-question. */
-  questionLevel: FadingLevel
+  questionLevel: FadingLevel | null
   /** What the last "Show it" did, or why it could not. */
   note: { text: string; error: boolean } | null
 }
@@ -82,9 +86,9 @@ const useSession = create<Session>(() => ({
   items: [],
   index: 0,
   results: [],
-  level: 'worked',
+  level: null,
   streak: 0,
-  questionLevel: 'worked',
+  questionLevel: null,
   ...blankQuestionState()
 }))
 const put = (patch: Partial<Session>) => useSession.setState(patch)
@@ -164,7 +168,7 @@ export function Practice() {
   // A question from a set is played from its seed at the level the question started at; the
   // memo keeps typing in a box from drawing a fresh copy of the question on every keystroke.
   const played: Played | null = useMemo(
-    () => (item?.kind === 'question' ? playQuestion(item.question, item.seed, settings, session.questionLevel) : null),
+    () => (item?.kind === 'question' ? playQuestion(item.question, item.seed, settings, session.questionLevel ?? undefined) : null),
     [item, settings, session.questionLevel]
   )
   const problem = item?.kind === 'topic' ? item.problem : played?.problem
@@ -237,7 +241,8 @@ export function Practice() {
     // The fading moves between questions, never under the student in the middle of one: two
     // right in a row shows less next time, a slip shows more again.
     const streak = item?.kind === 'question' ? (right ? s.streak + 1 : 0) : s.streak
-    const level = item?.kind === 'question' ? nextLevel(s.level, streak) : s.level
+    // From the level this question was played at: the author's own, until the student has answered one.
+    const level = item?.kind === 'question' ? nextLevel(played?.level ?? s.level ?? 'worked', streak) : s.level
     put({
       results: [...s.results, { id: problem.id, title: problem.title, right, hints: hints + lines.length, seconds: Math.round((Date.now() - startedAt) / 1000) }],
       index: s.index + 1,
@@ -250,14 +255,15 @@ export function Practice() {
   }
 
   /** Runs one "Show it", switching to where it can be seen and saying what happened. */
-  const show = (run: () => string, mode: 'graphing' | 'sandbox') => {
+  const show = (run: () => string, mode: 'graphing' | 'sandbox' | 'lab') => {
     try {
       const text = run()
       enterMode(mode)
       // Practice and the Sandbox share a dock group, and the button just pressed is in Practice:
       // left there, the Sandbox tab stayed behind it while the note said to press its Play.
       if (mode === 'sandbox') showPanel('sandbox')
-      put({ note: { text: `${text} Switched to ${mode === 'graphing' ? 'Graphing' : 'the Sandbox'} to show it; your place in the set is kept.`, error: false } })
+      const where = mode === 'graphing' ? 'Graphing' : mode === 'sandbox' ? 'the Sandbox' : 'Lab Data'
+      put({ note: { text: `${text} Switched to ${where} to show it; your place in the set is kept.`, error: false } })
     } catch (e) {
       put({ note: { text: e instanceof Error ? e.message : String(e), error: true } })
     }
@@ -499,6 +505,11 @@ export function Practice() {
                 <Play size={13} /> Open the experiment
               </button>
             )}
+            {q.sandbox?.record && (
+              <button className="btn ghost min-h-[44px]" onClick={() => show(() => sendSandboxReadings(q.sandbox!, played).note, 'lab')}>
+                <TableProperties size={13} /> Send the readings to Lab Data
+              </button>
+            )}
           </div>
         )}
         {note && <div className={`mx-3 mt-2 ${note.error ? 'text-bad' : 'text-ink-dim'}`}>{note.text}</div>}
@@ -544,7 +555,8 @@ export function Practice() {
             <div className="mb-1 text-fine uppercase tracking-wide text-warn">Answer</div>
             {played.working.answers.map((a, i) => (
               <div key={i} className="py-0.5">
-                <div className="text-ink-dim">{a.label}</div>
+                {/* The spoken prompt, as the box above has it: a Numbas prompt's \(…\) is never shown raw. */}
+                <div className="text-ink-dim">{played.parts[i]?.prompt ?? a.label}</div>
                 <Tex tex={a.tex} className="text-lead text-ink-strong" />
               </div>
             ))}

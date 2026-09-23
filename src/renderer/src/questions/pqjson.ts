@@ -199,6 +199,16 @@ export const RESERVED_NAMES: ReadonlySet<string> = new Set([
 /** The shape a variable name must have: a letter, then letters, digits or underscores. */
 export const VARIABLE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/
 
+/**
+ * Whether the `{…}` group starting at `at` in some LaTeX is a command's argument — the `{avg}` of
+ * `\mathrm{avg}` — rather than a chip. Such a group is LaTeX, never a number to fill in: the
+ * braking train's v_{\mathrm{avg}} went out to Numbas as \mathrm\var{avg} and could not come back.
+ */
+export function isCommandArgument(tex: string, at: number): boolean {
+  // Straight against the name only: in `\times {t}` the space ends the command and {t} is a chip.
+  return /\\[A-Za-z]+$/.test(tex.slice(0, at))
+}
+
 // ---------------------------------------------------------------------------
 // Reading a file
 // ---------------------------------------------------------------------------

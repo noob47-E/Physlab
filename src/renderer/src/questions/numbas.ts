@@ -14,6 +14,7 @@ import { licenseFromNumbas, refusalSentence } from './license'
 import {
   RESERVED_NAMES,
   UNIT_IDS,
+  isCommandArgument,
   VARIABLE_NAME,
   type License,
   type LicenseId,
@@ -27,6 +28,8 @@ import {
   type UnitId,
   type VariableDef
 } from './pqjson'
+import { unitInPrompt } from './units'
+import { RANDOM_RANGE } from './variables'
 
 // ===========================================================================
 // JME → mathjs
@@ -472,9 +475,9 @@ function plainNumber(n: JmeNode): number | null {
 /**
  * A variable's JME definition → how PhysLab draws it. `random(a..b)`, `random(a..b#s)` and
  * `random(a..b except 0)` with plain numbers become a range; `random(1, 2, 3)` and
- * `random([1, 2, 3])` a list; everything else is a formula in the other variables. A random
- * draw whose ends are other variables, or one buried inside a formula, is refused: PhysLab's
- * ranges are three numbers an author types into three boxes.
+ * `random([1, 2, 3])` a list; everything else is a formula in the other variables. A range whose
+ * ends are other variables becomes the formula `randomRange(a, b, step)`; a random draw buried
+ * inside a larger formula is refused.
  */
 export function jmeToVariableDef(src: string): VariableDef {
   const node = parseJme(src)
@@ -493,8 +496,15 @@ export function jmeToVariableDef(src: string): VariableDef {
         const from = plainNumber(arg.from)
         const to = plainNumber(arg.to)
         const step = arg.step === undefined ? 1 : plainNumber(arg.step)
-        if (from === null || to === null || step === null) throw new JmeRefusal('a random range whose ends are not plain numbers')
-        return exclude === undefined ? { kind: 'range', from, to, step } : { kind: 'range', from, to, step, exclude }
+        if (from !== null && to !== null && step !== null) {
+          return exclude === undefined ? { kind: 'range', from, to, step } : { kind: 'range', from, to, step, exclude }
+        }
+        // Ends that are other variables (a second speed that must beat the first) are worked out
+        // first and drawn by randomRange, which variables.ts has for exactly this; only the
+        // "except" form has no formula to go in.
+        if (exclude !== undefined) throw new JmeRefusal('a random range whose ends are not plain numbers, with except')
+        const ends = [arg.from, arg.to, ...(arg.step === undefined ? [] : [arg.step])].map((e) => emit(e, 'radians').s)
+        return { kind: 'expr', expr: `${RANDOM_RANGE}(${ends.join(', ')})` }
       }
       if (arg.t === 'list') {
         const items = arg.items.map(plainNumber)
@@ -698,66 +708,6 @@ function linesToSteps(lines: string[]): PQStep[] {
     } else out.push({ head: spoken(line), blank: false })
   }
   return out
-}
-
-// --- units named in a prompt ------------------------------------------------
-
-/** Longest first, so "m/s²" is found before "m/s" and both before "m". */
-const UNIT_WORDS: [string, UnitId][] = [
-  ['m\\/s\\^?2|m s\\^?-2|ms\\^?-2|m\\/s²|met(?:re|er)s per second squared', 'm/s²'],
-  ['kg m\\/s|kg m s\\^?-1|kgms\\^?-1|kg·m\\/s', 'kg·m/s'],
-  ['rad\\/s|rad s\\^?-1|radians per second', 'rad/s'],
-  ['m\\/s|m s\\^?-1|ms\\^?-1|met(?:re|er)s per second', 'm/s'],
-  ['km\\/h|km h\\^?-1|kmh\\^?-1|kilomet(?:re|er)s per hour', 'km/h'],
-  ['N m|N·m|Nm|newton met(?:re|er)s', 'N·m'],
-  ['m\\^?2|m²|square met(?:re|er)s', 'm²'],
-  ['m\\^?3|m³|cubic met(?:re|er)s', 'm³'],
-  ['°C|degrees celsius|degrees centigrade', '°C'],
-  ['°|degrees', '°'],
-  ['kilograms?|kg', 'kg'],
-  ['grams?|g', 'g'],
-  ['newtons?|N', 'N'],
-  ['joules?|J', 'J'],
-  ['watts?|W', 'W'],
-  ['pascals?|Pa', 'Pa'],
-  ['hertz|Hz', 'Hz'],
-  ['coulombs?|C', 'C'],
-  ['volts?|V', 'V'],
-  ['amp(?:ere)?s?|A', 'A'],
-  ['ohms?|Ω', 'Ω'],
-  ['kelvin|K', 'K'],
-  ['moles?|mol', 'mol'],
-  ['radians?|rad', 'rad'],
-  ['milliseconds?|ms', 'ms'],
-  ['minutes?|min', 'min'],
-  ['hours?|h', 'h'],
-  ['seconds?|s', 's'],
-  ['kilomet(?:re|er)s?|km', 'km'],
-  ['centimet(?:re|er)s?|cm', 'cm'],
-  ['millimet(?:re|er)s?|mm', 'mm'],
-  ['met(?:re|er)s?|m', 'm']
-]
-
-const UNIT_TAIL = UNIT_WORDS.map(
-  ([words, unit]) =>
-    [new RegExp(`(?:\\bin\\b|\\bunits? of\\b|\\(|\\[)\\s*(?:the\\s+)?(?:${words})\\s*[)\\]]?\\s*[.?:!]*\\s*$`), unit] as const
-)
-
-/**
- * The unit a prompt asks for, read from its tail: "… in m/s", "… (in metres per second)",
- * "… in \(\mathrm{ms^{-1}}\)". Numbas has no unit field on a number part, so the words are all
- * there is; nothing found means `none`, never a guess.
- */
-export function unitInPrompt(prompt: string): UnitId {
-  const plain = prompt
-    .replace(/\\[()[\]]/g, ' ')
-    .replace(/\\(?:mathrm|text|textrm|mathit|,|;| )\s*\{?/g, ' ')
-    .replace(/\^\{(-?\d)\}/g, '^$1')
-    .replace(/[{}]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  for (const [re, unit] of UNIT_TAIL) if (re.test(plain)) return unit
-  return 'none'
 }
 
 /** The closing line `toExam` writes for a number part's unit, read back so a set round-trips. */
@@ -1204,6 +1154,16 @@ export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
         if (name === 'number' && args.length === 1 && isFn(args[0], ['format']) && args[0].args.length === 2) {
           return `siground(${s(args[0].args[0])}, ${s(args[0].args[1])})`
         }
+        // A range with worked-out ends goes back to JME's own random(a..b#step); an end that is
+        // more than a name or a number is bracketed, so `..` cannot take part of it.
+        if (name === RANDOM_RANGE && (args.length === 2 || args.length === 3)) {
+          const end = (n: Node): string => {
+            const u = unparen(n)
+            return u.type === 'SymbolNode' || u.type === 'ConstantNode' ? s(u) : `(${s(u)})`
+          }
+          const step = args.length === 3 && !isConst(unparen(args[2]), 1) ? `#${end(args[2])}` : ''
+          return `random(${end(args[0])}..${end(args[1])}${step})`
+        }
         // `2 × 3` is the calculator's own spelling; JME has only *.
         if (name === 'timesOrCross' && args.length === 2) return s(new math.OperatorNode('*', 'multiply', [args[0], args[1]]))
         if ((name === 'sin' || name === 'cos' || name === 'tan') && args.length === 1) {
@@ -1249,9 +1209,17 @@ export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-/** LaTeX for Numbas: a chip becomes `\var{v}`, a protected group `{ v}` its plain self. */
+/**
+ * LaTeX for Numbas: a chip becomes `\var{v}`, a protected group `{ v}` its plain self, and a
+ * command's argument (`\mathrm{avg}`) stays LaTeX — written as `\mathrm\var{avg}` it named a
+ * variable that does not exist and the question could not come back in.
+ */
 const latexOut = (tex: string): string =>
-  escapeHtml(tex.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, '\\var{$1}').replace(/\{ ([A-Za-z][A-Za-z0-9_]*)\}/g, '{$1}'))
+  escapeHtml(
+    tex
+      .replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (m, name: string, at: number) => (isCommandArgument(tex, at) ? m : `\\var{${name}}`))
+      .replace(/\{ ([A-Za-z][A-Za-z0-9_]*)\}/g, '{$1}')
+  )
 
 /** A line of PhysLab text as one HTML paragraph; chips stay `{v}`, which is Numbas's own syntax. */
 function lineToHtml(line: string): string {

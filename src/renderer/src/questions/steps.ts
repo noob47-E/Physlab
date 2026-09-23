@@ -7,9 +7,9 @@
 
 import type { SymbolNode } from 'mathjs'
 import { inDegrees, math, preprocess } from '../math/expr'
-import { texPrecise, texSci, type MeasureSettings } from '../math/format'
+import type { MeasureSettings } from '../math/format'
 import { JOBS, runPure, type JobId } from '../math/pure/run'
-import type { Answer, Move, Working } from '../math/pure/work'
+import { texToPlain, type Answer, type Move, type Working } from '../math/pure/work'
 import type { V3 } from '../math/vec'
 import {
   solveAddition,
@@ -35,7 +35,8 @@ import {
   type Solution,
   type SolverSettings
 } from '../math/vectorSolver'
-import type { FadingLevel, PQPart, PQQuestion, PQStep, UnitId } from './pqjson'
+import { isCommandArgument, type FadingLevel, type PQPart, type PQQuestion, type PQStep, type UnitId } from './pqjson'
+import { texQuantity, texUnit } from './units'
 import { substitute, type Variant } from './variables'
 
 /** The panel's own step shape plus the author's mark that fading may blank it. */
@@ -52,62 +53,79 @@ const COULD_NOT = 'PhysLab could not work this step out.'
 // Numbers into LaTeX
 // ---------------------------------------------------------------------------
 
-/**
- * A unit as KaTeX sets it. `substitute` writes units as plain text ("2.5 m/s"), which is right
- * in a sentence and wrong in maths, where `m/s` would be three italic letters and `°` a stray
- * symbol. Only the units with a special character need a spelling of their own.
- */
-const TEX_UNITS: Partial<Record<UnitId, string>> = {
-  '°': '^{\\circ}',
-  '°C': '^{\\circ}\\mathrm{C}',
-  Ω: '\\Omega',
-  'm/s²': '\\mathrm{m/s^{2}}',
-  'N·m': '\\mathrm{N\\cdot m}',
-  'kg·m/s': '\\mathrm{kg\\cdot m/s}',
-  'm²': '\\mathrm{m^{2}}',
-  'm³': '\\mathrm{m^{3}}'
-}
-
-export function texUnit(unit: UnitId | undefined): string {
-  if (unit === undefined || unit === 'none') return ''
-  return TEX_UNITS[unit] ?? `\\mathrm{${unit}}`
-}
-
-/**
- * A drawn value as LaTeX with its unit: the same numbers and the same scientific threshold as
- * the chips in the statement, so a step never contradicts the question above it. A degree sign
- * sits against its number; every other unit takes a thin space.
- */
-export function texQuantity(v: number, unit: UnitId | undefined, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
-  const abs = Math.abs(v)
-  const number = abs >= 1e6 || (abs > 0 && abs < 1e-3) ? texSci(v, s) : texPrecise(v, s)
-  const u = texUnit(unit)
-  if (u === '') return number
-  if (unit === '°' || unit === '°C') {
-    // A degree is a superscript, and a scientific number already carries one: KaTeX refuses
-    // 10^{-19}^{\circ} as a double superscript unless the number is grouped first.
-    return number.includes('^') ? `{${number}}${u}` : `${number}${u}`
-  }
-  return `${number}\\,${u}`
-}
-
 const CHIP = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 
 /**
  * Chips inside LaTeX: a value in brackets when negative, so `{a} \times 2` never reads
  * `-3 \times 2` as a subtraction, and when a unit sits under a power or a subscript, so
- * `{t}^2` with t = 5 s reads (5 s)² and not 5 s².
+ * `{t}^2` with t = 5 s reads (5 s)² and not 5 s². A command's argument (`\mathrm{v}`) is LaTeX,
+ * not a chip, as it is for Numbas.
  */
 export function substituteTex(tex: string, values: Record<string, number>, units: Record<string, UnitId | undefined>, s: MeasureSettings): string {
   return tex.replace(CHIP, (chip, name: string, at: number) => {
     const v = values[name]
-    if (v === undefined || Number.isNaN(v)) return chip
+    if (v === undefined || Number.isNaN(v) || isCommandArgument(tex, at)) return chip
     const q = texQuantity(v, units[name], s)
     const next = tex.slice(at + chip.length).trimStart()[0]
     const raised = (next === '^' || next === '_') && texUnit(units[name]) !== ''
     return v < 0 || raised ? `\\left(${q}\\right)` : q
   })
 }
+
+// ---------------------------------------------------------------------------
+// Words with maths in them
+// ---------------------------------------------------------------------------
+
+/**
+ * A piece of what the student reads: plain words, or maths set by KaTeX — inline, or a display
+ * line of its own. A teacher's Numbas file keeps its inline maths as `\(…\)`; handed to the panel
+ * as plain text, the student read the backslashes and the LaTeX.
+ */
+export type Segment = { text: string } | { tex: string; display: boolean }
+
+/** What an author's text is filled in from: the drawn values, their units, the student's precision. */
+export type Fill = { values: Record<string, number>; units: Record<string, UnitId | undefined>; settings: MeasureSettings }
+
+const INLINE = /\\\(([\s\S]*?)\\\)/
+
+/**
+ * One line of an author's text → segments with the numbers in. A line starting `$$` is display
+ * maths; otherwise every `\(…\)` span is inline maths. Chips in words get the plain number and
+ * unit, chips in maths the LaTeX one (`substituteTex`).
+ */
+export function lineSegments(line: string, f: Fill): Segment[] {
+  const trimmed = line.trim()
+  if (trimmed.startsWith('$$')) {
+    return [{ tex: substituteTex(trimmed.replace(/^\$\$|\$\$$/g, ''), f.values, f.units, f.settings), display: true }]
+  }
+  const out: Segment[] = []
+  // split with one capture group alternates words (even) and the maths inside \(…\) (odd).
+  line.split(new RegExp(INLINE.source, 'g')).forEach((piece, k) => {
+    if (k % 2 === 1) out.push({ tex: substituteTex(piece, f.values, f.units, f.settings), display: false })
+    else if (piece !== '') out.push({ text: substitute(piece, f.values, f.units, f.settings) })
+  })
+  return out
+}
+
+/** A block of text → its non-empty lines as segments. */
+export function textLines(text: string, f: Fill): Segment[][] {
+  return text
+    .split('\n')
+    .filter((l) => l.trim() !== '')
+    .map((l) => lineSegments(l, f))
+}
+
+/** Segments read as one plain sentence: the maths spoken (texToPlain), never raw LaTeX. */
+export function spokenOf(segments: Segment[]): string {
+  return segments
+    .map((s) => ('text' in s ? s.text : texToPlain(s.tex)))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** An author's text as one plain sentence with the numbers in and any inline maths spoken. */
+const spoken = (text: string, f: Fill): string => spokenOf(textLines(text, f).flat())
 
 // ---------------------------------------------------------------------------
 // The answers
@@ -141,7 +159,8 @@ function evaluateIn(expr: string, values: Record<string, number>): number {
 }
 
 function answerFor(part: PQPart, values: Record<string, number>, units: Record<string, UnitId | undefined>, s: MeasureSettings): Answer {
-  const label = substitute(part.prompt, values, units, s)
+  // Spoken, as the box above it is: an author's \(…\) in a prompt reached the reveal as backslashes.
+  const label = spoken(part.prompt, { values, units, settings: s })
   if (part.type === 'number') {
     let v: number
     try {
@@ -240,9 +259,17 @@ function autoMoves(step: PQStep, values: Record<string, number>, units: Record<s
   }
   const solver = VECTOR_SOLVERS[auto.solver]
   if (!solver) return cannot()
+  // Each chip is the value itself, not its text at the student's precision: filled in rounded,
+  // a worked-out Fx = 25.98076 went into the solver as 25.98 and the working's last line could
+  // disagree with the part's own answer in the last digit. The solver rounds what it shows.
+  const exact = (text: string): string =>
+    text.replace(CHIP, (chip, name: string) => {
+      const v = values[name]
+      return v === undefined || Number.isNaN(v) ? chip : String(v)
+    })
   let args: unknown[]
   try {
-    args = auto.args.map((a) => readSolverArg(substitute(a, values, {}, s), values))
+    args = auto.args.map((a) => readSolverArg(exact(a), values))
   } catch {
     return cannot()
   }
@@ -312,7 +339,10 @@ const unitsOf = (q: PQQuestion): Record<string, UnitId | undefined> => Object.fr
 export function stepsToWorking(q: PQQuestion, variant: Variant, settings: MeasureSettings, level?: FadingLevel): Working {
   const { values } = variant
   const units = unitsOf(q)
-  const plain = (text: string): string => substitute(text, values, units, settings)
+  // Heads and notes are read as sentences, their inline maths spoken as a prompt's is: filled in
+  // with the numbers alone, an author's "Use \(v_{0} = {u}\)" reached the student as
+  // "Use \(v_0 = 16 m/s\)", since the panel's texToPlain strips commands but not \( \).
+  const plain = (text: string): string => spoken(text, { values, units, settings })
 
   const moves: StepMove[] = []
   for (const step of q.steps?.items ?? []) {

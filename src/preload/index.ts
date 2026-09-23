@@ -2,7 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   isDesktop: true,
-  openFile: (): Promise<{ path: string; content: string } | null> => ipcRenderer.invoke('file:open'),
+  /** No filters: the .phys project dialog. A question file passes its own (.pqjson, .exam) and a title. */
+  openFile: (filters?: { name: string; extensions: string[] }[], title?: string): Promise<{ path: string; content: string } | null> =>
+    ipcRenderer.invoke('file:open', filters, title),
   saveFile: (content: string, path: string | null): Promise<string | null> =>
     ipcRenderer.invoke('file:save', content, path),
   // Crash recovery: the renderer keeps a copy of unsaved work in the user's data folder.

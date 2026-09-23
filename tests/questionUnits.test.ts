@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { convertQuantity, formatQuantity, fromLengthUnit, lengthUnitId, unitFromTail, UNITS, unitsCompatible } from '../src/renderer/src/questions/units'
 import type { LengthUnit } from '../src/renderer/src/core/types'
 import { UNIT_IDS } from '../src/renderer/src/questions/pqjson'
+import { readSource } from './helpers/repo'
+import { substitute } from '../src/renderer/src/questions/variables'
+import { texQuantity } from '../src/renderer/src/questions/units'
 
 const PRECISION = { decimals: 2, precisionMode: 'dp' as const }
 
@@ -118,5 +121,32 @@ describe('unitFromTail', () => {
     expect(unitFromTail('12.5')).toEqual({ value: '12.5', unit: null })
     expect(unitFromTail('5*sqrt(2)')).toEqual({ value: '5*sqrt(2)', unit: null })
     expect(unitFromTail('')).toEqual({ value: '', unit: null })
+  })
+})
+
+describe('one home for unit formatting', () => {
+  it('keeps the LaTeX units and the prompt-unit reader in units.ts, not copied into steps or numbas', () => {
+    const units = readSource('src/renderer/src/questions/units.ts')
+    for (const fn of ['texUnit', 'texQuantity', 'unitInPrompt']) {
+      expect(units, fn).toContain(`export function ${fn}(`)
+      expect(readSource('src/renderer/src/questions/steps.ts'), fn).not.toContain(`function ${fn}(`)
+      expect(readSource('src/renderer/src/questions/numbas.ts'), fn).not.toContain(`function ${fn}(`)
+    }
+    expect(readSource('src/renderer/src/questions/variables.ts')).not.toContain('function chipNumber(')
+  })
+})
+
+describe('a chip\'s number', () => {
+  it('is formatQuantity\'s, so a small value never reads 0 and a Celsius reading has no space', () => {
+    const at2 = { decimals: 2, precisionMode: 'dp' as const }
+    const chip = substitute('I = {I}', { I: 0.0024 }, { I: 'A' }, at2)
+    expect(chip).toBe(`I = ${formatQuantity(0.0024, 'A', at2)}`)
+    expect(chip).not.toBe('I = 0 A')
+    expect(substitute('{T}', { T: 20 }, { T: '°C' }, at2)).toBe('20°C')
+    expect(substitute('{a}', { a: 30 }, { a: '°' }, at2)).toBe('30°')
+    expect(substitute('{n}', { n: 3 }, {}, at2)).toBe('3')
+    // The same value inside maths is not 0 either.
+    expect(texQuantity(0.0024, 'A', at2)).not.toMatch(/^0\\,/)
+    expect(texQuantity(0.0024, 'A', at2)).toContain('10^{')
   })
 })

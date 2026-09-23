@@ -4,9 +4,10 @@
 // words when a formula cannot be worked out. Headless: no React, no store, no DOM.
 
 import { inDegrees, math, preprocess, symbolsOf } from '../math/expr'
-import { fmtPrecise, fmtSci, type MeasureSettings } from '../math/format'
+import { fmtPrecise, type MeasureSettings } from '../math/format'
 import { rngFor } from '../math/problems'
 import { RESERVED_NAMES, type PQQuestion, type PQVariable, type UnitId } from './pqjson'
+import { formatQuantity } from './units'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
@@ -256,23 +257,14 @@ export function previewVariants(q: PQQuestion, count = 10, seed = 1): Variant[] 
 const CHIP = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 
 /**
- * The number a chip shows. Anything a million or more, or below a thousandth, goes to the
- * scientific form: `fmtPrecise` has a 10⁻¹² noise floor meant for a dragged point, and a charge
- * of 1.6×10⁻¹⁹ C in a question is a known value that must never read "0".
- */
-function chipNumber(v: number, settings: Precision): string {
-  const abs = Math.abs(v)
-  if (abs >= 1e6 || (abs > 0 && abs < 1e-3)) return fmtSci(v, settings)
-  return fmtPrecise(v, settings)
-}
-
-/**
  * Replaces every `{name}` chip with its drawn value in the student's precision, followed by the
  * variable's unit when it has one ("2.5 m/s", "30°" — a degree sign sits against its number).
  * A chip with no value is left exactly as typed, so a half-written question still shows the
- * author what is missing. A `$$…$$` span gets the same numbers.
- * TODO (WAVE 2, questions/units.ts): inside `$$…$$` the unit should be set as LaTeX (`\,\text{m/s}`)
- * and the ×10^ form as `\times 10^{…}`; no LaTeX is written here.
+ * author what is missing. Maths gets its chips from `substituteTex` in steps.ts instead.
+ *
+ * The number is `formatQuantity`'s, the same as the revealed answer's: a copy kept here lacked
+ * its "rounds to 0 → scientific" rule, so at 2 dp I = 0.0024 A read "I = 0 A" in the statement
+ * while the answer said 2.4×10⁻³ A, and it spaced "20 °C" where every answer wrote "20°C".
  */
 export function substitute(
   text: string,
@@ -285,9 +277,6 @@ export function substitute(
     // A missing value and a NaN (a formula that failed; its Variant already says so in words)
     // both leave the chip as typed: "The charge is undefined C." is no sentence for a student.
     if (v === undefined || Number.isNaN(v)) return chip
-    const unit = units[name]
-    const shown = chipNumber(v, settings)
-    if (unit === undefined || unit === 'none') return shown
-    return unit === '°' ? `${shown}°` : `${shown} ${unit}`
+    return formatQuantity(v, units[name] ?? 'none', settings)
   })
 }

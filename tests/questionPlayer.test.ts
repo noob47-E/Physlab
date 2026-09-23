@@ -15,7 +15,8 @@ vi.mock('../src/renderer/src/app/theme', () => ({
 }))
 
 import { resetGlobals } from './helpers/globals'
-import { math } from '../src/renderer/src/math/expr'
+import { readSource } from './helpers/repo'
+import { math, preprocess } from '../src/renderer/src/math/expr'
 import { checkAnswer, isCorrect } from '../src/renderer/src/math/checkAnswer'
 import type { MeasureSettings } from '../src/renderer/src/math/format'
 import { integrate } from '../src/renderer/src/calc/engine'
@@ -29,14 +30,16 @@ import { bundledSets, loadBundled, loadTeacherFile } from '../src/renderer/src/q
 import { serializePQFile } from '../src/renderer/src/questions/pqjson'
 import { fromExam, toExam } from '../src/renderer/src/questions/numbas'
 import { UNITS } from '../src/renderer/src/questions/units'
+import { lettersBeforeBrackets } from '../src/renderer/src/questions/parts'
 import katex from 'katex'
 import {
   bindValues,
   checkPlayedPart,
-  lettersBeforeBrackets,
   picturePlan,
+  plainFormula,
   playQuestion,
   sandboxPlan,
+  sendSandboxReadings,
   showMotion,
   showPicture,
   showSandbox,
@@ -175,6 +178,23 @@ describe('picture bindings', () => {
   it('writes the drawn numbers into the formula, bracketing a negative one and keeping x', () => {
     expect(bindValues('a*x^2 + b', { a: 2, b: -3, x: 99 })).toBe('2 * x ^ 2 + (-3)')
     expect(bindValues('x^k', { k: -2 })).toBe('x ^ (-2)')
+  })
+
+  it('says what it drew as a student writes it, and the graph\'s equation reads back the same curve', () => {
+    expect(plainFormula('3 * x ^ 2')).toBe('3x²')
+    expect(plainFormula('2 * x ^ 2 + (-3)')).toBe('2x² + (−3)')
+    expect(plainFormula('x ^ 4 - 2 * x')).toBe('x^4 − 2x')
+    expect(plainFormula('x ^ (-1) + sin(x) / x')).toBe('x⁻¹ + sin(x) / x')
+    expect(plainFormula('x * sqrt(x)')).toBe('x × sqrt(x)')
+    const q = train({ variables: [...train().variables, { name: 'a', def: { kind: 'list', items: [3] } }], picture: { kind: 'curve', expr: 'a*x^2 - 2x' } })
+    const { note } = showPicture(picturePlan(q.picture!, playQuestion(q, 1, SETTINGS), SETTINGS), SETTINGS)
+    expect(note).toBe('Drawn: y = 3x² − 2x.')
+    expect(note).not.toMatch(/\*|\s\^\s/)
+    const curve = graphs().find((g) => g.kind === 'explicit')!
+    expect(curve.source).toBe('y = 3x² − 2x')
+    // What the student reads is the same curve the graph draws.
+    const shown = 'y = 3x² − 2x'.slice(4)
+    for (const x of [-2, 0.5, 3]) expect(math.evaluate(preprocess(shown), { x })).toBeCloseTo(3 * x * x - 2 * x, 12)
   })
 
   it('shades the region between two curves with the area the calculator integrates', () => {
@@ -479,9 +499,9 @@ describe('the bundled sample set', () => {
     const q = byId('physlab-sample-pushed-crate')
     const played = playQuestion(q, 2, SETTINGS)
     const note = showSandbox(sandboxPlan(q.sandbox!, played))
-    // Its readings reach Lab Data through the Sandbox's own button, and the note says which.
+    // Its readings reach Lab Data through the question's own button, and the note says which.
     expect(note).toBe(
-      'Loaded the experiment with a push on Crate. Press Play and watch Crate on the Recording chart; when it has run, Send to Lab Data under the chart puts the readings in a table.'
+      'Loaded the experiment with a push on Crate. Press Play and watch Crate on the Recording chart; when it has run, Send the readings to Lab Data here puts them in a table.'
     )
     const { actuators, bodies } = useSandbox.getState()
     const crate = bodies.find((b) => b.name === 'Crate')!
@@ -490,6 +510,47 @@ describe('the bundled sample set', () => {
     expect(crate.friction).toBe(played.variant.values.mu)
     expect(actuators[0]).toMatchObject({ bodyId: crate.id, from: 0, until: 2 })
     expect(actuators[0].force(1)[0]).toBe(played.variant.values.F)
+  })
+
+  it('lands the recorded crate\'s run in Lab Data as one new table, keeping the student\'s own', () => {
+    const q = byId('physlab-sample-pushed-crate')
+    const played = playQuestion(q, 2, SETTINGS)
+    const mine = { id: 'mine', title: 'My readings', columns: [{ id: 'c0', name: 'x', unit: 'm' }], rows: [[1]], plot: { x: 'c0', y: 'c0', fit: 'linear' as const } }
+    useLab.getState().setTables([mine])
+    showSandbox(sandboxPlan(q.sandbox!, played))
+    // Nothing has run yet: a sentence, not an empty table.
+    expect(() => sendSandboxReadings(q.sandbox!, played)).toThrow('There are no readings of Crate yet. Press Play in the Sandbox, let it run, then send them.')
+    const crate = useSandbox.getState().bodies.find((b) => b.name === 'Crate')!
+    for (let k = 0; k <= 20; k++) {
+      const t = k / 10
+      useSandbox.getState().record({ [crate.id]: { t, x: t * t, y: 0, v: 2 * t, ke: 0, pe: 0, p: 0 } })
+    }
+    const sent = sendSandboxReadings(q.sandbox!, played)
+    expect(sent.rows).toBe(21)
+    const tables = useLab.getState().tables
+    expect(tables).toHaveLength(2)
+    expect(tables[0]).toEqual(mine)
+    expect(tables[1].title).toBe(`Crate — ${played.problem.title}`)
+    expect(tables[1].rows[20][0]).toBe(2)
+    expect(useLab.getState().currentId).toBe(tables[1].id)
+    // The same run sent twice is the same table, shown again, not copied.
+    expect(sendSandboxReadings(q.sandbox!, played).note).toBe(`These readings are already in Lab Data, in "${tables[1].title}".`)
+    expect(useLab.getState().tables).toHaveLength(2)
+  })
+
+  it('checks every body name before replacing the student\'s scene, and pauses the run first', () => {
+    const q = byId('physlab-sample-pushed-crate')
+    const played = playQuestion(q, 2, SETTINGS)
+    useSandbox.getState().loadPreset('friction')
+    const before = useSandbox.getState().bodies
+    const misspelt = { ...q.sandbox!, actuators: [{ ...q.sandbox!.actuators[0], body: 'Crat' }] }
+    expect(() => showSandbox(sandboxPlan(misspelt, played))).toThrow('The experiment has no body called Crat, so PhysLab cannot push it.')
+    expect(() => showSandbox(sandboxPlan({ ...q.sandbox!, record: 'Box' }, played))).toThrow('The experiment has no body called Box, so PhysLab cannot record it.')
+    // The scene the student had is untouched: the same bodies, not a fresh copy of the preset.
+    expect(useSandbox.getState().bodies).toBe(before)
+    scene().setPlaying(true)
+    showSandbox(sandboxPlan(q.sandbox!, played))
+    expect(scene().playing).toBe(false)
   })
 })
 
@@ -610,5 +671,41 @@ describe('a letter before a bracket', () => {
       expect(checkPlayedPart(p, `t(${u} - 4.9t)`, played, SETTINGS).verdict, `seed ${seed}`).toBe('right')
       expect(checkPlayedPart(p, `t(${u} - 9.8t)`, played, SETTINGS).verdict, `seed ${seed}`).toBe('wrong')
     }
+  })
+
+  it('needs no rewrite from the player: the marker reads the product itself', () => {
+    const q = loadBundled().questions.find((x) => x.id === 'physlab-sample-thrown-ball')!
+    const played = playQuestion(q, 3, SETTINGS)
+    const p = played.parts.find((x) => x.part.type === 'expression')!
+    expect(readSource('src/renderer/src/questions/player.ts')).not.toMatch(/lettersBeforeBrackets/)
+    expect(checkPlayedPart(p, `t(${played.variant.values.u} - 4.9t)`, played, SETTINGS).verdict).toBe('right')
+  })
+})
+
+describe('the author\'s fading level', () => {
+  it('is what a question plays at until the student has answered one', () => {
+    const q = train({ steps: { ...train().steps!, level: 'half' } })
+    expect(playQuestion(q, 1, SETTINGS).level).toBe('half')
+    expect(playQuestion(q, 1, SETTINGS, 'solo').level).toBe('solo')
+    // The panel hands over no level until the student has answered a question, then moves on
+    // from the level the question was actually played at.
+    const panel = readSource('src/renderer/src/panels/Practice.tsx')
+    expect(panel).toMatch(/level: null,/)
+    expect(panel).toMatch(/session\.questionLevel \?\? undefined/)
+    expect(panel).toMatch(/nextLevel\(played\?\.level \?\? s\.level \?\? 'worked', streak\)/)
+  })
+})
+
+describe('a number part\'s tolerance', () => {
+  it('is the author\'s: 48.99 on 50 at 2 % is not right, though the rounding sentence stays', () => {
+    const q = train({ parts: [{ type: 'number', prompt: 'How far?', answer: '50', unit: 'm', tolerance: { kind: 'relative', value: 0.02 }, marks: 1 }] })
+    const played = playQuestion(q, 1, SETTINGS)
+    const p = played.parts[0]
+    expect(isCorrect(checkPlayedPart(p, '49', played, SETTINGS))).toBe(true)
+    const c = checkPlayedPart(p, '48.99', played, SETTINGS)
+    expect(isCorrect(c)).toBe(false)
+    expect(c).toMatchObject({ verdict: 'wrong', message: 'Right method — just rounded a little early. Keep four digits until the last line.' })
+    // A Numbas min/max range is not widened fourfold either.
+    expect(isCorrect(checkPlayedPart(p, '47', played, SETTINGS))).toBe(false)
   })
 })

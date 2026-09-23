@@ -16,10 +16,10 @@ import {
   nextLevel,
   readSolverArg,
   stepsToWorking,
-  texQuantity,
   texText,
   type StepMove
 } from '../src/renderer/src/questions/steps'
+import { texQuantity } from '../src/renderer/src/questions/units'
 import { drawVariables } from '../src/renderer/src/questions/variables'
 import { resetGlobals } from './helpers/globals'
 
@@ -244,6 +244,27 @@ describe('stepsToWorking', () => {
     expect(w.moves.some((m) => m.tex?.includes('10^{-19}') || m.tex?.includes('10^{-15}'))).toBe(true)
   })
 
+  it('hands a vector solver the drawn values themselves, not their rounded text', () => {
+    // F = 10.1249 N shows as 10.12 at 2 dp; handed over as that text, its x-component came out
+    // 8.76 while the part's own answer, from the real F, is 8.77.
+    const q: PQQuestion = {
+      ...TRAIN,
+      variables: [
+        { name: 'F', def: { kind: 'list', items: [10.1249] }, unit: 'N' },
+        { name: 'th', def: { kind: 'list', items: [30] }, unit: '°' }
+      ],
+      parts: [{ type: 'number', prompt: 'Fx?', answer: 'F * cos(th)', unit: 'N', tolerance: { kind: 'relative', value: 0.001 }, marks: 1 }],
+      steps: { level: 'worked', items: [{ head: '', auto: { engine: 'vectors', solver: 'solveComponents', args: ['F', '{F}', '{th}', 'N'] } }] }
+    }
+    const at2: MeasureSettings = { ...SETTINGS, decimals: 2 }
+    const w = stepsToWorking(q, drawVariables(q, 1), at2)
+    rendersAll(w, 'exact solver inputs')
+    expect(w.answers[0].tex).toBe('8.77\\,\\mathrm{N}')
+    const all = w.moves.map((m) => m.tex ?? '').join('\n')
+    expect(all).toContain('8.77')
+    expect(all).not.toContain('8.76')
+  })
+
   it('reads a Numbas question through the importer and shows its steps: the boundary the bank crosses', () => {
     const exam = JSON.stringify({
       name: 'x',
@@ -332,5 +353,22 @@ describe('fading', () => {
       path.push(level)
     }
     expect(path).toEqual(['worked', 'half', 'half', 'solo', 'half', 'half', 'solo'])
+  })
+})
+
+describe('words with maths in them', () => {
+  it('speaks the inline maths of a heading, a note and an answer\'s label, as a prompt\'s is', () => {
+    const q: PQQuestion = {
+      ...TRAIN,
+      parts: [{ ...TRAIN.parts[0], prompt: 'Find \\(v_{\\mathrm{end}}\\) after {t}.' }],
+      steps: { level: 'worked', items: [{ head: 'Use \\(v_{0} = {u}\\).', note: 'Then \\(a = {a}\\).', tex: 'v = {vend}' }] }
+    }
+    const variant = drawVariables(q, 2)
+    const w = stepsToWorking(q, variant, SETTINGS)
+    for (const text of [w.moves[0].head, w.moves[0].note!, w.answers[0].label]) {
+      expect(text).not.toMatch(/\\\(|\\\)|\\mathrm|[{}]/)
+    }
+    expect(w.moves[0].head).toContain(`${variant.values.u}`)
+    expect(w.moves[0].head.startsWith('Use v')).toBe(true)
   })
 })

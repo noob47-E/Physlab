@@ -20,7 +20,7 @@ export interface Check {
 }
 
 /** Units a student is likely to type after the number; they are not part of the value. */
-const UNIT_TAIL = /(?<=[\d)\s])\s*(°|N\s*[·⋅]?\s*m|m\s*\/\s*s\s*\^?\s*2|m\s*\/\s*s|N|J|W|kg|m|s|rad|deg|degrees?|units?)\s*$/i
+export const UNIT_TAIL = /(?<=[\d)\s])\s*(°|N\s*[·⋅]?\s*m|m\s*\/\s*s\s*\^?\s*2|m\s*\/\s*s|N|J|W|kg|m|s|rad|deg|degrees?|units?)\s*$/i
 
 /** Reads "12.5", "5*sqrt(2)", "−3.4 N" or "37°" as a number. Returns null if it makes no sense. */
 export function parseAnswer(text: string): number | null {

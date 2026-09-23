@@ -4,11 +4,13 @@ import { openFailureText, saveFailureText } from '../core/fileErrors'
 
 type Bridge = {
   isDesktop: boolean
-  openFile: () => Promise<{ path: string; content: string } | null>
+  openFile: (filters?: { name: string; extensions: string[] }[], title?: string) => Promise<{ path: string; content: string } | null>
   saveFile: (content: string, path: string | null) => Promise<string | null>
 }
 
 const bridge = (window as unknown as { physlab?: Bridge }).physlab
+
+const QUESTION_FILE_FILTERS = [{ name: 'Question file', extensions: ['pqjson', 'exam'] }]
 
 export async function openProject() {
   if (scene().dirty && !confirm('Discard unsaved changes?')) return
@@ -37,7 +39,9 @@ export async function openProject() {
  */
 export async function openQuestionFile(): Promise<{ name: string; content: string } | null> {
   if (bridge) {
-    const r = await bridge.openFile()
+    // Its own filters: with none the dialog is the .phys project one, and a .pqjson or .exam
+    // could not even be seen in it.
+    const r = await bridge.openFile(QUESTION_FILE_FILTERS, 'Open a question file')
     return r ? { name: r.path, content: r.content } : null
   }
   return new Promise((resolve) => {

@@ -7,9 +7,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { inDegrees, math } from '../src/renderer/src/math/expr'
 import { resetGlobals } from './helpers/globals'
-import { JmeRefusal, fromExam, jmeToMath, jmeToVariableDef, mathToJme, toExam, unitInPrompt } from '../src/renderer/src/questions/numbas'
+import { JmeRefusal, fromExam, jmeToMath, jmeToVariableDef, mathToJme, toExam } from '../src/renderer/src/questions/numbas'
+import { unitInPrompt } from '../src/renderer/src/questions/units'
 import { parsePQFile, serializePQFile, type PQFile, type PQQuestion } from '../src/renderer/src/questions/pqjson'
 import { drawVariables, substitute } from '../src/renderer/src/questions/variables'
+import { loadBundled } from '../src/renderer/src/questions/bank'
+import { substituteTex } from '../src/renderer/src/questions/steps'
 
 beforeEach(resetGlobals)
 
@@ -108,7 +111,7 @@ describe('JME → mathjs', () => {
       ['[1, 2, 3]', 'a list'],
       ['a xor b', 'the word xor'],
       ['5!', 'a factorial'],
-      ['random(1..n)', 'a random range whose ends are not plain numbers'],
+      ['random(1..n except 0)', 'a random range whose ends are not plain numbers, with except'],
       ['random(1..5) * 2', 'random inside a formula'],
       ['random(x, y)', 'a random choice from things that are not numbers'],
       ['infinity', 'infinity'],
@@ -431,7 +434,7 @@ describe('fromExam', () => {
       [{ parts: [{ type: 'patternmatch', marks: 1, prompt: '<p>M</p>' }] }, 'uses a patternmatch part PhysLab does not read'],
       [{ parts: [{ type: 'extension', marks: 1, prompt: '<p>M</p>' }] }, 'uses a extension part PhysLab does not read'],
       [{ variables: { a: v('a', 'map(x^2, x, 1..3)') } }, 'variable a uses the function map, which PhysLab does not know'],
-      [{ variables: { a: v('a', 'random(1..n)'), n: v('n', '5') } }, 'variable a uses a random range whose ends are not plain numbers, which PhysLab does not know'],
+      [{ variables: { a: v('a', 'random(1..n except 2)'), n: v('n', '5') } }, 'variable a uses a random range whose ends are not plain numbers, with except, which PhysLab does not know'],
       [{ statement: '<p>See <img src="a.png"> the picture.</p>' }, 'has a picture or table PhysLab cannot show'],
       [{ statement: '<table><tr><td>1</td></tr></table>' }, 'has a picture or table PhysLab cannot show'],
       [{ rulesets: { std: ['all'] } }, 'uses Numbas scripting'],
@@ -765,5 +768,60 @@ describe('toExam', () => {
     // A one-value list comes home as itself, and the author's degree-convention sin still gives 5.
     expect(variant.values.th).toBe(30)
     expect(variant.values.h).toBeCloseTo(5, 12)
+  })
+})
+
+describe('ranges whose ends are other variables', () => {
+  it('import as randomRange, which variables.ts draws, and go back out as JME\'s own range', () => {
+    expect(jmeToVariableDef('random(a..b)')).toEqual({ kind: 'expr', expr: 'randomRange(a, b)' })
+    expect(jmeToVariableDef('random(v1 + 1..v1 + 5#2)')).toEqual({ kind: 'expr', expr: 'randomRange(v1 + 1, v1 + 5, 2)' })
+    expect(mathToJme('randomRange(a, b)')).toBe('random(a..b)')
+    expect(mathToJme('randomRange(v1 + 1, v1 + 5, 2)')).toBe('random((v1 + 1)..(v1 + 5)#2)')
+    expect(jmeToVariableDef(mathToJme('randomRange(v1 + 1, v1 + 5, 2)'))).toEqual({ kind: 'expr', expr: 'randomRange(v1 + 1, v1 + 5, 2)' })
+  })
+
+  it('bring a question in whose second speed must beat the first, with numbers that draw', () => {
+    const text = exam([
+      question({
+        statement: '<p>A car at {v1} m/s is overtaken by one at {v2} m/s.</p>',
+        variables: { v1: v('v1', 'random(10..20)'), v2: v('v2', 'random(v1 + 1..v1 + 5)') },
+        ungrouped_variables: ['v1', 'v2'],
+        parts: [{ type: 'numberentry', marks: 1, prompt: '<p>How much faster, in m/s?</p>', minValue: 'v2 - v1', maxValue: 'v2 - v1' }]
+      })
+    ])
+    const { file, report } = fromExam(text)
+    expect(report).toEqual([])
+    const q = parsePQFile(serializePQFile(file)).questions[0]
+    for (let seed = 1; seed <= 20; seed++) {
+      const { values, problems } = drawVariables(q, seed)
+      expect(problems, `seed ${seed}`).toEqual([])
+      expect(values.v2 - values.v1, `seed ${seed}`).toBeGreaterThanOrEqual(1)
+      expect(values.v2 - values.v1, `seed ${seed}`).toBeLessThanOrEqual(5)
+    }
+  })
+})
+
+describe('a command\'s argument in LaTeX', () => {
+  it('is LaTeX, not a chip, so the bundled braking train goes to .exam and comes back whole', () => {
+    const bundled = loadBundled()
+    const train = bundled.questions.find((x) => x.id === 'physlab-sample-braking-train')!
+    const text = toExam({ ...bundled, questions: [train] })
+    // The file is JSON, so each backslash of \mathrm\var is written twice.
+    expect(text).not.toContain('\\\\mathrm\\\\var')
+    expect(text).toContain('\\\\mathrm{avg}')
+    const { file, report } = fromExam(text)
+    expect(report).toEqual([])
+    const back = file.questions[0]
+    // A display line comes back trimmed inside its $$; nothing else about it changes.
+    const trimmed = (s: string): string => s.replace(/\$\$([\s\S]*?)\$\$/g, (_m, tex: string) => `$$${tex.trim()}$$`)
+    expect(back.statement).toBe(trimmed(train.statement))
+    expect(back.steps?.items.map((s) => s.tex)).toEqual(train.steps!.items.map((s) => s.tex))
+    const variant = drawVariables(parsePQFile(serializePQFile(file)).questions[0], 4)
+    expect(variant.problems).toEqual([])
+  })
+
+  it('stays LaTeX in PhysLab too, even when a variable has that name', () => {
+    const tex = substituteTex('v_{\\mathrm{v}} = {v}', { v: 12 }, { v: 'm/s' }, { decimals: 2, precisionMode: 'dp', unit: 'm', unitPerSquare: 1, angleUnit: 'deg' })
+    expect(tex).toBe('v_{\\mathrm{v}} = 12\\,\\mathrm{m/s}')
   })
 })
