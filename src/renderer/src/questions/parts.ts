@@ -23,7 +23,7 @@ export function evaluateInVariables(expr: string, values: Record<string, number>
   return Number(inDegrees(() => math.evaluate(preprocess(expr), { ...values })))
 }
 
-function toAbsoluteTol(part: NumberPart, value: number): number {
+export function toAbsoluteTol(part: NumberPart, value: number): number {
   return part.tolerance.kind === 'relative' ? Math.abs(value) * part.tolerance.value : part.tolerance.value
 }
 

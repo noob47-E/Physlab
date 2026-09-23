@@ -98,7 +98,7 @@ const CHIP = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
  * `-3 \times 2` as a subtraction, and when a unit sits under a power or a subscript, so
  * `{t}^2` with t = 5 s reads (5 s)² and not 5 s².
  */
-function substituteTex(tex: string, values: Record<string, number>, units: Record<string, UnitId | undefined>, s: MeasureSettings): string {
+export function substituteTex(tex: string, values: Record<string, number>, units: Record<string, UnitId | undefined>, s: MeasureSettings): string {
   return tex.replace(CHIP, (chip, name: string, at: number) => {
     const v = values[name]
     if (v === undefined || Number.isNaN(v)) return chip

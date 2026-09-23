@@ -22,7 +22,7 @@ const SENTENCE_PRECISION: Precision = { decimals: 4, precisionMode: 'dp' }
  * is not a dependency on another variable, and not an unknown name either.
  */
 function isBuiltIn(name: string): boolean {
-  if (RESERVED_NAMES.has(name)) return true
+  if (RESERVED_NAMES.has(name) || name === RANDOM_RANGE) return true
   const t = math.typeOf((math as unknown as Record<string, unknown>)[name])
   return t === 'number' || t === 'Complex' || t === 'boolean'
 }
@@ -128,6 +128,24 @@ const tidy = (v: number): number => Number(v.toPrecision(12))
 
 const near = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b))
 
+/** How many values from..to in steps of step holds; the small addition keeps (0.3 − 0)/0.1 = 2.9999999999999996 from losing the last one. */
+const countOf = (from: number, to: number, step: number): number => Math.max(1, Math.floor((to - from) / step + 1e-9) + 1)
+
+/** The name a formula calls to draw from a range whose ends are other variables. */
+export const RANDOM_RANGE = 'randomRange'
+
+/**
+ * One value from a..b in steps of `step`, drawn from the question's own stream `r`. A range
+ * variable's ends are three numbers typed into three boxes; a Numbas `random(a..b)` whose ends are
+ * other variables (a second speed that must beat the first, say) needs its ends worked out first,
+ * so it is written as the formula `randomRange(a, b, step)` and drawn here. Returns null when the
+ * ends cannot be drawn from — a step of 0, or a above b — and the caller says so in words.
+ */
+export function randomRange(r: () => number, a: number, b: number, step = 1): number | null {
+  if (![a, b, step].every(Number.isFinite) || step <= 0 || a > b) return null
+  return tidy(a + Math.floor(r() * countOf(a, b, step)) * step)
+}
+
 /**
  * One concrete set of values for the question. The same seed always gives the same values:
  * one `rngFor(seed)` stream, consumed in the topological order (not the author's order, so
@@ -160,8 +178,7 @@ export function drawVariables(q: PQQuestion, seed: number): Variant {
         values[name] = NaN
         continue
       }
-      // The small addition keeps (0.3 − 0)/0.1 = 2.9999999999999996 from losing the last value.
-      const count = Math.max(1, Math.floor((def.to - def.from) / def.step + 1e-9) + 1)
+      const count = countOf(def.from, def.to, def.step)
       const excluded = def.exclude ?? []
       let value = tidy(def.from)
       let avoided = false
@@ -183,15 +200,32 @@ export function drawVariables(q: PQQuestion, seed: number): Variant {
       }
     } else {
       let result: number
+      // A draw inside the formula takes the next number from the same stream as every range, so
+      // the variant is still fixed by the seed alone.
+      let badRange: string | null = null
+      const drawRange = (a: number, b: number, step = 1): number => {
+        const v = randomRange(r, Number(a), Number(b), Number(step))
+        if (v === null) {
+          const f = (x: number): string => fmtPrecise(Number(x), SENTENCE_PRECISION)
+          badRange = `${name} is drawn from ${f(a)} to ${f(b)} in steps of ${f(step)}, which PhysLab cannot draw from.`
+          return NaN
+        }
+        return v
+      }
       try {
         // Always in degrees: a question's numbers must not change because the student last left
         // the calculator in radians (the same rule checkAnswer.ts keeps for a typed answer).
         // `preprocess` reads the formula the way the calculator does, so u², √u, θ and the proper
         // minus the app writes everywhere mean what the author meant. A copy of the scope: mathjs
         // may write into the scope it is given, and the drawn values are not its to change.
-        result = Number(inDegrees(() => math.evaluate(preprocess(def.expr), { ...values })))
+        result = Number(inDegrees(() => math.evaluate(preprocess(def.expr), { ...values, [RANDOM_RANGE]: drawRange })))
       } catch {
         problems.push(`PhysLab could not read the formula for ${name}.`)
+        values[name] = NaN
+        continue
+      }
+      if (badRange !== null) {
+        problems.push(badRange)
         values[name] = NaN
         continue
       }

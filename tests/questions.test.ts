@@ -21,6 +21,7 @@ import {
   drawVariables,
   orderVariables,
   previewVariants,
+  randomRange,
   substitute,
   unknownSentence
 } from '../src/renderer/src/questions/variables'
@@ -366,6 +367,45 @@ describe('drawVariables', () => {
     const unk = drawVariables(question([expr('c', 'q + 1')]), 1)
     expect(unk.values).toEqual({})
     expect(unk.problems).toEqual(['c uses q, but there is no variable called q.'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// randomRange: a draw whose ends are other variables
+// ---------------------------------------------------------------------------
+
+describe('randomRange', () => {
+  // Numbas writes random(a..b) with variable ends (a second speed that must beat the first); a
+  // PhysLab range is three typed numbers, so such a draw is the formula randomRange(a, b, step).
+  it('draws between variable ends, from the same seeded stream, and orders after its ends', () => {
+    const q = question([expr('v2', 'randomRange(v1 + 1, v1 + 5, 1)'), range('v1', 2, 8)])
+    const order = orderVariables(q.variables)
+    expect(order).toEqual({ order: ['v1', 'v2'] })
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 400; seed++) {
+      const { values, problems } = drawVariables(q, seed)
+      expect(problems).toEqual([])
+      const gap = values.v2 - values.v1
+      expect(gap).toBeGreaterThanOrEqual(1)
+      expect(gap).toBeLessThanOrEqual(5)
+      expect(Number.isInteger(gap)).toBe(true)
+      seen.add(gap)
+      // Same seed, same numbers: the draw inside the formula is not Math.random.
+      expect(drawVariables(q, seed).values).toEqual(values)
+    }
+    expect([...seen].sort()).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it('steps in decimals without drift, and says in words when the ends cannot be drawn from', () => {
+    const r = () => 0.99999
+    expect(randomRange(r, 0, 0.3, 0.1)).toBe(0.3)
+    expect(randomRange(() => 0, 2, 2, 1)).toBe(2)
+    expect(randomRange(r, 5, 1, 1)).toBeNull()
+    expect(randomRange(r, 0, 1, 0)).toBeNull()
+    const q = question([range('a', 5, 5), expr('b', 'randomRange(a, 1)')])
+    const { values, problems } = drawVariables(q, 3)
+    expect(Number.isNaN(values.b)).toBe(true)
+    expect(problems).toEqual(['b is drawn from 5 to 1 in steps of 1, which PhysLab cannot draw from.'])
   })
 })
 

@@ -29,6 +29,31 @@ export async function openProject() {
   input.click()
 }
 
+/**
+ * Picks a question file — a PhysLab `.pqjson` or a Numbas `.exam` — and hands back its name and
+ * text for the Practice panel to read; the open scene is never touched, so nothing unsaved is at
+ * risk and there is nothing to confirm. Same two branches as openProject: the desktop bridge, or a
+ * file input in the browser build. Null when the student cancels.
+ */
+export async function openQuestionFile(): Promise<{ name: string; content: string } | null> {
+  if (bridge) {
+    const r = await bridge.openFile()
+    return r ? { name: r.path, content: r.content } : null
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pqjson,.exam,application/json'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      resolve(f ? { name: f.name, content: await f.text() } : null)
+    }
+    // A cancelled picker fires no change in every browser; `cancel` is the one that says so.
+    input.addEventListener('cancel', () => resolve(null))
+    input.click()
+  })
+}
+
 function load(content: string, path: string) {
   try {
     // parseSceneFile says in a sentence what is wrong with a half-copied or foreign file; parsing

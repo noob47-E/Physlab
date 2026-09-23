@@ -1,7 +1,7 @@
 // The grid used to be built from a canvas that had no size yet: zero-length lines, cached as done,
 // leaving the viewport black on the first open until something else asked for a new frame.
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import {
   circleSegments,
   clipLine,
@@ -298,10 +298,19 @@ describe('the step a point snaps to', () => {
 })
 
 describe('the axes switch', () => {
+  // The scene store drags in the whole app's module graph (sandbox, lab, evaluator). Importing it
+  // inside the test body counted that cold import — 1.5 s alone, several times that with every
+  // other file importing at once — against the test's own 5 s timeout, which is how the case
+  // failed once under the full suite and never alone. The import is set-up, so it happens here
+  // with a set-up's time allowance, and the test times only the switch itself.
+  let useScene: typeof import('../src/renderer/src/core/store').useScene
+  beforeAll(async () => {
+    ;({ useScene } = await import('../src/renderer/src/core/store'))
+  }, 60_000)
+
   // `showAxes` was drawn correctly from the start but reachable only as a View menu row; a
   // student looking at the grid picker, the right-click menu or the search box never found it.
-  it('round-trips through setSettings and starts on', async () => {
-    const { useScene } = await import('../src/renderer/src/core/store')
+  it('round-trips through setSettings and starts on', () => {
     const scene = () => useScene.getState()
     scene().newScene()
     expect(scene().settings.showAxes).toBe(true)
