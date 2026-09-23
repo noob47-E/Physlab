@@ -30,11 +30,11 @@ can be taken away from it later.
 | | |
 | --- | --- |
 | First work | 2026-09-14 |
-| Current version | 0.6.1 (2026-09-22) |
-| Releases built | 17 |
-| Commits | 133 |
-| Source | 36,462 lines of TypeScript/TSX across 194 files, plus 1,562 lines of CSS |
-| Tests | 1200, across 51 files, all pure logic with no browser |
+| Current version | 0.7.0 (2026-09-23) |
+| Releases built | 18 |
+| Commits | 146 |
+| Source | 43,596 lines of TypeScript/TSX across 208 files, plus 1,566 lines of CSS |
+| Tests | 1492, across 60 files, all pure logic with no browser |
 | Modes | 16 defined, 8 working, 8 reserved for later |
 | Dock panels | 15 |
 | Licence | GPL-3.0 |
@@ -776,6 +776,77 @@ across all four themes.
 - One pre-existing flaky test: `tests/maths.test.ts` "loads the maths panels lazily…" timed out
   once under machine contention during this work; it passes in isolation and passed on every merge
   run.
+
+### 0.7.0 — 2026-09-23
+
+Three tracks — Geometry Lego, grid patterns, and a question engine with Numbas import/export — plus
+a review pass on each.
+
+- **Geometry Lego.** A rectangle, square or triangle can be broken apart along a diagonal or a
+  median into rigid pieces that turn, flip and snap to a neighbour's corner or side the moment they
+  come within 12 px, letting go on a grid line rather than at a stray float. A selected piece
+  carries its own Turn/Flip handle on the drawing (press or Enter turns 15°, drag round turns in
+  15° steps, tap Flip), placed below the piece when there is no room above. Pieces that make a new
+  outline wait for **Fuse** rather than joining themselves; a fused shape keeps the theme's own
+  new-shape colour, is drawn whole, and still fuses back with the rest of a partial fuse without
+  claiming a "same area" it can no longer prove. A piece is measured by its own numbered sides,
+  never a name built by gluing two ids together. Turn, Flip, Break apart and Fuse are all in the
+  search palette, and a Lego line echoed in the Console no longer poses as something a student
+  could have typed. The `.phys` file format moves to version 3, with a lego record per piece
+  (`math/lego.ts`); a hand-edited file with a damaged record opens safely rather than crashing.
+- **Three grid patterns.** Besides the plain square grid, the viewport can draw **polar** rings
+  (labelled in radians or degrees), **isometric** or **hexagonal** paper, and snapping follows
+  whichever pattern is showing — a shape sketched on isometric, hex or polar paper snaps to that
+  grid's own points, not to x/y squares. A `.phys` file naming a grid style this build does not
+  know falls back to plain lines instead of refusing to open.
+- **A question engine, and Problem Sets learns to play question sets.** A headless PQJSON reader
+  (`questions/pqjson.ts`) with ordered random variables, plain-sentence refusals for a malformed
+  question, and a licence gate that keeps a question set's content inside the pool its licence
+  allows. Marking (`questions/units.ts`, `distractors.ts`) reuses the calculator's own answer
+  checker for number, expression and choice answers: units are read even when typed into the wrong
+  box and refused in words when the unit itself is wrong ("9.8 m/s^2" in a length box), an
+  expression is compared relative to its larger side so a factor of two is wrong however small the
+  constants involved, a wrong trig identity such as 2 sin x for sin 2x is marked wrong rather than
+  "right up to rounding", and generated wrong-but-plausible choices can never repeat the same text.
+  Worked steps (`questions/steps.ts`) fill in with the student's own numbers, fade as the student
+  gets better, starting at the level its author chose, and can hand a line to the maths or vector
+  engines rather than writing their own arithmetic. A question's picture can draw a curve in
+  pieces (reading as one line through every join), shade the region between two curves and write
+  its area, or draw a tangent at a point and write its slope — in the student's own precision,
+  never as raw digits — without ever giving the area or slope away before the question is answered:
+  "Show the picture" redraws only what the student has earned, each question's own picture replaces
+  the last one's, and the camera comes to it ("Fit everything in view" now reaches a shaded region
+  or an x–t graph too). A question can push a Sandbox body with a force written in t — an engine
+  that cuts out after a second, a thrust that grows with time — showing in the Sandbox panel with a
+  Remove button and as a force arrow while it acts, loading its named experiment fresh each time
+  (`loadPreset` mints new body ids on every load; the question's pushes are resolved against those
+  fresh bodies by name, never a stale id) and refusing in one sentence if the question names a body
+  the experiment does not have. The pushed-crate question sends its recorded run to Lab Data as a
+  new table. A student's teacher can bring a Numbas `.exam` question set in and take a PhysLab set
+  back out (`questions/numbas.ts`): every question outside the licence pool or the readable subset
+  is refused in one plain sentence rather than silently dropped, trig keeps its meaning crossing
+  either direction, a small value such as 0.0024 A reads 2.4×10⁻³ A the same way in the question as
+  in the answer, and the braking-train question — and any Numbas range whose ends are other
+  variables — now round-trips to `.exam` and back. A teacher's Open dialog in the desktop app shows
+  `.pqjson` and `.exam` files alongside `.phys`.
+- **Review fixes across all three tracks**, folded into the work above rather than kept as a
+  separate pass: a steep-but-finite region such as eˣ on [0, 20] gets its actual area instead of
+  "runs off to infinity"; the tangent to sin x at x = 1000 shows the right slope; deleting a shaded
+  region or a tangent takes its "area =" or "slope =" label with it; "h = 17t − 4.9t²" is marked as
+  the formula it is rather than misread; step headings and the revealed answer speak their maths in
+  words instead of showing raw `\( \)`; and the picture note reads `y = 3x²`, not `3 * x ^ 2`.
+
+`npm test`: 60 files, 1492 tests passed (baseline going into this phase set was 51 files / 1200).
+`npm run typecheck`: clean. `npm run lint`: 0 errors, 26 warnings, none of them new.
+
+**Still open**, honestly:
+- Motion question's Lab Data table ends on the part-2 answer (87 m) — left as designed. This was
+  only the "smaller case" inside the must finding. The table is the readings the question itself
+  asks for (`sampleEvery`), and the x–t graph drawn next to it ends at the same 87 m, so hiding the
+  last row would only hide something the graph still shows. It would also make the readings wrong.
+  The area and slope, which really did give the answer away, are now held back.
+
+0.7.1 authoring mode, 0.7.2 step generators, 0.7.3 grid shader and bundled content come next.
 
 ## What is in it today
 

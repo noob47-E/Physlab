@@ -277,11 +277,36 @@ neighbour is open.
 - **A convex-hull ramp's bottom edge sits exactly at floor level unless it is buried.** That edge
   is a real collision feature a rolling ball can catch on; sinking the ramp a few centimetres into
   the floor keeps a ball rolling off the bottom smoothly instead of catching on the seam.
+- **`.phys` `FILE_VERSION` is 3, for the Lego record per piece added in 0.7.0** (`core/migrate.ts`).
+  The rule from earlier versions still holds: bump `FILE_VERSION` when the file's shape changes and
+  add exactly one migrate step for that bump, stepping the format up one version at a time rather
+  than jumping straight to the latest shape — `parseSceneFile` is the only place that decides
+  whether a file is old, and every step it walks must leave a file the next step can still read.
+- **`loadPreset` mints fresh body ids on every load**, so anything that names a body from a preset
+  — a question's pushes, a recorded-body pick — has to resolve that name against the bodies the
+  load just built, never against an id captured earlier. `questions/player.ts`'s `showSandbox`
+  checks every named body exists in what the preset is about to build *before* the student's own
+  scene is replaced, so a misspelt body name refuses in one sentence instead of leaving the
+  student's Sandbox swapped for the experiment with no push on it.
+- **An actuator's on/off window is judged at the middle of the step, not its start.** The sim clock
+  is a running sum of 1/60, so at a nominal 2 s it can read 1.9999999999999978; judging a window
+  "1 s to 2 s" against that raw reading acted for one extra step while the next window lost one —
+  a question saying 3 N for one second read 3.05 m/s in the panel. `activeActuators` in
+  `sim/world.ts` adds half a step to the clock first, which is as far from either edge as the
+  rounding can ever drift.
+- **A worktree's `node_modules` is a junction to the main checkout's `node_modules`.** Never
+  `rm -rf` a worktree folder that contains it — that deletes the real `node_modules` through the
+  junction. Remove the junction on its own first (`rm <dir>/node_modules`, no `-r`), then remove
+  the folder, or use `git worktree remove --force`, which leaves the junction's target alone.
+- **A 44 px touch target needs `min-h-[44px]` (and `min-w-[44px]` for a square one), not
+  `min-h-11`.** The root font here is 13 px, so Tailwind's `h-11`/`min-h-11` (2.75rem against a
+  16 px root) comes out under 36 px in this app — short of the 44 px a touch target needs — and the
+  arbitrary-value class is the one that actually measures 44 px regardless of the root size.
 
 ## How to check your work
 
 ```bash
-npm test          # vitest, 1200 tests in 51 files, pure logic, no DOM
+npm test          # vitest, 1492 tests in 60 files, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run lint      # eslint, 0 errors; a suppression carries its reason after `--`
 npm run dev       # Electron with hot reload
