@@ -261,3 +261,184 @@ export function turbo(t: number): [number, number, number] {
   const b = 0.1067 + t * (12.5925 - t * (60.1097 - t * (109.0745 - t * (88.5066 - t * 26.8183))))
   return [Math.max(0, Math.min(1, r)), Math.max(0, Math.min(1, g)), Math.max(0, Math.min(1, b))]
 }
+
+// ---------------------------------------------------------------------------
+// Question pictures: a curve in pieces, the region between two curves, a tangent's slope
+// ---------------------------------------------------------------------------
+
+/** One formula of a piecewise curve and the stretch of x it holds on. */
+export interface Piece {
+  f: Fx
+  from: number
+  to: number
+}
+
+/**
+ * Samples a curve made of several formulas, each on its own stretch of x, `n` samples per piece.
+ * Pieces that meet — the end of one is the start of the next, at the same height — are joined
+ * into a single polyline with the shared point kept once, so the fat line runs through the join
+ * with no cap, gap or zero-length segment where the two formulas hand over. A jump between two
+ * pieces is a real break and stays one. Pieces are taken in order of x whatever order they came in.
+ */
+export function samplePiecewise(pieces: Piece[], n: number, viewH = Infinity): V3[][] {
+  const ordered = pieces
+    .map((p) => ({ f: p.f, from: Math.min(p.from, p.to), to: Math.max(p.from, p.to) }))
+    .filter((p) => Number.isFinite(p.from) && Number.isFinite(p.to) && p.to > p.from)
+    .sort((a, b) => a.from - b.from)
+  const out: V3[][] = []
+  for (const p of ordered) {
+    const polys = sampleExplicit(p.f, p.from, p.to, Math.max(2, n), viewH)
+    for (const poly of polys) {
+      const last = out[out.length - 1]
+      const end = last?.[last.length - 1]
+      const start = poly[0]
+      if (end && meets(end, start)) last.push(...poly.slice(1))
+      else out.push(poly)
+    }
+  }
+  return out
+}
+
+/** Whether two sample points are the same point of the plane, allowing for the rounding in `xMin + i·dx`. */
+function meets(a: V3, b: V3): boolean {
+  const scale = Math.max(1, Math.abs(a[0]), Math.abs(a[1]))
+  return Math.abs(a[0] - b[0]) <= 1e-9 * scale && Math.abs(a[1] - b[1]) <= 1e-6 * scale
+}
+
+/**
+ * The region between y = upper(x) and y = lower(x) for x in [a, b], as triangle positions to fill
+ * and the polylines that outline it (the two curves over [a, b] and the vertical edges that close
+ * the ends). Where the curves cross inside a column the column is split at the crossing, so the
+ * fill has no bow-tie: a quad drawn straight across a crossing paints two triangles that meet at a
+ * point and misses the region on either side of it. A column where either curve has no value is
+ * left empty rather than pinned to y = 0.
+ */
+export function betweenMesh(upper: Fx, lower: Fx, a: number, b: number, n: number, viewH = Infinity): { fill: Float32Array; outline: V3[][] } {
+  const x0 = Math.min(a, b)
+  const x1 = Math.max(a, b)
+  const steps = Math.max(1, n)
+  const dx = (x1 - x0) / steps
+  const tris: number[] = []
+  const us: number[] = []
+  const ls: number[] = []
+  for (let i = 0; i <= steps; i++) {
+    const x = i === steps ? x1 : x0 + i * dx
+    us.push(upper(x))
+    ls.push(lower(x))
+  }
+  // Each curve's outline breaks where it has no value and where it jumps by more than the view
+  // (an asymptote), the way the curve itself is drawn: 1/x must not be joined straight through
+  // the origin.
+  const trace = (ys: number[]): V3[][] => {
+    const polys: V3[][] = []
+    let cur: V3[] = []
+    for (let i = 0; i <= steps; i++) {
+      const x = i === steps ? x1 : x0 + i * dx
+      const y = ys[i]
+      const prev = cur.length ? cur[cur.length - 1][1] : NaN
+      if (!Number.isFinite(y) || (Number.isFinite(prev) && Math.abs(y - prev) > viewH * 1.5)) {
+        if (cur.length > 1) polys.push(cur)
+        cur = []
+      }
+      if (Number.isFinite(y)) cur.push([x, y, 0])
+    }
+    if (cur.length > 1) polys.push(cur)
+    return polys
+  }
+  for (let i = 0; i < steps; i++) {
+    const xa = i === 0 ? x0 : x0 + i * dx
+    const xb = i + 1 === steps ? x1 : x0 + (i + 1) * dx
+    const [ua, la, ub, lb] = [us[i], ls[i], us[i + 1], ls[i + 1]]
+    if (![ua, la, ub, lb].every(Number.isFinite)) continue
+    const da = ua - la
+    const db = ub - lb
+    if (da * db < 0) {
+      const t = da / (da - db)
+      const xc = xa + t * (xb - xa)
+      const yc = la + t * (lb - la)
+      tris.push(xa, la, 0, xc, yc, 0, xa, ua, 0)
+      tris.push(xc, yc, 0, xb, lb, 0, xb, ub, 0)
+    } else {
+      tris.push(xa, la, 0, xb, lb, 0, xb, ub, 0)
+      tris.push(xa, la, 0, xb, ub, 0, xa, ua, 0)
+    }
+  }
+  const outline: V3[][] = [...trace(us), ...trace(ls)]
+  const edge = (i: number, x: number) => {
+    if (Number.isFinite(us[i]) && Number.isFinite(ls[i]) && us[i] !== ls[i]) outline.push([[x, ls[i], 0], [x, us[i], 0]])
+  }
+  edge(0, x0)
+  edge(steps, x1)
+  return { fill: new Float32Array(tris), outline }
+}
+
+/**
+ * The area between y = upper(x) and y = lower(x) for x in [a, b]: the integral of |upper − lower|,
+ * so the answer is the size of the shaded region whichever curve is on top, and a pair of curves
+ * that swap over part way still gives the whole region, not the difference of two parts. Simpson's
+ * rule over `n` columns, with a column the curves cross inside split at the crossing so the kink
+ * in |upper − lower| does not sit inside a parabola. A column where a curve has no value (√x left
+ * of 0) is left out, since there is no region there; but a column where the gap between the curves
+ * is infinite or beyond any drawing (1/x at 0) makes the whole area NaN, because the integral
+ * diverges and a number for it would be a lie.
+ */
+export function betweenArea(upper: Fx, lower: Fx, a: number, b: number, n = 2000): number {
+  const x0 = Math.min(a, b)
+  const x1 = Math.max(a, b)
+  const steps = Math.max(1, n)
+  const dx = (x1 - x0) / steps
+  const d = (x: number) => upper(x) - lower(x)
+  const simpson = (p: number, q: number, dp: number, dq: number) => {
+    const m = d((p + q) / 2)
+    return ((q - p) / 6) * (Math.abs(dp) + 4 * Math.abs(m) + Math.abs(dq))
+  }
+  const diverges = (v: number) => !Number.isNaN(v) && (!Number.isFinite(v) || Math.abs(v) > 1e7)
+  let area = 0
+  let dPrev = d(x0)
+  for (let i = 0; i < steps; i++) {
+    const xa = i === 0 ? x0 : x0 + i * dx
+    const xb = i + 1 === steps ? x1 : x0 + (i + 1) * dx
+    const dNext = d(xb)
+    if (diverges(dPrev) || diverges(dNext)) return NaN
+    if (Number.isFinite(dPrev) && Number.isFinite(dNext)) {
+      const dm = d((xa + xb) / 2)
+      if (diverges(dm)) return NaN
+      if (dPrev * dNext < 0) {
+        const xc = xa + (dPrev / (dPrev - dNext)) * (xb - xa)
+        area += simpson(xa, xc, dPrev, 0) + simpson(xc, xb, 0, dNext)
+      } else area += simpson(xa, xb, dPrev, dNext)
+    }
+    dPrev = dNext
+  }
+  return area
+}
+
+/**
+ * The slope of y = f(x) at x = a by central differences with one Richardson step, which is exact
+ * for anything up to a cubic and within about 10⁻¹⁰ for the smooth functions a question draws a
+ * tangent to. NaN where there is no tangent, so a caller can say so instead of drawing a line at a
+ * made-up angle: where f has no value on one side (√x at 0); at a corner, where the slopes from
+ * the left and the right disagree (|x| at 0, a step); and at a vertical tangent, where the
+ * estimate keeps growing as the step shrinks (∛x at 0). Both tests ask whether the disagreement
+ * shrinks with the step, as it does for any smooth curve however steep, rather than whether it is
+ * small: tan x near π/2 has a slope of thousands and a real tangent.
+ */
+export function slopeAt(f: Fx, a: number): number {
+  const h = 1e-3 * Math.max(1, Math.abs(a))
+  const central = (step: number) => (f(a + step) - f(a - step)) / (2 * step)
+  const coarse = central(h)
+  const fine = central(h / 2)
+  const slope = (4 * fine - coarse) / 3
+  if (!Number.isFinite(slope)) return NaN
+  const scale = Math.max(1, Math.abs(slope))
+  // A corner: the one-sided slopes differ by more than a few per cent, and halving the step twice
+  // does not halve the difference (for a smooth curve it quarters it).
+  const oneSided = (step: number) => Math.abs((f(a + step) - f(a)) / step - (f(a) - f(a - step)) / step)
+  const c1 = oneSided(h)
+  if (c1 > 0.05 * scale && oneSided(h / 4) > c1 / 2) return NaN
+  // A vertical tangent: the central estimates differ by more than a per cent, and halving the step
+  // again does not halve the difference (for a smooth curve it quarters it).
+  const v1 = Math.abs(coarse - fine)
+  if (v1 > 0.01 * scale && Math.abs(fine - central(h / 4)) > v1 / 2) return NaN
+  return slope
+}

@@ -50,8 +50,12 @@ export type CircleDef =
   | { kind: 'centerRadius'; c: ObjId; r: string }
   | { kind: 'threePoints'; a: ObjId; b: ObjId; c: ObjId }
 
-/** 'area' shades between y = f(x) and the x-axis for x in [tMin, tMax] (integrals, probabilities). */
-export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area'
+/**
+ * 'area' shades between y = f(x) and the x-axis for x in [tMin, tMax] (integrals, probabilities).
+ * 'piecewise' is one curve made of several formulas, each on its own stretch of x (`pieces`).
+ * 'between' shades the region between y = exprs[0] (upper) and y = exprs[1] (lower) for x in [tMin, tMax].
+ */
+export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area' | 'piecewise' | 'between'
 
 export interface ObjectBase {
   id: ObjId
@@ -168,6 +172,8 @@ export interface GraphObj extends ObjectBase {
   tMax?: number
   /** Inequality operator. */
   op?: '<' | '<=' | '>' | '>='
+  /** The formulas of a piecewise curve, each with the stretch of x it holds on. */
+  pieces?: { expr: string; from: number; to: number }[]
   showRoots?: boolean
   showExtrema?: boolean
   width?: number

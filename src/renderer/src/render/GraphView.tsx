@@ -10,7 +10,7 @@ import { QUALITY, qualityNow } from './renderer'
 import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
 import { compileScalar } from '../math/expr'
-import { implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
+import { betweenMesh, implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, samplePiecewise, surfaceGeometry, type KeyPoint } from '../math/graphs'
 import { fmt } from '../math/format'
 import { themeColor, useTheme, useThemed, type Theme } from '../app/theme'
 import type { V3 } from '../math/vec'
@@ -56,12 +56,19 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
           return { f: compileScalar(obj.exprs[0], ['theta', 't'], scopeNow) }
         case 'parametric':
           return { fx: compileScalar(obj.exprs[0], ['t'], scopeNow), fy: compileScalar(obj.exprs[1], ['t'], scopeNow) }
+        case 'piecewise':
+          // The formulas are read from exprs, which mirror the pieces one to one: renaming a slider
+          // rewrites every graph's exprs, and a piece compiled from its own copy would go on
+          // naming a slider that no longer exists and vanish.
+          return { pieces: (obj.pieces ?? []).map((p, i) => ({ f: compileScalar(obj.exprs[i] ?? p.expr, ['x'], scopeNow), from: p.from, to: p.to })) }
+        case 'between':
+          return { f: compileScalar(obj.exprs[0], ['x'], scopeNow), g: compileScalar(obj.exprs[1], ['x'], scopeNow) }
       }
     } catch (e) {
       return { error: String(e) }
     }
     return {}
-  }, [obj.kind, obj.exprs])
+  }, [obj.kind, obj.exprs, obj.pieces])
 
   const is2DBounds = !is3D
   const b = is2DBounds ? view : { xMin: -10, xMax: 10, yMin: -10, yMax: 10, viewH: 20, wpp: 0.02, widthPx: 1000 }
@@ -101,6 +108,20 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         const ny = Math.min(900, Math.ceil((b.yMax - b.yMin) / cell))
         out.segments = implicitSegments(F, b.xMin, b.xMax, b.yMin, b.yMax, nx, ny)
         if (obj.kind === 'inequality') out.fill = inequalityMesh(F, obj.op ?? '<', b.xMin, b.xMax, b.yMin, b.yMax, Math.ceil(nx / 1.5), Math.ceil(ny / 1.5))
+      } else if (obj.kind === 'piecewise' && fns.pieces) {
+        // Sampled at the explicit curve's density over the widest piece, so a short piece is
+        // never coarser than the curve beside it; the joins are made in samplePiecewise.
+        const widest = Math.max(0, ...fns.pieces.map((p) => Math.abs(p.to - p.from)))
+        const n = Math.min(2000, Math.max(100, Math.round((widest / b.wpp / 2) * QUALITY[qualityNow()].samples)))
+        out.polylines = samplePiecewise(
+          fns.pieces.map((p) => ({ f: (x: number) => p.f({ x }), from: p.from, to: p.to })),
+          n,
+          b.viewH
+        )
+      } else if (obj.kind === 'between' && fns.f && fns.g) {
+        const region = betweenMesh((x) => fns.f!({ x }), (x) => fns.g!({ x }), obj.tMin ?? 0, obj.tMax ?? 1, 400, b.viewH)
+        out.fill = region.fill
+        out.polylines = region.outline
       } else if (obj.kind === 'polar' && fns.f) {
         const t0 = obj.tMin ?? 0
         const t1 = obj.tMax ?? 2 * Math.PI
@@ -116,7 +137,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
     // `evVersion` is not read here: the compiled functions read the scene's scope through a
     // closure, so a moved slider changes the curve without changing `fns`.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax])
+  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax, obj.pieces])
 
   useEffect(() => {
     const polys = data.segments ? pairsToPolys(data.segments) : data.polylines

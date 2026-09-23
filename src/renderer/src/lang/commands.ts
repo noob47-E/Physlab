@@ -8,7 +8,7 @@ import { scene } from '../core/store'
 import { parseExpr } from '../core/evaluate'
 import { freeCapitals, isValidName } from '../core/naming'
 import type { Computed, ObjId, SceneObject } from '../core/types'
-import { visualizeGraph, visualizePoint, visualizeSolution, visualizeVector } from '../core/visualize'
+import { visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector } from '../core/visualize'
 import { cas } from '../math/cas'
 import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
 import { fmtPrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
@@ -236,6 +236,40 @@ function tryGraph(input: string): boolean {
     s.pushLog({ input, kind: 'result', text: 'Parametric curve created.' + landInGraphing() })
     return true
   }
+  // Question pictures, spelt the way they are said: a curve in pieces, the region between two
+  // curves, the tangent at a point.
+  if ((m = input.match(/^\s*piecewise\s*\((.+)\)\s*$/i))) {
+    const pieces = splitArgs(m[1]).map((part) => {
+      const piece = part.match(/^(.+?)\s+from\s+(.+?)\s+to\s+(.+)$/i)
+      if (!piece) throw new Error('Each piece is a formula and its stretch of x: piecewise(x^2 from -3 to 0, x from 0 to 2)')
+      return { expr: piece[1].trim(), from: numberArg(piece[2]), to: numberArg(piece[3]) }
+    })
+    visualizePiecewise(pieces, undefined, input)
+    s.pushLog({ input, kind: 'result', text: `Piecewise curve created with ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}.` + landInGraphing() })
+    return true
+  }
+  if ((m = input.match(/^\s*between\s*\((.+)\)\s*$/i))) {
+    const parts = splitArgs(m[1])
+    if (parts.length !== 4) throw new Error('between(first curve, second curve, from x, to x), e.g. between(x^2, x + 2, -1, 2)')
+    const a = numberArg(parts[2])
+    const bnd = numberArg(parts[3])
+    const area = visualizeBetween(parts[0], parts[1], a, bnd)
+    const p = s.settings
+    s.pushLog({ input, kind: 'result', text: `Region shaded. Area between the curves from x = ${fmtPrecise(Math.min(a, bnd), p)} to ${fmtPrecise(Math.max(a, bnd), p)}: ${fmtPrecise(area, p)}.` + landInGraphing() })
+    return true
+  }
+  // tangent(P, c) — a point and a circle — is the geometry command; this is a formula and a number.
+  const tan = input.match(/^\s*tangent\s*\((.+)\)\s*$/i)
+  if (tan) {
+    const [expr, at, ...rest] = splitArgs(tan[1])
+    if (at !== undefined && rest.length === 0 && kindOfName(expr) === undefined && usesSymbol(expr, 'x')) {
+      const a = numberArg(at)
+      const { slope } = visualizeTangentAt(expr, a)
+      const p = s.settings
+      s.pushLog({ input, kind: 'result', text: `Tangent drawn at x = ${fmtPrecise(a, p)}. Its slope is ${fmtPrecise(slope, p)}.` + landInGraphing() })
+      return true
+    }
+  }
   const ineq = input.match(/^(.+?)(<=|>=|<|>)(.+)$/)
   if (ineq && !/[<>].*[<>]/.test(input.replace(ineq[2], '')) && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
     const op = ineq[2] as '<' | '<=' | '>' | '>='
@@ -254,6 +288,19 @@ function tryGraph(input: string): boolean {
     }
   }
   return false
+}
+
+/** A number typed as an argument, which may use a slider's name; anything else is refused in a sentence. */
+function numberArg(text: string): number {
+  let v: unknown
+  try {
+    v = math.evaluate(preprocess(text), { ...scene().ev.scope })
+  } catch {
+    throw new Error(`"${text.trim()}" is not a number.`)
+  }
+  const n = Number(plainNumber(v))
+  if (!Number.isFinite(n)) throw new Error(`"${text.trim()}" is not a number.`)
+  return n
 }
 
 function graphIfFunctionOfX(input: string, rhs: string, name?: string) {
@@ -1029,6 +1076,8 @@ export const HELP = `Examples (press Enter after each):
   Midpoint(P, Q)  Perpendicular(P, f)  Intersect(f, g)  Angle(P, Q, S)
   y = x^2 - 4      f(x) = sin(x)      x^2 + y^2 = 9      y > x^2
   r = 2cos(θ)      curve(cos(t), sin(t), 0, 2π)      z = sin(x)cos(y)
+  piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)     one curve in pieces
+  between(x^2, x + 2, -1, 2)   shade between two curves      tangent(x^2, 1)   the tangent at a point
   k = 2  (makes a slider you can drag)
   solve(x^2 - 5x + 6 = 0)   diff(x^3)   integrate(x^2, 0, 3)   factor(x^2-1)
   delete A     undo     clear     2d / 3d     play / pause`

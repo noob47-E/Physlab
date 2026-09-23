@@ -23,7 +23,7 @@ vi.mock('../src/renderer/src/app/theme', () => ({
 import { HELP, runCommand } from '../src/renderer/src/lang/commands'
 import { QUICK_EXAMPLES } from '../src/renderer/src/ui/quickExamples'
 import { scene, type LogEntry } from '../src/renderer/src/core/store'
-import type { SceneObject, VectorObj } from '../src/renderer/src/core/types'
+import type { GraphObj, SceneObject, VectorObj } from '../src/renderer/src/core/types'
 import { cas } from '../src/renderer/src/math/cas'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { resetGlobals } from './helpers/globals'
@@ -91,6 +91,7 @@ const madeA = (type: SceneObject['type']) => {
   const made = Object.values(scene().objects).filter((o) => !before.has(o.name) && !o.auxiliary)
   expect(made.map((o) => o.type), `a ${type} was made`).toContain(type)
 }
+const graphsOfKind = (kind: GraphObj['kind']): GraphObj[] => Object.values(scene().objects).filter((o): o is GraphObj => o.type === 'graph' && o.kind === kind)
 const stepsTitled = (last: LogEntry, title: RegExp) => expect(last.solution?.title, 'has steps').toMatch(title)
 
 const HELP_EXAMPLES: Example[] = [
@@ -286,6 +287,38 @@ const HELP_EXAMPLES: Example[] = [
       madeA('graph')
       expect(last.text).toMatch(/Surface/)
       expect(scene().viewMode).toBe('3d')
+    }
+  },
+  {
+    line: 'piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)',
+    check: (last) => {
+      const g = graphsOfKind('piecewise')
+      expect(g).toHaveLength(1)
+      expect(g[0].pieces).toEqual([
+        { expr: 'x^2', from: -3, to: 0 },
+        { expr: 'x', from: 0, to: 2 },
+        { expr: '2', from: 2, to: 4 }
+      ])
+      expect(last.text).toMatch(/Piecewise curve created with 3 pieces/)
+    }
+  },
+  {
+    line: 'between(x^2, x + 2, -1, 2)',
+    check: (last) => {
+      const g = graphsOfKind('between')
+      expect(g).toHaveLength(1)
+      expect(g[0].exprs).toEqual(['x^2', 'x + 2'])
+      expect([g[0].tMin, g[0].tMax]).toEqual([-1, 2])
+      expect(graphsOfKind('explicit'), 'both curves drawn in full').toHaveLength(2)
+      expect(last.text).toMatch(/from x = −1 to 2: 4\.5\./)
+      expect(Object.values(scene().objects).find((o) => o.type === 'text')?.text).toBe('area = 4.5')
+    }
+  },
+  {
+    line: 'tangent(x^2, 1)',
+    check: (last) => {
+      expect(graphsOfKind('explicit').map((g) => g.name)).toContain('tangent')
+      expect(last.text).toMatch(/Tangent drawn at x = 1\. Its slope is 2\./)
     }
   },
   {
