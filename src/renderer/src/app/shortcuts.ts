@@ -6,6 +6,7 @@ import { resetCamera } from '../render/viewState'
 import { isDrawingMode, useApp } from './modes'
 import { useSandbox } from '../sim/store'
 import { useLab } from '../lab/labStore'
+import { useAuthor } from '../questions/authorStore'
 import { visibleOrder } from '../core/visibility'
 import { pressSpace, releaseSpace, resetSpace } from '../render/panKey'
 
@@ -68,6 +69,13 @@ export function useShortcuts() {
           useLab.getState().undo()
           return
         }
+        // Question Author keeps the set's history: Ctrl+Z there used to undo the drawing behind
+        // it (the picture "Show it" drew) while the part the teacher removed stayed gone.
+        if (useApp.getState().mode === 'author') {
+          if (e.shiftKey) useAuthor.getState().redo()
+          else useAuthor.getState().undo()
+          return
+        }
         if (e.shiftKey) s.redo()
         else s.undo()
         return
@@ -75,6 +83,7 @@ export function useShortcuts() {
       if (ctrl && e.key.toLowerCase() === 'y') {
         e.preventDefault()
         if (useApp.getState().mode === 'sandbox') useSandbox.getState().redo()
+        else if (useApp.getState().mode === 'author') useAuthor.getState().redo()
         else s.redo()
         return
       }

@@ -8,7 +8,7 @@
 // functions are the only ones that reach a store, and they go through the same entry points the
 // command bar and the Sandbox's own preset list use.
 
-import type { ConstantNode, EvalFunction, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
+import type { EvalFunction, MathNode, SymbolNode } from 'mathjs'
 import { scene } from '../core/store'
 import { frameGraphs, visualizeBetween, visualizeGraph, visualizePiecewise, visualizeTangentAt } from '../core/visualize'
 import { useLab } from '../lab/labStore'
@@ -28,6 +28,7 @@ import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTo
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
 import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
 import { formatQuantity, UNITS } from './units'
+import { plainFormula } from './plainFormula'
 import { drawVariables, substitute, type Variant } from './variables'
 
 /** The Problem shape without the vector topic and level a generated vector problem carries. */
@@ -290,49 +291,9 @@ export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSet
   }
 }
 
-/** The powers the calculator reads back as superscripts (preprocess turns ², ³ and ⁻¹ into ^). */
-const SUPERSCRIPT: Record<string, string> = { '2': '²', '3': '³', '-1': '⁻¹' }
-
-/**
- * A bound formula written the way a student writes it: 3x² − 2x, not mathjs's 3 * x ^ 2 - 2 * x,
- * which is programming (rule 2). It stays something the command bar reads back, because it
- * becomes the graph's equation and editing that equation runs it as a command: ² ³ ⁻¹ and −
- * are what `preprocess` understands, a number before a letter or a bracket is a product, and
- * every other product is ×.
- */
-export function plainFormula(expr: string): string {
-  const letterLike = (n: MathNode): boolean =>
-    n.type === 'SymbolNode' ||
-    n.type === 'FunctionNode' ||
-    n.type === 'ParenthesisNode' ||
-    (n.type === 'OperatorNode' && (n as OperatorNode).fn === 'pow' && letterLike((n as OperatorNode).args[0]))
-  const options = {
-    handler: (node: MathNode, o: unknown): string | undefined => {
-      if (node.type !== 'OperatorNode') return undefined
-      const op = node as OperatorNode
-      const s = (n: MathNode): string => n.toString(o as never)
-      if (op.fn === 'pow' && op.args.length === 2) {
-        const [base, exp] = op.args
-        const inner = exp.type === 'ParenthesisNode' ? (exp as ParenthesisNode).content : exp
-        const negated = inner.type === 'OperatorNode' && (inner as OperatorNode).fn === 'unaryMinus' ? (inner as OperatorNode).args[0] : null
-        const key =
-          inner.type === 'ConstantNode'
-            ? String((inner as ConstantNode).value)
-            : negated?.type === 'ConstantNode'
-              ? `-${String((negated as ConstantNode).value)}`
-              : ''
-        return SUPERSCRIPT[key] ? `${s(base)}${SUPERSCRIPT[key]}` : `${s(base)}^${s(exp)}`
-      }
-      if (op.fn === 'multiply' && op.args.length === 2) {
-        const [a, b] = op.args
-        return a.type === 'ConstantNode' && letterLike(b) ? `${s(a)}${s(b)}` : `${s(a)} × ${s(b)}`
-      }
-      return undefined
-    }
-  }
-  // The proper minus, except inside a number's own exponent (1e-7).
-  return math.parse(preprocess(expr)).toString(options).replace(/(?<![0-9]e)-/g, '−')
-}
+// plainFormula lives beside the variables, whose problem sentences write formulas too; it is
+// exported from here as well, where the picture note first used it.
+export { plainFormula }
 
 export interface PictureShown {
   /** One sentence on what was drawn, for the panel. */

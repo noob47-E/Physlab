@@ -6,6 +6,7 @@
 import { inDegrees, math, preprocess, symbolsOf } from '../math/expr'
 import { fmtPrecise, type MeasureSettings } from '../math/format'
 import { rngFor } from '../math/problems'
+import { plainFormula } from './plainFormula'
 import { RESERVED_NAMES, type PQQuestion, type PQVariable, type UnitId } from './pqjson'
 import { formatQuantity } from './units'
 
@@ -231,10 +232,17 @@ export function drawVariables(q: PQQuestion, seed: number): Variant {
         continue
       }
       if (!Number.isFinite(result)) {
-        const deps = dependenciesOf(v, known)
-        const culprit = deps.find((d) => values[d] === 0) ?? deps[0]
-        const when = culprit === undefined ? '' : ` when ${culprit} = ${fmtPrecise(values[culprit], SENTENCE_PRECISION)}`
-        problems.push(`${name} = ${def.expr} is infinite or undefined${when}.`)
+        // A zero among the inputs is the usual culprit and is named alone. Otherwise every input
+        // is named: a = u/(t − 50) at t = 50 used to read "undefined when u = 24", which sent the
+        // author looking at the wrong variable.
+        const deps = [...new Set(dependenciesOf(v, known))]
+        const zero = deps.find((d) => values[d] === 0)
+        const named = zero !== undefined ? [zero] : deps
+        const when = named.length === 0 ? '' : ` when ${named.map((d) => `${d} = ${fmtPrecise(values[d], SENTENCE_PRECISION)}`).join(' and ')}`
+        // Written as a student writes it in a line of text (u²/(2t)), never the file's mathjs
+        // text (u ^ 2 / (2 * t)), which is programming and was shown in every red preview row.
+        const formula = plainFormula(def.expr).replace(/ \/ /g, '/')
+        problems.push(`${name} = ${formula} is infinite or undefined${when}.`)
       }
       values[name] = result
     }

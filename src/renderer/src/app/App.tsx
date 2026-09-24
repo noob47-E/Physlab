@@ -33,6 +33,7 @@ const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.G
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
+const Author = lazy(() => import('../panels/Author').then((m) => ({ default: m.Author })))
 const LabData = lazy(() => import('../panels/LabData').then((m) => ({ default: m.LabData })))
 
 const PANEL_VIEWS: Record<string, React.ComponentType> = {
@@ -44,6 +45,7 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   vectorcalc: VectorCalc,
   solver: Solver,
   practice: Practice,
+  author: Author,
   labdata: LabData,
   maths: Maths,
   console: Console,

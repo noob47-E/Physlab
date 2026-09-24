@@ -48,6 +48,8 @@ export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile(
   if (objects) parts.push(`${objects} ${objects === 1 ? 'object' : 'objects'}`)
   const tables = (file.lab ?? []).filter((t) => t.rows.some((row) => row.some((cell) => cell !== null && cell !== undefined))).length
   if (tables) parts.push(`${tables} ${tables === 1 ? 'table' : 'tables'} of readings`)
+  const questions = file.questions?.length ?? 0
+  if (questions) parts.push(`${questions} ${questions === 1 ? 'question' : 'questions'} in Question Author`)
   const sandbox = asLoaded(file, blank).sandbox
   if (sandbox && blank.sandbox && fingerprint({ ...blank, sandbox }) !== fingerprint(blank)) {
     const same = sandbox.bodies.length === blank.sandbox.bodies.length && !sandbox.links.length
@@ -60,11 +62,14 @@ export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile(
 /**
  * The file as `loadScene` would take it in: a missing lab or sandbox block becomes the blank
  * one, and world settings a file predates are filled from the defaults. Compared raw, an
- * autosave from a build without those blocks read as work with "0 objects" in it.
+ * autosave from a build without those blocks read as work with "0 objects" in it. An empty
+ * question set is no set, as `serialize` leaves it out; one question, even an empty one the
+ * teacher has only just added, is work.
  */
 function asLoaded(file: SceneFile, blank: SceneFile): SceneFile {
   const sandbox = file.sandbox && blank.sandbox ? { ...blank.sandbox, ...file.sandbox, world: { ...DEFAULT_WORLD, ...file.sandbox.world } } : blank.sandbox
-  return { ...file, lab: file.lab?.length ? file.lab : blank.lab, sandbox }
+  const { questions, ...rest } = file
+  return { ...rest, lab: file.lab?.length ? file.lab : blank.lab, sandbox, ...(questions?.length ? { questions } : {}) }
 }
 
 /** The file as text with ids replaced by their order of appearance, and the parts that are not work left out. */

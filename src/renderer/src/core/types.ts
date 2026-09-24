@@ -3,6 +3,7 @@ import type { GCircle, GLine } from '../math/geometry'
 import type { LabTable } from '../lab/types'
 import type { BodyDef, Link, WorldSettings } from '../sim/types'
 import type { Space } from './visibility'
+import type { PQQuestion } from '../questions/pqjson'
 
 /** The Sandbox as saved: what the student built, never the live run. */
 export interface SandboxFile {
@@ -263,7 +264,7 @@ export type ToolId =
 export interface SceneFile {
   app: 'PhysLab'
   /** The format this file is written in. `core/migrate.ts` lists the formats and steps older ones up. */
-  version: 4
+  version: 5
   objects: SceneObject[]
   settings: SceneSettings
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens
@@ -271,6 +272,13 @@ export interface SceneFile {
   lab?: LabTable[]
   /** The Sandbox scene. Optional for the same reason: a 0.3.3 file has none, and still opens. */
   sandbox?: SandboxFile
+  /**
+   * The question set a teacher is writing in Question Author (format 5). Optional and left out
+   * while empty, so a file with no questions reads exactly as it did in format 4. A question here
+   * may be half-written; only its licence and its shape are checked on the way in
+   * (`core/migrate.ts`), because Export is where a question must be complete.
+   */
+  questions?: PQQuestion[]
 }
 
 export type LengthUnit = 'unit' | 'mm' | 'cm' | 'm' | 'km' | 'in' | 'ft'

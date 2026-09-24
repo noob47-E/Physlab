@@ -2,6 +2,8 @@
 // widths, "Reset the panel layout" never reset anything, and a 1366-pixel laptop was handed a
 // window wider than its screen: every rule here is one of those, stated as a number.
 
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   LAYOUT_VERSION,
@@ -19,7 +21,9 @@ import {
   windowClass,
   zoomPercent
 } from '../src/renderer/src/app/layoutMath'
-import { MODES, isDrawingMode } from '../src/renderer/src/app/modes'
+import { MODES, isDrawingMode, modeById } from '../src/renderer/src/app/modes'
+import { SPACE_LABELS, modeOfSpace } from '../src/renderer/src/core/visibility'
+import { RENDERER_SRC, readSource } from './helpers/repo'
 import { TOOLS } from '../src/renderer/src/render/tools'
 import { WELCOME_JOB, WELCOME_PROMISE } from '../src/renderer/src/app/tour/steps'
 import { JOBS, runPure } from '../src/renderer/src/math/pure/run'
@@ -268,5 +272,34 @@ describe('which modes show the maths drawing', () => {
     expect(isDrawingMode('sandbox')).toBe(false)
     expect(isDrawingMode('gpu')).toBe(false)
     for (const m of MODES) if (m.id !== 'sandbox' && m.id !== 'gpu') expect(isDrawingMode(m.id), m.id).toBe(true)
+  })
+})
+
+describe('one name for the Geometry mode (Fix 16)', () => {
+  // The Strategy v2 report said the mode is "Geometry" on screen and "Shapes & Geometry" in the
+  // code. That name left the code in 0.3.6 (a0f13fc renamed README's mode table row); what is
+  // left is the stored id 'shapes', which saved files (every object's `space`) and saved layouts
+  // (`mode`) hold, so it stays an id and is never a word a student or a teacher reads.
+  it('is called Geometry wherever it is shown, and every space is named after its mode', () => {
+    expect(MODES.find((m) => m.id === 'shapes')!.label).toBe('Geometry')
+    expect(SPACE_LABELS.shapes).toBe('Geometry')
+    for (const space of Object.keys(SPACE_LABELS) as (keyof typeof SPACE_LABELS)[]) {
+      expect(SPACE_LABELS[space], space).toBe(modeById(modeOfSpace[space]).label)
+    }
+  })
+
+  it('never names it "Shapes & Geometry" anywhere in the app or its README', () => {
+    const files: string[] = []
+    const walk = (dir: string): void => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name)
+        if (e.isDirectory()) walk(p)
+        else if (/\.(ts|tsx|html|json|pqjson)$/.test(e.name)) files.push(p)
+      }
+    }
+    walk(RENDERER_SRC)
+    expect(files.length).toBeGreaterThan(50)
+    for (const f of files) expect(readFileSync(f, 'utf8').includes('Shapes & Geometry'), f).toBe(false)
+    expect(readSource('README.md').includes('Shapes & Geometry')).toBe(false)
   })
 })

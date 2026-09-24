@@ -114,7 +114,7 @@ describe('serialize → loadScene', () => {
     const { gridStyle: _g, ...older } = fullFile().settings
     scene().loadScene({ ...fullFile(), version: 2, settings: older })
     expect(scene().settings.gridStyle).toBe('lines')
-    expect(FILE_VERSION).toBe(4)
+    expect(FILE_VERSION).toBe(5)
   })
 
   it('keeps the label preferences of whoever is opening the file', () => {
@@ -150,7 +150,7 @@ describe('migrate', () => {
     expect(space).toEqual({ A: 'shapes', B: 'shapes', a: 'shapes', k: 'vectors', F: 'vectors' })
   })
 
-  it('steps a format-2 file without lego up to format 3 and changes nothing else', () => {
+  it('steps a format-2 file without lego up to the current format and changes nothing else', () => {
     const v2 = { ...fullFile(), version: 2 as const }
     const out = migrate(v2)
     expect(out.version).toBe(FILE_VERSION)
@@ -192,7 +192,7 @@ describe('migrate', () => {
     const tokenOf = (f: SceneFile, id: string) => f.objects.find((o) => o.id === id)?.themed
     // A drawing with all eight: the first six one to one, the seventh and eighth as a new drawing's.
     const all = parseSceneFile(JSON.stringify({ ...fullFile(), version: 3, objects: old.map((c, i) => arrow(`v${i}`, `V${i}`, c)) }))
-    expect(all.version).toBe(4)
+    expect(all.version).toBe(FILE_VERSION)
     expect(old.map((_, i) => tokenOf(all, `v${i}`))).toEqual(['--vec-1', '--vec-2', '--vec-3', '--vec-4', '--vec-5', '--vec-6', '--vec-1', '--vec-2'])
     // Colours one, two, seven and eight: seven and eight take tokens nobody else uses, so the
     // drawing does not show two pairs of arrows in one colour.

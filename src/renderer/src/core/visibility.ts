@@ -10,6 +10,10 @@
 import type { ModeId } from '../app/modes'
 import type { ObjId, SceneObject } from './types'
 
+/**
+ * Stored in every object of a saved file, so a space keeps its id for good; what a student reads
+ * is `SPACE_LABELS` ('shapes' is the Geometry drawing — see ModeId in app/modes.ts).
+ */
 export type Space = 'vectors' | 'shapes' | 'graphing' | 'lab'
 
 /** The drawing a mode looks at; null means the mode has no drawing of its own. */
@@ -21,7 +25,10 @@ export function spaceOf(mode: ModeId): Space | null {
       return 'vectors'
     case 'shapes':
       return 'shapes'
+    // Question Author's "Show it" draws with the same calls the player uses, which put the picture
+    // in Graphing; looking at that drawing, the teacher sees it beside the question being written.
     case 'graphing':
+    case 'author':
       return 'graphing'
     case 'lab':
       return 'lab'

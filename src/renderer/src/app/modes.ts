@@ -3,6 +3,12 @@
 import { create } from 'zustand'
 import type { ToolId } from '../core/types'
 
+/**
+ * A mode's id is stored: in a saved layout (`mode`) and, through `spaceOf`, in every object of a
+ * saved file (`space`). So an id is never renamed to follow its label. 'shapes' is the mode every
+ * student and every document calls Geometry (its `label`); renaming the id would need a file
+ * format step and a layout migration and would change nothing anyone reads (Fix 16).
+ */
 export type ModeId =
   | 'calculator'
   | 'vectors'
@@ -20,6 +26,7 @@ export type ModeId =
   | 'nuclear'
   | 'problems'
   | 'lab'
+  | 'author'
 
 export interface ModeDef {
   id: ModeId
@@ -61,6 +68,7 @@ export const MODES: ModeDef[] = [
     examples: true
   },
   {
+    // Stored id 'shapes', shown name Geometry: see ModeId.
     id: 'shapes',
     label: 'Geometry',
     description: 'Sketch or click shapes: automatic recognition, area formulas, decomposition, constructions.',
@@ -113,6 +121,15 @@ export const MODES: ModeDef[] = [
     ready: true,
     tools: ['select', '|', 'vector', 'point', '|', 'delete'],
     panel: 'practice',
+    view: '2d'
+  },
+  {
+    id: 'author',
+    label: 'Question Author',
+    description: 'Write a question with random numbers, a picture or an experiment, and the worked steps; save it as a set for your class.',
+    ready: true,
+    tools: ['select'],
+    panel: 'author',
     view: '2d'
   }
 ]

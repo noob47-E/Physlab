@@ -19,14 +19,18 @@
 //   4  from 0.9: arrows are drawn in theme tokens (--vec-1 … --vec-6). An arrow in one of the eight
 //      colours 0.6.1–0.7 handed out gets the token that took its colour's place, in `themed`, so it
 //      follows the theme; a colour the student picked stays theirs because it is read as a hex.
+//   5  from 0.9: the file may carry `questions`, the question set a teacher is writing in Question
+//      Author. A format-4 file has none and comes through as it was; a question anywhere is
+//      checked for its licence and its shape by `checkQuestions`, whatever the format says.
 
+import { LICENSE_IDS } from '../questions/pqjson'
 import { directDependents } from './evaluate'
 import { OLD_ARROW_COLOURS, PALETTE, vectorToken } from './naming'
 import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
 import type { Space } from './visibility'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
-export const FILE_VERSION: SceneFile['version'] = 4
+export const FILE_VERSION: SceneFile['version'] = 5
 
 type Raw = Record<string, unknown>
 
@@ -78,6 +82,7 @@ function checkShape(raw: unknown): Raw {
   if (raw.settings !== undefined && !isRecord(raw.settings)) throw new Error('The settings in this file are damaged.')
   if (raw.lab !== undefined) checkLab(raw.lab)
   if (raw.sandbox !== undefined) checkSandbox(raw.sandbox)
+  if (raw.questions !== undefined) checkQuestions(raw.questions)
   return { ...raw }
 }
 
@@ -124,6 +129,79 @@ function checkSandbox(sb: unknown): void {
   if (sb.sideView !== undefined && typeof sb.sideView !== 'boolean') throw new Error('The sandbox view setting in this file is damaged.')
 }
 
+const isStrings = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === 'string')
+
+/**
+ * The question set Question Author writes (format 5), checked on every file whatever its format:
+ * a lego record checked only on the way up from an older format let a damaged one through in a
+ * file of the current format. Two things are checked, and only two, because a question in a
+ * project is allowed to be half-written (a range still being typed, a part with no answer yet):
+ *
+ * - its licence: nothing may be used without one of the three PhysLab may carry, and the holder
+ *   must at least be a string, though it may still be empty while the teacher writes;
+ * - its shape: what the Author panel reads on its first render, down to each variable's rule and
+ *   each part's fields. A question with no list of parts, a list variable with no items or a
+ *   number part with no tolerance crashed the panel after the old scene was already gone, as a
+ *   lab table with no columns once did.
+ *
+ * A file failing either is refused with a sentence naming the question, like any damaged block.
+ */
+const isNum = (v: unknown): v is number => typeof v === 'number'
+
+/**
+ * A variable's rule, down to what its row in the Variables tab reads: a list with no items or a
+ * range with no ends passed a check on `kind` alone and then crashed the tab.
+ */
+function variableDefOk(d: unknown): boolean {
+  if (!isRecord(d)) return false
+  if (d.kind === 'range') return isNum(d.from) && isNum(d.to) && isNum(d.step) && (d.exclude === undefined || (Array.isArray(d.exclude) && d.exclude.every(isNum)))
+  if (d.kind === 'list') return Array.isArray(d.items) && d.items.every(isNum)
+  if (d.kind === 'expr') return typeof d.expr === 'string'
+  return false
+}
+
+/** A part, down to what its card in the Solution tab reads (a number part's tolerance, a choice's options). */
+function partOk(p: unknown): boolean {
+  if (!isRecord(p) || typeof p.prompt !== 'string') return false
+  if (p.type === 'number') {
+    const t = p.tolerance
+    return (
+      typeof p.answer === 'string' &&
+      typeof p.unit === 'string' &&
+      isRecord(t) &&
+      typeof t.kind === 'string' &&
+      isNum(t.value) &&
+      (p.traps === undefined || (Array.isArray(p.traps) && p.traps.every((x) => isRecord(x) && typeof x.value === 'string' && typeof x.why === 'string')))
+    )
+  }
+  if (p.type === 'expression') return typeof p.answer === 'string' && isStrings(p.symbols)
+  if (p.type === 'choice') return Array.isArray(p.choices) && p.choices.every((c) => isRecord(c) && typeof c.text === 'string' && typeof c.correct === 'boolean')
+  return false
+}
+
+function checkQuestions(qs: unknown): void {
+  if (!Array.isArray(qs)) throw new Error('The question set in this file is damaged.')
+  qs.forEach((q, i) => {
+    const who = isRecord(q) && typeof q.title === 'string' && q.title.trim() !== '' ? `Question '${q.title}'` : `Question ${i + 1}`
+    if (!isRecord(q)) throw new Error(`${who} in this file is damaged.`)
+    const l = q.license
+    if (!isRecord(l) || typeof l.id !== 'string' || l.id.trim() === '') throw new Error(`${who} in this file says nothing about its licence, so PhysLab cannot use it.`)
+    if (!(LICENSE_IDS as readonly string[]).includes(l.id)) throw new Error(`${who} in this file is licensed '${l.id}', which PhysLab may not use.`)
+    if (typeof l.holder !== 'string') throw new Error(`${who} in this file does not say who holds its licence.`)
+    const ok =
+      typeof q.id === 'string' &&
+      typeof q.title === 'string' &&
+      typeof q.statement === 'string' &&
+      Array.isArray(q.variables) &&
+      q.variables.every((v) => isRecord(v) && typeof v.name === 'string' && variableDefOk(v.def)) &&
+      Array.isArray(q.parts) &&
+      q.parts.every(partOk) &&
+      (q.steps === undefined || (isRecord(q.steps) && Array.isArray(q.steps.items) && q.steps.items.every((st) => isRecord(st) && typeof st.head === 'string'))) &&
+      (q.tags === undefined || isStrings(q.tags))
+    if (!ok) throw new Error(`${who} in this file is damaged.`)
+  })
+}
+
 /** Each object must at least be something the evaluator can name and look up. */
 function checkObjects(file: Raw): void {
   const objects = file.objects as unknown[]
@@ -146,7 +224,8 @@ function checkObjects(file: Raw): void {
 const STEPS: Record<number, (file: Raw) => Raw> = {
   1: v1ToV2,
   2: v2ToV3,
-  3: v3ToV4
+  3: v3ToV4,
+  4: v4ToV5
 }
 
 function v1ToV2(file: Raw): Raw {
@@ -209,6 +288,14 @@ function v3ToV4(file: Raw): Raw {
       return { ...o, themed: i < tokens.length ? tokens[i] : extra.get(i) }
     })
   }
+}
+
+/**
+ * Format 5 only adds the optional question set. A format-4 file never had one, and any that a
+ * hand-edited file carries has already been through `checkQuestions`, so the step is the bump.
+ */
+function v4ToV5(file: Raw): Raw {
+  return { ...file, version: 5 }
 }
 
 /**

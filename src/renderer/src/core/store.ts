@@ -6,6 +6,7 @@ import type { EvalResult, ObjId, PointObj, PolygonObj, SceneFile, SceneObject, S
 import type { Solution } from '../math/vectorSolver'
 import { emptyTable, useLab } from '../lab/labStore'
 import { startingScene, useSandbox } from '../sim/store'
+import { useAuthor } from '../questions/authorStore'
 import { DEFAULT_WORLD } from '../sim/types'
 import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
 import { renameInObjects, renameProblem } from './rename'
@@ -756,6 +757,7 @@ export const useScene = create<SceneState>()((set, get) => {
     newScene: () => {
       useLab.getState().setTables([])
       useSandbox.getState().loadSandbox()
+      useAuthor.getState().setQuestions([])
       set({
         objects: {},
         order: [],
@@ -775,6 +777,7 @@ export const useScene = create<SceneState>()((set, get) => {
       const file = migrate(raw)
       useLab.getState().setTables(file.lab ?? [])
       useSandbox.getState().loadSandbox(file.sandbox)
+      useAuthor.getState().setQuestions(file.questions ?? [])
       const objects: Record<ObjId, SceneObject> = {}
       for (const o of file.objects) objects[o.id] = o
       const order = file.objects.map((o) => o.id)
@@ -801,7 +804,9 @@ export const useScene = create<SceneState>()((set, get) => {
     },
     serialize: () => {
       const { objects, order, settings } = get()
-      return { app: 'PhysLab', version: FILE_VERSION, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot() }
+      // An empty question set is left out, so a project with none is the same file it was in format 4.
+      const questions = useAuthor.getState().questions
+      return { app: 'PhysLab', version: FILE_VERSION, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot(), ...(questions.length ? { questions } : {}) }
     },
     markSaved: (path) => set({ filePath: path, dirty: false })
   }
@@ -830,6 +835,11 @@ useLab.subscribe(() => useScene.setState({ dirty: true }))
 // not the live values published every tenth of a second.
 useSandbox.subscribe((s, prev) => {
   if (s.bodies !== prev.bodies || s.links !== prev.links || s.world !== prev.world || s.sideView !== prev.sideView) useScene.setState({ dirty: true })
+})
+
+// A question written in Question Author is work too; moving between questions is not.
+useAuthor.subscribe((s, prev) => {
+  if (s.questions !== prev.questions) useScene.setState({ dirty: true })
 })
 
 // Handy while developing: inspect the drawing from the browser console.

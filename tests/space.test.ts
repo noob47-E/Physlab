@@ -27,7 +27,7 @@ import { runCommand } from '../src/renderer/src/lang/commands'
 const SPACES: Space[] = ['vectors', 'shapes', 'graphing', 'lab']
 // One list each, used by both tests below: written twice, a new mode added to only one of them
 // would have failed the completeness guard or silently missed the null check.
-const WITH_DRAWING: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab']
+const WITH_DRAWING: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab', 'author']
 const NO_DRAWING: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
 
 const obj = (name: string, space?: Space): SceneObject =>
@@ -40,6 +40,8 @@ describe('which drawing a mode looks at', () => {
     expect(spaceOf('problems')).toBe('vectors')
     expect(spaceOf('shapes')).toBe('shapes')
     expect(spaceOf('graphing')).toBe('graphing')
+    // Question Author's "Show it" draws in Graphing, and the teacher sees it beside the question.
+    expect(spaceOf('author')).toBe('graphing')
     expect(spaceOf('lab')).toBe('lab')
   })
 
