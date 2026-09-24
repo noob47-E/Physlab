@@ -3,6 +3,7 @@
 // concrete set of numbers, the same numbers every time for the same seed, and says in plain
 // words when a formula cannot be worked out. Headless: no React, no store, no DOM.
 
+import type { EvalFunction } from 'mathjs'
 import { inDegrees, math, preprocess, symbolsOf } from '../math/expr'
 import { fmtPrecise, type MeasureSettings } from '../math/format'
 import { rngFor } from '../math/problems'
@@ -154,8 +155,115 @@ export function randomRange(r: () => number, a: number, b: number, step = 1): nu
  * reordering the variable list in the editor does not silently change every saved variant's
  * numbers). Whatever goes wrong is a sentence in `problems`, never a throw — the authoring
  * preview shows the row and marks it.
+ *
+ * A question with a `condition` ("only variants with real roots") keeps drawing — seed, seed + 1,
+ * … up to `maxRuns` draws — until the condition holds, so every seed still gives one fixed variant
+ * and a student replaying a saved seed meets the same numbers. The `seed` reported is the one asked
+ * for. When no draw meets it the first draw is kept and one sentence says so, never a throw.
  */
 export function drawVariables(q: PQQuestion, seed: number): Variant {
+  const first = drawOnce(q, seed)
+  const c = q.condition
+  // A loop or an unknown name leaves nothing drawn; that sentence is the one to read, and the
+  // condition would only add "cannot read" on top of it.
+  const nothingDrawn = q.variables.length > 0 && Object.keys(first.values).length === 0
+  if (c === undefined || nothingDrawn) return first
+  const runs = Math.max(1, Math.floor(c.maxRuns))
+  for (let k = 0; k < runs; k++) {
+    const v = k === 0 ? first : drawOnce(q, seed + k)
+    const holds = conditionHolds(c.when, v.values)
+    // A condition PhysLab cannot read would fail every draw alike; saying so at once is kinder
+    // than a hundred draws and a sentence that blames the ranges.
+    if (holds === null) return { ...first, problems: [...first.problems, unreadableCondition(c.when)] }
+    if (holds) return { ...v, seed }
+  }
+  return { ...first, problems: [...first.problems, `No variant met the condition ${conditionText(c.when)} in ${fmtPrecise(runs, SENTENCE_PRECISION)} tries; widen the ranges or loosen the condition.`] }
+}
+
+/**
+ * Whether a condition in the variables ("b^2 - 4*a*c >= 0", "mu >= tan(theta)") holds for these
+ * values: true, false, or null when it cannot be read or does not come out as yes or no. Worked
+ * out in degrees like every formula of the variables, so tan(theta) with θ = 30° is tan 30°. A
+ * value that could not be drawn (NaN) makes a comparison false, so such a draw is never kept.
+ * Shared with `showIf` (questions/ecf.ts): one rule for "only when".
+ *
+ * "Cannot be read" is a verdict on the condition, not on one draw: it does not parse, or it names
+ * something that is neither one of these variables nor a built-in (pi, e …), or it calls a function
+ * PhysLab does not know (sqr(b), a slip for sqrt(b)). A readable condition
+ * that fails for one draw (sqrt(b) > 2 with b = −4 gives a complex number, and comparing it
+ * throws) is simply false for that draw, so the search keeps drawing.
+ */
+export function conditionHolds(when: string, values: Record<string, number>): boolean | null {
+  const read = readCondition(when)
+  if (read === null) return null
+  if (!read.symbols.every((s) => s in values || s in math)) return null
+  let r: unknown
+  try {
+    r = inDegrees(() => read.run.evaluate({ ...values }))
+  } catch {
+    return false
+  }
+  if (typeof r === 'boolean') return r
+  // mathjs reads "a and b" as a boolean but a bare formula as a number: non-zero is yes, as in Numbas.
+  if (typeof r === 'number') return Number.isNaN(r) ? false : r !== 0
+  // A bare formula that comes out complex for this draw (sqrt(b) with b < 0) is no real yes.
+  if (math.isComplex(r)) return false
+  return null
+}
+
+interface ReadCondition {
+  run: EvalFunction
+  /** Every name the condition uses other than as a function: each must be a variable or a built-in. */
+  symbols: string[]
+}
+
+/**
+ * The condition parsed and compiled once, cached with its names: null when it does not parse or
+ * calls a function PhysLab does not know (sqr(b) for sqrt(b), or b(a + 1) for b × (a + 1)). Such
+ * a call would throw for every draw alike, and a throw reads as "false for this draw", so a typo
+ * would blame the ranges and hide a showIf part from every student.
+ */
+function readCondition(when: string): ReadCondition | null {
+  const cached = compiledConditions.get(when)
+  if (cached !== undefined) return cached
+  // A condition is read once and run for every draw of every seed; parsing it each time made a
+  // 100-run search the slowest thing in a question's first play.
+  if (compiledConditions.size > 64) compiledConditions.clear()
+  let read: ReadCondition | null
+  try {
+    const node = math.parse(preprocess(when))
+    const functions = node
+      .filter((n) => n.type === 'FunctionNode')
+      .map((n) => (n as unknown as { fn: { type: string; name?: string } }).fn)
+      .filter((fn) => fn.type === 'SymbolNode')
+      .map((fn) => fn.name ?? '')
+    const known = functions.every((name) => typeof (math as unknown as Record<string, unknown>)[name] === 'function')
+    read = known ? { run: node.compile(), symbols: symbolsOf(node) } : null
+  } catch {
+    read = null
+  }
+  compiledConditions.set(when, read)
+  return read
+}
+
+const compiledConditions = new Map<string, ReadCondition | null>()
+
+/** The condition as a student writes it: b² − 4a × c ≥ 0, not b ^ 2 - 4 * a * c >= 0. */
+function conditionText(when: string): string {
+  let text: string
+  try {
+    text = plainFormula(when)
+  } catch {
+    text = when
+  }
+  return text.replace(/>=/g, '≥').replace(/<=/g, '≤').replace(/!=/g, '≠').replace(/==/g, '=')
+}
+
+// Written the way a student writes it when it parses (an unknown name is the usual trouble), as typed otherwise.
+const unreadableCondition = (when: string): string => `PhysLab could not read the condition ${conditionText(when)}, so it cannot choose the variants that meet it.`
+
+/** One draw from `seed` alone, with no condition: the body of `drawVariables`. */
+function drawOnce(q: PQQuestion, seed: number): Variant {
   const values: Record<string, number> = {}
   const problems: string[] = []
   const ordered = orderVariables(q.variables)
@@ -250,10 +358,42 @@ export function drawVariables(q: PQQuestion, seed: number): Variant {
   return { seed, values, problems }
 }
 
-/** The rows the authoring tab shows: seeds seed, seed+1, … so the author sees the same ten every time. */
-export function previewVariants(q: PQQuestion, count = 10, seed = 1): Variant[] {
-  const out: Variant[] = []
-  for (let k = 0; k < count; k++) out.push(drawVariables(q, seed + k))
+/** A preview row: one variant, and — when the question keeps only some variants — why this one is not kept. */
+export interface PreviewVariant extends Variant {
+  /** Set when the row fails the question's condition: a student with this seed gets the next draw that meets it. */
+  rejected?: string
+}
+
+/** A part's letter as a student reads it: 0 → (a), 1 → (b). */
+export const partLetter = (index: number): string => `(${String.fromCharCode(97 + index)})`
+
+/**
+ * The rows the authoring tab shows: seeds seed, seed+1, … so the author sees the same ten every
+ * time. Each row is the raw draw from its seed, not the kept one, so a condition shows what it
+ * throws away: a row that fails it is flagged, and an author whose condition rejects nine rows in
+ * ten sees that at a glance instead of ten innocent-looking rows.
+ */
+export function previewVariants(q: PQQuestion, count = 10, seed = 1): PreviewVariant[] {
+  const out: PreviewVariant[] = []
+  for (let k = 0; k < count; k++) {
+    const row: PreviewVariant = drawOnce(q, seed + k)
+    const c = q.condition
+    if (c !== undefined && row.problems.length === 0) {
+      const holds = conditionHolds(c.when, row.values)
+      if (holds === null) row.problems = [...row.problems, unreadableCondition(c.when)]
+      else if (!holds) row.rejected = `Left out: ${conditionText(c.when)} does not hold here, so a student gets the next variant that meets it.`
+    }
+    // A part shown only under a condition PhysLab cannot read is shown anyway (questions/ecf.ts
+    // partShown); the author hears about it here rather than from a student.
+    if (row.problems.length === 0) {
+      q.parts.forEach((p, i) => {
+        if (p.showIf !== undefined && conditionHolds(p.showIf, row.values) === null) {
+          row.problems.push(`PhysLab could not read the condition for showing part ${partLetter(i)}, ${conditionText(p.showIf)}, so that part is always shown.`)
+        }
+      })
+    }
+    out.push(row)
+  }
   return out
 }
 
