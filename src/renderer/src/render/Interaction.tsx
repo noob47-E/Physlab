@@ -6,7 +6,7 @@ import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './ca
 import { labelAnchors, overlay, showTip } from './overlay'
 import { CURVE_PICK_PX, pickAll, pickAt, type Hit } from './picking'
 import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type Marquee, type SnapInfo } from './tools'
-import { marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, type S2 } from './selectMath'
+import { drawingClickHit, joinsPointWithSnapOff, marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, shiftConstrains, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { drag3D } from './viewMath'
@@ -150,12 +150,21 @@ export function Interaction() {
       const s = scene()
       const step = gridStep()
       const tidy = (v: number) => Math.round(v / (step / 20)) * (step / 20)
-      if (alt || !s.settings.snap) return { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
-      const hit = pickAt(pickCtx(), x, y, (o, c) => c.type === 'point' && !exclude?.has(o.id))
-      if (hit && hit.dist <= SNAP_POINT_PX) {
-        const c = s.ev.values.get(hit.id)
-        if (c?.type === 'point') return { p: c.p, kind: 'point', pointId: hit.id, label: s.objects[hit.id]?.name }
+      const onPoint = (): SnapInfo | null => {
+        const hit = pickAt(pickCtx(), x, y, (o, c) => c.type === 'point' && !exclude?.has(o.id))
+        const c = hit && hit.dist <= SNAP_POINT_PX ? s.ev.values.get(hit.id) : undefined
+        return hit && c?.type === 'point' ? { p: c.p, kind: 'point', pointId: hit.id, label: s.objects[hit.id]?.name } : null
       }
+      if (alt || !s.settings.snap) {
+        // A point-making tool's click still joins a point right under it with snapping off
+        // (drawingClickHit takes it), so the tip and ring say so too; the tip used to give the length
+        // to the pointer while the side was built to the point (Fix 1). Vector and Text, which place
+        // their ends from this snap, stay free, and a drag (it passes `exclude`) never joins.
+        const joined = joinsPointWithSnapOff(createsPointsOnEmpty(s.tool), !!exclude) ? onPoint() : null
+        return joined ?? { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
+      }
+      const point = onPoint()
+      if (point) return point
       // Where two lines or circles cross. A point placed here is defined by the crossing, so it
       // follows when either parent moves; before this a student had to aim at a crossing by eye
       // and got a free point that stayed behind. Tried before the grid, because a crossing that
@@ -409,7 +418,7 @@ export function Interaction() {
       let cursor = sn?.p ?? null
       // Shift draws at 15° steps from the previous point.
       const anchorPt = s.tool === 'vector' ? t.dragStart ?? t.firstTail : lastPickPoint()
-      if (cursor && e.shiftKey && anchorPt && s.viewMode === '2d') cursor = constrainAngle(anchorPt, cursor)
+      if (cursor && anchorPt && shiftConstrains(s.tool, e.shiftKey, s.viewMode === '2d', !!sn?.pointId)) cursor = constrainAngle(anchorPt, cursor)
       useTool.setState({ cursor, snap: s.tool === 'select' || !sn || sn.kind === 'free' ? null : sn })
 
       if (s.tool !== 'select' && s.tool !== 'sketch' && cursor && sn) {
@@ -423,7 +432,9 @@ export function Interaction() {
       } else showTip(null)
 
       if (e.buttons === 0 || s.tool !== 'select') {
-        const hit = s.tool === 'sketch' ? null : pickAt(pickCtx(), x, y, s.tool === 'select' ? undefined : acceptsFor(s.tool, t.picks))
+        // A drawing tool lights up only what its click would take (see drawingClickHit): a point
+        // 20 px away used to glow as though the click would join it, and then did not.
+        const hit = s.tool === 'sketch' ? null : s.tool === 'select' ? pickAt(pickCtx(), x, y) : drawingHit(x, y)
         s.setHovered(hit?.id ?? null)
         host.style.cursor = hit ? (s.tool === 'select' ? (isDraggable(hit) ? 'grab' : 'pointer') : 'pointer') : s.tool === 'select' ? '' : 'crosshair'
       }
@@ -443,6 +454,14 @@ export function Interaction() {
         if (objectInRect(o.type, pts as S2[], rect)) out.push(id)
       }
       return out
+    }
+
+    /** What the current drawing tool's click at (x, y) takes: an existing object, or null for a new point there. */
+    const drawingHit = (x: number, y: number): Hit | null => {
+      const s = scene()
+      const ctx = pickCtx()
+      const hits = pickAll(ctx, x, y, acceptsFor(s.tool, useTool.getState().picks))
+      return drawingClickHit(hits, (h) => ctx.ev.values.get(h.id)?.type === 'point', createsPointsOnEmpty(s.tool), SNAP_POINT_PX)
     }
 
     const lastPickPoint = (): V3 | null => {
@@ -710,15 +729,15 @@ export function Interaction() {
         return
       }
       const picks = useTool.getState().picks
-      const accept = acceptsFor(tool, picks)
       let id: ObjId | null = null
-      const hit = pickAt(pickCtx(), x, y, accept)
+      // Taken by the same radius the tip and snap ring used, so the end lands where they said (Fix 1).
+      const hit = drawingHit(x, y)
       if (hit) id = hit.id
       else if (createsPointsOnEmpty(tool)) {
         // Shift-constrained position for the next vertex.
         const anchorPt = lastPickPoint()
         const sn = snapAt(x, y, XY_PLANE, e.altKey)
-        if (sn && e.shiftKey && anchorPt && !sn.pointId && s.viewMode === '2d') {
+        if (sn && anchorPt && shiftConstrains(tool, e.shiftKey, s.viewMode === '2d', !!sn.pointId)) {
           const b = new Builder()
           id = b.point(constrainAngle(anchorPt, sn.p)).id
           b.commit(false)

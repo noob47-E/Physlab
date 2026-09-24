@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
   ArrowRight,
   ChevronDown,
@@ -27,7 +27,7 @@ import { newProject, openProject, saveProject } from './files'
 import { MODES, isDrawingMode, modeById, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
-import { TOOLS } from '../render/tools'
+import { shelfFitLabel, TOOLS } from '../render/tools'
 import { saveViewportImage } from '../render/exportImage'
 import { THEMES, THEME_LABELS, useTheme } from './theme'
 import { useTour } from './tour/Tour'
@@ -42,6 +42,7 @@ import { UNIT_NAMES } from '../math/format'
 import { spaceOf, visibleOrder } from '../core/visibility'
 import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { confirmClearDrawing } from './contextActions'
+import { modeTabs, type MeasuredModeWidths } from './modeSwitch'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
 
 // The panels still import enterMode from here; it now lives with the rest of the layout code.
@@ -125,6 +126,35 @@ export function useContainerWidth(): [(el: HTMLElement | null) => void, number] 
     return () => ro.disconnect()
   }, [el])
   return [setEl, width]
+}
+
+/**
+ * The mode tabs and the More modes button as the bar draws them, measured in a hidden row that
+ * carries their classes (Fix 13). The estimate in modeSwitch.ts is 25–30 % wide at 1440 px and
+ * below, so it folded Problem Sets into More modes at 1366 px with room to spare. Measured again
+ * whenever `key` changes (the room, the density, the labels) and once the fonts have loaded.
+ */
+function useModeWidths(key: string): [RefObject<HTMLDivElement | null>, MeasuredModeWidths] {
+  const ref = useRef<HTMLDivElement>(null)
+  const [widths, setWidths] = useState<MeasuredModeWidths>({})
+  useLayoutEffect(() => {
+    let live = true
+    const measure = () => {
+      const row = ref.current?.firstElementChild
+      if (!live || !row) return
+      // Rounded up, so a tab is never taken as narrower than it draws.
+      const ws = Array.from(row.children, (k) => Math.ceil(k.getBoundingClientRect().width))
+      const next = { tabs: ws.slice(0, -1), more: ws[ws.length - 1] ?? 0 }
+      setWidths((old) => (old.more === next.more && old.tabs?.join() === next.tabs.join() ? old : next))
+    }
+    measure()
+    // A label measured in the fallback font is narrower or wider than in Segoe UI.
+    void document.fonts?.ready.then(measure)
+    return () => {
+      live = false
+    }
+  }, [key])
+  return [ref, widths]
 }
 
 function useOutsideClose(open: boolean, close: () => void) {
@@ -372,7 +402,9 @@ export function TopBar() {
   const title = filePath ? filePath.split(/[\\/]/).pop() : 'untitled'
   const ready = MODES.filter((m) => m.ready)
   const later = MODES.filter((m) => !m.ready)
-  const current = modeById(mode)
+  const [modesRef, modesWidth] = useContainerWidth()
+  const [measureRef, measured] = useModeWidths(`${modesWidth}|${density}|${ready.map((m) => m.label).join()}`)
+  const split = modeTabs(modesWidth, ready.map((m) => m.label), ready.findIndex((m) => m.id === mode), measured)
   const s = scene
   return (
     <div ref={barRef} className={`topbar ${density}`}>
@@ -466,44 +498,47 @@ export function TopBar() {
       />
 
       <div className="mx-2 h-5 w-px bg-[var(--line-2)]" />
-      {/* A real box, not display: contents, so the tour can draw a ring around it. */}
-      <div data-tour="modes" className="flex min-w-0 items-center gap-1">
-        {density === 'full' ? (
-          <>
+      {/* A real box, not display: contents, so the tour can draw a ring around it. It takes the
+          room the bar has left, and modeTabs (modeSwitch.ts) decides from that how many modes are
+          tabs; the rest sit in More modes. One design at every width — the bar used to swap its
+          tabs for a "Mode" dropdown below 1500 px (Fix 13). */}
+      <div ref={modesRef} data-tour="modes" className="relative flex min-w-0 flex-1 items-center gap-1">
+        <div ref={measureRef} className="mode-measure" aria-hidden="true">
+          <div>
             {ready.map((m) => (
-              <button key={m.id} className={`mode-tab ${mode === m.id ? 'on' : ''}`} title={m.description} onClick={() => enterMode(m.id)}>
+              <button key={m.id} type="button" tabIndex={-1} className="mode-tab">
                 {m.label}
               </button>
             ))}
-            <Menu
-              label={
-                <span className="flex items-center gap-1 text-[var(--text-dim)]">
-                  More modes <ChevronDown size={13} />
-                </span>
-              }
-              items={later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))}
-            />
-          </>
-        ) : (
-          // Narrow window: one menu holds every mode, with the current one named on the button.
-          <Menu
-            className="mode-tab on"
-            title={current.description}
-            label={
-              <span className="flex items-center gap-1">
-                <span className="text-[var(--text-faint)]">Mode</span> {current.label} <ChevronDown size={13} />
+            <button type="button" tabIndex={-1} className="menu-btn">
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                More modes <ChevronDown size={13} />
               </span>
-            }
-            items={[
-              ...ready.map((m) => ({ label: m.label, sc: mode === m.id ? '●' : '', on: mode === m.id, run: () => enterMode(m.id) })),
-              '-' as const,
-              ...later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))
-            ]}
-          />
-        )}
+            </button>
+          </div>
+        </div>
+        {split.tabs.map((i) => {
+          const m = ready[i]
+          return (
+            <button key={m.id} className={`mode-tab shrink-0 ${mode === m.id ? 'on' : ''}`} title={m.description} aria-current={mode === m.id ? 'page' : undefined} onClick={() => enterMode(m.id)}>
+              {m.label}
+            </button>
+          )
+        })}
+        <Menu
+          label={
+            <span className="flex items-center gap-1 whitespace-nowrap text-[var(--text-dim)]">
+              More modes <ChevronDown size={13} />
+            </span>
+          }
+          items={[
+            ...split.more.map((i) => ({ label: ready[i].label, run: () => enterMode(ready[i].id) })),
+            ...(split.more.length ? ['-' as const] : []),
+            ...later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))
+          ]}
+        />
       </div>
 
-      <div className="flex-1" />
       <button data-tour="search" className="menu-btn flex items-center gap-2 text-[var(--text-dim)]" onClick={() => setSearchOpen(true)} title="Search everything (Ctrl+K)">
         <Search size={14} />
         {density !== 'tight' && (
@@ -523,15 +558,13 @@ export function TopBar() {
   )
 }
 
-const toolLabel = (id: string): string | undefined => TOOLS.find((t) => t.id === id)?.label
-
 export function ToolShelf() {
   const mode = useApp((a) => a.mode)
   const tool = useScene((s) => s.tool)
   const setTool = useScene((s) => s.setTool)
   const [ref, width] = useContainerWidth()
   const def = modeById(mode)
-  const shelf = shelfMode(width, def.tools, toolLabel)
+  const shelf = shelfMode(width, def.tools, shelfFitLabel)
   // A mode whose only tool is Move (Sandbox, GPU Lab, Lab Data) has nothing to offer here, and
   // the empty strip was 40 px taken from the drawing on a small screen. The card host stays: it
   // draws through a portal, takes no room, and the Sandbox's own buttons will ask it for cards.

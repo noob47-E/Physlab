@@ -61,7 +61,40 @@ export const rightDragPanned = (from: { x: number; y: number } | null, x: number
   from !== null && marqueeStarted({ x0: from.x, y0: from.y, x1: x, y1: y })
 
 /**
- * What is selected once the box is let go: the box's contents, or with Shift held the old
+ * What a drawing tool's click takes, from everything within reach of it (`pickAll`, best first).
+ * A tool that makes a new point on empty space takes an existing point only inside the snapping
+ * radius — the radius the snap ring and the length tip beside the pointer follow. Picking reaches
+ * further (22 px, a finger's width), and the release used to take a point from out there: let go
+ * 16 px short of P and the tip read 3.68 while the segment was built to P, 4 long (Fix 1). A point
+ * beyond the snapping radius is skipped rather than ending the search, so a segment right under
+ * the pointer still wins over a point just out of reach (Midpoint's first click). Tools that never
+ * make points (Perpendicular, Intersect…) draw no length from the click and keep the full reach.
+ */
+export function drawingClickHit<H extends { dist: number }>(hits: readonly H[], isPoint: (h: H) => boolean, createsPoints: boolean, snapPx: number): H | null {
+  if (!createsPoints) return hits[0] ?? null
+  return hits.find((h) => !isPoint(h) || h.dist <= snapPx) ?? null
+}
+
+/**
+ * Whether the pointer joins an existing point when snapping is off (Snap unticked, or Alt held).
+ * Only a tool whose click would join the point anyway (drawingClickHit, for a tool that makes
+ * points) says so in its tip and ring, so the tip gives the length the side is built with (Fix 1).
+ * Vector and Text stay free, as snapping off has always meant for them: a vector's ends and a text
+ * box go exactly under the pointer. A drag never joins (the dragged object would snap to itself).
+ */
+export const joinsPointWithSnapOff = (createsPoints: boolean, dragging: boolean): boolean => createsPoints && !dragging
+
+/**
+ * Whether Shift rounds the pointer to a 15° step. The release joins an existing point it snapped
+ * to rather than rounding (so a side can still close on a corner), and the tip used to round
+ * anyway, showing a length and angle the drawn side did not have. A vector's head never joins a
+ * point with Shift held, so it keeps the step. In 3-D there is no screen angle to round to.
+ */
+export const shiftConstrains = (tool: string, shift: boolean, flat: boolean, onPoint: boolean): boolean =>
+  shift && flat && (tool === 'vector' || !onPoint)
+
+/**
+ * What is selected once the box is let go:the box's contents, or with Shift held the old
  * selection plus them. Shift adds and never removes — a box that took away the objects it
  * covered read as a bug, unlike a Shift-click on one object, which toggles it.
  */

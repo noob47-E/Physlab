@@ -29,7 +29,7 @@ import { WELCOME_JOB, WELCOME_PROMISE } from '../src/renderer/src/app/tour/steps
 import { JOBS, runPure } from '../src/renderer/src/math/pure/run'
 
 describe('how much of the top bar fits', () => {
-  it('folds the mode tabs into a menu under 1500 px and goes to icons under 1150 px', () => {
+  it('gives up the bar’s extras (search label, file name) under 1500 px and goes to icons under 1150 px; the mode tabs fold by room, not by this (modeSwitch.ts)', () => {
     expect(barDensity(1920)).toBe('full')
     expect(barDensity(1500)).toBe('full')
     expect(barDensity(1499)).toBe('compact')

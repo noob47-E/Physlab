@@ -24,6 +24,46 @@
     padding: 0 6px;
   }
 
+  /* The row the bar measures its mode tabs and More button in (Fix 13): drawn with the tabs' own
+     classes, so each width is the real one at this window's density, and never seen, heard or
+     reached. The outer box is 0 × 0 and clips, so the row adds no scroll room; the inner row is
+     as wide as its content, so no label wraps while it is measured. */
+  .mode-measure {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .mode-measure > div {
+    display: flex;
+    width: max-content;
+    white-space: nowrap;
+  }
+  .mode-measure > div > * {
+    flex: none;
+  }
+
+  /* A tool never shrinks below its label, and its label stays on one line (Fix 7). The shelf's
+     description line has a big flex basis; the buttons used to shrink with it down to their bare
+     min-width, and at 1350 px "Perpendicular" (66 px of text in a 53 px button) ran into Midpoint
+     and Parallel, while the two-word bisector labels wrapped and squeezed their icons to nothing.
+     Whether the labels fit at all is shelfMode's call (layoutMath.ts), which then drops to icons. */
+  .toolshelf .tool {
+    flex-shrink: 0;
+  }
+  /* On a short window the button is 30 px: the larger Point icon may give a little, never all. */
+  .toolshelf .tool svg {
+    min-height: 14px;
+  }
+  .toolshelf .tool span {
+    white-space: nowrap;
+    line-height: 1.15;
+  }
+
   /* Icon-only tools when the labels would not fit the window. */
   .toolshelf.icons .tool {
     min-width: 32px;

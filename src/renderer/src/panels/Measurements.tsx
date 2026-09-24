@@ -4,7 +4,7 @@ import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { distanceToLineLike, footOfPerpendicular, lineEquation, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
-import { fmt, fmtIJK, fmtPoint, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
+import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
 import { isPieceCorner, namedByLetters, pieceLettered, pieceMeasures } from '../math/lego'
 import { classifyPolygon } from '../math/shapes'
@@ -304,6 +304,9 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
           <EditableValue
             value={measureValue(row.value, k, settings)}
             suffix={unitSuffix(k, settings)}
+            // A length reads at the student's precision, as the tip while drawing and the label on
+            // the drawing do: the box used to show 4.6063 u beside a segment labelled 4.61 u (Fix 1).
+            display={k === 'length' ? (v) => fmtPrecise(v, settings) : undefined}
             onSet={(shown) => row.set!(worldValue(shown, k, settings))}
           />
         ) : (
@@ -491,10 +494,10 @@ export function Measurements() {
  * hands back the number as typed — the caller converts it, because only the caller knows whether
  * it is looking at a length in centimetres or an angle in degrees.
  */
-function EditableValue({ value, suffix, onSet }: { value: number; suffix: string; onSet: (shown: number) => void }) {
+function EditableValue({ value, suffix, display, onSet }: { value: number; suffix: string; display?: (v: number) => string; onSet: (shown: number) => void }) {
   const [text, setText] = useState('')
   const [editing, setEditing] = useState(false)
-  const shown = editing ? text : fmt(value, 4)
+  const shown = editing ? text : display ? display(value) : fmt(value, 4)
   const commit = () => {
     setEditing(false)
     const raw = text.trim().replace(/−/g, '-')

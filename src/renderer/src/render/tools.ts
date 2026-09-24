@@ -39,6 +39,14 @@ export const TOOLS: ToolInfo[] = [
   { id: 'delete', label: 'Delete', key: 'X', hint: ['Click an object to delete it.'] }
 ]
 
+/**
+ * A tool's label as the shelf's fit estimate (`shelfMode`) should measure it. The shelf keeps a
+ * label on one line (shell.css), but the estimate sizes a button by its longest word, so a
+ * two-word label is handed over as one word of the same length: "Perp. bisector" is as wide as
+ * fourteen letters, not as "bisector" (Fix 7).
+ */
+export const shelfFitLabel = (id: string): string | undefined => TOOLS.find((t) => t.id === id)?.label.replace(/\s/g, '_')
+
 export interface SnapInfo {
   p: V3
   kind: 'free' | 'grid' | 'point' | 'axis' | 'onObject' | 'intersection'

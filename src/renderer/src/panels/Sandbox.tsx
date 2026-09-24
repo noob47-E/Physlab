@@ -18,6 +18,7 @@ import { LabChart } from './LabChart'
 import { enterMode } from '../app/layout'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
+import { clockText, widestClockText } from '../sim/transport'
 import { formatMeasure } from '../math/format'
 import { useToolCard } from '../ui/useToolCard'
 
@@ -57,7 +58,9 @@ function Vec3Row({ label, value, unit, live, onChange }: { label: string; value:
       {live ? (
         // While the run plays these are what the engine says, not what was typed: the typed
         // values are the start of the run and come back with Reset.
-        <div className="flex gap-1 tabular-nums text-[color:var(--text)]" title="Live value; pause to edit the starting value">
+        // As tall as the .field boxes it replaces (styles.css): a row of plain text is 4.5 px
+        // shorter, and Position and Velocity shrinking on Play moved the panel below (Fix 22).
+        <div className="flex h-[24px] items-center gap-1 tabular-nums text-[color:var(--text)]" title="Live value; pause to edit the starting value">
           {(['x', 'y', 'z'] as const).map((axis, i) => (
             <span key={axis} className="min-w-0 flex-1 truncate">
               <span className="text-fine italic text-[color:var(--text-faint)]">{axis} </span>
@@ -289,7 +292,11 @@ function Pushes() {
   )
 }
 
-/** Play, Reset, undo and the clock, pinned to the top so they are never below three screens of settings. */
+/**
+ * Play, Reset, undo and the clock, pinned to the top so they are never below three screens of
+ * settings. The row keeps its shape while a run plays (Fix 22, sim/transport.ts); its 4 px gaps
+ * keep it, with room for a 888.89 s clock, on one line in the 372 px panel of a 1366 px window.
+ */
 function Transport() {
   const engineTime = useSandbox((s) => s.engineTime)
   const past = useSandbox((s) => s.past)
@@ -301,11 +308,18 @@ function Transport() {
   const anyTrail = useSandbox((s) => s.bodies.some((b) => b.trace))
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
-  const num = useNum()
+  const settings = useScene((s) => s.settings)
   return (
-    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1.5 border-b border-[color:var(--line)] bg-[var(--bg-1)] px-3 py-2">
+    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-[color:var(--line)] bg-[var(--bg-1)] px-3 py-2">
       <button className="btn primary" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
-        {playing ? <Pause size={13} /> : <Play size={13} />} {playing ? 'Pause' : 'Play'}
+        {playing ? <Pause size={13} /> : <Play size={13} />}
+        {/* Both words share one cell and the other one is hidden, so the button is as wide as
+            "Pause" either way: "Play" turning into the wider "Pause" was enough to push the row
+            onto a second line on a narrow panel and jolt everything below it (Fix 22). */}
+        <span className="grid">
+          <span className={`col-start-1 row-start-1 ${playing ? 'invisible' : ''}`}>Play</span>
+          <span className={`col-start-1 row-start-1 ${playing ? '' : 'invisible'}`}>Pause</span>
+        </span>
       </button>
       <button
         className="btn"
@@ -339,7 +353,14 @@ function Transport() {
       </button>
       {/* The clock is the number every kinematics question needs; it used to be the hardest
           thing on the panel to read. */}
-      <span className="ml-auto tabular-nums text-[color:var(--text-strong)]">t = {num(engineTime, 's')}</span>
+      {/* Room kept for the widest time a run shows, so the row wraps (or not) by the panel's
+          width alone and never mid-run as the digits grow (sim/transport.ts). */}
+      <span className="ml-auto grid justify-items-end tabular-nums text-[color:var(--text-strong)]">
+        <span className="invisible col-start-1 row-start-1" aria-hidden="true">
+          {widestClockText(engineTime, settings)}
+        </span>
+        <span className="col-start-1 row-start-1">{clockText(engineTime, settings)}</span>
+      </span>
     </div>
   )
 }
