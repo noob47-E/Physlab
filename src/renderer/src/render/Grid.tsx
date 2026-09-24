@@ -7,7 +7,7 @@ import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, minorStepOf, 
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
-import { axisTitle, ringLabels, tickText } from './gridLabels'
+import { axisLabels, axisTitle, ringLabels, rulerLabels } from './gridLabels'
 import type { V3 } from '../math/vec'
 import type { GridStyle } from '../core/types'
 
@@ -146,15 +146,13 @@ export function Grid2D() {
       const origin = toScreen(camera, size, [0, 0, 0])
       const axisY = Math.min(Math.max(origin.y + 14, 12), size.height - 10)
       const axisX = Math.min(Math.max(origin.x - 8, 30), size.width - 6)
-      for (let i = Math.ceil(b.xMin / majorStep); i <= Math.floor(b.xMax / majorStep); i++) {
-        if (i === 0) continue
-        const sx = toScreen(camera, size, [i * majorStep, 0, 0]).x
-        ticks.place(tickText(i * majorStep, majorStep, settings), sx, axisY)
+      // Labels come from the Talbot search, not from every major line: never under 60 px apart,
+      // always on a drawn line, and the same step on both axes.
+      for (const { value, text } of axisLabels(b.xMin, b.xMax, size.width, majorStep, minorStep, settings)) {
+        ticks.place(text, toScreen(camera, size, [value, 0, 0]).x, axisY)
       }
-      for (let j = Math.ceil(b.yMin / majorStep); j <= Math.floor(b.yMax / majorStep); j++) {
-        if (j === 0) continue
-        const sy = toScreen(camera, size, [0, j * majorStep, 0]).y
-        ticks.place(tickText(j * majorStep, majorStep, settings), axisX, sy, 'right')
+      for (const { value, text } of axisLabels(b.yMin, b.yMax, size.height, majorStep, minorStep, settings)) {
+        ticks.place(text, axisX, toScreen(camera, size, [0, value, 0]).y, 'right')
       }
       ticks.place('0', origin.x - 8, origin.y + 12, 'right')
       if (showGrid && gridStyle === 'polar') {
@@ -220,12 +218,12 @@ export function Grid3D() {
       put(axisTitle('x', settings), [half * 1.08, 0, 0], AXIS_COLORS.x)
       put(axisTitle('y', settings), [0, half * 1.08, 0], AXIS_COLORS.y)
       put(axisTitle('z', settings), [0, 0, half * 1.08], AXIS_COLORS.z)
-      for (let i = -10; i <= 10; i += 2) {
-        if (i === 0) continue
-        const label = tickText(i * step, step, settings)
-        put(label, [i * step, 0, 0])
-        put(label, [0, i * step, 0])
-        put(label, [0, 0, i * step])
+      // Each axis is numbered for its own smallest size on screen, so under perspective its far
+      // labels keep 60 px apart too; an axis seen end-on shows none rather than a pile on one spot.
+      const screenOf = (p: V3) => toScreen(camera, size, p)
+      const axes: V3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      for (const dir of axes) {
+        for (const { text, x, y } of rulerLabels(dir, half, step, screenOf, size, settings)) ticks.place(text, x, y, 'center')
       }
     }
     ticks.end()
