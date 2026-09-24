@@ -213,9 +213,11 @@ describe('code written for format 1 meets a format-2 part', () => {
     expect(unanswered({ ...(q.parts[2] as Extract<PQPart, { type: 'vector' }>), answer: ['F', ' '] })).toBe(true)
   })
 
-  it('leaves a format-2 part out of a Numbas file with a sentence, keeping the rest', () => {
-    const exam = toExam(fileOf(q))
-    expect(exam).toContain("PhysLab's part 3 is a kind of answer this Numbas file cannot hold yet, so it is left out.")
+  it('leaves a format-2 part Numbas cannot ask out of a Numbas file with a sentence, keeping the rest', () => {
+    // A vector goes out as number boxes (QE3, tests/numbas2.test.ts); a Lego part has no Numbas form at all.
+    const lego: PQPart = { type: 'lego', prompt: 'Fill it.', target: [['0', '0'], ['2', '0'], ['0', '2']], pieces: 2, marks: 1 }
+    const exam = toExam(fileOf({ ...q, parts: [...q.parts.slice(0, 2), lego] }))
+    expect(exam).toContain("PhysLab's part 3 fills a shape with Lego pieces, which Numbas cannot ask, so it is left out.")
     expect((exam.match(/"type": ?"numberentry"/g) ?? []).length).toBe(2)
   })
 })

@@ -12,11 +12,14 @@ import { fmtPrecise } from '../math/format'
 import { texToPlain } from '../math/pure/work'
 import { licenseFromNumbas, refusalSentence } from './license'
 import {
+  DEFAULT_BAND,
+  bandOf,
+  formatVersionOf,
   RESERVED_NAMES,
   UNIT_IDS,
   isCommandArgument,
-  isFormat1Part,
   VARIABLE_NAME,
+  type BandTolerance,
   type License,
   type LicenseId,
   type PQFile,
@@ -584,6 +587,12 @@ interface TextContext {
   names: Set<string>
   /** Counts the variables made for expressions in the text, so their names stay distinct. */
   made: number
+  /**
+   * Variables defined as a matrix written out entry by entry (`matrix([1, 2], [3, 4])`). PhysLab's
+   * variables are numbers, so these are not variables at all: a matrix part that names one reads
+   * its entries from here, and nothing else may use it.
+   */
+  matrices: Map<string, JmeNode>
 }
 
 /**
@@ -596,6 +605,8 @@ function chipFor(inner: string, ctx: TextContext): string {
   const src = inner.trim()
   if (VARIABLE_NAME.test(src)) {
     if (ctx.names.has(src)) return `{${src}}`
+    // A matrix variable is a variable, just not one PhysLab can show — say so, not "no variable".
+    if (ctx.matrices.has(src)) throw new Skip(`shows the matrix ${src} in its text, which PhysLab can only take as an answer`)
     throw new Skip(`shows {${src}} in its text, but there is no variable called ${src}`)
   }
   let expr: string
@@ -815,9 +826,24 @@ interface QuestionRead {
   steps: PQStep[]
   statementLines: string[]
   notes: string[]
+  /** Numbas's name for a part (`p0`, `p1g0`) → the index of the PhysLab part it became. */
+  paths: Map<string, number>
+  /** Adaptive marking to turn into `ecf` once every part is read and every name above is known. */
+  carried: { index: number; label: string; source: Obj; inherited: boolean }[]
 }
 
-function readVariables(raw: unknown, ordered: string[]): PQVariable[] {
+/** The rows of a matrix written out entry by entry — `matrix([1, 2], [3, 4])` or `matrix([[1, 2], [3, 4]])` — or null. */
+function matrixRows(n: JmeNode): JmeNode[][] | null {
+  if (n.t !== 'call' || n.f !== 'matrix' || n.args.length === 0) return null
+  const lists = n.args.length === 1 && n.args[0].t === 'list' && n.args[0].items.every((r) => r.t === 'list') ? n.args[0].items : n.args
+  if (!lists.every((r) => r.t === 'list')) return null
+  const rows = (lists as Extract<JmeNode, { t: 'list' }>[]).map((r) => r.items)
+  // No rows (`matrix([])`), a row that is itself a list of lists, or rows of different lengths, is no matrix to type box by box.
+  if (rows.length === 0 || rows[0].length === 0 || rows.some((r) => r.length !== rows[0].length || r.some((e) => e.t === 'list'))) return null
+  return rows
+}
+
+function readVariables(raw: unknown, ordered: string[], matrices: Map<string, JmeNode> = new Map()): PQVariable[] {
   if (!isObj(raw)) return []
   const keys = [...ordered.filter((k) => k in raw), ...Object.keys(raw).filter((k) => !ordered.includes(k))]
   const out: PQVariable[] = []
@@ -830,6 +856,16 @@ function readVariables(raw: unknown, ordered: string[]): PQVariable[] {
     if (RESERVED_NAMES.has(name)) throw new Skip(`uses '${name}' as a variable name, but that already means something in maths`)
     if (seen.has(name)) continue
     seen.add(name)
+    // A matrix written out entry by entry is kept for the matrix part that names it (format 2).
+    try {
+      const node = parseJme(asString(v.definition))
+      if (matrixRows(node)) {
+        matrices.set(name, node)
+        continue
+      }
+    } catch {
+      // Not readable as JME: jmeToVariableDef below says why in its own sentence.
+    }
     let def: VariableDef
     try {
       def = jmeToVariableDef(asString(v.definition))
@@ -890,12 +926,68 @@ function readChoicePart(p: Obj, label: string, promptLines: string[], ctx: TextC
   read.parts.push({ type: 'choice', prompt: promptLines.join('\n'), choices, shuffle: tryGet(p, 'shuffleChoices') === true, marks: worth })
 }
 
-function readParts(rawParts: unknown, ctx: TextContext, read: QuestionRead, where: string): void {
+/** Whether a Numbas part carries adaptive marking of its own: a non-empty list of replacements. */
+const replaces = (p: Obj): boolean => {
+  const r = tryGet(p, 'variableReplacements')
+  return Array.isArray(r) && r.length > 0
+}
+
+/**
+ * A Numbas matrix part. Only a matrix written out entry by entry becomes a PhysLab matrix part —
+ * in the part itself or in a variable it names — because PhysLab's variables are numbers and its
+ * boxes need each entry as a formula; `id(3)` or a matrix worked out by a function is skipped with
+ * a sentence. Numbas's tolerance is a fixed gap on every entry; with none, the part's precision
+ * decides as it does for a number, and failing that the app's one tolerance, 2 %.
+ */
+function readMatrixPart(p: Obj, label: string, promptLines: string[], ctx: TextContext, read: QuestionRead, marks: number): void {
+  const src = asString(tryGet(p, 'correctAnswer')).trim()
+  if (src === '') throw new Skip(`gives no answer for ${label}`)
+  const unreadable = new Skip(`gives the answer to ${label} as ${src}, which PhysLab can read only as a matrix written out entry by entry`)
+  let node: JmeNode
+  try {
+    node = parseJme(src)
+  } catch (e) {
+    if (e instanceof JmeRefusal) throw unreadable
+    throw e
+  }
+  if (node.t === 'name' && ctx.matrices.has(node.v)) node = ctx.matrices.get(node.v)!
+  const rows = matrixRows(node)
+  if (!rows) throw unreadable
+  let answer: string[][]
+  try {
+    answer = rows.map((r) => r.map((e) => emit(e, 'radians').s))
+  } catch (e) {
+    refuse(e, label)
+  }
+  const gap = Number(tryGet(p, 'tolerance'))
+  const precision = Number(tryGet(p, 'precision'))
+  const precisionType = asString(tryGet(p, 'precisionType'))
+  let tolerance: Tolerance
+  if (gap > 0) tolerance = { kind: 'absolute', value: gap }
+  else if (precisionType === 'dp' && Number.isFinite(precision)) tolerance = { kind: 'absolute', value: 0.5 * 10 ** -precision }
+  else if (precisionType === 'sigfig' && Number.isFinite(precision)) tolerance = { kind: 'relative', value: 0.5 * 10 ** (1 - precision) }
+  else tolerance = { ...DEFAULT_BAND }
+  if (tryGet(p, 'allowResize') === true) read.notes.push(`${label} lets the student choose the size of the matrix in Numbas; PhysLab shows a box for each entry`)
+  const part: PQPart = { type: 'matrix', prompt: promptLines.join('\n'), answer, tolerance, marks }
+  if (tryGet(p, 'allowFractions') === true) part.allowFractions = true
+  if (tryGet(p, 'markPerCell') === true) part.markPerCell = true
+  read.parts.push(part)
+}
+
+/**
+ * The parts of a question, or the gaps of a gap-fill, in order. `prefix` is how Numbas names
+ * them (`p` for parts, `p0g` for the gaps of the first), so that adaptive marking, which names
+ * the part whose answer it uses, can be matched to the PhysLab part it became. A gap-fill's own
+ * adaptive marking is Numbas's way of setting it for its gaps, so it is handed down to them.
+ */
+function readParts(rawParts: unknown, ctx: TextContext, read: QuestionRead, where: string, prefix = 'p', parent?: Obj): void {
   if (!Array.isArray(rawParts)) return
   rawParts.forEach((p, i) => {
     if (!isObj(p)) return
     const label = `${where}part ${num(i + 1)}`
+    const path = `${prefix}${i}`
     const type = asString(tryGet(p, 'type'))
+    const at = read.parts.length
     readSteps(tryGet(p, 'steps'), ctx, read.steps)
     if (type === 'information') {
       read.statementLines.push(...htmlToLines(asString(tryGet(p, 'prompt')), ctx))
@@ -908,72 +1000,133 @@ function readParts(rawParts: unknown, ctx: TextContext, read: QuestionRead, wher
         read.statementLines.push(...lead)
         return
       }
-      const before = read.parts.length
-      readParts(gaps, ctx, read, `${label}, `)
-      const first = read.parts[before]
+      readParts(gaps, ctx, read, `${label}, `, `${path}g`, replaces(p) ? p : parent)
+      const first = read.parts[at]
       if (first && lead.length > 0) first.prompt = [...lead, first.prompt].filter((l) => l !== '').join('\n')
+      // A gap-fill of one gap answers with that gap's number, so a later part may name either.
+      if (read.parts.length === at + 1) read.paths.set(path, at)
       return
     }
-    const promptLines = htmlToLines(asString(tryGet(p, 'prompt')), ctx)
-    let marks = Number(tryGet(p, 'marks'))
-    if (type === '1_n_2' || type === 'm_n_2') {
-      readChoicePart(p, label, promptLines, ctx, read, marks)
-      return
-    }
-    if (type !== 'numberentry' && type !== 'jme') throw new Skip(`uses a ${type || 'nameless'} part PhysLab does not read`)
-    if (!(marks > 0)) {
-      read.notes.push(`${label} was worth 0 marks in Numbas; PhysLab counts it as 1`)
-      marks = 1
-    }
-    if (type === 'numberentry') {
-      let unit: UnitId
-      const last = promptLines[promptLines.length - 1]
-      const written = last === undefined ? null : UNIT_LINE.exec(last)
-      if (written && (UNIT_IDS as readonly string[]).includes(written[1])) {
-        unit = written[1] as UnitId
-        promptLines.pop()
-      } else unit = unitInPrompt(promptLines.join(' '))
-      const precision = Number(tryGet(p, 'precision'))
-      let got: NumberAnswer
-      try {
-        got = readNumberAnswer(
-          asString(tryGet(p, 'minValue')),
-          asString(tryGet(p, 'maxValue')),
-          asString(tryGet(p, 'precisionType')),
-          Number.isFinite(precision) ? precision : null
-        )
-      } catch (e) {
-        refuse(e, label)
-      }
-      if (got.note) read.notes.push(`${label}: ${got.note}`)
-      read.parts.push({ type: 'number', prompt: promptLines.join('\n'), answer: got.answer, unit, tolerance: got.tolerance, marks })
-      return
-    }
-    // jme. Read and set aside: which notation the student may type in and which functions are
-    // on offer are Numbas's business; PhysLab's field reads what the calculator reads.
-    void tryGet(p, 'notation')
-    void tryGet(p, 'enabledFunctions')
-    void tryGet(p, 'disabledFunctions')
-    void tryGet(p, 'functionSets')
-    let answer: string
+    readOnePart(p, type, label, ctx, read)
+    if (read.parts.length !== at + 1) return
+    read.paths.set(path, at)
+    if (replaces(p)) read.carried.push({ index: at, label, source: p, inherited: false })
+    else if (parent) read.carried.push({ index: at, label, source: parent, inherited: true })
+  })
+}
+
+/** One part that is not a gap-fill or information: it becomes exactly one PhysLab part, or the question is skipped. */
+function readOnePart(p: Obj, type: string, label: string, ctx: TextContext, read: QuestionRead): void {
+  const promptLines = htmlToLines(asString(tryGet(p, 'prompt')), ctx)
+  let marks = Number(tryGet(p, 'marks'))
+  if (type === '1_n_2' || type === 'm_n_2') {
+    readChoicePart(p, label, promptLines, ctx, read, marks)
+    return
+  }
+  if (type !== 'numberentry' && type !== 'jme' && type !== 'matrix') throw new Skip(`uses a ${type || 'nameless'} part PhysLab does not read`)
+  if (!(marks > 0)) {
+    read.notes.push(`${label} was worth 0 marks in Numbas; PhysLab counts it as 1`)
+    marks = 1
+  }
+  if (type === 'matrix') {
+    readMatrixPart(p, label, promptLines, ctx, read, marks)
+    return
+  }
+  if (type === 'numberentry') {
+    let unit: UnitId
+    const last = promptLines[promptLines.length - 1]
+    const written = last === undefined ? null : UNIT_LINE.exec(last)
+    if (written && (UNIT_IDS as readonly string[]).includes(written[1])) {
+      unit = written[1] as UnitId
+      promptLines.pop()
+    } else unit = unitInPrompt(promptLines.join(' '))
+    const precision = Number(tryGet(p, 'precision'))
+    let got: NumberAnswer
     try {
-      answer = jmeToMath(asString(tryGet(p, 'answer')), 'same')
+      got = readNumberAnswer(
+        asString(tryGet(p, 'minValue')),
+        asString(tryGet(p, 'maxValue')),
+        asString(tryGet(p, 'precisionType')),
+        Number.isFinite(precision) ? precision : null
+      )
     } catch (e) {
       refuse(e, label)
     }
-    const checking = asString(tryGet(p, 'checkingType'))
-    if (checking === 'dp' || checking === 'sigfig') {
-      read.notes.push(
-        `${label} is checked to a number of ${checking === 'dp' ? 'decimal places' : 'significant figures'} in Numbas; PhysLab checks it as an expression`
-      )
+    if (got.note) read.notes.push(`${label}: ${got.note}`)
+    read.parts.push({ type: 'number', prompt: promptLines.join('\n'), answer: got.answer, unit, tolerance: got.tolerance, marks })
+    return
+  }
+  // jme. Read and set aside: which notation the student may type in and which functions are
+  // on offer are Numbas's business; PhysLab's field reads what the calculator reads.
+  void tryGet(p, 'notation')
+  void tryGet(p, 'enabledFunctions')
+  void tryGet(p, 'disabledFunctions')
+  void tryGet(p, 'functionSets')
+  let answer: string
+  try {
+    answer = jmeToMath(asString(tryGet(p, 'answer')), 'same')
+  } catch (e) {
+    refuse(e, label)
+  }
+  const checking = asString(tryGet(p, 'checkingType'))
+  if (checking === 'dp' || checking === 'sigfig') {
+    read.notes.push(
+      `${label} is checked to a number of ${checking === 'dp' ? 'decimal places' : 'significant figures'} in Numbas; PhysLab checks it as an expression`
+    )
+  }
+  const range = tryGet(p, 'vsetRange')
+  const part: PQPart = { type: 'expression', prompt: promptLines.join('\n'), answer, symbols: freeSymbols(answer, ctx.names), marks }
+  if (Array.isArray(range) && range.length === 2 && range.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+    part.sampleRange = [range[0], range[1]]
+  }
+  read.parts.push(part)
+}
+
+/** Numbas's name for a part in words, the way the report names parts: `p1g0` → "part 2, part 1". */
+function pathWords(path: string): string {
+  const m = /^p(\d+)(?:g(\d+))?$/.exec(path)
+  if (!m) return 'a step inside another part'
+  return m[2] === undefined ? `part ${num(Number(m[1]) + 1)}` : `part ${num(Number(m[1]) + 1)}, part ${num(Number(m[2]) + 1)}`
+}
+
+/**
+ * Numbas's adaptive marking → PhysLab's error carried forward, once every part is read. Each
+ * replacement names a variable and the part whose answer stands in for it; that part must have
+ * come in as an earlier number part, or the question is skipped — marking the later part without
+ * the student's own numbers would take marks Numbas gives. A gap-fill's replacements are handed to
+ * its gaps, and a gap is never marked with its own answer or a later gap's, so those are passed by.
+ */
+function readCarried(read: QuestionRead, ctx: TextContext): void {
+  for (const c of read.carried) {
+    const part = read.parts[c.index]
+    const reps = tryGet(c.source, 'variableReplacements') as unknown[]
+    const uses: { part: number; variable: string }[] = []
+    for (const r of reps) {
+      if (!isObj(r)) continue
+      const variable = asString(r.variable)
+      const path = asString(r.part)
+      if (ctx.matrices.has(variable)) throw new Skip(`marks ${c.label} with an earlier answer put in place of the matrix ${variable}, which PhysLab can only take as an answer`)
+      if (!ctx.names.has(variable)) throw new Skip(`marks ${c.label} with an earlier answer put in place of ${variable || 'a nameless variable'}, but there is no variable called that`)
+      const k = read.paths.get(path)
+      if (k === undefined) throw new Skip(`marks ${c.label} with the answer to ${pathWords(path)}, which PhysLab does not ask as one number`)
+      if (k >= c.index) {
+        if (c.inherited) continue
+        throw new Skip(`marks ${c.label} with the answer to ${pathWords(path)}, which does not come before it`)
+      }
+      if (read.parts[k].type !== 'number') throw new Skip(`marks ${c.label} with the answer to ${pathWords(path)}, which is not a number`)
+      if (r.must_go_first === true) read.notes.push(`${c.label} waits in Numbas until ${pathWords(path)} is answered; PhysLab marks it with whatever that part holds`)
+      if (!uses.some((u) => u.part === k && u.variable === variable)) uses.push({ part: k, variable })
     }
-    const range = tryGet(p, 'vsetRange')
-    const part: PQPart = { type: 'expression', prompt: promptLines.join('\n'), answer, symbols: freeSymbols(answer, ctx.names), marks }
-    if (Array.isArray(range) && range.length === 2 && range.every((v) => typeof v === 'number' && Number.isFinite(v))) {
-      part.sampleRange = [range[0], range[1]]
+    if (uses.length === 0) continue
+    const strategy = asString(tryGet(c.source, 'variableReplacementStrategy')) === 'alwaysreplace' ? 'alwaysreplace' : 'originalfirst'
+    const asked = Number(tryGet(c.source, 'adaptiveMarkingPenalty'))
+    let penalty = Number.isFinite(asked) && asked > 0 ? asked : 0
+    if (penalty > part.marks) {
+      read.notes.push(`${c.label} takes ${num(penalty)} marks off an answer marked with an earlier one, more than it is worth; PhysLab takes ${num(part.marks)}`)
+      penalty = part.marks
     }
-    read.parts.push(part)
-  })
+    part.ecf = { uses, strategy, penalty }
+  }
 }
 
 function contributors(raw: Obj, exam: Obj): string[] {
@@ -1002,6 +1155,47 @@ function readLicense(raw: Obj, exam: Obj, title: string): License {
   return { id, holder, found: found! }
 }
 
+/** Numbas draws variants until `variablesTest.condition` holds, at most `maxRuns` times (100 by default). */
+const NUMBAS_MAX_RUNS = 100
+
+/**
+ * Numbas's `variablesTest` → PhysLab's `condition`: the same JME condition in the calculator's
+ * words (in degrees, like every formula of the variables), the same number of tries. An empty
+ * condition is Numbas's "keep every variant", so there is nothing to carry.
+ */
+function readCondition(test: unknown): PQQuestion['condition'] | undefined {
+  if (!isObj(test)) return undefined
+  const src = asString(test.condition).trim()
+  if (src === '') return undefined
+  let when: string
+  try {
+    when = jmeToMath(src, 'radians')
+  } catch (e) {
+    if (e instanceof JmeRefusal) throw new Skip(`keeps only the variants that meet a condition using ${e.what}, which PhysLab does not know`)
+    throw e
+  }
+  const runs = Number(test.maxRuns)
+  return { when, maxRuns: Number.isInteger(runs) && runs >= 1 ? runs : NUMBAS_MAX_RUNS }
+}
+
+/**
+ * A matrix variable is only ever an answer here: any other formula that names it (`2*m`, a
+ * condition on it) would be worked out by a calculator that has no such variable, so the question
+ * is skipped rather than drawn with numbers that are not there.
+ */
+function noMatrixArithmetic(ctx: TextContext, parts: PQPart[], condition: PQQuestion['condition'] | undefined): void {
+  if (ctx.matrices.size === 0) return
+  const formulas = [
+    ...ctx.vars.flatMap((v) => (v.def.kind === 'expr' ? [v.def.expr] : [])),
+    ...parts.flatMap((p) => (p.type === 'number' || p.type === 'expression' ? [p.answer] : p.type === 'matrix' ? p.answer.flat() : [])),
+    ...(condition ? [condition.when] : [])
+  ]
+  for (const f of formulas) {
+    const used = symbolsOf(math.parse(f)).find((s) => ctx.matrices.has(s))
+    if (used) throw new Skip(`works with the matrix ${used} in a formula, which PhysLab can only take as an answer`)
+  }
+}
+
 /** `title` is the name the report calls the question by, which for a nameless one is its number. */
 function readQuestion(raw: Obj, exam: Obj, title: string): { question: PQQuestion; notes: string[] } {
   // The licence comes first: a question PhysLab may not bundle is refused whatever else it holds.
@@ -1016,13 +1210,18 @@ function readQuestion(raw: Obj, exam: Obj, title: string): { question: PQQuestio
   if (Array.isArray(raw.variable_groups)) {
     for (const g of raw.variable_groups) if (isObj(g) && Array.isArray(g.variables)) ordered.push(...g.variables.map(asString))
   }
-  const vars = readVariables(raw.variables, ordered)
-  const ctx: TextContext = { vars, names: new Set(vars.map((v) => v.name)), made: 0 }
+  const matrices = new Map<string, JmeNode>()
+  const vars = readVariables(raw.variables, ordered, matrices)
+  const ctx: TextContext = { vars, names: new Set(vars.map((v) => v.name)), made: 0, matrices }
 
-  const read: QuestionRead = { parts: [], steps: [], statementLines: htmlToLines(asString(raw.statement), ctx), notes: [] }
+  const read: QuestionRead = { parts: [], steps: [], statementLines: htmlToLines(asString(raw.statement), ctx), notes: [], paths: new Map(), carried: [] }
   readParts(raw.parts, ctx, read, '')
   if (read.parts.length === 0) throw new Skip('has no part PhysLab can ask')
+  readCarried(read, ctx)
+  const condition = readCondition(raw.variablesTest)
+  // The advice is read first: a chip in it (`{2*m}`) makes a shown variable the matrix check must see too.
   const steps = [...linesToSteps(htmlToLines(asString(raw.advice), ctx)), ...read.steps]
+  noMatrixArithmetic(ctx, read.parts, condition)
 
   const question: PQQuestion = {
     id: stableId(raw),
@@ -1034,6 +1233,7 @@ function readQuestion(raw: Obj, exam: Obj, title: string): { question: PQQuestio
     imported: { format: 'numbas', contributors: contributors(raw, exam) }
   }
   if (steps.length > 0) question.steps = { level: 'worked', items: steps }
+  if (condition) question.condition = condition
   if (Array.isArray(raw.tags) && raw.tags.length > 0) question.tags = raw.tags.map(asString).filter((t) => t !== '')
   return { question, notes: read.notes }
 }
@@ -1091,7 +1291,9 @@ export function fromExam(text: string): ExamImport {
       else throw e
     }
   })
-  return { file: { app: 'PhysLab', format: 'pqjson', version: 1, questions }, report }
+  // Format 2 only when an import needs it (a matrix, error carried forward, a condition), so a plain
+  // import still opens in 0.7.0.
+  return { file: { app: 'PhysLab', format: 'pqjson', version: formatVersionOf({ questions }), questions }, report }
 }
 
 // ===========================================================================
@@ -1271,85 +1473,258 @@ const PART_DEFAULTS = {
   steps: []
 }
 
+/** A percentage in a sentence: 2, 0.5. */
+const pct = (fraction: number): string => num(fraction * 100)
+
+/** "y(0) = 0 and y'(0) = 1": a function part's starting conditions, as the author wrote them. */
+function startsText(p: Extract<PQPart, { type: 'function' }>): string {
+  return p.initial.map((c) => `${p.y}${c.order === 1 ? "'" : ''}(${c.at}) = ${c.value}`).join(' and ')
+}
+
 /** What a PQ part holds that Numbas cannot: written into the question's description instead. */
 function partNotes(p: PQPart, index: number): string[] {
   const label = `part ${num(index + 1)}`
   const out: string[] = []
-  if (!isFormat1Part(p)) out.push(`PhysLab's ${label} is a kind of answer this Numbas file cannot hold yet, so it is left out.`)
-  if (p.type === 'number') {
-    if (p.kind === 'direction') out.push(`PhysLab checks ${label} as a direction, round the circle.`)
-    if (p.kind === 'angle') out.push(`PhysLab checks ${label} as an angle.`)
-    for (const t of p.traps ?? []) out.push(`PhysLab knows a wrong answer for ${label}: ${t.value} — ${t.why}`)
+  switch (p.type) {
+    case 'number':
+      if (p.tolerance.kind === 'stated') {
+        out.push(`PhysLab marks ${label} against the student's own stated uncertainty (the Eₙ test); Numbas checks it within ${pct(DEFAULT_BAND.value)} %.`)
+      }
+      if (p.kind === 'direction') out.push(`PhysLab checks ${label} as a direction, round the circle.`)
+      if (p.kind === 'angle') out.push(`PhysLab checks ${label} as an angle.`)
+      for (const t of p.traps ?? []) out.push(`PhysLab knows a wrong answer for ${label}: ${t.value} — ${t.why}`)
+      break
+    case 'choice':
+      if (p.distractors) out.push(`PhysLab makes the choices for ${label} from the right answer ${p.distractors.correct} with the rules ${p.distractors.rules.join(', ')}.`)
+      break
+    case 'vector':
+      out.push(`PhysLab's ${label} is a vector; Numbas asks for its components one box each.`)
+      break
+    case 'matrix':
+      if (p.tolerance.kind === 'relative') out.push(`PhysLab accepts each entry of ${label} within ${pct(p.tolerance.value)} % of its own value; Numbas checks each entry exactly.`)
+      break
+    case 'roots':
+      if (p.answer.length === 0) out.push(`PhysLab's ${label} has no real roots as its answer, which a Numbas number box cannot take, so it is left out.`)
+      else out.push(`PhysLab's ${label} is a set of roots; Numbas asks for them one box each${p.answer.length > 3 ? ', in the order PhysLab lists them' : ', in any order'}.`)
+      break
+    case 'function':
+      out.push(`Numbas checks ${label} against the model answer ${p.y} = ${p.model} alone; PhysLab accepts any ${p.y} that solves ${p.ode}${p.initial.length > 0 ? ` with ${startsText(p)}` : ''}.`)
+      break
+    case 'proof':
+      out.push(`PhysLab's ${label} is a proof, shown with a model proof and a self-check list and never marked; both are in the advice.`)
+      break
+    case 'lego':
+      out.push(`PhysLab's ${label} fills a shape with Lego pieces, which Numbas cannot ask, so it is left out.`)
+      break
   }
-  if (p.type === 'choice' && p.distractors) {
-    out.push(`PhysLab makes the choices for ${label} from the right answer ${p.distractors.correct} with the rules ${p.distractors.rules.join(', ')}.`)
-  }
+  if (p.showIf !== undefined) out.push(`PhysLab shows ${label} only when ${p.showIf}; Numbas always shows it.`)
   return out
 }
 
-function partToNumbas(p: PQPart): Obj | null {
-  if (!isFormat1Part(p)) return null
-  const base = { ...PART_DEFAULTS, marks: p.marks }
-  if (p.type === 'number') {
-    const answer = `(${mathToJme(p.answer)})`
-    const t = jmeNumber(p.tolerance.value)
-    const [minValue, maxValue] =
-      p.tolerance.kind === 'relative' ? [`${answer} * (1 - ${t})`, `${answer} * (1 + ${t})`] : [`${answer} - ${t}`, `${answer} + ${t}`]
-    const prompt = p.unit === 'none' ? textToHtml(p.prompt) : textToHtml(p.prompt) + `<p>Give your answer in ${escapeHtml(p.unit)}.</p>`
-    return {
-      type: 'numberentry',
-      ...base,
-      prompt,
-      minValue,
-      maxValue,
-      correctAnswerFraction: false,
-      allowFractions: false,
-      mustBeReduced: false,
-      precisionType: 'none',
-      showPrecisionHint: false
-    }
-  }
-  if (p.type === 'expression') {
-    return {
-      type: 'jme',
-      ...base,
-      prompt: textToHtml(p.prompt),
-      answer: mathToJme(p.answer, 'same'),
-      answerSimplification: 'all',
-      showPreview: true,
-      checkingType: 'absdiff',
-      checkingAccuracy: 0.001,
-      failureRate: 1,
-      vsetRangePoints: 5,
-      vsetRange: p.sampleRange ?? [1, 2],
-      checkVariableNames: false,
-      singleLetterVariables: false,
-      allowUnknownFunctions: true,
-      implicitFunctionComposition: false,
-      caseSensitive: false,
-      valueGenerators: []
-    }
-  }
-  // A choice part whose choices are made by rules has nothing Numbas can list.
-  if (p.choices.length === 0) return null
-  const correct = p.choices.filter((c) => c.correct).length
-  const single = correct === 1
+/** The unit line a number box's prompt closes with, which the importer reads back as the part's unit. */
+const unitLine = (unit: UnitId): string => (unit === 'none' ? '' : `<p>Give your answer in ${escapeHtml(unit)}.</p>`)
+
+/**
+ * A Numbas number box for an answer already in JME: the band written into `minValue`/`maxValue`
+ * round the answer, so Numbas
+ * checks each variant it shows. `spread`, when given, is a JME half-width that replaces the band
+ * (a vector's components share one, a fraction of the vector's size).
+ */
+function numberEntry(answerJme: string, band: BandTolerance, marks: number, prompt: string, spread?: string): Obj {
+  const a = `(${answerJme})`
+  const t = jmeNumber(band.value)
+  const [minValue, maxValue] =
+    spread !== undefined ? [`${a} - ${spread}`, `${a} + ${spread}`] : band.kind === 'relative' ? [`${a} * (1 - ${t})`, `${a} * (1 + ${t})`] : [`${a} - ${t}`, `${a} + ${t}`]
   return {
-    type: single ? '1_n_2' : 'm_n_2',
-    ...base,
-    prompt: textToHtml(p.prompt),
-    minMarks: 0,
-    maxMarks: p.marks,
-    shuffleChoices: p.shuffle,
-    displayType: single ? 'radiogroup' : 'checkbox',
-    displayColumns: 0,
-    warningType: 'none',
-    showCellAnswerState: true,
-    markingMethod: 'sum ticked cells',
-    choices: p.choices.map((c) => lineToHtml(c.text)),
-    matrix: p.choices.map((c) => [c.correct ? (single ? p.marks : 1) : 0]),
-    distractors: p.choices.map((c) => (c.why ? lineToHtml(c.why) : ''))
+    type: 'numberentry',
+    ...PART_DEFAULTS,
+    marks,
+    prompt,
+    minValue,
+    maxValue,
+    correctAnswerFraction: false,
+    allowFractions: false,
+    mustBeReduced: false,
+    precisionType: 'none',
+    showPrecisionHint: false
   }
+}
+
+/** A gap-fill of number boxes: the prompt, then a line holding the boxes. */
+function gapfill(p: { prompt: string; marks: number; unit: UnitId }, boxes: string, gaps: Obj[], sortAnswers: boolean): Obj {
+  return { type: 'gapfill', ...PART_DEFAULTS, marks: 0, prompt: textToHtml(p.prompt) + `<p>${boxes}</p>` + unitLine(p.unit), gaps, sortAnswers }
+}
+
+/**
+ * The roots in ascending order as JME, for a gap-fill that sorts the student's answers before
+ * marking them: two roots are min and max, three add the middle one; more than three stay in the
+ * author's order (and the gap-fill does not sort).
+ */
+function ascending(roots: string[]): string[] | null {
+  const r = roots.map((x) => `(${mathToJme(x)})`)
+  if (r.length === 1) return r
+  const lo = `min(${r.join(', ')})`
+  const hi = `max(${r.join(', ')})`
+  if (r.length === 2) return [lo, hi]
+  if (r.length === 3) return [lo, `${r.join(' + ')} - ${lo} - ${hi}`, hi]
+  return null
+}
+
+function partToNumbas(p: PQPart): Obj | null {
+  const base = { ...PART_DEFAULTS, marks: p.marks }
+  switch (p.type) {
+    case 'number':
+      // A stated (Eₙ) answer has no band of its own; Numbas gets the app's one tolerance (bandOf).
+      return numberEntry(mathToJme(p.answer), bandOf(p.tolerance), p.marks, textToHtml(p.prompt) + unitLine(p.unit))
+    case 'expression':
+      return {
+        type: 'jme',
+        ...base,
+        prompt: textToHtml(p.prompt),
+        answer: mathToJme(p.answer, 'same'),
+        answerSimplification: 'all',
+        showPreview: true,
+        checkingType: 'absdiff',
+        checkingAccuracy: 0.001,
+        failureRate: 1,
+        vsetRangePoints: 5,
+        vsetRange: p.sampleRange ?? [1, 2],
+        checkVariableNames: false,
+        singleLetterVariables: false,
+        allowUnknownFunctions: true,
+        implicitFunctionComposition: false,
+        caseSensitive: false,
+        valueGenerators: []
+      }
+    case 'choice': {
+      // A choice part whose choices are made by rules has nothing Numbas can list.
+      if (p.choices.length === 0) return null
+      const correct = p.choices.filter((c) => c.correct).length
+      const single = correct === 1
+      return {
+        type: single ? '1_n_2' : 'm_n_2',
+        ...base,
+        prompt: textToHtml(p.prompt),
+        minMarks: 0,
+        maxMarks: p.marks,
+        shuffleChoices: p.shuffle,
+        displayType: single ? 'radiogroup' : 'checkbox',
+        displayColumns: 0,
+        warningType: 'none',
+        showCellAnswerState: true,
+        markingMethod: 'sum ticked cells',
+        choices: p.choices.map((c) => lineToHtml(c.text)),
+        matrix: p.choices.map((c) => [c.correct ? (single ? p.marks : 1) : 0]),
+        distractors: p.choices.map((c) => (c.why ? lineToHtml(c.why) : ''))
+      }
+    }
+    case 'vector': {
+      // One box per component. PhysLab's band is a distance from the answer; a component can be
+      // off by at most that much, so each box gets the same half-width: the band itself, or its
+      // fraction of the vector's size.
+      const band = bandOf(p.tolerance)
+      const size = `sqrt(${p.answer.map((c) => `(${mathToJme(c)}) ^ 2`).join(' + ')})`
+      const spread = band.kind === 'relative' ? `${jmeNumber(band.value)} * ${size}` : jmeNumber(band.value)
+      const gaps = p.answer.map((c) => numberEntry(mathToJme(c), band, p.marks / p.answer.length, '', spread))
+      return gapfill(p, p.answer.map((_c, k) => `[[${k}]] ${['i', 'j', 'k'][k]}`).join(' + '), gaps, false)
+    }
+    case 'roots': {
+      if (p.answer.length === 0) return null
+      const band = bandOf(p.tolerance)
+      const sorted = ascending(p.answer)
+      const answers = sorted ?? p.answer.map((x) => mathToJme(x))
+      const gaps = answers.map((a) => numberEntry(a, band, p.marks / answers.length, ''))
+      return gapfill(p, answers.map((_a, k) => `[[${k}]]`).join(', '), gaps, sorted !== null)
+    }
+    case 'matrix': {
+      const cols = p.answer[0].length
+      return {
+        type: 'matrix',
+        ...base,
+        prompt: textToHtml(p.prompt),
+        correctAnswer: `matrix(${p.answer.map((row) => `[${row.map((e) => mathToJme(e)).join(', ')}]`).join(', ')})`,
+        correctAnswerFractions: false,
+        numRows: p.answer.length,
+        numColumns: cols,
+        allowResize: false,
+        minColumns: 0,
+        maxColumns: 0,
+        minRows: 0,
+        maxRows: 0,
+        prefilledCells: '',
+        // Numbas's tolerance is a fixed gap on every entry; a relative band has no such gap, so
+        // Numbas checks exactly (the description says so) and reads back as the app's 2 %.
+        tolerance: p.tolerance.kind === 'absolute' ? p.tolerance.value : 0,
+        markPerCell: p.markPerCell === true,
+        allowFractions: p.allowFractions === true,
+        precisionType: 'none',
+        precision: 0,
+        precisionPartialCredit: 0,
+        precisionMessage: '',
+        strictPrecision: false
+      }
+    }
+    case 'function':
+      // Numbas compares the student's formula with the model at points in the range; PhysLab's
+      // own check (does it solve the equation and start right) is said in the description.
+      return {
+        type: 'jme',
+        ...base,
+        prompt: textToHtml(p.prompt),
+        answer: mathToJme(p.model, 'same'),
+        answerSimplification: 'all',
+        showPreview: true,
+        checkingType: 'absdiff',
+        checkingAccuracy: 0.001,
+        failureRate: 1,
+        vsetRangePoints: 5,
+        vsetRange: p.sampleRange ?? [0.1, 1],
+        checkVariableNames: false,
+        singleLetterVariables: false,
+        allowUnknownFunctions: true,
+        implicitFunctionComposition: false,
+        caseSensitive: false,
+        valueGenerators: []
+      }
+    case 'proof':
+      return { type: 'information', ...base, marks: 0, prompt: textToHtml(p.prompt) }
+    case 'lego':
+      return null
+  }
+}
+
+/** A proof part's model and self-check list, for the advice Numbas shows once the question is done. */
+function proofAdvice(q: PQQuestion): string {
+  return q.parts
+    .map((p, i) => {
+      if (p.type !== 'proof') return ''
+      const checks = p.selfCheck.length > 0 ? `<ul>${p.selfCheck.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''
+      return `<p>A model proof for part ${num(i + 1)}:</p>${textToHtml(p.model)}${checks}`
+    })
+    .join('')
+}
+
+/**
+ * PhysLab's error carried forward → Numbas's adaptive marking on the part (or on the gap-fill
+ * holding a vector's or roots' boxes, which is where Numbas sets it for gaps). A use of a part this
+ * file leaves out cannot be written, and the description says the part is marked without it.
+ */
+function writeCarried(q: PQQuestion, written: { index: number; part: Obj }[]): string[] {
+  const paths = new Map(written.map((w, j) => [w.index, `p${j}`]))
+  const notes: string[] = []
+  for (const { index, part } of written) {
+    const ecf = q.parts[index].ecf
+    if (!ecf) continue
+    const kept = ecf.uses.filter((u) => paths.has(u.part))
+    for (const u of ecf.uses) {
+      if (!paths.has(u.part)) notes.push(`PhysLab marks part ${num(index + 1)} with the answer to part ${num(u.part + 1)}, which this Numbas file leaves out, so Numbas marks it without.`)
+    }
+    if (kept.length === 0) continue
+    part.variableReplacements = kept.map((u) => ({ variable: u.variable, part: paths.get(u.part), must_go_first: false }))
+    part.variableReplacementStrategy = ecf.strategy
+    part.adaptiveMarkingPenalty = ecf.penalty
+  }
+  return notes
 }
 
 /** The picture, motion and sandbox bindings, as sentences, so nothing Numbas cannot read is invented. */
@@ -1383,13 +1758,15 @@ function stepsToAdvice(steps: PQSteps | undefined): string {
 }
 
 function questionToNumbas(q: PQQuestion): Obj {
-  const parts: Obj[] = []
+  const written: { index: number; part: Obj }[] = []
   const notes = [...bindingNotes(q)]
   q.parts.forEach((p, i) => {
     const part = partToNumbas(p)
-    if (part) parts.push(part)
+    if (part) written.push({ index: i, part })
     notes.push(...partNotes(p, i))
   })
+  notes.push(...writeCarried(q, written))
+  const parts = written.map((w) => w.part)
   const variables: Obj = {}
   for (const v of q.variables) {
     variables[v.name] = {
@@ -1406,13 +1783,14 @@ function questionToNumbas(q: PQQuestion): Obj {
   return {
     name: q.title,
     statement: textToHtml(q.statement),
-    advice: stepsToAdvice(q.steps),
+    advice: stepsToAdvice(q.steps) + proofAdvice(q),
     rulesets: {},
     extensions: [],
     builtin_constants: { e: true, pi: true, i: true },
     constants: [],
     variables,
-    variablesTest: { condition: '', maxRuns: 100 },
+    // The variants' condition in Numbas's own words; Numbas keeps every variant when it is empty.
+    variablesTest: q.condition ? { condition: mathToJme(q.condition.when), maxRuns: q.condition.maxRuns } : { condition: '', maxRuns: NUMBAS_MAX_RUNS },
     ungrouped_variables: q.variables.map((v) => v.name),
     variable_groups: [],
     functions: {},
@@ -1436,6 +1814,9 @@ function questionToNumbas(q: PQQuestion): Obj {
  * schema-10.0 shape with camelCase keys. Number parts become `numberentry` with the tolerance
  * written into `minValue`/`maxValue` as JME on the answer, so Numbas checks each variant it
  * shows; expression parts become `jme`; choice parts `1_n_2`/`m_n_2`; variables go back to JME.
+ * Format 2 goes out as the nearest thing Numbas has: a matrix as a matrix part, a vector or a set
+ * of roots as a gap-fill of number boxes, a function as a formula checked against its model, a
+ * proof as information; error carried forward as adaptive marking, the condition as variablesTest.
  * What Numbas has no place for — pictures, motion, experiments, known wrong answers — is
  * written into the question's description in words, never invented into a part.
  */

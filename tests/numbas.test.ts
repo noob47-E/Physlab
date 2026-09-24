@@ -429,7 +429,7 @@ describe('fromExam', () => {
   it('skips each question outside the subset with one plain sentence naming the reason', () => {
     const base = { variables: { a: v('a', 'random(1..5)') }, parts: [{ type: 'numberentry', marks: 1, prompt: '<p>a?</p>', minValue: 'a', maxValue: 'a' }] }
     const cases: [Raw, string][] = [
-      [{ parts: [{ type: 'matrix', marks: 1, prompt: '<p>M</p>' }] }, 'uses a matrix part PhysLab does not read'],
+      [{ parts: [{ type: 'patternmatch', marks: 1, prompt: '<p>M</p>' }] }, 'uses a patternmatch part PhysLab does not read'],
       [{ parts: [{ type: 'm_n_x', marks: 1, prompt: '<p>M</p>' }] }, 'uses a m_n_x part PhysLab does not read'],
       [{ parts: [{ type: 'patternmatch', marks: 1, prompt: '<p>M</p>' }] }, 'uses a patternmatch part PhysLab does not read'],
       [{ parts: [{ type: 'extension', marks: 1, prompt: '<p>M</p>' }] }, 'uses a extension part PhysLab does not read'],
@@ -494,12 +494,12 @@ describe('fromExam', () => {
         { type: 'jme', marks: 1, prompt: '<p>a?</p>', answer: 'a*x', checkingType: 'dp', checkingAccuracy: 2 }
       ]
     })
-    const bad = question({ name: 'Bad', parts: [{ type: 'matrix', marks: 1, prompt: '<p>M</p>' }] })
+    const bad = question({ name: 'Bad', parts: [{ type: 'patternmatch', marks: 1, prompt: '<p>M</p>' }] })
     const { file, report } = fromExam(exam([bad, zero, 'not a question' as unknown as Raw]))
     expect(file.questions.map((q) => q.title)).toEqual(['Zero marks'])
     expect(file.questions[0].parts.map((p) => p.marks)).toEqual([1, 1])
     expect(report).toEqual([
-      "Question 'Bad' was skipped: it uses a matrix part PhysLab does not read.",
+      "Question 'Bad' was skipped: it uses a patternmatch part PhysLab does not read.",
       "Question 'Zero marks', part 1 was worth 0 marks in Numbas; PhysLab counts it as 1.",
       "Question 'Zero marks', part 2 is checked to a number of decimal places in Numbas; PhysLab checks it as an expression.",
       'Question 3 was skipped: it is not a question PhysLab can read.'
