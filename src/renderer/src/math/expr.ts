@@ -8,6 +8,8 @@ import { all, create, type MathNode } from 'mathjs'
 import { angleBetween, cross as vcross, dot as vdot, len, normalize, project, type V3 } from './vec'
 
 export const math = create(all, { number: 'number', precision: 64 })
+// Points after Z are named A′, A″ (core/naming.ts); a prime straight after a letter or another prime is part of the name.
+{ const p = math.parse as unknown as { isAlpha: (c: string, prev: string, next: string) => boolean }; const alpha = p.isAlpha; p.isAlpha = (c, prev, next) => alpha(c, prev, next) || ('′″‴⁗'.includes(c) && !!prev && (alpha(prev, '', '') || '′″‴⁗'.includes(prev))) }
 
 let angleMode: 'deg' | 'rad' = 'deg'
 export const setAngleMode = (m: 'deg' | 'rad') => {

@@ -519,8 +519,8 @@ describe('breakApart in the scene', () => {
       expect(p.lego!.sourceSignature).toBe(signatureOf(ell))
       expect(p.lego!.originalColor).toBe('#9775fa')
       expect(p.color).not.toBe('#9775fa')
-      // Corners are hidden helpers and the sides are locked, so a piece only moves as a whole.
-      for (const pid of p.points) expect(sc().objects[pid]).toMatchObject({ type: 'point', visible: false, auxiliary: true })
+      // Corners carry letters of their own (Fix 17) but are locked, like the sides, so a piece only moves as a whole.
+      for (const pid of p.points) expect(sc().objects[pid]).toMatchObject({ type: 'point', visible: true, locked: true })
       const sides = sidesOf(p, sc().objects, sc().order)
       expect(sides.length).toBe(p.points.length)
       for (const sid of sides) expect(sc().objects[sid]).toMatchObject({ type: 'segment', locked: true })
@@ -559,10 +559,10 @@ describe('breakApart in the scene', () => {
     expect(legoStatus(ps.map((p) => cornersOf(p.id)), P(0, 0, 4, 0, 0, 3)).kind).toBe('original')
   })
 
-  it("measures a piece by numbered sides, never by its hidden corners' helper names", () => {
+  it('measures a piece by numbered sides, never by helper names like poly2_1', () => {
     sc().addObjects(ellScene())
     sc().breakApart('poly')
-    expect(pieces()[0].points.map((pid) => sc().objects[pid].name).join(' ')).toMatch(/_\d/)
+    expect(pieces()[0].points.map((pid) => sc().objects[pid].name).join(' ')).not.toMatch(/_\d/)
     for (const p of pieces()) {
       const rows = pieceMeasures(cornersOf(p.id))
       expect(rows.map((r) => r.label).join(' ')).not.toMatch(/_\d/)
@@ -570,7 +570,9 @@ describe('breakApart in the scene', () => {
       expect(rows.at(-1)).toMatchObject({ label: 'Area', value: polygonArea(cornersOf(p.id)) })
     }
     const src = readSource('src/renderer/src/panels/Measurements.tsx')
-    expect(src).toMatch(/o\.lego\)[\s\S]{0,200}pieceMeasures\(pts\)/)
+    // Numbered sides are for a piece without letters (a 0.7.0 file); a lettered piece is measured
+    // by its letters, like any shape (tests/legoReview.test.ts).
+    expect(src).toMatch(/o\.lego && !pieceLettered\(o\.points, objects\)\)[\s\S]{0,500}pieceMeasures\(pts\)/)
   })
 
   it('cuts a rectangle along a diagonal, decomposed or not, and the halves fuse back into it', () => {
@@ -647,9 +649,9 @@ describe('moving, turning, flipping and fusing pieces in the scene', () => {
     expect(sc().fusePieces([first.id])).toBe(ONE_PIECE_SENTENCE)
   })
 
-  it('deleting a piece takes its hidden corners with it, and undo brings them back', () => {
-    // A piece's corners are hidden helpers, not the student's points: left behind, they sat
-    // invisible in the scene, were written into the file and counted as unsaved work.
+  it('deleting a piece takes its corners with it, and undo brings them back', () => {
+    // A piece's corners were made for the piece, not drawn by the student: left behind, they sat
+    // in the scene, were written into the file and counted as unsaved work.
     const [first, ...rest] = pieces()
     const corners = first.points
     const sides = sidesOf(first, sc().objects, sc().order)
@@ -667,7 +669,7 @@ describe('moving, turning, flipping and fusing pieces in the scene', () => {
     for (const id of corners) expect(sc().objects[id]).toBeDefined()
   })
 
-  it('deleting a piece keeps a hidden corner that a student built on', () => {
+  it('deleting a piece keeps a corner that a student built on', () => {
     const [first] = pieces()
     const [c0, c1] = first.points
     sc().addObjects([{ ...base('own', 'q'), type: 'segment', a: c0, b: c1 }])
@@ -736,7 +738,7 @@ describe('Break apart and Fuse from the search palette', () => {
 describe('fusing into a different shape', () => {
   beforeEach(() => sc().newScene())
 
-  it('names the new shape with its area and perimeter, and never joins pieces of two different shapes', () => {
+  it('names the new shape with its area and perimeter, and joins pieces of two different shapes into a new one', () => {
     const sig = signatureOf(rect)
     const lego = (i: number, sourceId = 'src') => ({ sourceId, sourceSignature: sig, pieceIndex: i, originalColor: '#9775fa' })
     const pieceObjs = (id: string, pts: V3[], i: number, sourceId?: string): SceneObject[] => [
@@ -763,9 +765,13 @@ describe('fusing into a different shape', () => {
     for (const pid of shape[0].points) expect(sc().objects[pid]).toMatchObject({ type: 'point', visible: true })
 
     sc().newScene()
+    // Fix 17: pieces of two shapes that touch fuse too. Neither shape is the "original" of the
+    // other, so the result is a new shape in the new-shape colour, whatever outline it has.
     sc().addObjects([...pieceObjs('t1', triA, 0), ...pieceObjs('t2', triB, 0, 'other')])
-    expect(sc().fusePieces(['t1', 't2'])).toMatch(/different shapes/)
-    expect(polygonsInScene().length).toBe(2)
+    expect(sc().fusePieces(['t1', 't2'])).toBeNull()
+    expect(polygonsInScene().length).toBe(1)
+    expect(polygonsInScene()[0].themed).toBe('--lego-new')
+    expect(sc().log.at(-1)?.text).toBe('Fused into one new shape: Rectangle, area 12 u², perimeter 14 u.')
   })
 
   it('leaves pieces that make a new outline apart for the student to Fuse, and still fuses the original by itself', () => {

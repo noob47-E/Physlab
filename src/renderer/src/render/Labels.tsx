@@ -7,9 +7,11 @@ import { useScene } from '../core/store'
 import { cssColor } from '../app/theme'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { formatMeasure } from '../math/format'
-import { heading, len } from '../math/vec'
+import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import { classifyPolygon } from '../math/shapes'
+import { pieceLettered } from '../math/lego'
+import { PIECE_LETTER_PX, pieceLetterDirections } from './pieceLabels'
 
 /**
  * What the chip calls an object: a side of a shape is named by its corners (AB, not c),
@@ -17,6 +19,9 @@ import { classifyPolygon } from '../math/shapes'
  * working used (−B, not negB).
  */
 export function displayName(o: SceneObject, objects: Record<ObjId, SceneObject>, c?: Computed): string {
+  // A Lego piece's label is what it was cut as ("Right-angled triangle"); its letters follow,
+  // as on any shape, so two pieces can be told apart and talked about (Fix 17).
+  if (o.type === 'polygon' && o.lego && o.label) return pieceLettered(o.points, objects) ? `${o.label} ${o.points.map((p) => objects[p]?.name ?? '').join('')}` : o.label
   if (o.label) return o.label
   if (o.type === 'segment') {
     const inShape = Object.values(objects).some((p) => p.type === 'polygon' && p.points.includes(o.a) && p.points.includes(o.b))
@@ -191,6 +196,20 @@ const sizeCache = new WeakMap<HTMLElement, { key: string; w: number; h: number }
 
 /** Runs inside the canvas: moves labels to their anchors and nudges overlapping ones apart. */
 export function LabelProjector() {
+  // Letters of piece corners that share a spot with another piece's corner, moved to their own
+  // piece's side of the cut (render/pieceLabels.ts says why). Worked out when the drawing changes,
+  // not every frame.
+  const objects = useScene((s) => s.objects)
+  const ev = useScene((s) => s.ev)
+  const pieceDirs = useMemo(() => {
+    const pieces: { points: string[]; pts: V3[] }[] = []
+    for (const o of Object.values(objects)) {
+      if (o.type !== 'polygon' || !o.lego) continue
+      const c = ev.values.get(o.id)
+      if (c?.type === 'polygon' && c.pts.length === o.points.length) pieces.push({ points: o.points, pts: c.pts })
+    }
+    return pieces.length > 1 ? pieceLetterDirections(pieces) : null
+  }, [objects, ev])
   useFrame(({ camera, size }) => {
     const host = overlay.labels
     if (!host) return
@@ -217,7 +236,18 @@ export function LabelProjector() {
         cached = { key, w: el.offsetWidth, h: el.offsetHeight }
         sizeCache.set(el, cached)
       }
-      const box: Box = { x: s.x + (a.dx ?? 0) - cached.w / 2, y: s.y + (a.dy ?? 0) - cached.h / 2, w: cached.w, h: cached.h }
+      let { dx = 0, dy = 0 } = a
+      const dir = pieceDirs?.get(id)
+      if (dir) {
+        // The direction is in the drawing; its screen direction comes from projecting a step along it.
+        const t = toScreen(camera, size, [a.p[0] + dir[0] * 1e-3, a.p[1] + dir[1] * 1e-3, a.p[2]])
+        const l = Math.hypot(t.x - s.x, t.y - s.y)
+        if (l > 1e-9) {
+          dx = ((t.x - s.x) / l) * PIECE_LETTER_PX
+          dy = ((t.y - s.y) / l) * PIECE_LETTER_PX
+        }
+      }
+      const box: Box = { x: s.x + dx - cached.w / 2, y: s.y + dy - cached.h / 2, w: cached.w, h: cached.h }
       // Hidden (fading) labels keep following their object but never push visible ones aside.
       if (el.classList.contains('is-away')) {
         el.style.transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`

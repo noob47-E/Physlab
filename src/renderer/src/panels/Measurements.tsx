@@ -6,7 +6,8 @@ import { distanceToLineLike, footOfPerpendicular, lineEquation, lineLineIntersec
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
 import { fmt, fmtIJK, fmtPoint, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
-import { pieceMeasures } from '../math/lego'
+import { isPieceCorner, namedByLetters, pieceLettered, pieceMeasures } from '../math/lego'
+import { classifyPolygon } from '../math/shapes'
 import * as VS from '../math/vectorSolver'
 import { visualizeSolution } from '../core/visualize'
 import { ShapeInfo } from './ShapeInfo'
@@ -16,6 +17,7 @@ import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
 import { visibleIn } from '../core/visibility'
 import { CongruenceCard, TriangleFromSides } from './Congruence'
+import { trianglesToCompare } from '../math/congruence'
 
 type Row = {
   label: string
@@ -72,7 +74,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
         // A length can be typed when the far end is a point PhysLab is free to move: the end
         // slides along the line it is already on, so the drawing keeps its direction.
         const seg = o.type === 'segment' ? o : null
-        const movable = seg && isFreePoint(objects[seg.b]) ? seg.b : seg && isFreePoint(objects[seg.a]) ? seg.a : null
+        const movable = seg && isFreePoint(objects[seg.b], objects) ? seg.b : seg && isFreePoint(objects[seg.a], objects) ? seg.a : null
         const anchorAt = movable === seg?.b ? a : b
         const endAt = movable === seg?.b ? b : a
         rows.push(
@@ -124,8 +126,10 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
     }
     case 'polygon': {
       const pts = c.pts
-      if (o.type === 'polygon' && o.lego) {
-        // Numbered sides, never the hidden corners' helper names (pieceMeasures says why).
+      if (o.type === 'polygon' && o.lego && !pieceLettered(o.points, objects)) {
+        // A piece from a 0.7.0 file: numbered sides, never its hidden corners' helper names
+        // (pieceMeasures says why). A piece made since Fix 17 has letters and is measured by them
+        // below, as its chip and ShapeInfo name it ("Right-angled triangle EFG").
         return [{ title: `${o.label ?? 'Piece'}, a piece of a shape`, rows: pieceMeasures(pts).map((r) => ({ ...r, accent: r.kind === 'area' })) }]
       }
       const names = (o.type === 'polygon' ? o.points : []).map((id) => objects[id]?.name ?? '?')
@@ -134,7 +138,8 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
         const [A, B, C] = names
         return [
           {
-            title: `Triangle ${A}${B}${C}`,
+            // Named as ShapeInfo and the chip name it ("Right-angled triangle EFG"), not plain "Triangle".
+            title: `${classifyPolygon(pts).name} ${A}${B}${C}`,
             rows: [
               { label: `Side ${B}${C} (a)`, value: t.sides[0], kind: 'length', accent: true },
               { label: `Side ${C}${A} (b)`, value: t.sides[1], kind: 'length', accent: true },
@@ -158,7 +163,9 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
       }
       const rows: Row[] = pts.map((p, i) => ({ label: `Side ${names[i]}${names[(i + 1) % pts.length]}`, value: dist(p, pts[(i + 1) % pts.length]), kind: 'length' as const }))
       rows.push({ label: 'Perimeter', value: rows.reduce((s, r) => s + (r.value as number), 0), kind: 'length' }, { label: 'Area', value: polygonArea(pts), kind: 'area', accent: true })
-      return [{ title: `Polygon ${o.name}`, rows }]
+      // Named as ShapeInfo names it: a rectangle fused back from its halves reads "Rectangle ABCD",
+      // not "Polygon poly1" (Fix 17).
+      return [{ title: `${classifyPolygon(pts).name} ${names.join('')}`, rows }]
     }
     case 'angle': {
       // Typing an angle turns whichever arm is free about the vertex, keeping its length. If both
@@ -167,9 +174,9 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
       const vertexAt = ang ? get(ang.vertex) : undefined
       const turn =
         ang && vertexAt?.type === 'point'
-          ? isFreePoint(objects[ang.b])
+          ? isFreePoint(objects[ang.b], objects)
             ? { move: ang.b, fixed: ang.a }
-            : isFreePoint(objects[ang.a])
+            : isFreePoint(objects[ang.a], objects)
               ? { move: ang.a, fixed: ang.b }
               : null
           : null
@@ -404,10 +411,12 @@ export function Measurements() {
     )
   ]
 
-  // Two triangles: are they the same triangle, and by which rule?
-  // Lego pieces are left out: the card names a triangle by its corners, and a piece's corners are
-  // hidden helpers ("△poly2_1poly2_2poly2_3"), which read like code.
-  const triangles = sel.filter((o) => o.type === 'polygon' && !o.lego && o.points.length === 3 && ev.values.get(o.id)?.type === 'polygon')
+  // Two triangles, Lego pieces included: are they the same triangle, and by which rule?
+  const triangles = trianglesToCompare(
+    sel,
+    (id) => ev.values.get(id)?.type === 'polygon',
+    (o) => namedByLetters(o, objects)
+  )
 
   return (
     <div className="panel pb-6">
@@ -521,7 +530,11 @@ function EditableValue({ value, suffix, onSet }: { value: number; suffix: string
 }
 
 /** A point PhysLab may move: one that was placed, not one worked out from other objects. */
-const isFreePoint = (o: SceneObject | undefined): boolean => !!o && o.type === 'point' && o.def.kind === 'free'
+// A corner of a Lego piece is not: typing a length or an angle would move that one corner and bend
+// the piece, so it is never offered. A point the student locked by hand still is — the lock stops a
+// drag, and typing a number is a deliberate act — as it was before 0.9 (isPieceCorner).
+const isFreePoint = (o: SceneObject | undefined, objects: Record<ObjId, SceneObject>): boolean =>
+  !!o && o.type === 'point' && o.def.kind === 'free' && !isPieceCorner(o.id, objects)
 
 /** Puts a free point somewhere, which is what typing a measurement comes down to. */
 function movePoint(id: ObjId, to: V3): void {

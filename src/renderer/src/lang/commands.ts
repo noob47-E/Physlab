@@ -14,6 +14,7 @@ import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf,
 import { fmtPrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
+import { isPieceCorner } from '../math/lego'
 import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
@@ -280,7 +281,8 @@ function tryGraph(input: string): boolean {
   const eq = input.match(/^([^=]+)=([^=]+)$/)
   if (eq && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
     const lhs = eq[1].trim()
-    const isName = /^[A-Za-zͰ-Ͽ][\w']*$/.test(lhs) && !GRAPH_VARS.has(lhs)
+    // Primes as core/naming.ts isValidName allows them: points after Z are A′, A″ (Fix 11).
+    const isName = /^[A-Za-zͰ-Ͽ][\w'′″‴⁗]*$/.test(lhs) && !GRAPH_VARS.has(lhs)
     if (!isName) {
       visualizeGraph(input, [`(${eq[1]}) - (${eq[2]})`], 'implicit')
       s.pushLog({ input, kind: 'result', text: 'Implicit curve created.' + landInGraphing() })
@@ -325,11 +327,17 @@ function usesSymbol(src: string, sym: string): boolean {
 // ---------------------------------------------------------------------------
 
 function tryAssignment(input: string): boolean {
-  const m = input.match(/^\s*([A-Za-zͰ-Ͽ][\wͰ-Ͽ']*)\s*=(?!=)\s*(.+)$/)
+  // ′ ″ ‴ ⁗ as in core/naming.ts isValidName: after Z the app names points A′, A″ (Fix 11), and a
+  // student must be able to move or redefine them from the bar like any other point.
+  const m = input.match(/^\s*([A-Za-zͰ-Ͽ][\wͰ-Ͽ'′″‴⁗]*)\s*=(?!=)\s*(.+)$/)
   if (!m) return false
   const [, name, rhs] = m
   if (GRAPH_VARS.has(name) || name === 'z') return false
   if (!isValidName(name)) throw new Error(`"${name}" is a reserved name. Try another.`)
+  // A Lego piece's corners carry ordinary letters since Fix 17, so "E = (9, 9)" typed to make a
+  // new point E would redefine one corner and bend the piece. It moves only as a whole.
+  const taken = scene().ev.names.get(name)
+  if (taken && isPieceCorner(taken, scene().objects)) throw new Error(`${name} is a corner of a piece. Slide, turn or flip the piece to move it, or choose another letter.`)
   if (tryGeometryCommand(rhs, name, input)) return true
 
   // The line is kept as typed: the runtime × (math/expr.ts, timesOrCross) reads every case the

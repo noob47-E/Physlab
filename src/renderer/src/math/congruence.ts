@@ -3,6 +3,7 @@
 // share one answer.
 
 import { triangleInfo } from './geometry'
+import { interiorAngles, sideLengths } from './shapes'
 import type { V3 } from './vec'
 
 export type CongruenceTest = 'SSS' | 'SAS' | 'ASA' | 'AAS' | 'RHS'
@@ -177,4 +178,88 @@ export function triangleFromSides(a: number, b: number, c: number, at: V3 = [0, 
     [at[0] + c, at[1], at[2]],
     [at[0] + x, at[1] + y, at[2]]
   ]
+}
+
+/** A named polygon to compare: corner letters in order, with the corners. */
+export interface NamedShape {
+  names: string[]
+  pts: V3[]
+}
+
+/**
+ * Two polygons with the same number of corners compared corner by corner: every way of laying
+ * one on the other (starting at any corner, read either way round) is tried, and the first in
+ * which every side and every angle matches gives the correspondence. Triangles go through
+ * compareTriangles instead, which names the rule (SSS, SAS …) a proof would quote.
+ */
+export function comparePolygons(A: NamedShape, B: NamedShape, tolerance = 5e-3): { congruent: boolean; matchedName: string; reason: string } {
+  const n = A.pts.length
+  const nameA = A.names.join('')
+  if (n < 3 || B.pts.length !== n) return { congruent: false, matchedName: B.names.join(''), reason: `${nameA} and ${B.names.join('')} have different numbers of corners, so they are not congruent.` }
+  const sa = sideLengths(A.pts)
+  const aa = interiorAngles(A.pts)
+  const scale = Math.max(...sa, ...sideLengths(B.pts), 1e-9)
+  for (const dir of [1, -1]) {
+    for (let k = 0; k < n; k++) {
+      // Corner i of A lies on corner order[i] of B.
+      const order = Array.from({ length: n }, (_, i) => (((k + dir * i) % n) + n) % n)
+      const P = order.map((j) => B.pts[j])
+      const sb = sideLengths(P)
+      const ab = interiorAngles(P)
+      const same = sa.every((s, i) => Math.abs(s - sb[i]) <= tolerance * scale) && aa.every((a, i) => Math.abs(a - ab[i]) <= tolerance * 2)
+      if (!same) continue
+      const matchedName = order.map((j) => B.names[j]).join('')
+      return { congruent: true, matchedName, reason: `So ${nameA} ≅ ${matchedName}: every side and every angle matches, in that order.` }
+    }
+  }
+  return { congruent: false, matchedName: B.names.join(''), reason: `${nameA} and ${B.names.join('')} cannot be laid one on the other, so they are not congruent.` }
+}
+
+/** Two parts found congruent: which two, and the sentence that says so and why. */
+export interface CongruentPair {
+  i: number
+  j: number
+  /** The rule for two triangles (SSS, SAS …); null for other polygons, matched side by side and angle by angle. */
+  test: CongruenceTest | null
+  sentence: string
+}
+
+/**
+ * Every pair of congruent parts among the pieces of a decomposed shape (Fix 19). 0.7.0 compared
+ * only two separately drawn triangles, so the two halves a Decompose had just made could not be
+ * asked about at all.
+ */
+export function congruentParts(parts: NamedShape[], opts: CompareOptions = {}): CongruentPair[] {
+  const out: CongruentPair[] = []
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i + 1; j < parts.length; j++) {
+      const A = parts[i]
+      const B = parts[j]
+      if (A.pts.length !== B.pts.length) continue
+      if (A.pts.length === 3) {
+        const r = compareTriangles({ names: A.names as Tri['names'], pts: A.pts as Tri['pts'] }, { names: B.names as Tri['names'], pts: B.pts as Tri['pts'] }, opts)
+        if (r.congruent) out.push({ i, j, test: r.test, sentence: r.reasons[r.reasons.length - 1] })
+      } else {
+        const r = comparePolygons(A, B, opts.tolerance)
+        if (r.congruent) out.push({ i, j, test: null, sentence: r.reason })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * The two triangles the congruence card compares, from what is selected: any drawn triangle, a
+ * Lego piece included. 0.7.0 left pieces out because their corners were hidden helpers named
+ * poly2_1; since Fix 17 every piece is lettered, and the two halves of a rectangle cut along its
+ * diagonal are the first thing a student wants to compare (Fix 19).
+ */
+export function trianglesToCompare<T extends { id: string; type: string; points?: string[] }>(
+  sel: T[],
+  drawable: (id: string) => boolean,
+  lettered: (o: T) => boolean = () => true
+): T[] {
+  // `lettered` keeps out a piece from a 0.7.0 file: the card names a triangle by its corners, and
+  // that piece's corners are hidden helpers the card would print as "△poly2_1poly2_2poly2_3".
+  return sel.filter((o) => o.type === 'polygon' && o.points?.length === 3 && drawable(o.id) && lettered(o))
 }

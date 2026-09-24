@@ -4,7 +4,9 @@ import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
 import { freeCapitals } from '../core/naming'
 import { decompose, type DecomposeGoal } from '../math/decompose'
-import { legoStatus } from '../math/lego'
+import { fuseChoice, legoStatus, pieceLettered } from '../math/lego'
+import { congruentParts } from '../math/congruence'
+import { formatMeasure } from '../math/format'
 import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
@@ -90,14 +92,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
   const goal: DecomposeGoal = (obj?.type === 'polygon' && obj.decomposeGoal) || 'basic'
   const decIndex = (obj?.type === 'polygon' && obj.decomposeIndex) || 0
   const lego = obj?.type === 'polygon' ? obj.lego : undefined
-  // The selected pieces of the same shape as this one, this one included: what Fuse joins.
-  const fusable = useMemo(() => {
-    if (!lego) return []
-    return [...new Set([...selection, id])].filter((k) => {
-      const p = objects[k]
-      return p?.type === 'polygon' && p.lego?.sourceId === lego.sourceId
-    })
-  }, [lego, selection, objects, id])
+  // The selected shapes, this one included: what Fuse joins. Any touching shapes fuse (Fix 17),
+  // not only the pieces of one broken shape.
+  const fusable = useMemo(() => fuseChoice(selection, id, objects), [selection, objects, id])
 
   // Every piece of this shape on the table, and what they make together: a new outline is not
   // fused by itself, so the panel says so and Fuse joins them all.
@@ -129,7 +126,15 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         const n = dec ? dec.newPoints.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-7) : -1
         return n >= 0 ? letters[n] ?? '?' : '?'
       }
-      return { kind: 'polygon' as const, report, names, dec, pts: c.pts, nameAt }
+      // Parts that are the same shape — the two triangles either side of a trapezium's rectangle,
+      // say — are said to be congruent, with the corners matched and the rule (Fix 19).
+      const same = dec && dec.parts.length > 1
+        ? congruentParts(
+            dec.parts.map((part) => ({ names: part.pts.map(nameAt), pts: part.pts })),
+            { fmtLength: (v) => formatMeasure(v, 'length', settings), fmtAngle: (v) => formatMeasure(v, 'angle', settings) }
+          )
+        : []
+      return { kind: 'polygon' as const, report, names, dec, pts: c.pts, nameAt, same }
     }
     if (obj.type === 'circle' && c.type === 'circle') {
       const centerId = obj.def.kind === 'centerPoint' || obj.def.kind === 'centerRadius' ? obj.def.c : undefined
@@ -150,8 +155,8 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         <Shapes size={15} className="text-accent" />
         <div className="flex-1">
           <span className="font-semibold text-ink-strong">{data.report.name}</span>{' '}
-          {data.kind === 'polygon' && !lego && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
-          {lego && <span className="text-ink-dim">a piece of a shape</span>}
+          {data.kind === 'polygon' && (!lego || (obj.type === 'polygon' && pieceLettered(obj.points, objects))) && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
+          {lego && <span className="text-ink-dim">, a piece of a shape</span>}
         </div>
         {data.kind === 'polygon' && data.pts.length >= 4 && (
           <button
@@ -169,7 +174,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         )}
       </div>
 
-      {data.kind === 'polygon' && (canBreak || lego) && (
+      {data.kind === 'polygon' && (canBreak || lego || fusable.length >= 2) && (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5 text-small">
           {canBreak && (
             <button
@@ -180,16 +185,18 @@ export function ShapeInfo({ id }: { id: ObjId }) {
               <Puzzle size={14} /> Break apart
             </button>
           )}
+          {(lego || fusable.length >= 2) && (
+            <button
+              className="btn min-h-[44px]"
+              disabled={fuseIds.length < 2}
+              title={fuseIds.length < 2 ? 'Select two or more shapes or pieces that touch, then fuse them' : fuseIds === fusable ? 'Join the selected shapes into one shape' : 'Join all the pieces into the new shape'}
+              onClick={() => setFuseNote(fusePieces(fuseIds))}
+            >
+              <Combine size={14} /> Fuse
+            </button>
+          )}
           {lego && (
             <>
-              <button
-                className="btn min-h-[44px]"
-                disabled={fuseIds.length < 2}
-                title={fuseIds.length < 2 ? 'Select two or more pieces of the same shape, then fuse them' : fuseIds === fusable ? 'Join the selected pieces into one shape' : 'Join all the pieces into the new shape'}
-                onClick={() => setFuseNote(fusePieces(fuseIds))}
-              >
-                <Combine size={14} /> Fuse
-              </button>
               <button className="btn min-h-[44px]" title="Turn this piece a quarter turn anticlockwise" onClick={() => turnPiece(id, 90)}>
                 <RotateCw size={14} /> Turn 90°
               </button>
@@ -265,6 +272,14 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                   </div>
                 )
               })}
+              {data.same.map((pair) => (
+                <div key={`${pair.i}-${pair.j}`} className="border-t border-line px-2 py-1.5 text-ink">
+                  <span className="mr-1 font-semibold text-good">
+                    {ROMAN[pair.i]} and {ROMAN[pair.j]} are congruent.
+                  </span>
+                  {pair.sentence}
+                </div>
+              ))}
               <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-line pt-2 text-lead text-ink-strong">
                 <Tex
                   tex={`A = ${data.dec.parts.map((_, i) => `A_{${ROMAN[i]}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
@@ -277,7 +292,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         <ShapeReportView report={data.report} owner={id} piFactor={data.kind === 'circle'} />
       )}
       {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
-      {fuseNote && lego && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{fuseNote}</div>}
+      {fuseNote && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{fuseNote}</div>}
       {lego && together?.status.kind === 'different' && (
         <div className="border-t border-line px-2 py-1.5 text-small text-accent">These pieces make a new shape: {together.status.name}. Press Fuse to join them.</div>
       )}

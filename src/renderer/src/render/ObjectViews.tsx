@@ -12,7 +12,8 @@ import { freeCapitals } from '../core/naming'
 import { angleAt, centroid, orientedAngleAt } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
-import { decompose } from '../math/decompose'
+import { decompose, type Decomposition } from '../math/decompose'
+import { fillOutline, fillsWhole } from './fillMath'
 import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
 import { mixOklabMany, mixParents } from './colourMix'
@@ -408,6 +409,15 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   const fillColor = shownColor(obj)
   const wpp = worldPerPixel(camera, size, centroid(pts))
 
+  // Only a decomposed shape is split into parts. evaluateScene hands every polygon a fresh `pts` on
+  // every evaluation (each drag frame), and decompose tries up to 2000 triangulations of a shape
+  // with ten corners or fewer, so running it for every polygon cost up to ~120 ms a frame.
+  const dec = useMemo(
+    () => (obj.decomposed ? decompose(pts, obj.decomposeGoal ?? 'basic', obj.decomposeIndex ?? 0) : null),
+    [obj.decomposed, pts, obj.decomposeGoal, obj.decomposeIndex]
+  )
+  const whole = fillsWhole(obj.decomposed, dec?.parts.length ?? 1)
+
   const geometry = useMemo(() => {
     if (pts.length < 3) return null
     const shape = new THREE.Shape(pts.map((p) => new THREE.Vector2(p[0], p[1])))
@@ -459,13 +469,13 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
 
   return (
     <>
-      {geometry && !obj.decomposed && (
+      {geometry && whole && (
         <mesh geometry={geometry} renderOrder={0}>
           {/* Keyed on the colour: WebGPU compiles it in, and a themed shape changes colour with the theme. */}
           <meshBasicMaterial key={fillColor} color={fillColor} transparent opacity={selected ? 0.3 : hovered ? 0.24 : obj.fill ? 0.16 : 0} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {obj.decomposed && pts.length >= 3 && <DecomposedParts obj={obj} pts={pts} wpp={wpp} />}
+      {!whole && dec && pts.length >= 3 && <DecomposedParts obj={obj} dec={dec} pts={pts} wpp={wpp} />}
       {arcs.map((a, i) => (
         <FatLine key={i} points={a} color={colors.arc} width={1.6} renderOrder={6} />
       ))}
@@ -500,9 +510,8 @@ function rightAngleMarks(cuts: [V3, V3][], pts: V3[], size: number): V3[][] {
   return marks
 }
 
-/** Component shapes drawn slightly apart, with dashed cut ("gap") lines and Roman numerals. */
-function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: number }) {
-  const dec = useMemo(() => decompose(pts, obj.decomposeGoal ?? 'basic', obj.decomposeIndex ?? 0), [pts, obj.decomposeGoal, obj.decomposeIndex])
+/** Component shapes filled edge to edge, with dashed cut lines and Roman numerals. */
+function DecomposedParts({ dec, pts, wpp }: { obj: PolygonObj; dec: Decomposition; pts: V3[]; wpp: number }) {
   const objects = useScene((s) => s.objects)
   const letters = useMemo(
     () => freeCapitals(Object.values(objects).map((o) => o.name), dec.newPoints.length),
@@ -512,20 +521,9 @@ function DecomposedParts({ obj, pts, wpp }: { obj: PolygonObj; pts: V3[]; wpp: n
   const colors = useDrawingColors()
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label part-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
-  const gap = 4 * wpp
-  const geos = useMemo(
-    () =>
-      dec.parts.map((part) => {
-        const c = centroid(part.pts)
-        const inset = part.pts.map((p) => {
-          const d = sub(p, c)
-          const l = len(d)
-          return l > gap * 2 ? add(c, scale(d, (l - gap) / l)) : p
-        })
-        return new THREE.ShapeGeometry(new THREE.Shape(inset.map((p) => new THREE.Vector2(p[0], p[1]))))
-      }),
-    [dec, gap]
-  )
+  // Each part is filled to its own corners (fillOutline says why), so the geometry no longer
+  // depends on the zoom and is not rebuilt on every wheel step.
+  const geos = useMemo(() => dec.parts.map((part) => new THREE.ShapeGeometry(new THREE.Shape(fillOutline(part.pts).map(([x, y]) => new THREE.Vector2(x, y))))), [dec])
   useEffect(() => () => geos.forEach((g) => g.dispose()), [geos])
   useFrame(({ camera, size }) => {
     pool.begin()

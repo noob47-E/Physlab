@@ -11,7 +11,7 @@ import { add, dist, dot, mid, normalize, rotateZ, scale, sub, toDeg, toRad, type
 import { centroid, perimeter, polygonArea, signedArea2D } from './geometry'
 import { classifyPolygon, cleanPolygon, interiorAngles, sideLengths } from './shapes'
 import { formatColour, oklabToSrgb, parseColour, srgbToOklab } from '../render/colourMix'
-import type { LegoRecord } from '../core/types'
+import type { LegoRecord, ObjId, SceneObject } from '../core/types'
 import { decompose, type DecomposeGoal, type Part } from './decompose'
 
 export type { LegoRecord }
@@ -231,7 +231,7 @@ export type FuseResult =
 
 export const GAP_SENTENCE = 'The pieces do not quite touch — there is a gap.'
 export const OVERLAP_SENTENCE = 'Two pieces lie on top of each other.'
-export const ONE_PIECE_SENTENCE = 'Pick at least two pieces to fuse.'
+export const ONE_PIECE_SENTENCE = 'Pick at least two shapes or pieces to fuse.'
 
 /** Is `p` strictly inside the polygon, not on its edge? */
 function strictlyInside(p: V3, poly: V3[], eps: number): boolean {
@@ -303,6 +303,52 @@ export function fuseResult(pieces: V3[][], original: Original): FuseResult {
   if (Math.abs(area - total) > 0.005 * Math.max(total, 1e-12)) return { ok: false, sentence: OVERLAP_SENTENCE }
   const name = status.kind === 'different' ? status.name : classifyPolygon(status.outline).name
   return { ok: true, kind: status.kind, outline: status.outline, name, area, perimeter: perimeter(status.outline) }
+}
+
+/** One shape offered to Fuse: its corners and, for a piece, where it came from. */
+export interface FuseShape {
+  pts: V3[]
+  lego?: LegoRecord
+}
+
+/**
+ * What a Fuse makes, and so how the result is drawn:
+ * - `original`: every piece of one shape, back in that shape's outline — the shape again, in its own colour;
+ * - `partial`: some of one shape's pieces — a bigger piece of that shape, still a piece;
+ * - `new`: anything else that closes up — pieces of two shapes, plain shapes, or one shape's
+ *   pieces in a new outline — a new shape in the theme's new-shape colour.
+ */
+export type FusePlan =
+  | { ok: false; sentence: string }
+  | { ok: true; kind: 'original' | 'partial' | 'new'; outline: V3[]; name: string; area: number; perimeter: number; source?: LegoRecord }
+
+/**
+ * Fuse any shapes that touch (Fix 17): the owner asked that "all shapes" can be joined, not only
+ * the pieces of one broken shape, which 0.7.0 refused with "These pieces come from different
+ * shapes". Only pieces all cut from one shape can be that shape again; `othersLeft` says whether
+ * pieces of it stay out of this Fuse, which makes the result a bigger piece rather than the shape.
+ */
+export function fusePlan(shapes: FuseShape[], othersLeft: boolean): FusePlan {
+  const first = shapes[0]?.lego
+  const oneSource = !!first && shapes.every((s) => s.lego?.sourceId === first.sourceId)
+  // No signature to compare with: whatever closes up is a new shape.
+  const result = fuseResult(
+    shapes.map((s) => s.pts),
+    oneSource ? first.sourceSignature : ''
+  )
+  if (!result.ok) return result
+  const { outline, name, area, perimeter } = result
+  if (oneSource && othersLeft) return { ok: true, kind: 'partial', outline, name, area, perimeter, source: first }
+  if (oneSource && result.kind === 'original') return { ok: true, kind: 'original', outline, name, area, perimeter, source: first }
+  return { ok: true, kind: 'new', outline, name, area, perimeter }
+}
+
+/**
+ * The shapes a Fuse button joins: the selected polygons with the one the button belongs to, each
+ * once. Any polygon counts — a piece, a fused shape, a shape the student drew.
+ */
+export function fuseChoice(selection: ObjId[], id: ObjId | null, objects: Record<ObjId, SceneObject>): ObjId[] {
+  return [...new Set(id ? [...selection, id] : selection)].filter((k) => objects[k]?.type === 'polygon')
 }
 
 /**
@@ -501,10 +547,41 @@ export function simpleCut(input: V3[]): Part[] {
 
 /**
  * What the Measure panel lists for a piece: its sides numbered round it, then its perimeter and
- * area. A piece's corners are hidden helpers named after the piece (poly2_1), never the
- * student's letters, and "Side poly2_1poly2_2" read like code.
+ * area. A 0.7.0 piece's corners were hidden helpers named after the piece (poly2_1), and
+ * "Side poly2_1poly2_2" read like code; such a piece can still come back from a saved file.
  */
 export function pieceMeasures(pts: V3[]): { label: string; value: number; kind: 'length' | 'area' }[] {
   const sides = pts.map((p, i) => ({ label: `Side ${i + 1}`, value: dist(p, pts[(i + 1) % pts.length]), kind: 'length' as const }))
   return [...sides, { label: 'Perimeter', value: perimeter(pts), kind: 'length' }, { label: 'Area', value: polygonArea(pts), kind: 'area' }]
+}
+
+/**
+ * Does this piece carry letters a student can read? Every piece made since Fix 17 does; a piece
+ * from a 0.7.0 file has hidden helper corners named poly2_1, which are kept as saved (nothing is
+ * renamed on open) but never spelled out as if they were letters.
+ */
+export function pieceLettered(points: ObjId[], objects: Record<ObjId, SceneObject>): boolean {
+  return points.every((pid) => {
+    const p = objects[pid]
+    return !!p && !p.auxiliary && p.visible
+  })
+}
+
+/**
+ * Can this shape be named by its corners' letters — anything but a piece from a 0.7.0 file? The
+ * congruence card names triangles by their corners, so it compares only these (Fix 19).
+ */
+export function namedByLetters(o: SceneObject, objects: Record<ObjId, SceneObject>): boolean {
+  return o.type !== 'polygon' || !o.lego || pieceLettered(o.points, objects)
+}
+
+/**
+ * Is this a corner of a Lego piece (a locked point some piece is drawn through)? Such a corner
+ * moves only with its whole piece: redefining it from the command bar or typing a side length or
+ * an angle at it would move that one corner and bend the piece (Fix 17). A point the student locked
+ * by hand is not a piece corner and keeps its typed measures, as it did before 0.9.
+ */
+export function isPieceCorner(id: ObjId, objects: Record<ObjId, SceneObject>): boolean {
+  if (objects[id]?.type !== 'point' || !objects[id].locked) return false
+  return Object.values(objects).some((o) => o.type === 'polygon' && !!o.lego && o.points.includes(id))
 }

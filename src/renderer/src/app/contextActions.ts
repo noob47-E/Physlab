@@ -7,6 +7,7 @@ import { isFree } from '../core/evaluate'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { heading, len, neg, normalize, toDeg, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
+import { fuseChoice } from '../math/lego'
 import { useTool } from '../render/tools'
 import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
@@ -147,14 +148,11 @@ function polygonItems(o: SceneObject): MenuItem[] {
   if (canBreakApart(o)) {
     items.push({ label: 'Break apart', hint: 'Turn the pieces into shapes you can slide, turn and flip', run: () => (s().breakApart(o.id), focusPanel('measure')) })
   }
+  // Every selected shape; the right-clicked one counts even when it was not selected. Any
+  // touching shapes fuse (Fix 17), not only the pieces of one broken shape.
+  const chosen = fuseChoice(s().selection, o.id, s().objects)
+  if (chosen.length >= 2) items.push({ label: 'Fuse', hint: 'Join the selected shapes into one shape', run: () => (s().fusePieces(chosen), focusPanel('measure')) })
   if (o.lego) {
-    // Every selected piece of the same shape; the right-clicked piece counts even when it was not selected.
-    const source = o.lego.sourceId
-    const chosen = [...new Set([...s().selection, o.id])].filter((id) => {
-      const p = s().objects[id]
-      return p?.type === 'polygon' && p.lego?.sourceId === source
-    })
-    if (chosen.length >= 2) items.push({ label: 'Fuse pieces', hint: 'Join the selected pieces into one shape', run: () => (s().fusePieces(chosen), focusPanel('measure')) })
     items.push(
       { label: 'Turn 90°', run: () => s().turnPiece(o.id, 90) },
       { label: 'Turn 15°', run: () => s().turnPiece(o.id, 15) },
@@ -219,15 +217,10 @@ export function flipSelection(): void {
   for (const id of ids) s().flipPiece(id)
 }
 
-/** Fuses the selected pieces; `fusePieces` itself says why when they are fewer than two or from different shapes. */
+/** Fuses the selected shapes; `fusePieces` itself says why when they are fewer than two or do not touch. */
 export function fuseSelection(): void {
   const st = s()
-  st.fusePieces(
-    st.selection.filter((id) => {
-      const o = st.objects[id]
-      return o?.type === 'polygon' && !!o.lego
-    })
-  )
+  st.fusePieces(fuseChoice(st.selection, null, st.objects))
   focusPanel('measure')
 }
 
