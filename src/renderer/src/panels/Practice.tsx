@@ -26,7 +26,9 @@ import {
   showSandbox,
   type Played
 } from '../questions/player'
+import { buildResultFile, recordFirstTries, resultParts, serializeResultFile, type PQResultPart } from '../questions/results'
 import { nextLevel, resolveAutoSteps } from '../questions/steps'
+import { saveTextFile } from '../app/files'
 import { workSteps } from '../math/pure/store'
 import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
@@ -44,6 +46,13 @@ interface Result {
   right: boolean | null
   hints: number
   seconds: number
+  /**
+   * Present only for a question played from a set (never a generated vector-topic problem): what a
+   * `.pqresult` file needs to name the item again — the question's own id, the seed it was drawn
+   * from, and each counted part's mark, right on its very first Check (facility, decision 8, never
+   * a later correction) and whether error carried forward decided it.
+   */
+  question?: { id: string; seed: number; parts: PQResultPart[] }
 }
 
 /** One question of a running set: a generated vector problem, or a question from a question set with its seed. */
@@ -67,6 +76,20 @@ interface Session {
   typed: Record<string, PartAnswer>
   /** Each box's mark; a question's carries its error-carried-forward note and marks. */
   checks: Record<string, RowCheck>
+  /**
+   * Each part's own first real Check (`recordFirstTries`): right or not, recorded at the first
+   * Check with something readable in that part's box and never overwritten. Facility (decision 8)
+   * is "right at the first Check", so a fixed typo must not turn a wrong first try into a right
+   * one — and a part still blank when Enter checked part (a) has not been tried yet. Null until
+   * the question's first Check.
+   */
+  firstTries: Record<string, boolean> | null
+  /**
+   * The marks on screen when "Show the full solution" was pressed: a part already tried by then
+   * keeps what it had earned in its result file, and a Check made with the solution in view
+   * changes nothing there. Null until the solution is opened.
+   */
+  checksAtReveal: Record<string, RowCheck> | null
   hints: number
   /**
    * Faded lines the student has uncovered one at a time. The fading's note says "fill this line
@@ -100,9 +123,14 @@ interface Session {
   setQuestions: PQQuestion[]
 }
 
-const blankQuestionState = (): Pick<Session, 'typed' | 'checks' | 'hints' | 'lines' | 'revealed' | 'modelShown' | 'startedAt' | 'note'> => ({
+const blankQuestionState = (): Pick<
+  Session,
+  'typed' | 'checks' | 'firstTries' | 'checksAtReveal' | 'hints' | 'lines' | 'revealed' | 'modelShown' | 'startedAt' | 'note'
+> => ({
   typed: {},
   checks: {},
+  firstTries: null,
+  checksAtReveal: null,
   hints: 0,
   lines: [],
   revealed: false,
@@ -181,6 +209,10 @@ export function Practice() {
   const [source, setSource] = useState<Source>(saved.source)
   const [setId, setSetId] = useState(saved.setId)
   const [now, setNow] = useState(() => Date.now())
+  // "Save my results for my teacher" (opt-in): the name box is never required, and nothing is
+  // written to disk until the button below is pressed.
+  const [teacherName, setTeacherName] = useState('')
+  const [saveNote, setSaveNote] = useState<string | null>(null)
   const session = useSession()
   const teacher = useTeacherSets()
   const { items, index, typed, checks, hints, lines, revealed, results, startedAt, note } = session
@@ -249,6 +281,9 @@ export function Practice() {
   const begin = (next: Item[], setQuestions: PQQuestion[] = []) => {
     put({ items: next, index: 0, results: [], questionLevel: useSession.getState().level, setQuestions, ...blankQuestionState() })
     setNow(Date.now())
+    // A new set starts with nothing saved yet: last set's "Saved" (or refusal) note must not sit
+    // beside this one's Save button and tell the student their unsaved results already went out.
+    setSaveNote(null)
   }
 
   const startSet = () => {
@@ -298,7 +333,10 @@ export function Practice() {
       // earlier answers where it carries them forward.
       next = markPlayed(played, typed, settings)
     }
-    put({ checks: next })
+    // Facility (decision 8) is "right at the first Check": each part's own first real try,
+    // recorded once and never replaced; one first tried after the full solution is not right first time.
+    const s = useSession.getState()
+    put({ checks: next, firstTries: recordFirstTries(s.firstTries, next, s.revealed) })
   }
 
   /** Records this question and moves on; `insert` (Go deeper) is played next, before the rest of the set. */
@@ -313,8 +351,28 @@ export function Practice() {
     const streak = counts ? (right ? s.streak + 1 : 0) : s.streak
     // From the level this question was played at: the author's own, until the student has answered one.
     const level = counts ? nextLevel(played?.level ?? s.level ?? 'worked', streak) : s.level
+    // A .pqresult item names each counted part by the author's own index (never its position among
+    // only the shown parts), so a set with showIf-hidden parts still lines statistics up correctly
+    // between two students who were shown a different subset.
+    const question =
+      item?.kind === 'question' && played
+        ? {
+            id: item.question.id,
+            seed: item.seed,
+            parts: resultParts(
+              countedParts(played).map((p) => ({ key: p.key, index: p.index, marks: p.part.marks })),
+              checks,
+              s.firstTries,
+              revealed,
+              s.checksAtReveal
+            )
+          }
+        : undefined
     put({
-      results: [...s.results, { id: problem.id, title: problem.title, right, hints: hints + lines.length, seconds: Math.round((Date.now() - startedAt) / 1000) }],
+      results: [
+        ...s.results,
+        { id: problem.id, title: problem.title, right, hints: hints + lines.length, seconds: Math.round((Date.now() - startedAt) / 1000), question }
+      ],
       // The deeper question may be further down the set already: it is played now, not twice.
       items: insert ? [...s.items.slice(0, s.index + 1), insert, ...s.items.slice(s.index + 1).filter((it) => !sameQuestion(it, insert))] : s.items,
       index: s.index + 1,
@@ -338,6 +396,28 @@ export function Practice() {
       put({ note: { text: `${text} Switched to ${where} to show it; your place in the set is kept.`, error: false } })
     } catch (e) {
       put({ note: { text: e instanceof Error ? e.message : String(e), error: true } })
+    }
+  }
+
+  /** The finished set's own question-bank results — a vector-topic problem has no `question` and
+   *  is never in a `.pqresult` file, because a result file names a part by the author's own index
+   *  and a generated problem has no author. */
+  const questionResults = results.filter((r): r is Result & { question: NonNullable<Result['question']> } => !!r.question)
+
+  /** Writes a `.pqresult` file from this finished set, only when the button is pressed. */
+  const saveForTeacher = async () => {
+    const file = buildResultFile({
+      setId: pickedSet?.id ?? setId,
+      setTitle: pickedSet?.title ?? setId,
+      student: teacherName,
+      items: questionResults.map((r) => ({ questionId: r.question.id, seed: r.question.seed, parts: r.question.parts, hints: r.hints, seconds: r.seconds }))
+    })
+    const safeName = (pickedSet?.title ?? 'results').replace(/[^\w -]+/g, '').trim() || 'results'
+    try {
+      const path = await saveTextFile(serializeResultFile(file), `${safeName}.pqresult`, 'Result file', 'pqresult')
+      setSaveNote(path ? 'Saved. Give this file to your teacher — PhysLab never sends it anywhere on its own.' : null)
+    } catch (e) {
+      setSaveNote(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -503,6 +583,27 @@ export function Practice() {
             </div>
           ))}
         </div>
+        {questionResults.length > 0 && (
+          <div className="card mx-3 mt-3 p-3">
+            <div className="font-semibold text-ink-strong">Save my results for my teacher</div>
+            <div className="text-ink-dim">
+              A file with each part you answered, whether it was right first time and in the end, your marks, the hints you
+              used and the time you took — never sent anywhere by PhysLab. You choose who it goes to.
+            </div>
+            <input
+              className="field min-h-[44px] mt-2 w-full"
+              value={teacherName}
+              onChange={(e) => setTeacherName(e.target.value)}
+              placeholder="Your name (optional)"
+              aria-label="Your name for your teacher (optional)"
+              spellCheck={false}
+            />
+            <button className="btn mt-2 min-h-[44px]" onClick={saveForTeacher}>
+              Save my results for my teacher
+            </button>
+            {saveNote && <div className="mt-1 text-ink-dim">{saveNote}</div>}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2 px-3">
           <button className="btn primary min-h-[44px]" onClick={startSet}>
             <RotateCcw size={13} /> Another set
@@ -608,7 +709,7 @@ export function Practice() {
           </button>
           {/* With nothing marked there is no answer to give away: the solution is there from the start. */}
           {(anyChecked || hints > 0 || unmarked) && !revealed && (
-            <button className="btn ghost min-h-[44px]" onClick={() => put({ revealed: true })}>
+            <button className="btn ghost min-h-[44px]" onClick={() => put({ revealed: true, checksAtReveal: checks })}>
               Show the full solution
             </button>
           )}
