@@ -16,13 +16,17 @@ import { fromExam } from './numbas'
 import { evaluateInVariables } from './parts'
 import { playQuestion } from './player'
 import {
+  format2Formulas,
   isCommandArgument,
+  mapFormat2Formulas,
+  mapPartNames,
   parsePQFile,
   RESERVED_NAMES,
   serializePQFile,
   VARIABLE_NAME,
   type License,
   type LicenseId,
+  type Format1Part,
   type PQFile,
   type PQPart,
   type PQQuestion,
@@ -332,6 +336,7 @@ export interface PreviewRow {
 /** A part with nothing yet to work its answer out from. */
 export function unanswered(p: PQPart): boolean {
   if (p.type === 'number' || p.type === 'expression') return p.answer.trim() === ''
+  if (p.type !== 'choice') return format2Formulas(p).some((f) => f.trim() === '')
   return p.distractors !== undefined && p.distractors.correct.trim() === ''
 }
 
@@ -731,21 +736,26 @@ export function renameVariable(q: PQQuestion, from: string, to: string): PQQuest
   const f = (e: string): string => renameInFormula(e, from, to)
   const t = (s: string): string => renameInText(s, from, to)
   const x = (s: string): string => renameTexChips(s, from, to)
+  const renamePart = (p: PQPart): PQPart => {
+    if (p.type === 'number') return { ...p, prompt: t(p.prompt), answer: f(p.answer), ...(p.traps ? { traps: p.traps.map((tr) => ({ value: f(tr.value), why: t(tr.why) })) } : {}) }
+    if (p.type === 'expression') return { ...p, prompt: t(p.prompt), answer: f(p.answer) }
+    if (p.type !== 'choice') return { ...mapFormat2Formulas(p, f), prompt: t(p.prompt) }
+    return {
+      ...p,
+      prompt: t(p.prompt),
+      choices: p.choices.map((c) => ({ ...c, text: t(c.text), ...(c.why !== undefined ? { why: t(c.why) } : {}) })),
+      ...(p.distractors ? { distractors: { ...p.distractors, correct: f(p.distractors.correct) } } : {})
+    }
+  }
   const out: PQQuestion = {
     ...q,
     statement: renameInStatement(q.statement, from, to),
     variables: q.variables.map((v) => ({ ...v, name: v.name === from ? to : v.name, def: v.def.kind === 'expr' ? { kind: 'expr', expr: f(v.def.expr) } : v.def })),
-    parts: q.parts.map((p): PQPart => {
-      if (p.type === 'number') return { ...p, prompt: t(p.prompt), answer: f(p.answer), ...(p.traps ? { traps: p.traps.map((tr) => ({ value: f(tr.value), why: t(tr.why) })) } : {}) }
-      if (p.type === 'expression') return { ...p, prompt: t(p.prompt), answer: f(p.answer) }
-      return {
-        ...p,
-        prompt: t(p.prompt),
-        choices: p.choices.map((c) => ({ ...c, text: t(c.text), ...(c.why !== undefined ? { why: t(c.why) } : {}) })),
-        ...(p.distractors ? { distractors: { ...p.distractors, correct: f(p.distractors.correct) } } : {})
-      }
-    })
+    // Format 2 also names variables in showIf, the ECF variables and a stated uncertainty.
+    parts: q.parts.map((p) => mapPartNames(renamePart(p), f, (n) => (n === from ? to : n)))
   }
+  // The variants' condition is a formula in the variables like any answer.
+  if (q.condition) out.condition = { ...q.condition, when: f(q.condition.when) }
   if (q.steps) {
     out.steps = {
       ...q.steps,
@@ -896,10 +906,10 @@ export function pureInputLatex(input: string, names: readonly string[], frame: (
 // ---------------------------------------------------------------------------
 
 /** A part turned into another type, keeping what both have: the prompt and the marks. */
-export function changePartType(p: PQPart, type: PQPart['type']): PQPart {
+export function changePartType(p: PQPart, type: Format1Part['type']): PQPart {
   if (p.type === type) return p
   const { prompt, marks } = p
-  const answer = p.type === 'choice' ? '' : p.answer
+  const answer = p.type === 'number' || p.type === 'expression' ? p.answer : ''
   if (type === 'number') return { type, prompt, answer, unit: 'none', tolerance: { kind: 'relative', value: 0.02 }, marks }
   if (type === 'expression') return { type, prompt, answer, symbols: ['x'], marks }
   return {

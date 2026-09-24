@@ -425,6 +425,7 @@ describe('motion pieces', () => {
 function rightAnswer(p: PlayedPart, played: Played): string | number[] {
   if (p.part.type === 'choice') return p.choices!.flatMap((c, i) => (c.correct ? [i] : []))
   if (p.part.type === 'expression') return bindValues(p.part.answer, played.variant.values, p.part.symbols)
+  if (p.part.type !== 'number') throw new Error(`the sample set has no ${p.part.type} part`)
   return p.part.unit === 'none' ? String(p.field!.value) : `${p.field!.value} ${UNITS[p.part.unit].label}`
 }
 

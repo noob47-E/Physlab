@@ -15,6 +15,7 @@ import {
   RESERVED_NAMES,
   UNIT_IDS,
   isCommandArgument,
+  isFormat1Part,
   VARIABLE_NAME,
   type License,
   type LicenseId,
@@ -1274,6 +1275,7 @@ const PART_DEFAULTS = {
 function partNotes(p: PQPart, index: number): string[] {
   const label = `part ${num(index + 1)}`
   const out: string[] = []
+  if (!isFormat1Part(p)) out.push(`PhysLab's ${label} is a kind of answer this Numbas file cannot hold yet, so it is left out.`)
   if (p.type === 'number') {
     if (p.kind === 'direction') out.push(`PhysLab checks ${label} as a direction, round the circle.`)
     if (p.kind === 'angle') out.push(`PhysLab checks ${label} as an angle.`)
@@ -1286,6 +1288,7 @@ function partNotes(p: PQPart, index: number): string[] {
 }
 
 function partToNumbas(p: PQPart): Obj | null {
+  if (!isFormat1Part(p)) return null
   const base = { ...PART_DEFAULTS, marks: p.marks }
   if (p.type === 'number') {
     const answer = `(${mathToJme(p.answer)})`

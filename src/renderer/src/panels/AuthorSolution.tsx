@@ -14,7 +14,7 @@ import { JOBS, type JobId } from '../math/pure/run'
 import { blankPart, changePartType, chipKatex, chipTex, parseLetters, partCheck, previewAutoStep, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
 import { useAuthor, useAuthorView } from '../questions/authorStore'
 import { substitute, drawVariables } from '../questions/variables'
-import type { DistractorRule, FadingLevel, PQPart, PQQuestion, PQStep } from '../questions/pqjson'
+import { bandOf, type DistractorRule, type FadingLevel, type Format1Part, type PQPart, type PQQuestion, type PQStep } from '../questions/pqjson'
 import { ChipBar, FormulaField, UnitSelect } from './AuthorVariables'
 import { ChipText, TexField } from './AuthorScene'
 
@@ -22,7 +22,7 @@ import { ChipText, TexField } from './AuthorScene'
 // Parts
 // ---------------------------------------------------------------------------
 
-const PART_TYPES: { type: PQPart['type']; label: string }[] = [
+const PART_TYPES: { type: Format1Part['type']; label: string }[] = [
   { type: 'number', label: 'A number' },
   { type: 'expression', label: 'A formula' },
   { type: 'choice', label: 'A choice' }
@@ -187,8 +187,8 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
             <div className="w-20">
               <NumField
                 className="min-h-[44px]"
-                value={p.tolerance.kind === 'relative' ? p.tolerance.value * 100 : p.tolerance.value}
-                onChange={(x) => change((d) => d.type === 'number' && void (d.tolerance.value = Math.abs(d.tolerance.kind === 'relative' ? x / 100 : x)))}
+                value={bandOf(p.tolerance).kind === 'relative' ? bandOf(p.tolerance).value * 100 : bandOf(p.tolerance).value}
+                onChange={(x) => change((d) => d.type === 'number' && void (d.tolerance = { kind: bandOf(d.tolerance).kind, value: Math.abs(bandOf(d.tolerance).kind === 'relative' ? x / 100 : x) }))}
               />
             </div>
             <div className="seg" role="radiogroup" aria-label="How close is close enough">
@@ -202,7 +202,7 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
                     change((d) => {
                       if (d.type !== 'number' || d.tolerance.kind === kind) return
                       // The same number of the new kind: 2 % becomes ± 2 of the unit, not ± 0.02.
-                      d.tolerance = { kind, value: kind === 'relative' ? d.tolerance.value / 100 : d.tolerance.value * 100 }
+                      d.tolerance = bandOf(d.tolerance).kind === kind ? bandOf(d.tolerance) : { kind, value: kind === 'relative' ? bandOf(d.tolerance).value / 100 : bandOf(d.tolerance).value * 100 }
                     })
                   }
                 >

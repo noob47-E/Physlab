@@ -102,10 +102,11 @@ describe('parsePQFile', () => {
   })
 
   it('refuses a newer format with the version in the sentence', () => {
-    expect(() => parsePQFile('{"app":"PhysLab","format":"pqjson","version":2,"questions":[]}')).toThrow(
-      'This question file is format 2; this PhysLab reads format 1.'
+    // Format 2 is read since 0.9 (tests/pqjson2.test.ts); 3 is the first one this PhysLab does not know.
+    expect(() => parsePQFile('{"app":"PhysLab","format":"pqjson","version":3,"questions":[]}')).toThrow(
+      'This question file is format 3; this PhysLab reads formats 1 and 2.'
     )
-    // "1" in quotes is not a format at all, so it is not told "format 1; this PhysLab reads format 1".
+    // "1" in quotes is not a format at all, so it is not told "format 1; this PhysLab reads formats 1 and 2".
     expect(() => parsePQFile('{"app":"PhysLab","format":"pqjson","version":"1","questions":[]}')).toThrow(
       'This is not a PhysLab question file.'
     )
@@ -168,7 +169,8 @@ describe('parsePQFile', () => {
   })
 
   it('refuses a part of a kind it does not know, and an empty list of values', () => {
-    expect(() => parsePQFile(mutate((q) => (q.parts[0].type = 'matrix')))).toThrow('a part of a kind PhysLab does not know: matrix.')
+    // A matrix part is format 2's (tests/pqjson2.test.ts); an essay is still no kind PhysLab knows.
+    expect(() => parsePQFile(mutate((q) => (q.parts[0].type = 'essay')))).toThrow('a part of a kind PhysLab does not know: essay.')
     expect(() => parsePQFile(mutate((q) => (q.variables[0].def = { kind: 'list', items: [] })))).toThrow("an empty list to choose from")
   })
 

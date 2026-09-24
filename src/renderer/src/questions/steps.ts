@@ -35,6 +35,7 @@ import {
   type Solution,
   type SolverSettings
 } from '../math/vectorSolver'
+import { format2AnswerTex, statedAnswerTex } from './answerKinds'
 import { isCommandArgument, type FadingLevel, type PQPart, type PQQuestion, type PQStep, type UnitId } from './pqjson'
 import { texQuantity, texUnit } from './units'
 import { substitute, type Variant } from './variables'
@@ -168,6 +169,16 @@ function answerFor(part: PQPart, values: Record<string, number>, units: Record<s
     } catch {
       v = NaN
     }
+    // A stated (Eₙ) part refuses a bare number, so its answer is revealed as value ± uncertainty.
+    if (part.tolerance.kind === 'stated') {
+      let u: number
+      try {
+        u = evaluateIn(part.tolerance.uref, values)
+      } catch {
+        u = NaN
+      }
+      return { label, tex: statedAnswerTex(v, u, part.unit, s) }
+    }
     return { label, tex: Number.isFinite(v) ? texQuantity(v, part.unit, s) : '\\text{?}' }
   }
   if (part.type === 'expression') {
@@ -177,6 +188,7 @@ function answerFor(part: PQPart, values: Record<string, number>, units: Record<s
       return { label, tex: '\\text{?}' }
     }
   }
+  if (part.type !== 'choice') return { label, tex: format2AnswerTex(part, values, s) }
   const right = part.choices.filter((c) => c.correct).map((c) => `\\text{${texText(substitute(c.text, values, units, s))}}`)
   return { label, tex: right.length > 0 ? right.join(',\\ ') : '\\text{?}' }
 }

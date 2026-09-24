@@ -24,6 +24,7 @@ import { tableFrom } from '../sim/recording'
 import type { Actuator } from '../sim/types'
 import { checkChoicePart, generateChoices, type Choice } from './distractors'
 import { motionPieces, motionTable, type MotionPieces } from './motion'
+import { checkFormat2Part } from './answerKinds'
 import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTol } from './parts'
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
 import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
@@ -210,6 +211,7 @@ export function checkPlayedPart(p: PlayedPart, answer: string | number[], played
     if (p.part.type === 'choice') return checkChoicePart(Array.isArray(answer) ? answer : [], p.choices ?? [])
     const text = Array.isArray(answer) ? '' : answer
     if (p.part.type === 'expression') return checkExpressionPart(text, p.part, values, unitsOf(played.question))
+    if (p.part.type !== 'number') return checkFormat2Part(text, p.part, values, settings)
     // A trap that cannot be worked out is left out, so the student's answer is still marked; the
     // reason under a wrong answer is read with the numbers in, like everything else they see.
     const fill: Fill = { values, units: unitsOf(played.question), settings }

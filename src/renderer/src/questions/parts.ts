@@ -10,7 +10,8 @@ import type { MeasureSettings } from '../math/format'
 import { checkAnswer, parseAnswer, UNIT_TAIL, type Check } from '../math/checkAnswer'
 import type { AnswerField, Trap } from '../math/problems'
 import { rngFor } from '../math/problems'
-import type { PQPart, UnitId } from './pqjson'
+import { checkStated } from './answerKinds'
+import { bandOf, type PQPart, type UnitId } from './pqjson'
 import { convertQuantity, unitFromTail, UNITS } from './units'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
@@ -24,7 +25,9 @@ export function evaluateInVariables(expr: string, values: Record<string, number>
 }
 
 export function toAbsoluteTol(part: NumberPart, value: number): number {
-  return part.tolerance.kind === 'relative' ? Math.abs(value) * part.tolerance.value : part.tolerance.value
+  // A stated (Eₙ) part has no band of its own: it is marked by `checkStated`, never by this width.
+  const band = bandOf(part.tolerance)
+  return band.kind === 'relative' ? Math.abs(value) * band.value : band.value
 }
 
 /**
@@ -35,6 +38,12 @@ export function toAbsoluteTol(part: NumberPart, value: number): number {
  */
 export function checkNumberPart(text: string, part: NumberPart, values: Record<string, number>, settings: Precision): Check {
   const value = evaluateInVariables(part.answer, values)
+  // Rung 5: the student gives their own uncertainty and the answer is judged by the Eₙ test,
+  // which reads its own units; `checkAnswer`'s band and traps do not apply to it.
+  if (part.tolerance.kind === 'stated') {
+    const uref = evaluateInVariables(part.tolerance.uref, values)
+    return checkStated(text, { x: value, u: uref, unit: part.unit, maxRelU: part.tolerance.maxRelU }, settings)
+  }
   const tol = toAbsoluteTol(part, value)
   const traps: Trap[] = (part.traps ?? []).map((t) => ({ value: evaluateInVariables(t.value, values), why: t.why }))
   const field: AnswerField = {

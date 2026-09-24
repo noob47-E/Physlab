@@ -38,10 +38,44 @@ export interface PQVariable {
   description?: string
 }
 
-export interface Tolerance {
+/** How close an answer must be to the part's own: a band round it. */
+export interface BandTolerance {
   kind: 'relative' | 'absolute'
   /** relative: a fraction (0.02 = 2 %); absolute: in the part's unit. */
   value: number
+}
+
+/**
+ * Format 2, number parts only (rung 5): the student states their own uncertainty ("0.5591 ±
+ * 0.0001") and the answer is right when the Eₙ test passes, |x − xref| ≤ √(u² + uref²).
+ */
+export interface StatedTolerance {
+  kind: 'stated'
+  /** The reference value's own standard uncertainty, a mathjs expression in the variables. */
+  uref: string
+  /** The largest uncertainty accepted, as a fraction of the student's value (default 0.1 = 10 %), so "± 1000" cannot pass. */
+  maxRelU?: number
+}
+
+export type Tolerance = BandTolerance | StatedTolerance
+
+/**
+ * Format 2: error carried forward (Numbas adaptive marking). A part that `uses` an earlier part's
+ * answer is also marked with the student's own earlier answer put in place of that variable.
+ */
+export interface ECF {
+  uses: { part: number; variable: string }[]
+  /** originalfirst: the true values first, the student's own if that fails; alwaysreplace: only the student's own. */
+  strategy: 'originalfirst' | 'alwaysreplace'
+  /** Marks taken off an answer that is right only by error carried forward. */
+  penalty: number
+}
+
+/** Fields any part may carry in format 2. */
+export interface PartCommon {
+  ecf?: ECF
+  /** A mathjs condition in the question's variables; the part is shown and counted only when it holds. */
+  showIf?: string
 }
 
 export interface NamedTrap {
@@ -51,7 +85,7 @@ export interface NamedTrap {
   why: string
 }
 
-export type PQPart =
+export type PQPart = (
   | {
       type: 'number'
       prompt: string
@@ -85,6 +119,149 @@ export type PQPart =
       distractors?: { correct: string; unit: UnitId; rules: DistractorRule[] }
       marks: number
     }
+  // --- format 2 -----------------------------------------------------------
+  | {
+      type: 'vector'
+      prompt: string
+      /** Two or three mathjs expressions: the i, j (and k) components. */
+      answer: string[]
+      unit: UnitId
+      /** A band on the distance between the two vectors (relative: of the answer's size). */
+      tolerance: Tolerance
+      marks: number
+    }
+  | {
+      type: 'matrix'
+      prompt: string
+      /** Rows of mathjs expressions, all the same length. */
+      answer: string[][]
+      tolerance: Tolerance
+      /** An entry may be typed as a fraction, 3/5 for 0.6. */
+      allowFractions?: boolean
+      /** Marks shared out entry by entry instead of all or nothing. */
+      markPerCell?: boolean
+      marks: number
+    }
+  | {
+      type: 'roots'
+      prompt: string
+      /** Every root, as mathjs expressions; an empty list means "no real roots". */
+      answer: string[]
+      unit: UnitId
+      tolerance: Tolerance
+      /** A repeated root must then be typed as often as it repeats; otherwise it counts once. */
+      multiplicity?: boolean
+      marks: number
+    }
+  | {
+      type: 'function'
+      prompt: string
+      /** The names of the free variable and of the function: "x" and "y", "t" and "v". */
+      x: string
+      y: string
+      /** "lhs = rhs" in x, y, y′, y″ and the question's variables. */
+      ode: string
+      initial: { at: string; order: 0 | 1; value: string }[]
+      /** The author's own solution, shown when the answer is revealed. */
+      model: string
+      sampleRange?: [number, number]
+      marks: number
+    }
+  | {
+      /** Rung 5: shown with a model proof and a self-check list, never marked offline. */
+      type: 'proof'
+      prompt: string
+      model: string
+      selfCheck: string[]
+      /** Always 0 — the parser refuses anything else. Typed as a number so a part can be copied with new marks while its type changes. */
+      marks: number
+    }
+  | {
+      /** Rung 1: fill the target outline with Lego pieces. */
+      type: 'lego'
+      prompt: string
+      /** The target outline's corners, each an [x, y] pair of expressions. */
+      target: [string, string][]
+      pieces: number
+      marks: number
+    }
+) &
+  PartCommon
+
+/** The part kinds of format 1, which 0.7.0 reads. */
+export const FORMAT1_PART_TYPES = ['number', 'expression', 'choice'] as const
+
+/** A part 0.7.0 could already hold: number (with a band tolerance), expression or choice. */
+export type Format1Part = (Extract<PQPart, { type: 'number' }> & { tolerance: BandTolerance }) | Extract<PQPart, { type: 'expression' | 'choice' }>
+
+/** Every other part: the four answer kinds of format 2, proof and lego. */
+export type Format2Part = Exclude<PQPart, { type: (typeof FORMAT1_PART_TYPES)[number] }>
+
+/**
+ * Whether a part is one that format 1 already had, with nothing of format 2 in its marking (a
+ * stated tolerance). Code written for 0.7.0's three kinds narrows with this, so a new kind never
+ * falls into its "else it must be a choice" branch.
+ */
+export function isFormat1Part(p: PQPart): p is Format1Part {
+  if (p.type === 'number') return p.tolerance.kind !== 'stated'
+  return p.type === 'expression' || p.type === 'choice'
+}
+
+/** The default band: one marking tolerance for the whole app, 2 % (PROGRAM §5, Idea 12). */
+export const DEFAULT_BAND: BandTolerance = { kind: 'relative', value: 0.02 }
+
+/**
+ * A tolerance as a band. A stated (Eₙ) tolerance has no band of its own; where a band is needed
+ * anyway — the Author's band editor, a Numbas range — it reads as the 2 % default.
+ */
+export const bandOf = (t: Tolerance): BandTolerance => (t.kind === 'stated' ? DEFAULT_BAND : t)
+
+/**
+ * The same format-2 part with `f` applied to every formula in it (answers, the ODE and its
+ * starting values, the model, the Lego corners); prompts and sentences are left alone. Renaming
+ * a variable goes through this, so a vector's components follow a renamed `F` like a number's
+ * answer does.
+ */
+export function mapFormat2Formulas(p: Format2Part, f: (formula: string) => string): Format2Part {
+  switch (p.type) {
+    case 'vector':
+    case 'roots':
+      return { ...p, answer: p.answer.map(f) }
+    case 'matrix':
+      return { ...p, answer: p.answer.map((row) => row.map(f)) }
+    case 'function':
+      return { ...p, ode: f(p.ode), model: f(p.model), initial: p.initial.map((c) => ({ ...c, at: f(c.at), value: f(c.value) })) }
+    case 'lego':
+      return { ...p, target: p.target.map(([x, y]) => [f(x), f(y)] as [string, string]) }
+    case 'proof':
+      return p
+  }
+}
+
+/**
+ * Any part with `f` applied to the format-2 fields that name a variable outside its answer — the
+ * condition that shows it, a stated part's reference uncertainty — and `rename` to each variable
+ * an earlier answer is carried into. Renaming a variable goes through this too: a field left on
+ * the old name makes the saved file refuse to open ("carries an answer into 'a', but 'a' is not
+ * one of its variables").
+ */
+export function mapPartNames(p: PQPart, f: (formula: string) => string, rename: (name: string) => string): PQPart {
+  const out: PQPart = { ...p }
+  if (p.showIf !== undefined) out.showIf = f(p.showIf)
+  if (p.ecf !== undefined) out.ecf = { ...p.ecf, uses: p.ecf.uses.map((u) => ({ ...u, variable: rename(u.variable) })) }
+  if (out.type === 'number' && out.tolerance.kind === 'stated') out.tolerance = { ...out.tolerance, uref: f(out.tolerance.uref) }
+  return out
+}
+
+/** Every formula in a format-2 part, in the order `mapFormat2Formulas` visits them. */
+export function format2Formulas(p: Format2Part): string[] {
+  const out: string[] = []
+  mapFormat2Formulas(p, (s) => {
+    out.push(s)
+    return s
+  })
+  return out
+}
 
 export type DistractorRule =
   | 'sign'             // −answer
@@ -161,14 +338,27 @@ export interface PQQuestion {
   sandbox?: PQSandbox
   license: License
   tags?: string[]
-  /** Provenance of an import; absent on a question written in PhysLab. */
-  imported?: { format: 'numbas'; itemUrl?: string; contributors?: string[] }
+  /**
+   * Provenance of an import; absent on a question written in PhysLab. `changes` (format 2) lists
+   * what PhysLab altered, since CC BY and BY-SA require saying so.
+   */
+  imported?: { format: 'numbas'; itemUrl?: string; contributors?: string[]; changes?: string[] }
+  /** Format 2: keep drawing variants until this mathjs condition in the variables holds, at most `maxRuns` times. */
+  condition?: { when: string; maxRuns: number }
+  /** Format 2: the depth-ladder rung, 1 (first look) to 5 (research) — a search label, never a lock. */
+  rung?: 1 | 2 | 3 | 4 | 5
+  /** Format 2: the id of a question that goes one rung deeper. */
+  deeper?: string
 }
+
+/** The file formats this PhysLab reads. A file is written in the lowest one that holds it. */
+export type PQVersion = 1 | 2
 
 export interface PQFile {
   app: 'PhysLab'
   format: 'pqjson'
-  version: 1
+  /** On writing, `serializePQFile` sets this from what the questions use (`formatVersionOf`). */
+  version: PQVersion
   questions: PQQuestion[]
 }
 
@@ -245,7 +435,11 @@ export function parsePQFile(text: string): PQFile {
   // Only a genuinely different number is "another format"; a version that is not a number at all
   // ("1" in quotes) would otherwise be refused as "format 1; this PhysLab reads format 1".
   if (!isNum(raw.version)) throw new Error(NOT_A_FILE)
-  if (raw.version !== 1) throw new Error(`This question file is format ${num(raw.version)}; this PhysLab reads format 1.`)
+  // A version-1 file holding a format-2 field is read as it stands rather than refused: the
+  // fields say what the file is, and the next save writes the version that matches them.
+  if (raw.version !== 1 && raw.version !== 2) {
+    throw new Error(`This question file is format ${num(raw.version)}; this PhysLab reads formats 1 and 2.`)
+  }
   if (!Array.isArray(raw.questions)) throw new Error(NOT_A_FILE)
 
   raw.questions.forEach((q, i) => checkQuestion(q, i))
@@ -281,7 +475,28 @@ function checkQuestion(q: unknown, index: number): void {
 
   const seen = new Set<string>()
   for (const v of q.variables) checkVariable(v, who, seen)
-  for (const p of q.parts) checkPart(p, who)
+  q.parts.forEach((p, i) => checkPart(p, i, who, seen))
+  checkFormat2Question(q, who)
+}
+
+/** The question-level fields of format 2: a condition on the variants, the rung, the deeper link, the list of changes. */
+function checkFormat2Question(q: Record<string, unknown>, who: string): void {
+  if (q.condition !== undefined) {
+    const c = q.condition
+    if (!isObj(c) || !isStr(c.when) || c.when.trim() === '' || !isNum(c.maxRuns) || !Number.isInteger(c.maxRuns) || c.maxRuns < 1) {
+      throw new Error(`${who} keeps only some of its variants but does not say which: it needs a condition and a whole number of tries.`)
+    }
+  }
+  if (q.rung !== undefined && !(isNum(q.rung) && Number.isInteger(q.rung) && q.rung >= 1 && q.rung <= 5)) {
+    const shown = isNum(q.rung) ? num(q.rung) : String(q.rung)
+    throw new Error(`${who} is on rung ${shown}; the rungs go from 1 to 5.`)
+  }
+  if (q.deeper !== undefined && (!isStr(q.deeper) || q.deeper.trim() === '')) {
+    throw new Error(`${who} points to a deeper question but does not say which one.`)
+  }
+  if (isObj(q.imported) && q.imported.changes !== undefined && !(Array.isArray(q.imported.changes) && q.imported.changes.every(isStr))) {
+    throw new Error(`${who} lists the changes made to it, but not as sentences.`)
+  }
 }
 
 function checkVariable(v: unknown, who: string, seen: Set<string>): void {
@@ -326,18 +541,48 @@ function checkVariable(v: unknown, who: string, seen: Set<string>): void {
   }
 }
 
-function checkPart(p: unknown, who: string): void {
+const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr)
+const isWhole = (v: unknown): v is number => isNum(v) && Number.isInteger(v)
+
+/** A band tolerance (relative or absolute), as every part with a tolerance but a stated number part carries. */
+function isBand(t: unknown): boolean {
+  return isObj(t) && (t.kind === 'relative' || t.kind === 'absolute') && isNum(t.value)
+}
+
+/** A vector, matrix or roots part's tolerance: a band, never a stated uncertainty. */
+function checkBand(t: unknown, who: string, kind: string): void {
+  if (isObj(t) && t.kind === 'stated') {
+    throw new Error(`${who} asks for a stated uncertainty on a ${kind} part; only a number part can be marked that way.`)
+  }
+  if (!isBand(t)) throw new Error(`${who} has a ${kind} part that does not say how close an answer must be.`)
+}
+
+function checkPart(p: unknown, index: number, who: string, names: ReadonlySet<string>): void {
   if (!isObj(p) || !isStr(p.type)) throw new Error(`${who} has a part PhysLab cannot read.`)
   if (!isStr(p.prompt)) throw new Error(`${who} has a part with no prompt.`)
-  if (!isNum(p.marks) || p.marks <= 0) {
-    const shown = isNum(p.marks) ? num(p.marks) : String(p.marks)
+  const shown = isNum(p.marks) ? num(p.marks) : String(p.marks)
+  // A proof is shown with its model and a self-check list, never marked offline, so it is the
+  // one part worth nothing; any other part worth 0 would be a question nobody can score on.
+  if (p.type === 'proof') {
+    if (p.marks !== 0) throw new Error(`${who} gives a proof part ${shown} marks; a proof is shown, never marked, so it is worth 0.`)
+  } else if (!isNum(p.marks) || p.marks <= 0) {
     throw new Error(`${who} has a part worth ${shown} marks; every part must be worth more than 0.`)
   }
+  checkPartCommon(p, index, who, names)
   switch (p.type) {
     case 'number':
       if (!isStr(p.answer)) throw new Error(`${who} has a number part with no answer.`)
       if (!isUnit(p.unit)) throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.unit)}.`)
-      if (!isObj(p.tolerance) || (p.tolerance.kind !== 'relative' && p.tolerance.kind !== 'absolute') || !isNum(p.tolerance.value)) {
+      if (isObj(p.tolerance) && p.tolerance.kind === 'stated') {
+        if (!isStr(p.tolerance.uref) || p.tolerance.uref.trim() === '') {
+          throw new Error(`${who} has a number part marked against the student's own uncertainty, but gives no uncertainty for its own answer.`)
+        }
+        if (p.tolerance.maxRelU !== undefined && !(isNum(p.tolerance.maxRelU) && p.tolerance.maxRelU > 0)) {
+          throw new Error(`${who} has a number part whose largest accepted uncertainty is not a number above 0.`)
+        }
+        return
+      }
+      if (!isBand(p.tolerance)) {
         throw new Error(`${who} has a number part that does not say how close an answer must be.`)
       }
       return
@@ -353,9 +598,124 @@ function checkPart(p: unknown, who: string): void {
         throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.distractors.unit)}.`)
       }
       return
+    case 'vector':
+      if (!isStrings(p.answer) || p.answer.length < 2 || p.answer.length > 3) {
+        throw new Error(`${who} has a vector part whose answer is not two or three components.`)
+      }
+      if (!isUnit(p.unit)) throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.unit)}.`)
+      checkBand(p.tolerance, who, 'vector')
+      return
+    case 'matrix': {
+      const rows = p.answer
+      if (!Array.isArray(rows) || rows.length === 0 || !rows.every((r) => isStrings(r) && r.length > 0 && r.length === (rows[0] as unknown[]).length)) {
+        throw new Error(`${who} has a matrix part whose answer is not rows of entries, all the same length.`)
+      }
+      checkBand(p.tolerance, who, 'matrix')
+      for (const flag of [p.allowFractions, p.markPerCell]) {
+        if (flag !== undefined && typeof flag !== 'boolean') throw new Error(`${who} has a matrix part with a setting that is neither yes nor no.`)
+      }
+      return
+    }
+    case 'roots':
+      // An empty list is allowed: it is the answer "no real roots".
+      if (!isStrings(p.answer)) throw new Error(`${who} has a roots part whose answer is not a list of roots.`)
+      if (!isUnit(p.unit)) throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.unit)}.`)
+      checkBand(p.tolerance, who, 'roots')
+      if (p.multiplicity !== undefined && typeof p.multiplicity !== 'boolean') {
+        throw new Error(`${who} has a roots part that does not say yes or no to counting repeated roots.`)
+      }
+      return
+    case 'function':
+      if (!isStr(p.x) || !isStr(p.y) || !VARIABLE_NAME.test(p.x) || !VARIABLE_NAME.test(p.y) || p.x === p.y) {
+        throw new Error(`${who} has a function part that does not name its variable and its function.`)
+      }
+      if (!isStr(p.ode) || p.ode.split('=').length !== 2) throw new Error(`${who} has a function part whose equation does not have one = sign.`)
+      if (!Array.isArray(p.initial) || !p.initial.every((c) => isObj(c) && isStr(c.at) && isStr(c.value) && (c.order === 0 || c.order === 1))) {
+        throw new Error(`${who} has a function part with a starting condition PhysLab cannot read.`)
+      }
+      if (!isStr(p.model)) throw new Error(`${who} has a function part with no model answer.`)
+      if (p.sampleRange !== undefined) {
+        const r = p.sampleRange
+        if (!Array.isArray(r) || r.length !== 2 || !isNum(r[0]) || !isNum(r[1]) || r[0] >= r[1]) {
+          throw new Error(`${who} has a function part whose checking range is not two numbers, the smaller first.`)
+        }
+      }
+      return
+    case 'proof':
+      if (!isStr(p.model) || p.model.trim() === '') throw new Error(`${who} has a proof part with no model proof.`)
+      if (!isStrings(p.selfCheck)) throw new Error(`${who} has a proof part whose self-check list is not a list of sentences.`)
+      return
+    case 'lego':
+      if (!Array.isArray(p.target) || p.target.length < 3 || !p.target.every((c) => isStrings(c) && c.length === 2)) {
+        throw new Error(`${who} has a Lego part whose target outline is not three or more corners.`)
+      }
+      if (!isWhole(p.pieces) || p.pieces < 1) throw new Error(`${who} has a Lego part that does not say how many pieces it has.`)
+      return
     default:
       throw new Error(`${who} has a part of a kind PhysLab does not know: ${p.type}.`)
   }
+}
+
+/** What any part may carry in format 2: an answer carried forward from an earlier part, and a condition for showing it. */
+function checkPartCommon(p: Record<string, unknown>, index: number, who: string, names: ReadonlySet<string>): void {
+  const n = num(index + 1)
+  if (p.showIf !== undefined && (!isStr(p.showIf) || p.showIf.trim() === '')) {
+    throw new Error(`${who} shows part ${n} only under a condition, but the condition is empty.`)
+  }
+  if (p.ecf === undefined) return
+  const e = p.ecf
+  if (!isObj(e) || !Array.isArray(e.uses) || e.uses.length === 0) {
+    throw new Error(`${who} carries an earlier answer into part ${n} but does not say which.`)
+  }
+  for (const u of e.uses) {
+    if (!isObj(u) || !isWhole(u.part) || !isStr(u.variable)) {
+      throw new Error(`${who} carries an earlier answer into part ${n} but does not say which part and which variable.`)
+    }
+    // Only an earlier part: a later one has not been answered when this one is marked.
+    if (u.part < 0 || u.part >= index) {
+      throw new Error(`${who} has part ${n} use the answer to part ${num(u.part + 1)}, which does not come before it.`)
+    }
+    if (!names.has(u.variable)) {
+      throw new Error(`${who} carries an answer into '${u.variable}' in part ${n}, but '${u.variable}' is not one of its variables.`)
+    }
+  }
+  if (e.strategy !== 'originalfirst' && e.strategy !== 'alwaysreplace') {
+    throw new Error(`${who} carries an answer forward into part ${n} in a way PhysLab does not know: ${String(e.strategy)}.`)
+  }
+  if (!isNum(e.penalty) || e.penalty < 0 || (isNum(p.marks) && e.penalty > p.marks)) {
+    throw new Error(`${who} takes ${isNum(e.penalty) ? num(e.penalty) : String(e.penalty)} marks off part ${n} for a carried-forward answer, which the part cannot give.`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Which format a file needs
+// ---------------------------------------------------------------------------
+
+/** The picture kinds and distractor rules format 1 already had; anything else is format 2. */
+const FORMAT1_PICTURES: readonly string[] = ['curve', 'piecewise', 'between', 'tangent']
+const FORMAT1_RULES: readonly string[] = [
+  'sign', 'reciprocal', 'slope-for-value', 'value-for-slope', 'area-for-value', 'ignore-initial', 'g-10', 'half-double', 'power-of-ten'
+]
+
+/**
+ * The lowest format that holds this question. Written against the format-1 lists rather than
+ * the format-2 additions, so a picture kind or distractor rule another track adds later is
+ * format 2 without this function hearing of it — and 0.7.0, which cannot read it, is never
+ * handed it as a format-1 file.
+ */
+export function questionFormat(q: PQQuestion): PQVersion {
+  if (q.condition !== undefined || q.rung !== undefined || q.deeper !== undefined || q.imported?.changes !== undefined) return 2
+  if (q.picture !== undefined && !FORMAT1_PICTURES.includes(q.picture.kind)) return 2
+  for (const p of q.parts) {
+    if (!isFormat1Part(p) || p.ecf !== undefined || p.showIf !== undefined) return 2
+    if (p.type === 'choice' && p.distractors?.rules.some((r) => !FORMAT1_RULES.includes(r))) return 2
+  }
+  return 1
+}
+
+/** 2 when any question uses a format-2 field, else 1 — so a plain file still opens in 0.7.0. */
+export function formatVersionOf(file: Pick<PQFile, 'questions'>): PQVersion {
+  return file.questions.some((q) => questionFormat(q) === 2) ? 2 : 1
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +767,12 @@ function ordered(value: unknown): unknown {
   return out
 }
 
-/** The file text: two-space JSON with a stable key order, so it diffs cleanly between saves. */
+/**
+ * The file text: two-space JSON with a stable key order, so it diffs cleanly between saves. The
+ * version is worked out here from what the questions use, never taken from the object: the
+ * Author, the bank and the Numbas import all build files as version 1, and a vector part saved
+ * under that number would reach 0.7.0 as "a part of a kind PhysLab does not know".
+ */
 export function serializePQFile(f: PQFile): string {
-  return JSON.stringify(ordered(f), null, 2)
+  return JSON.stringify(ordered({ ...f, version: formatVersionOf(f) }), null, 2)
 }
