@@ -34,7 +34,7 @@ import {
   type UnitId,
   type VariableDef
 } from './pqjson'
-import { stepsToWorking, VECTOR_SOLVER_NAMES } from './steps'
+import { stepsToWorking, VECTOR_SOLVER_NAMES, workCasSteps, type StepWorker } from './steps'
 import { formatQuantity } from './units'
 import { drawVariables, type Variant } from './variables'
 
@@ -630,6 +630,18 @@ export const SOLVERS: readonly { name: string; label: string }[] = VECTOR_SOLVER
  */
 export function previewAutoStep(q: PQQuestion, step: PQStep, settings: MeasureSettings): Move[] {
   return stepsToWorking({ ...q, steps: { level: 'worked', items: [step] } }, drawVariables(q, 1), settings, 'worked').moves
+}
+
+/**
+ * `previewAutoStep` with an Integrate or Differentiate step worked through SymPy: the synchronous
+ * preview can only say "Working it out…" for one, and the teacher would add a step without ever
+ * seeing its working. Null for any other step, whose synchronous preview is already the whole of it.
+ */
+export async function previewAutoStepWorked(q: PQQuestion, step: PQStep, settings: MeasureSettings, work: StepWorker): Promise<Move[] | null> {
+  const one: PQQuestion = { ...q, steps: { level: 'worked', items: [step] } }
+  const variant = drawVariables(q, 1)
+  const resolved = await workCasSteps(one, variant.values, settings, work)
+  return resolved ? stepsToWorking(one, variant, settings, 'worked', resolved).moves : null
 }
 
 // ---------------------------------------------------------------------------

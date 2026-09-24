@@ -18,6 +18,9 @@ import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { evalDisplayedSum, splitDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
 import { rStr, rat } from '../src/renderer/src/math/pure/rat'
 import { exprTex, parseExpr, parseFraction } from '../src/renderer/src/math/pure/mono'
+import type { MathNode } from 'mathjs'
+import { math, preprocess } from '../src/renderer/src/math/expr'
+import { forSymPy } from '../src/renderer/src/math/pure/store'
 
 /**
  * What an input means, independent of how it was spelled.
@@ -33,8 +36,31 @@ const sideMeaning = (part: string): string => {
     const { num, den } = parseFraction(part)
     return `${exprTex(num)} over ${exprTex(den)}`
   } catch {
+    // Not a polynomial either (x^2 sin(x), which Differentiate offers): compared by its values,
+    // read the way the app reads it, since "x^2 sin(x)" and "x^(2)sin(x)" are one function.
+  }
+  try {
+    const f = asSymPyReadsIt(part).compile()
+    return [0.3, 0.7, 1.9].map((x) => Number(f.evaluate({ x })).toPrecision(10)).join(', ')
+  } catch {
     return part.replace(/\s+/g, '')
   }
+}
+
+/**
+ * A calculus line read the way the worker's SymPy parser reads it (implicit multiplication): a
+ * run of letters that is no known name is a product of single letters ("xe^(x)" is x·e^x), and a
+ * letter before a bracket multiplies it ("x(e)^(x)" is x·e^x). Integrate and Differentiate send
+ * the field's line to SymPy, not to mathjs, so this is what the field has to mean.
+ */
+function asSymPyReadsIt(part: string): MathNode {
+  // Split at the token level, as SymPy does, so "xe^(x)" is x·e^x and never (x·e)^x.
+  const split = preprocess(forSymPy(part)).replace(/[A-Za-z]+(\s*\()?/g, (run, bracket?: string) => {
+    const name = bracket ? run.slice(0, -bracket.length) : run
+    if (name in math && (bracket || typeof (math as unknown as Record<string, unknown>)[name] !== 'function')) return run
+    return name.split('').join('*') + (bracket ? `*${bracket}` : '')
+  })
+  return math.parse(split)
 }
 
 const meaningOf = (src: string): string =>

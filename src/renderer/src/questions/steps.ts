@@ -39,6 +39,8 @@ import { format2AnswerTex, statedAnswerTex } from './answerKinds'
 import { isCommandArgument, type FadingLevel, type PQPart, type PQQuestion, type PQStep, type UnitId } from './pqjson'
 import { texQuantity, texUnit } from './units'
 import { substitute, type Variant } from './variables'
+// A type only: player.ts builds on this file, so a value import back would be circular.
+import type { Played } from './player'
 
 /** The panel's own step shape plus the author's mark that fading may blank it. */
 export interface StepMove extends Move {
@@ -259,13 +261,47 @@ export function readSolverArg(text: string, values: Record<string, number>): unk
   return t
 }
 
-/** The moves an engine step contributes, or the one move that says it could not. */
-function autoMoves(step: PQStep, values: Record<string, number>, units: Record<string, UnitId | undefined>, s: MeasureSettings): StepMove[] {
+/** What an engine step worked by SymPy shows until `resolveAutoSteps` has its reply. */
+export const WORKING_IT_OUT_STEP = 'Working it out…'
+
+/** Where a SymPy-worked step's reply is kept: its job and its line with this variant's numbers in. */
+export const casStepKey = (job: string, input: string): string => `${job}\u0000${input}`
+
+/** Integrate or Differentiate one line through SymPy (the app passes math/pure/store.ts `workSteps`). */
+export type StepWorker = (job: JobId, input: string) => Promise<Working>
+
+/** A SymPy-worked step's reply as moves: its steps, or its answer alone with the reason, never nothing. */
+function casMoves(done: Working, cannot: (why?: string) => StepMove[]): StepMove[] {
+  if (done.error) return cannot(done.error)
+  if (done.moves.length) return done.moves.map((m) => ({ ...m, blank: false }))
+  const answer = done.answers[0]?.tex
+  if (answer === undefined) return cannot(done.reason)
+  return [{ head: done.reason ?? COULD_NOT, tex: `${done.input} ${answer.startsWith('\\approx') ? '' : '= '}${answer}`, blank: false }]
+}
+
+/**
+ * The moves an engine step contributes, or the one move that says it could not. A job SymPy
+ * works (Integrate, Differentiate) cannot answer synchronously: it shows "Working it out…" until
+ * its reply is in `resolved`.
+ */
+function autoMoves(
+  step: PQStep,
+  values: Record<string, number>,
+  units: Record<string, UnitId | undefined>,
+  s: MeasureSettings,
+  resolved?: ReadonlyMap<string, Working>
+): StepMove[] {
   const auto = step.auto!
   const cannot = (why?: string): StepMove[] => [{ head: COULD_NOT, note: why, blank: false }]
   if (auto.engine === 'pure') {
-    if (!JOBS.some((j) => j.id === auto.job)) return cannot()
-    const working = runPure(auto.job as JobId, substitute(auto.input, values, {}, s))
+    const def = JOBS.find((j) => j.id === auto.job)
+    if (!def) return cannot()
+    const input = substitute(auto.input, values, {}, s)
+    if (def.engine === 'cas') {
+      const done = resolved?.get(casStepKey(def.id, input))
+      return done ? casMoves(done, cannot) : [{ head: WORKING_IT_OUT_STEP, blank: false }]
+    }
+    const working = runPure(def.id, input)
     if (working.error) return cannot(working.error)
     return working.moves.map((m) => ({ ...m, blank: false }))
   }
@@ -348,7 +384,13 @@ const unitsOf = (q: PQQuestion): Record<string, UnitId | undefined> => Object.fr
  * were computed from the variables — there is nothing to verify, and the panel must still show
  * its tick. `level` fades the steps; it defaults to the level saved with the question.
  */
-export function stepsToWorking(q: PQQuestion, variant: Variant, settings: MeasureSettings, level?: FadingLevel): Working {
+export function stepsToWorking(
+  q: PQQuestion,
+  variant: Variant,
+  settings: MeasureSettings,
+  level?: FadingLevel,
+  resolved?: ReadonlyMap<string, Working>
+): Working {
   const { values } = variant
   const units = unitsOf(q)
   // Heads and notes are read as sentences, their inline maths spoken as a prompt's is: filled in
@@ -359,7 +401,7 @@ export function stepsToWorking(q: PQQuestion, variant: Variant, settings: Measur
   const moves: StepMove[] = []
   for (const step of q.steps?.items ?? []) {
     if (step.auto) {
-      moves.push(...autoMoves(step, values, units, settings))
+      moves.push(...autoMoves(step, values, units, settings, resolved))
       continue
     }
     const m: StepMove = { head: plain(step.head), blank: step.blank === true }
@@ -379,5 +421,63 @@ export function stepsToWorking(q: PQQuestion, variant: Variant, settings: Measur
     moves: fadeMoves(moves, level ?? q.steps?.level ?? 'worked'),
     answers: q.parts.map((p) => answerFor(p, values, units, settings)),
     checked: 'ok'
+  }
+}
+
+/**
+ * The SymPy replies a question's Integrate and Differentiate steps need, keyed by `casStepKey` for
+ * `stepsToWorking`: `work` is asked once per distinct line, and a line it could not answer gets a
+ * reply that says so, never a step left "Working it out…". Null when there is no such step. The
+ * player (`resolveAutoSteps`) and the Question Author's preview of an engine step both use it.
+ */
+export async function workCasSteps(
+  q: PQQuestion,
+  values: Record<string, number>,
+  settings: MeasureSettings,
+  work: StepWorker
+): Promise<Map<string, Working> | null> {
+  const wanted = new Map<string, { job: JobId; input: string }>()
+  for (const step of q.steps?.items ?? []) {
+    const auto = step.auto
+    if (auto?.engine !== 'pure') continue
+    const def = JOBS.find((j) => j.id === auto.job)
+    if (def?.engine !== 'cas') continue
+    const input = substitute(auto.input, values, {}, settings)
+    wanted.set(casStepKey(def.id, input), { job: def.id, input })
+  }
+  if (!wanted.size) return null
+  const resolved = new Map<string, Working>()
+  await Promise.all(
+    [...wanted].map(async ([key, { job, input }]) => {
+      let done: Working
+      try {
+        done = await work(job, input)
+      } catch {
+        done = { title: job, input, moves: [], answers: [], error: 'The algebra engine did not answer.' }
+      }
+      resolved.set(key, done)
+    })
+  )
+  return resolved
+}
+
+/**
+ * A played question with its SymPy-worked steps filled in. `playQuestion` has to answer at once,
+ * so an Integrate or Differentiate step is drawn as "Working it out…"; this asks `work` for each
+ * such step (once per distinct line), then sets the working, the full solution and the problem's
+ * steps out again from the same numbers. A question with no such step comes back unchanged (the
+ * same object, so Problem Sets knows there is nothing to swap in).
+ */
+export async function resolveAutoSteps(played: Played, settings: MeasureSettings, work: StepWorker): Promise<Played> {
+  const q = played.question
+  const resolved = await workCasSteps(q, played.variant.values, settings, work)
+  if (!resolved) return played
+  const working = stepsToWorking(q, played.variant, settings, played.level, resolved)
+  const full = played.level === 'worked' ? working : stepsToWorking(q, played.variant, settings, 'worked', resolved)
+  return {
+    ...played,
+    working,
+    full,
+    problem: { ...played.problem, solution: { ...played.problem.solution, steps: working.moves.map((m) => ({ text: m.head, tex: m.tex })) } }
   }
 }

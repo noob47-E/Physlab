@@ -18,7 +18,7 @@ import { isPieceCorner } from '../math/lego'
 import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
-import { casRequestFor, usePure } from '../math/pure/store'
+import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
 import { enterMode } from '../app/layout'
 
@@ -1015,14 +1015,41 @@ async function tryCas(input: string): Promise<boolean> {
     return true
   }
   const numeric = r.numeric && casOp !== 'diff' && casOp !== 'series' && casOp !== 'expand' && casOp !== 'factor' ? ` \\approx ${fmtNumeric(r.numeric, s.settings)}` : ''
-  const label = casOp === 'diff' ? `\\frac{d}{dx}\\left(${args[0]}\\right)` : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int') + `${args[0]}\\,dx` : ''
+  // The space after \int is not decoration: \int glued to integrate(x^2)'s x read as the unknown
+  // command \intx, and every indefinite integral from the bar rendered as a red KaTeX error.
+  // The label names the letter the answer was worked in: diff(t^3, t) = 3t² used to read d/dx, and
+  // diff(θ^2, θ) = 2θ read d/dx(θ²), which is 0. θ and theta are one letter, written \theta, as in
+  // the working behind the same line (forSymPy spells θ theta for it).
+  const byLetter = forSymPy((args[1] ?? '').trim())
+  const letter =
+    casOp === 'integrate' && args.length >= 3
+      ? 'x'
+      : /^[A-Za-z]$/.test(byLetter)
+        ? byLetter
+        : GREEK.has(byLetter)
+          ? `\\${byLetter}`
+          : 'x'
+  const label = casOp === 'diff' ? `\\frac{d}{d${letter}}\\left(${args[0]}\\right)` : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int ') + `${args[0]}\\,d${letter}` : ''
   const isFunctionResult = (casOp === 'diff' || (casOp === 'integrate' && args.length < 3)) && /x/.test(r.text)
   const unitNote = calculusUnitNote(casOp, args[0] ?? '', deg)
+  // An indefinite integral carries its + C, as its working and every textbook do; SymPy leaves it
+  // off, so the bar said ∫x eˣ dx = (x − 1)eˣ while "Show the working" said (x − 1)eˣ + C.
+  // An integral SymPy could not do comes back still written as one, and gets no + C.
+  const plusC = casOp === 'integrate' && args.length < 3 && !/\\int/.test(r.latex) ? ' + C' : ''
+  // The answer stays SymPy's own; its steps are one tap away in the Working panel (spec decision 3:
+  // no calculus words for the step engine, which runs first and would take diff/integrate over).
+  const steps = calculusJobFor(casOp, args)
   s.updateLog(id, {
     kind: 'result',
     text: undefined,
-    tex: `${label ? label + ' = ' : ''}${r.latex}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}${unitNote ? `\\quad\\text{(${unitNote})}` : ''}`,
-    visualize: isFunctionResult ? () => visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit') : undefined
+    tex: `${label ? label + ' = ' : ''}${r.latex}${plusC}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}${unitNote ? `\\quad\\text{(${unitNote})}` : ''}`,
+    visualize: isFunctionResult ? () => visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit') : undefined,
+    working: steps
+      ? () => {
+          usePure.getState().run(steps.job, steps.input, linearToLatex(steps.input))
+          showPanel('maths')
+        }
+      : undefined
   })
   return true
 }

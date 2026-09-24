@@ -17,6 +17,9 @@ import { runPure, type JobId } from '../src/renderer/src/math/pure/run'
 import { texToPlain, type Working } from '../src/renderer/src/math/pure/work'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { writeTimes } from '../src/renderer/src/math/pure/mono'
+import { derivativeWorking, integralWorking, type DerivTree, type IntegralTree } from '../src/renderer/src/math/pure/calculusSteps'
+import { readFileSync, readdirSync } from 'node:fs'
+import { repoPath } from './helpers/repo'
 
 beforeEach(resetGlobals)
 
@@ -707,7 +710,9 @@ export function chainFaults(w: Working, question: string): string[] {
   return out
 }
 
-const PURE_SPREAD: Record<JobId, string[]> = {
+// Integrate and Differentiate are worked by SymPy, not runPure: their lines are held to the same
+// rules below, from the worker's recorded replies ('the calculus jobs' describe).
+const PURE_SPREAD: Record<Exclude<JobId, 'integrate' | 'differentiate'>, string[]> = {
   factor: [
     '2x^2 + 0.3x - 0.2',
     '6x^2 + 7x - 3',
@@ -767,7 +772,7 @@ const PURE_SPREAD: Record<JobId, string[]> = {
 }
 
 describe('Calculator working: every line equal to the last, set out the textbook way (Fix 4)', () => {
-  for (const job of Object.keys(PURE_SPREAD) as JobId[]) {
+  for (const job of Object.keys(PURE_SPREAD) as (keyof typeof PURE_SPREAD)[]) {
     it(`${job}: a spread of questions`, () => {
       const faults: string[] = []
       for (const src of PURE_SPREAD[job]) {
@@ -889,4 +894,18 @@ describe('the Calculator line reader itself', () => {
     expect(workingFaults(working(String.raw`\left(3 + 4i\right)\left(1 + 2i\right) = 3 + 6i + 4i + 8i^{2} = -5 + 10i`))).toEqual([])
     expect(workingFaults(working(String.raw`\left(3 + 4i\right)\left(1 + 2i\right) = -5 + 11i`))).not.toEqual([])
   })
+})
+
+describe('Calculator working: the calculus jobs, from the worker’s recorded replies (Fix 4)', () => {
+  // Integrate and Differentiate are worked by SymPy, so their lines come from tests/fixtures/calculus
+  // (math/pure/calculusSteps.ts sets them out) rather than runPure; the same rules hold them.
+  const dir = repoPath('tests', 'fixtures', 'calculus')
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
+    it(file.replace(/\.json$/, ''), () => {
+      const f = JSON.parse(readFileSync(`${dir}/${file}`, 'utf8')) as { op: string; payload: { expr: string }; result: unknown }
+      const w = f.op === 'integral_steps' ? integralWorking(f.result as IntegralTree, f.payload.expr) : derivativeWorking(f.result as DerivTree, f.payload.expr)
+      // A refusal (∫ xˣ dx has no formula; ∫₋₁¹ 1/x dx has no value) is a sentence, not working to check.
+      expect(w.error ? [] : workingFaults(w)).toEqual([])
+    })
+  }
 })

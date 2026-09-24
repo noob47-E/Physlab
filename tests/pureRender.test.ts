@@ -8,6 +8,9 @@
 import { describe, expect, it } from 'vitest'
 import katex from 'katex'
 import { JOBS, runPure, type JobId } from '../src/renderer/src/math/pure/run'
+import { stepsWorkingFor } from '../src/renderer/src/math/pure/store'
+import type { Working } from '../src/renderer/src/math/pure/work'
+import { recordedFor } from './helpers/calculusFixtures'
 
 const renders = (tex: string, where: string): void => {
   expect(() => katex.renderToString(tex, { displayMode: true, throwOnError: true, strict: 'ignore' }), `${where}: ${tex}`).not.toThrow()
@@ -15,7 +18,10 @@ const renders = (tex: string, where: string): void => {
 
 /** Everything in one worked answer that will be handed to KaTeX. */
 function checkAll(job: JobId, src: string): void {
-  const w = runPure(job, src)
+  checkWorking(job, runPure(job, src))
+}
+
+function checkWorking(job: JobId, w: Working): void {
   if (w.error) return
   renders(w.input, `${job} input`)
   w.moves.forEach((m, i) => {
@@ -26,8 +32,18 @@ function checkAll(job: JobId, src: string): void {
 }
 
 describe('the LaTeX Pure Math writes', () => {
-  it('renders for every example offered in the panel', () => {
-    for (const job of JOBS) checkAll(job.id, job.example)
+  it('renders for every example offered in the panel, SymPy-worked ones from their recorded replies', () => {
+    for (const job of JOBS) {
+      if (job.engine !== 'cas') {
+        checkAll(job.id, job.example)
+        continue
+      }
+      const w = stepsWorkingFor(job.id, job.example, recordedFor(job.id, job.example))
+      // An example that refuses or has no steps would teach nothing on the one-tap "What can it do?".
+      expect(w.error, job.id).toBeUndefined()
+      expect(w.moves.length, job.id).toBeGreaterThan(0)
+      checkWorking(job.id, w)
+    }
   })
 
   it('renders for the awkward shapes: ladders, staircases, surds, repeated and quadratic factors', () => {

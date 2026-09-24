@@ -32,20 +32,22 @@ export function Console() {
             <div className={`log-out ${e.kind === 'error' ? 'err' : e.kind === 'info' ? 'info' : ''}`}>
               {e.tex ? <Tex tex={e.tex} /> : e.text}
             </div>
+            {/* Touch-sized (44 px) and always visible: these are the only way to the steps and the
+                picture of a line, so they must not hide behind a hover or a fingertip's miss. */}
             {(e.solution || e.visualize || e.working) && (
-              <div className="mt-1 flex gap-1.5 pl-3.5">
+              <div className="mt-1 flex flex-wrap gap-1.5 pl-3.5">
                 {e.solution && (
-                  <button className="btn h-6" onClick={() => showSolution(e.solution!)}>
+                  <button className="btn min-h-[44px]" onClick={() => showSolution(e.solution!)}>
                     <ListOrdered size={12} /> Steps
                   </button>
                 )}
                 {e.working && (
-                  <button className="btn h-6" onClick={e.working}>
-                    <ListOrdered size={12} /> Working
+                  <button className="btn min-h-[44px]" onClick={e.working} title="Open the step-by-step working for this line in the Maths screen">
+                    <ListOrdered size={12} /> Show the working
                   </button>
                 )}
                 {e.visualize && (
-                  <button className="btn h-6" onClick={e.visualize}>
+                  <button className="btn min-h-[44px]" onClick={e.visualize}>
                     <Eye size={12} /> Visualize
                   </button>
                 )}

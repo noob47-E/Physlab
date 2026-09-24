@@ -47,6 +47,8 @@ export type JobId =
   | 'solve'
   | 'factorComplex'
   | 'trigidentity'
+  | 'integrate'
+  | 'differentiate'
 
 export interface JobDef {
   id: JobId
@@ -66,6 +68,12 @@ export interface JobDef {
   exampleLatex: string
   /** True when this job takes a list: "12, 18". */
   list?: boolean
+  /**
+   * 'cas': the working comes from the SymPy worker (math/pure/store.ts askSteps), so it arrives a
+   * moment later and `runPure` cannot give it. Calculus needs SymPy's own rule tree to name every
+   * step; a TypeScript copy of integration would be a second, weaker algebra system.
+   */
+  engine?: 'cas'
 }
 
 export const JOBS: JobDef[] = [
@@ -158,6 +166,24 @@ export const JOBS: JobDef[] = [
     placeholder: 'sec(x) - cos(x) = sin(x)tan(x)',
     example: 'sec(x) - cos(x) = sin(x)tan(x)',
     exampleLatex: '\\sec x-\\cos x=\\sin x\\tan x'
+  },
+  {
+    id: 'differentiate',
+    label: 'Differentiate',
+    about: 'Differentiate step by step, naming each rule: product, quotient, chain.',
+    placeholder: 'x^2 sin(x)',
+    example: 'x^2 sin(x)',
+    exampleLatex: 'x^2\\sin x',
+    engine: 'cas'
+  },
+  {
+    id: 'integrate',
+    label: 'Integrate',
+    about: 'Integrate step by step, naming each rule. Add the limits after commas for a definite integral: x², 0, 2.',
+    placeholder: 'x e^x',
+    example: 'x e^x',
+    exampleLatex: 'xe^{x}',
+    engine: 'cas'
   }
 ]
 

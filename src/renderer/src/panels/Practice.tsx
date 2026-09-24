@@ -26,7 +26,8 @@ import {
   showSandbox,
   type Played
 } from '../questions/player'
-import { nextLevel } from '../questions/steps'
+import { nextLevel, resolveAutoSteps } from '../questions/steps'
+import { workSteps } from '../math/pure/store'
 import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
 import { PartRows, questionVerdict, SegmentLines, tally, type PartAnswer, type RowCheck } from './QuestionParts'
@@ -208,10 +209,26 @@ export function Practice() {
 
   // A question from a set is played from its seed at the level the question started at; the
   // memo keeps typing in a box from drawing a fresh copy of the question on every keystroke.
-  const played: Played | null = useMemo(
+  const playedNow: Played | null = useMemo(
     () => (item?.kind === 'question' ? playQuestion(item.question, item.seed, settings, session.questionLevel ?? undefined) : null),
     [item, settings, session.questionLevel]
   )
+  // An Integrate or Differentiate step is worked by SymPy, which answers after the question is
+  // drawn: its step shows "Working it out…" until then, then the working swaps in. Nothing asked
+  // for it, so the step said "Working it out…" for good. A reply for an earlier question or other
+  // settings is kept only with the copy it was worked for, so it never lands on the next question.
+  const [worked, setWorked] = useState<{ from: Played; played: Played } | null>(null)
+  useEffect(() => {
+    if (!playedNow) return
+    let live = true
+    void resolveAutoSteps(playedNow, settings, workSteps).then((next) => {
+      if (live && next !== playedNow) setWorked({ from: playedNow, played: next })
+    })
+    return () => {
+      live = false
+    }
+  }, [playedNow, settings])
+  const played = worked?.from === playedNow ? worked.played : playedNow
   const problem = item?.kind === 'topic' ? item.problem : played?.problem
 
   useEffect(() => {

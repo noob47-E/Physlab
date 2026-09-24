@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { JOBS, runPure, suggestJob, type JobId } from '../src/renderer/src/math/pure/run'
+import { workedFor } from './helpers/calculusFixtures'
 import { JUST_A_NUMBER, JUST_A_WHOLE_NUMBER, isNumericLine } from '../src/renderer/src/math/pure/factor'
 import { readSource } from './helpers/repo'
 import { Steps, texToPlain } from '../src/renderer/src/math/pure/work'
@@ -355,7 +356,8 @@ describe('the dispatcher', () => {
 
   it('every example offered in the UI actually works', () => {
     for (const job of JOBS) {
-      const w = runPure(job.id, job.example)
+      // Integrate and Differentiate are worked by SymPy: theirs is set out from its recorded reply.
+      const w = workedFor(job.id, job.example)
       expect(w.error, `${job.id}: ${job.example}`).toBeUndefined()
       expect(w.answers.length, job.id).toBeGreaterThan(0)
       expect(w.moves.length, job.id).toBeGreaterThan(0)
@@ -421,7 +423,7 @@ type Walked = [where: string, w: ReturnType<typeof runPure>]
 
 /** Every worked answer the wording checks walk: the panel's examples and the branch walk above. */
 const everyWorking = (): Walked[] => [
-  ...JOBS.map((job): Walked => [`${job.id} "${job.example}"`, runPure(job.id, job.example)]),
+  ...JOBS.map((job): Walked => [`${job.id} "${job.example}"`, workedFor(job.id, job.example)]),
   ...STAGE_WALK.map(([job, src]): Walked => [`${job} "${src}"`, runPure(job, src)])
 ]
 

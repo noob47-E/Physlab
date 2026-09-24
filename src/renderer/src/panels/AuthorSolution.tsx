@@ -3,20 +3,44 @@
 // much of the working a student sees at first, and steps PhysLab's own engine writes — the Pure
 // Math working or a vector solver's — worked out afresh for every student's numbers.
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Cpu, Plus, Trash2 } from 'lucide-react'
 import { useScene } from '../core/store'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
-import { texToPlain } from '../math/pure/work'
+import { texToPlain, type Move } from '../math/pure/work'
+import type { MeasureSettings } from '../math/format'
+import { workSteps } from '../math/pure/store'
 import { JOBS, type JobId } from '../math/pure/run'
-import { blankPart, changePartType, chipKatex, chipTex, parseLetters, partCheck, previewAutoStep, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
+import { blankPart, changePartType, chipKatex, chipTex, parseLetters, partCheck, previewAutoStep, previewAutoStepWorked, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
 import { useAuthor, useAuthorView } from '../questions/authorStore'
 import { substitute, drawVariables } from '../questions/variables'
 import { bandOf, type DistractorRule, type FadingLevel, type Format1Part, type PQPart, type PQQuestion, type PQStep } from '../questions/pqjson'
 import { ChipBar, FormulaField, UnitSelect } from './AuthorVariables'
 import { ChipText, TexField } from './AuthorScene'
+import { WORKING_IT_OUT_STEP } from '../questions/steps'
+
+/**
+ * What an engine step shows for row 1. An Integrate or Differentiate step is worked by SymPy, which
+ * answers later: its preview says "Working it out…" until then, and then shows the working — it
+ * stayed "Working it out…" for good, so the teacher could add a step whose working nobody had seen.
+ */
+function useAutoPreview(q: PQQuestion, step: PQStep | null, settings: MeasureSettings): Move[] {
+  const now = useMemo(() => (step ? previewAutoStep(q, step, settings) : []), [q, step, settings])
+  const [worked, setWorked] = useState<{ from: Move[]; moves: Move[] } | null>(null)
+  useEffect(() => {
+    if (!step || !now.some((m) => m.head === WORKING_IT_OUT_STEP)) return
+    let live = true
+    void previewAutoStepWorked(q, step, settings, workSteps).then((moves) => {
+      if (live && moves) setWorked({ from: now, moves })
+    })
+    return () => {
+      live = false
+    }
+  }, [q, step, settings, now])
+  return worked?.from === now ? worked.moves : now
+}
 
 // ---------------------------------------------------------------------------
 // Parts
@@ -377,7 +401,7 @@ function StepCard({ q, st, k, names }: { q: PQQuestion; st: PQStep; k: number; n
       if (d.steps) recipe(d.steps.items[k] as PQStep)
     })
   const auto = st.auto
-  const preview = useMemo(() => (auto ? previewAutoStep(q, st, settings) : []), [auto, q, st, settings])
+  const preview = useAutoPreview(q, auto ? st : null, settings)
 
   return (
     <div className="card p-2">
@@ -454,8 +478,10 @@ function EngineSteps({ q, names }: { q: PQQuestion; names: readonly string[] }) 
       engine === 'pure' ? (input ? { head: '', auto: { engine: 'pure', job: chosenJob, input } } : null) : { head: '', auto: { engine: 'vectors', solver, args: args.filter((a) => a.trim() !== '') } },
     [engine, input, chosenJob, solver, args]
   )
-  const preview = useMemo(() => (step ? previewAutoStep(q, step, settings) : []), [q, step, settings])
+  const preview = useAutoPreview(q, step, settings)
   const failed = preview.length === 1 && preview[0].head === 'PhysLab could not work this step out.'
+  // A step is added once its working has been seen, and never while SymPy is still working it out.
+  const pending = preview.some((m) => m.head === WORKING_IT_OUT_STEP)
 
   const onField = (next: string) => {
     setLatex(next)
@@ -469,7 +495,7 @@ function EngineSteps({ q, names }: { q: PQQuestion; names: readonly string[] }) 
   }
 
   const add = () => {
-    if (!step || failed) return
+    if (!step || failed || pending) return
     edit((d) => {
       d.steps ??= { level: 'worked', items: [] }
       d.steps.items.push(step)
@@ -559,7 +585,7 @@ function EngineSteps({ q, names }: { q: PQQuestion; names: readonly string[] }) 
           <MovesPreview moves={preview} />
         </div>
       )}
-      <button className="btn primary mt-2 min-h-[44px]" disabled={!step || failed || preview.length === 0} onClick={add}>
+      <button className="btn primary mt-2 min-h-[44px]" disabled={!step || failed || pending || preview.length === 0} onClick={add}>
         <Plus size={14} /> Add these steps
       </button>
     </div>
