@@ -25,6 +25,8 @@ import type { Actuator } from '../sim/types'
 import { checkChoicePart, generateChoices, type Choice } from './distractors'
 import { motionPieces, motionTable, type MotionPieces } from './motion'
 import { checkFormat2Part } from './answerKinds'
+import { answerValue, markWithECF, partShown, type ECFCheck } from './ecf'
+import { checkFunctionPart } from './odeCheck'
 import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTol } from './parts'
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
 import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
@@ -48,6 +50,12 @@ export interface PlayedChoice extends Choice {
 export interface PlayedPart {
   /** The answer box's key in the panel's typed/checks maps. */
   key: string
+  /**
+   * The part's place in the author's list. A part hidden by its `showIf` is left out of `parts`,
+   * so the shown parts' positions no longer match the author's: error carried forward, the
+   * worked answers and the part letters all go by this instead.
+   */
+  index: number
   part: PQPart
   /** The prompt as a plain sentence: the box's label and its accessible name. No LaTeX. */
   prompt: string
@@ -63,6 +71,12 @@ export interface PlayedPart {
   answerText?: string
   /** The answer as LaTeX, for the reveal (every part). */
   answerTex: string
+  /** A matrix part's size: one box per entry, never a bracketed list to type. */
+  matrix?: { rows: number; cols: number }
+  /** A proof part's model proof, line by line with its maths set, shown once the student asks. */
+  model?: Segment[][]
+  /** A proof part's self-check list, one line per point to tick off against the student's own proof. */
+  selfCheck?: Segment[][]
 }
 
 export interface Played {
@@ -114,7 +128,10 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
   const problems = [...variant.problems]
   const partProblems: Record<string, string[]> = {}
 
-  const parts: PlayedPart[] = q.parts.map((part, i) => {
+  // A part whose `showIf` fails for this variant is neither shown nor counted: it is left out here,
+  // so the boxes, the marking and "all right" never see it.
+  const shown = q.parts.flatMap((part, i) => (partShown(part, values) ? [{ part, i }] : []))
+  const parts: PlayedPart[] = shown.map(({ part, i }): PlayedPart => {
     const key = `p${i}`
     const own: string[] = (partProblems[key] = [])
     const flag = (sentence: string) => {
@@ -124,7 +141,16 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
     const promptLines = textLines(part.prompt, fill)
     const prompt = spokenOf(promptLines.flat())
     const answerTex = working.answers[i]?.tex ?? '\\text{?}'
-    const base = { key, part, prompt, promptLines, answerTex }
+    const base = { key, index: i, part, prompt, promptLines, answerTex }
+    if (part.type === 'matrix') {
+      const rows = part.answer.length
+      const cols = part.answer[0]?.length ?? 0
+      if (rows === 0 || cols === 0) flag(`"${prompt}" has no entries to fill in, so it cannot be marked.`)
+      return { ...base, matrix: { rows, cols } }
+    }
+    if (part.type === 'proof') {
+      return { ...base, model: textLines(part.model, fill), selfCheck: part.selfCheck.map((line) => textLines(line, fill).flat()) }
+    }
     if (part.type === 'number') {
       let value = NaN
       try {
@@ -205,12 +231,17 @@ const CANNOT_MARK = 'PhysLab could not work out the answer to this part, so it c
  * under the box, never a throw: thrown inside the panel's Check, it left every box unmarked and
  * said nothing at all.
  */
-export function checkPlayedPart(p: PlayedPart, answer: string | number[], played: Played, settings: MeasureSettings): Check {
+export function checkPlayedPart(p: PlayedPart, answer: PartAnswer, played: Played, settings: MeasureSettings): Check {
   const { values } = played.variant
   try {
-    if (p.part.type === 'choice') return checkChoicePart(Array.isArray(answer) ? answer : [], p.choices ?? [])
-    const text = Array.isArray(answer) ? '' : answer
+    if (p.part.type === 'choice') return checkChoicePart(isPicks(answer) ? answer : [], p.choices ?? [])
+    // A matrix is typed box by box; nothing typed yet is a grid of empty boxes, never "type each
+    // entry in its own box" for a student who has not started.
+    if (p.part.type === 'matrix') return checkFormat2Part(isGrid(answer) ? answer : (blankAnswer(p) as string[][]), p.part, values, settings)
+    const text = typeof answer === 'string' ? answer : ''
     if (p.part.type === 'expression') return checkExpressionPart(text, p.part, values, unitsOf(played.question))
+    // A function answer is put back into its own equation; answerKinds has no way to mark one.
+    if (p.part.type === 'function') return checkFunctionPart(text, p.part, values, unitsOf(played.question), settings)
     if (p.part.type !== 'number') return checkFormat2Part(text, p.part, values, settings)
     // A trap that cannot be worked out is left out, so the student's answer is still marked; the
     // reason under a wrong answer is read with the numbers in, like everything else they see.
@@ -226,6 +257,95 @@ export function checkPlayedPart(p: PlayedPart, answer: string | number[], played
   } catch {
     return { verdict: 'wrong', message: CANNOT_MARK }
   }
+}
+
+/** What a student can give a part: typed text, the options ticked, or a matrix's entries row by row. */
+export type PartAnswer = string | number[] | string[][]
+
+const isGrid = (a: PartAnswer): a is string[][] => Array.isArray(a) && a.length > 0 && a.every((row) => Array.isArray(row))
+const isPicks = (a: PartAnswer): a is number[] => Array.isArray(a) && a.every((x) => typeof x === 'number')
+
+/** A part's answer before anything is typed or ticked: a matrix's empty boxes, a choice's no options, a blank box. */
+export function blankAnswer(p: PlayedPart): PartAnswer {
+  if (p.matrix) return Array.from({ length: p.matrix.rows }, () => Array.from({ length: p.matrix!.cols }, () => ''))
+  return p.part.type === 'choice' ? [] : ''
+}
+
+/**
+ * The parts that are marked and count towards "all right". A proof part is never marked on this
+ * computer (it would need a proof language, which rule 2 rules out): it shows its model proof and
+ * self-check list instead, and a question with one must still be finishable. A Lego part is
+ * answered by filling its outline in Geometry, which Practice cannot see yet: it is shown with
+ * that sentence and left out too, so it never stands under the box as "cannot mark" and never
+ * keeps a question from being all right.
+ */
+export const countedParts = (played: Played): PlayedPart[] => played.parts.filter((p) => p.part.type !== 'proof' && p.part.type !== 'lego')
+
+/** One set of values in place of the variant's own, for marking with a student's earlier answers. */
+const withValues = (played: Played, values: Record<string, number>): Played => ({ ...played, variant: { ...played.variant, values } })
+
+/**
+ * Marks every counted part of a played question as Practice's Check does: each part with its plain
+ * marking, and — where the part carries error carried forward — again with the student's own
+ * earlier answers, in the author's part order. A part (b) that used a wrong part (a) correctly is
+ * right with the note "Marked using your answer to part (a): −4 m/s²"; the note and the marks it
+ * earns travel on the check.
+ */
+export function markPlayed(played: Played, typed: Readonly<Record<string, PartAnswer>>, settings: MeasureSettings): Record<string, ECFCheck> {
+  const earlier = new Map<number, number>()
+  const out: Record<string, ECFCheck> = {}
+  for (const p of countedParts(played)) {
+    const answer = typed[p.key] ?? blankAnswer(p)
+    const text = typeof answer === 'string' ? answer : ''
+    // markWithECF reads the answer itself only for a function part (always typed text); every
+    // other kind is marked through this closure, which holds the real answer — ticks or a grid.
+    out[p.key] = markWithECF(p, text, played, earlier, settings, (values) => checkPlayedPart(p, answer, withValues(played, values), settings))
+    const x = typeof answer === 'string' ? answerValue(p.part, answer) : null
+    if (x !== null) earlier.set(p.index, x)
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// The depth ladder: a rung is a label and a filter, never a lock
+// ---------------------------------------------------------------------------
+
+/** The five rungs in the words of Idea 1's ladder (§7), first look to research. */
+export const RUNG_NAMES: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'First look',
+  2: 'School',
+  3: 'Pre-university',
+  4: 'University',
+  5: 'Research'
+}
+
+/** "Depth 4 · University" — the label a question carries in the header and on its filter chip. */
+export const rungLabel = (rung: 1 | 2 | 3 | 4 | 5): string => `Depth ${rung} · ${RUNG_NAMES[rung]}`
+
+/** The rungs a set's questions are tagged with, lowest first: the chips worth offering. */
+export function rungsIn(questions: readonly PQQuestion[]): (1 | 2 | 3 | 4 | 5)[] {
+  return [...new Set(questions.flatMap((q) => (q.rung === undefined ? [] : [q.rung])))].sort((a, b) => a - b)
+}
+
+/**
+ * The questions of a set at one depth, in the set's order; null is every question. A question with
+ * no rung belongs to no depth: it is in "every depth" only, never guessed into one.
+ */
+export function questionsAtDepth(questions: readonly PQQuestion[], depth: number | null): PQQuestion[] {
+  return depth === null ? [...questions] : questions.filter((q) => q.rung === depth)
+}
+
+/**
+ * The question a "Go deeper" link leads to, looked up among the set's own questions by id, or the
+ * sentence saying why there is none. The link is the author's; a set opened without the deeper
+ * question (a teacher who shared only part of a set) must say so rather than show a dead button.
+ */
+export function resolveDeeper(q: PQQuestion, set: readonly PQQuestion[]): { question: PQQuestion } | { missing: string } | null {
+  if (q.deeper === undefined) return null
+  const id = q.deeper.trim()
+  const found = set.find((other) => other.id === id && other !== q)
+  if (found) return { question: found }
+  return { missing: `This question leads on to a deeper one ("${id}"), but it is not in this set.` }
 }
 
 // ---------------------------------------------------------------------------

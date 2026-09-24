@@ -1,20 +1,35 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import { BookOpen, Check, ChevronRight, Eye, FolderOpen, Lightbulb, Play, RotateCcw, Sparkles, TableProperties, Timer, X } from 'lucide-react'
+import { BookOpen, Check, ChevronRight, ChevronsDown, Eye, FolderOpen, Lightbulb, Minus, Play, RotateCcw, Sparkles, TableProperties, Timer, X } from 'lucide-react'
 import { visualizeSolution } from '../core/visualize'
 import { useScene } from '../core/store'
 import { enterMode } from '../app/layout'
 import { showPanel } from '../app/panels'
 import { openQuestionFile } from '../app/files'
-import { checkAnswer, expectedText, isCorrect, type Check as AnswerCheck } from '../math/checkAnswer'
+import { checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import type { FadingLevel, PQQuestion } from '../questions/pqjson'
 import { bundledSets, loadTeacherFile, type QuestionSet } from '../questions/bank'
-import { checkPlayedPart, picturePlan, playQuestion, sandboxPlan, sendSandboxReadings, showMotion, showPicture, showSandbox, type Played } from '../questions/player'
+import {
+  countedParts,
+  markPlayed,
+  picturePlan,
+  playQuestion,
+  questionsAtDepth,
+  resolveDeeper,
+  rungLabel,
+  rungsIn,
+  sandboxPlan,
+  sendSandboxReadings,
+  showMotion,
+  showPicture,
+  showSandbox,
+  type Played
+} from '../questions/player'
 import { nextLevel } from '../questions/steps'
 import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
-import { QuestionPartRow, SegmentLines, type PartAnswer } from './QuestionParts'
+import { PartRows, questionVerdict, SegmentLines, tally, type PartAnswer, type RowCheck } from './QuestionParts'
 
 const SETTINGS_KEY = 'physlab.practice'
 const LEVELS: Level[] = ['Basic', 'Intermediate', 'Advanced']
@@ -24,7 +39,8 @@ type Source = 'topics' | 'sets'
 interface Result {
   id: string
   title: string
-  right: boolean
+  /** Null for a question with nothing marked on this computer (only proofs or Lego parts): neither right nor wrong. */
+  right: boolean | null
   hints: number
   seconds: number
 }
@@ -48,7 +64,8 @@ interface Session {
   items: Item[]
   index: number
   typed: Record<string, PartAnswer>
-  checks: Record<string, AnswerCheck>
+  /** Each box's mark; a question's carries its error-carried-forward note and marks. */
+  checks: Record<string, RowCheck>
   hints: number
   /**
    * Faded lines the student has uncovered one at a time. The fading's note says "fill this line
@@ -57,6 +74,11 @@ interface Session {
    */
   lines: number[]
   revealed: boolean
+  /**
+   * The student opened a proof's model proof. For a question with nothing marked on this computer,
+   * that is its answer: "Show the full solution" and "Go deeper" follow it as they follow a Check.
+   */
+  modelShown: boolean
   results: Result[]
   startedAt: number
   /**
@@ -70,14 +92,20 @@ interface Session {
   questionLevel: FadingLevel | null
   /** What the last "Show it" did, or why it could not. */
   note: { text: string; error: boolean } | null
+  /**
+   * Every question of the set the student started, whatever depth was picked: "Go deeper" looks
+   * its question up here, so a set filtered to one depth still reaches the next one down.
+   */
+  setQuestions: PQQuestion[]
 }
 
-const blankQuestionState = (): Pick<Session, 'typed' | 'checks' | 'hints' | 'lines' | 'revealed' | 'startedAt' | 'note'> => ({
+const blankQuestionState = (): Pick<Session, 'typed' | 'checks' | 'hints' | 'lines' | 'revealed' | 'modelShown' | 'startedAt' | 'note'> => ({
   typed: {},
   checks: {},
   hints: 0,
   lines: [],
   revealed: false,
+  modelShown: false,
   startedAt: Date.now(),
   note: null
 })
@@ -89,6 +117,7 @@ const useSession = create<Session>(() => ({
   level: null,
   streak: 0,
   questionLevel: null,
+  setQuestions: [],
   ...blankQuestionState()
 }))
 const put = (patch: Partial<Session>) => useSession.setState(patch)
@@ -115,6 +144,12 @@ function loadSettings(): { chosen: TopicId[]; count: number; source: Source; set
   }
   return fallback
 }
+
+/** A fresh seed for a question reached by Go deeper: new numbers, as every question in a set gets. */
+const deeperSeed = (): number => Math.floor(Math.random() * 1e9) + 1
+
+/** Whether two items play the same question of a set (whatever their seeds). */
+const sameQuestion = (a: Item, b: Item): boolean => a.kind === 'question' && b.kind === 'question' && a.question.id === b.question.id
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
@@ -161,6 +196,12 @@ export function Practice() {
   }, [])
   const allSets = [...bundled, ...teacher.sets]
   const pickedSet = allSets.find((s) => s.id === setId) ?? allSets[0]
+  // The depth filter: a label to choose by, never a lock — "Every depth" is always there, and a
+  // depth the picked set does not have falls back to it.
+  const [depth, setDepth] = useState<number | null>(null)
+  const rungs = pickedSet ? rungsIn(pickedSet.questions) : []
+  const atDepth = depth !== null && (rungs as number[]).includes(depth) ? depth : null
+  const toPlay = pickedSet ? questionsAtDepth(pickedSet.questions, atDepth) : []
 
   const item: Item | undefined = items[index]
   const finished = items.length > 0 && index >= items.length
@@ -188,8 +229,8 @@ export function Practice() {
     return () => clearInterval(t)
   }, [item])
 
-  const begin = (next: Item[]) => {
-    put({ items: next, index: 0, results: [], questionLevel: useSession.getState().level, ...blankQuestionState() })
+  const begin = (next: Item[], setQuestions: PQQuestion[] = []) => {
+    put({ items: next, index: 0, results: [], questionLevel: useSession.getState().level, setQuestions, ...blankQuestionState() })
     setNow(Date.now())
   }
 
@@ -198,11 +239,14 @@ export function Practice() {
       begin(generateSet(chosen, count).map((problem) => ({ kind: 'topic', problem })))
       return
     }
-    if (!pickedSet) return
+    if (!pickedSet || toPlay.length === 0) return
     // One seed for the set, one per question drawn from it: the same way generateSet seeds the
     // vector problems, so every question's numbers come from rngFor, never Math.random itself.
     const r = rngFor(Math.floor(Math.random() * 1e9))
-    begin(pickedSet.questions.map((question) => ({ kind: 'question', question, seed: Math.floor(r() * 1e9) + 1 })))
+    begin(
+      toPlay.map((question) => ({ kind: 'question', question, seed: Math.floor(r() * 1e9) + 1 })),
+      pickedSet.questions
+    )
   }
 
   const openFile = async () => {
@@ -218,33 +262,44 @@ export function Practice() {
     }
   }
 
+  // A proof part is never marked, so it is left out of "all right"; a part hidden by its showIf
+  // is not in played.parts at all.
   const graded =
-    item?.kind === 'topic' ? item.problem.fields.map((f) => checks[f.key]) : played ? played.parts.map((p) => checks[p.key]) : []
+    item?.kind === 'topic' ? item.problem.fields.map((f) => checks[f.key]) : played ? countedParts(played).map((p) => checks[p.key]) : []
   const allRight = graded.length > 0 && graded.every(isCorrect)
-  const anyChecked = graded.some((c) => c && c.verdict !== 'empty')
+  // A question of only proofs or Lego parts has nothing to Check: opening the model proof is its answer.
+  const unmarked = item?.kind === 'question' && played !== null && graded.length === 0
+  const anyChecked = graded.some((c) => c && c.verdict !== 'empty') || (unmarked && session.modelShown)
 
   const check = () => {
     if (!item) return
-    const next: Record<string, AnswerCheck> = {}
+    let next: Record<string, RowCheck> = {}
     if (item.kind === 'topic') {
       for (const f of item.problem.fields) next[f.key] = checkAnswer(String(typed[f.key] ?? ''), f, settings)
     } else if (played) {
-      for (const p of played.parts) next[p.key] = checkPlayedPart(p, typed[p.key] ?? (p.part.type === 'choice' ? [] : ''), played, settings)
+      // Every part in the author's order, each later one also marked with the student's own
+      // earlier answers where it carries them forward.
+      next = markPlayed(played, typed, settings)
     }
     put({ checks: next })
   }
 
-  const nextQuestion = () => {
+  /** Records this question and moves on; `insert` (Go deeper) is played next, before the rest of the set. */
+  const nextQuestion = (insert?: Item) => {
     if (!problem) return
-    const right = graded.every(isCorrect) && graded.length > 0 && !revealed
+    const right = played ? questionVerdict(played, checks, revealed) : graded.every(isCorrect) && graded.length > 0 && !revealed
     const s = useSession.getState()
     // The fading moves between questions, never under the student in the middle of one: two
-    // right in a row shows less next time, a slip shows more again.
-    const streak = item?.kind === 'question' ? (right ? s.streak + 1 : 0) : s.streak
+    // right in a row shows less next time, a slip shows more again. A question with nothing marked
+    // (right is null) moves neither.
+    const counts = item?.kind === 'question' && right !== null
+    const streak = counts ? (right ? s.streak + 1 : 0) : s.streak
     // From the level this question was played at: the author's own, until the student has answered one.
-    const level = item?.kind === 'question' ? nextLevel(played?.level ?? s.level ?? 'worked', streak) : s.level
+    const level = counts ? nextLevel(played?.level ?? s.level ?? 'worked', streak) : s.level
     put({
       results: [...s.results, { id: problem.id, title: problem.title, right, hints: hints + lines.length, seconds: Math.round((Date.now() - startedAt) / 1000) }],
+      // The deeper question may be further down the set already: it is played now, not twice.
+      items: insert ? [...s.items.slice(0, s.index + 1), insert, ...s.items.slice(s.index + 1).filter((it) => !sameQuestion(it, insert))] : s.items,
       index: s.index + 1,
       streak,
       level,
@@ -356,9 +411,29 @@ export function Practice() {
                 </ul>
               )}
             </div>
+            {rungs.length > 0 && (
+              <div className="mt-3 px-3">
+                <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">Depth</div>
+                {/* A filter to choose by, never a lock: every depth stays one tap away. */}
+                <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Depth">
+                  {[null, ...rungs].map((r) => (
+                    <button
+                      key={r ?? 'all'}
+                      role="radio"
+                      aria-checked={atDepth === r}
+                      className={`btn min-h-[44px] ${atDepth === r ? 'primary' : ''}`}
+                      onClick={() => setDepth(r)}
+                    >
+                      {r === null ? 'Every depth' : rungLabel(r)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-3 px-3">
-              <button className="btn primary min-h-[44px]" disabled={!pickedSet} onClick={startSet}>
+              <button className="btn primary min-h-[44px]" disabled={toPlay.length === 0} onClick={startSet}>
                 <Sparkles size={13} /> Start {pickedSet ? `“${pickedSet.title}”` : 'practice'}
+                {atDepth !== null && ` — ${toPlay.length} question${toPlay.length === 1 ? '' : 's'}`}
               </button>
             </div>
           </>
@@ -369,7 +444,8 @@ export function Practice() {
 
   // ---------------------------------------------------------------- results
   if (finished) {
-    const right = results.filter((r) => r.right).length
+    // A question with nothing marked on this computer is neither right nor wrong: it is left out of the score.
+    const { right, marked, unmarked: notMarked } = tally(results)
     const total = results.length
     const time = results.reduce((a, r) => a + r.seconds, 0)
     const slowest = [...results].sort((a, b) => b.seconds - a.seconds)[0]
@@ -377,9 +453,13 @@ export function Practice() {
       <div className="panel pb-8">
         <div className="section-title">Practice finished</div>
         <div className="card mx-3 border-warn/40 bg-warn/5 p-3">
-          <div className="text-display font-semibold text-ink-strong">
-            {right} / {total} right
-          </div>
+          <div className="text-display font-semibold text-ink-strong">{marked > 0 ? `${right} / ${marked} right` : 'Set finished'}</div>
+          {notMarked > 0 && (
+            <div className="text-ink-dim">
+              {notMarked === 1 ? '1 question was' : `${notMarked} questions were`} not marked on this computer, so{' '}
+              {notMarked === 1 ? 'it is' : 'they are'} not in the score.
+            </div>
+          )}
           <div className="text-ink-dim">
             {mmss(time)} altogether, about {mmss(Math.round(time / Math.max(1, total)))} a question.
           </div>
@@ -392,7 +472,13 @@ export function Practice() {
         <div className="mt-3 px-3">
           {results.map((r, i) => (
             <div key={`${r.id}-${i}`} className="flex items-baseline gap-2 border-b border-line py-1.5">
-              {r.right ? <Check size={14} className="text-good" /> : <X size={14} className="text-bad" />}
+              {r.right === null ? (
+                <Minus size={14} className="text-ink-faint" aria-label="not marked" />
+              ) : r.right ? (
+                <Check size={14} className="text-good" />
+              ) : (
+                <X size={14} className="text-bad" />
+              )}
               <span className="w-5 text-ink-faint">{i + 1}</span>
               <span className="min-w-0 flex-1 truncate text-ink">{r.title}</span>
               <span className="text-ink-faint">{mmss(r.seconds)}</span>
@@ -421,13 +507,16 @@ export function Practice() {
       <span>
         Question {index + 1} of {items.length}
       </span>
+      {item.kind === 'question' && item.question.rung !== undefined && (
+        <span className="rounded-md bg-surface-0 px-1.5 font-normal normal-case tracking-normal text-ink-dim">{rungLabel(item.question.rung)}</span>
+      )}
       <span className="flex-1" />
       <Timer size={12} className="text-ink-faint" />
       <span className="font-normal text-ink-faint">{mmss(elapsed)}</span>
     </div>
   )
   const nextButton = (
-    <button className="btn min-h-[44px]" onClick={nextQuestion}>
+    <button className="btn min-h-[44px]" onClick={() => nextQuestion()}>
       {index + 1 === items.length ? 'Finish' : 'Next'} <ChevronRight size={13} />
     </button>
   )
@@ -442,6 +531,24 @@ export function Practice() {
     // Revealed, the lines the fading left for the student come back, so there is something to check against.
     const moves = revealed ? played.full.moves : played.working.moves
     const shown = revealed ? moves.length : Math.min(hints, moves.length)
+    // "Go deeper", once the question has been answered or its solution shown: the author's next
+    // layer of the same idea, played next from the set's own questions, or a sentence if the set
+    // does not have it.
+    const deeper = anyChecked || revealed ? resolveDeeper(q, session.setQuestions) : null
+    const deeperRow = deeper && (
+      <div className="mt-2 flex flex-wrap items-center gap-2 px-3">
+        {'question' in deeper ? (
+          <button
+            className="btn min-h-[44px]"
+            onClick={() => nextQuestion({ kind: 'question', question: deeper.question, seed: deeperSeed() })}
+          >
+            <ChevronsDown size={13} /> Go deeper{deeper.question.rung !== undefined ? ` — ${rungLabel(deeper.question.rung)}` : ''}
+          </button>
+        ) : (
+          <span className="text-ink-dim">{deeper.missing}</span>
+        )}
+      </div>
+    )
     return (
       <div className="panel pb-8">
         {header}
@@ -457,29 +564,33 @@ export function Practice() {
 
         <div className="mt-3 px-3">
           <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">Your answer</div>
-          {played.parts.map((p, i) => (
-            <QuestionPartRow
-              key={p.key}
-              p={p}
-              n={i + 1}
-              many={played.parts.length > 1}
-              value={typed[p.key]}
-              check={checks[p.key]}
-              revealed={revealed}
-              onChange={(v) => put({ typed: { ...useSession.getState().typed, [p.key]: v } })}
-              onEnter={check}
-            />
-          ))}
+          <PartRows
+            played={played}
+            typed={typed}
+            checks={checks}
+            revealed={revealed}
+            onChange={(key, v) => put({ typed: { ...useSession.getState().typed, [key]: v } })}
+            onEnter={check}
+            onModelShown={() => put({ modelShown: true })}
+          />
         </div>
 
+        {unmarked && (
+          <div className="mx-3 mb-1 text-ink-dim">
+            Nothing in this question is marked on this computer, so it is not in your score: compare your work with the model, then go on.
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 px-3 pt-1">
-          <button className="btn primary min-h-[44px]" onClick={check}>
-            <Check size={13} /> Check my answer
-          </button>
+          {!unmarked && (
+            <button className="btn primary min-h-[44px]" onClick={check}>
+              <Check size={13} /> Check my answer
+            </button>
+          )}
           <button className="btn min-h-[44px]" onClick={() => put({ hints: Math.min(hints + 1, moves.length) })} disabled={revealed || hints >= moves.length}>
             <Lightbulb size={13} /> {hints === 0 ? 'Hint' : 'Next hint'}
           </button>
-          {(anyChecked || hints > 0) && !revealed && (
+          {/* With nothing marked there is no answer to give away: the solution is there from the start. */}
+          {(anyChecked || hints > 0 || unmarked) && !revealed && (
             <button className="btn ghost min-h-[44px]" onClick={() => put({ revealed: true })}>
               Show the full solution
             </button>
@@ -487,6 +598,7 @@ export function Practice() {
           <span className="flex-1" />
           {nextButton}
         </div>
+        {deeperRow}
 
         {/* The picture's area or slope is held back until the question is answered right or the
             solution shown: it is usually exactly what the question asks for. */}
@@ -555,13 +667,19 @@ export function Practice() {
         {revealed && (
           <div className="card mx-3 mt-3 border-warn/40 bg-warn/5 p-3">
             <div className="mb-1 text-fine uppercase tracking-wide text-warn">Answer</div>
-            {played.working.answers.map((a, i) => (
-              <div key={i} className="py-0.5">
-                {/* The spoken prompt, as the box above has it: a Numbas prompt's \(…\) is never shown raw. */}
-                <div className="text-ink-dim">{played.parts[i]?.prompt ?? a.label}</div>
-                <Tex tex={a.tex} className="text-lead text-ink-strong" />
-              </div>
-            ))}
+            {/* By each shown part's own place in the author's list: a part hidden by its showIf has
+                an answer in the working but no box, and a proof's answer is its model proof above. */}
+            {countedParts(played).map((p) => {
+              const a = played.working.answers[p.index]
+              if (!a) return null
+              return (
+                <div key={p.key} className="py-0.5">
+                  {/* The spoken prompt, as the box above has it: a Numbas prompt's \(…\) is never shown raw. */}
+                  <div className="text-ink-dim">{p.prompt}</div>
+                  <Tex tex={a.tex} className="text-lead text-ink-strong" />
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

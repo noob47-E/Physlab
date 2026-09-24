@@ -22,6 +22,11 @@
 //   5  from 0.9: the file may carry `questions`, the question set a teacher is writing in Question
 //      Author. A format-4 file has none and comes through as it was; a question anywhere is
 //      checked for its licence and its shape by `checkQuestions`, whatever the format says.
+//   6  from 0.9: a question in the set may use the question-file format 2 — vector, matrix, roots,
+//      function, proof and Lego parts, a number marked against the student's stated uncertainty,
+//      error carried forward, a part shown only under a condition, a rung and a "Go deeper" link.
+//      A format-5 PhysLab would call such a question damaged; format 6 makes it say "saved by a
+//      newer PhysLab" instead. A format-5 file comes through as it was.
 
 import { LICENSE_IDS } from '../questions/pqjson'
 import { directDependents } from './evaluate'
@@ -30,7 +35,7 @@ import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './ty
 import type { Space } from './visibility'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
-export const FILE_VERSION: SceneFile['version'] = 5
+export const FILE_VERSION: SceneFile['version'] = 6
 
 type Raw = Record<string, unknown>
 
@@ -160,23 +165,65 @@ function variableDefOk(d: unknown): boolean {
   return false
 }
 
-/** A part, down to what its card in the Solution tab reads (a number part's tolerance, a choice's options). */
+/** A band tolerance, or (format 6, number parts) the reference uncertainty a stated answer is tested against. */
+const toleranceOk = (t: unknown): boolean => isRecord(t) && ((t.kind === 'stated' && typeof t.uref === 'string') || (typeof t.kind === 'string' && isNum(t.value)))
+
+/** Format 6: what any part may carry — error carried forward and a condition for showing it — as Practice reads them. */
+function partCommonOk(p: Raw): boolean {
+  const e = p.ecf
+  const ecfOk =
+    e === undefined ||
+    (isRecord(e) &&
+      Array.isArray(e.uses) &&
+      e.uses.every((u) => isRecord(u) && isNum(u.part) && typeof u.variable === 'string') &&
+      typeof e.strategy === 'string' &&
+      isNum(e.penalty))
+  return ecfOk && (p.showIf === undefined || typeof p.showIf === 'string')
+}
+
+/** A part, down to what its card in the Solution tab and its row in Practice read (a tolerance, a choice's options, a matrix's rows). */
 function partOk(p: unknown): boolean {
-  if (!isRecord(p) || typeof p.prompt !== 'string') return false
+  if (!isRecord(p) || typeof p.prompt !== 'string' || !partCommonOk(p)) return false
   if (p.type === 'number') {
-    const t = p.tolerance
     return (
       typeof p.answer === 'string' &&
       typeof p.unit === 'string' &&
-      isRecord(t) &&
-      typeof t.kind === 'string' &&
-      isNum(t.value) &&
+      toleranceOk(p.tolerance) &&
       (p.traps === undefined || (Array.isArray(p.traps) && p.traps.every((x) => isRecord(x) && typeof x.value === 'string' && typeof x.why === 'string')))
     )
   }
   if (p.type === 'expression') return typeof p.answer === 'string' && isStrings(p.symbols)
   if (p.type === 'choice') return Array.isArray(p.choices) && p.choices.every((c) => isRecord(c) && typeof c.text === 'string' && typeof c.correct === 'boolean')
+  // Format 6's kinds. A matrix's rows must be the same length: Practice lays one box per entry
+  // from the first row, and a ragged row marked against it compared an entry with nothing.
+  if (p.type === 'vector' || p.type === 'roots') return isStrings(p.answer) && typeof p.unit === 'string' && toleranceOk(p.tolerance)
+  if (p.type === 'matrix') {
+    const rows = p.answer
+    return Array.isArray(rows) && rows.every(isStrings) && rows.every((r) => (r as string[]).length === (rows[0] as string[]).length) && toleranceOk(p.tolerance)
+  }
+  if (p.type === 'function') {
+    return (
+      typeof p.x === 'string' &&
+      typeof p.y === 'string' &&
+      typeof p.ode === 'string' &&
+      typeof p.model === 'string' &&
+      Array.isArray(p.initial) &&
+      p.initial.every((c) => isRecord(c) && typeof c.at === 'string' && (c.order === 0 || c.order === 1) && typeof c.value === 'string')
+    )
+  }
+  if (p.type === 'proof') return typeof p.model === 'string' && isStrings(p.selfCheck)
+  if (p.type === 'lego') return Array.isArray(p.target) && p.target.every((c) => Array.isArray(c) && c.length === 2 && isStrings(c)) && isNum(p.pieces)
   return false
+}
+
+/** Format 6's question fields, as the Practice header and the Depth chips read them: a rung is 1 to 5, a link names a question. */
+function questionFieldsOk(q: Raw): boolean {
+  const c = q.condition
+  return (
+    (c === undefined || (isRecord(c) && typeof c.when === 'string' && isNum(c.maxRuns))) &&
+    (q.rung === undefined || (Number.isInteger(q.rung) && (q.rung as number) >= 1 && (q.rung as number) <= 5)) &&
+    (q.deeper === undefined || typeof q.deeper === 'string')
+  )
 }
 
 function checkQuestions(qs: unknown): void {
@@ -197,7 +244,8 @@ function checkQuestions(qs: unknown): void {
       Array.isArray(q.parts) &&
       q.parts.every(partOk) &&
       (q.steps === undefined || (isRecord(q.steps) && Array.isArray(q.steps.items) && q.steps.items.every((st) => isRecord(st) && typeof st.head === 'string'))) &&
-      (q.tags === undefined || isStrings(q.tags))
+      (q.tags === undefined || isStrings(q.tags)) &&
+      questionFieldsOk(q)
     if (!ok) throw new Error(`${who} in this file is damaged.`)
   })
 }
@@ -225,7 +273,8 @@ const STEPS: Record<number, (file: Raw) => Raw> = {
   1: v1ToV2,
   2: v2ToV3,
   3: v3ToV4,
-  4: v4ToV5
+  4: v4ToV5,
+  5: v5ToV6
 }
 
 function v1ToV2(file: Raw): Raw {
@@ -296,6 +345,15 @@ function v3ToV4(file: Raw): Raw {
  */
 function v4ToV5(file: Raw): Raw {
   return { ...file, version: 5 }
+}
+
+/**
+ * Format 6 only lets the question set hold format-2 questions. A format-5 file's questions are all
+ * format 1, and `checkQuestions` has already checked every question the file holds, so the step is
+ * the bump.
+ */
+function v5ToV6(file: Raw): Raw {
+  return { ...file, version: 6 }
 }
 
 /**

@@ -264,7 +264,7 @@ export type ToolId =
 export interface SceneFile {
   app: 'PhysLab'
   /** The format this file is written in. `core/migrate.ts` lists the formats and steps older ones up. */
-  version: 5
+  version: 6
   objects: SceneObject[]
   settings: SceneSettings
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens
@@ -276,7 +276,9 @@ export interface SceneFile {
    * The question set a teacher is writing in Question Author (format 5). Optional and left out
    * while empty, so a file with no questions reads exactly as it did in format 4. A question here
    * may be half-written; only its licence and its shape are checked on the way in
-   * (`core/migrate.ts`), because Export is where a question must be complete.
+   * (`core/migrate.ts`), because Export is where a question must be complete. From format 6 a
+   * question may use the question-file format 2 (the new answer kinds, error carried forward,
+   * showIf, a rung and a deeper link).
    */
   questions?: PQQuestion[]
 }

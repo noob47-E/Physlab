@@ -66,8 +66,8 @@ describe('format 5: the question set in a .phys file', () => {
   it('steps a format-4 file up to format 5 and changes nothing else', () => {
     const raw = v4()
     const out = migrate(raw)
-    expect(FILE_VERSION).toBe(5)
-    expect(out.version).toBe(5)
+    expect(FILE_VERSION).toBe(6)
+    expect(out.version).toBe(FILE_VERSION)
     expect({ ...out, version: 4 }).toEqual(raw)
     expect(raw.version).toBe(4)
     expect(out.questions).toBeUndefined()
@@ -76,7 +76,7 @@ describe('format 5: the question set in a .phys file', () => {
   it('keeps a question through the step, and a half-written one too', () => {
     const half: PQQuestion = { ...train(), id: 'half', title: 'Still writing', parts: [], variables: [{ name: 'u', def: { kind: 'range', from: 5, to: 1, step: 0 } }] }
     const out = parseSceneFile(JSON.stringify({ ...v4(), questions: [train(), half] }))
-    expect(out.version).toBe(5)
+    expect(out.version).toBe(FILE_VERSION)
     expect(out.questions).toEqual([train(), half])
     // An empty holder is a teacher who has not typed a name yet, not a damaged file.
     const unnamed = { ...train(), license: { id: 'CC BY 4.0', holder: '' } }
