@@ -13,10 +13,12 @@ import { texToPlain, type Move } from '../math/pure/work'
 import type { MeasureSettings } from '../math/format'
 import { workSteps } from '../math/pure/store'
 import { JOBS, type JobId } from '../math/pure/run'
-import { blankPart, changePartType, chipKatex, chipTex, parseLetters, partCheck, previewAutoStep, previewAutoStepWorked, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
+import { blankPart, chipKatex, chipTex, nameLatex, parseLetters, partCheck, previewAutoStep, previewAutoStepWorked, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
+import { ALL_PART_TYPES, changeAnyPartType, equationLatex, functionLettersProblem, readEquation, renameFunctionLetters, resizeMatrix } from '../questions/authorKinds'
+import { DEFAULT_MAX_REL_U } from '../questions/answerKinds'
 import { useAuthor, useAuthorView } from '../questions/authorStore'
 import { substitute, drawVariables } from '../questions/variables'
-import { bandOf, type DistractorRule, type FadingLevel, type Format1Part, type PQPart, type PQQuestion, type PQStep } from '../questions/pqjson'
+import { bandOf, type DistractorRule, type FadingLevel, type PQPart, type PQQuestion, type PQStep } from '../questions/pqjson'
 import { ChipBar, FormulaField, UnitSelect } from './AuthorVariables'
 import { ChipText, TexField } from './AuthorScene'
 import { WORKING_IT_OUT_STEP } from '../questions/steps'
@@ -45,12 +47,6 @@ function useAutoPreview(q: PQQuestion, step: PQStep | null, settings: MeasureSet
 // ---------------------------------------------------------------------------
 // Parts
 // ---------------------------------------------------------------------------
-
-const PART_TYPES: { type: Format1Part['type']; label: string }[] = [
-  { type: 'number', label: 'A number' },
-  { type: 'expression', label: 'A formula' },
-  { type: 'choice', label: 'A choice' }
-]
 
 /** Each wrong-option rule as the mistake a student makes. */
 const RULE_WORDS: Record<DistractorRule, string> = {
@@ -105,6 +101,128 @@ function LettersBox({ symbols, variables, onCommit }: { symbols: string[]; varia
   )
 }
 
+/** The free letter and the function's own letter of a function part ("x" and "y"), each a single name, never the other's. */
+function FunctionNames({ x, y, variables, onCommit }: { x: string; y: string; variables: readonly string[]; onCommit: (x: string, y: string) => void }) {
+  const [xt, setXt] = useState(x)
+  const [yt, setYt] = useState(y)
+  const [problem, setProblem] = useState<string | null>(null)
+  const commit = () => {
+    const nx = xt.trim()
+    const ny = yt.trim()
+    // Never a question variable's name either: y renamed to the variable k merged the two for good.
+    const why = functionLettersProblem(nx, ny, variables)
+    if (why) {
+      setProblem(why)
+      return
+    }
+    setProblem(null)
+    onCommit(nx, ny)
+  }
+  return (
+    <div className="flex flex-wrap items-start gap-3">
+      <label className="block">
+        <span className="text-small text-ink-dim">The free letter (its own axis)</span>
+        <input
+          className="field mt-1 min-h-[44px] w-16 font-math"
+          value={xt}
+          spellCheck={false}
+          onChange={(e) => setXt(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            e.stopPropagation()
+          }}
+        />
+      </label>
+      <label className="block">
+        <span className="text-small text-ink-dim">The function's own letter</span>
+        <input
+          className="field mt-1 min-h-[44px] w-16 font-math"
+          value={yt}
+          spellCheck={false}
+          onChange={(e) => setYt(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            e.stopPropagation()
+          }}
+        />
+      </label>
+      {problem && <div className="mt-4 min-w-0 flex-1 text-small text-bad">{problem}</div>}
+    </div>
+  )
+}
+
+/**
+ * A function part's equation, read the way FormulaField reads a formula. A LaTeX field (TexField)
+ * saved MathLive's y^{\prime}^{\prime} and a chip's {k}, which the marker cannot parse, so every
+ * student answer came back "could not read this part's equation" while the author saw nothing wrong.
+ */
+function EquationField({ ode, names, x, y, onCommit }: { ode: string; names: readonly string[]; x: string; y: string; onCommit: (ode: string) => void }) {
+  const ref = useRef<MathInputHandle>(null)
+  const [latex, setLatex] = useState(() => equationLatex(ode, names, y))
+  const [problem, setProblem] = useState<string | null>(null)
+  const committed = useRef(ode)
+  // A change from outside (a rename) is shown; the teacher's own typing already is, and setting
+  // it again would move the caret.
+  useEffect(() => {
+    if (ode === committed.current) return
+    committed.current = ode
+    setLatex(equationLatex(ode, names, y))
+    setProblem(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- names and y only matter when the equation itself changed from outside
+  }, [ode])
+  const change = (next: string) => {
+    setLatex(next)
+    const r = readEquation(next, names, x, y)
+    if (r.problem !== undefined) {
+      setProblem(r.problem)
+      return
+    }
+    setProblem(null)
+    if (r.expr !== committed.current) {
+      committed.current = r.expr
+      onCommit(r.expr)
+    }
+  }
+  return (
+    <div className="min-w-0">
+      <div className="text-small text-ink-dim">The equation it must solve (′ and ″ for its derivatives)</div>
+      <MathInput ref={ref} value={latex} onChange={change} placeholder={`${y}″ + ${y} = 0`} size="sm" className="w-full" />
+      <ChipBar names={names} onChip={(n) => ref.current?.insert(nameLatex(n))} />
+      {problem && <div className="mt-0.5 text-small text-bad">{problem}</div>}
+    </div>
+  )
+}
+
+/**
+ * "Marked right within" for a part whose tolerance is a band only (vector, matrix, roots) —
+ * the same relative/absolute choice the number part offers, without its Eₙ option.
+ */
+function BandToleranceRow({ tolerance, unitWord, onChange }: { tolerance: { kind: 'relative' | 'absolute'; value: number }; unitWord: string; onChange: (t: { kind: 'relative' | 'absolute'; value: number }) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-small text-ink-dim">Marked right within</span>
+      <div className="w-20">
+        <NumField className="min-h-[44px]" value={tolerance.kind === 'relative' ? tolerance.value * 100 : tolerance.value} onChange={(x) => onChange({ kind: tolerance.kind, value: Math.abs(tolerance.kind === 'relative' ? x / 100 : x) })} />
+      </div>
+      <div className="seg" role="radiogroup" aria-label="How close is close enough">
+        {(['relative', 'absolute'] as const).map((kind) => (
+          <button
+            key={kind}
+            role="radio"
+            aria-checked={tolerance.kind === kind}
+            className={`min-h-[44px] ${tolerance.kind === kind ? 'on' : ''}`}
+            onClick={() => tolerance.kind !== kind && onChange(tolerance.kind === kind ? tolerance : { kind, value: kind === 'relative' ? tolerance.value / 100 : tolerance.value * 100 })}
+          >
+            {kind === 'relative' ? '%' : unitWord}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** One part's answer for the numbers of the preview row "Show it" uses: the teacher checks it at a glance. */
 function AnswerCheck({ q, k }: { q: PQQuestion; k: number }) {
   const settings = useScene((s) => s.settings)
@@ -136,8 +254,8 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
     <div className="card p-2">
       <div className="flex flex-wrap items-center gap-1">
         <span className="text-ink-strong">Part {k + 1}</span>
-        <div className="seg ml-1" role="radiogroup" aria-label={`What part ${k + 1} asks for`}>
-          {PART_TYPES.map((t) => (
+        <div className="seg flex w-full flex-wrap" role="radiogroup" aria-label={`What part ${k + 1} asks for`}>
+          {ALL_PART_TYPES.map((t) => (
             <button
               key={t.type}
               role="radio"
@@ -145,7 +263,7 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
               className={`min-h-[44px] ${p.type === t.type ? 'on' : ''}`}
               onClick={() =>
                 edit((d) => {
-                  d.parts[k] = changePartType(d.parts[k] as PQPart, t.type)
+                  d.parts[k] = changeAnyPartType(d.parts[k] as PQPart, t.type)
                 })
               }
             >
@@ -212,15 +330,17 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-small text-ink-dim">Marked right within</span>
-            <div className="w-20">
-              <NumField
-                className="min-h-[44px]"
-                value={bandOf(p.tolerance).kind === 'relative' ? bandOf(p.tolerance).value * 100 : bandOf(p.tolerance).value}
-                onChange={(x) => change((d) => d.type === 'number' && void (d.tolerance = { kind: bandOf(d.tolerance).kind, value: Math.abs(bandOf(d.tolerance).kind === 'relative' ? x / 100 : x) }))}
-              />
-            </div>
+            {p.tolerance.kind !== 'stated' && (
+              <div className="w-20">
+                <NumField
+                  className="min-h-[44px]"
+                  value={p.tolerance.kind === 'relative' ? p.tolerance.value * 100 : p.tolerance.value}
+                  onChange={(x) => change((d) => d.type === 'number' && d.tolerance.kind !== 'stated' && void (d.tolerance = { kind: d.tolerance.kind, value: Math.abs(d.tolerance.kind === 'relative' ? x / 100 : x) }))}
+                />
+              </div>
+            )}
             <div className="seg" role="radiogroup" aria-label="How close is close enough">
-              {(['relative', 'absolute'] as const).map((kind) => (
+              {(['relative', 'absolute', 'stated'] as const).map((kind) => (
                 <button
                   key={kind}
                   role="radio"
@@ -229,16 +349,43 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
                   onClick={() =>
                     change((d) => {
                       if (d.type !== 'number' || d.tolerance.kind === kind) return
+                      if (kind === 'stated') {
+                        d.tolerance = { kind: 'stated', uref: '' }
+                        return
+                      }
                       // The same number of the new kind: 2 % becomes ± 2 of the unit, not ± 0.02.
                       d.tolerance = bandOf(d.tolerance).kind === kind ? bandOf(d.tolerance) : { kind, value: kind === 'relative' ? bandOf(d.tolerance).value / 100 : bandOf(d.tolerance).value * 100 }
                     })
                   }
                 >
-                  {kind === 'relative' ? '%' : p.unit === 'none' ? 'either way' : `${p.unit} either way`}
+                  {kind === 'relative' ? '%' : kind === 'absolute' ? (p.unit === 'none' ? 'either way' : `${p.unit} either way`) : 'a stated uncertainty (Eₙ)'}
                 </button>
               ))}
             </div>
           </div>
+          {p.tolerance.kind === 'stated' && (
+            <div className="space-y-2 rounded-md border border-line p-2">
+              <div className="text-small text-ink-dim">The student states their own uncertainty too ("0.5591 ± 0.0001") and is marked by the Eₙ test.</div>
+              <FormulaField
+                label="The right answer's own uncertainty"
+                placeholder="the true value's own uncertainty"
+                expr={p.tolerance.uref}
+                names={names}
+                onCommit={(e) => change((d) => d.type === 'number' && d.tolerance.kind === 'stated' && void (d.tolerance.uref = e))}
+              />
+              <label className="flex flex-wrap items-center gap-2">
+                <span className="text-small text-ink-dim">Largest uncertainty accepted, as a percentage of the student's value</span>
+                <div className="w-20">
+                  <NumField
+                    className="min-h-[44px]"
+                    value={(p.tolerance.maxRelU ?? DEFAULT_MAX_REL_U) * 100}
+                    onChange={(x) => change((d) => d.type === 'number' && d.tolerance.kind === 'stated' && void (d.tolerance.maxRelU = Math.abs(x) / 100))}
+                  />
+                </div>
+                <span className="text-small text-ink-dim">%</span>
+              </label>
+            </div>
+          )}
           <div>
             <div className="text-small text-ink-dim">Common mistakes — a student who gives one of these is told why</div>
             {(p.traps ?? []).map((t, j) => (
@@ -363,12 +510,229 @@ function PartCard({ q, p, k, names }: { q: PQQuestion; p: PQPart; k: number; nam
         </div>
       )}
 
-      <label className="mt-2 flex items-center gap-2">
-        <span className="text-small text-ink-dim">Marks</span>
-        <div className="w-16">
-          <NumField className="min-h-[44px]" decimals={0} value={p.marks} onChange={(x) => change((d) => void (d.marks = Math.max(1, Math.round(x))))} />
+      {p.type === 'vector' && (
+        <div className="mt-2 space-y-2">
+          <div className="text-small text-ink-dim">Its components, built from the variables</div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <FormulaField label="i" expr={p.answer[0] ?? ''} names={names} onCommit={(e) => change((d) => d.type === 'vector' && void (d.answer[0] = e))} />
+            <FormulaField label="j" expr={p.answer[1] ?? ''} names={names} onCommit={(e) => change((d) => d.type === 'vector' && void (d.answer[1] = e))} />
+            {p.answer.length > 2 && (
+              <div className="flex items-end gap-1">
+                <div className="min-w-0 flex-1">
+                  <FormulaField label="k" expr={p.answer[2] ?? ''} names={names} onCommit={(e) => change((d) => d.type === 'vector' && void (d.answer[2] = e))} />
+                </div>
+                <button className="icon-btn min-h-[44px] min-w-[44px]" aria-label="Remove the k component" onClick={() => change((d) => d.type === 'vector' && void d.answer.splice(2, 1))}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+          {p.answer.length < 3 && (
+            <button className="btn min-h-[44px]" onClick={() => change((d) => d.type === 'vector' && void d.answer.push(''))}>
+              <Plus size={14} /> Give it a third (k) component
+            </button>
+          )}
+          <AnswerCheck q={q} k={k} />
+          <UnitSelect id={`part-unit-${k}`} label="Its unit" value={p.unit} onChange={(u) => change((d) => d.type === 'vector' && void (d.unit = u))} />
+          <BandToleranceRow tolerance={bandOf(p.tolerance)} unitWord={p.unit === 'none' ? 'either way' : `${p.unit} either way`} onChange={(t) => change((d) => d.type === 'vector' && void (d.tolerance = t))} />
         </div>
-      </label>
+      )}
+
+      {p.type === 'matrix' && (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span className="text-small text-ink-dim">Rows</span>
+              <div className="w-16">
+                <NumField
+                  className="min-h-[44px]"
+                  decimals={0}
+                  value={p.answer.length}
+                  onChange={(x) =>
+                    change((d) => {
+                      if (d.type !== 'matrix') return
+                      const rows = Math.min(6, Math.max(1, Math.round(x)))
+                      d.answer = resizeMatrix(d.answer, rows, d.answer[0]?.length ?? 1)
+                    })
+                  }
+                />
+              </div>
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-small text-ink-dim">Columns</span>
+              <div className="w-16">
+                <NumField
+                  className="min-h-[44px]"
+                  decimals={0}
+                  value={p.answer[0]?.length ?? 1}
+                  onChange={(x) =>
+                    change((d) => {
+                      if (d.type !== 'matrix') return
+                      const cols = Math.min(6, Math.max(1, Math.round(x)))
+                      d.answer = resizeMatrix(d.answer, d.answer.length, cols)
+                    })
+                  }
+                />
+              </div>
+            </label>
+          </div>
+          <div className="space-y-1">
+            {p.answer.map((row, r) => (
+              <div key={r} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
+                {row.map((cell, c) => (
+                  <FormulaField key={c} expr={cell} names={names} onCommit={(e) => change((d) => d.type === 'matrix' && void (d.answer[r][c] = e))} />
+                ))}
+              </div>
+            ))}
+          </div>
+          <AnswerCheck q={q} k={k} />
+          <BandToleranceRow tolerance={bandOf(p.tolerance)} unitWord="either way" onChange={(t) => change((d) => d.type === 'matrix' && void (d.tolerance = t))} />
+          <label className="flex min-h-[44px] items-center gap-2 text-ink">
+            <input
+              type="checkbox"
+              checked={p.allowFractions === true}
+              onChange={(e) => change((d) => d.type === 'matrix' && (e.target.checked ? void (d.allowFractions = true) : void delete d.allowFractions))}
+            />
+            Accept an entry typed as a fraction (3/5 for 0.6)
+          </label>
+          <label className="flex min-h-[44px] items-center gap-2 text-ink">
+            <input
+              type="checkbox"
+              checked={p.markPerCell === true}
+              onChange={(e) => change((d) => d.type === 'matrix' && (e.target.checked ? void (d.markPerCell = true) : void delete d.markPerCell))}
+            />
+            Share the marks out entry by entry, not all or nothing
+          </label>
+        </div>
+      )}
+
+      {p.type === 'roots' && (
+        <div className="mt-2 space-y-2">
+          <div className="text-small text-ink-dim">Every root, each built from the variables. No entries at all means "no real roots".</div>
+          {p.answer.map((root, j) => (
+            // Keyed by the count too, so removing a row remounts the rest: a field keeps unread text
+            // until its value changes, and the row moving up showed the removed row's red text.
+            <div key={`${j}-${p.answer.length}`} className="flex items-start gap-1">
+              <div className="min-w-0 flex-1">
+                <FormulaField label={`Root ${j + 1}`} expr={root} names={names} onCommit={(e) => change((d) => d.type === 'roots' && void (d.answer[j] = e))} />
+              </div>
+              <button className="icon-btn min-h-[44px] min-w-[44px]" aria-label={`Remove root ${j + 1}`} onClick={() => change((d) => d.type === 'roots' && void d.answer.splice(j, 1))}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          <button className="btn min-h-[44px]" onClick={() => change((d) => d.type === 'roots' && void d.answer.push(''))}>
+            <Plus size={14} /> Add a root
+          </button>
+          <AnswerCheck q={q} k={k} />
+          <UnitSelect id={`part-unit-${k}`} label="Its unit" value={p.unit} onChange={(u) => change((d) => d.type === 'roots' && void (d.unit = u))} />
+          <BandToleranceRow tolerance={bandOf(p.tolerance)} unitWord={p.unit === 'none' ? 'either way' : `${p.unit} either way`} onChange={(t) => change((d) => d.type === 'roots' && void (d.tolerance = t))} />
+          <label className="flex min-h-[44px] items-center gap-2 text-ink">
+            <input
+              type="checkbox"
+              checked={p.multiplicity === true}
+              onChange={(e) => change((d) => d.type === 'roots' && (e.target.checked ? void (d.multiplicity = true) : void delete d.multiplicity))}
+            />
+            A repeated root must be typed as often as it repeats
+          </label>
+        </div>
+      )}
+
+      {p.type === 'function' && (
+        <div className="mt-2 space-y-2">
+          <FunctionNames
+            key={`${p.x}-${p.y}`}
+            x={p.x}
+            y={p.y}
+            variables={names}
+            onCommit={(x, y) =>
+              change((d) => {
+                if (d.type !== 'function') return
+                // The equation and the solution follow the letters; left on the old ones, every answer was marked wrong.
+                const r = renameFunctionLetters(d, x, y)
+                d.x = r.x
+                d.y = r.y
+                d.ode = r.ode
+                d.model = r.model
+              })
+            }
+          />
+          <EquationField key={`${p.x}-${p.y}`} ode={p.ode} names={names} x={p.x} y={p.y} onCommit={(e) => change((d) => d.type === 'function' && void (d.ode = e))} />
+          <div>
+            <div className="text-small text-ink-dim">Starting conditions</div>
+            {p.initial.map((ic, j) => (
+              <div key={`${j}-${p.initial.length}`} className="mt-1 flex flex-wrap items-start gap-1 rounded-md border border-line p-2">
+                <div className="w-24">
+                  <FormulaField label={`At ${p.x} =`} expr={ic.at} names={names} onCommit={(e) => change((d) => d.type === 'function' && void (d.initial[j].at = e))} />
+                </div>
+                <div className="seg mt-4" role="radiogroup" aria-label={`Starting condition ${j + 1} is on`}>
+                  <button role="radio" aria-checked={ic.order === 0} className={`min-h-[44px] ${ic.order === 0 ? 'on' : ''}`} onClick={() => change((d) => d.type === 'function' && void (d.initial[j].order = 0))}>
+                    {p.y}
+                  </button>
+                  <button role="radio" aria-checked={ic.order === 1} className={`min-h-[44px] ${ic.order === 1 ? 'on' : ''}`} onClick={() => change((d) => d.type === 'function' && void (d.initial[j].order = 1))}>
+                    {p.y}′
+                  </button>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <FormulaField label="equals" expr={ic.value} names={names} onCommit={(e) => change((d) => d.type === 'function' && void (d.initial[j].value = e))} />
+                </div>
+                <button
+                  className="icon-btn mt-4 min-h-[44px] min-w-[44px]"
+                  aria-label={`Remove starting condition ${j + 1}`}
+                  onClick={() => change((d) => d.type === 'function' && void d.initial.splice(j, 1))}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <button className="btn mt-1 min-h-[44px]" onClick={() => change((d) => d.type === 'function' && void d.initial.push({ at: '0', order: 0, value: '' }))}>
+              <Plus size={14} /> Add a starting condition
+            </button>
+          </div>
+          <FormulaField
+            key={`model-${p.x}`}
+            label="The author's own solution (shown once revealed)"
+            placeholder={`a formula in ${p.x}`}
+            expr={p.model}
+            names={names}
+            free={[p.x]}
+            onCommit={(e) => change((d) => d.type === 'function' && void (d.model = e))}
+          />
+          <AnswerCheck q={q} k={k} />
+        </div>
+      )}
+
+      {p.type === 'proof' && (
+        <div className="mt-2 space-y-2">
+          <ChipText label="The model proof (shown once the student asks)" placeholder="Divide x² + y² = r² by r²." value={p.model} names={names} multiline onCommit={(t) => change((d) => d.type === 'proof' && void (d.model = t))} />
+          <div>
+            <div className="text-small text-ink-dim">Self-check list — what the student compares their own proof against</div>
+            {p.selfCheck.map((line, j) => (
+              <div key={`${j}-${p.selfCheck.length}`} className="mt-1 flex items-start gap-1">
+                <div className="min-w-0 flex-1">
+                  <ChipText label={`Point ${j + 1}`} placeholder="You started from Pythagoras." value={line} names={names} chips={false} onCommit={(t) => change((d) => d.type === 'proof' && void (d.selfCheck[j] = t))} />
+                </div>
+                <button className="icon-btn min-h-[44px] min-w-[44px]" aria-label={`Remove point ${j + 1}`} onClick={() => change((d) => d.type === 'proof' && void d.selfCheck.splice(j, 1))}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <button className="btn mt-1 min-h-[44px]" onClick={() => change((d) => d.type === 'proof' && void d.selfCheck.push(''))}>
+              <Plus size={14} /> Add a self-check point
+            </button>
+          </div>
+          <div className="text-small text-ink-faint">A proof is shown, never marked on this computer.</div>
+        </div>
+      )}
+
+      {p.type !== 'proof' && (
+        <label className="mt-2 flex items-center gap-2">
+          <span className="text-small text-ink-dim">Marks</span>
+          <div className="w-16">
+            <NumField className="min-h-[44px]" decimals={0} value={p.marks} onChange={(x) => change((d) => void (d.marks = Math.max(1, Math.round(x))))} />
+          </div>
+        </label>
+      )}
     </div>
   )
 }

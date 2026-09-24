@@ -8,6 +8,7 @@ import { Plus, Trash2, Wrench, X } from 'lucide-react'
 import { useScene } from '../core/store'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { NumField } from '../ui/fields'
+import { fmtPrecise } from '../math/format'
 import { Tex } from '../ui/Tex'
 import {
   defaultDef,
@@ -23,6 +24,7 @@ import {
   UNIT_GROUPS,
   variableInUse
 } from '../questions/authoring'
+import { conditionRuns, functionLetterClash, functionLetters, MAX_CONDITION_RUNS } from '../questions/authorKinds'
 import { useAuthor } from '../questions/authorStore'
 import { formatQuantity } from '../questions/units'
 import type { PQQuestion, PQVariable, UnitId, VariableDef } from '../questions/pqjson'
@@ -156,10 +158,12 @@ function NameBox({ q, v }: { q: PQQuestion; v: PQVariable }) {
       setProblem(null)
       return
     }
-    const why = nameProblem(
-      next,
-      q.variables.filter((x) => x !== v).map((x) => x.name)
-    )
+    // Nor a function part's own letter: k renamed to v merged it with the part's v for good.
+    const why =
+      nameProblem(
+        next,
+        q.variables.filter((x) => x !== v).map((x) => x.name)
+      ) ?? functionLetterClash(q, next)
     if (why) {
       setProblem(why)
       return
@@ -360,6 +364,63 @@ function VariableRow({ q, v, i }: { q: PQQuestion; v: PQVariable; i: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Rung 3: which variants to keep
+// ---------------------------------------------------------------------------
+
+/** The default given to a new condition: try up to 100 draws before giving up and saying so. */
+const DEFAULT_CONDITION_RUNS = 100
+
+/**
+ * "Keep only variants where…" (rung 3): a chip condition in the question's variables that a drawn
+ * variant must hold, and how many draws to try before giving up — never typed braces, built the
+ * same way every other formula in Question Author is. Clearing the field removes the condition
+ * altogether, so every variant is kept again.
+ */
+function ConditionRow({ q }: { q: PQQuestion }) {
+  const names = q.variables.map((v) => v.name)
+  const condition = q.condition
+  return (
+    <div className="mt-2">
+      <div className="section-title">Which variants to keep</div>
+      <div className="space-y-2 px-3">
+        <div className="text-small text-ink-dim">Keep only the variants where this holds — a student never sees one that fails it. Leave it blank to keep every variant.</div>
+        <FormulaField
+          expr={condition?.when ?? ''}
+          names={names}
+          placeholder="such as b² − 4ac ≥ 0"
+          onCommit={(when) =>
+            useAuthor.getState().edit((d) => {
+              if (when.trim() === '') {
+                delete d.condition
+                return
+              }
+              d.condition = { when, maxRuns: d.condition?.maxRuns ?? DEFAULT_CONDITION_RUNS }
+            })
+          }
+        />
+        {condition && (
+          <label className="flex flex-wrap items-center gap-2">
+            <span className="text-small text-ink-dim">Try this many times (up to {fmtPrecise(MAX_CONDITION_RUNS, { decimals: 0, precisionMode: 'dp' })}) before giving up and saying so</span>
+            <div className="w-20">
+              <NumField
+                className="min-h-[44px]"
+                decimals={0}
+                value={condition.maxRuns}
+                onChange={(x) =>
+                  useAuthor.getState().edit((d) => {
+                    if (d.condition) d.condition.maxRuns = conditionRuns(x)
+                  })
+                }
+              />
+            </div>
+          </label>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // The tab
 // ---------------------------------------------------------------------------
 
@@ -385,13 +446,15 @@ export function AuthorVariables({ q }: { q: PQQuestion }) {
           className="btn min-h-[44px]"
           onClick={() =>
             useAuthor.getState().edit((d) => {
-              d.variables.push({ name: nextVariableName(d.variables.map((x) => x.name)), def: defaultDef('range') })
+              d.variables.push({ name: nextVariableName([...d.variables.map((x) => x.name), ...functionLetters(d)]), def: defaultDef('range') })
             })
           }
         >
           <Plus size={14} /> Add a variable
         </button>
       </div>
+
+      <ConditionRow q={q} />
 
       <div className="section-title mt-3">Ten students’ numbers</div>
       <div className={`px-3 text-small ${bad === 0 ? 'text-ink-dim' : 'text-bad'}`}>

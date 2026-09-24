@@ -6,13 +6,14 @@
 // JSON or code; the file format is written here and read back here.
 
 import type { MathNode, SymbolNode } from 'mathjs'
-import { math, preprocess } from '../math/expr'
+import { math, preprocess, symbolsOf } from '../math/expr'
 import type { MeasureSettings } from '../math/format'
 import { tryLatexToMath } from '../math/latexToMath'
 import { JOBS, suggestJob, type JobId } from '../math/pure/run'
 import type { Move } from '../math/pure/work'
 import { isShippable } from './license'
 import { fromExam } from './numbas'
+import { primed } from './odeCheck'
 import { evaluateInVariables } from './parts'
 import { playQuestion } from './player'
 import {
@@ -118,7 +119,7 @@ function splitIntoNames(run: string, names: readonly string[]): string[] | null 
 }
 
 /** Only the brackets the meaning needs, and every product written with its × (2 * a, never 2 a). */
-const TIDY = { parenthesis: 'auto', implicit: 'show' } as const
+export const TIDY = { parenthesis: 'auto', implicit: 'show' } as const
 
 export type FormulaRead = { expr: string; problem?: undefined } | { expr?: undefined; problem: string }
 
@@ -135,9 +136,11 @@ export function readFormula(latex: string, names: readonly string[], free: reado
   const linear = tryLatexToMath(latex)
   if (linear.problem !== undefined) return { problem: linear.problem }
   // A variable called mu written as the Greek μ is that variable: the calculator would read μ as
-  // micro and make it u.
+  // micro and make it u. Its primes stay on it: a function part whose letter is theta writes its
+  // second derivative θ″, and split off it (theta ″) the prime was left on its own and the whole
+  // formula was refused.
   let src = linear.src
-  for (const n of [...names, ...free]) if (GREEK[n]) src = src.split(GREEK[n]).join(` ${n} `)
+  for (const n of [...names, ...free]) if (GREEK[n]) src = src.replace(new RegExp(`${GREEK[n]}([′″]*)`, 'g'), ` ${n}$1 `)
   let node: MathNode
   try {
     node = math.parse(preprocess(src))
@@ -194,11 +197,13 @@ export function formulaLatex(expr: string | undefined, names: readonly string[] 
  * A plain space sets the same and reads back as the product it is.
  */
 // Its base of a power comes wrapped too (`{ x}^{2}`), which reads back as (x)^2 and made the
-// Pure Math engine open with a line tidying the brackets away.
+// Pure Math engine open with a line tidying the brackets away. A letter unwrapped straight after a
+// command keeps a space from it: k * v ^ 2 came out as `k\cdotv^{2}`, which reads back as "There
+// is no variable called cdotv."
 const plainSpaces = (tex: string): string =>
   tex
     .replace(/~/g, ' ')
-    .replace(/\{\s*([A-Za-z]|\d+(?:\.\d+)?)\s*\}(?=\^)/g, '$1')
+    .replace(/(\\[A-Za-z]+)?\{\s*([A-Za-z]|\d+(?:\.\d+)?)\s*\}(?=\^)/g, (_m, cmd: string | undefined, base: string) => (cmd ? `${cmd} ${base}` : base))
     .trim()
 
 /** How a variable is written in the maths field: a letter as itself, a longer name upright. */
@@ -340,6 +345,41 @@ export function unanswered(p: PQPart): boolean {
   return p.distractors !== undefined && p.distractors.correct.trim() === ''
 }
 
+/**
+ * The formulas a part is marked against besides a number's own answer and a generated choice's
+ * right answer, which the player already works out and flags: every entry of a vector, matrix or
+ * set of roots, a function's starting conditions, and a stated uncertainty. The player writes a
+ * component it cannot work out as "undefined" and says nothing, so a variant with a < 3 played
+ * √(a − 3) i + 1 j as "undefined i + 1 j" and marked every student answer "could not work out".
+ */
+function markedFormulas(p: PQPart): string[] {
+  switch (p.type) {
+    case 'number':
+      return p.tolerance.kind === 'stated' ? [p.tolerance.uref] : []
+    case 'vector':
+    case 'roots':
+      return p.answer
+    case 'matrix':
+      return p.answer.flat()
+    case 'function':
+      return p.initial.flatMap((c) => [c.at, c.value])
+    default:
+      return []
+  }
+}
+
+/** Whether a formula comes out as a real number for these values of the variables. */
+function worksOut(expr: string, values: Record<string, number>): boolean {
+  try {
+    return Number.isFinite(evaluateInVariables(expr, values))
+  } catch {
+    return false
+  }
+}
+
+/** The sentence the player itself uses for a number part it cannot work out, so a row reads the same whatever the kind. */
+const cannotWorkOut = (prompt: string): string => `PhysLab could not work out the answer to "${prompt}", so it cannot mark it.`
+
 /** What the Solution tab says under one part's answer box: nothing to check yet, a problem, or the answer. */
 export type PartCheck = { kind: 'empty'; text: string } | { kind: 'problem'; text: string } | { kind: 'answer'; text: string | null; tex: string }
 
@@ -358,7 +398,8 @@ export function partCheck(q: PQQuestion, k: number, seed: number, settings: Meas
     const p = played.parts[k]
     if (!p) return null
     const theirs = new Set(Object.values(played.partProblems).flat())
-    const problem = played.partProblems[p.key][0] ?? played.problems.find((x) => !theirs.has(x))
+    const unworked = markedFormulas(part).some((e) => !worksOut(e, drawVariables(q, seed).values)) ? cannotWorkOut(p.prompt) : undefined
+    const problem = played.partProblems[p.key][0] ?? unworked ?? played.problems.find((x) => !theirs.has(x))
     return problem !== undefined ? { kind: 'problem', text: problem } : { kind: 'answer', text: p.answerText ?? null, tex: p.answerTex }
   } catch (e) {
     return { kind: 'problem', text: e instanceof Error ? e.message : String(e) }
@@ -419,7 +460,8 @@ export function previewRows(q: PQQuestion, settings: MeasureSettings, count = 10
     let problems: string[] = [...variant.problems]
     try {
       const played = playQuestion(playable, seed, settings)
-      problems = [...new Set(played.problems)]
+      const unworked = played.parts.filter((p) => markedFormulas(p.part).some((e) => !worksOut(e, variant.values))).map((p) => cannotWorkOut(p.prompt))
+      problems = [...new Set([...played.problems, ...unworked])]
       let k = 0
       answers = q.parts.map((_, j) => {
         if (!ready[j]) return null
@@ -437,6 +479,18 @@ export function previewRows(q: PQQuestion, settings: MeasureSettings, count = 10
 // ---------------------------------------------------------------------------
 // What a question needs before it leaves PhysLab
 // ---------------------------------------------------------------------------
+
+/**
+ * The first letter a formula from the file uses that is neither in `allowed` nor maths' own (pi,
+ * e, sin …); null when there is none, undefined when the formula does not read at all.
+ */
+function strayLetter(expr: string, allowed: readonly string[]): string | null | undefined {
+  try {
+    return symbolsOf(math.parse(preprocess(expr))).find((n) => !allowed.includes(n) && !isBuiltIn(n)) ?? null
+  } catch {
+    return undefined
+  }
+}
 
 /** How many draws Export tries beyond the preview's ten: enough to meet a 1-in-100 zero. */
 const EXPORT_DRAWS = 500
@@ -459,6 +513,48 @@ export function questionProblems(q: PQQuestion, i: number, settings: MeasureSett
     const part = q.parts.length > 1 ? ` part ${k + 1}` : ''
     if (p.prompt.trim() === '') out.push(`${who}${part} needs a question to ask.`)
     if ((p.type === 'number' || p.type === 'expression') && p.answer.trim() === '') out.push(`${who}${part} needs its answer.`)
+    // The format-2 kinds start with blank entries (blankPartOf), and the file format accepts a
+    // blank string, so a half-finished part exported and played "3 i + undefined j" and marked
+    // every student answer "could not work out the answer".
+    const blank = (s: string): boolean => s.trim() === ''
+    if ((p.type === 'vector' && p.answer.some(blank)) || (p.type === 'roots' && p.answer.some(blank)) || (p.type === 'matrix' && p.answer.flat().some(blank))) {
+      const entry = p.type === 'vector' ? 'a component' : p.type === 'roots' ? 'a root' : 'a cell'
+      out.push(`${who}${part} has ${entry} with nothing written in it.`)
+    }
+    if (p.type === 'function') {
+      if (blank(p.ode)) out.push(`${who}${part} needs the equation its answer must solve.`)
+      if (p.initial.some((c) => blank(c.at) || blank(c.value))) out.push(`${who}${part} has a starting condition with nothing written in it.`)
+      if (blank(p.model)) out.push(`${who}${part} needs your own solution, the one shown once revealed.`)
+      // A letter that is also a variable's name (y renamed to the variable k) merged the two: the
+      // marker read k″ + k * k = 0 and called every right answer wrong, while the stray-letter
+      // check below let k through as a variable.
+      for (const [letter, role] of [
+        [p.x, 'free letter'],
+        [p.y, 'function’s own letter']
+      ] as const) {
+        if (q.variables.some((v) => v.name === letter)) out.push(`${who}${part}: its ${role} ${letter} is also a variable’s name. Rename one of them.`)
+      }
+      // A letter the part no longer has (y left behind after the part's letter became v) made the
+      // marker call every student answer wrong while the file still exported.
+      const names = q.variables.map((v) => v.name)
+      if (!blank(p.ode)) {
+        const sides = primed(p.ode).split('=')
+        const own = [p.x, p.y, `${p.y}′`, `${p.y}″`]
+        const strays = sides.length === 2 ? sides.map((s) => strayLetter(s, [...names, ...own])) : [undefined]
+        const stray = strays.find((s): s is string => typeof s === 'string')
+        if (strays.includes(undefined)) out.push(`${who}${part}: PhysLab cannot read its equation. Write it again.`)
+        else if (stray !== undefined) out.push(`${who}${part}: its equation uses ${stray}, which is not a variable, ${p.x}, ${p.y}, ${p.y}′ or ${p.y}″.`)
+      }
+      if (!blank(p.model)) {
+        const stray = strayLetter(p.model, [...names, p.x])
+        if (stray === undefined) out.push(`${who}${part}: PhysLab cannot read your own solution. Write it again.`)
+        else if (stray !== null) out.push(`${who}${part}: your own solution uses ${stray}, which is not a variable or ${p.x}.`)
+      }
+    }
+    if (p.type === 'proof') {
+      if (blank(p.model)) out.push(`${who}${part} needs its model proof.`)
+      if (p.selfCheck.some(blank)) out.push(`${who}${part} has a self-check point with nothing written in it.`)
+    }
     if (p.type === 'expression' && p.symbols.length === 0) out.push(`${who}${part} needs the letters the student may use.`)
     if (p.type === 'choice') {
       if (p.distractors) {
@@ -481,13 +577,13 @@ export function questionProblems(q: PQQuestion, i: number, settings: MeasureSett
 
   const bad = previewRows(q, settings).find((r) => r.problems.length > 0)
   if (bad) return [`${who}, preview row ${bad.seed}: ${bad.problems[0]}`]
-  // Only what a number needs is drawn beyond the preview: the variables and every answer.
+  // Only what a number needs is drawn beyond the preview: the variables and every formula a part is marked against.
   for (let seed = 11; seed <= 10 + EXPORT_DRAWS; seed++) {
     const v = drawVariables(q, seed)
     let problem = v.problems[0]
     if (problem === undefined) {
       for (const p of q.parts) {
-        const exprs = p.type === 'number' ? [p.answer] : p.type === 'choice' && p.distractors ? [p.distractors.correct] : []
+        const exprs = [...(p.type === 'number' ? [p.answer] : p.type === 'choice' && p.distractors ? [p.distractors.correct] : []), ...markedFormulas(p)]
         for (const e of exprs) {
           let value = NaN
           try {
@@ -751,6 +847,19 @@ export function renameVariable(q: PQQuestion, from: string, to: string): PQQuest
   const renamePart = (p: PQPart): PQPart => {
     if (p.type === 'number') return { ...p, prompt: t(p.prompt), answer: f(p.answer), ...(p.traps ? { traps: p.traps.map((tr) => ({ value: f(tr.value), why: t(tr.why) })) } : {}) }
     if (p.type === 'expression') return { ...p, prompt: t(p.prompt), answer: f(p.answer) }
+    if (p.type === 'function') {
+      // mathjs does not read a whole equation (y″ + k * y = 0 is an assignment it refuses), so
+      // renamed as one formula it came back untouched: k stayed in the equation after k became m,
+      // and variableInUse called a variable used only there unused. Each side is renamed alone,
+      // and the text is left as it was when neither side names the variable.
+      const sides = primed(p.ode).split('=')
+      const renamed = sides.length === 2 ? sides.map((s) => f(s.trim())) : null
+      const ode = renamed && renamed.some((s, i) => s !== sides[i].trim()) ? `${renamed[0]} = ${renamed[1]}` : p.ode
+      return { ...mapFormat2Formulas(p, f), ode, prompt: t(p.prompt) } as PQPart
+    }
+    // A proof's model and self-check points are the teacher's words with chips in them, which the
+    // player fills; sent through mapFormat2Formulas they were left alone and played a literal {a}.
+    if (p.type === 'proof') return { ...p, prompt: t(p.prompt), model: t(p.model), selfCheck: p.selfCheck.map(t) }
     if (p.type !== 'choice') return { ...mapFormat2Formulas(p, f), prompt: t(p.prompt) }
     return {
       ...p,
