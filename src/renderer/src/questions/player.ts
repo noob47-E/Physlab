@@ -85,6 +85,13 @@ export interface Played {
   level: FadingLevel
   /** Plain sentences about anything in this variant that could not be worked out; empty when all is well. */
   problems: string[]
+  /**
+   * The same sentences by the part they are about, keyed like `PlayedPart.key`; a problem with
+   * the variables themselves belongs to no one part and is only in `problems`. The author's
+   * Solution tab showed the question's first problem under every part, so part 2's box could
+   * carry part 1's complaint.
+   */
+  partProblems: Record<string, string[]>
 }
 
 const unitsOf = (q: PQQuestion): Record<string, UnitId | undefined> => Object.fromEntries(q.variables.map((v) => [v.name, v.unit]))
@@ -104,9 +111,15 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
   const lv = level ?? q.steps?.level ?? 'worked'
   const working = stepsToWorking(q, variant, settings, lv)
   const problems = [...variant.problems]
+  const partProblems: Record<string, string[]> = {}
 
   const parts: PlayedPart[] = q.parts.map((part, i) => {
     const key = `p${i}`
+    const own: string[] = (partProblems[key] = [])
+    const flag = (sentence: string) => {
+      problems.push(sentence)
+      own.push(sentence)
+    }
     const promptLines = textLines(part.prompt, fill)
     const prompt = spokenOf(promptLines.flat())
     const answerTex = working.answers[i]?.tex ?? '\\text{?}'
@@ -118,10 +131,10 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
       } catch {
         // Left NaN; the sentence below says so, and the box marks nothing as right.
       }
-      if (!Number.isFinite(value)) problems.push(`PhysLab could not work out the answer to "${prompt}", so it cannot mark it.`)
+      if (!Number.isFinite(value)) flag(`PhysLab could not work out the answer to "${prompt}", so it cannot mark it.`)
       const traps = (part.traps ?? []).map((t) => ({ value: safeValue(t.value, values), why: plain(t.why) }))
       if (traps.some((t) => !Number.isFinite(t.value))) {
-        problems.push(`PhysLab could not work out one of the mistakes "${prompt}" watches for, so it will not name that one.`)
+        flag(`PhysLab could not work out one of the mistakes "${prompt}" watches for, so it will not name that one.`)
       }
       const field: AnswerField = {
         key,
@@ -141,7 +154,7 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
       } catch {
         // A generated choice whose right answer cannot be worked out has nothing to offer; the
         // part shows no options and the sentence below says why, instead of the panel crashing.
-        problems.push(`PhysLab could not work out the options for "${prompt}".`)
+        flag(`PhysLab could not work out the options for "${prompt}".`)
         raw = []
       }
       // A listed choice may hold chips and maths too ("{v} m/s", "\(v = u\)"); a generated one is already a number.
@@ -171,7 +184,7 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
   }
 
   const full = lv === 'worked' ? working : stepsToWorking(q, variant, settings, 'worked')
-  return { question: q, variant, problem, parts, statement, working, full, level: lv, problems }
+  return { question: q, variant, problem, parts, statement, working, full, level: lv, problems, partProblems }
 }
 
 function safeValue(expr: string, values: Record<string, number>): number {

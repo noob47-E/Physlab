@@ -16,19 +16,19 @@ follow it, and if a test needs to disagree with it, say why in the test itself.
 | Marking a student's answer | **One rule for the whole app: `\|a − b\| ≤ 0.02 × \|b\|` — 2 % relative to the expected answer `b`, nothing more.** An expected answer of exactly 0 has no relative scale, so that question states its own absolute tolerance. Tested with an answer just inside the tolerance and one just outside. (`questions/parts.ts`'s `toAbsoluteTol` already marks this way.) | On an expected `50`: `49.0` and `51.0` are accepted; `48.99` and `51.01` are refused. |
 | What is shown on screen | The student's chosen precision (Rule 4, `math/format.ts`); an uncertainty carries exactly one significant figure (Idea 2's GUM budget). | `0.84 ± 0.01 s`. |
 
-### The one marking tolerance — known gap
+### The one marking tolerance — closed in 0.9 (INT-Wave1)
 
 PROGRAM-0.9.md §5 (Idea 12 decision 5.1) settles on **one tolerance, 2 %,** for the whole app, so
 a practice problem and a bundled question mark an answer the same way. `questions/numbas.ts`
-already defaults to `{ kind: 'relative', value: 0.02 }` (2 %) wherever a Numbas source leaves the
-tolerance to guess. `math/problems.ts`'s `tolOf` (line 85) still marks practice problems
-differently: 1 % (`v * 0.01`) with a floor of 0.05 in the answer's own units, whichever is larger — the exact gap Idea 12's own
-research found (§2, "Weak spots found while reading"). That floor is not part of this policy: on a
-small answer such as 0.0024 A it would accept anything within ±0.05 A. This slice does not change
-`math/problems.ts` (it is out of the GATE track's domain); whichever track next touches
-practice-problem marking should make `tolOf` plain 2 % relative (`Math.abs(v) * 0.02`), review
-the 0.05 floor (keep an absolute tolerance only where the expected answer can be 0, and state it
-in that problem), and cite this section when it does.
+defaults to `{ kind: 'relative', value: 0.02 }` (2 %) wherever a Numbas source leaves the
+tolerance to guess. `math/problems.ts`'s `tolOf` used to mark practice problems at 1 % with a
+floor of 0.05 in the answer's own units — the gap Idea 12's own research found (§2, "Weak spots
+found while reading"); on a small answer such as 0.0024 A the floor accepted anything within
+±0.05 A. It is now plain 2 % relative, and a problem whose answer can be exactly 0 (a component,
+a dot or cross product, the work done at 90°) states its own absolute tolerance of 0.05.
+`isCorrect` counts only a `right` verdict: `close` (four tolerances out) still names the likely
+slip, but is not ticked. `tests/practiceTolerance.test.ts` runs this section's example for
+Practice and for the question bank.
 
 ### What "exact" means
 

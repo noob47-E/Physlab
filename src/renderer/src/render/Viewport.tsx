@@ -306,14 +306,14 @@ export function Viewport() {
         <div className="tool-hint" style={turning3D ? { maxWidth: 'max(180px, calc(100% - 340px))' } : undefined}>
           <span>{hint}</span>
           {picks > 0 && (
-            <span className="pointer-events-auto ml-3 inline-flex items-center gap-1 border-l border-[var(--line-2)] pl-3">
-              <button className="btn h-6 primary" onClick={() => finishTool()} title="Finish this shape (right-click, Enter or double-click)">
+            <span className="pointer-events-auto ml-3 inline-flex shrink-0 items-center gap-1 border-l border-[var(--line-2)] pl-3">
+              <button className="btn primary min-h-[44px]" onClick={() => finishTool()} title="Finish this shape (right-click, Enter or double-click)">
                 <Check size={12} /> Finish
               </button>
-              <button className="btn h-6" onClick={() => undoLastPick()} title="Remove the last point (Backspace)">
+              <button className="btn min-h-[44px]" onClick={() => undoLastPick()} title="Remove the last point (Backspace)">
                 <Undo2 size={12} /> Undo point
               </button>
-              <button className="btn h-6" onClick={() => cancelTool()} title="Throw this drawing away (Esc)">
+              <button className="btn min-h-[44px]" onClick={() => cancelTool()} title="Throw this drawing away (Esc)">
                 <X size={12} /> Cancel
               </button>
             </span>

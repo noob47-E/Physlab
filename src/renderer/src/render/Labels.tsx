@@ -4,39 +4,37 @@ import { useFrame } from '@react-three/fiber'
 import { toScreen } from './cameraUtils'
 import { labelAnchors, overlay } from './overlay'
 import { useScene } from '../core/store'
+import { displayName } from '../core/naming'
 import { cssColor } from '../app/theme'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { formatMeasure } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
-import { classifyPolygon } from '../math/shapes'
-import { pieceLettered } from '../math/lego'
-import { PIECE_LETTER_PX, pieceLetterDirections } from './pieceLabels'
+import { duplicateSides, PIECE_LETTER_PX, settleLabel, sharedCornerLabels, type LabelBox, type MergedCorner } from './pieceLabels'
 
-/**
- * What the chip calls an object: a side of a shape is named by its corners (AB, not c),
- * a shape by what it is (Trapezium ABCD, not poly1), and a drawn answer by the name the
- * working used (−B, not negB).
- */
-export function displayName(o: SceneObject, objects: Record<ObjId, SceneObject>, c?: Computed): string {
-  // A Lego piece's label is what it was cut as ("Right-angled triangle"); its letters follow,
-  // as on any shape, so two pieces can be told apart and talked about (Fix 17).
-  if (o.type === 'polygon' && o.lego && o.label) return pieceLettered(o.points, objects) ? `${o.label} ${o.points.map((p) => objects[p]?.name ?? '').join('')}` : o.label
-  if (o.label) return o.label
-  if (o.type === 'segment') {
-    const inShape = Object.values(objects).some((p) => p.type === 'polygon' && p.points.includes(o.a) && p.points.includes(o.b))
-    const a = objects[o.a]?.name
-    const b = objects[o.b]?.name
-    if (inShape && a && b) return `${a}${b}`
-  }
-  if (o.type === 'polygon' && c?.type === 'polygon' && c.pts.length >= 3) {
-    const letters = o.points.map((p) => objects[p]?.name ?? '').join('')
-    return `${classifyPolygon(c.pts).name} ${letters}`.trim()
-  }
-  return o.name
-}
+// What the chip calls an object is core/naming.ts's displayName: the Measure list and the
+// selection header use the same one, so the drawing's FC is never the panel's "Segment d".
+export { displayName }
 
 type LabelMode = SceneSettings['measureLabels']
+
+/**
+ * Corners of Lego pieces that share a spot, as one label each ("G, K") — render/pieceLabels.ts
+ * says why. Null when fewer than two pieces are drawn.
+ */
+function useSharedCorners(): Map<ObjId, MergedCorner | null> | null {
+  const objects = useScene((s) => s.objects)
+  const ev = useScene((s) => s.ev)
+  return useMemo(() => {
+    const pieces: { points: string[]; pts: V3[] }[] = []
+    for (const o of Object.values(objects)) {
+      if (o.type !== 'polygon' || !o.lego) continue
+      const c = ev.values.get(o.id)
+      if (c?.type === 'polygon' && c.pts.length === o.points.length) pieces.push({ points: o.points, pts: c.pts })
+    }
+    return pieces.length > 1 ? sharedCornerLabels(pieces, (id) => objects[id]?.name ?? '') : null
+  }, [objects, ev])
+}
 
 /** Short measurement text for an object, e.g. "5 u ∠ 53.13°" for a vector. */
 export function measureText(o: SceneObject, c: Computed | undefined, s: SceneSettings, full: boolean): string {
@@ -109,6 +107,21 @@ export function LabelLayer() {
   const settings = useScene((s) => s.settings)
   const space = useScene((s) => s.activeSpace)
   const ref = useRef<HTMLDivElement>(null)
+  const shared = useSharedCorners()
+  // The cut is a side of both halves: its length is written once.
+  const twinSides = useMemo(() => {
+    const corners = new Set<ObjId>()
+    for (const o of Object.values(objects)) if (o.type === 'polygon' && o.lego) for (const p of o.points) corners.add(p)
+    const sides: { id: string; a: V3; b: V3 }[] = []
+    for (const id of order) {
+      const o = objects[id]
+      if (o?.type !== 'segment' || !corners.has(o.a) || !corners.has(o.b)) continue
+      const a = ev.values.get(o.a)
+      const b = ev.values.get(o.b)
+      if (a?.type === 'point' && b?.type === 'point') sides.push({ id, a: a.p, b: b.p })
+    }
+    return sides.length > 1 ? duplicateSides(sides) : null
+  }, [objects, order, ev])
 
   useEffect(() => {
     overlay.labels = ref.current
@@ -146,6 +159,12 @@ export function LabelLayer() {
         // Hidden labels that could appear on hover stay in the page so they can fade in and out.
         if (!visible && when !== 'hover') return null
         if (o.auxiliary && !sel && !pinned) return null
+        // A piece corner sharing its spot with another piece's is written in that one's label.
+        const merged = shared?.get(id)
+        if (merged === null) return null
+        // The cut's other copy is left out while the copy that keeps the label is showing.
+        const twin = twinSides?.get(id)
+        if (twin && (when === 'always' || active.has(twin) || objects[twin]?.labelPin === 'always')) return null
 
         if (o.type === 'graph') {
           return (
@@ -167,7 +186,10 @@ export function LabelLayer() {
         // Shapes stay uncluttered: name and area only when pointed at, selected, pinned or "Everything".
         if (o.type === 'polygon' && !isActive && !pinned && content !== 'full' && when !== 'hover') return null
         if (letterOnly) showMeasure = content === 'full'
-        const text = showMeasure ? measureText(o, c, settings, content === 'full' || sel) : ''
+        // A piece reads "ΔKLM · 6 u²": the long "Right-angled triangle" and "Area" belong in the
+        // Measure panel, and two 230 px labels at the middle of the cut covered each other.
+        const pieceArea = o.type === 'polygon' && o.lego && c?.type === 'polygon' ? `· ${formatMeasure(polygonArea(c.pts), 'area', settings)}` : null
+        const text = showMeasure ? (pieceArea ?? measureText(o, c, settings, content === 'full' || sel)) : ''
         if (!showName && !text) return null
         return (
           <span
@@ -176,7 +198,7 @@ export function LabelLayer() {
             className={`obj-label chip ${sel ? 'is-selected' : ''} ${visible ? '' : 'is-away'}`}
             style={{ ['--c' as string]: cssColor(o), display: 'none' }}
           >
-            {showName && <span className={`nm ${o.type === 'vector' ? 'vec-name' : ''}`}>{displayName(o, objects, c)}</span>}
+            {showName && <span className={`nm ${o.type === 'vector' ? 'vec-name' : ''}`}>{merged?.text ?? displayName(o, objects, c)}</span>}
             {text && <span className="ms">{text}</span>}
           </span>
         )
@@ -185,36 +207,18 @@ export function LabelLayer() {
   )
 }
 
-interface Box {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
 const sizeCache = new WeakMap<HTMLElement, { key: string; w: number; h: number }>()
 
 /** Runs inside the canvas: moves labels to their anchors and nudges overlapping ones apart. */
 export function LabelProjector() {
-  // Letters of piece corners that share a spot with another piece's corner, moved to their own
-  // piece's side of the cut (render/pieceLabels.ts says why). Worked out when the drawing changes,
-  // not every frame.
-  const objects = useScene((s) => s.objects)
-  const ev = useScene((s) => s.ev)
-  const pieceDirs = useMemo(() => {
-    const pieces: { points: string[]; pts: V3[] }[] = []
-    for (const o of Object.values(objects)) {
-      if (o.type !== 'polygon' || !o.lego) continue
-      const c = ev.values.get(o.id)
-      if (c?.type === 'polygon' && c.pts.length === o.points.length) pieces.push({ points: o.points, pts: c.pts })
-    }
-    return pieces.length > 1 ? pieceLetterDirections(pieces) : null
-  }, [objects, ev])
+  // A shared piece corner's one label ("G, K") sits outside every piece there
+  // (render/pieceLabels.ts says why); worked out when the drawing changes, not every frame.
+  const shared = useSharedCorners()
   useFrame(({ camera, size }) => {
     const host = overlay.labels
     if (!host) return
     const children = host.children
-    const placed: Box[] = []
+    const placed: LabelBox[] = []
     for (let i = 0; i < children.length; i++) {
       const el = children[i] as HTMLElement
       const id = el.dataset.oid
@@ -237,7 +241,7 @@ export function LabelProjector() {
         sizeCache.set(el, cached)
       }
       let { dx = 0, dy = 0 } = a
-      const dir = pieceDirs?.get(id)
+      const dir = shared?.get(id)?.dir
       if (dir) {
         // The direction is in the drawing; its screen direction comes from projecting a step along it.
         const t = toScreen(camera, size, [a.p[0] + dir[0] * 1e-3, a.p[1] + dir[1] * 1e-3, a.p[2]])
@@ -247,18 +251,14 @@ export function LabelProjector() {
           dy = ((t.y - s.y) / l) * PIECE_LETTER_PX
         }
       }
-      const box: Box = { x: s.x + dx - cached.w / 2, y: s.y + dy - cached.h / 2, w: cached.w, h: cached.h }
+      let box: LabelBox = { x: s.x + dx - cached.w / 2, y: s.y + dy - cached.h / 2, w: cached.w, h: cached.h }
       // Hidden (fading) labels keep following their object but never push visible ones aside.
       if (el.classList.contains('is-away')) {
         el.style.transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`
         continue
       }
-      // Greedy collision avoidance: slide down (then up) until the label no longer overlaps.
-      for (let attempt = 0; attempt < 6; attempt++) {
-        const hit = placed.find((p) => box.x < p.x + p.w && box.x + box.w > p.x && box.y < p.y + p.h && box.y + box.h > p.y)
-        if (!hit) break
-        box.y = attempt % 2 === 0 ? hit.y + hit.h + 2 : hit.y - box.h - 2
-      }
+      // The first free place on a ladder of steps below and above (pieceLabels.ts, settleLabel).
+      box = settleLabel(box, placed)
       placed.push(box)
       el.style.transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`
     }

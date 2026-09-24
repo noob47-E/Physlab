@@ -4,7 +4,7 @@ import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylind
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
-import { energyOf, groundTopOf, momentumSize, systemEnergy, systemMomentum } from '../sim/energy'
+import { energyOf, groundTopOf, momentumSize, readoutStates, systemEnergy, systemMomentum } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
 import { groupedPresets, launchVelocity, presetBadges, PRESETS, searchPresets, startPreset, type Preset } from '../sim/presets'
@@ -261,8 +261,10 @@ export function Sandbox() {
       <Connections selected={selection} partner={partner} />
       <EnergyReadout />
       <Recording />
-      <Collisions />
       <WorldSection />
+      {/* Below World on purpose: the list starts at the first bounce and grows to six rows, and
+          above World it pushed Gravity down mid-run (Fix 22). */}
+      <Collisions />
     </div>
   )
 }
@@ -623,16 +625,17 @@ function EnergyReadout() {
   const num = useNum()
   const datum = groundTopOf(bodies)
 
-  const moving = bodies.filter((b) => b.motion === 'dynamic')
-  const parts = moving.map((b) => ({ def: b, state: live[b.id], energy: live[b.id] ? energyOf(b, live[b.id], gravity, datum) : null }))
-  const known = parts.filter((p) => p.energy)
+  // Before Play the rows read the typed start (Fix 22): rendering nothing until the engine
+  // reported made the Energy bar, a row per body and the floor note appear all at once on Play,
+  // and everything below — Gravity, Slow motion — dropped 276 px under the student's pointer.
+  const known = readoutStates(bodies, live, massOf).map(({ def, state }) => ({ def, state, energy: energyOf(def, state, gravity, datum) }))
   if (!known.length) return null
-  const total = systemEnergy(known.map((p) => p.energy!))
+  const total = systemEnergy(known.map((p) => p.energy))
   // The vector sum, not the sum of the sizes: after a head-on bounce the two momenta point
   // opposite ways and it is their difference that a collision leaves unchanged. Every preset
   // sentence that quotes a kg m/s quotes this number; the per-body lines below only had to be
   // added up by hand.
-  const momentum = Math.hypot(...systemMomentum(known.map((p) => p.state!)))
+  const momentum = Math.hypot(...systemMomentum(known.map((p) => p.state)))
   // The split between movement and height, as a bar: watching it tip over as something falls is
   // the whole lesson.
   const pe = Math.max(0, total.potential)
@@ -646,25 +649,34 @@ function EnergyReadout() {
           <div className="bg-[var(--accent)]" style={{ width: `${share * 100}%` }} title="Kinetic" />
           <div className="flex-1 bg-[var(--warn)]" title="Potential" />
         </div>
-        <div className="mt-1 flex justify-between text-small">
-          <span className="text-[color:var(--accent)]">KE {num(total.kinetic, 'J')}</span>
-          <span className="text-[color:var(--warn)]">PE {num(total.potential, 'J')}</span>
-          <span className="font-semibold text-[color:var(--text-strong)]">total {num(total.total, 'J')}</span>
+        {/* Two fixed lines, never wrapped and never cut short: a reading that grows a digit
+            mid-run and wraps pushes every control below it down (Fix 22), and a number cut to
+            "3.48×10^-1…" reads as a different number. Each reading keeps its full width. */}
+        <div className="mt-1 flex justify-between gap-2 whitespace-nowrap text-small">
+          <span className="shrink-0 tabular-nums text-[color:var(--accent)]">KE {num(total.kinetic, 'J')}</span>
+          <span className="shrink-0 tabular-nums text-[color:var(--warn)]">PE {num(total.potential, 'J')}</span>
         </div>
-        <div className="mt-0.5 flex justify-end text-small">
-          <span className="tabular-nums text-[color:var(--text)]" title="Momentum of everything together: the size of the vector sum of every mass × velocity">
+        <div className="mt-0.5 flex justify-between gap-2 whitespace-nowrap text-small">
+          <span className="shrink-0 tabular-nums font-semibold text-[color:var(--text-strong)]">total {num(total.total, 'J')}</span>
+          <span className="shrink-0 tabular-nums text-[color:var(--text)]" title="Momentum of everything together: the size of the vector sum of every mass × velocity">
             p {num(momentum, 'kg m/s')}
           </span>
         </div>
       </div>
+      {/* Every body gets the same two lines before Play and during the run: its name and momentum,
+          then its KE and PE. Only the name may be cut short; a number never is. */}
       {known.map(({ def, state, energy }) => (
-        <div key={def.id} className="flex items-center gap-2 px-3 text-small text-[color:var(--text-dim)]">
-          <span className="w-14 shrink-0 truncate text-[color:var(--text)]">{def.name}</span>
-          <span className="w-20 tabular-nums">KE {num(energy!.kinetic)}</span>
-          <span className="w-20 tabular-nums">PE {num(energy!.potential)}</span>
-          <span className="tabular-nums" title="Momentum, mass × velocity">
-            p {num(momentumSize(state!), 'kg m/s')}
-          </span>
+        <div key={def.id} className="px-3 pb-0.5 text-small text-[color:var(--text-dim)]">
+          <div className="flex justify-between gap-2 whitespace-nowrap">
+            <span className="min-w-0 truncate text-[color:var(--text)]">{def.name}</span>
+            <span className="shrink-0 tabular-nums" title="Momentum, mass × velocity">
+              p {num(momentumSize(state), 'kg m/s')}
+            </span>
+          </div>
+          <div className="flex justify-between gap-2 whitespace-nowrap">
+            <span className="shrink-0 tabular-nums">KE {num(energy.kinetic)}</span>
+            <span className="shrink-0 tabular-nums">PE {num(energy.potential)}</span>
+          </div>
         </div>
       ))}
       <div className="px-3 pt-1 text-fine text-[color:var(--text-faint)]">Heights are measured from the top of the floor.</div>
@@ -1049,8 +1061,8 @@ function Recording() {
   return (
     <>
       <div className="section-title mt-2 flex items-center">
-        <span className="flex-1">Recording · {watched.name}</span>
-        <span className="normal-case tracking-normal text-[color:var(--text-faint)]">{samples.length} readings</span>
+        <span className="min-w-0 flex-1 truncate">Recording · {watched.name}</span>
+        <span className="shrink-0 whitespace-nowrap normal-case tabular-nums tracking-normal text-[color:var(--text-faint)]">{samples.length} readings</span>
       </div>
       <div className="flex flex-wrap items-center gap-2 px-3">
         <select className="field w-auto" value={key} onChange={(e) => setKey(e.target.value as QuantityKey)}>
@@ -1062,13 +1074,15 @@ function Recording() {
         </select>
         <span className="text-[color:var(--text-faint)]">against time</span>
       </div>
-      {samples.length > 1 ? (
-        <div className="mt-1 px-1">
+      {/* One fixed-height box for the hint and the chart alike: the one-line hint growing into a
+          150 px chart when the first readings arrived moved every control below it (Fix 22). */}
+      <div className="mt-1 h-[160px] overflow-hidden px-1">
+        {samples.length > 1 ? (
           <LabChart xs={xs} ys={ys} fit={null} xLabel="t / s" yLabel={`${q.label} / ${q.unit}`} height={150} />
-        </div>
-      ) : (
-        <div className="px-3 pt-1 text-small text-[color:var(--text-faint)]">Press Play and the readings start arriving.</div>
-      )}
+        ) : (
+          <div className="flex h-full items-center justify-center px-3 text-small text-[color:var(--text-faint)]">Press Play and the readings start arriving.</div>
+        )}
+      </div>
       <div className="mt-1 flex flex-wrap gap-2 px-3">
         <button
           className="btn"

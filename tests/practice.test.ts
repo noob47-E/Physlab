@@ -146,9 +146,13 @@ describe('checking an answer', () => {
     expect(checkAnswer('4.0691', field({ value: 233.13, tol: 0.6, kind: 'angle' })).message).toMatch(/radians/i)
   })
 
-  it('counts a close answer as right so honest rounding is not punished', () => {
+  it('names a close answer but does not count it: one 2 % rule for the whole app (docs/ACCURACY.md)', () => {
+    // 12.8 on 12.5 is 2.4 % out. It used to be ticked as "close"; the policy accepts nothing more
+    // than the tolerance, and the sentence about rounding early stays, under a cross.
     const f = field({ value: 12.5, tol: 0.125 })
-    expect(isCorrect(checkAnswer('12.8', f))).toBe(true)
+    expect(checkAnswer('12.8', f).verdict).toBe('close')
+    expect(isCorrect(checkAnswer('12.8', f))).toBe(false)
+    expect(isCorrect(checkAnswer('12.6', f))).toBe(true)
     expect(isCorrect(checkAnswer('14', f))).toBe(false)
   })
 })

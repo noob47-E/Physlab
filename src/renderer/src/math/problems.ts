@@ -81,8 +81,17 @@ const nz = (r: Rng, lo: number, hi: number): number => {
   return v === 0 ? (r() < 0.5 ? lo : hi) : v
 }
 
-/** 1% of the answer, never tighter than a rounding slip an honest student makes. */
-const tolOf = (v: number, min = 0.05) => Math.max(Math.abs(v) * 0.01, min)
+/**
+ * docs/ACCURACY.md's one marking rule: within 2 % of the expected answer, nothing more. This was
+ * 1 % with a 0.05 floor, which refused 49.4 on 50 and accepted anything within ±0.05 of a small
+ * answer such as 0.0024 A. An expected 0 has no 2 %, so a problem whose answer can be exactly 0
+ * states its own absolute tolerance as `ifZero` (a sum of whole-number components can be).
+ */
+const MARK_REL = 0.02
+// 1e-9, not === 0: the work done at 90° is F d cos 90°, which the double holds as about 10⁻¹⁴.
+const tolOf = (v: number, ifZero = 0) => (Math.abs(v) < 1e-9 ? ifZero : Math.abs(v) * MARK_REL)
+/** The stated tolerance for a component, product or work that can come out 0: a rounding slip of 0.05. */
+const ZERO_TOL = 0.05
 const ANGLE_TOL = 0.6
 
 /** Angles that turn up in textbooks (37° and 53° come from the 3-4-5 triangle). */
@@ -196,8 +205,8 @@ export const TOPICS: Topic[] = [
         title: `Resultant of ${n} vectors`,
         prompt: `Find the resultant R of ${vs.map((x) => compText(x.name, x.v)).join(' and ')} (metres). Give its components and its size.`,
         fields: [
-          { key: 'rx', label: 'Rx', unit: 'm', value: R[0], tol: tolOf(R[0]) },
-          { key: 'ry', label: 'Ry', unit: 'm', value: R[1], tol: tolOf(R[1]) },
+          { key: 'rx', label: 'Rx', unit: 'm', value: R[0], tol: tolOf(R[0], ZERO_TOL) },
+          { key: 'ry', label: 'Ry', unit: 'm', value: R[1], tol: tolOf(R[1], ZERO_TOL) },
           {
             key: 'mag',
             label: '|R|',
@@ -262,7 +271,7 @@ export const TOPICS: Topic[] = [
             key: 'dot',
             label: 'A·B',
             value: d,
-            tol: tolOf(d),
+            tol: tolOf(d, ZERO_TOL),
             traps: [
               { value: len(A.v) * len(B.v), why: 'That is AB with no cos θ. The dot product is AB cos θ.' },
               { value: cross(A.v, B.v)[2], why: 'That is the cross product (it uses sin θ). The dot product multiplies matching components: AxBx + AyBy.' }
@@ -291,13 +300,13 @@ export const TOPICS: Topic[] = [
             key: 'z',
             label: '(A×B)z',
             value: C[2],
-            tol: tolOf(C[2]),
+            tol: tolOf(C[2], ZERO_TOL),
             traps: [
               { value: -C[2], why: 'That is B × A. Swapping the order flips the sign: A × B = −(B × A).' },
               { value: dot(A.v, B.v), why: 'That is the dot product. The cross product multiplies across: AxBy − AyBx.' }
             ]
           },
-          { key: 'mag', label: '|A×B|', value: Math.abs(C[2]), tol: tolOf(Math.abs(C[2])) }
+          { key: 'mag', label: '|A×B|', value: Math.abs(C[2]), tol: tolOf(Math.abs(C[2]), ZERO_TOL) }
         ],
         solution: VS.solveCross(A, B)
       }
@@ -326,7 +335,7 @@ export const TOPICS: Topic[] = [
             label: 'Ex',
             unit: 'N',
             value: E[0],
-            tol: tolOf(E[0]),
+            tol: tolOf(E[0], ZERO_TOL),
             traps: [{ value: R[0], why: 'That is the resultant R. The balancing force is equal and opposite to it: E = −R.' }]
           },
           {
@@ -334,7 +343,7 @@ export const TOPICS: Topic[] = [
             label: 'Ey',
             unit: 'N',
             value: E[1],
-            tol: tolOf(E[1]),
+            tol: tolOf(E[1], ZERO_TOL),
             traps: [{ value: R[1], why: 'That is the resultant R. The balancing force is equal and opposite to it: E = −R.' }]
           },
           { key: 'mag', label: '|E|', unit: 'N', value: len(E), tol: tolOf(len(E)) }
@@ -362,7 +371,7 @@ export const TOPICS: Topic[] = [
             label: 'W',
             unit: 'J',
             value: W,
-            tol: tolOf(W),
+            tol: tolOf(W, ZERO_TOL),
             traps: [
               { value: F * d, why: 'That is F × d with no cos θ. Only the part of the force along the motion does work.' },
               { value: F * d * Math.sin(toRad(th)), why: 'Work uses cos θ. The sin θ version belongs to the cross product (torque).' }
@@ -391,7 +400,7 @@ export const TOPICS: Topic[] = [
             label: 'τz',
             unit: 'N m',
             value: t,
-            tol: tolOf(t),
+            tol: tolOf(t, ZERO_TOL),
             traps: [
               { value: dot(rv, Fv), why: 'That is r · F. Torque is the cross product: τ = rxFy − ryFx.' },
               { value: len(rv) * len(Fv), why: 'That is rF with no sin θ. Only the part of the force perpendicular to r turns the body.' },
@@ -421,7 +430,7 @@ export const TOPICS: Topic[] = [
             key: 'proj',
             label: 'B cos θ',
             value: s,
-            tol: tolOf(s),
+            tol: tolOf(s, ZERO_TOL),
             traps: [
               { value: d / len(B.v), why: 'You divided by |B|. The projection of B on A divides by the length of A.' },
               { value: d, why: 'That is A·B. Divide it by |A| to get the projection.' }

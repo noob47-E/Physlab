@@ -113,7 +113,8 @@ describe('the pieces of a broken shape', () => {
       for (const sid of sides) expect(sc().objects[sid]).toMatchObject({ type: 'segment', visible: true, locked: true })
       // The chip on the drawing and the side's chip read the letters.
       const c = sc().ev.values.get(p.id)
-      expect(displayName(p, sc().objects, c)).toBe(`Right-angled triangle ${p.points.map((pid) => sc().objects[pid].name).join('')}`)
+      // A triangle piece reads ΔEFG on the drawing (INT-Wave1); "Right-angled triangle EFG" is the Measure panel's heading.
+      expect(displayName(p, sc().objects, c)).toBe(`Δ${p.points.map((pid) => sc().objects[pid].name).join('')}`)
       const s0 = sc().objects[sides[0]]
       expect(displayName(s0, sc().objects)).toBe(`${sc().objects[p.points[0]].name}${sc().objects[p.points[1]].name}`)
     }

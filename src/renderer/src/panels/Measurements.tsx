@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ListOrdered } from 'lucide-react'
 import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
-import { distanceToLineLike, footOfPerpendicular, lineEquation, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
+import { circleEquationText, distanceToLineLike, footOfPerpendicular, lineEquation, lineEquationText, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
 import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
@@ -16,6 +16,7 @@ import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
 import { visibleIn } from '../core/visibility'
+import { displayName } from '../core/naming'
 import { CongruenceCard, TriangleFromSides } from './Congruence'
 import { trianglesToCompare } from '../math/congruence'
 
@@ -32,6 +33,9 @@ type Row = {
   set?: (value: number) => void
 }
 type Get = (id: ObjId) => Computed | undefined
+
+/** "circle, centre J" as a heading: "Circle, centre J". */
+const capitalised = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
 
 export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>): { title: string; rows: Row[] }[] {
   const c = get(o.id)
@@ -96,10 +100,11 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
       rows.push(
         { label: 'Slope m', value: Number.isFinite(eq.slope) ? eq.slope : 'vertical (undefined)', kind: Number.isFinite(eq.slope) ? 'num' : 'text' },
         { label: 'Inclination', value: eq.inclination, kind: 'angle' },
-        { label: 'Equation', value: `${fmt(eq.a, 3)}x + ${fmt(eq.b, 3)}y = ${fmt(eq.c, 3)}`.replace(/\+ −/g, '− '), kind: 'text' }
+        { label: 'Equation', value: lineEquationText(eq), kind: 'text' }
       )
       if (Number.isFinite(eq.yIntercept)) rows.push({ label: 'y-intercept', value: eq.yIntercept, kind: 'length' })
-      const groups = [{ title: `${c.type[0].toUpperCase()}${c.type.slice(1)} ${o.name}`, rows }]
+      // The side the drawing calls FC is "Segment FC" here too, never its stored name "d".
+      const groups = [{ title: `${c.type[0].toUpperCase()}${c.type.slice(1)} ${displayName(o, objects).replace(/^ray /, '')}`, rows }]
       // A side of a triangle/polygon: also show the whole shape.
       if (o.type === 'segment') {
         for (const p of Object.values(objects)) {
@@ -112,14 +117,14 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
       const { c: ctr, r } = c.circle
       return [
         {
-          title: `Circle ${o.name}`,
+          title: capitalised(displayName(o, objects, c)),
           rows: [
             { label: 'Centre', value: fmtPoint(ctr), kind: 'text' },
             { label: 'Radius r', value: r, kind: 'length', accent: true },
             { label: 'Diameter', value: 2 * r, kind: 'length' },
             { label: 'Circumference 2πr', value: 2 * Math.PI * r, kind: 'length' },
             { label: 'Area πr²', value: Math.PI * r * r, kind: 'area' },
-            { label: 'Equation', value: `(x − ${fmt(ctr[0], 3)})² + (y − ${fmt(ctr[1], 3)})² = ${fmt(r * r, 3)}`, kind: 'text' }
+            { label: 'Equation', value: circleEquationText(ctr, r), kind: 'text' }
           ]
         }
       ]
@@ -367,8 +372,10 @@ function AllMeasurements() {
                 className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${hovered === o.id ? 'bg-surface-3' : ''}`}
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color }} />
-                <span className="w-14 shrink-0 truncate font-math font-semibold italic text-ink-strong">
-                  {o.name}
+                {/* The textbook name (ΔGHJ, FC, circle, centre J), never the stored poly1, d or c1;
+                    wide enough for "Rectangle CDEF", and cut short only past half the row. */}
+                <span className="min-w-14 max-w-[50%] shrink-0 truncate font-math font-semibold italic text-ink-strong">
+                  {displayName(o, objects, c)}
                 </span>
                 <span className="min-w-0 flex-1 truncate tabular-nums text-ink">{text || '—'}</span>
                 <PinLabelButton id={o.id} className={o.labelPin === 'always' ? '' : 'opacity-0 group-hover:opacity-100'} />

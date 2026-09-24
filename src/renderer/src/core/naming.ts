@@ -1,4 +1,6 @@
-import type { ObjType, SceneObject } from './types'
+import type { Computed, ObjId, ObjType, SceneObject } from './types'
+import { classifyPolygon } from '../math/shapes'
+import { fmtPoint } from '../math/format'
 
 const GREEK = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'φ', 'ψ', 'ω']
 
@@ -139,4 +141,69 @@ export function nextColor(type: ObjType, objects: Record<string, SceneObject>): 
   const list = PALETTE[type]
   const count = Object.values(objects).filter((o) => o.type === type).length
   return list[count % list.length]
+}
+
+// ---------------------------------------------------------------------------
+// What a student reads an object as
+// ---------------------------------------------------------------------------
+
+/**
+ * A point a student can name a thing by: one that is on the drawing. A hidden helper (a 0.7.0
+ * piece's poly2_1, a vector's tail) is kept out, or "Side poly2_1poly2_2" reads like code.
+ */
+function lettered(id: ObjId, objects: Record<ObjId, SceneObject>): string | null {
+  const p = objects[id]
+  return p && p.type === 'point' && p.visible && !p.auxiliary ? p.name : null
+}
+
+/** The corners' letters in the order the corners were made, or null when one of them has none. */
+function cornerLetters(points: ObjId[], objects: Record<ObjId, SceneObject>): string | null {
+  const names = points.map((id) => lettered(id, objects))
+  return names.every((n): n is string => n !== null) ? names.join('') : null
+}
+
+/**
+ * What the drawing, the Measure list and the selection header call an object: the short name a
+ * textbook would print. The stored names (poly1, c1, a … q, r1) are internal and used to reach
+ * the student as they were — "poly1 Area 6 u²", "Segment d" for the side the drawing called FC.
+ *
+ * A triangle is ΔGHJ, any other shape what it is and its corners (Rectangle CDEF), a segment its
+ * two ends (FC), a ray the same (ray AB), a circle its centre (circle, centre J). Corners are read
+ * in the order they were made, the same order the congruence card and the shape table use. A
+ * label the student typed wins; anything with no letters to use keeps its own name.
+ */
+export function displayName(o: SceneObject, objects: Record<ObjId, SceneObject>, c?: Computed): string {
+  if (o.type === 'polygon') {
+    const letters = cornerLetters(o.points, objects)
+    // A 0.7.0 piece's corners are hidden helpers: it is called what it was cut as.
+    if (!letters) return o.label ?? o.name
+    // A Lego piece's label is what it was cut as; any other polygon's label the student typed.
+    if (o.label && !o.lego) return o.label
+    if (o.points.length === 3) return `Δ${letters}`
+    if (o.lego && o.label) return `${o.label} ${letters}`
+    return `${c?.type === 'polygon' && c.pts.length >= 3 ? classifyPolygon(c.pts).name : 'Polygon'} ${letters}`
+  }
+  if (o.label) return o.label
+  if (o.type === 'segment') {
+    const [a, b] = [lettered(o.a, objects), lettered(o.b, objects)]
+    if (a && b) return `${a}${b}`
+  }
+  if (o.type === 'ray') {
+    const [a, b] = [lettered(o.a, objects), lettered(o.b, objects)]
+    if (a && b) return `ray ${a}${b}`
+  }
+  if (o.type === 'circle') {
+    const d = o.def
+    if (d.kind === 'centerPoint' || d.kind === 'centerRadius') {
+      const centre = lettered(d.c, objects)
+      if (centre) return `circle, centre ${centre}`
+      // A centre typed as a number pair is a hidden helper point: its place is the name.
+      if (c?.type === 'circle') return `circle, centre ${fmtPoint(c.circle.c)}`
+    }
+    if (d.kind === 'threePoints') {
+      const [a, b, t] = [lettered(d.a, objects), lettered(d.b, objects), lettered(d.c, objects)]
+      if (a && b && t) return `circle through ${a}, ${b} and ${t}`
+    }
+  }
+  return o.name
 }

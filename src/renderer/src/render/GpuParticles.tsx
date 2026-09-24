@@ -2,12 +2,13 @@
 // uniform E and B fields (Lorentz force, Boris integrator) — run on the GPU with WebGPU, and on
 // the processor (fewer particles, the same start and the same push) where only WebGL2 is offered.
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { cross, dot, float, floor, Fn, hash, instancedArray, instancedDynamicBufferAttribute, instanceIndex, length, mix, smoothstep, uniform, uv, vec3 } from 'three/tsl'
 import { create } from 'zustand'
-import { borisStep, initSwarm, PARTICLE_BOX, particleCount, particlePath } from './particleMath'
+import { borisStep, initSwarm, PARTICLE_BOX, particleCount, particleLook, particlePath, type ParticleLook } from './particleMath'
+import { COLOR_SCHEME, themeColor, useTheme } from '../app/theme'
 
 export const useParticleLab = create<{
   enabled: boolean
@@ -31,20 +32,42 @@ export function GpuParticles() {
 
 type TslNode = Parameters<typeof length>[0]
 
-/** The sprites both paths draw: one soft dot per particle, blue when slow and orange when fast. */
-function particleSprite(position: TslNode, velocity: TslNode, count: number) {
-  const material = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+/**
+ * The material both paths draw with: one soft dot per particle, the theme's slow colour shading
+ * to its fast one. The blend and the colours come from the theme (particleMath.ts), and a theme
+ * change builds a new material, because WebGPU compiles colours and the blend into the pipeline.
+ */
+function particleMaterial(position: TslNode, velocity: TslNode, look: ParticleLook) {
+  const blending = look.blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending
+  const material = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending })
   material.positionNode = position as never
   const speed = length(velocity)
-  // Brightness scales down with particle count so millions of particles do not saturate to white.
-  const gain = Math.min(0.9, 60_000 / count)
-  material.colorNode = mix(vec3(0.15, 0.5, 1.0), vec3(1.0, 0.4, 0.12), speed.div(5).clamp()).mul(gain)
+  material.colorNode = mix(vec3(...look.slow), vec3(...look.fast), speed.div(5).clamp()).mul(look.gain)
   material.opacityNode = smoothstep(float(0.5), float(0.1), uv().sub(0.5).length())
   material.scaleNode = float(0.05)
-  const sprite = new THREE.Sprite(material)
+  return material
+}
+
+function particleSprite(count: number) {
+  const sprite = new THREE.Sprite()
   sprite.count = count
   sprite.frustumCulled = false
-  return { sprite, material }
+  /** Puts the theme's material on; the sprite is built once per count and outlives a theme change. */
+  const wear = (m: THREE.SpriteNodeMaterial) => void (sprite.material = m as never)
+  return { sprite, wear }
+}
+
+/** The swarm's material for the current theme, swapped onto the sprite before it is drawn. */
+function useParticleMaterial(wear: (m: THREE.SpriteNodeMaterial) => void, position: TslNode, velocity: TslNode, count: number) {
+  const theme = useTheme((t) => t.theme)
+  const material = useMemo(
+    () => particleMaterial(position, velocity, particleLook(COLOR_SCHEME[theme], themeColor('--particle-slow'), themeColor('--particle-fast'), count)),
+    [theme, position, velocity, count]
+  )
+  useLayoutEffect(() => {
+    wear(material)
+    return () => material.dispose()
+  }, [wear, material])
 }
 
 /**
@@ -92,7 +115,9 @@ function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.We
       p.assign(np.sub(floor(np.div(BOX).add(0.5)).mul(BOX)))
     })().compute(count)
 
-    const { sprite, material } = particleSprite(pos.toAttribute(), vel.toAttribute(), count)
+    const { sprite, wear } = particleSprite(count)
+    const position = pos.toAttribute()
+    const velocity = vel.toAttribute()
     /** One step of `dt` seconds with the fields as they are in the panel now. */
     const push = (dt: number) => {
       const st = useParticleLab.getState()
@@ -102,7 +127,7 @@ function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.We
       uDt.value = dt
       renderer.compute(update)
     }
-    return { init, push, sprite, material, pos }
+    return { init, push, sprite, wear, position, velocity, pos }
   }, [count, renderer])
 
   const resetNonce = useParticleLab((s) => s.resetNonce)
@@ -110,7 +135,7 @@ function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.We
     renderer.compute(sim.init)
   }, [sim, renderer, resetNonce])
 
-  useEffect(() => () => sim.material.dispose(), [sim])
+  useParticleMaterial(sim.wear, sim.position, sim.velocity, count)
 
   useEffect(() => {
     setProbe({
@@ -146,7 +171,9 @@ function CpuParticleSystem({ count }: { count: number }) {
     // as a few huge white triangles (WebGLBackend checks data.isInstancedInterleavedBuffer).
     const posBuf = new THREE.InstancedInterleavedBuffer(swarm.pos, 3, 1)
     const velBuf = new THREE.InstancedInterleavedBuffer(swarm.vel, 3, 1)
-    const { sprite, material } = particleSprite(instancedDynamicBufferAttribute(posBuf, 'vec3'), instancedDynamicBufferAttribute(velBuf, 'vec3'), count)
+    const { sprite, wear } = particleSprite(count)
+    const position: TslNode = instancedDynamicBufferAttribute(posBuf, 'vec3')
+    const velocity: TslNode = instancedDynamicBufferAttribute(velBuf, 'vec3')
     // The positions change on the processor; the graphics card's copy is uploaded again.
     const uploaded = () => {
       posBuf.needsUpdate = true
@@ -164,7 +191,7 @@ function CpuParticleSystem({ count }: { count: number }) {
       swarm.vel.set(fresh.vel)
       uploaded()
     }
-    return { swarm, push, reset, sprite, material }
+    return { swarm, push, reset, sprite, wear, position, velocity }
   }, [count])
 
   const resetNonce = useParticleLab((s) => s.resetNonce)
@@ -178,7 +205,7 @@ function CpuParticleSystem({ count }: { count: number }) {
     sim.reset()
   }, [sim, resetNonce])
 
-  useEffect(() => () => sim.material.dispose(), [sim])
+  useParticleMaterial(sim.wear, sim.position, sim.velocity, count)
 
   useEffect(() => {
     setProbe({

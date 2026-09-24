@@ -252,6 +252,10 @@ export function checkExpressionPart(
     const sampled = sampledCheck(text, part, scope)
     if (sampled.verdict === 'right') return sampled
     if (sampled.verdict !== 'wrong' && symbolicallyZero(`(${part.answer}) - (${text})`, scope)) return { verdict: 'right' }
+    // Within 0.1 % everywhere (3.14·r² for π·r²) is well inside docs/ACCURACY.md's 2 % rule, so it
+    // is ticked, with the rounding sentence as an amber note. Left as "close", isCorrect (which
+    // counts only "right") put a red cross over the words "Right up to rounding".
+    if (sampled.verdict === 'close') return { verdict: 'right', message: sampled.message }
     return sampled
   })
 }

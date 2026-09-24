@@ -152,3 +152,32 @@ export function cpuPathSentence(): string {
     `${mm} mm of where the graphics card would put it; tiny rounding differences grow slowly after that.`
   )
 }
+
+/** How the swarm is painted in one theme: the blend, the slow and fast colours (0–1 RGB) and a brightness gain. */
+export interface ParticleLook {
+  blending: 'additive' | 'normal'
+  slow: [number, number, number]
+  fast: [number, number, number]
+  gain: number
+}
+
+const rgb01 = (hex: string): [number, number, number] => {
+  const h = hex.trim().replace('#', '')
+  const full = h.length === 3 ? [...h].map((c) => c + c).join('') : h.slice(0, 6)
+  const n = Number.parseInt(full, 16)
+  return Number.isNaN(n) ? [0.5, 0.5, 0.5] : [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+}
+
+/**
+ * The swarm's look for a theme whose canvas is `scheme`. On a dark canvas the sprites are added
+ * together, so a dense knot glows, and each is dimmed by the count so millions do not saturate.
+ * On the Light theme's pale canvas added light can only go whiter — 500 000 blue and orange dots
+ * summed to a faint white haze and the student saw empty axes — so there each sprite is painted
+ * over what is behind it, at full strength, in the theme's darker pair.
+ */
+export function particleLook(scheme: 'dark' | 'light', slowHex: string, fastHex: string, count: number): ParticleLook {
+  const slow = rgb01(slowHex)
+  const fast = rgb01(fastHex)
+  if (scheme === 'light') return { blending: 'normal', slow, fast, gain: 1 }
+  return { blending: 'additive', slow, fast, gain: Math.min(0.9, 60_000 / Math.max(1, count)) }
+}

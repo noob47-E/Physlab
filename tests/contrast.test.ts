@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest'
 import { BLOCKS, THEME_CSS as css, contrast, themeBlock, tokenValue } from './helpers/theme'
 import { PALETTE, vectorToken } from '../src/renderer/src/core/naming'
 import { colourDistance, type Vision } from '../src/renderer/src/render/colourMix'
+import { particleLook } from '../src/renderer/src/render/particleMath'
+import { COLOR_SCHEME } from '../src/renderer/src/app/theme'
 
 const AA = 4.5
 
@@ -144,5 +146,42 @@ describe('arrow colours (Fix 2)', () => {
     const moon = themeBlock(css, BLOCKS.moonlight)
     expect(PALETTE.vector).toEqual(ARROWS.map((t) => tokenValue(moon, t)))
     expect(PALETTE.vector.map((c) => vectorToken(c))).toEqual(ARROWS)
+  })
+})
+
+describe('GPU Lab swarm colours (Light theme haze)', () => {
+  const SWARM = ['--particle-slow', '--particle-fast']
+
+  it('draws the slow and the fast particle colour at 3:1 or better on the canvas, in all four themes', () => {
+    for (const theme of THEMES) {
+      const block = themeBlock(css, BLOCKS[theme])
+      const bg = tokenValue(block, '--canvas-bg')!
+      for (const t of SWARM) {
+        const c = tokenValue(block, t)
+        expect(c, `${theme} ${t}`).toBeDefined()
+        expect(contrast(c!, bg), `${theme} ${t} (${c} on ${bg})`).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
+  it('paints over the Light canvas instead of adding light, and adds light in the three dark themes', () => {
+    const light = themeBlock(css, BLOCKS.light)
+    const look = particleLook(COLOR_SCHEME.light, tokenValue(light, '--particle-slow')!, tokenValue(light, '--particle-fast')!, 500_000)
+    // Added together, 500 000 sprites on #e9eef6 can only go whiter: the haze the record saw.
+    expect(look.blending).toBe('normal')
+    expect(look.gain).toBe(1)
+    for (const theme of ['dark', 'moonlight', 'moongold'] as const) {
+      const block = themeBlock(css, BLOCKS[theme])
+      const dark = particleLook(COLOR_SCHEME[theme], tokenValue(block, '--particle-slow')!, tokenValue(block, '--particle-fast')!, 500_000)
+      expect(dark.blending, theme).toBe('additive')
+      expect(dark.gain, theme).toBeCloseTo(0.12, 12)
+    }
+  })
+
+  it('reads the stylesheet colours into the shader as 0–1 channels', () => {
+    const look = particleLook('dark', '#2680ff', '#ff661f', 20_000)
+    expect(look.slow).toEqual([0x26 / 255, 0x80 / 255, 1])
+    expect(look.fast).toEqual([1, 0x66 / 255, 0x1f / 255])
+    expect(look.gain).toBe(0.9)
   })
 })

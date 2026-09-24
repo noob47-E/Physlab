@@ -11,9 +11,8 @@ import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
 import { texToPlain } from '../math/pure/work'
 import { JOBS, type JobId } from '../math/pure/run'
-import { blankPart, changePartType, chipKatex, chipTex, parseLetters, previewAutoStep, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
+import { blankPart, changePartType, chipKatex, chipTex, parseLetters, partCheck, previewAutoStep, pureInputFromLatex, pureInputLatex, SOLVERS, suggestAutoStep } from '../questions/authoring'
 import { useAuthor, useAuthorView } from '../questions/authorStore'
-import { playQuestion } from '../questions/player'
 import { substitute, drawVariables } from '../questions/variables'
 import type { DistractorRule, FadingLevel, PQPart, PQQuestion, PQStep } from '../questions/pqjson'
 import { ChipBar, FormulaField, UnitSelect } from './AuthorVariables'
@@ -82,24 +81,16 @@ function LettersBox({ symbols, variables, onCommit }: { symbols: string[]; varia
 function AnswerCheck({ q, k }: { q: PQQuestion; k: number }) {
   const settings = useScene((s) => s.settings)
   const seed = useAuthorView((s) => s.seed)
-  const shown = useMemo(() => {
-    try {
-      const played = playQuestion(q, seed, settings)
-      const p = played.parts[k]
-      return p ? { text: p.answerText ?? null, tex: p.answerTex, problem: played.problems[0] } : null
-    } catch (e) {
-      return { text: null, tex: '', problem: e instanceof Error ? e.message : String(e) }
-    }
-  }, [q, seed, settings, k])
+  const shown = useMemo(() => partCheck(q, k, seed, settings), [q, seed, settings, k])
   if (!shown) return null
   return (
-    <div className={`mt-1 text-small ${shown.problem ? 'text-bad' : 'text-ink-dim'}`}>
-      {shown.problem ? (
-        shown.problem
-      ) : (
+    <div className={`mt-1 text-small ${shown.kind === 'problem' ? 'text-bad' : 'text-ink-dim'}`}>
+      {shown.kind === 'answer' ? (
         <>
           With row {seed}’s numbers the answer is {shown.text ?? <Tex tex={shown.tex} />}.
         </>
+      ) : (
+        shown.text
       )}
     </div>
   )

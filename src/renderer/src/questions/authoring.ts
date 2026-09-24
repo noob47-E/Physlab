@@ -335,6 +335,31 @@ export function unanswered(p: PQPart): boolean {
   return p.distractors !== undefined && p.distractors.correct.trim() === ''
 }
 
+/** What the Solution tab says under one part's answer box: nothing to check yet, a problem, or the answer. */
+export type PartCheck = { kind: 'empty'; text: string } | { kind: 'problem'; text: string } | { kind: 'answer'; text: string | null; tex: string }
+
+/**
+ * The line under part `k`'s answer on the Solution tab, for the numbers of preview row `seed`.
+ * A part with no answer written yet gets a neutral nudge, not the red "could not work out the
+ * answer to """ that previewRows already stopped showing; and a part shows only its own problems
+ * (or the variables' own), never another part's.
+ */
+export function partCheck(q: PQQuestion, k: number, seed: number, settings: MeasureSettings): PartCheck | null {
+  const part = q.parts[k]
+  if (!part) return null
+  if (unanswered(part)) return { kind: 'empty', text: 'Write the answer, built from the variables.' }
+  try {
+    const played = playQuestion(q, seed, settings)
+    const p = played.parts[k]
+    if (!p) return null
+    const theirs = new Set(Object.values(played.partProblems).flat())
+    const problem = played.partProblems[p.key][0] ?? played.problems.find((x) => !theirs.has(x))
+    return problem !== undefined ? { kind: 'problem', text: problem } : { kind: 'answer', text: p.answerText ?? null, tex: p.answerTex }
+  } catch (e) {
+    return { kind: 'problem', text: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 const SENTENCE: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 4, precisionMode: 'dp' }
 
 /**

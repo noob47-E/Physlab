@@ -64,6 +64,9 @@
   --text-strong: #eef0f4;
   --input-bg: #16171a;
   --canvas-bg: #17181b;
+  /* GPU Lab swarm, slow → fast. Added together on a dark canvas (render/particleMath.ts). */
+  --particle-slow: #2680ff;
+  --particle-fast: #ff661f;
   --grid-minor: #26272c;
   --grid-major: #34363d;
   --grid-axis: #7d828c;
@@ -149,6 +152,9 @@
   --input-bg: #ffffff;
   /* Cool, not paper: a soft cool surface that is easy on the eyes and still projects well. */
   --canvas-bg: #e9eef6;
+  /* Painted over, not added: added light on this pale canvas saturated to a white haze. */
+  --particle-slow: #1f4fbf;
+  --particle-fast: #c2410c;
   --grid-minor: #d6dfec;
   --grid-major: #bcc8da;
   --grid-axis: #59647a;
@@ -219,6 +225,8 @@
   --bad: #ff8b94;
   --input-bg: #0d1226;
   --canvas-bg: #101630;
+  --particle-slow: #2f8cff;
+  --particle-fast: #ff6a2a;
   --grid-minor: #1a2140;
   --grid-major: #273052;
   --grid-axis: #7f8bbf;
@@ -293,6 +301,8 @@
   --text-strong: #fff6e0;
   --input-bg: #17110a;
   --canvas-bg: #1c150e;
+  --particle-slow: #3b8dff;
+  --particle-fast: #ffa23a;
   --grid-minor: #2e2416;
   --grid-major: #453520;
   --grid-axis: #b99a55;
@@ -693,10 +703,15 @@ input[type='range'] {
   pointer-events: none;
 }
 .tool-hint {
+  /* Centred by margins, not by left: 50% and a translate: an absolute box placed at 50% can only
+     shrink-to-fit into the half of the viewport to its right, so the hint beside the Finish, Undo
+     point and Cancel buttons wrapped to one or two words a line and covered the drawing. */
   position: absolute;
-  left: 50%;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
   bottom: 14px;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   max-width: calc(100% - 24px);

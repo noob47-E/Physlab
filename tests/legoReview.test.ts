@@ -176,10 +176,12 @@ describe('the letters at the ends of the cut (Fix 17)', () => {
     expect(pieceLetterDirections([{ points: ['a', 'b', 'c'], pts: tri }, { points: ['d', 'e', 'f'], pts: far }]).size).toBe(0)
   })
 
-  it('the label projector asks pieceLetterDirections for piece corners', () => {
+  it('the label projector places shared corners by these directions (as one merged label since INT-Wave1)', () => {
+    // sharedCornerLabels sums each letter's pieceLetterDirections direction for the one "G, K" label.
+    expect(readSource('src/renderer/src/render/pieceLabels.ts')).toMatch(/const dirs = pieceLetterDirections\(pieces, eps\)/)
     const src = readSource('src/renderer/src/render/Labels.tsx')
-    expect(src).toMatch(/pieceLetterDirections\(pieces\)/)
-    expect(src).toMatch(/const dir = pieceDirs\?\.get\(id\)/)
+    expect(src).toMatch(/sharedCornerLabels\(pieces/)
+    expect(src).toMatch(/const dir = shared\?\.get\(id\)\?\.dir/)
   })
 })
 

@@ -18,6 +18,7 @@ import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
 import { isResultArrow, RESULT_HEAD_GAP_PX } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
+import { pieceNameAnchor } from './pieceLabels'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -438,8 +439,24 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   const showMeasures = (selected || sideSelected || obj.showAngles) && settings.showAngleMarks
   const orientation = pts.length >= 3 ? Math.sign(signedArea(pts)) || 1 : 1
 
+  // A piece's name stands away from the cut (render/pieceLabels.ts); worked out once per evaluation.
+  const nameAt = useRef<{ key: unknown; p: V3 } | null>(null)
+  const anchor = (): V3 => {
+    if (!obj.lego) return centroid(pts)
+    const { objects, ev } = useScene.getState()
+    if (nameAt.current?.key !== ev) {
+      const others: V3[][] = []
+      for (const o of Object.values(objects)) {
+        const oc = o.type === 'polygon' && o.lego && o.id !== obj.id ? ev.values.get(o.id) : undefined
+        if (oc?.type === 'polygon') others.push(oc.pts)
+      }
+      nameAt.current = { key: ev, p: pieceNameAnchor(pts, others) }
+    }
+    return nameAt.current.p
+  }
+
   useFrame(({ camera: cam, size: sz }) => {
-    labelAnchors.set(obj.id, { p: centroid(pts) })
+    labelAnchors.set(obj.id, { p: anchor() })
     pool.begin()
     // Side lengths come from the side segments' own labels and the area from the polygon label,
     // so only interior angles are drawn here.

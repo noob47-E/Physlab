@@ -72,7 +72,7 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
   }, [result, showMarks, setMarks])
 
   if (!result) return null
-  const { A, r } = result
+  const { A, B, r } = result
   const len = (v: number) => formatMeasure(v, 'length', settings)
   const ang = (v: number) => formatMeasure(v, 'angle', settings)
   return (
@@ -80,7 +80,10 @@ export function CongruenceCard({ a, b }: { a: ObjId; b: ObjId }) {
       <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
         <Equal size={15} className="text-good" />
         <div className="flex-1 font-semibold text-ink-strong">
-          △{A.names.join('')} and △{r.matchedName}
+          {/* Each triangle by its corners in the order they were made, as the drawing and the
+              Measure list name it; only the ≅ line below reorders them to show which corner
+              matches which, as a proof must. */}
+          △{A.names.join('')} and △{B.names.join('')}
         </div>
         <span className={`rounded-full border px-2 text-fine ${r.congruent ? 'border-good text-good' : r.similar ? 'border-warn text-warn' : 'border-bad text-bad'}`}>
           {r.congruent ? `congruent · ${r.test}` : r.similar ? 'similar' : 'not congruent'}

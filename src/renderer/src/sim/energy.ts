@@ -106,3 +106,25 @@ export function groundTopOf(bodies: BodyDef[]): number {
   const floor = bodies.find((b) => b.shape === 'ground') ?? bodies.find((b) => b.motion === 'static')
   return floor ? floor.position[1] + floor.size[1] / 2 : 0
 }
+
+/**
+ * A body's state before the run starts: where it was typed, moving as it was typed. The energy
+ * readout works from this until the engine reports, so the Energy rows are on screen from the
+ * start instead of appearing on Play and pushing Gravity and Slow motion out from under the
+ * pointer (Fix 22).
+ */
+export function startStateOf(def: BodyDef, mass: number): BodyState {
+  return {
+    position: [...def.position] as V3,
+    rotation: [0, 0, 0, 1],
+    velocity: [...def.velocity] as V3,
+    angularVelocity: [...def.angularVelocity] as V3,
+    mass,
+    asleep: false
+  }
+}
+
+/** Each moving body with the state to read it from: the engine's when it has one, else its start. */
+export function readoutStates(bodies: BodyDef[], live: Record<string, BodyState>, massOf: (b: BodyDef) => number): { def: BodyDef; state: BodyState }[] {
+  return bodies.filter((b) => b.motion === 'dynamic').map((def) => ({ def, state: live[def.id] ?? startStateOf(def, massOf(def)) }))
+}

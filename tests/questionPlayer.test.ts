@@ -129,6 +129,25 @@ describe('playQuestion', () => {
     expect(wrongKind.message).toBe('That is in seconds; this box wants metres.')
   })
 
+  // INT-Wave1 review round 1: isCorrect counts only "right", and an expression 0.01 % out came
+  // back "close" — a red cross over the words "Right up to rounding". Inside the 2 % rule it is
+  // ticked with the sentence as an amber note; 1 % out is still wrong for an expression.
+  it('ticks an expression right up to rounding, with its note, and never crosses that sentence', () => {
+    const played = playQuestion(train(), 11, SETTINGS)
+    const expr = played.parts[1]
+    const { v, t } = played.variant.values
+    const nearly = checkPlayedPart(expr, `${v * (1 + 1e-4)}*(1 - s/${t})`, played, SETTINGS)
+    expect(nearly.verdict).toBe('right')
+    expect(nearly.message).toMatch(/^Right up to rounding/)
+    expect(isCorrect(nearly)).toBe(true)
+    const off = checkPlayedPart(expr, `${v * 1.01}*(1 - s/${t})`, played, SETTINGS)
+    expect(isCorrect(off)).toBe(false)
+    expect(off.message ?? '').not.toMatch(/up to rounding/)
+    const exact = checkPlayedPart(expr, `${v}*(1 - s/${t})`, played, SETTINGS)
+    expect(exact.verdict).toBe('right')
+    expect(exact.message).toBeUndefined()
+  })
+
   it('marks an expression part and a generated choice part, naming the mistake behind a wrong pick', () => {
     const played = playQuestion(train(), 11, SETTINGS)
     const [, expr, choice] = played.parts

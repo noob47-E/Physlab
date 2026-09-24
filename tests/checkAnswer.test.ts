@@ -238,11 +238,11 @@ describe('checkAnswer', () => {
     expect(checkAnswer('7', field({ value: 0, tol: 0.05 })).message).toMatch(/^Not quite/)
   })
 
-  it('calls a near miss "close" and counts it', () => {
+  it('calls a near miss "close", says why, and does not count it (docs/ACCURACY.md)', () => {
     const c = checkAnswer('12.9', field())
     expect(c.verdict).toBe('close')
     expect(c.message).toMatch(/rounded a little early/)
-    expect(isCorrect(c)).toBe(true)
+    expect(isCorrect(c)).toBe(false)
     expect(checkAnswer('13.1', field()).verdict).toBe('wrong')
   })
 

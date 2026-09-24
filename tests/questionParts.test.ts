@@ -155,6 +155,14 @@ describe('checkExpressionPart', () => {
     expect(checkExpressionPart('sin(x)^2+cos(x)^2', p, {}).verdict).toBe('wrong')
   })
 
+  it('ticks 3.14·r² for π·r² as right, with the rounding note (inside the 2 % rule)', () => {
+    const p = expressionPart({ answer: 'pi*r^2', symbols: ['r'] })
+    const c = checkExpressionPart('3.14*r^2', p, {})
+    expect(c.verdict).toBe('right')
+    expect(c.message).toBe('Right up to rounding — check your constants.')
+    expect(checkExpressionPart('3.1*r^2', p, {}).verdict).toBe('wrong')
+  })
+
   it('rejects a symbol the part does not allow', () => {
     const p = expressionPart({ answer: '2*x', symbols: ['x'] })
     const c = checkExpressionPart('2*t', p, {})

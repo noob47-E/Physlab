@@ -120,5 +120,9 @@ export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals'
   return `${n}${f.unit ? `${gap}${f.unit}` : ''}`
 }
 
-/** A right or close answer counts; empty and unreadable do not. */
-export const isCorrect = (c: Check | undefined): boolean => c?.verdict === 'right' || c?.verdict === 'close'
+/**
+ * Only a right answer counts (docs/ACCURACY.md: 2 % of the expected answer, nothing more). "Close"
+ * reaches four tolerances and used to count too, so Practice ticked 48.99 on 50; it keeps its
+ * sentence about rounding early, under a cross.
+ */
+export const isCorrect = (c: Check | undefined): boolean => c?.verdict === 'right'
