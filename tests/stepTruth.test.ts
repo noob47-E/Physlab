@@ -749,7 +749,21 @@ const PURE_SPREAD: Record<JobId, string[]> = {
   hcf: ['12, 18, 30', '84, 126', '7, 13', '6, 9'],
   lcm: ['12, 18, 30', '84, 126', '4, 6', '7, 7', '1, 1'],
   primes: ['360', '1001', '97'],
-  factorComplex: ['x^4 - 16', 'x^2 + 4', 'x^2 + 2x + 5', 'x^3 + 1', 'x^4 + 1']
+  factorComplex: ['x^4 - 16', 'x^2 + 4', 'x^2 + 2x + 5', 'x^3 + 1', 'x^4 + 1'],
+  // Trig lines are not read as numbers here (tests/trigSteps.test.ts checks every line at five
+  // angles); what this list holds them to is the writing: no doubled sign, no fraction inside a
+  // fraction, no bracketed whole denominator, no step that changes nothing.
+  trigidentity: [
+    'sec(x) - cos(x) = sin(x)tan(x)',
+    '1/(1 + sin x) + 1/(1 - sin x) = 2 sec^2 x',
+    '(1 - sin x)/(1 + sin x) = (sec x - tan x)^2',
+    '(1 - cos x)/sin x = tan(x/2)',
+    'cos 3x = 4 cos^3 x - 3 cos x',
+    'sin x/(1 + cos x) + (1 + cos x)/sin x = 2 cosec x',
+    '(sin 5x + sin 3x)/(cos 5x + cos 3x) = tan 4x',
+    'cot x + tan x = sec x cosec x',
+    '(1 - cos 2x)/sin 2x = tan x'
+  ]
 }
 
 describe('Calculator working: every line equal to the last, set out the textbook way (Fix 4)', () => {

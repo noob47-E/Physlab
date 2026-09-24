@@ -358,6 +358,15 @@ const HELP_EXAMPLES: Example[] = [
       expect(casCalls()).toHaveLength(0)
     }
   },
+  {
+    line: 'prove(sin 2x = 2 sin x cos x)',
+    check: (last) => {
+      expect(last.tex).toBe('\\text{Proved}\\;\\sin 2x = 2 \\sin x \\cos x')
+      expect(last.working, 'offers the working').toBeTypeOf('function')
+      expect(usePure.getState().working?.title).toBe('Prove sin 2x = 2 sin x cos x')
+      expect(casCalls(), 'proved offline, without the algebra engine').toHaveLength(0)
+    }
+  },
   { line: 'delete A', check: () => expect(named('A')).toBeUndefined() },
   {
     line: 'undo',

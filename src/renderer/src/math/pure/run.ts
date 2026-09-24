@@ -33,6 +33,7 @@ import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
 import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
 import { Steps, failed, texToPlain, type Working } from './work'
+import { isTrigIdentity, trigWorking } from './trigIdentity'
 
 export type JobId =
   | 'factor'
@@ -45,6 +46,7 @@ export type JobId =
   | 'complex'
   | 'solve'
   | 'factorComplex'
+  | 'trigidentity'
 
 export interface JobDef {
   id: JobId
@@ -148,6 +150,14 @@ export const JOBS: JobDef[] = [
     placeholder: 'x^2 + 4',
     example: 'x^4 - 16',
     exampleLatex: 'x^4-16'
+  },
+  {
+    id: 'trigidentity',
+    label: 'Prove identity',
+    about: 'Prove a trig identity, one named step at a time from the left side to the right.',
+    placeholder: 'sec(x) - cos(x) = sin(x)tan(x)',
+    example: 'sec(x) - cos(x) = sin(x)tan(x)',
+    exampleLatex: '\\sec x-\\cos x=\\sin x\\tan x'
   }
 ]
 
@@ -401,6 +411,9 @@ export function runPure(job: JobId, input: string): Working {
     case 'factorComplex':
       return factoriseComplexWorking(src)
 
+    case 'trigidentity':
+      return trigWorking(src)
+
     default:
       return failed('Pure Math', src, 'I do not know that job.')
   }
@@ -416,6 +429,8 @@ export function suggestJob(src: string): JobId {
   if (WHOLE.test(s)) return 'primes'
   if (s.includes(',')) return 'hcf'
   if (/(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(s)) return 'complex'
+  // sin²x + cos²x = 1 is an identity to prove, not an equation to solve; sin x = 0.5 stays with Solve.
+  if (isTrigIdentity(s)) return 'trigidentity'
   if (s.includes('=')) return 'solve'
   // A plain sum — 2/3 + √2, 1/2 + 1/3 — has nothing to divide out or split; Factorise says so in
   // one sentence, where Divide used to complain that sqrt is not something it can factorise.

@@ -839,7 +839,11 @@ const PURE_WORDS: Record<string, JobId> = {
   primes: 'primes',
   primefactors: 'primes',
   complex: 'complex',
-  solve: 'solve'
+  solve: 'solve',
+  // prove(sin 2x = 2 sin x cos x). A plain calculation such as mathjs's identity(3) still works:
+  // a refused identity with no SymPy fallback is tried as a calculation below.
+  prove: 'trigidentity',
+  identity: 'trigidentity'
 }
 
 /**
@@ -901,7 +905,9 @@ function tryPureMath(input: string): boolean {
   const s = scene()
   // The Working panel's maths field reads LaTeX, so the linear form typed here has to be
   // converted or 6x^2 arrives on screen as x^(2) with a stray bracket.
-  const latex = linearToLatex(body)
+  // A trig identity is not mathjs syntax (sin 2x would come back as sin(2)·x), so the field gets
+  // the proof's own LaTeX of what it read instead.
+  const latex = job === 'trigidentity' ? doc.input : linearToLatex(body)
   // A label is a word ("Quotient", "HCF =") or a symbol ("x_1 =", "theta_2 ="). The word goes in
   // \text{}; the symbol must not, because KaTeX refuses an underscore inside \text and every
   // solve line rendered red — and it still did for θ, which the parser spells "theta", until the
@@ -1088,4 +1094,5 @@ export const HELP = `Examples (press Enter after each):
   between(x^2, x + 2, -1, 2)   shade between two curves      tangent(x^2, 1)   the tangent at a point
   k = 2  (makes a slider you can drag)
   solve(x^2 - 5x + 6 = 0)   diff(x^3)   integrate(x^2, 0, 3)   factor(x^2-1)
+  prove(sin 2x = 2 sin x cos x)   a trig identity, proved one named step at a time
   delete A     undo     clear     2d / 3d     play / pause`
