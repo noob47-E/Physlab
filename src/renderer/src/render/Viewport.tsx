@@ -9,6 +9,7 @@ import { createRenderer, QUALITY, useGpuInfo } from './renderer'
 import { CameraRig } from './CameraRig'
 import { Grid2D, Grid3D } from './Grid'
 import { SceneObjects } from './SceneObjects'
+import { ArrowBatch } from './ArrowBatch'
 import { LabelLayer, LabelProjector } from './Labels'
 import { Interaction } from './Interaction'
 import { overlay } from './overlay'
@@ -201,6 +202,7 @@ export function Viewport() {
             wall, and a stray tool click dropped maths points over the physics. */}
         {mode !== 'sandbox' && (viewMode === '2d' ? <Grid2D /> : <Grid3D />)}
         {mode !== 'sandbox' && <SceneObjects />}
+        {mode !== 'sandbox' && <ArrowBatch />}
         {mode === 'sandbox' && <SandboxView />}
         {mode !== 'sandbox' && <Highlights />}
         {mode !== 'sandbox' && <MarksView />}

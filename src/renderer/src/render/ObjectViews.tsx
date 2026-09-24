@@ -19,6 +19,7 @@ import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../
 import { isResultArrow, RESULT_HEAD_GAP_PX } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 import { pieceNameAnchor } from './pieceLabels'
+import { BatchedArrow, useArrowBatched } from './ArrowBatch'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -169,9 +170,10 @@ const flatHeadGeo = new THREE.BufferGeometry().setAttribute('position', new THRE
  * Imperatively positions a shaft+head arrow mesh pair. In 2-D the head is a flat triangle that
  * keeps its pixel size at every zoom (`arrowHead`, 12 px and 25° unless told otherwise); the 3-D
  * view keeps a cone, whose radius is `headRadPx`. `tipPx` pushes the tip that many pixels past
- * the vector's end, for a halo that has to show all round the head.
+ * the vector's end, for a halo that has to show all round the head. Exported so
+ * tests/arrowBatch.test.ts can hold the batched path (render/arrowBatchMath.ts) to it.
  */
-function placeArrow(shaft: THREE.Mesh, head: THREE.Mesh, tail: V3, comp: V3, wpp: number, thick: number, is3D: boolean, headPx?: number, headRadPx = 6, tipPx = 0) {
+export function placeArrow(shaft: THREE.Mesh, head: THREE.Mesh, tail: V3, comp: V3, wpp: number, thick: number, is3D: boolean, headPx?: number, headRadPx = 6, tipPx = 0) {
   // The 2-D camera looks straight down z, so the arrow is laid out from its projection: turning
   // the flat head to a direction with a z component tilts its base out of the screen plane, and
   // what is seen of it is a skewed sliver (the cone was round, so this never showed).
@@ -201,7 +203,22 @@ function placeArrow(shaft: THREE.Mesh, head: THREE.Mesh, tail: V3, comp: V3, wpp
   }
 }
 
-export function Arrow({ tail, comp, color, is3D, thick = 1.7, renderOrder = 12, headPx, headRadPx, tipPx }: { tail: V3; comp: V3; color: string; is3D: boolean; thick?: number; renderOrder?: number; headPx?: number; headRadPx?: number; tipPx?: number }) {
+type ArrowProps = { tail: V3; comp: V3; color: string; is3D: boolean; thick?: number; renderOrder?: number; headPx?: number; headRadPx?: number; tipPx?: number }
+
+/**
+ * One arrow. From ARROW_BATCH_MIN 2-D arrows on screen it is drawn by the instanced batch
+ * (render/ArrowBatch.tsx) with the same maths; below that, or in 3-D, as its own two meshes.
+ * 500 separate arrows cost 1005 draw calls and 3–4.5 ms of JavaScript a frame (arrow spike).
+ * A new 2-D arrow draws nothing until it has been counted (a microtask), so a big picture never
+ * builds mesh arrows only to swap them for the batch.
+ */
+export function Arrow(props: ArrowProps) {
+  const batched = useArrowBatched(props.is3D)
+  if (batched === null) return null
+  return batched ? <BatchedArrow {...props} /> : <MeshArrow {...props} />
+}
+
+function MeshArrow({ tail, comp, color, is3D, thick = 1.7, renderOrder = 12, headPx, headRadPx, tipPx }: ArrowProps) {
   const shaft = useRef<THREE.Mesh>(null)
   const head = useRef<THREE.Mesh>(null)
   const mat = useArrowMaterials(color, is3D)
