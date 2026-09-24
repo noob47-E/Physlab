@@ -2,7 +2,9 @@ import { useEffect } from 'react'
 import { newProject, openProject, saveProject } from './files'
 import { scene } from '../core/store'
 import { TOOLS, cancelTool, finishTool, resetTool, undoLastPick, useTool } from '../render/tools'
-import { resetCamera } from '../render/viewState'
+import { isViewShown, resetCamera, turnView } from '../render/viewState'
+import { turnForKey } from '../render/viewMath'
+import { useTour } from './tour/Tour'
 import { isDrawingMode, useApp } from './modes'
 import { useSandbox } from '../sim/store'
 import { useLab } from '../lab/labStore'
@@ -93,6 +95,24 @@ export function useShortcuts() {
         return
       }
       if (ctrl) return
+      // The arrow keys turn a 3-D drawing (Shift for a small step); everywhere else they are left
+      // alone, and the tour keeps ← and → for its own Back and Next. A key the right-click menu
+      // already took (it calls preventDefault in the capture phase) is its, and a drawing that is
+      // not on screen (the Calculator's Maths tab in front) is not turned behind the student's back.
+      const turn = turnForKey(e.key, e.shiftKey, {
+        drawing: isDrawingMode(useApp.getState().mode),
+        viewMode: s.viewMode,
+        tourOpen: useTour.getState().step !== null,
+        typing: false,
+        viewShown: isViewShown(),
+        claimed: e.defaultPrevented
+      })
+      if (turn) {
+        // Without this the arrow keys also scroll whichever panel holds the page.
+        e.preventDefault()
+        turnView(turn.dir, turn.fine)
+        return
+      }
       // Tab is the keyboard's way from one control to the next, so it is never taken here; the
       // 2D/3D switch lives on its own key (VIEW_KEY) instead.
       if (e.key === 'Tab') return

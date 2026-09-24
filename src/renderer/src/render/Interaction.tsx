@@ -9,6 +9,8 @@ import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, u
 import { marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
+import { drag3D } from './viewMath'
+import { useTurnMode } from './viewState'
 import { showContextMenu } from '../ui/ContextMenu'
 import { Arrow } from './ObjectViews'
 import { Builder } from '../core/factory'
@@ -257,7 +259,8 @@ export function Interaction() {
         rightDown.current = null
         return
       }
-      // The camera controls own the right button (a pan); this only remembers where it started.
+      // The camera controls own the right button (a pan in 2D, a turn in 3D); this only
+      // remembers where it started.
       if (e.button === 2) {
         rightDown.current = local(e)
         return
@@ -270,12 +273,30 @@ export function Interaction() {
       const hit = pickAt(pickCtx(), x, y, tool === 'select' ? undefined : accept)
       down.current = { x, y, world: worldOn(x, y), hit }
 
+      // In 3D one rule (drag3D) says whether this press turns or slides the view or belongs to the
+      // tool. The left button's camera action is set here, per press, because only this listener
+      // knows the tool and what is under the cursor; it runs in the capture phase, before
+      // OrbitControls reads the button. Shift and Ctrl are left to OrbitControls, which swaps.
+      if (s.viewMode === '3d') {
+        const act = drag3D({ button: 0, tool, onObject: !!hit, spaceHeld: isSpaceHeld(), turnMode: useTurnMode.getState().on })
+        if (act !== 'tool') {
+          const c = ctxRef.current.controls as unknown as { enabled: boolean; mouseButtons?: { LEFT: THREE.MOUSE } } | null
+          if (c) {
+            c.enabled = true
+            if (c.mouseButtons) c.mouseButtons.LEFT = act === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+          }
+          if (tool === 'select' && !hit && !e.shiftKey) s.select([])
+          markSpaceUsed()
+          down.current = null
+          return
+        }
+      }
+
       if (tool === 'select') {
         if (!hit) {
           if (!e.shiftKey) s.select([])
-          // Empty space. With Space held the camera pans, and in 3D the left button is the only
-          // way to turn the view; otherwise the drag draws a selection box.
-          if (isSpaceHeld() || s.viewMode === '3d') {
+          // Empty space. With Space held the camera pans; otherwise the drag draws a selection box.
+          if (isSpaceHeld()) {
             markSpaceUsed()
             return
           }

@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { MapControls, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three/webgpu'
 import { niceStep, orthoBounds, worldPerPixel } from './cameraUtils'
-import { useCameraCommand, useView } from './viewState'
+import { onTurnRequested, pendingTurn, useCameraCommand, useView } from './viewState'
+import { drag3D, HOME_3D, stepTurn, type CameraDrag } from './viewMath'
 import { useScene } from '../core/store'
-import { useApp } from '../app/modes'
+import { isDrawingMode, useApp } from '../app/modes'
 import { engine, useSandbox } from '../sim/store'
 import { visibleIn } from '../core/visibility'
 import { graphBox } from '../core/visualize'
@@ -86,12 +87,31 @@ function useFineZoom(): boolean {
   return fine
 }
 
+/** OrbitControls' name for a camera action. */
+const MOUSE_FOR: Record<CameraDrag, THREE.MOUSE> = { turn: THREE.MOUSE.ROTATE, pan: THREE.MOUSE.PAN, tool: THREE.MOUSE.ROTATE }
+
 export function CameraRig() {
   const viewMode = useScene((s) => s.viewMode)
   const mode = useApp((s) => s.mode)
   const sideView = useSandbox((s) => s.sideView)
   const fineZoom = useFineZoom()
-  const { camera, size, controls, get } = useThree()
+  const { camera, size, controls, get, invalidate } = useThree()
+  const drawing = isDrawingMode(mode)
+  // Every 3-D view takes its buttons from the one rule in drag3D: right turns, middle slides. The
+  // Sandbox's own hint had always said "right-drag turns the view" while its right button panned.
+  // In the maths drawing the left button is set per press by Interaction, which knows the tool
+  // and what is under the cursor; in the Sandbox and the GPU Lab a left drag on empty space turns.
+  const mouseButtons = useMemo(
+    () => ({
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: MOUSE_FOR[drag3D({ button: 1, tool: 'select', onObject: false })],
+      RIGHT: MOUSE_FOR[drag3D({ button: 2, tool: 'select', onObject: false })]
+    }),
+    []
+  )
+
+  // A press of an arrow key or a turn button asks for a frame; the frames that follow ease it in.
+  useEffect(() => onTurnRequested(() => invalidate()), [invalidate])
   const command = useCameraCommand()
   const last = useRef({ cx: NaN, cy: NaN, wpp: NaN, w: 0, h: 0 })
   // The fill light's tint comes from the stylesheet and is re-read when the theme flips.
@@ -185,13 +205,31 @@ export function CameraRig() {
       camera.updateProjectionMatrix()
       c?.target.set(0, 0, 0)
     } else {
-      camera.position.set(9, -12, 9)
-      c?.target.set(0, 0, 0)
+      camera.position.set(...HOME_3D.position)
+      c?.target.set(...HOME_3D.target)
     }
     c?.update()
   }, [command, viewMode, camera, controls, get])
 
-  useFrame(() => {
+  useFrame((_state, dt) => {
+    if (pendingTurn.az !== 0 || pendingTurn.el !== 0) {
+      const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+      // Only the maths drawing's 3-D view turns this way; anywhere else a leftover turn is dropped.
+      if (viewMode === '3d' && drawing && c) {
+        const t = c.target
+        // On a canvas that draws on demand the first frame after a pause reports the whole pause
+        // as its dt, which would jump the full turn in one go instead of easing it in.
+        const s = stepTurn([camera.position.x, camera.position.y, camera.position.z], [t.x, t.y, t.z], pendingTurn, Math.min(dt, 1 / 30))
+        camera.position.set(...s.position)
+        pendingTurn.az = s.pending.az
+        pendingTurn.el = s.pending.el
+        c.update()
+        invalidate()
+      } else {
+        pendingTurn.az = 0
+        pendingTurn.el = 0
+      }
+    }
     const L = last.current
     if (viewMode === '2d') {
       const b = orthoBounds(camera, size)
@@ -247,8 +285,8 @@ export function CameraRig() {
   }
   return (
     <>
-      <PerspectiveCamera makeDefault position={[9, -12, 9]} fov={45} near={0.01} far={5000} up={[0, 0, 1]} />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }} />
+      <PerspectiveCamera makeDefault position={[...HOME_3D.position]} fov={45} near={0.01} far={5000} up={[0, 0, 1]} />
+      <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={mouseButtons} />
       <ambientLight intensity={0.55} />
       <directionalLight position={[6, -8, 14]} intensity={2.2} />
       <directionalLight position={[-10, 6, -4]} intensity={0.6} color={fillLight} />

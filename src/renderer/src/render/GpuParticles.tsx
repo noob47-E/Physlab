@@ -1,11 +1,13 @@
 // GPU compute demo & benchmark: up to millions of charged particles moving in
-// uniform E and B fields (Lorentz force, Boris integrator) — runs entirely on the GPU.
+// uniform E and B fields (Lorentz force, Boris integrator) — run on the GPU with WebGPU, and on
+// the processor (fewer particles, the same start and the same push) where only WebGL2 is offered.
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
-import { cross, dot, float, floor, Fn, hash, instancedArray, instanceIndex, length, mix, smoothstep, uniform, uv, vec3 } from 'three/tsl'
+import { cross, dot, float, floor, Fn, hash, instancedArray, instancedDynamicBufferAttribute, instanceIndex, length, mix, smoothstep, uniform, uv, vec3 } from 'three/tsl'
 import { create } from 'zustand'
+import { borisStep, initSwarm, PARTICLE_BOX, particleCount, particlePath } from './particleMath'
 
 export const useParticleLab = create<{
   enabled: boolean
@@ -19,9 +21,40 @@ export const useParticleLab = create<{
 export function GpuParticles() {
   const { enabled, count } = useParticleLab()
   const renderer = useThree((s) => s.gl) as unknown as THREE.WebGPURenderer
-  const isWebGPU = !!(renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
-  if (!enabled || !isWebGPU) return null
-  return <ParticleSystem key={count} count={count} renderer={renderer} />
+  // Without WebGPU there is no compute pass, but WebGL2 draws the sprites perfectly well: the
+  // processor moves the particles instead (Fix 10). Until 0.9 this drew nothing at all.
+  const path = particlePath((renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? 'WebGPU' : 'WebGL2')
+  if (!enabled || !path) return null
+  const n = particleCount(path, count)
+  return path === 'gpu' ? <ParticleSystem key={n} count={n} renderer={renderer} /> : <CpuParticleSystem key={n} count={n} />
+}
+
+type TslNode = Parameters<typeof length>[0]
+
+/** The sprites both paths draw: one soft dot per particle, blue when slow and orange when fast. */
+function particleSprite(position: TslNode, velocity: TslNode, count: number) {
+  const material = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+  material.positionNode = position as never
+  const speed = length(velocity)
+  // Brightness scales down with particle count so millions of particles do not saturate to white.
+  const gain = Math.min(0.9, 60_000 / count)
+  material.colorNode = mix(vec3(0.15, 0.5, 1.0), vec3(1.0, 0.4, 0.12), speed.div(5).clamp()).mul(gain)
+  material.opacityNode = smoothstep(float(0.5), float(0.1), uv().sub(0.5).length())
+  material.scaleNode = float(0.05)
+  const sprite = new THREE.Sprite(material)
+  sprite.count = count
+  sprite.frustumCulled = false
+  return { sprite, material }
+}
+
+/**
+ * A dev-only handle for the browser check that holds the two paths to each other: hold the frame
+ * loop, reset, take a fixed number of 1/60 s steps, read the positions back.
+ */
+type LabProbe = { path: 'gpu' | 'cpu'; count: number; hold: (on: boolean) => void; reset: () => void; step: (n: number) => void; read: () => Promise<Float32Array> }
+const probe = { held: false }
+const setProbe = (p: LabProbe | null) => {
+  if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __gpuLab?: LabProbe | null }).__gpuLab = p
 }
 
 function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.WebGPURenderer }) {
@@ -32,7 +65,8 @@ function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.We
     const uE = uniform(new THREE.Vector3(0.3, 0, 0))
     const uDt = uniform(1 / 60)
     const uQm = uniform(1)
-    const BOX = 14
+    // particleMath.ts builds the processor's swarm from the same hash and the same box.
+    const BOX = PARTICLE_BOX
 
     const init = Fn(() => {
       const i = instanceIndex
@@ -58,19 +92,18 @@ function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.We
       p.assign(np.sub(floor(np.div(BOX).add(0.5)).mul(BOX)))
     })().compute(count)
 
-    const material = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
-    material.positionNode = pos.toAttribute()
-    const speed = length(vel.toAttribute())
-    // Brightness scales down with particle count so millions of particles do not saturate to white.
-    const gain = Math.min(0.9, 60_000 / count)
-    material.colorNode = mix(vec3(0.15, 0.5, 1.0), vec3(1.0, 0.4, 0.12), speed.div(5).clamp()).mul(gain)
-    material.opacityNode = smoothstep(float(0.5), float(0.1), uv().sub(0.5).length())
-    material.scaleNode = float(0.05)
-    const sprite = new THREE.Sprite(material)
-    sprite.count = count
-    sprite.frustumCulled = false
-    return { init, update, sprite, material, uB, uE, uDt, uQm }
-  }, [count])
+    const { sprite, material } = particleSprite(pos.toAttribute(), vel.toAttribute(), count)
+    /** One step of `dt` seconds with the fields as they are in the panel now. */
+    const push = (dt: number) => {
+      const st = useParticleLab.getState()
+      uB.value.set(...st.B)
+      uE.value.set(...st.E)
+      uQm.value = st.qm
+      uDt.value = dt
+      renderer.compute(update)
+    }
+    return { init, push, sprite, material, pos }
+  }, [count, renderer])
 
   const resetNonce = useParticleLab((s) => s.resetNonce)
   useEffect(() => {
@@ -79,13 +112,90 @@ function ParticleSystem({ count, renderer }: { count: number; renderer: THREE.We
 
   useEffect(() => () => sim.material.dispose(), [sim])
 
+  useEffect(() => {
+    setProbe({
+      path: 'gpu',
+      count,
+      hold: (on) => void (probe.held = on),
+      reset: () => void renderer.compute(sim.init),
+      step: (n) => {
+        for (let i = 0; i < n; i++) sim.push(1 / 60)
+      },
+      read: async () => new Float32Array(await renderer.getArrayBufferAsync(sim.pos.value))
+    })
+    return () => setProbe(null)
+  })
+
   useFrame((_s, dt) => {
-    const st = useParticleLab.getState()
-    sim.uB.value.set(...st.B)
-    sim.uE.value.set(...st.E)
-    sim.uQm.value = st.qm
-    sim.uDt.value = Math.min(dt, 1 / 30)
-    renderer.compute(sim.update)
+    if (!probe.held) sim.push(Math.min(dt, 1 / 30))
+  })
+
+  return <primitive object={sim.sprite} />
+}
+
+/**
+ * The particles moved on the processor: the swarm lives in two plain arrays, one Boris step a
+ * frame (particleMath.ts), and the new positions go to the graphics card as instanced sprite
+ * positions. It starts from the very places the GPU's init pass puts them.
+ */
+function CpuParticleSystem({ count }: { count: number }) {
+  const sim = useMemo(() => {
+    const swarm = initSwarm(count)
+    // An *instanced* interleaved buffer: the WebGL2 backend steps a plain one per vertex, so the
+    // four corners of every sprite took four different particles' positions and the swarm drew
+    // as a few huge white triangles (WebGLBackend checks data.isInstancedInterleavedBuffer).
+    const posBuf = new THREE.InstancedInterleavedBuffer(swarm.pos, 3, 1)
+    const velBuf = new THREE.InstancedInterleavedBuffer(swarm.vel, 3, 1)
+    const { sprite, material } = particleSprite(instancedDynamicBufferAttribute(posBuf, 'vec3'), instancedDynamicBufferAttribute(velBuf, 'vec3'), count)
+    // The positions change on the processor; the graphics card's copy is uploaded again.
+    const uploaded = () => {
+      posBuf.needsUpdate = true
+      velBuf.needsUpdate = true
+    }
+    /** One step of `dt` seconds with the fields as they are in the panel now. */
+    const push = (dt: number) => {
+      const st = useParticleLab.getState()
+      borisStep(swarm, st.B, st.E, st.qm, dt)
+      uploaded()
+    }
+    const reset = () => {
+      const fresh = initSwarm(count)
+      swarm.pos.set(fresh.pos)
+      swarm.vel.set(fresh.vel)
+      uploaded()
+    }
+    return { swarm, push, reset, sprite, material }
+  }, [count])
+
+  const resetNonce = useParticleLab((s) => s.resetNonce)
+  const first = useRef(true)
+  useEffect(() => {
+    // The swarm was just built fresh; only a later Reset has anything to put back.
+    if (first.current) {
+      first.current = false
+      return
+    }
+    sim.reset()
+  }, [sim, resetNonce])
+
+  useEffect(() => () => sim.material.dispose(), [sim])
+
+  useEffect(() => {
+    setProbe({
+      path: 'cpu',
+      count,
+      hold: (on) => void (probe.held = on),
+      reset: sim.reset,
+      step: (n) => {
+        for (let i = 0; i < n; i++) sim.push(1 / 60)
+      },
+      read: async () => sim.swarm.pos.slice()
+    })
+    return () => setProbe(null)
+  })
+
+  useFrame((_s, dt) => {
+    if (!probe.held) sim.push(Math.min(dt, 1 / 30))
   })
 
   return <primitive object={sim.sprite} />

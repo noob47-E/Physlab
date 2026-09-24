@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
 import { isDrawingMode, useApp } from '../app/modes'
-import { Box, Camera, Check, Grid3x3, Home, Magnet, Square, Undo2, X } from 'lucide-react'
+import { Box, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Grid3x3, Home, Magnet, Rotate3d, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
 import { createRenderer, QUALITY, useGpuInfo } from './renderer'
@@ -12,7 +12,8 @@ import { SceneObjects } from './SceneObjects'
 import { LabelLayer, LabelProjector } from './Labels'
 import { Interaction } from './Interaction'
 import { overlay } from './overlay'
-import { resetCamera, useView } from './viewState'
+import { resetCamera, turnView, useTurnMode, useView } from './viewState'
+import type { TurnDirection } from './viewMath'
 import { GpuParticles, useParticleLab } from './GpuParticles'
 import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { GRID_STYLES, normaliseGridStyle } from './gridMath'
@@ -179,7 +180,17 @@ export function Viewport() {
   }, [])
 
   const info = TOOLS.find((t) => t.id === tool)
-  const hint = info ? info.hint[Math.min(picks, info.hint.length - 1)] : ''
+  const turnOn = useTurnMode((t) => t.on)
+  const turning3D = drawing && viewMode === '3d'
+  // In 3-D the tool's hint also says how to turn, which nothing on screen used to (Fix 3); with
+  // the Turn switch on, the left button is not the tool's at all and the hint says so.
+  const toolHint = info ? info.hint[Math.min(picks, info.hint.length - 1)] : ''
+  const hint =
+    turning3D && turnOn
+      ? 'Turn is on: drag (or use one finger) to turn the view. Click Turn again, or choose a tool, to draw.'
+      : turning3D && toolHint
+        ? `${toolHint} Right-drag or the arrow keys turn the view.`
+        : toolHint
 
   return (
     <div ref={hostRef} data-tour="viewport" className="viewport relative h-full w-full select-none overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
@@ -250,6 +261,7 @@ export function Viewport() {
       </div>
       )}
       {mode !== 'sandbox' && <MarqueeBox />}
+      {drawing && viewMode === '3d' && <TurnPad />}
 
       {/* Which backend, which quality, how many frames: for whoever is diagnosing graphics, not
           for a student doing homework. The setting is in the units-and-precision popover. */}
@@ -288,8 +300,10 @@ export function Viewport() {
           <span>Drag an object to place it. Press Play, then drag to push or lift it and let go to throw. Right-drag turns the view, scroll zooms.</span>
         </div>
       )}
-      {mode !== 'sandbox' && hint && tool !== 'select' && (
-        <div className="tool-hint">
+      {mode !== 'sandbox' && hint && (tool !== 'select' || (turning3D && turnOn)) && (
+        // The hint is centred at the bottom; in 3-D the turn pad stands at the bottom right, so
+        // the hint keeps clear of it on both sides.
+        <div className="tool-hint" style={turning3D ? { maxWidth: 'max(180px, calc(100% - 340px))' } : undefined}>
           <span>{hint}</span>
           {picks > 0 && (
             <span className="pointer-events-auto ml-3 inline-flex items-center gap-1 border-l border-[var(--line-2)] pl-3">
@@ -384,5 +398,89 @@ function SandboxStrip() {
       </button>
       <span className="badge tabular-nums">t = {formatMeasure(time, 'number', settings)} s</span>
     </div>
+  )
+}
+
+/**
+ * Fix 3: the 3-D view had no visible way to turn. Four turn buttons round Home, and the Turn switch
+ * that hands the left button (and one finger) to turning whatever tool is out. 44 px each, for a
+ * finger. A button held down keeps turning; Enter or Space on a focused one turns one step.
+ */
+function TurnPad() {
+  const turnOn = useTurnMode((t) => t.on)
+  const tool = useScene((s) => s.tool)
+  // Choosing a tool means the student wants to draw with it: the left button goes back to the tool.
+  useEffect(() => {
+    useTurnMode.setState({ on: false })
+  }, [tool])
+  return (
+    <div className="pointer-events-auto absolute bottom-[56px] right-3 grid grid-cols-3 gap-0.5 rounded-lg border border-line-2 bg-label p-1" role="group" aria-label="Turn the 3-D view">
+      <span />
+      <TurnButton dir="up" label="Tip the drawing up (↑ key; hold Shift for a small step)">
+        <ChevronUp size={18} />
+      </TurnButton>
+      <button
+        type="button"
+        className={`icon-btn min-h-[44px] min-w-[44px] ${turnOn ? 'on' : ''}`}
+        aria-pressed={turnOn}
+        title={turnOn ? 'Turn is on: a left drag or one finger turns the view. Click to hand the left button back to the tool' : 'Turn: a left drag or one finger turns the view, whatever tool is out (a right drag always turns)'}
+        onClick={() => useTurnMode.setState({ on: !turnOn })}
+      >
+        <Rotate3d size={18} />
+      </button>
+      <TurnButton dir="left" label="Turn the drawing left (← key; hold Shift for a small step)">
+        <ChevronLeft size={18} />
+      </TurnButton>
+      <button type="button" className="icon-btn min-h-[44px] min-w-[44px]" onClick={resetCamera} title="Back to the starting view (Home)">
+        <Home size={16} />
+      </button>
+      <TurnButton dir="right" label="Turn the drawing right (→ key; hold Shift for a small step)">
+        <ChevronRight size={18} />
+      </TurnButton>
+      <span />
+      <TurnButton dir="down" label="Tip the drawing down (↓ key; hold Shift for a small step)">
+        <ChevronDown size={18} />
+      </TurnButton>
+      <span />
+    </div>
+  )
+}
+
+function TurnButton({ dir, label, children }: { dir: TurnDirection; label: string; children: ReactNode }) {
+  const hold = useRef<{ wait: number; every: number } | null>(null)
+  const stop = () => {
+    if (!hold.current) return
+    clearTimeout(hold.current.wait)
+    clearInterval(hold.current.every)
+    hold.current = null
+  }
+  useEffect(() => stop, [])
+  return (
+    <button
+      type="button"
+      className="icon-btn min-h-[44px] min-w-[44px]"
+      title={label}
+      aria-label={label}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        stop()
+        turnView(dir, e.shiftKey)
+        // Held down, it keeps turning: a small step every tenth of a second after a short pause,
+        // so one click is still exactly one step.
+        const wait = window.setTimeout(() => {
+          if (hold.current) hold.current.every = window.setInterval(() => turnView(dir, true), 100)
+        }, 400)
+        hold.current = { wait, every: 0 }
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      // A click from the keyboard (Enter or Space on the focused button) has no pointer press.
+      onClick={(e) => {
+        if (e.detail === 0) turnView(dir, e.shiftKey)
+      }}
+    >
+      {children}
+    </button>
   )
 }
