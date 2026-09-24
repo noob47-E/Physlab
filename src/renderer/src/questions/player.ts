@@ -10,7 +10,7 @@
 
 import type { EvalFunction, MathNode, SymbolNode } from 'mathjs'
 import { scene } from '../core/store'
-import { frameGraphs, visualizeBetween, visualizeGraph, visualizePiecewise, visualizeTangentAt } from '../core/visualize'
+import { frameGraphs, NORMAL_STRETCH, visualizeBetween, visualizeCurves, visualizeDots, visualizeGraph, visualizeNormal, visualizeNumberLine, visualizePiecewise, visualizeSolution, visualizeTangentAt } from '../core/visualize'
 import { useLab } from '../lab/labStore'
 import type { Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
@@ -31,6 +31,7 @@ import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTo
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
 import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
 import { formatQuantity, UNITS } from './units'
+import { hasVisual, visualOf, type VisualPlan } from './autoVisual'
 import { plainFormula } from './plainFormula'
 import { drawVariables, substitute, type Variant } from './variables'
 
@@ -394,6 +395,20 @@ export type PicturePlan =
   | { kind: 'piecewise'; pieces: { expr: string; from: number; to: number }[] }
   | { kind: 'between'; upper: string; lower: string; from: number; to: number; label?: string }
   | { kind: 'tangent'; expr: string; at: number }
+  | { kind: 'normal'; mean: number; sd: number; from?: number; to?: number }
+  | { kind: 'vectors'; items: { name: string; v: V3; tail?: V3; role: 'input' | 'result' }[] }
+  | { kind: 'dots'; count: number; perRow: number }
+  | { kind: 'curves'; items: { expr: string; label: string; from?: number; to?: number }[] }
+  | { kind: 'numberline'; items: { label: string; value: number }[] }
+
+/** More dots than anyone counts by eye; a count past this is refused rather than drawn as a smear. */
+export const MAX_DOTS = 400
+
+/** Two or three component formulas → a vector in the plane or in space. */
+function vectorIn(parts: string[], values: Record<string, number>, what: string): V3 {
+  const c = parts.map((p) => numberIn(p, values, what))
+  return [c[0] ?? 0, c[1] ?? 0, c[2] ?? 0]
+}
 
 /** A picture with this variant's numbers in: formulas bound, ends worked out. Throws a sentence. */
 export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSettings): PicturePlan {
@@ -423,12 +438,62 @@ export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSet
       }
     case 'tangent':
       return { kind: 'tangent', expr: bindValues(pic.expr, values), at: numberIn(pic.at, values, 'the point the tangent touches') }
+    case 'normal': {
+      const sd = numberIn(pic.sd, values, 'the standard deviation')
+      if (!(sd > 0)) throw new Error('A normal curve needs a standard deviation above 0.')
+      const from = pic.from === undefined ? undefined : numberIn(pic.from, values, 'where the shading starts')
+      const to = pic.to === undefined ? undefined : numberIn(pic.to, values, 'where the shading ends')
+      if (from !== undefined && to !== undefined && !(from < to)) {
+        throw new Error(`The shading must start below where it ends; this question has it from ${fmtPrecise(from, settings)} to ${fmtPrecise(to, settings)}.`)
+      }
+      return { kind: 'normal', mean: numberIn(pic.mean, values, 'the mean'), sd, from, to }
+    }
+    case 'vectors':
+      if (pic.items.length === 0) throw new Error('This picture has no arrows to draw.')
+      return {
+        kind: 'vectors',
+        items: pic.items.map((it) => ({
+          name: it.name,
+          v: vectorIn(it.v, values, `the arrow ${it.name}`),
+          tail: it.tail === undefined ? undefined : vectorIn(it.tail, values, `where the arrow ${it.name} starts`),
+          role: it.role ?? 'input'
+        }))
+      }
+    case 'dots': {
+      const count = numberIn(pic.count, values, 'how many dots to draw')
+      if (!Number.isInteger(count) || count < 0) throw new Error(`Dots are counted in whole numbers; this picture asks for ${fmtPrecise(count, settings)}.`)
+      if (count > MAX_DOTS) throw new Error(`${fmtPrecise(count, settings)} dots are too many to count by eye; PhysLab draws at most ${fmtPrecise(MAX_DOTS, settings)}.`)
+      const perRow = pic.perRow !== undefined && Number.isInteger(pic.perRow) && pic.perRow > 0 ? pic.perRow : 10
+      return { kind: 'dots', count, perRow }
+    }
+    case 'curves':
+      if (pic.items.length === 0) throw new Error('This picture has no curves to draw.')
+      return {
+        kind: 'curves',
+        items: pic.items.map((it) => ({
+          expr: bindValues(it.expr, values),
+          label: substitute(it.label, values, units, settings),
+          from: it.from === undefined ? undefined : numberIn(it.from, values, 'where a curve starts'),
+          to: it.to === undefined ? undefined : numberIn(it.to, values, 'where a curve ends')
+        }))
+      }
+    case 'numberline':
+      if (pic.items.length === 0) throw new Error('This question gives no numbers PhysLab could put on a number line.')
+      return {
+        kind: 'numberline',
+        items: pic.items.map((it) => {
+          const value = numberIn(it.value, values, it.label === '' ? 'a mark' : `the mark ${it.label}`)
+          // A bare number is labelled by its value, through format.ts like every number shown.
+          return { label: it.label === '' ? fmtPrecise(value, settings) : substitute(it.label, values, units, settings), value }
+        })
+      }
   }
 }
 
 // plainFormula lives beside the variables, whose problem sentences write formulas too; it is
 // exported from here as well, where the picture note first used it.
 export { plainFormula }
+export { hasVisual, INFERRED_NOTE, type VisualPlan } from './autoVisual'
 
 export interface PictureShown {
   /** One sentence on what was drawn, for the panel. */
@@ -491,6 +556,41 @@ export function showPicture(plan: PicturePlan, settings: MeasureSettings, hideVa
         const { slope } = visualizeTangentAt(plan.expr, plan.at, hideValue)
         return hideValue ? { note: `Drawn: the tangent at x = ${n(plan.at)}.` } : { note: `The tangent at x = ${n(plan.at)} has slope ${n(slope)}.`, value: slope }
       }
+      case 'normal': {
+        const { area } = visualizeNormal(plan.mean, plan.sd, plan.from, plan.to, hideValue)
+        const region =
+          plan.from !== undefined && plan.to !== undefined
+            ? `between ${n(plan.from)} and ${n(plan.to)}`
+            : plan.to !== undefined
+              ? `below ${n(plan.to)}`
+              : plan.from !== undefined
+                ? `above ${n(plan.from)}`
+                : 'under the whole curve'
+        const what = `the normal curve with mean ${n(plan.mean)} and standard deviation ${n(plan.sd)} on the z scale, z = (x − mean) ÷ sd, drawn ${n(NORMAL_STRETCH)} times taller than its density so its shape shows, and shaded ${region}`
+        return hideValue
+          ? { note: `Drawn: ${what}. The shaded part of the whole bell is the probability you are finding.` }
+          : { note: `Drawn: ${what}. The shaded part of the whole bell is the probability, ${n(area)}.`, value: area }
+      }
+      case 'vectors': {
+        visualizeSolution({
+          title: '',
+          steps: [],
+          answers: [],
+          visual: { vectors: plan.items.map((it) => ({ name: it.name, v: it.v, tail: it.tail, role: it.role })), mode: 'common-tail' }
+        })
+        const names = plan.items.map((it) => it.name)
+        const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
+        return { note: `Drawn: the arrows ${list}.` }
+      }
+      case 'dots':
+        visualizeDots(plan.count, plan.perRow)
+        return { note: plan.count === 0 ? 'Drawn: no dots at all.' : `Drawn: dots in rows of ${n(plan.perRow)}.` }
+      case 'curves':
+        visualizeCurves(plan.items)
+        return { note: `Drawn: ${plan.items.map((it) => it.label).join(', ')}.` }
+      case 'numberline':
+        visualizeNumberLine(plan.items)
+        return { note: `Drawn on one number line: ${plan.items.map((it) => it.label).join(', ')}.` }
     }
   })
 }
@@ -551,6 +651,59 @@ export function showMotion(m: PQMotion, played: Played, settings: MeasureSetting
     rows = table.rows.length
   }
   return { pieces, rows, note: rows > 0 ? `${note} ${fmtPrecise(rows, { decimals: 0, precisionMode: 'dp' })} readings are in a new Lab Data table.` : note }
+}
+
+// ---------------------------------------------------------------------------
+// One visual for any question (Fix 21)
+// ---------------------------------------------------------------------------
+
+/**
+ * What this played question shows: the author's picture, motion or experiment; else a picture
+ * inferred from its numbers; else its given quantities on a number line. Never nothing.
+ */
+export function visualPlanFor(played: Played): VisualPlan {
+  return visualOf(played.question, played.variant)
+}
+
+/**
+ * Whether the visual can be drawn now, or only after the answer ("(after you answer)"): an
+ * inferred picture every part of which gives the answer away waits until the question is
+ * answered right or its solution shown. An author's own picture is always ready — its area or
+ * slope label is what waits (decision 12 of the spec, as 0.7.0 already did). 'none' is a
+ * question with nothing to draw — no numbers for its number line — so no button is offered;
+ * reported 'ready', its one "Show the picture" only drew an error.
+ */
+export function visualState(plan: VisualPlan, earned: boolean): 'ready' | 'after-answer' | 'none' {
+  if (!hasVisual(plan)) return 'none'
+  if (plan.source === 'authored' || earned) return 'ready'
+  return plan.auto.early ? 'ready' : 'after-answer'
+}
+
+/** Where the visual is drawn: the Sandbox for a question whose only visual is its experiment, else Graphing. */
+export function visualMode(plan: VisualPlan): 'graphing' | 'sandbox' {
+  return plan.source === 'authored' && !plan.picture && !plan.motion && plan.sandbox ? 'sandbox' : 'graphing'
+}
+
+export const HELD_BACK = 'This picture shows the answer, so it appears once you have answered right or asked for the solution.'
+
+/**
+ * Draws the question's visual and says in a sentence what was drawn. Before the answer is earned
+ * an inferred picture is drawn in its early form — the plots that do not end on the answer, the
+ * curve without its tangent, the shading without its area — and every value label is held back;
+ * once earned, the whole picture with its labels. Throws a sentence when there is nothing it may
+ * draw yet (`HELD_BACK`) or the picture cannot be worked out.
+ */
+export function showVisual(plan: VisualPlan, played: Played, settings: MeasureSettings, earned: boolean): string {
+  if (plan.source === 'authored') {
+    if (plan.picture) return showPicture(picturePlan(plan.picture, played, settings), settings, !earned).note
+    if (plan.motion) return showMotion(plan.motion, played, settings).note
+    if (plan.sandbox) return showSandbox(sandboxPlan(plan.sandbox, played))
+    throw new Error('This question has nothing to show.')
+  }
+  const v = earned ? plan.auto.visual : plan.auto.early
+  if (!v) throw new Error(HELD_BACK)
+  if (v.picture) return showPicture(picturePlan(v.picture, played, settings), settings, !earned).note
+  return showMotion(v.motion, played, settings).note
 }
 
 // ---------------------------------------------------------------------------

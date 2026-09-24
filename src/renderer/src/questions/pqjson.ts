@@ -306,6 +306,17 @@ export type PQPicture =
   | { kind: 'piecewise'; pieces: { expr: string; from: string; to: string }[] }
   | { kind: 'between'; upper: string; lower: string; from: string; to: string; label?: string }
   | { kind: 'tangent'; expr: string; at: string }
+  // --- format 2 (Fix 21: a picture for every question) ----------------------
+  /** A normal curve with mean and standard deviation, shaded from `from` to `to` (an end left out runs to that tail). */
+  | { kind: 'normal'; mean: string; sd: string; from?: string; to?: string }
+  /** Arrows, each with two or three components; drawn from `tail` (default the origin). The result is drawn in the answer colour. */
+  | { kind: 'vectors'; items: { name: string; v: string[]; tail?: string[]; role?: 'input' | 'result' }[] }
+  /** `count` dots in rows of `perRow` (default 10): something to count. */
+  | { kind: 'dots'; count: string; perRow?: number }
+  /** Several curves to compare, each with its own label ("Train A") and stretch of x. */
+  | { kind: 'curves'; items: { expr: string; label: string; from?: string; to?: string }[] }
+  /** The given quantities as labelled marks on one number line; an empty label is the value itself, written in the student's precision. */
+  | { kind: 'numberline'; items: { label: string; value: string }[] }
 
 export type MotionSegment =
   | { kind: 'rest'; duration: string }

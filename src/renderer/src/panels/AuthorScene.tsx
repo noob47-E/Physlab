@@ -305,6 +305,9 @@ const startPicture = (kind: PQPicture['kind']): PQPicture => {
       return { kind, upper: 'x', lower: 'x^2', from: '0', to: '1' }
     case 'tangent':
       return { kind, expr: 'x^2', at: '1' }
+    default:
+      // The format-2 kinds (Fix 21) are not offered in PICTURES yet; this keeps the switch total.
+      return { kind: 'curve', expr: 'x^2' }
   }
 }
 

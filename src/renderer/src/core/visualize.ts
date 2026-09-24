@@ -10,7 +10,7 @@ import { betweenArea, curveBox, slopeAt, type Box } from '../math/graphs'
 import type { GraphKind, GraphObj, SceneObject } from './types'
 import { fitCamera } from '../render/viewState'
 import { mixOklabMany, mixParents } from '../render/colourMix'
-import { themeColor } from '../app/theme'
+import { seriesColor, themeColor } from '../app/theme'
 
 export type { DrawStyle }
 
@@ -262,6 +262,186 @@ export function visualizeArea(expr: string, a: number, bnd: number, label: strin
   b.commit()
   remember('calculus', b)
   scene().setViewMode('2d')
+}
+
+// ---------------------------------------------------------------------------
+// Question pictures of format 2 (Fix 21): a normal curve, dots, several curves, a number line
+// ---------------------------------------------------------------------------
+
+/**
+ * A curve drawn only over its own stretch of x. An explicit graph is drawn across the whole view
+ * whatever its tMin and tMax say (they only frame it), so the two trains' speed lines ran on
+ * below zero past the moment each stopped; one piece of a piecewise graph stops where it should.
+ */
+function stretchOf(expr: string, from?: number, to?: number): Omit<GraphObj, 'id' | 'name' | 'color' | 'visible' | 'locked' | 'showLabel' | 'type'> {
+  if (from === undefined || to === undefined || !(to > from)) return { kind: 'explicit', source: `y = ${expr}`, exprs: [expr], tMin: from, tMax: to, showRoots: false, showExtrema: false }
+  return { kind: 'piecewise', source: `piecewise(${expr} from ${String(from)} to ${String(to)})`, exprs: [expr], pieces: [{ expr, from, to }], showRoots: false, showExtrema: false }
+}
+
+/** The standard normal density: every normal picture is drawn on the z scale, where it is this curve. */
+export const NORMAL_PDF = 'exp(-x^2 / 2) / sqrt(2 * pi)'
+
+/**
+ * How many times taller than the density the bell is drawn. On the z scale the density peaks at
+ * 0.4 over a bell 8 wide, and at one zoom for both axes that is a line lying along the axis (it
+ * read as a flat blue stripe in the browser check); five times taller it peaks at 2 and has the
+ * textbook shape. The probability is still the shaded part as a fraction of the whole bell, and
+ * the note and the label say the probability itself.
+ */
+export const NORMAL_STRETCH = 5
+
+/**
+ * How far out an open tail counts, in standard deviations. The area past 6σ is below 10⁻⁹, so
+ * P(X < 65) worked out from 6σ below the mean is the probability to every digit a student is shown.
+ */
+export const NORMAL_TAIL = 6
+
+/** The drawn bell runs this far each side; past 4σ it is flat against the axis anyway, and the shading stops there too. */
+export const NORMAL_SPAN = 4
+
+const standardPdf = (z: number): number => Math.exp((-z * z) / 2) / Math.sqrt(2 * Math.PI)
+
+/**
+ * A normal distribution with mean and sd, with the region from `from` to `to` shaded (an end left
+ * out is that whole tail). Drawn on the z scale — z = (x − mean) ÷ sd — because the density of
+ * N(50, 10²) peaks at 0.04 beside its own 60-wide axis; on the z scale, drawn NORMAL_STRETCH times
+ * taller, it is the textbook bell. The returned area is the probability itself, worked out on the
+ * density, never on the stretched drawing. The mean and the ends are labelled under the axis in
+ * the question's own numbers. `hideArea` leaves the probability label off for a question that asks
+ * for exactly that probability.
+ */
+export function visualizeNormal(mean: number, sd: number, from?: number, to?: number, hideArea = false): { area: number; zFrom: number; zTo: number } {
+  if (!(sd > 0) || !Number.isFinite(mean)) throw new Error('A normal curve needs a mean and a standard deviation above 0.')
+  const s = precision()
+  const z = (x: number | undefined, tail: number): number => (x === undefined ? tail : Math.max(-NORMAL_TAIL, Math.min(NORMAL_TAIL, (x - mean) / sd)))
+  if (from !== undefined && to !== undefined && !(from < to)) throw new Error('The shaded region needs its start below its end.')
+  const zFrom = z(from, -NORMAL_TAIL)
+  const zTo = z(to, NORMAL_TAIL)
+  // Both ends past 6σ on one side (P(X > 120) for N(50, 10²)) leave nothing to shade: the
+  // probability is below 10⁻⁹, 0 at any precision shown. The bell is drawn with no region; this
+  // used to throw a sentence about the drawing for a question that is perfectly valid.
+  const area = zTo > zFrom ? betweenArea(standardPdf, () => 0, zFrom, zTo, 4000) : 0
+  const bell = `${NORMAL_STRETCH} * ${NORMAL_PDF}`
+  const height = (zz: number): number => NORMAL_STRETCH * standardPdf(zz)
+  // The shading is drawn over the bell's own stretch; past 4σ it would be a hairline on the axis
+  // that only widens the framing.
+  const lo = Math.max(zFrom, -NORMAL_SPAN)
+  const hi = Math.min(zTo, NORMAL_SPAN)
+  clearTagged('calculus')
+  const b = new Builder()
+  b.graph(stretchOf(bell, -NORMAL_SPAN, NORMAL_SPAN), { name: 'normal' })
+  const region =
+    hi > lo
+      ? b.graph({ kind: 'between', source: `between(${bell}, 0, ${String(lo)}, ${String(hi)})`, exprs: [bell, '0'], tMin: lo, tMax: hi }, { color: themeColor('--accent', '#4f8cff'), name: 'region' })
+      : undefined
+  const owned = <T extends SceneObject>(o: T): T => {
+    if (region) (o as SceneObject & { owner?: string }).owner = region.id
+    return inGraphing(o)
+  }
+  // Labels sit just under the axis, at the mean and at each end the question names.
+  const under = -0.12 * height(0)
+  owned(b.text([0, under, 0], `mean ${fmtPrecise(mean, s)}`, { name: 'meanText', auxiliary: true }))
+  for (const x of [from, to]) {
+    if (x === undefined) continue
+    const at = z(x, 0)
+    if (Math.abs(at) < 1e-9) continue
+    // Level with the mean's label unless it would print over it; two rows down fell below the
+    // framed drawing in the browser check and was cut off.
+    const row = Math.abs(at) < 1 ? under * 2 : under
+    owned(b.text([Math.max(-NORMAL_SPAN, Math.min(NORMAL_SPAN, at)), row, 0], fmtPrecise(x, s), { name: 'endText', auxiliary: true }))
+  }
+  if (!hideArea && region) {
+    const zm = (lo + hi) / 2
+    owned(b.text([zm, height(zm) / 2, 0], `probability = ${fmtPrecise(area, s)}`, { name: 'areaText' }))
+  }
+  b.commit()
+  remember('calculus', b)
+  scene().setViewMode('2d')
+  return { area, zFrom, zTo }
+}
+
+/** A box round some points in the plane with the origin in it, for a drawing that has no graph to frame. */
+function frameAround(points: [number, number][]): void {
+  const xs = [0, ...points.map((p) => p[0])]
+  const ys = [0, ...points.map((p) => p[1])]
+  fitCamera({ min: [Math.min(...xs), Math.min(...ys), 0], max: [Math.max(...xs), Math.max(...ys), 0] })
+}
+
+/**
+ * `count` dots in rows of `perRow`, one unit apart, left to right and top to bottom: something to
+ * count, as a first-look question asks. The dots carry no labels — a label would count them.
+ */
+export function visualizeDots(count: number, perRow: number): void {
+  clearTagged('dots')
+  const b = new Builder()
+  const color = themeColor('--series-1', '#4dabf7')
+  const at: [number, number][] = []
+  for (let k = 0; k < count; k++) {
+    const p: [number, number] = [k % perRow, -Math.floor(k / perRow)]
+    at.push(p)
+    inGraphing(b.point([p[0], p[1], 0], { name: 'dot', color, showLabel: false }))
+  }
+  b.commit(false)
+  remember('dots', b)
+  scene().setViewMode('2d')
+  if (at.length) frameAround(at)
+}
+
+/**
+ * Several curves on one drawing, each in its own series colour and carrying its label ("Train
+ * A"), each over its own stretch of x. They replace the last set of compared curves, not any
+ * graph the student typed.
+ */
+export function visualizeCurves(items: { expr: string; label: string; from?: number; to?: number }[]): void {
+  if (!items.length) throw new Error('This picture has no curves to draw.')
+  clearTagged('curves')
+  const b = new Builder()
+  items.forEach((it, i) => {
+    const g = b.graph(stretchOf(it.expr, it.from, it.to), { color: seriesColor(i) })
+    g.label = it.label
+    // The name is written on the curve as well: a graph's own label shows only on hover by
+    // default, and which line is Train A must not depend on a hover.
+    const f = curveOf(it.expr)
+    const from = it.from ?? -5
+    const to = it.to ?? 5
+    const x = from + (to - from) * (0.2 + 0.25 * (i % 3))
+    const y = f(x)
+    if (Number.isFinite(y)) inGraphing(b.text([x, y, 0], it.label, { name: 'curveText', auxiliary: true })).owner = g.id
+  })
+  b.commit(false)
+  remember('curves', b)
+  scene().setViewMode('2d')
+}
+
+/**
+ * The given quantities as marks on one number line that runs through 0 (the axis labels it), each labelled with its name,
+ * value and unit. Labels alternate between two heights so two close values do not print over each
+ * other. The line is a segment between two hidden points, not a graph, so it stops at the marks.
+ */
+export function visualizeNumberLine(items: { label: string; value: number }[]): void {
+  if (!items.length) throw new Error('This question gives no numbers PhysLab could put on a number line.')
+  clearTagged('numberline')
+  const values = items.map((it) => it.value)
+  const lo = Math.min(0, ...values)
+  const hi = Math.max(0, ...values)
+  const span = hi - lo || Math.max(1, Math.abs(hi))
+  // A label is centred on its mark, so the end marks need room for half a label each side:
+  // at 8 % the two end labels ran off the framed drawing in the browser check.
+  const pad = span * 0.15
+  const b = new Builder()
+  const faint = themeColor('--text-faint', '#6c707a')
+  const ends = [lo - pad, hi + pad].map((x) => inGraphing(b.point([x, 0, 0], { auxiliary: true, visible: false })).id)
+  inGraphing(b.segment(ends[0], ends[1], { name: 'numberLine', color: faint, auxiliary: true }))
+  const lift = span * 0.05
+  const sorted = items.map((it, i) => ({ ...it, i })).sort((p, q) => p.value - q.value)
+  sorted.forEach((it, k) => {
+    inGraphing(b.point([it.value, 0, 0], { name: 'mark', color: seriesColor(it.i), showLabel: false }))
+    inGraphing(b.text([it.value, lift * (1 + (k % 2)), 0], it.label, { name: 'markText', auxiliary: true }))
+  })
+  b.commit(false)
+  remember('numberline', b)
+  scene().setViewMode('2d')
+  frameAround([[lo - pad, -lift], [hi + pad, lift * 3]])
 }
 
 /**
