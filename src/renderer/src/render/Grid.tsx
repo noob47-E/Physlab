@@ -3,7 +3,9 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { niceStep, orthoBounds, toScreen, worldPerPixel } from './cameraUtils'
-import { DOT_HALF_PX, dotQuads, finiteArea, gridKey, gridVertices, minorStepOf, needsGridRebuild, normaliseGridStyle, styleFor3D, usableSize, type GridArea } from './gridMath'
+import { abs, float, fract, fwidth, max, mix, positionLocal, saturate, uniform, vec4 } from 'three/tsl'
+import { DOT_HALF_PX, dotQuads, finiteArea, GRID_LINE_PX, gridKey, gridShaderPlan, gridVertices, minorStepOf, needsGridRebuild, normaliseGridStyle, shaderGridQuad, styleFor3D, usableSize, type GridArea } from './gridMath'
+import { useGpuInfo } from './renderer'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
@@ -70,6 +72,85 @@ function useGridLines(): GridLines {
   return lines
 }
 
+/** A float-valued TSL node, as the shader's arithmetic takes it. */
+type TslFloat = typeof positionLocal.x
+
+/**
+ * The shader grid (0.9): one quad whose pixels are lit by their distance to the nearest line, so
+ * every line is exactly one device pixel of ink at any zoom (see `lineCoverage` in gridMath.ts,
+ * which this mirrors and which the tests check). Only the 2-D square styles use it — `gridShaderPlan`.
+ */
+interface ShaderGrid {
+  mesh: THREE.Mesh
+  major: { value: number }
+  minor: { value: number }
+}
+
+function useShaderGrid(): ShaderGrid {
+  const grid = useMemo(() => {
+    const major = uniform(1)
+    const minor = uniform(0.2)
+    const minorColor = uniform(new THREE.Color(MINOR()))
+    const majorColor = uniform(new THREE.Color(MAJOR()))
+    // Step for step the same as lineCoverage. The quad's own coordinates are measured from a major
+    // line near the view (shaderGridQuad), so they stay small enough for the GPU's 32-bit floats;
+    // fwidth of them is the world width of one device pixel, whatever the zoom and the dpr.
+    const coverNode = (p: TslFloat, step: TslFloat) => {
+      const d = abs(fract(p.div(step).add(0.5)).sub(0.5)).mul(step)
+      return saturate(float(GRID_LINE_PX * 0.5 + 0.5).sub(d.div(fwidth(p))))
+    }
+    const p = positionLocal
+    const a = max(coverNode(p.x, minor), coverNode(p.y, minor))
+    const b = max(coverNode(p.x, major), coverNode(p.y, major))
+    // The larger coverage, as gridPixel: a major line is also a minor line, and stacking the two
+    // counted it twice (a major line split across two pixels drew one and a half pixels of ink).
+    const alpha = max(a, b)
+    const material = new THREE.MeshBasicNodeMaterial({ depthTest: false, depthWrite: false, side: THREE.DoubleSide })
+    material.colorNode = vec4(mix(minorColor, majorColor, b.div(max(alpha, 1e-6))), alpha)
+    // Blended but not "transparent": a transparent material is drawn after every opaque one and
+    // would lie over the shapes' fills; this way it stays first in the opaque pass, as the lines were.
+    material.blending = THREE.CustomBlending
+    material.blendSrc = THREE.SrcAlphaFactor
+    material.blendDst = THREE.OneMinusSrcAlphaFactor
+    material.blendSrcAlpha = THREE.OneFactor
+    material.blendDstAlpha = THREE.OneMinusSrcAlphaFactor
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Array(12).fill(0), 3))
+    geometry.setIndex([0, 1, 2, 0, 2, 3])
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.frustumCulled = false
+    mesh.renderOrder = -10
+    mesh.visible = false
+    return { mesh, major, minor, minorColor, majorColor }
+  }, [])
+  const theme = useTheme((t) => t.theme)
+  useEffect(() => repaintShaderGrid(grid), [theme, grid])
+  useEffect(() => () => (grid.mesh.geometry.dispose(), (grid.mesh.material as THREE.Material).dispose()), [grid])
+  return grid
+}
+
+/** Read the grid colours of the theme now showing into the shader. */
+function repaintShaderGrid(g: { mesh: THREE.Mesh; minorColor: { value: THREE.Color }; majorColor: { value: THREE.Color } }) {
+  g.minorColor.value.set(MINOR())
+  g.majorColor.value.set(MAJOR())
+  // Uniform colours reach the GPU without a rebuild, but the grid follows the rule every themed
+  // WebGPU material here follows (AGENTS "WebGPU compiles a material's colour in").
+  ;(g.mesh.material as THREE.Material).needsUpdate = true
+}
+
+/** Size the shader quad to the area and set its steps; the quad sits at a major line near the middle (shaderGridQuad). */
+function fillShaderGrid(g: ShaderGrid, style: GridStyle, area: GridArea, majorStep: number, minorStep: number) {
+  const q = shaderGridQuad(style, area, majorStep, minorStep)
+  const [x0, y0, x1, y1] = q.corners
+  const pos = g.mesh.geometry.getAttribute('position') as THREE.BufferAttribute
+  ;(pos.array as Float32Array).set([x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0])
+  pos.needsUpdate = true
+  g.mesh.geometry.computeBoundingSphere()
+  g.mesh.position.set(q.origin[0], q.origin[1], 0)
+  g.major.value = q.major
+  g.minor.value = q.minor
+}
+
 /** Rebuild the grid for one style; `dotHalf` is half a dot's side in world units (see `dotQuads`), `wpp` the world units one pixel spans (it sizes the chords of the polar circles). */
 function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridArea, majorStep: number, minorStep: number, dotHalf: number, wpp: number, z = 0) {
   const v = gridVertices(style, area, majorStep, minorStep, z, wpp)
@@ -82,6 +163,11 @@ function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridA
   put(dots, dotQuads(v.dots, dotHalf))
 }
 
+/** Show or hide the shader grid (the line path's twin is `showGridLines`). */
+function showShaderGrid(g: ShaderGrid, show: boolean) {
+  g.mesh.visible = show
+}
+
 /** Show or hide the grid. A part the style does not use is hidden rather than drawn empty: a zero-vertex draw call is still a draw call, and WebGPU warns about each one. */
 function showGridLines(lines: GridLines, show: boolean) {
   for (const l of lines) l.visible = show && ((l.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0) > 0
@@ -91,10 +177,14 @@ function showGridLines(lines: GridLines, show: boolean) {
 export function Grid2D() {
   const { camera, size } = useThree()
   const lines = useGridLines()
+  const shader = useShaderGrid()
   const [minor] = lines
   const showGrid = useScene((s) => s.settings.showGrid)
   // A style this build does not know draws lines rather than nothing.
   const gridStyle = useScene((s) => normaliseGridStyle(s.settings.gridStyle))
+  const backend = useGpuInfo((g) => g.backend)
+  const path = gridShaderPlan(backend, gridStyle, false)
+  const buildMs = useRef(0)
   const showAxes = useScene((s) => s.settings.showAxes)
   // Ticks are written in the drawing's unit and scale, like every other number on screen.
   const settings = useScene((s) => s.settings)
@@ -122,22 +212,29 @@ export function Grid2D() {
     const majorStep = niceStep(100 / zoom)
     const minorStep = minorStepOf(majorStep)
     const prev = built.current
-    const key = gridKey(majorStep, size, zoom, gridStyle)
+    // The path is part of the key: switching between the shader and the segments must rebuild the one now drawn.
+    const key = `${gridKey(majorStep, size, zoom, gridStyle)}|${path}`
     if (needsGridRebuild(prev, b, key)) {
       const w = b.xMax - b.xMin
       const h = b.yMax - b.yMin
       const ext = { xMin: b.xMin - w, xMax: b.xMax + w, yMin: b.yMin - h, yMax: b.yMax + h }
-      // The key holds the zoom, so the dots are re-sized whenever the zoom changes.
-      const wpp = worldPerPixel(camera, size)
-      fillGrid(lines, gridStyle, ext, majorStep, minorStep, DOT_HALF_PX * wpp, wpp)
+      const t0 = performance.now()
+      if (path === 'shader') fillShaderGrid(shader, gridStyle, ext, majorStep, minorStep)
+      else {
+        // The key holds the zoom, so the dots are re-sized whenever the zoom changes.
+        const wpp = worldPerPixel(camera, size)
+        fillGrid(lines, gridStyle, ext, majorStep, minorStep, DOT_HALF_PX * wpp, wpp)
+      }
+      buildMs.current = performance.now() - t0
       built.current = { key, ...ext }
       setAxes({ x: [[ext.xMin, 0, 0], [ext.xMax, 0, 0]], y: [[0, ext.yMin, 0], [0, ext.yMax, 0]] })
     }
-    showGridLines(lines, showGrid)
+    showGridLines(lines, showGrid && path === 'lines')
+    showShaderGrid(shader, showGrid && path === 'shader')
     if (trace) {
-      const verts = (minor.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0
+      const verts = path === 'shader' ? 4 : ((minor.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0)
       console.info(
-        `PHYSLAB_CHECK grid f${trace} size=${size.width}x${size.height} zoom=${zoom} step=${majorStep}/${minorStep} x=[${b.xMin.toFixed(2)},${b.xMax.toFixed(2)}] y=[${b.yMin.toFixed(2)},${b.yMax.toFixed(2)}] key=${key} prev=${prev.key} verts=${verts} axes=${axes.x.length} grid=${showGrid} axesOn=${showAxes}`
+        `PHYSLAB_CHECK grid f${trace} path=${path} backend=${backend} build=${buildMs.current.toFixed(2)}ms size=${size.width}x${size.height} zoom=${zoom} step=${majorStep}/${minorStep} x=[${b.xMin.toFixed(2)},${b.xMax.toFixed(2)}] y=[${b.yMin.toFixed(2)},${b.yMax.toFixed(2)}] key=${key} prev=${prev.key} verts=${verts} axes=${axes.x.length} grid=${showGrid} axesOn=${showAxes}`
       )
     }
 
@@ -179,6 +276,7 @@ export function Grid2D() {
       {lines.map((l) => (
         <primitive key={l.uuid} object={l} />
       ))}
+      <primitive object={shader.mesh} />
       {showAxes && axes.x.length > 0 && (
         <>
           <FatLine points={axes.x} color={AXIS()} width={1.6} renderOrder={-5} />

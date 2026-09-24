@@ -399,3 +399,80 @@ export function snapToGrid(style: GridStyle, p: V3, major: number, minor: number
   const step = snapStep(minor, style)
   return [Math.round(x / step) * step, Math.round(y / step) * step, z]
 }
+
+// ── The grid shader (0.9, Idea 1) ─────────────────────────────────────────────────────────────
+// The square 2-D grids can be drawn by one quad whose fragment shader lights each pixel by its
+// distance to the nearest line. A GPU line is one pixel wide wherever the rasteriser happens to
+// round it, so at some zooms a minor line faded to nothing or doubled into two half-lit pixels;
+// the shader gives every line exactly one device pixel of ink at any zoom and any pan.
+
+/**
+ * The rollback switch for WebGL2. The WebGPU path was checked in the browser in all four themes;
+ * if WebGL2 ever shows moiré, a slower frame or a wrong colour, this goes to false and WebGL2
+ * draws line segments again, with nothing else changed.
+ */
+export const GRID_SHADER_WEBGL2 = true
+
+/** The styles the shader draws: the three square-line papers. Dots, polar circles and the isometric and hex lattices keep their line segments. */
+export const SHADER_GRID_STYLES: readonly GridStyle[] = ['lines', 'fine', 'paper']
+
+/**
+ * How the grid is drawn: by the shader or by line segments. Only the 2-D square styles use the
+ * shader (the 3-D floor is seen at a slant, where one pixel of ink per line is not the goal);
+ * WebGL2 uses it only while `gate.webgl2Ok`, and a renderer still starting draws lines.
+ */
+export function gridShaderPlan(
+  backend: 'WebGPU' | 'WebGL2' | 'starting',
+  style: GridStyle,
+  is3D: boolean,
+  gate: { webgl2Ok: boolean } = { webgl2Ok: GRID_SHADER_WEBGL2 }
+): 'shader' | 'lines' {
+  if (is3D || !SHADER_GRID_STYLES.includes(style)) return 'lines'
+  if (backend === 'WebGPU') return 'shader'
+  return backend === 'WebGL2' && gate.webgl2Ok ? 'shader' : 'lines'
+}
+
+/** A line's width on screen in device pixels. */
+export const GRID_LINE_PX = 1
+
+/**
+ * The shader's line-distance function, written once more in TypeScript so it can be tested:
+ * how much of the pixel whose centre is at `x` a line family `step` apart covers, when one
+ * device pixel spans `wpp` world units (the shader gets `wpp` from `fwidth`). It is a tent of
+ * half-width one pixel around a line `widthPx` wide, so summed over the pixel centres across a
+ * line it is exactly `widthPx` wherever the line falls between them — never a gap, never a
+ * doubled line. Keep it step for step the same as `coverNode` in Grid.tsx.
+ */
+export function lineCoverage(x: number, step: number, wpp: number, widthPx = GRID_LINE_PX): number {
+  const f = x / step + 0.5
+  const d = Math.abs(f - Math.floor(f) - 0.5) * step
+  return Math.min(1, Math.max(0, widthPx * 0.5 + 0.5 - d / wpp))
+}
+
+/**
+ * One pixel of the shader grid: the minor and major coverage (each the larger of its vertical and
+ * horizontal family) and the alpha laid over the page, in the major colour where a major line
+ * covers the pixel. The alpha is the larger coverage, not minor and major stacked: every major
+ * line is also a minor line, so stacking counted it twice and a major line split between two
+ * pixels came out as one and a half pixels of ink (seen in the browser check).
+ */
+export function gridPixel(x: number, y: number, minor: number, major: number, wpp: number): { minor: number; major: number; alpha: number } {
+  const a = Math.max(lineCoverage(x, minor, wpp), lineCoverage(y, minor, wpp))
+  const b = Math.max(lineCoverage(x, major, wpp), lineCoverage(y, major, wpp))
+  return { minor: a, major: b, alpha: Math.max(a, b) }
+}
+
+/**
+ * The quad the shader draws on and the steps it draws. The quad's corners are kept relative to
+ * `origin`, the major line nearest the middle of the area, because the GPU works in 32-bit floats:
+ * a world x of 12 345 is held to about a thousandth, which at a close zoom is most of a pixel,
+ * and lines measured from world zero wobbled and doubled far from the origin. Measured from a
+ * major line near the view, the numbers stay small and every line still falls on a multiple of
+ * its step. `minor` is the step the minor lines are drawn at (halved for "fine", as `gridVertices`
+ * does).
+ */
+export function shaderGridQuad(style: GridStyle, area: GridArea, major: number, minor: number): { origin: [number, number]; corners: [number, number, number, number]; major: number; minor: number } {
+  const ox = Math.round((area.xMin + area.xMax) / 2 / major) * major
+  const oy = Math.round((area.yMin + area.yMax) / 2 / major) * major
+  return { origin: [ox, oy], corners: [area.xMin - ox, area.yMin - oy, area.xMax - ox, area.yMax - oy], major, minor: snapStep(minor, style) }
+}
