@@ -436,28 +436,34 @@ const renders = (tex: string, where: string): void => {
 describe('the bundled sample set', () => {
   const bank = loadBundled()
   const byId = (id: string) => bank.questions.find((q) => q.id === id)!
+  // The bundle now also carries other tracks' own bank files (physics-mechanics.pqjson among
+  // them), each tested in its own file; this describe block is about sample.pqjson specifically,
+  // so its two exact-count checks read only the questions whose id it gave them.
+  const samples = { ...bank, questions: bank.questions.filter((q) => q.id.startsWith('physlab-sample-')) }
 
   it('holds the braking train and one question for every binding, all CC BY 4.0 from PhysLab', () => {
-    expect(bank.questions).toHaveLength(6)
-    expect(bank.questions[0].title).toBe('A braking train')
-    for (const q of bank.questions) expect(q.license).toMatchObject({ id: 'CC BY 4.0', holder: 'PhysLab' })
-    const kinds = bank.questions.flatMap((q) => q.parts.map((p) => p.type))
+    expect(samples.questions).toHaveLength(6)
+    expect(samples.questions[0].title).toBe('A braking train')
+    for (const q of samples.questions) expect(q.license).toMatchObject({ id: 'CC BY 4.0', holder: 'PhysLab' })
+    const kinds = samples.questions.flatMap((q) => q.parts.map((p) => p.type))
     expect(kinds).toContain('expression')
-    expect(bank.questions.some((q) => q.parts.some((p) => p.type === 'choice' && p.distractors))).toBe(true)
-    expect(bank.questions.some((q) => q.parts.some((p) => p.type === 'number' && p.unit !== 'none'))).toBe(true)
-    expect(bank.questions.filter((q) => q.picture?.kind === 'between')).toHaveLength(1)
-    expect(bank.questions.filter((q) => q.motion?.sampleEvery)).toHaveLength(1)
-    expect(bank.questions.filter((q) => q.sandbox?.actuators.length)).toHaveLength(1)
+    expect(samples.questions.some((q) => q.parts.some((p) => p.type === 'choice' && p.distractors))).toBe(true)
+    expect(samples.questions.some((q) => q.parts.some((p) => p.type === 'number' && p.unit !== 'none'))).toBe(true)
+    expect(samples.questions.filter((q) => q.picture?.kind === 'between')).toHaveLength(1)
+    expect(samples.questions.filter((q) => q.motion?.sampleEvery)).toHaveLength(1)
+    expect(samples.questions.filter((q) => q.sandbox?.actuators.length)).toHaveLength(1)
   })
 
   it('offers every question together first, then one set per tag two or more questions share', () => {
-    const sets = bundledSets(bank)
+    const sets = bundledSets(samples)
     expect(sets[0].questions).toHaveLength(6)
     expect(sets.map((s) => s.title)).toEqual(['Every sample question', 'Forces', 'Graphs', 'Motion'])
     const motion = sets.find((s) => s.title === 'Motion')!
     expect(motion.questions.map((q) => q.id)).toContain('physlab-sample-braking-train')
   })
 
+  // The bundle now also carries other tracks' own bank files, so this loop covers more
+  // questions than when it was written; a generous timeout keeps it from flaking under load.
   it('plays every question on many seeds with no problem, every right answer marked right and every step through KaTeX', () => {
     for (const q of bank.questions) {
       for (let seed = 1; seed <= 25; seed++) {
@@ -485,7 +491,7 @@ describe('the bundled sample set', () => {
         }
       }
     }
-  })
+  }, 30000)
 
   it('never puts a variable where LaTeX wants a symbol: \\bar{v} with v drawn would print \\bar{20 m/s}', () => {
     for (const q of bank.questions) {
