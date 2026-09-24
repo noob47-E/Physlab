@@ -5,6 +5,10 @@
 import { describe, expect, it } from 'vitest'
 import { HALO_TIP_PX, HEAD_HALF_ANGLE_DEG, HEAD_PX, LABEL_BOX, POINT_PX, POINT_REACH_PX, arrowHead, pickLabelOffset, pointHalo, pointRadius } from '../src/renderer/src/render/viewMath'
 import { readSource } from './helpers/repo'
+import { RESULT_HEAD_GAP_PX, isResultArrow, mixParents } from '../src/renderer/src/render/colourMix'
+import { PALETTE, RESULT_COLOUR } from '../src/renderer/src/core/naming'
+import { cssColor, tokenOf } from '../src/renderer/src/app/theme'
+import { SWATCHES } from '../src/renderer/src/ui/swatches'
 
 describe('flat arrow heads', () => {
   it('are 12 px long with a 25° half-angle at any zoom', () => {
@@ -59,20 +63,56 @@ describe('flat arrow heads', () => {
   })
 })
 
-describe('the resultant is coloured between its parents', () => {
-  it('is mixed by the scene bridge when it draws, and again by the view from the live parents', () => {
-    const vis = readSource('src/renderer/src/core/visualize.ts')
-    expect(vis).toMatch(/o\.color = mixOklabMany\(inputs\.map\(\(p\) => p\.color\)\)/)
-    expect(vis).toMatch(/mixParents\.set\(o\.id, inputs\.map\(\(p\) => p\.id\)\)/)
-    // And forgotten with the answer, when the next drawing replaces it.
-    expect(vis).toMatch(/for \(const id of ids\) mixParents\.delete\(id\)/)
+describe('the resultant reads as clearly as its parents, not heavier (Fix 2)', () => {
+  it('knows a resultant by its token, by the command bar’s old gold, or by the parents it was drawn from', () => {
+    expect(isResultArrow({ id: 'r1', color: RESULT_COLOUR })).toBe(true)
+    expect(isResultArrow({ id: 'r2', color: '#123456', themed: '--vec-result' })).toBe(true)
+    // R = A + B typed in the bar is stored as #ffd43b; an old file keeps it.
+    expect(isResultArrow({ id: 'r3', color: '#ffd43b' })).toBe(true)
+    mixParents.set('r4', ['a', 'b'])
+    expect(isResultArrow({ id: 'r4', color: '#0cdefd' })).toBe(true)
+    // Its label and Outliner swatch read the same token as its arrow; they kept the stored mix.
+    expect(tokenOf({ id: 'r4', type: 'vector', color: '#cd7af2' })).toBe('--vec-result')
+    expect(cssColor({ id: 'r4', type: 'vector', color: '#cd7af2' })).toBe('var(--vec-result, #cd7af2)')
+    mixParents.delete('r4')
+    expect(tokenOf({ id: 'r4', type: 'vector', color: '#cd7af2' })).toBeUndefined()
+    // The label and the swatch hand the object itself, id and all, to cssColor.
+    expect(readSource('src/renderer/src/render/Labels.tsx')).toMatch(/cssColor\(o\)/)
+    expect(readSource('src/renderer/src/panels/Outliner.tsx')).toMatch(/cssColor\(o\)/)
+    // A parent, and an arrow in a colour the student picked, are not.
+    expect(isResultArrow({ id: 'a', color: PALETTE.vector[0] })).toBe(false)
+    expect(isResultArrow({ id: 'b', color: '#123456' })).toBe(false)
+  })
+
+  it('draws every arrow in its theme token; a picked colour stays the student’s, the old swatches included', () => {
+    expect(tokenOf({ type: 'vector', color: PALETTE.vector[1] })).toBe('--vec-2')
+    expect(tokenOf({ type: 'vector', color: '#123456' })).toBeUndefined()
+    // The Properties swatches still offer the eight 0.6.1 colours. Picked, each is shown as picked:
+    // cyan used to show as the blue token and pink and red as one orange. Old files' arrows in
+    // these colours were given their tokens when the file was read (core/migrate.ts, format 4).
+    for (const c of SWATCHES) expect(tokenOf({ type: 'vector', color: c }), c).toBeUndefined()
+    expect(cssColor({ type: 'vector', color: '#22b8cf' })).toBe('#22b8cf')
+    // An old file's arrow carries its token in `themed`, which Properties clears when a colour is picked.
+    expect(tokenOf({ type: 'vector', color: '#4dabf7', themed: '--vec-1' })).toBe('--vec-1')
+    expect(readSource('src/renderer/src/panels/Properties.tsx')).toMatch(/delete d\.themed/)
+    // Not every blue thing is an arrow: a graph in the same hex keeps it.
+    expect(tokenOf({ type: 'graph', color: '#4dabf7' })).toBeUndefined()
+    expect(cssColor({ type: 'vector', color: PALETTE.vector[0] })).toBe(`var(--vec-1, ${PALETTE.vector[0]})`)
+  })
+
+  it('gives R its parents’ weight and a second head, and drops the colour mix that sat beside a parent', () => {
     const view = readSource('src/renderer/src/render/ObjectViews.tsx')
-    expect(view).toMatch(/mixParents\.get\(obj\.id\)/)
-    expect(view).toMatch(/parents\.length >= 2 \? mixOklabMany\(parents\) : obj\.color/)
-    // Redone on a theme change: WebGPU compiles the colour in, so the memo is keyed on the theme.
-    expect(view).toMatch(/\[parentColours, obj\.color, colors\.theme\]/)
-    // The mixed colour is what the main arrow is drawn with.
-    expect(view).toMatch(/<Arrow tail=\{tail\} comp=\{comp\} color=\{color\} is3D=\{is3D\} thick=\{thick\} \/>/)
+    expect(view).not.toMatch(/mixOklabMany/)
+    expect(view).toMatch(/const result = isResultArrow\(obj\)/)
+    expect(view).toMatch(/result \? colors\.result : shownColor\(obj\)/)
+    // One thickness for every arrow; only selection or hover changes it.
+    expect(view).toMatch(/const thick = selected \? 2\.4 : hovered \? 2\.1 : 1\.7\n/)
+    expect(view).toMatch(/\{result && L \/ wpp > 4 \* RESULT_HEAD_GAP_PX && <Arrow tail=\{tail\} comp=\{comp\} color=\{color\} is3D=\{is3D\} thick=\{thick\} tipPx=\{-RESULT_HEAD_GAP_PX\} \/>\}/)
+    // The second head sits clear of the first: a whole 12 px head and a gap back.
+    expect(RESULT_HEAD_GAP_PX).toBeGreaterThan(HEAD_PX)
+    // The components have their own pair of tokens.
+    expect(view).toMatch(/xComp: themeColor\('--vec-x'\)/)
+    expect(view).toMatch(/yComp: themeColor\('--vec-y'\)/)
   })
 })
 

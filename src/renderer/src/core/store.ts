@@ -73,7 +73,11 @@ export interface SceneState {
 
   addObjects: (objs: SceneObject[], opts?: { select?: boolean; record?: boolean }) => void
   updateObject: (id: ObjId, recipe: (draft: Draft<SceneObject>) => void, record?: boolean) => void
-  removeObjects: (ids: ObjId[]) => void
+  /**
+   * `record: false` removes without an undo step of its own: the Vector Calculator takes away a
+   * drawn answer whose vectors were removed, and the undo that brings them back brings it back.
+   */
+  removeObjects: (ids: ObjId[], opts?: { record?: boolean }) => void
   /**
    * Geometry Lego. `breakApart` turns a decomposed polygon into one free polygon per part, each
    * a rigid piece the student slides, turns and flips; `fusePieces` joins touching shapes —
@@ -512,12 +516,12 @@ export const useScene = create<SceneState>()((set, get) => {
       commit({ ...objects, [id]: updated }, order, history)
     },
 
-    removeObjects: (ids) => {
+    removeObjects: (ids, opts = {}) => {
       const { objects, order, selection, hovered } = get()
       const doomed = doomedBy(ids, objects, order)
       if (doomed.size === 0) return
       dropPieceCorners(doomed, objects) // REGION L: a Lego piece's corners go with it
-      const history = record()
+      const history = opts.record === false ? {} : record()
       const nextObjects = { ...objects }
       for (const id of doomed) delete nextObjects[id]
       commit(

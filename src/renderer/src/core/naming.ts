@@ -89,7 +89,12 @@ let counter = 0
 export const newId = (): string => `o${Date.now().toString(36)}${(counter++).toString(36)}`
 
 export const PALETTE = {
-  vector: ['#4dabf7', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'],
+  /**
+   * Moonlight's values of the arrow tokens --vec-1 … --vec-6 (styles.css). An arrow stores one of
+   * these and is drawn in its token's colour for the theme that is on (vectorToken), so it is 3:1
+   * on every canvas. Six, not eight: eight could not all stay apart for colour-blind eyes (Fix 2).
+   */
+  vector: ['#0cdefd', '#eb7a1d', '#1fc092', '#f0e442', '#ba5382', '#975bce'],
   point: ['#e7f5ff'],
   segment: ['#ced4da'],
   ray: ['#ced4da'],
@@ -101,6 +106,34 @@ export const PALETTE = {
   graph: ['#4dabf7', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#22b8cf'],
   text: ['#e9ecef']
 } satisfies Record<ObjType, string[]>
+
+/**
+ * The 0.6.1–0.7 arrow colours, first to eighth, as files and autosaves hold them. They are turned
+ * into tokens once, when a file is read (core/migrate.ts, format 4), not every time a colour is
+ * read: the Properties swatches still offer these hexes, and a student who picks cyan for an arrow
+ * must see cyan, not the token that took the old cyan's place.
+ */
+export const OLD_ARROW_COLOURS = ['#4dabf7', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595']
+
+/** The gold the command bar gives a sum it draws (R = A + B, lang/commands.ts), which is a resultant. */
+const BAR_SUM_GOLD = '#ffd43b'
+
+/** The resultant's token; its stored colour is Moonlight's value of it. */
+export const RESULT_TOKEN = '--vec-result'
+export const RESULT_COLOUR = '#cf79ff'
+
+/**
+ * The arrow token a stored vector colour stands for, if it is one the app hands out now (today's
+ * palette, the resultant, or the command bar's gold sum). A colour the student picked themselves
+ * is theirs and has none; an older version's colours were turned into tokens when the file was read.
+ */
+export function vectorToken(color: string): string | undefined {
+  const c = color.trim().toLowerCase()
+  const i = PALETTE.vector.indexOf(c)
+  if (i >= 0) return `--vec-${i + 1}`
+  if (c === RESULT_COLOUR || c === BAR_SUM_GOLD) return RESULT_TOKEN
+  return undefined
+}
 
 export function nextColor(type: ObjType, objects: Record<string, SceneObject>): string {
   const list = PALETTE[type]

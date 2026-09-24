@@ -16,7 +16,7 @@ import { decompose, type Decomposition } from '../math/decompose'
 import { fillOutline, fillsWhole } from './fillMath'
 import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
-import { mixOklabMany, mixParents } from './colourMix'
+import { isResultArrow, RESULT_HEAD_GAP_PX } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 
 const UP = new THREE.Vector3(0, 1, 0)
@@ -60,8 +60,11 @@ function useDrawingColors() {
     () => ({
       theme,
       select: themeColor('--sel-glow'),
-      xComp: themeColor('--bad'),
-      yComp: themeColor('--good'),
+      // Their own pair, apart for colour-blind eyes too: --bad and --good were 3.1 apart for a
+      // deuteranope in Moonlight Gold (Fix 2).
+      xComp: themeColor('--vec-x'),
+      yComp: themeColor('--vec-y'),
+      result: themeColor('--vec-result'),
       arc: themeColor('--warn'),
       dashed: themeColor('--text-faint'),
       outline: themeColor('--bg-0'),
@@ -250,15 +253,15 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
   const wpp = worldPerPixel(camera, size, head)
 
   const colors = useDrawingColors()
-  // An answer drawn by the Vector Calculator is coloured between its parents. The mix is redone
-  // from the parents' current colours, keyed on the theme as well (WebGPU compiles a colour into
-  // its material, and useArrowMaterials makes a new one for a new colour string).
-  const parentColours = useScene((s) => mixParents.get(obj.id)?.map((id) => s.objects[id]?.color ?? '').join(' ') ?? '')
-  const color = useMemo(() => {
-    const parents = parentColours.split(' ').filter(Boolean)
-    return parents.length >= 2 ? mixOklabMany(parents) : obj.color
+  // A resultant is drawn in its own token, not mixed between its parents: the mix of A and B sat
+  // 1.4 from A for a deuteranope. It has its parents' weight and a second head instead of a
+  // heavier shaft (Fix 2). Every other arrow is drawn in its theme token (shownColor).
+  const result = isResultArrow(obj)
+  const color = useMemo(
+    () => (result ? colors.result : shownColor(obj)),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- colors.theme is the signal that the stylesheet changed, not a value read here
-  }, [parentColours, obj.color, colors.theme])
+    [result, obj.color, obj.themed, colors.theme]
+  )
   const showComps = obj.showComponents || selected
   // The θ arc from the x-axis is an angle mark; a student who wants a bare drawing turns it off.
   const showArc = useScene((s) => s.settings.showAngleMarks)
@@ -314,6 +317,9 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
           for its outline to be as wide along those edges as it is beside the shaft. */}
       {selected && <Arrow tail={tail} comp={comp} color={colors.select} is3D={is3D} thick={thick + 2.2} renderOrder={11} headPx={15} headRadPx={8.5} tipPx={HALO_TIP_PX} />}
       <Arrow tail={tail} comp={comp} color={color} is3D={is3D} thick={thick} />
+      {/* The resultant's second head, one head length and a gap back from the tip: a mark that
+          does not depend on seeing its colour. Left off an arrow too short to carry two. */}
+      {result && L / wpp > 4 * RESULT_HEAD_GAP_PX && <Arrow tail={tail} comp={comp} color={color} is3D={is3D} thick={thick} tipPx={-RESULT_HEAD_GAP_PX} />}
       {showComps && planar && L > 1e-9 && (
         <>
           <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />

@@ -2,10 +2,15 @@
 // old sample vectors back, and a vector selected on the drawing is the panel's business only
 // when it is one the student drew.
 
-import { describe, expect, it } from 'vitest'
-import type { SceneObject } from '../src/renderer/src/core/types'
-import { CARDS_KEY, OLD_CARDS_KEY, addVectorFromScene, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useScene } from '../src/renderer/src/core/store'
+import type { EvalResult, SceneObject, SceneSettings, VectorObj } from '../src/renderer/src/core/types'
+import { add, layoutVectors, type V3 } from '../src/renderer/src/math/vec'
+import * as VS from '../src/renderer/src/math/vectorSolver'
+import { isResultArrow } from '../src/renderer/src/render/colourMix'
+import { CARDS_KEY, OLD_CARDS_KEY, NOTHING_PICKED, NO_ARROWS, PlainError, addVectorFromScene, cardValues, planSync, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, answerHint, cardValue, evalNumber, explainVectorError, nextStepHint, removeCard, renameCard, startCardSync, unknownNameSentence, unknownNames, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
 import { readSource } from './helpers/repo'
+import { math } from '../src/renderer/src/math/expr'
 
 const card = (id: number, name: string, extra: Partial<Card> = {}): Card => ({ id, name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '', ...extra })
 
@@ -106,12 +111,14 @@ describe('one way in', () => {
     expect(src).toMatch(/const waiting = !ok && \(isBlankCard\(card\) \|\| \(card\.entry === 'scene' && !card\.sceneId\)\)/)
     expect(src).toMatch(/\$\{ok \|\| waiting \? '' : 'border-\[color:var\(--bad\)\]'\}/)
     expect(src).toMatch(/waiting \? \(\s*<span className="text-\[color:var\(--text-dim\)\]">/)
-    expect(src).toContain('Type a vector above, or draw one on the graph.')
+    expect(src).toContain('Type a vector above, like 3i + 4j or 10∠30°. It is drawn on the graph as you type.')
     expect(src).not.toContain('Type the vector, e.g.')
     // The field's placeholder carries the example, once.
     expect(src).toContain('placeholder="3i + 4j  or  10∠30°"')
     // An operation that reads the empty card still says so, in plain words.
-    expect(src).toContain("return 'nothing typed yet'")
+    const store = readSource('src/renderer/src/panels/vectorCalcStore.ts')
+    expect(store).toContain("NOTHING_TYPED = 'nothing typed yet'")
+    expect(store).toContain('return NOTHING_TYPED')
     expect(src).toMatch(/Card \$\{wanted\[i\]\.name\} cannot be read: \$\{v\}/)
   })
 
@@ -188,12 +195,11 @@ describe('a vector selected on the drawing', () => {
     expect(cardForSelection([card(3, 'A', { latex: '3\\hat{i}' })], ['vB'], objects, answers)).toEqual({ kind: 'add', sceneId: 'vB', name: 'B' })
   })
 
-  it('finds the card it was demoted from after undo and redo, before any blank card', () => {
-    const demoted = card(4, 'B', { latex: '3\\hat{i}+4\\hat{j}', last: [3, 4, 0], wasSceneId: 'vB' })
-    expect(cardToReuse([card(3, 'A'), demoted], 'vB')).toBe(demoted)
-    expect(cardForSelection([card(3, 'A'), demoted], ['vB'], objects, answers)).toEqual({ kind: 'link', cardId: 4, sceneId: 'vB', name: 'B' })
-    // The demotion keeps the vector's id for that purpose.
-    expect(readSource('src/renderer/src/panels/VectorCalc.tsx')).toMatch(/entry: 'comp', sceneId: '', wasSceneId: c\.sceneId/)
+  it('points at a typed card whose own arrow is selected, before any blank card', () => {
+    // A typed card draws its own arrow (Fix 26); selecting that arrow is selecting the card.
+    const typed = card(4, 'B', { latex: '3\\hat{i}+4\\hat{j}', last: [3, 4, 0], sceneId: 'vB', own: true })
+    expect(cardToReuse([card(3, 'A'), typed])).toMatchObject({ id: 3 })
+    expect(cardForSelection([card(3, 'A'), typed], ['vB'], objects, answers)).toEqual({ kind: 'card', cardId: 4 })
   })
 
   it('links a card in the store: the blank A becomes the reader of the drawing’s A, keeping its letter', () => {
@@ -201,7 +207,7 @@ describe('a vector selected on the drawing', () => {
     expect(linkCardToScene(3, 'vA', 'A')).toBe(3)
     const [a, b] = useVC.getState().cards
     expect(a).toMatchObject({ id: 3, name: 'A', entry: 'scene', sceneId: 'vA' })
-    expect(a.wasSceneId).toBeUndefined()
+    expect(a.own).toBe(false)
     expect(b).toMatchObject({ id: 4, name: 'B', latex: '\\hat{i}' })
     // A name another card holds is not taken over: the next free letter is used, never V6.
     useVC.setState({ cards: [card(5, 'B', { latex: '\\hat{i}' }), card(6, 'C')] })
@@ -227,12 +233,442 @@ describe('a vector selected on the drawing', () => {
   it('is what the panel watches: the scene selection, through the pure helper', () => {
     const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
     expect(src).toMatch(/useScene\(\(s\) => s\.selection\)/)
-    expect(src).toMatch(/cardForSelection\([^\n]*isDrawnAnswer\)/)
+    // The answers Draw on graph adds (Fix 2) are left out as the scene bridge's are.
+    expect(src).toMatch(/cardForSelection\([^\n]*\(id\) => isDrawnAnswer\(id\) \|\| isCalcAnswer\(id\)\)/)
     expect(src).toMatch(/scrollIntoView/)
     expect(src).toMatch(/match\.kind === 'link'\) set\(\{ highlight: linkCardToScene\(match\.cardId, match\.sceneId, match\.name\) \}\)/)
-    // Remove deselects the vector, since a click on something already selected does not re-select it.
-    expect(src).toMatch(/if \(card\.sceneId && selection\.includes\(card\.sceneId\)\) useScene\.getState\(\)\.select\(\[\]\)/)
+    // Remove takes the card's arrow off the drawing too (Fix 25); deleting an object drops it
+    // from the selection, so a later click on the vector re-selects it.
+    expect(src).toMatch(/onClick=\{\(\) => removeCard\(card\.id\)\}/)
     // The drawn answers are told apart by the scene bridge that drew them.
     expect(readSource('src/renderer/src/core/visualize.ts')).toMatch(/export const isDrawnAnswer/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 25 and Fix 26: the drawing and the cards are one set of vectors
+// ---------------------------------------------------------------------------
+
+describe('the graph and the cards stay in step (Fix 25, Fix 26)', () => {
+  const scene = () => useScene.getState()
+  const vecObj = (id: string, name: string, comp: [number, number, number]): SceneObject =>
+    ({ id, name, visible: true, locked: false, color: '#4dabf7', showLabel: true, space: 'vectors', type: 'vector', def: { kind: 'free', tail: [0, 0, 0], comp } }) as SceneObject
+  const vectorsOnGraph = () => Object.values(scene().objects).filter((o) => o.type === 'vector' && !o.auxiliary)
+  const compOf = (id: string) => {
+    const c = scene().ev.values.get(id)
+    return c?.type === 'vector' ? c.comp : undefined
+  }
+
+  beforeEach(() => {
+    useVC.setState({ cards: [], result: null, highlight: 0 })
+    scene().newScene()
+    startCardSync()
+  })
+
+  it('deleting a vector on the graph removes its card, and one undo brings both back', () => {
+    scene().addObjects([vecObj('g25a', 'A', [3, 4, 0])])
+    useVC.setState({ cards: [card(51, 'A', { entry: 'scene', sceneId: 'g25a' }), card(52, 'B', { latex: '2\\hat{j}' })] })
+    scene().removeObjects(['g25a'])
+    expect(useVC.getState().cards.map((c) => c.name)).toEqual(['B'])
+    scene().undo()
+    expect(useVC.getState().cards.map((c) => c.name)).toEqual(['A', 'B'])
+    expect(useVC.getState().cards[0]).toMatchObject({ id: 51, entry: 'scene', sceneId: 'g25a' })
+    scene().redo()
+    expect(useVC.getState().cards.map((c) => c.name)).toEqual(['B'])
+  })
+
+  it('removing a card removes its vector from the graph, and one undo brings both back', () => {
+    scene().addObjects([vecObj('g25b', 'B', [1, 2, 0])])
+    useVC.setState({ cards: [card(53, 'B', { entry: 'scene', sceneId: 'g25b' })] })
+    removeCard(53)
+    expect(scene().objects.g25b).toBeUndefined()
+    expect(useVC.getState().cards).toEqual([])
+    scene().undo()
+    expect(scene().objects.g25b).toBeDefined()
+    expect(useVC.getState().cards.map((c) => c.id)).toEqual([53])
+  })
+
+  it('draws a vector typed into a new card, under the card’s own name (Fix 26)', () => {
+    useVC.setState({ cards: [card(61, 'A')] })
+    // Blank: nothing to draw yet.
+    expect(vectorsOnGraph()).toEqual([])
+    useVC.setState({ cards: [card(61, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    const drawn = vectorsOnGraph()
+    expect(drawn.map((o) => o.name)).toEqual(['A'])
+    expect(compOf(drawn[0].id)).toEqual([3, 4, 0])
+    expect(useVC.getState().cards[0].sceneId).toBe(drawn[0].id)
+    expect(drawn[0].space).toBe('vectors')
+  })
+
+  it('typing moves the arrow, dragging the arrow rewrites the card, renaming renames both (Fix 26)', () => {
+    useVC.setState({ cards: [card(62, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    const id = useVC.getState().cards[0].sceneId
+    expect(compOf(id)).toEqual([3, 4, 0])
+    // Typing a new value moves the arrow.
+    useVC.setState({ cards: useVC.getState().cards.map((c) => ({ ...c, latex: '6\\hat{i}' })) })
+    expect(compOf(id)).toEqual([6, 0, 0])
+    // Dragging the arrow (the drawing changes, the card does not) rewrites the card.
+    scene().updateObject(id, (d) => {
+      if (d.type === 'vector') d.def = { kind: 'free', tail: [0, 0, 0], comp: [1, 2, 0] }
+    })
+    expect(useVC.getState().cards[0].latex).toBe(ijkLatex([1, 2, 0]))
+    expect(compOf(id)).toEqual([1, 2, 0])
+    // Renaming the card renames its arrow.
+    expect(renameCard(62, 'F')).toBeNull()
+    expect(scene().objects[id].name).toBe('F')
+    expect(useVC.getState().cards[0].name).toBe('F')
+  })
+
+  it('a card that uses another (B = 2A) follows it when A is dragged, undone and redone', () => {
+    useVC.setState({ cards: [card(64, 'A', { latex: '3\\hat{i}' }), card(65, 'B', { latex: '2A' })] })
+    const [a, b] = useVC.getState().cards.map((c) => c.sceneId)
+    expect(compOf(b)).toEqual([6, 0, 0])
+    // A's arrow dragged to (1, 1): A's card is rewritten and B's arrow follows in the same pass.
+    // It used to be worked out from A's old text and stayed at (6, 0, 0) beside a card saying (2, 2).
+    scene().beginGesture()
+    scene().updateObject(a, (d) => {
+      if (d.type === 'vector') d.def = { kind: 'free', tail: [0, 0, 0], comp: [1, 1, 0] }
+    })
+    scene().endGesture()
+    expect(useVC.getState().cards.map((c) => c.latex)).toEqual([ijkLatex([1, 1, 0]), '2A'])
+    expect(compOf(b)).toEqual([2, 2, 0])
+    // Undo puts both arrows back; B is still twice A, so its card keeps 2A rather than numbers.
+    scene().undo()
+    expect(compOf(a)).toEqual([3, 0, 0])
+    expect(compOf(b)).toEqual([6, 0, 0])
+    expect(useVC.getState().cards.map((c) => c.latex)).toEqual([ijkLatex([3, 0, 0]), '2A'])
+    scene().redo()
+    expect(compOf(b)).toEqual([2, 2, 0])
+    expect(useVC.getState().cards[1].latex).toBe('2A')
+    // Retyping A moves B too.
+    useVC.setState({ cards: useVC.getState().cards.map((c) => (c.name === 'A' ? { ...c, latex: '5\\hat{j}' } : c)) })
+    expect(compOf(b)).toEqual([0, 10, 0])
+  })
+
+  it('works the cards out once each, from the top: a chain of 14 cards is 14 evaluations, not 2^14', () => {
+    const names = 'ABCDEFGHLMNPQR'.split('')
+    const chain = names.map((n, i) => card(700 + i, n, { latex: i === 0 ? '\\hat{i}' : `2${names[i - 1]}` }))
+    const spy = vi.spyOn(math, 'evaluate')
+    try {
+      const values = cardValues(chain, scene().ev)
+      expect(values[13]).toEqual([2 ** 13, 0, 0])
+      expect(spy.mock.calls.length).toBe(14)
+      spy.mockClear()
+      planSync(chain, {}, scene().ev)
+      expect(spy.mock.calls.length).toBe(14)
+      // With no cards, the sync that runs on every drag frame does no work at all.
+      spy.mockClear()
+      const none = planSync([], scene().objects, scene().ev)
+      expect(none).toEqual({ cards: [], create: [], write: [] })
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('a size-and-angle card 5∠30° is drawn at 5 units, 30° above the x-axis', () => {
+    useVC.setState({ cards: [card(63, 'A', { entry: 'polar', mag: '5', angle: '30' })] })
+    const c = compOf(useVC.getState().cards[0].sceneId)!
+    expect(c[0]).toBeCloseTo(5 * Math.cos(Math.PI / 6), 9)
+    expect(c[1]).toBeCloseTo(2.5, 9)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 24: a beginner is told what is wrong, how to fix it, and what to do next
+// ---------------------------------------------------------------------------
+
+describe('plain-English guidance (Fix 24)', () => {
+  const ev = { values: new Map() } as unknown as EvalResult
+  const A = card(71, 'A', { latex: '3\\hat{i}+4\\hat{j}' })
+  const typedB = (latex: string, below: Card[] = []) => {
+    const B = card(72, 'B', { latex })
+    return cardValue(B, [A, B, ...below], ev)
+  }
+  /** Nothing a student reads carries the parser's own words. */
+  const technical = /char \d|Unexpected|Undefined symbol|addScalar|expected:|Unit|index:|null|undefined|Syntax error/
+
+  it('translates every parser message into what is wrong and how to fix it', () => {
+    const cases: [string, RegExp][] = [
+      ['3\\hat{i}+', /stops short.*Finish it/],
+      ['3\\hat{i}+4\\hat{j})', /“\)” with no “\(”/],
+      ['(3\\hat{i}+4\\hat{j}', /never closed.*Add the “\)”/],
+      ['A\\cdot', /waiting for a vector or number after it/],
+      ['A\\times/B', /waiting for a vector or number after it/],
+      ['A^2', /cannot be squared.*A · A/],
+      ['3,4', /comma cannot go there/],
+      ['3=4', /Leave out the = sign/],
+      ['3 4', /number, not a vector/],
+      ['\\frac{1}{0}\\hat{i}', /divided by zero/],
+      ['5\\angle', /10∠30°/]
+    ]
+    for (const [latex, want] of cases) {
+      const v = typedB(latex)
+      expect(typeof v, latex).toBe('string')
+      expect(v, latex).toMatch(want)
+      expect(v, latex).not.toMatch(technical)
+    }
+  })
+
+  it('refuses a name no card gives a value to, instead of reading it as a mathjs unit', () => {
+    // B is mathjs's byte and C its coulomb: "A/B" used to read as A itself and "C + A" failed
+    // with a message about addScalar.
+    const C = card(73, 'C', { latex: '\\hat{i}' })
+    expect(typedB('A/B')).toMatch(/There is no vector called B/)
+    expect(typedB('C+A', [C])).toMatch(/C is a card further down.*only use the vectors above it/)
+    expect(unknownNameSentence('AB', { A: 1, B: 1 })).toMatch(/“AB” is not one name.*A × B.*A · B/)
+    expect(typedB('\\hat{i}\\hat{j}')).toMatch(/“ij” is not one name/)
+    // A card above that cannot be read is named as the problem.
+    const bad = card(74, 'A', { latex: '3\\hat{i}+' })
+    const B = card(75, 'B', { latex: '2A' })
+    expect(cardValue(B, [bad, B], ev)).toMatch(/Card A cannot be read yet/)
+    // Units written after a number, the maths constants and the unit vectors still work.
+    expect(typedB('10 N\\angle30°')).toEqual(expect.any(Array))
+    expect(typedB('2A+\\hat{i}')).toEqual([7, 8, 0])
+    expect(unknownNames('pi * e * 30 deg', {})).toEqual([])
+    expect(unknownNames('2*A + i', { A: 1, i: 1 })).toEqual([])
+  })
+
+  it('a size-and-angle card says why an empty or lettered box cannot be read', () => {
+    const P = card(76, 'P', { entry: 'polar', mag: '', angle: '30' })
+    expect(cardValue(P, [P], ev)).toMatch(/This box is empty\. Type a number in it, like 5\./)
+    // A lone A is mathjs's ampere with no number: it used to draw a vector of size 0.
+    expect(cardValue({ ...P, mag: 'A' }, [P], ev)).toMatch(/“A” is not a number/)
+    expect(() => evalNumber('A')).toThrow(PlainError)
+    expect(evalNumber('5')).toBe(5)
+  })
+
+  it('the tester’s “Unexpected part "/B"” reads as a sentence', () => {
+    expect(explainVectorError(new Error('Unexpected part "/B" (char 3)'))).toBe('A vector cannot be divided by a vector. Divide by a number instead, like A/2, or use · or × between two vectors.')
+    expect(explainVectorError(new Error('Unexpected part "x" (char 3)'))).toMatch(/“x” cannot be read here\. Put a sign/)
+    // A sentence already written for the student passes through; the ± refusal is one.
+    expect(explainVectorError(new Error('Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.'))).toMatch(/^Choose \+ or −/)
+    expect(explainVectorError(new Error('Cannot read properties of undefined'))).toMatch(/Type it like 3i \+ 4j/)
+  })
+
+  it('a graph card says why to pick an arrow and what follows; with no arrows it says how to get one', () => {
+    expect(NOTHING_PICKED).toMatch(/x- and y-components, size and angle/)
+    expect(NOTHING_PICKED).toMatch(/follows the arrow when you drag it/)
+    expect(NO_ARROWS).toMatch(/Draw one with the Vector tool/)
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    expect(src).toContain('— choose an arrow from the graph —')
+    expect(src).toMatch(/offered\(card\)\.length \? \(v as string\) : NO_ARROWS/)
+    // The panel shows the translated words, never the parser's.
+    expect(src).not.toMatch(/friendly|Undefined symbol/)
+    expect(src).toMatch(/setError\(explainVectorError\(e\)\)/)
+  })
+
+  it('each card and each answer carries a short next step', () => {
+    expect(nextStepHint(['A'], 0)).toBe('Next: Size & angle or Components take A apart, or add a second vector to combine with it.')
+    expect(nextStepHint(['A', 'B'], 0)).toMatch(/Subtract, Dot and Cross use A and B, in that order/)
+    expect(nextStepHint(['A', 'B'], 1)).toMatch(/Add all gives the resultant.*A − B/)
+    expect(nextStepHint(['A', 'B', 'F'], 2)).toMatch(/F too.*only A and B/)
+    expect(answerHint(true)).toMatch(/Draw on graph/)
+    expect(answerHint(false)).not.toMatch(/Draw on graph/)
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    expect(src).toMatch(/nextStepHint\(readable, readable\.indexOf\(card\.name\)\)/)
+    expect(src).toMatch(/answerHint\(!!st\.result\.sol\.visual\)/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 2: Draw on graph uses the cards' own arrows, as a textbook draws them
+// ---------------------------------------------------------------------------
+
+describe('the textbook layout (Fix 2, math/vec.ts)', () => {
+  const A = { name: 'A', v: [3, 1, 0] as V3, role: 'input' as const }
+  const B = { name: 'B', v: [1, 2, 0] as V3, role: 'input' as const }
+  const at = (l: ReturnType<typeof layoutVectors>, name: string) => l.arrows.find((a) => a.name === name)!
+
+  it('head-to-tail: A from the origin, B from A’s head, R closing the triangle at B’s head', () => {
+    const l = layoutVectors([A, B, { name: 'R', v: [4, 3, 0], role: 'result' }], 'head-to-tail')
+    expect(at(l, 'A').tail).toEqual([0, 0, 0])
+    expect(at(l, 'B').tail).toEqual([3, 1, 0])
+    expect(at(l, 'R').tail).toEqual([0, 0, 0])
+    expect(add(at(l, 'R').tail, at(l, 'R').comp)).toEqual(add(at(l, 'B').tail, at(l, 'B').comp))
+    expect(l.sides).toEqual([])
+  })
+
+  it('subtraction chains A and −B: B stays at the origin and R ends at −B’s head (it used to start B at A’s head too)', () => {
+    const vs = [A, B, { name: '−B', v: [-1, -2, 0] as V3, tail: [3, 1, 0] as V3, role: 'helper' as const }, { name: 'R', v: [2, -1, 0] as V3, role: 'result' as const }]
+    for (const style of ['head-to-tail', 'common-tail'] as const) {
+      const l = layoutVectors(vs, style)
+      expect(at(l, 'B').tail, style).toEqual([0, 0, 0])
+      expect(at(l, '−B').tail, style).toEqual([3, 1, 0])
+      expect(add(at(l, 'R').tail, at(l, 'R').comp), style).toEqual(add(at(l, '−B').tail, at(l, '−B').comp))
+    }
+    // As a parallelogram, the sides are A and −B, both from the origin.
+    const p = layoutVectors(vs, 'parallelogram')
+    expect(p.style).toBe('parallelogram')
+    expect(at(p, '−B').tail).toEqual([0, 0, 0])
+    expect(p.sides).toEqual(['A', '−B'])
+  })
+
+  it('parallelogram: both from the origin, R along the diagonal; three vectors fall back to head-to-tail', () => {
+    const l = layoutVectors([A, B, { name: 'R', v: [4, 3, 0], role: 'result' }], 'parallelogram')
+    expect(l.arrows.map((a) => a.tail)).toEqual([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+    expect(l.sides).toEqual(['A', 'B'])
+    const C = { name: 'C', v: [0, 1, 0] as V3, role: 'input' as const }
+    const three = layoutVectors([A, B, C, { name: 'R', v: [4, 4, 0], role: 'result' }], 'parallelogram')
+    expect(three.style).toBe('head-to-tail')
+    expect(at(three, 'C').tail).toEqual([4, 3, 0])
+  })
+})
+
+describe('Draw on graph and Resultant only (Fix 2)', () => {
+  const scene = () => useScene.getState()
+  const vectors = () => Object.values(scene().objects).filter((o): o is VectorObj => o.type === 'vector')
+  const shown = () => vectors().filter((o) => o.visible).map((o) => o.label ?? o.name).sort()
+  const tailOf = (id: string) => {
+    const c = scene().ev.values.get(id)
+    return c?.type === 'vector' ? c.tail : undefined
+  }
+
+  beforeEach(() => {
+    useVC.setState({ cards: [], result: null, highlight: 0 })
+    scene().newScene()
+    startCardSync()
+    // A = 3i + j and B = i + 2j, the record's own example.
+    useVC.setState({ cards: [card(81, 'A', { latex: '3\\hat{i}+\\hat{j}' }), card(82, 'B', { latex: '\\hat{i}+2\\hat{j}' })] })
+  })
+
+  it('draws R once beside the student’s A and B — no A1 or B1 — head to tail, and selects nothing', () => {
+    const [a, b] = useVC.getState().cards.map((c) => c.sceneId)
+    const sol = VS.solveAddition([{ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }])
+    drawAnswer(sol, null)
+    expect(shown()).toEqual(['A', 'B', 'R'])
+    expect(tailOf(b)).toEqual([3, 1, 0])
+    const r = vectors().find((o) => o.name === 'R')!
+    expect(r.themed).toBe('--vec-result')
+    expect(isResultArrow(r)).toBe(true)
+    expect(isCalcAnswer(r.id)).toBe(true)
+    expect(isCalcAnswer(a)).toBe(false)
+    expect(scene().selection).toEqual([])
+    // Drawing again replaces the answer rather than stacking a second R.
+    drawAnswer(sol, 'parallelogram')
+    expect(vectors().filter((o) => !o.auxiliary).map((o) => o.name).sort()).toEqual(['A', 'B', 'R'])
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    // The far sides are construction lines, not arrows.
+    expect(Object.values(scene().objects).filter((o) => o.type === 'segment')).toHaveLength(2)
+    // Their hidden corner points leave the capitals free for the next card.
+    expect(Object.values(scene().objects).filter((o) => o.type === 'point' && /^[A-Z]\d*$/.test(o.name))).toEqual([])
+    // The cards still read their own vectors.
+    expect(useVC.getState().cards.map((c) => c.latex)).toEqual(['3\\hat{i}+\\hat{j}', '\\hat{i}+2\\hat{j}'])
+  })
+
+  it('draws Subtract as A + (−B): −B from A’s head in B’s colour, B left where it is', () => {
+    const [, b] = useVC.getState().cards.map((c) => c.sceneId)
+    drawAnswer(VS.solveSubtraction({ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }), 'head-to-tail')
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    const negB = vectors().find((o) => o.label === '−B')!
+    expect(tailOf(negB.id)).toEqual([3, 1, 0])
+    expect(negB.color).toBe(scene().objects[b].color)
+    const r = vectors().find((o) => o.name === 'R')!
+    const rv = scene().ev.values.get(r.id)
+    expect(rv?.type === 'vector' && add(rv.tail, rv.comp)).toEqual([2, -1, 0])
+  })
+
+  it('Resultant only hides A and B together and shows them again, one undo step each way', () => {
+    drawAnswer(VS.solveAddition([{ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }]), null)
+    const on = () => resultOnlyOn(scene().objects)
+    expect(on()).toBe(false)
+    setResultOnly(true)
+    expect(shown()).toEqual(['R'])
+    expect(on()).toBe(true)
+    // The button reads the drawing: undo shows A and B and the button is no longer pressed. It
+    // was a flag of its own, left pressed, and the next click changed nothing on the graph.
+    scene().undo()
+    expect(shown()).toEqual(['A', 'B', 'R'])
+    expect(on()).toBe(false)
+    scene().redo()
+    expect(on()).toBe(true)
+    setResultOnly(false)
+    expect(shown()).toEqual(['A', 'B', 'R'])
+    expect(on()).toBe(false)
+    // Asking for what is already so is no undo step.
+    const steps = scene().past.length
+    setResultOnly(false)
+    expect(scene().past.length).toBe(steps)
+    // Hiding A and B one at a time with their eye buttons presses it too.
+    for (const o of vectors().filter((x) => x.name === 'A' || x.name === 'B')) scene().updateObject(o.id, (d) => void (d.visible = false))
+    expect(on()).toBe(true)
+    setResultOnly(false)
+    // Deleting the answer while the parents are hidden brings them back.
+    setResultOnly(true)
+    scene().removeObjects(vectors().filter((o) => o.name === 'R').map((o) => o.id))
+    expect(shown()).toEqual(['A', 'B'])
+    expect(on()).toBe(false)
+    expect(readSource('src/renderer/src/panels/VectorCalc.tsx')).toMatch(/aria-pressed=\{onlyR\}/)
+  })
+
+  it('knows a saved answer after the file is reopened, so R never becomes a card counted twice by Add all', () => {
+    const sol = VS.solveAddition([{ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }])
+    drawAnswer(sol, null)
+    const saved = JSON.stringify(scene().serialize())
+    const r = vectors().find((o) => o.name === 'R')!.id
+    // A later drawing this session: the first R is no longer one this session's Draw on graph holds.
+    drawAnswer(VS.solveSubtraction({ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }), null)
+    scene().loadScene(JSON.parse(saved))
+    expect(scene().objects[r]?.themed).toBe('--vec-result')
+    expect(isCalcAnswer(r)).toBe(true)
+    expect(cardForSelection(useVC.getState().cards, [r], scene().objects, isCalcAnswer)).toEqual({ kind: 'none' })
+    // The command bar's own R = A + B (gold, no token) is the student's and still gets a card.
+    scene().addObjects([{ ...scene().objects[r], id: 'barR', name: 'S', color: '#ffd43b', themed: undefined } as SceneObject])
+    expect(isCalcAnswer('barR')).toBe(false)
+    expect(cardForSelection(useVC.getState().cards, ['barR'], scene().objects, isCalcAnswer).kind).toBe('add')
+  })
+
+  it('keeps the picture true to the cards: retyping or dragging A moves B’s tail and R, and a removed A takes R away', () => {
+    const [a, b] = useVC.getState().cards.map((c) => c.sceneId)
+    const solve = (vs: VS.NamedVec[], settings: SceneSettings) => VS.solveAddition(vs, 'R', settings)
+    const sol = solve([{ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }], scene().settings)
+    useVC.setState({ result: { sol, label: 'Add all', from: { cards: useVC.getState().cards.map((c) => ({ id: c.id, name: c.name })), solve } } })
+    drawAnswer(sol, 'head-to-tail')
+    const r = vectors().find((o) => o.name === 'R')!.id
+    const headOf = (id: string) => {
+      const c = scene().ev.values.get(id)
+      return c?.type === 'vector' ? add(c.tail, c.comp) : undefined
+    }
+    const answer = () => useVC.getState().result!.sol.visual!.vectors.find((x) => x.role === 'result')!.v
+    // Card A retyped to 5i: B's tail stays on A's head and R closes the triangle at B's new head.
+    // R used to stay at (4, 3) and B's tail at (3, 1): R ≠ A + B beside a card saying R = A + B.
+    useVC.setState({ cards: useVC.getState().cards.map((c) => (c.name === 'A' ? { ...c, latex: '5\\hat{i}' } : c)) })
+    expect(tailOf(b)).toEqual([5, 0, 0])
+    expect(tailOf(r)).toEqual([0, 0, 0])
+    expect(headOf(r)).toEqual([6, 2, 0])
+    expect(answer()).toEqual([6, 2, 0])
+    // A's arrow dragged: the same, and one undo puts the drag and its picture back together.
+    scene().beginGesture()
+    scene().updateObject(a, (d) => {
+      if (d.type === 'vector') d.def = { kind: 'free', tail: [0, 0, 0], comp: [2, 2, 0] }
+    })
+    scene().endGesture()
+    expect(tailOf(b)).toEqual([2, 2, 0])
+    expect(headOf(r)).toEqual([3, 4, 0])
+    scene().undo()
+    expect(tailOf(b)).toEqual([5, 0, 0])
+    expect(headOf(r)).toEqual([6, 2, 0])
+    expect(answer()).toEqual([6, 2, 0])
+    // Removing card A leaves nothing R is the sum of: R goes, B goes back to where it was, and
+    // the answer card says why. One undo brings A, R and the picture back.
+    removeCard(81)
+    expect(vectors().some((o) => o.id === r)).toBe(false)
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    expect(useVC.getState().result!.stale).toBe(true)
+    scene().undo()
+    expect(headOf(r)).toEqual([6, 2, 0])
+    expect(tailOf(b)).toEqual([5, 0, 0])
+    expect(useVC.getState().result!.stale).toBe(false)
+    expect(readSource('src/renderer/src/panels/VectorCalc.tsx')).toMatch(/st\.result\.stale &&/)
+  })
+
+  it('makes every button in the panel a 44 px target', () => {
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    expect(src).not.toMatch(/min-h-\[36px\]|\bh-9\b/)
+    const buttons = [...src.matchAll(/<button[\s\S]*?className=\{?[`"]([^`"]*)[`"]/g)].map((m) => m[1])
+    expect(buttons.length).toBeGreaterThanOrEqual(8)
+    for (const cls of buttons) expect(cls).toMatch(/min-h-\[44px\]/)
+    expect(src).toMatch(/drawAnswer\(st\.result!\.sol, st\.style\)/)
+    expect(src).not.toMatch(/visualizeSolution/)
   })
 })

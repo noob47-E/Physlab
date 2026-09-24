@@ -114,7 +114,7 @@ describe('serialize → loadScene', () => {
     const { gridStyle: _g, ...older } = fullFile().settings
     scene().loadScene({ ...fullFile(), version: 2, settings: older })
     expect(scene().settings.gridStyle).toBe('lines')
-    expect(FILE_VERSION).toBe(3)
+    expect(FILE_VERSION).toBe(4)
   })
 
   it('keeps the label preferences of whoever is opening the file', () => {
@@ -153,12 +153,12 @@ describe('migrate', () => {
   it('steps a format-2 file without lego up to format 3 and changes nothing else', () => {
     const v2 = { ...fullFile(), version: 2 as const }
     const out = migrate(v2)
-    expect(out.version).toBe(3)
+    expect(out.version).toBe(FILE_VERSION)
     expect({ ...out, version: 2 }).toEqual(v2)
     expect((v2 as { version: number }).version).toBe(2)
     scene().loadScene(v2)
     expect(scene().ev.errors.size).toBe(0)
-    expect(scene().serialize().version).toBe(3)
+    expect(scene().serialize().version).toBe(FILE_VERSION)
   })
 
   it("keeps a piece's lego record through save and open, and drops a damaged one without a word", () => {
@@ -168,7 +168,7 @@ describe('migrate', () => {
     const file: SceneFile = { ...fullFile(), objects: [...corners, piece] }
     scene().loadScene(parseSceneFile(JSON.stringify(file)))
     const saved = scene().serialize()
-    expect(saved.version).toBe(3)
+    expect(saved.version).toBe(FILE_VERSION)
     const back = saved.objects.find((o) => o.id === 'pc1')
     expect(back?.type === 'polygon' && back.lego).toEqual(lego)
     expect(parseSceneFile(JSON.stringify(saved)).objects.find((o) => o.id === 'pc1')).toEqual(piece)
@@ -183,6 +183,33 @@ describe('migrate', () => {
     const out = migrate({ ...file, version: 2, objects: [...corners, { ...piece, lego: unsigned }] })
     const o = out.objects.find((x) => x.id === 'pc1')
     expect(o?.type === 'polygon' && o.lego).toEqual({ ...unsigned, sourceSignature: '' })
+  })
+
+  it('steps a format-3 file up to format 4: old arrow colours become theme tokens, once', () => {
+    const arrow = (id: string, name: string, color: string, extra: Partial<SceneObject> = {}) =>
+      ({ id, name, type: 'vector', def: { kind: 'free', tail: [0, 0, 0], comp: [1, 0, 0] }, visible: true, locked: false, color, showLabel: true, space: 'vectors', ...extra }) as SceneObject
+    const old = ['#4dabf7', '#FF6B6B', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595']
+    const tokenOf = (f: SceneFile, id: string) => f.objects.find((o) => o.id === id)?.themed
+    // A drawing with all eight: the first six one to one, the seventh and eighth as a new drawing's.
+    const all = parseSceneFile(JSON.stringify({ ...fullFile(), version: 3, objects: old.map((c, i) => arrow(`v${i}`, `V${i}`, c)) }))
+    expect(all.version).toBe(4)
+    expect(old.map((_, i) => tokenOf(all, `v${i}`))).toEqual(['--vec-1', '--vec-2', '--vec-3', '--vec-4', '--vec-5', '--vec-6', '--vec-1', '--vec-2'])
+    // Colours one, two, seven and eight: seven and eight take tokens nobody else uses, so the
+    // drawing does not show two pairs of arrows in one colour.
+    const four = parseSceneFile(JSON.stringify({ ...fullFile(), version: 3, objects: [0, 1, 6, 7].map((i) => arrow(`v${i}`, `V${i}`, old[i])) }))
+    expect([0, 1, 6, 7].map((i) => tokenOf(four, `v${i}`))).toEqual(['--vec-1', '--vec-2', '--vec-3', '--vec-4'])
+    // Left alone: a colour nobody handed out, a token already set, the bar's gold sum, a graph in an old blue.
+    const rest = parseSceneFile(
+      JSON.stringify({
+        ...fullFile(),
+        version: 3,
+        objects: [arrow('m', 'M', '#123456'), arrow('t', 'T', '#4dabf7', { themed: '--vec-result' }), arrow('g', 'G', '#ffd43b'), { id: 'gr', name: 'f', type: 'graph', expr: 'x', visible: true, locked: false, color: '#4dabf7', showLabel: true, space: 'graphing' }]
+      })
+    )
+    expect(['m', 't', 'g', 'gr'].map((id) => tokenOf(rest, id))).toEqual([undefined, '--vec-result', undefined, undefined])
+    // A current file goes through untouched, and a picked colour saved in it stays a hex.
+    const now = { ...fullFile(), objects: [arrow('p', 'P', '#22b8cf')] }
+    expect(migrate(now).objects[0].themed).toBeUndefined()
   })
 
   it('checks the lego record of a file already in format 3, so letting go of a dragged shape cannot throw', () => {

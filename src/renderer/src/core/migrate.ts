@@ -16,13 +16,17 @@
 //   3  from 0.7: a polygon may carry `lego`, the record of the shape it was broken off from
 //      (Geometry Lego). Nothing else changed; a format-2 file has no `lego` and comes through as
 //      it was.
+//   4  from 0.9: arrows are drawn in theme tokens (--vec-1 … --vec-6). An arrow in one of the eight
+//      colours 0.6.1–0.7 handed out gets the token that took its colour's place, in `themed`, so it
+//      follows the theme; a colour the student picked stays theirs because it is read as a hex.
 
 import { directDependents } from './evaluate'
+import { OLD_ARROW_COLOURS, PALETTE, vectorToken } from './naming'
 import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
 import type { Space } from './visibility'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
-export const FILE_VERSION: SceneFile['version'] = 3
+export const FILE_VERSION: SceneFile['version'] = 4
 
 type Raw = Record<string, unknown>
 
@@ -141,7 +145,8 @@ function checkObjects(file: Raw): void {
 
 const STEPS: Record<number, (file: Raw) => Raw> = {
   1: v1ToV2,
-  2: v2ToV3
+  2: v2ToV3,
+  3: v3ToV4
 }
 
 function v1ToV2(file: Raw): Raw {
@@ -162,6 +167,48 @@ function v1ToV2(file: Raw): Raw {
 /** Format 3 only adds the Lego record a piece carries, which `checkLego` looks after for every format. */
 function v2ToV3(file: Raw): Raw {
   return { ...file, version: 3 }
+}
+
+/**
+ * Arrows in the colours 0.6.1–0.7 handed out are given the theme token that took each colour's place,
+ * once, here: turning them into tokens every time a colour was read also turned a swatch the
+ * student picked in Properties (the same eight hexes) into a token, so cyan showed as blue.
+ *
+ * There are six tokens for eight old colours (eight could not all stay apart for colour-blind
+ * eyes). The first six map one to one. The seventh and eighth take the first tokens no other arrow
+ * in the file uses, so a drawing that had them beside the first and second arrows does not show two
+ * pairs in one colour; only a file already using all six falls back to the first and second, as a
+ * new drawing's seventh and eighth arrows do. The command bar's gold sum is left as it is: it is
+ * read as the resultant's token while drawing and is a student's own arrow, not a drawn answer.
+ */
+function v3ToV4(file: Raw): Raw {
+  const objects = file.objects as Raw[]
+  const isArrow = (o: Raw) => o.type === 'vector' && typeof o.color === 'string' && typeof o.themed !== 'string'
+  const oldIndex = (o: Raw) => (isArrow(o) ? OLD_ARROW_COLOURS.indexOf((o.color as string).trim().toLowerCase()) : -1)
+  const tokens = PALETTE.vector.map((_, i) => `--vec-${i + 1}`)
+  const used = new Set<string>()
+  for (const o of objects) {
+    if (o.type !== 'vector') continue
+    const i = oldIndex(o)
+    const t = typeof o.themed === 'string' ? o.themed : i >= 0 && i < tokens.length ? tokens[i] : typeof o.color === 'string' ? vectorToken(o.color) : undefined
+    if (t) used.add(t)
+  }
+  const extra = new Map<number, string>()
+  for (let i = tokens.length; i < OLD_ARROW_COLOURS.length; i++) {
+    if (!objects.some((o) => oldIndex(o) === i)) continue
+    const free = tokens.find((t) => !used.has(t)) ?? tokens[i % tokens.length]
+    extra.set(i, free)
+    used.add(free)
+  }
+  return {
+    ...file,
+    version: 4,
+    objects: objects.map((o) => {
+      const i = oldIndex(o)
+      if (i < 0) return o
+      return { ...o, themed: i < tokens.length ? tokens[i] : extra.get(i) }
+    })
+  }
 }
 
 /**

@@ -6,6 +6,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { BLOCKS, THEME_CSS as css, contrast, themeBlock, tokenValue } from './helpers/theme'
+import { PALETTE, vectorToken } from '../src/renderer/src/core/naming'
+import { colourDistance, type Vision } from '../src/renderer/src/render/colourMix'
 
 const AA = 4.5
 
@@ -76,5 +78,71 @@ describe('WCAG contrast across all four themes', () => {
     // A misspelt key would exempt nothing and fail nothing — it would just sit there.
     const visited = new Set(PAIRS.map(([theme, ink, bg]) => `${theme} ${ink} on ${bg}`))
     expect([...KNOWN_PREEXISTING_SHORTFALLS.keys()].filter((k) => !visited.has(k))).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Arrows (Fix 2): seen in every theme, and told apart by colour-blind eyes too
+// ---------------------------------------------------------------------------
+
+const ARROWS = ['--vec-1', '--vec-2', '--vec-3', '--vec-4', '--vec-5', '--vec-6']
+const VISIONS: Vision[] = ['normal', 'protanopia', 'deuteranopia', 'tritanopia']
+/** The record's scale: about 8 apart reads as two colours, below about 6 as one. */
+const APART = 8
+
+describe('arrow colours (Fix 2)', () => {
+  it('reproduces the record’s measurements of the 0.6.1 colours, so the method is the record’s', () => {
+    const lightCanvas = tokenValue(themeBlock(css, BLOCKS.light), '--canvas-bg')!
+    // On Light, the old yellow was 1.38:1 and the command bar's gold resultant 1.22:1.
+    expect(contrast('#fcc419', lightCanvas)).toBeCloseTo(1.38, 2)
+    expect(contrast('#ffd43b', lightCanvas)).toBeCloseTo(1.22, 2)
+    // Red and green 3.8 apart for a deuteranope (32.5 for normal eyes), blue and purple 4.3.
+    expect(colourDistance('#ff6b6b', '#51cf66', 'deuteranopia')).toBeCloseTo(3.8, 1)
+    expect(colourDistance('#ff6b6b', '#51cf66')).toBeCloseTo(32.5, 1)
+    expect(colourDistance('#4dabf7', '#cc5de8', 'deuteranopia')).toBeCloseTo(4.3, 1)
+    expect(colourDistance('#51cf66', '#fcc419', 'protanopia')).toBeCloseTo(5.2, 1)
+  })
+
+  it('draws every arrow, the resultant and both components at 3:1 or better on the canvas, in all four themes', () => {
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      const block = themeBlock(css, selector)
+      const canvas = tokenValue(block, '--canvas-bg')!
+      for (const t of [...ARROWS, '--vec-result', '--vec-x', '--vec-y']) {
+        const v = tokenValue(block, t)
+        expect(v, `${theme} ${t}`).toBeDefined()
+        expect(contrast(v!, canvas), `${theme} ${t} ${v} on ${canvas}`).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
+  it('keeps the six arrow colours and the resultant apart for normal, protanope, deuteranope and tritanope eyes', () => {
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      const block = themeBlock(css, selector)
+      const set = [...ARROWS, '--vec-result'].map((t) => [t, tokenValue(block, t)!] as const)
+      for (const vision of VISIONS) {
+        for (let i = 0; i < set.length; i++) {
+          for (let j = i + 1; j < set.length; j++) {
+            const d = colourDistance(set[i][1], set[j][1], vision)
+            expect(d, `${theme} ${vision}: ${set[i][0]} ${set[i][1]} and ${set[j][0]} ${set[j][1]}`).toBeGreaterThanOrEqual(APART)
+          }
+        }
+      }
+    }
+  })
+
+  it('keeps the x and y components apart for every kind of eye (Moonlight Gold’s were 3.1 for a deuteranope)', () => {
+    expect(colourDistance('#f28474', '#7ac488', 'deuteranopia')).toBeLessThan(6)
+    for (const [theme, selector] of Object.entries(BLOCKS)) {
+      const block = themeBlock(css, selector)
+      for (const vision of VISIONS) {
+        expect(colourDistance(tokenValue(block, '--vec-x')!, tokenValue(block, '--vec-y')!, vision), `${theme} ${vision}`).toBeGreaterThanOrEqual(APART)
+      }
+    }
+  })
+
+  it('hands out the arrow colours from the stylesheet: the palette is Moonlight’s values, one per token', () => {
+    const moon = themeBlock(css, BLOCKS.moonlight)
+    expect(PALETTE.vector).toEqual(ARROWS.map((t) => tokenValue(moon, t)))
+    expect(PALETTE.vector.map((c) => vectorToken(c))).toEqual(ARROWS)
   })
 })

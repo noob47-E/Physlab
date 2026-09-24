@@ -3,6 +3,8 @@
 
 import { useMemo } from 'react'
 import { create } from 'zustand'
+import { RESULT_TOKEN, vectorToken } from '../core/naming'
+import { mixParents } from '../render/colourMix'
 
 export type Theme = 'dark' | 'light' | 'moonlight' | 'moongold'
 const KEY = 'physlab.theme'
@@ -51,11 +53,32 @@ export function themeColor(name: string, fallback = '#888888'): string {
 /** A token name a file may carry in `themed`; anything else is ignored rather than handed to CSS. */
 const isToken = (t: string | undefined): t is string => !!t && /^--[a-z0-9-]+$/.test(t)
 
-/** The colour an object is drawn in now: its theme token's when it has one (`themed`), else its own. */
-export const shownColor = (o: { color: string; themed?: string }): string => (isToken(o.themed) && typeof document !== 'undefined' ? themeColor(o.themed, o.color) : o.color)
+type Coloured = { id?: string; color: string; themed?: string; type?: string }
+
+/**
+ * The token an object is drawn in, if any: its own `themed`, or for an arrow the token its stored
+ * colour stands for (vectorToken), so an arrow is 3:1 on every theme's canvas, old files included.
+ * A fixed arrow colour was 1.38:1 on Light (Fix 2). An answer the scene bridge drew this session
+ * (mixParents) is in the resultant's token, as ObjectViews draws its arrow: its label and Outliner
+ * swatch kept the stored mix of its parents beside an arrow in --vec-result.
+ */
+export const tokenOf = (o: Coloured): string | undefined => {
+  if (isToken(o.themed)) return o.themed
+  if (o.type !== 'vector') return undefined
+  return o.id && mixParents.has(o.id) ? RESULT_TOKEN : vectorToken(o.color)
+}
+
+/** The colour an object is drawn in now: its theme token's when it has one, else its own. */
+export const shownColor = (o: Coloured): string => {
+  const t = tokenOf(o)
+  return t && typeof document !== 'undefined' ? themeColor(t, o.color) : o.color
+}
 
 /** The same for a style attribute: the token itself, so the page follows a theme switch without a render. */
-export const cssColor = (o: { color: string; themed?: string }): string => (isToken(o.themed) ? `var(${o.themed}, ${o.color})` : o.color)
+export const cssColor = (o: Coloured): string => {
+  const t = tokenOf(o)
+  return t ? `var(${t}, ${o.color})` : o.color
+}
 
 /** How many `--series-N` colours the stylesheet defines for plotted quantities. */
 export const SERIES_COUNT = 6

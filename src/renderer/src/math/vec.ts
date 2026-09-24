@@ -72,3 +72,73 @@ export const rotateZ = (a: V3, rad: number): V3 => {
 
 export const toDeg = (rad: number): number => (rad * 180) / Math.PI
 export const toRad = (deg: number): number => (deg * Math.PI) / 180
+
+// ---------------------------------------------------------------------------
+// Laying out a vector answer the way a textbook draws it (Fix 2)
+// ---------------------------------------------------------------------------
+
+export type LayoutRole = 'input' | 'result' | 'helper'
+export type LayoutStyle = 'head-to-tail' | 'parallelogram' | 'common-tail'
+
+/** A vector of an answer: an input (a card's arrow), the answer, or a helper such as −B. */
+export interface LayoutVector {
+  name: string
+  v: V3
+  role?: LayoutRole
+  /** Where the answer's own picture puts it; an input with none starts at the origin. */
+  tail?: V3
+}
+
+export interface LaidOut {
+  name: string
+  role: LayoutRole
+  tail: V3
+  comp: V3
+}
+
+export interface Layout {
+  arrows: LaidOut[]
+  /** A parallelogram's far sides: the arrows whose heads are joined to the answer's head. */
+  sides: string[]
+  /** The style used: a parallelogram needs exactly two vectors being added. */
+  style: LayoutStyle
+}
+
+/**
+ * Where every arrow of a vector answer goes, each vector drawn once. The vectors that add up to
+ * the answer (the "chain") are A, B, … for a sum, and A and −B for a subtraction — which is why
+ * Subtract used to start both B and −B at A's head: it chained the inputs, not what is added.
+ *
+ * - head-to-tail: the chain runs from the origin, each tail on the head before it; the answer
+ *   closes the triangle from the origin; an input outside the chain (B in A − B) stays at the
+ *   origin.
+ * - parallelogram: the two chained vectors from the origin, the answer along the diagonal, and
+ *   the far sides joined to the answer's head. Anything but two chained vectors is head-to-tail.
+ * - common-tail: every vector at its own tail, or the origin.
+ */
+export function layoutVectors(vs: LayoutVector[], style: LayoutStyle): Layout {
+  const inputs = vs.filter((x) => (x.role ?? 'input') === 'input')
+  const helpers = vs.filter((x) => x.role === 'helper')
+  // A subtraction's helper is the negated input it replaces, and carries its own tail (A's head).
+  const negated = helpers.find((h) => h.tail && inputs.some((i) => equals(neg(i.v), h.v)))
+  const chain = negated ? [inputs[0], negated] : inputs
+  const mode: LayoutStyle = style === 'parallelogram' && chain.length !== 2 ? 'head-to-tail' : style
+  const at = new Map<LayoutVector, V3>()
+  if (mode === 'head-to-tail') {
+    let cursor: V3 = ZERO
+    for (const c of chain) {
+      at.set(c, cursor)
+      cursor = add(cursor, c.v)
+    }
+  } else if (mode === 'parallelogram') {
+    for (const c of chain) at.set(c, ZERO)
+  }
+  const arrows = vs.map((x): LaidOut => {
+    const role = x.role ?? 'input'
+    // Outside the chain: an input stays where the student sees it, the answer starts at the origin.
+    const tail = at.get(x) ?? (mode === 'common-tail' || role === 'helper' ? (x.tail ?? ZERO) : ZERO)
+    return { name: x.name, role, tail, comp: x.v }
+  })
+  const sides = mode === 'parallelogram' ? chain.map((c) => c.name) : []
+  return { arrows, sides, style: mode }
+}

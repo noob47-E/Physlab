@@ -9,53 +9,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, Plus, Sigma, Trash2 } from 'lucide-react'
 import { useScene } from '../core/store'
-import type { EvalResult } from '../core/types'
-import { isDrawnAnswer, visualizeSolution, type DrawStyle } from '../core/visualize'
-import { latexToMath } from '../math/latexToMath'
-import { inDegrees, math, preprocess, toV3 } from '../math/expr'
+import type { SceneSettings } from '../core/types'
+import { isDrawnAnswer, type DrawStyle } from '../core/visualize'
+import { inDegrees, toV3 } from '../math/expr'
 import { formatMeasure, texIJK, texMeasure } from '../math/format'
-import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
+import { heading, len, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { addVectorFromScene, cardForSelection, ijkLatex, isBlankCard, linkCardToScene, newCardName, nextCardId, peekCardId, useVC, type Card, type Entry } from './vectorCalcStore'
+import { NO_ARROWS, answerHint, answerOnGraph, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, evalNumber, evaluateVectorLine, explainVectorError, PlainError, cardValues, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, peekCardId, pickArrow, removeCard, renameCard, setEntry, solveOperation, startCardSync, useVC, type Card, type Entry } from './vectorCalcStore'
 
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
-
-function evalNumber(latex: string): number {
-  const v = math.evaluate(preprocess(latexToMath(latex)))
-  const n = typeof v === 'number' ? v : Number((v as { toNumber?: () => number }).toNumber?.() ?? v)
-  if (!Number.isFinite(n)) throw new Error('Not a number')
-  return n
-}
-
-const friendly = (e: unknown): string => (e instanceof Error ? e.message.replace(/^Undefined symbol/, 'Unknown name') : 'Cannot read this vector')
-
-/** The vector value of a card, or an error message. */
-function cardValue(card: Card, cards: Card[], ev: EvalResult): V3 | string {
-  try {
-    return inDegrees(() => cardValueNow(card, cards, ev))
-  } catch (e) {
-    return friendly(e)
-  }
-}
-
-function cardValueNow(card: Card, cards: Card[], ev: EvalResult): V3 | string {
-  if (card.entry === 'polar') return fromPolar(evalNumber(card.mag), toRad(evalNumber(card.angle)))
-  if (card.entry === 'scene') {
-    const c = ev.values.get(card.sceneId)
-    if (c?.type === 'vector') return c.comp
-    return 'Pick a vector from the drawing'
-  }
-  if (!card.latex.trim()) return 'nothing typed yet'
-  const scope: Record<string, unknown> = { ...UNIT_VECTORS }
-  for (const other of cards) {
-    if (other.id === card.id) break
-    const v = cardValue(other, cards, ev)
-    if (typeof v !== 'string') scope[other.name] = v
-  }
-  return toV3(math.evaluate(preprocess(latexToMath(card.latex, { vectorOps: true })), scope))
-}
 
 interface Op {
   id: string
@@ -100,6 +64,36 @@ const STYLES: [DrawStyle | null, string][] = [
   ['common-tail', 'From origin']
 ]
 
+/**
+ * A typed expression worked out from the cards' values, with the names of the cards it used.
+ * Names are checked first: an unknown letter would otherwise be one of mathjs's units.
+ */
+function exprSolution(expr: string, cards: { name: string; v: V3 | string }[], settings: SceneSettings): { sol: VS.Solution; used: string[] } {
+  const scope: Record<string, unknown> = { ...UNIT_VECTORS }
+  cards.forEach((c) => {
+    if (typeof c.v !== 'string') scope[c.name] = c.v
+  })
+  const unreadable = cards.filter((c) => typeof c.v === 'string').map((c) => c.name)
+  const { src, out } = inDegrees(() => evaluateVectorLine(expr, scope, [], unreadable))
+  const inputs = cards.filter((x): x is { name: string; v: V3 } => typeof x.v !== 'string' && new RegExp(`\\b${x.name}\\b`).test(src))
+  const used = inputs.map((x) => x.name)
+  if (typeof out === 'number') {
+    // Both strings are KaTeX: the plain-text form's "×10^-5" put only the minus in the superscript.
+    const shown = texMeasure(out, 'number', settings)
+    return { used, sol: { title: 'Result', steps: [{ tex: `${expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } }
+  }
+  const v = toV3(out)
+  if (!v.every(Number.isFinite)) throw new PlainError('This cannot be worked out: something in it is divided by zero.')
+  const md = VS.solveMagnitudeDirection({ name: 'R', v }, settings)
+  const sol: VS.Solution = {
+    title: 'Resultant of the expression',
+    steps: [{ text: 'Evaluate component by component:', tex: `\\vec{R} = ${expr} = ${texIJK(v, settings)}` }, ...md.steps.slice(1)],
+    answers: [{ label: 'R', tex: texIJK(v, settings) }, ...md.answers],
+    visual: { vectors: [...inputs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: 'R', v, role: 'result' as const }], mode: 'common-tail' }
+  }
+  return { sol, used }
+}
+
 export function VectorCalc() {
   const st = useVC()
   const settings = useScene((s) => s.settings)
@@ -107,27 +101,29 @@ export function VectorCalc() {
   const ev = useScene((s) => s.ev)
   const selection = useScene((s) => s.selection)
   const [error, setError] = useState('')
+  /** Why a card's new name was refused, beside that card. */
+  const [nameProblem, setNameProblem] = useState<{ id: number; text: string }>({ id: 0, text: '' })
   const exprRef = useRef<MathInputHandle>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
   const set = useVC.setState
 
-  const values = useMemo(() => st.cards.map((c) => cardValue(c, st.cards, ev)), [st.cards, ev])
+  // One pass from the top (cardValues): working each card out on its own redid every card above it.
+  const values = useMemo(() => cardValues(st.cards, ev), [st.cards, ev])
   // Helpers are not offered: a force arrow drawn to a stand-in length would read as the wrong vector.
   const sceneVectors = Object.values(objects).filter((o) => o.type === 'vector' && !o.auxiliary)
 
-  // A drawing card remembers what it last read, so that when its vector is deleted (or the app
-  // restarts with an empty drawing) it becomes a typed card holding those components, not an
-  // empty red one.
-  useEffect(() => {
-    // Compared by value: values is a fresh array each time, and a store write here re-runs it.
-    const same = (a: V3, b?: V3) => !!b && a.every((x, k) => x === b[k])
-    const changed = st.cards.some((c, i) => c.entry === 'scene' && typeof values[i] !== 'string' && !same(values[i] as V3, c.last))
-    if (changed) set({ cards: st.cards.map((c, i) => (c.entry === 'scene' && typeof values[i] !== 'string' ? { ...c, last: values[i] as V3 } : c)) })
-  }, [values, st.cards, set])
-  useEffect(() => {
-    const stale = st.cards.filter((c) => c.entry === 'scene' && c.sceneId && !objects[c.sceneId])
-    if (stale.length) set({ cards: st.cards.map((c) => (stale.includes(c) ? { ...c, entry: 'comp', sceneId: '', wasSceneId: c.sceneId, latex: c.last ? ijkLatex(c.last) : c.latex } : c)) })
-  }, [objects, st.cards, set])
+  // "Resultant only" is offered while the drawn answer is on the graph.
+  const drawnHere = answerOnGraph(objects)
+  // Read from the drawing, so undo, redo and the Outliner's eye buttons keep the button right.
+  const onlyR = resultOnlyOn(objects)
+  // An arrow another card already stands for is not offered twice.
+  const offered = (card: Card) => sceneVectors.filter((o) => o.id === card.sceneId || !st.cards.some((c) => c.sceneId === o.id))
+  // The cards the operations can read, in order: the hints name them as the operations will.
+  const readable = st.cards.filter((_, i) => typeof values[i] !== 'string').map((c) => c.name)
+
+  // Every readable card is an arrow on the drawing and each follows the other (vectorCalcStore);
+  // the arrows are drawn from the moment the panel is first opened.
+  useEffect(() => startCardSync(), [])
 
   // A vector drawn with the Vector tool arrives selected, and the panel answers by showing it: a
   // card that reads it is added if none does (a blank card waiting since "Add vector" is used
@@ -135,7 +131,7 @@ export function VectorCalc() {
   // card the student removes stays removed until the vector is selected again; Remove deselects
   // the vector for that reason, since a click on something already selected does not re-select.
   useEffect(() => {
-    const match = cardForSelection(useVC.getState().cards, selection, useScene.getState().objects, isDrawnAnswer)
+    const match = cardForSelection(useVC.getState().cards, selection, useScene.getState().objects, (id) => isDrawnAnswer(id) || isCalcAnswer(id))
     if (match.kind === 'none') set({ highlight: 0 })
     else if (match.kind === 'card') set({ highlight: match.cardId })
     else if (match.kind === 'link') set({ highlight: linkCardToScene(match.cardId, match.sceneId, match.name) })
@@ -171,60 +167,17 @@ export function VectorCalc() {
       return
     }
     try {
-      let sol: VS.Solution
-      const [A, B] = vs
-      switch (opId) {
-        case 'sum':
-          sol = VS.solveAddition(vs, 'R', settings)
-          break
-        case 'sub':
-          sol = VS.solveSubtraction(A, B, 'R', settings)
-          break
-        case 'scale':
-          sol = VS.solveScalarMultiply(evalNumber(st.k), A, 'R', settings)
-          break
-        case 'dot':
-          sol = VS.solveDot(A, B, settings)
-          break
-        case 'angle':
-          sol = VS.solveAngleBetween(A, B, settings)
-          break
-        case 'cross':
-          sol = VS.solveCross(A, B, 'C', settings)
-          break
-        case 'mag':
-          sol = VS.solveMagnitudeDirection(A, settings)
-          break
-        case 'unit':
-          sol = VS.solveUnitVector(A, settings)
-          break
-        case 'proj':
-          sol = VS.solveProjection(B, A, settings)
-          break
-        case 'resolve':
-          sol = VS.solveResolve(A, settings)
-          break
-        case 'equil':
-          sol = VS.solveEquilibrium(vs, settings)
-          break
-        case 'torque':
-          sol = VS.solveTorque(A.v, B.v, settings)
-          break
-        case 'work':
-          sol = VS.solveWork(A.v, B.v, settings)
-          break
-        case 'lorentz':
-          sol = VS.solveMagneticForce(evalNumber(st.q), A.v, B.v, settings)
-          break
-        case 'relvel':
-          sol = VS.solveRelativeVelocity(A, B, settings)
-          break
-        default:
-          return
-      }
-      set({ result: { sol, label: op.label } })
+      const k = opId === 'scale' ? evalNumber(st.k) : 0
+      const q = opId === 'lorentz' ? evalNumber(st.q) : 0
+      // The recipe works the same answer out again when one of its vectors is dragged or retyped
+      // with its picture on the graph, so the picture and this card never disagree.
+      const solve = (named: VS.NamedVec[], now: typeof settings) => solveOperation(opId, named, now, k, q)
+      const sol = solve(vs, settings)
+      if (!sol) return
+      const wanted = op.need === 'all' ? st.cards : st.cards.slice(0, op.need)
+      set({ result: { sol, label: op.label, from: { cards: wanted.map((c) => ({ id: c.id, name: c.name })), solve } } })
     } catch (e) {
-      setError(friendly(e))
+      setError(explainVectorError(e))
     }
   }
 
@@ -232,40 +185,24 @@ export function VectorCalc() {
   const runExpr = () => {
     setError('')
     try {
-      const scope: Record<string, unknown> = { ...UNIT_VECTORS }
-      st.cards.forEach((c, i) => {
-        if (typeof values[i] !== 'string') scope[c.name] = values[i]
-      })
-      const src = preprocess(latexToMath(st.expr, { vectorOps: true }))
-      const out = inDegrees(() => math.parse(src).compile().evaluate(scope))
-      if (typeof out === 'number') {
-        // Both strings are KaTeX: the plain-text form's "×10^-5" put only the minus in the superscript.
-        const shown = texMeasure(out, 'number', settings)
-        set({ result: { label: 'Expression', sol: { title: 'Result', steps: [{ tex: `${st.expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } } })
-        return
-      }
-      const v = toV3(out)
-      const inputs = st.cards.map((c, i) => ({ name: c.name, v: values[i] })).filter((x): x is { name: string; v: V3 } => typeof x.v !== 'string' && new RegExp(`\\b${x.name}\\b`).test(src))
-      const md = VS.solveMagnitudeDirection({ name: 'R', v }, settings)
-      const sol: VS.Solution = {
-        title: 'Resultant of the expression',
-        steps: [{ text: 'Evaluate component by component:', tex: `\\vec{R} = ${st.expr} = ${texIJK(v, settings)}` }, ...md.steps.slice(1)],
-        answers: [{ label: 'R', tex: texIJK(v, settings) }, ...md.answers],
-        visual: { vectors: [...inputs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: 'R', v, role: 'result' as const }], mode: 'common-tail' }
-      }
-      set({ result: { sol, label: 'Expression' } })
+      const expr = st.expr
+      const { sol, used } = exprSolution(expr, st.cards.map((c, i) => ({ name: c.name, v: values[i] })), settings)
+      const cards = st.cards.filter((c) => used.includes(c.name)).map((c) => ({ id: c.id, name: c.name }))
+      set({ result: { sol, label: 'Expression', from: { cards, solve: (named, now) => exprSolution(expr, named, now).sol } } })
     } catch (e) {
-      setError(friendly(e))
+      setError(explainVectorError(e))
     }
   }
 
   const addCard = () => {
-    const name = newCardName(st.cards, peekCardId())
+    // A letter the drawing already uses (a point A) would give the card's arrow the name A1.
+    const taken = Object.values(useScene.getState().objects).map((o) => ({ name: o.name }) as Card)
+    const name = newCardName([...st.cards, ...taken], peekCardId())
     set({ cards: [...st.cards, { id: nextCardId(), name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
   }
 
   const opButton = (op: Op) => (
-    <button key={op.id} className="btn h-auto flex-col items-start gap-0 py-1 text-left" title={op.help} onClick={() => run(op.id)}>
+    <button key={op.id} className="btn h-auto min-h-[44px] flex-col items-start gap-0 py-1 text-left" title={op.help} onClick={() => run(op.id)}>
       <span className="text-small text-[color:var(--text-strong)]">{op.label}</span>
       <span className="text-fine text-[color:var(--text-dim)]">
         <Tex tex={op.tex} />
@@ -291,6 +228,7 @@ export function VectorCalc() {
         // wrong: "Add vector" used to answer with a red border and a red sentence before the
         // student had done anything. Red is kept for a vector that cannot be read, and an
         // operation that reaches an empty card says so in its own error line.
+        // A waiting card's prompt says what to do and what follows, not only "pick" (Fix 24).
         const waiting = !ok && (isBlankCard(card) || (card.entry === 'scene' && !card.sceneId))
         const lit = st.highlight === card.id
         // A typed vector is plain numbers; only one read off the drawing carries the drawing's unit.
@@ -304,7 +242,8 @@ export function VectorCalc() {
                 className="field w-11 text-center text-lead font-math font-semibold italic"
                 value={card.name}
                 title="Letters and digits, not i, j or k (those are the unit vectors)"
-                onChange={(e) => updateCard(card.id, { name: VS.safeCardName(e.target.value, card.name, st.cards.filter((c) => c.id !== card.id).map((c) => c.name)) })}
+                // The card and its arrow share one name; the drawing refuses a name it already uses.
+                onChange={(e) => setNameProblem({ id: card.id, text: renameCard(card.id, e.target.value) ?? '' })}
                 onKeyDown={(e) => e.stopPropagation()}
               />
               {/* One way in: the maths field, which takes 3i + 4j and 10∠30° alike. Size and angle
@@ -317,7 +256,7 @@ export function VectorCalc() {
                     ['scene', 'graph', 'Read it off a vector on the graph']
                   ] as [Entry, string, string][]
                 ).map(([k, l, tip]) => (
-                  <button key={k} className={`min-h-[36px] ${card.entry === k ? 'on' : ''}`} title={tip} onClick={() => updateCard(card.id, { entry: k })}>
+                  <button key={k} className={`min-h-[44px] ${card.entry === k ? 'on' : ''}`} title={tip} onClick={() => setEntry(card.id, k)}>
                     {l}
                   </button>
                 ))}
@@ -325,12 +264,10 @@ export function VectorCalc() {
               {/* ml-auto rather than a spacer: a zero-width spacer stays on the first line when
                   the button alone wraps, which left the wrapped button hanging at the left. */}
               <button
-                className="ml-auto min-h-[36px] min-w-[36px] rounded text-[color:var(--text-faint)] hover:text-[color:var(--bad)]"
+                className="ml-auto min-h-[44px] min-w-[44px] rounded text-[color:var(--text-faint)] hover:text-[color:var(--bad)]"
                 title="Remove this vector"
-                onClick={() => {
-                  set({ cards: st.cards.filter((c) => c.id !== card.id) })
-                  if (card.sceneId && selection.includes(card.sceneId)) useScene.getState().select([])
-                }}
+                // The card and its arrow go together, as one undo step (Fix 25).
+                onClick={() => removeCard(card.id)}
               >
                 <Trash2 size={14} className="mx-auto" />
               </button>
@@ -346,16 +283,12 @@ export function VectorCalc() {
             )}
             {card.entry === 'scene' && (
               <select
-                className="field min-h-[36px]"
+                className="field min-h-[44px]"
                 value={card.sceneId}
-                onChange={(e) => {
-                  const picked = objects[e.target.value]
-                  const others = st.cards.filter((c) => c.id !== card.id).map((c) => c.name)
-                  updateCard(card.id, { sceneId: e.target.value, name: picked ? VS.safeCardName(picked.name, card.name, others) : card.name })
-                }}
+                onChange={(e) => pickArrow(card.id, e.target.value)}
               >
-                <option value="">— pick a vector on the drawing —</option>
-                {sceneVectors.map((o) => (
+                <option value="">— choose an arrow from the graph —</option>
+                {offered(card).map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
                   </option>
@@ -372,11 +305,13 @@ export function VectorCalc() {
                   </span>
                 </span>
               ) : waiting ? (
-                <span className="text-[color:var(--text-dim)]">{card.entry === 'scene' ? (v as string) : 'Type a vector above, or draw one on the graph.'}</span>
+                <span className="text-[color:var(--text-dim)]">{card.entry === 'scene' ? (offered(card).length ? (v as string) : NO_ARROWS) : 'Type a vector above, like 3i + 4j or 10∠30°. It is drawn on the graph as you type.'}</span>
               ) : (
                 <span className="text-[color:var(--bad)]">{v as string}</span>
               )}
             </div>
+            {nameProblem.id === card.id && nameProblem.text && <div className="pl-1 text-small text-[color:var(--bad)]">{nameProblem.text}</div>}
+            {ok && readable.includes(card.name) && <div className="pl-1 text-fine text-[color:var(--text-dim)]">{nextStepHint(readable, readable.indexOf(card.name))}</div>}
           </div>
         )
       })}
@@ -401,15 +336,27 @@ export function VectorCalc() {
                 <Tex tex={a.tex} className="text-title text-[color:var(--text-strong)]" />
               </div>
             ))}
+            {st.result.stale && (
+              <div className="pt-1 text-small text-[color:var(--warn)]">
+                A vector this was worked out from was removed or cannot be read now, so its picture was taken off the graph. Press the operation again for the answer from the vectors you have now.
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--warn)] px-2 py-1.5">
             {st.result.sol.visual && (
-              <button className="btn primary" onClick={() => visualizeSolution(st.result!.sol, st.style ?? undefined)}>
+              // The cards' own arrows are laid out and only the answer is added: the scene
+              // bridge's copies put A1 on top of A (Fix 2).
+              <button className="btn primary min-h-[44px]" onClick={() => drawAnswer(st.result!.sol, st.style)}>
                 <Eye size={13} /> Draw on graph
               </button>
             )}
+            {drawnHere && (
+              <button className={`btn min-h-[44px] ${onlyR ? 'on' : ''}`} aria-pressed={onlyR} title="Hide the vectors it was worked from, or show them again" onClick={() => setResultOnly(!onlyR)}>
+                Resultant only
+              </button>
+            )}
             <div className="flex-1" />
-            <button className="btn ghost" onClick={() => set({ showSteps: !st.showSteps })}>
+            <button className="btn ghost min-h-[44px]" onClick={() => set({ showSteps: !st.showSteps })}>
               {st.showSteps ? <ChevronDown size={13} /> : <ChevronRight size={13} />} Steps
             </button>
             {st.result.sol.visual && (
@@ -418,13 +365,23 @@ export function VectorCalc() {
               // panel's default width the fourth choice read "From origi" with no way to see the rest.
               <div className="seg grid basis-full grid-cols-2">
                 {STYLES.map(([k, l]) => (
-                  <button key={l} className={`justify-center whitespace-nowrap ${st.style === k ? 'on' : ''}`} title={k ? '' : "The solution's own picture"} onClick={() => set({ style: k })}>
+                  <button
+                    key={l}
+                    className={`min-h-[44px] justify-center whitespace-nowrap ${st.style === k ? 'on' : ''}`}
+                    title={k ? '' : "The solution's own picture"}
+                    onClick={() => {
+                      set({ style: k })
+                      // A picture already on the graph is redrawn in the chosen layout at once.
+                      if (drawnHere) drawAnswer(st.result!.sol, k)
+                    }}
+                  >
                     {l}
                   </button>
                 ))}
               </div>
             )}
           </div>
+          <div className="px-3 pb-1.5 text-fine text-[color:var(--text-dim)]">{answerHint(!!st.result.sol.visual)}</div>
           {st.showSteps && (
             <ol className="steps space-y-1 px-2 pb-2">
               {st.result.sol.steps.map((s, i) => (
@@ -441,7 +398,7 @@ export function VectorCalc() {
 
       <div className="mt-2 grid grid-cols-3 gap-1 px-2">{COMMON_OPS.map(opButton)}</div>
 
-      <button className="btn ghost mx-2 mt-1" onClick={() => set({ showMore: !st.showMore })}>
+      <button className="btn ghost mx-2 mt-1 min-h-[44px]" onClick={() => set({ showMore: !st.showMore })}>
         {st.showMore ? <ChevronDown size={13} /> : <ChevronRight size={13} />} More {st.showMore ? '' : `(${MORE_OPS.length})`}
       </button>
       {st.showMore && (
@@ -466,7 +423,7 @@ export function VectorCalc() {
           <div className="flex-1">
             <MathInput ref={exprRef} value={st.expr} onChange={(l) => set({ expr: l })} onEnter={runExpr} />
           </div>
-          <button className="btn primary h-9" onClick={runExpr}>
+          <button className="btn primary min-h-[44px] min-w-[44px]" onClick={runExpr}>
             =
           </button>
         </div>

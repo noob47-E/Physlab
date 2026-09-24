@@ -115,6 +115,17 @@
   --sel-fill-faint: rgba(79, 140, 255, 0.12);
   color-scheme: dark;
   --lego-new: #4fd1a5;
+  /* Arrows (Fix 2): each at least 3:1 on this theme's canvas, and the six plus the resultant
+     stay apart under simulated protanopia, deuteranopia and tritanopia (tests/contrast.test.ts). */
+  --vec-1: #40c3ff;
+  --vec-2: #ff6a0d;
+  --vec-3: #2eb073;
+  --vec-4: #f0e442;
+  --vec-5: #b669b3;
+  --vec-6: #9f7bff;
+  --vec-result: #ff87bd;
+  --vec-x: #ff7b72;
+  --vec-y: #58c4ff;
 }
 
 /* Light theme for bright rooms and classroom projectors. */
@@ -177,6 +188,15 @@
   --sel-fill-faint: rgba(47, 111, 228, 0.12);
   color-scheme: light;
   --lego-new: #0f766e;
+  --vec-1: #0230f3;
+  --vec-2: #af0000;
+  --vec-3: #006041;
+  --vec-4: #957710;
+  --vec-5: #993f7f;
+  --vec-6: #4f75ec;
+  --vec-result: #7619a3;
+  --vec-x: #c0392b;
+  --vec-y: #1565c0;
 }
 
 /* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
@@ -239,6 +259,15 @@
   --sel-fill-faint: rgba(139, 156, 255, 0.12);
   color-scheme: dark;
   --lego-new: #6fe0c4;
+  --vec-1: #0cdefd;
+  --vec-2: #eb7a1d;
+  --vec-3: #1fc092;
+  --vec-4: #f0e442;
+  --vec-5: #ba5382;
+  --vec-6: #975bce;
+  --vec-result: #cf79ff;
+  --vec-x: #ff8b94;
+  --vec-y: #6cc8ff;
 }
 
 /* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
@@ -307,6 +336,15 @@
   --sel-fill-faint: rgba(224, 184, 74, 0.12);
   color-scheme: dark;
   --lego-new: #8fd9b6;
+  --vec-1: #4db3bb;
+  --vec-2: #f16612;
+  --vec-3: #02ddaf;
+  --vec-4: #f0e442;
+  --vec-5: #b96a79;
+  --vec-6: #817dbe;
+  --vec-result: #eb51ff;
+  --vec-x: #f28474;
+  --vec-y: #6fb8e8;
 }
 
 html,
