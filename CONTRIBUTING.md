@@ -31,9 +31,10 @@ If you teach, the most valuable report of all is: *my students got stuck here.*
 ```bash
 npm install
 npm run dev        # Electron with hot reload
-npm test           # ~780 tests, pure logic, no DOM
+npm test           # 1758 tests, pure logic, no DOM
 npm run typecheck  # must be clean
 npm run lint       # must report 0 errors; a suppression says why, after `--`
+npm run gate       # all of the above together, at four levels — see AGENTS.md and docs/ACCURACY.md
 ```
 
 The test suite covers the maths, not the interface. Put any decision worth trusting into a pure

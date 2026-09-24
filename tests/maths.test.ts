@@ -84,7 +84,7 @@ describe('from the field to the answer', () => {
 
   it('answers the Complex field’s other refusals in words', () => {
     // A lower-case re is the electron radius in the constants list, so mathjs said "'re' is
-    // not a function; its value is: 2.8179403262e-15".
+    // not a function; its value is: 2.8179403205e-15" (CODATA 2022; was ...3262e-15 in 2018).
     const re = evaluateInput('CMPLX', '\\operatorname{re}\\left(3+4i\\right)', opts)!
     expect(re.error!.sentence).toBe('There is no function called re. Check the spelling, or pick one from the keypad.')
     expect(re.error!.detail).toBeUndefined()
@@ -235,7 +235,7 @@ describe('the sentences', () => {
     // an argument index is mathjs talking to a programmer.
     for (const msg of [
       'Unexpected type of argument in function addScalar (expected: Unit, actual: number, index: 1)',
-      "'re' is not a function; its value is:\n  2.8179403262e-15",
+      "'re' is not a function; its value is:\n  2.8179403205e-15",
       'Invalid left hand side of assignment operator = (char 6)',
       'Unexpected end of expression (char 3)',
       'Undefined function foo'

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Installed by `npm run hooks:install` (sets core.hooksPath to this directory — see
+# scripts/install-hooks.mjs). Runs the gate on every commit (quick; thorough on main); the decision
+# logic lives in scripts/commit-msg-hook.mjs / scripts/gate-core.mjs, tested by tests/gate.test.ts.
+set -e
+root="$(git rev-parse --show-toplevel)"
+exec node "$root/scripts/commit-msg-hook.mjs" "$1"

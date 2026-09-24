@@ -10,10 +10,13 @@
     "dev": "electron-vite dev",
     "web": "vite --config vite.web.config.ts",
     "build": "electron-vite build",
+    "predist": "node scripts/gate.mjs full",
     "dist": "electron-vite build && electron-builder --win",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "gate": "node scripts/gate.mjs",
+    "hooks:install": "node scripts/install-hooks.mjs"
   },
   "build": {
     "appId": "com.physlab.desktop",

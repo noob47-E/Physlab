@@ -306,12 +306,26 @@ neighbour is open.
 ## How to check your work
 
 ```bash
-npm test          # vitest, 1492 tests in 60 files, pure logic, no DOM
+npm test          # vitest, 1758 tests in 74 files, pure logic, no DOM
 npm run typecheck # tsc --noEmit, must be clean
 npm run lint      # eslint, 0 errors; a suppression carries its reason after `--`
 npm run dev       # Electron with hot reload
-npm run dist      # builds dist/PhysLab Setup <version>.exe
+npm run gate      # runs the three checks above together, plus more at each level — see below
+npm run dist      # builds dist/PhysLab Setup <version>.exe (refuses unless the full gate is green)
 ```
+
+`npm run gate -- <quick|thorough|full|deep>` (Idea 12 slice 1) is the one-command version of the
+above and more: `quick` is exactly the three commands above, `thorough` adds building both the web
+and the Electron targets (Fix 5 — build it yourself rather than trust a stale bug report),
+`full` and `deep` add hooks for checks not built yet (property tests, golden step texts, oracle
+answers from SymPy/mpmath, four-theme screenshots, mutation testing — see `docs/ACCURACY.md` and
+`scripts/gate-core.mjs`). It writes a dated report to `C:\my_projects\PhysLab-backups\gate\`, and
+`npm run dist`'s new `predist` step runs the `full` level first, so a red gate blocks a release
+before it starts. `npm run hooks:install` points git at `.githooks/`, which then runs the gate on
+every commit — `quick` on a working branch, `thorough` (both builds too) on `main` — with vitest
+capped at 3 workers (`GATE_MAX_WORKERS`, default 3 in the hook) because this PC is shared. It skips
+a `WIP(` commit and one made with `PHYSLAB_SKIP_GATE=1`. A known flaky test file (docs/ACCURACY.md)
+that fails under load is re-run alone and, if it passes, reported amber (`!`), never green or red.
 
 The test suite covers the maths, not the UI: put any decision worth trusting into a pure function in
 `math/`, `lab/` or `render/gridMath.ts` and test that, rather than testing through React. The

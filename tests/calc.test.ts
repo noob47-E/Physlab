@@ -24,6 +24,7 @@ import { parseAnswer } from '../src/renderer/src/math/checkAnswer'
 import { fmt } from '../src/renderer/src/math/format'
 import { math, preprocess } from '../src/renderer/src/math/expr'
 import { resetGlobals } from './helpers/globals'
+import { CONSTANTS } from '../src/renderer/src/calc/constants'
 
 const ctx = { vars: {}, ans: 0, angle: 'deg' as const }
 
@@ -310,7 +311,50 @@ describe('a constant inserted into the maths field', () => {
     // The list inserts h_P; MathLive writes it as a subscript and latexToMath returns hP.
     expect(Number(evaluateComp('h_P', ctx).value)).toBeCloseTo(6.62607015e-34, 40)
     expect(Number(evaluateComp('hP', ctx).value)).toBeCloseTo(6.62607015e-34, 40)
-    expect(Number(evaluateComp('2*mp', ctx).value)).toBeCloseTo(2 * 1.67262192369e-27, 33)
+    // CODATA 2022 proton mass (was 1.67262192369e-27 under CODATA 2018).
+    expect(Number(evaluateComp('2*mp', ctx).value)).toBeCloseTo(2 * 1.67262192595e-27, 33)
+  })
+})
+
+describe('constants list pinned to CODATA 2022', () => {
+  const byId = (id: string): number => CONSTANTS.find((c) => c.id === id)!.value
+
+  it('holds the measured values that moved from CODATA 2018 (NIST SP 959, May 2024)', () => {
+    // Constants fixed by the 2019 SI redefinition (h, e, k_B, N_A, c, and anything built only
+    // from them) never move between adjustments and are covered by the h_P/e_ch checks above;
+    // this pins the measured constants that CODATA 2022 actually revised.
+    expect(byId('m_p')).toBe(1.67262192595e-27) // was 1.67262192369e-27
+    expect(byId('m_n')).toBe(1.67492750056e-27) // was 1.67492749804e-27
+    expect(byId('m_e')).toBe(9.1093837139e-31) // was 9.1093837015e-31
+    expect(byId('a_0')).toBe(5.29177210544e-11) // was 5.29177210903e-11
+    expect(byId('mu_N')).toBe(5.0507837393e-27) // was 5.0507837461e-27
+    expect(byId('mu_B')).toBe(9.2740100657e-24) // was 9.2740100783e-24
+    expect(byId('alpha_f')).toBe(7.2973525643e-3) // was 7.2973525693e-3
+    expect(byId('r_e')).toBe(2.8179403205e-15) // was 2.8179403262e-15
+    expect(byId('lambda_c')).toBe(2.42631023538e-12) // was 2.42631023867e-12
+    expect(byId('gamma_p')).toBe(2.6752218708e8) // was 2.6752218744e8
+    expect(byId('lambda_cp')).toBe(1.3214098536e-15) // was 1.32140985539e-15
+    expect(byId('lambda_cn')).toBe(1.31959090382e-15) // was 1.31959090581e-15
+    expect(byId('R_inf')).toBe(10973731.568157) // was 10973731.56816
+    expect(byId('u_amu')).toBe(1.66053906892e-27) // was 1.6605390666e-27
+    expect(byId('mu_p')).toBe(1.41060679545e-26) // was 1.41060679736e-26
+    expect(byId('mu_e')).toBe(-9.2847646917e-24) // was -9.2847647043e-24
+    expect(byId('mu_n')).toBe(-9.6623653e-27) // was -9.6623651e-27
+    expect(byId('eps_0')).toBe(8.8541878188e-12) // was 8.8541878128e-12
+    expect(byId('mu_0')).toBe(1.25663706127e-6) // was 1.25663706212e-6
+    expect(byId('Z_0')).toBe(376.730313412) // was 376.730313668
+    expect(byId('k_e')).toBe(8.9875517862e9) // was 8.9875517923e9, derived from eps_0
+  })
+
+  it('leaves the constants CODATA 2022 did not move alone', () => {
+    // G is unchanged at this precision (Idea 12's own finding); exact-by-definition constants
+    // (h, hbar, e, k_B, N_A, c, F, R, sigma_SB, phi_0, G_0, R_K, K_J, g_n, atm_std, t_C) cannot
+    // move between adjustments.
+    expect(byId('G_grav')).toBe(6.6743e-11)
+    expect(byId('h_P')).toBe(6.62607015e-34)
+    expect(byId('hbar')).toBe(1.054571817e-34)
+    expect(byId('m_mu')).toBe(1.883531627e-28)
+    expect(byId('mu_mu')).toBe(-4.4904483e-26)
   })
 })
 
