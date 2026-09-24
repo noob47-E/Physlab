@@ -27,6 +27,7 @@ export type ModeId =
   | 'problems'
   | 'lab'
   | 'author'
+  | 'results'
 
 export interface ModeDef {
   id: ModeId
@@ -130,6 +131,15 @@ export const MODES: ModeDef[] = [
     ready: true,
     tools: ['select'],
     panel: 'author',
+    view: '2d'
+  },
+  {
+    id: 'results',
+    label: 'Class Results',
+    description: 'Open the result files your class saved from Problem Sets and see each question part’s facility, correlation and discrimination, worked out on this computer.',
+    ready: true,
+    tools: ['select'],
+    panel: 'classresults',
     view: '2d'
   }
 ]

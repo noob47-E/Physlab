@@ -15,9 +15,12 @@ const idx = (id: string) => ready.findIndex((m) => m.id === id)
 /** The same tabs measured at 1366 × 768 (8 px padding at 1440 px and below), and the More modes button. */
 // Question Author (added by 0.9-AUTH after these were measured) is its 13 px Segoe UI text width,
 // 95.2 px, plus the padding — the same sum gives every measured tab above to 0.1 px.
-const MEASURED_1366: Record<string, number> = { Calculator: 74, Vectors: 59, Geometry: 73, Graphing: 70, Sandbox: 66, 'GPU Lab': 66, 'Lab Data': 67, 'Problem Sets': 92, 'Question Author': 112 }
+// Class Results (added by 0.9-QR2) measured the same way, in the app: 94.546875 px at 1920 (rounds
+// to 94.5) and 88.546875 px at 1366 (rounded up, like every 1366 figure here, to 89 — a narrower
+// estimate must never be trusted over the real width).
+const MEASURED_1366: Record<string, number> = { Calculator: 74, Vectors: 59, Geometry: 73, Graphing: 70, Sandbox: 66, 'GPU Lab': 66, 'Lab Data': 67, 'Problem Sets': 92, 'Question Author': 112, 'Class Results': 89 }
 const MEASURED_1366_MORE = 104
-const MEASURED: Record<string, number> = { Calculator: 79.5, Vectors: 64.1, Geometry: 78.5, Graphing: 75.2, Sandbox: 71.8, 'GPU Lab': 71.1, 'Lab Data': 72.7, 'Problem Sets': 97.4, 'Question Author': 117.2 }
+const MEASURED: Record<string, number> = { Calculator: 79.5, Vectors: 64.1, Geometry: 78.5, Graphing: 75.2, Sandbox: 71.8, 'GPU Lab': 71.1, 'Lab Data': 72.7, 'Problem Sets': 97.4, 'Question Author': 117.2, 'Class Results': 94.5 }
 
 describe('Fix 13: one way to switch modes', () => {
   it('shows every mode as a tab when there is room, and before the bar is measured', () => {
@@ -49,15 +52,19 @@ describe('Fix 13: one way to switch modes', () => {
     for (const l of labels) expect(MEASURED[l], `${l} was measured`).toBeDefined()
   })
 
-  it('at 1366 px, measured as drawn, every student mode is a tab and only Question Author folds into More (the estimate alone folded Problem Sets away too)', () => {
+  it('at 1366 px, measured as drawn, every student mode is a tab and only Question Author and Class Results fold into More (the estimate alone folded Problem Sets away too)', () => {
     // Measured in the app at 1366 × 768: 8 px padding at 1440 px and below; the modes box is 760 px.
     const at1366 = { tabs: labels.map((l) => MEASURED_1366[l]), more: MEASURED_1366_MORE }
     for (const l of labels) expect(MEASURED_1366[l], `${l} was measured at 1366 px`).toBeDefined()
     const all = ready.map((_, i) => i)
-    expect(modeTabs(760, labels, idx('calculator'), at1366)).toEqual({ tabs: all.filter((i) => i !== idx('author')), more: [idx('author')] })
-    expect(modeTabs(760, labels, idx('calculator')).more).toEqual([idx('problems'), idx('author')])
-    // A teacher in Question Author keeps it as a tab; Problem Sets makes room for it.
-    expect(modeTabs(760, labels, idx('author'), at1366)).toEqual({ tabs: all.filter((i) => i !== idx('problems')), more: [idx('problems')] })
+    // Calculator through Problem Sets (8 tabs, 599 px used) fit the 656 px budget; Question Author
+    // (116 px with its gap) does not, and the fill stops there — Class Results never gets tried.
+    expect(modeTabs(760, labels, idx('calculator'), at1366)).toEqual({ tabs: all.filter((i) => i !== idx('author') && i !== idx('results')), more: [idx('author'), idx('results')] })
+    expect(modeTabs(760, labels, idx('calculator')).more).toEqual([idx('problems'), idx('author'), idx('results')])
+    // A teacher in Question Author keeps it as a tab; Problem Sets AND Class Results both make room
+    // for it (dropping Problem Sets alone, as one mode used to, is no longer enough room: 503 + 116
+    // still fits 656, so nothing past Author is added back).
+    expect(modeTabs(760, labels, idx('author'), at1366)).toEqual({ tabs: all.filter((i) => i !== idx('problems') && i !== idx('results')), more: [idx('problems'), idx('results')] })
     // 1180 px leaves a 574 px box: six tabs, and Lab Data (70.7 px with its gap) would not fit in the 51 px left.
     expect(modeTabs(574, labels, idx('calculator'), at1366).tabs).toEqual(all.slice(0, 6))
     // The tabs taken and the More button never run past the box.

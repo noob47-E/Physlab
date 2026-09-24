@@ -25,7 +25,8 @@ export const PANEL_TITLES: Record<string, string> = {
   timeline: 'Timeline',
   graphs: 'Graphs',
   gpulab: 'GPU Lab',
-  sandbox: 'Sandbox'
+  sandbox: 'Sandbox',
+  classresults: 'Class Results'
 }
 
 export const PANEL_LIST = Object.entries(PANEL_TITLES).map(([id, title]) => ({ id, title }))
@@ -36,7 +37,7 @@ const PANEL_GROUPS: string[][] = [
   ['viewport', 'maths'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
-  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'author', 'labdata', 'sandbox', 'gpulab'],
+  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'author', 'labdata', 'sandbox', 'gpulab', 'classresults'],
   ['console', 'timeline', 'graphs']
 ]
 

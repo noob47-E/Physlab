@@ -35,6 +35,7 @@ const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ defau
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
 const Author = lazy(() => import('../panels/Author').then((m) => ({ default: m.Author })))
 const LabData = lazy(() => import('../panels/LabData').then((m) => ({ default: m.LabData })))
+const ClassResults = lazy(() => import('../panels/ClassResults').then((m) => ({ default: m.ClassResults })))
 
 const PANEL_VIEWS: Record<string, React.ComponentType> = {
   viewport: Viewport,
@@ -52,7 +53,8 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   timeline: Timeline,
   graphs: Graphs,
   gpulab: GpuLab,
-  sandbox: SandboxPanel
+  sandbox: SandboxPanel,
+  classresults: ClassResults
 }
 
 const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
