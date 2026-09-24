@@ -2,11 +2,17 @@
 // for a right answer, and the number they are checked against is the number PhysLab's own
 // step-by-step solution works out.
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { generate, generateSet, TOPICS, type AnswerField } from '../src/renderer/src/math/problems'
 import { checkAnswer, expectedText, isCorrect, parseAnswer } from '../src/renderer/src/math/checkAnswer'
 import { getAngleMode, setAngleMode } from '../src/renderer/src/math/expr'
 import { resetGlobals } from './helpers/globals'
+import { hasVisual, INFERRED_NOTE, visualOf } from '../src/renderer/src/questions/autoVisual'
+import { loadBundled } from '../src/renderer/src/questions/bank'
+import { drawVariables } from '../src/renderer/src/questions/variables'
+import { planDrawing, solveTorque } from '../src/renderer/src/math/vectorSolver'
 
 beforeEach(resetGlobals)
 
@@ -154,5 +160,105 @@ describe('checking an answer', () => {
     expect(isCorrect(checkAnswer('12.8', f))).toBe(false)
     expect(isCorrect(checkAnswer('12.6', f))).toBe(true)
     expect(isCorrect(checkAnswer('14', f))).toBe(false)
+  })
+})
+
+// Fix 21 in Practice (QV2): "Show the picture" is offered for every question and every vector
+// topic — an authored picture/motion/experiment, or, failing that, a picture PhysLab could infer
+// (never the empty fallback, which is only ever allowed for a teacher's or an imported file).
+describe('Fix 21: a visual for every practice question and vector topic', () => {
+  it('every bundled question has an authored or non-fallback visual', () => {
+    const bundled = loadBundled()
+    expect(bundled.questions.length).toBeGreaterThan(0)
+    for (const q of bundled.questions) {
+      for (let seed = 1; seed <= 3; seed++) {
+        const variant = drawVariables(q, seed)
+        const plan = visualOf(q, variant)
+        expect(plan.source, `${q.id} #${seed}`).not.toBe('fallback')
+        expect(hasVisual(plan), `${q.id} #${seed}`).toBe(true)
+      }
+    }
+  })
+
+  it('an author\'s question with a picture and an experiment (or a motion) offers each of them', async () => {
+    // The panel module reads the desktop bridge off window when it loads; a node test has none.
+    vi.stubGlobal('window', globalThis)
+    const { visualButtons } = await import('../src/renderer/src/panels/Practice')
+    vi.unstubAllGlobals()
+    const bundled = loadBundled().questions
+    const withPicture = bundled.find((q) => q.picture)!
+    const withMotion = bundled.find((q) => q.motion)!
+    const withSandbox = bundled.find((q) => q.sandbox)!
+    const plan = (q: typeof withPicture) => visualOf(q, drawVariables(q, 1))
+    // One visual: one button.
+    expect(visualButtons(plan(withPicture))).toEqual(['first'])
+    expect(visualButtons(plan(withMotion))).toEqual(['first'])
+    expect(visualButtons(plan(withSandbox))).toEqual(['first'])
+    // Picture + experiment: "Show the picture" and "Open the experiment" (one button lost the experiment).
+    expect(visualButtons(plan({ ...withPicture, sandbox: withSandbox.sandbox }))).toEqual(['first', 'experiment'])
+    // Picture + motion: "Show the picture" and "Draw the motion".
+    expect(visualButtons(plan({ ...withPicture, motion: withMotion.motion }))).toEqual(['first', 'motion'])
+    // Motion + experiment: the motion is drawn first, the experiment keeps its own button.
+    expect(visualButtons(plan({ ...withMotion, sandbox: withSandbox.sandbox }))).toEqual(['first', 'experiment'])
+    // All three: every one the author gave it.
+    expect(visualButtons(plan({ ...withPicture, motion: withMotion.motion, sandbox: withSandbox.sandbox }))).toEqual(['first', 'motion', 'experiment'])
+  })
+
+  it('says "PhysLab drew this from the question\'s numbers" under a fallback number line as under an inferred picture', async () => {
+    vi.stubGlobal('window', globalThis)
+    const { drawnNote } = await import('../src/renderer/src/panels/Practice')
+    vi.unstubAllGlobals()
+    const bundled = loadBundled().questions
+    const plan = (q: (typeof bundled)[number]) => visualOf(q, drawVariables(q, 1))
+    // A teacher's arithmetic question: nothing to infer, so its given numbers on a number line.
+    const sum = {
+      ...bundled[0],
+      picture: undefined,
+      motion: undefined,
+      sandbox: undefined,
+      statement: 'What is {a} + {b}?',
+      variables: [{ name: 'a', def: { kind: 'list' as const, items: [3] } }, { name: 'b', def: { kind: 'list' as const, items: [4] } }],
+      parts: [{ type: 'number' as const, prompt: 'The sum', answer: 'a + b', unit: 'none' as const, tolerance: { kind: 'absolute' as const, value: 0 }, marks: 1 }]
+    }
+    const fallback = plan(sum)
+    expect(fallback.source).toBe('fallback')
+    expect(drawnNote(fallback, 'ready')).toBe(INFERRED_NOTE)
+    const inferred = plan(bundled.find((q) => !q.picture && !q.motion && !q.sandbox && plan(q).source === 'inferred')!)
+    expect(drawnNote(inferred, 'ready')).toBe(INFERRED_NOTE)
+    // Not while it waits for the answer, and never under the author's own picture.
+    expect(drawnNote(inferred, 'after-answer')).toBeUndefined()
+    expect(drawnNote(plan(bundled.find((q) => q.picture)!), 'ready')).toBeUndefined()
+  })
+
+  it('torque draws r and F from one pivot, with no parallelogram sides', () => {
+    // solveCross's parallelogram pictures |A×B| as an area; for a lever arm it is meaningless.
+    const torque = solveTorque([0.5, 0, 0], [0, 20, 0])
+    expect(torque.visual!.mode).toBe('common-tail')
+    const drawing = planDrawing(torque.visual!)
+    expect(drawing.items.some((it) => it.kind === 'ghost')).toBe(false)
+    const arrows = drawing.items.filter((it) => it.kind === 'arrow')
+    expect(arrows.length).toBeGreaterThanOrEqual(3)
+    for (const a of arrows) if (a.kind === 'arrow') expect(a.tail, a.name).toEqual([0, 0, 0])
+  })
+
+  it('a vector topic\'s buttons, Show in scene among them, are 44 px targets', () => {
+    // The root font is 13 px, so min-h-11 would be 36 px: the target is min-h-[44px].
+    const panel = readFileSync(join(__dirname, '../src/renderer/src/panels/Practice.tsx'), 'utf8')
+    const row = panel.slice(panel.indexOf('const vp = item.problem'))
+    for (const label of ['<Check size={13} /> Check my answer', "{hints === 0 ? 'Hint' : 'Next hint'}", 'Show the full solution', '<Eye size={13} /> Show in scene']) {
+      const at = row.indexOf(label)
+      expect(at, label).toBeGreaterThan(0)
+      expect(row.slice(row.lastIndexOf('<button', at), at), label).toContain('min-h-[44px]')
+    }
+  })
+
+  it('every TOPICS entry\'s problem has solution.visual over 20 seeds', () => {
+    for (const topic of TOPICS) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const p = generate(topic.id, seed * 65599)
+        expect(p.solution.visual, `${topic.id} #${seed}`).toBeDefined()
+        expect(p.solution.visual!.vectors.length, `${topic.id} #${seed}`).toBeGreaterThan(0)
+      }
+    }
   })
 })

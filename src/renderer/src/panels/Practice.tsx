@@ -12,8 +12,9 @@ import type { FadingLevel, PQQuestion } from '../questions/pqjson'
 import { bundledSets, loadTeacherFile, type QuestionSet } from '../questions/bank'
 import {
   countedParts,
+  hasVisual,
+  INFERRED_NOTE,
   markPlayed,
-  picturePlan,
   playQuestion,
   questionsAtDepth,
   resolveDeeper,
@@ -22,9 +23,13 @@ import {
   sandboxPlan,
   sendSandboxReadings,
   showMotion,
-  showPicture,
   showSandbox,
-  type Played
+  showVisual,
+  visualMode,
+  visualPlanFor,
+  visualState,
+  type Played,
+  type VisualPlan
 } from '../questions/player'
 import { buildResultFile, recordFirstTries, resultParts, serializeResultFile, type PQResultPart } from '../questions/results'
 import { nextLevel, resolveAutoSteps } from '../questions/steps'
@@ -200,6 +205,30 @@ function Steps({ steps, shown }: { steps: { text?: string; tex?: string }[]; sho
       ))}
     </ol>
   )
+}
+
+/**
+ * The visual buttons a question offers (Fix 21). 'first' is the one "Show the picture" (or "Open
+ * the experiment") for whatever the question shows first. An author may give one question a
+ * picture, a motion and an experiment together, and Question Author previews each: the student
+ * gets each of them too — "Draw the motion" beside an authored picture, "Open the experiment"
+ * beside an authored picture or motion — so one button never hides the rest.
+ */
+export function visualButtons(plan: VisualPlan): ('first' | 'motion' | 'experiment')[] {
+  if (!hasVisual(plan)) return []
+  const out: ('first' | 'motion' | 'experiment')[] = ['first']
+  if (plan.source !== 'authored') return out
+  if (plan.picture && plan.motion) out.push('motion')
+  if (plan.sandbox && visualMode(plan) === 'graphing') out.push('experiment')
+  return out
+}
+
+/**
+ * The line under a picture PhysLab drew itself (spec decision 11): an inferred picture and the
+ * fallback number line of given quantities alike, since neither is the author's, once it can be shown.
+ */
+export function drawnNote(plan: VisualPlan, state: 'ready' | 'after-answer' | 'none'): string | undefined {
+  return plan.source !== 'authored' && state === 'ready' ? INFERRED_NOTE : undefined
 }
 
 export function Practice() {
@@ -653,6 +682,12 @@ export function Practice() {
     // layer of the same idea, played next from the set's own questions, or a sentence if the set
     // does not have it.
     const deeper = anyChecked || revealed ? resolveDeeper(q, session.setQuestions) : null
+    // Fix 21: whatever this question has to show — authored or inferred — behind one button.
+    const earned = revealed || allRight
+    const vPlan = visualPlanFor(played)
+    const vState = visualState(vPlan, earned)
+    const vMode = visualMode(vPlan)
+    const vButtons = visualButtons(vPlan)
     const deeperRow = deeper && (
       <div className="mt-2 flex flex-wrap items-center gap-2 px-3">
         {'question' in deeper ? (
@@ -718,25 +753,33 @@ export function Practice() {
         </div>
         {deeperRow}
 
-        {/* The picture's area or slope is held back until the question is answered right or the
-            solution shown: it is usually exactly what the question asks for. */}
-        {(q.picture || q.motion || q.sandbox) && (
+        {/* Fix 21: every question has something to show — the author's own picture, motion or
+            experiment, or, failing that, one PhysLab drew from the question's numbers. One button
+            for whichever it shows first, and one more for each other visual its author gave it; its value (the area, the slope, the picture PhysLab inferred when
+            every part of it gives the answer away) is held back until the question is answered
+            right or the solution shown, exactly as an authored picture's own labels already were. */}
+        {vState !== 'none' && (
           <div className="mt-2 flex flex-wrap items-center gap-2 px-3">
-            {q.picture && (
-              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showPicture(picturePlan(q.picture!, played, settings), settings, !(revealed || allRight)).note, 'graphing')}>
-                <Eye size={13} /> Show the picture
-              </button>
-            )}
-            {q.motion && (
-              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showMotion(q.motion!, played, settings).note, 'graphing')}>
+            <button
+              className="btn ghost min-h-[44px]"
+              disabled={vState === 'after-answer'}
+              onClick={() => show(() => showVisual(vPlan, played, settings, earned), vMode)}
+            >
+              {vMode === 'sandbox' ? <Play size={13} /> : <Eye size={13} />}
+              {vMode === 'sandbox' ? 'Open the experiment' : 'Show the picture'}
+              {vState === 'after-answer' && ' (after you answer)'}
+            </button>
+            {vButtons.includes('motion') && vPlan.source === 'authored' && (
+              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showMotion(vPlan.motion!, played, settings).note, 'graphing')}>
                 <Eye size={13} /> Draw the motion
               </button>
             )}
-            {q.sandbox && (
-              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showSandbox(sandboxPlan(q.sandbox!, played)), 'sandbox')}>
+            {vButtons.includes('experiment') && vPlan.source === 'authored' && (
+              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showSandbox(sandboxPlan(vPlan.sandbox!, played)), 'sandbox')}>
                 <Play size={13} /> Open the experiment
               </button>
             )}
+            {drawnNote(vPlan, vState) && <span className="text-ink-dim">{drawnNote(vPlan, vState)}</span>}
             {q.sandbox?.record && (
               <button className="btn ghost min-h-[44px]" onClick={() => show(() => sendSandboxReadings(q.sandbox!, played).note, 'lab')}>
                 <TableProperties size={13} /> Send the readings to Lab Data
@@ -854,19 +897,19 @@ export function Practice() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-3 pt-1">
-        <button className="btn primary" onClick={check}>
+        <button className="btn primary min-h-[44px]" onClick={check}>
           <Check size={13} /> Check my answer
         </button>
-        <button className="btn" onClick={() => put({ hints: Math.min(hints + 1, steps.length) })} disabled={!revealed && hints >= steps.length}>
+        <button className="btn min-h-[44px]" onClick={() => put({ hints: Math.min(hints + 1, steps.length) })} disabled={!revealed && hints >= steps.length}>
           <Lightbulb size={13} /> {hints === 0 ? 'Hint' : 'Next hint'}
         </button>
         {(anyChecked || hints > 0) && !revealed && (
-          <button className="btn ghost" onClick={() => put({ revealed: true })}>
+          <button className="btn ghost min-h-[44px]" onClick={() => put({ revealed: true })}>
             Show the full solution
           </button>
         )}
         {vp.solution.visual && (
-          <button className="btn ghost" onClick={() => visualizeSolution(vp.solution)}>
+          <button className="btn ghost min-h-[44px]" onClick={() => visualizeSolution(vp.solution)}>
             <Eye size={13} /> Show in scene
           </button>
         )}

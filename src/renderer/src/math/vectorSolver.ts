@@ -978,7 +978,11 @@ export function solveTorque(r: V3, F: V3, s: SolverSettings = DEFAULT_SETTINGS):
       { label: 'τ', tex: `${w.ijk(tau)}${unit}` },
       { label: '|τ|', tex: `${w.num(len(tau))}${unit}` },
       cr.answers[2]
-    ]
+    ],
+    // r and F act from the same point (the pivot), so they are drawn from one common tail — not
+    // solveCross's 'parallelogram' mode, whose ghost sides illustrate the *area* interpretation of
+    // A×B and are meaningless for a lever arm: τ is perpendicular to the r–F plane, not its diagonal.
+    visual: { vectors: cr.visual!.vectors, mode: 'common-tail' }
   })
 }
 
