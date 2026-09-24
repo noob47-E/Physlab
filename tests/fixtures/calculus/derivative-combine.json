@@ -1,0 +1,112 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "x*ln(x) - x"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "x \\ln x - x",
+   "text": "x*log(x) - x"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "sum",
+   "expr": {
+    "latex": "x \\ln x - x",
+    "text": "x*log(x) - x"
+   },
+   "result": {
+    "latex": "\\ln x",
+    "text": "log(x)"
+   },
+   "substeps": [
+    {
+     "rule": "product",
+     "expr": {
+      "latex": "x \\ln x",
+      "text": "x*log(x)"
+     },
+     "result": {
+      "latex": "\\ln x + 1",
+      "text": "log(x) + 1"
+     },
+     "substeps": [
+      {
+       "rule": "x",
+       "expr": {
+        "latex": "x",
+        "text": "x"
+       },
+       "result": {
+        "latex": "1",
+        "text": "1"
+       }
+      },
+      {
+       "rule": "log",
+       "expr": {
+        "latex": "\\ln x",
+        "text": "log(x)"
+       },
+       "result": {
+        "latex": "\\frac{1}{x}",
+        "text": "1/x"
+       }
+      }
+     ]
+    },
+    {
+     "rule": "constant_multiple",
+     "expr": {
+      "latex": "- x",
+      "text": "-x"
+     },
+     "result": {
+      "latex": "-1",
+      "text": "-1"
+     },
+     "constant": {
+      "latex": "-1",
+      "text": "-1"
+     },
+     "other": {
+      "latex": "x",
+      "text": "x"
+     },
+     "substeps": [
+      {
+       "rule": "x",
+       "expr": {
+        "latex": "x",
+        "text": "x"
+       },
+       "result": {
+        "latex": "1",
+        "text": "1"
+       }
+      }
+     ]
+    }
+   ],
+   "shown": {
+    "latex": "\\left(1 + \\ln x\\right) - 1",
+    "text": "(1 + log(x)) - 1"
+   }
+  },
+  "unsupported": false,
+  "answer_latex": "\\ln x",
+  "answer_text": "log(x)",
+  "checked": true
+ }
+}

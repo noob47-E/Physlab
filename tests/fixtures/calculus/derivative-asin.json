@@ -1,0 +1,91 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "asin(2x)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\sin^{-1} {2 x}",
+   "text": "asin(2*x)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "\\sin^{-1} {2 x}",
+    "text": "asin(2*x)"
+   },
+   "result": {
+    "latex": "\\frac{2}{\\sqrt{1 - 4 x^{2}}}",
+    "text": "2/sqrt(1 - 4*x**2)"
+   },
+   "outer": "asin",
+   "u": {
+    "latex": "2 x",
+    "text": "2*x"
+   },
+   "letter": "u",
+   "outer_expr": {
+    "latex": "\\sin^{-1} {u}",
+    "text": "asin(u)"
+   },
+   "outer_derivative": {
+    "latex": "\\frac{1}{\\sqrt{1 - u^{2}}}",
+    "text": "1/sqrt(1 - u**2)"
+   },
+   "outer_at_inner": {
+    "latex": "\\frac{1}{\\sqrt{1 - 4 x^{2}}}",
+    "text": "1/sqrt(1 - 4*x**2)"
+   },
+   "substeps": [
+    {
+     "rule": "constant_multiple",
+     "expr": {
+      "latex": "2 x",
+      "text": "2*x"
+     },
+     "result": {
+      "latex": "2",
+      "text": "2"
+     },
+     "constant": {
+      "latex": "2",
+      "text": "2"
+     },
+     "other": {
+      "latex": "x",
+      "text": "x"
+     },
+     "substeps": [
+      {
+       "rule": "x",
+       "expr": {
+        "latex": "x",
+        "text": "x"
+       },
+       "result": {
+        "latex": "1",
+        "text": "1"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "\\frac{2}{\\sqrt{1 - 4 x^{2}}}",
+  "answer_text": "2/sqrt(1 - 4*x**2)",
+  "checked": true
+ }
+}

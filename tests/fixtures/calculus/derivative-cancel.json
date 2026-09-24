@@ -1,0 +1,129 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "sin(x)^2 + cos(x)^2"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\sin^{2} {x} + \\cos^{2} {x}",
+   "text": "sin(x)**2 + cos(x)**2"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "sum",
+   "expr": {
+    "latex": "\\sin^{2} {x} + \\cos^{2} {x}",
+    "text": "sin(x)**2 + cos(x)**2"
+   },
+   "result": {
+    "latex": "0",
+    "text": "0"
+   },
+   "substeps": [
+    {
+     "rule": "chain",
+     "expr": {
+      "latex": "\\sin^{2} {x}",
+      "text": "sin(x)**2"
+     },
+     "result": {
+      "latex": "2 \\sin {x} \\cos {x}",
+      "text": "2*sin(x)*cos(x)"
+     },
+     "outer": "power",
+     "u": {
+      "latex": "\\sin {x}",
+      "text": "sin(x)"
+     },
+     "letter": "u",
+     "outer_expr": {
+      "latex": "u^{2}",
+      "text": "u**2"
+     },
+     "outer_derivative": {
+      "latex": "2 u",
+      "text": "2*u"
+     },
+     "outer_at_inner": {
+      "latex": "2 \\sin {x}",
+      "text": "2*sin(x)"
+     },
+     "substeps": [
+      {
+       "rule": "sin",
+       "expr": {
+        "latex": "\\sin {x}",
+        "text": "sin(x)"
+       },
+       "result": {
+        "latex": "\\cos {x}",
+        "text": "cos(x)"
+       }
+      }
+     ]
+    },
+    {
+     "rule": "chain",
+     "expr": {
+      "latex": "\\cos^{2} {x}",
+      "text": "cos(x)**2"
+     },
+     "result": {
+      "latex": "- 2 \\sin {x} \\cos {x}",
+      "text": "-2*sin(x)*cos(x)"
+     },
+     "outer": "power",
+     "u": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     },
+     "letter": "w",
+     "outer_expr": {
+      "latex": "w^{2}",
+      "text": "w**2"
+     },
+     "outer_derivative": {
+      "latex": "2 w",
+      "text": "2*w"
+     },
+     "outer_at_inner": {
+      "latex": "2 \\cos {x}",
+      "text": "2*cos(x)"
+     },
+     "substeps": [
+      {
+       "rule": "cos",
+       "expr": {
+        "latex": "\\cos {x}",
+        "text": "cos(x)"
+       },
+       "result": {
+        "latex": "- \\sin {x}",
+        "text": "-sin(x)"
+       }
+      }
+     ]
+    }
+   ],
+   "shown": {
+    "latex": "2 \\cos {x} \\sin {x} - 2 \\cos {x} \\sin {x}",
+    "text": "2*cos(x)*sin(x) - 2*cos(x)*sin(x)"
+   }
+  },
+  "unsupported": false,
+  "answer_latex": "0",
+  "answer_text": "0",
+  "checked": true
+ }
+}

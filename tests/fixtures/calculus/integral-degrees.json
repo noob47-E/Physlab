@@ -1,0 +1,37 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "cos(x)",
+  "deg": true
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\cos {x}",
+   "text": "cos(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\sin {x}",
+  "raw_text": "sin(x)",
+  "answer_latex": "\\sin {x}",
+  "answer_text": "sin(x)",
+  "checked": true,
+  "deg_ignored": true,
+  "tree": {
+   "rule": "CosRule",
+   "integrand": {
+    "latex": "\\cos {x}",
+    "text": "cos(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "result": {
+    "latex": "\\sin {x}",
+    "text": "sin(x)"
+   }
+  }
+ }
+}

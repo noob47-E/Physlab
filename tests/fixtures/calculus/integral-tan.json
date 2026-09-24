@@ -1,0 +1,110 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "tan(x)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\tan {x}",
+   "text": "tan(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "- \\ln\\left|\\cos {x}\\right|",
+  "raw_text": "-log(Abs(cos(x)))",
+  "answer_latex": "- \\ln\\left|\\cos {x}\\right|",
+  "answer_text": "-log(Abs(cos(x)))",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "RewriteRule",
+   "integrand": {
+    "latex": "\\tan {x}",
+    "text": "tan(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "rewritten": {
+    "latex": "\\frac{\\sin {x}}{\\cos {x}}",
+    "text": "sin(x)/cos(x)"
+   },
+   "substep": {
+    "rule": "URule",
+    "integrand": {
+     "latex": "\\frac{\\sin {x}}{\\cos {x}}",
+     "text": "sin(x)/cos(x)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "u_var": {
+     "latex": "u",
+     "text": "u"
+    },
+    "u_func": {
+     "latex": "\\cos {x}",
+     "text": "cos(x)"
+    },
+    "substep": {
+     "rule": "ConstantTimesRule",
+     "integrand": {
+      "latex": "- \\frac{1}{u}",
+      "text": "-1/u"
+     },
+     "variable": {
+      "latex": "u",
+      "text": "u"
+     },
+     "constant": {
+      "latex": "-1",
+      "text": "-1"
+     },
+     "other": {
+      "latex": "\\frac{1}{u}",
+      "text": "1/u"
+     },
+     "substep": {
+      "rule": "ReciprocalRule",
+      "integrand": {
+       "latex": "\\frac{1}{u}",
+       "text": "1/u"
+      },
+      "variable": {
+       "latex": "u",
+       "text": "u"
+      },
+      "base": {
+       "latex": "u",
+       "text": "u"
+      },
+      "result": {
+       "latex": "\\ln\\left|u\\right|",
+       "text": "log(Abs(u))"
+      }
+     },
+     "result": {
+      "latex": "- \\ln\\left|u\\right|",
+      "text": "-log(Abs(u))"
+     }
+    },
+    "result": {
+     "latex": "- \\ln\\left|\\cos {x}\\right|",
+     "text": "-log(Abs(cos(x)))"
+    },
+    "du": {
+     "latex": "- \\sin {x}",
+     "text": "-sin(x)"
+    }
+   },
+   "result": {
+    "latex": "- \\ln\\left|\\cos {x}\\right|",
+    "text": "-log(Abs(cos(x)))"
+   },
+   "kind": "rewrite"
+  }
+ }
+}

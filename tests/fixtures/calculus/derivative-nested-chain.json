@@ -1,0 +1,105 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "sin(cos(x^2))"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\sin{\\left(\\cos{\\left(x^{2} \\right)} \\right)}",
+   "text": "sin(cos(x**2))"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "\\sin{\\left(\\cos{\\left(x^{2} \\right)} \\right)}",
+    "text": "sin(cos(x**2))"
+   },
+   "result": {
+    "latex": "- 2 x \\sin{\\left(x^{2} \\right)} \\cos{\\left(\\cos{\\left(x^{2} \\right)} \\right)}",
+    "text": "-2*x*sin(x**2)*cos(cos(x**2))"
+   },
+   "outer": "sin",
+   "u": {
+    "latex": "\\cos{\\left(x^{2} \\right)}",
+    "text": "cos(x**2)"
+   },
+   "letter": "w",
+   "outer_expr": {
+    "latex": "\\sin {w}",
+    "text": "sin(w)"
+   },
+   "outer_derivative": {
+    "latex": "\\cos {w}",
+    "text": "cos(w)"
+   },
+   "outer_at_inner": {
+    "latex": "\\cos{\\left(\\cos{\\left(x^{2} \\right)} \\right)}",
+    "text": "cos(cos(x**2))"
+   },
+   "substeps": [
+    {
+     "rule": "chain",
+     "expr": {
+      "latex": "\\cos{\\left(x^{2} \\right)}",
+      "text": "cos(x**2)"
+     },
+     "result": {
+      "latex": "- 2 x \\sin{\\left(x^{2} \\right)}",
+      "text": "-2*x*sin(x**2)"
+     },
+     "outer": "cos",
+     "u": {
+      "latex": "x^{2}",
+      "text": "x**2"
+     },
+     "letter": "u",
+     "outer_expr": {
+      "latex": "\\cos {u}",
+      "text": "cos(u)"
+     },
+     "outer_derivative": {
+      "latex": "- \\sin {u}",
+      "text": "-sin(u)"
+     },
+     "outer_at_inner": {
+      "latex": "- \\sin{\\left(x^{2} \\right)}",
+      "text": "-sin(x**2)"
+     },
+     "substeps": [
+      {
+       "rule": "power",
+       "expr": {
+        "latex": "x^{2}",
+        "text": "x**2"
+       },
+       "result": {
+        "latex": "2 x",
+        "text": "2*x"
+       },
+       "exp": {
+        "latex": "2",
+        "text": "2"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "- 2 x \\sin{\\left(x^{2} \\right)} \\cos{\\left(\\cos{\\left(x^{2} \\right)} \\right)}",
+  "answer_text": "-2*x*sin(x**2)*cos(cos(x**2))",
+  "checked": true
+ }
+}

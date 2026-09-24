@@ -1,0 +1,74 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "sin(x)/x",
+  "lower": "0",
+  "upper": "1"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\frac{\\sin {x}}{x}",
+   "text": "sin(x)/x"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\operatorname{Si}x",
+  "raw_text": "Si(x)",
+  "answer_latex": "\\operatorname{Si}x",
+  "answer_text": "Si(x)",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "SiRule",
+   "integrand": {
+    "latex": "\\frac{\\sin {x}}{x}",
+    "text": "sin(x)/x"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "a": {
+    "latex": "1",
+    "text": "1"
+   },
+   "b": {
+    "latex": "0",
+    "text": "0"
+   },
+   "result": {
+    "latex": "\\operatorname{Si}x",
+    "text": "Si(x)"
+   }
+  },
+  "definite": {
+   "lower": {
+    "latex": "0",
+    "text": "0"
+   },
+   "upper": {
+    "latex": "1",
+    "text": "1"
+   },
+   "value": {
+    "latex": "\\operatorname{Si}{\\left(1 \\right)}",
+    "text": "Si(1)"
+   },
+   "numeric": {
+    "re": 0.946083070367183
+   },
+   "diverges": false,
+   "infinite": false,
+   "F_lower": {
+    "latex": "0",
+    "text": "0"
+   },
+   "F_upper": {
+    "latex": "\\operatorname{Si}{\\left(1 \\right)}",
+    "text": "Si(1)"
+   },
+   "agrees": true
+  }
+ }
+}

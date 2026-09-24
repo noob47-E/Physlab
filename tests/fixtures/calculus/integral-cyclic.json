@@ -1,0 +1,130 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "e^x*sin(x)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "e^{x} \\sin {x}",
+   "text": "exp(x)*sin(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{1}{2} e^{x} \\sin {x} - \\frac{1}{2} e^{x} \\cos {x}",
+  "raw_text": "exp(x)*sin(x)/2 - exp(x)*cos(x)/2",
+  "answer_latex": "\\frac{1}{2} e^{x} \\sin {x} - \\frac{1}{2} e^{x} \\cos {x}",
+  "answer_text": "exp(x)*sin(x)/2 - exp(x)*cos(x)/2",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "CyclicPartsRule",
+   "integrand": {
+    "latex": "e^{x} \\sin {x}",
+    "text": "exp(x)*sin(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "parts_rules": [
+    {
+     "rule": "PartsRule",
+     "integrand": null,
+     "variable": null,
+     "u": {
+      "latex": "\\sin {x}",
+      "text": "sin(x)"
+     },
+     "dv": {
+      "latex": "e^{x}",
+      "text": "exp(x)"
+     },
+     "v_step": {
+      "rule": "ExpRule",
+      "integrand": {
+       "latex": "e^{x}",
+       "text": "exp(x)"
+      },
+      "variable": {
+       "latex": "x",
+       "text": "x"
+      },
+      "base": {
+       "latex": "e",
+       "text": "E"
+      },
+      "exp": {
+       "latex": "x",
+       "text": "x"
+      },
+      "result": {
+       "latex": "e^{x}",
+       "text": "exp(x)"
+      }
+     },
+     "second_step": null
+    },
+    {
+     "rule": "PartsRule",
+     "integrand": null,
+     "variable": null,
+     "u": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     },
+     "dv": {
+      "latex": "e^{x}",
+      "text": "exp(x)"
+     },
+     "v_step": {
+      "rule": "ExpRule",
+      "integrand": {
+       "latex": "e^{x}",
+       "text": "exp(x)"
+      },
+      "variable": {
+       "latex": "x",
+       "text": "x"
+      },
+      "base": {
+       "latex": "e",
+       "text": "E"
+      },
+      "exp": {
+       "latex": "x",
+       "text": "x"
+      },
+      "result": {
+       "latex": "e^{x}",
+       "text": "exp(x)"
+      }
+     },
+     "second_step": null
+    }
+   ],
+   "coefficient": {
+    "latex": "-1",
+    "text": "-1"
+   },
+   "result": {
+    "latex": "\\frac{1}{2} e^{x} \\sin {x} - \\frac{1}{2} e^{x} \\cos {x}",
+    "text": "exp(x)*sin(x)/2 - exp(x)*cos(x)/2"
+   },
+   "terms": {
+    "latex": "e^{x} \\sin {x} - e^{x} \\cos {x}",
+    "text": "exp(x)*sin(x) - exp(x)*cos(x)"
+   },
+   "du": [
+    {
+     "latex": "\\cos {x}",
+     "text": "cos(x)"
+    },
+    {
+     "latex": "- \\sin {x}",
+     "text": "-sin(x)"
+    }
+   ]
+  }
+ }
+}

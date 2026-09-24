@@ -1,0 +1,120 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "3x^4 - 2x + 5"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "3 x^{4} - 2 x + 5",
+   "text": "3*x**4 - 2*x + 5"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "sum",
+   "expr": {
+    "latex": "3 x^{4} - 2 x + 5",
+    "text": "3*x**4 - 2*x + 5"
+   },
+   "result": {
+    "latex": "12 x^{3} - 2",
+    "text": "12*x**3 - 2"
+   },
+   "substeps": [
+    {
+     "rule": "constant_multiple",
+     "expr": {
+      "latex": "3 x^{4}",
+      "text": "3*x**4"
+     },
+     "result": {
+      "latex": "12 x^{3}",
+      "text": "12*x**3"
+     },
+     "constant": {
+      "latex": "3",
+      "text": "3"
+     },
+     "other": {
+      "latex": "x^{4}",
+      "text": "x**4"
+     },
+     "substeps": [
+      {
+       "rule": "power",
+       "expr": {
+        "latex": "x^{4}",
+        "text": "x**4"
+       },
+       "result": {
+        "latex": "4 x^{3}",
+        "text": "4*x**3"
+       },
+       "exp": {
+        "latex": "4",
+        "text": "4"
+       }
+      }
+     ]
+    },
+    {
+     "rule": "constant_multiple",
+     "expr": {
+      "latex": "- 2 x",
+      "text": "-2*x"
+     },
+     "result": {
+      "latex": "-2",
+      "text": "-2"
+     },
+     "constant": {
+      "latex": "-2",
+      "text": "-2"
+     },
+     "other": {
+      "latex": "x",
+      "text": "x"
+     },
+     "substeps": [
+      {
+       "rule": "x",
+       "expr": {
+        "latex": "x",
+        "text": "x"
+       },
+       "result": {
+        "latex": "1",
+        "text": "1"
+       }
+      }
+     ]
+    },
+    {
+     "rule": "constant",
+     "expr": {
+      "latex": "5",
+      "text": "5"
+     },
+     "result": {
+      "latex": "0",
+      "text": "0"
+     }
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "12 x^{3} - 2",
+  "answer_text": "12*x**3 - 2",
+  "checked": true
+ }
+}

@@ -1,0 +1,94 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "x*e^x"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "x e^{x}",
+   "text": "x*exp(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "x e^{x} - e^{x}",
+  "raw_text": "x*exp(x) - exp(x)",
+  "answer_latex": "\\left(x - 1\\right) e^{x}",
+  "answer_text": "(x - 1)*exp(x)",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "PartsRule",
+   "integrand": {
+    "latex": "x e^{x}",
+    "text": "x*exp(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "u": {
+    "latex": "x",
+    "text": "x"
+   },
+   "dv": {
+    "latex": "e^{x}",
+    "text": "exp(x)"
+   },
+   "v_step": {
+    "rule": "ExpRule",
+    "integrand": {
+     "latex": "e^{x}",
+     "text": "exp(x)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "base": {
+     "latex": "e",
+     "text": "E"
+    },
+    "exp": {
+     "latex": "x",
+     "text": "x"
+    },
+    "result": {
+     "latex": "e^{x}",
+     "text": "exp(x)"
+    }
+   },
+   "second_step": {
+    "rule": "ExpRule",
+    "integrand": {
+     "latex": "e^{x}",
+     "text": "exp(x)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "base": {
+     "latex": "e",
+     "text": "E"
+    },
+    "exp": {
+     "latex": "x",
+     "text": "x"
+    },
+    "result": {
+     "latex": "e^{x}",
+     "text": "exp(x)"
+    }
+   },
+   "result": {
+    "latex": "x e^{x} - e^{x}",
+    "text": "x*exp(x) - exp(x)"
+   },
+   "du": {
+    "latex": "1",
+    "text": "1"
+   }
+  }
+ }
+}

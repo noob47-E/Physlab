@@ -1,0 +1,126 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "2x*cos(x^2)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "2 x \\cos{\\left(x^{2} \\right)}",
+   "text": "2*x*cos(x**2)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\sin{\\left(x^{2} \\right)}",
+  "raw_text": "sin(x**2)",
+  "answer_latex": "\\sin{\\left(x^{2} \\right)}",
+  "answer_text": "sin(x**2)",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "ConstantTimesRule",
+   "integrand": {
+    "latex": "2 x \\cos{\\left(x^{2} \\right)}",
+    "text": "2*x*cos(x**2)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "constant": {
+    "latex": "2",
+    "text": "2"
+   },
+   "other": {
+    "latex": "x \\cos{\\left(x^{2} \\right)}",
+    "text": "x*cos(x**2)"
+   },
+   "substep": {
+    "rule": "AlternativeRule",
+    "integrand": {
+     "latex": "x \\cos{\\left(x^{2} \\right)}",
+     "text": "x*cos(x**2)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "alternatives": [
+     {
+      "rule": "URule",
+      "integrand": {
+       "latex": "x \\cos{\\left(x^{2} \\right)}",
+       "text": "x*cos(x**2)"
+      },
+      "variable": {
+       "latex": "x",
+       "text": "x"
+      },
+      "u_var": {
+       "latex": "u",
+       "text": "u"
+      },
+      "u_func": {
+       "latex": "x^{2}",
+       "text": "x**2"
+      },
+      "substep": {
+       "rule": "ConstantTimesRule",
+       "integrand": {
+        "latex": "\\frac{1}{2} \\cos {u}",
+        "text": "cos(u)/2"
+       },
+       "variable": {
+        "latex": "u",
+        "text": "u"
+       },
+       "constant": {
+        "latex": "\\frac{1}{2}",
+        "text": "1/2"
+       },
+       "other": {
+        "latex": "\\cos {u}",
+        "text": "cos(u)"
+       },
+       "substep": {
+        "rule": "CosRule",
+        "integrand": {
+         "latex": "\\cos {u}",
+         "text": "cos(u)"
+        },
+        "variable": {
+         "latex": "u",
+         "text": "u"
+        },
+        "result": {
+         "latex": "\\sin {u}",
+         "text": "sin(u)"
+        }
+       },
+       "result": {
+        "latex": "\\frac{1}{2} \\sin {u}",
+        "text": "sin(u)/2"
+       }
+      },
+      "result": {
+       "latex": "\\frac{1}{2} \\sin{\\left(x^{2} \\right)}",
+       "text": "sin(x**2)/2"
+      },
+      "du": {
+       "latex": "2 x",
+       "text": "2*x"
+      }
+     }
+    ],
+    "result": {
+     "latex": "\\frac{1}{2} \\sin{\\left(x^{2} \\right)}",
+     "text": "sin(x**2)/2"
+    }
+   },
+   "result": {
+    "latex": "\\sin{\\left(x^{2} \\right)}",
+    "text": "sin(x**2)"
+   }
+  }
+ }
+}

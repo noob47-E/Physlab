@@ -29,6 +29,9 @@ export const CAS_OPS = [
   'limit',
   'series',
   'solve',
+  // Answer + rule tree for the step engine (math/pure/calculusSteps.ts formats it).
+  'integral_steps',
+  'diff_steps',
   'warmup'
 ] as const
 export type CasOp = (typeof CAS_OPS)[number]

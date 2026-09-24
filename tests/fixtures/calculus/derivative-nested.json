@@ -1,0 +1,70 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "cos(x)^3"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\cos^{3} {x}",
+   "text": "cos(x)**3"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "\\cos^{3} {x}",
+    "text": "cos(x)**3"
+   },
+   "result": {
+    "latex": "- 3 \\sin {x} \\cos^{2} {x}",
+    "text": "-3*sin(x)*cos(x)**2"
+   },
+   "outer": "power",
+   "u": {
+    "latex": "\\cos {x}",
+    "text": "cos(x)"
+   },
+   "letter": "u",
+   "outer_expr": {
+    "latex": "u^{3}",
+    "text": "u**3"
+   },
+   "outer_derivative": {
+    "latex": "3 u^{2}",
+    "text": "3*u**2"
+   },
+   "outer_at_inner": {
+    "latex": "3 \\cos^{2} {x}",
+    "text": "3*cos(x)**2"
+   },
+   "substeps": [
+    {
+     "rule": "cos",
+     "expr": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     },
+     "result": {
+      "latex": "- \\sin {x}",
+      "text": "-sin(x)"
+     }
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "- 3 \\sin {x} \\cos^{2} {x}",
+  "answer_text": "-3*sin(x)*cos(x)**2",
+  "checked": true
+ }
+}

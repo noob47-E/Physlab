@@ -1,0 +1,143 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "x^2*cos(x)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "x^{2} \\cos {x}",
+   "text": "x**2*cos(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "x^{2} \\sin {x} + 2 x \\cos {x} - 2 \\sin {x}",
+  "raw_text": "x**2*sin(x) + 2*x*cos(x) - 2*sin(x)",
+  "answer_latex": "x^{2} \\sin {x} + 2 x \\cos {x} - 2 \\sin {x}",
+  "answer_text": "x**2*sin(x) + 2*x*cos(x) - 2*sin(x)",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "PartsRule",
+   "integrand": {
+    "latex": "x^{2} \\cos {x}",
+    "text": "x**2*cos(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "u": {
+    "latex": "x^{2}",
+    "text": "x**2"
+   },
+   "dv": {
+    "latex": "\\cos {x}",
+    "text": "cos(x)"
+   },
+   "v_step": {
+    "rule": "CosRule",
+    "integrand": {
+     "latex": "\\cos {x}",
+     "text": "cos(x)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "result": {
+     "latex": "\\sin {x}",
+     "text": "sin(x)"
+    }
+   },
+   "second_step": {
+    "rule": "PartsRule",
+    "integrand": {
+     "latex": "2 x \\sin {x}",
+     "text": "2*x*sin(x)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "u": {
+     "latex": "2 x",
+     "text": "2*x"
+    },
+    "dv": {
+     "latex": "\\sin {x}",
+     "text": "sin(x)"
+    },
+    "v_step": {
+     "rule": "SinRule",
+     "integrand": {
+      "latex": "\\sin {x}",
+      "text": "sin(x)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "result": {
+      "latex": "- \\cos {x}",
+      "text": "-cos(x)"
+     }
+    },
+    "second_step": {
+     "rule": "ConstantTimesRule",
+     "integrand": {
+      "latex": "- 2 \\cos {x}",
+      "text": "-2*cos(x)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "constant": {
+      "latex": "-2",
+      "text": "-2"
+     },
+     "other": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     },
+     "substep": {
+      "rule": "CosRule",
+      "integrand": {
+       "latex": "\\cos {x}",
+       "text": "cos(x)"
+      },
+      "variable": {
+       "latex": "x",
+       "text": "x"
+      },
+      "result": {
+       "latex": "\\sin {x}",
+       "text": "sin(x)"
+      }
+     },
+     "result": {
+      "latex": "- 2 \\sin {x}",
+      "text": "-2*sin(x)"
+     }
+    },
+    "result": {
+     "latex": "2 \\sin {x} - 2 x \\cos {x}",
+     "text": "-2*x*cos(x) + 2*sin(x)"
+    },
+    "du": {
+     "latex": "2",
+     "text": "2"
+    }
+   },
+   "result": {
+    "latex": "x^{2} \\sin {x} + 2 x \\cos {x} - 2 \\sin {x}",
+    "text": "x**2*sin(x) + 2*x*cos(x) - 2*sin(x)"
+   },
+   "du": {
+    "latex": "2 x",
+    "text": "2*x"
+   }
+  }
+ }
+}

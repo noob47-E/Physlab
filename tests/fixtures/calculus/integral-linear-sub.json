@@ -1,0 +1,176 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "e^(3x)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "e^{3 x}",
+   "text": "exp(3*x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{1}{3} e^{3 x}",
+  "raw_text": "exp(3*x)/3",
+  "answer_latex": "\\frac{1}{3} e^{3 x}",
+  "answer_text": "exp(3*x)/3",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "AlternativeRule",
+   "integrand": {
+    "latex": "e^{3 x}",
+    "text": "exp(3*x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "alternatives": [
+    {
+     "rule": "URule",
+     "integrand": {
+      "latex": "e^{3 x}",
+      "text": "exp(3*x)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "u_var": {
+      "latex": "u",
+      "text": "u"
+     },
+     "u_func": {
+      "latex": "3 x",
+      "text": "3*x"
+     },
+     "substep": {
+      "rule": "ConstantTimesRule",
+      "integrand": {
+       "latex": "\\frac{1}{3} e^{u}",
+       "text": "exp(u)/3"
+      },
+      "variable": {
+       "latex": "u",
+       "text": "u"
+      },
+      "constant": {
+       "latex": "\\frac{1}{3}",
+       "text": "1/3"
+      },
+      "other": {
+       "latex": "e^{u}",
+       "text": "exp(u)"
+      },
+      "substep": {
+       "rule": "ExpRule",
+       "integrand": {
+        "latex": "e^{u}",
+        "text": "exp(u)"
+       },
+       "variable": {
+        "latex": "u",
+        "text": "u"
+       },
+       "base": {
+        "latex": "e",
+        "text": "E"
+       },
+       "exp": {
+        "latex": "u",
+        "text": "u"
+       },
+       "result": {
+        "latex": "e^{u}",
+        "text": "exp(u)"
+       }
+      },
+      "result": {
+       "latex": "\\frac{1}{3} e^{u}",
+       "text": "exp(u)/3"
+      }
+     },
+     "result": {
+      "latex": "\\frac{1}{3} e^{3 x}",
+      "text": "exp(3*x)/3"
+     },
+     "du": {
+      "latex": "3",
+      "text": "3"
+     }
+    },
+    {
+     "rule": "URule",
+     "integrand": {
+      "latex": "e^{3 x}",
+      "text": "exp(3*x)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "u_var": {
+      "latex": "u",
+      "text": "u"
+     },
+     "u_func": {
+      "latex": "e^{3 x}",
+      "text": "exp(3*x)"
+     },
+     "substep": {
+      "rule": "ConstantTimesRule",
+      "integrand": {
+       "latex": "\\frac{1}{3}",
+       "text": "1/3"
+      },
+      "variable": {
+       "latex": "u",
+       "text": "u"
+      },
+      "constant": {
+       "latex": "\\frac{1}{3}",
+       "text": "1/3"
+      },
+      "other": {
+       "latex": "1",
+       "text": "1"
+      },
+      "substep": {
+       "rule": "ConstantRule",
+       "integrand": {
+        "latex": "1",
+        "text": "1"
+       },
+       "variable": {
+        "latex": "u",
+        "text": "u"
+       },
+       "result": {
+        "latex": "u",
+        "text": "u"
+       }
+      },
+      "result": {
+       "latex": "\\frac{u}{3}",
+       "text": "u/3"
+      }
+     },
+     "result": {
+      "latex": "\\frac{1}{3} e^{3 x}",
+      "text": "exp(3*x)/3"
+     },
+     "du": {
+      "latex": "3 e^{3 x}",
+      "text": "3*exp(3*x)"
+     }
+    }
+   ],
+   "result": {
+    "latex": "\\frac{1}{3} e^{3 x}",
+    "text": "exp(3*x)/3"
+   }
+  }
+ }
+}

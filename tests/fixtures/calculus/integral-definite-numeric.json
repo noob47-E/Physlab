@@ -1,0 +1,42 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "x^x",
+  "lower": "0",
+  "upper": "1"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "x^{x}",
+   "text": "x**x"
+  },
+  "unsupported": true,
+  "closed": false,
+  "raw_latex": "\\int x^{x}\\, dx",
+  "raw_text": "Integral(x**x, x)",
+  "answer_latex": "\\int x^{x}\\, dx",
+  "answer_text": "Integral(x**x, x)",
+  "checked": false,
+  "deg_ignored": false,
+  "definite": {
+   "lower": {
+    "latex": "0",
+    "text": "0"
+   },
+   "upper": {
+    "latex": "1",
+    "text": "1"
+   },
+   "value": {
+    "latex": "\\int\\limits_{0}^{1} x^{x}\\, dx",
+    "text": "Integral(x**x, (x, 0, 1))"
+   },
+   "numeric": {
+    "re": 0.7834305107121344
+   },
+   "diverges": false,
+   "infinite": false
+  }
+ }
+}

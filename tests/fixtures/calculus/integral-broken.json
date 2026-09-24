@@ -1,0 +1,72 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "1/x^2",
+  "lower": "-1",
+  "upper": "1"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\frac{1}{x^{2}}",
+   "text": "x**(-2)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "- \\frac{1}{x}",
+  "raw_text": "-1/x",
+  "answer_latex": "- \\frac{1}{x}",
+  "answer_text": "-1/x",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "PowerRule",
+   "integrand": {
+    "latex": "\\frac{1}{x^{2}}",
+    "text": "x**(-2)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "base": {
+    "latex": "x",
+    "text": "x"
+   },
+   "exp": {
+    "latex": "-2",
+    "text": "-2"
+   },
+   "result": {
+    "latex": "- \\frac{1}{x}",
+    "text": "-1/x"
+   }
+  },
+  "definite": {
+   "lower": {
+    "latex": "-1",
+    "text": "-1"
+   },
+   "upper": {
+    "latex": "1",
+    "text": "1"
+   },
+   "value": {
+    "latex": "\\infty",
+    "text": "oo"
+   },
+   "numeric": null,
+   "diverges": false,
+   "infinite": true,
+   "F_lower": {
+    "latex": "1",
+    "text": "1"
+   },
+   "F_upper": {
+    "latex": "-1",
+    "text": "-1"
+   },
+   "agrees": false
+  }
+ }
+}

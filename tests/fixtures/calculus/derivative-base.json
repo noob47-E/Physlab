@@ -1,0 +1,43 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "2^x"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "2^{x}",
+   "text": "2**x"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "exp_base",
+   "expr": {
+    "latex": "2^{x}",
+    "text": "2**x"
+   },
+   "result": {
+    "latex": "2^{x} \\ln 2",
+    "text": "2**x*log(2)"
+   },
+   "base": {
+    "latex": "2",
+    "text": "2"
+   }
+  },
+  "unsupported": false,
+  "answer_latex": "2^{x} \\ln 2",
+  "answer_text": "2**x*log(2)",
+  "checked": true
+ }
+}

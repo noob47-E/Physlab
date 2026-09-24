@@ -1,0 +1,21 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "x^x"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "x^{x}",
+   "text": "x**x"
+  },
+  "unsupported": true,
+  "closed": false,
+  "raw_latex": "\\int x^{x}\\, dx",
+  "raw_text": "Integral(x**x, x)",
+  "answer_latex": "\\int x^{x}\\, dx",
+  "answer_text": "Integral(x**x, x)",
+  "checked": false,
+  "deg_ignored": false
+ }
+}

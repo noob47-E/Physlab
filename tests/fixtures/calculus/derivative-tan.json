@@ -1,0 +1,39 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "tan(x)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\tan {x}",
+   "text": "tan(x)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "tan",
+   "expr": {
+    "latex": "\\tan {x}",
+    "text": "tan(x)"
+   },
+   "result": {
+    "latex": "\\sec^{2} {x}",
+    "text": "sec(x)**2"
+   }
+  },
+  "unsupported": false,
+  "answer_latex": "\\sec^{2} {x}",
+  "answer_text": "sec(x)**2",
+  "checked": true
+ }
+}

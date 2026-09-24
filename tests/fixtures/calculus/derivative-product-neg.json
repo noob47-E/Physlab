@@ -1,0 +1,63 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "x*cos(x)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "x \\cos {x}",
+   "text": "x*cos(x)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "product",
+   "expr": {
+    "latex": "x \\cos {x}",
+    "text": "x*cos(x)"
+   },
+   "result": {
+    "latex": "\\cos {x} - x \\sin {x}",
+    "text": "cos(x) - x*sin(x)"
+   },
+   "substeps": [
+    {
+     "rule": "x",
+     "expr": {
+      "latex": "x",
+      "text": "x"
+     },
+     "result": {
+      "latex": "1",
+      "text": "1"
+     }
+    },
+    {
+     "rule": "cos",
+     "expr": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     },
+     "result": {
+      "latex": "- \\sin {x}",
+      "text": "-sin(x)"
+     }
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "\\cos {x} - x \\sin {x}",
+  "answer_text": "cos(x) - x*sin(x)",
+  "checked": true
+ }
+}

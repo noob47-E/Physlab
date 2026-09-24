@@ -1,0 +1,98 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "ln(x^2 + 1)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\ln\\left(x^{2} + 1\\right)",
+   "text": "log(x**2 + 1)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "\\ln\\left(x^{2} + 1\\right)",
+    "text": "log(x**2 + 1)"
+   },
+   "result": {
+    "latex": "\\frac{2 x}{x^{2} + 1}",
+    "text": "2*x/(x**2 + 1)"
+   },
+   "outer": "log",
+   "u": {
+    "latex": "x^{2} + 1",
+    "text": "x**2 + 1"
+   },
+   "letter": "u",
+   "outer_expr": {
+    "latex": "\\ln u",
+    "text": "log(u)"
+   },
+   "outer_derivative": {
+    "latex": "\\frac{1}{u}",
+    "text": "1/u"
+   },
+   "outer_at_inner": {
+    "latex": "\\frac{1}{x^{2} + 1}",
+    "text": "1/(x**2 + 1)"
+   },
+   "substeps": [
+    {
+     "rule": "sum",
+     "expr": {
+      "latex": "x^{2} + 1",
+      "text": "x**2 + 1"
+     },
+     "result": {
+      "latex": "2 x",
+      "text": "2*x"
+     },
+     "substeps": [
+      {
+       "rule": "power",
+       "expr": {
+        "latex": "x^{2}",
+        "text": "x**2"
+       },
+       "result": {
+        "latex": "2 x",
+        "text": "2*x"
+       },
+       "exp": {
+        "latex": "2",
+        "text": "2"
+       }
+      },
+      {
+       "rule": "constant",
+       "expr": {
+        "latex": "1",
+        "text": "1"
+       },
+       "result": {
+        "latex": "0",
+        "text": "0"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "\\frac{2 x}{x^{2} + 1}",
+  "answer_text": "2*x/(x**2 + 1)",
+  "checked": true
+ }
+}

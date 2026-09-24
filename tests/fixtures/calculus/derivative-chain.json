@@ -1,0 +1,95 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "sin(3x^2)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\sin{\\left(3 x^{2} \\right)}",
+   "text": "sin(3*x**2)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "\\sin{\\left(3 x^{2} \\right)}",
+    "text": "sin(3*x**2)"
+   },
+   "result": {
+    "latex": "6 x \\cos{\\left(3 x^{2} \\right)}",
+    "text": "6*x*cos(3*x**2)"
+   },
+   "outer": "sin",
+   "u": {
+    "latex": "3 x^{2}",
+    "text": "3*x**2"
+   },
+   "letter": "u",
+   "outer_expr": {
+    "latex": "\\sin {u}",
+    "text": "sin(u)"
+   },
+   "outer_derivative": {
+    "latex": "\\cos {u}",
+    "text": "cos(u)"
+   },
+   "outer_at_inner": {
+    "latex": "\\cos{\\left(3 x^{2} \\right)}",
+    "text": "cos(3*x**2)"
+   },
+   "substeps": [
+    {
+     "rule": "constant_multiple",
+     "expr": {
+      "latex": "3 x^{2}",
+      "text": "3*x**2"
+     },
+     "result": {
+      "latex": "6 x",
+      "text": "6*x"
+     },
+     "constant": {
+      "latex": "3",
+      "text": "3"
+     },
+     "other": {
+      "latex": "x^{2}",
+      "text": "x**2"
+     },
+     "substeps": [
+      {
+       "rule": "power",
+       "expr": {
+        "latex": "x^{2}",
+        "text": "x**2"
+       },
+       "result": {
+        "latex": "2 x",
+        "text": "2*x"
+       },
+       "exp": {
+        "latex": "2",
+        "text": "2"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "6 x \\cos{\\left(3 x^{2} \\right)}",
+  "answer_text": "6*x*cos(3*x**2)",
+  "checked": true
+ }
+}
