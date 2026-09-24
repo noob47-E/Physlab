@@ -26,7 +26,7 @@ import {
 } from './rat'
 import { NotPolynomial, evalAt, exprTex, parseExpr, parseFraction, varsOf, writeTimes, type Expr } from './mono'
 import { math, preprocess } from '../expr'
-import { pDeg, pSub, pTex, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
+import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
 import { factorsOf } from './factor'
 import { texAngle } from '../format'
 import {
@@ -70,6 +70,22 @@ export const cxSub = (a: Cx, b: Cx): Cx => cx(rSub(a.re, b.re), rSub(a.im, b.im)
 export const cxMul = (a: Cx, b: Cx): Cx =>
   cx(rSub(rMul(a.re, b.re), rMul(a.im, b.im)), rAdd(rMul(a.re, b.im), rMul(a.im, b.re)))
 export const cxConj = (z: Cx): Cx => cx(z.re, rNeg(z.im))
+
+/** A number squared as written by hand: 2², (−1)², (½)². */
+const squaredTex = (r: Rat): string => (rIsNeg(r) || r.d !== 1n ? `\\left(${rTex(r)}\\right)^2` : `${rTex(r)}^2`)
+
+/** A sum of numbers times suffixes (i, i²), each sign written once: "3 + 6i + 4i − 8i²". */
+function signedTex(parts: { c: Rat; s: string }[]): string {
+  const out = parts
+    .filter((p) => !rIsZero(p.c))
+    .map((p, i) => {
+      const neg = rIsNeg(p.c)
+      const m = neg ? rNeg(p.c) : p.c
+      const body = rIsOne(m) && p.s ? p.s : `${rTex(m)}${p.s}`
+      return i === 0 ? `${neg ? '-' : ''}${body}` : `${neg ? '-' : '+'} ${body}`
+    })
+  return out.length ? out.join(' ') : '0'
+}
 
 /** a + bi, written the way a student would: 3 − 2i, not 3 + (−2)i. */
 export function cxTex(z: Cx): string {
@@ -177,14 +193,19 @@ export function complexWorking(src: string): Working {
     s.goal('Simplify to a + bi').add('Multiply out and collect, treating i as an ordinary letter for now.', iTex(num), '\\text{expand as usual}')
     powersOfIMove(num, s)
     const z = reduceI(num)
-    s.add('Now gather the real parts and the i parts separately.', `= ${cxTex(z)}`, 'a + bi:\\ \\text{real part } a,\\ \\text{imaginary part } b')
+    // Written from the expression, not from the line above it: after "i² = −1" a bare "= 8 − i"
+    // read as i² = −1 = 8 − i (Fix 4).
+    if (iTex(num) !== cxTex(z)) s.add('Now gather the real parts and the i parts separately.', `${iTex(num)} = ${cxTex(z)}`, 'a + bi:\\ \\text{real part } a,\\ \\text{imaginary part } b')
     return finishComplex(title, input, s, z, src)
   }
 
   // Dividing: multiply top and bottom by the conjugate of the bottom.
   const dz = reduceI(den)
   if (rIsZero(dz.re) && rIsZero(dz.im)) return failed(title, input, 'The bottom comes to zero.')
-  s.goal('Simplify the bottom').add('Work the bottom out first, so it is one number of the form a + bi.', `${iTex(den)} = ${cxTex(dz)}`)
+  // Only when there is something to work out (Fix 4): "1 − 2i = 1 − 2i" was a step that changed nothing.
+  if (iTex(den) !== cxTex(dz)) {
+    s.goal('Simplify the bottom').add('Work the bottom out first, so it is one number of the form a + bi.', `${iTex(den)} = ${cxTex(dz)}`)
+  }
   if (cxIsReal(dz)) {
     powersOfIMove(num, s)
     const nz = reduceI(num)
@@ -204,12 +225,38 @@ export function complexWorking(src: string): Working {
   const newBottom = rAdd(rMul(dz.re, dz.re), rMul(dz.im, dz.im))
   s.add(
     'The bottom becomes a real number, because the i terms cancel.',
-    `\\left(${cxTex(dz)}\\right)\\left(${cxTex(conj)}\\right) = ${rTex(rMul(dz.re, dz.re))} + ${rTex(rMul(dz.im, dz.im))} = ${rTex(newBottom)}`,
+    // "0 + 1" when the bottom is a pure i number said nothing; the squares are summed only when both are there.
+    [
+      `\\left(${cxTex(dz)}\\right)\\left(${cxTex(conj)}\\right)`,
+      rIsZero(dz.re) ? '' : `${rTex(rMul(dz.re, dz.re))} + ${rTex(rMul(dz.im, dz.im))}`,
+      rTex(newBottom)
+    ]
+      .filter(Boolean)
+      .join(' = '),
     'a^2 - (bi)^2 = a^2 + b^2'
   )
-  s.add('Multiply out the top the same way.', `\\left(${cxTex(nz)}\\right)\\left(${cxTex(conj)}\\right) = ${cxTex(newTop)}`)
+  // Every product shown, then i² = −1 used, then the parts collected (Fix 4: each step shows the
+  // work it describes). A link that says nothing new is left out rather than written twice.
+  const ac = rMul(nz.re, conj.re)
+  const bd = rMul(nz.im, conj.im)
+  const links = [
+    `\\left(${cxTex(nz)}\\right)\\left(${cxTex(conj)}\\right)`,
+    signedTex([
+      { c: ac, s: '' },
+      { c: rMul(nz.re, conj.im), s: 'i' },
+      { c: rMul(nz.im, conj.re), s: 'i' },
+      { c: bd, s: 'i^{2}' }
+    ]),
+    signedTex([
+      { c: ac, s: '' },
+      { c: rAdd(rMul(nz.re, conj.im), rMul(nz.im, conj.re)), s: 'i' },
+      { c: rNeg(bd), s: '' }
+    ]),
+    cxTex(newTop)
+  ].filter((t, i, all) => i === 0 || t !== all[i - 1])
+  s.add('Multiply out the top the same way, using i² = −1.', links.join(' = '))
   const z = cx(rDiv(newTop.re, newBottom), rDiv(newTop.im, newBottom))
-  s.add('Divide each part by the bottom.', `= ${cxTex(z)}`)
+  if (!rIsOne(newBottom)) s.add('Divide each part by the bottom.', `\\dfrac{${cxTex(newTop)}}{${rTex(newBottom)}} = ${cxTex(z)}`)
   return finishComplex(title, input, s, z, src)
 }
 
@@ -240,7 +287,8 @@ function finishComplex(title: string, input: string, s: Steps, z: Cx, src: strin
   const modTex = exact ? rTex(exact) : modSq.d === 1n ? rootTex(modSq.n) : `\\sqrt{${rTex(modSq)}}`
   s.goal('Find modulus and argument').add(
     'The modulus is the distance from the origin on the Argand diagram.',
-    `|z| = \\sqrt{${rTex(rMul(z.re, z.re))} + ${rTex(rMul(z.im, z.im))}} = ${modTex}`,
+    // The parts go in before they are squared, so the student sees where 1 + 4 came from.
+    `|z| = \\sqrt{${squaredTex(z.re)} + ${squaredTex(z.im)}} = \\sqrt{${rTex(rMul(z.re, z.re))} + ${rTex(rMul(z.im, z.im))}} = ${modTex}`,
     '|a+bi| = \\sqrt{a^2 + b^2}'
   )
   // texAngle rather than fmtAngle: fmtAngle honours the compass-bearing notation setting, and
@@ -374,9 +422,12 @@ export function solveLinearWorking(src: string): Working {
   const lv = evalAt(lhs, { [name]: x })
   const rv = evalAt(rhs, { [name]: x })
   const ok = rEq(lv, rv)
+  // The value is shown going in, side by side (Fix 4): "3x + 4 = 10, 10 = 10" gave a result
+  // without its working and then a line that changed nothing.
+  const side = (e: Expr, v: Rat): string => (varsOf(e).length ? `${pTexAt(polyFromExpr(e, name).poly, name, x)} = ${rTex(v)}` : rTex(v))
   s.goal('Check the answer').add(
-    'Put the answer back into the original equation to check both sides agree.',
-    `${name} = ${rTex(x)}:\\quad ${exprTex(lhs)} = ${rTex(lv)},\\quad ${exprTex(rhs)} = ${rTex(rv)}`
+    `Put ${name} = ${texToPlain(rTex(x))} into each side of the original equation: both sides must come to the same number.`,
+    `\\text{LHS} = ${side(lhs, lv)},\\quad \\text{RHS} = ${side(rhs, rv)}`
   )
   return {
     title,
@@ -451,9 +502,21 @@ export function solveQuadraticWorking(src: string): Working {
     )
   }
 
+  // −b is left out when b is 0: (± √20)/2, not (0 ± √20)/2.
+  const minusB = rIsZero(b) ? '' : `${rTex(rNeg(b))} `
   s.goal('Use the quadratic formula').add(
     'Put everything into the quadratic formula.',
-    `${name} = \\dfrac{-b \\pm \\sqrt{\\Delta}}{2a} = \\dfrac{${rTex(rNeg(b))} \\pm \\sqrt{${rTex(disc)}}}{${rTex(rMul(rat(2n), a))}}`,
+    // The root is worked out inside the formula before the two answers are read off (Fix 4):
+    // (−4 ± √−36)/2 went straight to −2 ± 3i without the (−4 ± 6i)/2 between them.
+    [
+      `${name} = \\dfrac{-b \\pm \\sqrt{\\Delta}}{2a}`,
+      `\\dfrac{${minusB}\\pm \\sqrt{${rTex(disc)}}}{${rTex(rMul(rat(2n), a))}}`,
+      sign !== 0 && disc.d === 1n && (sign < 0 || exact || surdOf(disc) !== `\\sqrt{${rTex(disc)}}`)
+        ? `\\dfrac{${minusB}\\pm ${surdOf(rAbs(disc))}${sign < 0 ? '\\,i' : ''}}{${rTex(rMul(rat(2n), a))}}`
+        : ''
+    ]
+      .filter(Boolean)
+      .join(' = '),
     `${name} = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}`
   )
 
@@ -545,6 +608,12 @@ interface CxCollect {
 
 const leadTex = (lead: Rat): string => (rIsOne(lead) ? '' : rIsOne(rAbs(lead)) && rIsNeg(lead) ? '-' : rTex(lead))
 
+/** "−b " at the top of the quadratic formula, or nothing when b is 0: (± √−16)/2, not (0 ± √−16)/2. */
+function formulaTop(b: Surd): string {
+  const t = surdTex(surdMul(surd(rat(-1n)), b))
+  return t === '0' ? '' : `${t} `
+}
+
 /**
  * Split a quadratic with surd coefficients into its two linear factors, pushing the working.
  * Returns false when the roots would need a nested root, which no student is expected to write.
@@ -570,7 +639,9 @@ function splitQuadratic(coeffs: Surd[], name: string, s: Steps, out: CxCollect):
       : square
         ? `${bracketedPlain} has a surd in it, so its roots are surds even though the discriminant (${discPlain}) is a perfect square.`
         : `${bracketedPlain} has a positive discriminant (${discPlain}) that is not a perfect square, so its roots are surds.`,
-    `${name} = ${cxsTex(p)} \\quad\\text{or}\\quad ${name} = ${cxsTex(q)}`,
+    // The sentence says "solve it with the quadratic formula", so the formula is shown with its
+    // numbers in before the roots (Fix 4: each sentence matches its maths).
+    `${name} = \\dfrac{${formulaTop(b)}\\pm \\sqrt{${surdTex(disc)}}}{${surdTex(surdMul(surd(rat(2n)), a))}} \\;\\Rightarrow\\; ${name} = ${cxsTex(p)} \\quad\\text{or}\\quad ${name} = ${cxsTex(q)}`,
     complex ? '\\sqrt{-k} = i\\sqrt{k}' : `${name} = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}`
   )
   // The leading coefficient of a quadratic is not rational when it came from a surd split; the
@@ -682,7 +753,14 @@ export function factoriseComplexWorking(src: string): Working {
   }
 
   const answer = `${leadTex(out.lead)}${out.brackets.join('')}`
-  s.goal('Write the finished factors').add('Put the factors together, with the number at the front.', `${exprTex(e)} = ${answer}`)
+  // A single quadratic is already written in full by the move that split it: x² + 2x + 5 showed
+  // "(x² + 2x + 5) = (x + 1 − 2i)(x + 1 + 2i)" and then the same equation again, under a sentence
+  // promising a number at the front that was not there.
+  if (!(realParts.length === 1 && pDeg(whole) === 2)) {
+    const lead = leadTex(out.lead)
+    const head = lead === '' ? 'Put the factors together.' : lead === '-' ? 'Put the factors together, with the minus sign at the front.' : 'Put the factors together, with the number at the front.'
+    s.goal('Write the finished factors').add(head, `${exprTex(e)} = ${answer}`)
+  }
   if (ok) {
     s.goal('Check by multiplying back').add(
       'Multiply back to check. Each pair of conjugate roots multiplies to a real quadratic, and the whole product comes back to the original.',

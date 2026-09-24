@@ -3,7 +3,7 @@
 // Two methods are taught and both are shown where they apply: the cover-up rule, which is quick
 // and only works for separate linear factors, and equating coefficients, which always works.
 
-import { R0, R1, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rSub, rTex, rat, type Rat } from './rat'
+import { R0, R1, commonDenominator, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rSub, rTex, rat, type Rat } from './rat'
 import { NotPolynomial, exprTex, parseFraction, varsOf, type Expr } from './mono'
 import {
   exprFromPoly,
@@ -16,6 +16,9 @@ import {
   pLead,
   pMonomial,
   pNeg,
+  pOverTexSigned,
+  pTexAt,
+  pScale,
   pMul,
   pTex,
   pTexBracketed,
@@ -65,6 +68,42 @@ function solveLinear(M: Rat[][], rhs: Rat[]): Rat[] | null {
   return out
 }
 
+/** ax² + bx + c with b² = 4ac is k(qx − p)²; the linear base and k, or null. */
+function squaredLinear(poly: Poly): { base: Poly; k: Rat } | null {
+  if (pDeg(poly) !== 2) return null
+  const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
+  if (!rIsZero(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))) return null
+  const root = rDiv(rNeg(b), rMul(rat(2n), a))
+  // A root p/q gives the whole-number bracket (qx − p); what is left over is a number.
+  const base: Poly = pTrim([rNeg(rat(root.n)), rat(root.d)])
+  return { base, k: rDiv(a, rat(root.d * root.d)) }
+}
+
+/**
+ * One piece of the answer with its sign pulled out and any fraction in its top cleared into the
+ * bottom (Fix 4): (8/3)/(x − 1) is written 8/(3(x − 1)), never a fraction inside a fraction; and
+ * a single factor below is not bracketed, A/(x − 1) not A/((x − 1)).
+ */
+function pieceOver(top: Poly, base: Poly, j: number, name: string): { sign: '+' | '-'; tex: string } {
+  const k = commonDenominator(top)
+  let whole = pScale(top, rat(k))
+  const single = whole.filter((c) => !rIsZero(c)).length === 1
+  const negate = single && rIsNeg(pLead(whole))
+  if (negate) whole = pNeg(whole)
+  // A bare letter (x, not 2x) can sit straight after a number: 3x², where 32x would misread.
+  const plainBase = base.filter((c) => !rIsZero(c)).length === 1 && rEq(pLead(base), R1)
+  const power = j > 1 ? `^{${j}}` : ''
+  const below =
+    k === 1n
+      ? j > 1 || plainBase
+        ? `${pTexBracketed(base, name)}${power}`
+        : pTex(base, name)
+      : plainBase
+        ? `${k}${pTex(base, name)}${power}`
+        : `${k}\\left(${pTex(base, name)}\\right)${power}`
+  return { sign: negate ? '-' : '+', tex: `\\dfrac{${pTex(whole, name)}}{${below}}` }
+}
+
 interface Piece {
   base: Poly
   /** Which power of the base this piece sits over: 1, 2, … */
@@ -107,7 +146,7 @@ export function partialFractionsWorking(src: string): Working {
     N = r
     s.goal('Divide out the whole part').add(
       `The top's power (${pDeg(N0)}) is not below the bottom's (${pDeg(D)}), so divide first and split only what is left over.`,
-      `${input} = ${pTex(whole, name)} + \\dfrac{${pTex(N, name)}}{${pTex(D, name)}}`,
+      `${input} = ${pTex(whole, name)} ${pOverTexSigned(N, D, name)}`,
       '\\text{improper} \\Rightarrow \\text{divide out the whole part first}'
     )
     if (pIsZero(N)) {
@@ -133,6 +172,15 @@ export function partialFractionsWorking(src: string): Working {
     }
     if (pDeg(poly) > 2) {
       return failed(title, input, `The bottom has a factor of power ${pDeg(poly)} that I cannot break down further, so I cannot split this one.`)
+    }
+    // x² is x repeated, not a quadratic factor (Fix 4): the sentence promises "one fraction for
+    // each power" of a repeated factor, and 1/(x²(x + 1)) used to come out as (−x + 1)/x² instead
+    // of −1/x + 1/x². A quadratic with a double root is a linear factor squared.
+    const twice = squaredLinear(poly)
+    if (twice) {
+      constant = rMul(constant, twice.k)
+      bases.push(twice.base, twice.base)
+      continue
     }
     bases.push(poly)
   }
@@ -167,7 +215,7 @@ export function partialFractionsWorking(src: string): Working {
       ? LETTERS[p.unknowns[0]]
       : `${LETTERS[p.unknowns[0]]}${name} + ${LETTERS[p.unknowns[1]]}`
   const pieceTex = (p: Piece): string =>
-    `\\dfrac{${numeratorTex(p)}}{${pTexBracketed(p.base, name)}${p.j > 1 ? `^{${p.j}}` : ''}}`
+    `\\dfrac{${numeratorTex(p)}}{${p.j > 1 ? `${pTexBracketed(p.base, name)}^{${p.j}}` : pTex(p.base, name)}}`
 
   const setup = pieces.map(pieceTex).join(' + ')
   s.goal('One fraction per factor').add(
@@ -187,11 +235,21 @@ export function partialFractionsWorking(src: string): Working {
   }
   s.goal('Clear the fractions').add(
     'Multiply every term by the bottom, so the fractions disappear.',
+    // What is left of the bottom is kept in its factors, the way it is written by hand:
+    // "A(x + 2)", "Ax(x + 1)", "(Bx + C)(x − 1)" — not "(A)(x² + x)".
     `${pTex(N, name)} = ${pieces
       .map((p) => {
-        let rest = pTrim(D)
-        for (let k = 0; k < p.j; k++) rest = pDivMod(rest, p.base).q
-        return `\\left(${numeratorTex(p)}\\right)${pTexBracketed(rest, name)}`
+        const lead = rEq(constant, R1) ? '' : rEq(constant, rNeg(R1)) ? '-' : rTex(constant)
+        const rest = grouped
+          .map((g) => {
+            const e = g.power - (pEq(g.base, p.base) ? p.j : 0)
+            if (e <= 0) return ''
+            const single = g.base.filter((c) => !rIsZero(c)).length === 1 && rEq(pLead(g.base), R1)
+            return `${single ? pTex(g.base, name) : `\\left(${pTex(g.base, name)}\\right)`}${e > 1 ? `^{${e}}` : ''}`
+          })
+          .join('')
+        const top = p.unknowns.length === 1 ? numeratorTex(p) : `\\left(${numeratorTex(p)}\\right)`
+        return `${lead}${top}${rest}`
       })
       .join(' + ')}`,
     '\\text{clear the denominators}'
@@ -222,22 +280,31 @@ export function partialFractionsWorking(src: string): Working {
       rest = pDivMod(rest, p.base).q
       const top = pEval(N, root)
       const bottom = pEval(rest, root)
-      s.add(
-        `Put ${name} = ${texToPlain(rTex(root))} in, which kills every term except ${LETTERS[p.unknowns[0]]}.`,
-        `${LETTERS[p.unknowns[0]]} = \\dfrac{${rTex(top)}}{${rTex(bottom)}} = ${rTex(rDiv(top, bottom))}`,
-        `${name} = ${rTex(root)}`
-      )
+      const L = LETTERS[p.unknowns[0]]
+      // The substitution is shown, not just its result (Fix 4): "A = 8/3 = 8/3" said nothing about
+      // where 8/3 came from. The value goes into the cleared identity, where every other letter's
+      // bracket is zero, and the other brackets stay as factors so the student can see them.
+      const others = pieces.filter((o) => o !== p)
+      const lead = rEq(constant, R1) ? '' : rEq(constant, rNeg(R1)) ? '-' : rTex(constant)
+      const restAt = others.map((o) => `\\left(${pTexAt(o.base, name, root)}\\right)`).join('')
+      const coef = rEq(bottom, R1) ? '' : rEq(bottom, rNeg(R1)) ? '-' : rTex(bottom)
+      const chain = [`${pTexAt(N, name, root)} = ${lead}${L}${restAt}`]
+      if (!rEq(bottom, R1)) chain.push(`${rTex(top)} = ${coef}${L}`)
+      chain.push(`${L} = ${rTex(rDiv(top, bottom))}`)
+      s.add(`Put ${name} = ${texToPlain(rTex(root))} in, which kills every term except ${L}.`, chain.join(' \\;\\Rightarrow\\; '), `${name} = ${rTex(root)}`)
     }
   } else {
     s.goal('Find each letter').add(
       'Multiply out and match the coefficient of each power on both sides — that gives one equation per power.',
       `\\begin{array}{rcl}\n${Array.from({ length: width }, (_, k) => {
+        // Each sign written once — "A - B", not "A + -1B" — and no space before the colon.
         const lhs = M[k]
-          .map((c, u) => (rIsZero(c) ? null : `${rTex(c) === '1' ? '' : rTex(c)}${LETTERS[u]}`))
-          .filter(Boolean)
-          .join(' + ')
-        const power = k === 0 ? '\\text{units}' : k === 1 ? name : `${name}^{${k}}`
-        return `${power} : & ${lhs || '0'} &= ${rTex(rhs[k])}`
+          .map((c, u) => (rIsZero(c) ? null : { neg: rIsNeg(c), body: `${rEq(c, R1) || rEq(c, rNeg(R1)) ? '' : rTex(rIsNeg(c) ? rNeg(c) : c)}${LETTERS[u]}` }))
+          .filter((t): t is { neg: boolean; body: string } => t !== null)
+          .map((t, i) => (i === 0 ? `${t.neg ? '-' : ''}${t.body}` : `${t.neg ? '-' : '+'} ${t.body}`))
+          .join(' ')
+        const power = k === 0 ? '\\text{number}' : k === 1 ? name : `${name}^{${k}}`
+        return `${power}: & ${lhs || '0'} &= ${rTex(rhs[k])}`
       }).join(' \\\\\n')}\n\\end{array}`,
       '\\text{equate coefficients}'
     )
@@ -257,14 +324,8 @@ export function partialFractionsWorking(src: string): Working {
       const topPoly: Poly = pTrim(tops.slice().reverse())
       if (pIsZero(topPoly)) return null
       // A single negative term can be pulled out in front as a minus sign; a sum cannot, because
-      // the minus would have to apply to every term in it.
-      const single = topPoly.filter((c) => !rIsZero(c)).length === 1
-      const negate = single && rIsNeg(pLead(topPoly))
-      const top = negate ? pNeg(topPoly) : topPoly
-      return {
-        sign: negate ? ('-' as const) : ('+' as const),
-        tex: `\\dfrac{${pTex(top, name)}}{${pTexBracketed(p.base, name)}${p.j > 1 ? `^{${p.j}}` : ''}}`
-      }
+      // the minus would have to apply to every term in it. pieceOver does both.
+      return pieceOver(topPoly, p.base, p.j, name)
     })
     .filter((x): x is { sign: '+' | '-'; tex: string } => x !== null)
 

@@ -600,8 +600,9 @@ describe('partial fractions show what they checked', () => {
     // The old string-patching turned this into something that is 0 at x = 0, not 1.
     const w = runPure('partial', '1/((x + 1)(x^2 + 1))')
     expect(w.check).toMatch(/the original/)
-    // The minus belongs to the first term of the numerator, not to the whole fraction.
-    expect(w.answers[0].tex).toContain(String.raw`+ \dfrac{-\frac{1}{2}x`)
+    // The minus belongs to the first term of the numerator, not to the whole fraction. The ½ is
+    // cleared into the bottom, so no fraction sits inside another (Fix 4).
+    expect(w.answers[0].tex).toContain(String.raw`+ \dfrac{-x + 1}{2\left(x^{2} + 1\right)}`)
     // And the strongest form of the same claim: what is displayed is 1 at x = 0, not 0.
     expect(rStr(evalDisplayedSum(w.answers[0].tex, 'x', rat(0n))!)).toBe('1')
   })

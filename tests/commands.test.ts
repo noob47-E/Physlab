@@ -743,7 +743,8 @@ describe('Pure Math from the command bar', () => {
     expect(usePure.getState().inputLatex).toBe('\\frac{x^{3}-1}{x-1}')
     last = await run('partial(3x+5, (x+1)(x+2))')
     expect(errors()).toEqual([])
-    expect(last.tex).toContain('\\dfrac{2}{\\left(x + 1\\right)}')
+    // A single factor below the line is not bracketed (Fix 4): 2/(x + 1), not 2/((x + 1)).
+    expect(last.tex).toContain('\\dfrac{2}{x + 1}')
   })
 
   it('says why it refused when there is no other engine to try', async () => {

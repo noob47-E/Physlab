@@ -264,6 +264,12 @@ interface Ctx {
   done: Expr[]
   /** Set when a search gave up early, so "no factors" is never claimed on incomplete evidence. */
   tooBig?: boolean
+  /**
+   * The factors still waiting behind the one being worked on. Every line is the whole expression
+   * (Fix 4): factorising the (x² − 5x + 6) left after taking out (x − 1) used to show
+   * "x² − 3x − 2x + 6" on its own, a line not equal to the question.
+   */
+  after?: Expr[]
 }
 
 /** A lone factor of exactly -1 is written as the minus sign it is, not as "-1(...)". */
@@ -279,9 +285,38 @@ const productTex = (parts: Expr[]): string => {
   return `${lead}${rest}`
 }
 
+/**
+ * A step's own maths written inside the factors already found (Fix 4). A 1/10 taken out at the
+ * front has to stay on every later line: "5x(4x - 1) + 2(4x - 1)" after "(1/10)(20x^2 - 5x + 8x - 2)"
+ * was ten times the line before it. A sum goes in square brackets, the textbook's outer bracket.
+ */
+function withOthers(ctx: Ctx, pending: Expr[], inner: string, sum: boolean): string {
+  const before = [...ctx.done, ...pending]
+  const after = ctx.after ?? []
+  if (!before.length && !after.length) return inner
+  const lead = before.length && isMinusOne(before[0]) ? '-' : ''
+  const rest = (lead ? before.slice(1) : before).map(factorTex).join('')
+  return `${lead}${rest}${sum ? `\\left[${inner}\\right]` : inner}${after.map(factorTex).join('')}`
+}
+
 /** Show the expression as it now stands: the finished factors plus whatever is still being worked on. */
 function snapshot(ctx: Ctx, pending: Expr[]): string {
-  return productTex([...ctx.done, ...pending])
+  return productTex([...ctx.done, ...pending, ...(ctx.after ?? [])])
+}
+
+/**
+ * Factorise each part in turn, keeping the parts on either side of it on every line: those before
+ * it (already done) as `pending`, those after it (not yet reached) as `ctx.after`.
+ */
+function factorParts(parts: Expr[], ctx: Ctx, pending: Expr[], depth: number): Expr[] {
+  const out: Expr[] = []
+  const saved = ctx.after
+  parts.forEach((p, i) => {
+    ctx.after = [...parts.slice(i + 1), ...(saved ?? [])]
+    out.push(...factorAll(p, ctx, [...pending, ...out], depth + 1))
+  })
+  ctx.after = saved
+  return out
 }
 
 function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
@@ -326,8 +361,8 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
   const signedTerm = (v: bigint): string => `${v < 0n ? '-' : ''}${coef(v)}${name}`
 
   ctx.s.goal('Split the middle term').add(
-    `Multiply the first and last coefficients: ${a.n} × ${c.n} = ${ac}. Now find two numbers that multiply to ${ac} and add to ${bb}.`,
-    `${p} \\times ${q} = ${ac} \\quad\\text{and}\\quad ${p} ${sign(q)} ${mag(q)} = ${bb}`,
+    `Multiply the first and last coefficients: ${a.n} × ${c.n < 0n ? `(${c.n})` : c.n} = ${ac}. Now find two numbers that multiply to ${ac} and add to ${bb}.`,
+    `${p} \\times ${q < 0n ? `(${q})` : q} = ${ac} \\quad\\text{and}\\quad ${p} ${sign(q)} ${mag(q)} = ${bb}`,
     'ax^2+bx+c:\\ \\text{split } b \\text{ using } ac'
   )
   const split: Expr = pTrim([c, rat(0n), a]).length
@@ -362,13 +397,13 @@ function splitMiddleTerm(e: Expr, ctx: Ctx, pending: Expr[]): Expr[] | null {
   }
   ctx.s.add(
     'Put the four terms into two pairs and take the common factor out of each pair.',
-    `${termTex(f1)}${exprTexBracketed(r1)} ${rIsNeg(g2.c) ? '-' : '+'} ${termTex({ c: rAbs(g2.c), v: g2.v })}${exprTexBracketed(r2)}`,
+    withOthers(ctx, pending, `${termTex(f1)}${exprTexBracketed(r1)} ${rIsNeg(g2.c) ? '-' : '+'} ${termTex({ c: rAbs(g2.c), v: g2.v })}${exprTexBracketed(r2)}`, true),
     '\\text{grouping}'
   )
   const outer = [...termExpr(f1), ...termExpr(g2)].filter((t) => !rIsZero(t.c))
   ctx.s.add(
     `Both pieces now share ${texToPlain(exprTexBracketed(r1))}, so take that out as well.`,
-    `${exprTexBracketed(r1)}${exprTexBracketed(outer)}`,
+    withOthers(ctx, pending, `${exprTexBracketed(r1)}${exprTexBracketed(outer)}`, false),
     '\\text{common bracket}'
   )
   return [r1, outer]
@@ -451,7 +486,7 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
       'a^2 - b^2 = (a-b)(a+b)'
     )
     ctx.s.add('So it splits into the difference and the sum.', snapshot(ctx, [...pending, ...dos.parts]))
-    return dos.parts.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+    return factorParts(dos.parts, ctx, pending, depth)
   }
 
   const cubes = sumOrDiffOfCubes(e)
@@ -467,7 +502,7 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
       `Use the ${cubes.sign === 1 ? 'sum' : 'difference'} of cubes formula, with a = ${texToPlain(termTex(cubes.a))} and b = ${texToPlain(termTex(cubes.b))}.`,
       snapshot(ctx, [...pending, ...cubes.parts])
     )
-    return cubes.parts.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+    return factorParts(cubes.parts, ctx, pending, depth)
   }
 
   // 3. Three terms: perfect square, then splitting the middle term.
@@ -483,14 +518,14 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   }
 
   const split = splitMiddleTerm(e, ctx, pending)
-  if (split) return split.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+  if (split) return factorParts(split, ctx, pending, depth)
 
   // 3b. Even powers only: a quadratic in u = x^k, or a square with the middle term completed.
   const sub = bySubstitution(e, ctx, pending)
-  if (sub) return sub.parts.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+  if (sub) return factorParts(sub.parts, ctx, pending, depth)
 
   const completed = byCompletingSquare(e, ctx, pending)
-  if (completed) return completed.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+  if (completed) return factorParts(completed, ctx, pending, depth)
 
   // 4. Four terms: grouping.
   const grp = byGrouping(e)
@@ -501,12 +536,12 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
       '\\text{grouping}'
     )
     ctx.s.add('Both pairs left the same bracket, so take it out.', snapshot(ctx, [...pending, ...grp.parts]))
-    return grp.parts.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+    return factorParts(grp.parts, ctx, pending, depth)
   }
 
   // 5. Degree 3 and up in one letter: find a root and divide.
   const peeled = peelRoot(e, ctx)
-  if (peeled) return peeled.flatMap((p) => factorAll(p, ctx, pending, depth + 1))
+  if (peeled) return factorParts(peeled, ctx, pending, depth)
 
   return [e]
 }

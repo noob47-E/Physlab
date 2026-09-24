@@ -17,7 +17,9 @@ import {
   pMul,
   pSub,
   pTex,
+  pOverTexSigned,
   pTexBracketed,
+  pTexSigned,
   pTrim,
   polyFromExpr,
   type Poly
@@ -125,14 +127,19 @@ export function divideWorking(src: string): Working {
     const leadPlain = plainTerm(pLead(rem), pDeg(rem), name)
     const byPlain = plainTerm(pLead(b), pDeg(b), name)
     const piecePlain = plainTerm(factor, shift, name)
+    // A term that already carries a fraction is divided with ÷: a fraction stacked on a fraction
+    // (½x² over 2x) is not how a textbook sets out a line (Fix 4).
+    const ratio = /frac/.test(leadTex + byTex) ? `${leadTex} \\div ${byTex}` : `\\dfrac{${leadTex}}{${byTex}}`
     s.add(
       `Divide ${leadPlain} by ${byPlain} to get ${piecePlain} — that is the next piece of the answer.`,
-      `\\dfrac{${leadTex}}{${byTex}} = ${pTex(piece, name)}`,
+      `${ratio} = ${pTex(piece, name)}`,
       '\\text{divide the leading terms}'
     )
     s.add(
       `Multiply ${piecePlain} by the divisor and take the result away.`,
-      `${pTexBracketed(rem, name)} - ${pTexBracketed(piece, name)}${pTexBracketed(b, name)} = ${pTexBracketed(next, name)}`,
+      // A negative piece is bracketed — "− (−1)(2x + 1)", never "− −1(2x + 1)" — and what is
+      // left needs no bracket of its own.
+      `${pTexBracketed(rem, name)} - ${rIsNeg(factor) ? `\\left(${pTex(piece, name)}\\right)` : pTex(piece, name)}${pTexBracketed(b, name)} = ${pTex(next, name)}`,
       '\\text{multiply, then subtract}'
     )
     rows.push(row(product, topDeg, name, '-'))
@@ -170,7 +177,7 @@ export function divideWorking(src: string): Working {
   if (!pIsZero(rem)) {
     answers.push({
       label: 'Altogether',
-      tex: `${pTex(q, name)} + \\dfrac{${pTex(rem, name)}}{${pTex(b, name)}}`
+      tex: `${pTex(q, name)} ${pOverTexSigned(rem, b, name)}`
     })
   }
 
@@ -180,7 +187,7 @@ export function divideWorking(src: string): Working {
       : `${texToPlain(pTex(rem, name))} is left over, and its power is now below the divisor's, so the division stops.`,
     pIsZero(rem)
       ? `${pTexBracketed(a, name)} = ${pTexBracketed(b, name)}${pTexBracketed(q, name)}`
-      : `${pTexBracketed(a, name)} = ${pTexBracketed(b, name)}${pTexBracketed(q, name)} + ${pTex(rem, name)}`,
+      : `${pTexBracketed(a, name)} = ${pTexBracketed(b, name)}${pTexBracketed(q, name)} ${pTexSigned(rem, name)}`,
     '\\text{dividend} = \\text{divisor} \\times \\text{quotient} + \\text{remainder}'
   )
 
@@ -193,7 +200,7 @@ export function divideWorking(src: string): Working {
     moves: s.moves,
     answers,
     check: ok
-      ? `${exprTex(exprFromPoly(pMul(b, q), name))}${pIsZero(rem) ? '' : ` + ${pTex(rem, name)}`} = ${exprTex(exprFromPoly(a, name))}`
+      ? `${exprTex(exprFromPoly(pMul(b, q), name))}${pIsZero(rem) ? '' : ` ${pTexSigned(rem, name)}`} = ${exprTex(exprFromPoly(a, name))}`
       : 'Careful: divisor × quotient + remainder did not give the original. Treat this answer with suspicion.',
     checked: ok ? 'ok' : 'failed'
   }

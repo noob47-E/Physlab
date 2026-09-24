@@ -53,6 +53,16 @@ export function factorTex(f: Factorisation): string {
   return f.n < 0n ? `-\\,${body}` : body
 }
 
+/**
+ * One number broken into primes, as a sentence and its maths. A prime is said to be prime, not
+ * written "7 = 7" — a line that changes nothing (Fix 4).
+ */
+function breakMove(n: bigint, f: Factorisation): [string, string] {
+  if (f.factors.length === 0) return [`${n} has no prime factors.`, `${n}\\text{ has no prime factors}`]
+  if (f.factors.length === 1 && f.factors[0][1] === 1) return [`${n} is already a prime.`, `${n}\\text{ is prime}`]
+  return [`Break ${n} into primes.`, `${n} = ${factorTex(f)}`]
+}
+
 /** The division ladder, as a textbook lays it out. */
 function ladderTex(f: Factorisation): string {
   let running = f.n < 0n ? -f.n : f.n
@@ -87,7 +97,7 @@ export function factoriseNumberWorking(input: bigint): Working {
   }
 
   if (f.factors.length === 1 && f.factors[0][1] === 1) {
-    s.goal('Check whether it is prime').add(`${abs} has no factors except 1 and itself, so it is already prime.`, `${abs} = ${abs}`, '\\text{a prime has exactly two factors}')
+    s.goal('Check whether it is prime').add(`${abs} has no factors except 1 and itself, so it is already prime.`, `${abs}\\text{ is prime}`, '\\text{a prime has exactly two factors}')
     return { title, input: tex, moves: s.moves, answers: [{ label: `${input}`, tex: factorTex(f) }], check: `${abs} is prime.`, checked: f.factors[0][0] === abs ? 'ok' : 'failed' }
   }
 
@@ -161,7 +171,7 @@ export function hcfWorking(ns: bigint[]): Working {
   s.goal('Break each number into primes').add('Write each number as a product of primes.', tableTex(pair), '\\text{HCF} = \\text{common primes, lowest index}')
   for (const r of pair.rows) {
     const f = primeFactorise(r.n)
-    s.add(`Break ${r.n} into primes.`, `${r.n} = ${factorTex(f)}`)
+    s.add(...breakMove(r.n, f))
   }
 
   const commonPowers = pair.primes.map((p, i) => Math.min(...pair.rows.map((r) => r.powers[i])))
@@ -180,7 +190,7 @@ export function hcfWorking(ns: bigint[]): Working {
     '\\min(\\text{indices})'
   )
   const hcf = ns.reduce((a, b) => bgcd(a, b), 0n)
-  s.add('Multiply those primes together to get the HCF.', `\\text{HCF} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${hcf}`)
+  s.add(...productMove('HCF', kept, hcf))
 
   // The primes kept from the table have to multiply to Euclid's answer, and that has to divide in.
   const ok = product(kept) === hcf && pos.every((n) => n % hcf === 0n)
@@ -192,6 +202,18 @@ export function hcfWorking(ns: bigint[]): Working {
     check: ok ? `${pos.map((n) => `${n} ÷ ${hcf} = ${n / hcf}`).join(',  ')} — all whole, so ${hcf} divides every one.` : `Careful: ${hcf} does not divide every number. Treat this answer with suspicion.`,
     checked: ok ? 'ok' : 'failed'
   }
+}
+
+/**
+ * "HCF = 2² × 3 = 12", or just "HCF = 3" when the one prime kept is the answer: "HCF = 3 = 3" was
+ * a step that changes nothing, and "multiply those primes together" promised a product that was
+ * not there.
+ */
+function productMove(what: 'HCF' | 'LCM', kept: [bigint, number][], value: bigint): [string, string] {
+  const product = kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')
+  if (!product) return [`No prime is left over, so the ${what} is 1.`, `\\text{${what}} = ${value}`]
+  if (product === String(value)) return [`That one prime is the ${what}.`, `\\text{${what}} = ${value}`]
+  return [`Multiply those primes together to get the ${what}.`, `\\text{${what}} = ${product} = ${value}`]
 }
 
 export function lcmWorking(ns: bigint[]): Working {
@@ -206,7 +228,7 @@ export function lcmWorking(ns: bigint[]): Working {
   s.goal('Break each number into primes').add('Write each number as a product of primes.', tableTex(pair), '\\text{LCM} = \\text{every prime, highest index}')
   for (const r of pair.rows) {
     const f = primeFactorise(r.n)
-    s.add(`Break ${r.n} into primes.`, `${r.n} = ${factorTex(f)}`)
+    s.add(...breakMove(r.n, f))
   }
 
   const topPowers = pair.primes.map((p, i) => Math.max(...pair.rows.map((r) => r.powers[i])))
@@ -217,7 +239,7 @@ export function lcmWorking(ns: bigint[]): Working {
     '\\max(\\text{indices})'
   )
   const lcm = ns.reduce((a, b) => blcm(a, b), 1n)
-  s.add('Multiply those primes together to get the LCM.', `\\text{LCM} = ${kept.map(([p, k]) => powerTex(p, k)).join(' \\times ')} = ${lcm}`)
+  s.add(...productMove('LCM', kept, lcm))
 
   const moves = s.moves
   if (ns.length === 2) {

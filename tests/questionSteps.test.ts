@@ -291,7 +291,8 @@ describe('stepsToWorking', () => {
     const w = stepsToWorking(q, variant, SETTINGS)
     rendersAll(w, 'imported')
     expect(w.input).toBe('h = \\frac{1}{2} g t^2')
-    expect(w.moves[0].head).toBe('Use h = 1/2gt² with g = 9.8.')
+    // (1/2)gt², not 1/2gt², which reads as 1 ÷ 2gt² (Fix 4).
+    expect(w.moves[0].head).toBe('Use h = (1/2)gt² with g = 9.8.')
     expect(w.moves[0].tex).toBe(`h = \\frac{1}{2} \\times 9.8 \\times ${variant.values.t}^2`)
     expect(w.answers[0]).toEqual({ label: 'How far does it fall, in m?', tex: `${variant.values.h}\\,\\mathrm{m}` })
   })

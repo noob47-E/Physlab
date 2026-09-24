@@ -94,6 +94,41 @@ describe('every solver renders through KaTeX', () => {
     })
   }
 
+  it('renders every step for a tiny and a huge pair of vectors (a number in scientific form is bracketed before it is squared)', () => {
+    // "3.16\times 10^{-7}^2" is a double superscript KaTeX refuses; it came from squaring a size
+    // written in scientific form without brackets.
+    const settings: MeasureSettings[] = [
+      { decimals: 2, precisionMode: 'dp', unit: 'unit', unitPerSquare: 1, angleUnit: 'deg' },
+      { decimals: 3, precisionMode: 'sf', unit: 'unit', unitPerSquare: 1, angleUnit: 'rad' }
+    ]
+    const pairs: [string, number[], number[]][] = [
+      ['tiny', [1e-7, 3e-7, 0], [2e-7, -1e-7, 0]],
+      ['huge', [3e10, 4e10, 0], [-2e10, 5e10, 0]],
+      ['tiny 3D', [1e-7, 3e-7, 2e-7], [2e-7, -1e-7, 1e-7]]
+    ]
+    for (const s of settings) {
+      for (const [label, a, b] of pairs) {
+        const A = { name: 'A', v: a as [number, number, number] }
+        const B = { name: 'B', v: b as [number, number, number] }
+        const m = Math.hypot(a[0], a[1], a[2])
+        const sols: [string, VS.Solution][] = [
+          ['magnitude', VS.solveMagnitudeDirection(A, s)],
+          ['add', VS.solveAddition([A, B], 'R', s)],
+          ['law of cosines', VS.solveAdditionCosineLaw(A, B, 'R', s)],
+          ['drawing', VS.solveAdditionGraphical([A, B], 'R', s)],
+          ['scalar', VS.solveScalarMultiply(-1.5, A, 'R', s)],
+          ['unit', VS.solveUnitVector(A, s)],
+          ['dot', VS.solveDot(A, B, s)],
+          ['cross', VS.solveCross(A, B, 'C', s)],
+          ['projection', VS.solveProjection(B, A, s)],
+          ['two forces', VS.solveTwoForces(m, m / 2, 71, 'N', s)],
+          ['magnetic', VS.solveMagneticForce(-1.6e-19, A.v, B.v, s)]
+        ]
+        for (const [name, sol] of sols) rendersAll(sol, `${label} ${name} (${s.precisionMode})`)
+      }
+    }
+  })
+
   it('renders in radians, significant figures and column notation too', () => {
     const rad: MeasureSettings = { decimals: 3, precisionMode: 'sf', unit: 'm', unitPerSquare: 1, angleUnit: 'rad' }
     const dp2: MeasureSettings = { ...rad, precisionMode: 'dp', decimals: 2 }
@@ -170,7 +205,11 @@ describe('textbook values', () => {
 
   it('dot product spells the components with the real names, whatever the cards are called', () => {
     const sol = VS.solveDot({ name: 'B', v: [1, 2, 0] }, { name: 'C', v: [3, 4, 0] })
-    expect(sol.steps[1].tex).toContain('B_{x}C_{x} + B_{y}C_{y} + B_{z}C_{z}')
+    // A plane pair writes no z-terms: "+ (0)(0)" added nothing to the working (Fix 4).
+    expect(sol.steps[1].tex).toMatch(/B_\{x\}C_\{x\} \+ B_\{y\}C_\{y\}$/)
+    expect(sol.steps[2].tex).toBe('= (1)(3) + (2)(4) = 11')
+    const solid = VS.solveDot({ name: 'B', v: [1, 2, 2] }, { name: 'C', v: [3, 4, 1] })
+    expect(solid.steps[1].tex).toContain('B_{x}C_{x} + B_{y}C_{y} + B_{z}C_{z}')
     expect(sol.answers[0].tex).toBe('11')
     expect(sol.steps.some((s) => (s.text ?? '').includes('projection of C on B'))).toBe(true)
   })

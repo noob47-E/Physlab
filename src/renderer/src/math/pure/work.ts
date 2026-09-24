@@ -74,8 +74,15 @@ export interface Working {
  */
 export function texToPlain(s: string): string {
   const sup: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }
+  // A fraction written on one line keeps what it divides together (Fix 4): \frac{3}{10}x is
+  // "(3/10)x" — "3/10x" reads as 3 ÷ 10x — and \frac{x + 1}{2} is "(x + 1)/2", not "x + 1/2".
+  const side = (t: string): string => (/^-?[\w.]+$/.test(t.replace(/\\[a-zA-Z]+|[{}^]/g, '')) ? t : `(${t})`)
+  const frac = (m: string, a: string, b: string, at: number, all: string): string => {
+    const flat = `${side(a)}/${side(b)}`
+    return /^\s*(?:[A-Za-z(]|\\left|\\sqrt)/.test(all.slice(at + m.length)) ? `(${flat})` : flat
+  }
   return s
-    .replace(/\\d?frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
+    .replace(/\\d?frac\{([^{}]*)\}\{([^{}]*)\}/g, frac)
     .replace(/\\sqrt\{([^{}]*)\}/g, '√$1')
     .replace(/\\text\{([^}]*)\}/g, '$1')
     .replace(/\\left|\\right/g, '')

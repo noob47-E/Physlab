@@ -9,13 +9,16 @@ import {
   R1,
   bgcd,
   blcm,
+  commonDenominator,
   rAdd,
   rDiv,
   rEq,
+  rIsNeg,
   rIsZero,
   rMul,
   rNeg,
   rSub,
+  rTex,
   rat,
   type Rat
 } from './rat'
@@ -232,4 +235,58 @@ export const pTexBracketed = (p: Poly, name: string): string => {
   const t = pTrim(p)
   const s = pTex(t, name)
   return t.filter((c) => !rIsZero(c)).length > 1 ? `\\left(${s}\\right)` : s
+}
+
+const termCount = (p: Poly): number => pTrim(p).filter((c) => !rIsZero(c)).length
+
+/**
+ * A polynomial with a number put in for the letter, the way it is written when substituting
+ * (Fix 4: a substitution is shown, not just its result): 3x + 5 at x = 1 is "3(1) + 5",
+ * x − 2 at x = 1 is "1 − 2", at x = −½ it is "−½ − 2".
+ */
+export function pTexAt(p: Poly, name: string, at: Rat): string {
+  const bare = at.d === 1n && !rIsNeg(at)
+  const val = rTex(at)
+  const parts: string[] = []
+  for (let k = pDeg(p); k >= 0; k--) {
+    const c = p[k] ?? R0
+    if (rIsZero(c)) continue
+    const mag = rIsNeg(c) ? rNeg(c) : c
+    let body: string
+    if (k === 0) body = rTex(mag)
+    // A negative or fractional value needs no bracket when nothing stands before it: "−2 − 1".
+    else if (rEq(mag, R1)) body = k === 1 && (bare || (parts.length === 0 && !rIsNeg(c))) ? val : `\\left(${val}\\right)${k > 1 ? `^{${k}}` : ''}`
+    else body = `${rTex(mag)}\\left(${val}\\right)${k > 1 ? `^{${k}}` : ''}`
+    parts.push(parts.length === 0 ? `${rIsNeg(c) ? '-' : ''}${body}` : `${rIsNeg(c) ? '-' : '+'} ${body}`)
+  }
+  return parts.length ? parts.join(' ') : '0'
+}
+
+/**
+ * " + p", or " - q" when p is a single negative term, for a polynomial written after another one
+ * (Fix 4): "+ −7/8" is written "− 7/8". A polynomial of several terms keeps its bracket, "+ (−2x + 3)",
+ * because pulling one minus out of a sum would change what it says.
+ */
+export function pTexSigned(p: Poly, name: string): string {
+  const t = pTrim(p)
+  if (termCount(t) === 1 && rIsNeg(pLead(t))) return `- ${pTex(pNeg(t), name)}`
+  return `+ ${pTexBracketed(t, name)}`
+}
+
+/**
+ * p ÷ d as one signed fraction written after another term, with any fraction in p cleared into
+ * the bottom (Fix 4): (−7/8) ÷ (2x − 1) is "− 7/(8(2x − 1))", never a fraction inside a fraction.
+ */
+export function pOverTexSigned(p: Poly, d: Poly, name: string): string {
+  const t = pTrim(p)
+  const k = commonDenominator(t)
+  let top = pScale(t, rat(k))
+  let sign = '+'
+  if (termCount(top) === 1 && rIsNeg(pLead(top))) {
+    top = pNeg(top)
+    sign = '-'
+  }
+  const dt = pTrim(d)
+  const bottom = k === 1n ? pTex(dt, name) : pDeg(dt) === 0 ? pTex(pScale(dt, rat(k)), name) : `${k}\\left(${pTex(dt, name)}\\right)`
+  return `${sign} \\dfrac{${pTex(top, name)}}{${bottom}}`
 }

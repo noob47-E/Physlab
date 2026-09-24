@@ -272,14 +272,23 @@ function expandWorking(src: string): Working {
         distributionTable(acc, f),
         '\\text{each} \\times \\text{each}'
       )
-      s.add('Write all the products out in a line.', rawSumTex(products))
+      // A line of a single product is the whole expression (Fix 4): the minus in front and the
+      // brackets not yet multiplied stay on it, so (x − 2)³ reads (x² − 2x − 2x + 4)(x − 2), not
+      // x² − 2x − 2x + 4, which is not what was asked.
+      const rest = factors.slice(i + 1)
+      const wrap = (t: string): string =>
+        !several && (sm.neg || rest.length) ? `${sm.neg ? '-' : ''}\\left(${t}\\right)${rest.map(factorTex).join('')}` : t
+      s.add('Write all the products out in a line.', wrap(rawSumTex(products)))
       const collected = normalize(products)
       if (collected.length < products.length) {
-        s.add('Collect the like terms, and write the highest power first.', `${groupedTex(products)} = ${exprTex(collected)}`, '\\text{like terms: same letters, same powers}')
+        s.add('Collect the like terms, and write the highest power first.', `${wrap(groupedTex(products))} = ${wrap(exprTex(collected))}`, '\\text{like terms: same letters, same powers}')
       } else {
-        s.add('No two terms are alike, so just write the highest power first.', exprTex(collected))
+        s.add('No two terms are alike, so just write the highest power first.', wrap(exprTex(collected)))
       }
       acc = collected
+    }
+    if (!several && sm.neg) {
+      s.add('Take the minus sign in front through the bracket: every sign inside changes.', `-\\left(${exprTex(acc)}\\right) = ${exprTex(eNeg(acc))}`, '-(a + b) = -a - b')
     }
     pieces.push(sm.neg ? eNeg(acc) : acc)
   })

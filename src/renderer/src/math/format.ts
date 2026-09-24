@@ -327,6 +327,61 @@ export function toDMS(deg: number): string {
   return `${sign}${D}°${M}'${fmt(S, 2)}"`
 }
 
+// ---------------------------------------------------------------------------
+// Step-by-step working: every line true as written (Fix 4)
+// ---------------------------------------------------------------------------
+
+/** Precision with only the part a number needs: decimal places or significant figures. */
+export type DigitSettings = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+
+/** How many digits past the student's own a working line may add before it gives up and writes ≈. */
+export const STEP_GUARD_MAX = 6
+
+/**
+ * The number a calculator is given when a student types a value exactly as the screen shows it:
+ * "−2.5" is −2.5, "1.6×10^-19" is 1.6e-19, "8.66°" is 8.66. The unit is the caller's business.
+ */
+export function shownValue(text: string): number {
+  const t = text.replace(/−/g, '-').replace(/\\times\s*10\^\{(-?\d+)\}/, 'e$1').replace(/×10\^(-?\d+)/, 'e$1')
+  const m = t.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/)
+  return m ? Number(m[0]) : NaN
+}
+
+/** The student's precision with `extra` more digits, in the same mode (places or figures). */
+export const morePrecise = <S extends DigitSettings>(s: S, extra: number): S => ({ ...s, decimals: s.decimals + extra })
+
+/**
+ * THE rule for every line of step-by-step working, in one place.
+ *
+ * A student copies working into a notebook and checks it on a calculator, typing each number
+ * exactly as the screen shows it. So a line such as "10 cos 30° = 10 × 0.87 = 8.66" is false
+ * (10 × 0.87 is 8.7), even though 8.66 is the right value of 10 cos 30°. Rounding the middle
+ * number is what broke it; rounding the answer is what the student asked for.
+ *
+ * The rule: a number that a line calculates WITH is written with as many digits as it takes for
+ * that calculation, done from the numbers as written, to give the line's result as written. The
+ * student's own precision is the fewest digits ever used; digits are added one at a time, and
+ * only where they are needed. Results — and every answer — are always the true value rounded to
+ * the student's precision, never a value rebuilt from rounded pieces, so the extra digits change
+ * no answer. The same quantity may therefore appear as 0.39 where it is an answer and 0.3928
+ * where the next line divides by it; both are that number, rounded for its job.
+ *
+ * `agrees(q)` says whether the line holds when its operands are written at precision q. The
+ * result is the precision to write them at, and `holds: false` when even STEP_GUARD_MAX extra
+ * digits cannot make it true (a result sitting exactly on a rounding boundary) — the caller
+ * then writes ≈ instead of =, which is what a textbook does.
+ */
+export function stepPrecision<S extends DigitSettings>(s: S, agrees: (q: S) => boolean): { q: S; holds: boolean } {
+  for (let extra = 0; extra <= STEP_GUARD_MAX; extra++) {
+    const q = morePrecise(s, extra)
+    if (agrees(q)) return { q, holds: true }
+  }
+  return { q: morePrecise(s, STEP_GUARD_MAX), holds: false }
+}
+
+/** "=" when a working line holds as written, "≈" when rounding means it can only be close. */
+export const stepEq = (holds: boolean): string => (holds ? '=' : '\\approx')
+
 /**
  * The inverse of `measureValue`: a number as the student typed it, in whatever unit is on screen,
  * turned back into the world value the scene stores. Typing a measurement to set it needs this,
