@@ -17,6 +17,7 @@ import { polygonArea } from '../math/geometry'
 import { isPieceCorner } from '../math/lego'
 import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
+import { normalRefusal, parseNormalQuery } from '../math/pure/zscore'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
 import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
@@ -856,7 +857,56 @@ const GREEK = new Set([
   'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'
 ])
 
+/**
+ * The standard normal table, from the bar: `normal(...)` is shorthand for `P(...)`, `invnorm(...)`
+ * and `phi(...)` are read as themselves, and a bare `P(...)` is tried only when what is inside
+ * names Z or X with a comparison — `parseNormalQuery` says no to anything else, so a student's own
+ * function called p (`p(2)`, `p(x) = x^2`) is left for the rest of the bar to read as a function,
+ * never hijacked. Tried outside the generic `word(args)` dispatch below because a distribution
+ * query can carry a trailing "= 0.05" or a comma-joined "X ~ N(50, 10^2)" that the generic pattern
+ * (the whole line is one word and one bracket) does not allow.
+ */
+function tryNormalQuery(input: string): boolean {
+  const shorthand = /^normal\s*\((.*)\)$/i.exec(input.trim())
+  const direct = parseNormalQuery(input)
+  const query = direct ?? (shorthand ? parseNormalQuery(`P(${shorthand[1]})`) : null)
+  if (!query) {
+    // "1 - P(Z < 1.96)" holds a question but is not one: refused in words, never answered with
+    // the arithmetic dropped (and not handed on, since the calculator cannot read P(Z < 1.96)).
+    const why = normalRefusal(input)
+    if (why) logError(input, why)
+    return why !== null
+  }
+  const src = direct ? input : `P(${shorthand![1]})`
+  const doc = runPure('normal', src)
+  const s = scene()
+  if (doc.error) {
+    logError(input, doc.error)
+    return true
+  }
+  // In LaTeX a bare "~" is a non-breaking space, so "X ~ N(50, 5^2)" would show in the Maths field
+  // as "X N(50, 5²)". \sim is the "is distributed as" sign, and parseNormalQuery reads it back.
+  // x_1 in P(x_1 < X < x_2) arrives escaped as x\_1, which the field would show as "x_1": it is
+  // the subscript x₁.
+  const latex = linearToLatex(src)
+    .replace(/\s*~\s*/g, '\\sim ')
+    .replace(/([a-zA-Z])\\_(\d)/g, '$1_{$2}')
+  s.pushLog({
+    input,
+    kind: 'result',
+    tex: doc.answers.map((a) => (a.label !== 'Answer' ? `\\text{${a.label}} = ${a.tex}` : a.tex)).join(String.raw`,\quad `),
+    working: () => {
+      usePure.getState().run('normal', src, latex)
+      showPanel('maths')
+    }
+  })
+  usePure.getState().run('normal', src, latex)
+  showPanel('maths')
+  return true
+}
+
 function tryPureMath(input: string): boolean {
+  if (tryNormalQuery(input)) return true
   const m = input.match(/^\s*([a-z]+)\s*\((.*)\)\s*$/i)
   if (!m) return false
   const job = PURE_WORDS[m[1].toLowerCase().replace(/[\s_-]/g, '')]
@@ -1121,5 +1171,7 @@ export const HELP = `Examples (press Enter after each):
   between(x^2, x + 2, -1, 2)   shade between two curves      tangent(x^2, 1)   the tangent at a point
   k = 2  (makes a slider you can drag)
   solve(x^2 - 5x + 6 = 0)   diff(x^3)   integrate(x^2, 0, 3)   factor(x^2-1)
+  P(Z < 1.96)   P(45 < X < 60), X ~ N(50, 5^2)     the standard normal table, with steps
+  invnorm(0.975)   invnorm(0.9), X ~ N(50, 10^2)     the z (or x) for a given area
   prove(sin 2x = 2 sin x cos x)   a trig identity, proved one named step at a time
   delete A     undo     clear     2d / 3d     play / pause`

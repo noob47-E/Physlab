@@ -755,6 +755,20 @@ const PURE_SPREAD: Record<Exclude<JobId, 'integrate' | 'differentiate'>, string[
   lcm: ['12, 18, 30', '84, 126', '4, 6', '7, 7', '1, 1'],
   primes: ['360', '1001', '97'],
   factorComplex: ['x^4 - 16', 'x^2 + 4', 'x^2 + 2x + 5', 'x^3 + 1', 'x^4 + 1'],
+  normal: [
+    'P(Z < 1.96)',
+    'P(Z > 1.645)',
+    'P(-1 < Z < 1)',
+    'P(Z < -2.33)',
+    'invnorm(0.975)',
+    'invnorm(0.05)',
+    'P(Z > z) = 0.05',
+    'P(-z < Z < z) = 0.9',
+    'P(X < 65), X ~ N(50, 10^2)',
+    'P(X > 65), X ~ N(50, 100)',
+    'P(45 < X < 60), X ~ N(50, 5^2)',
+    'P(X > x) = 0.1, X ~ N(50, 10^2)'
+  ],
   // Trig lines are not read as numbers here (tests/trigSteps.test.ts checks every line at five
   // angles); what this list holds them to is the writing: no doubled sign, no fraction inside a
   // fraction, no bracketed whole denominator, no step that changes nothing.

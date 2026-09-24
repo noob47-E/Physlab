@@ -273,6 +273,13 @@ export type DistractorRule =
   | 'g-10'             // uses g = 10
   | 'half-double'      // ×2 or ÷2 (a lost ½)
   | 'power-of-ten'     // ×10 or ÷10
+  // The four normal-distribution rules re-evaluate `correct` with one variable changed, so they
+  // need the part's variables named exactly z, or x with mean, and sd; with other names the rule
+  // gives nothing and is skipped.
+  | 'z-sign'             // normal distribution: reads Φ(|z|) for a negative z, sign dropped (needs z, or x and mean)
+  | 'z-one-minus'        // normal distribution: the "1 −" forgotten for an upper tail (any answer from 0 to 1)
+  | 'z-no-standardise'   // normal distribution: looks x up in the table as if it were already z (needs mean and sd)
+  | 'z-variance-for-sd'  // normal distribution: divides by the variance σ² instead of σ (needs sd)
 
 export type FadingLevel = 'worked' | 'half' | 'solo'
 

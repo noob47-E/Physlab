@@ -32,6 +32,7 @@ import { factoriseWorking, factorsOf, isNumericLine, wantsAllowI } from './facto
 import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
 import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
+import { normalRefusal, parseNormalQuery, zscoreWorking } from './zscore'
 import { Steps, failed, texToPlain, type Working } from './work'
 import { isTrigIdentity, trigWorking } from './trigIdentity'
 
@@ -46,6 +47,7 @@ export type JobId =
   | 'complex'
   | 'solve'
   | 'factorComplex'
+  | 'normal'
   | 'trigidentity'
   | 'integrate'
   | 'differentiate'
@@ -158,6 +160,14 @@ export const JOBS: JobDef[] = [
     placeholder: 'x^2 + 4',
     example: 'x^4 - 16',
     exampleLatex: 'x^4-16'
+  },
+  {
+    id: 'normal',
+    label: 'Normal',
+    about: 'The standard normal table: P(Z < z), P(Z > z), P(a < Z < b), and z or x from a given area.',
+    placeholder: 'P(Z < 1.96)',
+    example: 'P(Z < 1.96)',
+    exampleLatex: 'P(Z<1.96)'
   },
   {
     id: 'trigidentity',
@@ -437,6 +447,13 @@ export function runPure(job: JobId, input: string): Working {
     case 'factorComplex':
       return factoriseComplexWorking(src)
 
+    case 'normal': {
+      const query = parseNormalQuery(src)
+      if (!query)
+        return failed('Normal', src, normalRefusal(src) ?? 'I could not read that as a normal-distribution question. Try P(Z < 1.96), P(45 < X < 60), X ~ N(50, 5^2), or invnorm(0.975).')
+      return zscoreWorking(query)
+    }
+
     case 'trigidentity':
       return trigWorking(src)
 
@@ -452,6 +469,7 @@ export function runPure(job: JobId, input: string): Working {
 export function suggestJob(src: string): JobId {
   const s = src.trim()
   if (!s) return 'factor'
+  if (parseNormalQuery(s)) return 'normal'
   if (WHOLE.test(s)) return 'primes'
   if (s.includes(',')) return 'hcf'
   if (/(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(s)) return 'complex'

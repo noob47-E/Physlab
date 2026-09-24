@@ -62,7 +62,11 @@ const RULE_WORDS: Record<DistractorRule, string> = {
   'ignore-initial': 'Left out the starting value',
   'g-10': 'Used g = 10',
   'half-double': 'Lost or doubled a half',
-  'power-of-ten': 'Out by a power of ten'
+  'power-of-ten': 'Out by a power of ten',
+  'z-sign': 'Dropped the sign of z at the table',
+  'z-one-minus': 'Forgot the "1 −" for the other side of the table',
+  'z-no-standardise': 'Looked x up in the table as if it were already z',
+  'z-variance-for-sd': 'Divided by the variance instead of the standard deviation'
 }
 
 const KIND_WORDS: { kind: 'number' | 'angle' | 'direction'; label: string }[] = [

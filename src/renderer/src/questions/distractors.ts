@@ -27,7 +27,11 @@ const RULE_WHY: Record<DistractorRule, string> = {
   'ignore-initial': 'That drops the starting value the question gave you — check the initial condition.',
   'g-10': 'You used g = 10; this question uses a different value of g.',
   'half-double': 'Check for a missing or extra factor of two — a lost half, maybe.',
-  'power-of-ten': 'Right digits, wrong power of ten. Check the decimal point.'
+  'power-of-ten': 'Right digits, wrong power of ten. Check the decimal point.',
+  'z-sign': 'That reads the table at +z. For a negative z, use the symmetry of the curve: Φ(−z) = 1 − Φ(z).',
+  'z-one-minus': 'That is the area on the other side. The table gives the area to the left of z; the area to the right is 1 minus it.',
+  'z-no-standardise': 'That looks x up in the table as if it were z. Change x into z first: z = (x − μ)/σ.',
+  'z-variance-for-sd': 'That divides by the variance. N(μ, σ²) gives σ², so divide by its square root σ.'
 }
 
 /** Re-evaluates `expr` with a modified scope, or null when it does not come out to a finite number. */
@@ -68,6 +72,19 @@ function ruleValues(rule: DistractorRule, expr: string, values: Record<string, n
       return [correct * 2, correct / 2]
     case 'power-of-ten':
       return [correct * 10, correct / 10]
+    // The four rules below stand for the normal-distribution table-reading slips
+    // (math/pure/zscoreDistractors.ts has the full set, used for the standard-normal Working
+    // panel); here they generalise the same slip to whatever expr/values a normal-distribution
+    // choice part is authored with, re-evaluating the part's own expression with one variable
+    // changed the wrong way, exactly as every other rule in this switch does.
+    case 'z-sign':
+      return ['z' in values ? recompute(expr, { ...values, z: -values.z }) : 'x' in values && 'mean' in values ? recompute(expr, { ...values, x: 2 * values.mean - values.x }) : null]
+    case 'z-one-minus':
+      return correct >= 0 && correct <= 1 ? [1 - correct] : [null]
+    case 'z-no-standardise':
+      return 'mean' in values && 'sd' in values ? [recompute(expr, { ...values, mean: 0, sd: 1 })] : [null]
+    case 'z-variance-for-sd':
+      return 'sd' in values ? [recompute(expr, { ...values, sd: values.sd * values.sd })] : [null]
   }
 }
 

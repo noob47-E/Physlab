@@ -26,6 +26,8 @@ import { scene, type LogEntry } from '../src/renderer/src/core/store'
 import type { GraphObj, SceneObject, VectorObj } from '../src/renderer/src/core/types'
 import { cas } from '../src/renderer/src/math/cas'
 import { usePure } from '../src/renderer/src/math/pure/store'
+import { parseNormalQuery } from '../src/renderer/src/math/pure/zscore'
+import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { resetGlobals } from './helpers/globals'
 
 // Read fresh each time: vitest hands the mock a new calls array between tests.
@@ -356,6 +358,31 @@ const HELP_EXAMPLES: Example[] = [
     check: (last) => {
       expect(last.tex).toBe('\\left(x - 1\\right)\\left(x + 1\\right)')
       expect(casCalls()).toHaveLength(0)
+    }
+  },
+  {
+    line: 'P(Z < 1.96)',
+    check: (last) => {
+      expect(last.tex).toBe('\\text{P(Z < 1.96)} = 0.9750')
+      expect(last.working, 'offers the working').toBeTypeOf('function')
+    }
+  },
+  {
+    line: 'P(45 < X < 60), X ~ N(50, 5^2)',
+    check: (last) => {
+      expect(last.tex).toBe('\\text{P(45 < X < 60)} = 0.8185')
+    }
+  },
+  {
+    line: 'invnorm(0.975)',
+    check: (last) => {
+      expect(last.tex).toBe('\\text{z} = 1.960')
+    }
+  },
+  {
+    line: 'invnorm(0.9), X ~ N(50, 10^2)',
+    check: (last) => {
+      expect(last.tex).toBe('\\text{x} = 62.82')
     }
   },
   {
@@ -816,6 +843,58 @@ describe('Pure Math from the command bar', () => {
     forgetCasCalls()
     await run('solve(x^3 - x = 0)')
     expect(casCalls()).toEqual([['solve', { eqs: ['x^3 - x = 0'], vars: [], deg: true }]])
+  })
+
+  it('refuses arithmetic on a normal probability in words, never answering part of the line', async () => {
+    // "1 - P(Z < 1.96)" once logged 0.9750 — the P(Z < 1.96) alone, the "1 -" dropped.
+    for (const line of ['1 - P(Z < 1.96)', '2*P(Z > 1.96)', 'invnorm(0.9)+3']) {
+      scene().clearLog()
+      const last = await run(line)
+      expect(last.kind, line).toBe('error')
+      expect(last.text, line).toMatch(/one probability at a time/)
+      expect(last.tex ?? '', line).not.toMatch(/0\.9750|0\.0250|1\.282/)
+    }
+  })
+
+  it('sends X ~ N(…) to the Maths field as \\sim, not a bare ~ (a LaTeX space that showed "X N(50, 5²)")', async () => {
+    const last = await run('P(45 < X < 60), X ~ N(50, 5^2)')
+    expect(last.tex).toBe('\\text{P(45 < X < 60)} = 0.8185')
+    const latex = usePure.getState().inputLatex
+    expect(latex).toMatch(/X\\sim N/)
+    expect(latex.replace(/\\sim/g, '')).not.toMatch(/~/)
+    // What the field holds reads back as the same question when the student runs it from there.
+    expect(parseNormalQuery(latexToMath(latex))).toMatchObject({ kind: 'between', a: 45, b: 60, dist: { mean: 50, sd: 5 } })
+    // x_1 reaches the field as the subscript x₁, not as the escaped text "x\_1".
+    await run('P(x_1 < X < x_2) = 0.95, X ~ N(50, 10^2)')
+    const pair = usePure.getState().inputLatex
+    expect(pair).toMatch(/x_\{1\}<X<x_\{2\}/)
+    expect(pair).not.toMatch(/\\_/)
+    expect(parseNormalQuery(latexToMath(pair))).toMatchObject({ kind: 'inverse', tail: 'central', pair: true, p: 0.95 })
+  })
+
+  it('a lone normal question that cannot be read is refused in words, never handed to the calculator', async () => {
+    // "P(X < 65)" once said '"X" does not exist yet. Create it first, for example X = <1, 2> …'.
+    const x = await run('P(X < 65)')
+    expect(x.kind).toBe('error')
+    expect(x.text).toMatch(/^X needs its distribution after the probability, as in P\(X < 65\), X ~ N\(50, 10²\)/)
+    const z = await run('P(Z < 1), X ~ N(50, 10^2)')
+    expect(z.kind).toBe('error')
+    expect(z.text).toMatch(/^Z is already standard/)
+    expect(z.text).not.toMatch(/Unexpected operator/)
+  })
+
+  it("leaves a student's own function p alone: p(2) is p at 2, not a normal question", async () => {
+    // The bar does not yet call a graphed function at a number (f(2) says "Undefined function f"
+    // too), so the proof is that p(2) goes exactly where f(2) goes: to the calculator, never to
+    // the normal table or its refusal, and the Working panel's job is left as it was.
+    usePure.getState().setJob('factor')
+    const f = await run('f(x) = x^2', 'f(2)')
+    const p = await run('p(x) = x^2', 'p(2)')
+    expect(p.input).toBe('p(2)')
+    expect(p.kind).toBe(f.kind)
+    expect(p.text).toBe(f.text?.replace(/\bf$/, 'p'))
+    expect(`${p.tex ?? ''} ${p.text ?? ''}`).not.toMatch(/probability|normal|0\.\d{4}/i)
+    expect(usePure.getState().job).toBe('factor')
   })
 })
 
