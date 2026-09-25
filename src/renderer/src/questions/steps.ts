@@ -62,8 +62,12 @@ const CHIP = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
 /**
  * Chips inside LaTeX: a value in brackets when negative, so `{a} \times 2` never reads
  * `-3 \times 2` as a subtraction, and when a unit sits under a power or a subscript, so
- * `{t}^2` with t = 5 s reads (5 s)² and not 5 s². A command's argument (`\mathrm{v}`) is LaTeX,
- * not a chip, as it is for Numbas.
+ * `{t}^2` with t = 5 s reads (5 s)² and not 5 s². Two spots read a negative chip plainly instead:
+ * a matrix/array cell's start (after `&`, a row's `\\`, or the `\begin{…}` before its first cell) and standing alone right
+ * after `=` — `2 & {a}` with a = -9 reads `2 & -9`, and `y = {a}` reads `y = -9`, never `(-9)`.
+ * A power or subscript still forces brackets even there, since `-9^2` and `(-9)^2` differ, and
+ * every other spot (after an operator, a digit, a letter, `\times`, …) keeps its brackets. A
+ * command's argument (`\mathrm{v}`) is LaTeX, not a chip, as it is for Numbas.
  */
 export function substituteTex(tex: string, values: Record<string, number>, units: Record<string, UnitId | undefined>, s: MeasureSettings): string {
   return tex.replace(CHIP, (chip, name: string, at: number) => {
@@ -71,9 +75,25 @@ export function substituteTex(tex: string, values: Record<string, number>, units
     if (v === undefined || Number.isNaN(v) || isCommandArgument(tex, at)) return chip
     const q = texQuantity(v, units[name], s)
     const next = tex.slice(at + chip.length).trimStart()[0]
-    const raised = (next === '^' || next === '_') && texUnit(units[name]) !== ''
-    return v < 0 || raised ? `\\left(${q}\\right)` : q
+    const raisedNoSpace = next === '^' || next === '_'
+    const raised = raisedNoSpace && texUnit(units[name]) !== ''
+    const signSafe = v < 0 && !raisedNoSpace && standsAlone(tex.slice(0, at))
+    return (v < 0 && !signSafe) || raised ? `\\left(${q}\\right)` : q
   })
+}
+
+/** A matrix's or an array's opening, right after which its first cell starts: `\begin{pmatrix}`
+ *  (and the plain, b, v, B, V and starred forms) or `\begin{array}{rrr}`. */
+const CELL_OPENING = /\\begin\{[pbvBV]?matrix\*?\}$|\\begin\{array\}\{[^{}]*\}$/
+
+/** True at a matrix/array cell's start — right after `&`, a row's `\\`, or the matrix's or
+ *  array's own `\begin{…}` (its first cell) — or right after a stand-alone `=`: the only spots a
+ *  bare leading minus sign cannot be misread as an operator. Anywhere else (the very start of the
+ *  maths, after `(`, `,`, a digit, a letter, `\times`, a plus or minus sign, …) still needs
+ *  brackets. */
+function standsAlone(before: string): boolean {
+  const trimmed = before.replace(/\s+$/, '')
+  return /[&=]$/.test(trimmed) || trimmed.endsWith('\\\\') || CELL_OPENING.test(trimmed)
 }
 
 // ---------------------------------------------------------------------------

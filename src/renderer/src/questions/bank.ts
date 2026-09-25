@@ -21,9 +21,33 @@ export interface QuestionSet {
 
 /**
  * Every bundled file's text, keyed by its path. Read at build time (`?raw`), so the bank works
- * offline and in the packaged app with no file access at all.
+ * offline and in the packaged app with no file access at all — every byte is in the build
+ * regardless of size (there is no network to defer to in a packaged Electron app).
  */
 const BUNDLED: Record<string, string> = import.meta.glob<string>('./bank/*.pqjson', { eager: true, query: '?raw', import: 'default' })
+
+/**
+ * Each bundled file's questions, parsed and licence-checked once (S-Q §5 risk 5): `loadBundled()`
+ * used to redo `parsePQFile` and the licence gate over every file on every call, and Practice
+ * calls it on every mount through `bundledSets()`'s default argument. Every file is cached, not
+ * only a large one — a size threshold that no bundled file reached cached nothing. A file that
+ * fails either check is never cached, so it throws on every call.
+ */
+const parsedCache = new Map<string, PQQuestion[]>()
+
+function bundledQuestions(path: string, text: string): PQQuestion[] {
+  let questions = parsedCache.get(path)
+  if (!questions) {
+    questions = parsePQFile(text).questions
+    for (const q of questions) {
+      if (!isShippable(q.license)) throw new Error(`Question '${q.title}' in ${path} has no licence PhysLab may ship under.`)
+    }
+    parsedCache.set(path, questions)
+  }
+  // A copy for every caller: the cache is shared by every mount and every test, and a question
+  // changed in place by one (an author's working copy, a shuffled part) must not reach the next.
+  return structuredClone(questions)
+}
 
 /**
  * The bundled questions as one file. A bundled file that fails to parse, or a question in it
@@ -33,13 +57,7 @@ const BUNDLED: Record<string, string> = import.meta.glob<string>('./bank/*.pqjso
  */
 export function loadBundled(): PQFile {
   const questions: PQQuestion[] = []
-  for (const path of Object.keys(BUNDLED).sort()) {
-    const file = parsePQFile(BUNDLED[path])
-    for (const q of file.questions) {
-      if (!isShippable(q.license)) throw new Error(`Question '${q.title}' in ${path} has no licence PhysLab may ship under.`)
-      questions.push(q)
-    }
-  }
+  for (const path of Object.keys(BUNDLED).sort()) questions.push(...bundledQuestions(path, BUNDLED[path]))
   return { app: 'PhysLab', format: 'pqjson', version: 1, questions }
 }
 

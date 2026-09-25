@@ -32,7 +32,7 @@ import { fromExam, toExam } from '../src/renderer/src/questions/numbas'
 import { UNITS } from '../src/renderer/src/questions/units'
 import { graphBox } from '../src/renderer/src/core/visualize'
 import { useCameraCommand } from '../src/renderer/src/render/viewState'
-import { lettersBeforeBrackets, withoutNameEquals } from '../src/renderer/src/questions/parts'
+import { evaluateInVariables, lettersBeforeBrackets, withoutNameEquals } from '../src/renderer/src/questions/parts'
 import katex from 'katex'
 import {
   bindValues,
@@ -421,10 +421,13 @@ describe('motion pieces', () => {
 // The bank: the bundled sample set and a teacher's file
 // ---------------------------------------------------------------------------
 
-/** The answer a student who got it right would give: a number with its unit typed after it, a formula, or the right options. */
-function rightAnswer(p: PlayedPart, played: Played): string | number[] {
+/** The answer a student who got it right would give: a number with its unit typed after it, a formula, the right options, or a matrix's own entries. */
+function rightAnswer(p: PlayedPart, played: Played): string | number[] | string[][] {
   if (p.part.type === 'choice') return p.choices!.flatMap((c, i) => (c.correct ? [i] : []))
   if (p.part.type === 'expression') return bindValues(p.part.answer, played.variant.values, p.part.symbols)
+  // QN2's bundled Numbas matrix questions (Matrix addition and the like) are the first bundled
+  // content to use this kind: each entry typed back as the plain decimal `checkMatrixPart` reads.
+  if (p.part.type === 'matrix') return p.part.answer.map((row) => row.map((e) => String(evaluateInVariables(e, played.variant.values))))
   if (p.part.type !== 'number') throw new Error(`the sample set has no ${p.part.type} part`)
   return p.part.unit === 'none' ? String(p.field!.value) : `${p.field!.value} ${UNITS[p.part.unit].label}`
 }
