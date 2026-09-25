@@ -269,6 +269,16 @@ function scale(c: string, f: string): string {
 }
 
 const d = (v: string): string => `\\,d${v}`
+
+/**
+ * The worker's name for the variable, as maths: theta is \theta, and lamda (SymPy's spelling, since
+ * lambda is a word Python keeps for itself) is \lambda. "d/dtheta" and "dalpha" were written out in
+ * letters (GLM #25).
+ */
+export function varTex(name: string): string {
+  if (name === 'lamda') return '\\lambda'
+  return /^(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|rho|sigma|tau|upsilon|phi|chi|psi|omega)$/.test(name) ? `\\${name}` : name
+}
 const same = (a: string, b: string): boolean => a.replace(/\s+/g, '') === b.replace(/\s+/g, '')
 
 /** ∫ f dv, with the integrand bracketed when it is a sum. */
@@ -695,7 +705,7 @@ export const NO_VALUE =
 export function integralWorking(tree: IntegralTree, input: string, digits: DigitSettings = DEFAULT_DIGITS): Working {
   const title = 'Integrate'
   if (tree.error) return { title, input, moves: [], answers: [], error: tree.error }
-  const v = tree.var || 'x'
+  const v = varTex(tree.var || 'x')
   const def = tree.definite
   const f = tree.integrand.latex
   const shownInput = def ? `\\int_{${def.lower.latex}}^{${def.upper.latex}} ${isSum(f) ? `\\left(${f}\\right)` : f}${d(v)}` : integral(f, v)
@@ -858,7 +868,30 @@ function dShown(n: DerivRule): string {
   return n.result.latex
 }
 
-function explainDerivative(n: DerivRule, v: string, U: string, s: Steps): string {
+/**
+ * The two letters the product and quotient rules name their factors by: f and g, unless the
+ * question already uses one of them (f x sin x, or g² sin g differentiated by g) or a chain rule in
+ * the same working has taken it; "f = x" beside a constant f gave f two meanings at once (GLM #23).
+ */
+export function factorNames(tree: DerivTree): [string, string] {
+  // SymPy's own text of the question: a name not followed by "(" is a letter, not a function.
+  const taken = new Set([tree.var, ...(tree.expr.text.match(/[A-Za-z_][A-Za-z0-9_]*(?![A-Za-z0-9_]*\s*\()/g) ?? [])])
+  const walk = (n: DerivRule | undefined): void => {
+    if (!n) return
+    if (n.letter) taken.add(n.letter)
+    n.substeps?.forEach(walk)
+  }
+  walk(tree.tree)
+  const pairs: [string, string][] = [
+    ['f', 'g'],
+    ['u', 'v'],
+    ['p', 'q'],
+    ['h', 'k']
+  ]
+  return pairs.find(([a, b]) => !taken.has(a) && !taken.has(b)) ?? ['F', 'G']
+}
+
+function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [string, string] = ['f', 'g']): string {
   const f = n.expr.latex
   const res = n.result.latex
   if (dSimple(n)) {
@@ -870,13 +903,13 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps): string
     case 'constant_multiple': {
       const k = kids[0]
       const c = lat(n.constant)
-      const inner = explainDerivative(k, v, U, s)
+      const inner = explainDerivative(k, v, U, s, fg)
       s.add('Multiplied by the constant.', chain(dd(v, f), `${c === '-1' ? '-' : c}${dd(v, k.expr.latex)}`, scale(c, inner), res), `\\frac{d}{d${v}}(kf) = k\\frac{df}{d${v}}`)
       return res
     }
     case 'sum': {
       s.goal('Differentiate term by term')
-      for (const k of kids) if (!dSimple(k)) explainDerivative(k, v, U, s)
+      for (const k of kids) if (!dSimple(k)) explainDerivative(k, v, U, s, fg)
       // The terms side by side first; when they combine ((1 + ln x) − 1) the working-out is its
       // own line, so the answer is never left as an unfinished sum.
       const termwise = n.shown?.latex ?? res
@@ -888,22 +921,24 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps): string
       const [a, b] = kids
       if (!a || !b) throw new Unexplained()
       s.goal('Product rule')
-      for (const k of kids) if (!dSimple(k) && k.rule !== 'sum') explainDerivative(k, v, U, s)
+      for (const k of kids) if (!dSimple(k) && k.rule !== 'sum') explainDerivative(k, v, U, s, fg)
+      const [F, G] = fg
       s.add(
-        'Named the two factors f and g and differentiated each.',
-        `f = ${a.expr.latex},\\quad f' = ${a.result.latex},\\qquad g = ${b.expr.latex},\\quad g' = ${b.result.latex}`
+        `Named the two factors ${F} and ${G} and differentiated each.`,
+        `${F} = ${a.expr.latex},\\quad ${F}' = ${a.result.latex},\\qquad ${G} = ${b.expr.latex},\\quad ${G}' = ${b.result.latex}`
       )
-      s.add('Used the product rule.', chain(dd(v, f), plus(times(a.result.latex, b.expr.latex), times(a.expr.latex, b.result.latex)), res), `\\frac{d}{d${v}}(fg) = f'g + fg'`)
+      s.add('Used the product rule.', chain(dd(v, f), plus(times(a.result.latex, b.expr.latex), times(a.expr.latex, b.result.latex)), res), `\\frac{d}{d${v}}(${F}${G}) = ${F}'${G} + ${F}${G}'`)
       return res
     }
     case 'quotient': {
       const [top, bottom] = kids
       if (!top || !bottom) throw new Unexplained()
       s.goal('Quotient rule')
-      for (const k of kids) if (!dSimple(k) && k.rule !== 'sum') explainDerivative(k, v, U, s)
+      for (const k of kids) if (!dSimple(k) && k.rule !== 'sum') explainDerivative(k, v, U, s, fg)
+      const [F, G] = fg
       s.add(
-        'Named the top f and the bottom g and differentiated each.',
-        `f = ${top.expr.latex},\\quad f' = ${top.result.latex},\\qquad g = ${bottom.expr.latex},\\quad g' = ${bottom.result.latex}`
+        `Named the top ${F} and the bottom ${G} and differentiated each.`,
+        `${F} = ${top.expr.latex},\\quad ${F}' = ${top.result.latex},\\qquad ${G} = ${bottom.expr.latex},\\quad ${G}' = ${bottom.result.latex}`
       )
       const gt = bottom.expr.latex.trim()
       const g2 = /^[A-Za-z0-9]$/.test(gt) ? `${gt}^{2}` : `\\left(${gt}\\right)^{2}`
@@ -911,14 +946,14 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps): string
       const sides = [dd(v, f), `\\frac{${raw}}{${g2}}`]
       if (n.expanded && !same(n.expanded.latex, raw)) sides.push(`\\frac{${n.expanded.latex}}{${g2}}`)
       sides.push(res)
-      s.add('Used the quotient rule: bottom times the derivative of the top, minus top times the derivative of the bottom, all over the bottom squared.', chain(...sides), `\\frac{d}{d${v}}\\left(\\frac{f}{g}\\right) = \\frac{gf' - fg'}{g^{2}}`)
+      s.add('Used the quotient rule: bottom times the derivative of the top, minus top times the derivative of the bottom, all over the bottom squared.', chain(...sides), `\\frac{d}{d${v}}\\left(\\frac{${F}}{${G}}\\right) = \\frac{${G}${F}' - ${F}${G}'}{${G}^{2}}`)
       return res
     }
     case 'chain': {
       const inner = kids[0]
       if (!inner || !n.outer) throw new Unexplained()
       s.goal('Chain rule')
-      if (!dSimple(inner)) explainDerivative(inner, v, U, s)
+      if (!dSimple(inner)) explainDerivative(inner, v, U, s, fg)
       const u = lat(n.u)
       // Each inside has its own letter (the worker hands them out), so u keeps one meaning.
       const L = n.letter ?? U
@@ -945,13 +980,13 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps): string
 export function derivativeWorking(tree: DerivTree, input: string): Working {
   const title = 'Differentiate'
   if (tree.error) return { title, input, moves: [], answers: [], error: tree.error }
-  const v = tree.var || 'x'
+  const v = varTex(tree.var || 'x')
   const shownInput = dd(v, tree.expr.latex)
   const radians = tree.deg_ignored ? ` ${RADIANS_NOTE}` : ''
   const s = new Steps()
   try {
     if (tree.unsupported || !tree.tree) throw new Unexplained()
-    explainDerivative(tree.tree, v, tree.u || 'u', s)
+    explainDerivative(tree.tree, v, tree.u || 'u', s, factorNames(tree))
   } catch (e) {
     if (!(e instanceof Unexplained)) throw e
     return answerOnly(title, shownInput, tree.answer_latex, `${NO_STEPS}${radians}`, tree.checked)

@@ -532,7 +532,14 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
   if (grp) {
     ctx.s.goal('Group the terms in pairs').add(
       'Put the four terms into two pairs and take the common factor out of each pair.',
-      `${termTex(grp.taken[0])}${exprTexBracketed(grp.parts[0])} ${rIsNeg(grp.taken[1].c) ? '-' : '+'} ${termTex({ c: rAbs(grp.taken[1].c), v: grp.taken[1].v })}${exprTexBracketed(grp.parts[0])}`,
+      // Inside whatever was taken out before: after "2(x³ + x² + x + 1)" the line is
+      // "2[x²(x + 1) + 1(x + 1)]", or it is half the line before it (GLM #6).
+      withOthers(
+        ctx,
+        pending,
+        `${termTex(grp.taken[0])}${exprTexBracketed(grp.parts[0])} ${rIsNeg(grp.taken[1].c) ? '-' : '+'} ${termTex({ c: rAbs(grp.taken[1].c), v: grp.taken[1].v })}${exprTexBracketed(grp.parts[0])}`,
+        true
+      ),
       '\\text{grouping}'
     )
     ctx.s.add('Both pairs left the same bracket, so take it out.', snapshot(ctx, [...pending, ...grp.parts]))

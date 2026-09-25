@@ -313,7 +313,11 @@ export function calculusVariable(expr: string): string {
   return distinct.length === 1 ? distinct[0] : 'x'
 }
 
-const LETTER = /^(?:[A-Za-z]|theta)$/
+/** A letter to differentiate or integrate by: one Latin letter, or a Greek one spelt out (GLM #25). */
+const isLetter = (named: string): boolean => /^[A-Za-z]$/.test(named) || WHOLE_NAMES.has(named)
+
+/** lambda is a word Python keeps for itself, so SymPy spells the letter lamda (and prints it \lambda). */
+const pySpelling = (s: string): string => s.replace(/\blambda\b/g, 'lamda')
 
 /**
  * The typed line as the worker's payload: "x e^x", "x^2, 0, 2" (limits), "t^2, t" (a letter),
@@ -334,10 +338,10 @@ function stepsRequest(
   const limits = parts.length === 3 ? parts.slice(1) : parts.length === 4 ? parts.slice(2) : null
   // Integrate: f | f, letter | f, a, b | f, letter, a, b. Differentiate: f | f, letter.
   const lengthOk = parts.length >= 1 && parts.length <= (job === 'integrate' ? 4 : 2)
-  if (!expr || !lengthOk || (named !== undefined && !LETTER.test(named))) return { error: shapeSentence(job) }
+  if (!expr || !lengthOk || (named !== undefined && !isLetter(named))) return { error: shapeSentence(job) }
   const v = named ?? calculusVariable(expr)
   const trig = calculusUnitNote(job === 'integrate' ? 'integrate' : 'diff', expr, deg) !== null
-  const payload: Record<string, unknown> = { expr, var: v, deg: trig }
+  const payload: Record<string, unknown> = { expr: pySpelling(expr), var: pySpelling(v), deg: trig }
   if (limits) {
     payload.lower = limits[0]
     payload.upper = limits[1]

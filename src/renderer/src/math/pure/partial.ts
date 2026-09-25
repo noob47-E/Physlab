@@ -237,9 +237,13 @@ export function partialFractionsWorking(src: string): Working {
     'Multiply every term by the bottom, so the fractions disappear.',
     // What is left of the bottom is kept in its factors, the way it is written by hand:
     // "A(x + 2)", "Ax(x + 1)", "(Bx + C)(x − 1)" — not "(A)(x² + x)".
+    // The bottom's number in front multiplies every piece, and its sign is written once per piece:
+    // with a bottom of -(x - 2)(x + 1), "-A(x + 1) - B(x - 2)", not "-A(x + 1) + -B(x - 2)" (GLM #5).
     `${pTex(N, name)} = ${pieces
-      .map((p) => {
-        const lead = rEq(constant, R1) ? '' : rEq(constant, rNeg(R1)) ? '-' : rTex(constant)
+      .map((p, i) => {
+        const size = rIsNeg(constant) ? rNeg(constant) : constant
+        const sign = i === 0 ? (rIsNeg(constant) ? '-' : '') : rIsNeg(constant) ? ' - ' : ' + '
+        const lead = `${sign}${rEq(size, R1) ? '' : rTex(size)}`
         const rest = grouped
           .map((g) => {
             const e = g.power - (pEq(g.base, p.base) ? p.j : 0)
@@ -251,7 +255,7 @@ export function partialFractionsWorking(src: string): Working {
         const top = p.unknowns.length === 1 ? numeratorTex(p) : `\\left(${numeratorTex(p)}\\right)`
         return `${lead}${top}${rest}`
       })
-      .join(' + ')}`,
+      .join('')}`,
     '\\text{clear the denominators}'
   )
 

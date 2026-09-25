@@ -726,7 +726,9 @@ const PURE_SPREAD: Record<Exclude<JobId, 'integrate' | 'differentiate'>, string[
     '3x^2 - 12x',
     '0.2x^2 - 0.2x - 2.4',
     'x^4 - 5x^2 + 4',
-    'x^4 + 4'
+    'x^4 + 4',
+    // GLM #6: grouping after a common factor was taken out keeps that factor on its line.
+    '2x^3 + 2x^2 + 2x + 2'
   ],
   expand: ['(2x + 3)(3x - 1)', '(x - 2)^3', '(0.5x + 1)(2x - 4)', '-(x - 1)(x + 3)', '(x + 1)(x^2 - x + 1)'],
   divide: [
@@ -747,7 +749,10 @@ const PURE_SPREAD: Record<Exclude<JobId, 'integrate' | 'differentiate'>, string[
     'x^3/((x - 1)(x + 1))',
     '1/((x - 1)(x - 2)(x - 3))',
     '(x + 3)/(x^2(x - 1)^2)',
-    '(4x - 1)/((2x + 1)(x - 3))'
+    '(4x - 1)/((2x + 1)(x - 3))',
+    // GLM #5: a bottom whose number in front is negative (-1, then -2) wrote "+ -B" on the cleared line.
+    '1/((x + 1)(2 - x))',
+    '3/((x + 1)(4 - 2x))'
   ],
   complex: ['(3 + 4i)/(1 - 2i)', '(2 + i)(3 - 2i)', '(1 + i)^2', '5/(2 - i)', '(4 - 3i) - (1 + 2i)', '(1 + 2i)/(3 + 4i)', '(2 - 3i)/i'],
   solve: ['x^2 + 4x + 13 = 0', '2x^2 - 3x - 2 = 0', 'x^2 - 5 = 0', '3x + 4 = 10', 'x^2 + 2x + 1 = 0', 'x^2 - x + 1 = 0'],

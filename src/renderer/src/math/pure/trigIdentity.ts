@@ -1680,32 +1680,59 @@ export function proveIdentity(lhs: Sum, rhs: Sum, opts: ProveOptions = {}): Proo
 /**
  * The sentence for an identity that is not one: both sides at x = 1 (or A = 1, B = 0.3), in
  * radians. Every letter shown is the value used, and a point where the two sides happen to read
- * the same to three places is passed over for the next, so the sentence always shows a difference.
+ * the same to `places` decimal places is passed over for the next, so the sentence always shows a
+ * difference. Two sides that differ only further out are shown to as many places as that takes.
  */
-export function notEqualSentence(lhsText: string, rhsText: string, lhs: Sum, rhs: Sum, fmt: (v: number) => string): string {
+export function notEqualSentence(lhsText: string, rhsText: string, lhs: Sum, rhs: Sum, places = 3): string {
   const names = [...new Set([...allArgs(lhs), ...allArgs(rhs)].flatMap((k) => k.match(/[A-Za-zθ]/g) ?? []))]
   const known: Record<string, number> = { x: 1, A: 1, B: 0.3, θ: 1, t: 1 }
   const spare = [0.3, 0.6, 0.8, 1.2, 1.5]
   const first: Record<string, number> = {}
   let k = 0
   for (const n of names) first[n] = known[n] ?? (k++ === 0 ? 1 : spare[(k - 2) % spare.length])
-  const candidates = [first, ...[0.5, 0.7, 1.3].map((f) => Object.fromEntries(names.map((n) => [n, Math.round(first[n] * f * 100) / 100])))]
-  const differs = (at: Record<string, number>): boolean => {
-    const a = evaluate(lhs, at)
-    const b = evaluate(rhs, at)
-    return Number.isFinite(a) && Number.isFinite(b) && fmt(a) !== fmt(b)
+  // Wider points too: tan(x/100) and sin(x/100) read 0.01 and 0.01 at every point near 1 (GLM #11).
+  const candidates = [first, ...[0.5, 0.7, 1.3, 2, 5, 10].map((f) => Object.fromEntries(names.map((n) => [n, Math.round(first[n] * f * 100) / 100])))]
+  const sides = (at: Record<string, number>): [number, number] => [evaluate(lhs, at), evaluate(rhs, at)]
+  const dp =
+    (p: number) =>
+    (v: number): string =>
+      fmtPrecise(v, { decimals: p, precisionMode: 'dp' })
+  // A real difference at p places, not two values either side of a rounding edge: sin 0.0005 and
+  // tan 0.0005 differ by 4×10⁻¹¹, yet round to 0 and 0.001, which says sin is 0 (GLM #11).
+  const shows = (at: Record<string, number>, p: number): boolean => {
+    const [a, b] = sides(at)
+    return Number.isFinite(a) && Number.isFinite(b) && dp(p)(a) !== dp(p)(b) && Math.abs(a - b) >= 0.5 * 10 ** -p
   }
-  const at = candidates.find(differs) ?? first
-  const where = names.map((n) => `${n} = ${fmt(at[n])} rad`).join(', ')
-  return `Those two sides are not equal, so there is nothing to prove: at ${where}, ${lhsText} = ${fmt(evaluate(lhs, at))} but ${rhsText} = ${fmt(evaluate(rhs, at))}.`
+  // No letters, no point: "at , cos π = −1" had nothing to say where (GLM #26).
+  const where = (at: Record<string, number>): string => (names.length ? ` at ${names.map((n) => `${n} = ${dp(places)(at[n])} rad`).join(', ')},` : '')
+  const said = (at: Record<string, number>, p: number, lead: string): string => {
+    const [a, b] = sides(at)
+    return `${lead}:${where(at)} ${lhsText} = ${dp(p)(a)} but ${rhsText} = ${dp(p)(b)}.`
+  }
+  const NOT_EQUAL = 'Those two sides are not equal, so there is nothing to prove'
+  const at = candidates.find((q) => shows(q, places))
+  if (at) return said(at, places, NOT_EQUAL)
+  // The sides differ only past the places shown: two equal-looking numbers under "not equal"
+  // contradict the sentence, so the point where they differ most is shown to as many places as it
+  // takes to see the difference, and the sentence says how far out that is.
+  const gap = (q: Record<string, number>): number => {
+    const [a, b] = sides(q)
+    return Number.isFinite(a) && Number.isFinite(b) ? Math.abs(a - b) : -1
+  }
+  const widest = candidates.reduce((best, q) => (gap(q) > gap(best) ? q : best))
+  if (gap(widest) < 0) return said(first, places, NOT_EQUAL)
+  for (let p = places + 1; p <= 12; p++) {
+    if (shows(widest, p)) return said(widest, p, `${NOT_EQUAL}, though they differ only from the ${ordinal(p)} decimal place`)
+  }
+  return `${NOT_EQUAL}, though they differ only beyond the 12th decimal place.`
 }
+
+const ordinal = (n: number): string => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`
 
 // ---------------------------------------------------------------------------------------------
 // The Working, for the Working panel (job "trigidentity")
 // ---------------------------------------------------------------------------------------------
 
-
-const three = (v: number): string => fmtPrecise(v, { decimals: 3, precisionMode: 'dp' })
 
 /**
  * True when the text is a trig identity: it reads as one and its two sides agree. Auto uses this
@@ -1744,7 +1771,7 @@ export function trigWorking(text: string, opts: ProveOptions = {}): Working {
     proof = { refused: agrees(id.lhs, id.rhs, FIVE_POINTS) ? 'not-found' : 'not-equal' }
   }
   if ('refused' in proof) {
-    if (proof.refused === 'not-equal') return failed(title, input, notEqualSentence(lhs.text, rhs.text, id.lhs, id.rhs, three))
+    if (proof.refused === 'not-equal') return failed(title, input, notEqualSentence(lhs.text, rhs.text, id.lhs, id.rhs))
     // The two sides are equal (checked at five points) but no chain of at most six school steps
     // was found: the answer still comes first — it is true — and the reason is given.
     return {

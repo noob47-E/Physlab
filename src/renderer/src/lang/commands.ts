@@ -1079,7 +1079,11 @@ async function tryCas(input: string): Promise<boolean> {
         : GREEK.has(byLetter)
           ? `\\${byLetter}`
           : 'x'
-  const label = casOp === 'diff' ? `\\frac{d}{d${letter}}\\left(${args[0]}\\right)` : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int ') + `${args[0]}\\,d${letter}` : ''
+  // diff(x^3, x, 2) = 6x is the second derivative, so it reads d²/dx², not d/dx(x³) = 6x, which is
+  // false (GLM #24). An order the label cannot write truthfully (0, or not a whole number) gets none.
+  const order = casOp === 'diff' && args[2] ? Number(args[2]) : 1
+  const dBy = order === 1 ? `\\frac{d}{d${letter}}` : Number.isInteger(order) && order >= 2 ? `\\frac{d^{${order}}}{d${letter}^{${order}}}` : ''
+  const label = casOp === 'diff' ? (dBy ? `${dBy}\\left(${args[0]}\\right)` : '') : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int ') + `${args[0]}\\,d${letter}` : ''
   const isFunctionResult = (casOp === 'diff' || (casOp === 'integrate' && args.length < 3)) && /x/.test(r.text)
   const unitNote = calculusUnitNote(casOp, args[0] ?? '', deg)
   // An indefinite integral carries its + C, as its working and every textbook do; SymPy leaves it

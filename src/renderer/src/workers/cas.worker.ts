@@ -18,7 +18,13 @@ TRANSFORMS = standard_transformations + (implicit_multiplication_application, co
 x, y, z, t, a, b, c, k, n, m = sp.symbols('x y z t a b c k n m')
 theta = sp.Symbol('theta')
 
-def _names(deg):
+# The Greek letters Working lets a student name for Differentiate and Integrate (store.ts's
+# WHOLE_NAMES; lambda arrives spelt lamda). SymPy's parser would otherwise read beta and gamma as
+# its beta and gamma functions, so d/dbeta(beta^3) was refused (GLM #25). Only the two step ops ask
+# for them: elsewhere the names keep whatever meaning they had.
+GREEK_LETTERS = ('alpha', 'beta', 'gamma', 'phi', 'omega', 'lamda', 'mu', 'tau', 'sigma', 'rho', 'psi')
+
+def _names(deg, greek=False):
     d = {
         'x': x, 'y': y, 'z': z, 't': t, 'a': a, 'b': b, 'c': c, 'k': k, 'n': n, 'm': m, 'theta': theta,
         'pi': sp.pi, 'e': sp.E, 'E': sp.E, 'i': sp.I, 'oo': sp.oo, 'inf': sp.oo,
@@ -26,6 +32,8 @@ def _names(deg):
         'sqrt': sp.sqrt, 'cbrt': lambda v: sp.root(v, 3), 'abs': sp.Abs, 'Abs': sp.Abs,
         'nPr': lambda p, q: sp.factorial(p) / sp.factorial(p - q), 'nCr': sp.binomial,
     }
+    if greek:
+        d.update({g: sp.Symbol(g) for g in GREEK_LETTERS})
     if deg:
         r = sp.pi / 180
         d.update({
@@ -34,9 +42,9 @@ def _names(deg):
         })
     return d
 
-def P(s, deg=False):
+def P(s, deg=False, greek=False):
     s = s.replace('π', 'pi').replace('√', 'sqrt').replace('×', '*').replace('÷', '/').replace('−', '-')
-    return parse_expr(s, local_dict=_names(deg), transformations=TRANSFORMS, evaluate=True)
+    return parse_expr(s, local_dict=_names(deg, greek), transformations=TRANSFORMS, evaluate=True)
 
 def _num(v):
     try:
@@ -252,7 +260,7 @@ def _linfold(e, var):
 def integral_steps_op(p):
     var = sp.Symbol(p.get('var', 'x'))
     # Worked in radians always: in degrees every line of calculus drags a π/180 along (decision 2).
-    f = P(p['expr'], False)
+    f = P(p['expr'], False, greek=True)
     tree = None
     try:
         tree = _integral_steps(f, var)
@@ -410,9 +418,13 @@ def _dnode(f, v, U):
 
 def diff_steps_op(p):
     var = sp.Symbol(p.get('var', 'x'))
-    f = P(p['expr'], False)
-    used = {s.name for s in f.free_symbols}
-    letters = [L for L in ('u', 'w', 'v', 's', 'p', 'q', 'r') if L not in used]
+    f = P(p['expr'], False, greek=True)
+    used = {s.name for s in f.free_symbols} | {str(var)}
+    # u*w*v*s*p*q*r*x uses all seven chain letters: letters[0] of an empty list was a false "could
+    # not read that" (GLM #22). More single letters follow (never f or g, the product rule's, nor
+    # d, e, i, l, o, y, which read as something else), then u1, u2, ... so the list is never empty.
+    pool = ('u', 'w', 'v', 's', 'p', 'q', 'r', 'h', 'k', 'm', 'n', 'a', 'b', 'c', 't', 'z', 'j')
+    letters = [L for L in pool + tuple('u%d' % i for i in range(1, 10)) if L not in used]
     U = {'free': letters, 'by': {}}
     truth = sp.diff(f, var)
     out = {'var': str(var), 'expr': _ex(f), 'u': letters[0], 'letters': letters, 'deg_ignored': bool(p.get('deg', False))}
