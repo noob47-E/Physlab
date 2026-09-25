@@ -106,6 +106,8 @@ export function Interaction() {
   useEffect(() => {
     const host = overlay.canvasHost
     if (!host) return
+    // The camera rig's button map this listener last changed, handed back when it is removed.
+    let leftButtons: LeftButton | null = null
 
     const local = (e: { clientX: number; clientY: number }) => {
       const r = host.getBoundingClientRect()
@@ -289,10 +291,13 @@ export function Interaction() {
       if (s.viewMode === '3d') {
         const act = drag3D({ button: 0, tool, onObject: !!hit, spaceHeld: isSpaceHeld(), turnMode: useTurnMode.getState().on })
         if (act !== 'tool') {
-          const c = ctxRef.current.controls as unknown as { enabled: boolean; mouseButtons?: { LEFT: THREE.MOUSE } } | null
+          const c = ctxRef.current.controls as unknown as { enabled: boolean; mouseButtons?: LeftButton } | null
           if (c) {
             c.enabled = true
-            if (c.mouseButtons) c.mouseButtons.LEFT = act === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+            if (c.mouseButtons) {
+              setLeftDrag(c.mouseButtons, act)
+              leftButtons = c.mouseButtons
+            }
           }
           if (tool === 'select' && !hit && !e.shiftKey) s.select([])
           markSpaceUsed()
@@ -792,6 +797,7 @@ export function Interaction() {
     window.addEventListener('pointerup', onUp)
     return () => {
       host.removeEventListener('pointerdown', onDown, { capture: true })
+      releaseLeftDrag(leftButtons)
       host.removeEventListener('contextmenu', onContextMenu, { capture: true })
       host.removeEventListener('dblclick', onDoubleClick)
       host.removeEventListener('pointerleave', onLeave)
@@ -801,6 +807,25 @@ export function Interaction() {
   }, [])
 
   return <ToolPreview />
+}
+
+/** The part of OrbitControls' button map a left press changes. */
+type LeftButton = { LEFT: THREE.MOUSE }
+
+/** Sets what a left drag does to the 3-D camera for this press, as drag3D decided it. */
+export function setLeftDrag(buttons: LeftButton, act: 'turn' | 'pan'): void {
+  buttons.LEFT = act === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+}
+
+/**
+ * Hands the left button back as the camera rig made it: a turn. The rig keeps one button map for
+ * its whole life and OrbitControls reads it at every press, while this listener, which sets the
+ * button per press, is not mounted in the Sandbox. A Space-held pan in the 3-D drawing followed by
+ * a switch to the Sandbox used to leave its left drag panning, against its own rule that a left
+ * drag on empty space turns.
+ */
+export function releaseLeftDrag(buttons: LeftButton | null): void {
+  if (buttons) buttons.LEFT = THREE.MOUSE.ROTATE
 }
 
 function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, out: Map<ObjId, V3>, seen = new Set<ObjId>()) {

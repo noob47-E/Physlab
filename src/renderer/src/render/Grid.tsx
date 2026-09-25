@@ -9,9 +9,10 @@ import { useGpuInfo } from './renderer'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
-import { axisLabels, axisTitle, ringLabels, rulerLabels } from './gridLabels'
+import { axisLabels, axisTitle, ringLabels, rulerLabels, type ScreenOf } from './gridLabels'
 import type { V3 } from '../math/vec'
 import type { GridStyle } from '../core/types'
+import type { MeasureSettings } from '../math/format'
 
 // Grid colours come from the stylesheet so they follow the light/dark theme.
 const MINOR = () => themeColor('--grid-minor')
@@ -287,6 +288,23 @@ export function Grid2D() {
   )
 }
 
+/**
+ * The numbers along the 3-D floor's three axes, with where each is written on screen. Each axis is
+ * numbered for its own smallest size on screen, so under perspective its far labels keep 60 px
+ * apart too; an axis seen end-on shows none rather than a pile on one spot. One 0 marks the origin
+ * for all three. Exported for tests.
+ */
+export function floorLabels(screenOf: ScreenOf, view: { width: number; height: number }, half: number, step: number, settings: MeasureSettings): { text: string; x: number; y: number }[] {
+  const out: { text: string; x: number; y: number }[] = []
+  const axes: V3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  for (const dir of axes) for (const { text, x, y } of rulerLabels(dir, half, step, screenOf, view, settings)) out.push({ text, x, y })
+  // The axis labels leave 0 out because the origin carries one 0 for every axis; the 2-D grid
+  // writes it, and the 3-D floor used to read "−4, 4" along each axis with nothing where they cross.
+  const o = screenOf([0, 0, 0])
+  if (o.visible && o.x >= 0 && o.x <= view.width && o.y >= 0 && o.y <= view.height) out.push({ text: '0', x: o.x, y: o.y })
+  return out
+}
+
 /** Floor grid on the xy-plane with coloured x, y, z axes (z is up). */
 export function Grid3D() {
   const { camera, size, invalidate } = useThree()
@@ -316,13 +334,7 @@ export function Grid3D() {
       put(axisTitle('x', settings), [half * 1.08, 0, 0], AXIS_COLORS.x)
       put(axisTitle('y', settings), [0, half * 1.08, 0], AXIS_COLORS.y)
       put(axisTitle('z', settings), [0, 0, half * 1.08], AXIS_COLORS.z)
-      // Each axis is numbered for its own smallest size on screen, so under perspective its far
-      // labels keep 60 px apart too; an axis seen end-on shows none rather than a pile on one spot.
-      const screenOf = (p: V3) => toScreen(camera, size, p)
-      const axes: V3[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-      for (const dir of axes) {
-        for (const { text, x, y } of rulerLabels(dir, half, step, screenOf, size, settings)) ticks.place(text, x, y, 'center')
-      }
+      for (const { text, x, y } of floorLabels((p) => toScreen(camera, size, p), size, half, step, settings)) ticks.place(text, x, y, 'center')
     }
     ticks.end()
   })

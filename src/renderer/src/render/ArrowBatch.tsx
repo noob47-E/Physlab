@@ -4,9 +4,10 @@
  * Each `<Arrow>` used to be two meshes, a material and a useFrame of its own: 500 vectors cost
  * 1005 draw calls and 3.2–4.5 ms of JavaScript a frame on the spike's RTX 3060, and roughly ten
  * times that on a weak laptop. From ARROW_BATCH_MIN 2-D arrows on, an `<Arrow>` instead hands its
- * props to the registry here, and one `<ArrowBatch>` draws them all: one InstancedMesh of shafts
- * and one of heads per render order, one shared material with a colour per instance, and ONE
- * useFrame that writes every matrix with `placeArrow`'s own maths (render/arrowBatchMath.ts).
+ * props to the registry here, and one `<ArrowBatch>` draws them all: one InstancedMesh per render
+ * order holding each arrow's shaft and head as two instances (so arrows still paint over each
+ * other in the order they would have alone), one shared material with a colour per instance, and
+ * ONE useFrame that writes every matrix with `placeArrow`'s own maths (render/arrowBatchMath.ts).
  *
  * Colours stay whatever the caller resolved (VEC's theme tokens); the batch never reads a colour
  * of its own, so a theme switch reaches it as new props like any other arrow. Picking is
@@ -18,7 +19,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { create } from 'zustand'
 import { worldPerPixel } from './cameraUtils'
-import { arrowRGB, batchDecision, countByOrder, slabCapacity, writeBatch, type ArrowSlab, type BatchEntry } from './arrowBatchMath'
+import { abs, attribute, float, instanceColor, instanceIndex, positionLocal } from 'three/tsl'
+import { arrowRGB, batchDecision, countByOrder, newSlab, slabCapacity, writeBatch, type ArrowSlab, type BatchEntry } from './arrowBatchMath'
 import type { V3 } from '../math/vec'
 
 interface BatchState {
@@ -116,14 +118,52 @@ export function BatchedArrow({ tail, comp, color, thick = 1.7, renderOrder = 12,
   return null
 }
 
-// The same geometry the per-arrow path draws (render/ObjectViews.tsx): a unit 14-sided cylinder
-// along +y for the shaft, and a flat triangle with its base on the origin and apex at +y.
-const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 14)
-const flatHeadGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-1, 0, 0, 1, 0, 0, 0, 1, 0], 3))
+// The same geometry the per-arrow path draws (render/ObjectViews.tsx) — a unit 14-sided cylinder
+// along +y for the shaft, and a flat triangle with its base on the origin and apex at +y — merged
+// into one, each vertex marked with its part: 0 the shaft, 1 the head.
+//
+// Each arrow is two instances of it, its shaft at 2i and its head at 2i + 1, and the material
+// folds away the part an instance does not draw (arrowBatchMaterial). One mesh per render order
+// therefore paints arrow after arrow, each shaft then its head, exactly as the per-arrow meshes
+// did. A mesh of all the shafts and another of all the heads painted every shaft first, so where
+// two arrows crossed the earlier arrow's head lay over the later one's shaft, the other way round
+// from the per-arrow picture a 64th arrow switches away from.
+function arrowPartsGeometry(): THREE.BufferGeometry {
+  const cyl = new THREE.CylinderGeometry(1, 1, 1, 14)
+  const shaft = cyl.getAttribute('position').array
+  const n = shaft.length / 3
+  const position = new Float32Array((n + 3) * 3)
+  position.set(shaft)
+  position.set([-1, 0, 0, 1, 0, 0, 0, 1, 0], n * 3)
+  const part = new Float32Array(n + 3).fill(1, n)
+  const index = [...(cyl.getIndex()?.array ?? []), n, n + 1, n + 2]
+  cyl.dispose()
+  return new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute(position, 3))
+    .setAttribute('arrowPart', new THREE.Float32BufferAttribute(part, 1))
+    .setIndex(index)
+}
+const partsGeo = arrowPartsGeometry()
+
+/**
+ * The batch's one material: white, so each instance's colour comes through unchanged; double-sided
+ * for the same reason as the per-arrow material (the quaternion that turns a flat head can flip it
+ * over). An instance keeps the vertices of its own part (shaft on even instances, head on odd) and
+ * sends the other part's to one point, where its triangles have no area and draw nothing.
+ */
+export function arrowBatchMaterial(): THREE.MeshBasicNodeMaterial {
+  const mat = new THREE.MeshBasicNodeMaterial({ depthTest: false, depthWrite: false, side: THREE.DoubleSide })
+  const drawn = float(instanceIndex).mod(2)
+  mat.positionNode = positionLocal.mul(float(1).sub(abs(attribute('arrowPart', 'float').sub(drawn))))
+  // A NodeMaterial, unlike MeshBasicMaterial, does not multiply by instanceColor on its own:
+  // without this the whole batch would draw in the material's flat (white) colour.
+  mat.colorNode = instanceColor
+  return mat
+}
 
 interface OrderMeshes {
-  shaft: THREE.InstancedMesh
-  head: THREE.InstancedMesh
+  mesh: THREE.InstancedMesh
+  /** Where writeBatch puts each arrow's two matrices and colour, before they are interleaved. */
   slab: ArrowSlab
 }
 
@@ -132,41 +172,83 @@ function noRaycast(): void {
 }
 
 function buildOrder(order: number, capacity: number, mat: THREE.Material): OrderMeshes {
-  const shaft = new THREE.InstancedMesh(cylGeo, mat, capacity)
-  const head = new THREE.InstancedMesh(flatHeadGeo, mat, capacity)
-  const color = new Float32Array(capacity * 3)
-  for (const m of [shaft, head]) {
-    // The colour attribute must exist before the first draw: the WebGPU backend builds a
-    // material's program once, and one built without instance colours never gains them.
-    m.instanceColor = new THREE.InstancedBufferAttribute(color, 3)
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    m.instanceColor.setUsage(THREE.DynamicDrawUsage)
-    m.renderOrder = order
-    // Instances move every frame; a bounding sphere computed once would cull arrows still on screen.
-    m.frustumCulled = false
-    m.raycast = noRaycast
-    m.userData.arrowBatch = true
-    m.count = 0
-    m.visible = false
-  }
-  return { shaft, head, slab: { shaft: shaft.instanceMatrix.array as Float32Array, head: head.instanceMatrix.array as Float32Array, color, capacity, count: 0 } }
+  const mesh = new THREE.InstancedMesh(partsGeo, mat, capacity * 2)
+  // The colour attribute must exist before the first draw: the WebGPU backend builds a
+  // material's program once, and one built without instance colours never gains them.
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2 * 3), 3)
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+  mesh.instanceColor.setUsage(THREE.DynamicDrawUsage)
+  mesh.renderOrder = order
+  // Instances move every frame; a bounding sphere computed once would cull arrows still on screen.
+  mesh.frustumCulled = false
+  mesh.raycast = noRaycast
+  mesh.userData.arrowBatch = true
+  mesh.count = 0
+  mesh.visible = false
+  return { mesh, slab: newSlab(capacity) }
 }
 
 function dropOrder(group: THREE.Group, m: OrderMeshes): void {
-  group.remove(m.shaft, m.head)
-  // The geometries are shared module-wide; only the instance buffers go.
-  m.shaft.dispose()
-  m.head.dispose()
+  group.remove(m.mesh)
+  // The geometry is shared module-wide; only the instance buffers go.
+  m.mesh.dispose()
+}
+
+/** Copies each arrow's shaft and head into instances 2i and 2i + 1, both in the arrow's colour. */
+function interleave(slab: ArrowSlab, mesh: THREE.InstancedMesh): void {
+  const matrices = mesh.instanceMatrix.array as Float32Array
+  const colours = mesh.instanceColor?.array as Float32Array
+  for (let i = 0; i < slab.count; i++) {
+    matrices.set(slab.shaft.subarray(i * 16, i * 16 + 16), i * 32)
+    matrices.set(slab.head.subarray(i * 16, i * 16 + 16), i * 32 + 16)
+    const rgb = slab.color.subarray(i * 3, i * 3 + 3)
+    colours.set(rgb, i * 6)
+    colours.set(rgb, i * 6 + 3)
+  }
+}
+
+/** The batch's meshes, rebuilt inside frames and never during render. */
+export interface BatchLive {
+  orders: Map<number, OrderMeshes>
+  slabs: Map<number, ArrowSlab>
+  need: Map<number, number>
+}
+
+/**
+ * One frame of the batch: grows the mesh of each render order to fit, writes every arrow's
+ * matrices and colour, and shows only what is in use. Exported for tests, which read back the
+ * order the arrows paint in.
+ */
+export function syncBatch(g: THREE.Group, live: BatchLive, entries: ReadonlyMap<string, BatchEntry>, wppAt: (p: V3) => number, mat: THREE.Material): void {
+  const { orders, slabs, need } = live
+  countByOrder(entries.values(), need)
+  for (const [order, n] of need) {
+    const have = orders.get(order)
+    if (have && have.slab.capacity >= n) continue
+    if (have) dropOrder(g, have)
+    const built = buildOrder(order, slabCapacity(n), mat)
+    orders.set(order, built)
+    slabs.set(order, built.slab)
+    g.add(built.mesh)
+  }
+  writeBatch(entries.values(), wppAt, slabs)
+  for (const { mesh, slab } of orders.values()) {
+    const n = slab.count
+    mesh.count = 2 * n
+    mesh.visible = n > 0
+    if (n === 0) continue
+    interleave(slab, mesh)
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }
 }
 
 /** Draws every batched arrow. Mounted once beside the scene's objects (render/Viewport.tsx). */
 export function ArrowBatch() {
   const group = useRef<THREE.Group>(null)
-  // White, so each instance's colour comes through unchanged; double-sided for the same reason as
-  // the per-arrow material: the quaternion that turns a flat head can flip it over.
-  const mat = useMemo(() => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, side: THREE.DoubleSide }), [])
+  const mat = useMemo(arrowBatchMaterial, [])
   // Rebuilt inside frames, never during render, so they live in a ref.
-  const live = useRef({ orders: new Map<number, OrderMeshes>(), slabs: new Map<number, ArrowSlab>(), need: new Map<number, number>() })
+  const live = useRef<BatchLive>({ orders: new Map(), slabs: new Map(), need: new Map() })
 
   useEffect(() => {
     useBatchState.setState((s) => ({ hosts: s.hosts + 1 }))
@@ -184,29 +266,7 @@ export function ArrowBatch() {
   useFrame(({ camera, size }) => {
     const g = group.current
     if (!g) return
-    const { orders, slabs, need } = live.current
-    countByOrder(registry.values(), need)
-    for (const [order, n] of need) {
-      const have = orders.get(order)
-      if (have && have.slab.capacity >= n) continue
-      if (have) dropOrder(g, have)
-      const built = buildOrder(order, slabCapacity(n), mat)
-      orders.set(order, built)
-      slabs.set(order, built.slab)
-      g.add(built.shaft, built.head)
-    }
-    writeBatch(registry.values(), (p) => worldPerPixel(camera, size, p), slabs)
-    for (const m of orders.values()) {
-      const n = m.slab.count
-      m.shaft.count = m.head.count = n
-      m.shaft.visible = m.head.visible = n > 0
-      if (n === 0) continue
-      m.shaft.instanceMatrix.needsUpdate = true
-      m.head.instanceMatrix.needsUpdate = true
-      // Both meshes share one colour array, but each attribute uploads its own copy.
-      if (m.shaft.instanceColor) m.shaft.instanceColor.needsUpdate = true
-      if (m.head.instanceColor) m.head.instanceColor.needsUpdate = true
-    }
+    syncBatch(g, live.current, registry, (p) => worldPerPixel(camera, size, p), mat)
   })
 
   return <group ref={group} />

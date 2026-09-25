@@ -14,9 +14,12 @@ export const clockText = (t: number, settings: SceneSettings): string => `t = ${
 /**
  * Times whose text is the widest a run shows before 1000 s: one frame (with significant figures a
  * small time has the most digits), runs of eights (the longest integer part at each size) and a
- * hair under 1000 s, which rounds up to "1000" with no decimal places.
+ * hair under 1000 s, which rounds up to "1000" with no decimal places. The eights run to the last
+ * digit a double holds: the menu offers up to 12 decimal places, and "888.888888" stopped at six,
+ * so at 8 places the room kept was 17 characters while 100.01666667 s needs 18, and the clock's
+ * cell grew and shrank frame by frame once a run passed 100 s.
  */
-const WIDEST_TIMES = [1 / 60, 8.88888888, 88.8888888, 888.888888, 999.9999999]
+const WIDEST_TIMES = [1 / 60, 8.888888888888888, 88.88888888888889, 888.8888888888889, 999.9999999]
 
 /**
  * The text the clock keeps room for: the widest any time under 1000 s can have at these settings,
