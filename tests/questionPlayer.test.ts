@@ -27,7 +27,7 @@ import { useSandbox } from '../src/renderer/src/sim/store'
 import type { PQMotion, PQQuestion } from '../src/renderer/src/questions/pqjson'
 import { motionAt, motionPieces, motionTable } from '../src/renderer/src/questions/motion'
 import { bundledSets, loadBundled, loadTeacherFile } from '../src/renderer/src/questions/bank'
-import { serializePQFile } from '../src/renderer/src/questions/pqjson'
+import { isFormat1Part, serializePQFile } from '../src/renderer/src/questions/pqjson'
 import { fromExam, toExam } from '../src/renderer/src/questions/numbas'
 import { UNITS } from '../src/renderer/src/questions/units'
 import { graphBox } from '../src/renderer/src/core/visualize'
@@ -486,7 +486,9 @@ describe('the bundled sample set', () => {
             expect(new Set(p.choices!.map((c) => c.text)).size).toBe(p.choices!.length)
           }
           // Every right answer is marked right the way the panel marks it: through checkPlayedPart.
-          for (const p of played.parts) {
+          // A format-2 part (a function, roots, a stated uncertainty …) is typed its own way and is
+          // marked by its own bank's test (universityBank.test.ts); rightAnswer types format-1 answers.
+          for (const p of played.parts.filter((x) => isFormat1Part(x.part))) {
             expect(isCorrect(checkPlayedPart(p, rightAnswer(p, played), played, SETTINGS)), `${q.id} ${seed} ${p.prompt}`).toBe(true)
           }
           // No "{" chip survives into what the student reads.
