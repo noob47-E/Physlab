@@ -617,7 +617,7 @@ describe('the new kinds go out as the nearest thing Numbas has', () => {
       { type: 'matrix', prompt: 'M', answer: [['F', '0'], ['0', 'F']], tolerance: { kind: 'relative', value: 0.05 }, marks: 1, showIf: 'F > 5' }
     ])))
     const [stated, matrix] = examParts(out)
-    expect(stated).toMatchObject({ type: 'numberentry', minValue: '(0.559146) * (1 - 0.02)', maxValue: '(0.559146) * (1 + 0.02)' })
+    expect(stated).toMatchObject({ type: 'numberentry', minValue: '(0.559146) - abs(0.559146) * (0.02)', maxValue: '(0.559146) + abs(0.559146) * (0.02)' })
     expect(matrix).toMatchObject({ type: 'matrix', correctAnswer: 'matrix([F, 0], [0, F])', tolerance: 0 })
     const d = description(out)
     expect(d).toContain("PhysLab marks part 1 against the student's own stated uncertainty (the Eₙ test); Numbas checks it within 2 %.")

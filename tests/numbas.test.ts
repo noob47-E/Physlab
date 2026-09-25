@@ -680,7 +680,7 @@ describe('toExam', () => {
     expect(q.advice).toBe('<p>Write down v = u + at with the deceleration negative.</p><p>\\[v = \\var{u} - \\var{a} \\times \\var{t}\\]</p><p>So the final speed is {vend}.</p>')
 
     const [n1, n2, e, c1, c2] = q.parts
-    expect(n1).toMatchObject({ type: 'numberentry', marks: 2, minValue: '(vend) * (1 - 0.02)', maxValue: '(vend) * (1 + 0.02)', precisionType: 'none' })
+    expect(n1).toMatchObject({ type: 'numberentry', marks: 2, minValue: '(vend) - abs(vend) * (0.02)', maxValue: '(vend) + abs(vend) * (0.02)', precisionType: 'none' })
     expect(n1.prompt).toBe('<p>What is its speed after {t}?</p><p>Give your answer in m/s.</p>')
     expect(n2).toMatchObject({ minValue: '(u * t - a * t ^ 2 / 2) - 0.5', maxValue: '(u * t - a * t ^ 2 / 2) + 0.5' })
     expect(e).toMatchObject({ type: 'jme', answer: 'u - a * s', vsetRange: [0, 5], checkingType: 'absdiff', marks: 1 })
@@ -712,6 +712,26 @@ describe('toExam', () => {
     const nobody = toExam({ ...SET, questions: [{ ...q, imported: undefined, license: { id: 'CC0 1.0', holder: '' } }] })
     expect(JSON.parse(nobody.slice(nobody.indexOf('\n') + 1)).question_groups[0].questions[0].contributors).toEqual([])
     expect(out.metadata.description).toContain('PhysLab makes the choices for part 1 from the right answer vend with the rules sign, g-10.')
+  })
+
+  it('orders a negative answer\'s relative bounds so a plain Numbas install can mark it', () => {
+    // a*(1-t)/a*(1+t) flips for a negative a (e.g. -10 * 0.95 = -9.5 > -10 * 1.05 = -10.5), leaving
+    // Numbas's between-check with no satisfying value; the bounds must stay ordered either way.
+    const q: PQQuestion = {
+      ...SET.questions[0],
+      parts: [{ type: 'number', prompt: 'v?', answer: '-10', unit: 'm/s', tolerance: { kind: 'relative', value: 0.05 }, marks: 1 }]
+    }
+    const text = toExam({ ...SET, questions: [q] })
+    const exam = JSON.parse(text.slice(text.indexOf('\n') + 1))
+    const part = exam.question_groups[0].questions[0].parts[0]
+    expect(part.minValue).toBe('(-10) - abs(-10) * (0.05)')
+    expect(part.maxValue).toBe('(-10) + abs(-10) * (0.05)')
+    expect(math.evaluate(part.minValue)).toBeLessThan(math.evaluate(part.maxValue))
+    expect(math.evaluate(part.minValue)).toBeCloseTo(-10.5, 12)
+    expect(math.evaluate(part.maxValue)).toBeCloseTo(-9.5, 12)
+    // Reading the exam back recovers the same answer and tolerance.
+    const back = fromExam(text).file.questions[0].parts[0]
+    expect(back).toMatchObject({ answer: '-10', tolerance: { kind: 'relative', value: 0.05 } })
   })
 
   it('escapes HTML in text and maths, so a < in a prompt survives the trip', () => {

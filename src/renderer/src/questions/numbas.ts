@@ -746,9 +746,16 @@ function constantValue(expr: string): number | null {
   }
 }
 
-/** The canonical forms `toExam` writes: `(X) * (1 - t)` / `(X) * (1 + t)` and `(X) - t` / `(X) + t`. */
-const REL_MIN = /^\((.*)\) \* \(1 - ([0-9.eE+-]+)\)$/
-const REL_MAX = /^\((.*)\) \* \(1 \+ ([0-9.eE+-]+)\)$/
+/** The canonical forms `toExam` writes now: `(X) - abs(X) * (t)` / `(X) + abs(X) * (t)`. */
+const REL_MIN = /^\((.*)\) - abs\(\1\) \* \(([0-9.eE+-]+)\)$/
+const REL_MAX = /^\((.*)\) \+ abs\(\1\) \* \(([0-9.eE+-]+)\)$/
+/**
+ * The form older PhysLab exports wrote: `(X) * (1 - t)` / `(X) * (1 + t)`. It flips its own bounds
+ * for a negative X, so `toExam` no longer writes it, but a file saved before this fix still reads
+ * back correctly.
+ */
+const REL_MIN_OLD = /^\((.*)\) \* \(1 - ([0-9.eE+-]+)\)$/
+const REL_MAX_OLD = /^\((.*)\) \* \(1 \+ ([0-9.eE+-]+)\)$/
 const ABS_MIN = /^\((.*)\) - ([0-9.eE+-]+)$/
 const ABS_MAX = /^\((.*)\) \+ ([0-9.eE+-]+)$/
 
@@ -767,7 +774,8 @@ interface NumberAnswer {
  * simplifies to a number; when neither does, 2 % is assumed and the report says so.
  */
 function readNumberAnswer(minText: string, maxText: string, precisionType: string, precision: number | null): NumberAnswer {
-  const rel = [REL_MIN.exec(minText), REL_MAX.exec(maxText)]
+  let rel = [REL_MIN.exec(minText), REL_MAX.exec(maxText)]
+  if (!(rel[0] && rel[1])) rel = [REL_MIN_OLD.exec(minText), REL_MAX_OLD.exec(maxText)]
   if (rel[0] && rel[1] && rel[0][1] === rel[1][1] && rel[0][2] === rel[1][2]) {
     return { answer: jmeToMath(rel[0][1]), tolerance: { kind: 'relative', value: Number(rel[0][2]) } }
   }
@@ -1558,8 +1566,15 @@ const unitLine = (unit: UnitId): string => (unit === 'none' ? '' : `<p>Give your
 function numberEntry(answerJme: string, band: BandTolerance, marks: number, prompt: string, spread?: string): Obj {
   const a = `(${answerJme})`
   const t = jmeNumber(band.value)
+  // A negative answer makes a*(1-t) the *larger* bound, so Numbas's between-check (which needs
+  // minValue <= maxValue) has no satisfying value and marks every answer wrong. Writing the bounds
+  // as an offset from the answer, sized by |answer|, keeps them ordered for either sign.
   const [minValue, maxValue] =
-    spread !== undefined ? [`${a} - ${spread}`, `${a} + ${spread}`] : band.kind === 'relative' ? [`${a} * (1 - ${t})`, `${a} * (1 + ${t})`] : [`${a} - ${t}`, `${a} + ${t}`]
+    spread !== undefined
+      ? [`${a} - ${spread}`, `${a} + ${spread}`]
+      : band.kind === 'relative'
+        ? [`${a} - abs(${answerJme}) * (${t})`, `${a} + abs(${answerJme}) * (${t})`]
+        : [`${a} - ${t}`, `${a} + ${t}`]
   return {
     type: 'numberentry',
     ...PART_DEFAULTS,
