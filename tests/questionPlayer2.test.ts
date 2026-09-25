@@ -1,6 +1,6 @@
 // Playing the new kinds in Practice (QE4): a format-2 question read from its own file and played the
 // way the panel plays it — every kind marked through checkPlayedPart and markPlayed, a part hidden
-// by its showIf neither shown nor counted, a proof and a Lego part shown but never counted, error
+// by its showIf neither shown nor counted, a proof shown but never counted, a Lego part counted, error
 // carried forward from the student's own earlier answers, and the depth ladder's label, filter and
 // "Go deeper" link. Every question here goes through serializePQFile and parsePQFile first, so what
 // is tested is what a teacher's file actually plays.
@@ -49,7 +49,7 @@ function throughFile(...qs: PQQuestion[]): PQQuestion[] {
  * F = 10 N at θ = 30°: the vector (8.66i + 5j) N; x² + x − 6 = 0 has roots 2 and −3; the inverse of
  * [[2, 1], [1, 3]] is [[0.6, −0.2], [−0.2, 0.4]]; E₀ = 0.559146 ± 0.000001 (Eₙ); y″ + y = 0 with
  * y(0) = 0, y′(0) = 1 is solved by sin x; F cos θ = 8.66 N; and a listed choice, a proof and a
- * Lego part, which are shown but never counted.
+ * Lego part filled by the triangle itself; the proof is shown but never counted.
  */
 const EVERY: PQQuestion = {
   id: 'every-kind',
@@ -128,6 +128,9 @@ const RIGHT: Record<string, PartAnswer> = {
   p4: 'y = sin(x)',
   p5: '8.66 N',
   p6: [0],
+  // What Check my shape hands in: one row per shape on the drawing, its corners' x and y in turn —
+  // here the pieces put back into the triangle and fused.
+  p8: [['0', '0', '4', '0', '0', '3']],
   p9: '10d'
 }
 
@@ -211,12 +214,13 @@ describe('a played format-2 question marks every kind through checkPlayedPart', 
     })
   })
 
-  it('the proof and the Lego part are shown but not counted, so the question can still be all right', () => {
-    expect(countedParts(played).map((p) => p.key)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p9'])
+  it('the proof is shown but not counted; the Lego part is counted, so the question is all right only with the shape filled', () => {
+    expect(countedParts(played).map((p) => p.key)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p8', 'p9'])
     const marks = markPlayed(played, RIGHT, S)
-    expect(Object.keys(marks)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p9'])
+    expect(Object.keys(marks)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p8', 'p9'])
     expect(Object.values(marks).every(isCorrect)).toBe(true)
-    // Every counted part earns its full marks: 2 + 2 + 4 + 3 + 2 + 1 + 1 + 1.
+    expect(questionVerdict(played, marks, false)).toBe(true)
+    // Every counted part earns its full marks: 2 + 2 + 4 + 3 + 2 + 1 + 1 + 1 + 1.
     expect(Object.values(marks).map((c) => [c.marks, c.outOf])).toEqual([
       [2, 2],
       [2, 2],
@@ -225,8 +229,19 @@ describe('a played format-2 question marks every kind through checkPlayedPart', 
       [2, 2],
       [1, 1],
       [1, 1],
+      [1, 1],
       [1, 1]
     ])
+    // Every other part right, but the pieces make a different triangle of the same area 6: that
+    // part is wrong, earns nothing, and the question is not all right.
+    const other = markPlayed(played, { ...RIGHT, p8: [['0', '0', '6', '0', '0', '2']] }, S)
+    expect(other.p8).toMatchObject({ verdict: 'wrong', marks: 0, outOf: 1 })
+    expect(other.p8.message).toMatch(/^Same area, different outline: the pieces make /)
+    expect(questionVerdict(played, other, false)).toBe(false)
+    // Never laid out and never checked, it holds the question back like any empty box.
+    const { p8: _unfilled, ...rest } = RIGHT
+    expect(markPlayed(played, rest, S).p8).toMatchObject({ verdict: 'empty', marks: 0 })
+    expect(questionVerdict(played, markPlayed(played, rest, S), false)).toBe(false)
   })
 
   it('markPlayed with nothing typed leaves every box empty, the matrix included, and earns nothing', () => {

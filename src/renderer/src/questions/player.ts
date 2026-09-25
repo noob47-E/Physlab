@@ -26,6 +26,7 @@ import { checkChoicePart, generateChoices, type Choice } from './distractors'
 import { motionPieces, motionTable, type MotionPiece, type MotionPieces } from './motion'
 import { checkFormat2Part } from './answerKinds'
 import { answerValue, markWithECF, partShown, type ECFCheck } from './ecf'
+import { checkLegoPart, legoAnswer, legoShapesNow } from './legoPart'
 import { checkFunctionPart } from './odeCheck'
 import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTol } from './parts'
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
@@ -239,6 +240,19 @@ export function checkPlayedPart(p: PlayedPart, answer: PartAnswer, played: Playe
     // A matrix is typed box by box; nothing typed yet is a grid of empty boxes, never "type each
     // entry in its own box" for a student who has not started.
     if (p.part.type === 'matrix') return checkFormat2Part(isGrid(answer) ? answer : (blankAnswer(p) as string[][]), p.part, values, settings)
+    // A Lego part's answer is what its pieces make on the Geometry drawing, one row of corners per
+    // shape (legoAnswer); answerKinds had no way to see the drawing and called it unmarkable. While
+    // the pieces are on the drawing they are read now, whoever marks: the answer handed in is the
+    // one Check my shape stored, and pieces moved since would have been marked by their old tick.
+    // Taken off the drawing (another part laid out), the last checked answer is what there is;
+    // never laid out and never checked, the part is empty like an untouched box — "The pieces are
+    // not in Geometry" is for a student who pressed Check my shape.
+    if (p.part.type === 'lego') {
+      const now = legoShapesNow(played, p)
+      if (now) return checkLegoPart(legoAnswer(now), p.part, values)
+      // No shapes at all is still a checked answer (isGrid wants a row): a list, never text.
+      return Array.isArray(answer) ? checkLegoPart(isGrid(answer) ? answer : [], p.part, values) : { verdict: 'empty' }
+    }
     const text = typeof answer === 'string' ? answer : ''
     if (p.part.type === 'expression') return checkExpressionPart(text, p.part, values, unitsOf(played.question))
     // A function answer is put back into its own equation; answerKinds has no way to mark one.
@@ -276,11 +290,10 @@ export function blankAnswer(p: PlayedPart): PartAnswer {
  * The parts that are marked and count towards "all right". A proof part is never marked on this
  * computer (it would need a proof language, which rule 2 rules out): it shows its model proof and
  * self-check list instead, and a question with one must still be finishable. A Lego part is
- * answered by filling its outline in Geometry, which Practice cannot see yet: it is shown with
- * that sentence and left out too, so it never stands under the box as "cannot mark" and never
- * keeps a question from being all right.
+ * counted: its answer is what its pieces make on the Geometry drawing, which checkPlayedPart
+ * reads at every Check, so a wrong shape keeps the question from being all right.
  */
-export const countedParts = (played: Played): PlayedPart[] => played.parts.filter((p) => p.part.type !== 'proof' && p.part.type !== 'lego')
+export const countedParts = (played: Played): PlayedPart[] => played.parts.filter((p) => p.part.type !== 'proof')
 
 /** One set of values in place of the variant's own, for marking with a student's earlier answers. */
 const withValues = (played: Played, values: Record<string, number>): Played => ({ ...played, variant: { ...played.variant, values } })

@@ -47,7 +47,7 @@ type Source = 'topics' | 'sets'
 interface Result {
   id: string
   title: string
-  /** Null for a question with nothing marked on this computer (only proofs or Lego parts): neither right nor wrong. */
+  /** Null for a question with nothing marked on this computer (only proofs): neither right nor wrong. */
   right: boolean | null
   hints: number
   seconds: number
@@ -348,12 +348,16 @@ export function Practice() {
   const graded =
     item?.kind === 'topic' ? item.problem.fields.map((f) => checks[f.key]) : played ? countedParts(played).map((p) => checks[p.key]) : []
   const allRight = graded.length > 0 && graded.every(isCorrect)
-  // A question of only proofs or Lego parts has nothing to Check: opening the model proof is its answer.
+  // A question of only proofs has nothing to Check: opening the model proof is its answer. A Lego
+  // part is marked (from the drawing), so a Lego question is never "unmarked".
   const unmarked = item?.kind === 'question' && played !== null && graded.length === 0
   const anyChecked = graded.some((c) => c && c.verdict !== 'empty') || (unmarked && session.modelShown)
 
   const check = () => {
     if (!item) return
+    // The answers as they stand now, not as this render saw them: Check my shape writes its part's
+    // answer and asks for the Check in one go, before any re-render.
+    const typed = useSession.getState().typed
     let next: Record<string, RowCheck> = {}
     if (item.kind === 'topic') {
       for (const f of item.problem.fields) next[f.key] = checkAnswer(String(typed[f.key] ?? ''), f, settings)

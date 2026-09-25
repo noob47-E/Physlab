@@ -6,10 +6,13 @@
 // boxes use. Every control is a 44 px target and nothing needs a hover.
 
 import { useState, type ReactNode } from 'react'
-import { Check, Eye, X } from 'lucide-react'
+import { Check, Eye, Puzzle, X } from 'lucide-react'
+import { enterMode } from '../app/layout'
+import { scene, useScene } from '../core/store'
 import { isCorrect, type Check as AnswerCheck } from '../math/checkAnswer'
 import { fmt } from '../math/format'
 import type { CellVerdict } from '../questions/answerKinds'
+import { legoHandIn, legoLaidOut, LEGO_RIGHT, showLegoPart } from '../questions/legoPart'
 import { blankAnswer, countedParts, type PartAnswer, type Played, type PlayedPart, type Segment } from '../questions/player'
 import { partLetter } from '../questions/variables'
 import { UNITS } from '../questions/units'
@@ -44,6 +47,8 @@ interface RowProps {
   onEnter: () => void
   /** The student opened a proof's model proof: for a question with nothing marked, that is its answer. */
   onModelShown?: () => void
+  /** The played question: a Lego part lays its pieces out and marks them from it. */
+  played?: Played
 }
 
 /** The tick or cross beside a box once it has been marked. */
@@ -286,13 +291,67 @@ function ProofRow({ p, label, many, value, revealed, onChange, onModelShown }: R
   )
 }
 
-/** A Lego part is answered in Geometry by filling the shape; here it shows its prompt and says so. */
-function LegoRow({ p, label, many, check }: RowProps) {
+/**
+ * A Lego part: "Put the pieces in Geometry" lays out the outline to fill and the pieces, turned,
+ * beside it (and starts again when pressed again); the student fits them together on the drawing
+ * — slide, turn with the handle, snap — and "Check my shape" reads what the pieces make now,
+ * writes it as the part's answer and runs the question's own Check, so the part is marked and
+ * counted like any box (and the question's Check reads the drawing again whenever it runs).
+ */
+function LegoRow({ p, label, many, value, check, played, onChange, onEnter }: RowProps) {
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null)
+  // Read from the drawing on every change of it, never kept: laying out another Lego part takes
+  // this part's pieces away, and a remembered "laid out" went on offering "Start again" for pieces
+  // that were gone.
+  useScene((s) => s.objects)
+  const laid = played ? legoLaidOut(played, p) : false
+  // The question's last Check, as under any box: a box edited after Check keeps its mark until
+  // the next one, and so does a shape started again (hiding it here left "All right" below the
+  // question with no mark beside the part it was about).
+  const shown = check
+  const lay = () => {
+    if (!played) return
+    try {
+      enterMode('shapes')
+      const text = showLegoPart(played, p)
+      // Practice shares a dock group with Geometry's Measure panel, which enterMode has just asked
+      // for: asked for after it (one request is held at a time), Practice stays in front with the
+      // note and Check my shape, and the pieces turn with the handle on the drawing. showPanel
+      // here lost to the pending request and left Measure in front.
+      scene().requestFocus('practice')
+      setNote({ text, error: false })
+    } catch (e) {
+      setNote({ text: e instanceof Error ? e.message : String(e), error: true })
+    }
+  }
+  const checkShape = () => {
+    if (!played) return
+    // Pieces taken away by another part's lay-out keep this part's last checked answer.
+    onChange(legoHandIn(played, p, value))
+    setNote(null)
+    // The question's Check, as Enter in a box runs it (it reads the answer just written): the part
+    // is marked into the question's checks, first try and score, not only beside the button.
+    onEnter()
+  }
   return (
     <div className="mb-3">
       <Prompt p={p} label={label} many={many} />
-      <div className="text-ink-dim">This part is answered by filling the shape with Lego pieces in Geometry.</div>
-      <Verdict c={check} revealed={false} answer={null} />
+      <div className="text-ink-dim">Fit the pieces together in Geometry so they fill the outline: slide them, turn them with the handle above a piece, and let them snap.</div>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <button className="btn ghost min-h-[44px]" onClick={lay} disabled={!played}>
+          <Puzzle size={13} /> {laid ? 'Start again' : 'Put the pieces in Geometry'}
+        </button>
+        <button className="btn min-h-[44px]" onClick={checkShape} disabled={!played}>
+          Check my shape
+        </button>
+        {/* An unreadable check (pieces not laid out or not moved yet, the question's own broken
+            outline) is not a try: its sentence shows below, never a cross against the student. */}
+        {shown && shown.verdict !== 'unreadable' && <Mark c={shown} />}
+      </div>
+      {note && <div className={`mt-1 ${note.error ? 'text-bad' : 'text-ink-dim'}`}>{note.text}</div>}
+      {shown && isCorrect(shown) && <div className="mt-1 text-good">{LEGO_RIGHT}</div>}
+      {/* Not a try: what to do next, in the dim ink of a note, not the red of a wrong answer. */}
+      {shown?.verdict === 'unreadable' ? <div className="mt-1 text-ink-dim">{shown.message}</div> : <Verdict c={shown} revealed={false} answer={null} />}
     </div>
   )
 }
@@ -391,6 +450,7 @@ export function PartRows({
           onChange={(v) => onChange(p.key, v)}
           onEnter={onEnter}
           onModelShown={onModelShown}
+          played={played}
         />
       ))}
     </>
@@ -399,7 +459,7 @@ export function PartRows({
 
 /**
  * Whether a question from a set counts in the student's score, and if so whether it was right. A
- * question whose parts are all proofs or Lego parts has nothing marked on this computer: it is
+ * question whose parts are all proofs has nothing marked on this computer: it is
  * null, "not marked", and neither right nor wrong. Such a question (typical of the deepest rung)
  * used to finish as a miss, "0 / 3 right" with the proof among the wrong ones, and its miss
  * brought the steps' fading back a level.
