@@ -1708,6 +1708,9 @@ function proofAdvice(q: PQQuestion): string {
  * PhysLab's error carried forward → Numbas's adaptive marking on the part (or on the gap-fill
  * holding a vector's or roots' boxes, which is where Numbas sets it for gaps). A use of a part this
  * file leaves out cannot be written, and the description says the part is marked without it.
+ * Nor can a use of a part that is not one number: Numbas would put a vector's list where the
+ * part's number goes, and `readCarried` refuses it, so the round trip dropped the whole
+ * question without a word.
  */
 function writeCarried(q: PQQuestion, written: { index: number; part: Obj }[]): string[] {
   const paths = new Map(written.map((w, j) => [w.index, `p${j}`]))
@@ -1715,9 +1718,11 @@ function writeCarried(q: PQQuestion, written: { index: number; part: Obj }[]): s
   for (const { index, part } of written) {
     const ecf = q.parts[index].ecf
     if (!ecf) continue
-    const kept = ecf.uses.filter((u) => paths.has(u.part))
+    const kept = ecf.uses.filter((u) => paths.has(u.part) && q.parts[u.part].type === 'number')
     for (const u of ecf.uses) {
-      if (!paths.has(u.part)) notes.push(`PhysLab marks part ${num(index + 1)} with the answer to part ${num(u.part + 1)}, which this Numbas file leaves out, so Numbas marks it without.`)
+      const said = `PhysLab marks part ${num(index + 1)} with the answer to part ${num(u.part + 1)}`
+      if (!paths.has(u.part)) notes.push(`${said}, which this Numbas file leaves out, so Numbas marks it without.`)
+      else if (q.parts[u.part].type !== 'number') notes.push(`${said}, which is not a single number Numbas can carry forward, so Numbas marks it without.`)
     }
     if (kept.length === 0) continue
     part.variableReplacements = kept.map((u) => ({ variable: u.variable, part: paths.get(u.part), must_go_first: false }))

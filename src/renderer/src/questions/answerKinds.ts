@@ -36,8 +36,9 @@ function valueOf(expr: string, values: Record<string, number>): number {
 /**
  * The half-width of the band round a reference of size `size`. A relative band of a reference
  * that is 0 would be no band at all, and a root worked out as 1e-17 instead of 0 would then turn
- * a student's exact "0" wrong; `floor` is the part's own scale times 10⁻⁹, far below any rounding
- * a student does and far above the arithmetic's.
+ * a student's exact "0" wrong; `floor` is 10⁻⁹ times the size it belongs to (a root's own, the
+ * vector's, the matrix's largest entry), far below any rounding a student does and far above
+ * the arithmetic's.
  */
 function halfWidth(t: Tolerance, size: number, floor: number): number {
   const b = bandOf(t)
@@ -68,9 +69,12 @@ export const DEFAULT_MAX_REL_U = 0.1
 export function enTest(x: number, u: number, xref: number, uref: number): { en: number; ok: boolean } {
   const gap = Math.abs(x - xref)
   const both = Math.hypot(u, uref)
-  const en = both === 0 ? (gap === 0 ? 0 : Infinity) : gap / both
   // A hair of slack for binary rounding, so a gap that is exactly the allowance is not lost to the 17th digit.
-  return { en, ok: gap <= both * (1 + 1e-9) + 4 * Number.EPSILON * Math.max(Math.abs(x), Math.abs(xref)) }
+  const ok = gap <= both * (1 + 1e-9) + 4 * Number.EPSILON * Math.max(Math.abs(x), Math.abs(xref))
+  // With no allowance at all, a gap inside that slack is the arithmetic's (0.3 against 0.1 + 0.2),
+  // so Eₙ is 0 like the verdict says; it used to be ∞ beside "agrees, 1 or less agrees".
+  const en = both === 0 ? (ok ? 0 : Infinity) : gap / both
+  return { en, ok }
 }
 
 /**
@@ -99,8 +103,11 @@ export function checkStated(
   const max = ref.maxRelU ?? DEFAULT_MAX_REL_U
   // Measured against the student's own value, the way a relative uncertainty is always quoted —
   // and quoting it against the reference would give the reference away (u ÷ 17.9 % = xref). A
-  // value of 0 has no share to quote, so its sentence carries no number at all.
-  if (x === 0 && u > 0) {
+  // value of 0 has no share to quote, so its sentence carries no number at all. Against a
+  // reference that is itself exactly 0 (a net force, a displacement that cancels) the value is
+  // the right one and the Eₙ test below judges it; refusing it there marked "0 ± 0.05" wrong
+  // against 0 ± 0.05, an Eₙ of 0.
+  if (x === 0 && u > 0 && ref.x !== 0) {
     return { verdict: 'wrong', parsed: x, message: 'Your value is 0, so your uncertainty cannot be judged against it. Check your value.' }
   }
   const rel = x !== 0 ? u / Math.abs(x) : 0
@@ -298,8 +305,9 @@ export function checkRootsPart(text: string, part: RootsPart, values: Record<str
   const read = readSet(text, part.unit)
   if (isReadError(read)) return { verdict: 'unreadable', message: read.error }
   let given = read
-  const scale = Math.max(1, ...roots.map(Math.abs), ...given.map(Math.abs))
-  const tol = (x: number): number => halfWidth(part.tolerance, x, 1e-9 * scale)
+  // Each root's floor is its own size's: one shared scale took the largest value in the set, and
+  // with roots 2 and 10⁹ it widened 2's 2 % band from 0.04 to 1.04, so "3, 1000000000" was right.
+  const tol = (x: number): number => halfWidth(part.tolerance, x, 1e-9 * Math.max(1, Math.abs(x)))
   if (part.multiplicity !== true) {
     roots = distinct(roots, tol)
     given = distinct(given, tol)

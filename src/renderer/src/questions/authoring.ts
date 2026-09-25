@@ -395,7 +395,10 @@ export function partCheck(q: PQQuestion, k: number, seed: number, settings: Meas
   if (unanswered(part)) return { kind: 'empty', text: 'Write the answer, built from the variables.' }
   try {
     const played = playQuestion(q, seed, settings)
-    const p = played.parts[k]
+    // played.parts is compacted: a part hidden by its own showIf is left out, so an earlier
+    // part's showIf can shift every later part's array position away from its author index k.
+    // Each PlayedPart carries that author index as .index for exactly this lookup.
+    const p = played.parts.find((x) => x.index === k)
     if (!p) return null
     const theirs = new Set(Object.values(played.partProblems).flat())
     const unworked = markedFormulas(part).some((e) => !worksOut(e, drawVariables(q, seed).values)) ? cannotWorkOut(p.prompt) : undefined
@@ -432,10 +435,49 @@ export function suggestFix(q: PQQuestion, v: Variant, problems: readonly string[
     return { text: `${target.name} can be 0 — take 0 out of its list?`, apply: edit({ kind: 'list', items }) }
   }
   if (def.kind !== 'range') return null
-  if (def.from === 0 && def.to > 0) return { text: `${target.name} can be 0 — start it at ${n(def.step)}?`, apply: edit({ ...def, from: def.step }) }
-  if (def.to === 0 && def.from < 0) return { text: `${target.name} can be 0 — end it at ${n(-def.step)}?`, apply: edit({ ...def, to: -def.step }) }
-  return { text: `${target.name} can be 0 — never draw 0?`, apply: edit({ ...def, exclude: [...(def.exclude ?? []), 0] }) }
+  // Every fix offered must leave variables.ts something to draw once the range's own exclude
+  // list is out too — a moved end past the other end, or an exclude list that covers every
+  // value left, makes it reject the range for every seed ("t could not avoid the excluded
+  // values"), the same dead end in a different message. A range whose only drawable value is 0
+  // has no one-line fix at all.
+  const later: RangeDef = { ...def, from: def.step }
+  if (def.from === 0 && def.to > 0 && drawsSomething(later)) return { text: `${target.name} can be 0 — start it at ${n(def.step)}?`, apply: edit(later) }
+  const earlier: RangeDef = { ...def, to: -def.step }
+  if (def.to === 0 && def.from < 0 && drawsSomething(earlier)) return { text: `${target.name} can be 0 — end it at ${n(-def.step)}?`, apply: edit(earlier) }
+  // Leaving 0 out only helps a range whose grid holds 0 (−0.5 to 0 in steps of 1 draws −0.5 only).
+  const without0: RangeDef = { ...def, exclude: [...(def.exclude ?? []), 0] }
+  if (!onGrid(def, 0) || !drawsSomething(without0)) return null
+  return { text: `${target.name} can be 0 — never draw 0?`, apply: edit(without0) }
 }
+
+type RangeDef = Extract<VariableDef, { kind: 'range' }>
+
+/**
+ * Whether variables.ts can draw anything from `def` — a value on its grid that its exclude list
+ * does not rule out, compared the way variables.ts compares (the same tidy and the same "near").
+ * Each excluded entry rules out at most one grid value, so a free one, if any, turns up within
+ * the first exclude.length + 1 values; a huge range is never walked end to end.
+ */
+function drawsSomething(def: RangeDef): boolean {
+  if (!(def.step > 0) || !(def.from <= def.to)) return false
+  const excluded = def.exclude ?? []
+  for (let i = 0; i < Math.min(gridCount(def), excluded.length + 1); i++) {
+    if (!excluded.some((x) => nearly(gridValue(def, i), x))) return true
+  }
+  return false
+}
+
+/** Whether `x` is one of the values variables.ts can draw from `def`, before its exclude list. */
+function onGrid(def: RangeDef, x: number): boolean {
+  if (!(def.step > 0) || !(def.from <= def.to)) return false
+  const i = Math.round((x - def.from) / def.step)
+  return i >= 0 && i < gridCount(def) && nearly(gridValue(def, i), x)
+}
+
+// variables.ts's own grid arithmetic (countOf, tidy, near), repeated so the fix agrees with the draw.
+const gridCount = (def: RangeDef): number => Math.max(1, Math.floor((def.to - def.from) / def.step + 1e-9) + 1)
+const gridValue = (def: RangeDef, i: number): number => Number((def.from + i * def.step).toPrecision(12))
+const nearly = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b))
 
 /**
  * The rows the Variables tab shows: seeds 1 to `count`, the same ten every time, each played the
@@ -462,10 +504,11 @@ export function previewRows(q: PQQuestion, settings: MeasureSettings, count = 10
       const played = playQuestion(playable, seed, settings)
       const unworked = played.parts.filter((p) => markedFormulas(p.part).some((e) => !worksOut(e, variant.values))).map((p) => cannotWorkOut(p.prompt))
       problems = [...new Set([...played.problems, ...unworked])]
-      let k = 0
+      // played.parts is compacted (a part hidden by its own showIf is left out), and each one's
+      // .index counts `playable`'s parts, not q's — so map it back to the author's index first.
+      const authorIndex = q.parts.flatMap((_, j) => (ready[j] ? [j] : []))
       answers = q.parts.map((_, j) => {
-        if (!ready[j]) return null
-        const p = played.parts[k++]
+        const p = played.parts.find((x) => authorIndex[x.index] === j)
         return p ? { text: p.answerText ?? null, tex: p.answerTex } : null
       })
     } catch (e) {

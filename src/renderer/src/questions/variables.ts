@@ -197,6 +197,9 @@ export function conditionHolds(when: string, values: Record<string, number>): bo
   const read = readCondition(when)
   if (read === null) return null
   if (!read.symbols.every((s) => s in values || s in math)) return null
+  // Before any comparison, whatever its result type: mathjs answers NaN != 5 with true, so a
+  // draw whose d = √b had no value kept "d != 5" and was served with its "undefined" sentence.
+  if (read.symbols.some((s) => s in values && Number.isNaN(values[s]))) return false
   let r: unknown
   try {
     r = inDegrees(() => read.run.evaluate({ ...values }))

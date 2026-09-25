@@ -9,7 +9,7 @@ import type { EvalFunction, FunctionNode, MathNode, OperatorNode, ParenthesisNod
 import type { Check } from '../math/checkAnswer'
 import { getAngleMode, math, preprocess, setAngleMode, symbolsOf } from '../math/expr'
 import { fmtPrecise, type MeasureSettings } from '../math/format'
-import { evaluateInVariables, lettersBeforeBrackets, withoutNameEquals } from './parts'
+import { lettersBeforeBrackets, withoutNameEquals } from './parts'
 import type { PQPart, UnitId } from './pqjson'
 
 export type FunctionPart = Extract<PQPart, { type: 'function' }>
@@ -71,7 +71,9 @@ function radianScope(values: Record<string, number>, units: Record<string, UnitI
  * while a plain apostrophe would start a string).
  */
 export function primed(text: string): string {
-  return text.replace(/''|′′/g, '″').replace(/'/g, '′')
+  // A pair in either order too: y′' became y′′, two primes the parser reads as a name of its
+  // own, not the y″ the checker puts in scope, and every answer "had no value" anywhere.
+  return text.replace(/''|′′|′'|'′/g, '″').replace(/'/g, '′')
 }
 
 /** The additive terms of a side: y″ + y is [y″, y]; −(F₀ + kv²) is [F₀, kv²]. Their sizes give the scale a mismatch is measured against. */
@@ -223,7 +225,10 @@ export function checkFunctionPart(
     // It counts as a wrong letter only when, written in the part's own letter, it solves the equation.
     if (stray.length === 1 && stray[0].length === 1 && !names.includes(xName)) {
       const renamed = renameSymbol(node, stray[0], xName)
-      if (inRadians(() => residualOf(renamed, equation)).worst <= ROUNDING) {
+      // Held to the main check's five points with a value: with none, `worst` is never raised
+      // from 0, and √(−1 − x²) was told it only needed writing in t.
+      const r = inRadians(() => residualOf(renamed, equation))
+      if (r.finite >= 5 && r.worst <= ROUNDING) {
         return { verdict: 'wrong', message: `Write it in ${xName}: your answer uses ${stray[0]}.` }
       }
     }
@@ -251,9 +256,13 @@ export function checkFunctionPart(
     for (const ic of part.initial) {
       let at: number
       let want: number
+      // Worked in the equation's own terms — its scope, where a variable drawn in degrees is its
+      // radian size, and in radians, where this callback already runs. The degree-mode formula
+      // of the raw values made y(0) = θ with θ = 30° "should be 30" for y = θ cos(wx), a
+      // solution the equation itself takes, and y(0) = sin 1 the sine of 1°.
       try {
-        at = evaluateInVariables(ic.at, values)
-        want = evaluateInVariables(ic.value, values)
+        at = Number(math.evaluate(preprocess(ic.at), { ...equation.scope }))
+        want = Number(math.evaluate(preprocess(ic.value), { ...equation.scope }))
       } catch {
         return { verdict: 'unreadable', message: 'PhysLab could not work out this part’s starting condition, so it cannot mark it.' }
       }
