@@ -9,6 +9,7 @@ import { fmtPrecise } from '../math/format'
 import { betweenArea, curveBox, slopeAt, type Box } from '../math/graphs'
 import type { GraphKind, GraphObj, SceneObject } from './types'
 import { fitCamera } from '../render/viewState'
+import { POINT_PX } from '../render/viewMath'
 import { mixOklabMany, mixParents } from '../render/colourMix'
 import { seriesColor, themeColor } from '../app/theme'
 
@@ -368,8 +369,13 @@ function frameAround(points: [number, number][]): void {
 }
 
 /**
- * `count` dots in rows of `perRow`, one unit apart, left to right and top to bottom: something to
+ * `count` dots in rows of `perRow`, one unit apart, left to right and row by row: something to
  * count, as a first-look question asks. The dots carry no labels — a label would count them.
+ * Every dot sits in the middle of a grid square (x and y at 0.5, 1.5, 2.5 …), off both axes and
+ * off every grid crossing: a dot on x = 0 or y = 0 would sit on a numbered tick, and a learner
+ * reading that tick's label would count the dots one short; a dot on a crossing, over a whole-number
+ * tick, lets the axis number be read instead of the dots counted. Each dot is drawn twice the size of
+ * an ordinary point, so it cannot pass for a grid intersection.
  */
 export function visualizeDots(count: number, perRow: number): void {
   clearTagged('dots')
@@ -377,9 +383,11 @@ export function visualizeDots(count: number, perRow: number): void {
   const color = themeColor('--series-1', '#4dabf7')
   const at: [number, number][] = []
   for (let k = 0; k < count; k++) {
-    const p: [number, number] = [k % perRow, -Math.floor(k / perRow)]
+    const p: [number, number] = [0.5 + (k % perRow), 0.5 + Math.floor(k / perRow)]
     at.push(p)
-    inGraphing(b.point([p[0], p[1], 0], { name: 'dot', color, showLabel: false }))
+    const dot = b.point([p[0], p[1], 0], { name: 'dot', color, showLabel: false })
+    dot.size = 2 * POINT_PX.free
+    inGraphing(dot)
   }
   b.commit(false)
   remember('dots', b)

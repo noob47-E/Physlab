@@ -19,6 +19,7 @@ import { resetGlobals } from './helpers/globals'
 import { fmtPrecise, type MeasureSettings } from '../src/renderer/src/math/format'
 import { scene } from '../src/renderer/src/core/store'
 import type { GraphObj, SceneObject, TextObj } from '../src/renderer/src/core/types'
+import { POINT_PX } from '../src/renderer/src/render/viewMath'
 import type { PQPicture, PQQuestion, UnitId } from '../src/renderer/src/questions/pqjson'
 import { parsePQFile, questionFormat, serializePQFile } from '../src/renderer/src/questions/pqjson'
 import { HELD_BACK, hasVisual, INFERRED_NOTE, MAX_DOTS, picturePlan, playQuestion, showPicture, showVisual, visualMode, visualPlanFor, visualState } from '../src/renderer/src/questions/player'
@@ -135,9 +136,9 @@ describe('the new picture kinds', () => {
     expect(dots).toHaveLength(23)
     expect(dots.every((d) => d.showLabel === false)).toBe(true)
     expect(shown.note).not.toContain('23')
-    // Five to a row: the 23rd dot is the third of the fifth row.
+    // Five to a row, each in the middle of a grid square: the 23rd dot is the third of the fifth row.
     const last = dots[22] as { def: { kind: string; p: number[] } }
-    expect(last.def.p.slice(0, 2)).toEqual([2, -4])
+    expect(last.def.p.slice(0, 2)).toEqual([2.5, 4.5])
   })
 
   it('dots refuse a count that is not a whole number, or too many to count', () => {
@@ -174,6 +175,41 @@ describe('the new picture kinds', () => {
     const back = parsePQFile(serializePQFile({ app: 'PhysLab', format: 'pqjson', version: 1, questions: [q] }))
     expect(back.version).toBe(2)
     expect(back.questions[0].picture).toEqual(q.picture)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The dots picture: no dot on a numbered axis or a grid crossing, and every dot bigger than an
+// ordinary point (QD1's review findings — a dot at x = 0 or y = 0 sits on the axis's own tick
+// label, so a learner reading that label counts the dots one short; a point-sized dot on a
+// crossing looks like a grid intersection and sits over a tick number that can be read off).
+// ---------------------------------------------------------------------------
+
+describe('the dots picture stays off the axes and the grid crossings', () => {
+  it('puts every dot in the middle of a grid square in the first quadrant: no dot on a whole-number x or y', () => {
+    for (const [count, perRow] of [[1, 5], [2, 1], [4, 3], [5, 5], [8, 5], [9, 4], [23, 5], [40, 7]] as const) {
+      const q = question({ variables: [{ name: 'n', def: { kind: 'list', items: [count] } }] })
+      draw({ kind: 'dots', count: 'n', perRow }, q)
+      const dots = objects().filter((o) => o.type === 'point') as unknown as { def: { p: number[] } }[]
+      expect(dots).toHaveLength(count)
+      for (const d of dots) {
+        const [x, y] = d.def.p
+        expect(x).toBeGreaterThan(0)
+        expect(y).toBeGreaterThan(0)
+        expect(Number.isInteger(x)).toBe(false)
+        expect(Number.isInteger(y)).toBe(false)
+        expect(x % 1).toBeCloseTo(0.5, 12)
+        expect(y % 1).toBeCloseTo(0.5, 12)
+      }
+    }
+  })
+
+  it('draws every dot clearly larger than an ordinary point', () => {
+    const q = question({ variables: [{ name: 'n', def: { kind: 'list', items: [8] } }] })
+    draw({ kind: 'dots', count: 'n', perRow: 5 }, q)
+    const dots = objects().filter((o) => o.type === 'point') as unknown as { size?: number }[]
+    expect(dots).toHaveLength(8)
+    for (const d of dots) expect(d.size ?? 0).toBeGreaterThanOrEqual(2 * POINT_PX.free)
   })
 })
 
