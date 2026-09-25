@@ -525,3 +525,738 @@ describe('every play draws new numbers, and every answer is still the textbook o
     }
   })
 })
+
+// ===========================================================================
+// QP2: the second PhysLab physics set — circuits, gases, waves, rotation.
+// Same discipline as QP1 above (CC BY 4.0, rung 2 or 3, a trap, worked steps,
+// an authored visual, a fixed-seed known answer, and a textbook formula checked
+// on 25 fresh draws), in its own describe blocks against the second bank file.
+// ===========================================================================
+
+import { conditionHolds } from '../src/renderer/src/questions/variables'
+import { formatQuantity } from '../src/renderer/src/questions/units'
+import { picturePlan, type Played } from '../src/renderer/src/questions/player'
+import { compileScalar } from '../src/renderer/src/math/expr'
+import { planDrawing } from '../src/renderer/src/math/vectorSolver'
+import type { VariableDef } from '../src/renderer/src/questions/pqjson'
+
+let file2: PQFile
+beforeEach(() => {
+  file2 = parsePQFile(readSource('src/renderer/src/questions/bank/physics-fields.pqjson'))
+})
+
+const byId2 = (id: string): PQQuestion => file2.questions.find((q) => q.id === id)!
+
+/** Every value one variable can be drawn as: a range walked step by step (less what it excludes), or its list. */
+const choicesOf = (def: VariableDef): number[] => {
+  if (def.kind === 'list') return [...def.items]
+  if (def.kind !== 'range') throw new Error('this set draws every variable from a range or a list')
+  const out: number[] = []
+  const n = Math.round((def.to - def.from) / def.step)
+  for (let k = 0; k <= n; k++) {
+    const v = Number((def.from + k * def.step).toPrecision(12))
+    if (!(def.exclude ?? []).some((x) => Math.abs(x - v) < 1e-9)) out.push(v)
+  }
+  return out
+}
+
+/**
+ * Every set of numbers a student can meet: every combination of every variable's values that
+ * passes the question's condition. A few hundred at most, so the checks below walk all of them
+ * rather than trusting 25 seeds to find the one bad draw (a trap equal to the answer at R = V).
+ * A formula variable (the spanner's distance in metres, from its centimetres) is worked out from
+ * the ones drawn before it, as the player does.
+ */
+const everyDraw = (q: PQQuestion): Record<string, number>[] => {
+  let rows: Record<string, number>[] = [{}]
+  for (const v of q.variables) {
+    const def = v.def
+    rows =
+      def.kind === 'expr'
+        ? rows.map((r) => ({ ...r, [v.name]: evaluateInVariables(def.expr, r) }))
+        : rows.flatMap((r) => choicesOf(def).map((x) => ({ ...r, [v.name]: x })))
+  }
+  const c = q.condition
+  return c === undefined ? rows : rows.filter((r) => conditionHolds(c.when, r) === true)
+}
+
+/** A played question with exactly these numbers, for the parts of the player that read only the question and its values. */
+const playedWith = (q: PQQuestion, values: Record<string, number>): Played => ({ question: q, variant: { seed: 0, values, problems: [] } }) as unknown as Played
+
+/** The app's own default precision (store.ts): two decimal places. */
+const TWO_DP: MeasureSettings = { ...SETTINGS, decimals: 2 }
+
+describe('QP2 — the second physics set parses and every question is fit to ship', () => {
+  it('holds all 20 questions, every one CC BY 4.0 from PhysLab, on rung 2 or 3', () => {
+    expect(file2.questions).toHaveLength(20)
+    for (const q of file2.questions) {
+      expect(q.license, q.title).toMatchObject({ id: 'CC BY 4.0', holder: 'PhysLab' })
+      expect([2, 3], q.title).toContain(q.rung)
+    }
+    const ids = new Set(file2.questions.map((q) => q.id))
+    expect(ids.size).toBe(20)
+  })
+
+  it('tags each question by what it is about, one set per topic: circuits, gases, waves, rotation', () => {
+    const tags = new Set(file2.questions.flatMap((q) => q.tags ?? []))
+    expect([...tags].sort()).toEqual(['circuits', 'gases', 'rotation', 'waves'])
+    for (const topic of ['circuits', 'gases', 'waves', 'rotation']) {
+      expect(file2.questions.filter((q) => q.tags?.includes(topic)), topic).toHaveLength(5)
+    }
+  })
+
+  it('gives every question at least one named trap, on some part', () => {
+    for (const q of file2.questions) {
+      const traps = q.parts.flatMap((p) => (p.type === 'number' ? (p.traps ?? []) : []))
+      expect(traps.length, q.title).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives every question worked steps', () => {
+    for (const q of file2.questions) {
+      expect(q.steps, q.title).toBeDefined()
+      expect(q.steps!.items.length, q.title).toBeGreaterThan(0)
+    }
+  })
+
+  it('gives every question an authored visual — never the auto-inferred fallback', () => {
+    for (const q of file2.questions) {
+      expect(q.picture !== undefined || q.motion !== undefined, `${q.title} has neither a picture nor a motion field`).toBe(true)
+      const played = playQuestion(q, 1, SETTINGS)
+      const plan = visualPlanFor(played)
+      expect(plan.source, q.title).toBe('authored')
+    }
+  })
+
+  it('draws a picture of the physics, never a number line of the given numbers, and shows something on five seeds', () => {
+    for (const q of file2.questions) {
+      expect(q.picture?.kind, q.title).not.toBe('numberline')
+      for (let seed = 1; seed <= 5; seed++) {
+        const played = playQuestion(q, seed, SETTINGS)
+        expect(showVisual(visualPlanFor(played), played, SETTINGS, false), `${q.id} seed ${seed}`).toMatch(/\S/)
+      }
+    }
+  })
+
+  it('plays every question on many seeds with no problem, every right answer marked right, every step and prompt through KaTeX', () => {
+    for (const q of file2.questions) {
+      for (let seed = 1; seed <= 10; seed++) {
+        for (const level of ['worked', 'half', 'solo'] as const) {
+          const played = playQuestion(q, seed, SETTINGS, level)
+          expect(played.problems, `${q.id} seed ${seed}`).toEqual([])
+          for (const m of played.working.moves) {
+            if (m.tex) renders(m.tex, `${q.id} ${seed}`)
+            if (m.rule) renders(m.rule, `${q.id} ${seed} rule`)
+          }
+          for (const line of [...played.statement, ...played.parts.flatMap((p) => p.promptLines)]) {
+            for (const seg of line) if ('tex' in seg) renders(seg.tex, `${q.id} statement`)
+          }
+          for (const a of played.working.answers) renders(a.tex, `${q.id} answer`)
+          for (const p of played.parts) {
+            expect(isCorrect(checkPlayedPart(p, rightAnswer(p), played, SETTINGS)), `${q.id} ${seed} ${p.prompt}`).toBe(true)
+          }
+        }
+      }
+    }
+  })
+})
+
+describe('QP2 — no programming syntax in anything the student reads', () => {
+  it('writes plain words, never R1, V2 or lam, in titles, statements, prompts, traps, step headings and picture labels', () => {
+    for (const q of file2.questions) {
+      const words: string[] = [q.title, q.statement]
+      for (const p of q.parts) {
+        words.push(p.prompt)
+        if (p.type === 'number') for (const t of p.traps ?? []) words.push(t.why)
+      }
+      for (const s of q.steps?.items ?? []) words.push(s.head)
+      if (q.picture?.kind === 'vectors') words.push(...q.picture.items.map((it) => it.name))
+      if (q.picture?.kind === 'curves') words.push(...q.picture.items.map((it) => it.label))
+      if (q.picture?.kind === 'between' && q.picture.label) words.push(q.picture.label)
+      for (const w of words) {
+        const shown = w.replace(/\{[A-Za-z][A-Za-z0-9_]*\}/g, '')
+        expect(shown, `${q.id}: ${w}`).not.toMatch(/_|\*|\^|\b[A-Za-z]+\d+\b/)
+      }
+    }
+  })
+})
+
+describe('QP2 — every given number reads true at the precision a student actually has', () => {
+  // The app starts at 2 d.p. At that precision a volume of 0.005 m³ used to print as "0.01 m³"
+  // (so a student worked Boyle's law from the wrong volume and was marked wrong), and 0.004 m³
+  // went scientific as "4×10^-3", a caret in a sentence.
+  const PRECISIONS: MeasureSettings[] = [TWO_DP, { ...SETTINGS, decimals: 3, precisionMode: 'sf' }]
+
+  it('prints every value every variable can be drawn as plainly and exactly, at 2 d.p. and at 3 s.f.', () => {
+    for (const s of PRECISIONS) {
+      for (const q of file2.questions) {
+        for (const v of q.variables) {
+          const values = new Set(everyDraw(q).map((row) => row[v.name]))
+          for (const x of values) {
+            const text = formatQuantity(x, v.unit ?? 'none', s)
+            const num = text.split(' ')[0]
+            expect(num, `${q.id} ${v.name} = ${x} at ${s.decimals} ${s.precisionMode}: ${text}`).toMatch(/^−?\d+(\.\d+)?$/)
+            expect(Number(num.replace('−', '-')), `${q.id} ${v.name} at ${s.decimals} ${s.precisionMode}: ${text}`).toBe(x)
+          }
+        }
+      }
+    }
+  })
+
+  it('writes no caret or power of ten into a statement or a picture label, on any draw, at 2 d.p.', () => {
+    for (const q of file2.questions) {
+      for (const seed of SEEDS) {
+        const played = playQuestion(q, seed, TWO_DP)
+        for (const line of played.statement) {
+          for (const seg of line) if ('text' in seg) expect(seg.text, `${q.id} seed ${seed}`).not.toMatch(/\^|×\s*10/)
+        }
+      }
+      for (const values of everyDraw(q)) {
+        const plan = picturePlan(q.picture!, playedWith(q, values), TWO_DP)
+        const labels = plan.kind === 'curves' ? plan.items.map((it) => it.label) : plan.kind === 'between' && plan.label ? [plan.label] : []
+        for (const l of labels) expect(l, `${q.id} ${JSON.stringify(values)}`).not.toMatch(/\^|×\s*10/)
+      }
+    }
+  })
+})
+
+describe('QP2 — every picture draws the physics its label describes', () => {
+  /** The picture's curves, bound to these numbers, as functions of x (radians, as the drawing works). */
+  const curvesOf = (q: PQQuestion, values: Record<string, number>): { f: (x: number) => number; from: number; to: number }[] => {
+    const plan = picturePlan(q.picture!, playedWith(q, values), SETTINGS)
+    if (plan.kind !== 'curves') throw new Error(`${q.id} is not drawn as curves`)
+    return plan.items.map((it) => {
+      const f = compileScalar(it.expr, ['x'], () => ({}))
+      return { f: (x: number) => f({ x }), from: it.from!, to: it.to! }
+    })
+  }
+
+  it('the ideal gas: an isotherm through the gas’s own pressure and volume, never a shaded area that is not the answer', () => {
+    // A shaded P × V rectangle came with "the shaded region is the one whose area you are
+    // finding", but the part asks for moles, not P·V in joules.
+    const q = byId2('physlab-fields-ideal-gas-moles')
+    expect(q.picture?.kind).toBe('curves')
+    for (const v of everyDraw(q)) {
+      const [c] = curvesOf(q, v)
+      const litres = 1000 * v.V
+      expect(c.from < litres && litres < c.to, JSON.stringify(v)).toBe(true)
+      // Pressure in tens of kilopascals at the gas's own volume in litres is its own pressure.
+      expect(c.f(litres), JSON.stringify(v)).toBeCloseTo(v.P / 1e4, 9)
+      // Boyle's law along it: pressure × volume is the same everywhere, n·R·T.
+      for (const x of [c.from, (c.from + c.to) / 2, c.to]) expect((c.f(x) * 1e4 * x) / 1000, JSON.stringify(v)).toBeCloseTo(answer(q, 0, v) * 8.314 * v.T, 6)
+    }
+    const played = playQuestion(q, 1, SETTINGS)
+    const note = showVisual(visualPlanFor(played), played, SETTINGS, false)
+    expect(note).not.toMatch(/area/)
+    expect(note).toMatch(/kept at \d+ K/)
+  })
+
+  it('reads each answer off its picture, in the scale the label names, on every draw', () => {
+    // The pictures are drawn in scaled units so both axes can be read (tenths of an amp, litres,
+    // tens of kilopascals, tens of kelvin, hundreds of metres); a wrong factor of 10 in a formula
+    // would still draw a tidy picture, so each is checked against the question's own answer.
+    const planOf = (id: string, v: Record<string, number>) => picturePlan(byId2(`physlab-fields-${id}`).picture!, playedWith(byId2(`physlab-fields-${id}`), v), SETTINGS)
+    const endOf = (id: string, v: Record<string, number>, item = 0): { x: number; y: number } => {
+      const c = curvesOf(byId2(`physlab-fields-${id}`), v)[item]
+      return { x: c.to, y: c.f(c.to) }
+    }
+    const each = (id: string, check: (v: Record<string, number>, ans: (part: number) => number) => void): void => {
+      const q = byId2(`physlab-fields-${id}`)
+      const draws = everyDraw(q)
+      expect(draws.length, id).toBeGreaterThan(0)
+      for (const v of draws) check(v, (part) => answer(q, part, v))
+    }
+    const close = (got: number, want: number, where: string): void => {
+      expect(Math.abs(got - want), `${where}: ${got} against ${want}`).toBeLessThan(1e-9 * Math.max(1, Math.abs(want)))
+    }
+    for (const id of ['series-resistors', 'parallel-resistors']) {
+      each(id, (v, ans) => {
+        close(endOf(id, v).x / 10, ans(1), `${id} current`)
+        close(endOf(id, v).y, v.V, `${id} voltage`)
+      })
+    }
+    each('ohms-law-power', (v, ans) => {
+      close(endOf('ohms-law-power', v).x / 10, ans(0), 'current')
+      close(endOf('ohms-law-power', v).y, v.V, 'voltage')
+    })
+    for (const id of ['joule-heating', 'work-done-by-gas']) {
+      each(id, (v, ans) => {
+        const plan = planOf(id, v)
+        if (plan.kind !== 'between') throw new Error(`${id} is not a shaded region`)
+        const height = compileScalar(plan.upper, ['x'], () => ({}))({ x: 0 })
+        close(height * (plan.to - plan.from), ans(0), `${id} area in joules`)
+      })
+    }
+    each('boyles-law', (v) => close(endOf('boyles-law', v).y * 1e4, v.P1, 'starting pressure'))
+    each('boyles-law', (v, ans) => close(curvesOf(byId2('physlab-fields-boyles-law'), v)[0].f(1000 * v.V2) * 1e4, ans(0), 'squeezed pressure'))
+    each('charles-law', (v, ans) => close(endOf('charles-law', v, 1).y / 1000, ans(0), 'warmed volume'))
+    each('charles-law', (v) => close(endOf('charles-law', v, 1).x * 10, v.T2, 'final temperature'))
+    each('pressure-law', (v, ans) => close(endOf('pressure-law', v, 1).y * 1e4, ans(0), 'heated pressure'))
+    each('period-frequency', (v, ans) => close(endOf('period-frequency', v).x / 4, ans(0), 'four periods'))
+    each('echo-distance', (v, ans) => close(endOf('echo-distance', v, 0).y * 100, ans(0), 'distance to the cliff'))
+    each('echo-distance', (v) => close(endOf('echo-distance', v, 1).y, 0, 'the echo is back'))
+    each('beat-frequency', (v, ans) => {
+      const [c] = curvesOf(byId2('physlab-fields-beat-frequency'), v)
+      // Two beats: loud at 0, silent at half a beat period, loud again after one, and at the end.
+      close(c.to * ans(0), 2, 'two beats drawn')
+      close(c.f(1 / ans(0)), c.f(0), 'loud again after one beat')
+      expect(c.f(0.5 / ans(0)), 'silent halfway through a beat').toBeLessThan(1e-9)
+    })
+    each('period-of-rotation', (v, ans) => {
+      close(endOf('period-of-rotation', v).x, ans(0), 'one period')
+      close(endOf('period-of-rotation', v).y, 1, 'one whole lap')
+    })
+    const arrow = (id: string, v: Record<string, number>, name: string): number[] => {
+      const plan = planOf(id, v)
+      if (plan.kind !== 'vectors') throw new Error(`${id} is not drawn in arrows`)
+      return [...plan.items.find((it) => it.name === name)!.v]
+    }
+    each('angular-velocity', (v, ans) => close(arrow('angular-velocity', v, 'v')[1] / arrow('angular-velocity', v, 'r')[0], ans(0), 'v ÷ r'))
+  })
+
+  it('draws the rotation arrows from what the question gives, never an answer arrow the student could read the answer off', () => {
+    // An authored picture can be opened before the part is answered, and the player holds back
+    // only a shaded area's and a tangent's values (S-Q decision 12). The torque picture was a line
+    // ending at τ, and the centripetal pictures had an a or F arrow labelled with its size — the
+    // answer. A result arrow drawn beside two inputs also took a colour mixed from them, as if a
+    // were built from r and v the way a vector sum is. Every arrow is now a given quantity.
+    const gives = (q: PQQuestion, values: Record<string, number>): number[] => q.variables.filter((x) => x.def.kind !== 'expr').map((x) => values[x.name])
+    const len = (c: readonly number[]): number => Math.hypot(c[0], c[1], c[2])
+    for (const q of file2.questions) {
+      if (q.picture?.kind !== 'vectors') continue
+      for (const values of everyDraw(q)) {
+        const plan = picturePlan(q.picture, playedWith(q, values), SETTINGS)
+        if (plan.kind !== 'vectors') throw new Error(`${q.id} is not drawn in arrows`)
+        // Drawn exactly as the player draws it: no result arrow, so nothing is coloured as a mix.
+        const drawing = planDrawing({ vectors: plan.items.map((it) => ({ name: it.name, v: it.v, tail: it.tail, role: it.role })), mode: 'common-tail' })
+        for (const it of drawing.items) if (it.kind === 'arrow') expect(it.role, `${q.id}: ${it.name}`).toBe('input')
+        for (const it of plan.items) {
+          const size = len(it.v)
+          expect(
+            gives(q, values).some((g) => Math.abs(g - size) < 1e-9),
+            `${q.id} ${JSON.stringify(values)}: ${it.name} is ${size} long, which the question does not give`
+          ).toBe(true)
+        }
+      }
+    }
+    // The centripetal pictures: −r runs from the object to the centre, the way a and F point, and v is along the circle.
+    for (const id of ['centripetal-acceleration', 'centripetal-force']) {
+      const q = byId2(`physlab-fields-${id}`)
+      for (const values of everyDraw(q)) {
+        const plan = picturePlan(q.picture!, playedWith(q, values), SETTINGS)
+        if (plan.kind !== 'vectors') throw new Error(`${id} is not drawn in arrows`)
+        const inward = plan.items.find((it) => it.name === '−r')!
+        const along = plan.items.find((it) => it.name === 'v')!
+        expect(inward.tail, id).toEqual([values.r, 0, 0])
+        expect(inward.tail![0] + inward.v[0], `${id}: −r ends at the centre`).toBe(0)
+        expect(along.tail, id).toEqual(inward.tail)
+        expect(inward.v[0] * along.v[0] + inward.v[1] * along.v[1], `${id}: v is at right angles to the radius`).toBe(0)
+        expect(plan.items.map((it) => it.name).sort(), id).toEqual(['v', '−r'])
+      }
+    }
+    // The spanner: r out from the bolt in centimetres, as the question gives it, and F pushing at right angles at its end.
+    const spanner = byId2('physlab-fields-torque')
+    for (const values of everyDraw(spanner)) {
+      const plan = picturePlan(spanner.picture!, playedWith(spanner, values), SETTINGS)
+      if (plan.kind !== 'vectors') throw new Error('the torque picture is not drawn in arrows')
+      const [r, F] = plan.items
+      expect([r.name, F.name]).toEqual(['r', 'F'])
+      expect(r.v, JSON.stringify(values)).toEqual([values.d, 0, 0])
+      expect(F.tail, JSON.stringify(values)).toEqual([values.d, 0, 0])
+      expect(F.v, JSON.stringify(values)).toEqual([0, -values.F, 0])
+      // Neither arrow is the torque, in newton metres or in newton centimetres.
+      for (const it of plan.items) {
+        expect(Math.abs(len(it.v) - values.F * values.r), JSON.stringify(values)).toBeGreaterThan(1e-9)
+        expect(Math.abs(len(it.v) - values.F * values.d), JSON.stringify(values)).toBeGreaterThan(1e-9)
+      }
+    }
+  })
+
+  it('the spanner: its distance is given in centimetres and worked in metres, and the centimetre slip is a named trap', () => {
+    const q = byId2('physlab-fields-torque')
+    for (const values of everyDraw(q)) {
+      expect(values.r, JSON.stringify(values)).toBe(values.d / 100)
+      expect(answer(q, 0, values), JSON.stringify(values)).toBeCloseTo(values.F * (values.d / 100), 12)
+    }
+    const traps = (q.parts[0] as { traps?: { value: string }[] }).traps!.map((t) => t.value)
+    expect(traps).toContain('F * d')
+    const played = playQuestion(q, 1, SETTINGS, 'worked')
+    const texts = played.working.moves.map((m) => m.tex ?? '').join(' ')
+    // r = 30 cm = 0.3 m, with the drawn numbers in.
+    const v = played.variant.values
+    expect(texts).toContain(formatQuantity(v.d, 'cm', SETTINGS).split(' ')[0])
+    expect(texts).toContain(formatQuantity(v.r, 'm', SETTINGS).split(' ')[0])
+  })
+
+  it('the potential divider: the voltage across the second resistor bends over as that resistor grows, ending on the answer', () => {
+    // V₂ = Vin·x/(R₁ + x). The picture used to hold the bottom at the final R₁ + R₂, a straight
+    // line that agreed only at its two ends and taught a relationship that is not true.
+    const q = byId2('physlab-fields-potential-divider')
+    for (const v of everyDraw(q)) {
+      const [c] = curvesOf(q, v)
+      expect(c.from).toBe(0)
+      expect(c.to).toBe(v.R2)
+      expect(c.f(0)).toBe(0)
+      expect(c.f(v.R2), JSON.stringify(v)).toBeCloseTo(answer(q, 0, v), 9)
+      // Concave: halfway along, the curve is above the straight chord from (0, 0) to (R₂, V₂).
+      expect(c.f(v.R2 / 2), JSON.stringify(v)).toBeGreaterThan(answer(q, 0, v) / 2 + 1e-9)
+      expect(c.f(v.R2 / 2), JSON.stringify(v)).toBeCloseTo((v.Vin * v.R2) / 2 / (v.R1 + v.R2 / 2), 9)
+    }
+  })
+})
+
+describe('QP2 — every picture can be read at the size the camera frames it', () => {
+  // frameGraphs (core/visualize.ts) frames a question's graphs with the origin; a picture of
+  // arrows is framed on its arrows, and each one here starts at the origin or is joined to it by
+  // the radius. CameraRig then picks one zoom for both axes, never below 2 px a unit. Pictures
+  // that mixed scales collapsed under that one zoom: Boyle's law was an empty grid with its curve
+  // on the y-axis, the echo a 1 px sliver, the beats 25 cycles in 10 px. Each picture is now in
+  // quantities scaled so its width and height (with the origin) are within 10× of each other.
+  // The reviewer's canvas, and a shorter one: the Console docked under the viewport leaves
+  // about 600 × 380 px, where a region 150 kPa tall overflowed under the 2 px floor.
+  const CANVASES = [
+    { w: 716, h: 554 },
+    { w: 600, h: 380 }
+  ]
+
+  const boxOf = (q: PQQuestion, values: Record<string, number>): { w: number; h: number } => {
+    const plan = picturePlan(q.picture!, playedWith(q, values), SETTINGS)
+    const xs = [0]
+    const ys = [0]
+    const sample = (expr: string, a: number, b: number): void => {
+      const f = compileScalar(expr, ['x'], () => ({}))
+      for (let i = 0; i <= 64; i++) {
+        const x = a + ((b - a) * i) / 64
+        const y = f({ x })
+        if (!Number.isFinite(y) || Math.abs(y) > 1e9) continue
+        xs.push(x)
+        ys.push(y)
+      }
+    }
+    if (plan.kind === 'curves') {
+      for (const it of plan.items) {
+        // A curve with no ends runs for ever and frames nothing (graphBox), so every one has both.
+        expect(it.from !== undefined && it.to !== undefined, `${q.id}: ${it.label}`).toBe(true)
+        sample(it.expr, it.from!, it.to!)
+      }
+    } else if (plan.kind === 'between') {
+      sample(plan.upper, plan.from, plan.to)
+      sample(plan.lower, plan.from, plan.to)
+    } else if (plan.kind === 'vectors') {
+      for (const it of plan.items) {
+        const t = it.tail ?? [0, 0, 0]
+        xs.push(t[0], t[0] + it.v[0])
+        ys.push(t[1], t[1] + it.v[1])
+      }
+    } else {
+      throw new Error(`${q.id}: a ${plan.kind} picture is not measured here`)
+    }
+    return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
+  }
+
+  it('frames every picture on every drawable set of numbers with both sides at least 40 px and within 10× of each other', () => {
+    const bad: string[] = []
+    for (const q of file2.questions) {
+      const draws = everyDraw(q)
+      const fails = draws.flatMap((values) => {
+        const { w, h } = boxOf(q, values)
+        return CANVASES.flatMap((canvas) => {
+          // CameraRig's 2-D fit: the zoom that fits the box with a margin, floored at 2 px a unit.
+          const fit = Math.min(canvas.w / (Math.max(w, 1) * 1.35), canvas.h / (Math.max(h, 1) * 1.45), 400)
+          const zoom = Math.max(2, fit)
+          const why = [
+            fit < 2 ? 'too big to fit' : '',
+            w / h > 10 || w / h < 0.1 ? `width ÷ height = ${(w / h).toPrecision(3)}` : '',
+            w * zoom < 40 ? `${(w * zoom).toFixed(0)} px wide` : '',
+            h * zoom < 40 ? `${(h * zoom).toFixed(0)} px tall` : ''
+          ].filter(Boolean)
+          return why.length ? [`${JSON.stringify(values)} on ${canvas.w} × ${canvas.h}: ${why.join(', ')}`] : []
+        })
+      })
+      if (fails.length) bad.push(`${q.id}: ${fails.length}/${draws.length}, e.g. ${fails[0]}`)
+    }
+    expect(bad).toEqual([])
+  })
+
+  it('keeps every label short enough to sit on the drawing, where a curve’s label is written along the curve', () => {
+    // A 130-character label naming both scales ran off both sides of the viewport in the browser.
+    for (const q of file2.questions) {
+      for (const values of everyDraw(q)) {
+        const plan = picturePlan(q.picture!, playedWith(q, values), TWO_DP)
+        const labels = plan.kind === 'curves' ? plan.items.map((it) => it.label) : plan.kind === 'between' && plan.label ? [plan.label] : []
+        for (const l of labels) expect(l.length, `${q.id}: ${l}`).toBeLessThanOrEqual(70)
+      }
+    }
+  })
+})
+
+describe('QP2 — every step reads right once the numbers are in', () => {
+  const playedSteps2 = (q: PQQuestion, seed: number): string[] =>
+    playQuestion(q, seed, SETTINGS, 'worked')
+      .working.moves.map((m) => m.tex)
+      .filter((t): t is string => t !== undefined)
+
+  it('never puts a number where a fraction or a command wants a symbol: no {name} straight after a closing brace', () => {
+    for (const q of file2.questions) {
+      const names = q.variables.map((v) => v.name).join('|')
+      const loose = new RegExp(`\\}\\{(${names})\\}`)
+      for (const s of q.steps?.items ?? []) {
+        if (s.tex !== undefined) expect(s.tex, `${q.id}: ${s.tex}`).not.toMatch(loose)
+        if (s.rule !== undefined) expect(s.rule, `${q.id} rule: ${s.rule}`).not.toMatch(loose)
+      }
+    }
+  })
+
+  it('never sets two numbers side by side with only a space between them', () => {
+    for (const q of file2.questions) {
+      for (const seed of [1, 2, 3]) {
+        for (const tex of playedSteps2(q, seed)) expect(tex, q.id).not.toMatch(/\d\s*(\\[ ,;])+\s*\d/)
+      }
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Known answers, worked by hand from the numbers a pinned seed draws
+// ---------------------------------------------------------------------------
+
+describe('QP2 — known answers, from a pinned seed', () => {
+  it('two 10 Ω resistors in series across 24 V: 20 Ω total, 1.2 A', () => {
+    const q = byId2('physlab-fields-series-resistors')
+    const v = pinned(q, 7, { R1: 10, R2: 10, V: 24 })
+    expect(answer(q, 0, v)).toBeCloseTo(20, 9)
+    expect(answer(q, 1, v)).toBeCloseTo(1.2, 9)
+  })
+
+  it('two 10 Ω resistors side by side across 24 V: 5 Ω combined, 4.8 A total', () => {
+    const q = byId2('physlab-fields-parallel-resistors')
+    const v = pinned(q, 7, { R1: 10, R2: 10, V: 24 })
+    expect(answer(q, 0, v)).toBeCloseTo(5, 9)
+    expect(answer(q, 1, v)).toBeCloseTo(4.8, 9)
+  })
+
+  it('a 30 Ω resistor across 6 V draws 0.2 A and dissipates 1.2 W', () => {
+    const q = byId2('physlab-fields-ohms-law-power')
+    const v = pinned(q, 6, { R: 30, V: 6 })
+    expect(answer(q, 0, v)).toBeCloseTo(0.2, 9)
+    expect(answer(q, 1, v)).toBeCloseTo(1.2, 9)
+  })
+
+  it('15 V split between a 5 Ω and a 20 Ω resistor in series gives 12 V across the second one', () => {
+    const q = byId2('physlab-fields-potential-divider')
+    const v = pinned(q, 367, { Vin: 15, R1: 5, R2: 20 })
+    expect(answer(q, 0, v)).toBeCloseTo(12, 9)
+  })
+
+  it('2 A through 10 Ω for 30 s generates 1200 J of heat', () => {
+    const q = byId2('physlab-fields-joule-heating')
+    const v = pinned(q, 8, { R: 10, I: 2, t: 30 })
+    expect(answer(q, 0, v)).toBeCloseTo(1200, 9)
+  })
+
+  it('a gas at 100 kPa in 60 L squeezed to 20 L rises to 300 kPa', () => {
+    const q = byId2('physlab-fields-boyles-law')
+    const v = pinned(q, 39, { P1: 100000, V1: 0.06, V2: 0.02 })
+    expect(answer(q, 0, v)).toBeCloseTo(300000, 6)
+  })
+
+  it('a gas at 10 L and 250 K warmed to 400 K expands to 16 L', () => {
+    const q = byId2('physlab-fields-charles-law')
+    const v = pinned(q, 7, { V1: 0.01, T1: 250, T2: 400 })
+    expect(answer(q, 0, v)).toBeCloseTo(0.016, 9)
+  })
+
+  it('a sealed gas at 100 kPa and 250 K heated to 400 K reaches 160 kPa', () => {
+    const q = byId2('physlab-fields-pressure-law')
+    const v = pinned(q, 7, { P1: 100000, T1: 250, T2: 400 })
+    expect(answer(q, 0, v)).toBeCloseTo(160000, 6)
+  })
+
+  it('the moles worked out from PV = nRT satisfy the equation itself, at 200 kPa, 10 L, 300 K', () => {
+    const q = byId2('physlab-fields-ideal-gas-moles')
+    const v = pinned(q, 6, { P: 200000, V: 0.01, T: 300 })
+    const n = answer(q, 0, v)
+    // Checked the defining equation itself, not a re-typed decimal: n·R·T must equal P·V.
+    expect(n * 8.314 * v.T).toBeCloseTo(v.P * v.V, 6)
+  })
+
+  it('a gas at 120 kPa expanding from 10 L to 40 L does 3600 J of work', () => {
+    const q = byId2('physlab-fields-work-done-by-gas')
+    const v = pinned(q, 2, { P: 120000, V1: 0.01, V2: 0.04 })
+    expect(answer(q, 0, v)).toBeCloseTo(3600, 9)
+  })
+
+  it('a 200 Hz wave with a 0.5 m wavelength travels at 100 m/s', () => {
+    const q = byId2('physlab-fields-wave-speed')
+    const v = pinned(q, 4, { f: 200, lam: 0.5 })
+    expect(answer(q, 0, v)).toBeCloseTo(100, 9)
+  })
+
+  it('a 20 Hz oscillation has a period of 0.05 s', () => {
+    const q = byId2('physlab-fields-period-frequency')
+    expect(answer(q, 0, pinned(q, 4, { f: 20 }))).toBeCloseTo(0.05, 9)
+  })
+
+  it('sound at 350 m/s with a 2 s echo puts the cliff 350 m away', () => {
+    const q = byId2('physlab-fields-echo-distance')
+    const v = pinned(q, 4, { v: 350, t: 2 })
+    expect(answer(q, 0, v)).toBeCloseTo(350, 9)
+  })
+
+  it('444 Hz and 440 Hz played together beat 4 times a second', () => {
+    const q = byId2('physlab-fields-beat-frequency')
+    const v = pinned(q, 1523, { f1: 444, f2: 440 })
+    expect(answer(q, 0, v)).toBeCloseTo(4, 9)
+  })
+
+  it('a 0.2 m pipe closed at one end resonates at 425 Hz in 340 m/s sound', () => {
+    const q = byId2('physlab-fields-closed-pipe-resonance')
+    const v = pinned(q, 6, { v: 340, L: 0.2 })
+    expect(answer(q, 0, v)).toBeCloseTo(425, 9)
+  })
+
+  it('10 m/s around a 2 m circle gives an angular velocity of 5 rad/s', () => {
+    const q = byId2('physlab-fields-angular-velocity')
+    const v = pinned(q, 4, { v: 10, r: 2 })
+    expect(answer(q, 0, v)).toBeCloseTo(5, 9)
+  })
+
+  it('10 m/s around a 2 m circle needs a centripetal acceleration of 50 m/s²', () => {
+    const q = byId2('physlab-fields-centripetal-acceleration')
+    const v = pinned(q, 4, { v: 10, r: 2 })
+    expect(answer(q, 0, v)).toBeCloseTo(50, 9)
+  })
+
+  it('a 1.5 kg mass at 2 m/s on a 1.5 m circle needs 4 N', () => {
+    const q = byId2('physlab-fields-centripetal-force')
+    const v = pinned(q, 4, { m: 1.5, v: 2, r: 1.5 })
+    expect(answer(q, 0, v)).toBeCloseTo(4, 9)
+  })
+
+  it('40 N applied 30 cm from the bolt gives a torque of 12 N·m', () => {
+    const q = byId2('physlab-fields-torque')
+    const v = pinned(q, 4, { F: 40, d: 30, r: 0.3 })
+    expect(answer(q, 0, v)).toBeCloseTo(12, 9)
+  })
+
+  it('20 m/s around a 1 m circle takes 2π/20 s for one lap', () => {
+    const q = byId2('physlab-fields-period-of-rotation')
+    const v = pinned(q, 4, { v: 20, r: 1 })
+    expect(answer(q, 0, v)).toBeCloseTo((2 * Math.PI) / 20, 9)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fresh numbers every time, and every one of them still right — QP2
+// ---------------------------------------------------------------------------
+
+const TEXTBOOK2: Record<string, ((v: V) => number)[]> = {
+  'series-resistors': [(v) => v.R1 + v.R2, (v) => v.V / (v.R1 + v.R2)],
+  'parallel-resistors': [(v) => (v.R1 * v.R2) / (v.R1 + v.R2), (v) => (v.V * (v.R1 + v.R2)) / (v.R1 * v.R2)],
+  'ohms-law-power': [(v) => v.V / v.R, (v) => v.V * (v.V / v.R)],
+  'potential-divider': [(v) => (v.Vin * v.R2) / (v.R1 + v.R2)],
+  'joule-heating': [(v) => v.I * v.I * v.R * v.t],
+  'boyles-law': [(v) => (v.P1 * v.V1) / v.V2],
+  'charles-law': [(v) => (v.V1 * v.T2) / v.T1],
+  'pressure-law': [(v) => (v.P1 * v.T2) / v.T1],
+  'ideal-gas-moles': [(v) => (v.P * v.V) / (8.314 * v.T)],
+  'work-done-by-gas': [(v) => v.P * (v.V2 - v.V1)],
+  'wave-speed': [(v) => v.f * v.lam],
+  'period-frequency': [(v) => 1 / v.f],
+  'echo-distance': [(v) => (v.v * v.t) / 2],
+  'beat-frequency': [(v) => v.f1 - v.f2],
+  'closed-pipe-resonance': [(v) => v.v / (4 * v.L)],
+  'angular-velocity': [(v) => v.v / v.r],
+  'centripetal-acceleration': [(v) => (v.v * v.v) / v.r],
+  'centripetal-force': [(v) => (v.m * v.v * v.v) / v.r],
+  torque: [(v) => v.F * v.r],
+  'period-of-rotation': [(v) => (2 * Math.PI * v.r) / v.v]
+}
+
+describe('QP2 — every play draws new numbers, and every answer is still the textbook one', () => {
+  it('has a textbook formula here for every part of every question', () => {
+    for (const q of file2.questions) expect(TEXTBOOK2[q.id.replace('physlab-fields-', '')]?.length, q.id).toBe(q.parts.length)
+  })
+
+  it('draws more than one set of numbers for every question', () => {
+    for (const q of file2.questions) {
+      const draws = SEEDS.map((seed) => drawVariables(q, seed).values)
+      expect(new Set(draws.map((v) => JSON.stringify(v))).size, q.id).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('works out every part on seeds 1–25 to the textbook formula', () => {
+    for (const q of file2.questions) {
+      const formulas = TEXTBOOK2[q.id.replace('physlab-fields-', '')]
+      for (const seed of SEEDS) {
+        const drawn = drawVariables(q, seed)
+        expect(drawn.problems, `${q.id} seed ${seed}`).toEqual([])
+        formulas.forEach((f, k) => {
+          const want = f(drawn.values)
+          expect(Number.isFinite(want) && want !== 0, `${q.id} seed ${seed} part ${k}`).toBe(true)
+          expect(Math.abs(answer(q, k, drawn.values) - want), `${q.id} seed ${seed} part ${k}`).toBeLessThan(1e-9 * Math.max(1, Math.abs(want)))
+        })
+      }
+    }
+  })
+
+  it('marks every named trap wrong on every set of numbers a student can draw, not only on a few seeds', () => {
+    // 25 seeds missed R = V = 15 (where R ÷ V is the answer V ÷ R) and P·V within 0.5 % of 8.314·T
+    // (where the upside-down ideal gas equation lands inside the 2 % tolerance).
+    for (const q of file2.questions) {
+      for (const values of everyDraw(q)) {
+        const played = playedWith(q, values)
+        q.parts.forEach((part) => {
+          if (part.type !== 'number') return
+          for (const trap of part.traps ?? []) {
+            const value = evaluateInVariables(trap.value, values)
+            const p = { part } as PlayedPart
+            expect(isCorrect(checkPlayedPart(p, String(value), played, SETTINGS)), `${q.id} ${JSON.stringify(values)} trap ${trap.value} = ${value}`).toBe(false)
+          }
+        })
+      }
+    }
+  })
+
+  it('keeps the physics sensible on every draw there is: the compressed volume stays smaller, the warmed gas stays hotter, the two notes stay close enough to beat', () => {
+    for (const v of everyDraw(byId2('physlab-fields-boyles-law'))) expect(v.V2, `boyle ${JSON.stringify(v)}`).toBeLessThan(v.V1)
+    for (const v of everyDraw(byId2('physlab-fields-charles-law'))) expect(v.T2, `charles ${JSON.stringify(v)}`).toBeGreaterThan(v.T1)
+    for (const v of everyDraw(byId2('physlab-fields-work-done-by-gas'))) expect(v.V2, `work ${JSON.stringify(v)}`).toBeGreaterThan(v.V1)
+    // "Slightly lower" and "two notes close in pitch" must be true: a gap past 15-20 Hz is heard
+    // as roughness, not as beats, and the set once drew notes up to 220 Hz apart.
+    const beats = everyDraw(byId2('physlab-fields-beat-frequency'))
+    expect(beats.length).toBeGreaterThan(20)
+    for (const v of beats) {
+      expect(v.f1 - v.f2, `beat ${JSON.stringify(v)}`).toBeGreaterThanOrEqual(2)
+      expect(v.f1 - v.f2, `beat ${JSON.stringify(v)}`).toBeLessThanOrEqual(10)
+    }
+    // And the seeds a student is actually given all meet the condition, never its fallback draw.
+    for (const seed of SEEDS) expect(drawVariables(byId2('physlab-fields-beat-frequency'), seed).problems, `beat seed ${seed}`).toEqual([])
+  })
+
+  it('walks every drawable set of numbers, and every seed draws one of them', () => {
+    for (const q of file2.questions) {
+      const all = new Set(everyDraw(q).map((v) => JSON.stringify(v)))
+      for (let seed = 1; seed <= 200; seed++) {
+        const drawn = drawVariables(q, seed)
+        expect(drawn.problems, `${q.id} seed ${seed}`).toEqual([])
+        expect(all.has(JSON.stringify(drawn.values)), `${q.id} seed ${seed}: ${JSON.stringify(drawn.values)}`).toBe(true)
+      }
+    }
+  })
+
+  it('reads every step right on every one of those draws', () => {
+    const playedSteps2 = (q: PQQuestion, seed: number): string[] =>
+      playQuestion(q, seed, SETTINGS, 'worked')
+        .working.moves.map((m) => m.tex)
+        .filter((t): t is string => t !== undefined)
+    for (const q of file2.questions) {
+      for (const seed of SEEDS) {
+        for (const tex of playedSteps2(q, seed)) {
+          expect(tex, `${q.id} seed ${seed}`).not.toMatch(/\d\s*(\\[ ,;])+\s*\d/)
+          renders(tex, `${q.id} seed ${seed}`)
+        }
+      }
+    }
+  })
+})
