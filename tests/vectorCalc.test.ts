@@ -452,7 +452,7 @@ describe('plain-English guidance (Fix 24)', () => {
     expect(NO_ARROWS).toMatch(/Draw one with the Vector tool/)
     const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
     expect(src).toContain('— choose an arrow from the graph —')
-    expect(src).toMatch(/offered\(card\)\.length \? \(v as string\) : NO_ARROWS/)
+    expect(src).toMatch(/graphCardPrompt\(sceneVectors\.length, offered\(card\)\.length, v as string\)/)
     // The panel shows the translated words, never the parser's.
     expect(src).not.toMatch(/friendly|Undefined symbol/)
     expect(src).toMatch(/setError\(explainVectorError\(e\)\)/)

@@ -143,7 +143,9 @@ function vsub(a: V3, b: V3): V3 {
 // Friendly syntax → mathjs syntax
 // ---------------------------------------------------------------------------
 
-const IDENT = /[A-Za-z0-9_Ͱ-Ͽ']/
+// The primes are part of a name (A′ is the point after Z, and a copy of A): without them `2 × A′`
+// took A alone as the right operand and left the prime outside the call, a syntax error.
+const IDENT = /[A-Za-z0-9_Ͱ-Ͽ'′″‴⁗]/
 
 /** Finds the index of the bracket matching the one at `open`. */
 function matchForward(s: string, open: number): number {
@@ -265,7 +267,7 @@ export function preprocess(src: string): string {
     .replace(/\*\*/g, '^')
   // magnitude/angle notation: 10 ∠ 30°, 10 N at 30°
   s = s.replace(
-    /(\d+(?:\.\d+)?(?:e[-+]?\d+)?(?:\s*[A-Za-z]+(?:\/[A-Za-z]+)?(?:\^-?\d+)?)?)\s*(?:∠|\bat\b)\s*(-?\d+(?:\.\d+)?\s*°?|-?[A-Za-z_]\w*\s*°?|\([^()]*\)\s*°?)/g,
+    /(\d+(?:\.\d+)?(?:e[-+]?\d+)?(?:\s*[A-Za-z]+(?:\/[A-Za-z]+)?(?:\^-?\d+)?)?)\s*(?:∠|\bat\b)\s*(-?\d+(?:\.\d+)?\s*°?|-?[A-Za-z_][\w′″‴⁗]*\s*°?|\([^()]*\)\s*°?)/g,
     'polarVec($1, $2)'
   )
   s = s.replace(/°/g, ' deg')

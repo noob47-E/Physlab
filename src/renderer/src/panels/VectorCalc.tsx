@@ -17,7 +17,7 @@ import { heading, len, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { NO_ARROWS, answerHint, answerOnGraph, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, evalNumber, evaluateVectorLine, explainVectorError, PlainError, cardValues, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, peekCardId, pickArrow, removeCard, renameCard, setEntry, solveOperation, startCardSync, useVC, type Card, type Entry } from './vectorCalcStore'
+import { graphCardPrompt, answerHint, answerOnGraph, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, evalNumber, evaluateVectorLine, explainVectorError, PlainError, cardValues, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, peekCardId, pickArrow, removeCard, renameCard, setEntry, solveOperation, startCardSync, useVC, type Card, type Entry } from './vectorCalcStore'
 
 const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
 
@@ -305,7 +305,7 @@ export function VectorCalc() {
                   </span>
                 </span>
               ) : waiting ? (
-                <span className="text-[color:var(--text-dim)]">{card.entry === 'scene' ? (offered(card).length ? (v as string) : NO_ARROWS) : 'Type a vector above, like 3i + 4j or 10∠30°. It is drawn on the graph as you type.'}</span>
+                <span className="text-[color:var(--text-dim)]">{card.entry === 'scene' ? graphCardPrompt(sceneVectors.length, offered(card).length, v as string) :'Type a vector above, like 3i + 4j or 10∠30°. It is drawn on the graph as you type.'}</span>
               ) : (
                 <span className="text-[color:var(--bad)]">{v as string}</span>
               )}

@@ -307,6 +307,18 @@ export const NOTHING_TYPED = 'nothing typed yet'
 export const NOTHING_PICKED = 'Choose an arrow from the graph in the list above: this card then shows its x- and y-components, size and angle, and follows the arrow when you drag it.'
 /** The graph card's prompt when the graph has no arrow to offer yet. */
 export const NO_ARROWS = 'There is no arrow on the graph yet. Draw one with the Vector tool and it appears in the list above, or switch this card to “typed”.'
+/** The graph card's prompt when the graph has arrows but each one already belongs to another card. */
+export const ALL_ARROWS_TAKEN = 'Every arrow on the graph already belongs to another card. Draw a new one with the Vector tool and it appears in the list above, or switch this card to “typed”.'
+
+/**
+ * What a waiting graph card says: its own prompt while there is an arrow to choose, else why there
+ * is none. "No arrow on the graph yet" was shown whenever the list was empty, including when the
+ * graph had arrows that other cards had already taken.
+ */
+export function graphCardPrompt(arrowsOnGraph: number, arrowsOffered: number, prompt: string): string {
+  if (arrowsOffered > 0) return prompt
+  return arrowsOnGraph > 0 ? ALL_ARROWS_TAKEN : NO_ARROWS
+}
 
 /** Names the maths field may use that are neither a card nor a unit vector. */
 const KNOWN_NAMES = new Set(['pi', 'e', 'tau', 'phi', 'deg', 'rad'])
@@ -701,9 +713,46 @@ function syncCards(): void {
   followAnswer()
 }
 
+/**
+ * Whether a change to the drawing replaced it whole: File ▸ New, File ▸ Open, an Example and the
+ * typed "clear" (newScene / loadScene) start a new history in the same step as the new objects.
+ * Nothing else leaves both histories empty — an edit adds to the past, undo adds to the future.
+ */
+export const sceneReplaced = (s: { past: unknown[]; future: unknown[] }, prev: { past: unknown[] }): boolean => s.past !== prev.past && !s.past.length && !s.future.length
+
+/**
+ * A card carried into a new drawing: its arrow went with the old one, but the card is the
+ * student's work and is not tied to any file. A typed or size-and-angle card keeps its text; a
+ * graph card keeps the vector it last read as typed components. Either is drawn again on the new
+ * drawing by the sync, as the cards are after a restart, and under the same id: opening the file
+ * the cards were saved in then finds their arrows again instead of drawing a second A beside the
+ * file's own and renaming the card A′ (which left B = 2A unreadable).
+ */
+function carryOver(c: Card): Card {
+  return c.entry === 'scene' && c.last ? { ...c, entry: 'comp', latex: ijkLatex(c.last) } : c
+}
+
+/** Forgets what the last Draw on graph put on a drawing that is no longer there. */
+function forgetDrawn(): void {
+  Object.assign(drawn, { added: [], parents: [], results: [], slots: [], notes: [], sources: [], hidden: new Map(), inputs: new Map(), sol: null, style: null, from: undefined })
+  drawn.moved.clear()
+}
+
 /** The drawing changed: cards whose arrow went go with it, cards whose arrow came back return. */
-function followDrawing(prev: Record<ObjId, SceneObject>, next: Record<ObjId, SceneObject>): void {
+function followDrawing(prev: Record<ObjId, SceneObject>, next: Record<ObjId, SceneObject>, replaced = false): void {
   const cards = useVC.getState().cards
+  if (replaced) {
+    // A new drawing is not a delete: every card whose arrow left with the old one stays. Deleting
+    // them here was File ▸ New wiping the panel, with no undo and the loss saved at once. The
+    // old drawing's undo is gone too, so no departed card can come back and nothing of the old
+    // Draw on graph is left to lay out.
+    departed.clear()
+    forgetDrawn()
+    const out = cards.map((c) => (c.sceneId && prev[c.sceneId] && !next[c.sceneId] ? carryOver(c) : c))
+    if (out.some((c, i) => c !== cards[i])) useVC.setState({ cards: out })
+    // The sync (run next by the caller) draws every card that has no arrow now.
+    return
+  }
   let out = cards
   const gone = cards.filter((c) => c.sceneId && prev[c.sceneId] && !next[c.sceneId])
   if (gone.length) {
@@ -720,10 +769,12 @@ function followDrawing(prev: Record<ObjId, SceneObject>, next: Record<ObjId, Sce
 
 useScene.subscribe((s, prev) => {
   if (busy || relaying) return
-  if (s.objects !== prev.objects) followDrawing(prev.objects, s.objects)
+  if (s.objects !== prev.objects) followDrawing(prev.objects, s.objects, sceneReplaced(s, prev))
   // The answer went (deleted, or undone) while its parents were hidden: they come back, or they
   // would stay hidden with nothing on screen to say why.
   if (s.objects !== prev.objects && answerOnGraph(prev.objects) && !answerOnGraph(s.objects) && !s.gesture) showParents()
+  // A copy that stood in for a card arrow went: the student's own arrow shows again.
+  if (s.objects !== prev.objects && drawn.hidden.size && !s.gesture) showOriginals(prev.objects, s.objects)
   if (s.objects !== prev.objects || s.ev !== prev.ev) syncCards()
 })
 
@@ -816,6 +867,13 @@ const drawn = {
   /** The arrow standing for each arrow of the layout, in the layout's order, and its note if any. */
   slots: [] as ObjId[],
   notes: [] as (ObjId | undefined)[],
+  /** The card arrow each input slot was drawn for (the slot itself, or a copy standing in for it). */
+  sources: [] as (ObjId | undefined)[],
+  /**
+   * Card arrows hidden because a copy stands where the layout puts them, each with its copy: the
+   * student saw two arrows both reading A, one of them apart from the picture.
+   */
+  hidden: new Map<ObjId, ObjId>(),
   /** The card arrows the answer was worked out from, with the components they had then. */
   inputs: new Map<ObjId, V3>(),
   sol: null as VS.Solution | null,
@@ -871,19 +929,40 @@ function setArrow(id: ObjId, tail: V3, comp: V3): void {
   )
 }
 
-/** The card arrow that is an input of the answer: the first one not yet used whose vector it is. */
-function cardArrowFor(v: V3, used: Set<ObjId>): ObjId | undefined {
+/**
+ * The card arrow that is an input of the answer: the arrow of the card the answer names, else the
+ * first one not yet used whose vector it is. By value alone, A = B = 3i + 4j and "B" drawn bound
+ * A's arrow, and retyping B then left the picture at the old value with no word why.
+ */
+function cardArrowFor(v: V3, used: Set<ObjId>, name: string): ObjId | undefined {
   const sc = useScene.getState()
-  for (const c of useVC.getState().cards) {
-    if (!c.sceneId || used.has(c.sceneId) || !sc.objects[c.sceneId]) continue
+  const fits = (c: Card) => {
+    if (!c.sceneId || used.has(c.sceneId) || !sc.objects[c.sceneId]) return false
     const got = sc.ev.values.get(c.sceneId)
-    if (got?.type === 'vector' && near(got.comp, v)) return c.sceneId
+    return got?.type === 'vector' && near(got.comp, v)
   }
-  return undefined
+  const cards = useVC.getState().cards
+  return (cards.find((c) => c.name === name && fits(c)) ?? cards.find(fits))?.sceneId
 }
 
 /** What layoutVectors is given for a solution's picture: a stand-in length where there is one. */
 const layoutInput = (vis: NonNullable<VS.Solution['visual']>) => vis.vectors.map((x) => ({ name: x.name, v: x.drawn ?? x.v, role: x.role, tail: x.tail }))
+
+/**
+ * A copy of a card arrow that cannot be moved to where the layout puts it, standing there in its
+ * colour. Its own name is A′ (A is taken by the original); it reads A, the vector it is. It is
+ * auxiliary like the other things Draw on graph adds: a waiting graph card was offered it, and the
+ * next Draw on graph took it away with that card's arrow.
+ */
+function copyArrow(b: Builder, of: ObjId, a: { name: string; tail: V3; comp: V3 }, standIn: boolean): VectorObj {
+  const o = b.vector(
+    { kind: 'free', tail: a.tail, comp: a.comp },
+    { name: VS.sceneName(a.name), color: useScene.getState().objects[of]?.color, auxiliary: true, showLabel: true }
+  )
+  o.label = VS.sceneLabel(a.name) ?? a.name
+  if (standIn) o.labelMode = 'name'
+  return o
+}
 
 /**
  * Draws an answer with the cards' own arrows. `style` is the student's choice of picture, or
@@ -901,6 +980,8 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
     useScene.getState().beginGesture()
     try {
       for (const id of drawn.parents) setVisible(id, true)
+      for (const id of drawn.hidden.keys()) setVisible(id, true)
+      drawn.hidden.clear()
       for (const [id, tail] of drawn.moved) moveTail(id, tail)
       drawn.moved.clear()
 
@@ -912,6 +993,8 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
       const results: ObjId[] = []
       const slots: ObjId[] = []
       const notes: (ObjId | undefined)[] = []
+      const sources: (ObjId | undefined)[] = []
+      const hidden = new Map<ObjId, ObjId>()
       const inputs = new Map<ObjId, V3>()
       const faint = (o: SceneObject) => {
         o.themed = '--text-faint'
@@ -921,34 +1004,49 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
       lay.arrows.forEach((a, i) => {
         const src = vis.vectors[i]
         const standIn = !!src.drawn && !near(src.drawn, src.v)
+        /** A card arrow that cannot be moved to where the layout puts it, drawn again there instead. */
+        let copyOf: ObjId | undefined
         if (a.role === 'input') {
-          const id = cardArrowFor(src.v, used)
+          const id = cardArrowFor(src.v, used, src.name)
           if (id) {
             used.add(id)
-            idOf.set(a.name, id)
-            parents.push(id)
-            slots.push(id)
-            notes.push(undefined)
+            // Watched either way: a change to it lays the picture out again.
             inputs.set(id, compOf(id) ?? src.v)
             const was = useScene.getState().ev.values.get(id)
             const tail = was?.type === 'vector' ? was.tail : ZERO
-            if (!near(tail, a.tail)) {
-              if (moveTail(id, a.tail)) drawn.moved.set(id, tail)
+            if (near(tail, a.tail) || moveTail(id, a.tail)) {
+              if (!near(tail, a.tail)) drawn.moved.set(id, tail)
+              parents.push(id)
+              idOf.set(a.name, id)
+              slots.push(id)
+              sources.push(id)
+              notes.push(undefined)
+              return
             }
-            return
+            // An arrow drawn between two points (or from a formula) moves only with what it hangs
+            // on. It used to stay where it was while B and R were laid out as if it had moved: a
+            // head-to-tail figure broken apart with no word why. A copy in its colour, under its
+            // name, stands where the layout puts it, and the original is hidden while it does:
+            // left showing, two arrows both read A. It comes back with the picture's going.
+            copyOf = id
+            setVisible(id, false)
           }
         }
         // A helper such as −B takes the colour of the arrow it is the negative of.
         const of = a.role === 'helper' ? vis.vectors.findIndex((x) => x.role === 'input' && near(neg(x.v), src.v)) : -1
         const ofId = of >= 0 ? idOf.get(vis.vectors[of].name) : undefined
         const color = a.role === 'result' ? RESULT_COLOUR : ofId ? useScene.getState().objects[ofId]?.color : undefined
-        const o = b.vector({ kind: 'free', tail: a.tail, comp: a.comp }, { name: VS.sceneName(a.name), color, auxiliary: a.role === 'helper' || standIn })
+        const o = copyOf
+          ? copyArrow(b, copyOf, a, standIn)
+          : b.vector({ kind: 'free', tail: a.tail, comp: a.comp }, { name: VS.sceneName(a.name), color, auxiliary: a.role === 'helper' || standIn })
+        if (copyOf) hidden.set(copyOf, o.id)
         const label = VS.sceneLabel(a.name)
-        if (label) o.label = label
+        if (label && !copyOf) o.label = label
         if (a.role === 'result') o.themed = RESULT_TOKEN
         if (standIn) o.labelMode = 'name'
         idOf.set(a.name, o.id)
         slots.push(o.id)
+        sources.push(copyOf)
         if (a.role === 'result' && !standIn) results.push(o.id)
         else parents.push(o.id)
         const note = standIn && src.note ? b.text(add(a.tail, a.comp), src.note, { name: `${o.name}note`, auxiliary: true }).id : undefined
@@ -978,6 +1076,8 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
         results,
         slots,
         notes,
+        sources,
+        hidden,
         inputs,
         sol,
         style,
@@ -1035,16 +1135,13 @@ function layOutAgain(): boolean {
   const cards = useVC.getState().cards
   const sol = solveAgain(from, cards, cardValues(cards, sc.ev), sc.settings)
   const vis = sol?.visual
-  if (!sol || !vis || vis.vectors.length !== drawn.slots.length || drawn.slots.some((id) => !sc.objects[id])) return false
+  // Every arrow must still be there; a copy may be missing (an undo took it), its card arrow not.
+  if (!sol || !vis || vis.vectors.length !== drawn.slots.length || drawn.slots.some((id, i) => !sc.objects[drawn.sources[i] ?? id])) return false
   const lay = layoutVectors(layoutInput(vis), drawn.style ?? vis.mode ?? 'common-tail')
   lay.arrows.forEach((a, i) => {
-    const id = drawn.slots[i]
-    if (drawn.added.includes(id)) setArrow(id, a.tail, a.comp)
-    else {
-      const was = useScene.getState().ev.values.get(id)
-      if (was?.type === 'vector' && !near(was.tail, a.tail) && !drawn.moved.has(id)) drawn.moved.set(id, was.tail)
-      moveTail(id, a.tail, false)
-    }
+    const src = drawn.sources[i]
+    if (src) placeInput(i, src, a, !!vis.vectors[i].drawn && !near(vis.vectors[i].drawn!, vis.vectors[i].v))
+    else setArrow(drawn.slots[i], a.tail, a.comp)
     const note = drawn.notes[i]
     const o = note ? useScene.getState().objects[note] : undefined
     const text = vis.vectors[i].note ?? ''
@@ -1066,20 +1163,97 @@ function layOutAgain(): boolean {
   return true
 }
 
+/**
+ * Lays one card arrow of a drawn answer out again. It moves to where the layout puts it when it
+ * can; when it cannot — an arrow between two points whose tail was dragged off the start — a copy
+ * stands there instead and the original is hidden, as the first Draw on graph does. This ignored
+ * the failed move before, and B and R were laid out as if A had moved: #18's broken head-to-tail
+ * figure, reached through an edit instead of the first draw.
+ */
+function placeInput(i: number, src: ObjId, a: { name: string; tail: V3; comp: V3 }, standIn: boolean): void {
+  const objects = () => useScene.getState().objects
+  let slot = drawn.slots[i]
+  // Its copy went with an undo, which also put the card arrow back as it was: that arrow again.
+  if (slot !== src && !objects()[slot]) {
+    retarget(slot, src)
+    slot = src
+  }
+  if (slot === src) {
+    const was = useScene.getState().ev.values.get(src)
+    const tail = was?.type === 'vector' ? was.tail : ZERO
+    if (near(tail, a.tail)) return
+    const moved = drawn.moved.has(src)
+    if (moveTail(src, a.tail, false)) {
+      if (!moved) drawn.moved.set(src, tail)
+      return
+    }
+    // A redo brought its copy back: that copy again, not a second one.
+    const back = drawn.hidden.get(src)
+    if (back && objects()[back]) slot = back
+    else {
+      const b = new Builder()
+      const copy = copyArrow(b, src, a, standIn)
+      copy.visible = !resultOnlyOn(objects())
+      useScene.getState().addObjects(b.created, { record: false })
+      drawn.added.push(copy.id)
+      drawn.hidden.set(src, copy.id)
+      slot = copy.id
+    }
+    setVisible(src, false, false)
+    retarget(src, slot)
+  }
+  setArrow(slot, a.tail, a.comp)
+}
+
+/** Hands a slot of the drawn answer from one arrow to another, with the construction points on its head. */
+function retarget(from: ObjId, to: ObjId): void {
+  const swap = (ids: ObjId[]) => ids.map((id) => (id === from ? to : id))
+  drawn.slots = swap(drawn.slots)
+  drawn.parents = swap(drawn.parents)
+  for (const id of drawn.added) {
+    const o = useScene.getState().objects[id]
+    if (o?.type === 'point' && o.def.kind === 'vectorHead' && o.def.vector === from) {
+      useScene.getState().updateObject(
+        id,
+        (d) => {
+          if (d.type === 'point' && d.def.kind === 'vectorHead') d.def = { ...d.def, vector: to }
+        },
+        false
+      )
+    }
+  }
+}
+
 /** Takes a drawn answer off the graph when its vectors no longer give it, and puts the arrows back. */
 function retireAnswer(): void {
   const sc = useScene.getState()
   const gone = drawn.added.filter((id) => sc.objects[id])
   if (gone.length) sc.removeObjects(gone, { record: false })
   for (const [id, tail] of drawn.moved) moveTail(id, tail, false)
+  for (const id of drawn.hidden.keys()) setVisible(id, true, false)
+  drawn.hidden.clear()
   showParents()
   const shown = useVC.getState().result
   if (shown && shown.sol === drawn.sol) useVC.setState({ result: { ...shown, stale: true } })
 }
 
-function setVisible(id: ObjId, visible: boolean): void {
+function setVisible(id: ObjId, visible: boolean, record = true): void {
   const o = useScene.getState().objects[id]
-  if (o && o.visible !== visible) useScene.getState().updateObject(id, (d) => void (d.visible = visible))
+  if (o && o.visible !== visible) useScene.getState().updateObject(id, (d) => void (d.visible = visible), record)
+}
+
+/**
+ * Shows each card arrow whose stand-in copy has just left the drawing (deleted by hand, say) while
+ * it was still hidden. An undo that takes the copy puts the arrow back as it was by itself, and
+ * the pair is kept so a redo finds its copy again; a copy long gone never shows an arrow the
+ * student has since hidden.
+ */
+function showOriginals(prev: Record<ObjId, SceneObject>, objects: Record<ObjId, SceneObject>): void {
+  for (const [id, copy] of drawn.hidden) {
+    if (!prev[copy] || objects[copy] || !objects[id] || objects[id].visible) continue
+    drawn.hidden.delete(id)
+    setVisible(id, true, false)
+  }
 }
 
 /** Whether the drawn answer is still on the drawing, so "Resultant only" has something to show. */
