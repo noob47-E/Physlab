@@ -8,7 +8,7 @@ import { useScene } from '../core/store'
 import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneObject, TextObj, VectorObj } from '../core/types'
 import { isFree } from '../core/evaluate'
 import { visibleIn } from '../core/visibility'
-import { freeCapitals } from '../core/naming'
+import { componentTexts, freeCapitals } from '../core/naming'
 import { angleAt, centroid, orientedAngleAt } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
@@ -316,8 +316,9 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
       if (showComps && planar) {
         const ax = toScreen(cam, sz, [tail[0] + comp[0], tail[1], tail[2]])
         const ay = toScreen(cam, sz, [tail[0], tail[1] + comp[1], tail[2]])
-        pool.place(`${obj.name}x = ${formatMeasure(comp[0], 'length', settings)}`, (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', colors.xComp)
-        pool.place(`${obj.name}y = ${formatMeasure(comp[1], 'length', settings)}`, ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', colors.yComp)
+        const [xText, yText] = componentTexts(obj, comp, settings)
+        pool.place(xText, (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', colors.xComp)
+        pool.place(yText, ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', colors.yComp)
         if (showArc && L > 1e-9) {
           const mid = arc.mid
           const lp = toScreen(cam, sz, [tail[0] + Math.cos(mid) * 46 * worldPerPixel(cam, sz, tail), tail[1] + Math.sin(mid) * 46 * worldPerPixel(cam, sz, tail), tail[2]])

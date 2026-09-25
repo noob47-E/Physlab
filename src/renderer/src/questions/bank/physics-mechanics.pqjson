@@ -237,10 +237,11 @@
     {
       "id": "physlab-mechanics-newtons-second-law",
       "title": "Newton's second law",
-      "statement": "A resultant force of {F} acts on a {m} trolley on a frictionless bench.",
+      "statement": "A resultant force of {F} acts on a {m} trolley on a frictionless bench. Take g = {g}.",
       "variables": [
         { "name": "F", "def": { "kind": "range", "from": 10, "to": 60, "step": 5 }, "unit": "N", "description": "resultant force" },
-        { "name": "m", "def": { "kind": "range", "from": 2, "to": 8, "step": 1 }, "unit": "kg", "description": "mass of the trolley" }
+        { "name": "m", "def": { "kind": "range", "from": 2, "to": 8, "step": 1 }, "unit": "kg", "description": "mass of the trolley" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s²", "description": "acceleration due to gravity" }
       ],
       "parts": [
         {
@@ -263,7 +264,7 @@
           { "head": "Divide the force by the mass.", "tex": "a = F \\div m = \\frac{{F}}{{m}}", "blank": true }
         ]
       },
-      "picture": { "kind": "vectors", "items": [{ "name": "F", "v": ["F", "0"], "role": "input" }, { "name": "mg", "v": ["0", "-m*9.8"], "role": "input" }, { "name": "N", "v": ["0", "m*9.8"], "role": "input" }] },
+      "picture": { "kind": "vectors", "items": [{ "name": "F", "v": ["F", "0"], "role": "input" }, { "name": "mg", "v": ["0", "-m*g"], "role": "input" }, { "name": "N", "v": ["0", "m*g"], "role": "input" }] },
       "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
       "tags": ["forces"],
       "rung": 2
@@ -275,7 +276,8 @@
       "variables": [
         { "name": "m1", "def": { "kind": "range", "from": 3, "to": 8, "step": 1 }, "unit": "kg", "description": "heavier block" },
         { "name": "m2", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "lighter block" },
-        { "name": "g", "def": { "kind": "list", "items": [9.81] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" }
+        { "name": "g", "def": { "kind": "list", "items": [9.81] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" },
+        { "name": "a", "def": { "kind": "expr", "expr": "(m1 - m2) * g / (m1 + m2)" }, "unit": "m/s\u00b2", "description": "acceleration, worked out in the steps" }
       ],
       "condition": { "when": "m1 > m2", "maxRuns": 100 },
       "parts": [
@@ -308,15 +310,15 @@
         "level": "worked",
         "items": [
           { "head": "Newton's second law for the whole system: the difference in weight drives both blocks round the pulley together.", "tex": "(m_1 - m_2)\\,g = (m_1 + m_2)\\,a", "rule": "F_{\\mathrm{net}} = (m_1 + m_2)a" },
-          { "head": "Divide by the total mass to find the acceleration.", "tex": "a = \\frac{({m1} - {m2}) \\times {g}}{{m1} + {m2}}", "blank": true },
-          { "head": "The tension follows from either block: for the lighter one, T \u2212 m\u2082g = m\u2082a.", "tex": "T = {m2} \\times ({g} + a)", "rule": "T - m_2 g = m_2 a", "blank": true }
+          { "head": "Divide by the total mass to find the acceleration.", "tex": "a = \\frac{({m1} - {m2}) \\times {g}}{{m1} + {m2}} = {a}", "blank": true },
+          { "head": "The tension follows from either block: for the lighter one, T \u2212 m\u2082g = m\u2082a.", "tex": "T = {m2} \\times ({g} + {a})", "rule": "T - m_2 g = m_2 a", "blank": true }
         ]
       },
       "picture": {
         "kind": "vectors",
         "items": [
-          { "name": "m\u2081g", "v": ["0", "-m1*g"], "tail": ["-1", "0"], "role": "input" },
-          { "name": "m\u2082g", "v": ["0", "-m2*g"], "tail": ["1", "0"], "role": "input" }
+          { "name": "m\u2081g", "v": ["0", "-m1*g"], "tail": ["-(m1+m2)*g/2", "0"], "role": "input" },
+          { "name": "m\u2082g", "v": ["0", "-m2*g"], "tail": ["(m1+m2)*g/2", "0"], "role": "input" }
         ]
       },
       "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
@@ -381,7 +383,8 @@
       "variables": [
         { "name": "m1", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "front block" },
         { "name": "m2", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "back block" },
-        { "name": "F", "def": { "kind": "range", "from": 10, "to": 40, "step": 5 }, "unit": "N", "description": "pulling force" }
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 40, "step": 5 }, "unit": "N", "description": "pulling force" },
+        { "name": "a", "def": { "kind": "expr", "expr": "F / (m1 + m2)" }, "unit": "m/s²", "description": "acceleration, worked out in the steps" }
       ],
       "parts": [
         {
@@ -406,8 +409,8 @@
       "steps": {
         "level": "worked",
         "items": [
-          { "head": "Treat both blocks as one system of total mass m\u2081 + m\u2082 pulled by F.", "tex": "a = \\frac{{F}}{{m1} + {m2}}", "rule": "F = (m_1 + m_2)a", "blank": true },
-          { "head": "The string only has to accelerate the back block, so its tension is m\u2082a.", "tex": "T = {m2} \\times a", "rule": "T = m_2 a", "blank": true }
+          { "head": "Treat both blocks as one system of total mass m\u2081 + m\u2082 pulled by F.", "tex": "a = \\frac{{F}}{{m1} + {m2}} = {a}", "rule": "F = (m_1 + m_2)a", "blank": true },
+          { "head": "The string only has to accelerate the back block, so its tension is m\u2082a.", "tex": "T = {m2} \\times {a}", "rule": "T = m_2 a", "blank": true }
         ]
       },
       "picture": { "kind": "vectors", "items": [{ "name": "F", "v": ["F", "0"], "role": "input" }] },
@@ -422,7 +425,8 @@
       "variables": [
         { "name": "v", "def": { "kind": "range", "from": 6, "to": 20, "step": 2 }, "unit": "m/s", "description": "starting speed" },
         { "name": "s", "def": { "kind": "range", "from": 10, "to": 40, "step": 5 }, "unit": "m", "description": "distance travelled before stopping" },
-        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" }
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" },
+        { "name": "a", "def": { "kind": "expr", "expr": "v^2 / (2 * s)" }, "unit": "m/s\u00b2", "description": "deceleration, worked out in the steps" }
       ],
       "condition": { "when": "v^2 / (2 * s * g) >= 0.1 and v^2 / (2 * s * g) <= 0.8", "maxRuns": 100 },
       "parts": [
@@ -451,8 +455,8 @@
       "steps": {
         "level": "worked",
         "items": [
-          { "head": "The block stops (its final speed is 0), so v\u00b2 = u\u00b2 \u2212 2as gives its deceleration.", "tex": "0 = {v}^{2} - 2\\,a\\,{s}", "rule": "v^{2} = u^{2} - 2as", "blank": true },
-          { "head": "Friction alone causes it, and friction is \u03bcmg, so \u03bc = a \u00f7 g.", "tex": "\\mu = \\frac{a}{{g}}", "rule": "\\mu m g = m a", "blank": true }
+          { "head": "The block stops (its final speed is 0), so v\u00b2 = u\u00b2 \u2212 2as gives its deceleration.", "tex": "0 = {v}^{2} - 2\\,a\\,{s}, \\text{ so } a = \\frac{{v}^{2}}{2 \\times {s}} = {a}", "rule": "v^{2} = u^{2} - 2as", "blank": true },
+          { "head": "Friction alone causes it, and friction is \u03bcmg, so \u03bc = a \u00f7 g.", "tex": "\\mu = \\frac{{a}}{{g}}", "rule": "\\mu m g = m a", "blank": true }
         ]
       },
       "motion": {

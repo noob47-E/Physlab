@@ -3,8 +3,10 @@
 // terms, so a wrong-unit answer gets a plain sentence instead of a silently wrong mark.
 // Headless: no React, no store, no DOM.
 
+import type { ConstantNode, FunctionNode, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
 import type { LengthUnit } from '../core/types'
-import { fmtPrecise, fmtSci, texPrecise, texSci, type MeasureSettings } from '../math/format'
+import { math, preprocess } from '../math/expr'
+import { fmtPrecise, fmtSci, revealPrecision, texPrecise, texSci, type MeasureSettings } from '../math/format'
 import { UNIT_IDS, type UnitId } from './pqjson'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
@@ -97,6 +99,137 @@ export function unitsCompatible(a: UnitId, b: UnitId): boolean {
   return sameDim(UNITS[a].dim, UNITS[b].dim)
 }
 
+/** A formula's dimension, 'zero' for a bare 0 (which adds to anything), or null when it cannot be told. */
+type DimOf = Dim | 'zero' | null
+
+const addDims = (a: Dim, b: Dim, k: number): Dim => a.map((v, i) => v + k * b[i]) as unknown as Dim
+
+function dimOf(node: MathNode, units: Record<string, UnitId | undefined>): DimOf {
+  switch (node.type) {
+    case 'ConstantNode': {
+      const k = Number((node as ConstantNode).value)
+      if (k === 0) return 'zero'
+      // A whole number or a half is a pure number (2gh, ½mv²); 9.8 in "m*9.8" is g with its unit
+      // left off, and calling m × 9.8 a mass in kg would be wrong, so such a formula is not told.
+      return Number.isInteger(k * 2) ? NONE : null
+    }
+    case 'ParenthesisNode':
+      return dimOf((node as ParenthesisNode).content, units)
+    case 'SymbolNode': {
+      const name = (node as SymbolNode).name
+      if (name === 'pi' || name === 'e') return NONE
+      // An undeclared symbol cannot be told; a variable the question declares with no unit (a
+      // coefficient of friction) is a pure number, so μmg is still in N.
+      if (!Object.prototype.hasOwnProperty.call(units, name)) return null
+      const u = units[name]
+      if (u === undefined || u === 'none') return NONE
+      // A variable in grams or km/h would need its scale carried too; the label is left off instead.
+      if (UNITS[u].toSI !== 1 || UNITS[u].offset !== undefined) return null
+      return UNITS[u].dim
+    }
+    case 'FunctionNode': {
+      const f = node as FunctionNode
+      const fn = f.fn.name
+      // A trig or exponential function gives a pure number whatever its argument is in.
+      if (['sin', 'cos', 'tan', 'exp', 'log', 'ln', 'asin', 'acos', 'atan'].includes(fn)) return NONE
+      const inner = f.args[0] ? dimOf(f.args[0], units) : null
+      if (fn === 'abs') return inner
+      if (fn === 'sqrt') return inner === 'zero' ? 'zero' : inner && inner.every((v) => v % 2 === 0) ? (inner.map((v) => v / 2) as unknown as Dim) : null
+      return null
+    }
+    case 'OperatorNode': {
+      const op = node as OperatorNode
+      const [a, b] = op.args.map((x) => dimOf(x, units))
+      if (op.args.length === 1) return a
+      if (a === null || b === null) return null
+      if (op.op === '*' || op.op === '/') {
+        if (a === 'zero' || b === 'zero') return 'zero'
+        return addDims(a, b, op.op === '*' ? 1 : -1)
+      }
+      if (op.op === '+' || op.op === '-') {
+        if (a === 'zero') return b
+        if (b === 'zero') return a
+        return sameDim(a, b) ? a : null
+      }
+      if (op.op === '^' && b !== 'zero' && b.every((v) => v === 0) && a !== 'zero') {
+        let k: number
+        try {
+          k = Number(op.args[1].evaluate())
+        } catch {
+          return null
+        }
+        return Number.isFinite(k) ? (a.map((v) => v * k) as unknown as Dim) : null
+      }
+      return null
+    }
+    default:
+      return null
+  }
+}
+
+/** The variable a component is, give or take its sign ('' for a bare 0), or undefined for anything else. */
+function loneSymbol(node: MathNode): string | undefined {
+  if (node.type === 'ParenthesisNode') return loneSymbol((node as ParenthesisNode).content)
+  if (node.type === 'SymbolNode') return (node as SymbolNode).name
+  if (node.type === 'ConstantNode') return Number((node as ConstantNode).value) === 0 ? '' : undefined
+  const op = node as OperatorNode
+  if (node.type === 'OperatorNode' && op.args.length === 1 && (op.op === '-' || op.op === '+')) return loneSymbol(op.args[0])
+  return undefined
+}
+
+/**
+ * When every component is ±(one variable) or 0 — an arrow r = (d, 0) with d in cm — the arrow is
+ * in that variable's own unit, scaled or not: its numbers are the variable's own. Undefined when
+ * the components are anything else, or their variables' units differ.
+ */
+function ownUnitOf(components: readonly string[], units: Record<string, UnitId | undefined>): UnitId | undefined {
+  let found: UnitId | undefined
+  for (const c of components) {
+    let name: string | undefined
+    try {
+      name = loneSymbol(math.parse(preprocess(c)))
+    } catch {
+      return undefined
+    }
+    if (name === undefined) return undefined
+    if (name === '') continue
+    const u = Object.prototype.hasOwnProperty.call(units, name) ? units[name] : undefined
+    if (u === undefined || u === 'none' || UNITS[u].offset !== undefined) return undefined
+    if (found !== undefined && found !== u) return undefined
+    found = u
+  }
+  return found
+}
+
+/**
+ * The unit an arrow of a question picture is in, from its component formulas and the units of
+ * the variables they use: ["0", "-m2*g"] with m2 in kg and g in m/s² is in N. Null for a pure
+ * number, for components that disagree, or for anything that cannot be told — the drawing then
+ * keeps its grid units. Only an SI unit is named (a variable in grams would need its scale too),
+ * unless every component is ±(one variable) or 0, when the arrow's numbers are in that variable's
+ * own unit (r = (d, 0) with d in cm reads in cm).
+ */
+export function unitOfComponents(components: readonly string[], units: Record<string, UnitId | undefined>): UnitId | null {
+  const own = ownUnitOf(components, units)
+  if (own !== undefined) return own
+  let found: Dim | null = null
+  for (const c of components) {
+    let d: DimOf
+    try {
+      d = dimOf(math.parse(preprocess(c)), units)
+    } catch {
+      return null
+    }
+    if (d === null) return null
+    if (d === 'zero') continue
+    if (found && !sameDim(found, d)) return null
+    found = d
+  }
+  if (!found || found.every((v) => v === 0)) return null
+  const id = (Object.keys(UNITS) as UnitId[]).find((k) => UNITS[k].toSI === 1 && UNITS[k].offset === undefined && sameDim(UNITS[k].dim, found!))
+  return id ?? null
+}
+
 const toSI = (v: number, u: UnitInfo): number => v * u.toSI + (u.offset ?? 0)
 const fromSI = (v: number, u: UnitInfo): number => (v - (u.offset ?? 0)) / u.toSI
 
@@ -147,6 +280,15 @@ export function formatQuantity(v: number, unit: UnitId, settings: Precision): st
   if (info.label === '') return shown
   const gap = info.label === '°' || info.label === '°C' ? '' : ' '
   return `${shown}${gap}${info.label}`
+}
+
+/**
+ * The precision a part's known answer is revealed at (`revealPrecision`), tested on the number
+ * exactly as `formatQuantity` and `texQuantity` write it, plain or scientific: the answer under
+ * the box and on the full solution's Answer card must mark right when typed back.
+ */
+export function revealSettings<S extends Precision>(v: number, tol: number, settings: S): S {
+  return revealPrecision(v, tol, settings, (x, q) => formatQuantity(x, 'none', q))
 }
 
 /**

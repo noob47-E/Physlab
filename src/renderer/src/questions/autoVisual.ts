@@ -15,10 +15,11 @@ import type { MathNode } from 'mathjs'
 import { math, preprocess } from '../math/expr'
 import { fmtPrecise, type MeasureSettings } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
+import { motionPieces } from './motion'
 import { evaluateInVariables } from './parts'
 import { bandOf, DEFAULT_BAND, type MotionSegment, type PQMotion, type PQPicture, type PQQuestion, type PQSandbox, type Tolerance, type UnitId } from './pqjson'
 import { lineSegments, spokenOf, substituteTex, type Fill } from './steps'
-import { UNITS } from './units'
+import { unitsCompatible, UNITS } from './units'
 import type { Variant } from './variables'
 
 /** One thing to draw: a picture in Graphing, or a motion drawn as x–t and v–t curves. */
@@ -43,7 +44,14 @@ export interface AutoVisual {
 
 /** What a question shows: the author's own bindings, or a picture PhysLab drew from its numbers. */
 export type VisualPlan =
-  | { source: 'authored'; picture?: PQPicture; motion?: PQMotion; sandbox?: PQSandbox }
+  | {
+      source: 'authored'
+      picture?: PQPicture
+      motion?: PQMotion
+      sandbox?: PQSandbox
+      /** What of the picture and the motion may be drawn before the answer is earned (`authoredEarly`). */
+      early: { picture?: PQPicture; motion?: PQMotion }
+    }
   | { source: 'inferred' | 'fallback'; auto: AutoVisual }
 
 /** The line Practice shows under a picture PhysLab drew itself (Fix 21, spec risk 6). */
@@ -1110,13 +1118,272 @@ export function inferVisual(q: PQQuestion, variant: Variant): AutoVisual | null 
   )
 }
 
+// ---------------------------------------------------------------------------
+// An author's own picture, before the answer
+// ---------------------------------------------------------------------------
+
+/** Powers of ten a picture's axes are drawn to ("tenths of an amp", "litres", "hundreds of metres"). */
+const TENS = [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6].map((k) => 10 ** k)
+
+/**
+ * Whether a curve drawn to a scale shows an answer: its value, or its digits at the scale its
+ * label names — the series circuit's V–I line ends at 10 × the current ("tenths of an amp"),
+ * Charles's law at 1000 × the new volume ("litres"). A motion is drawn in SI and is never scaled:
+ * a car braking for 7 s must not be held back because 7 × 10 is the 70 m it covers.
+ */
+/**
+ * The shown values that are not simply a number the question gives: a stone dropped from 19.6 m
+ * starts its x–t curve at 19.6, and that is the height the statement wrote, even when g = 9.8
+ * makes the impact speed 19.6 m/s too. A value worked out from the givens (the echo's peak, the
+ * journey's 40 s) stays in. A zero is the origin, a start from rest or the axis every curve begins
+ * on: counted, it would hold back every picture of a question whose answer is 0.
+ */
+const fresh = (shown: number[], given: number[]): number[] => shown.filter((x) => Math.abs(x) > 1e-12 && !given.some((g) => same(Math.abs(g), Math.abs(x))))
+
+const holdsSizeOf = (shown: number[], answers: Answer[]): boolean => holdsSize(shown, answers)
+
+/**
+ * As drawn, leaving out the givens (`fresh`); at another power of ten, every value — at 10 Ω the
+ * V–I line ends at x = V, the given, which in "tenths of an amp" is the current asked for. A
+ * height of exactly 1 is a wave's or a shape's "not to scale" height, not a reading: at every
+ * power of ten it would hold any answer that is one (100 Hz, 10 m/s).
+ */
+const holdsScaledOf = (shown: number[], given: number[], answers: Answer[]): boolean =>
+  holdsSize(fresh(shown, given), answers) || holdsSize(TENS.flatMap((k) => shown.filter((s) => s !== 0 && Math.abs(s) !== 1).map((s) => s * k)), answers)
+
+/** The values a label writes in: each {name} is the variable's value. */
+function labelValues(label: string, values: Record<string, number>): number[] {
+  return [...label.matchAll(/\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}/g)].map((m) => values[m[1]]).filter((v) => Number.isFinite(v))
+}
+
+/** A formula in x with the question's values in; NaN where it has none. */
+const inXOf = (expr: string, values: Record<string, number>) => (x: number): number => {
+  try {
+    return evaluateInVariables(expr, { ...values, x })
+  } catch {
+    return NaN
+  }
+}
+
+/** Where a curve drawn from a to b crosses the axis and turns: marks a student reads off the grid. */
+function turnsAndRoots(f: (x: number) => number, a: number, b: number): number[] {
+  const out: number[] = []
+  if (!(b > a)) return out
+  // Where it crosses the y-axis: "y = 3x + 5 — where does it cut the y-axis?" is read off at x = 0.
+  if (a < 0 && b > 0) out.push(f(0))
+  const n = 400
+  let px = a
+  let py = f(a)
+  let pd = NaN
+  for (let i = 1; i <= n; i++) {
+    const x = a + ((b - a) * i) / n
+    const y = f(x)
+    if (Number.isFinite(py) && Number.isFinite(y)) {
+      if (py * y < 0) {
+        const r = bisect(f, px, x)
+        out.push(r)
+      }
+      const d = y - py
+      if (Number.isFinite(pd) && pd * d < 0) {
+        const t = extremum(f, Math.max(a, px - (b - a) / n), x, pd < 0)
+        out.push(t, f(t))
+      }
+      pd = d
+    }
+    px = x
+    py = y
+  }
+  return out
+}
+
+/** Where a curve on [from, to] starts and ends: the numbers its axes are read at. */
+const endsOf = (f: (x: number) => number, from: number, to: number): number[] => [from, to, f(from), f(to)].filter((v) => Number.isFinite(v))
+
+/** A picture's numbers, or undefined when one cannot be read (the player then says so itself). */
+function numberOrNaN(expr: string | undefined, values: Record<string, number>): number {
+  if (expr === undefined) return NaN
+  try {
+    return evaluateInVariables(expr, values)
+  } catch {
+    return NaN
+  }
+}
+
+/**
+ * The part of an author's picture that may be drawn before the answer, or undefined when all of
+ * it shows the answer. What each kind shows: a curve its ends and — drawn with its roots and
+ * turning points marked — those too; a shaded region its ends and the heights there (its area
+ * label waits already); a tangent its point; a normal curve its mean, spread and ends; an arrow its
+ * components, size and direction (the chip at its tip writes them); a number-line mark its value.
+ * A list of curves or arrows or marks loses the ones that hold an answer and keeps the rest; a
+ * single curve or region is all or nothing. Dots are what a counting question asks the student to
+ * count, so they are the question, not its answer.
+ */
+function earlyPicture(pic: PQPicture, values: Record<string, number>, answers: Answers, given: number[]): PQPicture | undefined {
+  const num = (e: string | undefined): number => numberOrNaN(e, values)
+  const holdsSize = (shown: number[], a: Answer[]): boolean => holdsSizeOf(fresh(shown, given), a)
+  const holdsScaled = (shown: number[], a: Answer[]): boolean => holdsScaledOf(shown, given, a)
+  /**
+   * Its ends and its label's numbers at any scale the axes may be drawn to; where it crosses and
+   * turns only as drawn — a wave's height "not to scale" is 1, and at ten times that it is no
+   * answer anyone reads off the drawing.
+   */
+  const curveHolds = (expr: string, from: number, to: number, label = ''): boolean => {
+    const f = inXOf(expr, values)
+    const turns = Number.isFinite(from) && Number.isFinite(to) ? turnsAndRoots(f, from, to).filter((v) => Number.isFinite(v)) : []
+    return (
+      holdsScaled([...endsOf(f, from, to), ...labelValues(label, values)], answers.numbers) ||
+      holdsSize(turns, answers.numbers) ||
+      (Number.isFinite(from) && Number.isFinite(to) && to > from && curveIsAnswer(f, answers, from, to))
+    )
+  }
+  switch (pic.kind) {
+    case 'curve': {
+      const from = pic.xMin === undefined ? -10 : num(pic.xMin)
+      const to = pic.xMax === undefined ? 10 : num(pic.xMax)
+      // A lone curve is drawn with its roots and turning points marked.
+      return curveHolds(pic.expr, from, to) ? undefined : pic
+    }
+    case 'piecewise': {
+      const held = pic.pieces.some((p) => {
+        const from = num(p.from)
+        const to = num(p.to)
+        return curveHolds(p.expr, from, to)
+      })
+      return held ? undefined : pic
+    }
+    case 'curves': {
+      const kept = pic.items.filter((it) => {
+        const from = it.from === undefined ? -5 : num(it.from)
+        const to = it.to === undefined ? 5 : num(it.to)
+        return !curveHolds(it.expr, from, to, it.label)
+      })
+      return kept.length === 0 ? undefined : kept.length === pic.items.length ? pic : { ...pic, items: kept }
+    }
+    case 'between': {
+      const from = num(pic.from)
+      const to = num(pic.to)
+      const up = inXOf(pic.upper, values)
+      const low = inXOf(pic.lower, values)
+      const shown = [from, to, up(from), up(to), low(from), low(to), ...labelValues(pic.label ?? '', values)].filter((v) => Number.isFinite(v))
+      // Drawn as the formulas say, never to a labelled scale: ½kx² is not "held" by kx at x = 0.2.
+      return holdsSize(shown, answers.numbers) ? undefined : pic
+    }
+    case 'tangent': {
+      const at = num(pic.at)
+      const f = inXOf(pic.expr, values)
+      return holdsSize([at, f(at)].filter((v) => Number.isFinite(v)), answers.numbers) || curveIsAnswer(f, answers, -10, 10) ? undefined : pic
+    }
+    case 'normal': {
+      const shown = [num(pic.mean), num(pic.sd), num(pic.from), num(pic.to)].filter((v) => Number.isFinite(v))
+      return holdsSize(shown, answers.numbers) ? undefined : pic
+    }
+    case 'vectors': {
+      const kept = pic.items.filter((it) => {
+        const c = it.v.map(num)
+        if (!c.every((v) => Number.isFinite(v))) return true
+        const size = Math.hypot(...c)
+        const turn = (Math.atan2(c[1] ?? 0, c[0] ?? 0) * 180) / Math.PI
+        return !holdsSize([...c, size, turn, (turn + 360) % 360], answers.numbers)
+      })
+      return kept.length === 0 ? undefined : kept.length === pic.items.length ? pic : { ...pic, items: kept }
+    }
+    case 'numberline': {
+      const kept = pic.items.filter((it) => !holdsSize([num(it.value), ...labelValues(it.label, values)].filter((v) => Number.isFinite(v)), answers.numbers))
+      return kept.length === 0 ? undefined : kept.length === pic.items.length ? pic : { ...pic, items: kept }
+    }
+    case 'dots':
+      return pic
+  }
+}
+
+/**
+ * The plots of an author's motion that may be drawn before the answer, or undefined when every
+ * one shows it. What a plot shows: where each stretch starts and ends on it, the time of every
+ * join and of the end (time runs along x, so the axis gives it away — "How long?" for a 40 s
+ * journey), and where the motion turns (the moment v crosses 0, the top height and the rise to it).
+ * An early motion sends no readings to Lab Data: its table holds every number the plots hold.
+ */
+function earlyMotion(m: PQMotion, values: Record<string, number>, answers: Answers, given: GivenQuantity[]): PQMotion | undefined {
+  const pieces = motionPieces(m, values)
+  if (pieces.problems.length > 0 || pieces.stretches.length === 0) return undefined
+  const first = pieces.stretches[0]
+  // A given is no secret only in its own role: a stone dropped from 19.6 m (g = 9.8) lands at
+  // 19.6 m/s, and the v–t line ending there hands over the speed, though the height was given.
+  const givenAs = (unit: UnitId): number[] => given.filter((g) => g.unit !== undefined && unitsCompatible(g.unit, unit)).map((g) => g.si)
+  const times: number[] = [pieces.total, ...pieces.stretches.flatMap((s) => [s.t0, s.t1])]
+  const values_: Record<PQMotion['plots'][number], { shown: number[]; unit: UnitId }[]> = { 'x-t': [], 'v-t': [], 'a-t': [] }
+  const at = (p: PQMotion['plots'][number], unit: UnitId, ...shown: number[]) => values_[p].push({ shown, unit })
+  for (const s of pieces.stretches) {
+    const tau = s.t1 - s.t0
+    const x1 = s.x0 + s.v0 * tau + 0.5 * s.a * tau * tau
+    at('x-t', 'm', s.x0, x1, x1 - s.x0, x1 - first.x0)
+    at('v-t', 'm/s', s.v0, s.v0 + s.a * tau)
+    at('a-t', 'm/s²', s.a)
+    // A v–t line's slope is read off it from its ends. When the question gives how long the
+    // stretch lasts, that is the working it asks for (a braking car's 20 m/s in 7 s); when it does
+    // not, the drawing supplies the time and the slope is the answer handed over (a block sliding
+    // to rest in a distance: a = −2.88 m/s² off the line).
+    if (!givenAs('s').some((g) => same(g, tau))) at('v-t', 'm/s²', s.a)
+    // The moment the stretch turns, if it does: v is 0 there and x is at its top (or bottom).
+    const turn = s.a === 0 ? NaN : -s.v0 / s.a
+    if (turn > 1e-9 && turn < tau - 1e-9) {
+      const xTop = s.x0 + s.v0 * turn + 0.5 * s.a * turn * turn
+      times.push(s.t0 + turn)
+      at('x-t', 'm', xTop, xTop - s.x0, xTop - first.x0)
+    }
+  }
+  const held = (p: PQMotion['plots'][number]): boolean =>
+    holdsSize(fresh(times, givenAs('s')), answers.numbers) || values_[p].some((v) => holdsSize(fresh(v.shown, givenAs(v.unit)), answers.numbers))
+  const safe = m.plots.filter((p) => !held(p))
+  if (safe.length === 0) return undefined
+  return { ...m, plots: safe, sampleEvery: undefined }
+}
+
+/** The values the question gives the student, as it writes them. */
+function givenValues(q: PQQuestion, values: Record<string, number>): number[] {
+  const text = [q.statement, ...q.parts.map((p) => p.prompt)].join('\n')
+  return q.variables.filter((v) => new RegExp(`\\{\\s*${escape(v.name)}\\s*\\}`).test(text)).map((v) => values[v.name]).filter((v) => Number.isFinite(v))
+}
+
+/** A number the question gives the student, in SI, with the unit it was given in. */
+interface GivenQuantity {
+  si: number
+  unit?: UnitId
+}
+
+/** The values the question gives the student: each variable its statement or a prompt writes in. */
+function givenQuantities(q: PQQuestion, values: Record<string, number>): GivenQuantity[] {
+  const text = [q.statement, ...q.parts.map((p) => p.prompt)].join('\n')
+  return q.variables
+    .filter((v) => new RegExp(`\\{\\s*${escape(v.name)}\\s*\\}`).test(text) && Number.isFinite(values[v.name]))
+    .map((v) => {
+      const info = v.unit ? UNITS[v.unit] : undefined
+      return { si: info ? values[v.name] * info.toSI + (info.offset ?? 0) : values[v.name], unit: v.unit }
+    })
+}
+
+/**
+ * What an author's picture and motion may show before the answer is earned (the experiment is
+ * run by the student, so it is always open). Each is absent when all of it holds an answer.
+ */
+export function authoredEarly(q: PQQuestion, variant: Variant): { picture?: PQPicture; motion?: PQMotion } {
+  const given = givenQuantities(q, variant.values)
+  const answers = answersOf(q, variant.values)
+  // A picture's axes are named only in its labels, so any given counts there; the numbers a
+  // picture shows are the question's own, as written, not converted.
+  const picture = q.picture ? earlyPicture(q.picture, variant.values, answers, givenValues(q, variant.values)) : undefined
+  const motion = q.motion ? earlyMotion(q.motion, variant.values, answers, given) : undefined
+  return { ...(picture ? { picture } : {}), ...(motion ? { motion } : {}) }
+}
+
 /**
  * What a question shows: the author's picture, motion or experiment when there is one; else a
  * picture inferred from its numbers; else its given quantities on a number line — which is empty
  * for a question with no numbers ("Which of these is a vector?"), so `hasVisual` is false there.
  */
 export function visualOf(q: PQQuestion, variant: Variant): VisualPlan {
-  if (q.picture || q.motion || q.sandbox) return { source: 'authored', picture: q.picture, motion: q.motion, sandbox: q.sandbox }
+  if (q.picture || q.motion || q.sandbox) return { source: 'authored', picture: q.picture, motion: q.motion, sandbox: q.sandbox, early: authoredEarly(q, variant) }
   const auto = inferVisual(q, variant)
   return auto ? { source: 'inferred', auto } : { source: 'fallback', auto: numberLineOf(q, variant) }
 }

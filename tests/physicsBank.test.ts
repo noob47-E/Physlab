@@ -24,7 +24,7 @@ import type { MeasureSettings } from '../src/renderer/src/math/format'
 import { parsePQFile, type PQFile, type PQQuestion } from '../src/renderer/src/questions/pqjson'
 import { drawVariables } from '../src/renderer/src/questions/variables'
 import { evaluateInVariables } from '../src/renderer/src/questions/parts'
-import { checkPlayedPart, playQuestion, showVisual, visualPlanFor, type PartAnswer, type PlayedPart } from '../src/renderer/src/questions/player'
+import { checkPlayedPart, HELD_BACK, playQuestion, showVisual, visualPlanFor, visualState, type PartAnswer, type PlayedPart } from '../src/renderer/src/questions/player'
 
 const SETTINGS: MeasureSettings = { decimals: 4, precisionMode: 'dp', unit: 'm', unitPerSquare: 1, angleUnit: 'deg' }
 
@@ -91,7 +91,11 @@ describe('the physics set parses and every question is fit to ship', () => {
       expect(q.picture?.kind, q.title).not.toBe('numberline')
       for (let seed = 1; seed <= 5; seed++) {
         const played = playQuestion(q, seed, SETTINGS)
-        expect(showVisual(visualPlanFor(played), played, SETTINGS, false), `${q.id} seed ${seed}`).toMatch(/\S/)
+        const plan = visualPlanFor(played)
+        expect(showVisual(plan, played, SETTINGS, true), `${q.id} seed ${seed}`).toMatch(/\S/)
+        // Before the answer, whatever holds none of it — or, when all of it does, a held-back sentence.
+        if (visualState(plan, false) === 'ready') expect(showVisual(plan, played, SETTINGS, false), `${q.id} seed ${seed}`).toMatch(/\S/)
+        else expect(() => showVisual(plan, played, SETTINGS, false), `${q.id} seed ${seed}`).toThrow(HELD_BACK)
       }
     }
   })
@@ -215,7 +219,9 @@ const answer = (q: PQQuestion, part: number, v: Record<string, number>): number 
 const pinned = (q: PQQuestion, seed: number, want: Record<string, number>): Record<string, number> => {
   const drawn = drawVariables(q, seed)
   expect(drawn.problems, q.id).toEqual([])
-  expect(drawn.values, q.id).toEqual(want)
+  // The drawn numbers; a result the steps work out (I = V ÷ R) rides along as a formula variable.
+  const drawnOnly = Object.fromEntries(Object.entries(drawn.values).filter(([k]) => k in want || q.variables.find((v) => v.name === k)?.def.kind !== 'expr'))
+  expect(drawnOnly, q.id).toEqual(want)
   return drawn.values
 }
 
@@ -225,6 +231,16 @@ describe('known answers — motion', () => {
     const v = pinned(q, 102, { v: 24, t: 8 })
     expect(answer(q, 0, v)).toBeCloseTo(96, 9)
     expect(answer(q, 1, v)).toBeCloseTo(-3, 9)
+  })
+
+  it('braking from 20 m/s in 12 s: 1 for the 120 m gets the plain message, 1.67 still gets the deceleration trap', () => {
+    const q = byId('physlab-mechanics-braking-car')
+    const played = playQuestion(q, 1, SETTINGS)
+    const at = { ...played, variant: { ...played.variant, values: { v: 20, t: 12 } } }
+    const distance = played.parts[0]
+    expect(checkPlayedPart(distance, '120', at, SETTINGS).verdict).toBe('right')
+    expect(checkPlayedPart(distance, '1', at, SETTINGS).message).toBe('Not quite. Press Hint to see the next step.')
+    expect(checkPlayedPart(distance, '1.67', at, SETTINGS).message).toBe('That is the size of the deceleration, in m/s², not a distance.')
   })
 
   it('100 m at a steady 5 m/s takes 20 s', () => {
@@ -257,7 +273,7 @@ describe('known answers — motion', () => {
 describe('known answers — forces', () => {
   it('F = 20 N on 4 kg gives 5 m/s²', () => {
     const q = byId('physlab-mechanics-newtons-second-law')
-    expect(answer(q, 0, pinned(q, 15, { F: 20, m: 4 }))).toBeCloseTo(5, 9)
+    expect(answer(q, 0, pinned(q, 15, { F: 20, m: 4, g: 9.8 }))).toBeCloseTo(5, 9)
   })
 
   it('an Atwood machine of 3 kg and 2 kg (g = 9.81) accelerates at 1.962 m/s² with a tension of 23.544 N', () => {
@@ -633,7 +649,11 @@ describe('QP2 — the second physics set parses and every question is fit to shi
       expect(q.picture?.kind, q.title).not.toBe('numberline')
       for (let seed = 1; seed <= 5; seed++) {
         const played = playQuestion(q, seed, SETTINGS)
-        expect(showVisual(visualPlanFor(played), played, SETTINGS, false), `${q.id} seed ${seed}`).toMatch(/\S/)
+        const plan = visualPlanFor(played)
+        expect(showVisual(plan, played, SETTINGS, true), `${q.id} seed ${seed}`).toMatch(/\S/)
+        // Before the answer, whatever holds none of it — or, when all of it does, a held-back sentence.
+        if (visualState(plan, false) === 'ready') expect(showVisual(plan, played, SETTINGS, false), `${q.id} seed ${seed}`).toMatch(/\S/)
+        else expect(() => showVisual(plan, played, SETTINGS, false), `${q.id} seed ${seed}`).toThrow(HELD_BACK)
       }
     }
   })
@@ -690,7 +710,11 @@ describe('QP2 — every given number reads true at the precision a student actua
   it('prints every value every variable can be drawn as plainly and exactly, at 2 d.p. and at 3 s.f.', () => {
     for (const s of PRECISIONS) {
       for (const q of file2.questions) {
+        const read = [q.statement, ...q.parts.map((p) => p.prompt)].join(' ')
         for (const v of q.variables) {
+          // A result the steps work out (I = 12 V ÷ 7 Ω = 1.71 A) is rounded like any result; only
+          // a number the question gives the student must read exactly.
+          if (v.def.kind === 'expr' && !read.includes(`{${v.name}}`)) continue
           const values = new Set(everyDraw(q).map((row) => row[v.name]))
           for (const x of values) {
             const text = formatQuantity(x, v.unit ?? 'none', s)
@@ -1258,5 +1282,65 @@ describe('QP2 — every play draws new numbers, and every answer is still the te
         }
       }
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// A worked line can be checked from its own numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * What is left of a worked line's last part once its numbers, units and layout are taken out:
+ * the symbols a student would still have to know a value for. "P = 12 V × I" leaves I — a result
+ * an earlier line worked out, but never gave a value — so the line cannot be checked on a
+ * calculator from what it shows.
+ */
+function symbolsLeft(tex: string): { hasNumber: boolean; symbols: string[] } {
+  const last = tex.split(/(?<![<>\\])=/).pop() ?? ''
+  const bare = last
+    .replace(/\\(?:mathrm|text|operatorname)\{(?:[^{}]|\{[^{}]*\})*\}/g, ' ')
+    // Units written as symbols (Ω, °) are units, not unknowns.
+    .replace(/\\(?:Omega|circ)\b/g, ' ')
+    .replace(/\\(?:frac|tfrac|dfrac|times|div|cdot|left|right|sqrt|approx|quad|qquad|Rightarrow|implies)\b/g, ' ')
+    .replace(/\\[,;:! ]/g, ' ')
+    .replace(/\\pi\b/g, '1')
+  const symbols = [...bare.matchAll(/\\[A-Za-z]+|(?<![A-Za-z])[A-Za-z](?![A-Za-z])/g)].map((m) => m[0])
+  return { hasNumber: /\d/.test(bare), symbols }
+}
+
+describe('every worked line can be checked from its own numbers', () => {
+  it('no line puts a number beside a symbol an earlier line worked out: each result is given its value and used as that number', () => {
+    const questions = [...file.questions, ...file2.questions]
+    expect(questions).toHaveLength(40)
+    for (const q of questions) {
+      for (const seed of [1, 2, 3]) {
+        // What earlier lines worked out: the symbol a line starts "X =" with, and the unknown a
+        // line with numbers in solves for ("0 = 12² − 2a × 30" works out a).
+        const worked = new Set<string>()
+        for (const m of playQuestion(q, seed, SETTINGS, 'worked').full.moves) {
+          if (m.tex === undefined) continue
+          const { hasNumber, symbols } = symbolsLeft(m.tex)
+          if (hasNumber) expect(symbols.filter((x) => worked.has(x)), `${q.id} seed ${seed}: ${m.tex}`).toEqual([])
+          const lhs = /^\s*(\\[A-Za-z]+|[A-Za-z])(?:_\{[^=]*?\}|_[A-Za-z0-9])?(?:\^\{?\d\}?)?\s*=/.exec(m.tex)
+          if (lhs) worked.add(lhs[1])
+          if (hasNumber) symbols.forEach((x) => worked.add(x))
+        }
+      }
+    }
+  })
+
+  it('the checker’s lines now carry their numbers: I, P and a have values before they are used', () => {
+    const ohm = byId2('physlab-fields-ohms-law-power')
+    // A 5 Ω resistor on 12 V: I = 12 V ÷ 5 Ω = 2.4 A, then P = 12 V × 2.4 A.
+    const seedFor = (q: PQQuestion, want: Record<string, number>): number => {
+      for (let seed = 1; seed <= 500; seed++) {
+        const v = drawVariables(q, seed).values
+        if (Object.entries(want).every(([k, x]) => v[k] === x)) return seed
+      }
+      throw new Error(`no seed draws ${JSON.stringify(want)}`)
+    }
+    const lines = playQuestion(ohm, seedFor(ohm, { R: 5, V: 12 }), SETTINGS, 'worked').full.moves.map((m) => m.tex ?? '')
+    expect(lines[0]).toContain('= 2.4\\,\\mathrm{A}')
+    expect(lines[1]).toContain('12\\,\\mathrm{V} \\times 2.4\\,\\mathrm{A}')
   })
 })

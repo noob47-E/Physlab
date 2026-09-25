@@ -379,6 +379,27 @@ export function stepPrecision<S extends DigitSettings>(s: S, agrees: (q: S) => b
   return { q: morePrecise(s, STEP_GUARD_MAX), holds: false }
 }
 
+/**
+ * The precision a KNOWN answer is revealed at, so that typing back what the screen shows marks
+ * right. The student's own precision whenever its rounding stays within half the answer's band
+ * `tol`; otherwise three significant figures, then four, and so on up to six. At 2 d.p. Charles's
+ * law revealed 0.0538 m³ as "0.05 m³", and typed back that was 7 % off a 2 % band — "Right
+ * method — just rounded a little early" under the very answer PhysLab had just given. `show` is
+ * the formatter the caller writes the number with (plain or scientific), read back by
+ * `shownValue`, so the test is made on exactly the text on screen.
+ */
+export function revealPrecision<S extends DigitSettings>(v: number, tol: number, s: S, show: (x: number, q: S) => string = fmtPrecise): S {
+  const holds = (q: S): boolean => Math.abs(shownValue(show(v, q)) - v) <= tol / 2
+  if (!Number.isFinite(v) || !(tol > 0) || holds(s)) return s
+  // Never fewer figures than the student already asked for.
+  const from = s.precisionMode === 'sf' ? Math.max(3, s.decimals + 1) : 3
+  for (let digits = from; digits < 6; digits++) {
+    const q: S = { ...s, precisionMode: 'sf', decimals: digits }
+    if (holds(q)) return q
+  }
+  return { ...s, precisionMode: 'sf', decimals: Math.max(6, from) }
+}
+
 /** "=" when a working line holds as written, "≈" when rounding means it can only be close. */
 export const stepEq = (holds: boolean): string => (holds ? '=' : '\\approx')
 

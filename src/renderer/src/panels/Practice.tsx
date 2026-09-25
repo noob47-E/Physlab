@@ -22,7 +22,7 @@ import {
   rungsIn,
   sandboxPlan,
   sendSandboxReadings,
-  showMotion,
+  showAuthoredMotion,
   showSandbox,
   showVisual,
   visualMode,
@@ -770,7 +770,7 @@ export function Practice() {
               {vState === 'after-answer' && ' (after you answer)'}
             </button>
             {vButtons.includes('motion') && vPlan.source === 'authored' && (
-              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showMotion(vPlan.motion!, played, settings).note, 'graphing')}>
+              <button className="btn ghost min-h-[44px]" onClick={() => show(() => showAuthoredMotion(vPlan, played, settings, earned), 'graphing')}>
                 <Eye size={13} /> Draw the motion
               </button>
             )}

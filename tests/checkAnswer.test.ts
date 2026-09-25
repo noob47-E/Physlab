@@ -180,6 +180,17 @@ describe('checkAnswer', () => {
     expect(checkAnswer('8.66', Fx).verdict).toBe('right')
   })
 
+  it('matches a named trap at its own size, not with the answer’s absolute band', () => {
+    // Braking car, 20 m/s for 12 s: 120 m at 2 % is ±2.4 m, and the trap v ÷ t is 1.67 m/s².
+    // With the answer's band every number from −0.7 to 4.1 was called "the deceleration".
+    const s = field({ value: 120, tol: 2.4, traps: [{ value: 20 / 12, why: 'That is the size of the deceleration, in m/s², not a distance.' }] })
+    expect(checkAnswer('1', s).message).toBe('Not quite. Press Hint to see the next step.')
+    expect(checkAnswer('3', s).message).toBe('Not quite. Press Hint to see the next step.')
+    expect(checkAnswer('1.67', s).message).toBe('That is the size of the deceleration, in m/s², not a distance.')
+    expect(checkAnswer('1.66', s).message).toBe('That is the size of the deceleration, in m/s², not a distance.')
+    expect(checkAnswer('120', s).verdict).toBe('right')
+  })
+
   it('a named trap comes before the general sign and quadrant rules', () => {
     const f = angle(30, { traps: [{ value: -30, why: 'You dropped the minus on Ay.' }] })
     expect(checkAnswer('-30', f).message).toBe('You dropped the minus on Ay.')

@@ -23,14 +23,14 @@ import { presetById } from '../sim/presets'
 import { tableFrom } from '../sim/recording'
 import type { Actuator } from '../sim/types'
 import { checkChoicePart, generateChoices, type Choice } from './distractors'
-import { motionPieces, motionTable, type MotionPieces } from './motion'
+import { motionPieces, motionTable, type MotionPiece, type MotionPieces } from './motion'
 import { checkFormat2Part } from './answerKinds'
 import { answerValue, markWithECF, partShown, type ECFCheck } from './ecf'
 import { checkFunctionPart } from './odeCheck'
 import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTol } from './parts'
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
 import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
-import { formatQuantity, UNITS } from './units'
+import { formatQuantity, revealSettings, unitOfComponents, UNITS } from './units'
 import { hasVisual, visualOf, type VisualPlan } from './autoVisual'
 import { plainFormula } from './plainFormula'
 import { drawVariables, substitute, type Variant } from './variables'
@@ -173,7 +173,7 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
         kind: part.kind,
         traps: traps.filter((t) => Number.isFinite(t.value))
       }
-      return { ...base, field, answerText: Number.isFinite(value) ? formatQuantity(value, part.unit, settings) : '?' }
+      return { ...base, field, answerText: Number.isFinite(value) ? formatQuantity(value, part.unit, revealSettings(value, field.tol, settings)) : '?' }
     }
     if (part.type === 'choice') {
       let raw: Choice[]
@@ -396,13 +396,19 @@ export type PicturePlan =
   | { kind: 'between'; upper: string; lower: string; from: number; to: number; label?: string }
   | { kind: 'tangent'; expr: string; at: number }
   | { kind: 'normal'; mean: number; sd: number; from?: number; to?: number }
-  | { kind: 'vectors'; items: { name: string; v: V3; tail?: V3; role: 'input' | 'result' }[] }
+  | { kind: 'vectors'; items: { name: string; v: V3; tail?: V3; role: 'input' | 'result'; unit?: string }[] }
   | { kind: 'dots'; count: number; perRow: number }
   | { kind: 'curves'; items: { expr: string; label: string; from?: number; to?: number }[] }
   | { kind: 'numberline'; items: { label: string; value: number }[] }
 
 /** More dots than anyone counts by eye; a count past this is refused rather than drawn as a smear. */
 export const MAX_DOTS = 400
+
+/** The unit label an arrow's components are in (N for ["0", "-m2*g"]), or none when it cannot be told. */
+function arrowUnit(components: string[], units: Record<string, UnitId | undefined>): string | undefined {
+  const u = unitOfComponents(components, units)
+  return u === null || UNITS[u].label === '' ? undefined : UNITS[u].label
+}
 
 /** Two or three component formulas → a vector in the plane or in space. */
 function vectorIn(parts: string[], values: Record<string, number>, what: string): V3 {
@@ -456,7 +462,8 @@ export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSet
           name: it.name,
           v: vectorIn(it.v, values, `the arrow ${it.name}`),
           tail: it.tail === undefined ? undefined : vectorIn(it.tail, values, `where the arrow ${it.name} starts`),
-          role: it.role ?? 'input'
+          role: it.role ?? 'input',
+          unit: arrowUnit(it.v, units)
         }))
       }
     case 'dots': {
@@ -521,6 +528,13 @@ function drawForQuestion<T>(draw: () => T): T {
   const before = new Set(scene().order)
   const out = draw()
   questionDrawn = scene().order.filter((id) => !before.has(id))
+  // Every question picture is shown in Graphing (visualMode), but the Builder stamps what it
+  // makes with the space the student is in: arrows asked for from Problem Sets, fresh from the
+  // launch mode, were stamped 'vectors', and Graphing showed an empty viewport under "Drawn: the
+  // arrows r and v".
+  for (const id of questionDrawn) {
+    if (scene().objects[id]?.space !== 'graphing') scene().updateObject(id, (d) => void (d.space = 'graphing'), false)
+  }
   frameGraphs(questionDrawn)
   return out
 }
@@ -572,15 +586,34 @@ export function showPicture(plan: PicturePlan, settings: MeasureSettings, hideVa
           : { note: `Drawn: ${what}. The shaded part of the whole bell is the probability, ${n(area)}.`, value: area }
       }
       case 'vectors': {
+        const before = new Set(scene().order)
         visualizeSolution({
           title: '',
           steps: [],
           answers: [],
           visual: { vectors: plan.items.map((it) => ({ name: it.name, v: it.v, tail: it.tail, role: it.role })), mode: 'common-tail' }
         })
+        // One arrow per item, in the items' order (common tail). The scene keeps a name it can
+        // hold — m₂g became mg1, u₂ became u1 — so each arrow is labelled with its author's name,
+        // which the tip chip and the component labels read, and measured in its own unit (N, not
+        // grid squares) when its formula says what that is.
+        const arrows = scene().order.filter((id) => !before.has(id) && scene().objects[id]?.type === 'vector')
+        plan.items.forEach((it, i) => {
+          const id = arrows[i]
+          if (id === undefined) return
+          scene().updateObject(
+            id,
+            (d) => {
+              if (d.type !== 'vector') return
+              if (d.name !== it.name) d.label = it.name
+              if (it.unit) d.unit = it.unit
+            },
+            false
+          )
+        })
         const names = plan.items.map((it) => it.name)
         const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
-        return { note: `Drawn: the arrows ${list}.` }
+        return { note: names.length > 1 ? `Drawn: the arrows ${list}.` : `Drawn: the arrow ${list}.` }
       }
       case 'dots':
         visualizeDots(plan.count, plan.perRow)
@@ -612,27 +645,62 @@ export interface MotionShown {
   note: string
 }
 
-const plotWords = (m: PQMotion): string => m.plots.map((p) => (p === 'x-t' ? 'position' : p === 'v-t' ? 'speed' : 'acceleration')).join(' and ')
+/**
+ * The power of ten a motion plot's values are divided by so the plot is about as tall as it is
+ * long. The drawing has one scale for both axes, and a car braking from 20 m/s over 70 m in 7 s
+ * was framed on the 70: the 7 s wide curves were a sliver against the y-axis. Time is never
+ * scaled — it is what the student reads across — and a small plot is left as it is, never blown
+ * up into "tenths". 1 when the plot already fits.
+ */
+export function plotScale(pieces: readonly MotionPiece[], total: number): number {
+  let peak = 0
+  for (const p of pieces) {
+    const f = math.compile(p.expr)
+    for (let i = 0; i <= 40; i++) {
+      const x = p.from + ((p.to - p.from) * i) / 40
+      const y = Math.abs(Number(f.evaluate({ x })))
+      if (Number.isFinite(y)) peak = Math.max(peak, y)
+    }
+  }
+  if (!(total > 0) || !(peak > 0)) return 1
+  return 10 ** Math.max(0, Math.round(Math.log10(peak / total)))
+}
+
+const SCALE_WORDS: Record<number, string> = { 1: '', 10: 'tens of ', 100: 'hundreds of ', 1000: 'thousands of ', 10000: 'tens of thousands of ' }
+
+/** "position in tens of metres": what a plot shows, and in what, when its values are scaled. */
+function plotWord(plot: PQMotion['plots'][number], scale: number): string {
+  const [what, unit] = plot === 'x-t' ? ['position', 'metres'] : plot === 'v-t' ? ['speed', 'metres per second'] : ['acceleration', 'metres per second squared']
+  if (scale === 1) return what
+  const words = SCALE_WORDS[scale] ?? `${fmtPrecise(scale, { decimals: 0, precisionMode: 'dp' })} times `
+  return `${what} in ${words}${unit}`
+}
 
 /**
  * Draws the motion's chosen plots as piecewise curves (x across is time) and, when the question
  * asks for readings, adds a t, x, v table to Lab Data — `appendTable`, never `setTables`, so the
  * student's own tables stay. Throws a sentence when the motion cannot be worked out.
  */
-export function showMotion(m: PQMotion, played: Played, settings: MeasureSettings): MotionShown {
+export function showMotion(m: PQMotion, played: Played, settings: MeasureSettings, earned = true): MotionShown {
   const { values } = played.variant
   const pieces = motionPieces(m, values)
   if (pieces.problems.length > 0) throw new Error(pieces.problems[0])
   if (pieces.x.length === 0) throw new Error('This motion has no stretch that lasts any time, so there is nothing to draw.')
 
+  const words: string[] = []
   drawForQuestion(() => {
     for (const plot of m.plots) {
       const set = plot === 'x-t' ? pieces.x : plot === 'v-t' ? pieces.v : pieces.a
-      visualizePiecewise(set, plot === 'x-t' ? 'xt' : plot === 'v-t' ? 'vt' : 'at')
+      const scale = plotScale(set, pieces.total)
+      words.push(plotWord(plot, scale))
+      const drawn = scale === 1 ? set : set.map((p) => ({ ...p, expr: `(${p.expr}) / ${scale}` }))
+      visualizePiecewise(drawn, plot === 'x-t' ? 'xt' : plot === 'v-t' ? 'vt' : 'at')
     }
   })
 
-  const note = `Drawn: ${plotWords(m)} against time for ${fmtPrecise(pieces.total, settings)} s (time runs along x).`
+  // The time is left out until the answer is earned: "for 40 s" under "How long?" was the answer.
+  const what = words.join(' and ')
+  const note = earned ? `Drawn: ${what} against time for ${fmtPrecise(pieces.total, settings)} s (time runs along x).` : `Drawn: ${what} against time (time runs along x).`
   let rows = 0
   if (m.sampleEvery !== undefined && m.sampleEvery.trim() !== '') {
     const every = numberIn(m.sampleEvery, values, 'how often the readings are taken')
@@ -657,25 +725,38 @@ export function showMotion(m: PQMotion, played: Played, settings: MeasureSetting
 // One visual for any question (Fix 21)
 // ---------------------------------------------------------------------------
 
+const visualPlans = new WeakMap<Played, VisualPlan>()
+
 /**
  * What this played question shows: the author's picture, motion or experiment; else a picture
  * inferred from its numbers; else its given quantities on a number line. Never nothing.
  */
 export function visualPlanFor(played: Played): VisualPlan {
-  return visualOf(played.question, played.variant)
+  // Practice asks on every render (every keystroke in an answer box), and working out what an
+  // author's picture may show early samples each curve hundreds of times; a Played is fixed for
+  // its variant, so its plan is worked out once.
+  const known = visualPlans.get(played)
+  if (known) return known
+  const plan = visualOf(played.question, played.variant)
+  visualPlans.set(played, plan)
+  return plan
 }
 
 /**
- * Whether the visual can be drawn now, or only after the answer ("(after you answer)"): an
- * inferred picture every part of which gives the answer away waits until the question is
- * answered right or its solution shown. An author's own picture is always ready — its area or
- * slope label is what waits (decision 12 of the spec, as 0.7.0 already did). 'none' is a
- * question with nothing to draw — no numbers for its number line — so no button is offered;
- * reported 'ready', its one "Show the picture" only drew an error.
+ * Whether the visual can be drawn now, or only after the answer ("(after you answer)"): a
+ * picture every part of which gives the answer away waits until the question is answered right
+ * or its solution shown. That holds for an author's own picture and motion as for an inferred
+ * one — the steady-speed journey's time axis ran to the 40 s it asked for, the ball's x–t curve
+ * peaked at the height asked for — and the Sandbox experiment, which the student runs, is always
+ * open. 'none' is a question with nothing to draw — no numbers for its number line — so no button
+ * is offered; reported 'ready', its one "Show the picture" only drew an error.
  */
 export function visualState(plan: VisualPlan, earned: boolean): 'ready' | 'after-answer' | 'none' {
   if (!hasVisual(plan)) return 'none'
-  if (plan.source === 'authored' || earned) return 'ready'
+  if (earned) return 'ready'
+  // The experiment counts only when it is what the first button shows: beside a held-back
+  // picture or motion it has its own "Open the experiment", and the first button stays waiting.
+  if (plan.source === 'authored') return plan.early.picture || plan.early.motion || (plan.sandbox && !plan.picture && !plan.motion) ? 'ready' : 'after-answer'
   return plan.auto.early ? 'ready' : 'after-answer'
 }
 
@@ -695,15 +776,33 @@ export const HELD_BACK = 'This picture shows the answer, so it appears once you 
  */
 export function showVisual(plan: VisualPlan, played: Played, settings: MeasureSettings, earned: boolean): string {
   if (plan.source === 'authored') {
-    if (plan.picture) return showPicture(picturePlan(plan.picture, played, settings), settings, !earned).note
-    if (plan.motion) return showMotion(plan.motion, played, settings).note
+    // Before the answer, only what holds none of it: the curves, arrows and plots that do not end,
+    // turn or run out on an answer (authoredEarly).
+    const picture = earned ? plan.picture : plan.early.picture
+    const motion = earned ? plan.motion : plan.early.motion
+    if (picture) return showPicture(picturePlan(picture, played, settings), settings, !earned).note
+    if (motion) return showMotion(motion, played, settings, earned).note
+    // A held-back picture or motion is not swapped for the experiment beside it: Practice has
+    // already switched to Graphing for the picture, and the experiment has its own button.
+    if (plan.picture || plan.motion) throw new Error(HELD_BACK)
     if (plan.sandbox) return showSandbox(sandboxPlan(plan.sandbox, played))
     throw new Error('This question has nothing to show.')
   }
   const v = earned ? plan.auto.visual : plan.auto.early
   if (!v) throw new Error(HELD_BACK)
   if (v.picture) return showPicture(picturePlan(v.picture, played, settings), settings, !earned).note
-  return showMotion(v.motion, played, settings).note
+  return showMotion(v.motion, played, settings, earned).note
+}
+
+/**
+ * "Draw the motion" beside an author's picture: the motion in full once the answer is earned,
+ * before that only its plots that hold no answer — or the held-back sentence when none is left.
+ */
+export function showAuthoredMotion(plan: VisualPlan, played: Played, settings: MeasureSettings, earned: boolean): string {
+  if (plan.source !== 'authored' || !plan.motion) throw new Error('This question has no motion to draw.')
+  const motion = earned ? plan.motion : plan.early.motion
+  if (!motion) throw new Error(HELD_BACK)
+  return showMotion(motion, played, settings, earned).note
 }
 
 // ---------------------------------------------------------------------------

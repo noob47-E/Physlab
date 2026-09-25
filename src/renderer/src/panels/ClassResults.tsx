@@ -10,6 +10,9 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Download, Upload, X } from 'lucide-react'
 import { itemStats, parseResultFile, serializeResultFile, type ItemStat, type PQResultFile } from '../questions/results'
 import { fmt } from '../math/format'
+import { loadBundled } from '../questions/bank'
+import { useAuthor } from '../questions/authorStore'
+import type { PQQuestion } from '../questions/pqjson'
 
 /** Only the one call this panel needs from the desktop bridge; declared locally (as app/files.ts
  *  does for the same bridge) rather than reaching into src/preload, which is outside this track. */
@@ -98,6 +101,33 @@ export function sortedStats(files: readonly PQResultFile[]): ItemStat[] {
   )
 }
 
+/**
+ * What a teacher calls each question: its title, looked up by id among the questions this
+ * computer has (the bundled banks, the Question Author's set), in that order of preference —
+ * never the internal id "physlab-fields-centripetal-acceleration", which wrapped over three lines
+ * of the side panel. An id nothing here knows (a set from another computer) stays as it is.
+ */
+export function questionTitles(ids: readonly string[], sources: readonly (readonly PQQuestion[])[]): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const id of ids) {
+    const q = sources.flatMap((qs) => qs.filter((x) => x.id === id))[0]
+    const title = q?.title.trim()
+    out.set(id, title ? title : id)
+  }
+  return out
+}
+
+/** The questions this computer knows by id: the bundled banks and the Question Author's set. */
+function knownQuestions(): PQQuestion[][] {
+  let bundled: PQQuestion[] = []
+  try {
+    bundled = loadBundled().questions
+  } catch {
+    // A damaged bundled bank is Practice's to report; here the ids simply stay ids.
+  }
+  return [bundled, useAuthor.getState().questions]
+}
+
 const csvField = (v: string): string => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
 /** A number a spreadsheet can sort and average: fmt's digits, but an ASCII minus (fmt writes
  *  U+2212, which Excel reads as text) and an empty cell, not "—", where there is no number. */
@@ -106,6 +136,7 @@ const csvNum = (v: number | null): string => (v === null ? '' : corr(v).replace(
 /** Headings written out in words, since a spreadsheet has no key under its table. */
 export const CSV_HEADER = [
   'Question',
+  'Question id',
   'Part',
   'Attempted',
   'Facility (share right first time)',
@@ -119,9 +150,9 @@ export const CSV_HEADER = [
  * mark: without one, Excel on Windows reads UTF-8 as the local code page and the flag's em dash
  * turns into "â€”".
  */
-export function statsToCsv(rows: readonly ItemStat[]): string {
+export function statsToCsv(rows: readonly ItemStat[], titles: ReadonlyMap<string, string> = new Map()): string {
   const lines = rows.map((r) =>
-    [r.questionId, String(r.partIndex + 1), String(r.attempted), pct(r.facility), csvNum(r.rpb), csvNum(r.d27), r.flag ?? '']
+    [titles.get(r.questionId) ?? r.questionId, r.questionId, String(r.partIndex + 1), String(r.attempted), pct(r.facility), csvNum(r.rpb), csvNum(r.d27), r.flag ?? '']
       .map(csvField)
       .join(',')
   )
@@ -133,6 +164,7 @@ export function ClassResults() {
   const [errors, setErrors] = useState<{ name: string; text: string }[]>([])
 
   const rows = useMemo(() => sortedStats(files.map((f) => f.file)), [files])
+  const titles = useMemo(() => questionTitles([...new Set(rows.map((r) => r.questionId))], knownQuestions()), [rows])
 
   const open = async () => {
     setErrors([])
@@ -156,7 +188,7 @@ export function ClassResults() {
   // so a plain top-level import would crash the moment a test imports this panel for its pure
   // functions (AGENTS.md's "dev-only global" trap); a dynamic import only ever runs from a click.
   const exportCsv = () => {
-    void import('../app/files').then(({ saveTextFile }) => saveTextFile(statsToCsv(rows), 'class-results.csv', 'CSV file', 'csv'))
+    void import('../app/files').then(({ saveTextFile }) => saveTextFile(statsToCsv(rows, titles), 'class-results.csv', 'CSV file', 'csv'))
   }
 
   return (
@@ -213,11 +245,11 @@ export function ClassResults() {
         <div className="px-3 py-6 text-ink-faint">Nobody attempted a part in {files.length === 1 ? 'this file' : 'these files'} yet.</div>
       ) : (
         <div className="mt-3 overflow-x-auto px-3">
-          {/* Sized to the side panel (about 390 px at 1366 px wide): the question id takes what is
-              left and wraps, the numbers take their own width, and a flag gets a line of its own
-              under its row across the full width — nothing a teacher needs is off to the side. The
-              id keeps 88 px so it never collapses to nothing; only a panel dragged narrower than
-              the table scrolls sideways. */}
+          {/* Sized to the side panel (about 390 px at 1366 px wide): the question's title takes
+              what is left and wraps, the numbers take their own width, and a flag gets a line of
+              its own under its row across the full width — nothing a teacher needs is off to the
+              side. The title keeps 88 px so it never collapses to nothing; only a panel dragged
+              narrower than the table scrolls sideways. */}
           <div className="grid gap-1" style={{ gridTemplateColumns: 'minmax(88px, 1fr) repeat(5, auto)' }}>
             <HeadCell>Question</HeadCell>
             <HeadCell num>Part</HeadCell>
@@ -228,7 +260,7 @@ export function ClassResults() {
             </HeadCell>
             <HeadCell num>D27</HeadCell>
             {rows.map((r) => (
-              <Row key={`${r.questionId}\u0000${r.partIndex}`} row={r} />
+              <Row key={`${r.questionId}\u0000${r.partIndex}`} row={r} title={titles.get(r.questionId) ?? r.questionId} />
             ))}
           </div>
           <div className="mt-3 flex flex-col gap-1 text-fine text-ink-dim">
@@ -254,10 +286,10 @@ function HeadCell({ children, num }: { children: ReactNode; num?: boolean }) {
 const CELL = 'min-h-[24px] rounded border border-line bg-input px-2 py-1'
 const NUM = `${CELL} num text-right whitespace-nowrap`
 
-function Row({ row }: { row: ItemStat }) {
+function Row({ row, title }: { row: ItemStat; title: string }) {
   return (
     <>
-      <div className={`${CELL} min-w-0 break-words`}>{row.questionId}</div>
+      <div className={`${CELL} min-w-0 break-words`}>{title}</div>
       <div className={NUM}>{row.partIndex + 1}</div>
       <div className={NUM}>{row.attempted}</div>
       <div className={NUM}>{pct(row.facility)}</div>

@@ -5,7 +5,7 @@
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
 import { inDegrees, math, preprocess } from './expr'
-import { fmtPrecise, fmtSci, type MeasureSettings } from './format'
+import { fmtPrecise, fmtSci, revealPrecision, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 
@@ -75,7 +75,14 @@ export function checkAnswer(text: string, f: AnswerField, s: Pick<MeasureSetting
   }
 
   // Named mistakes for this particular question come first: they are the most useful thing to say.
-  for (const trap of f.traps ?? []) if (near(a, trap.value)) return { verdict: 'wrong', parsed: a, message: trap.why }
+  // Each is matched at the same share of its own size as the answer's band is of the answer:
+  // the answer's absolute band (2 % of 120 m is 2.4 m) around a trap of 1.67 m/s² named "the
+  // deceleration" for any number from −0.7 to 4.1, so a student typing 1 was told a mistake they
+  // never made.
+  const share = f.value !== 0 ? f.tol / Math.abs(f.value) : null
+  for (const trap of f.traps ?? []) {
+    if (near(a, trap.value, share === null ? f.tol : share * Math.abs(trap.value))) return { verdict: 'wrong', parsed: a, message: trap.why }
+  }
 
   if (near(a, -f.value)) {
     return { verdict: 'wrong', parsed: a, message: 'Right size, wrong sign. Check the direction — or the signs of the components you started from.' }
@@ -109,12 +116,14 @@ export function checkAnswer(text: string, f: AnswerField, s: Pick<MeasureSetting
   return { verdict: 'wrong', parsed: a, message: 'Not quite. Press Hint to see the next step.' }
 }
 
-/** The answer as PhysLab would write it, for the "show me" button — in the student's precision. */
+/** The answer as PhysLab would write it, for the "show me" button — in the student's precision, or more figures when that precision would round it out of its own band. */
 export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 4, precisionMode: 'dp' }): string {
   // fmtPrecise writes anything under 1e-12 as 0, which is right for a dragged point and wrong
   // for a known answer: an electron's 1.6×10⁻¹⁹ N must never be revealed as "0 N".
   const v = f.value
-  const n = v !== 0 && Math.abs(v) < 1e-12 ? fmtSci(v, s) : fmtPrecise(v, s)
+  const show = (x: number, q: typeof s): string => (x !== 0 && Math.abs(x) < 1e-12 ? fmtSci(x, q) : fmtPrecise(x, q))
+  // Enough figures that the answer shown, typed back, is marked right by this same field.
+  const n = show(v, revealPrecision(v, f.tol, s, show))
   // A degree sign sits against its number, as formatMeasure writes it: "36.87°", not "36.87 °".
   const gap = f.unit === '°' ? '' : ' '
   return `${n}${f.unit ? `${gap}${f.unit}` : ''}`

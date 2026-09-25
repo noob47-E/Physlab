@@ -37,7 +37,8 @@ import {
 } from '../math/vectorSolver'
 import { format2AnswerTex, statedAnswerTex } from './answerKinds'
 import { isCommandArgument, type FadingLevel, type PQPart, type PQQuestion, type PQStep, type UnitId } from './pqjson'
-import { texQuantity, texUnit } from './units'
+import { toAbsoluteTol } from './parts'
+import { revealSettings, texQuantity, texUnit } from './units'
 import { substitute, type Variant } from './variables'
 // A type only: player.ts builds on this file, so a value import back would be circular.
 import type { Played } from './player'
@@ -181,7 +182,8 @@ function answerFor(part: PQPart, values: Record<string, number>, units: Record<s
       }
       return { label, tex: statedAnswerTex(v, u, part.unit, s) }
     }
-    return { label, tex: Number.isFinite(v) ? texQuantity(v, part.unit, s) : '\\text{?}' }
+    // Enough figures that the answer shown, typed back, marks right: 0.0538 m³, never 0.05 m³.
+    return { label, tex: Number.isFinite(v) ? texQuantity(v, part.unit, revealSettings(v, toAbsoluteTol(part, v), s)) : '\\text{?}' }
   }
   if (part.type === 'expression') {
     try {

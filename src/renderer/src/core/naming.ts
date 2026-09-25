@@ -1,6 +1,6 @@
-import type { Computed, ObjId, ObjType, SceneObject } from './types'
+import type { Computed, ObjId, ObjType, SceneObject, VectorObj } from './types'
 import { classifyPolygon } from '../math/shapes'
-import { fmtPoint } from '../math/format'
+import { fmtPoint, fmtPrecise, formatMeasure, type MeasureSettings } from '../math/format'
 
 const GREEK = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'φ', 'ψ', 'ω']
 
@@ -160,6 +160,24 @@ function lettered(id: ObjId, objects: Record<ObjId, SceneObject>): string | null
 function cornerLetters(points: ObjId[], objects: Record<ObjId, SceneObject>): string | null {
   const names = points.map((id) => lettered(id, objects))
   return names.every((n): n is string => n !== null) ? names.join('') : null
+}
+
+/**
+ * An amount of a vector — its size or one component — in the vector's own unit when it has one
+ * (a question's force arrow in N), else as a length in the drawing's unit. A force drawn from a
+ * question used to read "mg1y = −9.81 u": a length in grid squares, not a weight.
+ */
+export function vectorAmount(v: number, o: VectorObj, s: MeasureSettings): string {
+  return o.unit ? `${fmtPrecise(v, s)} ${o.unit}` : formatMeasure(v, 'length', s)
+}
+
+/**
+ * The component labels drawn beside a selected vector, "m₂gx = 0 N" and "m₂gy = −9.81 N": its
+ * display name (the author's m₂g, never the scene's sanitised mg1) and its own unit.
+ */
+export function componentTexts(o: VectorObj, comp: readonly number[], s: MeasureSettings): [string, string] {
+  const name = o.label ?? o.name
+  return [`${name}x = ${vectorAmount(comp[0], o, s)}`, `${name}y = ${vectorAmount(comp[1], o, s)}`]
 }
 
 /**

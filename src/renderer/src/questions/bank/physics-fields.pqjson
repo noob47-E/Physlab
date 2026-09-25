@@ -51,7 +51,8 @@
       "variables": [
         { "name": "R1", "def": { "kind": "range", "from": 10, "to": 60, "step": 10 }, "unit": "Ω", "description": "first resistor" },
         { "name": "R2", "def": { "kind": "range", "from": 10, "to": 60, "step": 10 }, "unit": "Ω", "description": "second resistor" },
-        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "battery voltage" }
+        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "battery voltage" },
+        { "name": "R", "def": { "kind": "expr", "expr": "R1 * R2 / (R1 + R2)" }, "unit": "Ω", "description": "combined resistance, worked out in the steps" }
       ],
       "parts": [
         {
@@ -76,8 +77,8 @@
       "steps": {
         "level": "worked",
         "items": [
-          { "head": "Resistors side by side share the same voltage; their combined resistance is the product over the sum.", "tex": "R = \\frac{{R1} \\times {R2}}{{R1} + {R2}}", "rule": "R = \\frac{R_1 R_2}{R_1 + R_2}", "blank": true },
-          { "head": "Ohm's law then gives the total current the battery must supply.", "tex": "I = \\frac{{V}}{R}", "rule": "I = V \\div R", "blank": true }
+          { "head": "Resistors side by side share the same voltage; their combined resistance is the product over the sum.", "tex": "R = \\frac{{R1} \\times {R2}}{{R1} + {R2}} = {R}", "rule": "R = \\frac{R_1 R_2}{R_1 + R_2}", "blank": true },
+          { "head": "Ohm's law then gives the total current the battery must supply.", "tex": "I = \\frac{{V}}{{R}}", "rule": "I = V \\div R", "blank": true }
         ]
       },
       "picture": { "kind": "curves", "items": [{ "expr": "((R1*R2)/(R1+R2))*x/10", "label": "Volts across the pair against current in tenths of an amp", "from": "0", "to": "10*V*(R1+R2)/(R1*R2)" }] },
@@ -91,7 +92,8 @@
       "statement": "A resistor of {R} is connected across a supply of {V}.",
       "variables": [
         { "name": "R", "def": { "kind": "range", "from": 5, "to": 50, "step": 5 }, "unit": "Ω", "description": "resistance" },
-        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "supply voltage" }
+        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "supply voltage" },
+        { "name": "I", "def": { "kind": "expr", "expr": "V / R" }, "unit": "A", "description": "current, worked out in the steps" }
       ],
       "condition": { "when": "V != R", "maxRuns": 100 },
       "parts": [
@@ -120,8 +122,8 @@
       "steps": {
         "level": "worked",
         "items": [
-          { "head": "Ohm's law gives the current the supply drives through the resistor.", "tex": "I = \\frac{{V}}{{R}}", "rule": "I = V \\div R", "blank": true },
-          { "head": "Power dissipated is the voltage across the resistor times the current through it.", "tex": "P = {V} \\times I", "rule": "P = VI", "blank": true }
+          { "head": "Ohm's law gives the current the supply drives through the resistor.", "tex": "I = \\frac{{V}}{{R}} = {I}", "rule": "I = V \\div R", "blank": true },
+          { "head": "Power dissipated is the voltage across the resistor times the current through it.", "tex": "P = {V} \\times {I}", "rule": "P = VI", "blank": true }
         ]
       },
       "picture": { "kind": "curves", "items": [{ "expr": "R*x/10", "label": "Volts across the resistor against current in tenths of an amp", "from": "0", "to": "10*V/R" }] },
@@ -172,7 +174,8 @@
       "variables": [
         { "name": "R", "def": { "kind": "range", "from": 10, "to": 20, "step": 5 }, "unit": "Ω", "description": "resistance" },
         { "name": "I", "def": { "kind": "range", "from": 1.5, "to": 2.5, "step": 0.5 }, "unit": "A", "description": "current" },
-        { "name": "t", "def": { "kind": "range", "from": 20, "to": 60, "step": 10 }, "unit": "s", "description": "time the current flows" }
+        { "name": "t", "def": { "kind": "range", "from": 20, "to": 60, "step": 10 }, "unit": "s", "description": "time the current flows" },
+        { "name": "P", "def": { "kind": "expr", "expr": "I^2 * R" }, "unit": "W", "description": "heating rate, worked out in the steps" }
       ],
       "parts": [
         {
@@ -191,8 +194,8 @@
       "steps": {
         "level": "worked",
         "items": [
-          { "head": "A current through a resistor heats it at a steady rate, the current squared times the resistance.", "tex": "P = {I}^{2} \\times {R}", "rule": "P = I^{2}R", "blank": true },
-          { "head": "Over the time the current flows, the heat generated is that rate times the time.", "tex": "Q = P \\times {t}", "rule": "Q = Pt", "blank": true }
+          { "head": "A current through a resistor heats it at a steady rate, the current squared times the resistance.", "tex": "P = {I}^{2} \\times {R} = {P}", "rule": "P = I^{2}R", "blank": true },
+          { "head": "Over the time the current flows, the heat generated is that rate times the time.", "tex": "Q = {P} \\times {t}", "rule": "Q = Pt", "blank": true }
         ]
       },
       "picture": { "kind": "between", "upper": "I^2*R", "lower": "0", "from": "0", "to": "t", "label": "Watts against seconds: the area is the heat in joules" },
@@ -608,7 +611,8 @@
       "variables": [
         { "name": "m", "def": { "kind": "range", "from": 0.5, "to": 1.5, "step": 0.5 }, "unit": "kg", "description": "mass" },
         { "name": "v", "def": { "kind": "range", "from": 2, "to": 6, "step": 2 }, "unit": "m/s", "description": "speed around the circle" },
-        { "name": "r", "def": { "kind": "range", "from": 1.5, "to": 3, "step": 0.5 }, "unit": "m", "description": "radius of the circle" }
+        { "name": "r", "def": { "kind": "range", "from": 1.5, "to": 3, "step": 0.5 }, "unit": "m", "description": "radius of the circle" },
+        { "name": "a", "def": { "kind": "expr", "expr": "v^2 / r" }, "unit": "m/s²", "description": "centripetal acceleration, worked out in the steps" }
       ],
       "parts": [
         {
@@ -627,8 +631,8 @@
       "steps": {
         "level": "worked",
         "items": [
-          { "head": "Moving on a circle needs a centripetal acceleration towards the centre, speed squared over radius.", "tex": "a = \\frac{{v}^{2}}{{r}}", "rule": "a = v^{2} \\div r", "blank": true },
-          { "head": "Newton's second law gives the force needed to produce that acceleration.", "tex": "F = {m} \\times a", "rule": "F = ma", "blank": true }
+          { "head": "Moving on a circle needs a centripetal acceleration towards the centre, speed squared over radius.", "tex": "a = \\frac{{v}^{2}}{{r}} = {a}", "rule": "a = v^{2} \\div r", "blank": true },
+          { "head": "Newton's second law gives the force needed to produce that acceleration.", "tex": "F = {m} \\times {a}", "rule": "F = ma", "blank": true }
         ]
       },
       "picture": {

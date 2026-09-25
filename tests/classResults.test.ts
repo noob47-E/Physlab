@@ -8,7 +8,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { addResultFile, CSV_HEADER, sortedStats, statsToCsv, type OpenedFile } from '../src/renderer/src/panels/ClassResults'
+import { addResultFile, CSV_HEADER, questionTitles, sortedStats, statsToCsv, type OpenedFile } from '../src/renderer/src/panels/ClassResults'
+import { loadBundled } from '../src/renderer/src/questions/bank'
 import { buildResultFile, serializeResultFile, type PQResultFile, type PQResultItem } from '../src/renderer/src/questions/results'
 
 /** One student's file: one item worth `itemMarks` (right iff `itemMarks > 0`) plus a filler item
@@ -120,7 +121,7 @@ describe('statsToCsv — the table as shown, as a spreadsheet reads it', () => {
     expect(lines[0]).toBe(HEADER)
     // n = 4, k = round(4·0.27) = 1: upper group is just the top total (right), lower just the
     // bottom (wrong) — D27 = 1 − 0 = 1, and fmt trims the trailing zeros of "1.00" to "1".
-    expect(lines[1]).toBe('Q,1,4,50%,0.89,1,')
+    expect(lines[1]).toBe('Q,Q,1,4,50%,0.89,1,') // no title known for 'Q': its id in both columns
   })
 
   it('leaves a null r_pb or D27 empty — one file, nothing to correlate — so the column stays numeric', () => {
@@ -128,8 +129,8 @@ describe('statsToCsv — the table as shown, as a spreadsheet reads it', () => {
     // Both rows (FILLER and Q): an empty r_pb and D27, never "—" in a numeric column.
     for (const line of csvLines(csv).slice(1)) {
       const cells = line.split(',')
-      expect(cells[4]).toBe('') // r_pb
-      expect(cells[5]).toBe('') // D27
+      expect(cells[5]).toBe('') // r_pb
+      expect(cells[6]).toBe('') // D27
     }
   })
 
@@ -142,9 +143,9 @@ describe('statsToCsv — the table as shown, as a spreadsheet reads it', () => {
     const csv = statsToCsv([row])
     expect(csv).not.toContain('\u2212')
     const cells = csvLines(csv)[1].split(',')
-    expect(cells[4]).toMatch(/^-0\.\d{1,2}$/)
-    expect(Number(cells[4])).toBeCloseTo(row.rpb!, 2)
-    expect(cells[5]).toBe('-1') // the top 27 % (one student) wrong, the bottom 27 % right
+    expect(cells[5]).toMatch(/^-0\.\d{1,2}$/)
+    expect(Number(cells[5])).toBeCloseTo(row.rpb!, 2)
+    expect(cells[6]).toBe('-1') // the top 27 % (one student) wrong, the bottom 27 % right
   })
 
   it('starts with a byte-order mark, so Excel on Windows keeps the flag’s em dash', () => {
@@ -166,11 +167,47 @@ describe('statsToCsv — the table as shown, as a spreadsheet reads it', () => {
     const files = [studentFile('Q', 0, 5), studentFile('Q', 0, 4), studentFile('Q', 0, 3), studentFile('Q', 0, 2), studentFile('Q', 1, 1)]
     const csv = statsToCsv(sortedStats(files))
     expect(csv).toContain('Most got it wrong first time.')
-    expect(csvLines(csv)[1].split(',').length).toBe(7) // the flag's own full stop is not mistaken for a new field
+    expect(csvLines(csv)[1].split(',').length).toBe(8) // the flag's own full stop is not mistaken for a new field
   })
 
   it('has just the header row for an empty table', () => {
     expect(statsToCsv([])).toBe('\uFEFF' + HEADER)
+  })
+})
+
+describe('questions are named by their titles, not their internal ids', () => {
+  // A real Rotation.pqresult named its rows "physlab-fields-centripetal-acceleration" and
+  // "physlab-fields-torque", each wrapping over two or three lines of the 370 px dock.
+  const ROTATION = ['physlab-fields-centripetal-acceleration', 'physlab-fields-torque']
+  const files = [
+    buildResultFile({
+      setId: 'bundled:rotation',
+      setTitle: 'Rotation',
+      items: ROTATION.map((questionId, i) => ({ questionId, seed: i + 1, hints: 0, seconds: 20, parts: [{ index: 0, answered: true, firstTry: true, right: true, marks: 1, outOf: 1 }] }))
+    })
+  ]
+
+  it('looks each id up in the bundled banks and the Question Author\u2019s set; an unknown id stays itself', () => {
+    const bundled = loadBundled().questions
+    const mine = [{ ...bundled[0], id: 'teacher-own', title: 'My own pulley question' }]
+    const titles = questionTitles([...ROTATION, 'teacher-own', 'from-another-computer'], [bundled, mine])
+    for (const id of ROTATION) expect(titles.get(id)).toBe(bundled.find((q) => q.id === id)!.title)
+    expect(titles.get('physlab-fields-torque')).not.toMatch(/physlab|-/)
+    expect(titles.get('teacher-own')).toBe('My own pulley question')
+    expect(titles.get('from-another-computer')).toBe('from-another-computer')
+  })
+
+  it('writes the title in the CSV, with the id in a column of its own', () => {
+    const rows = sortedStats(files)
+    const titles = questionTitles(rows.map((r) => r.questionId), [loadBundled().questions])
+    const lines = csvLines(statsToCsv(rows, titles))
+    expect(lines[0].split(',').slice(0, 2)).toEqual(['Question', 'Question id'])
+    for (const line of lines.slice(1)) {
+      const [title, id] = line.split(',')
+      expect(ROTATION).toContain(id)
+      expect(title).toBe(titles.get(id))
+      expect(title).not.toBe(id)
+    }
   })
 })
 

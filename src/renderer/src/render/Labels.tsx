@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber'
 import { toScreen } from './cameraUtils'
 import { labelAnchors, overlay } from './overlay'
 import { useScene } from '../core/store'
-import { displayName } from '../core/naming'
+import { displayName, vectorAmount } from '../core/naming'
 import { cssColor } from '../app/theme'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { formatMeasure } from '../math/format'
@@ -41,11 +41,12 @@ export function measureText(o: SceneObject, c: Computed | undefined, s: SceneSet
   if (!c) return ''
   switch (c.type) {
     case 'vector': {
-      const m = formatMeasure(len(c.comp), 'length', s)
+      // A question's force arrow is measured in N, not in grid squares.
+      const m = o.type === 'vector' ? vectorAmount(len(c.comp), o, s) : formatMeasure(len(c.comp), 'length', s)
       const planar = Math.abs(c.comp[2]) < 1e-12
       const base = planar ? `${m} ∠ ${formatMeasure(heading(c.comp), 'direction', s)}` : m
       if (!full) return base
-      const comps = c.comp.slice(0, planar ? 2 : 3).map((v) => formatMeasure(v, 'length', s).replace(/ \S+$/, ''))
+      const comps = c.comp.slice(0, planar ? 2 : 3).map((v) => (o.type === 'vector' ? vectorAmount(v, o, s) : formatMeasure(v, 'length', s)).replace(/ \S+$/, ''))
       return `${base}  (${comps.join(', ')})`
     }
     case 'segment':
