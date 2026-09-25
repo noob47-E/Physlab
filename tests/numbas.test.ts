@@ -38,7 +38,7 @@ describe('JME → mathjs', () => {
       ['a = b and not (c <> d) or a <= b', 'a == b and not (c != d) or a <= b'],
       ['(a or b) and c', '(a or b) and c'],
       ['2x', '2 * x'],
-      ['dec(x)', 'x'],
+      ['dec(x)', 'x - fix(x)'],
       ['trunc(x)', 'fix(x)'],
       ['-x^2', '-x ^ 2'],
       ['(a - b) - c', 'a - b - c'],
@@ -83,6 +83,11 @@ describe('JME → mathjs', () => {
     expect(evalDeg(jmeToMath('mod(7, 3)'))).toBe(1)
     expect(evalDeg(jmeToMath('1/2x'), { x: 4 })).toBe(2)
     expect(evalDeg(jmeToMath('2(x+1)'), { x: 4 })).toBe(10)
+    // dec(x) is JME's signed fractional part, x − trunc(x): the bug this replaces emitted the
+    // bare x, so dec(3.5) silently came in as 3.5 instead of Numbas's own 0.5.
+    expect(evalDeg(jmeToMath('dec(3.5)'))).toBeCloseTo(0.5, 12)
+    expect(evalDeg(jmeToMath('dec(-3.5)'))).toBeCloseTo(-0.5, 12)
+    expect(evalDeg(jmeToMath('dec(4)'))).toBe(0)
   })
 
   it('turns random() into a range or a list', () => {

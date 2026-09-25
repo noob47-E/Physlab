@@ -1138,7 +1138,13 @@ const TENS = [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6].map((k) => 10 ** k)
  * journey's 40 s) stays in. A zero is the origin, a start from rest or the axis every curve begins
  * on: counted, it would hold back every picture of a question whose answer is 0.
  */
-const fresh = (shown: number[], given: number[]): number[] => shown.filter((x) => Math.abs(x) > 1e-12 && !given.some((g) => same(Math.abs(g), Math.abs(x))))
+// Compares signed, not by size: a given of +5 must not hide a drawn −5, or a picture could show
+// the exact value of an answer that happens to share a given's magnitude with the opposite sign
+// before the question is answered. The sign is checked first: below about 5×10⁻⁷ `same` is an
+// absolute test, so a given of +1×10⁻⁷ would otherwise still hide a drawn −1×10⁻⁷ (and a given
+// of 0 a drawn 1×10⁻⁷).
+const sameSign = (g: number, x: number): boolean => (g === 0 ? x === 0 : g > 0 === x > 0)
+const fresh = (shown: number[], given: number[]): number[] => shown.filter((x) => Math.abs(x) > 1e-12 && !given.some((g) => sameSign(g, x) && same(g, x)))
 
 const holdsSizeOf = (shown: number[], answers: Answer[]): boolean => holdsSize(shown, answers)
 

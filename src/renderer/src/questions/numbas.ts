@@ -426,7 +426,14 @@ function emitCall(n: Extract<JmeNode, { t: 'call' }>, trig: TrigMode): Emitted {
     throw new JmeRefusal(`log with ${n.args.length} inputs`)
   }
   if (f === 'trunc') return atom(`fix(${one()})`)
-  if (f === 'dec') return emit(n.args[0], trig)
+  if (f === 'dec') {
+    if (n.args.length !== 1) throw new JmeRefusal(`dec with ${n.args.length} inputs`)
+    // Numbas's dec(x) is the signed fractional part, x − trunc(x): dec(3.5) = 0.5, dec(−3.5) =
+    // −0.5. Emitting the bare argument (the bug this replaces) silently dropped the whole part of
+    // every number dec() touched, wrong in every variant and in the marked answer alike.
+    const a = emit(n.args[0], trig)
+    return { s: `${wrap(a, P.add)} - fix(${a.s})`, p: P.add }
+  }
   const innerCall = (names: readonly string[]): JmeNode | null => {
     const a = n.args[0]
     return a.t === 'call' && names.includes(a.f) && a.args.length === 1 ? a.args[0] : null
@@ -959,11 +966,29 @@ function readMatrixPart(p: Obj, label: string, promptLines: string[], ctx: TextC
   } catch (e) {
     refuse(e, label)
   }
-  const gap = Number(tryGet(p, 'tolerance'))
+  // Only a real JSON number counts as a stated gap: null, "" or a stray string coerce to 0 through
+  // Number() just as a deliberate 0 does, and a hand-edited or third-party file writing one of
+  // those means "nothing set", not "match exactly".
+  const rawTolerance = tryGet(p, 'tolerance')
+  const gap = typeof rawTolerance === 'number' ? rawTolerance : NaN
   const precision = Number(tryGet(p, 'precision'))
   const precisionType = asString(tryGet(p, 'precisionType'))
+  // A relative band has no Numbas equivalent (its tolerance is one absolute gap), so it goes out
+  // as an exact 0 with the true value tucked into precisionMessage (writeMatrixPart, below) — a
+  // plain Numbas install reads it as exact, but a round trip through PhysLab restores the band.
+  // The marker is trusted only while the file still looks like PhysLab's own untouched export
+  // (tolerance still 0, no precision restriction): an explicit tolerance or precision the file
+  // now carries is a teacher's own edit and wins over a stale marker from before that edit.
+  const relBack = /^\[physlab:tolerance=relative:([0-9.]+(?:e-?\d+)?)]$/.exec(asString(tryGet(p, 'precisionMessage')))
   let tolerance: Tolerance
   if (gap > 0) tolerance = { kind: 'absolute', value: gap }
+  else if (relBack && gap === 0 && precisionType === 'none' && Number.isFinite(Number(relBack[1]))) tolerance = { kind: 'relative', value: Number(relBack[1]) }
+  // Numbas's own default for an untouched matrix part is tolerance 0 with no precision
+  // restriction, and that is also exactly how it marks an author's deliberate exact-match part —
+  // the two are the same JSON, and Numbas treats both as exact. PhysLab used to read the same
+  // zero as "nothing set" and loosen it to the app's 2% default, marking a wrong-by-up-to-2%
+  // entry as right when the question demanded an exact match.
+  else if (gap === 0 && precisionType !== 'dp' && precisionType !== 'sigfig') tolerance = { kind: 'absolute', value: 0 }
   else if (precisionType === 'dp' && Number.isFinite(precision)) tolerance = { kind: 'absolute', value: 0.5 * 10 ** -precision }
   else if (precisionType === 'sigfig' && Number.isFinite(precision)) tolerance = { kind: 'relative', value: 0.5 * 10 ** (1 - precision) }
   else tolerance = { ...DEFAULT_BAND }
@@ -1653,14 +1678,16 @@ function partToNumbas(p: PQPart): Obj | null {
         maxRows: 0,
         prefilledCells: '',
         // Numbas's tolerance is a fixed gap on every entry; a relative band has no such gap, so
-        // Numbas checks exactly (the description says so) and reads back as the app's 2 %.
+        // a plain Numbas install checks exactly (the description says so). The true band is kept
+        // in precisionMessage, which readMatrixPart reads back in preference to the bare 0, so a
+        // PhysLab -> .exam -> PhysLab round trip does not silently tighten a 5 % part to exact.
         tolerance: p.tolerance.kind === 'absolute' ? p.tolerance.value : 0,
         markPerCell: p.markPerCell === true,
         allowFractions: p.allowFractions === true,
         precisionType: 'none',
         precision: 0,
         precisionPartialCredit: 0,
-        precisionMessage: '',
+        precisionMessage: p.tolerance.kind === 'relative' ? `[physlab:tolerance=relative:${p.tolerance.value}]` : '',
         strictPrecision: false
       }
     }

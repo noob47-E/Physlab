@@ -192,14 +192,74 @@ describe('a Numbas matrix part', () => {
     ])
   })
 
-  it('without a tolerance takes its precision, or the app’s 2 %; a resizable one says the boxes are shown', () => {
+  it('takes its precision, is exact when neither precision nor a gap is set, or falls back to the app’s 2 % only when the tolerance field is missing outright; a resizable one says the boxes are shown', () => {
     const tol = (over: Raw): unknown => (fromExam(exam([question({ parts: [matrixPart('matrix([1,2],[3,4])', over)] })])).file.questions[0].parts[0] as MatrixPart).tolerance
-    expect(tol({})).toEqual({ kind: 'relative', value: 0.02 })
+    // Numbas writes tolerance: 0, precisionType: 'none' for an untouched matrix part exactly as
+    // it does for one an author deliberately set to require an exact match — the two are the same
+    // JSON, and Numbas marks both exactly — so PhysLab now reads a plain 0 as exact rather than
+    // loosening it to the app's own 2 % default (the bug this test used to encode).
+    expect(tol({})).toEqual({ kind: 'absolute', value: 0 })
     expect(tol({ precisionType: 'dp', precision: 2 })).toEqual({ kind: 'absolute', value: 0.005 })
     expect(tol({ precisionType: 'sigfig', precision: 3 })).toEqual({ kind: 'relative', value: 0.005 })
+    // A hand-edited or pre-schema file that leaves the tolerance key out entirely — never a shape
+    // the Numbas editor itself writes — still gets the app's one lenient default, not an exact
+    // match nobody asked for.
+    const noTolerance = matrixPart('matrix([1,2],[3,4])')
+    delete noTolerance.tolerance
+    expect((fromExam(exam([question({ parts: [noTolerance] })])).file.questions[0].parts[0] as MatrixPart).tolerance).toEqual({ kind: 'relative', value: 0.02 })
     expect(fromExam(exam([question({ parts: [matrixPart('matrix([1,2],[3,4])', { allowResize: true })] })])).report).toEqual([
       "Question 'Q', part 1 lets the student choose the size of the matrix in Numbas; PhysLab shows a box for each entry."
     ])
+  })
+
+  it('an entry wrong by 1 % is marked wrong against an author’s exact-match part, but right when the file omits the tolerance and PhysLab falls back to its own 2 %', () => {
+    const exact = matrixPart('matrix([100,0],[0,100])')
+    const noTolerance = matrixPart('matrix([100,0],[0,100])')
+    delete noTolerance.tolerance
+    const q = question({ parts: [exact] })
+    const withFallback = question({ parts: [noTolerance] })
+    const part = imported(exam([q])).file.questions[0].parts[0] as MatrixPart
+    const fallbackPart = imported(exam([withFallback])).file.questions[0].parts[0] as MatrixPart
+    const values = drawVariables(imported(exam([q])).file.questions[0], 1).values
+    // 1 % off (101 for 100) fails the author's exact match…
+    expect(checkMatrixPart([['101', '0'], ['0', '100']], part, values, S)).toMatchObject({ verdict: 'wrong' })
+    // …but is within the app's own 2 % default when the file never gave a tolerance at all.
+    expect(checkMatrixPart([['101', '0'], ['0', '100']], fallbackPart, values, S)).toMatchObject({ verdict: 'right' })
+  })
+
+  it('a relative tolerance survives a PhysLab -> .exam -> PhysLab round trip, though a plain Numbas install would mark it exactly', () => {
+    const q: PQQuestion = {
+      id: 'm', title: 'M', statement: 'Find the matrix.', variables: [],
+      parts: [{ type: 'matrix', prompt: 'M', answer: [['4', '0'], ['0', '4']], tolerance: { kind: 'relative', value: 0.05 }, marks: 1 }],
+      license: { id: 'CC BY 4.0', holder: 'PhysLab' }
+    }
+    const out = toExam(file(q))
+    const part = examParts(out)[0]
+    // What a plain Numbas install sees: an exact match (no relative form exists in its schema).
+    expect(part).toMatchObject({ type: 'matrix', tolerance: 0, precisionType: 'none' })
+    expect(part.precisionMessage).toBe('[physlab:tolerance=relative:0.05]')
+    // What PhysLab itself reads back: the true 5 % band, not the 0 -> "exact" a bare re-import of
+    // the tolerance field alone would now (correctly, per the fix above) produce.
+    const back = imported(out).file.questions[0].parts[0] as MatrixPart
+    expect(back.tolerance).toEqual({ kind: 'relative', value: 0.05 })
+    // 4 % off (4.16 for 4) is inside the 5 % band the author actually chose.
+    expect(checkMatrixPart([['4.16', '0'], ['0', '4']], back, {}, S)).toMatchObject({ verdict: 'right' })
+  })
+
+  it('a teacher’s own edit to the exported file wins over a stale round-trip marker left from an earlier band', () => {
+    const q: PQQuestion = {
+      id: 'm', title: 'M', statement: 'Find the matrix.', variables: [],
+      parts: [{ type: 'matrix', prompt: 'M', answer: [['4', '0'], ['0', '4']], tolerance: { kind: 'relative', value: 0.05 }, marks: 1 }],
+      license: { id: 'CC BY 4.0', holder: 'PhysLab' }
+    }
+    const out = toExam(file(q))
+    // A teacher opens the .exam and widens the gap themselves; the file still carries PhysLab's
+    // "relative:0.05" marker from before the edit.
+    const edited = out.replace('"tolerance":0', '"tolerance":0.2')
+    expect((imported(edited).file.questions[0].parts[0] as MatrixPart).tolerance).toEqual({ kind: 'absolute', value: 0.2 })
+    // The same for a teacher who switches on a precision restriction instead.
+    const toPrecision = out.replace('"precisionType":"none"', '"precisionType":"dp"').replace('"precision":0', '"precision":1')
+    expect((imported(toPrecision).file.questions[0].parts[0] as MatrixPart).tolerance).toEqual({ kind: 'absolute', value: 0.05 })
   })
 })
 

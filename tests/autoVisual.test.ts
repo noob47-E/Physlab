@@ -169,6 +169,40 @@ describe('the new picture kinds', () => {
     expect(shown.note).toBe('Drawn on one number line: v = 24 m/s, t = 8 s.')
   })
 
+  it('a number line holds back a signed answer that shares a given’s magnitude with the opposite sign', () => {
+    // F = 5 N is given (positive, as the statement writes it); the answer is −5 N, the opposite
+    // way. fresh() used to compare by size, so it treated −5 as the same value as the given +5
+    // and let the number line show it straight away — the answer, before it was earned.
+    const q = question({
+      statement: 'A force of {F} N pulls one way; take that direction as positive.',
+      variables: [{ name: 'F', def: { kind: 'list', items: [5] } }],
+      parts: [{ type: 'number', prompt: 'What is the force pulling the other way, signed?', answer: '-5', unit: 'N', tolerance: { kind: 'absolute', value: 0.01 }, marks: 1 }],
+      picture: { kind: 'numberline', items: [{ label: 'the other force', value: '-5' }] }
+    })
+    const played = playQuestion(q, 1, SETTINGS)
+    const plan = visualPlanFor(played)
+    expect(plan.source).toBe('authored')
+    expect(visualState(plan, false)).toBe('after-answer')
+    expect(() => showVisual(plan, played, SETTINGS, false)).toThrow(HELD_BACK)
+    // Once earned, the same picture draws normally.
+    expect(showVisual(plan, played, SETTINGS, true)).toContain('other force')
+  })
+
+  it('holds back a tiny signed answer too, where the value test alone is absolute', () => {
+    // Below about 5×10⁻⁷ two values within 10⁻⁶ of each other count as the same, so a given of
+    // +1×10⁻⁷ C used to hide a drawn −1×10⁻⁷ C as "already given". The sign is checked first now.
+    const q = question({
+      statement: 'A charge of {Q} C sits on one plate; take that plate as positive.',
+      variables: [{ name: 'Q', def: { kind: 'list', items: [1e-7] } }],
+      parts: [{ type: 'number', prompt: 'What is the charge on the other plate, signed?', answer: '-1e-7', unit: 'C', tolerance: { kind: 'absolute', value: 1e-9 }, marks: 1 }],
+      picture: { kind: 'numberline', items: [{ label: 'the other plate', value: '-1e-7' }] }
+    })
+    const played = playQuestion(q, 1, SETTINGS)
+    const plan = visualPlanFor(played)
+    expect(visualState(plan, false)).toBe('after-answer')
+    expect(() => showVisual(plan, played, SETTINGS, false)).toThrow(HELD_BACK)
+  })
+
   it('a picture of a new kind makes the file format 2 and survives a save and a reopen', () => {
     const q = question({ picture: { kind: 'normal', mean: '50', sd: '10', to: '65' } })
     expect(questionFormat(q)).toBe(2)
