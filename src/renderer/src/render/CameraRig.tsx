@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { MapControls, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three/webgpu'
 import { niceStep, orthoBounds, worldPerPixel } from './cameraUtils'
-import { useCameraCommand, useView } from './viewState'
+import { onTurnRequested, pendingTurn, useCameraCommand, useView } from './viewState'
+import { drag3D, HOME_3D, stepTurn, type CameraDrag } from './viewMath'
 import { useScene } from '../core/store'
-import { useApp } from '../app/modes'
-import { useSandbox } from '../sim/store'
+import { isDrawingMode, useApp } from '../app/modes'
+import { engine, useSandbox } from '../sim/store'
+import { visibleIn } from '../core/visibility'
+import { graphBox } from '../core/visualize'
+import { themeColor, useThemed } from '../app/theme'
 
-/** Bounding box of all visible geometry (graphs excluded). */
+/** Bounding box of all visible geometry (graphs only where they have ends). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
-  const { ev, objects } = useScene.getState()
+  const { ev, objects, activeSpace } = useScene.getState()
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
   const add = (p: readonly number[]) => {
@@ -23,7 +27,7 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
     }
   }
   for (const [id, c] of ev.values) {
-    if (!objects[id]?.visible) continue
+    if (!objects[id]?.visible || !visibleIn(objects[id], activeSpace)) continue
     switch (c.type) {
       case 'point':
       case 'text':
@@ -44,6 +48,17 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
       case 'polygon':
         c.pts.forEach(add)
         break
+      case 'graph': {
+        // A graph with ends (a piecewise curve, a shaded region) has a box; one that runs for
+        // ever does not, and is left out as before.
+        const o = objects[id]
+        const g = o?.type === 'graph' ? graphBox(o) : null
+        if (g) {
+          add(g.min)
+          add(g.max)
+        }
+        break
+      }
     }
   }
   if (!Number.isFinite(min[0])) return null
@@ -72,14 +87,35 @@ function useFineZoom(): boolean {
   return fine
 }
 
+/** OrbitControls' name for a camera action. */
+const MOUSE_FOR: Record<CameraDrag, THREE.MOUSE> = { turn: THREE.MOUSE.ROTATE, pan: THREE.MOUSE.PAN, tool: THREE.MOUSE.ROTATE }
+
 export function CameraRig() {
   const viewMode = useScene((s) => s.viewMode)
   const mode = useApp((s) => s.mode)
   const sideView = useSandbox((s) => s.sideView)
   const fineZoom = useFineZoom()
-  const { camera, size, controls } = useThree()
+  const { camera, size, controls, get, invalidate } = useThree()
+  const drawing = isDrawingMode(mode)
+  // Every 3-D view takes its buttons from the one rule in drag3D: right turns, middle slides. The
+  // Sandbox's own hint had always said "right-drag turns the view" while its right button panned.
+  // In the maths drawing the left button is set per press by Interaction, which knows the tool
+  // and what is under the cursor; in the Sandbox and the GPU Lab a left drag on empty space turns.
+  const mouseButtons = useMemo(
+    () => ({
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: MOUSE_FOR[drag3D({ button: 1, tool: 'select', onObject: false })],
+      RIGHT: MOUSE_FOR[drag3D({ button: 2, tool: 'select', onObject: false })]
+    }),
+    []
+  )
+
+  // A press of an arrow key or a turn button asks for a frame; the frames that follow ease it in.
+  useEffect(() => onTurnRequested(() => invalidate()), [invalidate])
   const command = useCameraCommand()
   const last = useRef({ cx: NaN, cy: NaN, wpp: NaN, w: 0, h: 0 })
+  // The fill light's tint comes from the stylesheet and is re-read when the theme flips.
+  const fillLight = useThemed(() => themeColor('--light-fill'))
 
   // The sandbox stands the world up the other way (y is up) and frames the floor.
   useEffect(() => {
@@ -100,8 +136,48 @@ export function CameraRig() {
   useEffect(() => {
     if (!command.nonce) return
     const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+    // Read at the moment of the command: a window resize must not repeat the last "fit".
+    const { width, height } = get().size
+    if (useApp.getState().mode === 'sandbox') {
+      // The maths presets below put the camera 12 m under the floor. Frame the objects instead,
+      // where they are now rather than where they started.
+      const { bodies, sideView } = useSandbox.getState()
+      const min = [Infinity, Infinity, Infinity]
+      const max = [-Infinity, -Infinity, -Infinity]
+      for (const b of bodies) {
+        if (b.shape === 'ground') continue
+        const p = engine.world?.state(b.id)?.position ?? b.position
+        const r = Math.max(...b.size) / 2
+        for (let k = 0; k < 3; k++) {
+          min[k] = Math.min(min[k], p[k] - r)
+          max[k] = Math.max(max[k], p[k] + r)
+        }
+      }
+      const floor = bodies.find((b) => b.shape === 'ground')
+      const top = floor ? floor.position[1] + floor.size[1] / 2 : 0
+      if (!Number.isFinite(min[0])) {
+        min[0] = -4
+        max[0] = 4
+        min[1] = top
+        max[1] = top + 3
+        min[2] = -1
+        max[2] = 1
+      }
+      min[1] = Math.min(min[1], top)
+      const cx = (min[0] + max[0]) / 2
+      const cy = (min[1] + max[1]) / 2
+      const cz = (min[2] + max[2]) / 2
+      const r = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 3)
+      camera.up.set(0, 1, 0)
+      if (sideView) camera.position.set(cx, cy + r * 0.25, cz + r * 1.6)
+      else camera.position.set(cx + r * 0.9, cy + r * 0.7, cz + r * 1.2)
+      c?.target.set(cx, cy, cz)
+      camera.lookAt(cx, cy, cz)
+      c?.update()
+      return
+    }
     if (command.kind === 'fit') {
-      const box = sceneBounds()
+      const box = command.box ?? sceneBounds()
       if (box) {
         const cx = (box.min[0] + box.max[0]) / 2
         const cy = (box.min[1] + box.max[1]) / 2
@@ -110,7 +186,7 @@ export function CameraRig() {
         const h = Math.max(box.max[1] - box.min[1], 1)
         if (viewMode === '2d') {
           camera.position.set(cx, cy, 100)
-          ;(camera as THREE.OrthographicCamera).zoom = Math.max(2, Math.min(size.width / (w * 1.35), size.height / (h * 1.45), 400))
+          ;(camera as THREE.OrthographicCamera).zoom = Math.max(2, Math.min(width / (w * 1.35), height / (h * 1.45), 400))
           camera.updateProjectionMatrix()
           c?.target.set(cx, cy, 0)
         } else {
@@ -129,13 +205,31 @@ export function CameraRig() {
       camera.updateProjectionMatrix()
       c?.target.set(0, 0, 0)
     } else {
-      camera.position.set(9, -12, 9)
-      c?.target.set(0, 0, 0)
+      camera.position.set(...HOME_3D.position)
+      c?.target.set(...HOME_3D.target)
     }
     c?.update()
-  }, [command.nonce, viewMode, camera, controls])
+  }, [command, viewMode, camera, controls, get])
 
-  useFrame(() => {
+  useFrame((_state, dt) => {
+    if (pendingTurn.az !== 0 || pendingTurn.el !== 0) {
+      const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+      // Only the maths drawing's 3-D view turns this way; anywhere else a leftover turn is dropped.
+      if (viewMode === '3d' && drawing && c) {
+        const t = c.target
+        // On a canvas that draws on demand the first frame after a pause reports the whole pause
+        // as its dt, which would jump the full turn in one go instead of easing it in.
+        const s = stepTurn([camera.position.x, camera.position.y, camera.position.z], [t.x, t.y, t.z], pendingTurn, Math.min(dt, 1 / 30))
+        camera.position.set(...s.position)
+        pendingTurn.az = s.pending.az
+        pendingTurn.el = s.pending.el
+        c.update()
+        invalidate()
+      } else {
+        pendingTurn.az = 0
+        pendingTurn.el = 0
+      }
+    }
     const L = last.current
     if (viewMode === '2d') {
       const b = orthoBounds(camera, size)
@@ -191,11 +285,11 @@ export function CameraRig() {
   }
   return (
     <>
-      <PerspectiveCamera makeDefault position={[9, -12, 9]} fov={45} near={0.01} far={5000} up={[0, 0, 1]} />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }} />
+      <PerspectiveCamera makeDefault position={[...HOME_3D.position]} fov={45} near={0.01} far={5000} up={[0, 0, 1]} />
+      <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={mouseButtons} />
       <ambientLight intensity={0.55} />
       <directionalLight position={[6, -8, 14]} intensity={2.2} />
-      <directionalLight position={[-10, 6, -4]} intensity={0.6} color="#9ec5ff" />
+      <directionalLight position={[-10, 6, -4]} intensity={0.6} color={fillLight} />
     </>
   )
 }

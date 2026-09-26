@@ -30,22 +30,38 @@ export function vecTex(name: string): string {
   return `\\vec{${name}}`
 }
 
-/** A compass bearing such as "N 30° E" for a direction measured from +x. */
-export function bearingText(rad: number, decimals = 2): string {
+/** Decimal places, or the student's precision settings (which may mean significant figures). */
+export type Precision = number | Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+
+const fmtAt = (n: number, p: Precision): string => (typeof p === 'number' ? fmt(n, p) : fmtPrecise(n, p))
+const texAt = (n: number, p: Precision): string => (typeof p === 'number' ? tex(n, p) : texPrecise(n, p))
+
+/**
+ * A compass bearing such as "N 30° E" for a direction measured from +x. The zero vector has
+ * no direction, so it is said so rather than written as "S undefined° W".
+ */
+export function bearingText(rad: number, precision: Precision = 2): string {
+  if (!Number.isFinite(rad)) return 'undefined'
   const fromNorth = ((90 - (rad * 180) / Math.PI) % 360 + 360) % 360
   const exact = ['N', 'E', 'S', 'W'][Math.round(fromNorth / 90) % 4]
   if (Math.abs(fromNorth - Math.round(fromNorth / 90) * 90) < 1e-9) return exact
   const ns = fromNorth < 90 || fromNorth > 270 ? 'N' : 'S'
   const ew = fromNorth < 180 ? 'E' : 'W'
   const off = ns === 'N' ? (fromNorth < 90 ? fromNorth : 360 - fromNorth) : Math.abs(180 - fromNorth)
-  return `${ns} ${fmt(off, decimals)}° ${ew}`
+  return `${ns} ${fmtAt(off, precision)}° ${ew}`
 }
 
 // ---------------------------------------------------------------------------
 // Measurements with units and precision (one place for every displayed value)
 // ---------------------------------------------------------------------------
 
-export type MeasureKind = 'length' | 'area' | 'volume' | 'angle' | 'number'
+/**
+ * 'angle' is an amount of turning (the corner of a triangle, the angle between two vectors);
+ * 'direction' is which way something points, measured from +x. Only a direction can be written
+ * as a compass bearing — "N 30° E" makes no sense for the corner of a triangle — so the bearing
+ * setting applies to 'direction' alone.
+ */
+export type MeasureKind = 'length' | 'area' | 'volume' | 'angle' | 'direction' | 'number'
 export type MeasureSettings = Pick<SceneSettings, 'decimals' | 'precisionMode' | 'unit' | 'unitPerSquare' | 'angleUnit'>
 
 export const UNIT_LABELS: Record<LengthUnit, string> = { unit: 'u', mm: 'mm', cm: 'cm', m: 'm', km: 'km', in: 'in', ft: 'ft' }
@@ -55,24 +71,54 @@ export const UNIT_NAMES: Record<LengthUnit, string> = { unit: 'grid units', mm: 
 export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
   if (!Number.isFinite(v)) return fmt(v)
   if (s.precisionMode === 'sf') {
-    if (v === 0) return '0'
-    const abs = Math.abs(v)
+    // The same noise floor as fmt: a point dragged onto the axis reads 0, not 3×10⁻¹⁷.
+    if (Math.abs(v) < 1e-12) return '0'
     const digits = Math.max(1, s.decimals)
-    if (abs >= 1e9 || abs < 1e-6) return fmt(Number(v.toPrecision(digits)), digits)
+    // Round before choosing the form: 999 999 999.9 at 3 s.f. is 1.00×10^9, and deciding on the
+    // unrounded value sent it down the plain path, where it came out as "1000000000".
+    const r = Number(v.toPrecision(digits))
+    const abs = Math.abs(r)
+    if (abs >= 1e9 || abs < 1e-6) return fmtSci(r, s)
     // Keep the string from toPrecision: Number(...) would drop the zeros that show the precision
     // (3 s.f. of 2.5 must read 2.50), but trim the exponent form and any padding zeros before the point.
-    const text = v.toPrecision(digits)
+    const text = r.toPrecision(digits)
     const plain = /e/i.test(text) ? String(Number(text)) : text
     return plain.replace('-', '−')
   }
   return fmt(v, s.decimals)
 }
 
-const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, number: 0 }
+/**
+ * The scientific form in the student's precision, whatever the size of the number. Unlike
+ * fmtPrecise it has no noise floor: a known answer of 1.6×10⁻¹⁹ N is not drag noise and must
+ * not be revealed as "0 N". Significant figures keep their zeros (2.50×10^-7); decimal places
+ * trim them, as fmt does.
+ */
+export function fmtSci(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  if (!Number.isFinite(v)) return fmt(v)
+  if (v === 0) return '0'
+  if (s.precisionMode === 'sf') return sci(v, Math.max(1, s.decimals) - 1, false)
+  return sci(v, s.decimals, true)
+}
+
+/** "m×10^e" from toExponential; the mantissa's zeros are kept or trimmed as the caller asks. */
+function sci(n: number, decimals: number, trim: boolean): string {
+  const [m, e] = n.toExponential(decimals).split('e')
+  // The mantissa takes the same proper minus as every other number on screen (the calculator's
+  // own formatter already does); the exponent keeps the plain hyphen `texPrecise` looks for.
+  return `${(trim ? trimZeros(m) : m).replace('-', '−')}×10^${Number(e)}`
+}
+
+const DIM: Record<MeasureKind, number> = { length: 1, area: 2, volume: 3, angle: 0, direction: 0, number: 0 }
+
+const isAngular = (kind: MeasureKind): boolean => kind === 'angle' || kind === 'direction'
+
+/** A direction is written as a bearing only when the student asked for bearings, in degrees. */
+const asBearing = (kind: MeasureKind, s: MeasureSettings): boolean => kind === 'direction' && NOTATION.direction === 'bearing' && s.angleUnit === 'deg'
 
 /** Converts a world (grid) value into the chosen real unit. */
 export function measureValue(v: number, kind: MeasureKind, s: MeasureSettings): number {
-  if (kind === 'angle') return angleFrom(v, s.angleUnit)
+  if (isAngular(kind)) return angleFrom(v, s.angleUnit)
   return v * Math.pow(s.unitPerSquare, DIM[kind])
 }
 
@@ -82,28 +128,30 @@ const ANGLE_TEX: Record<AngleUnit, string> = { deg: '^\\circ', rad: '\\,\\text{r
 
 export function unitSuffix(kind: MeasureKind, s: MeasureSettings): string {
   // A ternary on 'deg' labelled a grad angle "rad": the number was converted, the name was not.
-  if (kind === 'angle') return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
+  if (isAngular(kind)) return ANGLE_SUFFIX[s.angleUnit] ?? ' rad'
   if (kind === 'number') return ''
   const u = UNIT_LABELS[s.unit]
   return ` ${u}${DIM[kind] === 2 ? '²' : DIM[kind] === 3 ? '³' : ''}`
 }
 
-/** "12 cm²", "53.13°", "5 u". */
+/** "12 cm²", "53.13°", "5 u" — and a direction as "N 36.87° E" when bearings are chosen. */
 export function formatMeasure(v: number, kind: MeasureKind, s: MeasureSettings): string {
+  if (asBearing(kind, s)) return bearingText(v, s)
   return `${fmtPrecise(measureValue(v, kind, s), s)}${unitSuffix(kind, s)}`
 }
 
 /** LaTeX version: "12\,\text{cm}^2". */
 export function texMeasure(v: number, kind: MeasureKind, s: MeasureSettings, withUnit = true): string {
-  const n = fmtPrecise(measureValue(v, kind, s), s).replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
+  if (asBearing(kind, s)) return `\\text{${bearingText(v, s)}}`
+  const n = texPrecise(measureValue(v, kind, s), s)
   if (!withUnit || kind === 'number') return n
-  if (kind === 'angle') return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
+  if (isAngular(kind)) return `${n}${ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad}`
   const d = DIM[kind]
   return `${n}\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
 }
 
 export function texUnit(kind: MeasureKind, s: MeasureSettings): string {
-  if (kind === 'angle') return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
+  if (isAngular(kind)) return ANGLE_TEX[s.angleUnit] ?? ANGLE_TEX.rad
   if (kind === 'number') return ''
   const d = DIM[kind]
   return `\\,\\text{${UNIT_LABELS[s.unit]}}${d > 1 ? `^${d}` : ''}`
@@ -115,11 +163,11 @@ export function fmt(n: number, decimals = 4): string {
   if (!Number.isFinite(n)) return n > 0 ? '∞' : '−∞'
   if (Math.abs(n) < 1e-12) return '0'
   const abs = Math.abs(n)
-  if (abs >= 1e9 || abs < 1e-4) {
-    const [m, e] = n.toExponential(decimals).split('e')
-    return `${trimZeros(m)}×10^${Number(e)}`
-  }
-  return trimZeros(n.toFixed(decimals)).replace('-', '−')
+  if (abs >= 1e9 || abs < 1e-4) return sci(n, decimals, true)
+  // A small negative that rounds away at this precision is 0, not "−0": a midpoint at −0.0004
+  // read "(−0, 5)" and a unit vector "1i − 0j".
+  const t = trimZeros(n.toFixed(decimals))
+  return (t === '-0' ? '0' : t).replace('-', '−')
 }
 
 function trimZeros(s: string): string {
@@ -137,7 +185,30 @@ export function tex(n: number, decimals = 4): string {
     const [m, e] = n.toExponential(decimals).split('e')
     return `${trimZeros(m)}\\times 10^{${Number(e)}}`
   }
-  return trimZeros(n.toFixed(decimals))
+  const t = trimZeros(n.toFixed(decimals))
+  return t === '-0' ? '0' : t
+}
+
+/** A plain-text number made ready for KaTeX: an ASCII minus and a real exponent. */
+const toTex = (text: string): string => text.replace('−', '-').replace(/×10\^(-?\d+)/, '\\times 10^{$1}')
+
+/** fmtPrecise for KaTeX: an ASCII minus and a real exponent. */
+export function texPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  return toTex(fmtPrecise(v, s))
+}
+
+/** fmtSci for KaTeX. */
+export function texSci(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  return toTex(fmtSci(v, s))
+}
+
+/**
+ * The power of ten fmtSci writes for `v`, so a vector can be scaled to the same power as its
+ * size. It is read from the rounded form, not from log10: 9.99999×10⁻²⁰ rounds to 1×10⁻¹⁹, and
+ * taking the exponent before rounding wrote it as "10×10⁻²⁰".
+ */
+export function sciExponent(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): number {
+  return Number(fmtSci(v, s).match(/×10\^(-?\d+)/)?.[1] ?? 0)
 }
 
 /** Number wrapped in parentheses when negative, for substituting into formulas. */
@@ -149,48 +220,65 @@ export function texP(n: number, decimals = 4): string {
 export const fmtPoint = (p: V3, decimals = 3): string =>
   Math.abs(p[2]) < 1e-12 ? `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)})` : `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)}, ${fmt(p[2], decimals)})`
 
-/** "3i + 4j − 2k" style, or whatever the notation setting asks for. */
-export function fmtIJK(v: V3, decimals = 3): string {
+/**
+ * The direction in polar notation follows the student's angle unit and precision whenever the
+ * whole settings are given; a bare number of decimals means degrees, as the Measurements panel
+ * asks for. Hard-wired degrees at 2 d.p. put "R = 5.66 ∠ 45°" directly above "θ = 0.785 rad".
+ */
+const withAngleUnit = (p: Precision): p is MeasureSettings => typeof p === 'object' && 'angleUnit' in p
+function polarDirection(rad: number, p: Precision, forTex: boolean): string {
+  if (withAngleUnit(p)) return forTex ? texMeasure(rad, 'direction', p) : formatMeasure(rad, 'direction', p)
+  const d = typeof p === 'number' ? p : 2
+  if (NOTATION.direction === 'bearing') return forTex ? `\\text{${bearingText(rad, p)}}` : bearingText(rad, p)
+  return forTex ? texAngle(rad, 'deg', d) : fmtAngle(rad, 'deg', d)
+}
+
+/**
+ * "3i + 4j − 2k" style, or whatever the notation setting asks for. `precision` is a number of
+ * decimal places or the student's settings, so a solution in significant figures writes its
+ * components the same way as its magnitudes.
+ */
+export function fmtIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'pair' || NOTATION.components === 'column') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => fmt(c, decimals))
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => fmtAt(c, precision))
     return NOTATION.components === 'pair' ? `(${nums.join(', ')})` : `[${nums.join('; ')}]`
   }
   if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
-    return `${fmt(m, decimals)} ∠ ${NOTATION.direction === 'bearing' ? bearingText(ang, decimals) : fmtAngle(ang < 0 ? ang + 2 * Math.PI : ang, 'deg', 2)}`
+    return `${fmtAt(m, precision)} ∠ ${polarDirection(ang < 0 ? ang + 2 * Math.PI : ang, precision, false)}`
   }
   const parts: string[] = []
   const names = ['i', 'j', 'k']
   v.forEach((c, idx) => {
     if (Math.abs(c) < 1e-12) return
-    const mag = fmt(Math.abs(c), decimals)
+    const mag = fmtAt(Math.abs(c), precision)
     const sign = c < 0 ? '−' : '+'
     parts.push(parts.length === 0 ? `${c < 0 ? '−' : ''}${mag}${names[idx]}` : ` ${sign} ${mag}${names[idx]}`)
   })
   return parts.length ? parts.join('') : '0'
 }
 
-export function texIJK(v: V3, decimals = 3): string {
+export function texIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'pair') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => tex(c, decimals))
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
     return `\\left(${nums.join(',\\; ')}\\right)`
   }
   if (NOTATION.components === 'column') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => tex(c, decimals))
+    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
     return `\\begin{pmatrix}${nums.join(' \\\\ ')}\\end{pmatrix}`
   }
   if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
     const a = ang < 0 ? ang + 2 * Math.PI : ang
-    return `${tex(m, decimals)}\\,\\angle\\,${NOTATION.direction === 'bearing' ? `\\text{${bearingText(a, 2)}}` : texAngle(a, 'deg', 2)}`
+    return `${texAt(m, precision)}\\,\\angle\\,${polarDirection(a, precision, true)}`
   }
   const parts: string[] = []
   const names = ['\\hat{i}', '\\hat{j}', '\\hat{k}']
   v.forEach((c, idx) => {
     if (Math.abs(c) < 1e-12) return
-    const mag = tex(Math.abs(c), decimals)
+    const mag = texAt(Math.abs(c), precision)
     if (parts.length === 0) parts.push(`${c < 0 ? '-' : ''}${mag}${names[idx]}`)
     else parts.push(` ${c < 0 ? '-' : '+'} ${mag}${names[idx]}`)
   })
@@ -224,7 +312,7 @@ export function texAngle(rad: number, unit: AngleUnit = 'deg', decimals = 2): st
 /** Degrees → D°M'S" string (like the calculator's ° ' " key). */
 export function toDMS(deg: number): string {
   const sign = deg < 0 ? '−' : ''
-  let d = Math.abs(deg)
+  const d = Math.abs(deg)
   let D = Math.floor(d)
   let M = Math.floor((d - D) * 60)
   let S = (d - D - M / 60) * 3600
@@ -239,12 +327,88 @@ export function toDMS(deg: number): string {
   return `${sign}${D}°${M}'${fmt(S, 2)}"`
 }
 
+// ---------------------------------------------------------------------------
+// Step-by-step working: every line true as written (Fix 4)
+// ---------------------------------------------------------------------------
+
+/** Precision with only the part a number needs: decimal places or significant figures. */
+export type DigitSettings = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+
+/** How many digits past the student's own a working line may add before it gives up and writes ≈. */
+export const STEP_GUARD_MAX = 6
+
+/**
+ * The number a calculator is given when a student types a value exactly as the screen shows it:
+ * "−2.5" is −2.5, "1.6×10^-19" is 1.6e-19, "8.66°" is 8.66. The unit is the caller's business.
+ */
+export function shownValue(text: string): number {
+  const t = text.replace(/−/g, '-').replace(/\\times\s*10\^\{(-?\d+)\}/, 'e$1').replace(/×10\^(-?\d+)/, 'e$1')
+  const m = t.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/)
+  return m ? Number(m[0]) : NaN
+}
+
+/** The student's precision with `extra` more digits, in the same mode (places or figures). */
+export const morePrecise = <S extends DigitSettings>(s: S, extra: number): S => ({ ...s, decimals: s.decimals + extra })
+
+/**
+ * THE rule for every line of step-by-step working, in one place.
+ *
+ * A student copies working into a notebook and checks it on a calculator, typing each number
+ * exactly as the screen shows it. So a line such as "10 cos 30° = 10 × 0.87 = 8.66" is false
+ * (10 × 0.87 is 8.7), even though 8.66 is the right value of 10 cos 30°. Rounding the middle
+ * number is what broke it; rounding the answer is what the student asked for.
+ *
+ * The rule: a number that a line calculates WITH is written with as many digits as it takes for
+ * that calculation, done from the numbers as written, to give the line's result as written. The
+ * student's own precision is the fewest digits ever used; digits are added one at a time, and
+ * only where they are needed. Results — and every answer — are always the true value rounded to
+ * the student's precision, never a value rebuilt from rounded pieces, so the extra digits change
+ * no answer. The same quantity may therefore appear as 0.39 where it is an answer and 0.3928
+ * where the next line divides by it; both are that number, rounded for its job.
+ *
+ * `agrees(q)` says whether the line holds when its operands are written at precision q. The
+ * result is the precision to write them at, and `holds: false` when even STEP_GUARD_MAX extra
+ * digits cannot make it true (a result sitting exactly on a rounding boundary) — the caller
+ * then writes ≈ instead of =, which is what a textbook does.
+ */
+export function stepPrecision<S extends DigitSettings>(s: S, agrees: (q: S) => boolean): { q: S; holds: boolean } {
+  for (let extra = 0; extra <= STEP_GUARD_MAX; extra++) {
+    const q = morePrecise(s, extra)
+    if (agrees(q)) return { q, holds: true }
+  }
+  return { q: morePrecise(s, STEP_GUARD_MAX), holds: false }
+}
+
+/**
+ * The precision a KNOWN answer is revealed at, so that typing back what the screen shows marks
+ * right. The student's own precision whenever its rounding stays within half the answer's band
+ * `tol`; otherwise three significant figures, then four, and so on up to six. At 2 d.p. Charles's
+ * law revealed 0.0538 m³ as "0.05 m³", and typed back that was 7 % off a 2 % band — "Right
+ * method — just rounded a little early" under the very answer PhysLab had just given. `show` is
+ * the formatter the caller writes the number with (plain or scientific), read back by
+ * `shownValue`, so the test is made on exactly the text on screen.
+ */
+export function revealPrecision<S extends DigitSettings>(v: number, tol: number, s: S, show: (x: number, q: S) => string = fmtPrecise): S {
+  const holds = (q: S): boolean => Math.abs(shownValue(show(v, q)) - v) <= tol / 2
+  if (!Number.isFinite(v) || !(tol > 0) || holds(s)) return s
+  // Never fewer figures than the student already asked for.
+  const from = s.precisionMode === 'sf' ? Math.max(3, s.decimals + 1) : 3
+  for (let digits = from; digits < 6; digits++) {
+    const q: S = { ...s, precisionMode: 'sf', decimals: digits }
+    if (holds(q)) return q
+  }
+  return { ...s, precisionMode: 'sf', decimals: Math.max(6, from) }
+}
+
+/** "=" when a working line holds as written, "≈" when rounding means it can only be close. */
+export const stepEq = (holds: boolean): string => (holds ? '=' : '\\approx')
+
 /**
  * The inverse of `measureValue`: a number as the student typed it, in whatever unit is on screen,
  * turned back into the world value the scene stores. Typing a measurement to set it needs this,
  * and it has to be the exact mirror of the display or the drawing will drift a little each time.
  */
 export function worldValue(shown: number, kind: MeasureKind, s: MeasureSettings): number {
-  if (kind === 'angle') return angleTo(shown, s.angleUnit)
+  if (isAngular(kind)) return angleTo(shown, s.angleUnit)
   return shown / Math.pow(s.unitPerSquare, DIM[kind])
 }

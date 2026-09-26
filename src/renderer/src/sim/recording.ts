@@ -6,6 +6,7 @@
 // fall" to "find g" without typing a single reading.
 
 import type { BodyDef, BodyId, BodyState } from './types'
+import type { LabTable } from '../lab/types'
 import { energyOf, momentumSize } from './energy'
 
 export interface Sample {
@@ -73,5 +74,21 @@ export const RECORDING_COLUMNS: { name: string; unit: string }[] = [
   { name: 'v', unit: 'm/s' },
   { name: 'KE', unit: 'J' }
 ]
+
+/**
+ * The samples as a Lab Data table, with the columns named and carrying their units. A pure
+ * function rather than a line in the Send button, so a test can check what the button sends.
+ */
+export function tableFrom(name: string, samples: Sample[]): LabTable {
+  const columns = RECORDING_COLUMNS.map((c, i) => ({ id: `rc${i}`, name: c.name, unit: c.unit }))
+  return {
+    id: `rec${Date.now().toString(36)}`,
+    title: `${name} — from the Sandbox`,
+    columns,
+    rows: rowsFor(samples),
+    // Height against time to begin with; the student picks the pair they actually want.
+    plot: { x: columns[0].id, y: columns[2].id, fit: 'linear' }
+  }
+}
 
 export const bodyKey = (id: BodyId): string => id

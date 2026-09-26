@@ -1,0 +1,68 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "sin(x) + cos(x)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\sin {x} + \\cos {x}",
+   "text": "sin(x) + cos(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\sin {x} - \\cos {x}",
+  "raw_text": "sin(x) - cos(x)",
+  "answer_latex": "\\sin {x} - \\cos {x}",
+  "answer_text": "sin(x) - cos(x)",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "AddRule",
+   "integrand": {
+    "latex": "\\sin {x} + \\cos {x}",
+    "text": "sin(x) + cos(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "substeps": [
+    {
+     "rule": "SinRule",
+     "integrand": {
+      "latex": "\\sin {x}",
+      "text": "sin(x)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "result": {
+      "latex": "- \\cos {x}",
+      "text": "-cos(x)"
+     }
+    },
+    {
+     "rule": "CosRule",
+     "integrand": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "result": {
+      "latex": "\\sin {x}",
+      "text": "sin(x)"
+     }
+    }
+   ],
+   "result": {
+    "latex": "\\sin {x} - \\cos {x}",
+    "text": "sin(x) - cos(x)"
+   }
+  }
+ }
+}

@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { ListOrdered } from 'lucide-react'
 import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
-import { distanceToLineLike, footOfPerpendicular, lineEquation, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
+import { circleEquationText, distanceToLineLike, footOfPerpendicular, lineEquation, lineEquationText, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
-import { fmt, fmtIJK, fmtPoint, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
+import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
+import { isPieceCorner, namedByLetters, pieceLettered, pieceMeasures } from '../math/lego'
+import { classifyPolygon } from '../math/shapes'
 import * as VS from '../math/vectorSolver'
 import { visualizeSolution } from '../core/visualize'
 import { ShapeInfo } from './ShapeInfo'
@@ -13,11 +15,15 @@ import { measureText } from '../render/Labels'
 import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
+import { visibleIn } from '../core/visibility'
+import { displayName } from '../core/naming'
+import { CongruenceCard, TriangleFromSides } from './Congruence'
+import { trianglesToCompare } from '../math/congruence'
 
 type Row = {
   label: string
   value: number | string
-  kind?: 'num' | 'length' | 'area' | 'angle' | 'text'
+  kind?: 'num' | 'length' | 'area' | 'angle' | 'direction' | 'text'
   accent?: boolean
   /**
    * Set when PhysLab can make the value be whatever is typed — a length whose far end is a free
@@ -28,7 +34,10 @@ type Row = {
 }
 type Get = (id: ObjId) => Computed | undefined
 
-function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>): { title: string; rows: Row[] }[] {
+/** "circle, centre J" as a heading: "Circle, centre J". */
+const capitalised = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
+
+export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>): { title: string; rows: Row[] }[] {
   const c = get(o.id)
   if (!c) return []
   switch (c.type) {
@@ -38,7 +47,7 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
         { label: 'y', value: c.p[1], kind: 'length' }
       ]
       if (Math.abs(c.p[2]) > 1e-12) rows.push({ label: 'z', value: c.p[2], kind: 'length' })
-      rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' }, { label: 'Angle from +x', value: heading(c.p), kind: 'angle' })
+      rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' }, { label: 'Angle from +x', value: heading(c.p), kind: 'direction' })
       return [{ title: `Point ${o.name}`, rows }]
     }
     case 'vector': {
@@ -50,7 +59,7 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       const threeD = Math.abs(v[2]) > 1e-12
       if (threeD) rows.push({ label: `${o.name}z (z-component)`, value: v[2], kind: 'length' })
       rows.push({ label: `|${o.name}| magnitude`, value: len(v), kind: 'length', accent: true })
-      if (!threeD) rows.push({ label: 'θ with +x axis', value: heading(v), kind: 'angle', accent: true })
+      if (!threeD) rows.push({ label: 'θ with +x axis', value: heading(v), kind: 'direction', accent: true })
       else {
         const [a, b, g] = directionAngles(v)
         rows.push({ label: 'α with x-axis', value: a, kind: 'angle' }, { label: 'β with y-axis', value: b, kind: 'angle' }, { label: 'γ with z-axis', value: g, kind: 'angle' })
@@ -69,7 +78,7 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
         // A length can be typed when the far end is a point PhysLab is free to move: the end
         // slides along the line it is already on, so the drawing keeps its direction.
         const seg = o.type === 'segment' ? o : null
-        const movable = seg && isFreePoint(objects[seg.b]) ? seg.b : seg && isFreePoint(objects[seg.a]) ? seg.a : null
+        const movable = seg && isFreePoint(objects[seg.b], objects) ? seg.b : seg && isFreePoint(objects[seg.a], objects) ? seg.a : null
         const anchorAt = movable === seg?.b ? a : b
         const endAt = movable === seg?.b ? b : a
         rows.push(
@@ -91,10 +100,11 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       rows.push(
         { label: 'Slope m', value: Number.isFinite(eq.slope) ? eq.slope : 'vertical (undefined)', kind: Number.isFinite(eq.slope) ? 'num' : 'text' },
         { label: 'Inclination', value: eq.inclination, kind: 'angle' },
-        { label: 'Equation', value: `${fmt(eq.a, 3)}x + ${fmt(eq.b, 3)}y = ${fmt(eq.c, 3)}`.replace(/\+ −/g, '− '), kind: 'text' }
+        { label: 'Equation', value: lineEquationText(eq), kind: 'text' }
       )
       if (Number.isFinite(eq.yIntercept)) rows.push({ label: 'y-intercept', value: eq.yIntercept, kind: 'length' })
-      const groups = [{ title: `${c.type[0].toUpperCase()}${c.type.slice(1)} ${o.name}`, rows }]
+      // The side the drawing calls FC is "Segment FC" here too, never its stored name "d".
+      const groups = [{ title: `${c.type[0].toUpperCase()}${c.type.slice(1)} ${displayName(o, objects).replace(/^ray /, '')}`, rows }]
       // A side of a triangle/polygon: also show the whole shape.
       if (o.type === 'segment') {
         for (const p of Object.values(objects)) {
@@ -107,27 +117,34 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       const { c: ctr, r } = c.circle
       return [
         {
-          title: `Circle ${o.name}`,
+          title: capitalised(displayName(o, objects, c)),
           rows: [
             { label: 'Centre', value: fmtPoint(ctr), kind: 'text' },
             { label: 'Radius r', value: r, kind: 'length', accent: true },
             { label: 'Diameter', value: 2 * r, kind: 'length' },
             { label: 'Circumference 2πr', value: 2 * Math.PI * r, kind: 'length' },
             { label: 'Area πr²', value: Math.PI * r * r, kind: 'area' },
-            { label: 'Equation', value: `(x − ${fmt(ctr[0], 3)})² + (y − ${fmt(ctr[1], 3)})² = ${fmt(r * r, 3)}`, kind: 'text' }
+            { label: 'Equation', value: circleEquationText(ctr, r), kind: 'text' }
           ]
         }
       ]
     }
     case 'polygon': {
       const pts = c.pts
+      if (o.type === 'polygon' && o.lego && !pieceLettered(o.points, objects)) {
+        // A piece from a 0.7.0 file: numbered sides, never its hidden corners' helper names
+        // (pieceMeasures says why). A piece made since Fix 17 has letters and is measured by them
+        // below, as its chip and ShapeInfo name it ("Right-angled triangle EFG").
+        return [{ title: `${o.label ?? 'Piece'}, a piece of a shape`, rows: pieceMeasures(pts).map((r) => ({ ...r, accent: r.kind === 'area' })) }]
+      }
       const names = (o.type === 'polygon' ? o.points : []).map((id) => objects[id]?.name ?? '?')
       if (pts.length === 3) {
         const t = triangleInfo(pts[0], pts[1], pts[2])
         const [A, B, C] = names
         return [
           {
-            title: `Triangle ${A}${B}${C}`,
+            // Named as ShapeInfo and the chip name it ("Right-angled triangle EFG"), not plain "Triangle".
+            title: `${classifyPolygon(pts).name} ${A}${B}${C}`,
             rows: [
               { label: `Side ${B}${C} (a)`, value: t.sides[0], kind: 'length', accent: true },
               { label: `Side ${C}${A} (b)`, value: t.sides[1], kind: 'length', accent: true },
@@ -151,7 +168,9 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       }
       const rows: Row[] = pts.map((p, i) => ({ label: `Side ${names[i]}${names[(i + 1) % pts.length]}`, value: dist(p, pts[(i + 1) % pts.length]), kind: 'length' as const }))
       rows.push({ label: 'Perimeter', value: rows.reduce((s, r) => s + (r.value as number), 0), kind: 'length' }, { label: 'Area', value: polygonArea(pts), kind: 'area', accent: true })
-      return [{ title: `Polygon ${o.name}`, rows }]
+      // Named as ShapeInfo names it: a rectangle fused back from its halves reads "Rectangle ABCD",
+      // not "Polygon poly1" (Fix 17).
+      return [{ title: `${classifyPolygon(pts).name} ${names.join('')}`, rows }]
     }
     case 'angle': {
       // Typing an angle turns whichever arm is free about the vertex, keeping its length. If both
@@ -160,9 +179,9 @@ function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneObject>):
       const vertexAt = ang ? get(ang.vertex) : undefined
       const turn =
         ang && vertexAt?.type === 'point'
-          ? isFreePoint(objects[ang.b])
+          ? isFreePoint(objects[ang.b], objects)
             ? { move: ang.b, fixed: ang.a }
-            : isFreePoint(objects[ang.a])
+            : isFreePoint(objects[ang.a], objects)
               ? { move: ang.a, fixed: ang.b }
               : null
           : null
@@ -276,28 +295,33 @@ function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; ro
 }
 
 function RowView({ row, base, settings }: { row: Row; base?: Row; settings: SceneSettings }) {
-  const k = row.kind === 'angle' || row.kind === 'length' || row.kind === 'area' ? row.kind : 'number'
+  // 'direction' is a heading from +x, so the compass-bearing setting applies to it; corner angles stay 'angle'.
+  const k = row.kind === 'angle' || row.kind === 'direction' || row.kind === 'length' || row.kind === 'area' ? row.kind : 'number'
   const show = (v: number | string) => (typeof v === 'string' ? v : formatMeasure(v, k, settings))
   const delta = base && typeof row.value === 'number' && typeof base.value === 'number' ? row.value - base.value : 0
   return (
     <>
       <div className="k">{row.label}</div>
-      <div className={`v ${row.accent ? 'font-semibold text-white' : ''}`}>
+      <div className={`v ${row.accent ? 'font-semibold text-ink-strong' : ''}`}>
         {/* Typed in whatever unit is on screen — centimetres, degrees — and converted back to the
             world value the scene stores, or a drawing in cm would jump by a factor of ten. */}
         {row.set && typeof row.value === 'number' ? (
           <EditableValue
             value={measureValue(row.value, k, settings)}
             suffix={unitSuffix(k, settings)}
+            // A length reads at the student's precision, as the tip while drawing and the label on
+            // the drawing do: the box used to show 4.6063 u beside a segment labelled 4.61 u (Fix 1).
+            display={k === 'length' ? (v) => fmtPrecise(v, settings) : undefined}
             onSet={(shown) => row.set!(worldValue(shown, k, settings))}
           />
         ) : (
           show(row.value)
         )}
         {Math.abs(delta) > 1e-9 && (
-          <span className={`ml-2 text-[11px] ${delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <span className={`ml-2 text-fine ${delta > 0 ? 'text-good' : 'text-bad'}`}>
             Δ {delta > 0 ? '+' : '−'}
-            {formatMeasure(Math.abs(delta), k, settings)}
+            {/* A change of heading is an amount of turning, never a bearing. */}
+            {formatMeasure(Math.abs(delta), k === 'direction' ? 'angle' : k, settings)}
           </span>
         )}
       </div>
@@ -316,18 +340,20 @@ function AllMeasurements() {
   const hovered = useScene((s) => s.hovered)
   const select = useScene((s) => s.select)
   const setHovered = useScene((s) => s.setHovered)
-  const list = order.map((id) => objects[id]).filter((o) => o && o.visible && !o.auxiliary && LISTED.has(o.type) && ev.values.has(o.id))
+  const space = useScene((s) => s.activeSpace)
+  const list = order.map((id) => objects[id]).filter((o) => o && o.visible && !o.auxiliary && LISTED.has(o.type) && ev.values.has(o.id) && visibleIn(o, space))
 
   return (
     <div data-tour="measure" className="panel pb-6">
-      <div className="px-3 pb-2 pt-3 text-zinc-500">
-        Click any object to measure it live. Drag it and watch the <span className="text-emerald-400">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product.
+      <div className="px-3 pb-2 pt-3 text-ink-faint">
+        Click any object to measure it live. Drag it and watch the <span className="text-good">Δ changes</span>. Shift-click two vectors for the angle, dot and cross product, or two triangles to see whether they are congruent.
       </div>
+      {space === 'shapes' && <TriangleFromSides />}
       {list.length > 0 && (
         <>
           <div className="section-title flex items-center">
             <span className="flex-1">All measurements</span>
-            <span className="normal-case tracking-normal text-zinc-600">pin = always on drawing</span>
+            <span className="normal-case tracking-normal text-ink-faint">pin = always on drawing</span>
           </div>
           {list.map((o) => {
             const c = ev.values.get(o.id)
@@ -343,13 +369,15 @@ function AllMeasurements() {
                   select([o.id])
                   showContextMenu(e, menuForObject(o.id))
                 }}
-                className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${hovered === o.id ? 'bg-[#26282d]' : ''}`}
+                className={`group flex h-7 cursor-pointer items-center gap-2 px-3 ${hovered === o.id ? 'bg-surface-3' : ''}`}
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color }} />
-                <span className="w-14 shrink-0 truncate font-semibold italic text-zinc-100" style={{ fontFamily: 'Cambria, serif' }}>
-                  {o.name}
+                {/* The textbook name (ΔGHJ, FC, circle, centre J), never the stored poly1, d or c1;
+                    wide enough for "Rectangle CDEF", and cut short only past half the row. */}
+                <span className="min-w-14 max-w-[50%] shrink-0 truncate font-math font-semibold italic text-ink-strong">
+                  {displayName(o, objects, c)}
                 </span>
-                <span className="min-w-0 flex-1 truncate tabular-nums text-zinc-300">{text || '—'}</span>
+                <span className="min-w-0 flex-1 truncate tabular-nums text-ink">{text || '—'}</span>
                 <PinLabelButton id={o.id} className={o.labelPin === 'always' ? '' : 'opacity-0 group-hover:opacity-100'} />
               </div>
             )
@@ -393,14 +421,28 @@ export function Measurements() {
     )
   ]
 
+  // Two triangles, Lego pieces included: are they the same triangle, and by which rule?
+  const triangles = trianglesToCompare(
+    sel,
+    (id) => ev.values.get(id)?.type === 'polygon',
+    (o) => namedByLetters(o, objects)
+  )
+
   return (
     <div className="panel pb-6">
+      {triangles.length === 2 && <CongruenceCard a={triangles[0].id} b={triangles[1].id} />}
+      {triangles.length === 1 && sel.length === 1 && (
+        <>
+          <div className="px-3 pt-2 text-fine text-ink-faint">Shift-click another triangle to check whether the two are congruent — or draw one to compare with:</div>
+          <TriangleFromSides />
+        </>
+      )}
       {shapeIds.map((id) => (
         <ShapeInfo key={id} id={id} />
       ))}
       {vecs.length >= 2 && (
         <div className="card p-2">
-          <div className="mb-1.5 text-[11px] uppercase tracking-wide text-zinc-500">Solve with steps</div>
+          <div className="mb-1.5 text-fine uppercase tracking-wide text-ink-faint">Solve with steps</div>
           <div className="flex flex-wrap gap-1.5">
             <button className="btn" onClick={() => showSolution(VS.solveAddition(vecs))}>
               <ListOrdered size={13} /> {vecs.map((v) => v.name).join(' + ')}
@@ -459,10 +501,10 @@ export function Measurements() {
  * hands back the number as typed — the caller converts it, because only the caller knows whether
  * it is looking at a length in centimetres or an angle in degrees.
  */
-function EditableValue({ value, suffix, onSet }: { value: number; suffix: string; onSet: (shown: number) => void }) {
+function EditableValue({ value, suffix, display, onSet }: { value: number; suffix: string; display?: (v: number) => string; onSet: (shown: number) => void }) {
   const [text, setText] = useState('')
   const [editing, setEditing] = useState(false)
-  const shown = editing ? text : fmt(value, 4)
+  const shown = editing ? text : display ? display(value) : fmt(value, 4)
   const commit = () => {
     setEditing(false)
     const raw = text.trim().replace(/−/g, '-')
@@ -492,13 +534,17 @@ function EditableValue({ value, suffix, onSet }: { value: number; suffix: string
           e.stopPropagation()
         }}
       />
-      <span className="text-zinc-500">{suffix.trim()}</span>
+      <span className="text-ink-faint">{suffix.trim()}</span>
     </span>
   )
 }
 
 /** A point PhysLab may move: one that was placed, not one worked out from other objects. */
-const isFreePoint = (o: SceneObject | undefined): boolean => !!o && o.type === 'point' && o.def.kind === 'free'
+// A corner of a Lego piece is not: typing a length or an angle would move that one corner and bend
+// the piece, so it is never offered. A point the student locked by hand still is — the lock stops a
+// drag, and typing a number is a deliberate act — as it was before 0.9 (isPieceCorner).
+const isFreePoint = (o: SceneObject | undefined, objects: Record<ObjId, SceneObject>): boolean =>
+  !!o && o.type === 'point' && o.def.kind === 'free' && !isPieceCorner(o.id, objects)
 
 /** Puts a free point somewhere, which is what typing a measurement comes down to. */
 function movePoint(id: ObjId, to: V3): void {

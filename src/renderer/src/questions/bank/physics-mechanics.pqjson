@@ -1,0 +1,828 @@
+{
+  "app": "PhysLab",
+  "format": "pqjson",
+  "version": 2,
+  "questions": [
+    {
+      "id": "physlab-mechanics-braking-car",
+      "title": "A car brakes to a stop",
+      "statement": "A car travelling at {v} brakes hard and slows down evenly, coming to rest {t} later.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 10, "to": 30, "step": 2 }, "unit": "m/s", "description": "speed when the brakes go on" },
+        { "name": "t", "def": { "kind": "range", "from": 4, "to": 12, "step": 1 }, "unit": "s", "description": "time to stop" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How far does the car travel while it brakes?",
+          "answer": "v * t / 2",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "v * t", "why": "That is how far it would go at full speed the whole time. Braking evenly, its average speed is only half of that." },
+            { "value": "v / t", "why": "That is the size of the deceleration, in m/s\u00b2, not a distance." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "Taking the direction it was moving as positive, what is its acceleration while it brakes?",
+          "answer": "-v / t",
+          "unit": "m/s\u00b2",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "v / t", "why": "That is the size of the deceleration, but braking slows the car down, so the acceleration itself points backwards \u2014 it is negative." }
+          ],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The speed falls evenly from {v} to 0, so the average speed is halfway between them.", "tex": "v_{\\mathrm{avg}} = \\frac{{v} + 0}{2}", "rule": "v_{\\mathrm{avg}} = \\frac{u + v}{2}", "blank": true },
+          { "head": "Distance is the average speed multiplied by the time.", "tex": "s = v_{\\mathrm{avg}}\\,t = \\frac{{v}}{2} \\times {t}", "rule": "s = v_{\\mathrm{avg}}\\,t", "blank": true },
+          { "head": "The acceleration is the change in speed over the time it takes.", "tex": "a = \\frac{0 - {v}}{{t}}", "rule": "a = \\frac{v - u}{ t }", "blank": true }
+        ]
+      },
+      "motion": {
+        "v0": "v",
+        "segments": [{ "kind": "accelerate", "duration": "t", "a": "-v/t" }],
+        "plots": ["v-t", "x-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-steady-speed",
+      "title": "A steady-speed journey",
+      "statement": "A cyclist rides at a steady {v} to cover a distance of {d}.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 3, "to": 8, "step": 1 }, "unit": "m/s", "description": "steady speed" },
+        { "name": "d", "def": { "kind": "range", "from": 50, "to": 300, "step": 50 }, "unit": "m", "description": "distance ridden" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How long does the journey take?",
+          "answer": "d / v",
+          "unit": "s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "v * d", "why": "That multiplies speed by distance. Time is distance divided by speed." },
+            { "value": "v / d", "why": "That has distance and speed the wrong way round." }
+          ],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "At a steady speed, time is distance divided by speed.", "tex": "t = \\frac{{d}}{{v}}", "rule": "t = d \\div v", "blank": true },
+          { "head": "On a distance\u2013time or speed\u2013time graph the whole journey is one straight line, since the speed never changes." }
+        ]
+      },
+      "motion": {
+        "v0": "v",
+        "segments": [{ "kind": "uniform", "duration": "d/v", "v": "v" }],
+        "plots": ["x-t", "v-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-ball-thrown-up",
+      "title": "A ball thrown straight up",
+      "statement": "A ball is thrown straight up at {u}. Take g = {g} and ignore air resistance.",
+      "variables": [
+        { "name": "u", "def": { "kind": "list", "items": [4.9, 5, 7.35, 8, 9.8, 10, 12, 12.25, 14.7, 15, 17.15, 18, 19.6, 20, 22.05, 24.5, 25, 26.95, 29.4, 30, 31.85, 34.3] }, "unit": "m/s", "description": "launch speed" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How long does it take to reach the top of its flight?",
+          "answer": "u / g",
+          "unit": "s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "2 * u / g", "why": "That is the time to fall all the way back down to your hand. The time up to the top is half of that, since the ball slows at the same rate it speeds up." }
+          ],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "How high above your hand does it rise?",
+          "answer": "u^2 / (2 * g)",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "u^2 / g", "why": "That leaves out the 2 in v\u00b2 = u\u00b2 \u2212 2gs. Rearranged for the height, it needs a 2 underneath." },
+            { "value": "u * u / g", "why": "That leaves out the 2 in v\u00b2 = u\u00b2 \u2212 2gs." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Up is positive, so gravity acts as a deceleration of size g while the ball rises.", "tex": "a = -g = -{g}" },
+          { "head": "At the top of its flight its speed is momentarily 0.", "tex": "0 = {u} - {g} \\times t", "rule": "v = u - gt", "blank": true },
+          { "head": "The height reached uses v\u00b2 = u\u00b2 \u2212 2gs with v = 0.", "tex": "0 = {u}^{2} - 2 \\times {g} \\times h", "rule": "v^{2} = u^{2} - 2gs", "blank": true }
+        ]
+      },
+      "motion": {
+        "v0": "u",
+        "segments": [{ "kind": "accelerate", "duration": "u/g", "a": "-g" }],
+        "plots": ["v-t", "x-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-from-rest",
+      "title": "Speeding up from rest",
+      "statement": "A motorbike starts from rest and accelerates steadily at {a} for {t}.",
+      "variables": [
+        { "name": "a", "def": { "kind": "range", "from": 1, "to": 4, "step": 0.5 }, "unit": "m/s\u00b2", "description": "steady acceleration" },
+        { "name": "t", "def": { "kind": "range", "from": 3, "to": 10, "step": 1 }, "unit": "s", "description": "time spent accelerating" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What speed does it reach?",
+          "answer": "a * t",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "a / t", "why": "That divides instead of multiplying. Speed gained is acceleration times time." }],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "How far does it travel in that time?",
+          "answer": "t^2 * a / 2",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "a * t^2", "why": "That leaves out the \u00bd. Starting from rest, only half the rectangle under the speed\u2013time line is covered." },
+            { "value": "a * t", "why": "That is the final speed, not a distance." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Starting from rest, the speed reached is acceleration times time.", "tex": "v = a\\,t = {a} \\times {t}", "rule": "v = u + at", "blank": true },
+          { "head": "The distance covered from rest is \u00bd a t\u00b2.", "tex": "s = \\tfrac{1}{2}\\,a\\,t^{2} = \\tfrac{1}{2} \\times {a} \\times {t}^{2}", "rule": "s = ut + \\tfrac{1}{2}at^{2}", "blank": true }
+        ]
+      },
+      "motion": {
+        "segments": [{ "kind": "accelerate", "duration": "t", "a": "a" }],
+        "plots": ["v-t", "x-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-stone-dropped",
+      "title": "A stone dropped from a cliff",
+      "statement": "A stone is dropped from rest {h} above the ground. Take g = {g} and ignore air resistance.",
+      "variables": [
+        { "name": "h", "def": { "kind": "list", "items": [25, 30, 44.1, 45, 50, 60, 78.4, 80, 100, 122.5, 125, 150, 176.4, 180, 240.1, 313.6] }, "unit": "m", "description": "height above the ground" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How long does it take to reach the ground?",
+          "answer": "sqrt(2 * h / g)",
+          "unit": "s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "2 * h / g", "why": "That is missing the square root \u2014 s = \u00bdgt\u00b2 rearranges to t = \u221a(2s/g), not 2s/g itself." },
+            { "value": "h / g", "why": "That leaves out both the 2 and the square root." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "How fast is it moving when it lands?",
+          "answer": "sqrt(2 * g * h)",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "sqrt(g * h)", "why": "That leaves out the 2 in v\u00b2 = 2gh." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Falling from rest, the height fallen after time t is \u00bd g t\u00b2.", "tex": "{h} = \\tfrac{1}{2} \\times {g} \\times t^{2}", "rule": "s = \\tfrac{1}{2}gt^{2}", "blank": true },
+          { "head": "Its landing speed follows from v\u00b2 = u\u00b2 + 2gs, with u = 0 and s = h.", "tex": "v^{2} = 2 \\times {g} \\times {h}", "rule": "v^{2} = u^{2} + 2gs", "blank": true }
+        ]
+      },
+      "motion": {
+        "x0": "h",
+        "segments": [{ "kind": "accelerate", "duration": "sqrt(2*h/g)", "a": "-g" }],
+        "plots": ["v-t", "x-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-newtons-second-law",
+      "title": "Newton's second law",
+      "statement": "A resultant force of {F} acts on a {m} trolley on a frictionless bench. Take g = {g}.",
+      "variables": [
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 60, "step": 5 }, "unit": "N", "description": "resultant force" },
+        { "name": "m", "def": { "kind": "range", "from": 2, "to": 8, "step": 1 }, "unit": "kg", "description": "mass of the trolley" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s²", "description": "acceleration due to gravity" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the trolley's acceleration?",
+          "answer": "F / m",
+          "unit": "m/s\u00b2",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "F * m", "why": "Newton's second law is F = ma, so a = F \u00f7 m, not F \u00d7 m." },
+            { "value": "m / F", "why": "That has force and mass the wrong way round." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Newton's second law links the resultant force, the mass and the acceleration.", "tex": "F = m\\,a", "rule": "F = ma" },
+          { "head": "Divide the force by the mass.", "tex": "a = F \\div m = \\frac{{F}}{{m}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "vectors", "items": [{ "name": "F", "v": ["F", "0"], "role": "input" }, { "name": "mg", "v": ["0", "-m*g"], "role": "input" }, { "name": "N", "v": ["0", "m*g"], "role": "input" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-atwood-machine",
+      "title": "Two masses over a pulley",
+      "statement": "Two blocks hang from a light string over a frictionless, massless pulley: {m1} on one side and {m2} on the other. Take g = {g}.",
+      "variables": [
+        { "name": "m1", "def": { "kind": "range", "from": 3, "to": 8, "step": 1 }, "unit": "kg", "description": "heavier block" },
+        { "name": "m2", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "lighter block" },
+        { "name": "g", "def": { "kind": "list", "items": [9.81] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" },
+        { "name": "a", "def": { "kind": "expr", "expr": "(m1 - m2) * g / (m1 + m2)" }, "unit": "m/s\u00b2", "description": "acceleration, worked out in the steps" }
+      ],
+      "condition": { "when": "m1 > m2", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the size of their acceleration?",
+          "answer": "(m1 - m2) * g / (m1 + m2)",
+          "unit": "m/s\u00b2",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "(m1 - m2) * g / m2", "why": "The string has to move both blocks, so both masses share the accelerating force, not just the lighter one." },
+            { "value": "(m1 + m2) * g / (m1 - m2)", "why": "That has the top and bottom of the fraction swapped." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "What is the tension in the string?",
+          "answer": "2 * m1 * m2 * g / (m1 + m2)",
+          "unit": "N",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "(m1 + m2) * g", "why": "That carries both weights outright, as if nothing were accelerating \u2014 some of each block's weight goes into speeding the system up instead." },
+            { "value": "m1 * g", "why": "That is only the heavier block's own weight. The same string pulls up on the lighter block too, and both sides share one tension." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Newton's second law for the whole system: the difference in weight drives both blocks round the pulley together.", "tex": "(m_1 - m_2)\\,g = (m_1 + m_2)\\,a", "rule": "F_{\\mathrm{net}} = (m_1 + m_2)a" },
+          { "head": "Divide by the total mass to find the acceleration.", "tex": "a = \\frac{({m1} - {m2}) \\times {g}}{{m1} + {m2}} = {a}", "blank": true },
+          { "head": "The tension follows from either block: for the lighter one, T \u2212 m\u2082g = m\u2082a.", "tex": "T = {m2} \\times ({g} + {a})", "rule": "T - m_2 g = m_2 a", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "m\u2081g", "v": ["0", "-m1*g"], "tail": ["-(m1+m2)*g/2", "0"], "role": "input" },
+          { "name": "m\u2082g", "v": ["0", "-m2*g"], "tail": ["(m1+m2)*g/2", "0"], "role": "input" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-friction-pull",
+      "title": "Pulling a crate against friction",
+      "statement": "A crate of mass {m} is pulled across a rough floor by a horizontal force of {F}. The coefficient of friction between the crate and the floor is {mu}. Take g = {g}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 5, "to": 15, "step": 1 }, "unit": "kg", "description": "mass of the crate" },
+        { "name": "F", "def": { "kind": "range", "from": 40, "to": 120, "step": 5 }, "unit": "N", "description": "pulling force" },
+        { "name": "mu", "def": { "kind": "list", "items": [0.2, 0.25, 0.3, 0.35, 0.4] }, "description": "coefficient of friction" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" }
+      ],
+      "condition": { "when": "F - mu * m * g >= 5", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the friction force on the crate?",
+          "answer": "mu * m * g",
+          "unit": "N",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "mu * m", "why": "That leaves out g. Friction is \u03bc times the crate's weight mg, not \u03bc times its mass alone." }],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "What is the crate's acceleration?",
+          "answer": "(F - mu * m * g) / m",
+          "unit": "m/s\u00b2",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "F / m", "why": "That leaves friction out altogether. The floor drags back on the crate the whole time it slides." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Friction on a sliding crate is \u03bc times its weight, and it acts backwards.", "tex": "f = \\mu\\,m\\,g = {mu} \\times {m} \\times {g}", "rule": "f = \\mu N", "blank": true },
+          { "head": "The resultant force is the pull minus friction; divide by the mass.", "tex": "a = \\frac{F - f}{ m } = \\frac{{F} - {mu} \\times {m} \\times {g}}{{m}}", "rule": "F_{\\mathrm{net}} = ma", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "F", "v": ["F", "0"], "role": "input" },
+          { "name": "friction", "v": ["-mu*m*g", "0"], "role": "input" },
+          { "name": "mg", "v": ["0", "-m*g"], "role": "input" },
+          { "name": "N", "v": ["0", "m*g"], "role": "input" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces", "friction"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-connected-blocks",
+      "title": "Two blocks joined by a string",
+      "statement": "Two blocks on a frictionless table are joined by a light string: {m1} nearer the pull, {m2} behind it. A horizontal force of {F} pulls the front block.",
+      "variables": [
+        { "name": "m1", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "front block" },
+        { "name": "m2", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "back block" },
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 40, "step": 5 }, "unit": "N", "description": "pulling force" },
+        { "name": "a", "def": { "kind": "expr", "expr": "F / (m1 + m2)" }, "unit": "m/s²", "description": "acceleration, worked out in the steps" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the acceleration of the two blocks?",
+          "answer": "F / (m1 + m2)",
+          "unit": "m/s\u00b2",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "F / m1", "why": "That treats the front block as if it were pulling the string alone \u2014 the string also has to drag the block behind it, so the whole pair's mass counts." }],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "What is the tension in the string joining them?",
+          "answer": "m2 * F / (m1 + m2)",
+          "unit": "N",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "F", "why": "That is the whole pull on the front block, not what the string itself carries \u2014 the front block keeps some of the force to accelerate itself." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Treat both blocks as one system of total mass m\u2081 + m\u2082 pulled by F.", "tex": "a = \\frac{{F}}{{m1} + {m2}} = {a}", "rule": "F = (m_1 + m_2)a", "blank": true },
+          { "head": "The string only has to accelerate the back block, so its tension is m\u2082a.", "tex": "T = {m2} \\times {a}", "rule": "T = m_2 a", "blank": true }
+        ]
+      },
+      "picture": { "kind": "vectors", "items": [{ "name": "F", "v": ["F", "0"], "role": "input" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-friction-from-sliding",
+      "title": "Finding friction from a sliding stop",
+      "statement": "A block slides across a floor at {v}. Friction alone brings it to rest after {s}. Take g = {g}.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 6, "to": 20, "step": 2 }, "unit": "m/s", "description": "starting speed" },
+        { "name": "s", "def": { "kind": "range", "from": 10, "to": 40, "step": 5 }, "unit": "m", "description": "distance travelled before stopping" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" },
+        { "name": "a", "def": { "kind": "expr", "expr": "v^2 / (2 * s)" }, "unit": "m/s\u00b2", "description": "deceleration, worked out in the steps" }
+      ],
+      "condition": { "when": "v^2 / (2 * s * g) >= 0.1 and v^2 / (2 * s * g) <= 0.8", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the block's deceleration?",
+          "answer": "v^2 / (2 * s)",
+          "unit": "m/s\u00b2",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "v / s", "why": "That is not how v\u00b2 = u\u00b2 \u2212 2as rearranges \u2014 v itself must be squared." },
+            { "value": "v^2 / s", "why": "That leaves out the 2 in v\u00b2 = u\u00b2 \u2212 2as." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "What is the coefficient of friction between the block and the floor?",
+          "answer": "v^2 / (2 * s * g)",
+          "unit": "none",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "v^2 / (2 * s)", "why": "That is the deceleration itself, in m/s\u00b2. \u03bc is that divided by g, a plain number with no unit." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The block stops (its final speed is 0), so v\u00b2 = u\u00b2 \u2212 2as gives its deceleration.", "tex": "0 = {v}^{2} - 2\\,a\\,{s}, \\text{ so } a = \\frac{{v}^{2}}{2 \\times {s}} = {a}", "rule": "v^{2} = u^{2} - 2as", "blank": true },
+          { "head": "Friction alone causes it, and friction is \u03bcmg, so \u03bc = a \u00f7 g.", "tex": "\\mu = \\frac{{a}}{{g}}", "rule": "\\mu m g = m a", "blank": true }
+        ]
+      },
+      "motion": {
+        "v0": "v",
+        "segments": [{ "kind": "accelerate", "duration": "2*s/v", "a": "-v^2/(2*s)" }],
+        "plots": ["v-t", "x-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces", "friction"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-kinetic-energy",
+      "title": "Kinetic energy of a moving trolley",
+      "statement": "A trolley of mass {m} moves at {v}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 1, "to": 5, "step": 0.5 }, "unit": "kg", "description": "mass of the trolley" },
+        { "name": "v", "def": { "kind": "range", "from": 3, "to": 12, "step": 1 }, "unit": "m/s", "description": "speed" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is its kinetic energy?",
+          "answer": "v^2 * m * 0.5",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "m * v^2", "why": "That leaves out the \u00bd in \u00bdmv\u00b2." },
+            { "value": "m * v", "why": "That is momentum, not kinetic energy \u2014 kinetic energy needs the speed squared." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Kinetic energy is a half the mass times the speed squared.", "tex": "E_k = \\tfrac{1}{2}\\,m\\,v^{2}", "rule": "E_k = \\tfrac{1}{2}mv^{2}" },
+          { "head": "Put the numbers in.", "tex": "E_k = \\tfrac{1}{2} \\times {m} \\times {v}^{2}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "0.5*m*x^2", "label": "Kinetic energy of this trolley at each speed up to {v}", "from": "0", "to": "v" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["energy"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-falling-energy",
+      "title": "Energy of a falling object",
+      "statement": "An object of mass {m} is dropped from rest and falls freely through a height of {h}. Take g = {g}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 0.5, "to": 3, "step": 0.5 }, "unit": "kg", "description": "mass of the object" },
+        { "name": "h", "def": { "kind": "list", "items": [4.9, 5, 10, 12.5, 19.6, 20] }, "unit": "m", "description": "height fallen" },
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s\u00b2", "description": "acceleration due to gravity" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How much gravitational potential energy does it lose in the fall?",
+          "answer": "m * g * h",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "m * g", "why": "That leaves out the height fallen. Potential energy lost is weight times the height, mgh." }],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "Using energy conservation, how fast is it moving just before it lands?",
+          "answer": "sqrt(2 * g * h)",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "2 * g * h", "why": "That is twice the potential energy lost per unit mass \u2014 take the square root of it to get a speed." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "All the potential energy lost becomes kinetic energy.", "tex": "m\\,g\\,h = \\tfrac{1}{2}\\,m\\,v^{2}", "rule": "PE_{\\mathrm{lost}} = KE_{\\mathrm{gained}}" },
+          { "head": "The mass cancels, and rearranging for v gives the free-fall speed formula.", "tex": "v = \\sqrt{2 \\times {g} \\times {h}}", "rule": "v = \\sqrt{2gh}", "blank": true }
+        ]
+      },
+      "motion": {
+        "x0": "h",
+        "segments": [{ "kind": "accelerate", "duration": "sqrt(2*h/g)", "a": "-g" }],
+        "plots": ["x-t", "v-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["energy", "motion"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-work-energy-theorem",
+      "title": "The work\u2013energy theorem",
+      "statement": "A constant force of {F} pushes a {m} block, starting from rest, across a distance of {d} on a frictionless floor.",
+      "variables": [
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 30, "step": 2 }, "unit": "N", "description": "pushing force" },
+        { "name": "m", "def": { "kind": "range", "from": 1, "to": 6, "step": 1 }, "unit": "kg", "description": "mass of the block" },
+        { "name": "d", "def": { "kind": "range", "from": 2, "to": 10, "step": 1 }, "unit": "m", "description": "distance pushed" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How much work does the force do?",
+          "answer": "F * d",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "F / d", "why": "Work done by a constant force is force times distance moved, not force divided by distance." }],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "What speed does the block reach?",
+          "answer": "sqrt(2 * F * d / m)",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "F * d / m", "why": "That is twice the kinetic energy per unit mass \u2014 take the square root of it to turn it into a speed." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The work done goes entirely into kinetic energy, since the floor is frictionless and it starts from rest.", "tex": "F\\,d = \\tfrac{1}{2}\\,m\\,v^{2}", "rule": "W = \\Delta E_k" },
+          { "head": "Rearrange for the speed.", "tex": "v = \\sqrt{\\frac{2 \\times {F} \\times {d}}{{m}}}", "blank": true }
+        ]
+      },
+      "motion": {
+        "segments": [{ "kind": "accelerate", "duration": "sqrt(2*m*d/F)", "a": "F/m" }],
+        "plots": ["x-t", "v-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["energy", "forces"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-power",
+      "title": "Power delivered by a motor",
+      "statement": "A motor does {W} of work in {t}.",
+      "variables": [
+        { "name": "W", "def": { "kind": "range", "from": 100, "to": 1000, "step": 50 }, "unit": "J", "description": "work done" },
+        { "name": "t", "def": { "kind": "range", "from": 5, "to": 50, "step": 5 }, "unit": "s", "description": "time taken" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What power does the motor deliver?",
+          "answer": "W / t",
+          "unit": "W",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "W * t", "why": "That multiplies instead of divides. Power is work done per second, not work times time." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "Power is the rate of doing work.", "tex": "P = \\frac{{W}}{{t}}", "rule": "P = W \\div t", "blank": true }]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "(W/t)*x", "label": "Work done by the motor, rising steadily to {W} in {t}", "from": "0", "to": "t" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["energy"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-spring-energy",
+      "title": "Energy stored in a stretched spring",
+      "statement": "A spring with a spring constant of {k} N/m is stretched {x} from its natural length.",
+      "variables": [
+        { "name": "k", "def": { "kind": "range", "from": 50, "to": 400, "step": 50 }, "description": "spring constant" },
+        { "name": "x", "def": { "kind": "range", "from": 0.05, "to": 0.5, "step": 0.05 }, "unit": "m", "description": "extension" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How much elastic potential energy is stored in the spring?",
+          "answer": "x^2 * k * 0.5",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "k * x^2", "why": "That leaves out the \u00bd in \u00bdkx\u00b2." },
+            { "value": "k * x", "why": "That is the force in the spring (Hooke's law), not the energy stored \u2014 the energy needs x squared." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Elastic potential energy is a half the spring constant times the extension squared.", "tex": "E = \\tfrac{1}{2}\\,k\\,x^{2}", "rule": "E = \\tfrac{1}{2}kx^{2}" },
+          { "head": "Put the numbers in.", "tex": "E = \\tfrac{1}{2} \\times {k} \\times {x}^{2}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "between", "upper": "k*x", "lower": "0", "from": "0", "to": "x" },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["energy"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-momentum",
+      "title": "Momentum of a moving car",
+      "statement": "A car of mass {m} travels at {v}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 800, "to": 2000, "step": 100 }, "unit": "kg", "description": "mass of the car" },
+        { "name": "v", "def": { "kind": "range", "from": 5, "to": 30, "step": 5 }, "unit": "m/s", "description": "speed" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the car's momentum?",
+          "answer": "m * v",
+          "unit": "kg\u00b7m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "0.5 * m * v^2", "why": "That is kinetic energy, not momentum \u2014 momentum is just mass times velocity, with no square and no half." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "Momentum is mass times velocity.", "tex": "p = m\\,v = {m} \\times {v}", "rule": "p = mv", "blank": true }]
+      },
+      "picture": { "kind": "vectors", "items": [{ "name": "v", "v": ["v", "0"], "role": "input" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["momentum"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-inelastic-collision",
+      "title": "A collision where the trolleys stick together",
+      "statement": "A trolley of mass {m1} moving at {u1} collides with a stationary trolley of mass {m2}. They stick together and move off as one.",
+      "variables": [
+        { "name": "m1", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "moving trolley" },
+        { "name": "u1", "def": { "kind": "range", "from": 2, "to": 10, "step": 1 }, "unit": "m/s", "description": "its starting speed" },
+        { "name": "m2", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 }, "unit": "kg", "description": "stationary trolley" }
+      ],
+      "condition": { "when": "m1 != m2", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is their common speed just after the collision?",
+          "answer": "m1 * u1 / (m1 + m2)",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "m1 * u1 / m2", "why": "That leaves the moving trolley's own mass out of what shares the momentum afterwards \u2014 both trolleys move together, so both masses carry it." },
+            { "value": "u1 / 2", "why": "Splitting the speed in half only works when the two masses are equal; here they are not." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Momentum is conserved: the total before the collision equals the total after.", "tex": "m_1\\,u_1 = (m_1 + m_2)\\,v", "rule": "p_{\\mathrm{before}} = p_{\\mathrm{after}}" },
+          { "head": "The second trolley starts at rest, so it carries no momentum of its own; divide by the combined mass.", "tex": "v = \\frac{{m1} \\times {u1}}{{m1} + {m2}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "vectors", "items": [{ "name": "u\u2081", "v": ["u1", "0"], "role": "input" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["momentum"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-impulse",
+      "title": "Impulse speeds up a trolley",
+      "statement": "A trolley of mass {m}, starting at rest, is pushed by a steady force of {F} for {t}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 2, "to": 20, "step": 1 }, "unit": "kg", "description": "mass of the trolley" },
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 100, "step": 10 }, "unit": "N", "description": "steady force" },
+        { "name": "t", "def": { "kind": "range", "from": 0.1, "to": 1, "step": 0.1 }, "unit": "s", "description": "time the force acts" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What speed does the trolley reach?",
+          "answer": "F * t / m",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "F * t", "why": "That is the impulse, in kg\u00b7m/s (force times time) \u2014 divide it by the mass to get the speed." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Impulse equals the change in momentum.", "tex": "F\\,t = m\\,v", "rule": "Ft = \\Delta p" },
+          { "head": "Divide by the mass to find the speed reached.", "tex": "v = \\frac{{F} \\times {t}}{{m}}", "blank": true }
+        ]
+      },
+      "motion": {
+        "segments": [{ "kind": "accelerate", "duration": "t", "a": "F/m" }],
+        "plots": ["v-t", "x-t"]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["momentum", "forces"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-mechanics-recoil",
+      "title": "Recoil of a spring-loaded gun",
+      "statement": "A toy gun of mass {M}, at rest, fires a dart of mass {m} at {v}.",
+      "variables": [
+        { "name": "M", "def": { "kind": "range", "from": 2, "to": 8, "step": 0.5 }, "unit": "kg", "description": "mass of the gun" },
+        { "name": "m", "def": { "kind": "list", "items": [0.01, 0.02, 0.03, 0.05] }, "unit": "kg", "description": "mass of the dart" },
+        { "name": "v", "def": { "kind": "range", "from": 100, "to": 500, "step": 50 }, "unit": "m/s", "description": "dart's speed" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How fast does the gun recoil?",
+          "answer": "m * v / M",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "m * v", "why": "That is the dart's own momentum, in kg\u00b7m/s \u2014 the gun's recoil speed is that shared out over the gun's own mass." },
+            { "value": "M * v / m", "why": "That has the masses the wrong way round \u2014 the light dart flies off fast, so it is the heavy gun that recoils slowly." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The gun and dart start at rest, so their total momentum stays zero.", "tex": "M\\,V = m\\,v", "rule": "p_{\\mathrm{gun}} = p_{\\mathrm{dart}}" },
+          { "head": "Divide by the gun's own mass.", "tex": "V = \\frac{{m} \\times {v}}{{M}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "vectors", "items": [{ "name": "v (dart)", "v": ["v", "0"], "role": "input" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["momentum"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-mechanics-two-body-collision",
+      "title": "Two trolleys moving towards each other",
+      "statement": "A trolley of mass {m1} moves at {u1} towards a trolley of mass {m2} moving the other way at {u2}. They collide and stick together.",
+      "variables": [
+        { "name": "m1", "def": { "kind": "range", "from": 2, "to": 8, "step": 1 }, "unit": "kg", "description": "first trolley" },
+        { "name": "u1", "def": { "kind": "range", "from": 2, "to": 8, "step": 1 }, "unit": "m/s", "description": "first trolley's speed" },
+        { "name": "m2", "def": { "kind": "range", "from": 2, "to": 8, "step": 1 }, "unit": "kg", "description": "second trolley" },
+        { "name": "u2", "def": { "kind": "range", "from": 1, "to": 6, "step": 1 }, "unit": "m/s", "description": "second trolley's speed, the other way" }
+      ],
+      "condition": { "when": "abs(m1 * u1 - m2 * u2) >= 2", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "Taking the first trolley's direction as positive, what is their common velocity after the collision?",
+          "answer": "(m1 * u1 - m2 * u2) / (m1 + m2)",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "(m1 * u1 + m2 * u2) / (m1 + m2)", "why": "That adds the two momenta instead of subtracting \u2014 the second trolley moves the opposite way, so its momentum counts as negative in this direction." },
+            { "value": "-(m1 * u1 - m2 * u2) / (m1 + m2)", "why": "That is the right size but points the wrong way. With the first trolley's direction as positive, the pair moves off that way (a positive answer) only when m\u2081u\u2081 is bigger than m\u2082u\u2082; when the second trolley's momentum m\u2082u\u2082 is bigger, they move off its way and the answer is negative." }
+          ],
+          "marks": 3
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Momentum is conserved; the second trolley's momentum counts as negative, since it moves the other way.", "tex": "m_1 u_1 - m_2 u_2 = (m_1 + m_2)\\,v", "rule": "p_{\\mathrm{before}} = p_{\\mathrm{after}}" },
+          { "head": "Divide by the combined mass.", "tex": "v = \\frac{{m1} \\times {u1} - {m2} \\times {u2}}{{m1} + {m2}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "vectors", "items": [{ "name": "u\u2081", "v": ["u1", "0"], "role": "input" }, { "name": "u\u2082", "v": ["-u2", "0"], "role": "input" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["momentum"],
+      "rung": 3
+    }
+  ]
+}

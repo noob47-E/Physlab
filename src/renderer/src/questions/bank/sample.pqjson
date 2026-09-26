@@ -1,0 +1,229 @@
+{
+  "app": "PhysLab",
+  "format": "pqjson",
+  "version": 1,
+  "questions": [
+    {
+      "id": "physlab-sample-braking-train",
+      "title": "A braking train",
+      "statement": "A train moving at {v} puts its brakes on and slows down evenly, stopping {t} later.\n$$ s = \\tfrac{1}{2}\\,v\\,t $$",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 10, "to": 30, "step": 2 }, "unit": "m/s", "description": "speed when the brakes go on" },
+        { "name": "t", "def": { "kind": "range", "from": 20, "to": 40, "step": 5 }, "unit": "s", "description": "time to stop" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How far does the train travel while it is braking?",
+          "answer": "v * t / 2",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "v * t", "why": "That is how far it would go at full speed for the whole time. Braking evenly, its average speed is only half of that." },
+            { "value": "v / t", "why": "That is the deceleration in m/s², not a distance. Distance is average speed times time." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The speed falls evenly from {v} to 0, so the average speed is halfway between them.", "tex": "v_{\\mathrm{avg}} = \\frac{{v} + 0}{2}", "rule": "v_{\\mathrm{avg}} = \\frac{u + v}{2}", "blank": true },
+          { "head": "Distance is the average speed multiplied by the time.", "tex": "s = v_{\\mathrm{avg}}\\,t = \\frac{{v}}{2} \\times {t}", "rule": "s = v_{\\mathrm{avg}}\\,t", "blank": true },
+          { "head": "On a speed–time graph this distance is the area of the triangle under the line.", "note": "Half the base (the time) times the height (the starting speed)." }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion", "kinematics"]
+    },
+    {
+      "id": "physlab-sample-thrown-ball",
+      "title": "Height of a ball thrown upwards",
+      "statement": "A ball is thrown straight up at {u}. Take g = 9.8 m/s² and ignore air resistance.",
+      "variables": [
+        { "name": "u", "def": { "kind": "range", "from": 8, "to": 20, "step": 1 }, "unit": "m/s", "description": "launch speed" }
+      ],
+      "parts": [
+        {
+          "type": "expression",
+          "prompt": "Write its height h in metres after t seconds, as a formula in t.",
+          "answer": "u * t - 4.9 * t^2",
+          "symbols": ["t"],
+          "sampleRange": [0, 3],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Up is positive, so the acceleration is −9.8 m/s² and the starting speed is {u}.", "tex": "a = -9.8\\ \\mathrm{m/s^{2}},\\quad u = {u}" },
+          { "head": "Displacement under steady acceleration.", "tex": "h = u\\,t + \\tfrac{1}{2}a\\,t^{2}", "rule": "s = ut + \\tfrac{1}{2}at^{2}" },
+          { "head": "Put the numbers in.", "tex": "h = {u}\\,t - 4.9\\,t^{2}", "blank": true }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion", "algebra"]
+    },
+    {
+      "id": "physlab-sample-crate-acceleration",
+      "title": "Acceleration of a pulled crate",
+      "statement": "A crate of mass {m} is pulled across the floor by a resultant force of {F}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 2, "to": 12, "step": 1 }, "unit": "kg", "description": "mass" },
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 60, "step": 5 }, "unit": "N", "description": "resultant force" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "What is the crate's acceleration?",
+          "choices": [],
+          "shuffle": true,
+          "distractors": { "correct": "F / m", "unit": "m/s²", "rules": ["reciprocal", "half-double", "power-of-ten"] },
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Newton's second law links the resultant force, the mass and the acceleration.", "tex": "F = m\\,a", "rule": "F = ma" },
+          { "head": "Divide the force by the mass.", "tex": "a = F \\div m = \\frac{{F}}{{m}}", "blank": true }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces"]
+    },
+    {
+      "id": "physlab-sample-area-between",
+      "title": "Area between a line and a parabola",
+      "statement": "The line y = {k}x and the parabola y = x² meet at x = 0 and x = {k}.\n$$ A = \\int_{0}^{{k}} \\left({k}x - x^{2}\\right)\\,dx $$",
+      "variables": [
+        { "name": "k", "def": { "kind": "list", "items": [2, 3, 4, 5, 6] }, "description": "where they meet again" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "Find the area of the region between them.",
+          "answer": "k^3 / 6",
+          "unit": "none",
+          "tolerance": { "kind": "relative", "value": 0.01 },
+          "traps": [
+            { "value": "k^3 / 2", "why": "That is the area under the line alone. Take away the area under the parabola." },
+            { "value": "k^3 / 3", "why": "That is the area under the parabola alone. The region is the gap between the two curves." }
+          ],
+          "marks": 3
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The line is above the parabola between the crossings, so integrate the top curve minus the bottom one.", "tex": "A = \\int_{0}^{{k}} \\left({k}x - x^{2}\\right)dx", "rule": "A = \\int_{a}^{b} (f - g)\\,dx" },
+          { "head": "Integrate each term.", "tex": "A = \\left[\\frac{{k}x^{2}}{2} - \\frac{x^{3}}{3}\\right]_{0}^{{k}}", "blank": true },
+          { "head": "Put in the limits: the bottom limit gives 0.", "tex": "A = \\frac{{k}^{3}}{2} - \\frac{{k}^{3}}{3} = \\frac{{k}^{3}}{6}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "between", "upper": "k * x", "lower": "x^2", "from": "0", "to": "k", "label": "between y = {k}x and y = x²" },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["calculus", "graphs"]
+    },
+    {
+      "id": "physlab-sample-cyclist-journey",
+      "title": "A cyclist's journey",
+      "statement": "A cyclist sets off from rest and speeds up evenly at {a} for {t1}. She rides at that speed for {t2}, then brakes evenly to a stop in {t3}.",
+      "variables": [
+        { "name": "a", "def": { "kind": "range", "from": 0.5, "to": 2, "step": 0.5 }, "unit": "m/s²", "description": "acceleration" },
+        { "name": "t1", "def": { "kind": "range", "from": 4, "to": 8, "step": 1 }, "unit": "s", "description": "time speeding up" },
+        { "name": "t2", "def": { "kind": "range", "from": 10, "to": 20, "step": 5 }, "unit": "s", "description": "time at steady speed" },
+        { "name": "t3", "def": { "kind": "range", "from": 3, "to": 6, "step": 1 }, "unit": "s", "description": "time braking" },
+        { "name": "vmax", "def": { "kind": "expr", "expr": "a * t1" }, "unit": "m/s", "description": "top speed" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is her top speed?",
+          "answer": "vmax",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "How far does she ride altogether?",
+          "answer": "vmax * t1 / 2 + vmax * t2 + vmax * t3 / 2",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "vmax * (t1 + t2 + t3)", "why": "That treats the whole ride as top speed. The speeding-up and braking stretches are triangles on the speed–time graph, so they count half." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Her top speed is the acceleration times the time spent speeding up.", "tex": "v = a\\,t_{1} = {a} \\times {t1} = {vmax}", "rule": "v = u + at", "blank": true },
+          { "head": "The distance is the area under the speed–time graph: a triangle, a rectangle and another triangle.", "tex": "s = \\tfrac{1}{2}v\\,t_{1} + v\\,t_{2} + \\tfrac{1}{2}v\\,t_{3}", "blank": true },
+          { "head": "Show it draws the graphs and puts a reading every second into Lab Data, so you can check the area there." }
+        ]
+      },
+      "motion": {
+        "segments": [
+          { "kind": "accelerate", "duration": "t1", "a": "a" },
+          { "kind": "uniform", "duration": "t2", "v": "vmax" },
+          { "kind": "accelerate", "duration": "t3", "a": "-vmax / t3" }
+        ],
+        "plots": ["x-t", "v-t"],
+        "sampleEvery": "1"
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion", "graphs"]
+    },
+    {
+      "id": "physlab-sample-pushed-crate",
+      "title": "Pushing a sliding crate",
+      "statement": "A {m} crate slides across a floor at 6 m/s. The coefficient of friction is {mu}. An engine pushes it forward with a steady {F} for 2 s. Take g = {g}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "list", "items": [5] }, "unit": "kg", "description": "the Sandbox crate's mass" },
+        { "name": "mu", "def": { "kind": "list", "items": [0.4] }, "description": "the Sandbox floor's friction" },
+        { "name": "g", "def": { "kind": "list", "items": [9.81] }, "unit": "m/s²", "description": "the Sandbox's gravity" },
+        { "name": "F", "def": { "kind": "range", "from": 25, "to": 45, "step": 5 }, "unit": "N", "description": "the engine's push" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the crate's acceleration while it is pushed?",
+          "answer": "(F - mu * m * g) / m",
+          "unit": "m/s²",
+          "tolerance": { "kind": "relative", "value": 0.03 },
+          "traps": [
+            { "value": "F / m", "why": "That leaves out friction. The floor pulls back with μmg the whole time the crate slides." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "How fast is it moving when the push stops?",
+          "answer": "6 + 2 * (F - mu * m * g) / m",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.03 },
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Friction on a sliding crate is μ times its weight, and it acts backwards.", "tex": "f = \\mu m g = {mu} \\times {m} \\times {g}", "rule": "f = \\mu N", "blank": true },
+          { "head": "The resultant force is the push minus friction; divide by the mass.", "tex": "a = \\left(F - \\mu m g\\right) / m", "rule": "F = ma", "blank": true },
+          { "head": "Its speed goes up by a × 2 s from the 6 m/s it started with.", "tex": "v = 6 + 2a", "rule": "v = u + at" },
+          { "head": "Open the experiment loads it in the Sandbox with the push on the crate: press Play and watch its speed rise for 2 s on the Recording chart, then Send to Lab Data under the chart puts the readings in a table." }
+        ]
+      },
+      "sandbox": {
+        "preset": "friction",
+        "actuators": [{ "body": "Crate", "force": ["F", "0", "0"], "from": "0", "until": "2" }],
+        "record": "Crate"
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["forces", "friction"]
+    }
+  ]
+}

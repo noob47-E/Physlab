@@ -1,0 +1,40 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "1/x"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\frac{1}{x}",
+   "text": "1/x"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\ln\\left|x\\right|",
+  "raw_text": "log(Abs(x))",
+  "answer_latex": "\\ln\\left|x\\right|",
+  "answer_text": "log(Abs(x))",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "ReciprocalRule",
+   "integrand": {
+    "latex": "\\frac{1}{x}",
+    "text": "1/x"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "base": {
+    "latex": "x",
+    "text": "x"
+   },
+   "result": {
+    "latex": "\\ln\\left|x\\right|",
+    "text": "log(Abs(x))"
+   }
+  }
+ }
+}

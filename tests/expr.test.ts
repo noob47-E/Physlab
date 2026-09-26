@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { directionAngles, toDeg } from '../src/renderer/src/math/vec'
-import { compileScalar, inferKind, math, preprocess, setAngleMode, symbolsOf, toV3 } from '../src/renderer/src/math/expr'
+import { compileScalar, getAngleMode, inDegrees, inferKind, math, preprocess, setAngleMode, symbolsOf, toV3 } from '../src/renderer/src/math/expr'
+import { resetGlobals } from './helpers/globals'
+
+beforeEach(resetGlobals)
 
 describe('preprocess', () => {
   it('turns tuples into points but leaves calls alone', () => {
@@ -58,5 +61,19 @@ describe('direction angles', () => {
       expect(angs.every(Number.isFinite)).toBe(true)
     }
     expect(directionAngles([1, 0, 0]).map(toDeg)).toEqual([0, 90, 90])
+  })
+})
+
+describe('inDegrees', () => {
+  it('evaluates in degrees and puts the mode back, even when the work throws', () => {
+    setAngleMode('rad')
+    expect(inDegrees(() => math.evaluate('sin(30)'))).toBeCloseTo(0.5, 12)
+    expect(getAngleMode()).toBe('rad')
+    expect(() =>
+      inDegrees(() => {
+        throw new Error('no')
+      })
+    ).toThrow('no')
+    expect(getAngleMode()).toBe('rad')
   })
 })

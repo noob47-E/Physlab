@@ -3,19 +3,28 @@ import { useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './cameraUtils'
-import { overlay, showTip } from './overlay'
-import { pickAt, type Hit } from './picking'
-import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type SnapInfo } from './tools'
+import { labelAnchors, overlay, showTip } from './overlay'
+import { CURVE_PICK_PX, pickAll, pickAt, type Hit } from './picking'
+import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type Marquee, type SnapInfo } from './tools'
+import { drawingClickHit, joinsPointWithSnapOff, marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, shiftConstrains, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
+import { isSpaceHeld, markSpaceUsed } from './panKey'
+import { drag3D } from './viewMath'
+import { useTurnMode } from './viewState'
 import { showContextMenu } from '../ui/ContextMenu'
 import { Arrow } from './ObjectViews'
 import { Builder } from '../core/factory'
-import { isFree, parentRefs } from '../core/evaluate'
+import { asGLine, dependentsOf, isFree, parentRefs } from '../core/evaluate'
+import { intersectionsOf } from '../math/intersections'
 import { scene, useScene } from '../core/store'
-import type { ObjId, SceneObject } from '../core/types'
+import type { Computed, ObjId, SceneObject } from '../core/types'
 import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '../math/vec'
 import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
+import { visibleOrder } from '../core/visibility'
+import { minorStepOf, normaliseGridStyle, sketchSnap, snapStep, snapToGrid, styleFor3D } from './gridMath'
+import { legoSnap, pieceSnapTolerance, slideAlong } from '../math/lego'
+import { themeColor, useThemed } from '../app/theme'
 
 interface DragState {
   hit: Hit
@@ -33,6 +42,42 @@ interface DragState {
 const SNAP_POINT_PX = 12
 const SNAP_GRID_PX = 9
 const SNAP_AXIS_PX = 6
+/** How far from a line or circle the cursor may be for it to count towards a crossing. */
+const SNAP_CURVE_PX = 12
+
+/** A line, segment, ray, vector or circle: something that can cross something else. */
+const isCurve = (c: Computed) => !!asGLine(c) || c.type === 'circle'
+
+/**
+ * The positions that decide whether a selection box takes an object: the whole of what defines
+ * it has to be inside (see `objectInRect`). A graph has no geometry of its own here, so its label
+ * anchor stands for it; a number has nowhere on the drawing at all.
+ */
+function keyPoints(id: ObjId, c: Computed): V3[] {
+  switch (c.type) {
+    case 'point':
+    case 'text':
+      return [c.p]
+    case 'vector':
+      return [c.tail, add(c.tail, c.comp)]
+    case 'segment':
+    case 'ray':
+    case 'line':
+      return [c.line.p, add(c.line.p, c.line.d)]
+    case 'circle':
+      return [c.circle.c]
+    case 'polygon':
+      return c.pts
+    case 'angle':
+      return [c.vertex]
+    case 'graph': {
+      const a = labelAnchors.get(id)
+      return a ? [a.p] : []
+    }
+    case 'number':
+      return []
+  }
+}
 
 /** Rounds an angle to 15° steps (Shift while drawing). */
 function constrainAngle(from: V3, to: V3): V3 {
@@ -47,12 +92,22 @@ export function Interaction() {
   const drag = useRef<DragState | null>(null)
   const down = useRef<{ x: number; y: number; world: V3 | null; hit: Hit | null } | null>(null)
   const sketch = useRef<{ world: V3[]; lastX: number; lastY: number } | null>(null)
+  // A selection box in progress: where the left button went down on empty space with the Move tool.
+  const box = useRef<{ x0: number; y0: number } | null>(null)
+  // Where the right button went down on the canvas, so the contextmenu event that follows can
+  // tell a right-drag pan from a right-click (see rightDragPanned).
+  const rightDown = useRef<{ x: number; y: number } | null>(null)
+  // The existing point a vector drag or first click started on, so a vector drawn from one
+  // point to another is tied to them and follows when either point moves.
+  const vectorTail = useRef<{ down: ObjId | null; first: ObjId | null }>({ down: null, first: null })
   const ctxRef = useRef({ camera, size, controls })
   ctxRef.current = { camera, size, controls }
 
   useEffect(() => {
     const host = overlay.canvasHost
     if (!host) return
+    // The camera rig's button map this listener last changed, handed back when it is removed.
+    let leftButtons: LeftButton | null = null
 
     const local = (e: { clientX: number; clientY: number }) => {
       const r = host.getBoundingClientRect()
@@ -60,20 +115,29 @@ export function Interaction() {
     }
     const pickCtx = () => {
       const s = scene()
-      return { camera: ctxRef.current.camera, size: ctxRef.current.size, objects: s.objects, order: s.order, ev: s.ev }
+      // Only what is on screen can be picked: the other drawings are not there.
+      return { camera: ctxRef.current.camera, size: ctxRef.current.size, objects: s.objects, order: visibleOrder(s.order, s.objects, s.activeSpace), ev: s.ev }
     }
     const setControls = (enabled: boolean) => {
       const c = ctxRef.current.controls as unknown as { enabled: boolean } | null
       if (c) c.enabled = enabled
     }
-    /** Minor grid step at the current zoom. */
-    const gridStep = () => {
+    /** The grid as it is drawn at the current zoom: its style and its major and minor steps, by the same rules `Grid2D` and `Grid3D` build it. */
+    const gridNow = () => {
       const { camera: cam, size: sz } = ctxRef.current
-      if (scene().viewMode === '2d') {
+      const s = scene()
+      const style = normaliseGridStyle(s.settings.gridStyle)
+      if (s.viewMode === '2d') {
         const major = niceStep(100 * worldPerPixel(cam, sz))
-        return major / (String(major).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
+        return { style, major, minor: minorStepOf(major) }
       }
-      return niceStep(cam.position.length() / 12) / 2
+      const step = niceStep(cam.position.length() / 12)
+      return { style: styleFor3D(style), major: step * 2, minor: step / 2 }
+    }
+    /** The step a point snaps to at the current zoom: the minor grid step, halved with the Fine style, the same rule the grid is drawn by. */
+    const gridStep = () => {
+      const g = gridNow()
+      return snapStep(g.minor, g.style)
     }
     const worldOn = (x: number, y: number, plane: THREE.Plane = XY_PLANE) => screenToPlane(ctxRef.current.camera, ctxRef.current.size, x, y, plane)
     const scr = (p: V3) => toScreen(ctxRef.current.camera, ctxRef.current.size, p)
@@ -88,13 +152,31 @@ export function Interaction() {
       const s = scene()
       const step = gridStep()
       const tidy = (v: number) => Math.round(v / (step / 20)) * (step / 20)
-      if (alt || !s.settings.snap) return { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
-      const hit = pickAt(pickCtx(), x, y, (o, c) => c.type === 'point' && !exclude?.has(o.id))
-      if (hit && hit.dist <= SNAP_POINT_PX) {
-        const c = s.ev.values.get(hit.id)
-        if (c?.type === 'point') return { p: c.p, kind: 'point', pointId: hit.id, label: s.objects[hit.id]?.name }
+      const onPoint = (): SnapInfo | null => {
+        const hit = pickAt(pickCtx(), x, y, (o, c) => c.type === 'point' && !exclude?.has(o.id))
+        const c = hit && hit.dist <= SNAP_POINT_PX ? s.ev.values.get(hit.id) : undefined
+        return hit && c?.type === 'point' ? { p: c.p, kind: 'point', pointId: hit.id, label: s.objects[hit.id]?.name } : null
       }
-      const g: V3 = [Math.round(w[0] / step) * step, Math.round(w[1] / step) * step, w[2]]
+      if (alt || !s.settings.snap) {
+        // A point-making tool's click still joins a point right under it with snapping off
+        // (drawingClickHit takes it), so the tip and ring say so too; the tip used to give the length
+        // to the pointer while the side was built to the point (Fix 1). Vector and Text, which place
+        // their ends from this snap, stay free, and a drag (it passes `exclude`) never joins.
+        const joined = joinsPointWithSnapOff(createsPointsOnEmpty(s.tool), !!exclude) ? onPoint() : null
+        return joined ?? { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
+      }
+      const point = onPoint()
+      if (point) return point
+      // Where two lines or circles cross. A point placed here is defined by the crossing, so it
+      // follows when either parent moves; before this a student had to aim at a crossing by eye
+      // and got a free point that stayed behind. Tried before the grid, because a crossing that
+      // happens to sit near a grid line used to lose to the grid.
+      const crossing = crossingNear(x, y, exclude)
+      if (crossing) return crossing
+      // The nearest crossing of whatever grid is drawn: a circle and a ray, a lattice point, a
+      // hexagon's centre or corner — not always a multiple of the step on each axis.
+      const grid = gridNow()
+      const g = snapToGrid(grid.style, w, grid.major, grid.minor)
       const gs = scr(g)
       if (Math.hypot(gs.x - x, gs.y - y) <= SNAP_GRID_PX) return { p: g, kind: 'grid' }
       // On a side or a circle: the new point sticks to it and slides along it.
@@ -124,11 +206,40 @@ export function Interaction() {
       return { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
     }
 
+    /** The nearest crossing of two curves under the cursor, within `SNAP_POINT_PX`, or null. */
+    const crossingNear = (x: number, y: number, exclude?: Set<ObjId>): SnapInfo | null => {
+      const s = scene()
+      // Each curve's own reach, widened so that both lines of a crossing are found when the
+      // cursor is near the crossing rather than exactly on both.
+      const curves = pickAll(pickCtx(), x, y, (o, c) => !exclude?.has(o.id) && isCurve(c), SNAP_CURVE_PX - CURVE_PICK_PX)
+      if (curves.length < 2) return null
+      let best: SnapInfo | null = null
+      let bestD = SNAP_POINT_PX
+      for (let i = 0; i < curves.length; i++) {
+        for (let j = i + 1; j < curves.length; j++) {
+          const a = curves[i].id
+          const b = curves[j].id
+          const ca = s.ev.values.get(a)
+          const cb = s.ev.values.get(b)
+          if (!ca || !cb) continue
+          // Numbered by intersectionsOf, which is what the evaluator uses to place the point later.
+          intersectionsOf(ca, cb).forEach((p, index) => {
+            const sp = scr(p)
+            const d = Math.hypot(sp.x - x, sp.y - y)
+            if (!sp.visible || d >= bestD) return
+            bestD = d
+            best = { p, kind: 'intersection', a, b, index, label: `${s.objects[a]?.name} ∩ ${s.objects[b]?.name}` }
+          })
+        }
+      }
+      return best
+    }
+
     const fmtL = (v: number) => formatMeasure(v, 'length', scene().settings)
     const fmtA = (r: number) => formatMeasure(r, 'angle', scene().settings)
     const coordText = (p: V3) => `(${[p[0], p[1]].map((v) => fmtL(v).replace(/ \S+$/, '')).join(', ')})`
     const snapNote = (sn: SnapInfo) =>
-      sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'onObject' ? `  • ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : ''
+      sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'onObject' || sn.kind === 'intersection' ? `  • ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : ''
 
     /** Existing point under the cursor (snapped), or a new free point there. */
     const pointAt = (x: number, y: number, alt: boolean): ObjId | null => {
@@ -136,19 +247,36 @@ export function Interaction() {
       if (!sn) return null
       if (sn.pointId) return sn.pointId
       const b = new Builder()
-      // A point placed on a side belongs to it and slides along it afterwards.
-      const p = sn.kind === 'onObject' && sn.onId ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 }) : b.point(sn.p)
+      // A point placed on a side belongs to it and slides along it afterwards; one placed on a
+      // crossing belongs to both lines and stays on the crossing when they move.
+      const p =
+        sn.kind === 'intersection' && sn.a && sn.b && sn.index !== undefined
+          ? b.point({ kind: 'intersection', a: sn.a, b: sn.b, index: sn.index })
+          : sn.kind === 'onObject' && sn.onId
+            ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 })
+            : b.point(sn.p)
       b.commit(false)
+      // Remember that the tool made this point, so Esc may take it away again — and only this.
+      useTool.setState((t) => ({ created: [...t.created, p.id] }))
       return p.id
     }
 
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return
       // The buttons floating over the drawing — 2D/3D, grid, snap, the label choices — live inside
       // the same container this listener is attached to, and it listens in the capture phase, so a
       // click on one of them used to reach the canvas as well: pressing "Always" with a drawing
       // tool selected dropped a point behind the button. Only the canvas draws.
-      if (!(e.target instanceof HTMLCanvasElement)) return
+      if (!(e.target instanceof HTMLCanvasElement)) {
+        rightDown.current = null
+        return
+      }
+      // The camera controls own the right button (a pan in 2D, a turn in 3D); this only
+      // remembers where it started.
+      if (e.button === 2) {
+        rightDown.current = local(e)
+        return
+      }
+      if (e.button !== 0) return
       const { x, y } = local(e)
       const s = scene()
       const tool = s.tool
@@ -156,10 +284,39 @@ export function Interaction() {
       const hit = pickAt(pickCtx(), x, y, tool === 'select' ? undefined : accept)
       down.current = { x, y, world: worldOn(x, y), hit }
 
+      // In 3D one rule (drag3D) says whether this press turns or slides the view or belongs to the
+      // tool. The left button's camera action is set here, per press, because only this listener
+      // knows the tool and what is under the cursor; it runs in the capture phase, before
+      // OrbitControls reads the button. Shift and Ctrl are left to OrbitControls, which swaps.
+      if (s.viewMode === '3d') {
+        const act = drag3D({ button: 0, tool, onObject: !!hit, spaceHeld: isSpaceHeld(), turnMode: useTurnMode.getState().on })
+        if (act !== 'tool') {
+          const c = ctxRef.current.controls as unknown as { enabled: boolean; mouseButtons?: LeftButton } | null
+          if (c) {
+            c.enabled = true
+            if (c.mouseButtons) {
+              setLeftDrag(c.mouseButtons, act)
+              leftButtons = c.mouseButtons
+            }
+          }
+          if (tool === 'select' && !hit && !e.shiftKey) s.select([])
+          markSpaceUsed()
+          down.current = null
+          return
+        }
+      }
+
       if (tool === 'select') {
         if (!hit) {
           if (!e.shiftKey) s.select([])
-          return // empty space: the camera controls pan/orbit
+          // Empty space. With Space held the camera pans; otherwise the drag draws a selection box.
+          if (isSpaceHeld()) {
+            markSpaceUsed()
+            return
+          }
+          setControls(false)
+          box.current = { x0: x, y0: y }
+          return
         }
         setControls(false)
         if (e.shiftKey) s.select([hit.id], true)
@@ -177,6 +334,7 @@ export function Interaction() {
       }
       if (tool === 'vector') {
         const sn = snapAt(x, y, XY_PLANE, e.altKey)
+        vectorTail.current.down = sn?.pointId ?? null
         useTool.setState({ dragStart: sn ? sn.p : null })
       }
     }
@@ -200,6 +358,11 @@ export function Interaction() {
       }
       const starts = new Map<ObjId, V3>()
       collectFreePoints(o, s.objects, starts)
+      // Nothing that moves with the drag may be snapped onto: the object, the points it is
+      // moved by, and everything built on those. A dragged corner used to snap onto its own
+      // side, which moved away as it did.
+      const exclude = new Set<ObjId>([o.id, ...starts.keys()])
+      for (const id of [...exclude]) for (const d of dependentsOf(id, s.objects)) exclude.add(d)
       drag.current = {
         hit,
         plane,
@@ -208,7 +371,7 @@ export function Interaction() {
         startComp: c.type === 'vector' ? c.comp : undefined,
         startTail: c.type === 'vector' ? c.tail : undefined,
         moved: false,
-        exclude: new Set([o.id, ...starts.keys()])
+        exclude
       }
     }
 
@@ -228,6 +391,14 @@ export function Interaction() {
             useTool.setState({ stroke: [...sk.world] })
           }
         }
+        return
+      }
+
+      const bx = box.current
+      if (bx) {
+        const m: Marquee = { x0: bx.x0, y0: bx.y0, x1: x, y1: y }
+        // A few pixels of wobble on a click is not a box.
+        useTool.setState({ marquee: marqueeStarted(m) ? m : null })
         return
       }
 
@@ -252,7 +423,7 @@ export function Interaction() {
       let cursor = sn?.p ?? null
       // Shift draws at 15° steps from the previous point.
       const anchorPt = s.tool === 'vector' ? t.dragStart ?? t.firstTail : lastPickPoint()
-      if (cursor && e.shiftKey && anchorPt && s.viewMode === '2d') cursor = constrainAngle(anchorPt, cursor)
+      if (cursor && anchorPt && shiftConstrains(s.tool, e.shiftKey, s.viewMode === '2d', !!sn?.pointId)) cursor = constrainAngle(anchorPt, cursor)
       useTool.setState({ cursor, snap: s.tool === 'select' || !sn || sn.kind === 'free' ? null : sn })
 
       if (s.tool !== 'select' && s.tool !== 'sketch' && cursor && sn) {
@@ -266,10 +437,36 @@ export function Interaction() {
       } else showTip(null)
 
       if (e.buttons === 0 || s.tool !== 'select') {
-        const hit = s.tool === 'sketch' ? null : pickAt(pickCtx(), x, y, s.tool === 'select' ? undefined : acceptsFor(s.tool, t.picks))
+        // A drawing tool lights up only what its click would take (see drawingClickHit): a point
+        // 20 px away used to glow as though the click would join it, and then did not.
+        const hit = s.tool === 'sketch' ? null : s.tool === 'select' ? pickAt(pickCtx(), x, y) : drawingHit(x, y)
         s.setHovered(hit?.id ?? null)
         host.style.cursor = hit ? (s.tool === 'select' ? (isDraggable(hit) ? 'grab' : 'pointer') : 'pointer') : s.tool === 'select' ? '' : 'crosshair'
       }
+    }
+
+    /** Everything on this drawing that the box holds whole. */
+    const idsInRect = (m: Marquee): ObjId[] => {
+      const rect = normalizeRect(m)
+      const s = scene()
+      const out: ObjId[] = []
+      for (const id of visibleOrder(s.order, s.objects, s.activeSpace)) {
+        const o = s.objects[id]
+        const c = s.ev.values.get(id)
+        if (!o || !c || !o.visible) continue
+        const pts = keyPoints(id, c).map(scr)
+        if (!pts.every((p) => p.visible)) continue
+        if (objectInRect(o.type, pts as S2[], rect)) out.push(id)
+      }
+      return out
+    }
+
+    /** What the current drawing tool's click at (x, y) takes: an existing object, or null for a new point there. */
+    const drawingHit = (x: number, y: number): Hit | null => {
+      const s = scene()
+      const ctx = pickCtx()
+      const hits = pickAll(ctx, x, y, acceptsFor(s.tool, useTool.getState().picks))
+      return drawingClickHit(hits, (h) => ctx.ev.values.get(h.id)?.type === 'point', createsPointsOnEmpty(s.tool), SNAP_POINT_PX)
     }
 
     const lastPickPoint = (): V3 | null => {
@@ -368,10 +565,38 @@ export function Interaction() {
       // snapping the whole shape by its first corner so it lands neatly on the grid.
       const raw = worldOn(x, y, d.plane) ?? w
       let delta = sub(raw, d.startWorld)
+      // REGION L2: a Lego piece is pulled onto a piece of the same shape the moment a corner
+      // comes within 12 px of a neighbour's corner or side, before the grid gets a say — a
+      // neighbour is what the student is aiming at, and the grid used to pull the piece a few
+      // pixels off it. Alt turns this off like every other snap. The corners are the piece's
+      // own free points, taken where they stood when the drag began.
+      let met: 'corner' | 'edge' | 'none' = 'none'
+      let along: V3 | null = null
+      if (o.type === 'polygon' && o.lego && !e.altKey) {
+        const source = o.lego.sourceId
+        const own = o.points.map((pid) => d.starts.get(pid)).filter((p): p is V3 => !!p)
+        const neighbours = Object.values(s.objects).flatMap((n) => {
+          if (n.type !== 'polygon' || !n.lego || n.id === o.id || n.lego.sourceId !== source) return []
+          const c = s.ev.values.get(n.id)
+          return c?.type === 'polygon' ? [c.pts] : []
+        })
+        const tol = pieceSnapTolerance(worldPerPixel(ctxRef.current.camera, ctxRef.current.size))
+        const pull = legoSnap(own, delta, neighbours, tol)
+        met = pull.how
+        delta = pull.delta
+        if (pull.how === 'edge') along = pull.along
+      }
       const first = d.starts.values().next().value as V3 | undefined
-      if (first) {
+      if (met === 'none' && first) {
         const target = snapNear(add(first, delta), e.altKey, d.exclude)
         delta = sub(target.p, first)
+      } else if (met === 'edge' && along && first) {
+        // Glued to a neighbour's side, the piece is still free to run along it — and along it
+        // the grid keeps its say, so a piece let go part-way down a side lands on a grid line
+        // (or a tidy step) as a plain move would, not at y = −0.457967552. Only the part of the
+        // grid's pull that runs along the side is taken; across the side the fit stays exact.
+        const target = snapNear(add(first, delta), e.altKey, d.exclude)
+        delta = slideAlong(delta, along, sub(sub(target.p, first), delta))
       }
       for (const [pid, p0] of d.starts) {
         s.updateObject(pid, (dr) => {
@@ -379,7 +604,7 @@ export function Interaction() {
           if (dr.type === 'vector' && dr.def.kind === 'free') dr.def.tail = add(p0, delta)
         }, false)
       }
-      showTip(`move ${coordText(delta)}`, x, y)
+      showTip(`move ${coordText(delta)}${met === 'corner' ? '  • corner to corner' : met === 'edge' ? '  • side to side' : ''}`, x, y)
     }
 
     /** Snap a world position (not the cursor) using the same magnetic rules. */
@@ -395,7 +620,10 @@ export function Interaction() {
       setControls(true)
       if (!sk || sk.world.length < 4) return
       const s = scene()
-      const result = recognizeStroke(sk.world, { gridStep: s.settings.snap ? gridStep() : 0 })
+      // The grid's own points, not a square step: on isometric paper a sketched triangle's corners
+      // used to land on square-grid points that were not drawn.
+      const g = gridNow()
+      const result = recognizeStroke(sk.world, s.settings.snap ? sketchSnap(g.style, g.major, g.minor) : { gridStep: 0 })
       const b = new Builder()
       let primary: SceneObject | undefined
       if (result.kind === 'none') {
@@ -434,6 +662,19 @@ export function Interaction() {
         finishSketch()
         return
       }
+      if (box.current) {
+        const bx = box.current
+        box.current = null
+        setControls(true)
+        useTool.setState({ marquee: null })
+        const { x, y } = local(e)
+        const m: Marquee = { x0: bx.x0, y0: bx.y0, x1: x, y1: y }
+        // Shift adds what the box holds to the selection; without it the box is the selection.
+        // (A Shift-click toggles one object, but a box that took away what it covered surprised.)
+        if (marqueeStarted(m)) s.select(mergeSelection(s.selection, idsInRect(m), e.shiftKey))
+        down.current = null
+        return
+      }
       const d = drag.current
       drag.current = null
       if (d) {
@@ -457,15 +698,21 @@ export function Interaction() {
         if (!sn) return
         const tail = clickLike ? t.firstTail : t.dragStart
         if (!tail) {
+          vectorTail.current.first = vectorTail.current.down
           useTool.setState({ firstTail: t.dragStart, dragStart: null })
           return
         }
         const end = e.shiftKey && s.viewMode === '2d' ? constrainAngle(tail, sn.p) : sn.p
         if (dist(tail, end) > 1e-9) {
+          const tailId = clickLike ? vectorTail.current.first : vectorTail.current.down
+          const headId = e.shiftKey ? null : (sn.pointId ?? null)
           const b = new Builder()
-          b.vector({ kind: 'free', tail, comp: sub(end, tail) })
+          // Drawn from one existing point to another, the vector belongs to those points.
+          if (tailId && headId && tailId !== headId) b.vector({ kind: 'points', a: tailId, b: headId })
+          else b.vector({ kind: 'free', tail, comp: sub(end, tail) })
           b.commit()
         }
+        vectorTail.current = { down: null, first: null }
         resetTool()
         showTip(null)
         return
@@ -487,18 +734,19 @@ export function Interaction() {
         return
       }
       const picks = useTool.getState().picks
-      const accept = acceptsFor(tool, picks)
       let id: ObjId | null = null
-      const hit = pickAt(pickCtx(), x, y, accept)
+      // Taken by the same radius the tip and snap ring used, so the end lands where they said (Fix 1).
+      const hit = drawingHit(x, y)
       if (hit) id = hit.id
       else if (createsPointsOnEmpty(tool)) {
         // Shift-constrained position for the next vertex.
         const anchorPt = lastPickPoint()
         const sn = snapAt(x, y, XY_PLANE, e.altKey)
-        if (sn && e.shiftKey && anchorPt && !sn.pointId && s.viewMode === '2d') {
+        if (sn && anchorPt && shiftConstrains(tool, e.shiftKey, s.viewMode === '2d', !!sn.pointId)) {
           const b = new Builder()
           id = b.point(constrainAngle(anchorPt, sn.p)).id
           b.commit(false)
+          useTool.setState((t) => ({ created: [...t.created, id!] }))
         } else id = pointAt(x, y, e.altKey)
       }
       if (!id) return
@@ -510,18 +758,24 @@ export function Interaction() {
     // Right-click finishes a drawing; otherwise it opens the menu for whatever is under the cursor.
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
+      const from = rightDown.current
+      rightDown.current = null
+      // A right button pressed during a selection box is part of the box, never a menu.
+      if (box.current) return
+      // A right-drag panned the view: the button coming up is the end of the pan, not a click.
+      const at = local(e)
+      if (rightDragPanned(from, at.x, at.y)) return
       if (useTool.getState().picks.length && finishTool()) {
         e.stopPropagation()
         return
       }
-      const { x, y } = local(e)
-      const hit = pickAt(pickCtx(), x, y)
+      const hit = pickAt(pickCtx(), at.x, at.y)
       if (hit) {
         const s = scene()
         if (!s.selection.includes(hit.id)) s.select([hit.id])
         showContextMenu(e, menuForObject(hit.id))
       } else {
-        showContextMenu(e, menuForBackground(worldOn(x, y)))
+        showContextMenu(e, menuForBackground(worldOn(at.x, at.y)))
       }
     }
 
@@ -543,6 +797,7 @@ export function Interaction() {
     window.addEventListener('pointerup', onUp)
     return () => {
       host.removeEventListener('pointerdown', onDown, { capture: true })
+      releaseLeftDrag(leftButtons)
       host.removeEventListener('contextmenu', onContextMenu, { capture: true })
       host.removeEventListener('dblclick', onDoubleClick)
       host.removeEventListener('pointerleave', onLeave)
@@ -552,6 +807,25 @@ export function Interaction() {
   }, [])
 
   return <ToolPreview />
+}
+
+/** The part of OrbitControls' button map a left press changes. */
+type LeftButton = { LEFT: THREE.MOUSE }
+
+/** Sets what a left drag does to the 3-D camera for this press, as drag3D decided it. */
+export function setLeftDrag(buttons: LeftButton, act: 'turn' | 'pan'): void {
+  buttons.LEFT = act === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+}
+
+/**
+ * Hands the left button back as the camera rig made it: a turn. The rig keeps one button map for
+ * its whole life and OrbitControls reads it at every press, while this listener, which sets the
+ * button per press, is not mounted in the Sandbox. A Space-held pan in the 3-D drawing followed by
+ * a switch to the Sandbox used to leave its left drag panning, against its own rule that a left
+ * drag on empty space turns.
+ */
+export function releaseLeftDrag(buttons: LeftButton | null): void {
+  if (buttons) buttons.LEFT = THREE.MOUSE.ROTATE
 }
 
 function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, out: Map<ObjId, V3>, seen = new Set<ObjId>()) {
@@ -572,12 +846,35 @@ function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, 
   }
 }
 
+/**
+ * What a tool draws before it has made anything: the rubber band in a quiet grey, the freehand
+ * stroke in the accent colour and the snap rings in the same colours a selection uses. Read from the stylesheet and
+ * re-read when the theme flips, so they show on the light canvas too.
+ */
+function usePreviewColors() {
+  return useThemed(() => {
+    const accent = themeColor('--accent')
+    const good = themeColor('--good')
+    // Every snap colour is resolved here, once per theme, rather than in a closure that read the
+    // stylesheet again on each mouse move over a point.
+    const snap: Record<SnapInfo['kind'], string> = { point: themeColor('--sel-glow'), axis: accent, onObject: themeColor('--series-5'), intersection: themeColor('--key-intercept'), grid: good, free: good }
+    return {
+      band: themeColor('--text-dim'),
+      // The stroke is the only thing on screen while a student draws, and the selection yellow
+      // was the faintest line on the light canvas; the accent blue reads in both themes.
+      stroke: accent,
+      snap
+    }
+  })
+}
+
 /** Rubber-band previews, the snap indicator and the freehand stroke. */
 function ToolPreview() {
   const tool = useScene((s) => s.tool)
   const viewMode = useScene((s) => s.viewMode)
   const { picks, cursor, dragStart, firstTail, snap, stroke } = useTool()
   const ev = useScene((s) => s.ev)
+  const colors = usePreviewColors()
   useEffect(() => {
     resetTool()
     showTip(null)
@@ -585,16 +882,16 @@ function ToolPreview() {
   const pts = picks.map((id) => ev.values.get(id)).filter((c): c is { type: 'point'; p: V3 } => c?.type === 'point').map((c) => c.p)
   const is3D = viewMode === '3d'
 
-  const snapMark = snap && cursor ? <SnapMarker p={snap.p} kind={snap.kind} /> : null
+  const snapMark = snap && cursor ? <SnapMarker p={snap.p} color={colors.snap[snap.kind]} kind={snap.kind} /> : null
 
-  if (tool === 'sketch') return stroke.length > 1 ? <FatLine points={stroke} color="#ffe066" width={2.5} renderOrder={35} /> : null
+  if (tool === 'sketch') return stroke.length > 1 ? <FatLine points={stroke} color={colors.stroke} width={2.5} renderOrder={35} /> : null
   if (!cursor) return snapMark
   if (tool === 'vector') {
     const tail = dragStart ?? firstTail
     if (!tail || dist(tail, cursor) < 1e-9) return snapMark
     return (
       <>
-        <Arrow tail={tail} comp={sub(cursor, tail)} color="#9aa1ab" is3D={is3D} thick={1.4} renderOrder={30} />
+        <Arrow tail={tail} comp={sub(cursor, tail)} color={colors.band} is3D={is3D} thick={1.4} renderOrder={30} />
         {snapMark}
       </>
     )
@@ -609,7 +906,7 @@ function ToolPreview() {
     })
     return (
       <>
-        <FatLine points={ring} color="#9aa1ab" width={1.5} renderOrder={30} />
+        <FatLine points={ring} color={colors.band} width={1.5} renderOrder={30} />
         {snapMark}
       </>
     )
@@ -619,7 +916,7 @@ function ToolPreview() {
     if ((tool === 'triangle' && pts.length === 2) || tool === 'polygon') chain.push(pts[0])
     return (
       <>
-        <FatLine points={chain} color="#9aa1ab" width={1.5} renderOrder={30} />
+        <FatLine points={chain} color={colors.band} width={1.5} renderOrder={30} />
         {snapMark}
       </>
     )
@@ -627,10 +924,9 @@ function ToolPreview() {
   return snapMark
 }
 
-function SnapMarker({ p, kind }: { p: V3; kind: SnapInfo['kind'] }) {
+function SnapMarker({ p, kind, color }: { p: V3; kind: SnapInfo['kind']; color: string }) {
   const wpp = useThreeWpp()
-  const color = kind === 'point' ? '#ffd43b' : kind === 'axis' ? '#74c0fc' : kind === 'onObject' ? '#e599f7' : '#8ce99a'
-  const r = (kind === 'point' || kind === 'onObject' ? 9 : 6) * wpp
+  const r = (kind === 'point' || kind === 'onObject' || kind === 'intersection' ? 9 : 6) * wpp
   const ring: V3[] = Array.from({ length: 33 }, (_, i) => {
     const t = (i / 32) * Math.PI * 2
     return [p[0] + r * Math.cos(t), p[1] + r * Math.sin(t), p[2]]

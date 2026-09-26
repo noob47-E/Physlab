@@ -15,7 +15,7 @@ export function Console() {
 
   return (
     <div className="panel flex flex-col">
-      <div className="flex items-center gap-2 border-b border-[#26272c] px-3 py-1 text-[11px] text-zinc-500">
+      <div className="flex items-center gap-2 border-b border-line px-3 py-1 text-fine text-ink-faint">
         Results of everything you type in the command bar
         <div className="flex-1" />
         <button className="btn ghost h-6" onClick={clear}>
@@ -23,22 +23,31 @@ export function Console() {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {log.length === 0 && <div className="p-4 text-zinc-500">Nothing yet. Try typing <code className="text-amber-200">A = &lt;3, 4&gt;</code> in the command bar and press Enter.</div>}
+        {log.length === 0 && <div className="p-4 text-ink-faint">Nothing yet. Try typing <code className="text-warn">A = &lt;3, 4&gt;</code> in the command bar and press Enter.</div>}
         {log.map((e) => (
           <div key={e.id} className="log-entry">
-            <div className="log-in">› {e.input}</div>
+            {/* A line from a button (Break apart, Fuse) has nothing typed: a "› break apart" here
+                read as a command the bar would then refuse. */}
+            {e.input && <div className="log-in">› {e.input}</div>}
             <div className={`log-out ${e.kind === 'error' ? 'err' : e.kind === 'info' ? 'info' : ''}`}>
               {e.tex ? <Tex tex={e.tex} /> : e.text}
             </div>
-            {(e.solution || e.visualize) && (
-              <div className="mt-1 flex gap-1.5 pl-3.5">
+            {/* Touch-sized (44 px) and always visible: these are the only way to the steps and the
+                picture of a line, so they must not hide behind a hover or a fingertip's miss. */}
+            {(e.solution || e.visualize || e.working) && (
+              <div className="mt-1 flex flex-wrap gap-1.5 pl-3.5">
                 {e.solution && (
-                  <button className="btn h-6" onClick={() => showSolution(e.solution!)}>
+                  <button className="btn min-h-[44px]" onClick={() => showSolution(e.solution!)}>
                     <ListOrdered size={12} /> Steps
                   </button>
                 )}
+                {e.working && (
+                  <button className="btn min-h-[44px]" onClick={e.working} title="Open the step-by-step working for this line in the Maths screen">
+                    <ListOrdered size={12} /> Show the working
+                  </button>
+                )}
                 {e.visualize && (
-                  <button className="btn h-6" onClick={e.visualize}>
+                  <button className="btn min-h-[44px]" onClick={e.visualize}>
                     <Eye size={12} /> Visualize
                   </button>
                 )}

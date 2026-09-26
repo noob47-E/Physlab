@@ -8,6 +8,8 @@ import { all, create, type MathNode } from 'mathjs'
 import { angleBetween, cross as vcross, dot as vdot, len, normalize, project, type V3 } from './vec'
 
 export const math = create(all, { number: 'number', precision: 64 })
+// Points after Z are named A′, A″ (core/naming.ts); a prime straight after a letter or another prime is part of the name.
+{ const p = math.parse as unknown as { isAlpha: (c: string, prev: string, next: string) => boolean }; const alpha = p.isAlpha; p.isAlpha = (c, prev, next) => alpha(c, prev, next) || ('′″‴⁗'.includes(c) && !!prev && (alpha(prev, '', '') || '′″‴⁗'.includes(prev))) }
 
 let angleMode: 'deg' | 'rad' = 'deg'
 export const setAngleMode = (m: 'deg' | 'rad') => {
@@ -15,9 +17,24 @@ export const setAngleMode = (m: 'deg' | 'rad') => {
 }
 export const getAngleMode = () => angleMode
 
+/**
+ * Runs `fn` with the calculator in degrees and puts the mode back after. A vector card's 10∠30°
+ * and a practice question's "sin(30)" are always degrees, but a student working in radians in
+ * the Calculator must not find it silently switched.
+ */
+export function inDegrees<T>(fn: () => T): T {
+  const prev = angleMode
+  angleMode = 'deg'
+  try {
+    return fn()
+  } finally {
+    angleMode = prev
+  }
+}
+
 type AnyVal = unknown
 
-const isUnit = (x: AnyVal): x is { toNumber: (u: string) => number; formatUnits: () => string } =>
+export const isUnit = (x: AnyVal): x is { toNumber: (u: string) => number; formatUnits: () => string } =>
   typeof x === 'object' && x !== null && typeof (x as { toNumber?: unknown }).toNumber === 'function' && typeof (x as { formatUnits?: unknown }).formatUnits === 'function'
 
 /** Angle argument → radians (numbers follow the angle mode, units convert). */
@@ -82,12 +99,15 @@ math.import(
     },
     cross: (a: AnyVal, b: AnyVal) => vcross(toV3(a), toV3(b)),
     // What the × key means depends on what is on either side of it: a cross product between
-    // vectors, ordinary multiplication between numbers. Rewriting every × to cross() made
-    // "2 × 3" unreadable — and worse, PhysLab prints small numbers as "1.234×10^-5", so it
-    // could not read back what it had just written.
+    // vectors, ordinary multiplication otherwise — two numbers, or a number scaling a vector.
+    // Rewriting every × to cross() made "2 × 3" unreadable — and worse, PhysLab prints small
+    // numbers as "1.234×10^-5", so it could not read back what it had just written. The number
+    // × vector case is what lets a definition be kept exactly as typed: `C = 2 × A` used to be
+    // stored as `2 * A` because this function refused it, and the same line typed into the
+    // Properties panel's formula field failed with "Expected a vector or point".
     timesOrCross: (a: AnyVal, b: AnyVal) => {
       const scalar = (v: AnyVal) => typeof v === 'number' || isUnit(v)
-      if (scalar(a) && scalar(b)) return math.multiply(a as never, b as never)
+      if (scalar(a) || scalar(b)) return math.multiply(a as never, b as never)
       return vcross(toV3(a), toV3(b))
     },
     dot: (a: AnyVal, b: AnyVal) => vdot(toV3(a), toV3(b)),
@@ -123,7 +143,9 @@ function vsub(a: V3, b: V3): V3 {
 // Friendly syntax → mathjs syntax
 // ---------------------------------------------------------------------------
 
-const IDENT = /[A-Za-z0-9_Ͱ-Ͽ']/
+// The primes are part of a name (A′ is the point after Z, and a copy of A): without them `2 × A′`
+// took A alone as the right operand and left the prime outside the call, a syntax error.
+const IDENT = /[A-Za-z0-9_Ͱ-Ͽ'′″‴⁗]/
 
 /** Finds the index of the bracket matching the one at `open`. */
 function matchForward(s: string, open: number): number {
@@ -245,7 +267,7 @@ export function preprocess(src: string): string {
     .replace(/\*\*/g, '^')
   // magnitude/angle notation: 10 ∠ 30°, 10 N at 30°
   s = s.replace(
-    /(\d+(?:\.\d+)?(?:e[-+]?\d+)?(?:\s*[A-Za-z]+(?:\/[A-Za-z]+)?(?:\^-?\d+)?)?)\s*(?:∠|\bat\b)\s*(-?\d+(?:\.\d+)?\s*°?|-?[A-Za-z_]\w*\s*°?|\([^()]*\)\s*°?)/g,
+    /(\d+(?:\.\d+)?(?:e[-+]?\d+)?(?:\s*[A-Za-z]+(?:\/[A-Za-z]+)?(?:\^-?\d+)?)?)\s*(?:∠|\bat\b)\s*(-?\d+(?:\.\d+)?\s*°?|-?[A-Za-z_][\w′″‴⁗]*\s*°?|\([^()]*\)\s*°?)/g,
     'polarVec($1, $2)'
   )
   s = s.replace(/°/g, ' deg')

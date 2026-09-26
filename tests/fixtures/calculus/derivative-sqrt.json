@@ -1,0 +1,43 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "sqrt(x)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\sqrt{x}",
+   "text": "sqrt(x)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "power",
+   "expr": {
+    "latex": "\\sqrt{x}",
+    "text": "sqrt(x)"
+   },
+   "result": {
+    "latex": "\\frac{1}{2 \\sqrt{x}}",
+    "text": "1/(2*sqrt(x))"
+   },
+   "exp": {
+    "latex": "\\frac{1}{2}",
+    "text": "1/2"
+   }
+  },
+  "unsupported": false,
+  "answer_latex": "\\frac{1}{2 \\sqrt{x}}",
+  "answer_text": "1/(2*sqrt(x))",
+  "checked": true
+ }
+}

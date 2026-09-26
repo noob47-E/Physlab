@@ -1,8 +1,25 @@
 // What the tour points at, and the little tasks that tick themselves off.
 
-import { scene } from '../../core/store'
+import { scene, useScene } from '../../core/store'
 import { useCalc } from '../../calc/calcStore'
+import { useSandbox } from '../../sim/store'
 import type { ModeId } from '../modes'
+import type { JobId } from '../../math/pure/run'
+
+/**
+ * The worked example behind the Welcome screen's "Show your working" tile: a factorisation,
+ * because that is the homework question most students meet first and the working is short
+ * enough to read in one go. tests/layout.test.ts checks it really produces steps.
+ */
+export const WELCOME_JOB: JobId = 'factor'
+
+/**
+ * What the tile promises, in the notation a student writes. It has to match the job's own
+ * example, which is what the tile actually runs: tests/layout.test.ts holds the two together,
+ * so a changed example in math/pure/run.ts cannot leave the tile promising one problem and
+ * showing another.
+ */
+export const WELCOME_PROMISE = 'Factorise 6x² + 7x − 3'
 
 export interface TourStep {
   /** Element to spotlight (a data-tour name). Missing element: the card is centred. */
@@ -21,7 +38,7 @@ export const TOUR: TourStep[] = [
   {
     anchor: 'modes',
     title: 'Modes',
-    body: 'Like the modes on a calculator. Calculator, Vectors, Shapes & Geometry, Graphing — each one brings its own tools and panels.'
+    body: 'Like the modes on a calculator. Calculator, Vectors, Geometry, Graphing — each one brings its own tools and panels.'
   },
   {
     anchor: 'tools',
@@ -32,7 +49,7 @@ export const TOUR: TourStep[] = [
   {
     anchor: 'viewport',
     title: 'The drawing',
-    body: 'Drag empty space to move, scroll to zoom, and drag points or vector heads to change them. Everything is measured live.'
+    body: 'Hold Space and drag to move the view, scroll to zoom, and drag points or vector heads to change them. Drag a box on empty space to select several things. Everything is measured live.'
   },
   {
     anchor: 'labels',
@@ -53,6 +70,12 @@ export const TOUR: TourStep[] = [
     anchor: 'search',
     title: 'Find anything',
     body: 'Ctrl+K searches modes, tools, lessons, settings and commands. If you cannot remember where something is, look there.'
+  },
+  {
+    anchor: 'connect',
+    title: 'Join things together',
+    body: 'In the Sandbox, press Connect two objects: click one, click the other, then pick a string, rod, spring, real rope, hinge, weld, or a rope over a pulley. Lengthen a rope in Connections and it sags; shorten it and it lifts.',
+    mode: 'sandbox'
   },
   {
     title: 'That is the tour',
@@ -126,8 +149,23 @@ export const MISSIONS: Mission[] = [
     hint: 'Type y = x^2 - 4 in the command bar.',
     mode: 'graphing',
     done: () => objectsOf('graph').length > 0
+  },
+  {
+    id: 'join',
+    label: 'Connect two objects in the Sandbox',
+    hint: 'Press Connect two objects, click the ball, click the crate, and choose Rope. Then press Play.',
+    mode: 'sandbox',
+    // A preset that comes with its links does not count: the task is to make one.
+    done: () => useSandbox.getState().joined > 0
   }
 ]
+
+/**
+ * The stores a mission's `done` reads, so the tour re-checks the list whenever one of them
+ * changes. A mission that watches a store not listed here only ticks itself off when some
+ * other store happens to change — the Sandbox mission sat undone until the next drawing edit.
+ */
+export const MISSION_STORES: { subscribe: (listener: () => void) => () => void }[] = [useScene, useCalc, useSandbox]
 
 export const SHORTCUTS: [string, string][] = [
   ['Ctrl+K', 'Search everything'],
@@ -138,11 +176,17 @@ export const SHORTCUTS: [string, string][] = [
   ['Esc', 'Cancel the drawing, then back to the Move tool'],
   ['Alt (hold)', 'Draw without snapping'],
   ['Shift (hold)', 'Snap the direction to 15° steps'],
-  ['Tab', '2D / 3D view'],
+  ['3', '2D / 3D view'],
+  ['Tab', 'Move between the buttons and fields'],
   ['Home', 'Reset the view'],
-  ['Space', 'Play or pause the timeline'],
+  ['Space', 'Play or pause the timeline; hold it and drag to move the view'],
+  ['Drag on empty space', 'Select everything inside the box (Shift adds to the selection)'],
+  ['Ctrl+A', 'Select everything on this drawing'],
+  ['Shift+click (Sandbox)', 'Choose the second object to join to the selected one'],
+  ['Esc (Sandbox)', 'Stop connecting two objects'],
   ['Ctrl+Z / Ctrl+Y', 'Undo / redo'],
   ['Del', 'Delete what is selected'],
   ['Ctrl+S / Ctrl+O', 'Save / open a project'],
+  ['Ctrl+= / Ctrl+− / Ctrl+0', 'Bigger text, smaller text, normal size'],
   ['V P W S L C T G A D X K', 'Tools: move, point, vector, segment, line, circle, triangle, polygon, angle, measure, delete, sketch']
 ]

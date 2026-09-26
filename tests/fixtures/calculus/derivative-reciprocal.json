@@ -1,0 +1,94 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "1/(x + 1)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "\\frac{1}{x + 1}",
+   "text": "1/(x + 1)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "\\frac{1}{x + 1}",
+    "text": "1/(x + 1)"
+   },
+   "result": {
+    "latex": "- \\frac{1}{\\left(x + 1\\right)^{2}}",
+    "text": "-1/(x + 1)**2"
+   },
+   "outer": "power",
+   "u": {
+    "latex": "x + 1",
+    "text": "x + 1"
+   },
+   "letter": "u",
+   "outer_expr": {
+    "latex": "\\frac{1}{u}",
+    "text": "1/u"
+   },
+   "outer_derivative": {
+    "latex": "- \\frac{1}{u^{2}}",
+    "text": "-1/u**2"
+   },
+   "outer_at_inner": {
+    "latex": "- \\frac{1}{\\left(x + 1\\right)^{2}}",
+    "text": "-1/(x + 1)**2"
+   },
+   "substeps": [
+    {
+     "rule": "sum",
+     "expr": {
+      "latex": "x + 1",
+      "text": "x + 1"
+     },
+     "result": {
+      "latex": "1",
+      "text": "1"
+     },
+     "substeps": [
+      {
+       "rule": "x",
+       "expr": {
+        "latex": "x",
+        "text": "x"
+       },
+       "result": {
+        "latex": "1",
+        "text": "1"
+       }
+      },
+      {
+       "rule": "constant",
+       "expr": {
+        "latex": "1",
+        "text": "1"
+       },
+       "result": {
+        "latex": "0",
+        "text": "0"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "- \\frac{1}{\\left(x + 1\\right)^{2}}",
+  "answer_text": "-1/(x + 1)**2",
+  "checked": true
+ }
+}

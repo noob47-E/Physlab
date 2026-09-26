@@ -1,0 +1,295 @@
+{
+  "app": "PhysLab",
+  "format": "pqjson",
+  "version": 2,
+  "questions": [
+    {
+      "id": "physlab-firstlook-trains-brake",
+      "title": "Two trains brake",
+      "statement": "Two trains are moving side by side. Both put their brakes on at the same moment. Each line shows how fast that train is going as time goes by; both start at the same speed. Look at the picture — which train travels further before it stops?",
+      "variables": [
+        { "name": "u", "def": { "kind": "range", "from": 40, "to": 60, "step": 5 }, "unit": "m/s", "description": "the speed both trains start braking at" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which train stops further away?",
+          "choices": [
+            { "text": "Train A", "correct": true },
+            { "text": "Train B", "correct": false, "why": "Train B's line falls to zero sooner. It started at the same speed, so there is less space under its line: it covers less ground before it stops." },
+            { "text": "They stop the same distance away", "correct": false, "why": "The two lines don't reach zero at the same time: one keeps going for longer, so there is more space under its line." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "curves", "items": [
+        { "expr": "u - 2*x", "label": "Train A", "from": "0", "to": "u/2" },
+        { "expr": "u - 5*x", "label": "Train B", "from": "0", "to": "u/5" }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-cars-brake",
+      "title": "Two cars brake",
+      "statement": "Two cars are driving side by side. Both brake hard at the same moment. Each line shows how fast that car is going as time goes by; both start at the same speed. Look at the picture — which car goes further before it stops?",
+      "variables": [
+        { "name": "u", "def": { "kind": "list", "items": [30, 36, 42, 48] }, "unit": "m/s", "description": "the speed both cars start braking at" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which car stops further away?",
+          "choices": [
+            { "text": "Car A", "correct": true },
+            { "text": "Car B", "correct": false, "why": "Car B's line falls to zero sooner. It started at the same speed, so there is less space under its line: it covers less ground before it stops." },
+            { "text": "They stop at the same place", "correct": false, "why": "The two lines don't reach zero at the same time: look at where each one meets the bottom line, and at the space under each." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "curves", "items": [
+        { "expr": "u - 3*x", "label": "Car A", "from": "0", "to": "u/3" },
+        { "expr": "u - 6*x", "label": "Car B", "from": "0", "to": "u/6" }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-cyclists-brake",
+      "title": "Two cyclists brake",
+      "statement": "Two cyclists are riding side by side. Both squeeze their brakes at the same moment. Each line shows how fast that cyclist is going as time goes by; both start at the same speed. Look at the picture — which one rolls further before it stops?",
+      "variables": [
+        { "name": "u", "def": { "kind": "list", "items": [12, 15, 18, 21] }, "unit": "m/s", "description": "the speed both cyclists start braking at" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which cyclist rolls further before stopping?",
+          "choices": [
+            { "text": "Cyclist A", "correct": false, "why": "Cyclist A's line falls to zero sooner. They started at the same speed, so there is less space under that line: they cover less ground before stopping." },
+            { "text": "Cyclist B", "correct": true },
+            { "text": "They roll the same distance", "correct": false, "why": "The two lines don't reach zero at the same time: one keeps going for longer, so there is more space under its line." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "curves", "items": [
+        { "expr": "u - 4*x", "label": "Cyclist A", "from": "0", "to": "u/4" },
+        { "expr": "u - x", "label": "Cyclist B", "from": "0", "to": "u" }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-skaters-brake",
+      "title": "Two skaters glide to a stop",
+      "statement": "Two skaters are gliding along side by side. Both start slowing down at the same moment. Each line shows how fast that skater is going as time goes by; both start at the same speed. Look at the picture — which skater glides further before stopping?",
+      "variables": [
+        { "name": "u", "def": { "kind": "list", "items": [8, 10, 12, 14] }, "unit": "m/s", "description": "the speed both skaters start slowing down at" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which skater glides further before stopping?",
+          "choices": [
+            { "text": "Skater A", "correct": false, "why": "Skater A's line falls to zero sooner. They started at the same speed, so there is less space under that line: they glide less far before stopping." },
+            { "text": "Skater B", "correct": true },
+            { "text": "They glide the same distance", "correct": false, "why": "The two lines don't reach zero at the same time: one keeps going for longer, so there is more space under its line." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "curves", "items": [
+        { "expr": "u - 8*x", "label": "Skater A", "from": "0", "to": "u/8" },
+        { "expr": "u - 2*x", "label": "Skater B", "from": "0", "to": "u/2" }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-count-dots-1",
+      "title": "Count the dots",
+      "statement": "Here is a group of dots. Look at the picture and count them.",
+      "variables": [
+        { "name": "n", "def": { "kind": "range", "from": 6, "to": 12, "step": 1 }, "description": "how many dots are drawn" }
+      ],
+      "parts": [
+        { "type": "number", "prompt": "How many dots are there?", "answer": "n", "unit": "none", "tolerance": { "kind": "absolute", "value": 0 }, "marks": 1 }
+      ],
+      "picture": { "kind": "dots", "count": "n", "perRow": 5 },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-count-dots-2",
+      "title": "How many dots?",
+      "statement": "Count every dot in the picture.",
+      "variables": [
+        { "name": "n", "def": { "kind": "range", "from": 6, "to": 11, "step": 1 }, "description": "how many dots are drawn" }
+      ],
+      "parts": [
+        { "type": "number", "prompt": "How many dots are there?", "answer": "n", "unit": "none", "tolerance": { "kind": "absolute", "value": 0 }, "marks": 1 }
+      ],
+      "picture": { "kind": "dots", "count": "n", "perRow": 4 },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-count-dots-3",
+      "title": "Counting dots",
+      "statement": "Look carefully at the picture.",
+      "variables": [
+        { "name": "n", "def": { "kind": "list", "items": [4, 5, 7, 9, 11] }, "description": "how many dots are drawn" }
+      ],
+      "parts": [
+        { "type": "number", "prompt": "How many dots do you see?", "answer": "n", "unit": "none", "tolerance": { "kind": "absolute", "value": 0 }, "marks": 1 }
+      ],
+      "picture": { "kind": "dots", "count": "n", "perRow": 3 },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-count-dots-4",
+      "title": "A group of dots",
+      "statement": "The picture shows a group of dots.",
+      "variables": [
+        { "name": "n", "def": { "kind": "range", "from": 10, "to": 15, "step": 1 }, "description": "how many dots are drawn" }
+      ],
+      "parts": [
+        { "type": "number", "prompt": "How many dots are grouped together in the picture?", "answer": "n", "unit": "none", "tolerance": { "kind": "absolute", "value": 0 }, "marks": 1 }
+      ],
+      "picture": { "kind": "dots", "count": "n", "perRow": 6 },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-arrow-length-1",
+      "title": "Which arrow is longer?",
+      "statement": "Look at the two arrows in the picture.",
+      "variables": [
+        { "name": "p", "def": { "kind": "range", "from": 2, "to": 5, "step": 1 }, "description": "how far arrow A reaches" },
+        { "name": "q", "def": { "kind": "expr", "expr": "p + 3" }, "description": "how far arrow B reaches" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which arrow is longer?",
+          "choices": [
+            { "text": "Arrow A", "correct": false, "why": "Arrow B reaches further out than arrow A." },
+            { "text": "Arrow B", "correct": true },
+            { "text": "They are the same length", "correct": false, "why": "The two arrows end at different points — one reaches further out than the other." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "vectors", "items": [
+        { "name": "A", "v": ["p", "0"], "tail": ["1", "1"] },
+        { "name": "B", "v": ["0", "q"], "tail": ["1", "1"] }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-arrow-length-2",
+      "title": "Up or sideways: which is longer?",
+      "statement": "Look at the two arrows in the picture.",
+      "variables": [
+        { "name": "p", "def": { "kind": "range", "from": 6, "to": 9, "step": 1 }, "description": "how far up arrow A reaches" },
+        { "name": "q", "def": { "kind": "expr", "expr": "p - 3" }, "description": "how far arrow B reaches, to the left" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which arrow is longer?",
+          "choices": [
+            { "text": "Arrow A", "correct": true },
+            { "text": "Arrow B", "correct": false, "why": "Arrow A is longer than arrow B: it stretches further from where both start." },
+            { "text": "They are the same length", "correct": false, "why": "One arrow stretches further from the start than the other." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "vectors", "items": [
+        { "name": "A", "v": ["0", "p"], "tail": ["1", "1"] },
+        { "name": "B", "v": ["-q", "0"], "tail": ["1", "1"] }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-arrow-length-3",
+      "title": "Which arrow is longer?",
+      "statement": "Look at the two arrows in the picture: one slants, one lies flat.",
+      "variables": [
+        { "name": "p", "def": { "kind": "list", "items": [3, 4, 5] }, "description": "how far arrow A reaches, across and up" },
+        { "name": "q", "def": { "kind": "expr", "expr": "2 * p" }, "description": "how far arrow B reaches, across" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which arrow is longer?",
+          "choices": [
+            { "text": "Arrow A", "correct": false, "why": "Arrow B stretches further than arrow A, even though arrow A leans up and across." },
+            { "text": "Arrow B", "correct": true },
+            { "text": "They are the same length", "correct": false, "why": "One arrow stretches further than the other — look at how far each one reaches." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "vectors", "items": [
+        { "name": "A", "v": ["p", "p"], "tail": ["1", "1"] },
+        { "name": "B", "v": ["q", "0"], "tail": ["1", "1"] }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    },
+    {
+      "id": "physlab-firstlook-arrow-length-4",
+      "title": "Which arrow is longer?",
+      "statement": "Look at the two arrows in the picture.",
+      "variables": [
+        { "name": "p", "def": { "kind": "list", "items": [8, 10, 12, 14] }, "description": "how far up arrow A reaches" },
+        { "name": "q", "def": { "kind": "expr", "expr": "p / 2" }, "description": "how far arrow B reaches, across" }
+      ],
+      "parts": [
+        {
+          "type": "choice",
+          "prompt": "Which arrow is longer?",
+          "choices": [
+            { "text": "Arrow A", "correct": true },
+            { "text": "Arrow B", "correct": false, "why": "Arrow A is longer than arrow B: it stretches further from where both start." },
+            { "text": "They are the same length", "correct": false, "why": "One arrow stretches further from the start than the other." }
+          ],
+          "shuffle": true,
+          "marks": 1
+        }
+      ],
+      "picture": { "kind": "vectors", "items": [
+        { "name": "A", "v": ["0", "p"], "tail": ["1", "1"] },
+        { "name": "B", "v": ["q", "0"], "tail": ["1", "1"] }
+      ] },
+      "rung": 1,
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["first-look"]
+    }
+  ]
+}

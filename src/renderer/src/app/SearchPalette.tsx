@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
-import { MODES, useApp } from './modes'
-import { enterMode } from './TopBar'
+import { MODES, readyModes, useApp } from './modes'
+import { enterMode } from './layout'
 import { PANEL_LIST, showPanel } from './panels'
 import { CATALOG } from './CommandBar'
 import { scene } from '../core/store'
@@ -9,8 +9,11 @@ import { useTour } from './tour/Tour'
 import type { LengthUnit } from '../core/types'
 import { TOOLS } from '../render/tools'
 import { EXAMPLES, runExample } from '../panels/Examples'
-import { useCalc, type CalcMode } from '../calc/calcStore'
+import { MODE_HINTS, MODE_LABELS, useCalc, type CalcMode } from '../calc/calcStore'
 import { UNIT_NAMES } from '../math/format'
+import { GRID_STYLES } from '../render/gridMath'
+import { breakApartSelection, confirmClearDrawing, flipSelection, fuseSelection, turnSelection } from './contextActions'
+import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 
 interface Item {
   group: string
@@ -28,7 +31,8 @@ const CALC_MODES: CalcMode[] = ['COMP', 'CMPLX', 'BASE-N', 'MATRIX', 'VECTOR', '
 
 function buildItems(): Item[] {
   const items: Item[] = []
-  for (const m of MODES) items.push({ group: 'Modes', title: m.label, hint: m.ready ? m.description : `Coming soon — ${m.description}`, run: () => enterMode(m.id) })
+  // Only the modes that exist: a "coming soon" row that opened an empty mode was a dead end.
+  for (const m of readyModes()) items.push({ group: 'Modes', title: m.label, hint: m.description, run: () => enterMode(m.id) })
   for (const t of TOOLS) {
     items.push({
       group: 'Tools',
@@ -47,8 +51,9 @@ function buildItems(): Item[] {
   for (const cm of CALC_MODES) {
     items.push({
       group: 'Calculator',
-      title: `Calculator ${cm}`,
-      hint: 'Open this calculator mode',
+      // The words the Maths screen uses, never the ids: "Calculator CMPLX" was the handheld's look.
+      title: `Calculator: ${MODE_LABELS[cm]}`,
+      hint: MODE_HINTS[cm],
       run: () => {
         enterMode('calculator')
         useCalc.setState({ mode: cm })
@@ -71,6 +76,20 @@ function buildItems(): Item[] {
     { group: 'Settings', title: 'Precision: 2 decimal places', hint: '', run: () => scene().setSettings({ precisionMode: 'dp', decimals: 2 }) },
     { group: 'Settings', title: 'Precision: 3 significant figures', hint: '', run: () => scene().setSettings({ precisionMode: 'sf', decimals: 3 }) },
     { group: 'Settings', title: 'Toggle grid', hint: '', run: () => scene().setSettings({ showGrid: !scene().settings.showGrid }) },
+    ...GRID_STYLES.map((g) => ({ group: 'Settings', title: `Grid: ${g.label.toLowerCase()}`, hint: g.hint, run: () => scene().setSettings({ showGrid: true, gridStyle: g.id }) })),
+    { group: 'Settings', title: 'Grid: off', hint: 'No grid; the axes stay', run: () => scene().setSettings({ showGrid: false }) },
+    // The hints say "axis" too: a student types "x axis" or "hide axis", and only the hint can carry the singular.
+    { group: 'Settings', title: 'Axes: show', hint: 'The x axis and the y axis (and z in 3D), with their numbers', run: () => scene().setSettings({ showAxes: true }) },
+    { group: 'Settings', title: 'Axes: hide', hint: 'Takes each axis and its numbers off the drawing; the grid stays', run: () => scene().setSettings({ showAxes: false }) },
+    { group: 'Settings', title: 'Angle marks: show', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: true }) },
+    { group: 'Settings', title: 'Angle marks: hide', hint: ANGLE_MARKS_HELP, run: () => scene().setSettings({ showAngleMarks: false }) },
+    { group: 'Edit', title: 'Delete everything on this drawing…', hint: 'Only the drawing you are looking at; asks first; Undo brings it all back', run: () => confirmClearDrawing() },
+    // REGION L: Geometry Lego, reachable without a right-click as the design asks.
+    { group: 'Edit', title: 'Break apart the selected shape', hint: 'A decomposed shape becomes pieces you can slide, turn and flip (lego)', run: () => breakApartSelection() },
+    { group: 'Edit', title: 'Fuse the selected pieces', hint: 'Join pieces of one broken-apart shape back into one shape (lego)', run: () => fuseSelection() },
+    { group: 'Edit', title: 'Turn the selected pieces 90°', hint: 'A quarter turn anticlockwise about each piece’s centre (lego, rotate)', run: () => turnSelection(90) },
+    { group: 'Edit', title: 'Turn the selected pieces 15°', hint: 'A small turn anticlockwise about each piece’s centre (lego, rotate)', run: () => turnSelection(15) },
+    { group: 'Edit', title: 'Flip the selected pieces', hint: 'Each piece’s mirror image, left for right (lego, reflect)', run: () => flipSelection() },
     { group: 'Settings', title: 'Toggle snapping', hint: 'Hold Alt while drawing to skip snapping once', run: () => scene().setSettings({ snap: !scene().settings.snap }) },
     { group: 'Settings', title: 'Angles in degrees', hint: '', run: () => scene().setSettings({ angleUnit: 'deg' }) },
     { group: 'Settings', title: 'Angles in radians', hint: '', run: () => scene().setSettings({ angleUnit: 'rad' }) }
@@ -78,7 +97,8 @@ function buildItems(): Item[] {
   return items
 }
 
-function score(item: Item, q: string): number {
+/** Exported for the test that keeps the singular a student types ("x axis") reaching the Axes rows. */
+export function score(item: Item, q: string): number {
   const t = item.title.toLowerCase()
   const h = item.hint.toLowerCase()
   const words = q.toLowerCase().split(/\s+/).filter(Boolean)
@@ -126,13 +146,13 @@ export function SearchPalette() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 pt-[12vh]" onMouseDown={() => setOpen(false)}>
-      <div className="w-[640px] max-w-[92vw] overflow-hidden rounded-xl border border-[#3d3f46] bg-[#1f2024] shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-[#2e3036] px-3">
-          <Search size={16} className="text-zinc-500" />
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-[var(--shadow)] pt-[12vh]" onMouseDown={() => setOpen(false)}>
+      <div className="w-[640px] max-w-[92vw] overflow-hidden rounded-xl border border-[var(--line-2)] bg-[var(--menu-bg)] text-[var(--text)] shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-[var(--line)] px-3">
+          <Search size={16} className="text-[var(--text-faint)]" />
           <input
             ref={input}
-            className="h-11 flex-1 bg-transparent text-[15px] outline-none"
+            className="h-11 flex-1 bg-transparent text-lead outline-none"
             placeholder="Search modes, tools, examples, commands, settings…"
             value={q}
             onChange={(e) => {
@@ -155,12 +175,12 @@ export function SearchPalette() {
           />
         </div>
         <div className="max-h-[55vh] overflow-auto py-1">
-          {results.length === 0 && <div className="px-4 py-6 text-center text-zinc-500">Nothing found.</div>}
+          {results.length === 0 && <div className="px-4 py-6 text-center text-[var(--text-faint)]">Nothing found.</div>}
           {results.map((r, i) => (
-            <button key={`${r.group}-${r.title}`} className={`flex w-full items-baseline gap-3 px-4 py-1.5 text-left ${i === active ? 'bg-[#2f4a7a]' : 'hover:bg-[#2a2c32]'}`} onMouseEnter={() => setActive(i)} onClick={() => choose(r)}>
-              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-zinc-500">{r.group}</span>
-              <span className="shrink-0 text-zinc-100">{r.title}</span>
-              <span className="truncate text-[12px] text-zinc-500">{r.hint}</span>
+            <button key={`${r.group}-${r.title}`} className={`flex w-full items-baseline gap-3 px-4 py-1.5 text-left ${i === active ? 'bg-[var(--sel-row)]' : 'hover:bg-[var(--bg-3)]'}`} onMouseEnter={() => setActive(i)} onClick={() => choose(r)}>
+              <span className="w-20 shrink-0 text-fine uppercase tracking-wide text-[var(--text-faint)]">{r.group}</span>
+              <span className="shrink-0 text-[var(--text-strong)]">{r.title}</span>
+              <span className="truncate text-small text-[var(--text-faint)]">{r.hint}</span>
             </button>
           ))}
         </div>

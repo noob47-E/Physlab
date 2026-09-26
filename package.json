@@ -1,7 +1,7 @@
 {
   "name": "physlab",
   "productName": "PhysLab",
-  "version": "0.3.1",
+  "version": "0.9.0-preview.3",
   "description": "Personal physics and math simulation engine",
   "main": "./out/main/index.js",
   "author": "PhysLab",
@@ -10,9 +10,13 @@
     "dev": "electron-vite dev",
     "web": "vite --config vite.web.config.ts",
     "build": "electron-vite build",
+    "predist": "node scripts/gate.mjs full",
     "dist": "electron-vite build && electron-builder --win",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "gate": "node scripts/gate.mjs",
+    "hooks:install": "node scripts/install-hooks.mjs"
   },
   "build": {
     "appId": "com.physlab.desktop",
@@ -43,6 +47,7 @@
     }
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@tailwindcss/vite": "^4.3.3",
@@ -57,6 +62,9 @@
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "immer": "^11.1.18",
     "jolt-physics": "^1.1.0",
     "katex": "^0.18.7",
@@ -68,7 +76,8 @@
     "react-dom": "~19.2.0",
     "tailwindcss": "^4.3.3",
     "three": "^0.186.0",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
     "uplot": "^1.6.32",
     "vite": "^7.3.6",
     "vitest": "^5.0.0",

@@ -3,6 +3,12 @@
 import { create } from 'zustand'
 import type { ToolId } from '../core/types'
 
+/**
+ * A mode's id is stored: in a saved layout (`mode`) and, through `spaceOf`, in every object of a
+ * saved file (`space`). So an id is never renamed to follow its label. 'shapes' is the mode every
+ * student and every document calls Geometry (its `label`); renaming the id would need a file
+ * format step and a layout migration and would change nothing anyone reads (Fix 16).
+ */
 export type ModeId =
   | 'calculator'
   | 'vectors'
@@ -20,6 +26,8 @@ export type ModeId =
   | 'nuclear'
   | 'problems'
   | 'lab'
+  | 'author'
+  | 'results'
 
 export interface ModeDef {
   id: ModeId
@@ -30,17 +38,25 @@ export interface ModeDef {
   tools: (ToolId | '|')[]
   /** Panel to bring forward when the mode opens. */
   panel?: string
+  /** A panel for the big centre area, shown instead of the viewport while this mode is open. */
+  centre?: string
   view?: '2d' | '3d'
+  /** The Examples panel has lessons for this mode, so the default layout opens it. */
+  examples?: boolean
 }
 
 export const MODES: ModeDef[] = [
   {
     id: 'calculator',
     label: 'Calculator',
-    description: 'Scientific calculator in natural textbook math, with every fx-991EX mode and more.',
+    description: 'One Maths screen: type in natural textbook maths, get the answer, then the working step by step — factorising, division, partial fractions, HCF/LCM and complex numbers.',
     ready: true,
     tools: ['select', '|', 'point', 'distance', '|', 'delete'],
-    panel: 'calculator'
+    // One screen holds the field, the answer and the working, so it is the mode's panel and its
+    // centre at once: the keypad used to live in a side panel and the working in the middle,
+    // and every "Work it out" was a jump between the two.
+    panel: 'maths',
+    centre: 'maths'
   },
   {
     id: 'vectors',
@@ -49,16 +65,19 @@ export const MODES: ModeDef[] = [
     ready: true,
     tools: ['select', '|', 'vector', 'point', '|', 'distance', 'angle', '|', 'segment', 'text', '|', 'delete'],
     panel: 'vectorcalc',
-    view: '2d'
+    view: '2d',
+    examples: true
   },
   {
+    // Stored id 'shapes', shown name Geometry: see ModeId.
     id: 'shapes',
-    label: 'Shapes & Geometry',
+    label: 'Geometry',
     description: 'Sketch or click shapes: automatic recognition, area formulas, decomposition, constructions.',
     ready: true,
     tools: ['select', '|', 'sketch', 'segment', 'triangle', 'polygon', 'circle', '|', 'point', 'line', 'ray', 'vector', '|', 'midpoint', 'perpendicular', 'parallel', 'perpBisector', 'angleBisector', 'intersect', '|', 'angle', 'distance', 'text', '|', 'delete'],
     panel: 'measure',
-    view: '2d'
+    view: '2d',
+    examples: true
   },
   {
     id: 'graphing',
@@ -66,7 +85,8 @@ export const MODES: ModeDef[] = [
     description: 'Graph functions, equations, inequalities, polar and parametric curves, 3D surfaces.',
     ready: true,
     tools: ['select', '|', 'point', 'intersect', 'distance', '|', 'delete'],
-    panel: 'console'
+    panel: 'console',
+    examples: true
   },
   {
     id: 'sandbox',
@@ -103,20 +123,77 @@ export const MODES: ModeDef[] = [
     tools: ['select', '|', 'vector', 'point', '|', 'delete'],
     panel: 'practice',
     view: '2d'
+  },
+  {
+    id: 'author',
+    label: 'Question Author',
+    description: 'Write a question with random numbers, a picture or an experiment, and the worked steps; save it as a set for your class.',
+    ready: true,
+    tools: ['select'],
+    panel: 'author',
+    view: '2d'
+  },
+  {
+    id: 'results',
+    label: 'Class Results',
+    description: 'Open the result files your class saved from Problem Sets and see each question part’s facility, correlation and discrimination, worked out on this computer.',
+    ready: true,
+    tools: ['select'],
+    panel: 'classresults',
+    view: '2d'
   }
 ]
 
 /** Never throws: a file from a newer version may name a mode this build does not have. */
 export const modeById = (id: ModeId) => MODES.find((m) => m.id === id) ?? MODES[0]
 
-export const useApp = create<{ mode: ModeId; searchOpen: boolean; layoutReady: boolean; setMode: (m: ModeId) => void; setSearchOpen: (o: boolean) => void }>((set) => ({
+/** The modes a student can open today; the rest are announced, not clickable. */
+export const readyModes = (): ModeDef[] => MODES.filter((m) => m.ready)
+
+/**
+ * Whether the mode shows the maths drawing, whose 2D/3D switch, grid and snapping apply. The
+ * Sandbox and the GPU Lab are 3D worlds of their own: the viewport hides those switches there, and
+ * the keyboard and the View menu must agree, or a brushed 3 key dropped the particles into a flat
+ * 2D view with no button on screen to bring 3D back.
+ */
+export const isDrawingMode = (id: ModeId): boolean => id !== 'sandbox' && id !== 'gpu'
+
+const INFO_KEY = 'physlab.graphicsInfo'
+
+const readGraphicsInfo = (): boolean => {
+  try {
+    return localStorage.getItem(INFO_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export const useApp = create<{
+  mode: ModeId
+  searchOpen: boolean
+  layoutReady: boolean
+  /** The WebGPU / quality / fps badges on the drawing: off unless someone is diagnosing graphics. */
+  graphicsInfo: boolean
+  setMode: (m: ModeId) => void
+  setSearchOpen: (o: boolean) => void
+  setGraphicsInfo: (on: boolean) => void
+}>((set) => ({
   mode: 'vectors',
   searchOpen: false,
   /** The dock layout has settled; the 3D canvas waits for this so the GPU renderer starts only once. */
   layoutReady: false,
+  graphicsInfo: readGraphicsInfo(),
   setMode: (mode) => set({ mode }),
-  setSearchOpen: (searchOpen) => set({ searchOpen })
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
+  setGraphicsInfo: (graphicsInfo) => {
+    try {
+      localStorage.setItem(INFO_KEY, graphicsInfo ? '1' : '0')
+    } catch {
+      // Not remembered; the badges just come back hidden next time.
+    }
+    set({ graphicsInfo })
+  }
 }))
 
 // Handy while developing: inspect app state from the browser console.
-if (import.meta.env?.DEV) (window as unknown as { __useApp?: typeof useApp }).__useApp = useApp
+if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __useApp?: typeof useApp }).__useApp = useApp

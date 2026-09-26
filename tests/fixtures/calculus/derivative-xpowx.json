@@ -1,0 +1,28 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "x^x"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "x^{x}",
+   "text": "x**x"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "unsupported": true,
+  "answer_latex": "x^{x} \\left(\\ln x + 1\\right)",
+  "answer_text": "x**x*(log(x) + 1)",
+  "checked": true
+ }
+}

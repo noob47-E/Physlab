@@ -1,7 +1,7 @@
 // Loads the Jolt physics engine (WebAssembly, MIT) the first time the Sandbox is opened.
 // Nothing here runs at startup, so the calculator and vectors keep their fast start.
 
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import type JoltType from 'jolt-physics/wasm'
 
 export type Jolt = typeof JoltType
@@ -15,11 +15,13 @@ const listeners = new Set<(s: LoadState, message?: string) => void>()
 
 export const joltState = () => state
 
-/** React hook: re-renders when the engine finishes loading. */
+/**
+ * React hook: re-renders when the engine finishes loading. Read through the store hook rather
+ * than a state-plus-effect pair: the engine used to become ready between a panel's first render
+ * and its subscription, and "Starting the physics engine…" stayed on screen for good.
+ */
 export function useJoltState(): LoadState {
-  const [value, setValue] = useState(state)
-  useEffect(() => onJoltState((s) => setValue(s)), [])
-  return value
+  return useSyncExternalStore(onJoltState, joltState)
 }
 export function onJoltState(fn: (s: LoadState, message?: string) => void): () => void {
   listeners.add(fn)

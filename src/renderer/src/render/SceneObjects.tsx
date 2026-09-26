@@ -3,6 +3,7 @@ import { useView } from './viewState'
 import { AngleView, CircleView, LineLikeView, PointView, PolygonView, TextView, VectorView } from './ObjectViews'
 import { GraphView } from './GraphView'
 import type { Computed } from '../core/types'
+import { visibleIn } from '../core/visibility'
 
 type C<T extends Computed['type']> = Extract<Computed, { type: T }>
 
@@ -12,6 +13,7 @@ export function SceneObjects() {
   const ev = useScene((s) => s.ev)
   const selection = useScene((s) => s.selection)
   const hovered = useScene((s) => s.hovered)
+  const space = useScene((s) => s.activeSpace)
   const is3D = useScene((s) => s.viewMode === '3d')
   // Re-render on zoom so pixel-sized decorations (arcs, dashes) stay the same size on screen.
   const zoom = useView((s) => s.wpp)
@@ -20,7 +22,7 @@ export function SceneObjects() {
     <>
       {order.map((id) => {
         const o = objects[id]
-        if (!o || !o.visible) return null
+        if (!o || !o.visible || !visibleIn(o, space)) return null
         const sel = selection.includes(id)
         const hov = hovered === id
         if (o.type === 'graph') return <GraphView key={id} obj={o} selected={sel} hovered={hov} is3D={is3D} />

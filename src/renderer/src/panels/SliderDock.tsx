@@ -1,4 +1,5 @@
 import { Pause, Play } from 'lucide-react'
+import { visibleIn } from '../core/visibility'
 import { useScene } from '../core/store'
 import type { NumberObj } from '../core/types'
 import { fmt } from '../math/format'
@@ -14,18 +15,19 @@ export function SliderDock() {
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
 
-  const sliders = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number' && !!o.slider && o.visible)
+  const space = useScene((s) => s.activeSpace)
+  const sliders = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number' && !!o.slider && o.visible && visibleIn(o, space))
   if (!sliders.length) return null
 
   return (
-    <div className="absolute bottom-3 left-3 flex max-h-[45%] w-64 flex-col gap-1 overflow-auto rounded-lg border border-[#34363d] bg-[#1c1d21ee] p-2">
+    <div className="absolute bottom-3 left-3 flex max-h-[45%] w-64 flex-col gap-1 overflow-auto rounded-lg border border-line-2 bg-label p-2">
       {sliders.map((o) => {
         const c = ev.values.get(o.id)
         const value = c?.type === 'number' ? c.value : 0
         const s = o.slider!
         return (
           <div key={o.id} className="flex items-center gap-2">
-            <span className="w-8 truncate font-semibold italic" style={{ color: o.color, fontFamily: 'Cambria, serif' }}>
+            <span className="w-8 truncate font-math font-semibold italic" style={{ color: o.color }}>
               {o.name}
             </span>
             <input
@@ -34,7 +36,7 @@ export function SliderDock() {
               max={s.max}
               step={s.step}
               value={value}
-              className="flex-1 accent-[#4f8cff]"
+              className="flex-1"
               onPointerDown={beginGesture}
               onPointerUp={endGesture}
               onChange={(e) => {
@@ -47,9 +49,9 @@ export function SliderDock() {
                 }, false)
               }}
             />
-            <span className="w-12 text-right tabular-nums text-zinc-300">{fmt(value, 2)}</span>
+            <span className="w-12 text-right tabular-nums text-ink">{fmt(value, 2)}</span>
             <button
-              className={`text-zinc-400 hover:text-white ${o.animate ? 'text-sky-400' : ''}`}
+              className={`text-ink-dim hover:text-ink-strong ${o.animate ? 'text-accent' : ''}`}
               title="Animate"
               onClick={() => {
                 update(o.id, (d) => {

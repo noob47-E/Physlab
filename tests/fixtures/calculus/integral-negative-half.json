@@ -1,0 +1,219 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "-1/(2x + 2)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "- \\frac{1}{2 x + 2}",
+   "text": "-1/(2*x + 2)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "- \\frac{1}{2} \\ln\\left|2 x + 2\\right|",
+  "raw_text": "-log(Abs(2*x + 2))/2",
+  "answer_latex": "- \\frac{1}{2} \\ln\\left|2 x + 2\\right|",
+  "answer_text": "-log(Abs(2*x + 2))/2",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "ConstantTimesRule",
+   "integrand": {
+    "latex": "- \\frac{1}{2 x + 2}",
+    "text": "-1/(2*x + 2)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "constant": {
+    "latex": "-1",
+    "text": "-1"
+   },
+   "other": {
+    "latex": "\\frac{1}{2 x + 2}",
+    "text": "1/(2*x + 2)"
+   },
+   "substep": {
+    "rule": "AlternativeRule",
+    "integrand": {
+     "latex": "\\frac{1}{2 x + 2}",
+     "text": "1/(2*x + 2)"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "alternatives": [
+     {
+      "rule": "URule",
+      "integrand": {
+       "latex": "\\frac{1}{2 x + 2}",
+       "text": "1/(2*x + 2)"
+      },
+      "variable": {
+       "latex": "x",
+       "text": "x"
+      },
+      "u_var": {
+       "latex": "u",
+       "text": "u"
+      },
+      "u_func": {
+       "latex": "2 x + 2",
+       "text": "2*x + 2"
+      },
+      "substep": {
+       "rule": "ConstantTimesRule",
+       "integrand": {
+        "latex": "\\frac{1}{2 u}",
+        "text": "1/(2*u)"
+       },
+       "variable": {
+        "latex": "u",
+        "text": "u"
+       },
+       "constant": {
+        "latex": "\\frac{1}{2}",
+        "text": "1/2"
+       },
+       "other": {
+        "latex": "\\frac{1}{u}",
+        "text": "1/u"
+       },
+       "substep": {
+        "rule": "ReciprocalRule",
+        "integrand": {
+         "latex": "\\frac{1}{u}",
+         "text": "1/u"
+        },
+        "variable": {
+         "latex": "u",
+         "text": "u"
+        },
+        "base": {
+         "latex": "u",
+         "text": "u"
+        },
+        "result": {
+         "latex": "\\ln\\left|u\\right|",
+         "text": "log(Abs(u))"
+        }
+       },
+       "result": {
+        "latex": "\\frac{1}{2} \\ln\\left|u\\right|",
+        "text": "log(Abs(u))/2"
+       }
+      },
+      "result": {
+       "latex": "\\frac{1}{2} \\ln\\left|2 x + 2\\right|",
+       "text": "log(Abs(2*x + 2))/2"
+      },
+      "du": {
+       "latex": "2",
+       "text": "2"
+      }
+     },
+     {
+      "rule": "RewriteRule",
+      "integrand": {
+       "latex": "\\frac{1}{2 x + 2}",
+       "text": "1/(2*x + 2)"
+      },
+      "variable": {
+       "latex": "x",
+       "text": "x"
+      },
+      "rewritten": {
+       "latex": "\\frac{1}{2 \\left(x + 1\\right)}",
+       "text": "1/(2*(x + 1))"
+      },
+      "substep": {
+       "rule": "ConstantTimesRule",
+       "integrand": {
+        "latex": "\\frac{1}{2 \\left(x + 1\\right)}",
+        "text": "1/(2*(x + 1))"
+       },
+       "variable": {
+        "latex": "x",
+        "text": "x"
+       },
+       "constant": {
+        "latex": "\\frac{1}{2}",
+        "text": "1/2"
+       },
+       "other": {
+        "latex": "\\frac{1}{x + 1}",
+        "text": "1/(x + 1)"
+       },
+       "substep": {
+        "rule": "URule",
+        "integrand": {
+         "latex": "\\frac{1}{x + 1}",
+         "text": "1/(x + 1)"
+        },
+        "variable": {
+         "latex": "x",
+         "text": "x"
+        },
+        "u_var": {
+         "latex": "w",
+         "text": "w"
+        },
+        "u_func": {
+         "latex": "x + 1",
+         "text": "x + 1"
+        },
+        "substep": {
+         "rule": "ReciprocalRule",
+         "integrand": {
+          "latex": "\\frac{1}{w}",
+          "text": "1/w"
+         },
+         "variable": {
+          "latex": "w",
+          "text": "w"
+         },
+         "base": {
+          "latex": "w",
+          "text": "w"
+         },
+         "result": {
+          "latex": "\\ln\\left|w\\right|",
+          "text": "log(Abs(w))"
+         }
+        },
+        "result": {
+         "latex": "\\ln\\left|x + 1\\right|",
+         "text": "log(Abs(x + 1))"
+        },
+        "du": {
+         "latex": "1",
+         "text": "1"
+        }
+       },
+       "result": {
+        "latex": "\\frac{1}{2} \\ln\\left|x + 1\\right|",
+        "text": "log(Abs(x + 1))/2"
+       }
+      },
+      "result": {
+       "latex": "\\frac{1}{2} \\ln\\left|x + 1\\right|",
+       "text": "log(Abs(x + 1))/2"
+      },
+      "kind": "rewrite"
+     }
+    ],
+    "result": {
+     "latex": "\\frac{1}{2} \\ln\\left|2 x + 2\\right|",
+     "text": "log(Abs(2*x + 2))/2"
+    }
+   },
+   "result": {
+    "latex": "- \\frac{1}{2} \\ln\\left|2 x + 2\\right|",
+    "text": "-log(Abs(2*x + 2))/2"
+   }
+  }
+ }
+}

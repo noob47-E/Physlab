@@ -1,0 +1,3168 @@
+{
+  "app": "PhysLab",
+  "format": "pqjson",
+  "version": 2,
+  "questions": [
+    {
+      "id": "numbas-q7864-numbas-a0ca8728",
+      "title": "Guitar fret spacing",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the distance of each fret from the nut on this 647.7 mm scale, fret number across.",
+          "Title shortened from 'Instrument Design 1' for the practice list.",
+          "The fret formula is set as maths (the original step read 'x_n=L*(1-0.5^(n/12))')."
+        ],
+        "contributors": [
+          "Clodagh Carroll"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/7864/instrument-design-1/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Clodagh Carroll",
+        "source": "https://numbas.mathcentre.ac.uk/question/7864/instrument-design-1/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "359.2",
+          "marks": 2,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.05
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "647.7 * (1 - 2 ^ (-x / 12))",
+            "label": "distance from the nut (mm)",
+            "from": "0",
+            "to": "24"
+          }
+        ]
+      },
+      "statement": "The scale length of a standard Fender Stratocaster is 647.7 mm. At what distance from the nut should the 14th fret be placed if equal temperament is used? Give your answer correct to one decimal place.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "With equal temperament, the distance from the nut to fret n (the nut is n = 0) on a scale of length L is",
+            "tex": "x_n = L\\left(1 - 2^{-n/12}\\right)"
+          },
+          {
+            "blank": false,
+            "head": "Here L = 647.7 mm and n = 14:",
+            "tex": "x_{14} = 647.7\\left(1 - 2^{-14/12}\\right)"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "general maths"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-q7872-numbas-2bbf93ae",
+      "title": "Guitar scale length",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the fraction of the scale length from the nut to each fret, fret number across (the same for every guitar).",
+          "Title shortened from 'Instrument Design 9' for the practice list.",
+          "Two variables the question never used (L and n) are left out.",
+          "The fret formula is set as maths (the original step read 'x_n=L*(1-0.5^(n/12))')."
+        ],
+        "contributors": [
+          "Clodagh Carroll"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/7872/instrument-design-9/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Clodagh Carroll",
+        "source": "https://numbas.mathcentre.ac.uk/question/7872/instrument-design-9/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "662.4",
+          "marks": 4,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.05
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "1 - 2 ^ (-x / 12)",
+            "label": "fraction of the scale length",
+            "from": "0",
+            "to": "24"
+          }
+        ]
+      },
+      "statement": "If the 8th fret is 245.1mm from the nut on a guitar, what is the scale length of the guitar? Give your answer correct to one decimal place.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "With equal temperament, the distance from the nut to fret n (the nut is n = 0) on a scale of length L is",
+            "tex": "x_n = L\\left(1 - 2^{-n/12}\\right)"
+          },
+          {
+            "blank": false,
+            "head": "Here the 8th fret is 245.1 mm from the nut, so",
+            "tex": "245.1 = L\\left(1 - 2^{-8/12}\\right)"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "general maths"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-q10367-numbas-0b21f16f",
+      "title": "Simple interest",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the money in the account year by year, years across: simple interest adds the same amount every year, so it is a straight line.",
+          "Title shortened from 'Simple Interest easy' for the practice list.",
+          "The answer, asked to 2 decimal places, is marked to the nearest cent rather than to within 2 cents.",
+          "A variable the question never used (answer2) is left out.",
+          "'&euro;' shown as text is now the euro sign €.",
+          "The worked steps are rewritten with their formulas set as maths (the original $…$ maths and &euro; showed as raw text)."
+        ],
+        "contributors": [
+          "Julie Crowley"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/10367/simple-interest-easy/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julie Crowley",
+        "source": "https://numbas.mathcentre.ac.uk/question/10367/simple-interest-easy/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "answer1",
+          "marks": 2,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.005
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "initial * (1 + x * p / 100)",
+            "label": "money in the account (€)",
+            "from": "0",
+            "to": "10"
+          }
+        ]
+      },
+      "statement": "An investor puts €\\({initial}\\) in a savings account that pays \\({p}\\%\\) simple interest at the end of each year. How much would the investor have after \\({n}\\) years?\nGive your answer to \\(2\\) decimal places.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Simple interest each year is the same fraction of the sum put in, so over t years at a rate r:",
+            "tex": "I = P \\times t \\times r"
+          },
+          {
+            "blank": false,
+            "head": "Here the sum is €{initial}, for {n} years at {p}% a year:",
+            "tex": "I = {initial} \\times {n} \\times \\frac{{p}}{100} = {interest}"
+          },
+          {
+            "blank": false,
+            "head": "Add the interest to the sum put in to get what the investor has, in euros:",
+            "tex": "{initial} + {interest} = {answer1}"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "number and arithmetic"
+      ],
+      "variables": [
+        {
+          "name": "nnn",
+          "def": {
+            "kind": "range",
+            "from": 1,
+            "step": 1,
+            "to": 5
+          }
+        },
+        {
+          "name": "nn",
+          "def": {
+            "kind": "range",
+            "from": 1,
+            "step": 1,
+            "to": 4
+          }
+        },
+        {
+          "name": "initial",
+          "def": {
+            "kind": "range",
+            "from": 2000,
+            "step": 100,
+            "to": 10000
+          }
+        },
+        {
+          "name": "answer1",
+          "def": {
+            "kind": "expr",
+            "expr": "initial * (1 + n * p / 100)"
+          }
+        },
+        {
+          "name": "n",
+          "def": {
+            "kind": "expr",
+            "expr": "nnn + nn"
+          }
+        },
+        {
+          "name": "p",
+          "def": {
+            "kind": "range",
+            "from": 5,
+            "step": 1,
+            "to": 15
+          }
+        },
+        {
+          "name": "interest",
+          "def": {
+            "kind": "expr",
+            "expr": "n * p * initial / 100"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q13125-numbas-7568318c",
+      "title": "Expanding a linear factor",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the curve y = (x − t)³ for t = 1 and t = 2; the expanded form draws the same curves.",
+          "The note telling students to type 't*x' and 't^3' is left out; the answer box reads ordinary maths."
+        ],
+        "contributors": [
+          "Sanka Balasuriya"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/13125/expanding-a-linear-factor/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Sanka Balasuriya",
+        "source": "https://numbas.mathcentre.ac.uk/question/13125/expanding-a-linear-factor/"
+      },
+      "parts": [
+        {
+          "type": "expression",
+          "answer": "x ^ 3 - 3 * x ^ 2 * t + 3 * x * t ^ 2 - t ^ 3",
+          "marks": 1,
+          "prompt": "\\((x-t)^3 = \\) ___",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "x",
+            "t"
+          ]
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "(x - 1) ^ 3",
+            "label": "(x − t)³ when t = 1",
+            "from": "-1",
+            "to": "3"
+          },
+          {
+            "expr": "(x - 2) ^ 3",
+            "label": "(x − t)³ when t = 2",
+            "from": "0",
+            "to": "4"
+          }
+        ]
+      },
+      "statement": "Expand \\(\\displaystyle (x-t)^3\\)",
+      "tags": [
+        "algebra"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-q13336-numbas-52c83c77",
+      "title": "Compound interest on savings",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the lump sum growing year by year from P to A, years across: compound interest grows by the same fraction every year.",
+          "Title shortened from 'Savings compound interest 2' for the practice list.",
+          "The rate, asked to 2 decimal places, is marked to the nearest hundredth of a percent rather than to within 0.02 %.",
+          "'&euro;' shown as text is now the euro sign €.",
+          "The worked steps are rewritten with their formulas set as maths (the original $…$ maths showed as raw text and its nth root lost its n); 'Part (a)' headings are left out."
+        ],
+        "contributors": [
+          "Julie Crowley"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/13336/savings-compound-interest-2/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julie Crowley",
+        "source": "https://numbas.mathcentre.ac.uk/question/13336/savings-compound-interest-2/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "P",
+          "marks": 1,
+          "prompt": "What is the value of P, in euros? ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.0001
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "A",
+          "marks": 1,
+          "prompt": "What is the value of A, in euros? ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.0001
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "n",
+          "marks": 1,
+          "prompt": "What is the value of n? ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.0001
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "perc",
+          "marks": 3,
+          "prompt": "What is the interest rate per annum? Please give your answer as a percentage correct to 2 decimal places. ___%",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.005
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "P * (1 + int) ^ x",
+            "label": "money in the account (€)",
+            "from": "0",
+            "to": "n"
+          }
+        ]
+      },
+      "statement": "A lump sum of €\\({P}\\) is deposited into a savings account that pays compound interest for \\({n}\\) years. If no withdrawals are made from the account, then the amount that the lump sum will have grown to is €\\({A}\\).\nThe compound interest formula is:\n\\(\\ A = P(1+i)^n \\)",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "The compound interest formula is",
+            "tex": "A = P(1+i)^n"
+          },
+          {
+            "blank": false,
+            "head": "P is the sum put in at the start, so here it is €{P}."
+          },
+          {
+            "blank": false,
+            "head": "A is what the sum has grown to after {n} years, so here it is €{A}."
+          },
+          {
+            "blank": false,
+            "head": "n is the number of years the interest is added for, so here it is {n}."
+          },
+          {
+            "blank": false,
+            "head": "For the rate, put these numbers into the formula:",
+            "tex": "{A} = {P}(1+i)^{{n}}"
+          },
+          {
+            "blank": false,
+            "head": "Divide both sides by {P}:",
+            "tex": "\\frac{{A}}{{P}} = {ratio} = (1+i)^{{n}}"
+          },
+          {
+            "blank": false,
+            "head": "Take the root of index {n} of both sides:",
+            "tex": "1 + i = \\sqrt[{n}]{{ratio}} = {intplus}"
+          },
+          {
+            "blank": false,
+            "head": "So i = {int}, and the yearly interest rate is {perc}%."
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "number and arithmetic"
+      ],
+      "variables": [
+        {
+          "name": "n",
+          "def": {
+            "kind": "range",
+            "from": 2,
+            "step": 1,
+            "to": 6
+          }
+        },
+        {
+          "name": "P",
+          "def": {
+            "kind": "range",
+            "from": 1000,
+            "step": 500,
+            "to": 6000
+          }
+        },
+        {
+          "name": "A",
+          "def": {
+            "kind": "expr",
+            "expr": "round(P * (1 + int) ^ n, 2)"
+          }
+        },
+        {
+          "name": "perc",
+          "def": {
+            "kind": "range",
+            "from": 1.5,
+            "step": 0.5,
+            "to": 5.5
+          }
+        },
+        {
+          "name": "int",
+          "def": {
+            "kind": "expr",
+            "expr": "perc / 100"
+          }
+        },
+        {
+          "name": "ratio",
+          "def": {
+            "kind": "expr",
+            "expr": "A / P"
+          }
+        },
+        {
+          "name": "intplus",
+          "def": {
+            "kind": "expr",
+            "expr": "ratio ^ (1 / n)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q20968-numbas-f68f01a8",
+      "title": "A definite integral",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the curve y = x(2x + 3) with the region under it from x = 0 to x = 2 shaded; its area is shown once the question is answered.",
+          "Title shortened from 'Definite Integrals Exam Q6' for the practice list.",
+          "Ten variables the question never used are left out.",
+          "'Evaluate the integrals' reads 'the integral' (there is one); the answer box takes 34/3 or 11.33, where the original accepted only the exact fraction; worked steps are added."
+        ],
+        "contributors": [
+          "Violeta CIT"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/20968/definite-integrals-exam-q6/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Violeta CIT",
+        "source": "https://numbas.mathcentre.ac.uk/question/20968/definite-integrals-exam-q6/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "34 / 3",
+          "marks": 20,
+          "prompt": "\\(\\displaystyle ∫₀² x(2x + 3)\\,dx = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.005
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "between",
+        "upper": "x * (2 * x + 3)",
+        "lower": "0",
+        "from": "0",
+        "to": "2"
+      },
+      "statement": "Evaluate the integral. Give your answer as an exact fraction or to 2 decimal places.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Multiply out the bracket first:",
+            "tex": "\\int_0^2 x(2x+3)\\,dx = \\int_0^2 \\left(2x^2+3x\\right)dx"
+          },
+          {
+            "blank": false,
+            "head": "Integrate each term:",
+            "tex": "\\left[\\frac{2x^3}{3} + \\frac{3x^2}{2}\\right]_0^2"
+          },
+          {
+            "blank": false,
+            "head": "Put in the top limit and take away the bottom one:",
+            "tex": "\\frac{16}{3} + 6 - 0 = \\frac{34}{3}"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "calculus"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-q21211-numbas-fbc099c6",
+      "title": "Calculate distance from a point to a plane",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the point P as an arrow from the origin, and the plane's normal n = (a, b, c) drawn from P: the distance is measured along n.",
+          "The worked steps' $…$ maths is rewritten as words and a formula line, and 'porjection' is spelt 'projection'.",
+          "The point and the plane are written as a textbook writes them (the original showed '10*x+10*y+(-5)*z+2=0' and 'P(3,(-10),1)'): the plane's coefficients are drawn from 2 to 10 and its constant from 1 to 10, which also rules out a = b = c = 0, where there is no plane and the distance divided by zero.",
+          "The distance is asked for to 2 decimal places and marked to within 0.005, not within 5 %.",
+          "A step puts this question's own numbers into the distance formula.",
+          "The plane's equation is shown with the question, so the answer box reads 'Give the distance to 2 decimal places'."
+        ],
+        "contributors": [
+          "Manuel Pérez"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/21211/calculate-distance-from-a-point-to-a-plane/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Manuel Pérez",
+        "source": "https://numbas.mathcentre.ac.uk/question/21211/calculate-distance-from-a-point-to-a-plane/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "abs(a * px + b * py + c * pz + d) / sqrt(a ^ 2 + b ^ 2 + c ^ 2)",
+          "marks": 1,
+          "prompt": "Give the distance to 2 decimal places: ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.005
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          {
+            "name": "P",
+            "v": [
+              "px",
+              "py",
+              "pz"
+            ]
+          },
+          {
+            "name": "n",
+            "v": [
+              "a",
+              "b",
+              "c"
+            ],
+            "tail": [
+              "px",
+              "py",
+              "pz"
+            ]
+          }
+        ]
+      },
+      "statement": "Calculate the distance from the point P = ({px}, {py}, {pz}) to the plane π given by\n$$ {a}x + {b}y + {c}z + {d} = 0 $$",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "The distance from a point P to the plane Ax + By + Cz + D = 0 is",
+            "tex": "d(P,\\pi) = \\dfrac{|Ap_x+Bp_y+Cp_z+D|}{\\sqrt{A^2+B^2+C^2}}"
+          },
+          {
+            "blank": false,
+            "head": "Put in this plane's coefficients and P's coordinates:",
+            "tex": "d = \\dfrac{\\left|{a} \\times {px} + {b} \\times {py} + {c} \\times {pz} + {d}\\right|}{\\sqrt{{a}^2 + {b}^2 + {c}^2}}"
+          },
+          {
+            "blank": false,
+            "head": "Another way: find where the line through P perpendicular to the plane meets it (the orthogonal projection of P), then the distance from P to that point."
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "general maths"
+      ],
+      "variables": [
+        {
+          "name": "px",
+          "def": {
+            "kind": "range",
+            "from": -10,
+            "step": 1,
+            "to": 10
+          },
+          "description": "x coordinate of point P"
+        },
+        {
+          "name": "py",
+          "def": {
+            "kind": "range",
+            "from": -10,
+            "step": 1,
+            "to": 10
+          },
+          "description": "y coordinate of point P"
+        },
+        {
+          "name": "pz",
+          "def": {
+            "kind": "range",
+            "from": -10,
+            "step": 1,
+            "to": 10
+          },
+          "description": "z coordinate of point P"
+        },
+        {
+          "name": "a",
+          "def": {
+            "kind": "range",
+            "from": 2,
+            "step": 1,
+            "to": 10
+          },
+          "description": "A coefficient of the equation of the plane π."
+        },
+        {
+          "name": "b",
+          "def": {
+            "kind": "range",
+            "from": 2,
+            "step": 1,
+            "to": 10
+          },
+          "description": "B coefficient of the equation of plane π."
+        },
+        {
+          "name": "c",
+          "def": {
+            "kind": "range",
+            "from": 2,
+            "step": 1,
+            "to": 10
+          },
+          "description": "C coefficient of the equation of plane π."
+        },
+        {
+          "name": "d",
+          "def": {
+            "kind": "range",
+            "from": 1,
+            "step": 1,
+            "to": 10
+          },
+          "description": "Intercept term of the equation of plane π."
+        }
+      ]
+    },
+    {
+      "id": "numbas-q34507-numbas-721dbed0",
+      "title": "Add two numbers",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the two prices as bars to compare.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "The second number is drawn from 1 to 9 like the first (the original's −9 to 9 showed '6 +(-9)' and a negative price).",
+          "The step 'A picture of a number line here.' (a placeholder) is replaced."
+        ],
+        "contributors": [
+          "Lauren Frances Desoysa"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/34507/add-two-numbers/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Lauren Frances Desoysa",
+        "source": "https://numbas.mathcentre.ac.uk/question/34507/add-two-numbers/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "a + b",
+          "marks": 1,
+          "prompt": "What is \\({a} + {b}\\)?",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "2",
+            "label": "first price: {a}",
+            "from": "0",
+            "to": "a"
+          },
+          {
+            "expr": "1",
+            "label": "second price: {b}",
+            "from": "0",
+            "to": "b"
+          }
+        ]
+      },
+      "statement": "Jill wants to know the total price of her shopping.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Start at {a} and count on {b} more."
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "general maths"
+      ],
+      "variables": [
+        {
+          "name": "a",
+          "def": {
+            "kind": "range",
+            "from": 1,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b",
+          "def": {
+            "kind": "range",
+            "from": 1,
+            "step": 1,
+            "to": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q34513-numbas-7e3c7f64",
+      "title": "Adding two measured lengths",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the two layers as bars, thickness across.",
+          "Title shortened from 'Addition:  2 numbers' for the practice list.",
+          "'Caclulate' is spelt 'Calculate'; the answer is the total to 2 significant figures, marked to within 0.0001, where the original accepted anything within 5 % of the unrounded sum."
+        ],
+        "contributors": [
+          "Christopher Saville"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/34513/addition-2-numbers/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Christopher Saville",
+        "source": "https://numbas.mathcentre.ac.uk/question/34513/addition-2-numbers/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "total",
+          "marks": 2,
+          "prompt": "One layer is {a} m thick. The other layer is {b} m thick, so the total is \\({a} + {b}\\) metres. ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.0001
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "2",
+            "label": "layer 1: {a} m",
+            "from": "0",
+            "to": "a"
+          },
+          {
+            "expr": "1",
+            "label": "layer 2: {b} m",
+            "from": "0",
+            "to": "b"
+          }
+        ]
+      },
+      "statement": "The thickness of two sedimentary layers is measured. Calculate the total thickness. Give your answer to 2 significant figures.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Add the two thicknesses, then round to 2 significant figures: keep the first two digits that are not zeros, rounding up when the next digit is 5 or more."
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "general maths"
+      ],
+      "variables": [
+        {
+          "name": "a",
+          "def": {
+            "kind": "range",
+            "from": 0.01,
+            "step": 0.01,
+            "to": 10
+          },
+          "description": "Thickness of layer 1. The thickness is assumed to be constant."
+        },
+        {
+          "name": "b",
+          "def": {
+            "kind": "range",
+            "from": 0.01,
+            "step": 0.01,
+            "to": 10
+          },
+          "description": "Thickness of layer 2. The thickness is assumed to be constant."
+        },
+        {
+          "name": "total",
+          "def": {
+            "kind": "expr",
+            "expr": "round(a + b, max(0, 1 - floor(log10(a + b))))"
+          },
+          "description": "The total thickness to 2 significant figures."
+        }
+      ]
+    },
+    {
+      "id": "numbas-q40319-numbas-8128225f",
+      "title": "Find the missing quantity",
+      "condition": {
+        "maxRuns": 100,
+        "when": "a != b and a != 2 * b"
+      },
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the cost against the number of stems, a straight line through 0 since the price is the same per stem.",
+          "Title shortened from 'Don's copy of 3.4 Find the missing quantity Q3 (different variable coding)' for the practice list.",
+          "A worked step is added.",
+          "The prices are written in dollars in words ('40 dollars'), not with a $ sign."
+        ],
+        "contributors": [
+          "TEAME CIT",
+          "Don Shearman",
+          "Susan McGlynn"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/40319/don-s-copy-of-3-4-find-the-missing-quantity-q3-dif/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "TEAME CIT, Don Shearman, Susan McGlynn",
+        "source": "https://numbas.mathcentre.ac.uk/question/40319/don-s-copy-of-3-4-find-the-missing-quantity-q3-dif/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "c * f / d",
+          "marks": 1,
+          "prompt": "Suppose \\({d}\\) flower stems cost \\({f}\\) dollars. How much would you pay for \\({c}\\) flower stems? Cost = ___ dollars",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.005
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "f / d * x",
+            "label": "cost in dollars of x stems",
+            "from": "0",
+            "to": "max(c, d)"
+          }
+        ]
+      },
+      "statement": "",
+      "tags": [
+        "general maths"
+      ],
+      "variables": [
+        {
+          "name": "a",
+          "def": {
+            "kind": "list",
+            "items": [
+              2,
+              3,
+              4
+            ]
+          }
+        },
+        {
+          "name": "b",
+          "def": {
+            "kind": "list",
+            "items": [
+              2,
+              5,
+              7
+            ]
+          }
+        },
+        {
+          "name": "k",
+          "def": {
+            "kind": "list",
+            "items": [
+              5,
+              7,
+              8
+            ]
+          }
+        },
+        {
+          "name": "c",
+          "def": {
+            "kind": "expr",
+            "expr": "a * k"
+          }
+        },
+        {
+          "name": "d",
+          "def": {
+            "kind": "expr",
+            "expr": "b * k"
+          },
+          "description": "d"
+        },
+        {
+          "name": "f",
+          "def": {
+            "kind": "list",
+            "items": [
+              20,
+              30,
+              40
+            ]
+          }
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "blank": false,
+            "head": "Find the cost of one stem, then multiply by how many you want:",
+            "tex": "\\frac{{f}}{{d}} \\times {c}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "numbas-q67792-numbas-68d096f7",
+      "title": "Primary age multiplication",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the number every table here multiplies, as dots in rows of up to 11; the tables themselves are left for the student to work out.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "Numbas's own marking advice ('don't worry about the missing marks … go back to the previous part', 'click back through your parts in the navigation') is left out; the steps say how each table is worked."
+        ],
+        "contributors": [
+          "Julia Goedecke"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/67792/primary-age-multiplication/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julia Goedecke",
+        "source": "https://numbas.mathcentre.ac.uk/question/67792/primary-age-multiplication/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "a * b",
+          "marks": 1,
+          "prompt": "Work out \\({a} \\times {b} = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "2 * times2",
+          "marks": 1,
+          "prompt": "You can work out \\(2 \\times {times2}\\) using addition: \\(2 \\times {times2} = {times2} + {times2} = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "2 * times3",
+          "marks": 1,
+          "prompt": "You can work out \\(3 \\times {times3}\\) in two ways; fill in both. If you know \\(2 \\times {times3}\\), add another \\({times3}\\) to it. \\(2 \\times {times3} = \\) ___. Then add \\({times3}\\) to the answer: ___. Or just use addition: \\(3 \\times {times3} = {times3} + {times3} + {times3} = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "3 * times3",
+          "marks": 1,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "3 * times3",
+          "marks": 1,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "10 * times10",
+          "marks": 1,
+          "prompt": "To multiply by \\(10\\), you just need to put a zero at the end. \\(10 \\times {times10} = \\) ___.",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "a",
+          "marks": 1,
+          "prompt": "Times \\(1\\) is always easy: it's just the number itself. So \\({a} \\times 1 = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "10 * times5",
+          "marks": 1,
+          "prompt": "To multiply by \\(5\\), you can multiply by \\(10\\), which is quite easy, and then take half of the answer. It's good practice for doing halves as well! \\(10 \\times {times5} = \\) ___, and half of that is ___.",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "5 * times5",
+          "marks": 1,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "10 * times9",
+          "marks": 1,
+          "prompt": "To multiply by \\(9\\), the easiest way is to multiply by \\(10\\) and then take the number away once. \\(10 \\times {times9} = \\) ___. Then take away \\({times9}\\) gives ___.",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "9 * times9",
+          "marks": 1,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "dots",
+        "count": "b",
+        "perRow": 11
+      },
+      "statement": "Practice some multiplication.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "× 2: add the number to itself."
+          },
+          {
+            "blank": false,
+            "head": "× 3: add the number three times, or add it once more to × 2."
+          },
+          {
+            "blank": false,
+            "head": "× 10: put a 0 on the end. × 5: halve × 10. × 9: take the number away from × 10."
+          },
+          {
+            "blank": false,
+            "head": "× 1: the number stays the same."
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "number and arithmetic"
+      ],
+      "variables": [
+        {
+          "name": "a",
+          "def": {
+            "kind": "list",
+            "items": [
+              2,
+              3,
+              5,
+              9,
+              10
+            ]
+          }
+        },
+        {
+          "name": "b",
+          "def": {
+            "kind": "range",
+            "from": 1,
+            "step": 1,
+            "to": 10
+          }
+        },
+        {
+          "name": "times2",
+          "def": {
+            "kind": "expr",
+            "expr": "b"
+          }
+        },
+        {
+          "name": "times3",
+          "def": {
+            "kind": "expr",
+            "expr": "b"
+          }
+        },
+        {
+          "name": "times10",
+          "def": {
+            "kind": "expr",
+            "expr": "b"
+          }
+        },
+        {
+          "name": "times5",
+          "def": {
+            "kind": "expr",
+            "expr": "b"
+          }
+        },
+        {
+          "name": "times9",
+          "def": {
+            "kind": "expr",
+            "expr": "b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q94124-numbas-8ecc2008",
+      "title": "Matrix addition",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the first columns of A and B as arrows from the same point; their sum, the first column of A + B, is left for the student to work out.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "The step 'Please see lecture slides for worked example' (another course's) is replaced by a worked first entry."
+        ],
+        "contributors": [
+          "Heather Driscoll"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/94124/matrix-addition/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Heather Driscoll",
+        "source": "https://numbas.mathcentre.ac.uk/question/94124/matrix-addition/"
+      },
+      "parts": [
+        {
+          "type": "matrix",
+          "answer": [
+            [
+              "ab11",
+              "ab12",
+              "ab13"
+            ],
+            [
+              "ab21",
+              "ab22",
+              "ab23"
+            ],
+            [
+              "ab31",
+              "ab32",
+              "ab33"
+            ]
+          ],
+          "marks": 1,
+          "prompt": "\\(A + B = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          }
+        }
+      ],
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          {
+            "name": "a₁",
+            "v": [
+              "a11",
+              "a21",
+              "a31"
+            ]
+          },
+          {
+            "name": "b₁",
+            "v": [
+              "b11",
+              "b21",
+              "b31"
+            ]
+          }
+        ]
+      },
+      "statement": "$$ A = \\left(\\begin{array}{rrr} {a11} & {a12} & {a13}\\\\ {a21} & {a22} & {a23}\\\\ {a31} & {a32} & {a33}\\\\ \\end{array}\\right),\\;\\;\\;\\; B= \\left(\\begin{array}{rrr} {b11} & {b12} & {b13}\\\\ {b21} & {b22} & {b23}\\\\ {b31} & {b32} & {b33}\\\\ \\end{array}\\right) $$",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Add the entries in the same place: row i, column j of A + B is the entry there in A plus the entry there in B. The first one:",
+            "tex": "(A+B)_{11} = {a11} + {b11} = {ab11}"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "matrices and linear algebra"
+      ],
+      "variables": [
+        {
+          "name": "a11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "ab11",
+          "def": {
+            "kind": "expr",
+            "expr": "a11 + b11"
+          }
+        },
+        {
+          "name": "ab12",
+          "def": {
+            "kind": "expr",
+            "expr": "a12 + b12"
+          }
+        },
+        {
+          "name": "ab13",
+          "def": {
+            "kind": "expr",
+            "expr": "a13 + b13"
+          }
+        },
+        {
+          "name": "ab21",
+          "def": {
+            "kind": "expr",
+            "expr": "a21 + b21"
+          }
+        },
+        {
+          "name": "ab22",
+          "def": {
+            "kind": "expr",
+            "expr": "a22 + b22"
+          }
+        },
+        {
+          "name": "ab23",
+          "def": {
+            "kind": "expr",
+            "expr": "a23 + b23"
+          }
+        },
+        {
+          "name": "ab31",
+          "def": {
+            "kind": "expr",
+            "expr": "a31 + b31"
+          }
+        },
+        {
+          "name": "ab32",
+          "def": {
+            "kind": "expr",
+            "expr": "a32 + b32"
+          }
+        },
+        {
+          "name": "ab33",
+          "def": {
+            "kind": "expr",
+            "expr": "a33 + b33"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q94128-numbas-81208a40",
+      "title": "Matrix subtraction",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the first columns of A and B as arrows from the same point; their difference, the first column of A − B, is left for the student to work out.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "The step 'Please see lecture slides for worked example' (another course's) is replaced by a worked first entry."
+        ],
+        "contributors": [
+          "Heather Driscoll"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/94128/matrix-subtraction/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Heather Driscoll",
+        "source": "https://numbas.mathcentre.ac.uk/question/94128/matrix-subtraction/"
+      },
+      "parts": [
+        {
+          "type": "matrix",
+          "answer": [
+            [
+              "ab11",
+              "ab12",
+              "ab13"
+            ],
+            [
+              "ab21",
+              "ab22",
+              "ab23"
+            ],
+            [
+              "ab31",
+              "ab32",
+              "ab33"
+            ]
+          ],
+          "marks": 1,
+          "prompt": "\\(A - B = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          }
+        }
+      ],
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          {
+            "name": "a₁",
+            "v": [
+              "a11",
+              "a21",
+              "a31"
+            ]
+          },
+          {
+            "name": "b₁",
+            "v": [
+              "b11",
+              "b21",
+              "b31"
+            ]
+          }
+        ]
+      },
+      "statement": "$$ A = \\left(\\begin{array}{rrr} {a11} & {a12} & {a13}\\\\ {a21} & {a22} & {a23}\\\\ {a31} & {a32} & {a33}\\\\ \\end{array}\\right),\\;\\;\\;\\; B= \\left(\\begin{array}{rrr} {b11} & {b12} & {b13}\\\\ {b21} & {b22} & {b23}\\\\ {b31} & {b32} & {b33}\\\\ \\end{array}\\right) $$",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Subtract the entries in the same place: row i, column j of A − B is the entry there in A minus the entry there in B. The first one:",
+            "tex": "(A-B)_{11} = {a11} - {b11} = {ab11}"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "matrices and linear algebra"
+      ],
+      "variables": [
+        {
+          "name": "a11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "ab11",
+          "def": {
+            "kind": "expr",
+            "expr": "a11 - b11"
+          }
+        },
+        {
+          "name": "ab12",
+          "def": {
+            "kind": "expr",
+            "expr": "a12 - b12"
+          }
+        },
+        {
+          "name": "ab13",
+          "def": {
+            "kind": "expr",
+            "expr": "a13 - b13"
+          }
+        },
+        {
+          "name": "ab21",
+          "def": {
+            "kind": "expr",
+            "expr": "a21 - b21"
+          }
+        },
+        {
+          "name": "ab22",
+          "def": {
+            "kind": "expr",
+            "expr": "a22 - b22"
+          }
+        },
+        {
+          "name": "ab23",
+          "def": {
+            "kind": "expr",
+            "expr": "a23 - b23"
+          }
+        },
+        {
+          "name": "ab31",
+          "def": {
+            "kind": "expr",
+            "expr": "a31 - b31"
+          }
+        },
+        {
+          "name": "ab32",
+          "def": {
+            "kind": "expr",
+            "expr": "a32 - b32"
+          }
+        },
+        {
+          "name": "ab33",
+          "def": {
+            "kind": "expr",
+            "expr": "a33 - b33"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q94129-numbas-28575551",
+      "title": "Matrix multiplication AB",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the columns a₁, a₂, a₃ of A as arrows from the same point; the first column of AB is b₁₁a₁ + b₂₁a₂ + b₃₁a₃, which is left for the student to work out.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "The step 'Please see lecture slides for worked example' (another course's) is replaced by a worked first entry."
+        ],
+        "contributors": [
+          "Heather Driscoll"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/94129/matrix-multiplication-ab/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Heather Driscoll",
+        "source": "https://numbas.mathcentre.ac.uk/question/94129/matrix-multiplication-ab/"
+      },
+      "parts": [
+        {
+          "type": "matrix",
+          "answer": [
+            [
+              "ab11",
+              "ab12",
+              "ab13"
+            ],
+            [
+              "ab21",
+              "ab22",
+              "ab23"
+            ],
+            [
+              "ab31",
+              "ab32",
+              "ab33"
+            ]
+          ],
+          "marks": 1,
+          "prompt": "\\(A \\times B = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          }
+        }
+      ],
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          {
+            "name": "a₁",
+            "v": [
+              "a11",
+              "a21",
+              "a31"
+            ]
+          },
+          {
+            "name": "a₂",
+            "v": [
+              "a12",
+              "a22",
+              "a32"
+            ]
+          },
+          {
+            "name": "a₃",
+            "v": [
+              "a13",
+              "a23",
+              "a33"
+            ]
+          }
+        ]
+      },
+      "statement": "$$ A = \\left(\\begin{array}{rrr} {a11} & {a12} & {a13}\\\\ {a21} & {a22} & {a23}\\\\ {a31} & {a32} & {a33}\\\\ \\end{array}\\right),\\;\\;\\;\\; B= \\left(\\begin{array}{rrr} {b11} & {b12} & {b13}\\\\ {b21} & {b22} & {b23}\\\\ {b31} & {b32} & {b33}\\\\ \\end{array}\\right) $$",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Row i, column j of AB is row i of A times column j of B: multiply the entries in turn and add. The first one:",
+            "tex": "(AB)_{11} = {a11} \\times {b11} + {a12} \\times {b21} + {a13} \\times {b31} = {ab11}"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "matrices and linear algebra",
+        "number and arithmetic"
+      ],
+      "variables": [
+        {
+          "name": "a11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "ab11",
+          "def": {
+            "kind": "expr",
+            "expr": "a11 * b11 + a12 * b21 + a13 * b31"
+          }
+        },
+        {
+          "name": "ab12",
+          "def": {
+            "kind": "expr",
+            "expr": "a11 * b12 + a12 * b22 + a13 * b32"
+          }
+        },
+        {
+          "name": "ab13",
+          "def": {
+            "kind": "expr",
+            "expr": "a11 * b13 + a12 * b23 + a13 * b33"
+          }
+        },
+        {
+          "name": "ab21",
+          "def": {
+            "kind": "expr",
+            "expr": "a21 * b11 + a22 * b21 + a23 * b31"
+          }
+        },
+        {
+          "name": "ab22",
+          "def": {
+            "kind": "expr",
+            "expr": "a21 * b12 + a22 * b22 + a23 * b32"
+          }
+        },
+        {
+          "name": "ab23",
+          "def": {
+            "kind": "expr",
+            "expr": "a21 * b13 + a22 * b23 + a23 * b33"
+          }
+        },
+        {
+          "name": "ab31",
+          "def": {
+            "kind": "expr",
+            "expr": "a31 * b11 + a32 * b21 + a33 * b31"
+          }
+        },
+        {
+          "name": "ab32",
+          "def": {
+            "kind": "expr",
+            "expr": "a31 * b12 + a32 * b22 + a33 * b32"
+          }
+        },
+        {
+          "name": "ab33",
+          "def": {
+            "kind": "expr",
+            "expr": "a31 * b13 + a32 * b23 + a33 * b33"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q94130-numbas-ad7fa4b1",
+      "title": "Matrix multiplication BA",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the columns b₁, b₂, b₃ of B as arrows from the same point; the first column of BA is a₁₁b₁ + a₂₁b₂ + a₃₁b₃, which is left for the student to work out.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "The step 'Please see lecture slides for worked example' (another course's) is replaced by a worked first entry."
+        ],
+        "contributors": [
+          "Heather Driscoll"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/94130/matrix-multiplication-ba/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Heather Driscoll",
+        "source": "https://numbas.mathcentre.ac.uk/question/94130/matrix-multiplication-ba/"
+      },
+      "parts": [
+        {
+          "type": "matrix",
+          "answer": [
+            [
+              "ab11",
+              "ab12",
+              "ab13"
+            ],
+            [
+              "ab21",
+              "ab22",
+              "ab23"
+            ],
+            [
+              "ab31",
+              "ab32",
+              "ab33"
+            ]
+          ],
+          "marks": 1,
+          "prompt": "\\(B \\times A = \\) ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          }
+        }
+      ],
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          {
+            "name": "b₁",
+            "v": [
+              "b11",
+              "b21",
+              "b31"
+            ]
+          },
+          {
+            "name": "b₂",
+            "v": [
+              "b12",
+              "b22",
+              "b32"
+            ]
+          },
+          {
+            "name": "b₃",
+            "v": [
+              "b13",
+              "b23",
+              "b33"
+            ]
+          }
+        ]
+      },
+      "statement": "$$ A = \\left(\\begin{array}{rrr} {a11} & {a12} & {a13}\\\\ {a21} & {a22} & {a23}\\\\ {a31} & {a32} & {a33}\\\\ \\end{array}\\right),\\;\\;\\;\\; B= \\left(\\begin{array}{rrr} {b11} & {b12} & {b13}\\\\ {b21} & {b22} & {b23}\\\\ {b31} & {b32} & {b33}\\\\ \\end{array}\\right) $$",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "Row i, column j of BA is row i of B times column j of A: multiply the entries in turn and add. The first one:",
+            "tex": "(BA)_{11} = {b11} \\times {a11} + {b12} \\times {a21} + {b13} \\times {a31} = {ab11}"
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "matrices and linear algebra",
+        "number and arithmetic"
+      ],
+      "variables": [
+        {
+          "name": "a11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "a33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b11",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b12",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b13",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b21",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b22",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b23",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b31",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b32",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "b33",
+          "def": {
+            "kind": "range",
+            "from": -9,
+            "step": 1,
+            "to": 9
+          }
+        },
+        {
+          "name": "ab11",
+          "def": {
+            "kind": "expr",
+            "expr": "b11 * a11 + b12 * a21 + b13 * a31"
+          }
+        },
+        {
+          "name": "ab12",
+          "def": {
+            "kind": "expr",
+            "expr": "b11 * a12 + b12 * a22 + b13 * a32"
+          }
+        },
+        {
+          "name": "ab13",
+          "def": {
+            "kind": "expr",
+            "expr": "b11 * a13 + b12 * a23 + b13 * a33"
+          }
+        },
+        {
+          "name": "ab21",
+          "def": {
+            "kind": "expr",
+            "expr": "b21 * a11 + b22 * a21 + b23 * a31"
+          }
+        },
+        {
+          "name": "ab22",
+          "def": {
+            "kind": "expr",
+            "expr": "b21 * a12 + b22 * a22 + b23 * a32"
+          }
+        },
+        {
+          "name": "ab23",
+          "def": {
+            "kind": "expr",
+            "expr": "b21 * a13 + b22 * a23 + b23 * a33"
+          }
+        },
+        {
+          "name": "ab31",
+          "def": {
+            "kind": "expr",
+            "expr": "b31 * a11 + b32 * a21 + b33 * a31"
+          }
+        },
+        {
+          "name": "ab32",
+          "def": {
+            "kind": "expr",
+            "expr": "b31 * a12 + b32 * a22 + b33 * a32"
+          }
+        },
+        {
+          "name": "ab33",
+          "def": {
+            "kind": "expr",
+            "expr": "b31 * a13 + b32 * a23 + b33 * a33"
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbas-q99576-numbas-77958dc0",
+      "title": "Multiplication test",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): one day's apples, the 3 the question gives; a week is 7 rows like it, left for the student to count up.",
+          "Marked exactly, as Numbas marks it: a whole-number answer no longer carries a 2 % band that let an answer one out pass as right.",
+          "The step 'Enter an integer number!' is replaced by how the answer is worked."
+        ],
+        "contributors": [
+          "Jan Sieber"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/99576/multiplication-test/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Jan Sieber",
+        "source": "https://numbas.mathcentre.ac.uk/question/99576/multiplication-test/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "21",
+          "marks": 1,
+          "prompt": "I eat ___ apples per week.",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "63",
+          "marks": 1,
+          "prompt": "I eat ___ apples in 3 weeks.",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "dots",
+        "count": "3",
+        "perRow": 3
+      },
+      "statement": "Apples & multiplication:\nI eat 3 apples per day.",
+      "steps": {
+        "items": [
+          {
+            "blank": false,
+            "head": "A week has 7 days, so a week of apples is 7 lots of 3."
+          },
+          {
+            "blank": false,
+            "head": "Three weeks is 3 lots of a week."
+          }
+        ],
+        "level": "worked"
+      },
+      "tags": [
+        "number and arithmetic"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-q150096-numbas-e426b71a",
+      "title": "VAT on a price",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the price with VAT against the price without it, a straight line since VAT is always the same fraction.",
+          "Title shortened from 'Calculate VAT question (Newcastle)' for the practice list.",
+          "The price with VAT is marked to within 0.0001 and the price without VAT exactly (Numbas marks both exactly); neither carries a 2 % band that would let an answer one out pass as right.",
+          "The Numbas editor's label ('Newcastle editor version 1.0', and 'Newcastle' before the first price) is left out, the second price gains its £, and worked steps are added."
+        ],
+        "contributors": [
+          "Ferenc Lengyel"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/150096/calculate-vat-question-newcastle/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Ferenc Lengyel",
+        "source": "https://numbas.mathcentre.ac.uk/question/150096/calculate-vat-question-newcastle/"
+      },
+      "parts": [
+        {
+          "type": "number",
+          "answer": "vatprice1",
+          "marks": 1,
+          "prompt": "The price of the 1st product without VAT is £{novatprice1}. VAT is 20%. What is its full price, in pounds? ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.0001
+          },
+          "unit": "none"
+        },
+        {
+          "type": "number",
+          "answer": "novatprice2",
+          "marks": 1,
+          "prompt": "The 2nd product's full price, with VAT, is £{vatprice2}. What is its price without VAT, in pounds? ___",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "6 / 5 * x",
+            "label": "price with 20% VAT (£)",
+            "from": "0",
+            "to": "100"
+          }
+        ]
+      },
+      "statement": "We are going to work out the price of different products with and without VAT (20%).",
+      "tags": [
+        "number and arithmetic"
+      ],
+      "variables": [
+        {
+          "name": "novatprice1",
+          "def": {
+            "kind": "range",
+            "from": 10,
+            "step": 10,
+            "to": 100
+          },
+          "description": "price without VAT"
+        },
+        {
+          "name": "vatprice1",
+          "def": {
+            "kind": "expr",
+            "expr": "novatprice1 * 6 / 5"
+          },
+          "description": "price with 20 % VAT"
+        },
+        {
+          "name": "novatprice2",
+          "def": {
+            "kind": "range",
+            "from": 10,
+            "step": 10,
+            "to": 100
+          }
+        },
+        {
+          "name": "vatprice2",
+          "def": {
+            "kind": "expr",
+            "expr": "novatprice2 * 6 / 5"
+          }
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "blank": false,
+            "head": "20% VAT adds a fifth of the price, so the full price is 1.2 times the price without VAT:",
+            "tex": "{novatprice1} \\times 1.2 = {vatprice1}"
+          },
+          {
+            "blank": false,
+            "head": "Going back, divide the full price by 1.2:",
+            "tex": "{vatprice2} \\div 1.2 = {novatprice2}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "numbas-q208547-numbas-eea43d8f",
+      "title": "Like terms",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the two sides of the worked example 5x − 4 = 2x + 5 as lines; they meet at its solution, x = 3.",
+          "The cheetah's catch-up time is corrected to 50/21 ≈ 2.38 s (31t = 10t + 50); the original's 2.35 was the middle of its accepted range, not the answer.",
+          "'3·2 lots of t' in the equation in s now reads '3·2 lots of s'.",
+          "The two equations in the part text are set in the sentence rather than on lines of their own."
+        ],
+        "contributors": [
+          "Fern Gossow"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/question/208547/like-terms/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Fern Gossow",
+        "source": "https://numbas.mathcentre.ac.uk/question/208547/like-terms/"
+      },
+      "parts": [
+        {
+          "type": "expression",
+          "answer": "8 * x + 1",
+          "marks": 1,
+          "prompt": "In the equation \\(11x - 3x + 1 = 17\\), we can combine the like-terms \\(11x\\) and \\(3x\\) to rewrite the left-hand side as ___. The solution to the equation is then \\(x = \\) ___.",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "x"
+          ]
+        },
+        {
+          "type": "expression",
+          "answer": "2",
+          "marks": 1,
+          "prompt": "",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": []
+        },
+        {
+          "type": "expression",
+          "answer": "5 * s + 10",
+          "marks": 1,
+          "prompt": "We want to solve the equation \\(3(2s - 1) = 5(s + 2)\\). Expanding the left-hand side gives \\(6s - 3\\) (there are \\(3 \\times 2\\) lots of \\(s\\) and \\(3 \\times (-1) = -3\\) others), and expanding the right-hand side gives ___. The solution to the equation is \\(s = \\) ___.",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "s"
+          ]
+        },
+        {
+          "type": "expression",
+          "answer": "13",
+          "marks": 1,
+          "prompt": "",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": []
+        },
+        {
+          "type": "expression",
+          "answer": "10 * t + 50",
+          "marks": 1,
+          "prompt": "A cheetah can run at 31 metres per second, so can cover a distance of \\(31t\\) metres after \\(t\\) seconds. A world-class human sprinter can run at around \\(10\\) metres per second. If we give the human a \\(50\\) metre head start, then after \\(t\\) seconds they can cover a distance of ___ metres (including the head-start). By writing and solving an equation, find the number of seconds it would take a cheetah to catch up to the human (you can answer to one decimal place): ___.",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "t"
+          ]
+        },
+        {
+          "type": "number",
+          "answer": "50 / 21",
+          "marks": 1,
+          "prompt": "",
+          "tolerance": {
+            "kind": "absolute",
+            "value": 0.05
+          },
+          "unit": "none"
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "5 * x - 4",
+            "label": "5x − 4",
+            "from": "0",
+            "to": "5"
+          },
+          {
+            "expr": "2 * x + 5",
+            "label": "2x + 5",
+            "from": "0",
+            "to": "5"
+          }
+        ]
+      },
+      "statement": "When an equation involves multiple copies of a variable, also known as like-terms, the first step is usually to combine them. For example, to solve the equation\n$$ 5x-4=2x+5, $$\nwe can first subtract \\(2x\\) from both sides to give\n$$ 5x-2x-4=5. $$\nHaving \\(5\\) lots of \\(x\\) and removing \\(2\\) lots of \\(x\\) leaves us with \\(3\\) lots of \\(x\\), so the left-hand side of the equation is \\(3x-4\\). We can then add \\(4\\) to both sides to get \\(3x=9\\), so the solution is \\(x=3\\).",
+      "tags": [
+        "algebra"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-e4787-numbas-d846ed6f",
+      "title": "A recurrence relation (5)",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the first five terms, y(0) to y(4), worked from the recurrence and plotted above n.",
+          "Title shortened from 'Julie's copy of Recurrence - rekursjon 5' for the practice list.",
+          "The recurrence is shown with the question, and its first terms are written y(0) and y(1) (the original's y₀ and y₁), as in the other recurrence questions."
+        ],
+        "contributors": [
+          "Julie Crowley"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julie Crowley",
+        "source": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "parts": [
+        {
+          "type": "expression",
+          "answer": "-3 ^ (n + 1) + n * 3 ^ n + 2 ^ (n + 2)",
+          "marks": 4,
+          "prompt": "Find a direct formula for \\(y(n)\\): \\(y(n) = \\) ___",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "n"
+          ]
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "1",
+            "label": "y(0)",
+            "from": "-0.25",
+            "to": "0.25"
+          },
+          {
+            "expr": "2",
+            "label": "y(1)",
+            "from": "0.75",
+            "to": "1.25"
+          },
+          {
+            "expr": "7",
+            "label": "y(2)",
+            "from": "1.75",
+            "to": "2.25"
+          },
+          {
+            "expr": "32",
+            "label": "y(3)",
+            "from": "2.75",
+            "to": "3.25"
+          },
+          {
+            "expr": "145",
+            "label": "y(4)",
+            "from": "3.75",
+            "to": "4.25"
+          }
+        ]
+      },
+      "statement": "A sequence \\(y(n)\\) is given by the recursive formula\n$$ y(n) - 6y(n-1) + 9y(n-2) = 2^n, \\quad y(0) = 1, \\quad y(1) = 2 $$",
+      "tags": [
+        "sequences and series",
+        "logic and discrete maths"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-e4787-numbas-e438504e",
+      "title": "A recurrence relation (4)",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the first five terms, y(1) to y(5), worked from the recurrence and plotted above n.",
+          "Title shortened from 'Julie's copy of Recurrence - rekursjon 4' for the practice list.",
+          "The recurrence is shown with the question, above the answer box."
+        ],
+        "contributors": [
+          "Julie Crowley"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julie Crowley",
+        "source": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "parts": [
+        {
+          "type": "expression",
+          "answer": "2 ^ n - 2",
+          "marks": 4,
+          "prompt": "Find a direct formula for \\(y(n)\\): \\(y(n) = \\) ___",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "n"
+          ]
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "0",
+            "label": "y(1)",
+            "from": "0.75",
+            "to": "1.25"
+          },
+          {
+            "expr": "2",
+            "label": "y(2)",
+            "from": "1.75",
+            "to": "2.25"
+          },
+          {
+            "expr": "6",
+            "label": "y(3)",
+            "from": "2.75",
+            "to": "3.25"
+          },
+          {
+            "expr": "14",
+            "label": "y(4)",
+            "from": "3.75",
+            "to": "4.25"
+          },
+          {
+            "expr": "30",
+            "label": "y(5)",
+            "from": "4.75",
+            "to": "5.25"
+          }
+        ]
+      },
+      "statement": "A sequence \\(y(n)\\) is given by the recursive formula\n$$ y(n) - 3y(n-1) + 2y(n-2) = 0, \\quad n \\geq 3, \\quad y(1) = 0, \\quad y(2) = 2 $$",
+      "tags": [
+        "sequences and series",
+        "logic and discrete maths"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-e4787-numbas-680b92b2",
+      "title": "A recurrence relation (3)",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the first five terms, y(0) to y(4), worked from the recurrence and plotted above n.",
+          "Title shortened from 'Marie's copy of Julie's copy of Recurrence - rekursjon 3' for the practice list.",
+          "The prompt asks for a direct formula, as it means (the original said 'recurrence formula').",
+          "The answer is corrected to −3ⁿ + 2n + 3: the original's 5·3ⁿ − 2n − 3 solves y(n) − 3y(n−1) = +4n, not the −4n the question gives (y(1) = 2, y(2) = −2 from the recurrence itself).",
+          "The recurrence is shown with the question, above the answer box."
+        ],
+        "contributors": [
+          "Julie Crowley",
+          "Marie Nicholson"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julie Crowley, Marie Nicholson",
+        "source": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "parts": [
+        {
+          "type": "expression",
+          "answer": "-3 ^ n + 2 * n + 3",
+          "marks": 4,
+          "prompt": "Find a direct formula for \\(y(n)\\): \\(y(n) = \\) ___",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "n"
+          ]
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "2",
+            "label": "y(0)",
+            "from": "-0.25",
+            "to": "0.25"
+          },
+          {
+            "expr": "2",
+            "label": "y(1)",
+            "from": "0.75",
+            "to": "1.25"
+          },
+          {
+            "expr": "-2",
+            "label": "y(2)",
+            "from": "1.75",
+            "to": "2.25"
+          },
+          {
+            "expr": "-18",
+            "label": "y(3)",
+            "from": "2.75",
+            "to": "3.25"
+          },
+          {
+            "expr": "-70",
+            "label": "y(4)",
+            "from": "3.75",
+            "to": "4.25"
+          }
+        ]
+      },
+      "statement": "A sequence \\(y(n)\\) is defined by the recursive formula\n$$ y(n) - 3y(n-1) = -4n, \\quad y(0) = 2 $$",
+      "tags": [
+        "sequences and series",
+        "logic and discrete maths"
+      ],
+      "variables": []
+    },
+    {
+      "id": "numbas-e4787-numbas-5b35c676",
+      "title": "A recurrence relation (2)",
+      "imported": {
+        "format": "numbas",
+        "changes": [
+          "PhysLab added a picture (Numbas gave none): the first five terms, y(0) to y(4), worked from the recurrence and plotted above n.",
+          "Title shortened from 'Marie's copy of Julie's copy of Recurrence - rekursjon 2' for the practice list.",
+          "The prompt asks for a direct formula, as it means (the original said 'recurrence formula').",
+          "The recurrence is shown with the question, above the answer box."
+        ],
+        "contributors": [
+          "Julie Crowley",
+          "Marie Nicholson"
+        ],
+        "itemUrl": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "license": {
+        "id": "CC BY 4.0",
+        "found": "Creative Commons Attribution 4.0 International",
+        "holder": "Julie Crowley, Marie Nicholson",
+        "source": "https://numbas.mathcentre.ac.uk/exam/4787/recurrence-relations/"
+      },
+      "parts": [
+        {
+          "type": "expression",
+          "answer": "2 * 3 ^ n",
+          "marks": 4,
+          "prompt": "Find a direct formula for \\(y(n)\\): \\(y(n) = \\) ___",
+          "sampleRange": [
+            0,
+            1
+          ],
+          "symbols": [
+            "n"
+          ]
+        }
+      ],
+      "picture": {
+        "kind": "curves",
+        "items": [
+          {
+            "expr": "2",
+            "label": "y(0)",
+            "from": "-0.25",
+            "to": "0.25"
+          },
+          {
+            "expr": "6",
+            "label": "y(1)",
+            "from": "0.75",
+            "to": "1.25"
+          },
+          {
+            "expr": "18",
+            "label": "y(2)",
+            "from": "1.75",
+            "to": "2.25"
+          },
+          {
+            "expr": "54",
+            "label": "y(3)",
+            "from": "2.75",
+            "to": "3.25"
+          },
+          {
+            "expr": "162",
+            "label": "y(4)",
+            "from": "3.75",
+            "to": "4.25"
+          }
+        ]
+      },
+      "statement": "A sequence \\(y(n)\\) is defined by the recursive formula\n$$ y(n) - 3y(n-1) = 0, \\quad y(0) = 2 $$",
+      "tags": [
+        "sequences and series",
+        "logic and discrete maths"
+      ],
+      "variables": []
+    }
+  ]
+}

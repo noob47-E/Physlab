@@ -1,0 +1,44 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "x^2"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "x^{2}",
+   "text": "x**2"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{x^{3}}{3}",
+  "raw_text": "x**3/3",
+  "answer_latex": "\\frac{x^{3}}{3}",
+  "answer_text": "x**3/3",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "PowerRule",
+   "integrand": {
+    "latex": "x^{2}",
+    "text": "x**2"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "base": {
+    "latex": "x",
+    "text": "x"
+   },
+   "exp": {
+    "latex": "2",
+    "text": "2"
+   },
+   "result": {
+    "latex": "\\frac{x^{3}}{3}",
+    "text": "x**3/3"
+   }
+  }
+ }
+}

@@ -1,0 +1,509 @@
+// One door for every saved file. A .phys file records the format it was written in (`version`),
+// and `migrate` walks it up to the format this build uses one version at a time, so a file from any
+// earlier PhysLab still opens. Every step is a plain function of a plain object: nothing here
+// touches a store, which is what lets `loadScene` refuse a bad file before anything is lost.
+//
+// The formats so far:
+//   1  every build through 0.3.10. Objects and settings from the start; lab tables (0.3.3), the
+//      sandbox (0.3.5) and each object's drawing (`space`, 0.3.6) were all added without a bump,
+//      so a format-1 file may or may not carry them, and `measureLabels: 'off'` once meant "hide
+//      the labels". A format-1 object with no `space` therefore means one of two things: the file
+//      is older than 0.3.6 and nothing was ever stamped, or it is newer and the object was made
+//      where no drawing was active (the Sandbox, say) and was meant to show everywhere. Whether
+//      any object in the file is stamped tells the two apart.
+//   2  0.3.11 to 0.6.1: written by a PhysLab that knows about spaces, so a missing `space` is
+//      always deliberate and is left alone.
+//   3  from 0.7: a polygon may carry `lego`, the record of the shape it was broken off from
+//      (Geometry Lego). Nothing else changed; a format-2 file has no `lego` and comes through as
+//      it was.
+//   4  from 0.9: arrows are drawn in theme tokens (--vec-1 … --vec-6). An arrow in one of the eight
+//      colours 0.6.1–0.7 handed out gets the token that took its colour's place, in `themed`, so it
+//      follows the theme; a colour the student picked stays theirs because it is read as a hex.
+//   5  from 0.9: the file may carry `questions`, the question set a teacher is writing in Question
+//      Author. A format-4 file has none and comes through as it was; a question anywhere is
+//      checked for its licence and its shape by `checkQuestions`, whatever the format says.
+//   6  from 0.9: a question in the set may use the question-file format 2 — vector, matrix, roots,
+//      function, proof and Lego parts, a number marked against the student's stated uncertainty,
+//      error carried forward, a part shown only under a condition, a rung and a "Go deeper" link.
+//      A format-5 PhysLab would call such a question damaged; format 6 makes it say "saved by a
+//      newer PhysLab" instead. A format-5 file comes through as it was.
+
+import { LICENSE_IDS, type FadingLevel, type MotionSegment, type PQMotion, type PQPicture } from '../questions/pqjson'
+import { directDependents } from './evaluate'
+import { OLD_ARROW_COLOURS, PALETTE, vectorToken } from './naming'
+import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
+import type { Space } from './visibility'
+
+/** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
+export const FILE_VERSION: SceneFile['version'] = 6
+
+type Raw = Record<string, unknown>
+
+const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/**
+ * Turns the text of a .phys file into a scene in the current format, or throws an Error whose
+ * message says in plain words what is wrong with it.
+ */
+export function parseSceneFile(text: string): SceneFile {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    throw new Error('This file cannot be read: it is not complete, or it is not a PhysLab project.')
+  }
+  return migrate(raw)
+}
+
+/**
+ * Checks a parsed file and brings it up to `FILE_VERSION`. The input is never changed; the result
+ * is a new object. Throws an Error with a readable message for anything that is not a project file.
+ */
+export function migrate(raw: unknown): SceneFile {
+  let file = checkShape(raw)
+  // Before the steps, not after: a step reads each object's id and type, and a null in the list
+  // used to come out as a raw TypeError instead of a sentence.
+  checkObjects(file)
+  let version = file.version as number
+  while (version < FILE_VERSION) {
+    const step = STEPS[version]
+    if (!step) throw new Error(`PhysLab does not know how to read format ${version} of a project file.`)
+    file = step(file)
+    version = file.version as number
+  }
+  return { ...file, objects: (file.objects as Raw[]).map(checkLego) } as unknown as SceneFile
+}
+
+/** The things every format has had: what makes a file a PhysLab project at all. */
+function checkShape(raw: unknown): Raw {
+  if (!isRecord(raw)) throw new Error('This is not a PhysLab project file.')
+  if (raw.app !== 'PhysLab') throw new Error('This file was not saved by PhysLab.')
+  const v = raw.version
+  if (!Number.isInteger(v) || (v as number) < 1) throw new Error('This file does not say which PhysLab format it uses, so it cannot be opened.')
+  if ((v as number) > FILE_VERSION) {
+    throw new Error(`This file was saved by a newer PhysLab (format ${v}); this one reads up to format ${FILE_VERSION}. Please update PhysLab.`)
+  }
+  if (!Array.isArray(raw.objects)) throw new Error('This is not a PhysLab project: it has no objects in it.')
+  if (raw.settings !== undefined && !isRecord(raw.settings)) throw new Error('The settings in this file are damaged.')
+  if (raw.lab !== undefined) checkLab(raw.lab)
+  if (raw.sandbox !== undefined) checkSandbox(raw.sandbox)
+  if (raw.questions !== undefined) checkQuestions(raw.questions)
+  return { ...raw }
+}
+
+const isV3 = (v: unknown): boolean => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number')
+
+// The block checks look one level down, at what the panels read on their first render: a table
+// with no columns or a body with no position used to load without a word and then crash the Lab
+// panel or the Sandbox viewport, after the old scene was already gone.
+
+/** Lab tables have had id, title, columns, rows and plot since they arrived in 0.3.3. */
+function checkLab(lab: unknown): void {
+  if (!Array.isArray(lab)) throw new Error('The lab tables in this file are damaged.')
+  lab.forEach((t, i) => {
+    const ok =
+      isRecord(t) &&
+      typeof t.id === 'string' &&
+      typeof t.title === 'string' &&
+      Array.isArray(t.columns) &&
+      t.columns.every((c) => isRecord(c) && typeof c.id === 'string' && typeof c.name === 'string') &&
+      Array.isArray(t.rows) &&
+      t.rows.every((r) => Array.isArray(r)) &&
+      isRecord(t.plot)
+    if (!ok) throw new Error(`Lab table ${i + 1} in this file is damaged.`)
+  })
+}
+
+/** The sandbox has had the same shape since 0.3.5; `world` and `sideView` may be left out. */
+function checkSandbox(sb: unknown): void {
+  if (!isRecord(sb) || !Array.isArray(sb.bodies)) throw new Error('The sandbox in this file is damaged.')
+  sb.bodies.forEach((b, i) => {
+    if (!isRecord(b) || typeof b.id !== 'string' || typeof b.shape !== 'string' || !isV3(b.size) || !isV3(b.position)) {
+      throw new Error(`Body ${i + 1} in the sandbox is damaged.`)
+    }
+  })
+  if (sb.links !== undefined) {
+    if (!Array.isArray(sb.links)) throw new Error('The connections in the sandbox are damaged.')
+    sb.links.forEach((l, i) => {
+      if (!isRecord(l) || typeof l.id !== 'string' || typeof l.kind !== 'string' || typeof l.a !== 'string' || typeof l.b !== 'string') {
+        throw new Error(`Connection ${i + 1} in the sandbox is damaged.`)
+      }
+    })
+  }
+  if (sb.world !== undefined && !isRecord(sb.world)) throw new Error('The world settings in the sandbox are damaged.')
+  if (sb.sideView !== undefined && typeof sb.sideView !== 'boolean') throw new Error('The sandbox view setting in this file is damaged.')
+}
+
+const isStrings = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === 'string')
+
+/**
+ * The question set Question Author writes (format 5), checked on every file whatever its format:
+ * a lego record checked only on the way up from an older format let a damaged one through in a
+ * file of the current format. Two things are checked, and only two, because a question in a
+ * project is allowed to be half-written (a range still being typed, a part with no answer yet):
+ *
+ * - its licence: nothing may be used without one of the three PhysLab may carry, and the holder
+ *   must at least be a string, though it may still be empty while the teacher writes;
+ * - its shape: what the Author panel reads on its first render, down to each variable's rule and
+ *   each part's fields. A question with no list of parts, a list variable with no items or a
+ *   number part with no tolerance crashed the panel after the old scene was already gone, as a
+ *   lab table with no columns once did.
+ *
+ * A file failing either is refused with a sentence naming the question, like any damaged block.
+ */
+const isNum = (v: unknown): v is number => typeof v === 'number'
+
+/**
+ * A variable's rule, down to what its row in the Variables tab reads: a list with no items or a
+ * range with no ends passed a check on `kind` alone and then crashed the tab.
+ */
+function variableDefOk(d: unknown): boolean {
+  if (!isRecord(d)) return false
+  if (d.kind === 'range') return isNum(d.from) && isNum(d.to) && isNum(d.step) && (d.exclude === undefined || (Array.isArray(d.exclude) && d.exclude.every(isNum)))
+  if (d.kind === 'list') return Array.isArray(d.items) && d.items.every(isNum)
+  if (d.kind === 'expr') return typeof d.expr === 'string'
+  return false
+}
+
+/** A band tolerance, or (format 6, number parts) the reference uncertainty a stated answer is tested against. */
+const toleranceOk = (t: unknown): boolean => isRecord(t) && ((t.kind === 'stated' && typeof t.uref === 'string') || (typeof t.kind === 'string' && isNum(t.value)))
+
+/** Format 6: what any part may carry — error carried forward and a condition for showing it — as Practice reads them. */
+function partCommonOk(p: Raw): boolean {
+  const e = p.ecf
+  const ecfOk =
+    e === undefined ||
+    (isRecord(e) &&
+      Array.isArray(e.uses) &&
+      e.uses.every((u) => isRecord(u) && isNum(u.part) && typeof u.variable === 'string') &&
+      typeof e.strategy === 'string' &&
+      isNum(e.penalty))
+  return ecfOk && (p.showIf === undefined || typeof p.showIf === 'string')
+}
+
+/** A part, down to what its card in the Solution tab and its row in Practice read (a tolerance, a choice's options, a matrix's rows). */
+function partOk(p: unknown): boolean {
+  if (!isRecord(p) || typeof p.prompt !== 'string' || !partCommonOk(p)) return false
+  if (p.type === 'number') {
+    return (
+      typeof p.answer === 'string' &&
+      typeof p.unit === 'string' &&
+      toleranceOk(p.tolerance) &&
+      (p.traps === undefined || (Array.isArray(p.traps) && p.traps.every((x) => isRecord(x) && typeof x.value === 'string' && typeof x.why === 'string')))
+    )
+  }
+  if (p.type === 'expression') return typeof p.answer === 'string' && isStrings(p.symbols)
+  if (p.type === 'choice') {
+    // Generated choices: the Solution tab reads `distractors.rules.includes(rule)` for every rule
+    // it offers, so a hand-edited object with no rule list crashed it.
+    const d = p.distractors
+    const distractorsOk = d === undefined || (isRecord(d) && typeof d.correct === 'string' && typeof d.unit === 'string' && isStrings(d.rules))
+    return distractorsOk && Array.isArray(p.choices) && p.choices.every((c) => isRecord(c) && typeof c.text === 'string' && typeof c.correct === 'boolean')
+  }
+  // Format 6's kinds. A matrix's rows must be the same length: Practice lays one box per entry
+  // from the first row, and a ragged row marked against it compared an entry with nothing.
+  if (p.type === 'vector' || p.type === 'roots') return isStrings(p.answer) && typeof p.unit === 'string' && toleranceOk(p.tolerance)
+  if (p.type === 'matrix') {
+    const rows = p.answer
+    return Array.isArray(rows) && rows.every(isStrings) && rows.every((r) => (r as string[]).length === (rows[0] as string[]).length) && toleranceOk(p.tolerance)
+  }
+  if (p.type === 'function') {
+    return (
+      typeof p.x === 'string' &&
+      typeof p.y === 'string' &&
+      typeof p.ode === 'string' &&
+      typeof p.model === 'string' &&
+      Array.isArray(p.initial) &&
+      p.initial.every((c) => isRecord(c) && typeof c.at === 'string' && (c.order === 0 || c.order === 1) && typeof c.value === 'string')
+    )
+  }
+  if (p.type === 'proof') return typeof p.model === 'string' && isStrings(p.selfCheck)
+  if (p.type === 'lego') return Array.isArray(p.target) && p.target.every((c) => Array.isArray(c) && c.length === 2 && isStrings(c)) && isNum(p.pieces)
+  return false
+}
+
+/** Format 6's question fields, as the Practice header and the Depth chips read them: a rung is 1 to 5, a link names a question. */
+function questionFieldsOk(q: Raw): boolean {
+  const c = q.condition
+  return (
+    (c === undefined || (isRecord(c) && typeof c.when === 'string' && isNum(c.maxRuns))) &&
+    (q.rung === undefined || (Number.isInteger(q.rung) && (q.rung as number) >= 1 && (q.rung as number) <= 5)) &&
+    (q.deeper === undefined || typeof q.deeper === 'string')
+  )
+}
+
+const isStr = (v: unknown): boolean => typeof v === 'string'
+/** An optional field: absent, or of its type. A hand-edited `xMin: 0` is not a formula. */
+const opt = (v: unknown, ok: (v: unknown) => boolean): boolean => v === undefined || ok(v)
+/** A list of records, each passing `ok`. */
+const each = (v: unknown, ok: (r: Raw) => boolean): boolean => Array.isArray(v) && v.every((r) => isRecord(r) && ok(r))
+
+/**
+ * Each picture kind, down to the fields the Author panel's scene tab and Practice read on their
+ * first render: a piecewise picture with no `pieces` passed a check that never looked at the
+ * picture, and the scene tab crashed at `pieces.map`. Keyed on every kind of `PQPicture`, so a
+ * kind added there cannot be forgotten here: the file stops compiling until it has its row.
+ */
+const PICTURE_OK: Record<PQPicture['kind'], (p: Raw) => boolean> = {
+  curve: (p) => isStr(p.expr) && opt(p.xMin, isStr) && opt(p.xMax, isStr),
+  piecewise: (p) => each(p.pieces, (s) => isStr(s.expr) && isStr(s.from) && isStr(s.to)),
+  between: (p) => isStr(p.upper) && isStr(p.lower) && isStr(p.from) && isStr(p.to) && opt(p.label, isStr),
+  tangent: (p) => isStr(p.expr) && isStr(p.at),
+  normal: (p) => isStr(p.mean) && isStr(p.sd) && opt(p.from, isStr) && opt(p.to, isStr),
+  vectors: (p) => each(p.items, (a) => isStr(a.name) && isStrings(a.v) && opt(a.tail, isStrings) && opt(a.role, (r) => r === 'input' || r === 'result')),
+  dots: (p) => isStr(p.count) && opt(p.perRow, isNum),
+  curves: (p) => each(p.items, (c) => isStr(c.expr) && isStr(c.label) && opt(c.from, isStr) && opt(c.to, isStr)),
+  numberline: (p) => each(p.items, (m) => isStr(m.label) && isStr(m.value))
+}
+
+const SEGMENT_OK: Record<MotionSegment['kind'], (s: Raw) => boolean> = {
+  rest: () => true,
+  uniform: (s) => isStr(s.v),
+  accelerate: (s) => isStr(s.a)
+}
+const PLOTS: readonly unknown[] = ['x-t', 'v-t', 'a-t'] satisfies PQMotion['plots']
+const LEVELS: readonly unknown[] = ['worked', 'half', 'solo'] satisfies FadingLevel[]
+
+const pictureOk = (p: unknown): boolean => isRecord(p) && Object.hasOwn(PICTURE_OK, String(p.kind)) && PICTURE_OK[p.kind as PQPicture['kind']](p)
+
+/** A motion as the scene tab lists its stretches (`segments.map`) and Practice plots it. */
+const motionOk = (m: unknown): boolean =>
+  isRecord(m) &&
+  each(m.segments, (s) => isStr(s.duration) && Object.hasOwn(SEGMENT_OK, String(s.kind)) && SEGMENT_OK[s.kind as MotionSegment['kind']](s)) &&
+  Array.isArray(m.plots) &&
+  m.plots.every((x) => PLOTS.includes(x)) &&
+  opt(m.x0, isStr) &&
+  opt(m.v0, isStr) &&
+  opt(m.sampleEvery, isStr)
+
+/** A Sandbox scene as the scene tab lists its pushes (`actuators.map`): each a body and three force formulas. */
+const sandboxOk = (s: unknown): boolean =>
+  isRecord(s) &&
+  isStr(s.preset) &&
+  each(s.actuators, (a) => isStr(a.body) && isStrings(a.force) && (a.force as string[]).length === 3 && opt(a.from, isStr) && opt(a.until, isStr)) &&
+  opt(s.record, isStr)
+
+/**
+ * A worked step, down to its `auto` job: the Solution tab reads an engine step's `input.trim()`
+ * and a vector step's `args`, and looks its fading level up in a list of three (an unknown level
+ * crashed on `.about`).
+ */
+const autoOk = (a: unknown): boolean =>
+  isRecord(a) && ((a.engine === 'pure' && isStr(a.job) && isStr(a.input)) || (a.engine === 'vectors' && isStr(a.solver) && isStrings(a.args)))
+const stepsOk = (s: unknown): boolean =>
+  isRecord(s) &&
+  LEVELS.includes(s.level) &&
+  each(
+    s.items,
+    (st) => isStr(st.head) && opt(st.tex, isStr) && opt(st.rule, isStr) && opt(st.note, isStr) && opt(st.blank, (b) => typeof b === 'boolean') && opt(st.auto, autoOk)
+  )
+
+function checkQuestions(qs: unknown): void {
+  if (!Array.isArray(qs)) throw new Error('The question set in this file is damaged.')
+  qs.forEach((q, i) => {
+    const who = isRecord(q) && typeof q.title === 'string' && q.title.trim() !== '' ? `Question '${q.title}'` : `Question ${i + 1}`
+    if (!isRecord(q)) throw new Error(`${who} in this file is damaged.`)
+    const l = q.license
+    if (!isRecord(l) || typeof l.id !== 'string' || l.id.trim() === '') throw new Error(`${who} in this file says nothing about its licence, so PhysLab cannot use it.`)
+    if (!(LICENSE_IDS as readonly string[]).includes(l.id)) throw new Error(`${who} in this file is licensed '${l.id}', which PhysLab may not use.`)
+    if (typeof l.holder !== 'string') throw new Error(`${who} in this file does not say who holds its licence.`)
+    const ok =
+      typeof q.id === 'string' &&
+      typeof q.title === 'string' &&
+      typeof q.statement === 'string' &&
+      Array.isArray(q.variables) &&
+      q.variables.every((v) => isRecord(v) && typeof v.name === 'string' && variableDefOk(v.def)) &&
+      Array.isArray(q.parts) &&
+      q.parts.every(partOk) &&
+      opt(q.steps, stepsOk) &&
+      opt(q.picture, pictureOk) &&
+      opt(q.motion, motionOk) &&
+      opt(q.sandbox, sandboxOk) &&
+      (q.tags === undefined || isStrings(q.tags)) &&
+      questionFieldsOk(q)
+    if (!ok) throw new Error(`${who} in this file is damaged.`)
+  })
+}
+
+/** Each object must at least be something the evaluator can name and look up. */
+function checkObjects(file: Raw): void {
+  const objects = file.objects as unknown[]
+  objects.forEach((o, i) => {
+    if (!isRecord(o) || typeof o.id !== 'string' || typeof o.type !== 'string' || typeof o.name !== 'string') {
+      throw new Error(`Object ${i + 1} in this file is damaged: it has no id, type or name.`)
+    }
+  })
+  const seen = new Set<string>()
+  for (const o of objects as Raw[]) {
+    if (seen.has(o.id as string)) throw new Error(`This file lists the object "${o.name}" twice.`)
+    seen.add(o.id as string)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The steps. STEPS[n] takes a format-n file and returns a format-(n+1) file.
+// ---------------------------------------------------------------------------
+
+const STEPS: Record<number, (file: Raw) => Raw> = {
+  1: v1ToV2,
+  2: v2ToV3,
+  3: v3ToV4,
+  4: v4ToV5,
+  5: v5ToV6
+}
+
+function v1ToV2(file: Raw): Raw {
+  const objects = file.objects as SceneObject[]
+  // A file with even one stamped object came from 0.3.6 or later, where an object left without a
+  // space was made where no drawing was active and is meant to show everywhere; stamping it by
+  // type would move a vector out of the Geometry and Graphing views a student used to see it in,
+  // with no way to move it back. Only a file that never heard of spaces gets them worked out.
+  const spaces = objects.some((o) => o.space) ? new Map<ObjId, Space>() : spacesForV1(objects)
+  return {
+    ...file,
+    version: 2,
+    settings: migrateLabelSettings((file.settings ?? {}) as Partial<SceneSettings>),
+    objects: objects.map((o) => (spaces.has(o.id) ? { ...o, space: spaces.get(o.id) } : o))
+  }
+}
+
+/** Format 3 only adds the Lego record a piece carries, which `checkLego` looks after for every format. */
+function v2ToV3(file: Raw): Raw {
+  return { ...file, version: 3 }
+}
+
+/**
+ * Arrows in the colours 0.6.1–0.7 handed out are given the theme token that took each colour's place,
+ * once, here: turning them into tokens every time a colour was read also turned a swatch the
+ * student picked in Properties (the same eight hexes) into a token, so cyan showed as blue.
+ *
+ * There are six tokens for eight old colours (eight could not all stay apart for colour-blind
+ * eyes). The first six map one to one. The seventh and eighth take the first tokens no other arrow
+ * in the file uses, so a drawing that had them beside the first and second arrows does not show two
+ * pairs in one colour; only a file already using all six falls back to the first and second, as a
+ * new drawing's seventh and eighth arrows do. The command bar's gold sum is left as it is: it is
+ * read as the resultant's token while drawing and is a student's own arrow, not a drawn answer.
+ */
+function v3ToV4(file: Raw): Raw {
+  const objects = file.objects as Raw[]
+  const isArrow = (o: Raw) => o.type === 'vector' && typeof o.color === 'string' && typeof o.themed !== 'string'
+  const oldIndex = (o: Raw) => (isArrow(o) ? OLD_ARROW_COLOURS.indexOf((o.color as string).trim().toLowerCase()) : -1)
+  const tokens = PALETTE.vector.map((_, i) => `--vec-${i + 1}`)
+  const used = new Set<string>()
+  for (const o of objects) {
+    if (o.type !== 'vector') continue
+    const i = oldIndex(o)
+    const t = typeof o.themed === 'string' ? o.themed : i >= 0 && i < tokens.length ? tokens[i] : typeof o.color === 'string' ? vectorToken(o.color) : undefined
+    if (t) used.add(t)
+  }
+  const extra = new Map<number, string>()
+  for (let i = tokens.length; i < OLD_ARROW_COLOURS.length; i++) {
+    if (!objects.some((o) => oldIndex(o) === i)) continue
+    const free = tokens.find((t) => !used.has(t)) ?? tokens[i % tokens.length]
+    extra.set(i, free)
+    used.add(free)
+  }
+  return {
+    ...file,
+    version: 4,
+    objects: objects.map((o) => {
+      const i = oldIndex(o)
+      if (i < 0) return o
+      return { ...o, themed: i < tokens.length ? tokens[i] : extra.get(i) }
+    })
+  }
+}
+
+/**
+ * Format 5 only adds the optional question set. A format-4 file never had one, and any that a
+ * hand-edited file carries has already been through `checkQuestions`, so the step is the bump.
+ */
+function v4ToV5(file: Raw): Raw {
+  return { ...file, version: 5 }
+}
+
+/**
+ * Format 6 only lets the question set hold format-2 questions. A format-5 file's questions are all
+ * format 1, and `checkQuestions` has already checked every question the file holds, so the step is
+ * the bump.
+ */
+function v5ToV6(file: Raw): Raw {
+  return { ...file, version: 6 }
+}
+
+/**
+ * A polygon's Lego record, checked on every file whatever its format. A format-2 file never has
+ * one, but a file edited by hand or written by a build in between might carry something under that
+ * name: a record that is not `{ sourceId, pieceIndex, originalColor }` in the right types is dropped
+ * without a word, and the polygon opens as an ordinary polygon, rather than the whole file being
+ * refused over a field that only affects the Fuse button. Checked only on the way up from format 2,
+ * a bad record in a format-3 file opened as a piece, and letting go of it after a drag threw.
+ */
+function checkLego(o: Raw): Raw {
+  if (o.type !== 'polygon' || o.lego === undefined) return o
+  // The signature is only what lets the pieces be recognised as the original shape; without
+  // it they still move, turn and fuse into "a new shape".
+  if (isLegoRecord(o.lego)) return typeof o.lego.sourceSignature === 'string' ? o : { ...o, lego: { ...o.lego, sourceSignature: '' } }
+  const { lego: _dropped, ...rest } = o
+  void _dropped
+  return rest
+}
+
+function isLegoRecord(v: unknown): v is Raw {
+  return isRecord(v) && typeof v.sourceId === 'string' && typeof v.pieceIndex === 'number' && typeof v.originalColor === 'string'
+}
+
+/**
+ * The first builds hid labels with `measureLabels: 'off'`; now `labelShow: 'never'` says when
+ * and `measureLabels` only says what. Shared with the saved label preferences, which have no
+ * version of their own.
+ */
+export function migrateLabelSettings(s: Partial<SceneSettings>): Partial<SceneSettings> {
+  if ((s.measureLabels as string) === 'off') return { ...s, measureLabels: 'measure', labelShow: s.labelShow ?? 'never' }
+  return s
+}
+
+/** Types whose drawing is never in doubt. */
+const SPACE_BY_TYPE: Partial<Record<ObjType, Space>> = {
+  graph: 'graphing',
+  vector: 'vectors',
+  segment: 'shapes',
+  ray: 'shapes',
+  line: 'shapes',
+  circle: 'shapes',
+  polygon: 'shapes',
+  angle: 'shapes'
+}
+
+/**
+ * Which drawing each object of a pre-0.3.6 file belongs to. There was one drawing then, so the
+ * file cannot say; a graph, a vector or a shape tells by its type, and a point, number or text
+ * goes with the first thing that uses it. Something nothing uses is left unstamped and shows in
+ * every drawing, which is what a spaceless object means today too.
+ */
+export function spacesForV1(objects: SceneObject[]): Map<ObjId, Space> {
+  const byId: Record<ObjId, SceneObject> = {}
+  for (const o of objects) byId[o.id] = o
+  const out = new Map<ObjId, Space>()
+  for (const o of objects) {
+    const s = SPACE_BY_TYPE[o.type]
+    if (s) out.set(o.id, s)
+  }
+  const children = directDependents(byId)
+  // A point used by a segment that is used by a polygon needs two passes; one pass per object is
+  // always enough, and usually one or two in all.
+  for (let pass = 0; pass < objects.length; pass++) {
+    let changed = false
+    for (const o of objects) {
+      if (out.has(o.id)) continue
+      const users = [...(children.get(o.id) ?? [])].sort((a, b) => objects.findIndex((x) => x.id === a) - objects.findIndex((x) => x.id === b))
+      const first = users.find((c) => out.has(c))
+      if (first) {
+        out.set(o.id, out.get(first)!)
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+  return out
+}

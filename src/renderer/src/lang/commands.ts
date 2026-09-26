@@ -6,15 +6,22 @@ import type { MathNode } from 'mathjs'
 import { Builder } from '../core/factory'
 import { scene } from '../core/store'
 import { parseExpr } from '../core/evaluate'
-import { isValidName } from '../core/naming'
+import { freeCapitals, isValidName } from '../core/naming'
 import type { Computed, ObjId, SceneObject } from '../core/types'
-import { visualizeGraph, visualizePoint, visualizeSolution, visualizeVector } from '../core/visualize'
+import { visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector } from '../core/visualize'
 import { cas } from '../math/cas'
-import { inferKind, math, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
-import { fmt, fmtAngle, tex, texIJK } from '../math/format'
+import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
+import { fmtPrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
+import { isPieceCorner } from '../math/lego'
 import * as VS from '../math/vectorSolver'
+import { linearToLatex, runPure, type JobId } from '../math/pure/run'
+import { normalRefusal, parseNormalQuery } from '../math/pure/zscore'
+import { calculusUnitNote, casInDegrees } from '../calc/angle'
+import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
+import { showPanel } from '../app/panels'
+import { enterMode } from '../app/layout'
 
 type Node = MathNode & Record<string, unknown>
 
@@ -81,26 +88,53 @@ function assertKnown(node: MathNode) {
 
 const evaluateNode = (node: MathNode) => node.compile().evaluate({ ...scene().ev.scope })
 
-export function describeComputed(c: Computed | undefined, decimals = 3): string {
+const isGeo = (node: MathNode) => {
+  const k = inferKind(node, kindOfName)
+  return k === 'vector' || k === 'point'
+}
+
+/**
+ * The × key is parsed as `timesOrCross`, which only decides what it means at evaluation time.
+ * Kind inference and the step solver never learned that name, so `A × B` printed a bare
+ * `[0, 0, -11]` with no steps and `C = A × B` refused with "not a number". Once the operands are
+ * known the call is rewritten into the cross product or the ordinary product it stands for.
+ */
+function resolveTimes(node: MathNode): MathNode {
+  return node.transform((n) => {
+    const fn = n as Node
+    if (fn.type !== 'FunctionNode' || (fn.fn as { name?: string }).name !== 'timesOrCross') return n
+    const a = resolveTimes((fn.args as MathNode[])[0])
+    const b = resolveTimes((fn.args as MathNode[])[1])
+    if (isGeo(a) && isGeo(b)) return new math.FunctionNode('cross', [a, b])
+    return new math.OperatorNode('*', 'multiply', [a, b])
+  })
+}
+
+const parseNode = (src: string): Node => resolveTimes(math.parse(preprocess(src))) as Node
+
+/** A number in LaTeX at a fixed number of decimals, or in the student's own precision. */
+const texAt = (n: number, p: Precision): string => (typeof p === 'number' ? tex(n, p) : texPrecise(n, p))
+
+export function describeComputed(c: Computed | undefined, decimals: Precision = 3): string {
   if (!c) return '—'
   switch (c.type) {
     case 'point':
-      return `(${c.p.map((v) => tex(v, decimals)).join(', ')})`
+      return `(${c.p.map((v) => texAt(v, decimals)).join(', ')})`
     case 'vector':
       return `${texIJK(c.comp, decimals)}`
     case 'number':
-      return tex(c.value, decimals)
+      return texAt(c.value, decimals)
     case 'segment':
-      return `\\text{length } ${tex(len(c.line.d), decimals)}`
+      return `\\text{length } ${texAt(len(c.line.d), decimals)}`
     case 'ray':
     case 'line':
-      return `\\text{line through } (${c.line.p.slice(0, 2).map((v) => tex(v, decimals)).join(', ')})`
+      return `\\text{line through } (${c.line.p.slice(0, 2).map((v) => texAt(v, decimals)).join(', ')})`
     case 'circle':
-      return `\\text{circle, } r = ${tex(c.circle.r, decimals)}`
+      return `\\text{circle, } r = ${texAt(c.circle.r, decimals)}`
     case 'polygon':
-      return `\\text{${c.pts.length === 3 ? 'triangle' : 'polygon'}, area } ${tex(polygonArea(c.pts), decimals)}`
+      return `\\text{${c.pts.length === 3 ? 'triangle' : 'polygon'}, area } ${texAt(polygonArea(c.pts), decimals)}`
     case 'angle':
-      return fmtAngle(c.value, scene().settings.angleUnit)
+      return texMeasure(c.value, 'angle', scene().settings)
     default:
       return ''
   }
@@ -138,6 +172,7 @@ export async function runCommand(raw: string): Promise<void> {
   }
 
   try {
+    if (tryPureMath(input)) return
     if (await tryCas(input)) return
     if (tryGraph(input)) return
     if (tryAssignment(input)) return
@@ -160,6 +195,18 @@ function friendlyError(e: unknown): string {
 // Graphs: y = f(x), f(x) = ..., z = f(x,y), r = f(θ), implicit, inequalities, curves
 // ---------------------------------------------------------------------------
 
+/**
+ * A graph is stamped 'graphing' wherever it was typed (Builder.base), but nothing used to follow
+ * it there: y = x² − 3 typed in Vectors mode cleared the bar, logged "Graph created" to a Console
+ * that was not open, and drew nothing until the student found Graphing by hand. Called after the
+ * graph exists, so a refused line (an unknown name) leaves the student where they were.
+ */
+function landInGraphing(): string {
+  if (scene().activeSpace === 'graphing') return ''
+  enterMode('graphing')
+  return ' Switched to Graphing to show it.'
+}
+
 function tryGraph(input: string): boolean {
   let m: RegExpMatchArray | null
   const s = scene()
@@ -174,12 +221,12 @@ function tryGraph(input: string): boolean {
   }
   if ((m = input.match(/^\s*z\s*=\s*(.+)$/))) {
     visualizeGraph(input, [m[1]], 'surface')
-    s.pushLog({ input, kind: 'result', text: 'Surface created in the 3D view.' })
+    s.pushLog({ input, kind: 'result', text: 'Surface created in the 3D view.' + landInGraphing() })
     return true
   }
   if ((m = input.match(/^\s*r\s*=\s*(.+)$/)) && /θ|theta/.test(m[1])) {
     visualizeGraph(input, [m[1].replace(/θ/g, 'theta')], 'polar', { tMin: 0, tMax: 2 * Math.PI })
-    s.pushLog({ input, kind: 'result', text: 'Polar curve created.' })
+    s.pushLog({ input, kind: 'result', text: 'Polar curve created.' + landInGraphing() })
     return true
   }
   if ((m = input.match(/^\s*curve\s*\((.+)\)\s*$/i))) {
@@ -188,27 +235,75 @@ function tryGraph(input: string): boolean {
     const tMin = parts[2] ? Number(math.evaluate(preprocess(parts[2]))) : 0
     const tMax = parts[3] ? Number(math.evaluate(preprocess(parts[3]))) : 2 * Math.PI
     visualizeGraph(input, [parts[0], parts[1]], 'parametric', { tMin, tMax })
-    s.pushLog({ input, kind: 'result', text: 'Parametric curve created.' })
+    s.pushLog({ input, kind: 'result', text: 'Parametric curve created.' + landInGraphing() })
     return true
+  }
+  // Question pictures, spelt the way they are said: a curve in pieces, the region between two
+  // curves, the tangent at a point.
+  if ((m = input.match(/^\s*piecewise\s*\((.+)\)\s*$/i))) {
+    const pieces = splitArgs(m[1]).map((part) => {
+      const piece = part.match(/^(.+?)\s+from\s+(.+?)\s+to\s+(.+)$/i)
+      if (!piece) throw new Error('Each piece is a formula and its stretch of x: piecewise(x^2 from -3 to 0, x from 0 to 2)')
+      return { expr: piece[1].trim(), from: numberArg(piece[2]), to: numberArg(piece[3]) }
+    })
+    visualizePiecewise(pieces, undefined, input)
+    s.pushLog({ input, kind: 'result', text: `Piecewise curve created with ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}.` + landInGraphing() })
+    return true
+  }
+  if ((m = input.match(/^\s*between\s*\((.+)\)\s*$/i))) {
+    const parts = splitArgs(m[1])
+    if (parts.length !== 4) throw new Error('between(first curve, second curve, from x, to x), e.g. between(x^2, x + 2, -1, 2)')
+    const a = numberArg(parts[2])
+    const bnd = numberArg(parts[3])
+    const area = visualizeBetween(parts[0], parts[1], a, bnd)
+    const p = s.settings
+    s.pushLog({ input, kind: 'result', text: `Region shaded. Area between the curves from x = ${fmtPrecise(Math.min(a, bnd), p)} to ${fmtPrecise(Math.max(a, bnd), p)}: ${fmtPrecise(area, p)}.` + landInGraphing() })
+    return true
+  }
+  // tangent(P, c) — a point and a circle — is the geometry command; this is a formula and a number.
+  const tan = input.match(/^\s*tangent\s*\((.+)\)\s*$/i)
+  if (tan) {
+    const [expr, at, ...rest] = splitArgs(tan[1])
+    if (at !== undefined && rest.length === 0 && kindOfName(expr) === undefined && usesSymbol(expr, 'x')) {
+      const a = numberArg(at)
+      const { slope } = visualizeTangentAt(expr, a)
+      const p = s.settings
+      s.pushLog({ input, kind: 'result', text: `Tangent drawn at x = ${fmtPrecise(a, p)}. Its slope is ${fmtPrecise(slope, p)}.` + landInGraphing() })
+      return true
+    }
   }
   const ineq = input.match(/^(.+?)(<=|>=|<|>)(.+)$/)
   if (ineq && !/[<>].*[<>]/.test(input.replace(ineq[2], '')) && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
     const op = ineq[2] as '<' | '<=' | '>' | '>='
     visualizeGraph(input, [`(${ineq[1]}) - (${ineq[3]})`], 'inequality', { op })
-    s.pushLog({ input, kind: 'result', text: 'Shaded region created.' })
+    s.pushLog({ input, kind: 'result', text: 'Shaded region created.' + landInGraphing() })
     return true
   }
   const eq = input.match(/^([^=]+)=([^=]+)$/)
   if (eq && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
     const lhs = eq[1].trim()
-    const isName = /^[A-Za-zͰ-Ͽ][\w']*$/.test(lhs) && !GRAPH_VARS.has(lhs)
+    // Primes as core/naming.ts isValidName allows them: points after Z are A′, A″ (Fix 11).
+    const isName = /^[A-Za-zͰ-Ͽ][\w'′″‴⁗]*$/.test(lhs) && !GRAPH_VARS.has(lhs)
     if (!isName) {
       visualizeGraph(input, [`(${eq[1]}) - (${eq[2]})`], 'implicit')
-      s.pushLog({ input, kind: 'result', text: 'Implicit curve created.' })
+      s.pushLog({ input, kind: 'result', text: 'Implicit curve created.' + landInGraphing() })
       return true
     }
   }
   return false
+}
+
+/** A number typed as an argument, which may use a slider's name; anything else is refused in a sentence. */
+function numberArg(text: string): number {
+  let v: unknown
+  try {
+    v = math.evaluate(preprocess(text), { ...scene().ev.scope })
+  } catch {
+    throw new Error(`"${text.trim()}" is not a number.`)
+  }
+  const n = Number(plainNumber(v))
+  if (!Number.isFinite(n)) throw new Error(`"${text.trim()}" is not a number.`)
+  return n
 }
 
 function graphIfFunctionOfX(input: string, rhs: string, name?: string) {
@@ -217,7 +312,7 @@ function graphIfFunctionOfX(input: string, rhs: string, name?: string) {
   const unknown = syms.filter((n) => n !== 'x')
   if (unknown.length) throw new Error(`Unknown name "${unknown[0]}" in the function. Make a slider first, e.g. ${unknown[0]} = 1`)
   visualizeGraph(input, [rhs], 'explicit', { name })
-  scene().pushLog({ input, kind: 'result', text: 'Graph created. Roots and turning points are marked.' })
+  scene().pushLog({ input, kind: 'result', text: 'Graph created. Roots and turning points are marked.' + landInGraphing() })
 }
 
 function usesSymbol(src: string, sym: string): boolean {
@@ -233,14 +328,23 @@ function usesSymbol(src: string, sym: string): boolean {
 // ---------------------------------------------------------------------------
 
 function tryAssignment(input: string): boolean {
-  const m = input.match(/^\s*([A-Za-zͰ-Ͽ][\wͰ-Ͽ']*)\s*=(?!=)\s*(.+)$/)
+  // ′ ″ ‴ ⁗ as in core/naming.ts isValidName: after Z the app names points A′, A″ (Fix 11), and a
+  // student must be able to move or redefine them from the bar like any other point.
+  const m = input.match(/^\s*([A-Za-zͰ-Ͽ][\wͰ-Ͽ'′″‴⁗]*)\s*=(?!=)\s*(.+)$/)
   if (!m) return false
   const [, name, rhs] = m
   if (GRAPH_VARS.has(name) || name === 'z') return false
   if (!isValidName(name)) throw new Error(`"${name}" is a reserved name. Try another.`)
+  // A Lego piece's corners carry ordinary letters since Fix 17, so "E = (9, 9)" typed to make a
+  // new point E would redefine one corner and bend the piece. It moves only as a whole.
+  const taken = scene().ev.names.get(name)
+  if (taken && isPieceCorner(taken, scene().objects)) throw new Error(`${name} is a corner of a piece. Slide, turn or flip the piece to move it, or choose another letter.`)
   if (tryGeometryCommand(rhs, name, input)) return true
 
-  const node = math.parse(preprocess(rhs)) as Node
+  // The line is kept as typed: the runtime × (math/expr.ts, timesOrCross) reads every case the
+  // bar does, so `C = 2 × A` stays `2 × A` in the Properties field instead of becoming `2 * A`.
+  const node = parseNode(rhs)
+  const expr = rhs
   const unknown = unknownSymbols(node).filter((s) => s !== name)
   if (unknown.length) assertKnown(node)
   const kind = inferKind(node, kindOfName)
@@ -249,7 +353,7 @@ function tryAssignment(input: string): boolean {
   let obj: SceneObject
 
   if (kind === 'point') {
-    obj = isConstant(node) ? b.point(toV3(evaluateNode(node)), { name }) : b.point({ kind: 'expr', expr: rhs }, { name })
+    obj = isConstant(node) ? b.point(toV3(evaluateNode(node)), { name }) : b.point({ kind: 'expr', expr }, { name })
   } else if (kind === 'vector') {
     const unit = unitOf(node)
     if (isConstant(node)) {
@@ -257,7 +361,7 @@ function tryAssignment(input: string): boolean {
     } else {
       const addends = sumOperands(node)
       const first = addends?.[0] ? scene().ev.names.get(addends[0]) : undefined
-      obj = b.vector({ kind: 'expr', expr: rhs, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
+      obj = b.vector({ kind: 'expr', expr, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
       if (addends && addends.length >= 2) addHeadToTailHelpers(b, addends)
     }
   } else {
@@ -265,9 +369,9 @@ function tryAssignment(input: string): boolean {
     const value = constant ? Number(evaluateNode(node)) : NaN
     if (constant && Number.isFinite(value)) {
       const span = Math.max(10, Math.ceil(Math.abs(value) * 2))
-      obj = b.number(rhs, { name, slider: { min: value < 0 ? -span : Math.min(0, -span / 2), max: span, step: Math.abs(value) < 1 && value !== 0 ? 0.01 : 0.1 } })
+      obj = b.number(expr, { name, slider: { min: value < 0 ? -span : Math.min(0, -span / 2), max: span, step: Math.abs(value) < 1 && value !== 0 ? 0.01 : 0.1 } })
     } else {
-      obj = b.number(rhs, { name })
+      obj = b.number(expr, { name })
     }
   }
 
@@ -280,20 +384,21 @@ function tryAssignment(input: string): boolean {
     scene().pushLog({ input, kind: 'error', text: `${name}: ${err}` })
     return true
   }
-  const solution = solutionFor(node)
+  const solution = solutionFor(node, name)
   scene().pushLog({
     input,
     kind: 'result',
-    tex: `${name} = ${describeComputed(c)}${c?.type === 'vector' ? vectorExtras(c.comp) : ''}`,
+    tex: `${name} = ${describeComputed(c, scene().settings)}${c?.type === 'vector' ? vectorExtras(c.comp) : ''}`,
     solution: solution ?? undefined
   })
   return true
 }
 
 function vectorExtras(v: V3): string {
-  const m = len(v)
-  if (Math.abs(v[2]) > 1e-12) return `,\\quad \\text{magnitude } ${tex(m, 3)}`
-  return `,\\quad \\text{magnitude } ${tex(m, 3)},\\ \\theta = ${fmtAngle(heading(v), scene().settings.angleUnit).replace('°', '^\\circ')}`
+  const s = scene().settings
+  const m = texPrecise(len(v), s)
+  if (Math.abs(v[2]) > 1e-12) return `,\\quad \\text{magnitude } ${m}`
+  return `,\\quad \\text{magnitude } ${m},\\ \\theta = ${texMeasure(heading(v), 'direction', s)}`
 }
 
 function unitOf(node: MathNode): string | undefined {
@@ -327,7 +432,10 @@ function addHeadToTailHelpers(b: Builder, names: string[]) {
   const ids = names.map((n) => scene().ev.names.get(n)!)
   let prev = ids[0]
   for (let i = 1; i < ids.length; i++) {
-    const head = b.point({ kind: 'vectorHead', vector: prev }, { auxiliary: true, visible: false })
+    // The hidden tail point is named after the copy it carries, not from the shared A, B, C…
+    // alphabet: after `R = A + B` it used to take the name C, and the student's next line
+    // `C = <-1, 2>` quietly replaced it, leaving B′ hanging off a vector instead of a point.
+    const head = b.point({ kind: 'vectorHead', vector: prev }, { name: `${names[i]}′tail`, auxiliary: true, visible: false })
     const placed = b.vector({ kind: 'placed', vector: ids[i], tail: head.id }, { name: `${names[i]}′`, color: '#868e96', auxiliary: true })
     prev = placed.id
   }
@@ -385,7 +493,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
     const trimmed = arg.trim()
     const id = names.get(trimmed)
     if (id) return id
-    const node = math.parse(preprocess(trimmed))
+    const node = parseNode(trimmed)
     const kind = inferKind(node, kindOfName)
     if (kind === 'point' || kind === 'vector') {
       return isConstant(node)
@@ -424,7 +532,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
       else if (a.length === 2) {
         const c = ref(a[0])
         const second = a[1].trim()
-        const kind = names.has(second) ? kindOfName(second) : inferKind(math.parse(preprocess(second)), kindOfName)
+        const kind = names.has(second) ? kindOfName(second) : inferKind(parseNode(second), kindOfName)
         primary = kind === 'point'
           ? b.circle({ kind: 'centerPoint', c, p: ref(second) }, opts)
           : b.circle({ kind: 'centerRadius', c, r: second }, opts)
@@ -505,7 +613,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
     case 'Vector': {
       if (a.length === 2) primary = b.vector({ kind: 'points', a: ref(a[0]), b: ref(a[1]) }, opts)
       else if (a.length === 1) {
-        const node = math.parse(preprocess(a[0]))
+        const node = parseNode(a[0])
         primary = b.vector({ kind: 'free', tail: [0, 0, 0], comp: toV3(evaluateNode(node)) }, opts)
       }
       break
@@ -546,7 +654,7 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
   scene().pushLog(
     err
       ? { input: fullInput, kind: 'error', text: `${scene().objects[id]?.name}: ${err}` }
-      : { input: fullInput, kind: 'result', tex: `${scene().objects[id]?.name} = ${describeComputed(scene().ev.values.get(id))}` }
+      : { input: fullInput, kind: 'result', tex: `${scene().objects[id]?.name} = ${describeComputed(scene().ev.values.get(id), scene().settings)}` }
   )
   return true
 }
@@ -560,45 +668,68 @@ interface VecArg {
   v: V3
 }
 
-function vecArg(node: Node, fallback: string): VecArg {
-  const name = node.type === 'SymbolNode' ? (node.name as string) : fallback
-  return { name, v: toV3(evaluateNode(node)) }
+/**
+ * Names the operands of one command for its steps. A symbol keeps its own name; anything else —
+ * a literal `<1, 0>`, a sum `A + B` — needs a letter, and it must be one no object in the drawing
+ * has: falling back to a fixed A or B put "B = 1i" in the working of `A × <1, 0>` while the
+ * student's B was <2, −1>, and titled `cross(A + B, A)` "Vector product A×A". The result's own
+ * letter goes through the same namer so it cannot collide with an operand either.
+ */
+function operandNamer(): { arg: (node: Node, preferred: string) => VecArg; letter: (preferred: string) => string } {
+  const taken = new Set(scene().ev.names.keys())
+  const letter = (preferred: string): string => {
+    const name = taken.has(preferred) ? freeCapitals(taken, 1)[0] : preferred
+    taken.add(name)
+    return name
+  }
+  const arg = (node: Node, preferred: string): VecArg => {
+    const name = node.type === 'SymbolNode' ? (node.name as string) : letter(preferred)
+    return { name, v: toV3(evaluateNode(node)) }
+  }
+  return { arg, letter }
 }
 
-/** Recognises vector operations written directly (A + B, A × B, |A|…) and builds a step-by-step solution. */
-export function solutionFor(root: MathNode): VS.Solution | null {
+/**
+ * Recognises vector operations written directly (A + B, A × B, |A|…) and builds a step-by-step
+ * solution. `name` is what the result is being assigned to, so the steps say F for
+ * `F = 10 N ∠ 30°` rather than the solver's default A.
+ */
+export function solutionFor(root: MathNode, name?: string): VS.Solution | null {
   let node = root as Node
+  // The command bar answers in the student's own precision and angle unit, like the panels.
+  const settings = scene().settings
+  const result = name ?? 'R'
   while (node.type === 'ParenthesisNode') node = node.content as Node
   const vecSym = (n: Node) => n.type === 'SymbolNode' && kindOfName(n.name as string) === 'vector'
+  const { arg: vecArg, letter } = operandNamer()
   try {
     if (node.type === 'OperatorNode') {
       const args = node.args as Node[]
       const sum = sumOperands(node)
-      if (sum) return VS.solveAddition(sum.map((n) => vecArg({ type: 'SymbolNode', name: n } as unknown as Node, n)))
-      if (node.fn === 'subtract' && args.every(vecSym)) return VS.solveSubtraction(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
+      // A real SymbolNode, because vecArg evaluates it: a plain object shaped like one has no
+      // compile(), and the throw was swallowed below, so `R = A + B` never had any steps.
+      if (sum) return VS.solveAddition(sum.map((n) => vecArg(new math.SymbolNode(n) as unknown as Node, n)), result, settings)
+      if (node.fn === 'subtract' && args.every(vecSym)) return VS.solveSubtraction(vecArg(args[0], 'A'), vecArg(args[1], 'B'), result, settings)
       if (node.fn === 'multiply' && args.length === 2) {
-        if (vecSym(args[1]) && isConstant(args[0])) return VS.solveScalarMultiply(Number(evaluateNode(args[0])), vecArg(args[1], 'A'))
-        if (vecSym(args[0]) && isConstant(args[1])) return VS.solveScalarMultiply(Number(evaluateNode(args[1])), vecArg(args[0], 'A'))
-        if (vecSym(args[0]) && vecSym(args[1])) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
+        if (vecSym(args[1]) && isConstant(args[0])) return VS.solveScalarMultiply(Number(evaluateNode(args[0])), vecArg(args[1], 'A'), result, settings)
+        if (vecSym(args[0]) && isConstant(args[1])) return VS.solveScalarMultiply(Number(evaluateNode(args[1])), vecArg(args[0], 'A'), result, settings)
+        if (vecSym(args[0]) && vecSym(args[1])) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
       }
     }
     if (node.type === 'FunctionNode') {
       const fname = (node.fn as { name: string }).name
       const args = node.args as Node[]
-      const geo = (n: Node) => {
-        const k = inferKind(n, kindOfName)
-        return k === 'vector' || k === 'point'
-      }
-      if (fname === 'cross' && args.length === 2 && args.every(geo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'dot' && args.length === 2 && args.every(geo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'mag' && args.length === 1 && geo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'))
-      if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'))
-      if (fname === 'proj' && args.length === 2) return VS.solveProjection(vecArg(args[0], 'B'), vecArg(args[1], 'A'))
-      if (fname === 'angleBetween' && args.length === 2) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'))
-      if (fname === 'polarVec' && args.length === 2) {
-        const v = toV3(evaluateNode(node))
-        return VS.solveComponents('A', len(v), (heading(v) * 180) / Math.PI)
-      }
+      if (fname === 'polarVec' && args.length === 2) return VS.solveResolve({ name: name ?? 'A', v: toV3(evaluateNode(node)) }, settings)
+      // A compound operand such as `(A + B) × A` gets the answer without working: the steps
+      // would have to call A + B by a letter of their own, and a line typed as an expression
+      // reads better with the answer alone than with a name the student never gave.
+      if (!args.every((a) => vecSym(a) || isConstant(a))) return null
+      if (fname === 'cross' && args.length === 2 && args.every(isGeo)) return VS.solveCross(vecArg(args[0], 'A'), vecArg(args[1], 'B'), name ?? letter('C'), settings)
+      if (fname === 'dot' && args.length === 2 && args.every(isGeo)) return VS.solveDot(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
+      if (fname === 'mag' && args.length === 1 && isGeo(args[0])) return VS.solveMagnitudeDirection(vecArg(args[0], 'A'), settings)
+      if (fname === 'unitVec' && args.length === 1) return VS.solveUnitVector(vecArg(args[0], 'A'), settings)
+      if (fname === 'proj' && args.length === 2) return VS.solveProjection(vecArg(args[0], 'B'), vecArg(args[1], 'A'), settings)
+      if (fname === 'angleBetween' && args.length === 2) return VS.solveAngleBetween(vecArg(args[0], 'A'), vecArg(args[1], 'B'), settings)
     }
   } catch {
     return null
@@ -612,58 +743,63 @@ function trySolverCommand(input: string): boolean {
   const m = input.match(/^\s*([A-Za-z]+)\s*\((.*)\)\s*$/)
   if (!m || !SOLVER_FNS.has(m[1].toLowerCase())) return false
   const fn = m[1].toLowerCase()
-  const args = splitArgs(m[2]).map((a) => math.parse(preprocess(a)) as Node)
+  const settings = scene().settings
+  const args = splitArgs(m[2]).map((a) => parseNode(a))
   const num = (n: Node) => Number(evaluateNode(n))
-  const v = (i: number, name: string) => vecArg(args[i], name)
+  const namer = operandNamer()
+  const v = (i: number, name: string) => namer.arg(args[i], name)
   let sol: VS.Solution | null = null
   switch (fn) {
     case 'components':
     case 'resolve':
-      if (args.length === 2) sol = VS.solveComponents('A', num(args[0]), num(args[1]))
+      if (args.length === 2) sol = VS.solveComponents('A', num(args[0]), num(args[1]), '', settings)
       else if (args.length === 1) {
-        const a = v(0, 'A')
-        sol = VS.solveComponents(a.name, len(a.v), (heading(a.v) * 180) / Math.PI)
+        // A 3-D vector's components are read off directly; resolving it at its heading in the
+        // plane reported Ax = 4.24 for 3i + 4j + 5k.
+        sol = VS.solveResolve(v(0, 'A'), settings)
       }
       break
     case 'magnitude':
     case 'magdir':
     case 'direction':
-      sol = VS.solveMagnitudeDirection(v(0, 'A'))
+      sol = VS.solveMagnitudeDirection(v(0, 'A'), settings)
       break
     case 'unit':
-      sol = VS.solveUnitVector(v(0, 'A'))
+      sol = VS.solveUnitVector(v(0, 'A'), settings)
       break
     case 'angle':
+      sol = VS.solveAngleBetween(v(0, 'A'), v(1, 'B'), settings)
+      break
     case 'dot':
-      sol = VS.solveDot(v(0, 'A'), v(1, 'B'))
+      sol = VS.solveDot(v(0, 'A'), v(1, 'B'), settings)
       break
     case 'cross':
-      sol = VS.solveCross(v(0, 'A'), v(1, 'B'))
+      sol = VS.solveCross(v(0, 'A'), v(1, 'B'), namer.letter('C'), settings)
       break
     case 'add':
-      sol = VS.solveAddition(args.map((_, i) => v(i, String.fromCharCode(65 + i))))
+      sol = VS.solveAddition(args.map((_, i) => v(i, String.fromCharCode(65 + i))), 'R', settings)
       break
     case 'subtract':
-      sol = VS.solveSubtraction(v(0, 'A'), v(1, 'B'))
+      sol = VS.solveSubtraction(v(0, 'A'), v(1, 'B'), 'R', settings)
       break
     case 'projection':
-      sol = VS.solveProjection(v(0, 'B'), v(1, 'A'))
+      sol = VS.solveProjection(v(0, 'B'), v(1, 'A'), settings)
       break
     case 'resultant':
     case 'twoforces':
-      sol = VS.solveTwoForces(num(args[0]), num(args[1]), num(args[2]))
+      sol = VS.solveTwoForces(num(args[0]), num(args[1]), num(args[2]), 'N', settings)
       break
     case 'equilibrium':
-      sol = VS.solveEquilibrium(args.map((_, i) => v(i, `F${i + 1}`)))
+      sol = VS.solveEquilibrium(args.map((_, i) => v(i, `F${i + 1}`)), settings)
       break
     case 'torque':
-      sol = VS.solveTorque(v(0, 'r').v, v(1, 'F').v)
+      sol = VS.solveTorque(v(0, 'r').v, v(1, 'F').v, settings)
       break
     case 'work':
-      sol = VS.solveWork(v(0, 'F').v, v(1, 'd').v)
+      sol = VS.solveWork(v(0, 'F').v, v(1, 'd').v, settings)
       break
     case 'magforce':
-      sol = VS.solveMagneticForce(num(args[0]), v(1, 'v').v, v(2, 'B').v)
+      sol = VS.solveMagneticForce(num(args[0]), v(1, 'v').v, v(2, 'B').v, settings)
       break
   }
   if (!sol) throw new Error(`Wrong inputs for ${m[1]}. Type "help" for examples.`)
@@ -683,13 +819,183 @@ function trySolverCommand(input: string): boolean {
 // CAS: solve, diff, integrate, limit, series, simplify, expand, factor
 // ---------------------------------------------------------------------------
 
-async function tryCas(input: string): Promise<boolean> {
-  const m = input.match(/^\s*(solve|nsolve|diff|derivative|d\/dx|integrate|integral|limit|series|simplify|expand|factor|exact)\s*\((.*)\)\s*$/i)
+
+// ---------------------------------------------------------------------------
+// Pure Math: factorise, divide, partial fractions, HCF/LCM, complex numbers.
+// These run offline and instantly, and they write out their working, so they are tried before
+// the SymPy worker. Anything they cannot do falls through to tryCas, which still gives an answer.
+// ---------------------------------------------------------------------------
+
+const PURE_WORDS: Record<string, JobId> = {
+  factorise: 'factor',
+  factorize: 'factor',
+  factor: 'factor',
+  expand: 'expand',
+  divide: 'divide',
+  partial: 'partial',
+  partialfractions: 'partial',
+  hcf: 'hcf',
+  gcd: 'hcf',
+  lcm: 'lcm',
+  primes: 'primes',
+  primefactors: 'primes',
+  complex: 'complex',
+  solve: 'solve',
+  // prove(sin 2x = 2 sin x cos x). A plain calculation such as mathjs's identity(3) still works:
+  // a refused identity with no SymPy fallback is tried as a calculation below.
+  prove: 'trigidentity',
+  identity: 'trigidentity'
+}
+
+/**
+ * The Greek names the expression parser spells out (θ → theta), shown as the letter again. All of
+ * them: a list of the common few left a student's sigma or rho rendered as the word. pi is a
+ * constant and omicron has no KaTeX command, so neither is a name an unknown can carry.
+ */
+const GREEK = new Set([
+  'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
+  'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'
+])
+
+/**
+ * The standard normal table, from the bar: `normal(...)` is shorthand for `P(...)`, `invnorm(...)`
+ * and `phi(...)` are read as themselves, and a bare `P(...)` is tried only when what is inside
+ * names Z or X with a comparison — `parseNormalQuery` says no to anything else, so a student's own
+ * function called p (`p(2)`, `p(x) = x^2`) is left for the rest of the bar to read as a function,
+ * never hijacked. Tried outside the generic `word(args)` dispatch below because a distribution
+ * query can carry a trailing "= 0.05" or a comma-joined "X ~ N(50, 10^2)" that the generic pattern
+ * (the whole line is one word and one bracket) does not allow.
+ */
+function tryNormalQuery(input: string): boolean {
+  const shorthand = /^normal\s*\((.*)\)$/i.exec(input.trim())
+  const direct = parseNormalQuery(input)
+  const query = direct ?? (shorthand ? parseNormalQuery(`P(${shorthand[1]})`) : null)
+  if (!query) {
+    // "1 - P(Z < 1.96)" holds a question but is not one: refused in words, never answered with
+    // the arithmetic dropped (and not handed on, since the calculator cannot read P(Z < 1.96)).
+    const why = normalRefusal(input)
+    if (why) logError(input, why)
+    return why !== null
+  }
+  const src = direct ? input : `P(${shorthand![1]})`
+  const doc = runPure('normal', src)
+  const s = scene()
+  if (doc.error) {
+    logError(input, doc.error)
+    return true
+  }
+  // In LaTeX a bare "~" is a non-breaking space, so "X ~ N(50, 5^2)" would show in the Maths field
+  // as "X N(50, 5²)". \sim is the "is distributed as" sign, and parseNormalQuery reads it back.
+  // x_1 in P(x_1 < X < x_2) arrives escaped as x\_1, which the field would show as "x_1": it is
+  // the subscript x₁.
+  const latex = linearToLatex(src)
+    .replace(/\s*~\s*/g, '\\sim ')
+    .replace(/([a-zA-Z])\\_(\d)/g, '$1_{$2}')
+  s.pushLog({
+    input,
+    kind: 'result',
+    tex: doc.answers.map((a) => (a.label !== 'Answer' ? `\\text{${a.label}} = ${a.tex}` : a.tex)).join(String.raw`,\quad `),
+    working: () => {
+      usePure.getState().run('normal', src, latex)
+      showPanel('maths')
+    }
+  })
+  usePure.getState().run('normal', src, latex)
+  showPanel('maths')
+  return true
+}
+
+function tryPureMath(input: string): boolean {
+  if (tryNormalQuery(input)) return true
+  const m = input.match(/^\s*([a-z]+)\s*\((.*)\)\s*$/i)
   if (!m) return false
-  const op = m[1].toLowerCase()
+  const job = PURE_WORDS[m[1].toLowerCase().replace(/[\s_-]/g, '')]
+  if (!job) return false
+
+  const args = splitArgs(m[2])
+  // A third argument has no meaning here, and sent on as it was, `x^3-1,x-1,3` reached SymPy as
+  // one string and came back as a parser complaint rather than the shape the bar wants.
+  if ((job === 'divide' || job === 'partial') && args.length > 2) throw new Error(`${m[1]}(numerator, denominator) or ${m[1]}(fraction)`)
+  // solve(x^2-4, x) names the unknown; the pure solver works that out for itself.
+  // divide(x^3-1, x-1) and partial(3x+5, (x+1)(x+2)) are the fraction written as two arguments.
+  const body =
+    job === 'hcf' || job === 'lcm'
+      ? args.join(', ')
+      : job === 'solve'
+        ? args[0] ?? ''
+        : (job === 'divide' || job === 'partial') && args.length === 2
+          ? `(${args[0]})/(${args[1]})`
+          : m[2]
+  if (!body.trim()) return false
+
+  const doc = runPure(job, body)
+  if (doc.error) {
+    // A fraction of plain numbers is arithmetic: the refusal itself says "the calculator will do
+    // that one", so it does, and divide(10, 2) answers 5 as it did before the two-argument form.
+    // "Plain" is decided by parsing, not by looking for letters: the e of 2e3 and the name pi
+    // are numbers too, and divide(2e3, 4) was being sent to SymPy for a 500 the calculator had.
+    if ((job === 'divide' || job === 'partial') && isPlainArithmetic(body)) {
+      evaluatePlain(body, input)
+      return true
+    }
+    // Not something the step engine can do. The Working panel's own fallback table
+    // (math/pure/store.ts) says which jobs SymPy can take over, and the caller sends those on so
+    // an answer still appears. The rest are tried as a plain calculation, which is where
+    // complex(3, 4) is answered; only when that fails too is the refusal the last word, because
+    // its reason ("needs a whole number") is worth more than `I don't know "x"`.
+    if (casRequestFor(job, body, casInDegrees(scene().settings.angleUnit))) return false
+    try {
+      evaluatePlain(input)
+    } catch {
+      logError(input, doc.error)
+    }
+    return true
+  }
+
+  const s = scene()
+  // The Working panel's maths field reads LaTeX, so the linear form typed here has to be
+  // converted or 6x^2 arrives on screen as x^(2) with a stray bracket.
+  // A trig identity is not mathjs syntax (sin 2x would come back as sin(2)·x), so the field gets
+  // the proof's own LaTeX of what it read instead.
+  const latex = job === 'trigidentity' ? doc.input : linearToLatex(body)
+  // A label is a word ("Quotient", "HCF =") or a symbol ("x_1 =", "theta_2 ="). The word goes in
+  // \text{}; the symbol must not, because KaTeX refuses an underscore inside \text and every
+  // solve line rendered red — and it still did for θ, which the parser spells "theta", until the
+  // subscript was split off the name. The = stays where the label has one, so it reads x_1 = 3,
+  // not x_1 3; and a label that is only the number itself (primes(7) → "7") is not repeated.
+  const label = (text: string): string => {
+    const eq = text.trim().endsWith('=')
+    const bare = text.replace(/=/g, '').trim()
+    if (/^-?\d+$/.test(bare)) return eq ? `${bare} = ` : ''
+    const sym = /^([A-Za-z]+)(_\d+)?$/.exec(bare)
+    const shown = !sym
+      ? String.raw`\text{${bare}}`
+      : (GREEK.has(sym[1]) ? '\\' + sym[1] : sym[1].length === 1 ? sym[1] : String.raw`\text{${sym[1]}}`) + (sym[2] ?? '')
+    return eq ? `${shown} = ` : shown + String.raw`\;`
+  }
+  s.pushLog({
+    input,
+    kind: 'result',
+    tex: doc.answers.map((a) => `${a.label === 'Answer' ? '' : label(a.label)}${a.tex}`).join(String.raw`,\quad `),
+    working: () => {
+      usePure.getState().run(job, body, latex)
+      showPanel('maths')
+    }
+  })
+  usePure.getState().run(job, body, latex)
+  showPanel('maths')
+  return true
+}
+
+async function tryCas(input: string): Promise<boolean> {
+  const m = input.match(/^\s*(solve|nsolve|diff|derivative|d\/dx|integrate|integral|limit|series|simplify|expand|factor|factorise|factorize|divide|partial|partialfractions|exact)\s*\((.*)\)\s*$/i)
+  if (!m) return false
+  // The step engine spells it three ways; SymPy knows one.
+  const op = m[1].toLowerCase().replace(/^factori[sz]e$/, 'factor')
   const args = splitArgs(m[2])
   const s = scene()
-  const deg = s.settings.angleUnit === 'deg' && !/x|y|t/.test(m[2])
+  // In DEG mode the calculator's own d/dx works in degrees; the algebra engine must agree.
+  const deg = casInDegrees(s.settings.angleUnit)
   const id = s.pushLog({ input, kind: 'info', text: 'Solving… (the algebra engine takes a few seconds to start the first time)' })
   let payload: Record<string, unknown>
   let casOp = op
@@ -716,6 +1022,14 @@ async function tryCas(input: string): Promise<boolean> {
     case 'series':
       payload = { expr: args[0], var: 'x', at: args[1] ?? '0', n: args[2] ?? 6 }
       break
+    case 'divide':
+    case 'partial':
+    case 'partialfractions':
+      // What the step engine refused (divide(sin(x), x)) goes to SymPy's apart, the same route
+      // the Working panel takes, as the one fraction the two arguments stand for.
+      casOp = 'apart'
+      payload = { expr: args.length === 2 ? `(${args[0]})/(${args[1]})` : args.join(',') }
+      break
     default:
       payload = { expr: args.join(',') }
   }
@@ -732,7 +1046,7 @@ async function tryCas(input: string): Promise<boolean> {
       return true
     }
     const texOut = rows
-      .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !/^-?\d+$/.test(v.text) ? ` \\approx ${fmtNumeric(v.numeric)}` : ''}`).join(',\\ '))
+      .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !/^-?\d+$/.test(v.text) ? ` \\approx ${fmtNumeric(v.numeric, s.settings)}` : ''}`).join(',\\ '))
       .join('\\quad\\text{or}\\quad ')
     const single = args.length === 1 && rows.every((row) => Object.keys(row).length === 1 && 'x' in row)
     const roots = single ? rows.map((row) => row.x.numeric).filter((n) => n && n.im === undefined).map((n) => n!.re) : []
@@ -750,26 +1064,70 @@ async function tryCas(input: string): Promise<boolean> {
     })
     return true
   }
-  const numeric = r.numeric && casOp !== 'diff' && casOp !== 'series' && casOp !== 'expand' && casOp !== 'factor' ? ` \\approx ${fmtNumeric(r.numeric)}` : ''
-  const label = casOp === 'diff' ? `\\frac{d}{dx}\\left(${args[0]}\\right)` : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int') + `${args[0]}\\,dx` : ''
+  const numeric = r.numeric && casOp !== 'diff' && casOp !== 'series' && casOp !== 'expand' && casOp !== 'factor' ? ` \\approx ${fmtNumeric(r.numeric, s.settings)}` : ''
+  // The space after \int is not decoration: \int glued to integrate(x^2)'s x read as the unknown
+  // command \intx, and every indefinite integral from the bar rendered as a red KaTeX error.
+  // The label names the letter the answer was worked in: diff(t^3, t) = 3t² used to read d/dx, and
+  // diff(θ^2, θ) = 2θ read d/dx(θ²), which is 0. θ and theta are one letter, written \theta, as in
+  // the working behind the same line (forSymPy spells θ theta for it).
+  const byLetter = forSymPy((args[1] ?? '').trim())
+  const letter =
+    casOp === 'integrate' && args.length >= 3
+      ? 'x'
+      : /^[A-Za-z]$/.test(byLetter)
+        ? byLetter
+        : GREEK.has(byLetter)
+          ? `\\${byLetter}`
+          : 'x'
+  // diff(x^3, x, 2) = 6x is the second derivative, so it reads d²/dx², not d/dx(x³) = 6x, which is
+  // false (GLM #24). An order the label cannot write truthfully (0, or not a whole number) gets none.
+  const order = casOp === 'diff' && args[2] ? Number(args[2]) : 1
+  const dBy = order === 1 ? `\\frac{d}{d${letter}}` : Number.isInteger(order) && order >= 2 ? `\\frac{d^{${order}}}{d${letter}^{${order}}}` : ''
+  const label = casOp === 'diff' ? (dBy ? `${dBy}\\left(${args[0]}\\right)` : '') : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int ') + `${args[0]}\\,d${letter}` : ''
   const isFunctionResult = (casOp === 'diff' || (casOp === 'integrate' && args.length < 3)) && /x/.test(r.text)
+  const unitNote = calculusUnitNote(casOp, args[0] ?? '', deg)
+  // An indefinite integral carries its + C, as its working and every textbook do; SymPy leaves it
+  // off, so the bar said ∫x eˣ dx = (x − 1)eˣ while "Show the working" said (x − 1)eˣ + C.
+  // An integral SymPy could not do comes back still written as one, and gets no + C.
+  const plusC = casOp === 'integrate' && args.length < 3 && !/\\int/.test(r.latex) ? ' + C' : ''
+  // The answer stays SymPy's own; its steps are one tap away in the Working panel (spec decision 3:
+  // no calculus words for the step engine, which runs first and would take diff/integrate over).
+  const steps = calculusJobFor(casOp, args)
   s.updateLog(id, {
     kind: 'result',
     text: undefined,
-    tex: `${label ? label + ' = ' : ''}${r.latex}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}`,
-    visualize: isFunctionResult ? () => visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit') : undefined
+    tex: `${label ? label + ' = ' : ''}${r.latex}${plusC}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}${unitNote ? `\\quad\\text{(${unitNote})}` : ''}`,
+    visualize: isFunctionResult ? () => visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit') : undefined,
+    working: steps
+      ? () => {
+          usePure.getState().run(steps.job, steps.input, linearToLatex(steps.input))
+          showPanel('maths')
+        }
+      : undefined
   })
   return true
 }
 
-const fmtNumeric = (n: { re: number; im?: number }) => (n.im === undefined ? tex(n.re, 6) : `${tex(n.re, 6)} ${n.im < 0 ? '-' : '+'} ${tex(Math.abs(n.im), 6)}i`)
+/** The decimal beside an exact answer, in the student's precision (rule 4), real or complex. */
+const fmtNumeric = (n: { re: number; im?: number }, p: Precision) => (n.im === undefined ? texAt(n.re, p) : `${texAt(n.re, p)} ${n.im < 0 ? '-' : '+'} ${texAt(Math.abs(n.im), p)}i`)
 
 // ---------------------------------------------------------------------------
 // Plain expressions
 // ---------------------------------------------------------------------------
 
-function evaluatePlain(input: string) {
-  const node = math.parse(preprocess(input)) as Node
+/** True when the text is a calculation in numbers, constants and units alone, with nothing to solve for. */
+function isPlainArithmetic(src: string): boolean {
+  try {
+    return isConstant(parseNode(src))
+  } catch {
+    return false
+  }
+}
+
+/** `shown` is the line the log quotes when the maths evaluated is a rewrite of what was typed. */
+function evaluatePlain(expr: string, shown = expr) {
+  const input = shown
+  const node = parseNode(expr)
   assertKnown(node)
   const kind = inferKind(node, kindOfName)
   const value = evaluateNode(node)
@@ -780,16 +1138,19 @@ function evaluatePlain(input: string) {
     s.pushLog({
       input,
       kind: 'result',
-      tex: kind === 'vector' ? `${texIJK(v, 4)}${vectorExtras(v)}` : `(${v.map((c) => tex(c, 4)).join(', ')})`,
+      tex: kind === 'vector' ? `${texIJK(v, s.settings)}${vectorExtras(v)}` : `(${v.map((c) => texPrecise(c, s.settings)).join(', ')})`,
       solution: solution ?? undefined,
       visualize: () => (kind === 'vector' ? (solution ? visualizeSolution(solution) : visualizeVector(v)) : visualizePoint(v))
     })
     return
   }
-  const text = typeof value === 'number' ? fmt(value, 10) : math.format(value, { precision: 10 })
+  // The student's precision, not a fixed ten digits (rule 4): with decimals set to 2, `1/3` used
+  // to answer 0.3333333333 beside a panel showing |A| = 5.00. The ≈ tail after an exact form is
+  // the one place the full display stays, the way the calculator's S⇔D key shows it.
+  const text = typeof value === 'number' ? fmtPrecise(value, s.settings) : isUnit(value) ? `${fmtPrecise(plainNumber(value), s.settings)} ${value.formatUnits()}` : math.format(value, { precision: 10 })
   const id = s.pushLog({ input, kind: 'result', text: `= ${text}`, solution: solution ?? undefined })
   if (typeof value === 'number' && !Number.isInteger(value) && Number.isFinite(value) && isConstant(node)) {
-    cas('exact', { expr: preprocess(input), deg: s.settings.angleUnit === 'deg' }).then((r) => {
+    cas('exact', { expr: preprocess(expr), deg: casInDegrees(s.settings.angleUnit) }).then((r) => {
       if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text) {
         s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${tex(value, 10)}` })
       }
@@ -810,6 +1171,11 @@ export const HELP = `Examples (press Enter after each):
   Midpoint(P, Q)  Perpendicular(P, f)  Intersect(f, g)  Angle(P, Q, S)
   y = x^2 - 4      f(x) = sin(x)      x^2 + y^2 = 9      y > x^2
   r = 2cos(θ)      curve(cos(t), sin(t), 0, 2π)      z = sin(x)cos(y)
+  piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)     one curve in pieces
+  between(x^2, x + 2, -1, 2)   shade between two curves      tangent(x^2, 1)   the tangent at a point
   k = 2  (makes a slider you can drag)
   solve(x^2 - 5x + 6 = 0)   diff(x^3)   integrate(x^2, 0, 3)   factor(x^2-1)
+  P(Z < 1.96)   P(45 < X < 60), X ~ N(50, 5^2)     the standard normal table, with steps
+  invnorm(0.975)   invnorm(0.9), X ~ N(50, 10^2)     the z (or x) for a given area
+  prove(sin 2x = 2 sin x cos x)   a trig identity, proved one named step at a time
   delete A     undo     clear     2d / 3d     play / pause`

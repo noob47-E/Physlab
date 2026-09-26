@@ -1,12 +1,15 @@
 // The lab table: what gets worked out from what, and what reaches the graph.
 
-import { describe, expect, it } from 'vitest'
-import { addColumn, addRow, addUncertainty, emptyTable, removeColumn, setCell, setColumn } from '../src/renderer/src/lab/labStore'
+import { describe, expect, it, vi } from 'vitest'
+import { addColumn, addRow, addUncertainty, DEFAULT_TABLE_TITLE, emptyTable, removeColumn, setCell, setColumn, uniqueTitle, useLab } from '../src/renderer/src/lab/labStore'
+import { rowsFor, tableFrom } from '../src/renderer/src/sim/recording'
+import { readSource } from './helpers/repo'
 import { headerOf, isUsableName, plotPairs, plotSeries, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
 import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/renderer/src/lab/fit'
 import { chartSeries } from '../src/renderer/src/lab/chartData'
 import { applyPaste, cellNumber, csvFileName, parseTable, toCsv } from '../src/renderer/src/lab/csv'
 import type { LabTable } from '../src/renderer/src/lab/types'
+import { fmtPrecise } from '../src/renderer/src/math/format'
 
 /** A table of t and d with the readings filled in. */
 function freeFall(): LabTable {
@@ -27,6 +30,16 @@ describe('working out a column from the others', () => {
     const { values, errors } = resolveValues(table)
     expect(errors).toEqual({})
     expect(values.map((r) => r[2])).toEqual([0.2, 0.4, 0.6, 0.8, 1].map((t) => t * t))
+  })
+
+  it("shows a worked-out cell in the student's precision, not a fixed four decimals", () => {
+    // The panel prints resolved values through fmtPrecise; t = 0.45 gives t² = 0.2025, which a
+    // student who chose 2 d.p. must read as 0.2 like every other number on screen.
+    const table = addColumn(setCell(freeFall(), 0, 0, 0.45), { name: 'tsq', formula: 't^2' })
+    const cell = resolveValues(table).values[0][2] as number
+    expect(cell).toBeCloseTo(0.2025, 12)
+    expect(fmtPrecise(cell, { decimals: 2, precisionMode: 'dp' })).toBe('0.2')
+    expect(fmtPrecise(cell, { decimals: 3, precisionMode: 'sf' })).toBe('0.203')
   })
 
   it('leaves a cell empty when a reading it needs is missing', () => {
@@ -359,5 +372,79 @@ describe('readings pasted in or read from a file', () => {
     expect(csvFileName('Free fall')).toBe('Free-fall.csv')
     expect(csvFileName('  ')).toBe('lab-data.csv')
     expect(csvFileName('g: from d/t?')).toBe('g-from-dt.csv')
+  })
+})
+
+describe('sending a Sandbox recording to Lab Data', () => {
+  const samples = [
+    { t: 0, x: 0, y: 5, v: 0, ke: 0, pe: 49.05, p: 0 },
+    { t: 0.5, x: 0, y: 3.77375, v: 4.905, ke: 12.0295125, pe: 37.0204875, p: 4.905 },
+    { t: 1, x: 0, y: 0.095, v: 9.81, ke: 48.11805, pe: 0.93195, p: 9.81 }
+  ]
+
+  it('tableFrom gives the recording columns with their units, height against time to begin with', () => {
+    const t = tableFrom('Ball', samples)
+    expect(t.title).toBe('Ball — from the Sandbox')
+    expect(t.columns.map((c) => `${c.name}/${c.unit}`)).toEqual(['t/s', 'x/m', 'y/m', 'v/m/s', 'KE/J'])
+    expect(t.rows).toEqual(rowsFor(samples))
+    expect(t.rows[1]).toEqual([0.5, 0, 3.7738, 4.905, 12.03])
+    expect(t.columns.find((c) => c.id === t.plot.x)?.name).toBe('t')
+    expect(t.columns.find((c) => c.id === t.plot.y)?.name).toBe('y')
+  })
+
+  it('appendTable keeps the typed tables, opens the new one, and Ctrl+Z takes it back', () => {
+    // setTables exists to replace everything when a project opens: it points at the first table
+    // and forgets the undo history. The send used to go through it, so the recording landed at
+    // the end of a list Lab Data was not showing — "it does not send data to lab at all".
+    useLab.getState().setTables([freeFall()])
+    const typed = useLab.getState().tables[0]
+    useLab.getState().update(typed.id, (t) => setCell(t, 0, 0, 0.25))
+    const stepsBefore = useLab.getState().past.length
+
+    // Edits under 700 ms apart fold into one undo step (a burst of keystrokes); the student
+    // switched modes between typing and pressing Send, so the clock has moved on.
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.now() + 5000)
+    const sent = tableFrom('Ball', samples)
+    useLab.getState().appendTable(sent)
+    vi.useRealTimers()
+    const state = useLab.getState()
+    expect(state.currentId).toBe(sent.id)
+    expect(state.tables.map((t) => t.id)).toEqual([typed.id, sent.id])
+    expect(state.tables[0].rows[0][0]).toBe(0.25)
+    expect(state.past.length).toBeGreaterThan(stepsBefore)
+
+    useLab.getState().undo()
+    expect(useLab.getState().tables.map((t) => t.id)).toEqual([typed.id])
+    expect(useLab.getState().currentId).toBe(typed.id)
+  })
+
+  it('numbers a second recording of the same body so the two tabs can be told apart', () => {
+    useLab.getState().setTables([freeFall()])
+    useLab.getState().appendTable(tableFrom('Ball', samples))
+    useLab.getState().appendTable({ ...tableFrom('Ball', samples), id: 'rec2' })
+    useLab.getState().appendTable({ ...tableFrom('Ball', samples), id: 'rec3' })
+    expect(useLab.getState().tables.map((t) => t.title)).toEqual(['Free fall', 'Ball — from the Sandbox', 'Ball — from the Sandbox (2)', 'Ball — from the Sandbox (3)'])
+    expect(uniqueTitle([], 'Ball')).toBe('Ball')
+  })
+
+  it('a fresh session and File ▸ New start from the same table, so an untouched launch is not work', () => {
+    expect(emptyTable().title).toBe(DEFAULT_TABLE_TITLE)
+    expect(readSource('src/renderer/src/core/store.ts')).toMatch(/lab: \[emptyTable\(\)\]/)
+  })
+
+  it('the Send button goes through appendTable and Lab Data can reach every table', () => {
+    // The fix once lived in the store while the button kept its own copy, so the tests were green
+    // and the app was not. Reading the panels as text is how sceneStore.test.ts caught the same
+    // thing in Properties.
+    const sandbox = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const button = sandbox.lastIndexOf('Send to Lab Data')
+    const send = sandbox.slice(button - 900, button)
+    expect(send).toContain('appendTable(tableFrom(watched.name, samples))')
+    expect(send).not.toContain('setTables(')
+
+    const lab = readSource('src/renderer/src/panels/LabData.tsx')
+    for (const action of ['setCurrent', 'addTable', 'removeTable']) expect(lab).toContain(`useLab((s) => s.${action})`)
+    expect(lab).toContain('onClick={() => setCurrent(t.id)}')
   })
 })

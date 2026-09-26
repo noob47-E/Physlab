@@ -1,46 +1,20 @@
 import { ListOrdered, Trash2 } from 'lucide-react'
 import { useScene, scene } from '../core/store'
-import { exprRefs, isFree } from '../core/evaluate'
-import { isValidName } from '../core/naming'
+import { isFree } from '../core/evaluate'
 import type { SceneObject } from '../core/types'
 import { heading, len, toDeg, toRad, type V3 } from '../math/vec'
+import { fmt } from '../math/format'
 import * as VS from '../math/vectorSolver'
 import { Check, ColorField, NumField, TextField } from '../ui/fields'
 import { runCommand } from '../lang/commands'
-
-function renameObject(obj: SceneObject, next: string) {
-  const s = scene()
-  if (!isValidName(next) || s.ev.names.has(next)) {
-    s.pushLog({ input: `rename ${obj.name}`, kind: 'error', text: `"${next}" is not available as a name.` })
-    return
-  }
-  const re = new RegExp(`(?<![\\w'])${obj.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w'])`, 'g')
-  const changed: SceneObject[] = [{ ...obj, name: next }]
-  for (const o of Object.values(s.objects)) {
-    if (o.id === obj.id || !exprRefs(o).some((e) => re.test(e))) continue
-    re.lastIndex = 0
-    const copy = JSON.parse(JSON.stringify(o)) as SceneObject
-    if (copy.type === 'point' && copy.def.kind === 'expr') copy.def.expr = copy.def.expr.replace(re, next)
-    if (copy.type === 'vector' && copy.def.kind === 'expr') copy.def.expr = copy.def.expr.replace(re, next)
-    if (copy.type === 'circle' && copy.def.kind === 'centerRadius') copy.def.r = copy.def.r.replace(re, next)
-    if (copy.type === 'number') copy.expr = copy.expr.replace(re, next)
-    if (copy.type === 'graph') {
-      copy.exprs = copy.exprs.map((e) => e.replace(re, next))
-      // The source is what the Outliner shows and what editing starts from, so it renames too.
-      re.lastIndex = 0
-      copy.source = copy.source.replace(re, next)
-    }
-    changed.push(copy)
-  }
-  s.addObjects(changed)
-}
+import { shownColor } from '../app/theme'
 
 function V3Fields({ v, onChange }: { v: V3; onChange: (v: V3) => void }) {
   return (
     <div className="grid grid-cols-3 gap-1">
       {(['x', 'y', 'z'] as const).map((ax, i) => (
         <div key={ax} className="relative">
-          <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-zinc-500">{ax}</span>
+          <span className="pointer-events-none absolute left-1.5 top-1 text-fine text-ink-faint">{ax}</span>
           <NumField value={v[i]} onChange={(n) => onChange(v.map((c, j) => (j === i ? n : c)) as V3)} />
         </div>
       ))}
@@ -57,10 +31,10 @@ export function Properties() {
   const showSolution = useScene((s) => s.showSolution)
   const angleUnit = useScene((s) => s.settings.angleUnit)
 
-  if (selection.length === 0) return <div className="panel p-4 text-zinc-500">Select an object to edit it.</div>
+  if (selection.length === 0) return <div className="panel p-4 text-ink-faint">Select an object to edit it.</div>
   if (selection.length > 1) {
     return (
-      <div className="panel p-4 text-zinc-400">
+      <div className="panel p-4 text-ink-dim">
         {selection.length} objects selected. See the <b>Measure</b> tab for relationships between them.
         <div className="mt-3">
           <button className="btn" onClick={() => remove(selection)}>
@@ -81,14 +55,31 @@ export function Properties() {
       <div className="section-title">
         {o.type} {isFree(o) ? '· free' : '· dependent'}
       </div>
-      {err && <div className="mx-3 mb-2 rounded bg-red-500/10 px-2 py-1 text-red-300">{err}</div>}
+      {err && <div className="mx-3 mb-2 rounded bg-bad/10 px-2 py-1 text-bad">{err}</div>}
       <div className="prop-row">
         <label>Name</label>
-        <TextField value={o.name} onCommit={(n) => renameObject(o, n.trim())} />
+        <TextField
+          value={o.name}
+          onCommit={(n) => {
+            // The store does the renaming (core/rename.ts): it knows which object owns a name, so
+            // a second "a" renamed here never rewrites formulas that were pointing at the other one.
+            const problem = scene().renameObject(o.id, n.trim())
+            if (problem) scene().pushLog({ input: `rename ${o.name}`, kind: 'error', text: problem })
+          }}
+        />
       </div>
       <div className="prop-row">
         <label>Colour</label>
-        <ColorField value={o.color} onChange={(col) => set((d) => void (d.color = col))} />
+        <ColorField
+          value={shownColor(o)}
+          onChange={(col) =>
+            set((d) => {
+              // A colour the student picks is theirs: it no longer follows the theme.
+              d.color = col
+              delete d.themed
+            })
+          }
+        />
       </div>
       <div className="prop-row">
         <label>Show</label>
@@ -151,7 +142,7 @@ export function Properties() {
               value={o.def.t}
               onChange={(e) => set((d) => d.type === 'point' && d.def.kind === 'onObject' && void (d.def.t = Number(e.target.value)))}
             />
-            <span className="w-12 text-right tabular-nums text-zinc-400">{o.def.t.toFixed(2)}</span>
+            <span className="w-12 text-right tabular-nums text-ink-dim">{fmt(o.def.t, 2)}</span>
           </div>
         </div>
       )}
@@ -204,7 +195,7 @@ export function Properties() {
               <TextField mono value={o.def.expr} onCommit={(v) => set((d) => d.type === 'vector' && d.def.kind === 'expr' && void (d.def.expr = v))} />
             </div>
           ) : (
-            <div className="px-3 text-zinc-500">Defined by other objects ({o.def.kind}). Drag its parents to change it.</div>
+            <div className="px-3 text-ink-faint">Defined by other objects ({o.def.kind}). Drag its parents to change it.</div>
           )}
           <div className="prop-row">
             <label>Unit</label>

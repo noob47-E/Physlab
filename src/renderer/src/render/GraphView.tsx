@@ -10,11 +10,30 @@ import { QUALITY, qualityNow } from './renderer'
 import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
 import { compileScalar } from '../math/expr'
-import { implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, surfaceGeometry, type KeyPoint } from '../math/graphs'
+import { betweenMesh, implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, samplePiecewise, surfaceGeometry, type KeyPoint } from '../math/graphs'
 import { fmt } from '../math/format'
+import { themeColor, useTheme, useThemed, type Theme } from '../app/theme'
 import type { V3 } from '../math/vec'
 
 const scopeNow = () => useScene.getState().ev.scope
+
+/**
+ * The graph's own colours (a curve's colour is the object's) come from the stylesheet and are
+ * re-read when the theme flips, so a root marked in the dark theme is still visible on the
+ * light canvas. WebGPU compiles a material's colour in, so the materials below are keyed on the
+ * theme and arrive new rather than being edited.
+ */
+function useGraphColors() {
+  const theme = useTheme((t) => t.theme)
+  const colors = useThemed(() => {
+    // Resolved once per theme: reading the stylesheet inside useFrame for every key point made a
+    // graph with many roots pay a style read per root per frame.
+    const extremum = themeColor('--key-extremum')
+    const key: Record<KeyPoint['kind'], string> = { root: themeColor('--key-root'), yIntercept: themeColor('--key-intercept'), max: extremum, min: extremum }
+    return { select: themeColor('--sel-glow'), wireframe: themeColor('--wireframe'), key }
+  })
+  return { theme, colors }
+}
 
 export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D }: { obj: GraphObj; selected: boolean; hovered: boolean; is3D: boolean }) {
   const view = useView()
@@ -37,12 +56,19 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
           return { f: compileScalar(obj.exprs[0], ['theta', 't'], scopeNow) }
         case 'parametric':
           return { fx: compileScalar(obj.exprs[0], ['t'], scopeNow), fy: compileScalar(obj.exprs[1], ['t'], scopeNow) }
+        case 'piecewise':
+          // The formulas are read from exprs, which mirror the pieces one to one: renaming a slider
+          // rewrites every graph's exprs, and a piece compiled from its own copy would go on
+          // naming a slider that no longer exists and vanish.
+          return { pieces: (obj.pieces ?? []).map((p, i) => ({ f: compileScalar(obj.exprs[i] ?? p.expr, ['x'], scopeNow), from: p.from, to: p.to })) }
+        case 'between':
+          return { f: compileScalar(obj.exprs[0], ['x'], scopeNow), g: compileScalar(obj.exprs[1], ['x'], scopeNow) }
       }
     } catch (e) {
       return { error: String(e) }
     }
     return {}
-  }, [obj.kind, obj.exprs])
+  }, [obj.kind, obj.exprs, obj.pieces])
 
   const is2DBounds = !is3D
   const b = is2DBounds ? view : { xMin: -10, xMax: 10, yMin: -10, yMax: 10, viewH: 20, wpp: 0.02, widthPx: 1000 }
@@ -82,6 +108,20 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         const ny = Math.min(900, Math.ceil((b.yMax - b.yMin) / cell))
         out.segments = implicitSegments(F, b.xMin, b.xMax, b.yMin, b.yMax, nx, ny)
         if (obj.kind === 'inequality') out.fill = inequalityMesh(F, obj.op ?? '<', b.xMin, b.xMax, b.yMin, b.yMax, Math.ceil(nx / 1.5), Math.ceil(ny / 1.5))
+      } else if (obj.kind === 'piecewise' && fns.pieces) {
+        // Sampled at the explicit curve's density over the widest piece, so a short piece is
+        // never coarser than the curve beside it; the joins are made in samplePiecewise.
+        const widest = Math.max(0, ...fns.pieces.map((p) => Math.abs(p.to - p.from)))
+        const n = Math.min(2000, Math.max(100, Math.round((widest / b.wpp / 2) * QUALITY[qualityNow()].samples)))
+        out.polylines = samplePiecewise(
+          fns.pieces.map((p) => ({ f: (x: number) => p.f({ x }), from: p.from, to: p.to })),
+          n,
+          b.viewH
+        )
+      } else if (obj.kind === 'between' && fns.f && fns.g) {
+        const region = betweenMesh((x) => fns.f!({ x }), (x) => fns.g!({ x }), obj.tMin ?? 0, obj.tMax ?? 1, 400, b.viewH)
+        out.fill = region.fill
+        out.polylines = region.outline
       } else if (obj.kind === 'polar' && fns.f) {
         const t0 = obj.tMin ?? 0
         const t1 = obj.tMax ?? 2 * Math.PI
@@ -94,8 +134,10 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       /* invalid function: draw nothing */
     }
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fns, b.xMin, b.xMax, b.yMin, b.yMax, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax])
+    // `evVersion` is not read here: the compiled functions read the scene's scope through a
+    // closure, so a moved slider changes the curve without changing `fns`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax, obj.pieces])
 
   useEffect(() => {
     const polys = data.segments ? pairsToPolys(data.segments) : data.polylines
@@ -109,6 +151,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
   const { camera, size } = useThree()
+  const { theme, colors } = useGraphColors()
 
   useFrame(({ camera: cam, size: sz }) => {
     const firstPoly = labelPoints(data)
@@ -126,7 +169,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       for (const k of data.keys) {
         const s = toScreen(cam, sz, [k.x, k.y, 0])
         if (s.x < 0 || s.y < 0 || s.x > sz.width || s.y > sz.height) continue
-        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', k.kind === 'root' ? '#ffa8a8' : k.kind === 'yIntercept' ? '#a5d8ff' : '#b2f2bb')
+        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', colors.key[k.kind])
       }
     }
     pool.end()
@@ -134,12 +177,12 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   void camera
   void size
 
-  if (obj.kind === 'surface') return <SurfaceView obj={obj} F={fns.F} selected={selected} version={evVersion} />
+  if (obj.kind === 'surface') return <SurfaceView obj={obj} F={fns.F} selected={selected} version={evVersion} wireframe={colors.wireframe} theme={theme} />
 
   return (
     <>
       {data.fill && data.fill.length > 0 && <FillMesh positions={data.fill} color={obj.color} />}
-      {selected && data.polylines.map((p, i) => <FatLine key={`s${i}`} points={p} color="#ffd43b" width={width + 4} renderOrder={2} />)}
+      {selected && data.polylines.map((p, i) => <FatLine key={`s${i}`} points={p} color={colors.select} width={width + 4} renderOrder={2} />)}
       {data.polylines.map((p, i) => (
         <FatLine key={i} points={p} color={obj.color} width={width} renderOrder={3} />
       ))}
@@ -147,7 +190,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         <FatLine points={data.segments} segments color={obj.color} width={width} renderOrder={3} dashed={obj.op === '<' || obj.op === '>'} dashSize={8 * b.wpp} gapSize={5 * b.wpp} />
       )}
       {data.keys.map((k, i) => (
-        <KeyDot key={i} p={[k.x, k.y, 0]} color={k.kind === 'root' ? '#ff8787' : k.kind === 'yIntercept' ? '#74c0fc' : '#8ce99a'} />
+        <KeyDot key={`${theme}${i}`} p={[k.x, k.y, 0]} color={colors.key[k.kind]} />
       ))}
     </>
   )
@@ -195,7 +238,7 @@ function FillMesh({ positions, color }: { positions: Float32Array; color: string
   )
 }
 
-function SurfaceView({ obj, F, selected, version }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown }) {
+function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown; wireframe: string; theme: Theme }) {
   const geo = useMemo(() => {
     if (!F) return null
     const s = surfaceGeometry((x, y) => F({ x, y }), 6, 140)
@@ -205,7 +248,7 @@ function SurfaceView({ obj, F, selected, version }: { obj: GraphObj; F?: (v: Rec
     g.setIndex(s.indices)
     g.computeVertexNormals()
     return g
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is the evaluator's result: F reads the scope through a closure, so the same F gives a new surface once a slider moves
   }, [F, version])
   useEffect(() => () => geo?.dispose(), [geo])
   useFrame(() => labelAnchors.set(obj.id, { p: [6, 6, 0] }))
@@ -216,7 +259,7 @@ function SurfaceView({ obj, F, selected, version }: { obj: GraphObj; F?: (v: Rec
         <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.55} metalness={0.05} transparent opacity={selected ? 0.8 : 0.95} />
       </mesh>
       <mesh geometry={geo}>
-        <meshBasicMaterial color="#000000" wireframe transparent opacity={0.12} />
+        <meshBasicMaterial key={theme} color={wireframe} wireframe transparent opacity={0.12} />
       </mesh>
     </group>
   )

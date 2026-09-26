@@ -1,7 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell } from 'electron'
 import { extname, join, normalize, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { openDialogOptions } from './openDialog'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -65,16 +67,101 @@ function registerAppProtocol(): void {
   })
 }
 
+/**
+ * Chromium zoom levels: each step is ×1.2. Kept within what still leaves the shell usable.
+ * The renderer holds the same three lines in src/renderer/src/app/layoutMath.ts (the popover's
+ * disabled buttons come from that copy); the main and preload bundles cannot import renderer
+ * code, so change both together. Chromium remembers the level per host across launches, so
+ * nothing here or in the renderer has to save it.
+ */
+const ZOOM_MIN = -3
+const ZOOM_MAX = 3
+const clampZoom = (level: number): number => (Number.isFinite(level) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(level * 2) / 2)) : 0)
+
+function setZoom(win: BrowserWindow, level: number): number {
+  const z = clampZoom(level)
+  win.webContents.setZoomLevel(z)
+  // The settings popover shows the zoom, so it has to hear about a keyboard change too.
+  win.webContents.send('app:zoom', z)
+  return z
+}
+
+/**
+ * The menu bar is hidden, but the menu still owns the keys. Electron's default menu bound Ctrl+R
+ * and F5 to a plain reload, which threw away unsaved work with no question asked; and without a
+ * menu of our own, zoom had no keys at all.
+ */
+function buildMenu(win: BrowserWindow): Menu {
+  const reload = () => {
+    if (dirty) {
+      const choice = dialog.showMessageBoxSync(win, {
+        type: 'question',
+        buttons: ['Reload anyway', 'Keep working'],
+        defaultId: 1,
+        cancelId: 1,
+        message: 'Reload PhysLab?',
+        detail: 'There is unsaved work. It will be offered back after the reload, but it is not saved in a file. Press Ctrl+S first to keep it.'
+      })
+      if (choice !== 0) return
+    }
+    win.webContents.reload()
+  }
+  const zoomBy = (delta: number) => setZoom(win, win.webContents.getZoomLevel() + delta)
+  return Menu.buildFromTemplate([
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Bigger text', accelerator: 'CmdOrCtrl+=', click: () => zoomBy(0.5) },
+        { label: 'Bigger text', accelerator: 'CmdOrCtrl+Plus', visible: false, click: () => zoomBy(0.5) },
+        { label: 'Bigger text', accelerator: 'CmdOrCtrl+numadd', visible: false, click: () => zoomBy(0.5) },
+        { label: 'Smaller text', accelerator: 'CmdOrCtrl+-', click: () => zoomBy(-0.5) },
+        { label: 'Smaller text', accelerator: 'CmdOrCtrl+numsub', visible: false, click: () => zoomBy(-0.5) },
+        { label: 'Normal size', accelerator: 'CmdOrCtrl+0', click: () => setZoom(win, 0) },
+        { type: 'separator' },
+        { label: 'Full screen', accelerator: 'F11', click: () => win.setFullScreen(!win.isFullScreen()) },
+        { type: 'separator' },
+        { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: reload },
+        { label: 'Reload', accelerator: 'F5', visible: false, click: reload },
+        { label: 'Developer tools', accelerator: 'F12', click: () => win.webContents.toggleDevTools() }
+      ]
+    }
+  ])
+}
+
+// The window paints this before the renderer's first frame, so it must match the theme the
+// renderer is about to apply or every launch starts with a flash of the wrong colour. The renderer
+// tells us its --bg-0 whenever the theme changes and we keep it beside the autosave; a fresh
+// install has no file and gets Moonlight's, which is the renderer's default too.
+const DEFAULT_BACKGROUND = '#0b1020'
+const themeFile = () => join(app.getPath('userData'), 'theme.json')
+
+/** A '#rrggbb' colour and nothing else: the file is ours, but a half-written one must not reach Chromium. */
+const isHexColour = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)
+
+function readThemeBackground(): string {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(themeFile(), 'utf8'))
+    const bg = (parsed as { background?: unknown } | null)?.background
+    return isHexColour(bg) ? bg : DEFAULT_BACKGROUND
+  } catch {
+    return DEFAULT_BACKGROUND
+  }
+}
+
 function createWindow(): void {
+  // Sized to the work area (the screen minus the taskbar), so a 1366×768 laptop at 125 % scaling
+  // is not handed a window wider than its screen. The old minimum of 1100 was wider than that
+  // laptop's 1093 usable pixels, and the top bar was clipped with no way to widen it.
+  const work = screen.getPrimaryDisplay().workAreaSize
   const win = new BrowserWindow({
-    width: 1680,
-    height: 1020,
-    minWidth: 1100,
-    minHeight: 700,
+    width: Math.min(1680, work.width),
+    height: Math.min(1020, work.height),
+    minWidth: 960,
+    minHeight: 600,
     title: 'PhysLab',
     // Packaged builds use the icon embedded in the .exe.
     icon: app.isPackaged ? undefined : join(__dirname, '../../build/icon.png'),
-    backgroundColor: '#161618',
+    backgroundColor: readThemeBackground(),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -91,6 +178,21 @@ function createWindow(): void {
     win.show()
   })
 
+  // The X button used to discard unsaved work without a word. The renderer says when there is
+  // any; the autosave copy is written on the way out either way.
+  win.on('close', (e) => {
+    if (!dirty) return
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['Close anyway', 'Keep working'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'PhysLab has unsaved work.',
+      detail: 'It will be offered back next time you open PhysLab, but it is not saved in a file. Press Ctrl+S first to keep it.'
+    })
+    if (choice !== 0) e.preventDefault()
+  })
+
   // PHYSLAB_LOG=1 mirrors renderer warnings/errors to the terminal (useful for diagnosing GPU issues).
   if (process.env['PHYSLAB_LOG']) {
     win.webContents.on('console-message', (details) => {
@@ -103,16 +205,16 @@ function createWindow(): void {
     })
   }
 
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return
-    if (input.key === 'F12') {
-      win.webContents.toggleDevTools()
-      event.preventDefault()
-    }
-    if (input.key === 'F11') {
-      win.setFullScreen(!win.isFullScreen())
-      event.preventDefault()
-    }
+  Menu.setApplicationMenu(buildMenu(win))
+
+  // Nothing in PhysLab opens a second window or leaves the app: a link in an example, or a
+  // dragged-in file, must not turn the window into a web browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isOwnUrl(url)) event.preventDefault()
   })
 
   // PHYSLAB_BENCH=1000000 opens straight into the GPU particle benchmark.
@@ -131,10 +233,48 @@ function createWindow(): void {
   }
 }
 
-ipcMain.handle('file:open', async () => {
+/** The renderer's own pages: the app:// scheme when packaged, the Vite dev server otherwise. */
+function isOwnUrl(url: string): boolean {
+  if (url.startsWith('app://')) return true
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  return !!devUrl && !app.isPackaged && url.startsWith(devUrl)
+}
+
+let dirty = false
+ipcMain.on('app:dirty', (_e, value: boolean) => {
+  dirty = !!value
+})
+
+// The renderer reports its colour on every start as well as on every switch, so this is what
+// stops the file being rewritten on each launch with the value it already holds.
+let rememberedBackground: string | undefined
+ipcMain.on('app:theme', (e, background: unknown) => {
+  if (!isHexColour(background)) return
+  BrowserWindow.fromWebContents(e.sender)?.setBackgroundColor(background)
+  rememberedBackground ??= readThemeBackground()
+  if (background === rememberedBackground) return
+  try {
+    mkdirSync(app.getPath('userData'), { recursive: true })
+    // Written beside and then renamed over, like the autosave, so a crash mid-write cannot leave
+    // a half file for the next launch to read.
+    const tmp = `${themeFile()}.saving`
+    writeFileSync(tmp, JSON.stringify({ background }), 'utf8')
+    renameSync(tmp, themeFile())
+    rememberedBackground = background
+  } catch {
+    // Not remembered: the next launch flashes the default colour, and nothing else is lost.
+  }
+})
+
+ipcMain.handle('zoom:get', (e) => BrowserWindow.fromWebContents(e.sender)?.webContents.getZoomLevel() ?? 0)
+ipcMain.handle('zoom:set', (e, level: number) => {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  return win ? setZoom(win, level) : 0
+})
+
+ipcMain.handle('file:open', async (_e, filters?: unknown, title?: unknown) => {
   const result = await dialog.showOpenDialog({
-    title: 'Open PhysLab project',
-    filters: [{ name: 'PhysLab project', extensions: ['phys'] }],
+    ...openDialogOptions(filters, title),
     properties: ['openFile']
   })
   if (result.canceled || result.filePaths.length === 0) return null
@@ -155,17 +295,44 @@ ipcMain.handle('file:save', async (_e, content: string, path: string | null) => 
   }
   // Write beside the file first, then swap it in, so a crash cannot leave a half-written project.
   const tmp = `${target}.saving`
-  await writeFile(tmp, content, 'utf8')
   try {
-    await rename(tmp, target)
-  } catch {
-    // Windows refuses the swap while a backup tool or virus scanner holds the file open.
-    // Copying over it is not atomic, but losing the student's work would be worse.
-    await copyFile(tmp, target)
+    await writeFile(tmp, content, 'utf8')
+    try {
+      await rename(tmp, target)
+    } catch {
+      // Windows refuses the swap while a backup tool or virus scanner holds the file open.
+      // Copying over it is not atomic, but losing the student's work would be worse.
+      await copyFile(tmp, target)
+      await unlink(tmp).catch(() => {})
+    }
+  } catch (e) {
+    // The renderer shows this to the student; the raw "EACCES: permission denied, open '…'" is
+    // what would reach them otherwise.
     await unlink(tmp).catch(() => {})
+    throw new Error(writeFailureText(e), { cause: e })
   }
   return target
 })
+
+/** Why a write failed, in a sentence, from the code Node puts on the error. */
+function writeFailureText(e: unknown): string {
+  const code = (e as { code?: string } | null)?.code
+  switch (code) {
+    case 'EACCES':
+    case 'EPERM':
+      return 'PhysLab is not allowed to write in that folder.'
+    case 'EROFS':
+      return 'That drive is read-only.'
+    case 'ENOSPC':
+      return 'There is no room left on that drive.'
+    case 'ENOENT':
+      return 'That folder is no longer there.'
+    case 'EBUSY':
+      return 'Another program is holding that file open.'
+    default:
+      return `The file could not be written${code ? ` (${code})` : ''}.`
+  }
+}
 
 ipcMain.handle('file:saveImage', async (_e, dataUrl: string) => {
   const result = await dialog.showSaveDialog({
@@ -213,6 +380,18 @@ ipcMain.handle('autosave:write', async (_e, content: string) => {
     return true
   } catch {
     return false
+  }
+})
+
+ipcMain.on('autosave:writeSync', (e, content: string) => {
+  try {
+    mkdirSync(autosaveDir(), { recursive: true })
+    const tmp = `${autosaveFile()}.saving`
+    writeFileSync(tmp, content, 'utf8')
+    renameSync(tmp, autosaveFile())
+    e.returnValue = true
+  } catch {
+    e.returnValue = false
   }
 })
 

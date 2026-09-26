@@ -1,0 +1,48 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "1/(1 + x^2)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\frac{1}{x^{2} + 1}",
+   "text": "1/(x**2 + 1)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\tan^{-1} {x}",
+  "raw_text": "atan(x)",
+  "answer_latex": "\\tan^{-1} {x}",
+  "answer_text": "atan(x)",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "ArctanRule",
+   "integrand": {
+    "latex": "\\frac{1}{x^{2} + 1}",
+    "text": "1/(x**2 + 1)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "a": {
+    "latex": "1",
+    "text": "1"
+   },
+   "b": {
+    "latex": "1",
+    "text": "1"
+   },
+   "c": {
+    "latex": "1",
+    "text": "1"
+   },
+   "result": {
+    "latex": "\\tan^{-1} {x}",
+    "text": "atan(x)"
+   }
+  }
+ }
+}

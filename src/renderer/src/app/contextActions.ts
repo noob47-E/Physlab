@@ -1,14 +1,18 @@
 // What the right-click menu offers for each kind of object, in each mode.
 
+import { visibleOrder } from '../core/visibility'
 import { scene } from '../core/store'
 import { Builder } from '../core/factory'
 import { isFree } from '../core/evaluate'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { heading, len, neg, normalize, toDeg, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
+import { fuseChoice } from '../math/lego'
 import { useTool } from '../render/tools'
+import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
+import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
 import { fitCamera, resetCamera } from '../render/viewState'
-import { addVectorFromScene } from '../panels/VectorCalc'
+import { addVectorFromScene } from '../panels/vectorCalcStore'
 import type { MenuGroup, MenuItem } from '../ui/ContextMenu'
 import { useApp } from './modes'
 
@@ -124,6 +128,7 @@ function lineItems(o: SceneObject, c: Extract<Computed, { type: 'segment' | 'ray
   return items
 }
 
+// REGION L: Geometry Lego rows live in polygonItems.
 function polygonItems(o: SceneObject): MenuItem[] {
   if (o.type !== 'polygon') return []
   const items: MenuItem[] = [
@@ -140,12 +145,83 @@ function polygonItems(o: SceneObject): MenuItem[] {
       run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
     })
   }
+  if (canBreakApart(o)) {
+    items.push({ label: 'Break apart', hint: 'Turn the pieces into shapes you can slide, turn and flip', run: () => (s().breakApart(o.id), focusPanel('measure')) })
+  }
+  // Every selected shape; the right-clicked one counts even when it was not selected. Any
+  // touching shapes fuse (Fix 17), not only the pieces of one broken shape.
+  const chosen = fuseChoice(s().selection, o.id, s().objects)
+  if (chosen.length >= 2) items.push({ label: 'Fuse', hint: 'Join the selected shapes into one shape', run: () => (s().fusePieces(chosen), focusPanel('measure')) })
+  if (o.lego) {
+    items.push(
+      { label: 'Turn 90°', run: () => s().turnPiece(o.id, 90) },
+      { label: 'Turn 15°', run: () => s().turnPiece(o.id, 15) },
+      { label: 'Flip', hint: 'Its mirror image, left for right', run: () => s().flipPiece(o.id) }
+    )
+  }
   items.push({
     label: o.showAngles ? 'Hide angles' : 'Show angles',
     checked: !!o.showAngles,
     run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.showAngles = !o.showAngles)))
   })
   return items
+}
+
+/**
+ * A decomposed shape breaks into its parts, and a triangle (which has no Decompose) is cut in two
+ * along a median; a piece is already a piece.
+ */
+const canBreakApart = (o: SceneObject): boolean => o.type === 'polygon' && !o.lego && (!!o.decomposed || o.points.length === 3)
+
+/** What the search palette says when Break apart has no decomposed shape to work on. */
+export const BREAK_APART_NEEDS_SHAPE = 'Select a shape and decompose it first; then it can be broken apart.'
+
+/**
+ * Break apart and Fuse for the search palette, which has no object under the cursor: they read
+ * the selection, and say in the log why nothing happened rather than doing nothing silently.
+ */
+export function breakApartSelection(): void {
+  const st = s()
+  const shape = st.selection.map((id) => st.objects[id]).find((o) => o !== undefined && canBreakApart(o))
+  if (!shape) {
+    st.pushLog({ input: '', kind: 'info', text: BREAK_APART_NEEDS_SHAPE })
+    return
+  }
+  st.breakApart(shape.id)
+  focusPanel('measure')
+}
+
+/** The selected Lego pieces, for the palette's Turn and Flip rows. */
+const selectedPieces = (): string[] => {
+  const st = s()
+  return st.selection.filter((id) => {
+    const o = st.objects[id]
+    return o?.type === 'polygon' && !!o.lego
+  })
+}
+
+/** What the palette's Turn and Flip say when no piece is selected. */
+export const TURN_NEEDS_PIECE = 'Select a piece first: Break apart a shape, then pick one of its pieces.'
+
+/** Turns every selected piece about its own centre, or says why nothing turned. */
+export function turnSelection(deg: number): void {
+  const ids = selectedPieces()
+  if (!ids.length) return void s().pushLog({ input: '', kind: 'info', text: TURN_NEEDS_PIECE })
+  for (const id of ids) s().turnPiece(id, deg)
+}
+
+/** Flips every selected piece left for right, or says why nothing flipped. */
+export function flipSelection(): void {
+  const ids = selectedPieces()
+  if (!ids.length) return void s().pushLog({ input: '', kind: 'info', text: TURN_NEEDS_PIECE })
+  for (const id of ids) s().flipPiece(id)
+}
+
+/** Fuses the selected shapes; `fusePieces` itself says why when they are fewer than two or do not touch. */
+export function fuseSelection(): void {
+  const st = s()
+  st.fusePieces(fuseChoice(st.selection, null, st.objects))
+  focusPanel('measure')
 }
 
 function graphItems(o: SceneObject): MenuItem[] {
@@ -190,6 +266,21 @@ export function menuForObject(id: ObjId): MenuGroup[] {
   return groups
 }
 
+/** The sentence shown where the command is offered but no drawing is open (the Sandbox, the GPU Lab). */
+export const NO_DRAWING_TO_CLEAR = 'No drawing is open here. Go to Vectors, Geometry, Graphing or Lab Data: each has a drawing of its own.'
+
+/** Asks before clearing the drawing. Undo brings everything back, but a whole drawing is worth a question. */
+export function confirmClearDrawing(): void {
+  // The palette offers the command everywhere; with no drawing active there is nothing to ask
+  // about, and the store refuses anyway. Say so rather than do nothing.
+  if (!s().activeSpace) {
+    alert(NO_DRAWING_TO_CLEAR)
+    return
+  }
+  if (!confirm('Delete every object on this drawing? Undo brings them back.')) return
+  s().clearDrawing()
+}
+
 /** Menu for empty space. */
 export function menuForBackground(world: V3 | null): MenuGroup[] {
   const st = s()
@@ -203,9 +294,12 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
   items.push(
     { label: 'Fit everything in view', run: () => fitCamera() },
     { label: 'Reset the view', shortcut: 'Home', run: () => resetCamera() },
-    { label: 'Select everything', shortcut: 'Ctrl+A', run: () => st.select(st.order) }
+    { label: 'Select everything', shortcut: 'Ctrl+A', run: () => st.select(visibleOrder(st.order, st.objects, st.activeSpace)) },
+    { label: 'Delete everything on this drawing…', hint: 'Only this drawing; Undo brings it back', danger: true, run: () => confirmClearDrawing() }
   )
   const labels = st.settings.labelShow
+  const { showGrid, showAxes } = st.settings
+  const gridStyle = normaliseGridStyle(st.settings.gridStyle)
   return [
     { items },
     {
@@ -213,12 +307,21 @@ export function menuForBackground(world: V3 | null): MenuGroup[] {
       items: [
         { label: 'Always', checked: labels === 'always', run: () => st.setSettings({ labelShow: 'always' }) },
         { label: 'On hover', checked: labels === 'hover', run: () => st.setSettings({ labelShow: 'hover' }) },
-        { label: 'Hidden', checked: labels === 'never', run: () => st.setSettings({ labelShow: 'never' }) }
+        { label: 'Hidden', checked: labels === 'never', run: () => st.setSettings({ labelShow: 'never' }) },
+        { label: 'Angle marks', hint: ANGLE_MARKS_HELP, checked: st.settings.showAngleMarks, run: () => st.setSettings({ showAngleMarks: !st.settings.showAngleMarks }) }
+      ]
+    },
+    {
+      title: 'Grid',
+      items: [
+        ...GRID_STYLES.map((g): MenuItem => ({ label: g.label, hint: g.hint, checked: showGrid && gridStyle === g.id, run: () => st.setSettings({ showGrid: true, gridStyle: g.id }) })),
+        { label: 'Off', checked: !showGrid, run: () => st.setSettings({ showGrid: false }) },
+        // Not a style: the grid can be off with the axes on, or the other way round.
+        { label: 'Axes', hint: 'The axes with their numbers', checked: showAxes, run: () => st.setSettings({ showAxes: !showAxes }) }
       ]
     },
     {
       items: [
-        { label: 'Grid', checked: st.settings.showGrid, run: () => st.setSettings({ showGrid: !st.settings.showGrid }) },
         { label: 'Snapping', checked: st.settings.snap, run: () => st.setSettings({ snap: !st.settings.snap }) },
         { label: 'Search everything…', shortcut: 'Ctrl+K', run: () => useApp.getState().setSearchOpen(true) }
       ]

@@ -1,0 +1,21 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "sqrt(1 + x^3)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\sqrt{x^{3} + 1}",
+   "text": "sqrt(x**3 + 1)"
+  },
+  "unsupported": true,
+  "closed": true,
+  "raw_latex": "\\frac{1}{3} \\frac{x \\Gamma\\left(\\frac{1}{3}\\right) {{}_{2}F_{1}\\left(\\begin{matrix} - \\frac{1}{2}, \\frac{1}{3} \\\\ \\frac{4}{3} \\end{matrix}\\middle| {x^{3} e^{i \\pi}} \\right)}}{\\Gamma\\left(\\frac{4}{3}\\right)}",
+  "raw_text": "x*gamma(1/3)*hyper((-1/2, 1/3), (4/3,), x**3*exp_polar(I*pi))/(3*gamma(4/3))",
+  "answer_latex": "x {{}_{2}F_{1}\\left(\\begin{matrix} - \\frac{1}{2}, \\frac{1}{3} \\\\ \\frac{4}{3} \\end{matrix}\\middle| {x^{3} e^{i \\pi}} \\right)}",
+  "answer_text": "x*hyper((-1/2, 1/3), (4/3,), x**3*exp_polar(I*pi))",
+  "checked": false,
+  "deg_ignored": false
+ }
+}

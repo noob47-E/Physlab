@@ -8,7 +8,6 @@ import {
   countSigFigs,
   dimensionsOf,
   exactForm,
-  fmtNum,
   inverseNormal,
   normalCdf,
   normalPdf,
@@ -23,7 +22,9 @@ import {
   statistics,
   type RegressionType
 } from '../calc/engine'
+import { calcNum, mathFormatOptions } from '../calc/format'
 import { CONSTANTS } from '../calc/constants'
+import { themeColor } from '../app/theme'
 import { math } from '../math/expr'
 import { Builder } from '../core/factory'
 import { useScene } from '../core/store'
@@ -64,19 +65,19 @@ export function ModePanel({ mode }: { mode: CalcMode }) {
   }
 }
 
-const Screen = ({ children }: { children: React.ReactNode }) => <div className="lcd min-h-0 text-[14px]">{children}</div>
+const Screen = ({ children }: { children: React.ReactNode }) => <div className="maths-screen text-lead">{children}</div>
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className="flex items-center gap-2">
-    <span className="w-28 shrink-0 text-right text-zinc-400">{label}</span>
+    <span className="w-28 shrink-0 text-right text-[color:var(--text-dim)]">{label}</span>
     <div className="min-w-0 flex-1">{children}</div>
   </div>
 )
 
 const matTex = (m: unknown): string => {
   const arr = (m as { toArray?: () => unknown }).toArray ? (m as { toArray: () => unknown }).toArray() : m
-  if (!Array.isArray(arr)) return typeof arr === 'number' ? fmtNum(arr) : String(arr)
+  if (!Array.isArray(arr)) return typeof arr === 'number' ? calcNum(arr) : String(arr)
   const rows = (Array.isArray(arr[0]) ? arr : [arr]) as unknown[][]
-  return `\\begin{bmatrix}${rows.map((r) => r.map((v) => (typeof v === 'number' ? fmtNum(v, 6) : math.format(v as never, { precision: 6 }))).join(' & ')).join(' \\\\ ')}\\end{bmatrix}`
+  return `\\begin{bmatrix}${rows.map((r) => r.map((v) => (typeof v === 'number' ? calcNum(v) : math.format(v as never, mathFormatOptions()))).join(' & ')).join(' \\\\ ')}\\end{bmatrix}`
 }
 
 // ---------------------------------------------------------------------------
@@ -90,19 +91,19 @@ function MatrixEditor({ name }: { name: string }) {
   return (
     <div className="card p-2">
       <div className="mb-1 flex items-center gap-2">
-        <b className="text-white">{name}</b>
-        <span className="text-zinc-500">
+        <b className="text-[color:var(--text-strong)]">{name}</b>
+        <span className="text-[color:var(--text-faint)]">
           {rows}×{cols}
         </span>
         <div className="flex-1" />
-        <span className="text-zinc-500">rows</span>
+        <span className="text-[color:var(--text-faint)]">rows</span>
         <button className="icon-btn h-5 w-5" onClick={() => resize(Math.max(1, rows - 1), cols)}>
           <Minus size={11} />
         </button>
         <button className="icon-btn h-5 w-5" onClick={() => resize(Math.min(6, rows + 1), cols)}>
           <Plus size={11} />
         </button>
-        <span className="text-zinc-500">cols</span>
+        <span className="text-[color:var(--text-faint)]">cols</span>
         <button className="icon-btn h-5 w-5" onClick={() => resize(rows, Math.max(1, cols - 1))}>
           <Minus size={11} />
         </button>
@@ -121,15 +122,15 @@ function visualizeMatrix2D(M: number[][], label: string) {
   const b = new Builder()
   const [[a, c], [bb, d]] = M
   const o = b.point([0, 0, 0], { name: 'O', auxiliary: true, visible: false })
-  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [1, 0, 0] }, { name: 'i', color: '#868e96' })
-  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [0, 1, 0] }, { name: 'j', color: '#868e96' })
-  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [a, bb, 0] }, { name: 'Mi', color: '#ff6b6b' })
-  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [c, d, 0] }, { name: 'Mj', color: '#51cf66' })
+  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [1, 0, 0] }, { name: 'i', color: themeColor('--grid-axis') })
+  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [0, 1, 0] }, { name: 'j', color: themeColor('--grid-axis') })
+  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [a, bb, 0] }, { name: 'Mi', color: themeColor('--bad') })
+  b.vector({ kind: 'free', tail: [0, 0, 0], comp: [c, d, 0] }, { name: 'Mj', color: themeColor('--good') })
   const p1 = b.point([a, bb, 0], { auxiliary: true, showLabel: false })
   const p2 = b.point([a + c, bb + d, 0], { auxiliary: true, showLabel: false })
   const p3 = b.point([c, d, 0], { auxiliary: true, showLabel: false })
-  b.polygon([o.id, p1.id, p2.id, p3.id], { name: 'image', color: '#fcc419' })
-  b.text([a + c, bb + d, 0], `${label}: area × det = ${fmtNum(a * d - bb * c, 5)}`)
+  b.polygon([o.id, p1.id, p2.id, p3.id], { name: 'image', color: themeColor('--warn') })
+  b.text([a + c, bb + d, 0], `${label}: area × det = ${calcNum(a * d - bb * c)}`)
   b.commit()
   useScene.getState().setViewMode('2d')
 }
@@ -177,12 +178,12 @@ function MatrixMode() {
       </div>
       <div className="flex flex-wrap gap-1">
         {quick.map((q) => (
-          <button key={q} className="btn h-6 font-mono text-[11px]" onClick={() => (setExpr(q), run(q))}>
+          <button key={q} className="btn h-6 font-mono text-fine" onClick={() => (setExpr(q), run(q))}>
             {q}
           </button>
         ))}
       </div>
-      {err && <div className="text-red-400">{err}</div>}
+      {err && <div className="text-[color:var(--bad)]">{err}</div>}
       {out && (
         <Screen>
           <Tex tex={out.tex} display />
@@ -216,7 +217,7 @@ function VectorMode() {
     <div className="flex flex-col gap-2">
       {Object.entries(vectors).map(([name, v]) => (
         <div key={name} className="card flex items-center gap-2 p-2">
-          <b className="w-12 text-white">{name}</b>
+          <b className="w-12 text-[color:var(--text-strong)]">{name}</b>
           <div className="seg">
             <button className={v.length === 2 ? 'on' : ''} onClick={() => set(name, v.slice(0, 2))}>
               2D
@@ -233,13 +234,13 @@ function VectorMode() {
         </div>
       ))}
       <div className="flex items-center gap-2">
-        <span className="text-zinc-400">Use</span>
+        <span className="text-[color:var(--text-dim)]">Use</span>
         <select className="field w-24" value={a} onChange={(e) => setA(e.target.value)}>
           {Object.keys(vectors).map((n) => (
             <option key={n}>{n}</option>
           ))}
         </select>
-        <span className="text-zinc-400">and</span>
+        <span className="text-[color:var(--text-dim)]">and</span>
         <select className="field w-24" value={b} onChange={(e) => setB(e.target.value)}>
           {Object.keys(vectors).map((n) => (
             <option key={n}>{n}</option>
@@ -301,7 +302,7 @@ function StatMode() {
     if (typeof res === 'string') return
     const b = new Builder()
     rows.forEach((r) => b.point([r.x, paired ? r.y : 0, 0], { auxiliary: true, showLabel: false }))
-    if (res.expr) b.graph({ kind: 'explicit', source: res.label ?? 'regression', exprs: [res.expr], showRoots: false, showExtrema: false }, { name: 'fit', color: '#fcc419' })
+    if (res.expr) b.graph({ kind: 'explicit', source: res.label ?? 'regression', exprs: [res.expr], showRoots: false, showExtrema: false }, { name: 'fit', color: themeColor('--warn') })
     b.commit()
     useScene.getState().setViewMode('2d')
   }
@@ -319,23 +320,23 @@ function StatMode() {
         <option value="power">y = a·x^b</option>
         <option value="inverse">y = a + b/x</option>
       </select>
-      <label className="flex items-center gap-2 text-zinc-400">
+      <label className="flex items-center gap-2 text-[color:var(--text-dim)]">
         <input type="checkbox" checked={useFreq} onChange={(e) => setUseFreq(e.target.checked)} /> Frequency column
       </label>
       <div className="card max-h-56 overflow-auto p-1">
         <div className="grid gap-1" style={{ gridTemplateColumns: `24px 1fr ${paired ? '1fr' : ''} ${useFreq ? '70px' : ''} 22px` }}>
           <span />
-          <b className="text-center text-zinc-400">x</b>
-          {paired && <b className="text-center text-zinc-400">y</b>}
-          {useFreq && <b className="text-center text-zinc-400">freq</b>}
+          <b className="text-center text-[color:var(--text-dim)]">x</b>
+          {paired && <b className="text-center text-[color:var(--text-dim)]">y</b>}
+          {useFreq && <b className="text-center text-[color:var(--text-dim)]">freq</b>}
           <span />
           {rows.map((r, i) => (
             <FragmentRow key={i}>
-              <span className="text-right text-zinc-500">{i + 1}</span>
+              <span className="text-right text-[color:var(--text-faint)]">{i + 1}</span>
               <NumField value={r.x} onChange={(v) => setRows(rows.map((q, j) => (j === i ? { ...q, x: v } : q)))} />
               {paired && <NumField value={r.y} onChange={(v) => setRows(rows.map((q, j) => (j === i ? { ...q, y: v } : q)))} />}
               {useFreq && <NumField value={r.f} onChange={(v) => setRows(rows.map((q, j) => (j === i ? { ...q, f: v } : q)))} />}
-              <button className="text-zinc-500 hover:text-red-400" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+              <button className="text-[color:var(--text-faint)] hover:text-[color:var(--bad)]" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                 ×
               </button>
             </FragmentRow>
@@ -346,31 +347,31 @@ function StatMode() {
         </button>
       </div>
       {typeof res === 'string' ? (
-        <div className="text-red-400">{res}</div>
+        <div className="text-[color:var(--bad)]">{res}</div>
       ) : (
         <Screen>
-          <div className="grid grid-cols-2 gap-x-4 font-mono text-[12.5px]">
+          <div className="grid grid-cols-2 gap-x-4 font-mono text-small">
             <span>n = {res.n}</span>
-            <span>x̄ = {fmtNum(res.mean, 8)}</span>
-            <span>σx = {fmtNum(res.sigmaX, 8)}</span>
-            <span>sx = {fmtNum(res.sx, 8)}</span>
-            <span>Σx = {fmtNum(res.sum, 8)}</span>
-            <span>Σx² = {fmtNum(res.sumSq, 8)}</span>
-            <span>min = {fmtNum(res.min)}</span>
-            <span>max = {fmtNum(res.max)}</span>
-            <span>Q1 = {fmtNum(res.q1)}</span>
-            <span>Med = {fmtNum(res.median)}</span>
-            <span>Q3 = {fmtNum(res.q3)}</span>
-            {res.meanY !== undefined && <span>ȳ = {fmtNum(res.meanY, 8)}</span>}
-            {res.coef && Object.entries(res.coef).map(([k, v]) => <span key={k}>{k} = {fmtNum(v, 8)}</span>)}
-            {res.r !== undefined && <span>r = {fmtNum(res.r, 8)}</span>}
+            <span>x̄ = {calcNum(res.mean)}</span>
+            <span>σx = {calcNum(res.sigmaX)}</span>
+            <span>sx = {calcNum(res.sx)}</span>
+            <span>Σx = {calcNum(res.sum)}</span>
+            <span>Σx² = {calcNum(res.sumSq)}</span>
+            <span>min = {calcNum(res.min)}</span>
+            <span>max = {calcNum(res.max)}</span>
+            <span>Q1 = {calcNum(res.q1)}</span>
+            <span>Med = {calcNum(res.median)}</span>
+            <span>Q3 = {calcNum(res.q3)}</span>
+            {res.meanY !== undefined && <span>ȳ = {calcNum(res.meanY)}</span>}
+            {res.coef && Object.entries(res.coef).map(([k, v]) => <span key={k}>{k} = {calcNum(v)}</span>)}
+            {res.r !== undefined && <span>r = {calcNum(res.r)}</span>}
           </div>
-          {res.label && <div className="mt-1 text-[12px]">Model: {res.label}</div>}
+          {res.label && <div className="mt-1 text-small">Model: {res.label}</div>}
           {res.expr && (
-            <div className="mt-1 flex items-center gap-2 text-[12px]">
+            <div className="mt-1 flex items-center gap-2 text-small">
               ŷ at x =
-              <input className="w-16 rounded border border-black/20 bg-white/40 px-1" type="number" value={predictX} onChange={(e) => setPredictX(Number(e.target.value))} onKeyDown={(e) => e.stopPropagation()} />
-              → <b>{fmtNum(predict, 8)}</b>
+              <input className="w-16 rounded border border-[color:var(--line-2)] bg-[color:var(--input-bg)] px-1" type="number" value={predictX} onChange={(e) => setPredictX(Number(e.target.value))} onKeyDown={(e) => e.stopPropagation()} />
+              → <b>{calcNum(predict)}</b>
             </div>
           )}
         </Screen>
@@ -436,7 +437,7 @@ function DistMode() {
         const hi = kind.endsWith('CD') && k <= p.x
         const base = b.point([k, 0, 0], { auxiliary: true, visible: false })
         const top = b.point([k, y * 10, 0], { auxiliary: true, showLabel: false })
-        b.segment(base.id, top.id, { color: hi || (kind.endsWith('PD') && k === p.x) ? '#fcc419' : '#4dabf7', showLabel: false })
+        b.segment(base.id, top.id, { color: hi || (kind.endsWith('PD') && k === p.x) ? themeColor('--warn') : themeColor('--accent'), showLabel: false })
       }
       b.text([0, -0.8, 0], 'bar heights ×10')
       b.commit()
@@ -489,7 +490,7 @@ function DistMode() {
         f('lambda', 'λ')
       )}
       <Screen>
-        {error ? <span className="text-[#8a1c1c]">{error}</span> : <div className="text-right text-[22px]">{fmtNum(result)}</div>}
+        {error ? <span className="text-[color:var(--bad)]">{error}</span> : <div className="text-right text-display">{calcNum(result)}</div>}
       </Screen>
       <button className="btn w-fit" onClick={visualize}>
         <Eye size={13} /> Visualize
@@ -532,14 +533,14 @@ function TableMode() {
       <div className="grid grid-cols-3 gap-1">
         {(['start', 'end', 'step'] as const).map((k) => (
           <div key={k} className="relative">
-            <span className="pointer-events-none absolute left-1.5 top-1 text-[10px] text-zinc-500">{k}</span>
+            <span className="pointer-events-none absolute left-1.5 top-1 text-fine text-[color:var(--text-faint)]">{k}</span>
             <NumField value={range[k]} onChange={(v) => setRange({ ...range, [k]: k === 'step' ? Math.max(1e-6, v) : v })} />
           </div>
         ))}
       </div>
       <div className="card max-h-64 overflow-auto">
-        <table className="w-full font-mono text-[12px]">
-          <thead className="sticky top-0 bg-[#222327] text-zinc-400">
+        <table className="w-full font-mono text-small">
+          <thead className="sticky top-0 bg-[color:var(--bg-2)] text-[color:var(--text-dim)]">
             <tr>
               <th className="px-2 py-1 text-right">x</th>
               <th className="px-2 py-1 text-right">f(x)</th>
@@ -548,10 +549,10 @@ function TableMode() {
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="odd:bg-black/10">
-                <td className="px-2 text-right text-zinc-400">{fmtNum(r.x, 8)}</td>
-                <td className="px-2 text-right">{typeof r.f === 'number' ? fmtNum(r.f, 8) : r.f}</td>
-                {gx.trim() && <td className="px-2 text-right">{typeof r.g === 'number' ? fmtNum(r.g, 8) : r.g}</td>}
+              <tr key={i} className="odd:bg-surface-1">
+                <td className="px-2 text-right text-[color:var(--text-dim)]">{calcNum(r.x)}</td>
+                <td className="px-2 text-right">{typeof r.f === 'number' ? calcNum(r.f) : r.f}</td>
+                {gx.trim() && <td className="px-2 text-right">{typeof r.g === 'number' ? calcNum(r.g) : r.g}</td>}
               </tr>
             ))}
           </tbody>
@@ -587,7 +588,7 @@ function EquationMode() {
   const [coef, setCoef] = useState<number[]>([1, -5, 6, 0, 0, 0, 0])
   const letters = ['x', 'y', 'z', 't', 'u', 'v']
 
-  let out: React.ReactNode = null
+  let out: React.ReactNode
   let visualize: (() => void) | null = null
   try {
     if (kind === 'simul') {
@@ -597,7 +598,7 @@ function EquationMode() {
       out = sol.map((v, i) => (
         <div key={i} className="flex justify-between">
           <span>{letters[i]} =</span>
-          <span>{exactForm(v) ? <Tex tex={exactForm(v)!} /> : fmtNum(v)}</span>
+          <span>{exactForm(v) ? <Tex tex={exactForm(v)!} /> : calcNum(v)}</span>
         </div>
       ))
       if (n === 2) {
@@ -620,13 +621,13 @@ function EquationMode() {
             <div key={i} className="flex justify-between">
               <span>x{i + 1} =</span>
               <span>
-                {r.im === 0 ? exactForm(r.re) ? <Tex tex={exactForm(r.re)!} /> : fmtNum(r.re) : `${fmtNum(r.re)} ${r.im < 0 ? '−' : '+'} ${fmtNum(Math.abs(r.im))}i`}
+                {r.im === 0 ? exactForm(r.re) ? <Tex tex={exactForm(r.re)!} /> : calcNum(r.re) : `${calcNum(r.re)} ${r.im < 0 ? '−' : '+'} ${calcNum(Math.abs(r.im))}i`}
               </span>
             </div>
           ))}
           {deg === 2 && c[0] !== 0 && (
-            <div className="mt-1 border-t border-black/20 pt-1 text-[12px]">
-              Turning point: ({fmtNum(-c[1] / (2 * c[0]))}, {fmtNum(c[2] - (c[1] * c[1]) / (4 * c[0]))}) · discriminant b²−4ac = {fmtNum(c[1] * c[1] - 4 * c[0] * c[2])}
+            <div className="mt-1 border-t border-[color:var(--line-2)] pt-1 text-small">
+              Turning point: ({calcNum(-c[1] / (2 * c[0]))}, {calcNum(c[2] - (c[1] * c[1]) / (4 * c[0]))}) · discriminant b²−4ac = {calcNum(c[1] * c[1] - 4 * c[0] * c[2])}
             </div>
           )}
         </>
@@ -634,7 +635,7 @@ function EquationMode() {
       visualize = () => visualizeGraph(`y = ${expr}`, [expr], 'explicit')
     }
   } catch (e) {
-    out = <span className="text-[#8a1c1c]">{e instanceof Error ? e.message : String(e)}</span>
+    out = <span className="text-[color:var(--bad)]">{e instanceof Error ? e.message : String(e)}</span>
   }
 
   return (
@@ -664,11 +665,11 @@ function EquationMode() {
                 {row.slice(0, n).map((v, j) => (
                   <span key={j} className="flex items-center gap-0.5">
                     <NumField className="w-14" value={v} onChange={(x) => setA(A.map((r, a) => r.map((q, b) => (a === i && b === j ? x : q))))} />
-                    <i className="text-zinc-400">{letters[j]}</i>
-                    {j < n - 1 && <span className="text-zinc-500">+</span>}
+                    <i className="text-[color:var(--text-dim)]">{letters[j]}</i>
+                    {j < n - 1 && <span className="text-[color:var(--text-faint)]">+</span>}
                   </span>
                 ))}
-                <span className="px-1 text-zinc-400">=</span>
+                <span className="px-1 text-[color:var(--text-dim)]">=</span>
                 <NumField className="w-14" value={row[n]} onChange={(x) => setA(A.map((r, a) => r.map((q, b) => (a === i && b === n ? x : q))))} />
               </div>
             ))}
@@ -689,11 +690,11 @@ function EquationMode() {
             {coef.slice(0, deg + 1).map((v, i) => (
               <span key={i} className="flex items-center gap-0.5">
                 <NumField className="w-14" value={v} onChange={(x) => setCoef(coef.map((q, j) => (j === i ? x : q)))} />
-                <i className="text-zinc-400">{deg - i > 1 ? `x${'⁰¹²³⁴⁵⁶'[deg - i]}` : deg - i === 1 ? 'x' : ''}</i>
-                {i < deg && <span className="text-zinc-500">+</span>}
+                <i className="text-[color:var(--text-dim)]">{deg - i > 1 ? `x${'⁰¹²³⁴⁵⁶'[deg - i]}` : deg - i === 1 ? 'x' : ''}</i>
+                {i < deg && <span className="text-[color:var(--text-faint)]">+</span>}
               </span>
             ))}
-            <span className="text-zinc-400">= 0</span>
+            <span className="text-[color:var(--text-dim)]">= 0</span>
           </div>
         </>
       )}
@@ -714,10 +715,10 @@ function InequalityMode() {
   const [coef, setCoef] = useState([1, -5, 6, 0, 0])
   const [op, setOp] = useState<'<' | '<=' | '>' | '>='>('<')
   const c = coef.slice(0, deg + 1)
-  let text = ''
+  let text: string
   try {
     const iv = polyInequality(c, op)
-    const f = (v: number) => (Number.isFinite(v) ? fmtNum(v, 8) : v > 0 ? '∞' : '−∞')
+    const f = (v: number) => (Number.isFinite(v) ? calcNum(v) : v > 0 ? '∞' : '−∞')
     text = iv.length
       ? iv.map((r) => (r.from === r.to ? `x = ${f(r.from)}` : !Number.isFinite(r.from) && !Number.isFinite(r.to) ? 'All real numbers' : !Number.isFinite(r.from) ? `x ${r.closedTo ? '≤' : '<'} ${f(r.to)}` : !Number.isFinite(r.to) ? `x ${r.closedFrom ? '≥' : '>'} ${f(r.from)}` : `${f(r.from)} ${r.closedFrom ? '≤' : '<'} x ${r.closedTo ? '≤' : '<'} ${f(r.to)}`)).join('   or   ')
       : 'No solution'
@@ -740,8 +741,8 @@ function InequalityMode() {
         {c.map((v, i) => (
           <span key={i} className="flex items-center gap-0.5">
             <NumField className="w-14" value={v} onChange={(x) => setCoef(coef.map((q, j) => (j === i ? x : q)))} />
-            <i className="text-zinc-400">{deg - i > 1 ? `x${'⁰¹²³⁴'[deg - i]}` : deg - i === 1 ? 'x' : ''}</i>
-            {i < deg && <span className="text-zinc-500">+</span>}
+            <i className="text-[color:var(--text-dim)]">{deg - i > 1 ? `x${'⁰¹²³⁴'[deg - i]}` : deg - i === 1 ? 'x' : ''}</i>
+            {i < deg && <span className="text-[color:var(--text-faint)]">+</span>}
           </span>
         ))}
         <select className="field w-14" value={op} onChange={(e) => setOp(e.target.value as typeof op)}>
@@ -750,16 +751,16 @@ function InequalityMode() {
           <option value=">">&gt;</option>
           <option value=">=">≥</option>
         </select>
-        <span className="text-zinc-400">0</span>
+        <span className="text-[color:var(--text-dim)]">0</span>
       </div>
       <Screen>
-        <div className="text-[16px]">{text}</div>
+        <div className="text-lead">{text}</div>
       </Screen>
       <button
         className="btn w-fit"
         onClick={() => {
           visualizeGraph(`y = ${expr}`, [expr], 'explicit')
-          visualizeGraph(`${expr} ${op} 0`, [expr], 'inequality', { op, color: '#51cf66' })
+          visualizeGraph(`${expr} ${op} 0`, [expr], 'inequality', { op, color: themeColor('--good') })
         }}
       >
         <Eye size={13} /> Visualize
@@ -789,12 +790,12 @@ function RatioMode() {
         <b>:</b>
         <NumField className="w-16" value={v.b} onChange={(x) => setV({ ...v, b: x })} />
         <b>=</b>
-        {unknown === 'd' ? <NumField className="w-16" value={v.c} onChange={(x) => setV({ ...v, c: x })} /> : <span className="w-16 text-center text-amber-300">X</span>}
+        {unknown === 'd' ? <NumField className="w-16" value={v.c} onChange={(x) => setV({ ...v, c: x })} /> : <span className="w-16 text-center text-[color:var(--warn)]">X</span>}
         <b>:</b>
-        {unknown === 'c' ? <NumField className="w-16" value={v.d} onChange={(x) => setV({ ...v, d: x })} /> : <span className="w-16 text-center text-amber-300">X</span>}
+        {unknown === 'c' ? <NumField className="w-16" value={v.d} onChange={(x) => setV({ ...v, d: x })} /> : <span className="w-16 text-center text-[color:var(--warn)]">X</span>}
       </div>
       <Screen>
-        <div className="text-right text-[22px]">X = {fmtNum(result)}</div>
+        <div className="text-right text-display">X = {calcNum(result)}</div>
       </Screen>
     </div>
   )
@@ -841,10 +842,10 @@ function SheetMode() {
   }, [cells])
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-[11px] text-zinc-500">Type numbers or formulas starting with = (e.g. =A1*2, =sum(A1:A5), =mean(B1:B4)).</div>
+      <div className="text-fine text-[color:var(--text-faint)]">Type numbers or formulas starting with = (e.g. =A1*2, =sum(A1:A5), =mean(B1:B4)).</div>
       <div className="card overflow-auto">
-        <table className="w-full font-mono text-[12px]">
-          <thead className="bg-[#222327] text-zinc-400">
+        <table className="w-full font-mono text-small">
+          <thead className="bg-[color:var(--bg-2)] text-[color:var(--text-dim)]">
             <tr>
               <th className="w-6" />
               {COLS.map((c) => (
@@ -857,15 +858,15 @@ function SheetMode() {
           <tbody>
             {Array.from({ length: 15 }, (_, r) => (
               <tr key={r}>
-                <td className="text-center text-zinc-500">{r + 1}</td>
+                <td className="text-center text-[color:var(--text-faint)]">{r + 1}</td>
                 {COLS.map((c) => {
                   const id = `${c}${r + 1}`
                   return (
-                    <td key={id} className="border border-[#2c2d32] p-0">
+                    <td key={id} className="border border-[color:var(--line)] p-0">
                       {edit === id ? (
                         <input
                           autoFocus
-                          className="w-full bg-[#101114] px-1 outline-none"
+                          className="w-full bg-[color:var(--input-bg)] px-1 outline-none"
                           defaultValue={cells[id] ?? ''}
                           onBlur={(e) => {
                             setCells({ ...cells, [id]: e.target.value })
@@ -878,7 +879,7 @@ function SheetMode() {
                         />
                       ) : (
                         <div className="min-h-5 cursor-cell px-1 text-right" onClick={() => setEdit(id)}>
-                          {typeof values[id] === 'number' ? fmtNum(values[id] as number, 8) : values[id]}
+                          {typeof values[id] === 'number' ? calcNum(values[id] as number) : values[id]}
                         </div>
                       )}
                     </td>
@@ -917,13 +918,13 @@ function UnitsMode() {
   const [from, setFrom] = useState('km/h')
   const [to, setTo] = useState('m/s')
   const [free, setFree] = useState('5 N m to J')
-  let result = ''
+  let result: string
   try {
-    result = fmtNum(Number(math.unit(value, from).toNumber(to)))
+    result = calcNum(Number(math.unit(value, from).toNumber(to)))
   } catch (e) {
     result = String(e instanceof Error ? e.message : e)
   }
-  let freeOut = ''
+  let freeOut: string
   try {
     freeOut = math.format(math.evaluate(free), { precision: 10 })
   } catch (e) {
@@ -955,7 +956,7 @@ function UnitsMode() {
             <option key={u}>{u}</option>
           ))}
         </select>
-        <span className="text-zinc-400">→</span>
+        <span className="text-[color:var(--text-dim)]">→</span>
         <select className="field w-28" value={to} onChange={(e) => setTo(e.target.value)}>
           {units.map((u) => (
             <option key={u}>{u}</option>
@@ -963,11 +964,11 @@ function UnitsMode() {
         </select>
       </div>
       <Screen>
-        <div className="text-right text-[20px]">
+        <div className="text-right text-display">
           {result} {to}
         </div>
       </Screen>
-      <div className="text-zinc-400">Or type any conversion (any units, even combined):</div>
+      <div className="text-[color:var(--text-dim)]">Or type any conversion (any units, even combined):</div>
       <input className="field font-mono" value={free} onChange={(e) => setFree(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
       <Screen>
         <div className="text-right">{freeOut}</div>
@@ -984,25 +985,22 @@ function ConstMode() {
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">
-        <Search size={13} className="absolute left-2 top-1.5 text-zinc-500" />
+        <Search size={13} className="absolute left-2 top-1.5 text-[color:var(--text-faint)]" />
         <input className="field pl-7" placeholder="Search constants…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
       </div>
-      <div className="card max-h-[520px] overflow-auto">
+      <div className="card min-h-0 overflow-auto">
         {list.map((c) => (
           <button
             key={c.id}
-            className="grid w-full grid-cols-[28px_52px_1fr_auto] items-baseline gap-2 px-2 py-1 text-left hover:bg-[#2f4a7a]"
+            className="grid w-full grid-cols-[28px_52px_1fr_auto] items-baseline gap-2 px-2 py-1 text-left hover:bg-[color:var(--sel-row)]"
             title={`Insert ${c.id} into the calculator`}
-            onClick={() => {
-              useCalc.getState().insert(c.id)
-              useCalc.setState({ mode: 'COMP' })
-            }}
+            onClick={() => useCalc.getState().insert(c.id)}
           >
-            <span className="text-zinc-500">{String(c.no).padStart(2, '0')}</span>
-            <span className="font-semibold text-white">{c.symbol}</span>
-            <span className="truncate text-zinc-300">{c.name}</span>
-            <span className="font-mono text-[11.5px] text-amber-200">
-              {fmtNum(c.value, 10)} {c.unit}
+            <span className="text-[color:var(--text-faint)]">{String(c.no).padStart(2, '0')}</span>
+            <span className="font-semibold text-[color:var(--text-strong)]">{c.symbol}</span>
+            <span className="truncate text-[color:var(--text)]">{c.name}</span>
+            <span className="font-mono text-fine text-[color:var(--code-text)]">
+              {calcNum(c.value)} {c.unit}
             </span>
           </button>
         ))}
@@ -1030,7 +1028,7 @@ function MeasureMode() {
   }
   const numVal = Number(num.replace(/[×x]\s*10\^?/i, 'e'))
   const prop = propagate(op, a, op === '^' ? power : b)
-  let dims = ''
+  let dims: string
   try {
     dims = dimensionsOf(unitExpr)
   } catch (e) {
@@ -1043,17 +1041,17 @@ function MeasureMode() {
         <div className="section-title px-0">Significant figures</div>
         <input className="field font-mono" value={num} onChange={(e) => setNum(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
         {typeof sf === 'string' ? (
-          <div className="mt-1 text-red-400">{sf}</div>
+          <div className="mt-1 text-[color:var(--bad)]">{sf}</div>
         ) : (
-          <div className="mt-1 text-zinc-300">
-            <b className="text-white">{sf.count}</b> significant figure{sf.count === 1 ? '' : 's'}. <span className="text-zinc-400">{sf.explanation}</span>
+          <div className="mt-1 text-[color:var(--text)]">
+            <b className="text-[color:var(--text-strong)]">{sf.count}</b> significant figure{sf.count === 1 ? '' : 's'}. <span className="text-[color:var(--text-dim)]">{sf.explanation}</span>
             <div className="mt-1">Scientific notation: {Number.isFinite(numVal) ? numVal.toExponential(Math.max(0, sf.count - 1)).replace('e', ' × 10^') : '—'}</div>
           </div>
         )}
         <div className="mt-2 flex items-center gap-2">
           Round to
           <NumField className="w-14" value={sig} onChange={(v) => setSig(Math.max(1, Math.min(15, Math.round(v))))} />
-          sig. figs → <b className="font-mono text-amber-200">{Number.isFinite(numVal) ? roundSig(numVal, sig) : '—'}</b>
+          sig. figs → <b className="font-mono text-[color:var(--code-text)]">{Number.isFinite(numVal) ? roundSig(numVal, sig) : '—'}</b>
         </div>
       </div>
 
@@ -1076,17 +1074,17 @@ function MeasureMode() {
             </>
           )}
         </div>
-        <div className="mt-2 text-[15px] text-white">
-          = {fmtNum(prop.value, 6)} ± {fmtNum(prop.unc, 3)} <span className="text-zinc-400">({fmtNum((100 * prop.unc) / Math.abs(prop.value), 3)} %)</span>
+        <div className="mt-2 text-lead text-[color:var(--text-strong)]">
+          = {calcNum(prop.value)} ± {calcNum(prop.unc)} <span className="text-[color:var(--text-dim)]">({calcNum((100 * prop.unc) / Math.abs(prop.value))} %)</span>
         </div>
-        <div className="text-zinc-400">{prop.rule}</div>
+        <div className="text-[color:var(--text-dim)]">{prop.rule}</div>
       </div>
 
       <div className="card p-2">
         <div className="section-title px-0">Dimensions of a unit</div>
         <input className="field font-mono" value={unitExpr} onChange={(e) => setUnitExpr(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
-        <div className="mt-1 text-[15px] text-white">{dims}</div>
-        <div className="text-zinc-500">Try N, J, W, Pa, m/s^2, N*m^2/kg^2. Both sides of a correct equation must have the same dimensions.</div>
+        <div className="mt-1 text-lead text-[color:var(--text-strong)]">{dims}</div>
+        <div className="text-[color:var(--text-faint)]">Try N, J, W, Pa, m/s^2, N*m^2/kg^2. Both sides of a correct equation must have the same dimensions.</div>
       </div>
     </div>
   )

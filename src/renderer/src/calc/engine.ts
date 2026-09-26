@@ -1,8 +1,9 @@
 // Numeric engine behind the calculator panel (fx-991EX feature set and more).
 
 import type { MathNode } from 'mathjs'
-import { math, preprocess, setAngleMode, getAngleMode, splitArgs } from '../math/expr'
+import { fromRadians, math, preprocess, setAngleMode, splitArgs } from '../math/expr'
 import { constantScope } from './constants'
+import { calcNum, mathFormatOptions } from './format'
 
 // ---------------------------------------------------------------------------
 // Input normalisation: calculator key symbols → mathjs
@@ -83,7 +84,9 @@ export function solveNumeric(f: (x: number) => number, guess = 0): number {
       if (Number.isFinite(py) && Number.isFinite(cy) && Math.sign(py) !== Math.sign(cy)) {
         let a = px
         let b = cx
-        for (let k = 0; k < 200; k++) {
+        // 60 halvings take a 2 000 000-wide bracket below 10⁻¹²; the 200 it used to do were
+        // 140 evaluations of f for nothing, on every bracket, on the main thread.
+        for (let k = 0; k < 60; k++) {
           const m = (a + b) / 2
           if (Math.sign(f(m)) === Math.sign(f(a))) a = m
           else b = m
@@ -96,8 +99,10 @@ export function solveNumeric(f: (x: number) => number, guess = 0): number {
     }
     return NaN
   }
+  // 1 000 points per sweep, not 4 000: an equation with no root used to cost 16 000 evaluations
+  // of f (each a mathjs evaluate) before "No solution", a visible freeze after Enter.
   for (const R of [10, 100, 1e4, 1e6]) {
-    const r = scan(guess - R, guess + R, 4000)
+    const r = scan(guess - R, guess + R, 1000)
     if (Number.isFinite(r)) return r
   }
   throw new Error('No solution found')
@@ -170,10 +175,34 @@ math.import(
     Ran: () => Math.round(Math.random() * 1000) / 1000,
     GCD: (...a: number[]) => math.gcd(...(a as [number, number])),
     LCM: (...a: number[]) => math.lcm(...(a as [number, number])),
-    Abs: (x: number) => math.abs(x)
+    Abs: (x: number) => math.abs(x),
+    // Capitalised because the constants list defines r_e (the classical electron radius) under
+    // the spelling `re` as well, and that number shadowed mathjs's own re() in every scope.
+    Re: (z: unknown) => math.re(z as never),
+    Im: (z: unknown) => math.im(z as never)
   },
   { override: true }
 )
+
+/**
+ * The argument of a complex number in the angle unit the screen shows, the way atan2 and the
+ * inverse trig functions already do. mathjs's own arg answers in radians whatever the switch
+ * says, so in degrees arg(1 + i) read 0.79 under a card that called the same angle 45°.
+ */
+export const argOf = (z: unknown): number => {
+  const c = math.complex(z as never) as unknown as { re: number; im: number }
+  return fromRadians(Math.atan2(c.im, c.re))
+}
+
+/**
+ * A part that is only round-off beside the other is written as 0: the polar key gives 2∠90° a
+ * real part of cos(90°) × 2 = 1.2×10⁻¹⁶, and every handheld shows 2i. The floor is relative to
+ * the number's own size, never absolute — an answer of 1.6×10⁻¹⁹ on its own must survive.
+ */
+export function tidyComplex(c: { re: number; im: number }): { re: number; im: number } {
+  const eps = 1e-12 * Math.max(Math.abs(c.re), Math.abs(c.im))
+  return { re: Math.abs(c.re) < eps ? 0 : c.re, im: Math.abs(c.im) < eps ? 0 : c.im }
+}
 
 export interface CalcOutput {
   value: unknown
@@ -195,7 +224,7 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
   setAngleMode(ctx.angle)
   const src = input.trim()
   if (!src) throw new Error('Empty')
-  const scope: Record<string, unknown> = { ...constantScope(), ...ctx.vars, Ans: ctx.ans ?? 0 }
+  const scope: Record<string, unknown> = { ...constantScope(), ...ctx.vars, Ans: ctx.ans ?? 0, arg: argOf }
 
   // splitArgs, not a regex: Pol(max(1,3), 4) must split on the right comma.
   const pol = src.match(/^Pol\((.*)\)$/i)
@@ -206,7 +235,7 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
     const r = Math.hypot(x, y)
     const theta = Math.atan2(y, x)
     const th = ctx.angle === 'deg' ? (theta * 180) / Math.PI : theta
-    return { value: r, text: `r = ${fmtNum(r)}`, extra: [`θ = ${fmtNum(th)}${ctx.angle === 'deg' ? '°' : ' rad'}`] }
+    return { value: r, text: `r = ${calcNum(r)}`, extra: [`θ = ${calcNum(th)}${ctx.angle === 'deg' ? '°' : ' rad'}`] }
   }
   const rec = src.match(/^Rec\((.*)\)$/i)
   const recArgs = rec ? splitArgs(rec[1]) : null
@@ -214,7 +243,7 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
     const r = Number(math.evaluate(casioToMath(recArgs[0]), scope))
     const t = Number(math.evaluate(casioToMath(recArgs[1]), scope))
     const tr = ctx.angle === 'deg' ? (t * Math.PI) / 180 : t
-    return { value: r * Math.cos(tr), text: `x = ${fmtNum(r * Math.cos(tr))}`, extra: [`y = ${fmtNum(r * Math.sin(tr))}`] }
+    return { value: r * Math.cos(tr), text: `x = ${calcNum(r * Math.cos(tr))}`, extra: [`y = ${calcNum(r * Math.sin(tr))}`] }
   }
   // SOLVE: an equation in x
   if (/^[^=]+=[^=]+$/.test(src) && /(^|[^A-Za-z])x([^A-Za-z]|$)/.test(src)) {
@@ -224,7 +253,7 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
     const f = (x: number) => Number(fl.evaluate({ ...scope, x })) - Number(fr.evaluate({ ...scope, x }))
     const guess = typeof ctx.vars.x === 'number' ? (ctx.vars.x as number) : 0
     const root = solveNumeric(f, guess)
-    return { value: root, text: `x = ${fmtNum(root)}`, extra: [`L − R = ${fmtNum(f(root))}`] }
+    return { value: root, text: `x = ${calcNum(root)}`, extra: [`L − R = ${calcNum(f(root))}`] }
   }
   const node = math.parse(casioToMath(src))
   const value = node.compile().evaluate(scope)
@@ -237,35 +266,26 @@ export function evaluateComp(input: string, ctx: CalcContext): CalcOutput {
   return { value, text: formatValue(value), latexInput }
 }
 
-export function fmtNum(v: number, digits = 10): string {
-  if (!Number.isFinite(v)) return Number.isNaN(v) ? 'Math ERROR' : v > 0 ? '∞' : '−∞'
-  if (v === 0) return '0'
-  const abs = Math.abs(v)
-  if (abs >= 1e10 || abs < 1e-9) {
-    const [m, e] = v.toExponential(digits - 1).split('e')
-    return `${m.replace(/\.?0+$/, '')}×10^${Number(e)}`
-  }
-  return String(Number(v.toPrecision(digits)))
-}
-
-export function fmtEng(v: number): string {
-  if (!Number.isFinite(v) || v === 0) return fmtNum(v)
-  const e = Math.floor(Math.log10(Math.abs(v)) / 3) * 3
-  return `${Number((v / 10 ** e).toPrecision(10))}×10^${e}`
-}
-
 export function formatValue(v: unknown): string {
-  if (typeof v === 'number') return fmtNum(v)
+  if (typeof v === 'number') return calcNum(v)
   if (typeof v === 'boolean') return v ? 'true' : 'false'
+  // A complex number's two parts are numbers, and they follow the same never-pad rule as any
+  // other: mathjs's fixed notation wrote 2.00i on the same screen as a trimmed 5.
+  if (math.isComplex(v)) {
+    const c = tidyComplex(v as { re: number; im: number })
+    if (c.im === 0) return calcNum(c.re)
+    const im = Math.abs(c.im) === 1 ? 'i' : `${calcNum(Math.abs(c.im))}i`
+    return c.re === 0 ? `${c.im < 0 ? '−' : ''}${im}` : `${calcNum(c.re)} ${c.im < 0 ? '−' : '+'} ${im}`
+  }
   try {
-    return math.format(v as never, { precision: 10 })
+    return math.format(v as never, mathFormatOptions())
   } catch {
     return String(v)
   }
 }
 
 // ---------------------------------------------------------------------------
-// Exact forms (S⇔D): fractions, surds, π multiples — offline recognition
+// Exact forms (the "exact / decimal" chip): fractions, surds, π multiples — offline recognition
 // ---------------------------------------------------------------------------
 
 export function toFraction(v: number, maxDen = 100000): [number, number] | null {
@@ -301,14 +321,18 @@ function fracTex(n: number, d: number, suffix = ''): string {
 export function exactForm(v: number): string | null {
   if (!Number.isFinite(v)) return null
   if (Number.isInteger(v)) return String(v)
+  // A physical constant is not "exactly 0": the fraction search below accepts anything within
+  // 10⁻¹¹ of a whole number, which used to turn 7 ÷ 3h into the exact answer 0.
+  if (Math.abs(v) < 1e-9) return null
   const f = toFraction(v, 10000)
   if (f) return fracTex(f[0], f[1])
   const piF = toFraction(v / Math.PI, 360)
   if (piF) return fracTex(piF[0], piF[1], '\\pi')
   const sq = toFraction(v * v, 100000)
-  if (sq) {
+  // v² within 10⁻¹¹ of zero is read as the fraction 0/1, and the answer for 1 ÷ 500000 was √0.
+  if (sq && sq[0] !== 0) {
     // v = ±√(n/d) = ±√(n·d)/d, pull out square factors.
-    let [n, d] = sq
+    const [n, d] = sq
     const sign = v < 0 ? -1 : 1
     let inside = n * d
     let outside = 1
@@ -345,24 +369,134 @@ export function formatBase(v: number, base: Base): string {
   return base === 2 ? s.padStart(Math.min(digits, Math.ceil(s.length / 4) * 4), '0') : s
 }
 
+type BaseTok = { kind: 'num'; value: number } | { kind: 'op'; value: string }
+
+/**
+ * Whole-number arithmetic and logic in the chosen base, the way a BASE-N calculator does it.
+ *
+ * Every division is a whole-number division on its own: 7 ÷ 2 × 2 is 6, because 7 ÷ 2 is 3 on
+ * the calculator's screen before it is multiplied. The old version worked in decimals and only
+ * threw the fraction away at the very end, giving 7 — and did so by handing the string to
+ * Function(), which is not something a calculator should do with what a student typed.
+ */
 export function evaluateBaseN(input: string, base: Base): number {
-  const prefix = base === 16 ? '0x' : base === 8 ? '0o' : base === 2 ? '0b' : ''
-  // Numbers in the chosen base (letters A–F only in hex).
-  const re = base === 16 ? /\b[0-9A-Fa-f]+\b/g : base === 8 ? /\b[0-7]+\b/g : base === 2 ? /\b[01]+\b/g : /\b\d+\b/g
-  const expr = input
-    .replace(/\band\b/gi, '&')
-    .replace(/\bor\b/gi, '|')
-    .replace(/\bxnor\b/gi, '^~')
-    .replace(/\bxor\b/gi, '^')
-    .replace(/\bnot\b/gi, '~')
-    .replace(/\bneg\b/gi, '-')
-    .replace(re, (m) => String(parseInt(m, base)))
-  void prefix
-  if (!/^[\d\s+\-*/()&|^~]+$/.test(expr)) throw new Error('Syntax ERROR')
-  const sanitized = expr.replace(/\^~/g, '^~')
-  // eslint-disable-next-line no-new-func
-  const out = Function(`"use strict"; return (${sanitized.replace(/\//g, '/')});`)() as number
-  return toInt32(Math.trunc(out))
+  const digits = base === 16 ? /^[0-9A-Fa-f]+/ : base === 8 ? /^[0-7]+/ : base === 2 ? /^[01]+/ : /^\d+/
+  const words: Record<string, string> = { and: '&', or: '|', xor: '^', xnor: 'xnor', not: '~', neg: 'neg' }
+  const toks: BaseTok[] = []
+  let s = input.trim()
+  while (s.length) {
+    if (/^\s/.test(s)) {
+      s = s.replace(/^\s+/, '')
+      continue
+    }
+    const word = s.match(/^[a-zA-Z]+/)
+    const digit = s.match(digits)
+    // In hex "and" would also read as digits, so words are tried first — but only whole words.
+    if (word && words[word[0].toLowerCase()] && !(digit && digit[0].length > word[0].length)) {
+      toks.push({ kind: 'op', value: words[word[0].toLowerCase()] })
+      s = s.slice(word[0].length)
+      continue
+    }
+    if (digit) {
+      toks.push({ kind: 'num', value: parseInt(digit[0], base) })
+      s = s.slice(digit[0].length)
+      continue
+    }
+    if ('+-*/()&|^~'.includes(s[0])) {
+      toks.push({ kind: 'op', value: s[0] })
+      s = s.slice(1)
+      continue
+    }
+    throw new Error('Syntax ERROR')
+  }
+
+  let pos = 0
+  const peek = (): BaseTok | undefined => toks[pos]
+  const isOp = (v: string): boolean => {
+    const t = peek()
+    return t?.kind === 'op' && t.value === v
+  }
+  const take = (): BaseTok => {
+    const t = toks[pos++]
+    if (!t) throw new Error('Syntax ERROR')
+    return t
+  }
+  // Precedence, lowest first: or, xor/xnor, and, add/subtract, multiply/divide, unary, brackets.
+  const primary = (): number => {
+    const t = take()
+    if (t.kind === 'num') return toInt32(t.value)
+    if (t.value === '(') {
+      const v = or()
+      if (!isOp(')')) throw new Error('Syntax ERROR')
+      pos++
+      return v
+    }
+    throw new Error('Syntax ERROR')
+  }
+  const unary = (): number => {
+    if (isOp('-') || isOp('neg')) {
+      pos++
+      return toInt32(-unary())
+    }
+    if (isOp('~')) {
+      pos++
+      return toInt32(~unary())
+    }
+    return primary()
+  }
+  const mul = (): number => {
+    let v = unary()
+    while (isOp('*') || isOp('/')) {
+      const op = take().value
+      const r = unary()
+      // Math.imul is the exact 32-bit wrap-around; a double product of two 31-bit numbers loses
+      // its low bits, and 7FFFFFFF × 7FFFFFFF came out as 0.
+      if (op === '*') v = Math.imul(v, r)
+      else {
+        if (r === 0) throw new Error('Math ERROR')
+        v = toInt32(Math.trunc(v / r))
+      }
+    }
+    return v
+  }
+  const add = (): number => {
+    let v = mul()
+    while (isOp('+') || isOp('-')) {
+      const op = take().value
+      const r = mul()
+      v = toInt32(op === '+' ? v + r : v - r)
+    }
+    return v
+  }
+  const and = (): number => {
+    let v = add()
+    while (isOp('&')) {
+      pos++
+      v = toInt32(v & add())
+    }
+    return v
+  }
+  const xor = (): number => {
+    let v = and()
+    while (isOp('^') || isOp('xnor')) {
+      const op = take().value
+      const r = and()
+      v = toInt32(op === '^' ? v ^ r : ~(v ^ r))
+    }
+    return v
+  }
+  const or = (): number => {
+    let v = xor()
+    while (isOp('|')) {
+      pos++
+      v = toInt32(v | xor())
+    }
+    return v
+  }
+  if (!toks.length) throw new Error('Syntax ERROR')
+  const out = or()
+  if (pos !== toks.length) throw new Error('Syntax ERROR')
+  return out
 }
 
 // ---------------------------------------------------------------------------

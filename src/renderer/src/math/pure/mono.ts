@@ -1,0 +1,422 @@
+// Algebraic expressions as a sum of monomials: 6x²y − 3xy + 2.
+//
+// This is the shape every Pure Math step generator works on. Parsing expands everything first, so
+// (x+2)(x+3) arrives as x² + 5x + 6 and the working can start from a tidy, ordered expression the
+// same way a student would write it out.
+
+import { type MathNode } from 'mathjs'
+import { math, preprocess } from '../expr'
+import { R0, R1, rAdd, rEq, rFromNumber, rGcd, rIsNeg, rIsOne, rMul, rNeg, rPow, rat, rTex, rAbs, type Rat } from './rat'
+
+/** One term: a coefficient and the powers of each variable. Absent variable = power 0. */
+export interface Term {
+  c: Rat
+  v: Record<string, number>
+}
+
+/** A sum of terms, always tidy: like terms combined, zeros dropped, ordered for display. */
+export type Expr = Term[]
+
+/** Raised when the input is not something Pure Math can work on, with a sentence for the student. */
+export class NotPolynomial extends Error {}
+
+const varKey = (v: Record<string, number>): string =>
+  Object.keys(v)
+    .filter((k) => v[k] !== 0)
+    .sort()
+    .map((k) => `${k}^${v[k]}`)
+    .join('*')
+
+export const varsOf = (e: Expr): string[] => {
+  const s = new Set<string>()
+  for (const t of e) for (const k of Object.keys(t.v)) if (t.v[k] !== 0) s.add(k)
+  return [...s].sort()
+}
+
+export const totalDegree = (t: Term): number => Object.values(t.v).reduce((a, b) => a + b, 0)
+export const degreeIn = (e: Expr, name: string): number => e.reduce((m, t) => Math.max(m, t.v[name] ?? 0), 0)
+export const exprDegree = (e: Expr): number => e.reduce((m, t) => Math.max(m, totalDegree(t)), 0)
+export const isConstant = (e: Expr): boolean => e.every((t) => totalDegree(t) === 0)
+export const exprIsZero = (e: Expr): boolean => e.length === 0
+
+/** Combine like terms, drop zeros, and order: highest degree first, then alphabetically. */
+export function normalize(terms: Term[]): Expr {
+  const byKey = new Map<string, Term>()
+  for (const t of terms) {
+    const clean: Record<string, number> = {}
+    for (const k of Object.keys(t.v)) if (t.v[k] !== 0) clean[k] = t.v[k]
+    const key = varKey(clean)
+    const hit = byKey.get(key)
+    if (hit) hit.c = rAdd(hit.c, t.c)
+    else byKey.set(key, { c: t.c, v: clean })
+  }
+  const out = [...byKey.values()].filter((t) => t.c.n !== 0n)
+  out.sort((a, b) => {
+    const d = totalDegree(b) - totalDegree(a)
+    if (d !== 0) return d
+    const av = Object.keys(a.v).sort()
+    const bv = Object.keys(b.v).sort()
+    for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+      const x = av[i] ?? ''
+      const y = bv[i] ?? ''
+      if (x !== y) return x < y ? -1 : 1
+      const pa = a.v[x] ?? 0
+      const pb = b.v[y] ?? 0
+      if (pa !== pb) return pb - pa
+    }
+    return 0
+  })
+  return out
+}
+
+export const constExpr = (c: Rat): Expr => normalize([{ c, v: {} }])
+export const varExpr = (name: string, power = 1): Expr => normalize([{ c: R1, v: { [name]: power } }])
+
+export const eAdd = (a: Expr, b: Expr): Expr => normalize([...a, ...b])
+export const eNeg = (a: Expr): Expr => a.map((t) => ({ c: rNeg(t.c), v: { ...t.v } }))
+export const eSub = (a: Expr, b: Expr): Expr => eAdd(a, eNeg(b))
+export const eScale = (a: Expr, k: Rat): Expr => normalize(a.map((t) => ({ c: rMul(t.c, k), v: { ...t.v } })))
+
+export function mulTerm(a: Term, b: Term): Term {
+  const v: Record<string, number> = { ...a.v }
+  for (const k of Object.keys(b.v)) v[k] = (v[k] ?? 0) + b.v[k]
+  return { c: rMul(a.c, b.c), v }
+}
+
+export function eMul(a: Expr, b: Expr): Expr {
+  const out: Term[] = []
+  for (const x of a) for (const y of b) out.push(mulTerm(x, y))
+  return normalize(out)
+}
+
+export function ePow(a: Expr, k: number): Expr {
+  if (k < 0) throw new NotPolynomial('A negative power turns this into a fraction, which is not something I can factorise.')
+  let out = constExpr(R1)
+  for (let i = 0; i < k; i++) out = eMul(out, a)
+  return out
+}
+
+export const eEq = (a: Expr, b: Expr): boolean => {
+  if (a.length !== b.length) return false
+  return a.every((t, i) => rEq(t.c, b[i].c) && varKey(t.v) === varKey(b[i].v))
+}
+
+/** Divide by a single term. Returns null when it would need a negative power. */
+export function divideByTerm(e: Expr, by: Term): Expr | null {
+  const out: Term[] = []
+  for (const t of e) {
+    const v: Record<string, number> = { ...t.v }
+    for (const k of Object.keys(by.v)) {
+      v[k] = (v[k] ?? 0) - by.v[k]
+      if (v[k] < 0) return null
+    }
+    out.push({ c: rMul(t.c, rPow(by.c, -1)), v })
+  }
+  return normalize(out)
+}
+
+// ---------------------------------------------------------------- display
+
+/** The variable part of a term: x^{2}y. */
+export function varTex(v: Record<string, number>): string {
+  const keys = Object.keys(v)
+    .filter((k) => v[k] !== 0)
+    .sort()
+  return keys
+    .map((k) => {
+      const name = k.length > 1 ? `\\${k}` : k
+      return v[k] === 1 ? name : `${name}^{${v[k]}}`
+    })
+    .join('')
+}
+
+/** One term on its own, sign included: -3x^{2}. */
+export function termTex(t: Term): string {
+  const vt = varTex(t.v)
+  if (!vt) return rTex(t.c)
+  if (rIsOne(t.c)) return vt
+  if (rIsOne(rAbs(t.c)) && rIsNeg(t.c)) return `-${vt}`
+  // A fraction coefficient reads better as one fraction than as a fraction times a letter.
+  if (t.c.d !== 1n) return `${rTex(t.c)}${vt}`
+  return `${rTex(t.c)}${vt}`
+}
+
+/** A whole expression with the signs joined up: 6x^{2} + 7x - 3. */
+export function exprTex(e: Expr): string {
+  if (e.length === 0) return '0'
+  let out = ''
+  e.forEach((t, i) => {
+    const neg = rIsNeg(t.c)
+    const body = termTex({ c: rAbs(t.c), v: t.v })
+    if (i === 0) out += neg ? `-${body}` : body
+    else out += neg ? ` - ${body}` : ` + ${body}`
+  })
+  return out
+}
+
+/** Wrapped in brackets when it is a sum, so products read correctly: (x + 2)(x + 3). */
+export function exprTexBracketed(e: Expr): string {
+  const s = exprTex(e)
+  return e.length > 1 ? `\\left(${s}\\right)` : s
+}
+
+// ---------------------------------------------------------------- parsing
+
+/**
+ * The whole number an exponent comes to, or null.
+ *
+ * Brackets and a leading minus have to be seen through. MathLive's natural input becomes `x^(2)`
+ * once converted to linear form, and a bare ConstantNode check rejected that outright — so typing
+ * any power into the maths field made the whole expression unreadable.
+ */
+function wholeNumberIn(node: MathNode): number | null {
+  const n = node as unknown as { type: string; value?: unknown; content?: MathNode; op?: string; args?: MathNode[] }
+  if (n.type === 'ParenthesisNode' && n.content) return wholeNumberIn(n.content)
+  if (n.type === 'ConstantNode') {
+    return typeof n.value === 'number' && Number.isInteger(n.value) ? n.value : null
+  }
+  if (n.type === 'OperatorNode' && n.args?.length === 1 && (n.op === '-' || n.op === '+')) {
+    const inner = wholeNumberIn(n.args[0])
+    return inner === null ? null : n.op === '-' ? -inner : inner
+  }
+  return null
+}
+
+function fromNode(node: MathNode): Expr {
+  const n = node as unknown as { type: string; [k: string]: unknown }
+  switch (n.type) {
+    case 'ConstantNode': {
+      const raw = n.value
+      if (typeof raw !== 'number') throw new NotPolynomial('I can only work with ordinary numbers here.')
+      return constExpr(rFromNumber(raw))
+    }
+    case 'SymbolNode': {
+      const name = String(n.name)
+      // Real constants would make the working inexact, so they are refused rather than approximated.
+      // `i` is deliberately allowed through as an ordinary letter: the complex tools expand first
+      // and only then replace i² with −1, which is exactly how the working should read.
+      if (name === 'pi' || name === 'e') {
+        throw new NotPolynomial(`${name} is a number that never ends, so it cannot appear in exact working like this.`)
+      }
+      return varExpr(name)
+    }
+    case 'ParenthesisNode':
+      return fromNode(n.content as MathNode)
+    case 'OperatorNode': {
+      const args = (n.args as MathNode[]).map((a) => a)
+      const op = String(n.op)
+      if (op === '+') return args.map(fromNode).reduce(eAdd)
+      if (op === '-') {
+        if (args.length === 1) return eNeg(fromNode(args[0]))
+        return eSub(fromNode(args[0]), fromNode(args[1]))
+      }
+      if (op === '*') return args.map(fromNode).reduce(eMul)
+      if (op === '^') {
+        const base = fromNode(args[0])
+        const k = wholeNumberIn(args[1])
+        if (k === null) throw new NotPolynomial('Powers have to be whole numbers for this.')
+        return ePow(base, k)
+      }
+      if (op === '/') {
+        const top = fromNode(args[0])
+        const bot = fromNode(args[1])
+        if (bot.length !== 1) throw new NotPolynomial('Dividing by a bracket makes a fraction — use Partial Fractions or Divide for that.')
+        const done = divideByTerm(top, bot[0])
+        if (!done) throw new NotPolynomial('That division leaves letters on the bottom, so it is not a polynomial.')
+        return done
+      }
+      throw new NotPolynomial(`I do not know how to handle "${op}" here.`)
+    }
+    case 'FunctionNode':
+      throw new NotPolynomial(`"${String((n.fn as { name?: string })?.name ?? 'that function')}" is not something I can factorise.`)
+    default:
+      throw new NotPolynomial('I could not read that as an algebraic expression.')
+  }
+}
+
+/**
+ * "x(x + 1)" means x times the bracket. mathjs reads a letter followed by a bracket as a call to a
+ * function named x, which is the first expand exercise a student meets being refused with
+ * '"x" is not something I can factorise'. A single letter (with or without a power) directly in
+ * front of a bracket gets its × written in; a letter inside a longer name (the n of sin) does not.
+ */
+const IMPLICIT_CALL = /(?<![A-Za-z_])([A-Za-z](?:\^\d+)?)\s*\(/g
+export const writeTimes = (text: string): string => text.replace(IMPLICIT_CALL, '$1*(')
+
+/** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */
+function readNode(src: string): MathNode {
+  const text = src.trim()
+  if (!text) throw new NotPolynomial('Nothing to work on yet — type an expression first.')
+  try {
+    return math.parse(writeTimes(preprocess(text)))
+  } catch {
+    throw new NotPolynomial('I could not read that. Check the brackets and signs.')
+  }
+}
+
+/** Read typed maths into an expanded expression. Throws NotPolynomial with a readable reason. */
+export function parseExpr(src: string): Expr {
+  return fromNode(readNode(src))
+}
+
+type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode }
+
+/** How many times a bracket is written out for Expand: (x + 1)⁸ is eight columns, not one lump. */
+const MAX_UNROLLED_POWER = 8
+
+/** One product, taken apart: its factors, its sign, and how it was typed. */
+interface Product {
+  neg: boolean
+  factors: Expr[]
+  shown: string
+}
+
+/**
+ * The factors of one product node — see parseFactors.
+ *
+ * A leading minus inside the product is peeled off as the sign: mathjs reads −(x + 1)(x − 1) as
+ * (−(x + 1))·(x − 1), and folding the minus into the bracket showed the student a grid for
+ * (−x − 1), which is not what they wrote.
+ */
+function productOfNode(node: MathNode): Product {
+  const out: { e: Expr; tex?: string }[] = []
+  let neg = false
+  const walk = (n: MathNode): void => {
+    const v = n as unknown as Loose
+    if (v.type === 'ParenthesisNode' && v.content) return walk(v.content)
+    if (v.type === 'OperatorNode' && v.op === '*' && v.args) return v.args.forEach(walk)
+    if (v.type === 'OperatorNode' && v.op === '-' && v.args?.length === 1) {
+      neg = !neg
+      return walk(v.args[0])
+    }
+    if (v.type === 'OperatorNode' && v.op === '^' && v.args?.length === 2) {
+      const k = wholeNumberIn(v.args[1])
+      const base = fromNode(v.args[0])
+      // A power of a bracket is that bracket written k times; a power of a single term stays whole.
+      if (k !== null && k >= 2 && base.length > 1) {
+        if (k <= MAX_UNROLLED_POWER) {
+          for (let i = 0; i < k; i++) out.push({ e: base })
+          return
+        }
+        // Too high to unroll: the factor is stored expanded, but the heading must still show the
+        // power that was typed, not the answer.
+        out.push({ e: fromNode(n), tex: `\\left(${exprTex(base)}\\right)^{${k}}` })
+        return
+      }
+    }
+    out.push({ e: fromNode(n) })
+  }
+  walk(node)
+  // 2x is one term, not "2 times x": every single-term factor is gathered into one monomial, in
+  // the place of the first, so 2x(x + 1) distributes 2x over the bracket instead of starting with
+  // a grid for 2 × x.
+  const singles = out.filter((f) => f.e.length === 1)
+  let merged = out
+  if (singles.length >= 2) {
+    const mono = singles.reduce((a, b) => eMul(a, b.e), constExpr(R1))
+    let placed = false
+    merged = out.flatMap((f) => {
+      if (f.e.length !== 1) return [f]
+      if (placed) return []
+      placed = true
+      return [{ e: mono }]
+    })
+  }
+  return { neg, factors: merged.map((f) => f.e), shown: merged.map((f) => f.tex ?? exprTexBracketed(f.e)).join('') }
+}
+
+/**
+ * The factors of a product, each expanded on its own but not multiplied together.
+ *
+ * (2x + 3)(3x − 1) comes back as [2x + 3, 3x − 1] and (x + 1)² as [x + 1, x + 1], which is what
+ * Expand needs to show the distribution rather than restate the answer. Anything that is not a
+ * product at the top level comes back as a single factor.
+ */
+export function parseFactors(src: string): Expr[] {
+  return productOfNode(readNode(src)).factors
+}
+
+/** One piece of a sum: its sign, the factors of the product it is, and the product as typed. */
+export interface Summand {
+  neg: boolean
+  factors: Expr[]
+  /** LaTeX of the factors as written: (x + 1)^{9} is stored as one expanded factor and must not be shown as one. */
+  shown: string
+}
+
+/**
+ * The top-level sum, each piece kept as a product of factors: (x + 2)² − (x − 2)² comes back as
+ * two summands of two factors each, so Expand can multiply each one out and then add the pieces,
+ * instead of saying there was nothing to multiply.
+ */
+export function parseSummands(src: string): Summand[] {
+  const out: Summand[] = []
+  const walk = (n: MathNode, neg: boolean): void => {
+    const v = n as unknown as Loose
+    if (v.type === 'ParenthesisNode' && v.content) return walk(v.content, neg)
+    if (v.type === 'OperatorNode' && v.args) {
+      if (v.op === '+' && v.args.length === 2) {
+        walk(v.args[0], neg)
+        return walk(v.args[1], neg)
+      }
+      if (v.op === '-' && v.args.length === 2) {
+        walk(v.args[0], neg)
+        return walk(v.args[1], !neg)
+      }
+      if (v.op === '-' && v.args.length === 1) return walk(v.args[0], !neg)
+      if (v.op === '+' && v.args.length === 1) return walk(v.args[0], neg)
+    }
+    const product = productOfNode(n)
+    out.push({ neg: neg !== product.neg, factors: product.factors, shown: product.shown })
+  }
+  walk(readNode(src), false)
+  return out
+}
+
+/**
+ * Read a fraction of two expressions. `x` on its own comes back as x/1, so callers can treat
+ * everything uniformly.
+ */
+export function parseFraction(src: string): { num: Expr; den: Expr } {
+  const node = readNode(src.trim().replace(/^=+|=+$/g, ''))
+  let top = node as unknown as { type: string; op?: string; args?: MathNode[]; content?: MathNode }
+  while (top.type === 'ParenthesisNode' && top.content) top = top.content as unknown as typeof top
+  if (top.type === 'OperatorNode' && top.op === '/' && top.args?.length === 2) {
+    return { num: fromNode(top.args[0]), den: fromNode(top.args[1]) }
+  }
+  return { num: fromNode(node), den: constExpr(R1) }
+}
+
+/** The highest common factor of every term: the bit that comes out at the front. */
+export function commonFactor(e: Expr): Term {
+  if (e.length === 0) return { c: R0, v: {} }
+  const c = rGcd(e.map((t) => t.c))
+  const v: Record<string, number> = {}
+  const first = e[0]
+  for (const k of Object.keys(first.v)) {
+    const lowest = e.reduce((m, t) => Math.min(m, t.v[k] ?? 0), first.v[k])
+    if (lowest > 0) v[k] = lowest
+  }
+  // Pulling out a minus is only tidy when the whole thing starts negative.
+  return { c: rIsNeg(e[0].c) ? rNeg(c) : c, v }
+}
+
+/** A single term as an Expr, for feeding back into the algebra. */
+export const termExpr = (t: Term): Expr => normalize([{ c: t.c, v: { ...t.v } }])
+
+/** Substitute a number for a letter — used to check working and to solve by picking values. */
+export function evalAt(e: Expr, at: Record<string, Rat>): Rat {
+  let sum = R0
+  for (const t of e) {
+    let p = t.c
+    for (const k of Object.keys(t.v)) {
+      const val = at[k]
+      if (!val) throw new NotPolynomial(`No value given for ${k}.`)
+      p = rMul(p, rPow(val, t.v[k]))
+    }
+    sum = rAdd(sum, p)
+  }
+  return sum
+}
+
+export { rat }

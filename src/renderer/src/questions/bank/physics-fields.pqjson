@@ -1,0 +1,725 @@
+{
+  "app": "PhysLab",
+  "format": "pqjson",
+  "version": 2,
+  "questions": [
+    {
+      "id": "physlab-fields-series-resistors",
+      "title": "Two resistors in series",
+      "statement": "Two resistors, {R1} and {R2}, are connected one after the other across a battery of {V}.",
+      "variables": [
+        { "name": "R1", "def": { "kind": "range", "from": 10, "to": 30, "step": 5 }, "unit": "Ω", "description": "first resistor" },
+        { "name": "R2", "def": { "kind": "range", "from": 10, "to": 30, "step": 5 }, "unit": "Ω", "description": "second resistor" },
+        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "battery voltage" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the total resistance of the two together?",
+          "answer": "R1 + R2",
+          "unit": "Ω",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "R1 * R2 / (R1 + R2)", "why": "That is how two resistors combine when they sit side by side, not one after the other. Resistances in series simply add." }],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "What current flows from the battery?",
+          "answer": "V / (R1 + R2)",
+          "unit": "A",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "V * (R1 + R2)", "why": "Ohm's law divides voltage by resistance to give a current; it does not multiply them." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Resistors one after the other share the same current, and their resistances simply add.", "tex": "R = {R1} + {R2}", "rule": "R = R_1 + R_2", "blank": true },
+          { "head": "Ohm's law gives the current the battery drives through that total resistance.", "tex": "I = \\frac{{V}}{{R1} + {R2}}", "rule": "I = V \\div R", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "(R1+R2)*x/10", "label": "Volts across the pair against current in tenths of an amp", "from": "0", "to": "10*V/(R1+R2)" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["circuits"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-fields-parallel-resistors",
+      "title": "Two resistors side by side",
+      "statement": "Two resistors, {R1} and {R2}, are connected side by side across a battery of {V}.",
+      "variables": [
+        { "name": "R1", "def": { "kind": "range", "from": 10, "to": 60, "step": 10 }, "unit": "Ω", "description": "first resistor" },
+        { "name": "R2", "def": { "kind": "range", "from": 10, "to": 60, "step": 10 }, "unit": "Ω", "description": "second resistor" },
+        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "battery voltage" },
+        { "name": "R", "def": { "kind": "expr", "expr": "R1 * R2 / (R1 + R2)" }, "unit": "Ω", "description": "combined resistance, worked out in the steps" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the combined resistance of the two together?",
+          "answer": "R1 * R2 / (R1 + R2)",
+          "unit": "Ω",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "R1 + R2", "why": "Simply adding the two is the rule for resistors one after the other. Side by side, each offers the current a separate path, so the combined resistance is smaller than either one alone." }],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "What total current does the battery supply?",
+          "answer": "V * (R1 + R2) / (R1 * R2)",
+          "unit": "A",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "V / (R1 + R2)", "why": "That treats the pair as if they were one after the other. Side by side, the battery sees the smaller combined resistance, so it supplies more current than this." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Resistors side by side share the same voltage; their combined resistance is the product over the sum.", "tex": "R = \\frac{{R1} \\times {R2}}{{R1} + {R2}} = {R}", "rule": "R = \\frac{R_1 R_2}{R_1 + R_2}", "blank": true },
+          { "head": "Ohm's law then gives the total current the battery must supply.", "tex": "I = \\frac{{V}}{{R}}", "rule": "I = V \\div R", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "((R1*R2)/(R1+R2))*x/10", "label": "Volts across the pair against current in tenths of an amp", "from": "0", "to": "10*V*(R1+R2)/(R1*R2)" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["circuits"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-fields-ohms-law-power",
+      "title": "Current and power in a resistor",
+      "statement": "A resistor of {R} is connected across a supply of {V}.",
+      "variables": [
+        { "name": "R", "def": { "kind": "range", "from": 5, "to": 50, "step": 5 }, "unit": "Ω", "description": "resistance" },
+        { "name": "V", "def": { "kind": "range", "from": 6, "to": 24, "step": 3 }, "unit": "V", "description": "supply voltage" },
+        { "name": "I", "def": { "kind": "expr", "expr": "V / R" }, "unit": "A", "description": "current, worked out in the steps" }
+      ],
+      "condition": { "when": "V != R", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What current flows through the resistor?",
+          "answer": "V / R",
+          "unit": "A",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "R / V", "why": "Ohm's law has voltage on top and resistance on the bottom, not the other way round." }],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "What power does the resistor dissipate?",
+          "answer": "V * (V / R)",
+          "unit": "W",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "V / R", "why": "That is only the current, in amps. Power needs the voltage multiplied by that current as well." },
+            { "value": "V * R", "why": "Power is voltage times current, and the current here is voltage divided by resistance — multiplying voltage by resistance instead skips that step." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Ohm's law gives the current the supply drives through the resistor.", "tex": "I = \\frac{{V}}{{R}} = {I}", "rule": "I = V \\div R", "blank": true },
+          { "head": "Power dissipated is the voltage across the resistor times the current through it.", "tex": "P = {V} \\times {I}", "rule": "P = VI", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "R*x/10", "label": "Volts across the resistor against current in tenths of an amp", "from": "0", "to": "10*V/R" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["circuits"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-fields-potential-divider",
+      "title": "A potential divider",
+      "statement": "A supply of {Vin} is connected across two resistors in series, {R1} and {R2}.",
+      "variables": [
+        { "name": "Vin", "def": { "kind": "range", "from": 9, "to": 24, "step": 3 }, "unit": "V", "description": "supply voltage" },
+        { "name": "R1", "def": { "kind": "range", "from": 5, "to": 30, "step": 5 }, "unit": "Ω", "description": "first resistor" },
+        { "name": "R2", "def": { "kind": "range", "from": 5, "to": 30, "step": 5 }, "unit": "Ω", "description": "second resistor" }
+      ],
+      "condition": { "when": "R1 != R2", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What voltage appears across the second resistor?",
+          "answer": "Vin * R2 / (R1 + R2)",
+          "unit": "V",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "Vin * R1 / (R1 + R2)", "why": "That gives the share of the supply across the first resistor instead. Each resistor's own share of the voltage is in proportion to its own resistance." },
+            { "value": "Vin * (R1 + R2) / R2", "why": "That has the fraction upside down; the share of the voltage cannot come out bigger than the supply itself." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The same current flows through both resistors, so the supply splits between them in proportion to their own resistance.", "tex": "\\frac{V_2}{{Vin}} = \\frac{{R2}}{{R1} + {R2}}", "rule": "\\frac{V_2}{V_{in}} = \\frac{R_2}{R_1 + R_2}" },
+          { "head": "Multiply through by the supply voltage.", "tex": "V_2 = {Vin} \\times \\frac{{R2}}{{R1} + {R2}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "Vin*x/(R1+x)", "label": "Volts across the second resistor as it grows from zero ohms", "from": "0", "to": "R2" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["circuits"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-joule-heating",
+      "title": "Heat from a current-carrying resistor",
+      "statement": "A current of {I} flows through a resistor of {R} for {t}.",
+      "variables": [
+        { "name": "R", "def": { "kind": "range", "from": 10, "to": 20, "step": 5 }, "unit": "Ω", "description": "resistance" },
+        { "name": "I", "def": { "kind": "range", "from": 1.5, "to": 2.5, "step": 0.5 }, "unit": "A", "description": "current" },
+        { "name": "t", "def": { "kind": "range", "from": 20, "to": 60, "step": 10 }, "unit": "s", "description": "time the current flows" },
+        { "name": "P", "def": { "kind": "expr", "expr": "I^2 * R" }, "unit": "W", "description": "heating rate, worked out in the steps" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How much heat energy is generated in the resistor?",
+          "answer": "I^2 * R * t",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "I * R * t", "why": "That leaves the current un-squared. The heating rate is the current squared times the resistance." },
+            { "value": "I^2 * R", "why": "That is the heating rate itself, in watts, not an energy — it still needs multiplying by the time." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "A current through a resistor heats it at a steady rate, the current squared times the resistance.", "tex": "P = {I}^{2} \\times {R} = {P}", "rule": "P = I^{2}R", "blank": true },
+          { "head": "Over the time the current flows, the heat generated is that rate times the time.", "tex": "Q = {P} \\times {t}", "rule": "Q = Pt", "blank": true }
+        ]
+      },
+      "picture": { "kind": "between", "upper": "I^2*R", "lower": "0", "from": "0", "to": "t", "label": "Watts against seconds: the area is the heat in joules" },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["circuits"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-boyles-law",
+      "title": "Squeezing a gas — Boyle's law",
+      "statement": "A gas at a pressure of {P1} fills a volume of {V1}. Kept at the same temperature, it is squeezed down to {V2}.",
+      "variables": [
+        { "name": "P1", "def": { "kind": "list", "items": [100000, 120000, 150000] }, "unit": "Pa", "description": "starting pressure" },
+        { "name": "V1", "def": { "kind": "list", "items": [0.03, 0.04, 0.05, 0.06] }, "unit": "m³", "description": "starting volume" },
+        { "name": "V2", "def": { "kind": "list", "items": [0.01, 0.02] }, "unit": "m³", "description": "squeezed volume" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the gas's new pressure?",
+          "answer": "P1 * V1 / V2",
+          "unit": "Pa",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "P1 * V2 / V1", "why": "That has the two volumes swapped. At the same temperature, pressure times volume stays the same, so squeezing the gas into a smaller volume must raise its pressure, not lower it." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "At a fixed temperature, pressure times volume stays the same before and after.", "tex": "{P1} \\times {V1} = P_2 \\times {V2}", "rule": "P_1 V_1 = P_2 V_2" },
+          { "head": "Divide by the new, smaller volume.", "tex": "P_2 = \\frac{{P1} \\times {V1}}{{V2}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "P1*V1/(10*x)", "label": "Tens of kilopascals against litres as the gas is squeezed", "from": "1000*V2", "to": "1000*V1" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["gases"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-charles-law",
+      "title": "Warming a gas — Charles's law",
+      "statement": "A gas fills a volume of {V1} at a temperature of {T1}. Kept at the same pressure, it is warmed to {T2}.",
+      "variables": [
+        { "name": "V1", "def": { "kind": "list", "items": [0.01, 0.02, 0.03, 0.04, 0.05] }, "unit": "m³", "description": "starting volume" },
+        { "name": "T1", "def": { "kind": "range", "from": 250, "to": 320, "step": 10 }, "unit": "K", "description": "starting temperature" },
+        { "name": "T2", "def": { "kind": "range", "from": 330, "to": 400, "step": 10 }, "unit": "K", "description": "final temperature" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the gas's new volume?",
+          "answer": "V1 * T2 / T1",
+          "unit": "m³",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "V1 * T1 / T2", "why": "That has the two temperatures swapped. At a fixed pressure, warming a gas makes it expand, so its volume must come out bigger than the one it started with, not smaller." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "At a fixed pressure, volume divided by temperature stays the same, with temperature measured from absolute zero.", "tex": "\\frac{{V1}}{{T1}} = \\frac{V_2}{{T2}}", "rule": "\\frac{V_1}{T_1} = \\frac{V_2}{T_2}" },
+          { "head": "Multiply through by the new, higher temperature.", "tex": "V_2 = {V1} \\times \\frac{{T2}}{{T1}}", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "10000*V1*x/T1", "label": "Litres against tens of kelvin, back to absolute zero", "from": "0", "to": "T1/10" },
+          { "expr": "10000*V1*x/T1", "label": "Warmed from {T1} to {T2}", "from": "T1/10", "to": "T2/10" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["gases"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-pressure-law",
+      "title": "Heating a sealed gas — the pressure law",
+      "statement": "A sealed gas is at a pressure of {P1} and a temperature of {T1}. Kept at the same volume, it is heated to {T2}.",
+      "variables": [
+        { "name": "P1", "def": { "kind": "list", "items": [100000, 150000, 200000, 250000, 300000] }, "unit": "Pa", "description": "starting pressure" },
+        { "name": "T1", "def": { "kind": "range", "from": 250, "to": 320, "step": 10 }, "unit": "K", "description": "starting temperature" },
+        { "name": "T2", "def": { "kind": "range", "from": 330, "to": 400, "step": 10 }, "unit": "K", "description": "final temperature" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the gas's new pressure?",
+          "answer": "P1 * T2 / T1",
+          "unit": "Pa",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "P1 * T1 / T2", "why": "That has the two temperatures swapped. At a fixed volume, heating a sealed gas raises its pressure, so the answer must come out bigger than the one it started with, not smaller." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "At a fixed volume, pressure divided by temperature stays the same, with temperature measured from absolute zero.", "tex": "\\frac{{P1}}{{T1}} = \\frac{P_2}{{T2}}", "rule": "\\frac{P_1}{T_1} = \\frac{P_2}{T_2}" },
+          { "head": "Multiply through by the new, higher temperature.", "tex": "P_2 = {P1} \\times \\frac{{T2}}{{T1}}", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "P1*x/(1000*T1)", "label": "Tens of kilopascals against tens of kelvin, back to absolute zero", "from": "0", "to": "T1/10" },
+          { "expr": "P1*x/(1000*T1)", "label": "Heated from {T1} to {T2}", "from": "T1/10", "to": "T2/10" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["gases"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-ideal-gas-moles",
+      "title": "How much gas is in the cylinder?",
+      "statement": "A cylinder holds a gas at a pressure of {P}, a volume of {V} and a temperature of {T}.",
+      "variables": [
+        { "name": "P", "def": { "kind": "list", "items": [100000, 150000, 200000, 250000, 300000] }, "unit": "Pa", "description": "pressure" },
+        { "name": "V", "def": { "kind": "list", "items": [0.01, 0.02, 0.03, 0.04, 0.05] }, "unit": "m³", "description": "volume" },
+        { "name": "T", "def": { "kind": "range", "from": 250, "to": 320, "step": 10 }, "unit": "K", "description": "temperature" }
+      ],
+      "condition": { "when": "abs(P * V - 8.314 * T) >= 0.05 * 8.314 * T", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How many moles of gas are in the cylinder? Take the gas constant R as 8.314 J/(mol·K).",
+          "answer": "P * V / (8.314 * T)",
+          "unit": "mol",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "8.314 * T / (P * V)", "why": "That is the ideal gas equation turned upside down." },
+            { "value": "P * V * T / 8.314", "why": "The temperature belongs on the bottom of the fraction, alongside the gas constant, not multiplied in on top." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The ideal gas equation links pressure, volume, the amount of gas and its temperature.", "tex": "{P} \\times {V} = n \\times 8.314 \\times {T}", "rule": "PV = nRT" },
+          { "head": "Divide by the gas constant and the temperature to find the number of moles.", "tex": "n = \\frac{{P} \\times {V}}{8.314 \\times {T}}", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "P*V/(10*x)", "label": "Tens of kilopascals against litres, kept at {T}", "from": "500*V", "to": "2000*V" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["gases"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-fields-work-done-by-gas",
+      "title": "A gas expanding at constant pressure",
+      "statement": "A gas at a constant pressure of {P} expands from a volume of {V1} to a volume of {V2}.",
+      "variables": [
+        { "name": "P", "def": { "kind": "list", "items": [80000, 100000, 120000] }, "unit": "Pa", "description": "constant pressure" },
+        { "name": "V1", "def": { "kind": "list", "items": [0.01, 0.02, 0.03] }, "unit": "m³", "description": "starting volume" },
+        { "name": "V2", "def": { "kind": "list", "items": [0.04, 0.05, 0.06] }, "unit": "m³", "description": "final volume" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How much work does the gas do as it expands?",
+          "answer": "P * (V2 - V1)",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "P * (V1 - V2)", "why": "That has the two volumes the wrong way round: an expanding gas does positive work, and this comes out negative." },
+            { "value": "P * V2", "why": "That leaves out the starting volume — only the change in volume counts, not the final volume on its own." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "At a constant pressure, the work a gas does is that pressure times the change in its volume.", "tex": "W = {P} \\times ({V2} - {V1})", "rule": "W = P\\,\\Delta V", "blank": true }
+        ]
+      },
+      "picture": { "kind": "between", "upper": "P/1000", "lower": "0", "from": "1000*V1", "to": "1000*V2", "label": "Kilopascals against litres: the area is the work in joules" },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["gases"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-wave-speed",
+      "title": "Speed of a travelling wave",
+      "statement": "A wave has a frequency of {f} and a wavelength of {lam}.",
+      "variables": [
+        { "name": "f", "def": { "kind": "range", "from": 20, "to": 200, "step": 20 }, "unit": "Hz", "description": "frequency" },
+        { "name": "lam", "def": { "kind": "range", "from": 0.5, "to": 3, "step": 0.5, "exclude": [1] }, "unit": "m", "description": "wavelength" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the speed of the wave?",
+          "answer": "f * lam",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "f / lam", "why": "Wave speed is frequency multiplied by wavelength, not one divided by the other." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "A wave's speed is how many wavelengths pass a point each second, so it is frequency times wavelength.", "tex": "v = {f} \\times {lam}", "rule": "v = f\\lambda", "blank": true }]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "sin(2*pi*x/lam)", "label": "One snapshot of the wave, repeating every wavelength", "from": "0", "to": "2*lam" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["waves"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-period-frequency",
+      "title": "Period of an oscillation",
+      "statement": "Something oscillates at a frequency of {f}.",
+      "variables": [{ "name": "f", "def": { "kind": "range", "from": 2, "to": 20, "step": 2 }, "unit": "Hz", "description": "frequency" }],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How long does one complete oscillation take?",
+          "answer": "1 / f",
+          "unit": "s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "f", "why": "That is the frequency itself, in oscillations per second. The time for one oscillation is 1 divided by the frequency, not the frequency's own value." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "The period is the time for one whole oscillation, the reciprocal of the frequency.", "tex": "T = \\frac{1}{{f}}", "rule": "T = 1 \\div f", "blank": true }]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "0.25*sin(2*pi*f*x)", "label": "Four oscillations against seconds (height not to scale)", "from": "0", "to": "4/f" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["waves"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-echo-distance",
+      "title": "Timing an echo",
+      "statement": "A shout bounces off a distant cliff. Sound travels at {v} in air, and the echo returns {t} after the shout.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 300, "to": 350, "step": 10 }, "unit": "m/s", "description": "speed of sound" },
+        { "name": "t", "def": { "kind": "range", "from": 1, "to": 5, "step": 0.5 }, "unit": "s", "description": "time for the echo to return" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How far away is the cliff?",
+          "answer": "v * t / 2",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "v * t", "why": "That is the whole distance the sound covers, there and back. The cliff itself is only half of that away." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "The sound travels to the cliff and back again in the time given, covering the distance twice.", "tex": "2d = {v} \\times {t}", "rule": "2d = vt", "blank": true },
+          { "head": "Divide by 2 to find the distance to the cliff itself.", "tex": "d = \\frac{{v} \\times {t}}{2}", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "v*x/100", "label": "Out to the cliff: hundreds of metres against seconds", "from": "0", "to": "t/2" },
+          { "expr": "v*(t-x)/100", "label": "The echo coming back", "from": "t/2", "to": "t" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["waves"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-beat-frequency",
+      "title": "Two notes played together",
+      "statement": "Two notes are sounded together, one at {f1} and the other, slightly lower, at {f2}.",
+      "variables": [
+        { "name": "f1", "def": { "kind": "range", "from": 440, "to": 480, "step": 2 }, "unit": "Hz", "description": "higher frequency" },
+        { "name": "f2", "def": { "kind": "range", "from": 430, "to": 478, "step": 1 }, "unit": "Hz", "description": "lower frequency" }
+      ],
+      "condition": { "when": "f1 - f2 >= 2 and f1 - f2 <= 8", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How many beats are heard each second?",
+          "answer": "f1 - f2",
+          "unit": "Hz",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "f1 + f2", "why": "Beats come from the difference between the two frequencies, not their sum — adding them gives a frequency far higher than either note." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "Two notes close in pitch beat at a rate equal to the difference between their frequencies.", "tex": "f_{\\mathrm{beat}} = {f1} - {f2}", "rule": "f_{beat} = |f_1 - f_2|", "blank": true }]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "abs(cos(pi*(f1-f2)*x))", "label": "Loudness (not to scale) against seconds: one swell per beat", "from": "0", "to": "2/(f1-f2)" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["waves"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-closed-pipe-resonance",
+      "title": "Resonance in a closed pipe",
+      "statement": "A pipe of length {L}, closed at one end, resonates in sound travelling at {v}.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 330, "to": 350, "step": 5 }, "unit": "m/s", "description": "speed of sound" },
+        { "name": "L", "def": { "kind": "range", "from": 0.2, "to": 1, "step": 0.1 }, "unit": "m", "description": "length of the pipe" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is the pipe's lowest resonant frequency?",
+          "answer": "v / (4 * L)",
+          "unit": "Hz",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "v / (2 * L)", "why": "That is the formula for a pipe open at both ends, which fits half a wavelength. A pipe closed at one end fits only a quarter of a wavelength, so its lowest frequency is speed divided by four times the length." }],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "A pipe closed at one end holds a closed end and an open end a quarter of a wavelength apart, so only a quarter wavelength fits inside it at the lowest resonance.", "tex": "{L} = \\frac{\\lambda}{4}", "rule": "L = \\frac{\\lambda}{4}" },
+          { "head": "The frequency follows from the wave speed and that wavelength.", "tex": "f = \\frac{{v}}{4 \\times {L}}", "rule": "f = v \\div \\lambda", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "cos(pi*x/(2*L))", "label": "Shape of the standing wave in the pipe, closed at one end", "from": "0", "to": "L" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["waves"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-fields-angular-velocity",
+      "title": "Angular velocity of a point on a wheel",
+      "statement": "A point moves at {v} around a circle of radius {r}.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 2, "to": 10, "step": 2 }, "unit": "m/s", "description": "speed around the circle" },
+        { "name": "r", "def": { "kind": "range", "from": 1.5, "to": 3, "step": 0.5 }, "unit": "m", "description": "radius of the circle" }
+      ],
+      "condition": { "when": "v <= 6 * r", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is its angular velocity?",
+          "answer": "v / r",
+          "unit": "rad/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [{ "value": "v * r", "why": "Angular velocity is the speed around the circle divided by the radius, not multiplied by it." }],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "Angular velocity is how fast the angle turns, the speed around the circle divided by the radius.", "tex": "\\omega = \\frac{{v}}{{r}}", "rule": "\\omega = v \\div r", "blank": true }]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "r", "v": ["r", "0"], "role": "input" },
+          { "name": "v", "v": ["0", "v"], "tail": ["r", "0"], "role": "input" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["rotation"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-centripetal-acceleration",
+      "title": "Centripetal acceleration",
+      "statement": "An object moves at a steady {v} around a circle of radius {r}.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 2, "to": 10, "step": 2 }, "unit": "m/s", "description": "speed around the circle" },
+        { "name": "r", "def": { "kind": "range", "from": 1.5, "to": 3, "step": 0.5 }, "unit": "m", "description": "radius of the circle" }
+      ],
+      "condition": { "when": "v <= 6 * r", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What is its acceleration towards the centre?",
+          "answer": "v^2 / r",
+          "unit": "m/s²",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "v / r", "why": "That is the angular velocity, in radians per second, not an acceleration — the centripetal acceleration needs the speed squared, divided by the radius." },
+            { "value": "v^2 * r", "why": "The radius belongs on the bottom of the fraction, not multiplied in on top." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [{ "head": "Moving at a steady speed around a circle still accelerates, towards the centre, at speed squared over radius.", "tex": "a = \\frac{{v}^{2}}{{r}}", "rule": "a = v^{2} \\div r", "blank": true }]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "−r", "v": ["-r", "0"], "tail": ["r", "0"], "role": "input" },
+          { "name": "v", "v": ["0", "v"], "tail": ["r", "0"], "role": "input" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["rotation"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-centripetal-force",
+      "title": "Force needed to keep something turning",
+      "statement": "A mass of {m} moves at a steady {v} around a circle of radius {r}.",
+      "variables": [
+        { "name": "m", "def": { "kind": "range", "from": 0.5, "to": 1.5, "step": 0.5 }, "unit": "kg", "description": "mass" },
+        { "name": "v", "def": { "kind": "range", "from": 2, "to": 6, "step": 2 }, "unit": "m/s", "description": "speed around the circle" },
+        { "name": "r", "def": { "kind": "range", "from": 1.5, "to": 3, "step": 0.5 }, "unit": "m", "description": "radius of the circle" },
+        { "name": "a", "def": { "kind": "expr", "expr": "v^2 / r" }, "unit": "m/s²", "description": "centripetal acceleration, worked out in the steps" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What force is needed to keep it moving on that circle?",
+          "answer": "m * v^2 / r",
+          "unit": "N",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "m * v / r", "why": "That leaves the speed un-squared. The centripetal force needs the speed squared, not the speed itself." },
+            { "value": "m * v^2 * r", "why": "The radius belongs on the bottom of the fraction, not multiplied in on top — a bigger circle needs less force to hold something on it at the same speed, not more." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "Moving on a circle needs a centripetal acceleration towards the centre, speed squared over radius.", "tex": "a = \\frac{{v}^{2}}{{r}} = {a}", "rule": "a = v^{2} \\div r", "blank": true },
+          { "head": "Newton's second law gives the force needed to produce that acceleration.", "tex": "F = {m} \\times {a}", "rule": "F = ma", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "−r", "v": ["-r", "0"], "tail": ["r", "0"], "role": "input" },
+          { "name": "v", "v": ["0", "v"], "tail": ["r", "0"], "role": "input" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["rotation"],
+      "rung": 3
+    },
+    {
+      "id": "physlab-fields-torque",
+      "title": "Turning a spanner",
+      "statement": "A force of {F} is applied at right angles to a spanner, {d} from the bolt it turns.",
+      "variables": [
+        { "name": "F", "def": { "kind": "range", "from": 10, "to": 40, "step": 5 }, "unit": "N", "description": "applied force" },
+        { "name": "d", "def": { "kind": "range", "from": 20, "to": 60, "step": 10 }, "unit": "cm", "description": "distance from the bolt" },
+        { "name": "r", "def": { "kind": "expr", "expr": "d / 100" }, "unit": "m", "description": "the same distance in metres" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "What torque does the force produce about the bolt?",
+          "answer": "F * r",
+          "unit": "N·m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "F * d", "why": "That uses the distance in centimetres, which gives newton centimetres, 100 times too many. Change the distance into metres first: 100 centimetres make one metre." },
+            { "value": "F / r", "why": "Torque is the force multiplied by its distance from the turning point, not divided by it — a longer spanner gives more turning effect for the same push, not less." }
+          ],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "A newton metre needs the distance in metres, and 100 centimetres make one metre.", "tex": "r = {d} = {r}", "rule": "100\\,\\text{cm} = 1\\,\\text{m}" },
+          { "head": "Applied at right angles, the turning effect of a force is the force times its distance from the pivot.", "tex": "\\tau = {F} \\times {r}", "rule": "\\tau = Fr", "blank": true }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "r", "v": ["d", "0"], "role": "input" },
+          { "name": "F", "v": ["0", "-F"], "tail": ["d", "0"], "role": "input" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["rotation"],
+      "rung": 2
+    },
+    {
+      "id": "physlab-fields-period-of-rotation",
+      "title": "Time for one lap",
+      "statement": "An object moves at a steady {v} around a circle of radius {r}.",
+      "variables": [
+        { "name": "v", "def": { "kind": "range", "from": 4, "to": 20, "step": 2 }, "unit": "m/s", "description": "speed around the circle" },
+        { "name": "r", "def": { "kind": "range", "from": 0.5, "to": 2, "step": 0.5 }, "unit": "m", "description": "radius of the circle" }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How long does it take to go once round the circle?",
+          "answer": "2 * pi * r / v",
+          "unit": "s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "r / v", "why": "That leaves out the 2π: one full lap covers the whole circumference, 2π times the radius, not just the radius itself." },
+            { "value": "2 * pi * v / r", "why": "That has the speed and the radius the wrong way round — a faster object takes less time to go round, not more." }
+          ],
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          { "head": "One lap covers the whole circumference of the circle, 2π times the radius.", "tex": "d = 2\\pi \\times {r}", "rule": "d = 2\\pi r", "blank": true },
+          { "head": "At a steady speed, the time taken is that distance divided by the speed.", "tex": "T = \\frac{2\\pi \\times {r}}{{v}}", "rule": "T = d \\div v", "blank": true }
+        ]
+      },
+      "picture": { "kind": "curves", "items": [{ "expr": "v*x/(2*pi*r)", "label": "Laps against seconds: one lap takes one period", "from": "0", "to": "2*pi*r/v" }] },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["rotation"],
+      "rung": 3
+    }
+  ]
+}

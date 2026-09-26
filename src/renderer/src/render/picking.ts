@@ -4,6 +4,7 @@ import type * as THREE from 'three/webgpu'
 import { toScreen, type ViewSize } from './cameraUtils'
 import type { Computed, EvalResult, ObjId, SceneObject } from '../core/types'
 import { add, normalize, scale, type V3 } from '../math/vec'
+import { POINT_REACH_PX } from './viewMath'
 
 export type HitPart = 'body' | 'head' | 'tail'
 
@@ -53,6 +54,9 @@ function insidePolygon(p: S2, pts: S2[]): boolean {
   return inside
 }
 
+/** How far from a segment, ray, line or circle the cursor may be, in pixels, and still pick it. `Interaction.tsx` widens its crossing search from it. */
+export const CURVE_PICK_PX = 8
+
 export interface PickContext {
   camera: THREE.Camera
   size: ViewSize
@@ -61,14 +65,27 @@ export interface PickContext {
   ev: EvalResult
 }
 
+/** The one object under the cursor: the first of `pickAll`, so the two never disagree. */
 export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: SceneObject, c: Computed) => boolean): Hit | null {
+  return pickAll(ctx, sx, sy, accept)[0] ?? null
+}
+
+/**
+ * Every object within reach of the cursor, best first: a lower priority number wins (a point over
+ * a line over a shape), and among equals the nearer one. `slack` widens every tolerance by that
+ * many pixels, for a caller that wants the lines near a crossing and not only the one under the
+ * cursor. A vector offers up to three hits (head, tail, body); only its best one is kept.
+ */
+export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: SceneObject, c: Computed) => boolean, slack = 0): Hit[] {
   const { camera, size, objects, order, ev } = ctx
   const P = { x: sx, y: sy }
   const scr = (v: V3) => toScreen(camera, size, v)
-  let best: Hit | null = null
+  const found = new Map<ObjId, Hit>()
+  const better = (a: Hit, b: Hit) => a.priority < b.priority || (a.priority === b.priority && a.dist < b.dist)
   const offer = (h: Hit, tol: number) => {
-    if (h.dist > tol) return
-    if (!best || h.priority < best.priority || (h.priority === best.priority && h.dist < best.dist)) best = h
+    if (h.dist > tol + slack) return
+    const prev = found.get(h.id)
+    if (!prev || better(h, prev)) found.set(h.id, h)
   }
 
   for (let idx = order.length - 1; idx >= 0; idx--) {
@@ -80,7 +97,7 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
     switch (c.type) {
       case 'point': {
         const s = scr(c.p)
-        if (s.visible) offer({ id, part: 'body', dist: Math.hypot(s.x - sx, s.y - sy), priority: 0 }, 12)
+        if (s.visible) offer({ id, part: 'body', dist: Math.hypot(s.x - sx, s.y - sy), priority: 0 }, POINT_REACH_PX)
         break
       }
       case 'text': {
@@ -93,8 +110,11 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
         const a = scr(c.tail)
         const b = scr(head)
         if (!a.visible || !b.visible) break
+        // Head and tail share a priority so the nearer end wins. With the head ranked above the
+        // tail, a short arrow could not be picked up by its tail at all: the head, 14 px away,
+        // always took the click.
         offer({ id, part: 'head', dist: Math.hypot(b.x - sx, b.y - sy), priority: 1 }, 14)
-        offer({ id, part: 'tail', dist: Math.hypot(a.x - sx, a.y - sy), priority: 2 }, 10)
+        offer({ id, part: 'tail', dist: Math.hypot(a.x - sx, a.y - sy), priority: 1 }, 12)
         offer({ id, part: 'body', dist: segDist(P, a, b), priority: 3 }, 8)
         break
       }
@@ -110,7 +130,7 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
         const a = scr(c.line.p)
         const b = scr(add(c.line.p, c.type === 'line' || c.type === 'ray' ? scale(normalize(c.line.d), Math.max(1, Math.hypot(...c.line.d))) : c.line.d))
         const d = c.type === 'segment' ? segDist(P, a, b) : c.type === 'ray' ? rayDist(P, a, b) : lineDist(P, a, b)
-        offer({ id, part: 'body', dist: d, priority: 5 }, 8)
+        offer({ id, part: 'body', dist: d, priority: 5 }, CURVE_PICK_PX)
         break
       }
       case 'circle': {
@@ -122,7 +142,7 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
           if (prev) min = Math.min(min, segDist(P, prev, s))
           prev = s
         }
-        offer({ id, part: 'body', dist: min, priority: 6 }, 8)
+        offer({ id, part: 'body', dist: min, priority: 6 }, CURVE_PICK_PX)
         break
       }
       case 'graph': {
@@ -148,5 +168,6 @@ export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: Sc
       }
     }
   }
-  return best
+  // Stable: two hits that tie keep the order they were offered in (the top of the drawing first).
+  return [...found.values()].sort((a, b) => a.priority - b.priority || a.dist - b.dist)
 }

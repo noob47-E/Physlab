@@ -3,7 +3,9 @@
 // of zero-length lines, cached it as done, and left the viewport black until something else asked
 // for a new frame.
 
+import type { GridStyle } from '../core/types'
 import type { ViewSize } from './cameraUtils'
+import type { V3 } from '../math/vec'
 
 export interface GridArea {
   xMin: number
@@ -31,5 +33,446 @@ export function needsGridRebuild(prev: GridArea & { key: string }, view: GridAre
  * needs more grid, and the zoom is part of it because the very first frame uses a stand-in camera
  * whose zoom is 1 — a grid built for that must not be mistaken for the real one.
  */
-export const gridKey = (majorStep: number, size: ViewSize, zoom = 1): string =>
-  `${majorStep}|${size.width}x${size.height}|${zoom}`
+export const gridKey = (majorStep: number, size: ViewSize, zoom = 1, style: GridStyle = 'lines'): string =>
+  `${majorStep}|${size.width}x${size.height}|${zoom}|${style}`
+
+/** The styles in the order every picker lists them, with the word a student sees. "Off" is `showGrid: false`, not a style. */
+export const GRID_STYLES: { id: GridStyle; label: string; hint: string }[] = [
+  { id: 'lines', label: 'Lines', hint: 'Squared, with a heavier line every few squares' },
+  { id: 'dots', label: 'Dots', hint: 'A dot at each crossing and nothing else, so the drawing stands out' },
+  { id: 'fine', label: 'Fine', hint: 'Squares half the size, for detailed work' },
+  { id: 'paper', label: 'Paper', hint: 'Squared paper: lines on a tinted page' },
+  { id: 'polar', label: 'Polar — circles and angles', hint: 'Circles at every major step and a ray every 15°, labelled in radians or degrees' },
+  { id: 'isometric', label: 'Isometric — 60° triangles', hint: 'Lines at 0°, 60° and 120°, for drawing solids by hand' },
+  { id: 'hex', label: 'Hexagons', hint: 'Regular hexagons edge to edge, for tilings and patterns' }
+]
+
+/**
+ * The style a saved file asks for, or 'lines' when it names one this build has never heard of.
+ * A drawing saved by a newer build (or a hand-edited file) used to reach `gridVertices` with a
+ * word no branch matched and draw nothing at all; reading through this means a grid is always
+ * drawn, so no file-format step is needed for a new style.
+ */
+export function normaliseGridStyle(raw: unknown): GridStyle {
+  return typeof raw === 'string' && GRID_STYLES.some((g) => g.id === raw) ? (raw as GridStyle) : 'lines'
+}
+
+/** The 3D floor knows only the square styles: circles and lattices are 2D drawing paper, so it draws lines for them. */
+export const styleFor3D = (style: GridStyle): GridStyle => (style === 'polar' || style === 'isometric' || style === 'hex' ? 'lines' : style)
+
+/**
+ * The minor step that goes with a major step: four squares to a major line when the major step
+ * starts with a 2 (0.2, 2, 20 …), five otherwise. The grid and the snap both use it, so a point
+ * always snaps to a line the student can see.
+ */
+export const minorStepOf = (major: number): number => major / (String(major).replace(/[0.]/g, '').startsWith('2') ? 4 : 5)
+
+/**
+ * The step a point snaps to: the minor step, halved for the "fine" style. `gridVertices` draws
+ * the fine grid at half the minor step, and snapping used to ignore the style, so with Fine on a
+ * point snapped to every second crossing the student could see.
+ */
+export const snapStep = (minor: number, style: GridStyle): number => (style === 'fine' ? minor / 2 : minor)
+
+/** Half the width of a grid dot on screen, in pixels: a 3 px square. A 2 px square that does not sit on pixel boundaries blends into a faint smudge under MSAA. */
+export const DOT_HALF_PX = 1.5
+
+/**
+ * The dots of the dots style as small squares, two triangles each (18 numbers per dot), `h` being
+ * half the square's side in world units. WebGPU draws a point primitive as exactly one device
+ * pixel and ignores `PointsMaterial.size` (three.js says so in `PointsNodeMaterial`), so the
+ * dots were invisible specks on the default renderer; a square the caller sizes from
+ * `worldPerPixel` reads the same on both backends.
+ */
+export function dotQuads(dots: number[], h: number): number[] {
+  const out: number[] = []
+  for (let i = 0; i < dots.length; i += 3) {
+    const x = dots[i]
+    const y = dots[i + 1]
+    const z = dots[i + 2]
+    out.push(x - h, y - h, z, x + h, y - h, z, x + h, y + h, z)
+    out.push(x - h, y - h, z, x + h, y + h, z, x - h, y + h, z)
+  }
+  return out
+}
+
+/** Flat xyz triples: line ends for `minor` and `major` (two per line), one point per dot. */
+export interface GridVertices {
+  minor: number[]
+  major: number[]
+  dots: number[]
+}
+
+
+/** Pixels a minor step must span before the minor lines or circles are drawn at all; below this the grid is a solid block of colour. */
+export const MIN_MINOR_PX = 8
+
+/** Rays of the polar grid: one every 15°, so the 30° and 45° families both fall on a ray. */
+export const POLAR_RAYS = 24
+
+/** How far a drawn chord may sit inside its circle, in pixels: a fifth of a pixel is not visible at any zoom. */
+const SAGITTA_PX = 0.2
+
+/**
+ * Chords per full circle for a radius of `rPx` pixels. Fixed pixel-length chords waste vertices on
+ * a big circle and look polygonal on a small one; keeping the chord's bulge (the sagitta) under
+ * a fifth of a pixel gives a count that grows with √r, never fewer than 48 so the smallest ring
+ * is still round.
+ */
+export function circleSegments(rPx: number): number {
+  if (!Number.isFinite(rPx) || rPx <= 0) return 48
+  return Math.min(4096, Math.max(48, Math.ceil(2 * Math.PI * Math.sqrt(rPx / (8 * SAGITTA_PX)))))
+}
+
+/** cos 60° and sin 60°: the two numbers every 60° lattice is built from. */
+const HALF = 0.5
+const ROOT3_2 = Math.sqrt(3) / 2
+
+/**
+ * A polar grid over an area: which angles it must cover and which radii it can hold. An area
+ * that does not contain the origin only sees a slice of every circle (less than a half turn),
+ * so only that slice is drawn — a view panned far from the origin would otherwise spend its
+ * whole vertex budget on the parts of huge circles nobody can see.
+ */
+export function polarRange(area: GridArea): { rMin: number; rMax: number; start: number; span: number } {
+  const dx = Math.max(area.xMin, 0, -area.xMax)
+  const dy = Math.max(area.yMin, 0, -area.yMax)
+  const corners: [number, number][] = [[area.xMin, area.yMin], [area.xMax, area.yMin], [area.xMax, area.yMax], [area.xMin, area.yMax]]
+  const rMax = Math.max(...corners.map(([x, y]) => Math.hypot(x, y)))
+  if (dx === 0 && dy === 0) return { rMin: 0, rMax, start: 0, span: 2 * Math.PI }
+  // The directions to the corners, sorted; the largest gap between neighbours is the part of the
+  // turn no point of the area lies in, and the arc to draw is everything else.
+  const angles = corners.map(([x, y]) => Math.atan2(y, x)).sort((a, b) => a - b)
+  let gapAt = 0
+  let gap = angles[0] + 2 * Math.PI - angles[3]
+  for (let i = 0; i < 3; i++) {
+    const g = angles[i + 1] - angles[i]
+    if (g > gap) {
+      gap = g
+      gapAt = i + 1
+    }
+  }
+  return { rMin: Math.hypot(dx, dy), rMax, start: angles[gapAt % 4], span: 2 * Math.PI - gap }
+}
+
+/** Append the arc of the circle of radius `r` covering `start … start + span` as line segments. */
+function pushArc(out: number[], r: number, start: number, span: number, segments: number, z: number) {
+  const dTheta = (2 * Math.PI) / segments
+  const n = Math.max(1, Math.ceil(span / dTheta - 1e-9))
+  let px = r * Math.cos(start)
+  let py = r * Math.sin(start)
+  for (let i = 1; i <= n; i++) {
+    const t = start + Math.min(span, i * dTheta)
+    const x = r * Math.cos(t)
+    const y = r * Math.sin(t)
+    out.push(px, py, z, x, y, z)
+    px = x
+    py = y
+  }
+}
+
+/**
+ * Where the line through `p` in direction `d` enters and leaves the area, as a segment, or
+ * nothing when it misses. Every lattice line is clipped this way rather than drawn from one far
+ * corner to the other, so a lattice covers exactly the area asked for.
+ */
+export function clipLine(p: [number, number], d: [number, number], area: GridArea): [number, number, number, number] | null {
+  let t0 = -Infinity
+  let t1 = Infinity
+  const clip = (p0: number, dir: number, lo: number, hi: number): boolean => {
+    if (Math.abs(dir) < 1e-15) return p0 >= lo && p0 <= hi
+    const a = (lo - p0) / dir
+    const b = (hi - p0) / dir
+    t0 = Math.max(t0, Math.min(a, b))
+    t1 = Math.min(t1, Math.max(a, b))
+    return true
+  }
+  if (!clip(p[0], d[0], area.xMin, area.xMax) || !clip(p[1], d[1], area.yMin, area.yMax) || t0 > t1) return null
+  return [p[0] + t0 * d[0], p[1] + t0 * d[1], p[0] + t1 * d[0], p[1] + t1 * d[1]]
+}
+
+/** The three directions of the 60° lattice: 0°, 60° and 120°. */
+const ISO_DIRS: [number, number][] = [[1, 0], [HALF, ROOT3_2], [-HALF, ROOT3_2]]
+
+/** A 60° lattice point: `s·(i + j/2, j·√3/2)`. Snapping and drawing both read it from here so they cannot disagree. */
+export const isoPoint = (i: number, j: number, s: number): [number, number] => [s * (i + j * HALF), s * j * ROOT3_2]
+
+/** The six corners of a hexagon of edge `a` centred at (cx, cy), flat sides top and bottom (a corner at 0°). */
+export const hexCorners = (cx: number, cy: number, a: number): [number, number][] =>
+  [0, 1, 2, 3, 4, 5].map((k) => [cx + a * Math.cos((k * Math.PI) / 3), cy + a * Math.sin((k * Math.PI) / 3)])
+
+/** A hexagon centre of the tiling with edge `a`: columns 1.5a apart, every second column half a row (√3a/2) higher; (0, 0) is a centre. */
+export const hexCentre = (i: number, j: number, a: number): [number, number] => [1.5 * a * i, ROOT3_2 * a * (2 * j + (i & 1))]
+
+/**
+ * Where the lattice lines of a family sit inside the area: for a family through the points
+ * `origin + k·pitch` with direction `dir`, the k range whose lines touch the box.
+ */
+function familyRange(pitch: [number, number], dir: [number, number], area: GridArea): [number, number] {
+  // Each line is p·n = k·(pitch·n) for the normal n of the family; the box's corners give the
+  // extreme k values.
+  const n: [number, number] = [-dir[1], dir[0]]
+  const pn = pitch[0] * n[0] + pitch[1] * n[1]
+  const corners: [number, number][] = [[area.xMin, area.yMin], [area.xMax, area.yMin], [area.xMax, area.yMax], [area.xMin, area.yMax]]
+  const ks = corners.map(([x, y]) => (x * n[0] + y * n[1]) / pn)
+  return [Math.ceil(Math.min(...ks) - 1e-9), Math.floor(Math.max(...ks) + 1e-9)]
+}
+
+/**
+ * The grid for one style over one area, as vertex lists. Lines: a minor line every `minor`, a
+ * major line every `major`. Dots: nothing but a dot at every minor crossing, so the drawing shows
+ * through. Fine: the minor step halved, for a drawing that needs finer squares than the zoom
+ * gives. Paper: the same lines as 'lines' — the paper tint is the canvas colour, not a vertex.
+ * Polar: a circle at every minor step (major circles in the major list) and a ray every 15°.
+ * Isometric: three line families at 0°, 60° and 120°, triangles of side `minor`, heavier every
+ * `major`. Hex: regular hexagons of edge `major`, each shared edge drawn once, a dot at each
+ * centre. `worldPerPixel` decides how many chords a circle needs and when minor detail would
+ * be too dense to see.
+ */
+export function gridVertices(style: GridStyle, area: GridArea, major: number, minor: number, z = 0, worldPerPixel = minor / 20): GridVertices {
+  const out: GridVertices = { minor: [], major: [], dots: [] }
+  const minorVisible = minor / worldPerPixel >= MIN_MINOR_PX
+  if (style === 'polar') {
+    const { rMin, rMax, start, span } = polarRange(area)
+    const isMajor = (r: number) => Math.abs(r / major - Math.round(r / major)) < 1e-9
+    if (minorVisible) {
+      for (let k = Math.max(1, Math.ceil(rMin / minor - 1e-9)); k * minor <= rMax; k++) {
+        const r = k * minor
+        if (!isMajor(r)) pushArc(out.minor, r, start, span, circleSegments(r / worldPerPixel), z)
+      }
+    }
+    for (let k = Math.max(1, Math.ceil(rMin / major - 1e-9)); k * major <= rMax; k++) {
+      const r = k * major
+      pushArc(out.major, r, start, span, circleSegments(r / worldPerPixel), z)
+    }
+    for (let n = 0; n < POLAR_RAYS; n++) {
+      const t = (n * 2 * Math.PI) / POLAR_RAYS
+      out.major.push(rMin * Math.cos(t), rMin * Math.sin(t), z, rMax * Math.cos(t), rMax * Math.sin(t), z)
+    }
+    return out
+  }
+  if (style === 'isometric') {
+    // Every family passes through the lattice points on the x axis, `minor` apart, and repeats
+    // every `ratio` lines in the heavier colour so the big triangles have side `major`.
+    const ratio = Math.max(1, Math.round(major / minor))
+    for (const dir of ISO_DIRS) {
+      const pitch: [number, number] = dir[0] === 1 ? [0, minor * ROOT3_2] : [minor, 0]
+      const [k0, k1] = familyRange(pitch, dir, area)
+      for (let k = k0; k <= k1; k++) {
+        const heavy = k % ratio === 0
+        if (!heavy && !minorVisible) continue
+        const seg = clipLine([k * pitch[0], k * pitch[1]], dir, area)
+        if (seg) (heavy ? out.major : out.minor).push(seg[0], seg[1], z, seg[2], seg[3], z)
+      }
+    }
+    return out
+  }
+  if (style === 'hex') {
+    const a = major
+    const seen = new Set<string>()
+    const key = (x: number, y: number) => `${Math.round(x / a / 1e-6)},${Math.round(y / a / 1e-6)}`
+    const i0 = Math.floor(area.xMin / (1.5 * a)) - 1
+    const i1 = Math.ceil(area.xMax / (1.5 * a)) + 1
+    const j0 = Math.floor(area.yMin / (2 * ROOT3_2 * a)) - 1
+    const j1 = Math.ceil(area.yMax / (2 * ROOT3_2 * a)) + 1
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const [cx, cy] = hexCentre(i, j, a)
+        // A hexagon whose centre is more than an edge outside the box cannot reach into it.
+        if (cx + a < area.xMin || cx - a > area.xMax || cy + a < area.yMin || cy - a > area.yMax) continue
+        if (cx >= area.xMin && cx <= area.xMax && cy >= area.yMin && cy <= area.yMax) out.dots.push(cx, cy, z)
+        const c = hexCorners(cx, cy, a)
+        for (let k = 0; k < 6; k++) {
+          const p = c[k]
+          const q = c[(k + 1) % 6]
+          // The same edge seen from the neighbouring hexagon is the same two corners in the other order.
+          const ka = key(p[0], p[1])
+          const kb = key(q[0], q[1])
+          const edge = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`
+          if (seen.has(edge)) continue
+          seen.add(edge)
+          out.major.push(p[0], p[1], z, q[0], q[1], z)
+        }
+      }
+    }
+    return out
+  }
+  const step = snapStep(minor, style)
+  const x0 = Math.ceil(area.xMin / step)
+  const x1 = Math.floor(area.xMax / step)
+  const y0 = Math.ceil(area.yMin / step)
+  const y1 = Math.floor(area.yMax / step)
+  if (style === 'dots') {
+    for (let i = x0; i <= x1; i++) for (let j = y0; j <= y1; j++) out.dots.push(i * step, j * step, z)
+    return out
+  }
+  for (let i = x0; i <= x1; i++) out.minor.push(i * step, area.yMin, z, i * step, area.yMax, z)
+  for (let j = y0; j <= y1; j++) out.minor.push(area.xMin, j * step, z, area.xMax, j * step, z)
+  for (let i = Math.ceil(area.xMin / major); i <= Math.floor(area.xMax / major); i++) out.major.push(i * major, area.yMin, z, i * major, area.yMax, z)
+  for (let j = Math.ceil(area.yMin / major); j <= Math.floor(area.yMax / major); j++) out.major.push(area.xMin, j * major, z, area.xMax, j * major, z)
+  return out
+}
+
+/** The closest of some candidate points to (x, y). */
+function nearest(x: number, y: number, candidates: [number, number][]): [number, number] {
+  let best = candidates[0]
+  let bestD = Infinity
+  for (const c of candidates) {
+    const d = Math.hypot(c[0] - x, c[1] - y)
+    if (d < bestD) {
+      bestD = d
+      best = c
+    }
+  }
+  return best
+}
+
+/**
+ * How a sketched shape's corners snap for a grid style. Square styles round to the snap step on
+ * each axis, which lets the recogniser also snap lengths and keep rectangles square to the axes.
+ * Any other pattern must snap to its own points instead: rounding to a square step put a triangle
+ * sketched on isometric paper on points nobody could see. The isometric lattice is as fine as the
+ * squares, so a corner always goes to its nearest lattice point; polar crossings spread apart
+ * away from the centre and hexagon corners sit a major step apart, so there a corner moves only
+ * when it is within half a minor step of one — rounding every corner would bend the shape.
+ */
+export function sketchSnap(style: GridStyle, major: number, minor: number): { gridStep: number; snapPoint?: (p: V3) => V3 } {
+  if (style !== 'polar' && style !== 'isometric' && style !== 'hex') return { gridStep: snapStep(minor, style) }
+  const reach = style === 'isometric' ? Infinity : minor / 2
+  return {
+    gridStep: 0,
+    snapPoint: (p) => {
+      const g = snapToGrid(style, p, major, minor)
+      return Math.hypot(g[0] - p[0], g[1] - p[1]) <= reach ? g : p
+    }
+  }
+}
+
+/**
+ * The grid point nearest to `p` for a style — the crossing a student sees, so a snapped point
+ * always lands on the drawn grid. Square styles: the nearest multiple of the snap step on each
+ * axis. Polar: the nearest crossing of a circle (every minor step) and a ray (every 15°).
+ * Isometric: the nearest lattice point. Hex: the nearest hexagon centre or corner, whichever is
+ * closer. The height is left alone.
+ */
+export function snapToGrid(style: GridStyle, p: V3, major: number, minor: number): V3 {
+  const [x, y, z] = p
+  if (style === 'polar') {
+    const r = Math.round(Math.hypot(x, y) / minor) * minor
+    if (r === 0) return [0, 0, z]
+    const sector = (2 * Math.PI) / POLAR_RAYS
+    const t = Math.round(Math.atan2(y, x) / sector) * sector
+    // cos(π/2) is 6×10⁻¹⁷, not 0: a point snapped onto the y axis must sit on it exactly.
+    const clean = (v: number) => (Math.abs(v) < 1e-12 * r ? 0 : v)
+    return [clean(r * Math.cos(t)), clean(r * Math.sin(t)), z]
+  }
+  if (style === 'isometric') {
+    const s = minor
+    const jf = y / (s * ROOT3_2)
+    const candidates: [number, number][] = []
+    for (const j of [Math.floor(jf), Math.ceil(jf)]) {
+      const ifl = x / s - j * HALF
+      for (const i of [Math.floor(ifl), Math.ceil(ifl)]) candidates.push(isoPoint(i, j, s))
+    }
+    const q = nearest(x, y, candidates)
+    return [q[0], q[1], z]
+  }
+  if (style === 'hex') {
+    const a = major
+    const ifl = x / (1.5 * a)
+    const candidates: [number, number][] = []
+    for (const i of [Math.floor(ifl), Math.ceil(ifl)]) {
+      const jf = y / (2 * ROOT3_2 * a) - (i & 1) * HALF
+      for (const j of [Math.floor(jf), Math.ceil(jf)]) {
+        const c = hexCentre(i, j, a)
+        candidates.push(c, ...hexCorners(c[0], c[1], a))
+      }
+    }
+    const q = nearest(x, y, candidates)
+    // Every centre and corner is a multiple of a/2 across and of a·√3/2 up; rounding onto those
+    // multiples takes out the cos/sin dust (a corner at 1.9999999999999991, 4×10⁻¹⁶) so the
+    // same corner reached from two neighbouring hexagons is the same point.
+    const hx = a * HALF
+    const hy = a * ROOT3_2
+    return [Math.round(q[0] / hx) * hx, Math.round(q[1] / hy) * hy, z]
+  }
+  const step = snapStep(minor, style)
+  return [Math.round(x / step) * step, Math.round(y / step) * step, z]
+}
+
+// ── The grid shader (0.9, Idea 1) ─────────────────────────────────────────────────────────────
+// The square 2-D grids can be drawn by one quad whose fragment shader lights each pixel by its
+// distance to the nearest line. A GPU line is one pixel wide wherever the rasteriser happens to
+// round it, so at some zooms a minor line faded to nothing or doubled into two half-lit pixels;
+// the shader gives every line exactly one device pixel of ink at any zoom and any pan.
+
+/**
+ * The rollback switch for WebGL2. The WebGPU path was checked in the browser in all four themes;
+ * if WebGL2 ever shows moiré, a slower frame or a wrong colour, this goes to false and WebGL2
+ * draws line segments again, with nothing else changed.
+ */
+export const GRID_SHADER_WEBGL2 = true
+
+/** The styles the shader draws: the three square-line papers. Dots, polar circles and the isometric and hex lattices keep their line segments. */
+export const SHADER_GRID_STYLES: readonly GridStyle[] = ['lines', 'fine', 'paper']
+
+/**
+ * How the grid is drawn: by the shader or by line segments. Only the 2-D square styles use the
+ * shader (the 3-D floor is seen at a slant, where one pixel of ink per line is not the goal);
+ * WebGL2 uses it only while `gate.webgl2Ok`, and a renderer still starting draws lines.
+ */
+export function gridShaderPlan(
+  backend: 'WebGPU' | 'WebGL2' | 'starting',
+  style: GridStyle,
+  is3D: boolean,
+  gate: { webgl2Ok: boolean } = { webgl2Ok: GRID_SHADER_WEBGL2 }
+): 'shader' | 'lines' {
+  if (is3D || !SHADER_GRID_STYLES.includes(style)) return 'lines'
+  if (backend === 'WebGPU') return 'shader'
+  return backend === 'WebGL2' && gate.webgl2Ok ? 'shader' : 'lines'
+}
+
+/** A line's width on screen in device pixels. */
+export const GRID_LINE_PX = 1
+
+/**
+ * The shader's line-distance function, written once more in TypeScript so it can be tested:
+ * how much of the pixel whose centre is at `x` a line family `step` apart covers, when one
+ * device pixel spans `wpp` world units (the shader gets `wpp` from `fwidth`). It is a tent of
+ * half-width one pixel around a line `widthPx` wide, so summed over the pixel centres across a
+ * line it is exactly `widthPx` wherever the line falls between them — never a gap, never a
+ * doubled line. Keep it step for step the same as `coverNode` in Grid.tsx.
+ */
+export function lineCoverage(x: number, step: number, wpp: number, widthPx = GRID_LINE_PX): number {
+  const f = x / step + 0.5
+  const d = Math.abs(f - Math.floor(f) - 0.5) * step
+  return Math.min(1, Math.max(0, widthPx * 0.5 + 0.5 - d / wpp))
+}
+
+/**
+ * One pixel of the shader grid: the minor and major coverage (each the larger of its vertical and
+ * horizontal family) and the alpha laid over the page, in the major colour where a major line
+ * covers the pixel. The alpha is the larger coverage, not minor and major stacked: every major
+ * line is also a minor line, so stacking counted it twice and a major line split between two
+ * pixels came out as one and a half pixels of ink (seen in the browser check).
+ */
+export function gridPixel(x: number, y: number, minor: number, major: number, wpp: number): { minor: number; major: number; alpha: number } {
+  const a = Math.max(lineCoverage(x, minor, wpp), lineCoverage(y, minor, wpp))
+  const b = Math.max(lineCoverage(x, major, wpp), lineCoverage(y, major, wpp))
+  return { minor: a, major: b, alpha: Math.max(a, b) }
+}
+
+/**
+ * The quad the shader draws on and the steps it draws. The quad's corners are kept relative to
+ * `origin`, the major line nearest the middle of the area, because the GPU works in 32-bit floats:
+ * a world x of 12 345 is held to about a thousandth, which at a close zoom is most of a pixel,
+ * and lines measured from world zero wobbled and doubled far from the origin. Measured from a
+ * major line near the view, the numbers stay small and every line still falls on a multiple of
+ * its step. `minor` is the step the minor lines are drawn at (halved for "fine", as `gridVertices`
+ * does).
+ */
+export function shaderGridQuad(style: GridStyle, area: GridArea, major: number, minor: number): { origin: [number, number]; corners: [number, number, number, number]; major: number; minor: number } {
+  const ox = Math.round((area.xMin + area.xMax) / 2 / major) * major
+  const oy = Math.round((area.yMin + area.yMax) / 2 / major) * major
+  return { origin: [ox, oy], corners: [area.xMin - ox, area.yMin - oy, area.xMax - ox, area.yMax - oy], major, minor: snapStep(minor, style) }
+}

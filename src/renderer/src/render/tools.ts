@@ -17,7 +17,7 @@ export interface ToolInfo {
 }
 
 export const TOOLS: ToolInfo[] = [
-  { id: 'select', label: 'Move', key: 'V', hint: ['Click to select. Drag points and vector heads. Drag empty space to pan, scroll to zoom.'] },
+  { id: 'select', label: 'Move', key: 'V', hint: ['Click to select, or drag a box round several objects. Drag points and vector heads. Hold Space and drag (or right-drag) to pan, scroll to zoom.'] },
   { id: 'sketch', label: 'Sketch', key: 'K', hint: ['Draw a rough shape with the mouse: it becomes a perfect square, rectangle, triangle, circle or line. Hold Alt for no grid snapping.'] },
   { id: 'point', label: 'Point', key: 'P', hint: ['Click anywhere to place a point.'] },
   { id: 'vector', label: 'Vector', key: 'W', hint: ['Drag from tail to head (or click tail, then head).', 'Click where the head should be.'] },
@@ -39,14 +39,36 @@ export const TOOLS: ToolInfo[] = [
   { id: 'delete', label: 'Delete', key: 'X', hint: ['Click an object to delete it.'] }
 ]
 
+/**
+ * A tool's label as the shelf's fit estimate (`shelfMode`) should measure it. The shelf keeps a
+ * label on one line (shell.css), but the estimate sizes a button by its longest word, so a
+ * two-word label is handed over as one word of the same length: "Perp. bisector" is as wide as
+ * fourteen letters, not as "bisector" (Fix 7).
+ */
+export const shelfFitLabel = (id: string): string | undefined => TOOLS.find((t) => t.id === id)?.label.replace(/\s/g, '_')
+
 export interface SnapInfo {
   p: V3
-  kind: 'free' | 'grid' | 'point' | 'axis' | 'onObject'
+  kind: 'free' | 'grid' | 'point' | 'axis' | 'onObject' | 'intersection'
   pointId?: ObjId
   /** For 'onObject': the line/segment/circle the point should stick to, and where along it. */
   onId?: ObjId
   t?: number
+  /** For 'intersection': the two objects that cross there, and which of their crossings this is
+   *  (numbered the way `intersectionsOf` numbers them, so the point lands on the same crossing
+   *  whenever the scene is worked out again). */
+  a?: ObjId
+  b?: ObjId
+  index?: number
   label?: string
+}
+
+/** The box a student drags with the Move tool, in canvas pixels; the corners are whichever way round the drag went. */
+export interface Marquee {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
 }
 
 export interface ToolRuntime {
@@ -59,11 +81,18 @@ export interface ToolRuntime {
   snap: SnapInfo | null
   /** Freehand stroke being drawn with the Sketch tool. */
   stroke: V3[]
+  /** Points this tool itself created for the drawing in progress. Esc removes these and no others:
+   *  it used to remove every unused point it had been clicked on, including ones placed earlier. */
+  created: ObjId[]
+  /** The selection box being dragged on empty space with the Move tool, or null. */
+  marquee: Marquee | null
 }
 
-export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [] }))
+export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [], created: [], marquee: null }))
 
-export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [] })
+// The snap marker goes too: a tool that has finished, or been swapped for another, has nothing to
+// point at, and the ring used to stay on the last crossing until the mouse moved again.
+export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [], marquee: null, snap: null })
 
 /** Is a tool part-way through a drawing (so Finish / Undo point / Cancel apply)? */
 export const isDrawing = (): boolean => useTool.getState().picks.length > 0
@@ -107,10 +136,10 @@ export function finishTool(): boolean {
 
 /** Throw away the unfinished drawing (Esc). */
 export function cancelTool(): boolean {
-  const picks = useTool.getState().picks
+  const { picks, created } = useTool.getState()
   if (!picks.length) return false
   resetTool()
-  dropUnusedPicks(picks)
+  dropUnusedPicks(picks.filter((id) => created.includes(id)))
   return true
 }
 

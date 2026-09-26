@@ -1,0 +1,48 @@
+// Which drawing an object belongs to. Vectors, Geometry, Graphing and Lab Data share one scene
+// store, so a triangle drawn in Geometry used to turn up behind the vectors and the other way
+// round. Every object now remembers the space it was made in and is only shown there. An object
+// with no space is shown everywhere: that is what an object made where no drawing is active gets,
+// and what a format-1 file's objects keep when nothing in the file says where they belong
+// (`core/migrate.ts` stamps the ones it can tell). A mode with no drawing of its own (the Sandbox,
+// the GPU Lab) shows only those: its space is null, and null once meant "show all", which put the
+// Geometry points' letters over the Sandbox's falling ball.
+
+import type { ModeId } from '../app/modes'
+import type { ObjId, SceneObject } from './types'
+
+/**
+ * Stored in every object of a saved file, so a space keeps its id for good; what a student reads
+ * is `SPACE_LABELS` ('shapes' is the Geometry drawing — see ModeId in app/modes.ts).
+ */
+export type Space = 'vectors' | 'shapes' | 'graphing' | 'lab'
+
+/** The drawing a mode looks at; null means the mode has no drawing of its own. */
+export function spaceOf(mode: ModeId): Space | null {
+  switch (mode) {
+    case 'calculator':
+    case 'vectors':
+    case 'problems':
+      return 'vectors'
+    case 'shapes':
+      return 'shapes'
+    // Question Author's "Show it" draws with the same calls the player uses, which put the picture
+    // in Graphing; looking at that drawing, the teacher sees it beside the question being written.
+    case 'graphing':
+    case 'author':
+      return 'graphing'
+    case 'lab':
+      return 'lab'
+    default:
+      return null
+  }
+}
+
+/** The mode a space is shown in, for "go to" buttons. */
+export const modeOfSpace: Record<Space, ModeId> = { vectors: 'vectors', shapes: 'shapes', graphing: 'graphing', lab: 'lab' }
+
+export const SPACE_LABELS: Record<Space, string> = { vectors: 'Vectors', shapes: 'Geometry', graphing: 'Graphing', lab: 'Lab Data' }
+
+export const visibleIn = (o: SceneObject | undefined, space: Space | null): boolean => !!o && (!o.space || o.space === space)
+
+/** The ids to draw, list and pick right now, in scene order. */
+export const visibleOrder = (order: ObjId[], objects: Record<ObjId, SceneObject>, space: Space | null): ObjId[] => order.filter((id) => visibleIn(objects[id], space))

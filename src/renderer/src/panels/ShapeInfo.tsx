@@ -1,9 +1,12 @@
-import { useMemo } from 'react'
-import { RotateCcw, Scissors, Shapes } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Combine, FlipHorizontal2, Puzzle, RotateCcw, RotateCw, Scissors, Shapes } from 'lucide-react'
 import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
 import { freeCapitals } from '../core/naming'
 import { decompose, type DecomposeGoal } from '../math/decompose'
+import { fuseChoice, legoStatus, pieceLettered } from '../math/lego'
+import { congruentParts } from '../math/congruence'
+import { formatMeasure } from '../math/format'
 import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
@@ -11,48 +14,48 @@ import { Tex } from '../ui/Tex'
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 
-function Hover({ h, children, className = '' }: { h: Highlight; children: React.ReactNode; className?: string }) {
+function Hover({ h, owner, children, className = '' }: { h: Highlight; owner: ObjId; children: React.ReactNode; className?: string }) {
   const set = useHighlight((s) => s.set)
   return (
-    <div className={`cursor-help rounded px-1 hover:bg-[#2f4a7a55] ${className}`} onMouseEnter={() => set(h)} onMouseLeave={() => set(null)}>
+    <div className={`cursor-help rounded px-1 hover:bg-sel/40 ${className}`} onMouseEnter={() => set({ ...h, owner })} onMouseLeave={() => set(null)}>
       {children}
     </div>
   )
 }
 
-function Row({ row, piFactor }: { row: FormulaRow; piFactor?: boolean }) {
+function Row({ row, owner, piFactor }: { row: FormulaRow; owner: ObjId; piFactor?: boolean }) {
   const settings = useScene((s) => s.settings)
   return (
-    <div className="border-t border-[#2a2b30] px-2 py-2 first:border-t-0">
-      <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500">{row.title}</div>
-      <Hover h={row.highlight} className="text-[15px]">
+    <div className="border-t border-line px-2 py-2 first:border-t-0">
+      <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">{row.title}</div>
+      <Hover h={row.highlight} owner={owner} className="text-lead">
         <Tex tex={row.general} />
-        <span className="ml-2 text-[11px] text-zinc-500">hover to shade</span>
+        <span className="ml-2 text-fine text-ink-faint">hover to shade</span>
       </Hover>
       {row.symbols.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-1 text-zinc-300">
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-1 text-ink">
           {row.symbols.map((s) => (
-            <Hover key={s.sym + s.label} h={s.highlight}>
+            <Hover key={s.sym + s.label} h={s.highlight} owner={owner}>
               <Tex tex={`${s.sym} = ${/^[A-Z][\w]*$/.test(s.label) ? `\\mathit{${s.label}} = ` : ''}${answerTex(s.value, s.kind, settings)}`} />
             </Hover>
           ))}
         </div>
       )}
-      <div className="mt-1 pl-1 text-zinc-300">
+      <div className="mt-1 pl-1 text-ink">
         <Tex tex={row.substitution} />
       </div>
-      <div className="mt-1 pl-1 text-[16px] text-white">
+      <div className="mt-1 pl-1 text-title text-ink-strong">
         <Tex tex={`${row.general.split('=')[0]}= ${answerTex(row.value, row.kind, settings, piFactor)}`} />
       </div>
     </div>
   )
 }
 
-export function ShapeReportView({ report, piFactor }: { report: ShapeReport; piFactor?: boolean }) {
+export function ShapeReportView({ report, owner, piFactor }: { report: ShapeReport; owner: ObjId; piFactor?: boolean }) {
   return (
     <>
       {report.rows.map((r) => (
-        <Row key={r.title} row={r} piFactor={piFactor} />
+        <Row key={r.title} row={r} owner={owner} piFactor={piFactor} />
       ))}
     </>
   )
@@ -65,9 +68,19 @@ export function ShapeInfo({ id }: { id: ObjId }) {
   const settings = useScene((s) => s.settings)
   const update = useScene((s) => s.updateObject)
   const setHighlight = useHighlight((s) => s.set)
+  const selection = useScene((s) => s.selection)
+  const breakApart = useScene((s) => s.breakApart)
+  const fusePieces = useScene((s) => s.fusePieces)
+  const turnPiece = useScene((s) => s.turnPiece)
+  const flipPiece = useScene((s) => s.flipPiece)
+  // What the last Fuse said when it could not: a gap, an overlap. Cleared by the next Fuse.
+  const [fuseNote, setFuseNote] = useState<string | null>(null)
 
   const obj = objects[id]
   const c = ev.values.get(id)
+  // When this card goes — the shape deleted, another one selected — its shading goes too. The
+  // mouse-leave that used to clear it never fires on an element that has been unmounted.
+  useEffect(() => () => setHighlight(null), [id, setHighlight])
   const setGoal = (g: DecomposeGoal) =>
     update(id, (d) => {
       if (d.type === 'polygon') {
@@ -78,6 +91,26 @@ export function ShapeInfo({ id }: { id: ObjId }) {
 
   const goal: DecomposeGoal = (obj?.type === 'polygon' && obj.decomposeGoal) || 'basic'
   const decIndex = (obj?.type === 'polygon' && obj.decomposeIndex) || 0
+  const lego = obj?.type === 'polygon' ? obj.lego : undefined
+  // The selected shapes, this one included: what Fuse joins. Any touching shapes fuse (Fix 17),
+  // not only the pieces of one broken shape.
+  const fusable = useMemo(() => fuseChoice(selection, id, objects), [selection, objects, id])
+
+  // Every piece of this shape on the table, and what they make together: a new outline is not
+  // fused by itself, so the panel says so and Fuse joins them all.
+  const together = useMemo(() => {
+    if (!lego) return null
+    const ids = Object.values(objects)
+      .filter((o) => o.type === 'polygon' && o.lego?.sourceId === lego.sourceId)
+      .map((o) => o.id)
+    const pts = ids.map((k) => {
+      const v = ev.values.get(k)
+      return v?.type === 'polygon' ? v.pts : null
+    })
+    if (ids.length < 2 || pts.some((p) => !p)) return null
+    return { ids, status: legoStatus(pts as V3[][], lego.sourceSignature) }
+  }, [lego, objects, ev])
+  const fuseIds = fusable.length >= 2 ? fusable : together && together.status.kind !== 'apart' ? together.ids : fusable
 
   const data = useMemo(() => {
     if (!obj || !c) return null
@@ -93,7 +126,15 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         const n = dec ? dec.newPoints.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-7) : -1
         return n >= 0 ? letters[n] ?? '?' : '?'
       }
-      return { kind: 'polygon' as const, report, names, dec, pts: c.pts, nameAt }
+      // Parts that are the same shape — the two triangles either side of a trapezium's rectangle,
+      // say — are said to be congruent, with the corners matched and the rule (Fix 19).
+      const same = dec && dec.parts.length > 1
+        ? congruentParts(
+            dec.parts.map((part) => ({ names: part.pts.map(nameAt), pts: part.pts })),
+            { fmtLength: (v) => formatMeasure(v, 'length', settings), fmtAngle: (v) => formatMeasure(v, 'angle', settings) }
+          )
+        : []
+      return { kind: 'polygon' as const, report, names, dec, pts: c.pts, nameAt, same }
     }
     if (obj.type === 'circle' && c.type === 'circle') {
       const centerId = obj.def.kind === 'centerPoint' || obj.def.kind === 'centerRadius' ? obj.def.c : undefined
@@ -103,14 +144,19 @@ export function ShapeInfo({ id }: { id: ObjId }) {
   }, [obj, c, objects, settings, goal, decIndex])
 
   if (!data || !obj) return null
+  // A decomposed shape breaks into its parts; a simple one (and a triangle, which has no
+  // Decompose) is cut in two instead, so Break apart works on the shapes a student draws most.
+  const canBreak = data.kind === 'polygon' && !lego && (data.dec !== null || data.pts.length === 3)
+  const simple = canBreak && data.kind === 'polygon' && (!data.dec || data.dec.parts.length < 2)
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-[#2a2b30] px-2 py-1.5">
-        <Shapes size={15} className="text-violet-300" />
+      <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
+        <Shapes size={15} className="text-accent" />
         <div className="flex-1">
-          <span className="font-semibold text-white">{data.report.name}</span>{' '}
-          {data.kind === 'polygon' && <span className="italic text-zinc-400" style={{ fontFamily: 'Cambria, serif' }}>{data.names.join('')}</span>}
+          <span className="font-semibold text-ink-strong">{data.report.name}</span>{' '}
+          {data.kind === 'polygon' && (!lego || (obj.type === 'polygon' && pieceLettered(obj.points, objects))) && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
+          {lego && <span className="text-ink-dim">, a piece of a shape</span>}
         </div>
         {data.kind === 'polygon' && data.pts.length >= 4 && (
           <button
@@ -128,9 +174,46 @@ export function ShapeInfo({ id }: { id: ObjId }) {
         )}
       </div>
 
+      {data.kind === 'polygon' && (canBreak || lego || fusable.length >= 2) && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5 text-small">
+          {canBreak && (
+            <button
+              className="btn min-h-[44px]"
+              title={simple ? `Cut it in two along ${data.pts.length === 3 ? 'a median' : 'a diagonal'}, then slide, turn and flip the halves` : 'Turn the pieces into shapes you can slide, turn and flip'}
+              onClick={() => (setHighlight(null), breakApart(id))}
+            >
+              <Puzzle size={14} /> Break apart
+            </button>
+          )}
+          {(lego || fusable.length >= 2) && (
+            <button
+              className="btn min-h-[44px]"
+              disabled={fuseIds.length < 2}
+              title={fuseIds.length < 2 ? 'Select two or more shapes or pieces that touch, then fuse them' : fuseIds === fusable ? 'Join the selected shapes into one shape' : 'Join all the pieces into the new shape'}
+              onClick={() => setFuseNote(fusePieces(fuseIds))}
+            >
+              <Combine size={14} /> Fuse
+            </button>
+          )}
+          {lego && (
+            <>
+              <button className="btn min-h-[44px]" title="Turn this piece a quarter turn anticlockwise" onClick={() => turnPiece(id, 90)}>
+                <RotateCw size={14} /> Turn 90°
+              </button>
+              <button className="btn min-h-[44px]" title="Turn this piece a little anticlockwise" onClick={() => turnPiece(id, 15)}>
+                <RotateCw size={14} /> Turn 15°
+              </button>
+              <button className="btn min-h-[44px]" title="Its mirror image, left for right" onClick={() => flipPiece(id)}>
+                <FlipHorizontal2 size={14} /> Flip
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {data.kind === 'polygon' && data.dec && data.dec.parts.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-[#2a2b30] px-2 py-1.5 text-[12px]">
-          <span className="text-zinc-500">Split into</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-2 py-1.5 text-small">
+          <span className="text-ink-faint">Split into</span>
           <div className="seg">
             <button className={goal === 'basic' ? 'on' : ''} onClick={() => setGoal('basic')} title="Only rectangles, squares and triangles">
               Rectangles &amp; triangles
@@ -160,9 +243,10 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       {data.kind === 'polygon' && data.dec ? (
         <div>
           {data.dec.parts.length === 1 ? (
-            <div className="px-2 py-2 text-zinc-400">
+            <div className="px-2 py-2 text-ink-dim">
               This is already a simple shape; no need to split it.
-              {goal === 'basic' && <span className="text-zinc-500"> It is a rectangle, square or triangle already.</span>}
+              {goal === 'basic' && <span className="text-ink-faint"> It is a rectangle, square or triangle already.</span>}
+              <span className="text-ink-faint"> Break apart still cuts it in two, so you can see what its halves make.</span>
             </div>
           ) : (
             <>
@@ -172,23 +256,31 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                 const rep = polygonReport(part.pts, partNames, settings)
                 const areaRow = rep.rows.find((r) => r.title.startsWith('Area'))
                 return (
-                  <div key={i} className="border-t border-[#2a2b30]">
-                    <Hover h={{ region: part.pts }} className="mx-1 mt-1 flex items-center gap-2">
-                      <span className="rounded bg-[#3a3f4a] px-1.5 text-[11px] font-bold text-white">{ROMAN[i]}</span>
-                      <span className="text-zinc-200">
+                  <div key={i} className="border-t border-line">
+                    <Hover h={{ region: part.pts }} owner={id} className="mx-1 mt-1 flex items-center gap-2">
+                      <span className="rounded bg-surface-4 px-1.5 text-fine font-bold text-ink-strong">{ROMAN[i]}</span>
+                      <span className="text-ink-strong">
                         {part.cls.name}{' '}
-                        <span className="italic text-zinc-400" style={{ fontFamily: 'Cambria, serif' }}>
+                        <span className="font-math italic text-ink-dim">
                           {partNames.join('')}
                         </span>
                       </span>
                       <span className="flex-1" />
-                      <Tex tex={`A_{${ROMAN[i]}} = ${answerTex(part.area, 'area', settings)}`} className="text-white" />
+                      <Tex tex={`A_{${ROMAN[i]}} = ${answerTex(part.area, 'area', settings)}`} className="text-ink-strong" />
                     </Hover>
-                    {areaRow && <Row row={{ ...areaRow, highlight: { ...areaRow.highlight, region: part.pts } }} />}
+                    {areaRow && <Row row={{ ...areaRow, highlight: { ...areaRow.highlight, region: part.pts } }} owner={id} />}
                   </div>
                 )
               })}
-              <Hover h={{ region: data.pts }} className="m-1 border-t border-[#2a2b30] pt-2 text-[15px] text-white">
+              {data.same.map((pair) => (
+                <div key={`${pair.i}-${pair.j}`} className="border-t border-line px-2 py-1.5 text-ink">
+                  <span className="mr-1 font-semibold text-good">
+                    {ROMAN[pair.i]} and {ROMAN[pair.j]} are congruent.
+                  </span>
+                  {pair.sentence}
+                </div>
+              ))}
+              <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-line pt-2 text-lead text-ink-strong">
                 <Tex
                   tex={`A = ${data.dec.parts.map((_, i) => `A_{${ROMAN[i]}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
                 />
@@ -197,9 +289,13 @@ export function ShapeInfo({ id }: { id: ObjId }) {
           )}
         </div>
       ) : (
-        <ShapeReportView report={data.report} piFactor={data.kind === 'circle'} />
+        <ShapeReportView report={data.report} owner={id} piFactor={data.kind === 'circle'} />
       )}
-      {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-[#2a2b30] px-2 py-1.5 text-[12px] text-amber-200">{data.report.note}</div>}
+      {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
+      {fuseNote && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{fuseNote}</div>}
+      {lego && together?.status.kind === 'different' && (
+        <div className="border-t border-line px-2 py-1.5 text-small text-accent">These pieces make a new shape: {together.status.name}. Press Fuse to join them.</div>
+      )}
     </div>
   )
 }

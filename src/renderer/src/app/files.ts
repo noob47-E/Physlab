@@ -1,13 +1,16 @@
 import { scene } from '../core/store'
-import type { SceneFile } from '../core/types'
+import { parseSceneFile } from '../core/migrate'
+import { openFailureText, saveFailureText } from '../core/fileErrors'
 
 type Bridge = {
   isDesktop: boolean
-  openFile: () => Promise<{ path: string; content: string } | null>
+  openFile: (filters?: { name: string; extensions: string[] }[], title?: string) => Promise<{ path: string; content: string } | null>
   saveFile: (content: string, path: string | null) => Promise<string | null>
 }
 
 const bridge = (window as unknown as { physlab?: Bridge }).physlab
+
+const QUESTION_FILE_FILTERS = [{ name: 'Question file', extensions: ['pqjson', 'exam'] }]
 
 export async function openProject() {
   if (scene().dirty && !confirm('Discard unsaved changes?')) return
@@ -28,14 +31,41 @@ export async function openProject() {
   input.click()
 }
 
+/**
+ * Picks a question file — a PhysLab `.pqjson` or a Numbas `.exam` — and hands back its name and
+ * text for the Practice panel to read; the open scene is never touched, so nothing unsaved is at
+ * risk and there is nothing to confirm. Same two branches as openProject: the desktop bridge, or a
+ * file input in the browser build. Null when the student cancels.
+ */
+export async function openQuestionFile(): Promise<{ name: string; content: string } | null> {
+  if (bridge) {
+    // Its own filters: with none the dialog is the .phys project one, and a .pqjson or .exam
+    // could not even be seen in it.
+    const r = await bridge.openFile(QUESTION_FILE_FILTERS, 'Open a question file')
+    return r ? { name: r.path, content: r.content } : null
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pqjson,.exam,application/json'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      resolve(f ? { name: f.name, content: await f.text() } : null)
+    }
+    // A cancelled picker fires no change in every browser; `cancel` is the one that says so.
+    input.addEventListener('cancel', () => resolve(null))
+    input.click()
+  })
+}
+
 function load(content: string, path: string) {
   try {
-    const file = JSON.parse(content) as SceneFile
-    if (file.app !== 'PhysLab') throw new Error('Not a PhysLab project')
-    scene().loadScene(file, path)
+    // parseSceneFile says in a sentence what is wrong with a half-copied or foreign file; parsing
+    // the text here used to put "SyntaxError: Unexpected end of JSON input" in the console.
+    scene().loadScene(parseSceneFile(content), path)
     scene().pushLog({ input: 'open', kind: 'info', text: `Opened ${path}` })
   } catch (e) {
-    scene().pushLog({ input: 'open', kind: 'error', text: `Could not open: ${String(e)}` })
+    scene().pushLog({ input: 'open', kind: 'error', text: openFailureText(path, e) })
   }
 }
 
@@ -43,7 +73,13 @@ export async function saveProject(saveAs = false) {
   const s = scene()
   const content = JSON.stringify(s.serialize(), null, 1)
   if (bridge) {
-    const path = await bridge.saveFile(content, saveAs ? null : s.filePath)
+    let path: string | null
+    try {
+      path = await bridge.saveFile(content, saveAs ? null : s.filePath)
+    } catch (e) {
+      s.pushLog({ input: 'save', kind: 'error', text: saveFailureText(e) })
+      return
+    }
     if (path) {
       s.markSaved(path)
       s.pushLog({ input: 'save', kind: 'info', text: `Saved ${path}` })

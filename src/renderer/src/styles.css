@@ -1,0 +1,1572 @@
+@import 'tailwindcss';
+
+/*
+ * Type and colour tokens the .tsx files use as utilities (text-fine, text-ink-dim, bg-surface-2,
+ * font-math…). Sizes are named steps rather than pixel values so a panel cannot quietly invent a
+ * 10.5 px label again: there are six sizes in the whole app, and the smallest is one step under
+ * the base. `static` keeps every variable in the output even where no utility uses it, because the
+ * rules further down refer to them with var().
+ */
+@theme static {
+  --font-ui: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  --font-math: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
+  --font-mono: 'Cascadia Code', 'Consolas', monospace;
+  --text-fine: 11px;
+  --text-small: 12px;
+  --text-body: 13px;
+  --text-lead: 15px;
+  --text-title: 18px;
+  --text-display: 22px;
+}
+
+/* Colour utilities resolve to the theme variables below, so the same class works in both themes. */
+@theme inline {
+  --color-ink: var(--text);
+  --color-ink-strong: var(--text-strong);
+  --color-ink-dim: var(--text-dim);
+  --color-ink-faint: var(--text-faint);
+  --color-surface-0: var(--bg-0);
+  --color-surface-1: var(--bg-1);
+  --color-surface-2: var(--bg-2);
+  --color-surface-3: var(--bg-3);
+  --color-surface-4: var(--bg-4);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-on-accent: var(--on-accent);
+  --color-warn: var(--warn);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-sel: var(--sel-row);
+  --color-measure: var(--measure-text);
+  --color-code: var(--code-text);
+  --color-input: var(--input-bg);
+  --color-label: var(--label-bg);
+}
+
+:root {
+  --bg-0: #121315;
+  --bg-1: #1a1b1e;
+  --bg-2: #222327;
+  --bg-3: #2b2c31;
+  --bg-4: #35363c;
+  --line: #303137;
+  --line-2: #3d3f46;
+  --text: #d9dbe0;
+  --text-dim: #9a9ea8;
+  --text-faint: #6c707a;
+  --accent: #4f8cff;
+  --accent-2: #3a6fd8;
+  --warn: #ffb84d;
+  --good: #58d68d;
+  --bad: #ff6b6b;
+  --text-strong: #eef0f4;
+  --input-bg: #16171a;
+  --canvas-bg: #17181b;
+  /* GPU Lab swarm, slow → fast. Added together on a dark canvas (render/particleMath.ts). */
+  --particle-slow: #2680ff;
+  --particle-fast: #ff661f;
+  --grid-minor: #26272c;
+  --grid-major: #34363d;
+  --grid-axis: #7d828c;
+  --grid-paper: #1d1b17;
+  --tick-text: #7d828c;
+  --label-bg: rgba(16, 17, 20, 0.78);
+  --label-text: #e9ecef;
+  --label-shadow: rgba(0, 0, 0, 0.9);
+  --sel-row: #2f4a7a;
+  --shadow: rgba(0, 0, 0, 0.55);
+  /* Menus and popups float above everything, so they have their own surface colour. */
+  --menu-bg: #26272c;
+  --measure-text: #ffe8a3;
+  --code-text: #ffe8a3;
+  --log-in: #8fb6ff;
+  /* Text on an accent-coloured button or row: the accent is blue here and in light, so this is white in both. */
+  --on-accent: #ffffff;
+  /* Text on the hovered Delete row, whose red is darkened towards black in every theme, so this
+     is white in every theme even where --on-accent is a dark ink. */
+  --on-danger: #ffffff;
+  /* The x, y, z axes keep the colours every textbook uses; the light theme only deepens them. */
+  --axis-x: #ff4d6a;
+  --axis-y: #8fd12e;
+  --axis-z: #3b9dff;
+  /* Series colours for plotted quantities, in the order they are added. */
+  --series-1: #4dabf7;
+  --series-2: #ff6b6b;
+  --series-3: #51cf66;
+  --series-4: #fcc419;
+  --series-5: #cc5de8;
+  --series-6: #22b8cf;
+  /* Drawing colours the viewport reads through themeColor(): the halo round a selected curve or
+     body, the dots a graph puts on its roots, intercepts and turning points, the mesh over a 3D
+     surface, and the cool fill light on the far side of a solid. */
+  --sel-glow: #ffd43b;
+  --key-root: #ff8787;
+  --key-intercept: #74c0fc;
+  --key-extremum: #8ce99a;
+  --wireframe: #000000;
+  --light-fill: #9ec5ff;
+  /* Chrome colours the rules further down used to hardcode: the ring round a selected label, the
+     dimming behind the tour, the focus ring of a text or maths field and the fill of a selection
+     inside one. Each is the accent or the selection glow at a set opacity, in the theme's own hue. */
+  --sel-label: rgba(255, 212, 59, 0.6);
+  --sel-label-ring: rgba(255, 212, 59, 0.35);
+  --scrim: rgba(8, 10, 14, 0.55);
+  --focus-ring: rgba(79, 140, 255, 0.2);
+  --sel-fill: rgba(79, 140, 255, 0.35);
+  --sel-fill-faint: rgba(79, 140, 255, 0.12);
+  color-scheme: dark;
+  --lego-new: #4fd1a5;
+  /* Arrows (Fix 2): each at least 3:1 on this theme's canvas, and the six plus the resultant
+     stay apart under simulated protanopia, deuteranopia and tritanopia (tests/contrast.test.ts). */
+  --vec-1: #40c3ff;
+  --vec-2: #ff6a0d;
+  --vec-3: #2eb073;
+  --vec-4: #f0e442;
+  --vec-5: #b669b3;
+  --vec-6: #9f7bff;
+  --vec-result: #ff87bd;
+  --vec-x: #ff7b72;
+  --vec-y: #58c4ff;
+}
+
+/* Light theme for bright rooms and classroom projectors. */
+:root[data-theme='light'] {
+  --bg-0: #eceef1;
+  --bg-1: #f6f7f9;
+  --bg-2: #ffffff;
+  --bg-3: #e8eaee;
+  --bg-4: #dfe2e7;
+  --line: #d3d7dd;
+  --line-2: #bcc2cb;
+  --text: #24262b;
+  --text-dim: #565b64;
+  --text-faint: #767c86;
+  --text-strong: #15171a;
+  --accent: #2f6fe4;
+  --accent-2: #3d7bf0;
+  --warn: #b26a00;
+  --good: #1f8a4c;
+  --bad: #c92a2a;
+  --input-bg: #ffffff;
+  /* Cool, not paper: a soft cool surface that is easy on the eyes and still projects well. */
+  --canvas-bg: #e9eef6;
+  /* Painted over, not added: added light on this pale canvas saturated to a white haze. */
+  --particle-slow: #1f4fbf;
+  --particle-fast: #c2410c;
+  --grid-minor: #d6dfec;
+  --grid-major: #bcc8da;
+  --grid-axis: #59647a;
+  --grid-paper: #fbf6e6;
+  --tick-text: #59647a;
+  --label-bg: rgba(250, 252, 255, 0.9);
+  --label-text: #1c1e22;
+  --label-shadow: rgba(255, 255, 255, 0.9);
+  --sel-row: #bcd4ff;
+  --shadow: rgba(30, 40, 60, 0.18);
+  --menu-bg: #ffffff;
+  --measure-text: #8a5a00;
+  --code-text: #8a5a00;
+  --log-in: #1c4fa1;
+  --on-accent: #ffffff;
+  --on-danger: #ffffff;
+  --axis-x: #d6224a;
+  --axis-y: #4f8f0e;
+  --axis-z: #1f6fd0;
+  --series-1: #1c7ed6;
+  --series-2: #d6336c;
+  --series-3: #2b8a3e;
+  --series-4: #b3800a;
+  --series-5: #862e9c;
+  --series-6: #0b7285;
+  --sel-glow: #c48600;
+  --key-root: #c92a2a;
+  --key-intercept: #1c7ed6;
+  --key-extremum: #2b8a3e;
+  --wireframe: #1c1e22;
+  --light-fill: #dbe7fa;
+  --sel-label: rgba(196, 134, 0, 0.7);
+  --sel-label-ring: rgba(196, 134, 0, 0.35);
+  --scrim: rgba(30, 40, 60, 0.45);
+  --focus-ring: rgba(47, 111, 228, 0.25);
+  --sel-fill: rgba(47, 111, 228, 0.3);
+  --sel-fill-faint: rgba(47, 111, 228, 0.12);
+  color-scheme: light;
+  --lego-new: #0f766e;
+  --vec-1: #0230f3;
+  --vec-2: #af0000;
+  --vec-3: #006041;
+  --vec-4: #957710;
+  --vec-5: #993f7f;
+  --vec-6: #4f75ec;
+  --vec-result: #7619a3;
+  --vec-x: #c0392b;
+  --vec-y: #1565c0;
+}
+
+/* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
+:root[data-theme='moonlight'] {
+  --bg-0: #0b1020;
+  --bg-1: #10162b;
+  --bg-2: #161d36;
+  --bg-3: #1d2542;
+  --bg-4: #252e4f;
+  --line: #232c4a;
+  --line-2: #2f3a5e;
+  --text: #c9d1f0;
+  --text-dim: #8f9ac4;
+  --text-faint: #667198;
+  --text-strong: #e6eaff;
+  --accent: #8b9cff;
+  --accent-2: #6f82e8;
+  --warn: #f7c66b;
+  --good: #7fd8a4;
+  --bad: #ff8b94;
+  --input-bg: #0d1226;
+  --canvas-bg: #101630;
+  --particle-slow: #2f8cff;
+  --particle-fast: #ff6a2a;
+  --grid-minor: #1a2140;
+  --grid-major: #273052;
+  --grid-axis: #7f8bbf;
+  --grid-paper: #181529;
+  --tick-text: #8b96c9;
+  --label-bg: rgba(12, 16, 34, 0.82);
+  --label-text: #e2e7ff;
+  --label-shadow: rgba(4, 6, 16, 0.9);
+  --sel-row: #2c3a6e;
+  --shadow: rgba(2, 4, 12, 0.6);
+  --menu-bg: #1a2140;
+  --measure-text: #ffe0a6;
+  --code-text: #ffe0a6;
+  --log-in: #a7b6ff;
+  /* The periwinkle accent is light, so the text on it is the night ink, not white. */
+  --on-accent: #0b1020;
+  --on-danger: #ffffff;
+  --axis-x: #ff6b85;
+  --axis-y: #a6e05a;
+  --axis-z: #6fb4ff;
+  --series-1: #7cb8ff;
+  --series-2: #ff8fa3;
+  --series-3: #7fdc9a;
+  --series-4: #f9d56e;
+  --series-5: #d29bf5;
+  --series-6: #6fd6e6;
+  --sel-glow: #f5c76b;
+  --key-root: #ff8fa3;
+  --key-intercept: #7cc4ff;
+  --key-extremum: #8fe3b0;
+  --wireframe: #05070f;
+  --light-fill: #b4c4ff;
+  --sel-label: rgba(245, 199, 107, 0.6);
+  --sel-label-ring: rgba(245, 199, 107, 0.35);
+  --scrim: rgba(4, 6, 16, 0.6);
+  --focus-ring: rgba(139, 156, 255, 0.25);
+  --sel-fill: rgba(139, 156, 255, 0.35);
+  --sel-fill-faint: rgba(139, 156, 255, 0.12);
+  color-scheme: dark;
+  --lego-new: #6fe0c4;
+  --vec-1: #0cdefd;
+  --vec-2: #eb7a1d;
+  --vec-3: #1fc092;
+  --vec-4: #f0e442;
+  --vec-5: #ba5382;
+  --vec-6: #975bce;
+  --vec-result: #cf79ff;
+  --vec-x: #ff8b94;
+  --vec-y: #6cc8ff;
+}
+
+/* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
+   a warm charcoal night with a gold accent instead of a cool blue one. Moonlight itself stays the
+   default; this is a second choice for the same time of day. */
+:root[data-theme='moongold'] {
+  --bg-0: #1a140d;
+  --bg-1: #221a10;
+  --bg-2: #2c2116;
+  --bg-3: #362a1c;
+  --bg-4: #423422;
+  --line: #3a2f20;
+  --line-2: #4a3c28;
+  --text: #f0e6d2;
+  --text-dim: #c9b98f;
+  --text-faint: #93855f;
+  --accent: #e0b84a;
+  --accent-2: #c99a2e;
+  --warn: #f0a840;
+  --good: #7ac488;
+  /* Lifted from #e2685a, which read 4.2:1 as an error line on a card and 3.6:1 on a key. */
+  --bad: #f28474;
+  --text-strong: #fff6e0;
+  --input-bg: #17110a;
+  --canvas-bg: #1c150e;
+  --particle-slow: #3b8dff;
+  --particle-fast: #ffa23a;
+  --grid-minor: #2e2416;
+  --grid-major: #453520;
+  --grid-axis: #b99a55;
+  --grid-paper: #2a2013;
+  --tick-text: #b99a55;
+  --label-bg: rgba(26, 20, 13, 0.82);
+  --label-text: #f0e6d2;
+  --label-shadow: rgba(5, 3, 1, 0.9);
+  --sel-row: #4a3a1c;
+  --shadow: rgba(10, 6, 2, 0.6);
+  --menu-bg: #241b11;
+  --measure-text: #ffd98a;
+  --code-text: #ffd98a;
+  --log-in: #e0c088;
+  /* The gold accent is light, like Moonlight's periwinkle, so the text on it is the night ink. */
+  --on-accent: #1a140d;
+  --on-danger: #ffffff;
+  --axis-x: #ff6b5a;
+  --axis-y: #b9d15a;
+  --axis-z: #6fb4ff;
+  --series-1: #e0b84a;
+  --series-2: #ff8f6b;
+  --series-3: #8fd18a;
+  /* Gold is series 1, so the fourth series is a lavender rather than a second gold. */
+  --series-4: #c9a8ff;
+  --series-5: #d79bd1;
+  --series-6: #6fc9c9;
+  /* Gold, like every theme's glow: objects take their colours from PALETTE in core/naming.ts, blue
+     first, and a gold halo shows against each of them better than any cool one tried. */
+  --sel-glow: #ffdb7a;
+  --key-root: #ff8f6b;
+  --key-intercept: #7cc4ff;
+  --key-extremum: #8fe08a;
+  --wireframe: #0a0602;
+  --light-fill: #e8d9a8;
+  --sel-label: rgba(255, 219, 122, 0.6);
+  --sel-label-ring: rgba(255, 219, 122, 0.35);
+  --scrim: rgba(10, 6, 2, 0.6);
+  --focus-ring: rgba(224, 184, 74, 0.25);
+  --sel-fill: rgba(224, 184, 74, 0.35);
+  --sel-fill-faint: rgba(224, 184, 74, 0.12);
+  color-scheme: dark;
+  --lego-new: #8fd9b6;
+  --vec-1: #4db3bb;
+  --vec-2: #f16612;
+  --vec-3: #02ddaf;
+  --vec-4: #f0e442;
+  --vec-5: #b96a79;
+  --vec-6: #817dbe;
+  --vec-result: #eb51ff;
+  --vec-x: #f28474;
+  --vec-y: #6fb8e8;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  overflow: hidden;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* In the base layer, so a component rule such as .cmd-input can still choose its own face and size:
+   an unlayered rule here beats every rule inside @layer components, which is why the command bar
+   silently ignored its font for two versions. */
+@layer base {
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* Checkboxes and range sliders take the theme's accent without a class on every one of them. */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+/* ---------- Dockview theme tuned to Blender-like greys ---------- */
+.dockview-theme-dark {
+  --dv-background-color: var(--bg-0);
+  --dv-paneview-header-border-color: var(--line);
+  --dv-group-view-background-color: var(--bg-1);
+  --dv-tabs-and-actions-container-background-color: var(--bg-2);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-1);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-2);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-1);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-2);
+  --dv-tab-divider-color: var(--line);
+  /* The focused tab: white here would be invisible on the light theme. */
+  --dv-activegroup-visiblepanel-tab-color: var(--text-strong);
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-faint);
+  --dv-separator-border: var(--line);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--accent);
+  --dv-tabs-and-actions-container-height: 28px;
+  --dv-tabs-and-actions-container-font-size: var(--text-small);
+}
+
+/* Custom component classes live in a cascade layer so Tailwind utilities (w-12, h-auto…) can override them. */
+@layer components {
+/* ---------- Generic controls ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--bg-4);
+}
+.btn.primary {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn.primary:hover {
+  background: var(--accent);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn.ghost:hover {
+  background: var(--bg-3);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border-radius: 5px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-dim);
+}
+.icon-btn:hover {
+  color: var(--text-strong);
+  background: var(--bg-3);
+}
+.icon-btn.on {
+  color: var(--on-accent);
+  background: var(--accent-2);
+  border-color: var(--accent);
+}
+
+.seg {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.seg button.on {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.seg button:not(.on):hover {
+  background: var(--bg-3);
+  color: var(--text-strong);
+}
+
+.field {
+  height: 24px;
+  width: 100%;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  outline: none;
+}
+.field:focus {
+  border-color: var(--accent);
+}
+.field.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-1);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 5px;
+  font-size: var(--text-fine);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.prop-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 33%) 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+}
+.prop-row > label {
+  color: var(--text-dim);
+  text-align: right;
+  font-size: var(--text-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  padding: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.kv > .k {
+  color: var(--text-dim);
+}
+.kv > .v {
+  color: var(--text-strong);
+  text-align: right;
+}
+
+.card {
+  margin: 6px 8px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+
+/* ---------- Viewport ---------- */
+.viewport canvas {
+  display: block;
+}
+.tick-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: var(--text-fine);
+  color: var(--tick-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 3px var(--canvas-bg), 0 0 3px var(--canvas-bg);
+}
+.obj-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+  font-family: var(--font-math);
+  white-space: nowrap;
+  text-shadow: 0 0 4px var(--label-shadow), 0 0 2px var(--label-shadow);
+  transition: opacity 0.12s ease;
+}
+/* "On hover" labels: appear at once, linger a moment after the cursor leaves, then fade. */
+.obj-label.is-away {
+  opacity: 0;
+  transition: opacity 0.3s ease 0.4s;
+}
+.obj-label.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 7px 2px 6px;
+  border-radius: 5px;
+  background: var(--label-bg);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--c, #888);
+  text-shadow: none;
+  /* The object's colour is the left border, never the text: a point is drawn near-white, and on
+     the Light theme's near-white --label-bg the letter M was a blank box. */
+  color: var(--label-text);
+}
+.obj-label.chip .nm {
+  font-size: 14px;
+}
+.obj-label.chip .ms {
+  font-family: var(--font-ui);
+  font-style: normal;
+  font-weight: 500;
+  font-size: var(--text-small);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.obj-label.is-selected {
+  border-color: var(--sel-label);
+  box-shadow: 0 0 0 1px var(--sel-label-ring);
+}
+.obj-label.is-text {
+  font-style: normal;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  color: var(--text-strong);
+  background: var(--label-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.vec-name {
+  position: relative;
+  display: inline-block;
+}
+.vec-name::before {
+  content: '→';
+  position: absolute;
+  left: 50%;
+  top: -0.72em;
+  transform: translateX(-50%);
+  font-size: 0.72em;
+  font-style: normal;
+}
+.measure-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: var(--text-small);
+  color: var(--measure-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  background: var(--label-bg);
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.measure-label.part-label {
+  font-size: var(--text-lead);
+  font-weight: 700;
+  background: var(--label-bg);
+}
+.cursor-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--label-bg);
+  border: 1px solid var(--line-2);
+  color: var(--label-text);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tool-hint {
+  /* Centred by margins, not by left: 50% and a translate: an absolute box placed at 50% can only
+     shrink-to-fit into the half of the viewport to its right, so the hint beside the Finish, Undo
+     point and Cancel buttons wrapped to one or two words a line and covered the drawing. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 24px);
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--label-bg);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  pointer-events: none;
+}
+
+/* ---------- Tour, welcome and help ---------- */
+.tour-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tour-hole {
+  position: fixed;
+  border-radius: 8px;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px var(--scrim);
+  pointer-events: none;
+}
+.tour-card {
+  max-width: calc(100vw - 24px);
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 50px var(--shadow);
+}
+
+/* ---------- Right-click menu ---------- */
+.context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 226px;
+  max-width: 320px;
+  padding: 4px 0;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 12px 34px var(--shadow);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+.menu-item.is-active {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.menu-item.is-danger {
+  color: var(--bad);
+}
+.menu-item.is-danger.is-active {
+  /* Darkened rather than a fixed dark red, so it follows whichever red the theme uses. */
+  background: color-mix(in srgb, var(--bad) 60%, black);
+  /* Not --on-accent: Moonlight's is a dark ink for its light accent, and dark ink on this
+     darkened red read at 3.4:1. The mixed red is dark in every theme, so the ink is always white. */
+  color: var(--on-danger);
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 8px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.menu-btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 4px;
+  color: var(--text);
+}
+.menu-btn:hover,
+.menu-btn.open {
+  background: var(--bg-4);
+}
+.menu {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 50;
+  min-width: 220px;
+  /* A 24-row View menu ran off the bottom of a 768 px screen with no way to reach the last rows. */
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 7px;
+  background: var(--menu-bg);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 10px 30px var(--shadow);
+}
+.menu button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  text-align: left;
+}
+.menu button:hover {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.menu button:hover .sc {
+  color: var(--on-accent);
+  opacity: 0.8;
+}
+.menu .sc {
+  color: var(--text-faint);
+}
+.menu hr {
+  border: 0;
+  border-top: 1px solid var(--line-2);
+  margin: 4px 0;
+}
+
+.mode-tab {
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 5px;
+  color: var(--text-dim);
+}
+.mode-tab.on {
+  background: var(--bg-4);
+  color: var(--text-strong);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.mode-tab:not(.on):hover {
+  color: var(--text-strong);
+}
+.mode-tab.soon {
+  opacity: 0.4;
+}
+
+.toolshelf {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 8px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 50px;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: var(--text-fine);
+}
+.tool:hover {
+  background: var(--bg-3);
+  color: var(--text-strong);
+}
+.tool.on {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.tool-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 6px;
+  background: var(--line-2);
+}
+
+.cmdbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.cmd-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-lead);
+  outline: none;
+}
+.cmd-input::placeholder {
+  color: var(--text-faint);
+}
+.cmd-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.suggest {
+  position: absolute;
+  z-index: 60;
+  top: 34px;
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 7px;
+  background: var(--menu-bg);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 12px 30px var(--shadow);
+}
+.suggest button {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  width: 100%;
+  padding: 5px 12px;
+  text-align: left;
+  gap: 12px;
+}
+.suggest button.active,
+.suggest button:hover {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.suggest button.active code,
+.suggest button:hover code {
+  color: var(--on-accent);
+}
+.suggest code {
+  font-family: var(--font-mono);
+  color: var(--code-text);
+}
+
+/* ---------- Console ---------- */
+.log-entry {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.log-in {
+  font-family: var(--font-mono);
+  color: var(--log-in);
+}
+.log-out {
+  margin-top: 2px;
+  padding-left: 14px;
+  color: var(--text-strong);
+  white-space: pre-wrap;
+}
+.log-out.err {
+  color: var(--bad);
+}
+.log-out.info {
+  color: var(--text-dim);
+}
+
+/* ---------- Natural math input (MathLive) ---------- */
+math-field.math-input {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-strong);
+  border: 1px solid var(--line-2);
+  font-size: var(--text-title);
+  --caret-color: var(--accent);
+  --selection-background-color: var(--sel-fill);
+  --contains-highlight-background-color: var(--sel-fill-faint);
+  --placeholder-color: var(--text-faint);
+  --smart-fence-color: var(--text-dim);
+}
+math-field.math-input:focus-within {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+math-field.math-input-sm {
+  font-size: var(--text-lead);
+  min-height: 28px;
+}
+math-field.math-input-lg {
+  font-size: var(--text-display);
+  min-height: 46px;
+}
+math-field.math-input::part(virtual-keyboard-toggle),
+math-field.math-input::part(menu-toggle) {
+  display: none;
+}
+
+/* ---------- Maths ---------- */
+/* One flat stack of cards: the field, the answer, the working. Tokens only, so the screen
+   follows every theme; the old green LCD and bevelled keys were the same in all of them. */
+.maths {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  /* The panel scrolls; it used to grow past its dock instead, and on a short window the keys
+     and the = button were simply off the bottom with no way to reach them. */
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
+}
+/* The stack scrolls as a whole; a card that scrolls sideways (a long answer) must not be squeezed
+   shorter than its content to make the rest fit, which is what a flex child does by default. */
+.maths > *,
+.maths-head > * {
+  flex-shrink: 0;
+}
+/* The block the popup keypad hangs under — the field, the toolbar, the answer and the drawers —
+   so the keypad never sits over the answer it produces. */
+.maths-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.maths-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.maths-field math-field.math-input,
+.maths-field .field {
+  flex: 1;
+  min-width: 0;
+}
+.maths-field .field {
+  height: 46px;
+}
+.maths-answer {
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+.maths-answer.is-error {
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+}
+.maths-result {
+  font-size: var(--text-display);
+  color: var(--text-strong);
+  min-height: 34px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* The screens of the list modes (matrices, statistics, distributions…): a plain result card. */
+.maths-screen {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--text-strong);
+  min-height: 0;
+}
+.maths-working {
+  border-top: 1px solid var(--line);
+}
+
+/* The popup keypad: under the field, over everything, never focused. */
+.keypad-pop {
+  position: fixed;
+  z-index: 55;
+  width: min(560px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 50px var(--shadow);
+  user-select: none;
+}
+.keypad-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.keypad-tabs > button {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: var(--text-small);
+}
+.keypad-tabs > button:hover {
+  color: var(--text-strong);
+  background: var(--bg-3);
+}
+.keypad-tabs > button.on {
+  color: var(--on-accent);
+  background: var(--accent-2);
+}
+.keypad-body {
+  display: flex;
+  gap: 10px;
+  min-height: 0;
+}
+.keypad-body > .keys-numbers {
+  flex: 0 0 236px;
+  align-content: start;
+}
+.keypad-body > .keys:not(.keys-numbers) {
+  flex: 1;
+  min-width: 0;
+  align-content: start;
+}
+/* Only the Constants group is tall enough to need a scrollbar. A scrolling group clips the
+   relatives that hang under its last row (polar → x, y), so the rest stay overflow: visible. */
+.keypad-body > .keys-constants {
+  overflow-y: auto;
+}
+.keys {
+  display: grid;
+  gap: 4px;
+}
+.key-cell {
+  position: relative;
+  min-width: 0;
+}
+.key-cell.wide {
+  grid-column: span 2;
+}
+.key {
+  position: relative;
+  width: 100%;
+  height: 34px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  color: var(--text-strong);
+  font-size: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.key:hover {
+  background: var(--bg-4);
+  border-color: var(--accent);
+}
+.key:active,
+.key.open {
+  background: var(--accent-2);
+  color: var(--on-accent);
+}
+.key.primary {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.key.primary:hover {
+  background: var(--accent);
+}
+.keys-numbers .key {
+  font-size: var(--text-body);
+  padding: 0 2px;
+}
+/* The chevron that opens a key's relatives (sin → sin⁻¹, sinh); a long press does the same. */
+.key-more {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-size: var(--text-fine);
+  color: var(--text-faint);
+  line-height: 1;
+  padding: 2px 3px;
+}
+.key:hover .key-more,
+.key.open .key-more {
+  color: inherit;
+}
+.key-variants {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 3px);
+  left: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 7px;
+  background: var(--menu-bg);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 10px 24px var(--shadow);
+}
+.key-variants .key {
+  width: auto;
+  min-width: 52px;
+  padding: 0 8px;
+}
+
+/* ---------- Pure Math: the step-by-step working area ---------- */
+.pure-doc .katex-display {
+  margin: 3px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.pure-move {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+}
+.pure-num {
+  display: flex;
+  height: 20px;
+  width: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--sel-row);
+  color: var(--text-strong);
+  font-size: var(--text-fine);
+  margin-top: 1px;
+}
+.pure-head {
+  color: var(--text);
+  line-height: 1.45;
+}
+.pure-note {
+  color: var(--text-faint);
+  font-style: italic;
+  margin-top: 2px;
+}
+/* The formula that licenced the step, parked on the right so the sentence stays readable. */
+.pure-rule {
+  flex-shrink: 0;
+  max-width: 40%;
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+  color: var(--text-dim);
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+.pure-rule .katex {
+  font-size: 1em;
+  color: var(--text-dim);
+}
+.pure-method {
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 1px 8px;
+  font-size: var(--text-fine);
+}
+.pure-answer {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  padding: 10px 12px;
+}
+.pure-history {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  min-width: 120px;
+  max-width: 60%;
+  flex-shrink: 0;
+  border-left: 1px solid var(--line);
+  background: var(--bg-1);
+  min-height: 0;
+  /* Closed by default and dragged narrower from its corner: the working needs the room more. */
+  resize: horizontal;
+  overflow: hidden;
+}
+.pure-hist-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+  padding: 5px 8px;
+}
+.pure-hist-row:hover {
+  background: var(--bg-2);
+}
+.pure-hist-row .katex {
+  font-size: 0.95em;
+}
+/* Long division and prime-factor ladders are wide; let them scroll rather than spill. */
+.pure-doc .katex-display > .katex {
+  white-space: normal;
+}
+
+/* ---------- Tool cards ---------- */
+/* The card that opens when the mouse rests on a tool button (ui/ToolCard.tsx). Above the command
+   bar's example list (.suggest, 60), which is up whenever the bar is focused: at 40 the card opened
+   under it and only its title strip showed. Below the tour (80). It never covers a menu because
+   useToolCard does not open one while a menu is on screen. No pointer events, so the button
+   underneath keeps every click. */
+.tool-card {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 15rem;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 50px var(--shadow);
+  pointer-events: none;
+}
+.tool-card-anim {
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+}
+.tc-scene {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* One 2.5 s loop shared by every animation (app/toolCards/animMath.ts holds the same beats): the
+   cursor arrives, clicks at 30 %, clicks again at 62 % when the tool needs two clicks, the result
+   shows, and everything fades by the end so the loop restarts clean. Where the cursor goes comes
+   from the element (--tc-a rest, --tc-b first click, --tc-c second), so one rule serves every
+   card; `tc-late` moves a ripple or a result to the second click. `tc-vanish` is the opposite of
+   `tc-appear`: what the first click takes away (the Delete card's object, the Move card's point
+   before it is moved) goes at 30 %, so the still frame shows it gone and not merely selected. */
+.tc-cursor,
+.tc-ripple,
+.tc-appear,
+.tc-vanish {
+  animation-duration: 2.5s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+}
+.tc-cursor {
+  animation-name: tc-cursor;
+  translate: var(--tc-a);
+}
+.tc-ripple {
+  animation-name: tc-ripple;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+}
+.tc-appear {
+  animation-name: tc-appear;
+  opacity: 0;
+}
+.tc-vanish {
+  animation-name: tc-vanish;
+}
+.tc-late {
+  --tc-first: 0;
+  --tc-second: 1;
+  --tc-early: 0;
+}
+@keyframes tc-cursor {
+  0% {
+    translate: var(--tc-a);
+    opacity: 0;
+  }
+  8% {
+    translate: var(--tc-a);
+    opacity: 1;
+  }
+  30%,
+  40% {
+    translate: var(--tc-b);
+  }
+  62%,
+  90% {
+    translate: var(--tc-c, var(--tc-b));
+    opacity: 1;
+  }
+  100% {
+    translate: var(--tc-c, var(--tc-b));
+    opacity: 0;
+  }
+}
+@keyframes tc-ripple {
+  0%,
+  29% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  30% {
+    opacity: calc(0.9 * var(--tc-first, 1));
+    scale: 0.3;
+  }
+  48% {
+    opacity: 0;
+    scale: 1.6;
+  }
+  61% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  62% {
+    opacity: calc(0.9 * var(--tc-second, 0));
+    scale: 0.3;
+  }
+  80%,
+  100% {
+    opacity: 0;
+    scale: 1.6;
+  }
+}
+@keyframes tc-appear {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  36%,
+  62% {
+    opacity: var(--tc-early, 1);
+  }
+  66%,
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* Fades in with the cursor, so the loop restarts clean, and goes with the first click. */
+@keyframes tc-vanish {
+  0% {
+    opacity: 0;
+  }
+  8%,
+  30% {
+    opacity: 1;
+  }
+  36%,
+  100% {
+    opacity: 0;
+  }
+}
+/* A student who has asked the OS for less motion gets a still picture of the finished step: the
+   loop is held at 84 %, where the result shows, the ripples are spent and the cursor rests. */
+@media (prefers-reduced-motion: reduce) {
+  .tc-cursor,
+  .tc-ripple,
+  .tc-appear,
+  .tc-vanish {
+    animation-play-state: paused;
+    animation-delay: -2.1s;
+  }
+}
+
+/* ---------- Smaller screens ---------- */
+/* A 1366×768 laptop at 125 % scaling has about 1090 px of width and 610 px of height to give. The
+   bars give up their spare padding first, then their height, before any panel has to shrink. */
+@media (max-width: 1440px) {
+  .topbar {
+    gap: 4px;
+    padding: 0 6px;
+  }
+  .menu-btn {
+    padding: 0 7px;
+  }
+  .mode-tab {
+    padding: 0 8px;
+  }
+  .tool {
+    min-width: 44px;
+    padding: 0 4px;
+  }
+  .cmdbar {
+    gap: 6px;
+    padding: 0 8px;
+  }
+  .prop-row {
+    padding: 3px 8px;
+  }
+}
+@media (max-height: 800px) {
+  .topbar {
+    height: 32px;
+  }
+  .menu {
+    top: 28px;
+  }
+  .toolshelf {
+    height: 34px;
+  }
+  .tool {
+    height: 30px;
+    gap: 0;
+  }
+  .cmdbar {
+    height: 32px;
+  }
+  .cmd-input {
+    height: 26px;
+  }
+  .suggest {
+    top: 30px;
+  }
+}
+
+/* ---------- Viewport overlays ---------- */
+/* The box dragged with the Move tool over empty space: whatever it fully contains gets selected. */
+.marquee {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: var(--sel-fill-faint);
+  border-radius: 2px;
+}
+
+} /* end @layer components */
+
+/* The dock's own variable is set outside the layer above, so this override has to be too. */
+@media (max-height: 800px) {
+  .dockview-theme-dark {
+    --dv-tabs-and-actions-container-height: 24px;
+  }
+}
+
+.katex {
+  font-size: 1.08em;
+}
+.steps .katex-display {
+  margin: 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}

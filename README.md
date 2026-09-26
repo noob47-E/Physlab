@@ -43,15 +43,35 @@ Everything runs offline.
 </tr>
 </table>
 
+## New: PhysLab 0.9 Preview (Wave 2)
+
+**[Download the 0.9 Preview for Windows](https://github.com/noob47-E/Physlab/releases/tag/v0.9.0-preview.3)** — it installs next to
+an older PhysLab as its own app, "PhysLab 0.9 Preview". Files saved in it use the new 0.9 format, which older versions cannot open.
+
+- **Problem Sets:** a picture for every question (also for Numbas imports, and never giving the answer away), 40 physics
+  questions with pictures, a first-look set for beginners, a university set and 222 Numbas school-maths questions.
+- **New answer kinds:** vectors, matrices, roots, functions, proofs and Lego pieces; error carried forward and stated uncertainties.
+- **For teachers:** Question Author writes all the new kinds; saved result files and a Class Results screen.
+- **Step-by-step working** for integrals, derivatives, trigonometric proofs and the normal distribution (`P(Z < 1.96)`).
+- **Graph and viewport:** axis numbers exactly on the grid lines, a sharper grid, hundreds of arrows at once, turning 3-D views.
+- **Dozens of fixes,** including 28 bugs found by an outside audit and confirmed.
+
+The screenshots above show earlier versions. 0.9 is still being built in waves; this preview contains Waves 1 and 2.
+
+[HISTORY.md](HISTORY.md) is the full record of how it was built — every version, what each one
+added, and the bugs that were worth remembering.
+
 ## Run it
 
 | What | Command |
 | --- | --- |
-| Install, or update an older version | `dist\PhysLab Setup 0.6.1.exe` |
+| Install, or update an older version | `dist\PhysLab Setup 0.7.0.exe` |
 | Run without installing | `dist\win-unpacked\PhysLab.exe` |
 | Developer mode (live reload) | `npm run dev` |
 | Rebuild the installer | `npm run dist` |
-| Unit tests | `npm test` |
+| Unit tests, types and lint | `npm test`, `npm run typecheck`, `npm run lint` |
+
+**The window.** It fits a laptop screen and remembers its size and your text zoom (Ctrl+= / Ctrl+− / Ctrl+0). On a narrow window the top bar folds: the mode tabs become a **Mode** menu and the tool shelf shows icons only. Each mode opens just the panels it needs — the drawing, its own panel and Examples — not every panel at once.
 
 **Panels.** Closing a panel is not a dead end: **View** lists every panel with open/closed beside it, click one to bring it back. Ctrl+K finds them too, and entering a mode reopens the panel that mode uses. **View ▸ Reset the panel layout** puts everything back the way the mode starts.
 
@@ -66,21 +86,67 @@ Features are grouped into modes, like a calculator. Pick one in the top bar, or 
 
 | Mode | What it does |
 | --- | --- |
-| **Calculator** | Natural textbook math (fractions, roots, powers, ∫, Σ look like a book) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. A **popup keypad** opens under the field for the keys you need and stays open between entries — there is no permanent bank of buttons or a tiny fixed display, so the screen is not trying to look like a handheld calculator. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). Every number shown follows your precision setting (decimal places or significant figures). |
-| **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ` or `size ∠ angle`, one-click operations (sum, difference, dot, cross, projection, equilibrium, torque, work, magnetic force, relative velocity…) and step-by-step working. |
-| **Shapes & Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form**. |
-| **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. |
-| **Sandbox** | Real objects that collide, on the Jolt physics engine. Start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. |
+| **Calculator** | One **Maths screen**: a single natural-math field (fractions, roots, powers, ∫, Σ look like a book, and physical typing answers exactly like the on-screen keys) with every fx-991EX mode: COMP, CMPLX, BASE-N, MATRIX, VECTOR, STAT, DIST, TABLE, EQN, INEQ, RATIO, SHEET, UNITS, CONST, MEASURE. A **popup keypad** opens under the field for the keys you need and stays open between entries — there is no permanent bank of buttons or a tiny fixed display, so the screen is not trying to look like a handheld calculator. **Visualize** draws the calculation (tangent line for d/dx, shaded area for ∫). Every number shown follows your precision setting (decimal places or significant figures). Beside the field is the **Working** area — see Pure Math below. |
+| **Vectors** | **Vector Calculator** panel: type vectors as `3î + 4ĵ`, `size ∠ angle` or a column, or paste them straight from a book (î ĵ k̂ and x² are read as written). The answer sits right under the vector cards; the six everyday operations are one click and the rest (projection, equilibrium, torque, work, magnetic force, relative velocity…) wait behind **More**. Every operation can show its steps the way the book does — components, the cosine law for a sum, the angle between — in your precision and angle unit, and **Draw on graph** draws exactly the vectors the working found, with the triangle or parallelogram to prove it. Your cards are remembered between sessions. |
+| **Geometry** | **Sketch** a rough shape and it snaps to a perfect square, rectangle, triangle, circle… Click corners or draw connected segments and closed loops are recognised too. The Measure tab shows the shape's name and its **area in algebraic form** (formula → values → answer with units). **Hover a formula** to shade the area; hover a symbol to highlight that side. **Decompose** splits any shape into rectangles and triangles, adding the corner the cut needs, with **Other way** to see alternatives. **Congruent triangles**: Shift-click two triangles and the Measure panel says whether they are the same triangle and by which rule (SSS, SAS, ASA, AAS, RHS), with every equal side and angle written out and marked on the drawing; or type three sides and have the triangle drawn. **Geometry Lego**: break a rectangle, square or triangle apart along a diagonal or a median into pieces you can turn, flip and drag — a piece clicks onto a neighbour's corner or side the moment it comes close, and a selected piece carries its own Turn/Flip handle. Pieces that come together into a new outline wait for **Fuse** before they join, and a fused shape keeps its own colour and area. Each mode keeps its own drawing: what you draw in Geometry stays in Geometry. |
+| **Graphing** | `y = x^2 - 4`, `x^2 + y^2 = 9`, `y > x^2`, `r = 2cos(3θ)`, `z = sin(x)cos(y)`, sliders, roots and turning points. The grid itself can be square, **polar** (rings labelled in radians or degrees), **isometric** or **hexagonal** paper — pick it from the grid picker, and snapping follows whichever pattern is showing. |
+| **Sandbox** | Real objects that collide, on the Jolt physics engine. Paused, drag anything — a ball, a wall, the floor — to arrange it; playing, drag to push or lift it and let go to throw. Reset puts everything back and the clock to zero; an object that falls off the edge is put back and says so. Press **Start here** for one ball and one floor, start from an experiment — projectile, collision, recoil, pendulum, mass on a spring — or build your own from balls, crates, cylinders, capsules, cones, ramps, planks and walls. Press **Connect two objects**, click one, click the other and pick how they are joined — a **rod, string, spring, real rope, hinge or weld**, or a rope **over a pulley** (the wheel sits above both) for an Atwood machine; each choice is a card that says in one line what it does, and Shift+click on the second object is the quick way. Lengthen a rope in Connections and it sags; shorten it and it lifts. Twenty-nine experiments to start from, grouped by topic and tagged with what they join things with, each saying what to measure and what the book says the answer is, so you can compare the clock with the formula. Type a word into the search box — "gravity", "rope pulley" — to jump straight to the matching experiments instead of scrolling the list. New objects weigh what a student could lift (a 1 kg ball, a 2 kg crate). The panel shows the five things you usually want about an object — name, material, mass, position, velocity — and folds the rest away; Play, Reset and Step sit at its top. The whole sandbox is saved in the `.phys` file and protected by the autosave. Live **energy and momentum**, trajectory trails, metre lines on the floor, a launcher that works out v cos θ and v sin θ for you, and **Send to Lab Data** to turn a run into readings you can fit a line through. |
 | **GPU Lab** | Millions of charged particles in E and B fields on the graphics card. |
 | **Lab Data** | The table from your practical notebook: type or paste your readings, work a column out from the others (`t^2`), plot one against another and fit a line through them. Gives you the equation, r², and the gradient with its unit, its meaning and its ±. |
-| **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake. |
+| **Problem Sets** | Practice with fresh numbers every time. **Hint** gives you one step, not the answer. **Check my answer** marks what *you* worked out on paper and names the mistake: wrong quadrant, sin instead of cos, forgotten cos θ, calculator left in radians, wrong power of ten. Alongside the topic generators, **question sets** bring a teacher's own bank of questions: variables and seeds so every attempt has fresh numbers, marked as a number with units and tolerance, a typed expression, or a multiple-choice pick, with worked steps that fade as you get better and a picture, a motion graph or a live Sandbox scene attached to the question. A teacher can bring in a **Numbas `.exam`** file and take a PhysLab set back out to one, and a question set that leans on content outside your licence says so in one plain sentence instead of half-working. |
 | Coming next | Proofs, Mechanics, Instruments, Electricity & Electronics, Optics, Waves & Sound, Heat, Nuclear & Modern. |
+
+## Pure Math: the working, not just the answer
+
+Open **Calculator** and the big area in the middle becomes **Working**. Type a question, press
+**Work it out**, and the whole method appears — every step with a plain-English line saying what
+just happened, and the formula that allowed it printed beside the step.
+
+| Tool | Example | What you get |
+| --- | --- | --- |
+| **Factorise** | `6x^2 + 7x - 3` | Splitting the middle term, grouping, and the pair of brackets |
+| **Expand** | `(2x + 3)(3x - 1)` | The each-times-each table, the products in a line, then collected with the highest power first |
+| **Divide** | `(x^3 - 6x^2 + 11x - 6)/(x - 1)` | Long division written out as the full staircase, quotient and remainder |
+| **Partial fractions** | `(3x + 5)/((x + 1)(x + 2))` | The A/(x+1) + B/(x+2) form, by the cover-up rule or by equating coefficients |
+| **HCF / LCM** | `12, 18, 30` or `x^2 - 1, x^2 + 2x + 1` | The prime-factor table, or the common brackets — numbers and algebra both |
+| **Prime factors** | `360` | The division ladder, the index form, and how many divisors the number has |
+| **Complex** | `(2 + 3i)/(1 - i)` | Multiplying by the conjugate, i² = −1 applied where you can see it, plus modulus, argument and conjugate |
+| **Solve** | `3x + 5 = 11` or `x^2 + 4x + 13 = 0` | A linear equation collected, moved across and checked by substitution; or the quadratic formula step by step, where a negative discriminant becomes i and the roots come out as a conjugate pair |
+| **Factorise with i** | `x^2 + 4` | Factors that do not exist over the real numbers: (x + 2i)(x − 2i). When a real factorisation stops at a quadratic with no real roots, **Allow i** carries on. |
+
+Three things make this different from a calculator that just prints an answer:
+
+- **It is exact.** Everything is worked out in whole numbers and fractions, never in decimals that
+  drift. `1/3` stays `1/3`, and a third multiplied by three is exactly one.
+- **It checks itself.** Before any answer is shown, PhysLab multiplies the factors back out, or adds
+  the partial fractions back over a common denominator, and compares the result with your question.
+  The tick at the bottom of the answer is that check, not a promise.
+- **It lets you try first.** A new answer arrives with its steps hidden and only the answer
+  showing. Press **Show a step** for one step at a time, or **Show all steps** for the whole
+  method; "Always show all steps" in the panel turns the hiding off for good. **Treat as** picks
+  the job (Auto guesses it from what you typed).
+
+Everything is offline and instant. If a question is past the methods PhysLab can write out by hand,
+it still gives you the answer and says plainly that there are no steps for that one. A `.phys`
+file from any earlier PhysLab still opens, and a damaged one is refused with a sentence rather than
+replacing what you had open.
+
+You can also run these from the calculator keypad — **Work it out**, **Factorise**, **Expand**,
+**Solve**, **Partial fr.** sit under the keys and send whatever you have typed across — or from the
+command bar: `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `partial((3x+5)/((x+1)(x+2)))`,
+`primes(360)`, `complex((2+3i)/(1-i))`.
+
+Everything you work out is kept in **History** down the side, and it is still there next time you
+open PhysLab. The calculator's own history is remembered now too.
 
 ## Drawing, finishing and the right-click menu
 
 - While you draw: **right-click, Enter or double-click** finishes the shape, **Backspace** removes the last point, **Esc** cancels. The same three buttons appear next to the hint at the bottom of the drawing.
-- **Right-click** any object for what you can do with it: show components, resolve with steps, midpoint, perpendicular bisector, decompose, show angles, pin its label, rename, delete. Right-clicking empty space gives view, grid, snapping and label options. The same menu works in the Outliner and the Measure list.
-- A point clicked **on a side or a circle** sticks to it and slides along it when dragged.
+- **Right-click** any object for what you can do with it: show components, resolve with steps, midpoint, perpendicular bisector, decompose, show angles, hide its angle marks, pin its label, rename, delete. Right-clicking empty space gives view, grid, snapping and label options. The same menu works in the Outliner and the Measure list.
+- A point clicked **on a side or a circle** sticks to it and slides along it when dragged; a point dropped on the **crossing of two lines** snaps there and follows both of them if either moves.
+- **Drag a box** round several objects to select all of them at once; **Delete** with nothing selected offers to clear the whole drawing, and refuses instead of doing it by accident.
+- **Grid styles**: lines, dots, fine or paper, from the grid picker or the right-click menu on empty space — whichever one is showing has its own tick in the View menu.
+- Hover any tool, shape or link button and a **card** appears after half a second with a short looping picture and one sentence saying what it does.
 
 ## Practice and hints
 
@@ -150,11 +216,11 @@ Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one c
 - `factorise(6x^2 + 7x - 3)`, `hcf(84, 132, 210)`, `lcm(12, 18)`, `primes(360)`, `divide((x^3-1)/(x-1))`, `partial((3x+5)/((x+1)(x+2)))`, `complex((2+3i)/(1-i))` — each writes out its working in the Working panel
 - `k = 2` makes a slider; use `t` in formulas and press Play to animate. Type `help` for more.
 
-Shortcuts: `Ctrl+K` search · `Tab` 2D/3D · `Home` reset view · `Space` play/pause · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete · `Esc` back to Move · `Ctrl+S` save a `.phys` project.
+Shortcuts: `Ctrl+K` search · `3` 2D/3D · `Tab` moves between the controls · `Home` reset view · tap `Space` to play/pause, hold it and drag (or right-drag) to pan the view · `Ctrl+A` select all · drag a box round objects to select several · `Ctrl+Z / Ctrl+Y` undo/redo · `Del` delete (with nothing selected, clear the drawing) · `Esc` back to Move · `Ctrl+S` save a `.phys` project · `Ctrl+=` / `Ctrl+−` / `Ctrl+0` bigger, smaller, normal text.
 
 ## Teachers and classrooms
 
-- **Light theme** for bright rooms and projectors (View ▸ Light theme); dark stays the default.
+- **Four themes** — Moonlight, Moonlight Gold, Dark and Light — cycle with View ▸ Theme or the Settings menu; a fresh install opens in **Moonlight**. **Moonlight Gold** is a warm-gold night option beside the navy Moonlight. **Light theme** suits bright rooms and projectors.
 - **Export the drawing** as a PNG at 1× or 2×, labels and axis numbers included (camera button on the drawing, or File ▸ Export).
 - **Auto-save**: unsaved work is copied aside every minute, and offered back if the app closes unexpectedly.
 - The panel arrangement and the mode you were in are remembered (View ▸ Reset the panel layout puts them back).

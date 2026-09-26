@@ -39,11 +39,14 @@ export function chartSeries(xs: number[], ys: number[], fit: Fit | null): ChartS
   while (mi < measured.length || di < dense.length) {
     const nextM = mi < measured.length ? measured[mi].x : Infinity
     const nextD = di < dense.length ? dense[di] : Infinity
-    if (nextM <= nextD) {
+    // A dense point at the same place would only repeat this x — and floating point can put it
+    // one ulp on either side of the reading, so the test is relative and decided before the
+    // branch: 3e-9 used to get a curve point at 2.9999999999999996e-9 right beside it.
+    const same = mi < measured.length && di < dense.length && Math.abs(nextD - nextM) <= 1e-9 * Math.max(Math.abs(nextM), Number.MIN_VALUE)
+    if (same || nextM < nextD) {
       entries.push({ x: nextM, y: measured[mi].y })
       mi++
-      // A dense point at the same place would only repeat this x.
-      if (Math.abs(nextD - nextM) < 1e-12) di++
+      if (same) di++
     } else {
       entries.push({ x: nextD, y: null })
       di++

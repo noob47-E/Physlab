@@ -1,0 +1,44 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "sqrt(x)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\sqrt{x}",
+   "text": "sqrt(x)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{2 x^{3/2}}{3}",
+  "raw_text": "2*x**(3/2)/3",
+  "answer_latex": "\\frac{2 x^{3/2}}{3}",
+  "answer_text": "2*x**(3/2)/3",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "PowerRule",
+   "integrand": {
+    "latex": "\\sqrt{x}",
+    "text": "sqrt(x)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "base": {
+    "latex": "x",
+    "text": "x"
+   },
+   "exp": {
+    "latex": "\\frac{1}{2}",
+    "text": "1/2"
+   },
+   "result": {
+    "latex": "\\frac{2 x^{3/2}}{3}",
+    "text": "2*x**(3/2)/3"
+   }
+  }
+ }
+}

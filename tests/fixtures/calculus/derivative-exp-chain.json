@@ -1,0 +1,91 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "e^(2x)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "e^{2 x}",
+   "text": "exp(2*x)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "chain",
+   "expr": {
+    "latex": "e^{2 x}",
+    "text": "exp(2*x)"
+   },
+   "result": {
+    "latex": "2 e^{2 x}",
+    "text": "2*exp(2*x)"
+   },
+   "outer": "exp",
+   "u": {
+    "latex": "2 x",
+    "text": "2*x"
+   },
+   "letter": "u",
+   "outer_expr": {
+    "latex": "e^{u}",
+    "text": "exp(u)"
+   },
+   "outer_derivative": {
+    "latex": "e^{u}",
+    "text": "exp(u)"
+   },
+   "outer_at_inner": {
+    "latex": "e^{2 x}",
+    "text": "exp(2*x)"
+   },
+   "substeps": [
+    {
+     "rule": "constant_multiple",
+     "expr": {
+      "latex": "2 x",
+      "text": "2*x"
+     },
+     "result": {
+      "latex": "2",
+      "text": "2"
+     },
+     "constant": {
+      "latex": "2",
+      "text": "2"
+     },
+     "other": {
+      "latex": "x",
+      "text": "x"
+     },
+     "substeps": [
+      {
+       "rule": "x",
+       "expr": {
+        "latex": "x",
+        "text": "x"
+       },
+       "result": {
+        "latex": "1",
+        "text": "1"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "2 e^{2 x}",
+  "answer_text": "2*exp(2*x)",
+  "checked": true
+ }
+}

@@ -8,6 +8,8 @@ import { measureValue, texMeasure, fmtPrecise, type MeasureKind, type MeasureSet
 import { exactForm } from '../calc/engine'
 
 export interface Highlight {
+  /** The object the highlight belongs to; when it is deleted the highlight goes with it. */
+  owner?: string
   /** Region to shade with hatch lines. */
   region?: V3[]
   /** Lines to highlight (sides, diagonals). */

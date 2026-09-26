@@ -105,7 +105,7 @@ export function applyPaste(table: LabTable, parsed: ParsedTable): LabTable {
 
 /** What a saved file should be called: the experiment's own name, made safe for a filename. */
 export function csvFileName(title: string): string {
-  const safe = title.trim().replace(/[\/:*?"<>|]/g, '').replace(/\s+/g, '-').slice(0, 40)
+  const safe = title.trim().replace(/[/:*?"<>|]/g, '').replace(/\s+/g, '-').slice(0, 40)
   return `${safe || 'lab-data'}.csv`
 }
 

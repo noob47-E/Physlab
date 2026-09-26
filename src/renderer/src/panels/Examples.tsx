@@ -4,7 +4,7 @@ import { runCommand } from '../lang/commands'
 import { scene } from '../core/store'
 import { useParticleLab } from '../render/GpuParticles'
 import { fitCamera, resetCamera } from '../render/viewState'
-import { enterMode } from '../app/TopBar'
+import { enterMode } from '../app/layout'
 import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
 
@@ -278,7 +278,8 @@ function freeFallReadings(): LabTable {
 /** Replace the scene with an example lesson. */
 export async function runExample(ex: Example): Promise<void> {
   const s = scene()
-  if (s.dirty && s.order.length && !confirm('Replace the current scene with this example?')) return
+  // Lab readings and a sandbox count as work too; the old test only looked at the drawing.
+  if (s.dirty && !confirm(`Open "${ex.title}"? It replaces what you have now, and your unsaved changes will be lost.`)) return
   useParticleLab.setState({ enabled: false })
   s.newScene()
   s.setViewMode('2d')
@@ -312,7 +313,7 @@ export function Examples() {
 
   return (
     <div className="panel pb-6">
-      <div className="px-3 pb-1 pt-3 text-zinc-300">Ready-made lessons, by topic. Click one, then play with it.</div>
+      <div className="px-3 pb-1 pt-3 text-ink">Ready-made lessons, by topic. Click one, then play with it.</div>
       <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pt-1">
         <input
           className="field flex-1"
@@ -329,7 +330,7 @@ export function Examples() {
           ))}
         </div>
       </div>
-      {shown.length === 0 && <div className="px-3 py-4 text-zinc-500">Nothing matches that search.</div>}
+      {shown.length === 0 && <div className="px-3 py-4 text-ink-faint">Nothing matches that search.</div>}
       {AREAS.filter((a) => shown.some((ex) => ex.area === a)).map((area) => (
         <div key={area}>
           <div className="section-title">{area}</div>
@@ -339,18 +340,18 @@ export function Examples() {
               <div key={ex.title} className="card p-2.5">
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-white">{ex.title}</div>
-                    <div className="text-[11px] text-sky-300">
-                      {ex.topic} <span className="text-zinc-500">· {ex.level}</span>
+                    <div className="font-semibold text-ink-strong">{ex.title}</div>
+                    <div className="text-fine text-accent">
+                      {ex.topic} <span className="text-ink-faint">· {ex.level}</span>
                     </div>
                   </div>
                   <button className="btn primary h-7" onClick={() => run(ex)} disabled={running !== null}>
                     <Play size={12} /> {running === ex.title ? '…' : 'Open'}
                   </button>
                 </div>
-                <div className="mt-1.5 text-zinc-300">{ex.what}</div>
-                <div className="mt-1 text-zinc-500">
-                  <span className="text-amber-300">Try: </span>
+                <div className="mt-1.5 text-ink">{ex.what}</div>
+                <div className="mt-1 text-ink-faint">
+                  <span className="text-warn">Try: </span>
                   {ex.tryThis}
                 </div>
               </div>

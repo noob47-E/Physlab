@@ -6,6 +6,10 @@ import { Tex } from '../ui/Tex'
 import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
 import { showContextMenu } from '../ui/ContextMenu'
+import { modeOfSpace, SPACE_LABELS, visibleIn, type Space } from '../core/visibility'
+import { enterMode } from '../app/layout'
+import { cssColor } from '../app/theme'
+import { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 const GROUPS: { type: ObjType[]; label: string }[] = [
   { type: ['vector'], label: 'Vectors' },
@@ -17,6 +21,9 @@ const GROUPS: { type: ObjType[]; label: string }[] = [
   { type: ['text'], label: 'Text' }
 ]
 
+/** Plain words beside each starter: a bare block of syntax read like a programming manual. */
+const STARTERS = QUICK_EXAMPLES.filter((e) => e.draws)
+
 export function Outliner() {
   const objects = useScene((s) => s.objects)
   const order = useScene((s) => s.order)
@@ -27,14 +34,38 @@ export function Outliner() {
   const update = useScene((s) => s.updateObject)
   const remove = useScene((s) => s.removeObjects)
   const setHovered = useScene((s) => s.setHovered)
+  const space = useScene((s) => s.activeSpace)
 
-  const list = order.map((id) => objects[id]).filter((o): o is SceneObject => !!o)
+  const all = order.map((id) => objects[id]).filter((o): o is SceneObject => !!o)
+  const list = all.filter((o) => visibleIn(o, space))
+  // What lives in the other drawings, so nothing feels lost.
+  const elsewhere = new Map<Space, number>()
+  for (const o of all) if (!visibleIn(o, space) && o.space && !o.auxiliary) elsewhere.set(o.space, (elsewhere.get(o.space) ?? 0) + 1)
+  const others = [...elsewhere.entries()].length > 0 && (
+    <div className="px-3 pt-3 text-ink-faint">
+      {[...elsewhere.entries()].map(([sp, n]) => (
+        <button key={sp} className="btn ghost mr-1 mb-1" onClick={() => enterMode(modeOfSpace[sp])} title={`Switch to ${SPACE_LABELS[sp]}`}>
+          {n} in {SPACE_LABELS[sp]}
+        </button>
+      ))}
+    </div>
+  )
   if (list.length === 0) {
     return (
-      <div className="panel p-4 text-zinc-500">
-        <p className="mb-2 text-zinc-300">The scene is empty.</p>
-        <p>Pick a tool above and click in the viewport, or type in the command bar, for example:</p>
-        <pre className="mt-2 rounded bg-black/30 p-2 text-[12px] leading-6 text-amber-200">{`A = <3, 4>\nB = <2, -1>\nR = A + B\nTriangle((0,0),(4,0),(0,3))\ny = sin(x)`}</pre>
+      <div className="panel p-4 text-ink-faint">
+        <p className="mb-2 text-ink">Nothing drawn yet.</p>
+        <p>Pick a tool above and click on the drawing, or type something in the bar at the top, such as:</p>
+        <ul className="mt-2 space-y-1">
+          {STARTERS.map((s) => (
+            <li key={s.insert} className="flex items-baseline gap-2">
+              <button className="font-mono text-warn hover:underline" title="Put this in the command bar" onClick={() => window.dispatchEvent(new CustomEvent('physlab:command', { detail: s.insert }))}>
+                {s.insert}
+              </button>
+              <span>{s.desc.charAt(0).toLowerCase() + s.desc.slice(1)}</span>
+            </li>
+          ))}
+        </ul>
+        {others}
       </div>
     )
   }
@@ -47,7 +78,7 @@ export function Outliner() {
         return (
           <div key={g.label}>
             <div className="section-title">
-              {g.label} <span className="text-zinc-600">{items.length}</span>
+              {g.label} <span className="text-ink-faint">{items.length}</span>
             </div>
             {items.map((o) => {
               const sel = selection.includes(o.id)
@@ -63,18 +94,18 @@ export function Outliner() {
                     select([o.id])
                     showContextMenu(e, menuForObject(o.id))
                   }}
-                  className={`group flex h-7 cursor-pointer items-center gap-2 px-2 ${sel ? 'bg-[#2f4a7a]' : hovered === o.id ? 'bg-[#26282d]' : ''}`}
+                  className={`group flex h-7 cursor-pointer items-center gap-2 px-2 ${sel ? 'bg-sel' : hovered === o.id ? 'bg-surface-3' : ''}`}
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color, opacity: o.visible ? 1 : 0.3 }} />
-                  <span className={`w-12 shrink-0 truncate font-semibold italic ${o.auxiliary ? 'text-zinc-500' : 'text-zinc-100'}`} style={{ fontFamily: 'Cambria, serif' }}>
-                    {o.name}
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cssColor(o), opacity: o.visible ? 1 : 0.3 }} />
+                  <span className={`w-12 shrink-0 truncate font-math font-semibold italic ${o.auxiliary ? 'text-ink-faint' : 'text-ink-strong'}`}>
+                    {o.label ?? o.name}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-zinc-400">
-                    {err ? <span className="text-red-400">{err}</span> : o.type === 'graph' ? o.source : <Tex tex={describeComputed(ev.values.get(o.id), 2)} />}
+                  <span className="min-w-0 flex-1 truncate text-fine text-ink-dim">
+                    {err ? <span className="text-bad">{err}</span> : o.type === 'graph' ? o.source : <Tex tex={describeComputed(ev.values.get(o.id), 2)} />}
                   </span>
                   <span className="hidden items-center gap-1 group-hover:flex">
                     <button
-                      className="text-zinc-400 hover:text-white"
+                      className="text-ink-dim hover:text-ink-strong"
                       title={o.locked ? 'Unlock' : 'Lock'}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -86,7 +117,7 @@ export function Outliner() {
                       {o.locked ? <Lock size={13} /> : <Unlock size={13} />}
                     </button>
                     <button
-                      className="text-zinc-400 hover:text-red-400"
+                      className="text-ink-dim hover:text-bad"
                       title="Delete"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -100,7 +131,7 @@ export function Outliner() {
                     <PinLabelButton id={o.id} className={o.labelPin === 'always' ? '' : 'hidden group-hover:block'} />
                   )}
                   <button
-                    className="text-zinc-400 hover:text-white"
+                    className="text-ink-dim hover:text-ink-strong"
                     title={o.visible ? 'Hide' : 'Show'}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -117,6 +148,7 @@ export function Outliner() {
           </div>
         )
       })}
+      {others}
     </div>
   )
 }

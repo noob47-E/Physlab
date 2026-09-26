@@ -1,0 +1,74 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "x^2",
+  "lower": "0",
+  "upper": "2"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "x^{2}",
+   "text": "x**2"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{x^{3}}{3}",
+  "raw_text": "x**3/3",
+  "answer_latex": "\\frac{x^{3}}{3}",
+  "answer_text": "x**3/3",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "PowerRule",
+   "integrand": {
+    "latex": "x^{2}",
+    "text": "x**2"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "base": {
+    "latex": "x",
+    "text": "x"
+   },
+   "exp": {
+    "latex": "2",
+    "text": "2"
+   },
+   "result": {
+    "latex": "\\frac{x^{3}}{3}",
+    "text": "x**3/3"
+   }
+  },
+  "definite": {
+   "lower": {
+    "latex": "0",
+    "text": "0"
+   },
+   "upper": {
+    "latex": "2",
+    "text": "2"
+   },
+   "value": {
+    "latex": "\\frac{8}{3}",
+    "text": "8/3"
+   },
+   "numeric": {
+    "re": 2.6666666666666665
+   },
+   "diverges": false,
+   "infinite": false,
+   "F_lower": {
+    "latex": "0",
+    "text": "0"
+   },
+   "F_upper": {
+    "latex": "\\frac{8}{3}",
+    "text": "8/3"
+   },
+   "agrees": true
+  }
+ }
+}

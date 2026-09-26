@@ -1,0 +1,142 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "1/(x^2 - 1)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "\\frac{1}{x^{2} - 1}",
+   "text": "1/(x**2 - 1)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{1}{2} \\ln\\left|x - 1\\right| - \\frac{1}{2} \\ln\\left|x + 1\\right|",
+  "raw_text": "log(Abs(x - 1))/2 - log(Abs(x + 1))/2",
+  "answer_latex": "\\frac{1}{2} \\ln\\left|x - 1\\right| - \\frac{1}{2} \\ln\\left|x + 1\\right|",
+  "answer_text": "log(Abs(x - 1))/2 - log(Abs(x + 1))/2",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "RewriteRule",
+   "integrand": {
+    "latex": "\\frac{1}{x^{2} - 1}",
+    "text": "1/(x**2 - 1)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "rewritten": {
+    "latex": "\\frac{1}{2 \\left(x - 1\\right)} - \\frac{1}{2 \\left(x + 1\\right)}",
+    "text": "-1/(2*(x + 1)) + 1/(2*(x - 1))"
+   },
+   "substep": {
+    "rule": "ConstantTimesRule",
+    "integrand": {
+     "latex": "\\frac{1}{2} \\left(\\frac{1}{x - 1} - \\frac{1}{x + 1}\\right)",
+     "text": "(-1/(x + 1) + 1/(x - 1))/2"
+    },
+    "variable": {
+     "latex": "x",
+     "text": "x"
+    },
+    "constant": {
+     "latex": "\\frac{1}{2}",
+     "text": "1/2"
+    },
+    "other": {
+     "latex": "\\frac{1}{x - 1} - \\frac{1}{x + 1}",
+     "text": "-1/(x + 1) + 1/(x - 1)"
+    },
+    "substep": {
+     "rule": "AddRule",
+     "integrand": {
+      "latex": "\\frac{1}{x - 1} - \\frac{1}{x + 1}",
+      "text": "-1/(x + 1) + 1/(x - 1)"
+     },
+     "variable": {
+      "latex": "x",
+      "text": "x"
+     },
+     "substeps": [
+      {
+       "rule": "ReciprocalRule",
+       "integrand": {
+        "latex": "\\frac{1}{x - 1}",
+        "text": "1/(x - 1)"
+       },
+       "variable": {
+        "latex": "x",
+        "text": "x"
+       },
+       "base": {
+        "latex": "x - 1",
+        "text": "x - 1"
+       },
+       "result": {
+        "latex": "\\ln\\left|x - 1\\right|",
+        "text": "log(Abs(x - 1))"
+       }
+      },
+      {
+       "rule": "ConstantTimesRule",
+       "integrand": {
+        "latex": "- \\frac{1}{x + 1}",
+        "text": "-1/(x + 1)"
+       },
+       "variable": {
+        "latex": "x",
+        "text": "x"
+       },
+       "constant": {
+        "latex": "-1",
+        "text": "-1"
+       },
+       "other": {
+        "latex": "\\frac{1}{x + 1}",
+        "text": "1/(x + 1)"
+       },
+       "substep": {
+        "rule": "ReciprocalRule",
+        "integrand": {
+         "latex": "\\frac{1}{x + 1}",
+         "text": "1/(x + 1)"
+        },
+        "variable": {
+         "latex": "x",
+         "text": "x"
+        },
+        "base": {
+         "latex": "x + 1",
+         "text": "x + 1"
+        },
+        "result": {
+         "latex": "\\ln\\left|x + 1\\right|",
+         "text": "log(Abs(x + 1))"
+        }
+       },
+       "result": {
+        "latex": "- \\ln\\left|x + 1\\right|",
+        "text": "-log(Abs(x + 1))"
+       }
+      }
+     ],
+     "result": {
+      "latex": "\\ln\\left|x - 1\\right| - \\ln\\left|x + 1\\right|",
+      "text": "log(Abs(x - 1)) - log(Abs(x + 1))"
+     }
+    },
+    "result": {
+     "latex": "\\frac{1}{2} \\ln\\left|x - 1\\right| - \\frac{1}{2} \\ln\\left|x + 1\\right|",
+     "text": "log(Abs(x - 1))/2 - log(Abs(x + 1))/2"
+    }
+   },
+   "result": {
+    "latex": "\\frac{1}{2} \\ln\\left|x - 1\\right| - \\frac{1}{2} \\ln\\left|x + 1\\right|",
+    "text": "log(Abs(x - 1))/2 - log(Abs(x + 1))/2"
+   },
+   "kind": "partial"
+  }
+ }
+}

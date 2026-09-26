@@ -1,6 +1,17 @@
 import type { V3 } from '../math/vec'
 import type { GCircle, GLine } from '../math/geometry'
 import type { LabTable } from '../lab/types'
+import type { BodyDef, Link, WorldSettings } from '../sim/types'
+import type { Space } from './visibility'
+import type { PQQuestion } from '../questions/pqjson'
+
+/** The Sandbox as saved: what the student built, never the live run. */
+export interface SandboxFile {
+  bodies: BodyDef[]
+  links: Link[]
+  world: WorldSettings
+  sideView: boolean
+}
 
 export type ObjId = string
 
@@ -40,8 +51,12 @@ export type CircleDef =
   | { kind: 'centerRadius'; c: ObjId; r: string }
   | { kind: 'threePoints'; a: ObjId; b: ObjId; c: ObjId }
 
-/** 'area' shades between y = f(x) and the x-axis for x in [tMin, tMax] (integrals, probabilities). */
-export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area'
+/**
+ * 'area' shades between y = f(x) and the x-axis for x in [tMin, tMax] (integrals, probabilities).
+ * 'piecewise' is one curve made of several formulas, each on its own stretch of x (`pieces`).
+ * 'between' shades the region between y = exprs[0] (upper) and y = exprs[1] (lower) for x in [tMin, tMax].
+ */
+export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area' | 'piecewise' | 'between'
 
 export interface ObjectBase {
   id: ObjId
@@ -56,8 +71,20 @@ export interface ObjectBase {
   labelPin?: 'always' | 'never'
   /** Hidden helper objects (e.g. auxiliary points) are not listed prominently. */
   auxiliary?: boolean
+  /**
+   * A stylesheet colour token (`--lego-new`) this object is drawn in, whichever theme is on;
+   * `color` is then only what a reader without the stylesheet falls back to. A colour read once
+   * and saved stayed Moonlight Gold's pale mint in the Light theme, where it nearly vanished.
+   * Choosing a colour in Properties drops it.
+   */
+  themed?: string
   /** Free-text caption shown in the outliner. */
   caption?: string
+  /** Shown on the drawing and in the Outliner instead of `name`, when the name a student reads (−B, â) is not one the scene can hold. */
+  label?: string
+  /** The drawing this belongs to (Vectors, Geometry, Graphing, Lab Data). Missing = shown everywhere,
+   *  which is what an object made where no drawing is active (the Sandbox, say) gets. */
+  space?: Space
 }
 
 export interface PointObj extends ObjectBase {
@@ -70,7 +97,6 @@ export interface VectorObj extends ObjectBase {
   type: 'vector'
   def: VectorDef
   showComponents?: boolean
-  showAngle?: boolean
   unit?: string
 }
 
@@ -97,6 +123,19 @@ export interface CircleObj extends ObjectBase {
   fill?: boolean
 }
 
+/**
+ * Where a Lego piece came from: a polygon broken apart into its simple shapes. Every piece of
+ * one shape shares `sourceId`, and `sourceSignature` (`math/lego.ts` signatureOf) is the shape
+ * itself, remembered so the pieces can be recognised as the original once the parent is gone.
+ */
+export interface LegoRecord {
+  sourceId: ObjId
+  sourceSignature: string
+  pieceIndex: number
+  /** The parent's colour, given back to the shape when the pieces fuse into it again. */
+  originalColor: string
+}
+
 export interface PolygonObj extends ObjectBase {
   type: 'polygon'
   points: ObjId[]
@@ -108,6 +147,8 @@ export interface PolygonObj extends ObjectBase {
   decomposeGoal?: 'basic' | 'formula'
   /** Which of the possible splits to show ("Other way" cycles it). */
   decomposeIndex?: number
+  /** Set on a piece of a shape that was broken apart; absent on an ordinary polygon. */
+  lego?: LegoRecord
 }
 
 export interface AngleObj extends ObjectBase {
@@ -139,6 +180,8 @@ export interface GraphObj extends ObjectBase {
   tMax?: number
   /** Inequality operator. */
   op?: '<' | '<=' | '>' | '>='
+  /** The formulas of a piecewise curve, each with the stretch of x it holds on. */
+  pieces?: { expr: string; from: number; to: number }[]
   showRoots?: boolean
   showExtrema?: boolean
   width?: number
@@ -148,6 +191,12 @@ export interface TextObj extends ObjectBase {
   type: 'text'
   p: V3
   text: string
+  /**
+   * The object this text describes, when it describes one: deleting that object deletes the text
+   * too (`doomedBy`). The shaded region's "area = 4.5" was a free text, and a student who deleted
+   * the region was left with the number floating over two bare curves.
+   */
+  owner?: ObjId
 }
 
 export type SceneObject =
@@ -214,19 +263,36 @@ export type ToolId =
 
 export interface SceneFile {
   app: 'PhysLab'
-  version: 1
+  /** The format this file is written in. `core/migrate.ts` lists the formats and steps older ones up. */
+  version: 6
   objects: SceneObject[]
   settings: SceneSettings
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens
    *  in an older build. */
   lab?: LabTable[]
+  /** The Sandbox scene. Optional for the same reason: a 0.3.3 file has none, and still opens. */
+  sandbox?: SandboxFile
+  /**
+   * The question set a teacher is writing in Question Author (format 5). Optional and left out
+   * while empty, so a file with no questions reads exactly as it did in format 4. A question here
+   * may be half-written; only its licence and its shape are checked on the way in
+   * (`core/migrate.ts`), because Export is where a question must be complete. From format 6 a
+   * question may use the question-file format 2 (the new answer kinds, error carried forward,
+   * showIf, a rung and a deeper link).
+   */
+  questions?: PQQuestion[]
 }
 
 export type LengthUnit = 'unit' | 'mm' | 'cm' | 'm' | 'km' | 'in' | 'ft'
 
+/** How the grid is drawn: squared lines, a dot at each crossing, finer squares, squared paper with a tinted page, polar circles and rays, a 60° isometric lattice, or a hexagon tiling. "Off" is `showGrid: false`; a file naming a style this build does not know draws lines (`normaliseGridStyle`). */
+export type GridStyle = 'lines' | 'dots' | 'fine' | 'paper' | 'polar' | 'isometric' | 'hex'
+
 export interface SceneSettings {
   angleUnit: 'deg' | 'rad'
   showGrid: boolean
+  /** Saved with the drawing, like the unit. A file from before this setting existed draws lines. */
+  gridStyle: GridStyle
   showAxes: boolean
   snap: boolean
   /** Digits: decimal places ('dp') or significant figures ('sf'). */
@@ -241,6 +307,10 @@ export interface SceneSettings {
   measureLabels: 'name' | 'measure' | 'full'
   /** Keep point letters (A, B, C…) on the drawing even when other labels are hidden. */
   pointLetters: boolean
+  /** The arcs at a polygon's corners, a vector's angle from the x-axis and the congruence marks.
+   *  A viewer preference like the label choices: it follows the person, not the file. Angle
+   *  objects a student drew on purpose stay whatever this says. */
+  showAngleMarks: boolean
   /** How vectors are written, so PhysLab matches whatever book is in front of the student. */
   vectorNotation: 'arrow' | 'bold' | 'underline'
   componentForm: 'ijk' | 'pair' | 'column' | 'polar'

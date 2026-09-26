@@ -1,0 +1,760 @@
+{
+  "app": "PhysLab",
+  "format": "pqjson",
+  "version": 2,
+  "questions": [
+    {
+      "id": "physlab-uni-dragster-braking",
+      "title": "A dragster brakes against the air",
+      "statement": "A dragster of mass {m} crosses the line at {u}. Its brakes push back with a steady force of {F0}, and its parachute and the air push back with a force k v², where k = {k} kg/m and v is its speed.",
+      "variables": [
+        { "name": "m", "def": { "kind": "list", "items": [800, 1000, 1200] }, "unit": "kg", "description": "mass of the dragster" },
+        { "name": "u", "def": { "kind": "list", "items": [80, 90, 100, 110] }, "unit": "m/s", "description": "speed when the brakes go on" },
+        { "name": "F0", "def": { "kind": "list", "items": [8000, 10000, 12000] }, "unit": "N", "description": "steady braking force" },
+        { "name": "k", "def": { "kind": "list", "items": [0.8, 1, 1.2, 1.5] }, "description": "air drag constant in kg/m" },
+        { "name": "a0", "def": { "kind": "expr", "expr": "(F0 + k * u^2) / m" }, "unit": "m/s²", "description": "deceleration at the start" },
+        { "name": "s", "def": { "kind": "expr", "expr": "m / (2 * k) * ln(1 + k * u^2 / F0)" }, "unit": "m", "description": "stopping distance" },
+        { "name": "Eb", "def": { "kind": "expr", "expr": "F0 * s" }, "unit": "J", "description": "energy the brakes turn into heat" }
+      ],
+      "condition": { "when": "abs(F0 - k * u^2) >= 0.1 * F0", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "How big is its deceleration just as the brakes go on?",
+          "answer": "a0",
+          "unit": "m/s²",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "F0 / m", "why": "That is the brakes alone. At the start the air pushes back too, with k u², and the two forces add." },
+            { "value": "k * u^2 / m", "why": "That is the air alone. The brakes push back as well, and the two forces add." }
+          ],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "How far does it travel before it stops?",
+          "answer": "s",
+          "unit": "m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "m * u^2 / (2 * F0)", "why": "That is the stopping distance with the brakes alone. The air takes energy too, so it stops sooner." },
+            { "value": "m * u^2 / (2 * (F0 + k * u^2))", "why": "That treats the starting force as if it stayed the same all the way. The air's push falls as the dragster slows, so write a = v dv/ds and integrate." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "number",
+          "prompt": "How much energy do the brakes turn into heat on the way?",
+          "answer": "Eb",
+          "unit": "J",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "m * u^2 / 2", "why": "That is all of its kinetic energy. The air takes part of it, so the brakes get only F₀ times the stopping distance." }
+          ],
+          "ecf": { "uses": [{ "part": 1, "variable": "s" }], "strategy": "originalfirst", "penalty": 0 },
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "At the start the brakes and the air push back together, so Newton's second law gives the deceleration.",
+            "tex": "a_0 = \\frac{F_0 + k u^2}{ m } = \\frac{{F0} + {k}\\,\\mathrm{kg/m} \\times ({u})^2}{{m}} = {a0}",
+            "rule": "F = ma",
+            "blank": true
+          },
+          {
+            "head": "The force changes with the speed, so write the acceleration as v dv/ds and separate the variables.",
+            "tex": "m v \\frac{dv}{ds} = -(F_0 + k v^2) \\;\\Rightarrow\\; s = \\int_0^{ u } \\frac{m v}{F_0 + k v^2}\\,dv",
+            "rule": "a = v\\frac{dv}{ds}"
+          },
+          {
+            "head": "The integral is a logarithm, and that is the stopping distance.",
+            "tex": "s = \\frac{ m }{2k}\\ln\\left(1 + \\frac{k u^2}{F_0}\\right) = \\frac{{m}}{2 \\times {k}\\,\\mathrm{kg/m}}\\ln\\left(1 + \\frac{{k}\\,\\mathrm{kg/m} \\times ({u})^2}{{F0}}\\right) = {s}",
+            "rule": "\\int \\frac{v}{F_0 + k v^2}\\,dv = \\frac{1}{2k}\\ln(F_0 + k v^2)",
+            "blank": true
+          },
+          {
+            "head": "The brakes do work F₀ times the distance; the rest of the kinetic energy goes into the air.",
+            "tex": "E_{\\text{brakes}} = F_0\\, s = {F0} \\times {s} = {Eb}",
+            "rule": "W = F s",
+            "blank": true
+          }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "sqrt(u^2 - 2 * F0 * x / m)", "label": "Brakes alone", "from": "0", "to": "m * u^2 / (2 * F0)" },
+          { "expr": "sqrt((u^2 + F0 / k) * e^(-2 * k * x / m) - F0 / k)", "label": "Brakes and air", "from": "0", "to": "s" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion", "forces"],
+      "rung": 4,
+      "deeper": "physlab-uni-dragster-speed"
+    },
+    {
+      "id": "physlab-uni-dragster-speed",
+      "title": "The dragster's speed along the track",
+      "statement": "The same dragster: mass {m}, speed {u} as the brakes go on, a steady braking force {F0} and an air push k v² with k = {k} kg/m. Newton's second law, with the acceleration written as v dv/ds, says\n$$ m v \\frac{dv}{ds} = -(F_0 + k v^2) $$",
+      "variables": [
+        { "name": "m", "def": { "kind": "list", "items": [800, 1000, 1200] }, "unit": "kg", "description": "mass of the dragster" },
+        { "name": "u", "def": { "kind": "list", "items": [80, 90, 100, 110] }, "unit": "m/s", "description": "speed when the brakes go on" },
+        { "name": "F0", "def": { "kind": "list", "items": [8000, 10000, 12000] }, "unit": "N", "description": "steady braking force" },
+        { "name": "k", "def": { "kind": "list", "items": [0.8, 1, 1.2, 1.5] }, "description": "air drag constant in kg/m" },
+        { "name": "d", "def": { "kind": "list", "items": [50, 100] }, "unit": "m", "description": "distance at which the speed is asked" },
+        { "name": "vd", "def": { "kind": "expr", "expr": "sqrt((u^2 + F0 / k) * e^(-2 * k * d / m) - F0 / k)" }, "unit": "m/s", "description": "speed after the distance d" }
+      ],
+      "parts": [
+        {
+          "type": "function",
+          "prompt": "Find its speed v as a formula in s, the distance travelled since the brakes went on.",
+          "x": "s",
+          "y": "v",
+          "ode": "m v v' = -(F0 + k v^2)",
+          "initial": [{ "at": "0", "order": 0, "value": "u" }],
+          "model": "sqrt((u^2 + F0/k) * e^(-2 k s/m) - F0/k)",
+          "sampleRange": [1, 100],
+          "marks": 3
+        },
+        {
+          "type": "number",
+          "prompt": "How fast is it going {d} after the brakes go on?",
+          "answer": "vd",
+          "unit": "m/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "sqrt(u^2 - 2 * F0 * d / m)", "why": "That is the speed with the brakes alone. The air slows it as well." }
+          ],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "Put w = v². Then dw/ds = 2v dv/ds, and the equation becomes a straight first-order one in w.",
+            "tex": "\\frac{ m }{2}\\frac{dw}{ds} = -(F_0 + k w)",
+            "rule": "\\frac{d(v^2)}{ds} = 2v\\frac{dv}{ds}"
+          },
+          {
+            "head": "Its solution that starts at w = u² when s = 0 dies away exponentially towards −F₀/k.",
+            "tex": "w + \\frac{F_0}{ k } = \\left(u^2 + \\frac{F_0}{ k }\\right)e^{-2ks/m}",
+            "blank": true
+          },
+          {
+            "head": "Take the square root to get the speed.",
+            "tex": "v(s) = \\sqrt{\\left(u^2 + \\frac{F_0}{ k }\\right)e^{-2ks/m} - \\frac{F_0}{ k }}",
+            "blank": true
+          },
+          {
+            "head": "Put in the numbers at s = {d}.",
+            "tex": "v = \\sqrt{\\left(({u})^2 + \\frac{{F0}}{{k}\\,\\mathrm{kg/m}}\\right)e^{-2 \\times {k}\\,\\mathrm{kg/m} \\times {d}/{m}} - \\frac{{F0}}{{k}\\,\\mathrm{kg/m}}} = {vd}",
+            "blank": true
+          }
+        ]
+      },
+      "picture": {
+        "kind": "curve",
+        "expr": "F0 + k * x^2",
+        "xMin": "0",
+        "xMax": "u"
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion", "differential equations"],
+      "rung": 4,
+      "deeper": "physlab-uni-drag-shortens-stop"
+    },
+    {
+      "id": "physlab-uni-damped-spring",
+      "title": "A damped spring set moving",
+      "statement": "A 1 kg mass on a spring, with a damper, moves along x as\n$$ x'' + {b}\\,x' + {q}\\,x = 0 $$\nIt starts at x = 0 and is given a push so that it sets off at {v0}.",
+      "variables": [
+        { "name": "b", "def": { "kind": "list", "items": [2, 4] }, "description": "damping per kilogram, in 1/s" },
+        { "name": "wd", "def": { "kind": "list", "items": [2, 3, 4] }, "description": "angular frequency of the damped swings, in rad/s" },
+        { "name": "q", "def": { "kind": "expr", "expr": "(b / 2)^2 + wd^2" }, "description": "spring stiffness per kilogram" },
+        { "name": "hb", "def": { "kind": "expr", "expr": "b / 2" }, "description": "decay rate" },
+        { "name": "v0", "def": { "kind": "list", "items": [2, 3, 4, 5, 6] }, "unit": "m/s", "description": "starting speed" },
+        { "name": "Bc", "def": { "kind": "expr", "expr": "v0 / wd" }, "unit": "m", "description": "size of the sine term" },
+        { "name": "T", "def": { "kind": "expr", "expr": "2 * pi / wd" }, "unit": "s", "description": "time between swings" }
+      ],
+      "parts": [
+        {
+          "type": "function",
+          "prompt": "Find x as a formula in t.",
+          "x": "t",
+          "y": "x",
+          "ode": "x'' + b x' + q x = 0",
+          "initial": [
+            { "at": "0", "order": 0, "value": "0" },
+            { "at": "0", "order": 1, "value": "v0" }
+          ],
+          "model": "v0/wd * e^(-b t/2) * sin(wd t)",
+          "marks": 3
+        },
+        {
+          "type": "number",
+          "prompt": "How long is it from one swing to the next?",
+          "answer": "T",
+          "unit": "s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "2 * pi / sqrt(q)", "why": "That is the period with no damper. The damper slows the swings: use the imaginary part of the roots, not √{q}." }
+          ],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "Try x = eʳᵗ. The equation becomes a quadratic in r.",
+            "tex": "r^2 + {b}r + {q} = 0",
+            "rule": "x = e^{rt}"
+          },
+          {
+            "head": "Its roots are a complex pair.",
+            "tex": "r = -{hb} \\pm \\sqrt{{q} - {hb}^2}\\,i = -{hb} \\pm {wd}i",
+            "rule": "r = \\frac{-b \\pm \\sqrt{b^2 - 4q}}{2}",
+            "blank": true
+          },
+          {
+            "head": "So the motion is a sine and a cosine, dying away.",
+            "tex": "x = e^{-{hb}t}\\left(A\\cos {wd}t + B\\sin {wd}t\\right)"
+          },
+          {
+            "head": "x(0) = 0 gives A = 0. Then the starting speed fixes B.",
+            "tex": "x'(0) = {wd}B = {v0} \\;\\Rightarrow\\; B = {Bc}",
+            "blank": true
+          },
+          {
+            "head": "The swings repeat every 2π over the angular frequency.",
+            "tex": "T = \\frac{2\\pi}{{wd}\\,\\mathrm{rad/s}} = {T}",
+            "rule": "T = \\frac{2\\pi}{\\omega_d}",
+            "blank": true
+          }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "v0 / wd * e^(-b * x / 2)", "label": "Upper edge of the swings", "from": "0", "to": "6" },
+          { "expr": "-v0 / wd * e^(-b * x / 2)", "label": "Lower edge of the swings", "from": "0", "to": "6" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["oscillations", "differential equations"],
+      "rung": 4
+    },
+    {
+      "id": "physlab-uni-eigenvalues",
+      "title": "The eigenvalues of a 2 × 2 matrix",
+      "statement": "The arrows p and q are the columns of the matrix A: where A sends one step along x and one step along y.\n$$ A = \\begin{pmatrix} {a} & {b} \\\\ {c} & {d} \\end{pmatrix} $$",
+      "variables": [
+        { "name": "l1", "def": { "kind": "list", "items": [-3, -2, -1, 1, 2] }, "description": "first eigenvalue" },
+        { "name": "l2", "def": { "kind": "list", "items": [3, 4, 5, 6] }, "description": "second eigenvalue" },
+        { "name": "n", "def": { "kind": "list", "items": [1, 2, 3] }, "description": "shift that hides the eigenvalues" },
+        { "name": "a", "def": { "kind": "expr", "expr": "l1 + n" } },
+        { "name": "b", "def": { "kind": "expr", "expr": "n" } },
+        { "name": "c", "def": { "kind": "expr", "expr": "l2 - l1 - n" } },
+        { "name": "d", "def": { "kind": "expr", "expr": "l2 - n" } },
+        { "name": "tr", "def": { "kind": "expr", "expr": "a + d" }, "description": "trace" },
+        { "name": "det", "def": { "kind": "expr", "expr": "a * d - b * c" }, "description": "determinant" }
+      ],
+      "condition": { "when": "c != 0", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "roots",
+          "prompt": "Find both eigenvalues of A.",
+          "answer": ["l1", "l2"],
+          "unit": "none",
+          "tolerance": { "kind": "absolute", "value": 0.01 },
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "An eigenvalue λ makes A − λI squash some arrow to nothing, so its determinant is 0.",
+            "tex": "\\det\\begin{pmatrix} {a} - \\lambda & {b} \\\\ {c} & {d} - \\lambda \\end{pmatrix} = 0",
+            "rule": "\\det(A - \\lambda I) = 0"
+          },
+          {
+            "head": "Multiplied out, it is λ² minus the trace times λ plus the determinant.",
+            "tex": "\\lambda^2 - {tr}\\lambda + {det} = 0",
+            "rule": "\\lambda^2 - (a + d)\\lambda + (ad - bc) = 0",
+            "blank": true
+          },
+          {
+            "head": "It factorises.",
+            "tex": "(\\lambda - {l1})(\\lambda - {l2}) = 0",
+            "blank": true
+          },
+          {
+            "head": "So there are two eigenvalues.",
+            "tex": "\\lambda_1 = {l1}, \\quad \\lambda_2 = {l2}"
+          }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "p", "v": ["a", "c"] },
+          { "name": "q", "v": ["b", "d"] }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["matrices"],
+      "rung": 4,
+      "deeper": "physlab-uni-normal-modes"
+    },
+    {
+      "id": "physlab-uni-normal-modes",
+      "title": "Two pendulums joined by a spring",
+      "statement": "Two identical pendulums, each of length {L} with a bob of mass {m}, hang side by side where g = {g}. A light spring of stiffness {k} N/m joins the bobs. For small swings the angles obey\n$$ \\ddot\\theta_1 = -\\frac{ g }{ L }\\theta_1 - \\frac{ k }{ m }(\\theta_1 - \\theta_2), \\qquad \\ddot\\theta_2 = -\\frac{ g }{ L }\\theta_2 - \\frac{ k }{ m }(\\theta_2 - \\theta_1) $$\nThe arrows show the two ways they can swing together: A, both the same way; B, opposite ways.",
+      "variables": [
+        { "name": "g", "def": { "kind": "list", "items": [9.8] }, "unit": "m/s²", "description": "gravity" },
+        { "name": "L", "def": { "kind": "list", "items": [0.5, 1, 2] }, "unit": "m", "description": "length of each pendulum" },
+        { "name": "m", "def": { "kind": "list", "items": [0.5, 1, 2] }, "unit": "kg", "description": "mass of each bob" },
+        { "name": "k", "def": { "kind": "list", "items": [2, 4, 5, 8] }, "description": "spring stiffness in N/m" },
+        { "name": "w1sq", "def": { "kind": "expr", "expr": "g / L" } },
+        { "name": "w2sq", "def": { "kind": "expr", "expr": "g / L + 2 * k / m" } },
+        { "name": "w1", "def": { "kind": "expr", "expr": "sqrt(w1sq)" }, "unit": "rad/s" },
+        { "name": "w2", "def": { "kind": "expr", "expr": "sqrt(w2sq)" }, "unit": "rad/s" }
+      ],
+      "parts": [
+        {
+          "type": "roots",
+          "prompt": "Find the two angular frequencies at which the pair can swing in step (the normal modes), both positive.",
+          "answer": ["w1", "w2"],
+          "unit": "rad/s",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "marks": 2
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "Look for motions where both swing at one angular frequency ω, θ = Θ cos ωt. Then ω² is an eigenvalue of this matrix.",
+            "tex": "\\begin{pmatrix} \\frac{ g }{ L } + \\frac{ k }{ m } & -\\frac{ k }{ m } \\\\ -\\frac{ k }{ m } & \\frac{ g }{ L } + \\frac{ k }{ m } \\end{pmatrix}",
+            "rule": "\\ddot\\theta = -\\omega^2\\theta"
+          },
+          {
+            "head": "Swinging the same way, the spring never stretches: only gravity acts.",
+            "tex": "\\omega_1^2 = \\frac{ g }{ L } = \\frac{{g}}{{L}} = {w1sq}\\,\\mathrm{s^{-2}}",
+            "blank": true
+          },
+          {
+            "head": "Swinging opposite ways, the spring pulls each bob back twice as hard.",
+            "tex": "\\omega_2^2 = \\frac{ g }{ L } + \\frac{2k}{ m } = {w1sq}\\,\\mathrm{s^{-2}} + \\frac{2 \\times {k}\\,\\mathrm{N/m}}{{m}} = {w2sq}\\,\\mathrm{s^{-2}}",
+            "blank": true
+          },
+          {
+            "head": "Take the square roots.",
+            "tex": "\\omega_1 = {w1}, \\quad \\omega_2 = {w2}",
+            "blank": true
+          }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "A", "v": ["1", "1"] },
+          { "name": "B", "v": ["1", "-1"] }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["oscillations", "matrices"],
+      "rung": 4
+    },
+    {
+      "id": "physlab-uni-matrix-inverse",
+      "title": "The inverse of a 2 × 2 matrix",
+      "statement": "The arrows p and q are the columns of the matrix A. Its inverse undoes what A does.\n$$ A = \\begin{pmatrix} {a} & {b} \\\\ {c} & {d} \\end{pmatrix} $$",
+      "variables": [
+        { "name": "a", "def": { "kind": "range", "from": 1, "to": 5, "step": 1 } },
+        { "name": "b", "def": { "kind": "range", "from": 1, "to": 4, "step": 1 } },
+        { "name": "c", "def": { "kind": "range", "from": 1, "to": 4, "step": 1 } },
+        { "name": "d", "def": { "kind": "range", "from": 1, "to": 6, "step": 1 } },
+        { "name": "D", "def": { "kind": "expr", "expr": "a * d - b * c" }, "description": "determinant" },
+        { "name": "i11", "def": { "kind": "expr", "expr": "d / D" } },
+        { "name": "i12", "def": { "kind": "expr", "expr": "-b / D" } },
+        { "name": "i21", "def": { "kind": "expr", "expr": "-c / D" } },
+        { "name": "i22", "def": { "kind": "expr", "expr": "a / D" } }
+      ],
+      "condition": { "when": "abs(D) == 1 or abs(D) == 2 or abs(D) == 4 or abs(D) == 5", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "matrix",
+          "prompt": "Find the inverse of A, one entry in each box. A fraction such as 3/5 is fine.",
+          "answer": [
+            ["i11", "i12"],
+            ["i21", "i22"]
+          ],
+          "tolerance": { "kind": "absolute", "value": 0.005 },
+          "allowFractions": true,
+          "markPerCell": true,
+          "marks": 4
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "Work out the determinant first.",
+            "tex": "D = {a} \\times {d} - {b} \\times {c} = {D}",
+            "rule": "D = ad - bc",
+            "blank": true
+          },
+          {
+            "head": "Swap the two entries on the diagonal, change the sign of the other two, and divide by the determinant.",
+            "tex": "A^{-1} = \\frac{1}{{D}}\\begin{pmatrix} {d} & -{b} \\\\ -{c} & {a} \\end{pmatrix} = \\begin{pmatrix} {i11} & {i12} \\\\ {i21} & {i22} \\end{pmatrix}",
+            "rule": "A^{-1} = \\frac{1}{ad - bc}\\begin{pmatrix} d & -b \\\\ -c & a \\end{pmatrix}",
+            "blank": true
+          },
+          {
+            "head": "Check: A times its inverse is the identity.",
+            "tex": "A A^{-1} = \\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}"
+          }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "p", "v": ["a", "c"] },
+          { "name": "q", "v": ["b", "d"] }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["matrices"],
+      "rung": 4,
+      "deeper": "physlab-uni-eigenvalues"
+    },
+    {
+      "id": "physlab-uni-torque-vector",
+      "title": "Torque as a cross product",
+      "statement": "A force F = ({Fx}, {Fy}, {Fz}) acts at the point r = ({rx}, {ry}, {rz}), measured from a pivot at the origin.",
+      "variables": [
+        { "name": "rx", "def": { "kind": "list", "items": [1, 2, 3] }, "unit": "m" },
+        { "name": "ry", "def": { "kind": "list", "items": [-2, -1, 1, 2] }, "unit": "m" },
+        { "name": "rz", "def": { "kind": "list", "items": [0, 1, 2] }, "unit": "m" },
+        { "name": "Fx", "def": { "kind": "list", "items": [-3, -2, -1, 1, 2, 3] }, "unit": "N" },
+        { "name": "Fy", "def": { "kind": "list", "items": [1, 2, 3, 4] }, "unit": "N" },
+        { "name": "Fz", "def": { "kind": "list", "items": [-2, -1, 1, 2] }, "unit": "N" },
+        { "name": "tx", "def": { "kind": "expr", "expr": "ry * Fz - rz * Fy" }, "unit": "N·m" },
+        { "name": "ty", "def": { "kind": "expr", "expr": "rz * Fx - rx * Fz" }, "unit": "N·m" },
+        { "name": "tz", "def": { "kind": "expr", "expr": "rx * Fy - ry * Fx" }, "unit": "N·m" },
+        { "name": "tmag", "def": { "kind": "expr", "expr": "sqrt(tx^2 + ty^2 + tz^2)" }, "unit": "N·m" }
+      ],
+      "condition": { "when": "tz != 0", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "vector",
+          "prompt": "Find the torque about the origin, τ = r × F, in components.",
+          "answer": ["tx", "ty", "tz"],
+          "unit": "N·m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "marks": 3
+        },
+        {
+          "type": "number",
+          "prompt": "How big is the torque?",
+          "answer": "tmag",
+          "unit": "N·m",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "The torque is the cross product of where the force acts and the force, set out as a determinant.",
+            "tex": "\\vec\\tau = \\vec r \\times \\vec F = \\begin{vmatrix} \\hat\\imath & \\hat\\jmath & \\hat k \\\\ {rx} & {ry} & {rz} \\\\ {Fx} & {Fy} & {Fz} \\end{vmatrix}",
+            "rule": "\\vec\\tau = \\vec r \\times \\vec F"
+          },
+          {
+            "head": "The x part leaves out the x column.",
+            "tex": "\\tau_x = {ry} \\times {Fz} - {rz} \\times {Fy} = {tx}",
+            "rule": "\\tau_x = r_y F_z - r_z F_y",
+            "blank": true
+          },
+          {
+            "head": "The y part leaves out the y column, and takes the other order.",
+            "tex": "\\tau_y = {rz} \\times {Fx} - {rx} \\times {Fz} = {ty}",
+            "rule": "\\tau_y = r_z F_x - r_x F_z",
+            "blank": true
+          },
+          {
+            "head": "The z part leaves out the z column.",
+            "tex": "\\tau_z = {rx} \\times {Fy} - {ry} \\times {Fx} = {tz}",
+            "rule": "\\tau_z = r_x F_y - r_y F_x",
+            "blank": true
+          },
+          {
+            "head": "Its size is Pythagoras in three dimensions.",
+            "tex": "|\\vec\\tau| = \\sqrt{{tx}^2 + {ty}^2 + {tz}^2} = {tmag}",
+            "blank": true
+          }
+        ]
+      },
+      "picture": {
+        "kind": "vectors",
+        "items": [
+          { "name": "r", "v": ["rx", "ry", "rz"] },
+          { "name": "F", "v": ["Fx", "Fy", "Fz"] }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["rotation", "vectors"],
+      "rung": 4
+    },
+    {
+      "id": "physlab-uni-anharmonic-ground-state",
+      "title": "The ground state of an anharmonic oscillator",
+      "statement": "In units where ħ = m = ω = 1, an oscillator has the energy\n$$ H = \\tfrac12 p^2 + \\tfrac12 x^2 + \\lambda x^4, \\qquad \\lambda = {lam} $$\nThe extra λx⁴ stiffens the spring. Find its lowest energy E₀.",
+      "variables": [
+        { "name": "lam", "def": { "kind": "list", "items": [0.1] }, "description": "strength of the x⁴ term" },
+        { "name": "S1", "def": { "kind": "expr", "expr": "1/2 + 3/4 * lam" } },
+        { "name": "S2", "def": { "kind": "expr", "expr": "S1 - 21/8 * lam^2" } },
+        { "name": "S3", "def": { "kind": "expr", "expr": "S2 + 333/16 * lam^3" } },
+        { "name": "S4", "def": { "kind": "expr", "expr": "S3 - 30885/128 * lam^4" } },
+        { "name": "alpha", "def": { "kind": "expr", "expr": "cbrt(3 * lam + sqrt(9 * lam^2 - 1/27)) + cbrt(3 * lam - sqrt(9 * lam^2 - 1/27))" } },
+        { "name": "Evar", "def": { "kind": "expr", "expr": "alpha / 4 + 1 / (4 * alpha) + 3 * lam / (4 * alpha^2)" } }
+      ],
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "First-order perturbation theory: what estimate does it give for E₀?",
+          "answer": "S1",
+          "unit": "none",
+          "tolerance": { "kind": "relative", "value": 0.002 },
+          "traps": [
+            { "value": "1/2 + lam", "why": "That takes ⟨x⁴⟩ as 1. In the harmonic ground state ⟨x⁴⟩ = 3⟨x²⟩² = 3/4." },
+            { "value": "1/2 + 3 * lam", "why": "That takes ⟨x²⟩ as 1. In the harmonic ground state ⟨x²⟩ = 1/2, so ⟨x⁴⟩ = 3 × (1/2)² = 3/4." }
+          ],
+          "marks": 1
+        },
+        {
+          "type": "number",
+          "prompt": "State E₀ with your own uncertainty, as E ± u. It is right when it agrees with the reference value within both uncertainties.",
+          "answer": "0.559146",
+          "unit": "none",
+          "tolerance": { "kind": "stated", "uref": "0.000001" },
+          "marks": 3
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "Without the extra term this is the harmonic oscillator, whose ground state has E = 1/2 and ⟨x²⟩ = 1/2.",
+            "tex": "E_0^{(0)} = \\tfrac12, \\quad \\langle x^2 \\rangle = \\tfrac12"
+          },
+          {
+            "head": "To first order the energy rises by λ⟨x⁴⟩, and for this Gaussian ground state ⟨x⁴⟩ = 3⟨x²⟩² = 3/4.",
+            "tex": "E_0 \\approx \\tfrac12 + \\tfrac34\\lambda = \\tfrac12 + \\tfrac34 \\times {lam} = {S1}",
+            "rule": "E^{(1)} = \\langle 0 | \\lambda x^4 | 0 \\rangle",
+            "blank": true
+          },
+          {
+            "head": "More terms of the series do not settle: its partial sums jump from side to side, and the series in fact runs away. It cannot give six figures.",
+            "tex": "{S1}, \\quad {S2}, \\quad {S3}, \\quad {S4}",
+            "rule": "E_0 = \\tfrac12 + \\tfrac34\\lambda - \\tfrac{21}{8}\\lambda^2 + \\tfrac{333}{16}\\lambda^3 - \\tfrac{30885}{128}\\lambda^4 + \\cdots"
+          },
+          {
+            "head": "A bell-curve guess ψ = exp(−αx²/2) gives an upper bound. Its energy is smallest where α³ − α − 6λ = 0.",
+            "tex": "E(\\alpha) = \\frac{\\alpha}{4} + \\frac{1}{4\\alpha} + \\frac{3\\lambda}{4\\alpha^2}, \\quad \\alpha = {alpha}, \\quad E = {Evar}",
+            "rule": "E_0 \\le \\langle \\psi | H | \\psi \\rangle"
+          },
+          {
+            "head": "Writing H as a matrix in the first 40 harmonic-oscillator states and finding its lowest eigenvalue gives E₀ to six decimal places. The Gaussian bound is about 0.0012 too high.",
+            "tex": "E_0 = 0.559146 \\pm 0.000001"
+          },
+          {
+            "head": "An answer E ± u is accepted when the gap to the reference is no bigger than the two uncertainties together (the Eₙ test).",
+            "tex": "|E - E_0| \\le \\sqrt{u^2 + u_{\\text{ref}}^2}",
+            "rule": "E_n = \\frac{|E - E_0|}{\\sqrt{u^2 + u_{\\text{ref}}^2}} \\le 1"
+          }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "x^2 / 2", "label": "Spring alone", "from": "-2", "to": "2" },
+          { "expr": "x^2 / 2 + lam * x^4", "label": "With the extra x⁴ term", "from": "-2", "to": "2" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["quantum", "measurement"],
+      "rung": 5
+    },
+    {
+      "id": "physlab-uni-two-labs-agree",
+      "title": "Do two measurements agree?",
+      "statement": "Two labs measure g. Lab A finds {gA} ± {uA}; Lab B finds {gB} ± {uB}. Each result is drawn as a bell curve, in cm/s² above or below 9.80 m/s².",
+      "variables": [
+        { "name": "gA", "def": { "kind": "range", "from": 9.78, "to": 9.84, "step": 0.01 }, "unit": "m/s²", "description": "Lab A's value" },
+        { "name": "uA", "def": { "kind": "list", "items": [0.01, 0.02, 0.03] }, "unit": "m/s²", "description": "Lab A's uncertainty" },
+        { "name": "gB", "def": { "kind": "range", "from": 9.76, "to": 9.86, "step": 0.01 }, "unit": "m/s²", "description": "Lab B's value" },
+        { "name": "uB", "def": { "kind": "list", "items": [0.01, 0.02, 0.04] }, "unit": "m/s²", "description": "Lab B's uncertainty" },
+        { "name": "gap", "def": { "kind": "expr", "expr": "abs(gA - gB)" }, "unit": "m/s²" },
+        { "name": "uc", "def": { "kind": "expr", "expr": "sqrt(uA^2 + uB^2)" }, "unit": "m/s²" },
+        { "name": "En", "def": { "kind": "expr", "expr": "gap / uc" } },
+        { "name": "dA", "def": { "kind": "expr", "expr": "(gA - 9.8) * 100" } },
+        { "name": "sA", "def": { "kind": "expr", "expr": "uA * 100" } },
+        { "name": "dB", "def": { "kind": "expr", "expr": "(gB - 9.8) * 100" } },
+        { "name": "sB", "def": { "kind": "expr", "expr": "uB * 100" } }
+      ],
+      "condition": { "when": "abs(En - 1) >= 0.15", "maxRuns": 100 },
+      "parts": [
+        {
+          "type": "number",
+          "prompt": "Work out Eₙ, the gap between the two results divided by their combined uncertainty.",
+          "answer": "En",
+          "unit": "none",
+          "tolerance": { "kind": "absolute", "value": 0.02 },
+          "traps": [
+            { "value": "gap / (uA + uB)", "why": "That adds the two uncertainties straight. Independent uncertainties add in quadrature: square each, add, then take the square root." },
+            { "value": "gap / (uA^2 + uB^2)", "why": "That divides by the sum of the squares. Take its square root first." }
+          ],
+          "marks": 2
+        },
+        {
+          "type": "choice",
+          "prompt": "Do the two results agree?",
+          "choices": [
+            { "text": "Yes: they agree within their uncertainties", "correct": true },
+            { "text": "No: they disagree", "correct": false, "why": "Eₙ is at most 1, so the gap is no bigger than the two uncertainties together allow." },
+            { "text": "Two results alone cannot tell", "correct": false, "why": "They can: Eₙ compares the gap between them with the uncertainties both labs stated." }
+          ],
+          "shuffle": false,
+          "showIf": "En <= 1",
+          "marks": 1
+        },
+        {
+          "type": "choice",
+          "prompt": "Do the two results agree?",
+          "choices": [
+            { "text": "Yes: they agree within their uncertainties", "correct": false, "why": "Eₙ is above 1, so the gap is bigger than the two uncertainties together allow." },
+            { "text": "No: they disagree", "correct": true },
+            { "text": "Two results alone cannot tell", "correct": false, "why": "They can: Eₙ compares the gap between them with the uncertainties both labs stated." }
+          ],
+          "shuffle": false,
+          "showIf": "En > 1",
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "The gap between the two results.",
+            "tex": "|g_A - g_B| = |{gA} - {gB}| = {gap}",
+            "blank": true
+          },
+          {
+            "head": "Independent uncertainties add in quadrature.",
+            "tex": "\\sqrt{u_A^2 + u_B^2} = \\sqrt{({uA})^2 + ({uB})^2} = {uc}",
+            "rule": "u_c = \\sqrt{u_A^2 + u_B^2}",
+            "blank": true
+          },
+          {
+            "head": "Eₙ is the gap over the combined uncertainty.",
+            "tex": "E_n = \\frac{{gap}}{{uc}} = {En}",
+            "rule": "E_n = \\frac{|g_A - g_B|}{\\sqrt{u_A^2 + u_B^2}}",
+            "blank": true
+          },
+          {
+            "head": "The results agree when Eₙ is 1 or less, and disagree when it is above 1.",
+            "tex": "E_n \\le 1 \\;\\Rightarrow\\; \\text{they agree}"
+          }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "4 * e^(-(x - dA)^2 / (2 * sA^2))", "label": "Lab A", "from": "dA - 4 * sA", "to": "dA + 4 * sA" },
+          { "expr": "4 * e^(-(x - dB)^2 / (2 * sB^2))", "label": "Lab B", "from": "dB - 4 * sB", "to": "dB + 4 * sB" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["measurement"],
+      "rung": 4,
+      "deeper": "physlab-uni-anharmonic-ground-state"
+    },
+    {
+      "id": "physlab-uni-drag-shortens-stop",
+      "title": "Why the air always shortens the stop",
+      "statement": "With brakes alone, a dragster stops in m u²/(2F₀). With the air's k v² as well, it stops in (m/2k) ln(1 + k u²/F₀).",
+      "variables": [
+        { "name": "z", "def": { "kind": "list", "items": [0.5, 1, 1.5, 2, 3] }, "description": "k u² over F₀" },
+        { "name": "ratio", "def": { "kind": "expr", "expr": "ln(1 + z) / z" } }
+      ],
+      "parts": [
+        {
+          "type": "proof",
+          "prompt": "Prove that, whatever the numbers, the stop with the air is shorter than the stop with brakes alone.",
+          "model": "Write \\(z = \\dfrac{k u^2}{F_0}\\), which is above 0. Then \\(\\dfrac{ m }{2k}\\ln(1+z) = \\dfrac{m u^2}{2F_0}\\cdot\\dfrac{\\ln(1+z)}{ z }\\), so it is enough to show that \\(\\ln(1+z) < z\\) for every \\(z > 0\\).\nLet \\(f(z) = z - \\ln(1+z)\\). Then \\(f(0) = 0\\).\nIts slope is \\(f'(z) = 1 - \\dfrac{1}{1+z} = \\dfrac{ z }{1+z}\\), which is above 0 for every \\(z > 0\\).\nSo f starts at 0 and only rises: \\(f(z) > 0\\) for every \\(z > 0\\). That is \\(\\ln(1+z) < z\\), so the stop with the air is shorter.",
+          "selfCheck": [
+            "You named one number z for k u²/F₀ and said why it is positive.",
+            "You turned the claim into ln(1 + z) < z.",
+            "You checked where the difference starts: f(0) = 0.",
+            "You showed the difference only grows: its slope z/(1 + z) is positive when z is.",
+            "You said in words why that finishes the proof."
+          ],
+          "marks": 0
+        },
+        {
+          "type": "number",
+          "prompt": "For a dragster with k u²/F₀ = {z}, what fraction of the brakes-alone distance does it need?",
+          "answer": "ratio",
+          "unit": "none",
+          "tolerance": { "kind": "relative", "value": 0.02 },
+          "traps": [
+            { "value": "log10(1 + z) / z", "why": "That used log to base 10. The stopping distance needs the natural log, ln." },
+            { "value": "1 - z / 2", "why": "That is only the start of the series for ln(1 + z)/z, good for small z. Work out ln(1 + z)/z itself." }
+          ],
+          "marks": 1
+        }
+      ],
+      "steps": {
+        "level": "worked",
+        "items": [
+          {
+            "head": "Name the one number that matters, z = k u²/F₀. It is above 0.",
+            "tex": "z = \\frac{k u^2}{F_0} > 0"
+          },
+          {
+            "head": "The two stopping distances differ only by the factor ln(1 + z)/z.",
+            "tex": "\\frac{s_{\\text{air}}}{s_{\\text{brakes}}} = \\frac{\\frac{m}{2k}\\ln(1+z)}{\\frac{m u^2}{2F_0}} = \\frac{\\ln(1+z)}{ z }"
+          },
+          {
+            "head": "Let f(z) = z − ln(1 + z). It starts at f(0) = 0 and its slope is positive, so f(z) > 0 for every z > 0.",
+            "tex": "f'(z) = 1 - \\frac{1}{1+z} = \\frac{ z }{1+z} > 0",
+            "blank": true
+          },
+          {
+            "head": "Put in z = {z}.",
+            "tex": "\\frac{\\ln(1 + {z})}{{z}} = {ratio}",
+            "blank": true
+          }
+        ]
+      },
+      "picture": {
+        "kind": "curves",
+        "items": [
+          { "expr": "x", "label": "z", "from": "0", "to": "4" },
+          { "expr": "ln(1 + x)", "label": "ln(1 + z)", "from": "0", "to": "4" }
+        ]
+      },
+      "license": { "id": "CC BY 4.0", "holder": "PhysLab", "source": "PhysLab" },
+      "tags": ["motion", "proof"],
+      "rung": 5
+    }
+  ]
+}

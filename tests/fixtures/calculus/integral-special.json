@@ -1,0 +1,48 @@
+{
+ "op": "integral_steps",
+ "payload": {
+  "expr": "e^(-x^2)"
+ },
+ "result": {
+  "var": "x",
+  "integrand": {
+   "latex": "e^{- x^{2}}",
+   "text": "exp(-x**2)"
+  },
+  "unsupported": false,
+  "closed": true,
+  "raw_latex": "\\frac{1}{2} \\sqrt{\\pi} \\operatorname{erf}x",
+  "raw_text": "sqrt(pi)*erf(x)/2",
+  "answer_latex": "\\frac{1}{2} \\sqrt{\\pi} \\operatorname{erf}x",
+  "answer_text": "sqrt(pi)*erf(x)/2",
+  "checked": true,
+  "deg_ignored": false,
+  "tree": {
+   "rule": "ErfRule",
+   "integrand": {
+    "latex": "e^{- x^{2}}",
+    "text": "exp(-x**2)"
+   },
+   "variable": {
+    "latex": "x",
+    "text": "x"
+   },
+   "a": {
+    "latex": "-1",
+    "text": "-1"
+   },
+   "b": {
+    "latex": "0",
+    "text": "0"
+   },
+   "c": {
+    "latex": "0",
+    "text": "0"
+   },
+   "result": {
+    "latex": "\\frac{1}{2} \\sqrt{\\pi} \\operatorname{erf}x",
+    "text": "sqrt(pi)*erf(x)/2"
+   }
+  }
+ }
+}

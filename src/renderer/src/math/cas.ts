@@ -9,6 +9,33 @@ export interface CasValue {
   value?: CasValue
 }
 
+/**
+ * Every operation cas.worker.ts implements. Nothing else may be sent.
+ *
+ * This list is a contract with Python in another file. It is written down here, and checked
+ * against the worker's source by a test, because the halves drifted apart once already: a payload
+ * key of `equations` where the worker reads `eqs` made every solve fallback fail in silence.
+ */
+export const CAS_OPS = [
+  'exact',
+  'eval',
+  'simplify',
+  'expand',
+  'factor',
+  'factor_complex',
+  'apart',
+  'diff',
+  'integrate',
+  'limit',
+  'series',
+  'solve',
+  // Answer + rule tree for the step engine (math/pure/calculusSteps.ts formats it).
+  'integral_steps',
+  'diff_steps',
+  'warmup'
+] as const
+export type CasOp = (typeof CAS_OPS)[number]
+
 export type CasResult = CasValue & {
   error?: string
   solutions?: Record<string, CasValue>[]
@@ -93,5 +120,15 @@ export function cas(op: string, payload: Record<string, unknown> = {}): Promise<
   })
 }
 
-/** Start loading SymPy in the background so the first real request is fast. */
-export const warmupCas = () => cas('warmup')
+/**
+ * Start loading SymPy in the background so the first real request is fast.
+ *
+ * This deliberately bypasses `cas()`: a warm-up is not a question. Sent as a request it counted as
+ * busy for the whole load, so opening the Calculator showed "Working…" and a Stop button for a
+ * question nobody had asked — and on a slow first launch the 30 s timer killed the half-loaded
+ * worker, which then booted again from nothing for the first real answer. With no id the worker
+ * loads and says nothing back; the status strip reads "Starting algebra…" meanwhile, which is true.
+ */
+export const warmupCas = (): void => {
+  getWorker().postMessage({ op: 'warmup', payload: {} })
+}

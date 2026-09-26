@@ -1,0 +1,67 @@
+{
+ "op": "diff_steps",
+ "payload": {
+  "expr": "x^2*sin(x)"
+ },
+ "result": {
+  "var": "x",
+  "expr": {
+   "latex": "x^{2} \\sin {x}",
+   "text": "x**2*sin(x)"
+  },
+  "u": "u",
+  "letters": [
+   "u",
+   "w",
+   "v",
+   "s",
+   "p",
+   "q",
+   "r"
+  ],
+  "deg_ignored": false,
+  "tree": {
+   "rule": "product",
+   "expr": {
+    "latex": "x^{2} \\sin {x}",
+    "text": "x**2*sin(x)"
+   },
+   "result": {
+    "latex": "2 x \\sin {x} + x^{2} \\cos {x}",
+    "text": "2*x*sin(x) + x**2*cos(x)"
+   },
+   "substeps": [
+    {
+     "rule": "power",
+     "expr": {
+      "latex": "x^{2}",
+      "text": "x**2"
+     },
+     "result": {
+      "latex": "2 x",
+      "text": "2*x"
+     },
+     "exp": {
+      "latex": "2",
+      "text": "2"
+     }
+    },
+    {
+     "rule": "sin",
+     "expr": {
+      "latex": "\\sin {x}",
+      "text": "sin(x)"
+     },
+     "result": {
+      "latex": "\\cos {x}",
+      "text": "cos(x)"
+     }
+    }
+   ]
+  },
+  "unsupported": false,
+  "answer_latex": "2 x \\sin {x} + x^{2} \\cos {x}",
+  "answer_text": "2*x*sin(x) + x**2*cos(x)",
+  "checked": true
+ }
+}
