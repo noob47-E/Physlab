@@ -2,6 +2,7 @@
 // with every equality written out, the way a proof is marked. Pure, so the panel and the tests
 // share one answer.
 
+import { toFixedHalfAway } from './format'
 import { triangleInfo } from './geometry'
 import { interiorAngles, sideLengths } from './shapes'
 import type { V3 } from './vec'
@@ -62,8 +63,9 @@ export interface CompareOptions {
 
 export function compareTriangles(A: Tri, B: Tri, opts: CompareOptions = {}): Congruence {
   const tol = opts.tolerance ?? 5e-3
-  const fl = opts.fmtLength ?? ((v) => v.toFixed(2))
-  const fa = opts.fmtAngle ?? ((r) => `${((r * 180) / Math.PI).toFixed(1)}°`)
+  // Fixed places rounded as a calculator rounds (toFixed wrote a 2.675 side as 2.67).
+  const fl = opts.fmtLength ?? ((v) => toFixedHalfAway(v, 2))
+  const fa = opts.fmtAngle ?? ((r) => `${toFixedHalfAway((r * 180) / Math.PI, 1)}°`)
   const ia = triangleInfo(A.pts[0], A.pts[1], A.pts[2])
   const ib = triangleInfo(B.pts[0], B.pts[1], B.pts[2])
   const scale = Math.max(...ia.sides, ...ib.sides, 1e-9)

@@ -5,9 +5,10 @@
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
 import { inDegrees, math, preprocess } from './expr'
-import { fmtPrecise, fmtSci, revealPrecision, type MeasureSettings } from './format'
+import { fmtPrecise, fmtSci, noiseFloor, revealPrecision, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
+import { UNITS } from '../questions/units'
 
 export type Verdict = 'right' | 'close' | 'wrong' | 'empty' | 'unreadable'
 
@@ -19,8 +20,51 @@ export interface Check {
   parsed?: number
 }
 
-/** Units a student is likely to type after the number; they are not part of the value. */
-export const UNIT_TAIL = /(?<=[\d)\s])\s*(°|N\s*[·⋅]?\s*m|m\s*\/\s*s\s*\^?\s*2|m\s*\/\s*s|N|J|W|kg|m|s|rad|deg|degrees?|units?)\s*$/i
+/**
+ * One unit label as the pattern that reads it after a number. A label has characters no keyboard
+ * has a key for (², ³, ·), so it is read as it is typed as well — m/s^2, m/s2, m^2, N m, Nm — and
+ * a slash may have spaces round it ("m / s"). With `anyCase` its letters match in either case.
+ */
+function tailOf(label: string, anyCase: boolean): string {
+  return [...label]
+    .map((c) => {
+      if (c === '²' || c === '³') return `(?:\\s*\\^?\\s*${c === '²' ? 2 : 3}|${c})`
+      if (c === '·') return '\\s*[·⋅]?\\s*'
+      if (c === '/') return '\\s*\\/\\s*'
+      if (anyCase && /[a-z]/i.test(c)) return `[${c.toLowerCase()}${c.toUpperCase()}]`
+      return c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    })
+    .join('')
+}
+
+/**
+ * The units this tail has always read in either case, from before it was made from the whole list:
+ * "5 KG" or "5 S" is still a unit, and a number part names it ("could not read the unit KG",
+ * questions/parts.ts) instead of marking the bare number. Every other label must match exactly, so
+ * the letter of a variable (v, c, k, a) after a number is never taken for a volt, a coulomb, a
+ * kelvin or an amp.
+ */
+const EITHER_CASE = new Set(['°', 'N·m', 'm/s', 'm/s²', 'N', 'J', 'W', 'kg', 'm', 's', 'rad'])
+
+/**
+ * Units a student is likely to type after the number; they are not part of the value. Made from
+ * every label in questions/units.ts, so a unit PhysLab knows (the coulomb in "1.6×10^-19 C", Hz,
+ * Pa, V, A, K, mol, °C, m³ …) is never left for mathjs to read as a quantity and come back
+ * "unreadable". Longest first, and group 1 is the unit as it was typed (questions/parts.ts quotes it).
+ */
+export const UNIT_TAIL = new RegExp(
+  `(?<=[\\d)\\s])\\s*(${[
+    ...Object.values(UNITS)
+      .map((u) => u.label)
+      .filter((label) => label !== '')
+      .sort((a, b) => b.length - a.length)
+      .map((label) => tailOf(label, EITHER_CASE.has(label))),
+    // Words that are no unit's label but were always dropped, in either case: "37 deg", "37 degrees", "7 units".
+    tailOf('deg', true),
+    `${tailOf('degree', true)}[sS]?`,
+    `${tailOf('unit', true)}[sS]?`
+  ].join('|')})\\s*$`
+)
 
 /** Reads "12.5", "5*sqrt(2)", "−3.4 N" or "37°" as a number. Returns null if it makes no sense. */
 export function parseAnswer(text: string): number | null {
@@ -54,7 +98,11 @@ export function checkAnswer(text: string, f: AnswerField, s: Pick<MeasureSetting
   const a = parseAnswer(text)
   if (a === null) return { verdict: 'unreadable', message: 'I could not read that. Type a number like 12.5, or an expression like 5*sqrt(2).' }
 
-  const near = (x: number, y: number, tol = f.tol) => Math.abs(x - y) <= tol
+  // `y` is always the expected side, whose size sets the floor (format.ts noiseFloor): a band of 0
+  // forgives the arithmetic's last bit (0.1 + 0.2 against "0.3") and nothing a student types.
+  // Nothing typed can be "near" an answer that is not a number: a 2 % band of an answer worked out
+  // as ∞ is ∞ wide (parts.ts toAbsoluteTol), and |5 − ∞| ≤ ∞ marked every number right.
+  const near = (x: number, y: number, tol = f.tol) => Number.isFinite(y) && Math.abs(x - y) <= tol + noiseFloor(y)
   // Only a direction goes round in a circle. The angle between two vectors is an amount of
   // turning, so 420° for a 60° field is wrong, not "the same direction", and its three
   // "other quadrants" are not mistakes anyone makes.

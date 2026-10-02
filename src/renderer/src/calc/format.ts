@@ -6,7 +6,7 @@
 // precision). The digits now come from fmtPrecise; this file only adds what a calculator needs
 // on top — the error words, engineering notation, and never showing 0 for something that is not.
 
-import { fmtPrecise, type MeasureSettings } from '../math/format'
+import { fmtPrecise, toExponentialHalfAway, type MeasureSettings } from '../math/format'
 
 export type CalcPrecision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
@@ -56,19 +56,16 @@ function sigFiguresIn(text: string): number {
   return digits.length
 }
 
-/** m×10^e with the mantissa written to the chosen number of significant figures. */
+/**
+ * m×10^e with the mantissa written to the chosen number of significant figures. Mantissa and
+ * power come from one rounding of `v` itself: dividing by 10^e first made a new double with binary
+ * error of its own (1.2685×10⁻¹³ ÷ 10⁻¹³ is stored just below 1.2685, so it read 1.268), and a
+ * mantissa that rounds up to 10 must move the power — 9.9995×10⁻¹³ at 4 figures is 1×10⁻¹²,
+ * never 10×10⁻¹³ — which the rounding does itself.
+ */
 function exponentForm(v: number, s: CalcPrecision): string {
-  const digits = Math.max(1, s.decimals)
-  let e = Math.floor(Math.log10(Math.abs(v)))
-  let mant = fmtPrecise(v / 10 ** e, { decimals: digits, precisionMode: 'sf' })
-  // 9.99… rounds up to 10 at few figures; that is one more power of ten, not a two-digit
-  // mantissa. The rounded value is then exactly one power of ten, so the mantissa is 1: formatting
-  // again would round 0.95 down to 0.9 and print 0.9×10⁻¹² for 9.5×10⁻¹³.
-  if (/^[−-]?10/.test(mant)) {
-    e += 1
-    mant = `${v < 0 ? '−' : ''}1`
-  }
-  return `${trimZeros(mant)}×10^${e}`
+  const [mant, e] = toExponentialHalfAway(v, Math.max(1, s.decimals) - 1).split('e')
+  return `${trimZeros(mant).replace('-', '−')}×10^${Number(e)}`
 }
 
 /**
@@ -81,11 +78,37 @@ function trimZeros(text: string): string {
   return (mant.includes('.') ? mant.replace(/\.?0+$/, '') : mant) + exp
 }
 
-/** Engineering notation: the exponent a multiple of three, the digits still the student's. */
+/**
+ * Engineering notation: the exponent a multiple of three, the digits still the student's, trimmed
+ * as calcNum trims them.
+ *
+ * The digits are read from one rounding of `v`, not from v ÷ 10^e — that division adds binary
+ * error of its own (1268.5 ÷ 1000 is stored 1.26849999999999996…, which read 1.268) — and the
+ * power of three is chosen from the ROUNDED value: 999.95 at 4 figures is 1000, which is 1×10^3,
+ * and choosing on the raw value wrote "1000×10^0" (0.00099995 likewise read "1000×10^-6").
+ */
 export function calcEng(v: number, s: CalcPrecision = calcPrecision()): string {
   if (!Number.isFinite(v) || v === 0) return calcNum(v, s)
-  const e = Math.floor(Math.log10(Math.abs(v)) / 3) * 3
-  return `${calcNum(v / 10 ** e, s)}×10^${e}`
+  const band = (x: number): number => Math.floor(x / 3) * 3
+  let figures = Math.max(1, s.decimals)
+  if (s.precisionMode === 'dp') {
+    // As many figures as reach the student's places in the mantissa v ÷ 10^band, counted from
+    // the first figure of the decimal the student saw (all 15 figures, so not yet rounded).
+    const first = Number(toExponentialHalfAway(v, 14).split('e')[1])
+    figures = first - band(first) + 1 + s.decimals
+  }
+  const [mant, power] = toExponentialHalfAway(v, figures - 1).split('e')
+  // The band comes from the rounded power. A carry leaves exactly a power of ten, so when it
+  // carries into the next band (999.996 → 1000.00 at 2 places) the coarser places of that band
+  // would round to the same 1×10^3: no second rounding is needed, as the zeros are trimmed.
+  const x = Number(power)
+  const e = band(x)
+  // Move the point x − e places right: 1.269e+4 is 12.69×10^3.
+  const digits = mant.replace('-', '').replace('.', '')
+  const whole = digits.slice(0, x - e + 1).padEnd(x - e + 1, '0')
+  const rest = digits.slice(x - e + 1)
+  const text = `${mant.startsWith('-') ? '−' : ''}${rest ? `${whole}.${rest}` : whole}`
+  return `${trimZeros(text)}×10^${e}`
 }
 
 /** The precision as mathjs wants it, for complex numbers, matrices and units. */

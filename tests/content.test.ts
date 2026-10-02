@@ -30,7 +30,7 @@ import { loadBundled } from '../src/renderer/src/questions/bank'
 import { parsePQFile, type PQFile, type PQQuestion } from '../src/renderer/src/questions/pqjson'
 import { substituteTex, type Segment } from '../src/renderer/src/questions/steps'
 import { drawVariables } from '../src/renderer/src/questions/variables'
-import { evaluateInVariables } from '../src/renderer/src/questions/parts'
+import { checkNumberPart, evaluateInVariables } from '../src/renderer/src/questions/parts'
 import { hasVisual, numberLineOf, visualOf } from '../src/renderer/src/questions/autoVisual'
 import { bindValues, checkPlayedPart, picturePlan, playQuestion, spokenOf, type Played, type PartAnswer, type PlayedPart } from '../src/renderer/src/questions/player'
 import type { MeasureSettings } from '../src/renderer/src/math/format'
@@ -357,14 +357,78 @@ describe('the curated Numbas school-maths bundle (QN2)', () => {
     expect(notes.filter((n) => HISTORY.test(n))).toEqual([])
     const notice = readSource('NOTICE')
     expect(notice).not.toMatch(/\bRound \d\b/)
-    // The two parts marked to within 0.0001 are described as that, never as "marked exactly".
+  })
+
+  it('marks "Adding two measured lengths" and "VAT on a price" exactly, as Numbas does, and says so in their change notes and in NOTICE (P21)', () => {
+    // Both were once moved to ±0.0001 only so that revealPrecision (math/format.ts) had a band to
+    // fit: at tolerance 0 it revealed the answer at the student's own precision, which typed back
+    // was marked wrong. That gap is the reveal's to close, not the questions', so both are back at 0.
+    const notice = readSource('NOTICE')
     for (const title of ['Adding two measured lengths', 'VAT on a price']) {
       const q = file.questions.find((x) => x.title === title)!
-      expect(q.parts.some((p) => p.type === 'number' && p.tolerance?.kind === 'absolute' && p.tolerance.value === 0.0001), title).toBe(true)
-      const note = (q.imported?.changes ?? []).join(' ')
-      expect(note, title).toContain('to within 0.0001')
-      expect(note, title).not.toMatch(/marked exactly|^Marked exactly/i)
+      expect(q.parts.some((p) => p.type === 'number'), title).toBe(true)
+      for (const p of q.parts) if (p.type === 'number') expect(p.tolerance, `${title}: ${p.prompt}`).toEqual({ kind: 'absolute', value: 0 })
+      const notes = q.imported?.changes ?? []
+      const note = notes.find((c) => /marked exactly/i.test(c))
+      expect(note, `${title}: a change note saying it is marked exactly`).toBeDefined()
+      expect(notes.filter((c) => c.includes('0.0001')), title).toEqual([])
+      // NOTICE repeats a question's change notes word for word, in order, after its "Changes:".
+      const entry = notice.split('\n').find((l) => l.startsWith(`- "${title}" —`))
+      expect(entry, `${title}: its NOTICE entry`).toBeDefined()
+      expect(entry, `${title}: NOTICE`).toContain(note!)
+      expect(entry, `${title}: NOTICE`).toContain(`Changes: ${notes.join(' ')}`)
     }
+  })
+
+  it('"Find the missing quantity" asks for the cost to the nearest cent, which its ±0.005 band marks: every variant\'s cost to the cent is right, a cent either side is not (P21)', () => {
+    // With the stems in sevens the cost never comes out in whole cents (35 stems for 20 dollars make
+    // 10 stems 5.714… dollars), and the ±0.005 band already wanted it to the cent, but the prompt never
+    // said so: a student's "5.7" was marked wrong with no rounding ever asked for.
+    const q = file.questions.find((x) => x.title === 'Find the missing quantity')!
+    const part = q.parts[0]
+    if (part.type !== 'number') throw new Error('Find the missing quantity: part 1 is not a number part')
+    expect(part.prompt).toContain('to the nearest cent')
+    expect(part.tolerance).toEqual({ kind: 'absolute', value: 0.005 })
+    const notes = q.imported?.changes ?? []
+    const note = notes.find((c) => c.includes('nearest cent'))
+    expect(note, 'a change note naming the nearest cent').toBeDefined()
+    const entry = readSource('NOTICE').split('\n').find((l) => l.startsWith('- "Find the missing quantity" —'))
+    expect(entry, 'its NOTICE entry').toBeDefined()
+    expect(entry).toContain(note!)
+    expect(entry).toContain(`Changes: ${notes.join(' ')}`)
+
+    // Every variant the question's own lists allow — its `when` only drops two whole-dollar pairs.
+    const items = (name: string): number[] => {
+      const v = q.variables.find((x) => x.name === name)
+      return v?.def.kind === 'list' ? v.def.items : []
+    }
+    const exprOf = (name: string): string => {
+      const v = q.variables.find((x) => x.name === name)
+      return v?.def.kind === 'expr' ? v.def.expr : 'NaN'
+    }
+    const marked: string[] = []
+    let notWholeCents = 0
+    for (const a of items('a')) for (const b of items('b')) for (const k of items('k')) for (const f of items('f')) {
+      const values = { a, b, k, f, c: evaluateInVariables(exprOf('c'), { a, b, k }), d: evaluateInVariables(exprOf('d'), { a, b, k }) }
+      const cost = evaluateInVariables(part.answer, values)
+      const cents = Math.round(cost * 100)
+      const whole = Math.abs(cost * 100 - cents) < 1e-9
+      if (!whole) notWholeCents++
+      const verdict = (typed: string): string => `${values.c} of ${values.d} stems for ${f} dollars (${cost}): "${typed}" is ${checkNumberPart(typed, part, values, SETTINGS).verdict}`
+      const right = verdict((cents / 100).toFixed(2))
+      if (!right.endsWith(' is right')) marked.push(right)
+      // A cent either side, and (when the cost is not whole cents) the cost to the nearest ten cents,
+      // which is why the prompt has to ask for cents.
+      const wrongs = [(cents - 1) / 100, (cents + 1) / 100].map((x) => x.toFixed(2))
+      if (!whole) wrongs.push(cost.toFixed(1))
+      for (const typed of wrongs) {
+        const v = verdict(typed)
+        if (v.endsWith(' is right')) marked.push(v)
+      }
+    }
+    expect(marked).toEqual([])
+    // The premise: 27 variants (every one with b = 7) do not come out in whole cents.
+    expect(notWholeCents).toBe(27)
   })
 
   it('keeps the bundle inside its size budget (4 MB; S-Q QN2)', () => {

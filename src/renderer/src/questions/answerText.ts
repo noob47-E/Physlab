@@ -32,6 +32,41 @@ export function evalNumber(text: string): number | null {
 /** Unicode minus and the other dashes a keyboard or a paste gives, as the hyphen the reader works with. */
 const dashes = (s: string): string => s.replace(/[−–—]/g, '-')
 
+const SUPERSCRIPT_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹'
+
+/**
+ * A number as it is written, never worked out: a mantissa, then e-notation or a power of ten —
+ * "×", "x" or "*", then 10, then the exponent after a caret, bare or in brackets, or raised in
+ * superscript digits. Groups: mantissa, then the exponent in e-notation, after a caret, in
+ * brackets after a caret, raised.
+ */
+const PLAIN_NUMBER =
+  /^([+-]?(?:\d+\.?\d*|\.\d+))(?:[eE]([+-]?\d+)|\s*[×x*]\s*10\s*(?:\^\s*(?:([+-]?\d+)|\(\s*([+-]?\d+)\s*\))|([⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)))?$/
+
+/** A raised exponent in the digits Number reads: "⁻¹⁹" → "-19". */
+const unraised = (s: string): string =>
+  s.replace('⁻', '-').replace('⁺', '+').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (d) => String(SUPERSCRIPT_DIGITS.indexOf(d)))
+
+/**
+ * One number typed as PhysLab writes it — plain ("0.6", "−0.2"), in e-notation ("1.5e-3"), or in
+ * the ×10 form a revealed answer and a scientific calculator show ("1.6×10^-19", "1.6 x 10^(-19)",
+ * "1.6*10^-19", "1.6 × 10⁻¹⁹") — or null for anything else, an expression or a bare 10^3 among
+ * them. It exists so that a revealed answer typed back reads as exactly the number it shows: the
+ * value is the double Number("1.6e-19") names, where mathjs works 1.6*10^-19 out as
+ * 1.6000000000000002e-19 and preprocess misreads "12.5×10^3" as 2500, "2.5×10^+3" as 15625 and
+ * "1.6×10⁻¹²" as 0.0256.
+ */
+function readPlainNumber(text: string): number | null {
+  const m = PLAIN_NUMBER.exec(dashes(text.trim()))
+  if (!m) return null
+  const [, mantissa, e, caret, bracketed, raised] = m
+  const exponent = e ?? caret ?? bracketed ?? (raised === undefined ? '0' : unraised(raised))
+  // Written out and read as one literal: mantissa × 10 ** exponent is not exact.
+  const v = Number(`${mantissa}e${exponent}`)
+  // Like evalNumber, only a real number counts: 1×10^400 is no more an answer than "Infinity".
+  return Number.isFinite(v) ? v : null
+}
+
 /**
  * Splits at `seps` only outside brackets, so the comma in "sqrt(2), 3" separates and the one in
  * "max(1, 2)" does not.
@@ -106,7 +141,7 @@ function readPolar(t: string): Read<{ v: number[]; unit: UnitId | null }> | null
     right = a.value
   }
   right = right.replace(/°\s*$/, '').trim()
-  const size = evalNumber(left)
+  const size = readPlainNumber(left) ?? evalNumber(left)
   const angle = evalNumber(right)
   if (size === null) return { error: `PhysLab could not read the size "${left}". ${VECTOR_HELP}` }
   if (angle === null) return { error: `PhysLab could not read the angle "${right}". ${VECTOR_HELP}` }
@@ -127,7 +162,7 @@ function readBracketed(t: string): Read<{ v: number[]; unit: UnitId | null }> | 
   if (items.length > 3) return { error: 'A vector has two or three components.' }
   const v: number[] = []
   for (const s of items) {
-    const x = evalNumber(s)
+    const x = readPlainNumber(s) ?? evalNumber(s)
     if (x === null) return { error: `PhysLab could not read the component "${s.trim()}". ${VECTOR_HELP}` }
     v.push(x)
   }
@@ -165,7 +200,7 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
   const unit: UnitId | null = withUnit ? tail.unit : null
   const whole = withUnit ? tail.value : t
   const body = unwrapIJK(whole) ?? whole
-  // Split before every + or − that is not inside brackets and not an exponent's sign (1e-3).
+  // Split before every + or − that is not inside brackets and not an exponent's sign (1e-3, 4×10^-3).
   const terms: string[] = []
   let depth = 0
   let cur = ''
@@ -173,7 +208,7 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
     const c = body[i]
     if (c === '(') depth++
     if (c === ')') depth--
-    if ((c === '+' || c === '-') && depth === 0 && cur.trim() !== '' && !/\de$/i.test(cur.trim())) {
+    if ((c === '+' || c === '-') && depth === 0 && cur.trim() !== '' && !/(\de|\^)$/i.test(cur.trim())) {
       terms.push(cur)
       cur = ''
     }
@@ -187,7 +222,7 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
     const m = /^([+-]?)(.*?)\*?([ijk])$/.exec(term)
     if (!m) return { error: `PhysLab could not read "${raw.trim()}". Each part needs its i, j or k, like 3i or −4j.` }
     const [, sign, coef, axis] = m
-    const size = coef === '' ? 1 : evalNumber(coef)
+    const size = coef === '' ? 1 : (readPlainNumber(coef) ?? evalNumber(coef))
     if (size === null) return { error: `PhysLab could not read "${raw.trim()}". ${VECTOR_HELP}` }
     const k = 'ijk'.indexOf(axis)
     v[k] += sign === '-' ? -size : size
@@ -265,17 +300,18 @@ function readSetValue(s: string, item: string, unit: UnitId | undefined): number
 // One matrix entry
 // ---------------------------------------------------------------------------
 
-const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i
 const FRACTION = /^([+-]?\d+)\s*\/\s*([+-]?\d+)$/
 
 /**
- * One entry of a matrix answer: a plain number ("0.6", "−0.2", "1.5e-3"), or with
- * `allowFractions` a fraction of whole numbers ("3/5", "−1/5"). Anything else — an expression, a
- * fraction where decimals are asked for, a division by zero — is null.
+ * One entry of a matrix answer: a number as it is written ("0.6", "−0.2", "1.5e-3", and the ×10
+ * form the reveal writes, "1.6×10^-19" or "1.6 × 10⁻¹⁹"), or with `allowFractions` a fraction of
+ * whole numbers ("3/5", "−1/5"). Anything else — an expression, a fraction where decimals are
+ * asked for, a division by zero — is null.
  */
 export function readMatrixCell(text: string, allowFractions: boolean): number | null {
   const t = dashes(text.trim()).replace(/\s+/g, ' ')
-  if (NUMBER.test(t)) return Number(t)
+  const x = readPlainNumber(t)
+  if (x !== null) return x
   const f = FRACTION.exec(t)
   if (f && allowFractions) {
     const d = Number(f[2])
@@ -292,13 +328,37 @@ export function readMatrixCell(text: string, allowFractions: boolean): number | 
  * Reads a measured value with its standard uncertainty: "0.5591 ± 0.0001", "0.5591 +- 0.0001",
  * "0.5591 +/- 0.0001", "(0.5591 ± 0.0001) J", or the concise form "0.5591(1)", where the digits in
  * brackets are the uncertainty in the last digits shown (1.23(45) is 1.23 ± 0.45). A plain number
- * with no uncertainty is an error whose sentence asks for one, in the student's own digits.
+ * with no uncertainty is an error whose sentence asks for one, in the student's own digits. A very
+ * large or very small value shares one power of ten between its value and its uncertainty, as the
+ * revealed answer writes it (statedAnswerTex): "(6.6261 ± 0.0012)×10^-34" or "(6.6261 ± 0.0012) ×
+ * 10⁻³⁴", with × · ⋅ x or * for the sign.
  */
 export function readStated(text: string): Read<{ x: number; u: number; unit: UnitId | null }> {
   let t = dashes(text.trim()).replace(/\\pm/g, '±').replace(/\+\s*\/?\s*-/g, '±')
   if (t === '') return { error: 'Type your value and its uncertainty, like 2.50 ± 0.05.' }
   const tail = unitFromTail(t)
   const unit = tail.unit
+
+  // A bracket holding a ±, then one ×10 power for both halves. Groups: what is in the bracket, then
+  // the exponent after a caret, in brackets after a caret, or raised in superscript digits. Split
+  // at the ± alone, the first half was "(6.6261" and was refused as "could not read the value".
+  const shared = /^\(\s*(.+?)\s*\)\s*[×·⋅x*]\s*10\s*(?:\^\s*(?:([+-]?\d+)|\(\s*([+-]?\d+)\s*\))|([⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+))$/.exec(tail.value)
+  if (shared && shared[1].includes('±')) {
+    const [, inner, caret, bracketed, raised] = shared
+    const power = caret ?? bracketed ?? unraised(raised)
+    const halves = inner.split('±').map((h) => h.trim())
+    if (halves.length !== 2) return { error: 'Type one ± between your value and its uncertainty.' }
+    // The power goes on each half as e-notation ("6.6261e-34", "0.0012e-34") and is read as one
+    // literal, never multiplied in: the value is the double those digits name, and the uncertainty
+    // exactly 1.2e-37. A half that is not a plain number (an expression, a power of its own) is refused.
+    const x = readPlainNumber(`${halves[0]}e${power}`)
+    const u = readPlainNumber(`${halves[1]}e${power}`)
+    if (x === null) return { error: `PhysLab could not read the value "${halves[0]}".` }
+    if (u === null) return { error: `PhysLab could not read the uncertainty "${halves[1]}".` }
+    if (u < 0) return { error: 'An uncertainty is never negative: the ± already gives both sides.' }
+    return { x, u, unit }
+  }
+
   t = tail.value.replace(/^\((.*)\)$/, '$1').trim()
 
   const concise = /^([+-]?)(\d*)(?:\.(\d+))?\((\d+(?:\.\d+)?)\)(?:e([+-]?\d+))?$/i.exec(t.replace(/\s+/g, ''))

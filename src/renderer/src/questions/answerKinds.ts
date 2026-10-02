@@ -6,11 +6,11 @@
 
 import type { Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
-import { fmtPrecise, texPrecise, type MeasureSettings } from '../math/format'
+import { fmtPrecise, noiseFloor, roundHalfAway, toExponentialHalfAway, toFixedHalfAway, type MeasureSettings } from '../math/format'
 import { isReadError, readMatrixCell, readSet, readStated, readVector } from './answerText'
 import type { Format2Part, PQPart, Tolerance, UnitId } from './pqjson'
 import { bandOf } from './pqjson'
-import { convertQuantity, texQuantity, texUnit, UNITS } from './units'
+import { convertQuantity, revealSettings, texQuantity, texUnit, UNITS } from './units'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
@@ -164,7 +164,9 @@ export function checkVectorPart(text: string, part: VectorPart, values: Record<s
   const n = ref.length
   v = [...v, 0, 0].slice(0, n)
 
-  const tol = halfWidth(part.tolerance, size(ref), 1e-9 * Math.max(1, size(ref)))
+  // The floor is the vector's own size's (format.ts noiseFloor): 10⁻⁹ × max(1, size) was an
+  // absolute 10⁻⁹ under any vector shorter than 1, and a force of 3×10⁻¹⁴ N took "0i + 0j".
+  const tol = halfWidth(part.tolerance, size(ref), noiseFloor(size(ref)))
   if (dist(v, ref) <= tol) return { verdict: 'right' }
   if (r.v.length < n && Math.abs(ref[2]) > tol) {
     return { verdict: 'wrong', message: 'This vector has three components, i, j and k; yours has two.' }
@@ -226,13 +228,16 @@ export function checkMatrixPart(cells: string[][], part: MatrixPart, values: Rec
     return { verdict: 'wrong', message: `This answer is a ${count(rows)} × ${count(cols)} matrix; yours is ${theirs}.`, cells: [], marks: 0 }
   }
   const fractions = part.allowFractions === true
-  const scale = Math.max(1, ...ref.flat().map(Math.abs))
+  // Each entry's floor is its own size's, but never under a millionth of the largest entry's
+  // (format.ts noiseFloor): a zero worked out as 6×10⁻¹⁷ beside entries of size 1 is still a zero,
+  // and an entry of 1.6×10⁻¹⁹ is not swamped — 10⁻⁹ × max(1, largest) let "0" stand for it.
+  const largest = Math.max(0, ...ref.flat().map(Math.abs))
   const got = cells.map((row, i) =>
     row.map((text, j): { verdict: CellVerdict; fraction?: boolean } => {
       if (text.trim() === '') return { verdict: 'empty' }
       const x = readMatrixCell(text, fractions)
       if (x === null) return { verdict: 'unreadable', fraction: !fractions && readMatrixCell(text, true) !== null }
-      return { verdict: Math.abs(x - ref[i][j]) <= halfWidth(part.tolerance, ref[i][j], 1e-9 * scale) ? 'right' : 'wrong' }
+      return { verdict: Math.abs(x - ref[i][j]) <= halfWidth(part.tolerance, ref[i][j], noiseFloor(ref[i][j], largest)) ? 'right' : 'wrong' }
     })
   )
   const verdicts = got.map((row) => row.map((c) => c.verdict))
@@ -305,9 +310,12 @@ export function checkRootsPart(text: string, part: RootsPart, values: Record<str
   const read = readSet(text, part.unit)
   if (isReadError(read)) return { verdict: 'unreadable', message: read.error }
   let given = read
-  // Each root's floor is its own size's: one shared scale took the largest value in the set, and
-  // with roots 2 and 10⁹ it widened 2's 2 % band from 0.04 to 1.04, so "3, 1000000000" was right.
-  const tol = (x: number): number => halfWidth(part.tolerance, x, 1e-9 * Math.max(1, Math.abs(x)))
+  // Each root's floor is its own size's, never under a millionth of the largest root's (format.ts
+  // noiseFloor). One shared 10⁻⁹ × largest widened 2's 2 % band from 0.04 to 1.04 beside a root of
+  // 10⁹, so "3, 1000000000" was right; 10⁻⁹ × max(1, |x|) was an absolute 10⁻⁹ that let "0" stand
+  // for a root of 1.6×10⁻¹⁹. The millionth keeps a root worked out as 3×10⁻¹⁷ beside 2 a zero.
+  const largest = Math.max(0, ...roots.map(Math.abs))
+  const tol = (x: number): number => halfWidth(part.tolerance, x, noiseFloor(x, largest))
   if (part.multiplicity !== true) {
     roots = distinct(roots, tol)
     given = distinct(given, tol)
@@ -365,7 +373,8 @@ export function checkFormat2Part(answer: string | string[][], part: Format2Part,
  * The right answer of a stated (Eₙ) part as LaTeX, in the form the part asks for — its value ±
  * its reference uncertainty — so a student who types back what is revealed is marked right. The
  * app's one ± rule (PROGRAM 0.9 §5, Idea 9) rounds it: the uncertainty to 1 significant figure,
- * 2 when its first digit is 1, and the value to that same decimal place — 0.5591460 ± 0.0000010.
+ * 2 when its first digit is 1, and the value to that same decimal place — 0.5591460 ± 0.0000010,
+ * and at the tens or hundreds when the uncertainty is 10 or more: 889.3 ± 220 is 900 ± 200.
  * A very large or very small value shares one power of ten: (6.6261 ± 0.0012)×10^{-34}.
  */
 export function statedAnswerTex(value: number, uref: number, unit: UnitId, s: Precision): string {
@@ -378,17 +387,24 @@ export function statedAnswerTex(value: number, uref: number, unit: UnitId, s: Pr
   const power = e >= 6 || e <= -4 ? e : 0
   const x = value / 10 ** power
   const du = uref / 10 ** power
-  const first = Math.floor(Math.log10(du))
-  const digits = Math.floor(du / 10 ** first) === 1 ? 2 : 1
-  const rounded = Number(du.toPrecision(digits))
-  // toPrecision can carry into a new decade (0.96 → 1): count places from what was kept.
-  const places = Math.max(0, digits - 1 - Math.floor(Math.log10(rounded)))
+  // The first figure is read from the decimal the student sees, not from the raw double: the
+  // shared power of ten leaves 1×10⁻²⁹ ÷ 10⁻²⁶ stored as 0.0009999999999999998, which read as a
+  // first figure of 9 (one figure kept, not two), and 2×10⁻²⁴ ÷ 10⁻²³ as 0.19999999999999998,
+  // which read as a 1.
+  const digits = toExponentialHalfAway(du, 14).startsWith('1') ? 2 : 1
+  // Half away from zero on the decimal, as a calculator rounds: toPrecision rounded the binary
+  // double, so an uncertainty of 0.045 read 0.04 and a value of 2.675 read 2.67.
+  const rounded = roundHalfAway(du, digits, 'sf')
+  // The rounding can carry into a new decade (0.96 → 1): count places from what was kept. The
+  // count is negative when the uncertainty is 10 or more — its last figure is the tens, the
+  // hundreds — and the value is rounded to that same place: 889.3 ± 220 is 900 ± 200. A count
+  // clamped at 0 left the value at the units, 889 ± 200, a finer place than its own uncertainty.
+  const places = digits - 1 - Math.floor(Math.log10(rounded))
   // Fixed places, not format.ts's fmt: the ± rule keeps the zeros fmt trims (0.0000010 says 2
-  // significant figures) and never turns a small uncertainty into its own power of ten.
-  const show = (n: number): string => {
-    const t = n.toFixed(places)
-    return /^-0(\.0*)?$/.test(t) ? t.slice(1) : t
-  }
+  // significant figures) and never turns a small uncertainty into its own power of ten. A value
+  // that rounds away to nothing reads 0.00 (or 0 at a negative place), never −0.00: neither
+  // writer signs a zero. toFixedHalfAway cannot round at a negative place, roundHalfAway can.
+  const show = (n: number): string => (places >= 0 ? toFixedHalfAway(n, places) : toFixedHalfAway(roundHalfAway(n, places, 'dp'), 0))
   const body = `${show(x)} \\pm ${show(rounded)}`
   if (power === 0) return withUnit(body, false)
   return withUnit(`\\left(${body}\\right)\\times 10^{${power}}`, true)
@@ -400,28 +416,58 @@ const texAbs = (x: number, s: Precision): string => texQuantity(Math.abs(x), 'no
 /**
  * The right answer of a format-2 part as LaTeX, for the revealed answer and the worked
  * solution's last line (answers are mandatory, Rule 3): 8.66 i + 5 j N, a matrix in brackets,
- * the roots in a list.
+ * the roots in a list. Each number is written at the precision `revealSettings` gives it against
+ * the part's STATED band for that number (no noise floor, so a part marked exactly goes through
+ * revealPrecision's exact mode), because the answer revealed must mark right typed back. At the
+ * student's own precision a matrix marked exactly showed an entry of 74 as "70" at 1 s.f., and
+ * the roots ±√2 at 2 % read "1, -1" at 0 d.p.
  */
 export function format2AnswerTex(part: Format2Part, values: Record<string, number>, s: Precision): string {
+  // A number within the arithmetic's own noise of 0 beside the answer's largest value is a zero
+  // (format.ts noiseFloor): 0.1 + 0.2 − 0.3 is 5.6×10⁻¹⁷, and the markers take "0" for it, so it is
+  // written 0, never as its binary hair. The vector branch leaves such a component out; a matrix
+  // entry and a root are written as 0. The markers' own floor for an entry is never smaller than
+  // this one, so the "0" typed back marks right.
+  const noiseToZero = (x: number, largest: number): number => (Math.abs(x) <= noiseFloor(0, largest) ? 0 : x)
   try {
     switch (part.type) {
       case 'vector': {
         const v = part.answer.map((e) => valueOf(e, values))
-        const terms = v
-          .map((c, i) => ({ c, axis: `\\mathbf{${AXES[i]}}` }))
-          .filter(({ c }) => fmtPrecise(c, s).replace('−', '') !== '0')
-        if (terms.length === 0) return `\\mathbf{0}`
-        const body = terms.map(({ c, axis }, i) => `${c < 0 ? (i === 0 ? '-' : ' - ') : i === 0 ? '' : ' + '}${texAbs(c, s)}\\,${axis}`).join('')
+        // A component with no real value (an author's sqrt of a negative, 1/0) makes the size NaN or
+        // ∞, and the zero test below would then drop every component and reveal the zero vector.
+        if (v.some((c) => !Number.isFinite(c))) return '\\text{?}'
+        const length = size(v)
+        // One band for the whole vector: each component within half of it keeps the vector within
+        // it, for up to three components (√3 / 2 < 1).
+        const band = halfWidth(part.tolerance, length, 0)
+        // Only a zero, or the arithmetic's hair off one (cos 90°), is left out — never a real small
+        // component: (0.004, 5) at 2 d.p. was revealed as "5j", and typed back that was wrong.
+        const terms = v.map((c, i) => ({ c, axis: `\\mathbf{${AXES[i]}}` })).filter(({ c }) => Math.abs(c) > noiseFloor(0, length))
         const u = texUnit(part.unit)
+        if (terms.length === 0) return u === '' ? '\\mathbf{0}' : `\\mathbf{0}\\,${u}`
+        const body = terms.map(({ c, axis }, i) => `${c < 0 ? (i === 0 ? '-' : ' - ') : i === 0 ? '' : ' + '}${texAbs(c, revealSettings(c, band, s))}\\,${axis}`).join('')
         return u === '' ? body : `\\left(${body}\\right)\\,${u}`
       }
       case 'roots': {
         const roots = part.answer.map((e) => valueOf(e, values))
+        // As for a vector's components: a root with no real value is the author's mistake, and the
+        // marker says it cannot mark such a part, so the reveal says "?" — not "undefined" or "∞" as if
+        // that were the answer.
+        if (roots.some((x) => !Number.isFinite(x))) return '\\text{?}'
         if (roots.length === 0) return '\\text{no real roots}'
-        return roots.map((x) => texQuantity(x, part.unit, s)).join(',\\ ')
+        const largest = Math.max(0, ...roots.map(Math.abs))
+        return roots
+          .map((x) => noiseToZero(x, largest))
+          .map((x) => texQuantity(x, part.unit, revealSettings(x, halfWidth(part.tolerance, x, 0), s)))
+          .join(',\\ ')
       }
       case 'matrix': {
-        const rows = part.answer.map((row) => row.map((e) => texPrecise(valueOf(e, values), s)).join(' & '))
+        // texQuantity, not texPrecise, whose 10⁻¹² floor wrote an entry of 1.6×10⁻¹⁹ as 0.
+        const entry = (x: number): string => texQuantity(x, 'none', revealSettings(x, halfWidth(part.tolerance, x, 0), s))
+        const entries = part.answer.map((row) => row.map((e) => valueOf(e, values)))
+        if (entries.some((row) => row.some((x) => !Number.isFinite(x)))) return '\\text{?}' // see the roots above
+        const largest = Math.max(0, ...entries.flat().map(Math.abs))
+        const rows = entries.map((row) => row.map((x) => entry(noiseToZero(x, largest))).join(' & '))
         return `\\begin{pmatrix} ${rows.join(' \\\\ ')} \\end{pmatrix}`
       }
       case 'function':

@@ -831,7 +831,7 @@
         "changes": [
           "PhysLab added a picture (Numbas gave none): the two layers as bars, thickness across.",
           "Title shortened from 'Addition:  2 numbers' for the practice list.",
-          "'Caclulate' is spelt 'Calculate'; the answer is the total to 2 significant figures, marked to within 0.0001, where the original accepted anything within 5 % of the unrounded sum."
+          "'Caclulate' is spelt 'Calculate'; the answer is the total to 2 significant figures, marked exactly, where the original accepted anything within 5 % of the unrounded sum."
         ],
         "contributors": [
           "Christopher Saville"
@@ -852,7 +852,7 @@
           "prompt": "One layer is {a} m thick. The other layer is {b} m thick, so the total is \\({a} + {b}\\) metres. ___",
           "tolerance": {
             "kind": "absolute",
-            "value": 0.0001
+            "value": 0
           },
           "unit": "none"
         }
@@ -931,7 +931,8 @@
           "PhysLab added a picture (Numbas gave none): the cost against the number of stems, a straight line through 0 since the price is the same per stem.",
           "Title shortened from 'Don's copy of 3.4 Find the missing quantity Q3 (different variable coding)' for the practice list.",
           "A worked step is added.",
-          "The prices are written in dollars in words ('40 dollars'), not with a $ sign."
+          "The prices are written in dollars in words ('40 dollars'), not with a $ sign.",
+          "The cost is asked to the nearest cent, which the ±0.005 marking already required: when 35 stems cost 20 dollars, 10 stems cost 5.714… dollars, not an exact number of cents."
         ],
         "contributors": [
           "TEAME CIT",
@@ -951,7 +952,7 @@
           "type": "number",
           "answer": "c * f / d",
           "marks": 1,
-          "prompt": "Suppose \\({d}\\) flower stems cost \\({f}\\) dollars. How much would you pay for \\({c}\\) flower stems? Cost = ___ dollars",
+          "prompt": "Suppose \\({d}\\) flower stems cost \\({f}\\) dollars. How much would you pay for \\({c}\\) flower stems, to the nearest cent? Cost = ___ dollars",
           "tolerance": {
             "kind": "absolute",
             "value": 0.005
@@ -2623,7 +2624,7 @@
         "changes": [
           "PhysLab added a picture (Numbas gave none): the price with VAT against the price without it, a straight line since VAT is always the same fraction.",
           "Title shortened from 'Calculate VAT question (Newcastle)' for the practice list.",
-          "The price with VAT is marked to within 0.0001 and the price without VAT exactly (Numbas marks both exactly); neither carries a 2 % band that would let an answer one out pass as right.",
+          "Both prices are marked exactly, as Numbas marks them; neither carries a 2 % band that would let an answer one out pass as right.",
           "The Numbas editor's label ('Newcastle editor version 1.0', and 'Newcastle' before the first price) is left out, the second price gains its £, and worked steps are added."
         ],
         "contributors": [
@@ -2645,7 +2646,7 @@
           "prompt": "The price of the 1st product without VAT is £{novatprice1}. VAT is 20%. What is its full price, in pounds? ___",
           "tolerance": {
             "kind": "absolute",
-            "value": 0.0001
+            "value": 0
           },
           "unit": "none"
         },

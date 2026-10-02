@@ -9,7 +9,7 @@
 
 import { parseAnswer, type Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
-import type { MeasureSettings } from '../math/format'
+import { noiseFloor, type MeasureSettings } from '../math/format'
 import { checkFunctionPart } from './odeCheck'
 import { toAbsoluteTol } from './parts'
 import type { ECF, PQPart, PQQuestion, UnitId } from './pqjson'
@@ -134,7 +134,9 @@ function earlierIsRight(q: PQQuestion, partIndex: number, truth: number, x: numb
   if (!Number.isFinite(truth)) return false
   const earlier = q.parts[partIndex]
   const tol = earlier?.type === 'number' ? toAbsoluteTol(earlier, truth) : 0
-  return Math.abs(x - truth) <= tol + 1e-9 * Math.max(1, Math.abs(truth))
+  // The floor is the truth's own size's: 10⁻⁹ × max(1, |truth|) was 10⁻⁹ for a charge of
+  // 1.6×10⁻¹⁹ C, so an earlier "0" counted as the true charge and nothing was carried forward.
+  return Math.abs(x - truth) <= tol + noiseFloor(truth)
 }
 
 /** The note: "Marked using your answer to part (a): −4 m/s²". */

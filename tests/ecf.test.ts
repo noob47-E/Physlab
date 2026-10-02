@@ -406,3 +406,51 @@ describe('markWithECF takes the plain marking from its caller', () => {
     expect(src).not.toMatch(/^import \{[^}]*\} from '\.\/player'$/m)
   })
 })
+
+// P21b: earlierIsRight (questions/ecf.ts) took an earlier answer for the true value when it lay
+// within the earlier part's band plus 10⁻⁹ × max(1, |truth|) — an absolute 10⁻⁹ for any truth
+// smaller than 1. For a charge of 1.6×10⁻¹⁹ C that is ten orders of magnitude wider than the charge
+// itself, so an earlier "0" counted as the right charge: nothing was carried forward and part (b)
+// was marked against the true values, with no note. The rule (wave head): the floor is relative to
+// the value's own size, 10⁻⁹ × |truth|.
+describe('P21b: error carried forward tells a tiny true value from a zero', () => {
+  /** (a) the charge q = 1.6×10⁻¹⁹ C at 2 %; (b) the force on it in a field of 1000 N/C, F = qE = 1.6×10⁻¹⁶ N, carrying (a) forward through q. */
+  const charge = (strategy: ECF['strategy']): PQQuestion =>
+    throughFile({
+      id: 'charge',
+      title: 'A charge in a field',
+      statement: 'A charge of {q} sits in a field of {Ef} N/C.',
+      variables: [
+        { name: 'q', def: { kind: 'list', items: [1.6e-19] }, unit: 'C' },
+        { name: 'Ef', def: { kind: 'list', items: [1000] } }
+      ],
+      parts: [
+        { type: 'number', prompt: 'The charge', answer: 'q', unit: 'C', tolerance: band, marks: 1 },
+        { type: 'number', prompt: 'The force on it', answer: 'q*Ef', unit: 'N', tolerance: band, marks: 2, ecf: { uses: [{ part: 0, variable: 'q' }], strategy, penalty: 0 } }
+      ],
+      license: { id: 'CC BY 4.0', holder: 'PhysLab' }
+    })
+  const NOTE = /^Marked using your answer to part \(a\)/
+
+  it('an earlier "0" for a charge of 1.6×10⁻¹⁹ C is not taken for the true charge: under alwaysreplace, (b) is marked with the student’s 0 and says so', () => {
+    const [a, b] = sit(charge('alwaysreplace'), ['0', '1.6e-16'])
+    expect(a.verdict).not.toBe('right')
+    expect.soft(b.ecfNote ?? '(no note)', 'the note under (b)').toMatch(NOTE)
+    expect.soft(b, '(b) marked against q = 0, where F = 0').toMatchObject({ verdict: 'wrong', marks: 0 })
+  })
+
+  it('and under originalfirst, (a) "0" then (b) "0" — the student’s own 0 × Ef — is right by error carried forward, with the note', () => {
+    const [, b] = sit(charge('originalfirst'), ['0', '0'])
+    expect.soft(b, '(b) "0" after (a) "0"').toMatchObject({ verdict: 'right', marks: 2 })
+    expect.soft(b.ecfNote ?? '(no note)', 'the note under (b)').toMatch(NOTE)
+  })
+
+  it('GUARD: the true charge typed in (a) is not carried forward — (b) is marked against the true values, with no note', () => {
+    for (const strategy of ['alwaysreplace', 'originalfirst'] as const) {
+      const [a, b] = sit(charge(strategy), ['1.6e-19', '1.6e-16'])
+      expect(a.verdict, strategy).toBe('right')
+      expect(b, strategy).toMatchObject({ verdict: 'right', marks: 2 })
+      expect(b.ecfNote, strategy).toBeUndefined()
+    }
+  })
+})

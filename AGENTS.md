@@ -302,6 +302,25 @@ neighbour is open.
   `min-h-11`.** The root font here is 13 px, so Tailwind's `h-11`/`min-h-11` (2.75rem against a
   16 px root) comes out under 36 px in this app — short of the 44 px a touch target needs — and the
   arbitrary-value class is the one that actually measures 44 px regardless of the root size.
+- **`toFixed` / `toPrecision` / `toExponential` round the binary double** (`2.675.toFixed(2)` is "2.67"). Every
+  shown number goes through `math/format.ts`'s half-away helpers (`roundHalfAway`, `toFixedHalfAway`, …): the shortest
+  decimal cut to 15 figures, then rounded half away from zero; a fast path uses the built-in only where it is provably
+  the same. Guard: `tests/format.test.ts` › P6 and "P6 speed".
+- **The marking noise floor is relative, never absolute** (`noiseFloor` in `math/format.ts`). An absolute 10⁻⁹ floor
+  marked "0" right for a 1.6×10⁻¹⁹ C answer at 2 %, because SI physics answers are smaller than any fixed floor.
+  Guard: the P21b tests in `tests/checkAnswer.test.ts` and `tests/answerKinds.test.ts`.
+- **Typed maths (`preprocess` in `math/expr.ts`):** `^` binds before `×` `·` `/`, which group left to right; a number
+  is read whole, e-notation included; `a×10ⁿ` written with `×` `·` `⋅` is ONE number (PhysLab prints numbers that way and
+  must read them back) while `*` is plain multiplication; `%` is percent and modulo is `mod`. Before this, `2×3^2` was
+  36 and `12.5×10^3` was 2500. Guard: `tests/exprPrecedence.test.ts`.
+- **`revealPrecision` at tolerance 0** shows the exact answer in the fewest figures, and that text typed back must be
+  marked right. Guard: `tests/questionReveal.test.ts` › P21.
+
+## Code knowledge
+
+`docs/knowledge/` holds one short note per area — what it does, its files, data flow, invariants, the traps met and
+where the tests are (e.g. `numbers.md`). Read the note for the area you are about to change; the polish wave adds one
+per part.
 
 ## How to check your work
 

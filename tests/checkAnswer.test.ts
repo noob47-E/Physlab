@@ -1,10 +1,15 @@
 // The answer checker: a student must never be marked wrong for a right answer, and when they are
 // wrong the sentence under the box must name the mistake they actually made.
 
+import { readdirSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { checkAnswer, expectedText, isCorrect, parseAnswer } from '../src/renderer/src/math/checkAnswer'
+import { checkAnswer, expectedText, isCorrect, parseAnswer, UNIT_TAIL } from '../src/renderer/src/math/checkAnswer'
 import { getAngleMode, setAngleMode } from '../src/renderer/src/math/expr'
 import { generate, type AnswerField } from '../src/renderer/src/math/problems'
+import { checkNumberPart, evaluateInVariables } from '../src/renderer/src/questions/parts'
+import { parsePQFile, type BandTolerance, type PQPart, type UnitId } from '../src/renderer/src/questions/pqjson'
+import { UNITS } from '../src/renderer/src/questions/units'
+import { readSource, repoPath } from './helpers/repo'
 
 const field = (over: Partial<AnswerField> = {}): AnswerField => ({ key: 'a', label: 'A', value: 12.5, tol: 0.125, ...over })
 /** A direction from +x, as the magnitude-and-direction question asks for. */
@@ -304,5 +309,312 @@ describe('expectedText', () => {
     expect(checkAnswer(expectedText(field({ value: 1.6e-19 }), { decimals: 2, precisionMode: 'sf' }), field({ value: 1.6e-19, tol: 1.6e-21 })).verdict).toBe('right')
     // An answer of exactly zero is still 0.
     expect(expectedText(field({ value: 0, unit: 'N' }))).toBe('0 N')
+  })
+})
+
+// P21: a field marked exactly (tol 0) gives revealPrecision no band to fit inside, and it handed
+// back the student's own precision: 2.675 m at 2 d.p. was revealed as "2.67 m", and typed back
+// that was marked wrong under the answer PhysLab had just shown.
+describe('P21: expectedText for an answer marked exactly (tolerance 0)', () => {
+  const dp = (decimals: number) => ({ decimals, precisionMode: 'dp' }) as const
+  const sf = (decimals: number) => ({ decimals, precisionMode: 'sf' }) as const
+
+  it('reveals the answer exactly, not rounded to the student’s precision, and typed back it is right: 2.675 m at 2 d.p., 12.345 N at 3 s.f.', () => {
+    for (const [f, s, want] of [
+      [field({ value: 2.675, tol: 0, unit: 'm' }), dp(2), '2.675 m'],
+      [field({ value: 12.345, tol: 0, unit: 'N' }), sf(3), '12.345 N']
+    ] as const) {
+      const shown = expectedText(f, s)
+      expect.soft(shown, `${f.value} at ${s.decimals} ${s.precisionMode}`).toBe(want)
+      expect.soft(checkAnswer(shown, f, s).verdict, `"${shown}" typed back`).toBe('right')
+    }
+  })
+
+  it('never reveals binary noise, and the clean answer typed back is right: 0.1 + 0.2 reads "0.3", 0.35 × 3 reads "1.05"', () => {
+    for (const [value, s, want] of [
+      [0.1 + 0.2, dp(2), '0.3'],
+      [0.35 * 3, dp(2), '1.05'],
+      [0.35 * 3, dp(1), '1.05']
+    ] as const) {
+      const f = field({ value, tol: 0 })
+      const shown = expectedText(f, s)
+      expect.soft(shown, `${value} at ${s.decimals} ${s.precisionMode}`).toBe(want)
+      // 0.30000000000000004 typed as "0.3": at tol 0 `near` is |a − v| ≤ 0, exact equality on doubles
+      // with no floor, so even a perfect reveal is marked wrong until the marker compares at 15 figures.
+      expect.soft(checkAnswer(shown, f, s).verdict, `"${shown}" typed back for ${value}`).toBe('right')
+    }
+  })
+
+  it('guard: marked exactly stays exact — the answer itself is right, anything a digit away is wrong', () => {
+    expect(checkAnswer('2.675', field({ value: 2.675, tol: 0 })).verdict).toBe('right')
+    expect(checkAnswer('2.6749', field({ value: 2.675, tol: 0 })).verdict).toBe('wrong')
+    expect(checkAnswer('2.6751', field({ value: 2.675, tol: 0 })).verdict).toBe('wrong')
+    expect(checkAnswer('0.30000001', field({ value: 0.1 + 0.2, tol: 0 })).verdict).toBe('wrong')
+    expect(checkAnswer('12', field({ value: 12, tol: 0 })).verdict).toBe('right')
+    expect(checkAnswer('10', field({ value: 12, tol: 0 })).verdict).toBe('wrong')
+  })
+})
+
+// P21b: at tolerance 0 `near` (math/checkAnswer.ts) was |a − v| ≤ 0 — exact equality on doubles,
+// with no floor — so the arithmetic's own last-bit noise marked a clean answer wrong: "0.3" for
+// 0.1 + 0.2, and "70 cm" for a 0.7 m part (70 × 0.01 is 0.7000000000000001). The rule (wave head):
+// the main comparison adds a floor of 10⁻⁹ × |value| to the stated half-width. It is relative to the
+// answer's own size, never an absolute amount: physics answers are tiny in SI units, and an
+// absolute 10⁻⁹ would swamp a 2 % band on 1.6×10⁻¹⁹ C and mark "0" right.
+describe('P21b: a one-number answer is compared with a binary-noise floor of 10⁻⁹ × |value|, added to its stated band', () => {
+  type NumberPart = Extract<PQPart, { type: 'number' }>
+  const exactly = (value: number): AnswerField => field({ value, tol: 0 })
+  const EXACTLY = { kind: 'absolute', value: 0 } as const
+  const TWO_PERCENT = { kind: 'relative', value: 0.02 } as const
+  /** A question's number part, as a teacher's file holds it — marked by questions/parts.ts checkNumberPart, as the player marks it. */
+  const numberPart = (answer: string, unit: UnitId, tolerance: BandTolerance): NumberPart => ({ type: 'number', prompt: 'The answer', answer, unit, tolerance: { ...tolerance }, marks: 1 })
+  const markPart = (typed: string, part: NumberPart): string => checkNumberPart(typed, part, {}, { decimals: 2, precisionMode: 'dp' }).verdict
+
+  it('marked exactly, an answer just inside the floor is right: 1234.5 ± 0.5×10⁻⁹ × 1234.5 and 0.3 ± 0.5×10⁻⁹ × 0.3', () => {
+    // Plain decimals, which parseAnswer reads to the nearest double: each offset arrives to within
+    // about 10⁻¹³ of itself, far from the floor's edge at half or twice the floor.
+    for (const [value, typed] of [
+      [1234.5, '1234.50000061725'], // + 6.1725×10⁻⁷
+      [1234.5, '1234.49999938275'], // − 6.1725×10⁻⁷
+      [0.3, '0.30000000015'], // + 1.5×10⁻¹⁰
+      [0.3, '0.29999999985'] // − 1.5×10⁻¹⁰
+    ] as const) {
+      expect.soft(checkAnswer(typed, exactly(value)).verdict, `"${typed}" for ${value}`).toBe('right')
+    }
+  })
+
+  it('GUARD: marked exactly, an answer just outside the floor is not right: 1234.5 ± 2×10⁻⁹ × 1234.5 and 0.3 ± 2×10⁻⁹ × 0.3', () => {
+    for (const [value, typed] of [
+      [1234.5, '1234.500002469'], // + 2.469×10⁻⁶
+      [1234.5, '1234.499997531'], // − 2.469×10⁻⁶
+      // An absolute floor of 10⁻⁹ — or 10⁻⁹ × max(1, |v|) — would take these two.
+      [0.3, '0.3000000006'], // + 6×10⁻¹⁰
+      [0.3, '0.2999999994'] // − 6×10⁻¹⁰
+    ] as const) {
+      expect.soft(checkAnswer(typed, exactly(value)).verdict, `"${typed}" for ${value}`).not.toBe('right')
+    }
+  })
+
+  it('GUARD: a stated band wider than the floor is unchanged — 5 ± 0.01 takes 5.009 and 4.991, not 5.011 or 4.989', () => {
+    const f = field({ value: 5, tol: 0.01 })
+    expect(['5.009', '4.991', '5.011', '4.989'].map((t) => `${t}: ${checkAnswer(t, f).verdict === 'right'}`)).toEqual(['5.009: true', '4.991: true', '5.011: false', '4.989: false'])
+  })
+
+  it('marked exactly, the arithmetic’s last-bit noise never marks a clean answer wrong: "0.3" for 0.1 + 0.2 and "1.05" for 0.35 × 3 — through checkAnswer and the number-part marker', () => {
+    for (const [answer, value, typed] of [
+      ['0.1 + 0.2', 0.1 + 0.2, '0.3'],
+      ['0.35 * 3', 0.35 * 3, '1.05']
+    ] as const) {
+      // The premise: the worked-out value carries the noise (0.30000000000000004, 1.0499999999999998).
+      expect(value, answer).not.toBe(Number(typed))
+      expect.soft(checkAnswer(typed, exactly(value)).verdict, `"${typed}" for ${answer}, checkAnswer`).toBe('right')
+      expect.soft(markPart(typed, numberPart(answer, 'none', EXACTLY)), `"${typed}" for ${answer}, number part`).toBe('right')
+    }
+  })
+
+  it('"70 cm" typed for a 0.7 m number part marked exactly is right — the unit conversion, 70 × 0.01, gives 0.7000000000000001', () => {
+    const part = numberPart('0.7', 'm', EXACTLY)
+    expect(['0.7', '0.7 m', '70 cm'].map((t) => `${t}: ${markPart(t, part)}`).join('; ')).toBe('0.7: right; 0.7 m: right; 70 cm: right')
+  })
+
+  it('GUARD: a charge of 1.6×10⁻¹⁹ C is not swamped by the floor — "0" and "5e-19" are not right, marked exactly or at 2 %, through checkAnswer and the number-part marker', () => {
+    const e = 1.6e-19
+    for (const typed of ['0', '5e-19']) {
+      for (const [tolerance, share] of [[EXACTLY, 0], [TWO_PERCENT, 0.02]] as const) {
+        const how = `"${typed}" for 1.6e-19 C ${share === 0 ? 'marked exactly' : 'at 2 %'}`
+        expect.soft(checkAnswer(typed, field({ value: e, tol: share * e })).verdict, `${how}, checkAnswer`).not.toBe('right')
+        expect.soft(markPart(typed, numberPart('1.6e-19', 'C', tolerance)), `${how}, number part`).not.toBe('right')
+      }
+    }
+  })
+
+  it('a charge worked out as 1.6 × 10^-19 (1.6000000000000002×10⁻¹⁹) is right typed as "1.6e-19" or "1.6×10^-19", marked exactly or at 2 % — through checkAnswer and the number-part marker', () => {
+    // The premise: the author's product lands a last bit off the literal, so marked exactly the
+    // student's exact "1.6e-19" was about 2×10⁻³⁵ C away, and wrong.
+    const worked = parseAnswer('1.6 * 1e-19')!
+    expect(worked).not.toBe(1.6e-19)
+    for (const typed of ['1.6e-19', '1.6×10^-19']) {
+      for (const [tolerance, share] of [[EXACTLY, 0], [TWO_PERCENT, 0.02]] as const) {
+        for (const [answer, value] of [['1.6e-19', 1.6e-19], ['1.6 * 10^-19', worked]] as const) {
+          const how = `"${typed}" for ${answer} C ${share === 0 ? 'marked exactly' : 'at 2 %'}`
+          expect.soft(checkAnswer(typed, field({ value, tol: share * value })).verdict, `${how}, checkAnswer`).toBe('right')
+          expect.soft(markPart(typed, numberPart(answer, 'C', tolerance)), `${how}, number part`).toBe('right')
+        }
+      }
+    }
+  })
+
+  it('GUARD: 5×10⁻¹⁰ marked exactly — "1.4e-9" is not right (an absolute floor of 10⁻⁹ would take it)', () => {
+    expect(checkAnswer('1.4e-9', exactly(5e-10)).verdict).not.toBe('right')
+    expect(markPart('1.4e-9', numberPart('5e-10', 'none', EXACTLY))).not.toBe('right')
+  })
+})
+
+// EXPR (polish part P-NUM): an answer box reads the typed line through math/expr.ts preprocess. Its
+// ×10 rule took one digit of the mantissa, so "12.5×10^3" read as 1 × 2.5×10³ = 2500, and its ×
+// stopped at the sign of an e-number, so "2×1.6e-19" read as 2 × 1.6 × e − 19 = −10.30.
+// tests/exprPrecedence.test.ts pins the reading itself.
+describe('EXPR: a typed ×10 answer is read whole', () => {
+  const x = (value: number, tol: number): AnswerField => ({ key: 'x', label: 'x', value, tol })
+
+  it('"12.5×10^3" is right for 12500 at 2 %', () => {
+    expect(checkAnswer('12.5×10^3', x(12500, 250)).verdict).toBe('right')
+  })
+
+  it('"12.5×10^3" is wrong for 2500 at 2 %', () => {
+    expect(checkAnswer('12.5×10^3', x(2500, 50)).verdict).toBe('wrong')
+  })
+
+  it('"2×1.6e-19" is right for 3.2×10⁻¹⁹ at 2 %', () => {
+    expect(checkAnswer('2×1.6e-19', x(3.2e-19, 0.02 * 3.2e-19)).verdict).toBe('right')
+  })
+})
+
+// P21d: an author's answer that works out to infinity (1/(a − b) at a = b) is flagged "cannot mark"
+// by the player, but nothing pinned that the marker itself never takes a typed number for it. At a
+// stated width of 0.01 or 0 it never did (|5 − ∞| = ∞ is over the width, and format.ts noiseFloor
+// adds nothing to an infinite answer). At 2 % the width was ∞ × 0.02 = ∞ (questions/parts.ts
+// toAbsoluteTol), and |5 − ∞| ≤ ∞ + 0 marked every number typed right. Nothing typed can be "near"
+// an answer that is not a number, so `near` (math/checkAnswer.ts) refuses one whatever the width.
+describe('P21d: an answer that works out to infinity marks nothing right', () => {
+  type NumberPart = Extract<PQPart, { type: 'number' }>
+  const BANDS: [string, BandTolerance][] = [
+    ['a band of 0.01', { kind: 'absolute', value: 0.01 }],
+    ['a band of 0', { kind: 'absolute', value: 0 }],
+    ['a band of 2 %', { kind: 'relative', value: 0.02 }]
+  ]
+  /** A question's number part whose answer is a formula of the question's variables, as a teacher's file holds it. */
+  const numberPart = (answer: string, tolerance: BandTolerance): NumberPart => ({ type: 'number', prompt: 'The answer', answer, unit: 'none', tolerance: { ...tolerance }, marks: 1 })
+  const markPart = (typed: string, part: NumberPart, values: Record<string, number>): string => checkNumberPart(typed, part, values, { decimals: 2, precisionMode: 'dp' }).verdict
+
+  it('the premise: 1/(a − b) is ∞ at a = b = 2 and −∞ for −1/(a − b), and a real number once a is 3 — which "1" and "-1" mark right at every band', () => {
+    expect(evaluateInVariables('1/(a - b)', { a: 2, b: 2 })).toBe(Infinity)
+    expect(evaluateInVariables('-1/(a - b)', { a: 2, b: 2 })).toBe(-Infinity)
+    for (const [how, band] of BANDS) {
+      expect.soft(markPart('1', numberPart('1/(a - b)', band), { a: 3, b: 2 }), `"1" for 1/(3 − 2), ${how}`).toBe('right')
+      expect.soft(markPart('-1', numberPart('-1/(a - b)', band), { a: 3, b: 2 }), `"-1" for −1/(3 − 2), ${how}`).toBe('right')
+    }
+  })
+
+  it('"5" is not right for 1/(a − b) at a = b = 2 — a band of 0.01, a band of 0 and a band of 2 % — nor is "0", "-5" or "1e300", and the same for −1/(a − b)', () => {
+    for (const answer of ['1/(a - b)', '-1/(a - b)']) {
+      for (const [how, band] of BANDS) {
+        for (const typed of ['5', '0', '-5', '1e300']) {
+          expect.soft(markPart(typed, numberPart(answer, band), { a: 2, b: 2 }), `"${typed}" for ${answer} at a = b = 2, ${how}`).not.toBe('right')
+        }
+      }
+    }
+  })
+
+  it('the same through checkAnswer: a reference of ∞ or −∞ is never near a number, with a width of 0.01, of 0, of ∞ (2 % of ∞) or of NaN', () => {
+    for (const value of [Infinity, -Infinity]) {
+      for (const tol of [0.01, 0, Infinity, NaN]) {
+        expect.soft(checkAnswer('5', field({ value, tol })).verdict, `"5" for ${value} ± ${tol}`).not.toBe('right')
+      }
+    }
+  })
+})
+
+// M5: checkAnswer's UNIT_TAIL, the units a student may type after a number, was a list written by
+// hand (N, J, W, kg, m, s, rad, N·m, m/s and m/s^2), so a number in any other unit PhysLab knows
+// was read by mathjs as a quantity and came back "unreadable": the electron's charge as
+// "1.6×10^-19 C", and 50 Hz, 100 Pa, 5 V, 3 A, 20 K, 12 mol, 100 °C, 2 cm and 5 m/s². The tail is
+// now made from every label in questions/units.ts. A letter that is no unit must still be left
+// alone — "2x", "3 x" and "5e" (5 × Euler's number) are maths, not a unit.
+describe('M5: every unit label PhysLab knows can be typed after a number', () => {
+  const LABELS = Object.values(UNITS)
+    .map((u) => u.label)
+    .filter((label) => label !== '')
+  /** The unit of every number part of every bundled question file (src/renderer/src/questions/bank/*.pqjson). */
+  const bundledUnits = (): UnitId[] => {
+    const dir = ['src', 'renderer', 'src', 'questions', 'bank']
+    const units = new Set<UnitId>()
+    for (const file of readdirSync(repoPath(...dir)).filter((f) => f.endsWith('.pqjson'))) {
+      for (const q of parsePQFile(readSource([...dir, file].join('/'))).questions) {
+        for (const p of q.parts) if (p.type === 'number' && p.unit !== 'none') units.add(p.unit)
+      }
+    }
+    return [...units]
+  }
+
+  it('the premise: the bundles use units beyond the old hand list — Ω, Pa, Hz, V, A, mol, m³, rad/s, m/s² and kg·m/s among them', () => {
+    const units = bundledUnits()
+    expect(units.length).toBeGreaterThanOrEqual(15)
+    for (const u of ['Ω', 'Pa', 'Hz', 'V', 'A', 'mol', 'm³', 'rad/s', 'm/s²', 'kg·m/s'] as UnitId[]) expect(units, u).toContain(u)
+  })
+
+  it('every unit label of every number part in the bundled question files, typed after a number, is read through checkAnswer — spaced and unspaced', () => {
+    for (const unit of bundledUnits()) {
+      const label = UNITS[unit].label
+      for (const typed of [`50 ${label}`, `50${label}`]) {
+        expect.soft(checkAnswer(typed, field({ value: 50, tol: 0.5, unit: label })).verdict, `"${typed}" for a box in ${label}`).toBe('right')
+      }
+    }
+  })
+
+  it('every label in UNITS, typed after a number, is stripped by parseAnswer — spaced and unspaced', () => {
+    for (const label of LABELS) {
+      for (const typed of [`50 ${label}`, `50${label}`]) expect.soft(parseAnswer(typed), `"${typed}"`).toBe(50)
+    }
+  })
+
+  it('a unit written the way a plain keyboard writes it is stripped too — m^2, m2, m^3, m/s^2, m / s, km / h, rad / s, N · m, kg m/s, kg·m/s', () => {
+    for (const unit of ['m^2', 'm2', 'm^3', 'm3', 'm/s^2', 'm/s2', 'm / s', 'km / h', 'rad / s', 'N · m', 'N m', 'Nm', 'kg m/s', 'kg·m/s', 'deg', 'degrees']) {
+      expect.soft(parseAnswer(`7 ${unit}`), `"7 ${unit}"`).toBe(7)
+    }
+  })
+
+  it('the electron charge as the reveal writes it, "1.6×10^-19 C", and as it is typed, "1.6e-19 C", is read as 1.6e-19 and marks right', () => {
+    const charge = field({ value: 1.6e-19, tol: 0.02 * 1.6e-19, unit: 'C' })
+    for (const typed of ['1.6×10^-19 C', '1.6e-19 C', '1.6E-19 C', '1.6 × 10⁻¹⁹ C', '1.6e-19C']) {
+      expect.soft(parseAnswer(typed), `"${typed}" read`).toBe(1.6e-19)
+      expect.soft(checkAnswer(typed, charge).verdict, `"${typed}" marked`).toBe('right')
+    }
+    // What the "show me" button prints for it, typed back.
+    const shown = expectedText(charge, { decimals: 2, precisionMode: 'dp' })
+    expect(shown).toBe('1.6×10^-19 C')
+    expect(checkAnswer(shown, charge).verdict).toBe('right')
+  })
+
+  it('a degree sign sits against its number and °C reads as one unit — "100°C", "100 °C", "37°"', () => {
+    expect(parseAnswer('100°C')).toBe(100)
+    expect(parseAnswer('100 °C')).toBe(100)
+    expect(parseAnswer('37°')).toBe(37)
+    expect(checkAnswer('100 °C', field({ value: 100, tol: 1, unit: '°C' })).verdict).toBe('right')
+  })
+
+  it('GUARD: a letter that is no unit is maths, not a unit — 2x, 3 x and 5 a are unreadable and 5e is five times Euler’s number', () => {
+    for (const typed of ['2x', '3 x', '5 a', '5a']) expect.soft(parseAnswer(typed), `"${typed}"`).toBeNull()
+    expect(parseAnswer('5e')).toBeCloseTo(5 * Math.E, 12)
+    expect(parseAnswer('2 pi')).toBeCloseTo(2 * Math.PI, 12)
+    expect(parseAnswer('1.5e')).toBeCloseTo(1.5 * Math.E, 12)
+  })
+
+  it('GUARD: a lower-case v, c or k after a number is a variable, not a volt, a coulomb or a kelvin — "5 v", "5 c", "5 k" are unreadable (the labels are V, C and K)', () => {
+    for (const typed of ['5 v', '5 c', '5 k', '5v', '5c', '5k']) expect.soft(parseAnswer(typed), `"${typed}"`).toBeNull()
+  })
+
+  it('GUARD: a unit alone, with no number before it, is not a number — N, C, V, A, Hz, °C, m/s²', () => {
+    for (const typed of ['N', 'C', 'V', 'A', 'Hz', '°C', 'm/s²']) expect.soft(parseAnswer(typed), `"${typed}"`).toBeNull()
+  })
+
+  it('UNIT_TAIL gives the unit as it was typed in its first group, whatever its label — what questions/parts.ts quotes when it cannot read one', () => {
+    expect(UNIT_TAIL.exec('50 Hz')?.[1]).toBe('Hz')
+    expect(UNIT_TAIL.exec('50 km / h')?.[1]).toBe('km / h')
+    expect(UNIT_TAIL.exec('3 Ω')?.[1]).toBe('Ω')
+  })
+
+  it('GUARD: UNIT_TAIL still reads the units it always read in either case, as typed, and nothing else — the sentence for "5 KG" and "5 S" quotes them (questions/parts.ts)', () => {
+    expect(UNIT_TAIL.exec('50 KG')?.[1]).toBe('KG')
+    expect(UNIT_TAIL.exec('50 S')?.[1]).toBe('S')
+    expect(UNIT_TAIL.exec('50 units')?.[1]).toBe('units')
+    expect(UNIT_TAIL.exec('7 UNITS')?.[1]).toBe('UNITS')
+    expect(UNIT_TAIL.exec('37 DEGREES')?.[1]).toBe('DEGREES')
+    expect(parseAnswer('37 Degrees')).toBe(37)
+    expect(UNIT_TAIL.exec('5 m/s^2')?.[1]).toBe('m/s^2')
+    expect(UNIT_TAIL.exec('50 x')).toBeNull()
+    // exec and replace are used on it without lastIndex bookkeeping, so it must not be global or sticky.
+    expect(UNIT_TAIL.global).toBe(false)
+    expect(UNIT_TAIL.sticky).toBe(false)
   })
 })

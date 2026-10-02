@@ -81,7 +81,7 @@ describe('#9 the band round each root is its own, not the largest value in the s
     expect(checkRootsPart('2, 1021000000', part, {}, S).verdict).toBe('wrong')
   })
 
-  it('a root of exactly 0 keeps its floor of 10⁻⁹, however large the other root', () => {
+  it('a root of exactly 0 next to 10⁹ keeps a floor of 10⁻⁹ × 10⁻⁶ × 10⁹ = 10⁻⁶ (10⁻⁹ of a millionth of the largest root): "0" is right, "0.5" is not', () => {
     const zero: RootsPart = { ...part, answer: ['0', '1000000000'] }
     expect(checkRootsPart('0, 1000000000', zero, {}, S).verdict).toBe('right')
     expect(checkRootsPart('0.5, 1000000000', zero, {}, S).verdict).toBe('wrong')
