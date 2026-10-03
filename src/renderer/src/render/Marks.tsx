@@ -6,7 +6,8 @@ import { FatLine } from './FatLine'
 import { useView } from './viewState'
 import { useScene } from '../core/store'
 import { themeColor, useThemed } from '../app/theme'
-import { add, normalize, scale, sub, type V3 } from '../math/vec'
+import type { V3 } from '../math/vec'
+import { arcLines, tickLines, tickNormal } from './markGeometry'
 
 export interface Marks {
   /** A side, and how many ticks it gets (sides with the same count are equal). */
@@ -26,40 +27,9 @@ export function MarksView() {
   const colour = useThemed(() => themeColor('--good'))
   if (!marks) return null
   const lines: V3[][] = []
-  for (const t of marks.ticks) {
-    const mid = scale(add(t.a, t.b), 0.5)
-    const dir = normalize(sub(t.b, t.a))
-    const perp: V3 = [-dir[1], dir[0], 0]
-    const half = 6 * wpp
-    const gap = 5 * wpp
-    for (let i = 0; i < t.n; i++) {
-      const c = add(mid, scale(dir, (i - (t.n - 1) / 2) * gap))
-      lines.push([add(c, scale(perp, half)), sub(c, scale(perp, half))])
-    }
-  }
-  for (const arc of showArcs ? marks.arcs : []) {
-    const u = normalize(sub(arc.a, arc.vertex))
-    const v = normalize(sub(arc.b, arc.vertex))
-    let a0 = Math.atan2(u[1], u[0])
-    const a1 = Math.atan2(v[1], v[0])
-    // Sweep the short way round, the inside of the corner.
-    let d = a1 - a0
-    while (d > Math.PI) d -= 2 * Math.PI
-    while (d < -Math.PI) d += 2 * Math.PI
-    if (d < 0) {
-      a0 = a1
-      d = -d
-    }
-    for (let i = 0; i < arc.n; i++) {
-      const r = (22 + i * 5) * wpp
-      const pts: V3[] = []
-      for (let k = 0; k <= 24; k++) {
-        const t = a0 + (d * k) / 24
-        pts.push([arc.vertex[0] + r * Math.cos(t), arc.vertex[1] + r * Math.sin(t), arc.vertex[2]])
-      }
-      lines.push(pts)
-    }
-  }
+  // Marks lie in the plane of the shape they mark, so they read right when the triangle stands upright in 3-D.
+  for (const t of marks.ticks) lines.push(...tickLines(t, tickNormal(t, marks.ticks, marks.arcs), 6 * wpp, 5 * wpp))
+  for (const arc of showArcs ? marks.arcs : []) lines.push(...arcLines(arc, 22 * wpp, 5 * wpp))
   return (
     <>
       {lines.map((pts, i) => (

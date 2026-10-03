@@ -4,7 +4,7 @@
 // still numbered its axes 1, 2, 3, so the picture and the Measure panel disagreed about where
 // anything was. Every number here goes through the same unit and scale as every other number.
 
-import { fmtPrecise, measureValue, UNIT_LABELS, type MeasureSettings } from '../math/format'
+import { fmtPrecise, measureValue, superscriptPowers, UNIT_LABELS, type MeasureSettings } from '../math/format'
 import { axisTicks, MIN_LABEL_PX } from './ticks'
 import type { V3 } from '../math/vec'
 
@@ -27,12 +27,14 @@ const MOST_TICK_DECIMALS = 4
  * nice step, so the step decides how many decimals are shown, not the precision setting: 3 s.f.
  * would turn the axis into 1.00, 2.00, 3.00. The user's decimal places are still the ceiling,
  * because a scale of 0.3333333 cm per square would otherwise number every line to seven places.
+ * At a huge scale the formatter switches to a power of ten; the axis is read, never typed back,
+ * so the power is raised (2 × 10⁹) instead of left as programming syntax (2×10^9).
  */
 export function tickText(v: number, step: number, s: MeasureSettings): string {
   const value = measureValue(v, 'length', s)
   const ceiling = s.precisionMode === 'dp' ? Math.max(1, s.decimals) : MOST_TICK_DECIMALS
   const decimals = Math.min(tickDecimals(measureValue(step, 'length', s)), ceiling)
-  return fmtPrecise(value, { decimals, precisionMode: 'dp' })
+  return superscriptPowers(fmtPrecise(value, { decimals, precisionMode: 'dp' }))
 }
 
 /**

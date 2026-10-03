@@ -33,8 +33,8 @@ describe('H13 slider label precision', () => {
     expect(sliderLabel(0.123456, 0.001, { decimals: 3, precisionMode: 'sf' })).toBe('0.123')
   })
   it('raises a power of ten instead of showing a caret', () => {
-    expect(sliderLabel(1e12, 1, { decimals: 3, precisionMode: 'sf' })).toBe('1.00 × 10¹²')
-    expect(sliderLabel(-2.5e-8, 1, { decimals: 2, precisionMode: 'sf' })).toBe('−2.5 × 10⁻⁸')
+    expect(sliderLabel(1e12, 1, { decimals: 3, precisionMode: 'sf' })).toBe('1.00\u00a0×\u00a010¹²')
+    expect(sliderLabel(-2.5e-8, 1, { decimals: 2, precisionMode: 'sf' })).toBe('−2.5\u00a0×\u00a010⁻⁸')
   })
   it('never reads 0 for a value a few tiny steps from zero', () => {
     // String(1e-7) is "1e-7", so sliderLabel counts no step places; the label still reads 3 × 10⁻⁷

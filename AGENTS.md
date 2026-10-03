@@ -342,6 +342,12 @@ neighbour is open.
   it while the student is still typing. Guard: `tests/topBarInputs.test.ts`.
 - **Panel text uses `fmtLabel`, which gives raised powers.** `fmtPrecise` keeps the caret, so use it only for text that
   is read back. Guard: `tests/shellLogic.test.ts` › H13.
+- **A drawing tool may drop only what this drawing made.** Check `created` before deleting a pick, and never call the
+  store's undo from a tool. Guard: `tests/toolStepBack.test.ts`.
+- **Write grid and line data into the existing GPU buffer** (draw range / instanceCount) instead of making a new
+  attribute on every rebuild. Read the draw range, not `attribute.count`. Guard: `tests/gpuBuffers.test.ts`.
+- **`superscriptPowers` writes U+00A0 around ×.** Write it as ` ` in source, never as a raw character: lint rejects
+  the raw character, and readers cannot see it. A shown value typed back still reads (`tests/rawPowers.test.ts`).
 
 ## Code knowledge
 

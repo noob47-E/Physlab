@@ -10,16 +10,16 @@ import { drawingClickHit, joinsPointWithSnapOff, marqueeStarted, mergeSelection,
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { drag3D } from './viewMath'
+import { canDrag, collectFreePoints, dragFrom, selectionAfterClick, tipAngle, tipLength, tipNumber } from './pointerMath'
 import { useTurnMode } from './viewState'
 import { showContextMenu } from '../ui/ContextMenu'
 import { Arrow } from './ObjectViews'
 import { Builder } from '../core/factory'
-import { asGLine, dependentsOf, isFree, parentRefs } from '../core/evaluate'
+import { asGLine, dependentsOf, isFree } from '../core/evaluate'
 import { intersectionsOf } from '../math/intersections'
 import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { add, dist, dot, heading, len, normalize, scale, sub, type V3 } from '../math/vec'
-import { formatMeasure } from '../math/format'
 import { recognizeStroke } from '../math/shapes'
 import { visibleOrder } from '../core/visibility'
 import { minorStepOf, normaliseGridStyle, sketchSnap, snapStep, snapToGrid, styleFor3D } from './gridMath'
@@ -253,9 +253,10 @@ export function Interaction() {
       return best
     }
 
-    const fmtL = (v: number) => formatMeasure(v, 'length', scene().settings)
-    const fmtA = (r: number) => formatMeasure(r, 'angle', scene().settings)
-    const coordText = (p: V3) => `(${[p[0], p[1]].map((v) => fmtL(v).replace(/ \S+$/, '')).join(', ')})`
+    const fmtL = (v: number) => tipLength(v, scene().settings)
+    const fmtA = (r: number) => tipAngle(r, scene().settings)
+    const fmtN = (v: number) => tipNumber(v, scene().settings)
+    const coordText = (p: V3) => `(${[p[0], p[1]].map(fmtN).join(', ')})`
     const snapNote = (sn: SnapInfo) =>
       sn.kind === 'point'
         ? `  • on ${sn.label}`
@@ -347,10 +348,15 @@ export function Interaction() {
           box.current = { x0: x, y0: y }
           return
         }
-        setControls(false)
         if (e.shiftKey) s.select([hit.id], true)
         else if (!s.selection.includes(hit.id)) s.select([hit.id])
-        startDrag(hit)
+        // Only a press that can drag takes the camera controls from the camera: a locked object
+        // or a point that cannot move is just selected (W3, W22).
+        const o = s.objects[hit.id]
+        if (o && canDrag(o, s.objects)) {
+          setControls(false)
+          startDrag(hit)
+        }
         return
       }
       // Creation tools own the left button.
@@ -372,19 +378,13 @@ export function Interaction() {
       const s = scene()
       const o = s.objects[hit.id]
       const c = s.ev.values.get(hit.id)
-      if (!o || !c || o.locked) return
-      const cam = ctxRef.current.camera
+      if (!o || !c || !canDrag(o, s.objects)) return
       let anchor: V3 = [0, 0, 0]
       if (c.type === 'point' || c.type === 'text') anchor = c.p
       else if (c.type === 'vector') anchor = hit.part === 'head' ? add(c.tail, c.comp) : c.tail
-      let plane: THREE.Plane
-      if (s.viewMode === '2d') plane = XY_PLANE
-      else {
-        plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -anchor[2])
-        const view = new THREE.Vector3()
-        cam.getWorldDirection(view)
-        if (Math.abs(view.z) < 0.15) plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(view.x, view.y, 0).normalize(), new THREE.Vector3(...anchor))
-      }
+      // The start is the grabbed spot on the drag plane itself, not on the floor (W4).
+      const at = down.current
+      const { plane, startWorld } = at ? dragFrom(ctxRef.current.camera, ctxRef.current.size, at.x, at.y, s.viewMode, anchor) : { plane: XY_PLANE, startWorld: anchor }
       const starts = new Map<ObjId, V3>()
       collectFreePoints(o, s.objects, starts)
       // Nothing that moves with the drag may be snapped onto: the object, the points it is
@@ -395,7 +395,7 @@ export function Interaction() {
       drag.current = {
         hit,
         plane,
-        startWorld: down.current?.world ?? anchor,
+        startWorld,
         starts,
         startComp: c.type === 'vector' ? c.comp : undefined,
         startTail: c.type === 'vector' ? c.tail : undefined,
@@ -460,7 +460,7 @@ export function Interaction() {
         if (anchorPt && ['vector', 'segment', 'line', 'ray', 'distance', 'triangle', 'polygon', 'angle'].includes(s.tool)) {
           const dv = sub(cursor, anchorPt)
           text = `${s.tool === 'vector' ? '|v| = ' : 'length = '}${fmtL(len(dv))}   θ = ${fmtA(heading(dv))}`
-          if (s.tool === 'vector') text += `   (${fmtL(dv[0]).replace(/ \S+$/, '')}, ${fmtL(dv[1]).replace(/ \S+$/, '')})`
+          if (s.tool === 'vector') text += `   (${fmtN(dv[0])}, ${fmtN(dv[1])})`
         } else if (anchorPt && s.tool === 'circle') text = `r = ${fmtL(dist(anchorPt, cursor))}`
         showTip(text + snapNote(sn), x, y)
       } else showTip(null)
@@ -507,13 +507,7 @@ export function Interaction() {
 
     const isDraggable = (hit: Hit) => {
       const o = scene().objects[hit.id]
-      if (!o) return false
-      if (isFree(o)) return true
-      // Points that live on a side slide along it.
-      if (o.type === 'point' && o.def.kind === 'onObject') return true
-      const m = new Map<ObjId, V3>()
-      collectFreePoints(o, scene().objects, m)
-      return m.size > 0
+      return !!o && canDrag(o, scene().objects)
     }
 
     const applyDrag = (d: DragState, x: number, y: number, e: PointerEvent) => {
@@ -708,6 +702,8 @@ export function Interaction() {
       drag.current = null
       if (d) {
         if (d.moved) s.endGesture()
+        const next = selectionAfterClick(s.selection, d.hit.id, e.shiftKey, d.moved)
+        if (next) s.select(next)
         setControls(true)
         showTip(null)
         return
@@ -717,8 +713,14 @@ export function Interaction() {
       if (!dn) return
       const { x, y } = local(e)
       const tool = s.tool
-      if (tool === 'select') return
+      // Turned back on for every press, also one on a locked object, which starts no drag and
+      // once left the controls off until the next press on empty space (W3).
       setControls(true)
+      if (tool === 'select') {
+        const next = dn.hit ? selectionAfterClick(s.selection, dn.hit.id, e.shiftKey, Math.hypot(x - dn.x, y - dn.y) >= 3) : null
+        if (next) s.select(next)
+        return
+      }
       const clickLike = Math.hypot(x - dn.x, y - dn.y) < 5
 
       if (tool === 'vector') {
@@ -855,24 +857,6 @@ export function setLeftDrag(buttons: LeftButton, act: 'turn' | 'pan'): void {
  */
 export function releaseLeftDrag(buttons: LeftButton | null): void {
   if (buttons) buttons.LEFT = THREE.MOUSE.ROTATE
-}
-
-function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneObject>, out: Map<ObjId, V3>, seen = new Set<ObjId>()) {
-  if (seen.has(o.id)) return
-  seen.add(o.id)
-  if (o.type === 'point' && o.def.kind === 'free') {
-    out.set(o.id, o.def.p)
-    return
-  }
-  if (o.type === 'vector' && o.def.kind === 'free') {
-    out.set(o.id, o.def.tail)
-    return
-  }
-  if (o.type === 'point') return // dependent points do not move their parents
-  for (const pid of parentRefs(o)) {
-    const p = objects[pid]
-    if (p) collectFreePoints(p, objects, out, seen)
-  }
 }
 
 /**

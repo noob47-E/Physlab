@@ -6,6 +6,7 @@ import { niceStep, orthoBounds, toScreen, worldPerPixel } from './cameraUtils'
 import { abs, float, fract, fwidth, max, mix, positionLocal, saturate, uniform, vec4 } from 'three/tsl'
 import { DOT_HALF_PX, dotQuads, finiteArea, GRID_LINE_PX, gridKey, gridShaderPlan, gridVertices, minorStepOf, needsGridRebuild, normaliseGridStyle, shaderGridQuad, styleFor3D, usableSize, type GridArea } from './gridMath'
 import { useGpuInfo } from './renderer'
+import { drawnVertices, writePositions } from './gpuBuffers'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
@@ -155,13 +156,9 @@ function fillShaderGrid(g: ShaderGrid, style: GridStyle, area: GridArea, majorSt
 /** Rebuild the grid for one style; `dotHalf` is half a dot's side in world units (see `dotQuads`), `wpp` the world units one pixel spans (it sizes the chords of the polar circles). */
 function fillGrid([minor, major, dots]: GridLines, style: GridStyle, area: GridArea, majorStep: number, minorStep: number, dotHalf: number, wpp: number, z = 0) {
   const v = gridVertices(style, area, majorStep, minorStep, z, wpp)
-  const put = (obj: THREE.Object3D & { geometry: THREE.BufferGeometry }, pos: number[]) => {
-    obj.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-    obj.geometry.computeBoundingSphere()
-  }
-  put(minor, v.minor)
-  put(major, v.major)
-  put(dots, dotQuads(v.dots, dotHalf))
+  writePositions(minor.geometry, v.minor)
+  writePositions(major.geometry, v.major)
+  writePositions(dots.geometry, dotQuads(v.dots, dotHalf))
 }
 
 /** Show or hide the shader grid (the line path's twin is `showGridLines`). */
@@ -171,7 +168,7 @@ function showShaderGrid(g: ShaderGrid, show: boolean) {
 
 /** Show or hide the grid. A part the style does not use is hidden rather than drawn empty: a zero-vertex draw call is still a draw call, and WebGPU warns about each one. */
 function showGridLines(lines: GridLines, show: boolean) {
-  for (const l of lines) l.visible = show && ((l.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0) > 0
+  for (const l of lines) l.visible = show && drawnVertices(l.geometry) > 0
 }
 
 /** Adaptive 2D graph-paper grid with numbered axes. */
@@ -233,7 +230,7 @@ export function Grid2D() {
     showGridLines(lines, showGrid && path === 'lines')
     showShaderGrid(shader, showGrid && path === 'shader')
     if (trace) {
-      const verts = path === 'shader' ? 4 : ((minor.geometry.getAttribute('position') as THREE.BufferAttribute | undefined)?.count ?? 0)
+      const verts = path === 'shader' ? 4 : drawnVertices(minor.geometry)
       console.info(
         `PHYSLAB_CHECK grid f${trace} path=${path} backend=${backend} build=${buildMs.current.toFixed(2)}ms size=${size.width}x${size.height} zoom=${zoom} step=${majorStep}/${minorStep} x=[${b.xMin.toFixed(2)},${b.xMax.toFixed(2)}] y=[${b.yMin.toFixed(2)},${b.yMax.toFixed(2)}] key=${key} prev=${prev.key} verts=${verts} axes=${axes.x.length} grid=${showGrid} axesOn=${showAxes}`
       )

@@ -301,7 +301,7 @@ describe('V2 — a field never pushes the panel wider, and a size too big to dra
     const said = tooBigToDraw(1e6, s, 1200)!
     expect(said).toMatch(/^Too big to draw at this scale/)
     expect(said).not.toContain('^')
-    expect(said).toContain('× 10¹⁰')
+    expect(said).toContain('×\u00a010¹⁰')
     expect(said).toContain(superscriptPowers(formatMeasure(limit, 'length', s)))
     expect(said).not.toMatch(E_FORM)
     // Under 10⁹ nothing changes: the limit is a plain number there.
@@ -1116,38 +1116,38 @@ describe('V6 (plain text) — the drawing’s labels write a power of ten raised
     return scene().objects[arrowOf('A')] as VectorObj
   }
 
-  it('measureText of a vector 8.89×10¹⁹ cm long at 67° is 8.89 × 10¹⁹ cm ∠ 67°, compact and with its components', () => {
+  it('measureText of a vector 8.89×10¹⁹ cm long at 67° is 8.89\u00a0×\u00a010¹⁹ cm ∠ 67°, compact and with its components', () => {
     const o = arrow()
     const c: Computed = { type: 'vector', tail: [0, 0, 0], comp: planarBig }
-    expect(measureText(o, c, scene().settings, false)).toBe('8.89 × 10¹⁹ cm ∠ 67°')
-    expect(measureText(o, c, scene().settings, true)).toBe('8.89 × 10¹⁹ cm ∠ 67°  (3.47 × 10¹⁹, 8.18 × 10¹⁹)')
+    expect(measureText(o, c, scene().settings, false)).toBe('8.89\u00a0×\u00a010¹⁹ cm ∠ 67°')
+    expect(measureText(o, c, scene().settings, true)).toBe('8.89\u00a0×\u00a010¹⁹ cm ∠ 67°  (3.47\u00a0×\u00a010¹⁹, 8.18\u00a0×\u00a010¹⁹)')
     // A small one (fmt writes anything under 10⁻¹² as 0, so 10⁻⁷ is the smallest a chip can show). Each
-    // component loses its unit before its power is raised: "1.6 × 10⁻⁷", never a "10⁻⁷" cut off as a unit.
+    // component loses its unit before its power is raised: "1.6\u00a0×\u00a010⁻⁷", never a "10⁻⁷" cut off as a unit.
     const small: Computed = { type: 'vector', tail: [0, 0, 0], comp: [1.6e-7, 0, 0] }
-    expect(measureText(o, small, scene().settings, true)).toBe('1.6 × 10⁻⁷ cm ∠ 0°  (1.6 × 10⁻⁷, 0)')
+    expect(measureText(o, small, scene().settings, true)).toBe('1.6\u00a0×\u00a010⁻⁷ cm ∠ 0°  (1.6\u00a0×\u00a010⁻⁷, 0)')
   })
 
   // F2: fmtPrecise writes anything under 10⁻¹² as 0 (a drag's noise), so a card typed as 1.6×10⁻¹⁹ ∠ 30° drew the
-  // chip "A 0 cm ∠ 30°" while its card line said 1.6 × 10⁻¹⁹. A vector whose whole size is under the floor is written
+  // chip "A 0 cm ∠ 30°" while its card line said 1.6\u00a0×\u00a010⁻¹⁹. A vector whose whole size is under the floor is written
   // in scientific form, in the same unit as before; a component under 10⁻¹² of its size is noise beside it, as in the card line.
   it('a vector under 10⁻¹² is written in scientific form on its chip, in its own unit, never as 0 (F2)', () => {
     const o = arrow()
     const s = scene().settings
     const tiny = (comp: V3): Computed => ({ type: 'vector', tail: [0, 0, 0], comp })
     const at30 = tiny(fromPolar(1.6e-19, toRad(30)))
-    expect(measureText(o, at30, s, false)).toBe('1.6 × 10⁻¹⁹ cm ∠ 30°')
-    expect(measureText(o, at30, s, true)).toBe('1.6 × 10⁻¹⁹ cm ∠ 30°  (1.39 × 10⁻¹⁹, 8 × 10⁻²⁰)')
+    expect(measureText(o, at30, s, false)).toBe('1.6\u00a0×\u00a010⁻¹⁹ cm ∠ 30°')
+    expect(measureText(o, at30, s, true)).toBe('1.6\u00a0×\u00a010⁻¹⁹ cm ∠ 30°  (1.39\u00a0×\u00a010⁻¹⁹, 8\u00a0×\u00a010⁻²⁰)')
     expect(measureText(o, at30, s, true)).not.toMatch(/ 0 |\^/)
     // 3.06×10⁻¹⁶ of 5 is noise beside it, and 6×10⁻³⁶ of 1.6×10⁻¹⁹ is too: the component is 0, not written out.
-    expect(measureText(o, tiny(fromPolar(1.6e-19, toRad(90))), s, true)).toBe('1.6 × 10⁻¹⁹ cm ∠ 90°  (0, 1.6 × 10⁻¹⁹)')
+    expect(measureText(o, tiny(fromPolar(1.6e-19, toRad(90))), s, true)).toBe('1.6\u00a0×\u00a010⁻¹⁹ cm ∠ 90°  (0, 1.6\u00a0×\u00a010⁻¹⁹)')
     // One out of the plane keeps its z (the plane test is relative to its own size, as the card line's is) and has no angle.
-    expect(measureText(o, tiny([0, 0, 1.6e-19]), s, false)).toBe('1.6 × 10⁻¹⁹ cm')
-    expect(measureText(o, tiny([0, 0, 1.6e-19]), s, true)).toBe('1.6 × 10⁻¹⁹ cm  (0, 0, 1.6 × 10⁻¹⁹)')
+    expect(measureText(o, tiny([0, 0, 1.6e-19]), s, false)).toBe('1.6\u00a0×\u00a010⁻¹⁹ cm')
+    expect(measureText(o, tiny([0, 0, 1.6e-19]), s, true)).toBe('1.6\u00a0×\u00a010⁻¹⁹ cm  (0, 0, 1.6\u00a0×\u00a010⁻¹⁹)')
     // The unit is the one vectorAmount gives: the drawing's, scaled by the grid, or a question's own, as it is.
-    expect(measureText(o, at30, { ...s, unitPerSquare: 2 }, false)).toBe('3.2 × 10⁻¹⁹ cm ∠ 30°')
-    expect(measureText({ ...o, unit: 'N' }, at30, { ...s, unitPerSquare: 2 }, true)).toBe('1.6 × 10⁻¹⁹ N ∠ 30°  (1.39 × 10⁻¹⁹, 8 × 10⁻²⁰)')
+    expect(measureText(o, at30, { ...s, unitPerSquare: 2 }, false)).toBe('3.2\u00a0×\u00a010⁻¹⁹ cm ∠ 30°')
+    expect(measureText({ ...o, unit: 'N' }, at30, { ...s, unitPerSquare: 2 }, true)).toBe('1.6\u00a0×\u00a010⁻¹⁹ N ∠ 30°  (1.39\u00a0×\u00a010⁻¹⁹, 8\u00a0×\u00a010⁻²⁰)')
     // The floor is on the number the student sees: 10⁻³ squares at 10⁻¹⁰ cm a square is 10⁻¹³ cm.
-    expect(measureText(o, tiny([1e-3, 0, 0]), { ...s, unitPerSquare: 1e-10 }, false)).toBe('1 × 10⁻¹³ cm ∠ 0°')
+    expect(measureText(o, tiny([1e-3, 0, 0]), { ...s, unitPerSquare: 1e-10 }, false)).toBe('1\u00a0×\u00a010⁻¹³ cm ∠ 0°')
     // Nothing else changes: an ordinary vector, the zero vector, and one with only noise in a component.
     expect(measureText(o, tiny([3, 4, 0]), s, false)).toBe('5 cm ∠ 53.13°')
     expect(measureText(o, tiny([3, 4, 0]), s, true)).toBe('5 cm ∠ 53.13°  (3, 4)')
@@ -1170,7 +1170,7 @@ describe('V6 (plain text) — the drawing’s labels write a power of ten raised
     expect(measureText({ ...o, unit: 'N' }, zero, s, false)).toBe('0 N, no direction')
     // A vector with a direction keeps its ∠: ordinary, one under the noise floor, and one out of the plane (no ∠, as before).
     expect(measureText(o, vec([3, 4, 0]), s, false)).toBe('5 cm ∠ 53.13°')
-    expect(measureText(o, vec([1.6e-19, 0, 0]), s, false)).toBe('1.6 × 10⁻¹⁹ cm ∠ 0°')
+    expect(measureText(o, vec([1.6e-19, 0, 0]), s, false)).toBe('1.6\u00a0×\u00a010⁻¹⁹ cm ∠ 0°')
     expect(measureText(o, vec([0, 0, 2]), s, false)).toBe('2 cm')
   })
 
@@ -1179,10 +1179,10 @@ describe('V6 (plain text) — the drawing’s labels write a power of ten raised
     const s = scene().settings
     const line = (d: V3) => ({ kind: 'segment' as const, p: [0, 0, 0] as V3, d })
     const cases: [Computed, boolean, string][] = [
-      [{ type: 'segment', line: line([BIG, 0, 0]) }, false, '8.89 × 10¹⁹ cm'],
-      [{ type: 'number', value: BIG }, false, '8.89 × 10¹⁹'],
-      [{ type: 'circle', circle: { c: [0, 0, 0], r: BIG } }, false, 'r = 8.89 × 10¹⁹ cm'],
-      [{ type: 'point', p: [BIG, 2, 0] }, true, '(8.89 × 10¹⁹, 2)'],
+      [{ type: 'segment', line: line([BIG, 0, 0]) }, false, '8.89\u00a0×\u00a010¹⁹ cm'],
+      [{ type: 'number', value: BIG }, false, '8.89\u00a0×\u00a010¹⁹'],
+      [{ type: 'circle', circle: { c: [0, 0, 0], r: BIG } }, false, 'r = 8.89\u00a0×\u00a010¹⁹ cm'],
+      [{ type: 'point', p: [BIG, 2, 0] }, true, '(8.89\u00a0×\u00a010¹⁹, 2)'],
       [{ type: 'segment', line: line([3, 4, 0]) }, false, '5 cm'],
       [{ type: 'point', p: [3, 4, 0] }, true, '(3, 4)']
     ]

@@ -5,6 +5,7 @@ import { LineSegments2 } from 'three/addons/lines/webgpu/LineSegments2.js'
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import type { V3 } from '../math/vec'
+import { writeLinePoints } from './gpuBuffers'
 
 export interface FatLineProps {
   /** Polyline vertices, or pairs of segment endpoints when `segments` is true. */
@@ -60,8 +61,7 @@ export function FatLine({
     const minCount = segments ? 6 : 6
     obj.visible = visible && flat.length >= minCount && flat.every(Number.isFinite)
     if (!obj.visible) return
-    ;(obj.geometry as LineGeometry).setPositions(flat)
-    if (dashed) obj.computeLineDistances()
+    writeLinePoints(obj, flat, segments, dashed)
   }, [obj, points, closed, segments, dashed, visible])
 
   useEffect(() => {

@@ -434,10 +434,11 @@ const RAISED_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹'
  * formatters write is touched — "x^2", LaTeX's "\times 10^{…}", e-notation and a power already
  * raised pass through as they are — so running it twice changes nothing. It is a separate step
  * because fmt, fmtPrecise and fmtSci must keep writing the caret: shownValue, sciExponent and
- * toTex read that form back.
+ * toTex read that form back. The spaces either side of × are no-break spaces (U+00A0), so a narrow
+ * panel can never wrap "7.6 ×" away from "10⁹ u".
  */
 export function superscriptPowers(text: string): string {
-  return text.replace(/×10\^(-?\d+)/g, (_all, e: string) => ` × 10${e.replace(/\d/g, (d) => RAISED_DIGITS[Number(d)]).replace('-', '⁻')}`)
+  return text.replace(/×10\^(-?\d+)/g, (_all, e: string) => `\u00a0×\u00a010${e.replace(/\d/g, (d) => RAISED_DIGITS[Number(d)]).replace('-', '⁻')}`)
 }
 
 /**

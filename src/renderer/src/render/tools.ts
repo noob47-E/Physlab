@@ -182,30 +182,35 @@ export interface ToolRuntime {
   /** Points this tool itself created for the drawing in progress. Esc removes these and no others:
    *  it used to remove every unused point it had been clicked on, including ones placed earlier. */
   created: ObjId[]
+  /** Sides the Segment tool has drawn in this drawing, oldest first. Its picks hold only the end
+   *  the pen is at, so Backspace takes the last of these to step back to the point before. */
+  sides: ObjId[]
   /** The selection box being dragged on empty space with the Move tool, or null. */
   marquee: Marquee | null
 }
 
-export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [], created: [], marquee: null }))
+export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [], created: [], sides: [], marquee: null }))
 
 // The snap marker goes too: a tool that has finished, or been swapped for another, has nothing to
 // point at, and the ring used to stay on the last crossing until the mouse moved again.
-export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [], marquee: null, snap: null })
+export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [], sides: [], marquee: null, snap: null })
 
 /** Is a tool part-way through a drawing (so Finish / Undo point / Cancel apply)? */
 export const isDrawing = (): boolean => useTool.getState().picks.length > 0
 
-/** Delete points this tool created that nothing ended up using. */
-function dropUnusedPicks(picks: ObjId[]): void {
+/**
+ * Delete the picked points that this drawing made itself (`created`) and nothing ended up using.
+ * A point placed before the drawing began is never taken, used or not: Finish and Backspace used
+ * to drop any unused pick, so clicking an earlier point and pressing Enter deleted it, and with it
+ * a midpoint built on it (W1). A point built on a pick (a midpoint, a crossing) counts as using it.
+ */
+function dropUnusedPicks(picks: ObjId[], created: readonly ObjId[]): void {
   const s = scene()
   const used = new Set<ObjId>()
-  for (const o of Object.values(s.objects)) {
-    if (o.type === 'point') continue
-    for (const r of parentRefs(o)) used.add(r)
-  }
+  for (const o of Object.values(s.objects)) for (const r of parentRefs(o)) used.add(r)
   const drop = picks.filter((id) => {
     const o = s.objects[id]
-    return !!o && o.type === 'point' && isFree(o) && !used.has(id)
+    return created.includes(id) && !!o && o.type === 'point' && isFree(o) && !used.has(id)
   })
   if (drop.length) s.removeObjects(drop)
 }
@@ -216,7 +221,7 @@ function dropUnusedPicks(picks: ObjId[]): void {
  */
 export function finishTool(): boolean {
   const s = scene()
-  const picks = useTool.getState().picks
+  const { picks, created } = useTool.getState()
   if (!picks.length) return false
   if (s.tool === 'polygon' && picks.length >= 3) {
     const b = new Builder()
@@ -228,7 +233,7 @@ export function finishTool(): boolean {
     return true
   }
   resetTool()
-  dropUnusedPicks(picks)
+  dropUnusedPicks(picks, created)
   return true
 }
 
@@ -237,23 +242,37 @@ export function cancelTool(): boolean {
   const { picks, created } = useTool.getState()
   if (!picks.length) return false
   resetTool()
-  dropUnusedPicks(picks.filter((id) => created.includes(id)))
+  dropUnusedPicks(picks, created)
   return true
 }
 
-/** Step back one point (Backspace). Sides already drawn are undone through the scene's history. */
+/**
+ * Step back one point of the drawing in progress (Backspace), touching nothing made before it.
+ * The Segment tool used to call the scene's undo here, which reverted whatever was done last —
+ * an earlier circle when the drawing had begun on an existing point — and then ended the drawing
+ * (W2). Now it takes away its own last side and that side's end point, if the drawing made it, and
+ * the pen goes back to the side's start; with no side of its own yet the drawing simply ends.
+ */
 export function undoLastPick(): boolean {
   const s = scene()
-  const picks = useTool.getState().picks
+  const { picks, created, sides } = useTool.getState()
   if (!picks.length) return false
+  const last = picks[picks.length - 1]
   if (s.tool === 'segment') {
-    s.undo()
-    resetTool()
+    const sideId = sides[sides.length - 1]
+    const side = sideId ? s.objects[sideId] : undefined
+    if (side?.type !== 'segment') {
+      resetTool()
+      dropUnusedPicks([last], created)
+      return true
+    }
+    useTool.setState({ picks: [side.a], sides: sides.slice(0, -1) })
+    s.removeObjects([side.id])
+    dropUnusedPicks([last], created)
     return true
   }
-  const last = picks[picks.length - 1]
   useTool.setState({ picks: picks.slice(0, -1) })
-  dropUnusedPicks([last])
+  dropUnusedPicks([last], created)
   return true
 }
 
@@ -356,9 +375,11 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
     case 'segment': {
       if (picks.length < 2) return false
       const segObj = b.segment(picks[0], picks[1])
+      const { created, sides } = useTool.getState()
       done()
-      // Continue drawing from the end point, like a pen (Esc to stop).
-      useTool.setState({ picks: [picks[1]] })
+      // Continue drawing from the end point, like a pen (Esc to stop). The drawing is still the
+      // same one, so what it made and the sides it drew are kept for Backspace and Esc.
+      useTool.setState({ picks: [picks[1]], created, sides: [...sides, segObj.id] })
       closeLoopIfAny(segObj.id)
       return true
     }

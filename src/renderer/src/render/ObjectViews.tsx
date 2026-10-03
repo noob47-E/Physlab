@@ -9,7 +9,7 @@ import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneO
 import { isFree } from '../core/evaluate'
 import { visibleIn } from '../core/visibility'
 import { componentTexts, freeCapitals } from '../core/naming'
-import { angleAt, centroid, orientedAngleAt } from '../math/geometry'
+import { centroid } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure, superscriptPowers } from '../math/format'
 import { decompose, type Decomposition } from '../math/decompose'
@@ -20,6 +20,7 @@ import { isResultArrow, RESULT_HEAD_GAP_PX, showsComponents } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 import { pieceNameAnchor } from './pieceLabels'
 import { BatchedArrow, useArrowBatched } from './ArrowBatch'
+import { arcBetween, cornerAngle, polygonCornerMark } from './markGeometry'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -243,22 +244,6 @@ function arcPoints(center: V3, r: number, from: number, to: number, steps = 48):
   return pts
 }
 
-/** Arc in the plane spanned by two directions u, v starting at a vertex (3D-safe). */
-function arcBetween(vertex: V3, u: V3, v: V3, r: number, steps = 40): V3[] {
-  const a = normalize(u)
-  const total = angleBetween(u, v)
-  let perp = sub(normalize(v), scale(a, Math.cos(total)))
-  const pl = len(perp)
-  if (pl < 1e-9) perp = Math.abs(a[2]) < 0.9 ? [-a[1], a[0], 0] : [0, -a[2], a[1]]
-  perp = normalize(perp)
-  const pts: V3[] = []
-  for (let i = 0; i <= steps; i++) {
-    const t = (total * i) / steps
-    pts.push(add(vertex, add(scale(a, r * Math.cos(t)), scale(perp, r * Math.sin(t)))))
-  }
-  return pts
-}
-
 export const VectorView = memo(function VectorView({ obj, c, selected, hovered, is3D }: ViewProps<VectorObj, Extract<Computed, { type: 'vector' }>>) {
   const { tail, comp } = c
   const head = add(tail, comp)
@@ -401,6 +386,7 @@ export const LineLikeView = memo(function LineLikeView({ obj, c, selected, hover
 export const CircleView = memo(function CircleView({ obj, c, selected, hovered }: ViewProps<CircleObj, Extract<Computed, { type: 'circle' }>>) {
   const { c: center, r } = c.circle
   const colors = useDrawingColors()
+  const colour = shownColor(obj)
   const pts = useMemo(() => arcPoints(center, r, 0, Math.PI * 2, 160), [center, r])
   useFrame(() => labelAnchors.set(obj.id, { p: [center[0] + r * Math.SQRT1_2, center[1] + r * Math.SQRT1_2, center[2]], dx: 10, dy: -10 }))
   return (
@@ -408,11 +394,12 @@ export const CircleView = memo(function CircleView({ obj, c, selected, hovered }
       {obj.fill && (
         <mesh position={center} scale={[r, r, 1]} renderOrder={1}>
           <circleGeometry args={[1, 96]} />
-          <meshBasicMaterial color={obj.color} transparent opacity={0.12} depthTest={false} depthWrite={false} />
+          {/* Keyed on theme and colour: WebGPU compiles a colour in, so a new one needs a new material. */}
+          <meshBasicMaterial key={`${colors.theme}${colour}`} color={colour} transparent opacity={0.12} depthTest={false} depthWrite={false} />
         </mesh>
       )}
       {selected && <FatLine points={pts} color={colors.select} width={6} renderOrder={4} />}
-      <FatLine points={pts} color={obj.color} width={hovered ? 2.8 : 2.2} renderOrder={5} />
+      <FatLine points={pts} color={colour} width={hovered ? 2.8 : 2.2} renderOrder={5} />
     </>
   )
 })
@@ -483,7 +470,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
       pts.forEach((v, i) => {
         const prev = pts[(i - 1 + pts.length) % pts.length]
         const next = pts[(i + 1) % pts.length]
-        const ang = pts.length === 3 ? angleAt(prev, v, next) : interiorAngle(prev, v, next, orientation)
+        const ang = cornerAngle(prev, v, next, orientation, pts.length === 3)
         let bis = normalize(add(normalize(sub(prev, v)), normalize(sub(next, v))))
         if (pts.length > 3 && ang > Math.PI) bis = scale(bis, -1)
         const w = worldPerPixel(cam, sz, v)
@@ -498,14 +485,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
     ? pts.map((v, i) => {
         const prev = pts[(i - 1 + pts.length) % pts.length]
         const next = pts[(i + 1) % pts.length]
-        const ang = angleAt(prev, v, next)
-        const r = 22 * wpp
-        if (Math.abs(toDeg(ang) - 90) < 1e-6) {
-          const u1 = scale(normalize(sub(prev, v)), r * 0.6)
-          const u2 = scale(normalize(sub(next, v)), r * 0.6)
-          return [add(v, u1), add(add(v, u1), u2), add(v, u2)] as V3[]
-        }
-        return arcBetween(v, sub(prev, v), sub(next, v), r)
+        return polygonCornerMark(prev, v, next, orientation, pts.length === 3, 22 * wpp)
       })
     : []
 
@@ -611,17 +591,14 @@ function signedArea(pts: V3[]) {
   return s
 }
 
-function interiorAngle(prev: V3, v: V3, next: V3, orientation: number) {
-  const a = orientedAngleAt(next, v, prev)
-  return orientation > 0 ? a : 2 * Math.PI - a
-}
-
 // ---------------------------------------------------------------------------
 // Angles
 // ---------------------------------------------------------------------------
 
 export const AngleView = memo(function AngleView({ obj, c, selected }: ViewProps<AngleObj, Extract<Computed, { type: 'angle' }>>) {
   const { camera, size } = useThree()
+  const theme = useTheme((s) => s.theme)
+  const colour = shownColor(obj)
   const wpp = worldPerPixel(camera, size, c.vertex)
   const r = 32 * wpp
   const u = sub(c.a, c.vertex)
@@ -654,10 +631,11 @@ export const AngleView = memo(function AngleView({ obj, c, selected }: ViewProps
     <>
       {sector && (
         <mesh geometry={sector} renderOrder={1}>
-          <meshBasicMaterial color={obj.color} transparent opacity={selected ? 0.4 : 0.22} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
+          {/* Keyed on theme and colour: WebGPU compiles a colour in, so a new one needs a new material. */}
+          <meshBasicMaterial key={`${theme}${colour}`} color={colour} transparent opacity={selected ? 0.4 : 0.22} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      <FatLine points={pts} color={obj.color} width={selected ? 3 : 2} renderOrder={6} />
+      <FatLine points={pts} color={colour} width={selected ? 3 : 2} renderOrder={6} />
     </>
   )
 })

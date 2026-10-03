@@ -892,7 +892,7 @@ describe('an answer and its picture follow their cards (V1, H2, V3, V4, H1)', ()
     const F = vectors().find((o) => o.name === 'F')!.id
     const note = () => Object.values(scene().objects).find((o): o is TextObj => o.type === 'text')
     expect(round(compOf(F)!)).toEqual([0, 0, 1])
-    expect(note()?.text).toBe('|F| = 1.6 × 10⁻¹⁹ N — arrow not to scale')
+    expect(note()?.text).toBe('|F| = 1.6\u00a0×\u00a010⁻¹⁹ N — arrow not to scale')
     // v retyped as 2i doubles F. A stand-in is filed under drawn.parents, never drawn.results, so
     // followAnswer returned at once; and nothing works out an answer card on its own (V1).
     edit('v', { latex: '2\\hat{i}' })
@@ -903,7 +903,7 @@ describe('an answer and its picture follow their cards (V1, H2, V3, V4, H1)', ()
     // is taken off and the answer card says why.
     if (scene().objects[F]) {
       expect(round(compOf(F)!)).toEqual([0, 0, 2])
-      expect(note()?.text).toBe('|F| = 3.2 × 10⁻¹⁹ N — arrow not to scale')
+      expect(note()?.text).toBe('|F| = 3.2\u00a0×\u00a010⁻¹⁹ N — arrow not to scale')
     } else expect(result().stale).toBe(true)
   })
 

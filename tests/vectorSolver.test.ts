@@ -255,11 +255,11 @@ describe('textbook values', () => {
     const sol = VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0])
     expect(sol.answers[0].tex).toBe('\\left(1\\hat{k}\\right)\\times 10^{-18}\\,\\text{N}')
     expect(sol.answers[1].tex).toBe('1\\times 10^{-18}\\,\\text{N}')
-    expect(sol.visual!.vectors.find((v) => v.name === 'F')!.note).toContain('|F| = 1 × 10⁻¹⁸ N')
+    expect(sol.visual!.vectors.find((v) => v.name === 'F')!.note).toContain('|F| = 1\u00a0×\u00a010⁻¹⁸ N')
     const sf: MeasureSettings = { decimals: 3, precisionMode: 'sf', unit: 'unit', unitPerSquare: 1, angleUnit: 'deg' }
     expect(VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0], sf).answers[1].tex).toBe('1.00\\times 10^{-18}\\,\\text{N}')
     // The charge in the sentence takes the same form.
-    expect(VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0]).steps.map((s) => s.text ?? '').join(' ')).toContain('q = 1 × 10⁻¹⁹ C')
+    expect(VS.solveMagneticForce(9.99999e-20, [10, 0, 0], [0, 1, 0]).steps.map((s) => s.text ?? '').join(' ')).toContain('q = 1\u00a0×\u00a010⁻¹⁹ C')
   })
 
   it('the drawing method picks a 1-2-5 scale so the longest vector is about ten squares', () => {
@@ -430,7 +430,7 @@ describe('laying out a drawing', () => {
     expect(F && F.kind === 'arrow' && F.labelMode).toBe('name')
     expect(F && F.kind === 'arrow' && F.comp.map((c) => c + 0)).toEqual([0, 0, -1])
     const note = plan.items.find((it) => it.kind === 'note')
-    expect(note && note.kind === 'note' && note.text).toMatch(/\|F\| = 1\.6 × 10⁻¹⁹ N — arrow not to scale/)
+    expect(note && note.kind === 'note' && note.text).toMatch(/\|F\| = 1\.6\u00a0×\u00a010⁻¹⁹ N — arrow not to scale/)
     expect(note && note.kind === 'note' && note.at.map((c) => c + 0)).toEqual([0, 0, -1])
     // Nothing drawn to a stand-in length is left selected as if it were the answer.
     expect(plan.select).toBe('B')
@@ -602,7 +602,7 @@ describe('scalar × vector with a tiny k (H4)', () => {
 
   it('k reads 1.6×10⁻¹⁹ in the title and in both working lines, and those lines reach the same R and |R| as the answers', () => {
     const sol = VS.solveScalarMultiply(k, A)
-    expect(sol.title).toContain('1.6 × 10⁻¹⁹')
+    expect(sol.title).toContain('1.6\u00a0×\u00a010⁻¹⁹')
     const [times, size] = sol.steps.map((st) => st.tex ?? '')
     expect(times).toContain('1.6\\times 10^{-19}')
     expect(R_TINY.some((r) => times.includes(r)), times).toBe(true)
@@ -625,7 +625,7 @@ describe('scalar × vector with a tiny k (H4)', () => {
     const tiny = VS.solveScalarMultiply(k, A).visual!.vectors.find((v) => v.role === 'result')!
     // Half of |A| = 5, not |A|: a stand-in |A| long lay exactly on top of A and hid it (H4 picture, below).
     expect(Math.hypot(...tiny.drawn!)).toBeCloseTo(2.5, 9)
-    expect(tiny.note).toBe('|R| = 8 × 10⁻¹⁹ — arrow not to scale')
+    expect(tiny.note).toBe('|R| = 8\u00a0×\u00a010⁻¹⁹ — arrow not to scale')
   })
 })
 
@@ -740,7 +740,7 @@ describe('perpendicular and parallel are judged by the angle, whatever the size 
     expect(sentences(sol)).toContain('right-hand rule')
   })
 
-  it('rounding noise in A·B and A×B is set to zero by a scale-free rule: 10⁶∠30° · 10⁶∠120° is 0, 10⁶∠0° × 10⁶∠180° the null vector', () => {
+  it('rounding noise in A·B and A×B is set to zero by a scale-free rule: 10⁶∠30° · 10⁶∠120° is 0, 10⁶∠0°\u00a0×\u00a010⁶∠180° the null vector', () => {
     // cos 90° and sin 180°, stored to 16 digits, left A·B = 0.0001 and A×B = 0.0001k̂ on these cards.
     const dot = VS.solveDot({ name: 'A', v: fromPolar(1e6, toRad(30)) }, { name: 'B', v: fromPolar(1e6, toRad(120)) })
     rendersAll(dot, 'noise dot')
@@ -791,7 +791,7 @@ describe('the picture of a scalar multiple keeps A visible (H4, round 2)', () =>
     const R = resultOf(k)
     expect(R.drawn, 'a stand-in').toBeDefined()
     closeTo(R.drawn!, [1.5, 2, 0])
-    expect(R.note).toBe('|R| = 8 × 10⁻¹⁹ — arrow not to scale')
+    expect(R.note).toBe('|R| = 8\u00a0×\u00a010⁻¹⁹ — arrow not to scale')
     // R is still the true vector: only the picture stands in.
     expect(R.v[0]).toBeCloseTo(4.8e-19, 30)
     expect(R.v[1]).toBeCloseTo(6.4e-19, 30)
@@ -800,7 +800,7 @@ describe('the picture of a scalar multiple keeps A visible (H4, round 2)', () =>
   it('k = −1.6×10⁻¹⁹: the stand-in is half of |A| the other way, from the tail', () => {
     const R = resultOf(-k)
     closeTo(R.drawn!, [-1.5, -2, 0])
-    expect(R.note).toBe('|R| = 8 × 10⁻¹⁹ — arrow not to scale')
+    expect(R.note).toBe('|R| = 8\u00a0×\u00a010⁻¹⁹ — arrow not to scale')
   })
 
   it('k = 25 still draws the true (75, 100, 0), with no stand-in and no note', () => {
@@ -820,7 +820,7 @@ describe('the picture of a scalar multiple keeps A visible (H4, round 2)', () =>
     closeTo(result.comp, [1.5, 2, 0])
     expect(Math.hypot(...result.comp)).toBeLessThan(Math.hypot(...input.comp))
     const note = plan.items.find((it) => it.kind === 'note')
-    expect(note && note.kind === 'note' && note.text).toBe('|R| = 8 × 10⁻¹⁹ — arrow not to scale')
+    expect(note && note.kind === 'note' && note.text).toBe('|R| = 8\u00a0×\u00a010⁻¹⁹ — arrow not to scale')
   })
 })
 
@@ -952,7 +952,7 @@ describe('the components of a tiny real vector (H16)', () => {
       { label: 'Ax', tex: '1.3856\\times 10^{-19}' },
       { label: 'Ay', tex: '8\\times 10^{-20}' }
     ])
-    expect(sol.steps[0].text).toBe('Given: magnitude A = 1.6 × 10⁻¹⁹ at θ = 30° with the +x axis.')
+    expect(sol.steps[0].text).toBe('Given: magnitude A = 1.6\u00a0×\u00a010⁻¹⁹ at θ = 30° with the +x axis.')
     expect(sol.steps[1].tex).toBe('A_{x} = A\\cos\\theta = 1.6\\times 10^{-19}\\cos 30^\\circ = 1.6\\times 10^{-19}\\times 0.866 = 1.3856\\times 10^{-19}')
     expect(sol.steps[2].tex).toBe('A_{y} = A\\sin\\theta = 1.6\\times 10^{-19}\\sin 30^\\circ = 1.6\\times 10^{-19}\\times 0.5 = 8\\times 10^{-20}')
     expect(sol.steps[3].tex).toBe('\\vec{A} = \\left(1.3856\\hat{i} + 0.8\\hat{j}\\right)\\times 10^{-19}')
@@ -966,7 +966,7 @@ describe('the components of a tiny real vector (H16)', () => {
   it('a unit goes after each component and the sentence: 1.6×10⁻¹⁹ N at 30°', () => {
     const sol = VS.solveComponents('F', 1.6e-19, 30, 'N')
     rendersAll(sol, 'tiny components with a unit')
-    expect(sol.steps[0].text).toBe('Given: magnitude F = 1.6 × 10⁻¹⁹ N at θ = 30° with the +x axis.')
+    expect(sol.steps[0].text).toBe('Given: magnitude F = 1.6\u00a0×\u00a010⁻¹⁹ N at θ = 30° with the +x axis.')
     expect(answersOf(sol)).toEqual(['1.3856\\times 10^{-19}\\,\\text{N}', '8\\times 10^{-20}\\,\\text{N}'])
   })
 
@@ -974,7 +974,7 @@ describe('the components of a tiny real vector (H16)', () => {
     const sol = VS.solveResolve({ name: 'A', v: fromPolar(1.6e-19, toRad(30)) })
     rendersAll(sol, 'tiny resolve')
     expect(answersOf(sol)).toEqual(['1.3856\\times 10^{-19}', '8\\times 10^{-20}'])
-    expect(sol.steps[0].text).toBe('Given: magnitude A = 1.6 × 10⁻¹⁹ at θ = 30° with the +x axis.')
+    expect(sol.steps[0].text).toBe('Given: magnitude A = 1.6\u00a0×\u00a010⁻¹⁹ at θ = 30° with the +x axis.')
   })
 
   it('a component that is only rounding noise beside the magnitude is 0: 1.6×10⁻¹⁹ at 90° has Ax = 0, not 9.8×10⁻³⁶', () => {
@@ -1161,7 +1161,7 @@ describe('the reviewers’ leads on the solver (P-VEC)', () => {
     it('Components of 9×10⁻¹³ î + 9×10⁻¹³ ĵ gives its own angle, 45°, and its own parts, not 0° (and not 0 and 0 beside the vector line)', () => {
       const sol = VS.solveResolve({ name: 'A', v: [9e-13, 9e-13, 0] })
       rendersAll(sol, 'band resolve')
-      expect(sol.steps[0].text).toBe('Given: magnitude A = 1.2728 × 10⁻¹² at θ = 45° with the +x axis.')
+      expect(sol.steps[0].text).toBe('Given: magnitude A = 1.2728\u00a0×\u00a010⁻¹² at θ = 45° with the +x axis.')
       expect(answersOf(sol)).toEqual(['9\\times 10^{-13}', '9\\times 10^{-13}'])
       expect(sol.steps[3].tex).toBe('\\vec{A} = \\left(9\\hat{i} + 9\\hat{j}\\right)\\times 10^{-13}')
     })
@@ -1183,7 +1183,7 @@ describe('the reviewers’ leads on the solver (P-VEC)', () => {
 // V6 (P-VEC): a caret is programming syntax, and no screen of PhysLab shows one. fmt writes a power of
 // ten "1.6×10^-19" because shownValue and sciExponent read that form back, so what a student reads —
 // the title, the sentences, the answer labels and the note drawn beside a stand-in arrow — is
-// rewritten once, in finish(), to "1.6 × 10⁻¹⁹". The LaTeX keeps its \times 10^{-19}, which is typeset raised.
+// rewritten once, in finish(), to "1.6\u00a0×\u00a010⁻¹⁹". The LaTeX keeps its \times 10^{-19}, which is typeset raised.
 describe('plain text writes a power of ten raised, never with a caret (V6)', () => {
   /** Every plain-text string a solution carries: title, sentences, answer labels and the notes beside stand-in arrows. */
   const plainTextOf = (sol: VS.Solution): string[] => [
@@ -1197,23 +1197,23 @@ describe('plain text writes a power of ten raised, never with a caret (V6)', () 
   }
   const textOf = (sol: VS.Solution): string => sol.steps.map((st) => st.text ?? '').join(' ')
 
-  it('Scalar × with k = 1.6×10⁻¹⁹, Components and Resolve of 1.6×10⁻¹⁹ ∠ 30°, and Magnetic force with q = 1.6×10⁻¹⁹ read 1.6 × 10⁻¹⁹', () => {
+  it('Scalar × with k = 1.6×10⁻¹⁹, Components and Resolve of 1.6×10⁻¹⁹ ∠ 30°, and Magnetic force with q = 1.6×10⁻¹⁹ read 1.6\u00a0×\u00a010⁻¹⁹', () => {
     const scalar = VS.solveScalarMultiply(1.6e-19, A)
     noCaret(scalar, 'Scalar ×')
-    expect(scalar.title).toBe('R = (1.6 × 10⁻¹⁹)A')
-    expect(scalar.visual!.vectors.find((v) => v.role === 'result')!.note).toBe('|R| = 8 × 10⁻¹⁹ — arrow not to scale')
+    expect(scalar.title).toBe('R = (1.6\u00a0×\u00a010⁻¹⁹)A')
+    expect(scalar.visual!.vectors.find((v) => v.role === 'result')!.note).toBe('|R| = 8\u00a0×\u00a010⁻¹⁹ — arrow not to scale')
 
     const parts = VS.solveComponents('A', 1.6e-19, 30)
     noCaret(parts, 'Components')
-    expect(parts.steps[0].text).toBe('Given: magnitude A = 1.6 × 10⁻¹⁹ at θ = 30° with the +x axis.')
+    expect(parts.steps[0].text).toBe('Given: magnitude A = 1.6\u00a0×\u00a010⁻¹⁹ at θ = 30° with the +x axis.')
     const resolved = VS.solveResolve({ name: 'A', v: fromPolar(1.6e-19, toRad(30)) })
     noCaret(resolved, 'Resolve')
-    expect(resolved.steps[0].text).toBe('Given: magnitude A = 1.6 × 10⁻¹⁹ at θ = 30° with the +x axis.')
+    expect(resolved.steps[0].text).toBe('Given: magnitude A = 1.6\u00a0×\u00a010⁻¹⁹ at θ = 30° with the +x axis.')
 
     const force = VS.solveMagneticForce(1.6e-19, [1, 0, 0], [0, 1, 0])
     noCaret(force, 'Magnetic force')
-    expect(textOf(force)).toContain('Multiply by the charge q = 1.6 × 10⁻¹⁹ C:')
-    expect(force.visual!.vectors.find((v) => v.name === 'F')!.note).toBe('|F| = 1.6 × 10⁻¹⁹ N — arrow not to scale')
+    expect(textOf(force)).toContain('Multiply by the charge q = 1.6\u00a0×\u00a010⁻¹⁹ C:')
+    expect(force.visual!.vectors.find((v) => v.name === 'F')!.note).toBe('|F| = 1.6\u00a0×\u00a010⁻¹⁹ N — arrow not to scale')
   })
 
   it('the drawing method’s scale sentence and its comparison line raise their powers, for huge vectors and tiny ones', () => {
@@ -1222,22 +1222,22 @@ describe('plain text writes a power of ten raised, never with a caret (V6)', () 
       { name: 'B', v: [1e10, -2e10, 0] }
     ])
     noCaret(big, 'huge')
-    expect(textOf(big)).toContain('1 grid square stands for 5 × 10⁹ units, so the longest vector (5 × 10¹⁰) is 10 squares')
-    expect(textOf(big)).toContain('The component method gives R = 4.4721 × 10¹⁰ at θ = 26.5651°.')
+    expect(textOf(big)).toContain('1 grid square stands for 5\u00a0×\u00a010⁹ units, so the longest vector (5\u00a0×\u00a010¹⁰) is 10 squares')
+    expect(textOf(big)).toContain('The component method gives R = 4.4721\u00a0×\u00a010¹⁰ at θ = 26.5651°.')
     const small = VS.solveAdditionGraphical([
       { name: 'A', v: [3e-10, 4e-10, 0] },
       { name: 'B', v: [1e-10, -2e-10, 0] }
     ])
     noCaret(small, 'tiny')
-    expect(textOf(small)).toContain('1 grid square stands for 1 × 10⁻¹⁰ units, so the longest vector (5 × 10⁻¹⁰) is 5 squares')
-    expect(textOf(small)).toContain('The component method gives R = 4.4721 × 10⁻¹⁰ at θ = 26.5651°.')
+    expect(textOf(small)).toContain('1 grid square stands for 1\u00a0×\u00a010⁻¹⁰ units, so the longest vector (5\u00a0×\u00a010⁻¹⁰) is 5 squares')
+    expect(textOf(small)).toContain('The component method gives R = 4.4721\u00a0×\u00a010⁻¹⁰ at θ = 26.5651°.')
   })
 
-  it('at 3 significant figures the kept zero stays (1.60 × 10⁻¹⁹), and the LaTeX keeps its braced exponent', () => {
+  it('at 3 significant figures the kept zero stays (1.60\u00a0×\u00a010⁻¹⁹), and the LaTeX keeps its braced exponent', () => {
     const sf: MeasureSettings = { decimals: 3, precisionMode: 'sf', unit: 'unit', unitPerSquare: 1, angleUnit: 'deg' }
     const sol = VS.solveScalarMultiply(1.6e-19, A, 'R', sf)
     noCaret(sol, 'Scalar × at 3 s.f.')
-    expect(sol.title).toBe('R = (1.60 × 10⁻¹⁹)A')
+    expect(sol.title).toBe('R = (1.60\u00a0×\u00a010⁻¹⁹)A')
     const tex = [...sol.steps.map((st) => st.tex ?? ''), ...sol.answers.map((a) => a.tex)].join(' ')
     expect(tex).toContain('\\times 10^{-19}')
     expect(tex, 'a raised digit in LaTeX would be drawn as a stray character').not.toMatch(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]/)

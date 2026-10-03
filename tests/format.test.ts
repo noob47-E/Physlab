@@ -677,9 +677,9 @@ describe('P6 — the rounding rule against a table recomputed by the crew from i
 /** The raised digits and minus a label uses, as plain characters — read here, independently of the code under test. */
 const RAISED: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-' }
 
-/** A label turned back into what fmt writes: " × 10⁻⁸" becomes "×10^-8". */
+/** A label turned back into what fmt writes: "\u00a0×\u00a010⁻⁸" becomes "×10^-8". */
 const caretForm = (label: string): string =>
-  label.replace(/ × 10([⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, (_all, raised: string) => `×10^${[...raised].map((c) => RAISED[c]).join('')}`)
+  label.replace(/\u00a0×\u00a010([⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, (_all, raised: string) => `×10^${[...raised].map((c) => RAISED[c]).join('')}`)
 
 /** Every size, both signs, awkward mantissas and the edge doubles: what the label writers must survive. */
 const sweepValues = (): number[] => {
@@ -693,32 +693,32 @@ const sweepValues = (): number[] => {
 const SWEEP_PRECISIONS: Precision[] = [0, 1, 2, 3, 4, 6, ...[1, 2, 3, 4, 6].map((n) => SF(n)), ...[0, 2, 4].map((n) => DP(n))]
 
 describe('P3V6 — a plain-text number with no caret: fmtLabel and superscriptPowers', () => {
-  it('fmtLabel raises the power of ten, negative or two or three digits long: 1.49 × 10⁻⁸, 6.02 × 10²³', () => {
-    expect(fmtLabel(1.49e-8, 2)).toBe('1.49 × 10⁻⁸')
-    expect(fmtLabel(-8.89e19, DP(2))).toBe('−8.89 × 10¹⁹')
-    expect(fmtLabel(6.02e23, 2)).toBe('6.02 × 10²³')
-    expect(fmtLabel(-6.02e23, 2)).toBe('−6.02 × 10²³')
-    expect(fmtLabel(1.49e-12, 2)).toBe('1.49 × 10⁻¹²')
-    expect(fmtLabel(1e100, 2)).toBe('1 × 10¹⁰⁰')
-    expect(fmtLabel(-1.5e300, 2)).toBe('−1.5 × 10³⁰⁰')
-    expect(fmtLabel(3e9, DP(2))).toBe('3 × 10⁹')
+  it('fmtLabel raises the power of ten, negative or two or three digits long: 1.49\u00a0×\u00a010⁻⁸, 6.02\u00a0×\u00a010²³', () => {
+    expect(fmtLabel(1.49e-8, 2)).toBe('1.49\u00a0×\u00a010⁻⁸')
+    expect(fmtLabel(-8.89e19, DP(2))).toBe('−8.89\u00a0×\u00a010¹⁹')
+    expect(fmtLabel(6.02e23, 2)).toBe('6.02\u00a0×\u00a010²³')
+    expect(fmtLabel(-6.02e23, 2)).toBe('−6.02\u00a0×\u00a010²³')
+    expect(fmtLabel(1.49e-12, 2)).toBe('1.49\u00a0×\u00a010⁻¹²')
+    expect(fmtLabel(1e100, 2)).toBe('1\u00a0×\u00a010¹⁰⁰')
+    expect(fmtLabel(-1.5e300, 2)).toBe('−1.5\u00a0×\u00a010³⁰⁰')
+    expect(fmtLabel(3e9, DP(2))).toBe('3\u00a0×\u00a010⁹')
   })
 
-  it('fmtLabel keeps the zeros that show significant figures: 2.5×10⁻⁷ at 3 s.f. is 2.50 × 10⁻⁷', () => {
-    expect(fmtLabel(2.5e-7, SF(3))).toBe('2.50 × 10⁻⁷')
+  it('fmtLabel keeps the zeros that show significant figures: 2.5×10⁻⁷ at 3 s.f. is 2.50\u00a0×\u00a010⁻⁷', () => {
+    expect(fmtLabel(2.5e-7, SF(3))).toBe('2.50\u00a0×\u00a010⁻⁷')
     expect(fmtLabel(2.5, SF(3))).toBe('2.50')
     expect(fmtLabel(123456, SF(3))).toBe('123000')
-    expect(fmtLabel(-6.674e-11, SF(3))).toBe('−6.67 × 10⁻¹¹')
-    expect(fmtLabel(1.2e10, SF(4))).toBe('1.200 × 10¹⁰')
-    expect(fmtLabel(6.02214076e23, SF(3))).toBe('6.02 × 10²³')
-    // The form is chosen after rounding: 999 999 999.996 at 2 s.f. is 1.0 × 10⁹.
-    expect(fmtLabel(999999999.996, SF(2))).toBe('1.0 × 10⁹')
+    expect(fmtLabel(-6.674e-11, SF(3))).toBe('−6.67\u00a0×\u00a010⁻¹¹')
+    expect(fmtLabel(1.2e10, SF(4))).toBe('1.200\u00a0×\u00a010¹⁰')
+    expect(fmtLabel(6.02214076e23, SF(3))).toBe('6.02\u00a0×\u00a010²³')
+    // The form is chosen after rounding: 999 999 999.996 at 2 s.f. is 1.0\u00a0×\u00a010⁹.
+    expect(fmtLabel(999999999.996, SF(2))).toBe('1.0\u00a0×\u00a010⁹')
   })
 
   it('fmtLabel in decimal places trims the zeros, as fmt does', () => {
-    expect(fmtLabel(2.5e-7, DP(4))).toBe('2.5 × 10⁻⁷')
-    expect(fmtLabel(0.000001, DP(2))).toBe('1 × 10⁻⁶')
-    expect(fmtLabel(-0.00005, DP(2))).toBe('−5 × 10⁻⁵')
+    expect(fmtLabel(2.5e-7, DP(4))).toBe('2.5\u00a0×\u00a010⁻⁷')
+    expect(fmtLabel(0.000001, DP(2))).toBe('1\u00a0×\u00a010⁻⁶')
+    expect(fmtLabel(-0.00005, DP(2))).toBe('−5\u00a0×\u00a010⁻⁵')
     expect(fmtLabel(2.5, DP(3))).toBe('2.5')
     expect(fmtLabel(5, DP(2))).toBe('5')
   })
@@ -732,7 +732,7 @@ describe('P3V6 — a plain-text number with no caret: fmtLabel and superscriptPo
     expect(fmtLabel(12345.678, 2)).toBe('12345.68')
     expect(fmtLabel(1.23456)).toBe('1.235')
     expect(fmtLabel(1.23456)).toBe(fmt(1.23456, 3))
-    expect(fmtLabel(6.02e23)).toBe('6.02 × 10²³')
+    expect(fmtLabel(6.02e23)).toBe('6.02\u00a0×\u00a010²³')
   })
 
   it('fmtLabel writes anything below the 10⁻¹² noise floor as 0, as fmt does, so a dragged point shows no power', () => {
@@ -742,7 +742,7 @@ describe('P3V6 — a plain-text number with no caret: fmtLabel and superscriptPo
     expect(fmtLabel(-1e-13, DP(4))).toBe('0')
     expect(fmtLabel(3e-17, SF(3))).toBe('0')
     // The first value on the right side of the floor keeps its power.
-    expect(fmtLabel(1e-12, 2)).toBe('1 × 10⁻¹²')
+    expect(fmtLabel(1e-12, 2)).toBe('1\u00a0×\u00a010⁻¹²')
   })
 
   it('fmtLabel says what it cannot write, as fmt does', () => {
@@ -772,25 +772,25 @@ describe('P3V6 — a plain-text number with no caret: fmtLabel and superscriptPo
   })
 
   it('superscriptPowers rewrites every ×10^e, with all ten raised digits and the raised minus', () => {
-    expect(superscriptPowers('1.5×10^-7')).toBe('1.5 × 10⁻⁷')
-    expect(superscriptPowers('−2×10^1234567890')).toBe('−2 × 10¹²³⁴⁵⁶⁷⁸⁹⁰')
-    expect(superscriptPowers('1×10^-1234567890')).toBe('1 × 10⁻¹²³⁴⁵⁶⁷⁸⁹⁰')
-    expect(superscriptPowers('5.00×10^0')).toBe('5.00 × 10⁰')
-    expect(superscriptPowers('(3×10^8, −4×10^-9)')).toBe('(3 × 10⁸, −4 × 10⁻⁹)')
+    expect(superscriptPowers('1.5×10^-7')).toBe('1.5\u00a0×\u00a010⁻⁷')
+    expect(superscriptPowers('−2×10^1234567890')).toBe('−2\u00a0×\u00a010¹²³⁴⁵⁶⁷⁸⁹⁰')
+    expect(superscriptPowers('1×10^-1234567890')).toBe('1\u00a0×\u00a010⁻¹²³⁴⁵⁶⁷⁸⁹⁰')
+    expect(superscriptPowers('5.00×10^0')).toBe('5.00\u00a0×\u00a010⁰')
+    expect(superscriptPowers('(3×10^8, −4×10^-9)')).toBe('(3\u00a0×\u00a010⁸, −4\u00a0×\u00a010⁻⁹)')
   })
 
   it('superscriptPowers works on the lines the vector and point writers compose from fmt', () => {
-    expect(superscriptPowers(fmtIJK([1.49e-8, 3e10, 0], 2))).toBe('1.49 × 10⁻⁸i + 3 × 10¹⁰j')
-    expect(superscriptPowers(fmtPoint([1.49e-8, -3e10, 0], 2))).toBe('(1.49 × 10⁻⁸, −3 × 10¹⁰)')
+    expect(superscriptPowers(fmtIJK([1.49e-8, 3e10, 0], 2))).toBe('1.49\u00a0×\u00a010⁻⁸i + 3\u00a0×\u00a010¹⁰j')
+    expect(superscriptPowers(fmtPoint([1.49e-8, -3e10, 0], 2))).toBe('(1.49\u00a0×\u00a010⁻⁸, −3\u00a0×\u00a010¹⁰)')
     setNotation({ components: 'column' })
-    expect(superscriptPowers(fmtIJK([1.49e-8, 3e10, 0], 2))).toBe('[1.49 × 10⁻⁸; 3 × 10¹⁰]')
+    expect(superscriptPowers(fmtIJK([1.49e-8, 3e10, 0], 2))).toBe('[1.49\u00a0×\u00a010⁻⁸; 3\u00a0×\u00a010¹⁰]')
   })
 
   it('superscriptPowers leaves everything else alone: x^2, LaTeX powers, e-notation, a power already raised', () => {
-    for (const same of ['x^2', '2^10', 'a^-1', '10^3', '3×10^x', 'ab×10', '\\times 10^{-7}', '1.5\\times 10^{-7}', '1.23e-7', '1E+5', '1.5 × 10⁻⁷', 'no power here', '', '−3.5']) {
+    for (const same of ['x^2', '2^10', 'a^-1', '10^3', '3×10^x', 'ab×10', '\\times 10^{-7}', '1.5\\times 10^{-7}', '1.23e-7', '1E+5', '1.5\u00a0×\u00a010⁻⁷', 'no power here', '', '−3.5']) {
       expect(superscriptPowers(same), same).toBe(same)
     }
-    expect(superscriptPowers('x^2 = 1.5×10^-7')).toBe('x^2 = 1.5 × 10⁻⁷')
+    expect(superscriptPowers('x^2 = 1.5×10^-7')).toBe('x^2 = 1.5\u00a0×\u00a010⁻⁷')
   })
 
   it('superscriptPowers run twice changes nothing', () => {
