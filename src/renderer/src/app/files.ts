@@ -1,6 +1,8 @@
 import { scene } from '../core/store'
 import { parseSceneFile } from '../core/migrate'
 import { openFailureText, saveFailureText } from '../core/fileErrors'
+import { RESULT_FORMAT } from '../questions/results'
+import { HIDDEN_MODES, type ModeId } from './modes'
 
 type Bridge = {
   isDesktop: boolean
@@ -17,7 +19,7 @@ export async function openProject() {
   if (bridge) {
     const r = await bridge.openFile()
     if (!r) return
-    load(r.content, r.path)
+    loadProjectText(r.content, r.path)
     return
   }
   // Browser fallback.
@@ -26,7 +28,7 @@ export async function openProject() {
   input.accept = '.phys,application/json'
   input.onchange = async () => {
     const f = input.files?.[0]
-    if (f) load(await f.text(), f.name)
+    if (f) loadProjectText(await f.text(), f.name)
   }
   input.click()
 }
@@ -58,7 +60,39 @@ export async function openQuestionFile(): Promise<{ name: string; content: strin
   })
 }
 
-function load(content: string, path: string) {
+const CLASS_RESULTS_NOT_HERE = 'Class results are not in this version of PhysLab.'
+
+// The two marks of a result file, looked for in its text rather than parsed out of it: this file
+// keeps its own JSON parsing out (tests/persistence.test.ts), so no parser message can reach the
+// console, and a look at the text cannot throw. A project or a question file never has both as
+// keys: a quote inside one of its strings is escaped, so the same words typed in a label do not match.
+const RESULT_APP = /"app"\s*:\s*"PhysLab"/
+const RESULT_MARK = new RegExp(`"format"\\s*:\\s*"${RESULT_FORMAT}"`)
+
+/**
+ * A sentence for a file that belongs to a mode this build keeps out of reach, or null when the file
+ * is fine to open. Class Results is the only such mode with a file of its own that a student can be
+ * handed (a `.pqresult`, saved from Problem Sets). Opened without this it was only "This is not a
+ * PhysLab project" (or "…question file"), which sends a student looking for what they did wrong. A
+ * renamed result file is still one, so what is inside counts as well as the name.
+ */
+export function hiddenModeFileText(name: string, content: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): string | null {
+  if (!hidden.has('results')) return null
+  if (/\.pqresult$/i.test(name) || (RESULT_APP.test(content) && RESULT_MARK.test(content))) return CLASS_RESULTS_NOT_HERE
+  return null
+}
+
+/**
+ * Opens the text of a project file. Both ways of picking one end here, and a file that belongs to a
+ * hidden mode is refused first, in a sentence, with nothing loaded and the mode left as it was.
+ * Exported so a test can cross this boundary without a dialog.
+ */
+export function loadProjectText(content: string, path: string) {
+  const refused = hiddenModeFileText(path, content)
+  if (refused) {
+    scene().pushLog({ input: 'open', kind: 'error', text: refused })
+    return
+  }
   try {
     // parseSceneFile says in a sentence what is wrong with a half-copied or foreign file; parsing
     // the text here used to put "SyntaxError: Unexpected end of JSON input" in the console.

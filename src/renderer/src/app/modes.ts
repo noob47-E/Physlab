@@ -144,11 +144,41 @@ export const MODES: ModeDef[] = [
   }
 ]
 
+/**
+ * Modes this build keeps out of reach. Question Author and Class Results are not ready for students
+ * or for the science exhibition (owner, 2026-10-01), so no tab, More modes row, search row, View-menu
+ * panel, saved layout, results card or opened file leads to them. Nothing is deleted: their code,
+ * tests and file formats stay. To bring both back, empty this set: `new Set<ModeId>()`.
+ */
+export const HIDDEN_MODES: ReadonlySet<ModeId> = new Set<ModeId>(['author', 'results'])
+
+// Each helper below takes the set as its last parameter, defaulting to HIDDEN_MODES, so a test can
+// pass an empty one and see the modes come back: the default is the switch, nothing else is.
+
+export const isModeHidden = (id: ModeId, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean => hidden.has(id)
+
 /** Never throws: a file from a newer version may name a mode this build does not have. */
 export const modeById = (id: ModeId) => MODES.find((m) => m.id === id) ?? MODES[0]
 
-/** The modes a student can open today; the rest are announced, not clickable. */
-export const readyModes = (): ModeDef[] => MODES.filter((m) => m.ready)
+/** The modes a student can open in this build; the rest are announced (comingSoonModes), not clickable, or kept out of reach. */
+export const readyModes = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeDef[] => MODES.filter((m) => m.ready && !hidden.has(m.id))
+
+/** The modes announced as "(coming soon)". A hidden mode is not announced either: it is not coming. */
+export const comingSoonModes = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeDef[] => MODES.filter((m) => !m.ready && !hidden.has(m.id))
+
+/** The panels of the hidden modes — the panel each opens and the centre panel it shows — which nothing may open. */
+export const hiddenPanels = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): string[] => [
+  ...new Set(MODES.filter((m) => hidden.has(m.id)).flatMap((m) => [m.panel, m.centre]).filter((p): p is string => !!p))
+]
+
+/**
+ * The mode a saved session may open in. A hidden mode opens Problem Sets, the visible mode nearest
+ * to both: it plays the sets Question Author writes and makes the results Class Results reads.
+ */
+export const openableMode = (id: ModeId, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeId => (hidden.has(id) ? 'problems' : id)
+
+/** A result file is only worth saving while the mode that reads it is in the build. */
+export const resultFilesOffered = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean => !hidden.has('results')
 
 /**
  * Whether the mode shows the maths drawing, whose 2D/3D switch, grid and snapping apply. The

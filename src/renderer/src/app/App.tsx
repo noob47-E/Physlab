@@ -15,13 +15,13 @@ import { Timeline } from '../panels/Timeline'
 import { Examples } from '../panels/Examples'
 import { useParticleLab } from '../render/GpuParticles'
 import { useScene } from '../core/store'
-import { useApp } from './modes'
+import { openableMode, useApp } from './modes'
 import { startAutosave } from './autosave'
 import { RecoveryBar } from './RecoveryBar'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
 import { Tour } from './tour/Tour'
-import { PANEL_TITLES, refreshOpenPanels, setDockApi, showPanel } from './panels'
+import { PANEL_TITLES, dropHiddenPanels, refreshOpenPanels, setDockApi, showPanel } from './panels'
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
@@ -114,8 +114,10 @@ export function App() {
             setDockApi(e.api)
             try {
               const bench = location.hash.includes('bench')
-              const mode = bench ? 'gpu' : (savedMode() ?? 'vectors')
-              const restored = !bench && restoreLayout(e.api)
+              // A session left in a hidden mode opens in Problem Sets; a layout that held nothing but
+              // hidden panels comes back empty from dropHiddenPanels, and is rebuilt below.
+              const mode = bench ? 'gpu' : openableMode(savedMode() ?? 'vectors')
+              const restored = !bench && restoreLayout(e.api) && dropHiddenPanels()
               if (!restored) buildLayout(e.api, mode)
               // enterMode, not setMode: the mode needs its view, tool shelf and drawing too, and
               // a restored Sandbox used to come back in 2D with the wrong shelf.

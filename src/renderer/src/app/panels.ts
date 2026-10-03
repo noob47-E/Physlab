@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import type { DockviewApi } from 'dockview-react'
 import { columns, panelHome } from './layoutMath'
+import { HIDDEN_MODES, hiddenPanels, type ModeId } from './modes'
 
 /** Panel id → the name shown on its tab. */
 export const PANEL_TITLES: Record<string, string> = {
@@ -29,7 +30,17 @@ export const PANEL_TITLES: Record<string, string> = {
   classresults: 'Class Results'
 }
 
-export const PANEL_LIST = Object.entries(PANEL_TITLES).map(([id, title]) => ({ id, title }))
+/** True for a panel that belongs to a mode this build keeps out of reach (HIDDEN_MODES in modes.ts). */
+export const isPanelHidden = (id: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean => hiddenPanels(hidden).includes(id)
+
+/** The panels a student can ask for: PANEL_TITLES without the hidden ones. */
+export const panelList = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): { id: string; title: string }[] =>
+  Object.entries(PANEL_TITLES)
+    .filter(([id]) => !isPanelHidden(id, hidden))
+    .map(([id, title]) => ({ id, title }))
+
+/** The View menu's panel rows and Ctrl+K's Panels rows. */
+export const PANEL_LIST = panelList()
 
 /** Which panels share a home, so a closed one comes back beside the ones it lived with. */
 const PANEL_GROUPS: string[][] = [
@@ -65,7 +76,8 @@ export const isPanelOpen = (id: string): boolean => !!dockApi?.getPanel(id)
  */
 export function showPanel(id: string): void {
   const api = dockApi
-  if (!api || !PANEL_TITLES[id]) return
+  // A hidden mode's panel opens from nowhere, not even a stray requestFocus.
+  if (!api || !PANEL_TITLES[id] || isPanelHidden(id)) return
   const existing = api.getPanel(id)
   if (existing) {
     existing.api.setActive()
@@ -115,4 +127,20 @@ export function hidePanel(id: string): void {
 export function togglePanel(id: string): void {
   if (isPanelOpen(id)) hidePanel(id)
   else showPanel(id)
+}
+
+/**
+ * Closes every hidden panel a restored layout still holds: a layout saved while those modes could
+ * be opened may have their panels in it, and nothing else would ever take them out. True while any
+ * panel is left; false means the layout is empty now, and the caller builds a fresh one.
+ */
+export function dropHiddenPanels(): boolean {
+  const api = dockApi
+  if (!api) return false
+  for (const id of hiddenPanels()) {
+    const panel = api.getPanel(id)
+    if (panel) api.removePanel(panel)
+  }
+  refreshOpenPanels()
+  return api.panels.length > 0
 }

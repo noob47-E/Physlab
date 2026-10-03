@@ -29,7 +29,8 @@ export function fillCommandBar(text: string) {
 
 const CALC_MODES: CalcMode[] = ['COMP', 'CMPLX', 'BASE-N', 'MATRIX', 'VECTOR', 'STAT', 'DIST', 'TABLE', 'EQUATION', 'INEQUALITY', 'RATIO', 'SHEET', 'UNITS', 'CONST', 'MEASURE']
 
-function buildItems(): Item[] {
+/** Every row Ctrl+K can offer; exported so a test can walk them and find none that leads to a hidden mode. */
+export function buildItems(): Item[] {
   const items: Item[] = []
   // Only the modes that exist: a "coming soon" row that opened an empty mode was a dead end.
   for (const m of readyModes()) items.push({ group: 'Modes', title: m.label, hint: m.description, run: () => enterMode(m.id) })
@@ -39,7 +40,7 @@ function buildItems(): Item[] {
       title: t.label,
       hint: t.hint[0],
       run: () => {
-        const mode = MODES.find((m) => m.ready && m.tools.includes(t.id))
+        const mode = readyModes().find((m) => m.tools.includes(t.id))
         if (mode && !MODES.find((m) => m.id === useApp.getState().mode)?.tools.includes(t.id)) enterMode(mode.id)
         scene().setTool(t.id)
       }

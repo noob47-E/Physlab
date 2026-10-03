@@ -4,8 +4,9 @@ import { BookOpen, Check, ChevronRight, ChevronsDown, Eye, FolderOpen, Lightbulb
 import { visualizeSolution } from '../core/visualize'
 import { useScene } from '../core/store'
 import { enterMode } from '../app/layout'
+import { resultFilesOffered } from '../app/modes'
 import { showPanel } from '../app/panels'
-import { openQuestionFile } from '../app/files'
+import { hiddenModeFileText, openQuestionFile } from '../app/files'
 import { checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import type { FadingLevel, PQQuestion } from '../questions/pqjson'
@@ -333,6 +334,9 @@ export function Practice() {
   const openFile = async () => {
     const f = await openQuestionFile()
     if (!f) return
+    // A class-results file is not a question set; say what it is, not "not a question file".
+    const refused = hiddenModeFileText(f.name, f.content)
+    if (refused) return void useTeacherSets.setState({ error: refused, report: [] })
     try {
       const set = loadTeacherFile(f.content, f.name)
       useTeacherSets.setState((s) => ({ sets: [...s.sets.filter((x) => x.id !== set.id), set], report: set.report, error: null }))
@@ -616,7 +620,7 @@ export function Practice() {
             </div>
           ))}
         </div>
-        {questionResults.length > 0 && (
+        {resultFilesOffered() && questionResults.length > 0 && (
           <div className="card mx-3 mt-3 p-3">
             <div className="font-semibold text-ink-strong">Save my results for my teacher</div>
             <div className="text-ink-dim">

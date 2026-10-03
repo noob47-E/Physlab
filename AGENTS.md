@@ -326,6 +326,16 @@ neighbour is open.
   in `snapAt` (render/Interaction.tsx).
 - **Every label chip goes through `superscriptPowers`.** That includes the Measure panel, which reuses `measureText`.
   Never put a caret or e-notation on screen.
+- **Keep a mode out of a build with `HIDDEN_MODES` in app/modes.ts, never with `ready: false`.**
+  - `ready: false` lists the mode as "(coming soon)".
+  - A hidden mode is listed nowhere, and `showPanel` refuses its panels.
+  - A session saved in a hidden mode opens Problem Sets, and `dropHiddenPanels` removes its panels from a restored
+    layout.
+  - Emptying the set brings everything back. Question Author and Class Results are hidden this way (owner,
+    2026-10-03); their code is due to be archived and removed in the clean-up wave.
+  - Guard: `tests/hiddenModes.test.ts`.
+- **Build every list of modes and panels a student sees from `readyModes()`, `comingSoonModes()` or `PANEL_LIST`.**
+  Never use `MODES.filter` or `PANEL_TITLES` in a component.
 
 ## Code knowledge
 

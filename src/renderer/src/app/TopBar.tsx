@@ -24,7 +24,7 @@ import {
   Waypoints
 } from 'lucide-react'
 import { newProject, openProject, saveProject } from './files'
-import { MODES, isDrawingMode, modeById, useApp } from './modes'
+import { comingSoonModes, isDrawingMode, modeById, readyModes, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
 import { shelfFitLabel, TOOLS } from '../render/tools'
@@ -430,8 +430,8 @@ export function TopBar() {
   const [barRef, width] = useContainerWidth()
   const density = barDensity(width)
   const title = filePath ? filePath.split(/[\\/]/).pop() : 'untitled'
-  const ready = MODES.filter((m) => m.ready)
-  const later = MODES.filter((m) => !m.ready)
+  const ready = readyModes()
+  const later = comingSoonModes()
   const [modesRef, modesWidth] = useContainerWidth()
   const [measureRef, measured] = useModeWidths(`${modesWidth}|${density}|${ready.map((m) => m.label).join()}`)
   const split = modeTabs(modesWidth, ready.map((m) => m.label), ready.findIndex((m) => m.id === mode), measured)
