@@ -220,7 +220,8 @@ describe('a student cannot reach Question Author or Class Results', () => {
 
     it('has a Tools row that switches to the first mode a student can open with that tool', () => {
       const src = readSource('src/renderer/src/app/SearchPalette.tsx')
-      expect(has(src, /const mode = readyModes\(\)\.find\(\(m\) => m\.tools\.includes\(t\.id\)\)/), 'the Tools row picks its mode from readyModes()').toBe(true)
+      // SC: the pick moved into modeForTool, which still searches readyModes() and skips centre-panel modes.
+      expect(has(src, /return readyModes\(\)\.find\(shows\)/), 'the Tools row picks its mode from readyModes()').toBe(true)
       expect(has(src, /MODES\.find\(\(m\) => m\.ready/), 'the Tools row picks its mode from all of MODES').toBe(false)
       for (const t of TOOLS) {
         const first = readyModes().find((m) => m.tools.includes(t.id))

@@ -87,13 +87,19 @@ function vectorItems(o: SceneObject, c: Extract<Computed, { type: 'vector' }>): 
     { label: 'Magnitude & direction (steps)', run: () => s().showSolution(VS.solveMagnitudeDirection(named)) },
     { label: 'Unit vector', run: () => makeVector(normalize(c.comp), c.tail, `${o.name}̂`) },
     { label: 'Reverse (−' + o.name + ')', run: () => makeVector(neg(c.comp), c.tail) },
-    {
-      label: 'Move tail to the origin',
-      run: () =>
-        s().updateObject(o.id, (d) => {
-          if (d.type === 'vector' && d.def.kind === 'free') d.def.tail = [0, 0, 0]
-        })
-    },
+    // Only a free vector has a tail to set; for a calculated one the row did nothing yet still
+    // cost an Undo step, so it is left out (like "Move to the origin" for points).
+    ...(isFree(o)
+      ? [
+          {
+            label: 'Move tail to the origin',
+            run: () =>
+              s().updateObject(o.id, (d) => {
+                if (d.type === 'vector' && d.def.kind === 'free') d.def.tail = [0, 0, 0]
+              })
+          }
+        ]
+      : []),
     {
       label: 'Add to the Vector Calculator',
       run: () => {

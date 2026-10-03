@@ -2,7 +2,7 @@ import { Pause, Play } from 'lucide-react'
 import { visibleIn } from '../core/visibility'
 import { useScene } from '../core/store'
 import type { NumberObj } from '../core/types'
-import { fmt } from '../math/format'
+import { sliderLabel, sliderPlayClick } from './shellLogic'
 
 /** GeoGebra-style sliders floating over the viewport. */
 export function SliderDock() {
@@ -14,6 +14,7 @@ export function SliderDock() {
   const endGesture = useScene((s) => s.endGesture)
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
+  const settings = useScene((s) => s.settings)
 
   const space = useScene((s) => s.activeSpace)
   const sliders = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number' && !!o.slider && o.visible && visibleIn(o, space))
@@ -49,15 +50,18 @@ export function SliderDock() {
                 }, false)
               }}
             />
-            <span className="w-12 text-right tabular-nums text-ink">{fmt(value, 2)}</span>
+            <span className="w-12 text-right tabular-nums text-ink">{sliderLabel(value, s.step, settings)}</span>
             <button
               className={`text-ink-dim hover:text-ink-strong ${o.animate ? 'text-accent' : ''}`}
               title="Animate"
               onClick={() => {
-                update(o.id, (d) => {
-                  if (d.type === 'number') d.animate = !d.animate
-                })
-                if (!o.animate && !playing) setPlaying(true)
+                // A sweeping slider on a paused clock resumes; it is not switched off.
+                const next = sliderPlayClick(!!o.animate, playing)
+                if (next.animate !== !!o.animate)
+                  update(o.id, (d) => {
+                    if (d.type === 'number') d.animate = next.animate
+                  })
+                if (next.playing !== playing) setPlaying(next.playing)
               }}
             >
               {o.animate && playing ? <Pause size={13} /> : <Play size={13} />}

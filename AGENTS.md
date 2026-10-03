@@ -336,6 +336,12 @@ neighbour is open.
   - Guard: `tests/hiddenModes.test.ts`.
 - **Build every list of modes and panels a student sees from `readyModes()`, `comingSoonModes()` or `PANEL_LIST`.**
   Never use `MODES.filter` or `PANEL_TITLES` in a component.
+- **A name boundary written with `\w` misses Greek letters and primes, and treats a digit as part of the name (`2A`).**
+  Read formulas as whole numbers and whole names instead. Guard: `tests/rename.test.ts`.
+- **A typed number box must keep the student's text while it is partial ("", ".", "0.").** `Number(text) || 1` resets
+  it while the student is still typing. Guard: `tests/topBarInputs.test.ts`.
+- **Panel text uses `fmtLabel`, which gives raised powers.** `fmtPrecise` keeps the caret, so use it only for text that
+  is read back. Guard: `tests/shellLogic.test.ts` › H13.
 
 ## Code knowledge
 

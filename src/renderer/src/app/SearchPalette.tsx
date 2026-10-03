@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
-import { MODES, readyModes, useApp } from './modes'
+import { MODES, readyModes, useApp, type ModeId } from './modes'
 import { enterMode } from './layout'
 import { PANEL_LIST, showPanel } from './panels'
 import { CATALOG } from './CommandBar'
@@ -29,6 +29,18 @@ export function fillCommandBar(text: string) {
 
 const CALC_MODES: CalcMode[] = ['COMP', 'CMPLX', 'BASE-N', 'MATRIX', 'VECTOR', 'STAT', 'DIST', 'TABLE', 'EQUATION', 'INEQUALITY', 'RATIO', 'SHEET', 'UNITS', 'CONST', 'MEASURE']
 
+/**
+ * The mode a drawing tool's row should open, or null to stay where the student is. A mode whose centre
+ * panel covers the viewport (the Calculator's Maths screen) is never the answer: the tool would be
+ * picked but the drawing hidden behind the Maths tab.
+ */
+export function modeForTool(tool: string, current: ModeId): ModeId | null {
+  const shows = (m: (typeof MODES)[number]) => !m.centre && (m.tools as string[]).includes(tool)
+  const here = MODES.find((m) => m.id === current)
+  if (here && shows(here)) return null
+  return readyModes().find(shows)?.id ?? null
+}
+
 /** Every row Ctrl+K can offer; exported so a test can walk them and find none that leads to a hidden mode. */
 export function buildItems(): Item[] {
   const items: Item[] = []
@@ -40,8 +52,8 @@ export function buildItems(): Item[] {
       title: t.label,
       hint: t.hint[0],
       run: () => {
-        const mode = readyModes().find((m) => m.tools.includes(t.id))
-        if (mode && !MODES.find((m) => m.id === useApp.getState().mode)?.tools.includes(t.id)) enterMode(mode.id)
+        const mode = modeForTool(t.id, useApp.getState().mode)
+        if (mode) enterMode(mode)
         scene().setTool(t.id)
       }
     })
@@ -76,9 +88,9 @@ export function buildItems(): Item[] {
     { group: 'Settings', title: 'Labels: letters only', hint: 'Cleaner drawing', run: () => scene().setSettings({ measureLabels: 'name' }) },
     { group: 'Settings', title: 'Precision: 2 decimal places', hint: '', run: () => scene().setSettings({ precisionMode: 'dp', decimals: 2 }) },
     { group: 'Settings', title: 'Precision: 3 significant figures', hint: '', run: () => scene().setSettings({ precisionMode: 'sf', decimals: 3 }) },
-    { group: 'Settings', title: 'Toggle grid', hint: '', run: () => scene().setSettings({ showGrid: !scene().settings.showGrid }) },
-    ...GRID_STYLES.map((g) => ({ group: 'Settings', title: `Grid: ${g.label.toLowerCase()}`, hint: g.hint, run: () => scene().setSettings({ showGrid: true, gridStyle: g.id }) })),
-    { group: 'Settings', title: 'Grid: off', hint: 'No grid; the axes stay', run: () => scene().setSettings({ showGrid: false }) },
+    { group: 'Settings', title: 'Toggle grid', hint: 'Show or hide the grid', run: () => scene().setSettings({ showGrid: !scene().settings.showGrid }) },
+    ...GRID_STYLES.map((g) => ({ group: 'Settings', title: `Grid: ${g.label.toLowerCase()}`, hint: `${g.hint} · show grid`, run: () => scene().setSettings({ showGrid: true, gridStyle: g.id }) })),
+    { group: 'Settings', title: 'Grid: off', hint: 'Hide the grid (turn it off); the axes stay', run: () => scene().setSettings({ showGrid: false }) },
     // The hints say "axis" too: a student types "x axis" or "hide axis", and only the hint can carry the singular.
     { group: 'Settings', title: 'Axes: show', hint: 'The x axis and the y axis (and z in 3D), with their numbers', run: () => scene().setSettings({ showAxes: true }) },
     { group: 'Settings', title: 'Axes: hide', hint: 'Takes each axis and its numbers off the drawing; the grid stays', run: () => scene().setSettings({ showAxes: false }) },

@@ -24,6 +24,7 @@ import {
   Waypoints
 } from 'lucide-react'
 import { newProject, openProject, saveProject } from './files'
+import { clampPrecision, scaleFromText } from './topBarInputs'
 import { comingSoonModes, isDrawingMode, modeById, readyModes, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
@@ -237,6 +238,15 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
   const setGraphicsInfo = useApp((a) => a.setGraphicsInfo)
   const [zoom, setZoom, zoomable] = useZoom()
   const theme = useTheme((t) => t.theme)
+  // The box shows what was typed; the stored scale only follows a positive number (see scaleFromText).
+  const [scaleText, setScaleText] = useState(String(settings.unitPerSquare))
+  const [shownScale, setShownScale] = useState(settings.unitPerSquare)
+  if (shownScale !== settings.unitPerSquare) {
+    // The scale changed from elsewhere (a Units row in Ctrl+K, a file): show it, unless the box already says it.
+    // Adjusted while rendering rather than in an effect, so the box never paints the old number first.
+    setShownScale(settings.unitPerSquare)
+    if (scaleFromText(scaleText) !== settings.unitPerSquare) setScaleText(String(settings.unitPerSquare))
+  }
   const summary = `1 □ = ${settings.unitPerSquare} ${settings.unit === 'unit' ? 'unit' : settings.unit} · ${settings.decimals} ${settings.precisionMode === 'dp' ? 'd.p.' : 's.f.'}`
   return (
     <div ref={ref} className="relative">
@@ -249,7 +259,19 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
           <Heading>Scale</Heading>
           <div className="mb-3 flex items-center gap-2">
             <span className="text-[var(--text)]">1 grid square =</span>
-            <input className="field num w-16" type="number" min={0} step="any" value={settings.unitPerSquare} onChange={(e) => set({ unitPerSquare: Math.max(1e-9, Number(e.target.value) || 1) })} />
+            <input
+              className="field num w-16"
+              type="text"
+              inputMode="decimal"
+              aria-label="Length of one grid square"
+              value={scaleText}
+              onChange={(e) => {
+                setScaleText(e.target.value)
+                const n = scaleFromText(e.target.value)
+                if (n !== null) set({ unitPerSquare: Math.max(1e-9, n) })
+              }}
+              onBlur={() => setScaleText(String(settings.unitPerSquare))}
+            />
             <select className="field w-28" value={settings.unit} onChange={(e) => set({ unit: e.target.value as LengthUnit })}>
               {UNITS.map((u) => (
                 <option key={u} value={u}>
@@ -260,7 +282,7 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
           </div>
           <Heading>Precision</Heading>
           <div className="mb-3 flex items-center gap-2">
-            <input className="field num w-14" type="number" min={0} max={12} value={settings.decimals} onChange={(e) => set({ decimals: Math.max(0, Math.min(12, Math.round(Number(e.target.value)))) })} />
+            <input className="field num w-14" type="number" min={settings.precisionMode === 'sf' ? 1 : 0} max={12} value={settings.decimals} onChange={(e) => set({ decimals: clampPrecision(Number(e.target.value), settings.precisionMode) })} />
             <div className="seg whitespace-nowrap">
               <button className={settings.precisionMode === 'dp' ? 'on' : ''} onClick={() => set({ precisionMode: 'dp' })}>
                 decimal places

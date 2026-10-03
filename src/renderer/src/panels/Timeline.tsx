@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react'
 import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { useSandbox } from '../sim/store'
 import { formatMeasure } from '../math/format'
+import { nextTimelineMax } from './shellLogic'
 
 export function Timeline() {
   const mode = useApp((s) => s.mode)
@@ -39,7 +41,11 @@ function MathsTimeline() {
   const setTime = useScene((s) => s.setTime)
   const setSpeed = useScene((s) => s.setSpeed)
   const settings = useScene((s) => s.settings)
-  const duration = Math.max(10, Math.ceil(time / 10) * 10)
+  // The scale only grows, so dragging back across a multiple of 10 s does not move the thumb. Kept in
+  // state and adjusted while rendering (React's pattern for remembered derived values), not in a ref.
+  const [scale, setScale] = useState(10)
+  const duration = nextTimelineMax(scale, time)
+  if (duration !== scale) setScale(duration)
 
   return (
     <div className="panel flex flex-col gap-3 p-3">

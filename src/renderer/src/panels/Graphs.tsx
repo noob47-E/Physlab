@@ -3,6 +3,7 @@ import uPlot from 'uplot'
 import { Plus, Trash2, X } from 'lucide-react'
 import { useScene } from '../core/store'
 import { math, preprocess } from '../math/expr'
+import { keepBefore } from './shellLogic'
 import { seriesColor, themeColor, useTheme } from '../app/theme'
 
 /** Live plots of any quantity against time (e.g. |R|, angle(A, B), P[1]). */
@@ -55,7 +56,8 @@ export function Graphs() {
     let lastDraw = 0
     return useScene.subscribe((s) => {
       if (s.time === lastT) return
-      if (s.time < lastT) data.current = [[], ...tracks.map(() => [])]
+      // Scrubbing back keeps what was recorded before the new time (only the Reset button clears).
+      if (s.time < lastT) data.current = keepBefore(data.current, s.time)
       lastT = s.time
       const d = data.current
       d[0].push(s.time)

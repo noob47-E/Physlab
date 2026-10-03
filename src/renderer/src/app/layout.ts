@@ -8,6 +8,7 @@
 import type { DockviewApi } from 'dockview-react'
 import { scene } from '../core/store'
 import { spaceOf } from '../core/visibility'
+import { resetTool } from '../render/tools'
 import { QUALITY, qualityNow } from '../render/renderer'
 import { useParticleLab } from '../render/GpuParticles'
 import { warmupCas } from '../math/cas'
@@ -30,6 +31,10 @@ export function enterMode(id: ModeId) {
   useParticleLab.setState(id === 'gpu' ? { enabled: true, count: QUALITY[qualityNow()].particles } : { enabled: false })
   if (m.view) s.setViewMode(m.view)
   if (!m.tools.includes(s.tool)) s.setTool('select')
+  // A new mode starts every tool afresh: a half-made segment or a pending vector tail from the
+  // last drawing would otherwise finish here, joined to a point this drawing cannot show. The
+  // tool's own reset only runs when the tool changes, which it does not when both modes share it.
+  resetTool()
   // The centre panel is switched directly: requestFocus holds one panel at a time, so asking
   // for two in a row would lose the first.
   if (m.centre) showPanel(m.centre)

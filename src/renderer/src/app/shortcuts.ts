@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { newProject, openProject, saveProject } from './files'
 import { scene } from '../core/store'
-import { TOOLS, cancelTool, finishTool, resetTool, undoLastPick, useTool } from '../render/tools'
+import { cancelTool, finishTool, resetTool, undoLastPick, useTool } from '../render/tools'
 import { isViewShown, resetCamera, turnView } from '../render/viewState'
 import { turnForKey } from '../render/viewMath'
 import { useTour } from './tour/Tour'
-import { isDrawingMode, useApp } from './modes'
+import { isDrawingMode, modeById, useApp } from './modes'
+import { toolForKey } from './toolKeys'
 import { useSandbox } from '../sim/store'
 import { useLab } from '../lab/labStore'
 import { useAuthor } from '../questions/authorStore'
@@ -174,8 +175,8 @@ export function useShortcuts() {
           document.getElementById('command-input')?.focus()
           return
       }
-      const tool = TOOLS.find((t) => t.key && t.key.toLowerCase() === e.key.toLowerCase())
-      if (tool) s.setTool(tool.id)
+      const tool = toolForKey(e.key, modeById(useApp.getState().mode).tools)
+      if (tool) s.setTool(tool)
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKeyUp)
