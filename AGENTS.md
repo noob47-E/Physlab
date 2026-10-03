@@ -315,6 +315,17 @@ neighbour is open.
   36 and `12.5×10^3` was 2500. Guard: `tests/exprPrecedence.test.ts`.
 - **`revealPrecision` at tolerance 0** shows the exact answer in the fewest figures, and that text typed back must be
   marked right. Guard: `tests/questionReveal.test.ts` › P21.
+- **Rebuild a Vectors answer card from its recipe every time, drawn or not.** A half-typed card is "unreadable", not
+  "removed": freeze the answer and its picture rather than taking them off. Guard: `tests/vectorCalc.test.ts` R2/R6.
+- **Re-lay a drawn answer's arrows in place, keeping the same ids; never delete them and make new ones.** If the arrows
+  are re-made, the student's points and angles built on them go with them. Guard: `tests/vectorSnap.test.ts` B.
+- **`fmtPrecise`'s 10⁻¹² floor is for noise, not for answers.** Write tiny real values with the scientific writers. Treat
+  as zero only noise that is small RELATIVE to the inputs (the vector solver's `isNoise` and `lineScale`).
+- **mathjs adds a bare number to every component of a matrix.** "8i + 2" becomes 10i + 2j + 2k unless it is refused.
+- **Snap order changed for every drawing tool.** An arrow head (`vectorHead`) now comes straight after an existing point
+  in `snapAt` (render/Interaction.tsx).
+- **Every label chip goes through `superscriptPowers`.** That includes the Measure panel, which reuses `measureText`.
+  Never put a caret or e-notation on screen.
 
 ## Code knowledge
 

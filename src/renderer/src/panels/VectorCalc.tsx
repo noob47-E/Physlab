@@ -9,53 +9,53 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, Plus, Sigma, Trash2 } from 'lucide-react'
 import { useScene } from '../core/store'
-import type { SceneSettings } from '../core/types'
 import { isDrawnAnswer, type DrawStyle } from '../core/visualize'
-import { inDegrees, toV3 } from '../math/expr'
-import { formatMeasure, texIJK, texMeasure } from '../math/format'
-import { heading, len, type V3 } from '../math/vec'
-import * as VS from '../math/vectorSolver'
+import { len, type V3 } from '../math/vec'
+import { useView } from '../render/viewState'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { graphCardPrompt, answerHint, answerOnGraph, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, evalNumber, evaluateVectorLine, explainVectorError, PlainError, cardValues, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, peekCardId, pickArrow, removeCard, renameCard, setEntry, solveOperation, startCardSync, useVC, type Card, type Entry } from './vectorCalcStore'
+import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type OperationRule } from './vectorCalcStore'
 
-const UNIT_VECTORS = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
-
-interface Op {
+/** An operation's button: what it reads and is called (the store's OPERATIONS) with how it is drawn. */
+interface Op extends OperationRule {
   id: string
-  label: string
   tex: string
-  /** How many cards the operation reads, in order from the top; 'all' reads every card. */
-  need: number | 'all'
   help: string
-  /** The scalar field this operation needs, shown beside its button and nowhere else. */
-  field?: 'k' | 'q'
 }
+
+const op = (id: string, tex: string, help: string): Op => ({ id, ...OPERATIONS[id], tex, help })
 
 /** The six operations a student reaches for most, always visible. */
 const COMMON_OPS: Op[] = [
-  { id: 'sum', label: 'Add all', tex: '\\vec{A}+\\vec{B}+\\dots', need: 'all', help: 'Resultant by rectangular components' },
-  { id: 'sub', label: 'Subtract', tex: '\\vec{A}-\\vec{B}', need: 2, help: 'A + (−B)' },
-  { id: 'dot', label: 'Dot', tex: '\\vec{A}\\cdot\\vec{B}', need: 2, help: 'Scalar product and angle between' },
-  { id: 'cross', label: 'Cross', tex: '\\vec{A}\\times\\vec{B}', need: 2, help: 'Vector product and parallelogram area' },
-  { id: 'mag', label: 'Size & angle', tex: '|\\vec{A}|,\\ \\theta', need: 1, help: 'Magnitude and direction' },
-  { id: 'resolve', label: 'Components', tex: 'A_x,\\ A_y', need: 1, help: 'Aₓ = A cos θ, A_y = A sin θ' }
+  op('sum', '\\vec{A}+\\vec{B}+\\dots', 'Resultant by rectangular components'),
+  op('sub', '\\vec{A}-\\vec{B}', 'A + (−B)'),
+  op('dot', '\\vec{A}\\cdot\\vec{B}', 'Scalar product and angle between'),
+  op('cross', '\\vec{A}\\times\\vec{B}', 'Vector product and parallelogram area'),
+  op('mag', '|\\vec{A}|,\\ \\theta', 'Magnitude and direction'),
+  op('resolve', 'A_x,\\ A_y', 'Aₓ = A cos θ, A_y = A sin θ')
 ]
 
 /** The rest, behind "More". */
 const MORE_OPS: Op[] = [
-  { id: 'scale', label: 'Scalar ×', tex: 'k\\vec{A}', need: 1, help: 'Multiply by k', field: 'k' },
-  { id: 'unit', label: 'Unit vector', tex: '\\hat{A}', need: 1, help: 'Direction with length 1' },
-  { id: 'angle', label: 'Angle between', tex: '\\theta_{AB}', need: 2, help: 'cos θ = A·B / AB' },
-  { id: 'proj', label: 'Projection', tex: '\\mathrm{proj}_{A}\\vec{B}', need: 2, help: 'Shadow of B on A' },
-  { id: 'equil', label: 'Equilibrium', tex: '\\vec{E}=-\\sum\\vec{F}', need: 'all', help: 'Force that balances all' },
-  { id: 'torque', label: 'Torque', tex: '\\vec{\\tau}=\\vec{r}\\times\\vec{F}', need: 2, help: 'First card = r, second = F' },
-  { id: 'work', label: 'Work', tex: 'W=\\vec{F}\\cdot\\vec{d}', need: 2, help: 'First card = F, second = d' },
-  { id: 'lorentz', label: 'Magnetic force', tex: 'q(\\vec{v}\\times\\vec{B})', need: 2, help: 'First card = v, second = B, charge q', field: 'q' },
-  { id: 'relvel', label: 'Relative velocity', tex: '\\vec{v}_{AB}=\\vec{v}_A-\\vec{v}_B', need: 2, help: 'Velocity of A as seen from B' }
+  op('scale', 'k\\vec{A}', 'Multiply by k'),
+  op('unit', '\\hat{A}', 'Direction with length 1'),
+  op('angle', '\\theta_{AB}', 'cos θ = A·B / AB'),
+  op('proj', '\\mathrm{proj}_{A}\\vec{B}', 'Shadow of B on A'),
+  op('equil', '\\vec{E}=-\\sum\\vec{F}', 'Force that balances all'),
+  op('torque', '\\vec{\\tau}=\\vec{r}\\times\\vec{F}', 'First card = r, second = F'),
+  op('work', 'W=\\vec{F}\\cdot\\vec{d}', 'First card = F, second = d'),
+  op('lorentz', 'q(\\vec{v}\\times\\vec{B})', 'First card = v, second = B, charge q'),
+  op('relvel', '\\vec{v}_{AB}=\\vec{v}_A-\\vec{v}_B', 'Velocity of A as seen from B')
 ]
 
-const OPS = [...COMMON_OPS, ...MORE_OPS]
+/**
+ * The operation buttons, in as many columns as keep every label whole (V2). Three fixed columns left
+ * "Components" (the longest word) wider than its 69 px track at the 960 px minimum window at 120 %
+ * text: the button grew past its track and the whole panel scrolled sideways, and once it could
+ * shrink the word still stuck out of the button, because a word cannot wrap. Each track is now at
+ * least a label wide, so a panel of the minimum width gets two columns and a wide one three.
+ */
+const OP_GRID = 'grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1 px-2'
 
 const STYLES: [DrawStyle | null, string][] = [
   [null, 'Auto'],
@@ -64,42 +64,16 @@ const STYLES: [DrawStyle | null, string][] = [
   ['common-tail', 'From origin']
 ]
 
-/**
- * A typed expression worked out from the cards' values, with the names of the cards it used.
- * Names are checked first: an unknown letter would otherwise be one of mathjs's units.
- */
-function exprSolution(expr: string, cards: { name: string; v: V3 | string }[], settings: SceneSettings): { sol: VS.Solution; used: string[] } {
-  const scope: Record<string, unknown> = { ...UNIT_VECTORS }
-  cards.forEach((c) => {
-    if (typeof c.v !== 'string') scope[c.name] = c.v
-  })
-  const unreadable = cards.filter((c) => typeof c.v === 'string').map((c) => c.name)
-  const { src, out } = inDegrees(() => evaluateVectorLine(expr, scope, [], unreadable))
-  const inputs = cards.filter((x): x is { name: string; v: V3 } => typeof x.v !== 'string' && new RegExp(`\\b${x.name}\\b`).test(src))
-  const used = inputs.map((x) => x.name)
-  if (typeof out === 'number') {
-    // Both strings are KaTeX: the plain-text form's "×10^-5" put only the minus in the superscript.
-    const shown = texMeasure(out, 'number', settings)
-    return { used, sol: { title: 'Result', steps: [{ tex: `${expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } }
-  }
-  const v = toV3(out)
-  if (!v.every(Number.isFinite)) throw new PlainError('This cannot be worked out: something in it is divided by zero.')
-  const md = VS.solveMagnitudeDirection({ name: 'R', v }, settings)
-  const sol: VS.Solution = {
-    title: 'Resultant of the expression',
-    steps: [{ text: 'Evaluate component by component:', tex: `\\vec{R} = ${expr} = ${texIJK(v, settings)}` }, ...md.steps.slice(1)],
-    answers: [{ label: 'R', tex: texIJK(v, settings) }, ...md.answers],
-    visual: { vectors: [...inputs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: 'R', v, role: 'result' as const }], mode: 'common-tail' }
-  }
-  return { sol, used }
-}
-
 export function VectorCalc() {
   const st = useVC()
   const settings = useScene((s) => s.settings)
   const objects = useScene((s) => s.objects)
   const ev = useScene((s) => s.ev)
   const selection = useScene((s) => s.selection)
+  // The drawing's width in pixels, subscribed to: the size limit in "Too big to draw…" is a number of
+  // grid squares across it, and read from the store at render time it stayed that of the last render
+  // after a window or panel resize, until a retype (G4b).
+  const widthPx = useView((s) => s.widthPx)
   const [error, setError] = useState('')
   /** Why a card's new name was refused, beside that card. */
   const [nameProblem, setNameProblem] = useState<{ id: number; text: string }>({ id: 0, text: '' })
@@ -143,43 +117,8 @@ export function VectorCalc() {
 
   const updateCard = (id: number, patch: Partial<Card>) => set({ cards: st.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)) })
 
-  /**
-   * The cards an operation reads, by position. "First card = r, second = F" has to mean the
-   * cards the student can see: skipping an unreadable card silently made the third card F.
-   */
-  const pick = (op: Op): VS.NamedVec[] | string => {
-    const wanted = op.need === 'all' ? st.cards : st.cards.slice(0, op.need)
-    if (op.need !== 'all' && wanted.length < op.need) return `${op.label} needs ${op.need} vectors. Add another card.`
-    if (op.need === 'all' && wanted.length < 1) return 'Add a vector first.'
-    for (let i = 0; i < wanted.length; i++) {
-      const v = values[st.cards.indexOf(wanted[i])]
-      if (typeof v === 'string') return `Card ${wanted[i].name} cannot be read: ${v}`
-    }
-    return wanted.map((c) => ({ name: c.name, v: values[st.cards.indexOf(c)] as V3 }))
-  }
-
-  const run = (opId: string) => {
-    setError('')
-    const op = OPS.find((o) => o.id === opId)!
-    const vs = pick(op)
-    if (typeof vs === 'string') {
-      setError(vs)
-      return
-    }
-    try {
-      const k = opId === 'scale' ? evalNumber(st.k) : 0
-      const q = opId === 'lorentz' ? evalNumber(st.q) : 0
-      // The recipe works the same answer out again when one of its vectors is dragged or retyped
-      // with its picture on the graph, so the picture and this card never disagree.
-      const solve = (named: VS.NamedVec[], now: typeof settings) => solveOperation(opId, named, now, k, q)
-      const sol = solve(vs, settings)
-      if (!sol) return
-      const wanted = op.need === 'all' ? st.cards : st.cards.slice(0, op.need)
-      set({ result: { sol, label: op.label, from: { cards: wanted.map((c) => ({ id: c.id, name: c.name })), solve } } })
-    } catch (e) {
-      setError(explainVectorError(e))
-    }
-  }
+  /** An operation button: the store works it out and says why when it cannot (H9). */
+  const run = (opId: string) => setError(runOperation(opId) ?? '')
 
   /** Free expression: A + 2B − C, A × B, |A|… */
   const runExpr = () => {
@@ -201,9 +140,11 @@ export function VectorCalc() {
     set({ cards: [...st.cards, { id: nextCardId(), name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
   }
 
+  // The buttons shrink to their track and wrap a two-word label inside the button (V2); the track
+  // itself (OP_GRID) is never narrower than a whole label.
   const opButton = (op: Op) => (
-    <button key={op.id} className="btn h-auto min-h-[44px] flex-col items-start gap-0 py-1 text-left" title={op.help} onClick={() => run(op.id)}>
-      <span className="text-small text-[color:var(--text-strong)]">{op.label}</span>
+    <button key={op.id} className="btn h-auto min-h-[44px] min-w-0 flex-col items-start gap-0 whitespace-normal px-1.5 py-1 text-left" title={op.help} onClick={() => run(op.id)}>
+      <span className="break-words text-small text-[color:var(--text-strong)]">{op.label}</span>
       <span className="text-fine text-[color:var(--text-dim)]">
         <Tex tex={op.tex} />
       </span>
@@ -233,6 +174,8 @@ export function VectorCalc() {
         const lit = st.highlight === card.id
         // A typed vector is plain numbers; only one read off the drawing carries the drawing's unit.
         const sizeKind = card.entry === 'scene' ? 'length' : 'number'
+        // An arrow longer than the camera can zoom out to is drawn as nothing: say so, under the card.
+        const tooBig = ok ? tooBigToDraw(len(v as V3), settings, widthPx) : null
         return (
           <div key={card.id} ref={lit ? highlightRef : undefined} className={`card p-2 ${ok || waiting ? '' : 'border-[color:var(--bad)]'} ${lit ? 'ring-2 ring-[color:var(--accent)]' : ''}`}>
             {/* The row wraps and the switch may shrink: at the 960 px minimum window the three
@@ -248,7 +191,9 @@ export function VectorCalc() {
               />
               {/* One way in: the maths field, which takes 3i + 4j and 10∠30° alike. Size and angle
                   as two boxes stay a chip away for a student whose book writes vectors that way. */}
-              <div className="seg min-w-0 shrink overflow-x-auto">
+              {/* flex-wrap, not overflow-x-auto: at the 960 px minimum window and 120 % text the switch
+                  scrolled inside itself and "graph" was out of sight; now it wraps to a second line. */}
+              <div className="seg min-w-0 shrink flex-wrap">
                 {(
                   [
                     ['comp', 'typed', 'Type it, like 3i + 4j or 10∠30°'],
@@ -274,7 +219,10 @@ export function VectorCalc() {
             </div>
             {card.entry === 'comp' && <MathInput value={card.latex} onChange={(l) => updateCard(card.id, { latex: l })} onEnter={() => run('sum')} placeholder="3i + 4j  or  10∠30°" />}
             {card.entry === 'polar' && (
-              <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1.5">
+              // minmax(0, 1fr), not a bare 1fr: a bare 1fr track cannot be narrower than what its field
+              // holds, so a long size or angle widened the row past the panel's edge. Now each field
+              // keeps its track's width and scrolls its own digits.
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-center gap-1.5">
                 <MathInput size="sm" value={card.mag} onChange={(l) => updateCard(card.id, { mag: l })} placeholder="size" />
                 <span className="text-title text-[color:var(--text-dim)]">∠</span>
                 <MathInput size="sm" value={card.angle} onChange={(l) => updateCard(card.id, { angle: l })} placeholder="angle" />
@@ -297,12 +245,9 @@ export function VectorCalc() {
             )}
             <div className="mt-1 min-h-5 pl-1 text-body">
               {ok ? (
+                // The whole line is KaTeX, so the vector, its size and its angle share one number form.
                 <span className="text-[color:var(--text)]">
-                  <Tex tex={`\\vec{${card.name}} = ${texIJK(v as V3, settings)}`} />
-                  <span className="ml-3 text-[color:var(--text-dim)]">
-                    |{card.name}| = {formatMeasure(len(v as V3), sizeKind, settings)}
-                    {Math.abs((v as V3)[2]) < 1e-12 && <> · θ = {formatMeasure(heading(v as V3), 'direction', settings)}</>}
-                  </span>
+                  <Tex tex={cardLineTex(card.name, v as V3, sizeKind, settings)} />
                 </span>
               ) : waiting ? (
                 <span className="text-[color:var(--text-dim)]">{card.entry === 'scene' ? graphCardPrompt(sceneVectors.length, offered(card).length, v as string) :'Type a vector above, like 3i + 4j or 10∠30°. It is drawn on the graph as you type.'}</span>
@@ -310,6 +255,7 @@ export function VectorCalc() {
                 <span className="text-[color:var(--bad)]">{v as string}</span>
               )}
             </div>
+            {ok && tooBig && <div className="pl-1 text-small text-[color:var(--warn)]">{tooBig}</div>}
             {nameProblem.id === card.id && nameProblem.text && <div className="pl-1 text-small text-[color:var(--bad)]">{nameProblem.text}</div>}
             {ok && readable.includes(card.name) && <div className="pl-1 text-fine text-[color:var(--text-dim)]">{nextStepHint(readable, readable.indexOf(card.name))}</div>}
           </div>
@@ -336,14 +282,10 @@ export function VectorCalc() {
                 <Tex tex={a.tex} className="text-title text-[color:var(--text-strong)]" />
               </div>
             ))}
-            {st.result.stale && (
-              <div className="pt-1 text-small text-[color:var(--warn)]">
-                A vector this was worked out from was removed or cannot be read now, so its picture was taken off the graph. Press the operation again for the answer from the vectors you have now.
-              </div>
-            )}
+            {st.result.stale && <div className="pt-1 text-small text-[color:var(--warn)]">{staleSentence(st.result)}</div>}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--warn)] px-2 py-1.5">
-            {st.result.sol.visual && (
+            {canDraw(st.result) && (
               // The cards' own arrows are laid out and only the answer is added: the scene
               // bridge's copies put A1 on top of A (Fix 2).
               <button className="btn primary min-h-[44px]" onClick={() => drawAnswer(st.result!.sol, st.style)}>
@@ -359,7 +301,7 @@ export function VectorCalc() {
             <button className="btn ghost min-h-[44px]" onClick={() => set({ showSteps: !st.showSteps })}>
               {st.showSteps ? <ChevronDown size={13} /> : <ChevronRight size={13} />} Steps
             </button>
-            {st.result.sol.visual && (
+            {canDraw(st.result) && (
               // Its own row: beside the button the layout names wrapped mid-word in a narrow panel.
               // A two-by-two grid, not one nowrap row: .seg clips what overflows, and at the
               // panel's default width the fourth choice read "From origi" with no way to see the rest.
@@ -381,7 +323,7 @@ export function VectorCalc() {
               </div>
             )}
           </div>
-          <div className="px-3 pb-1.5 text-fine text-[color:var(--text-dim)]">{answerHint(!!st.result.sol.visual)}</div>
+          <div className="px-3 pb-1.5 text-fine text-[color:var(--text-dim)]">{answerHint(canDraw(st.result))}</div>
           {st.showSteps && (
             <ol className="steps space-y-1 px-2 pb-2">
               {st.result.sol.steps.map((s, i) => (
@@ -396,16 +338,17 @@ export function VectorCalc() {
         </div>
       )}
 
-      <div className="mt-2 grid grid-cols-3 gap-1 px-2">{COMMON_OPS.map(opButton)}</div>
+      <div className={`mt-2 ${OP_GRID}`}>{COMMON_OPS.map(opButton)}</div>
 
       <button className="btn ghost mx-2 mt-1 min-h-[44px]" onClick={() => set({ showMore: !st.showMore })}>
         {st.showMore ? <ChevronDown size={13} /> : <ChevronRight size={13} />} More {st.showMore ? '' : `(${MORE_OPS.length})`}
       </button>
       {st.showMore && (
-        <div className="grid grid-cols-3 gap-1 px-2">
+        <div className={OP_GRID}>
           {MORE_OPS.map((op) =>
             op.field ? (
-              <div key={op.id} className="col-span-3 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+              // The field's track may shrink (as in the size ∠ angle row); the button's keeps its text.
+              <div key={op.id} className="col-span-full grid grid-cols-[1fr_auto_minmax(0,1fr)] items-center gap-1.5">
                 {opButton(op)}
                 <span className="text-[color:var(--text-dim)]">{op.field} =</span>
                 <MathInput size="sm" value={st[op.field]} onChange={(l) => (op.field === 'k' ? set({ k: l }) : set({ q: l }))} />
@@ -420,7 +363,9 @@ export function VectorCalc() {
       <div className="card mt-2 p-2">
         <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--text-faint)]">Or type any vector expression</div>
         <div className="flex items-center gap-1.5">
-          <div className="flex-1">
+          {/* min-w-0: a flex item is never narrower than its content unless told so, and the "=" button
+              was pushed off the panel by a long expression. */}
+          <div className="min-w-0 flex-1">
             <MathInput ref={exprRef} value={st.expr} onChange={(l) => set({ expr: l })} onEnter={runExpr} />
           </div>
           <button className="btn primary min-h-[44px] min-w-[44px]" onClick={runExpr}>

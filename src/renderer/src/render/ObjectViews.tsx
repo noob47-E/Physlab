@@ -11,12 +11,12 @@ import { visibleIn } from '../core/visibility'
 import { componentTexts, freeCapitals } from '../core/naming'
 import { angleAt, centroid, orientedAngleAt } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
-import { formatMeasure } from '../math/format'
+import { formatMeasure, superscriptPowers } from '../math/format'
 import { decompose, type Decomposition } from '../math/decompose'
 import { fillOutline, fillsWhole } from './fillMath'
 import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
-import { isResultArrow, RESULT_HEAD_GAP_PX } from './colourMix'
+import { isResultArrow, RESULT_HEAD_GAP_PX, showsComponents } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 import { pieceNameAnchor } from './pieceLabels'
 import { BatchedArrow, useArrowBatched } from './ArrowBatch'
@@ -280,7 +280,7 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- colors.theme is the signal that the stylesheet changed, not a value read here
     [result, obj.color, obj.themed, colors.theme]
   )
-  const showComps = obj.showComponents || selected
+  const showComps = showsComponents(obj, selected)
   // The θ arc from the x-axis is an angle mark; a student who wants a bare drawing turns it off.
   const showArc = useScene((s) => s.settings.showAngleMarks)
   const L = len(comp)
@@ -307,18 +307,19 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
     pool.begin()
     {
       // The name/size/angle chip comes from the label layer; here only drag changes and components.
+      // A power of ten in either is raised, "8.89 × 10¹⁹", never "8.89×10^19" (V6: no caret on screen).
       if (dragging && base?.type === 'vector' && b.visible) {
         const dTheta = angleBetween(base.comp, comp)
         const sign = Math.sign(base.comp[0] * comp[1] - base.comp[1] * comp[0]) || 1
         const parts = [`Δθ = ${sign < 0 ? '−' : '+'}${formatMeasure(dTheta, 'angle', settings)}`, `ΔL = ${formatMeasure(L - len(base.comp), 'length', settings)}`]
-        pool.place(parts.join('   '), b.x + 16, b.y + 22, 'left')
+        pool.place(superscriptPowers(parts.join('   ')), b.x + 16, b.y + 22, 'left')
       }
       if (showComps && planar) {
         const ax = toScreen(cam, sz, [tail[0] + comp[0], tail[1], tail[2]])
         const ay = toScreen(cam, sz, [tail[0], tail[1] + comp[1], tail[2]])
         const [xText, yText] = componentTexts(obj, comp, settings)
-        pool.place(xText, (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', colors.xComp)
-        pool.place(yText, ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', colors.yComp)
+        pool.place(superscriptPowers(xText), (a.x + ax.x) / 2, ax.y + (comp[1] >= 0 ? 16 : -16), 'center', colors.xComp)
+        pool.place(superscriptPowers(yText), ay.x + (comp[0] >= 0 ? -10 : 10), (a.y + ay.y) / 2, comp[0] >= 0 ? 'right' : 'left', colors.yComp)
         if (showArc && L > 1e-9) {
           const mid = arc.mid
           const lp = toScreen(cam, sz, [tail[0] + Math.cos(mid) * 46 * worldPerPixel(cam, sz, tail), tail[1] + Math.sin(mid) * 46 * worldPerPixel(cam, sz, tail), tail[2]])

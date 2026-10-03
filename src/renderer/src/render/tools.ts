@@ -4,8 +4,9 @@ import { create } from 'zustand'
 import { Builder } from '../core/factory'
 import { isFree, parentRefs } from '../core/evaluate'
 import { scene } from '../core/store'
-import type { Computed, ObjId, SceneObject, ToolId } from '../core/types'
-import type { V3 } from '../math/vec'
+import type { Computed, EvalResult, ObjId, SceneObject, ToolId } from '../core/types'
+import { visibleOrder, type Space } from '../core/visibility'
+import { add, type V3 } from '../math/vec'
 
 export type Need = 'point' | 'lineLike' | 'curve' | 'any' | 'segmentOrPoint'
 
@@ -49,7 +50,7 @@ export const shelfFitLabel = (id: string): string | undefined => TOOLS.find((t) 
 
 export interface SnapInfo {
   p: V3
-  kind: 'free' | 'grid' | 'point' | 'axis' | 'onObject' | 'intersection'
+  kind: 'free' | 'grid' | 'point' | 'axis' | 'onObject' | 'intersection' | 'vectorHead'
   pointId?: ObjId
   /** For 'onObject': the line/segment/circle the point should stick to, and where along it. */
   onId?: ObjId
@@ -60,7 +61,104 @@ export interface SnapInfo {
   a?: ObjId
   b?: ObjId
   index?: number
+  /** For 'vectorHead': the arrow whose head this is. A point made here is defined by that head, so
+   *  it stays on the tip when the arrow is dragged, retyped or laid out again. */
+  vectorId?: ObjId
   label?: string
+}
+
+/** An arrow's head as a snap target: the arrow, and where its head is in the drawing. */
+export interface HeadTarget {
+  id: ObjId
+  head: V3
+}
+
+/**
+ * The arrows whose heads a click can land on, in drawing order: every arrow drawn and visible in
+ * the drawing being looked at. A helper Draw on graph keeps hidden, an arrow "Resultant only"
+ * hides and one in another mode's drawing are never targets — a click would join something not on
+ * screen. `exclude` is what a drag moves, so a dragged arrow never lands on its own old head.
+ * Only heads: a tail snaps as any other spot does.
+ */
+export function headSnapTargets(objects: Record<ObjId, SceneObject>, order: ObjId[], ev: EvalResult, space: Space | null, exclude?: ReadonlySet<ObjId>): HeadTarget[] {
+  const out: HeadTarget[] = []
+  for (const id of visibleOrder(order, objects, space)) {
+    const c = ev.values.get(id)
+    if (c?.type !== 'vector' || !objects[id].visible || exclude?.has(id)) continue
+    out.push({ id, head: add(c.tail, c.comp) })
+  }
+  return out
+}
+
+/** Screen distances closer than this are one spot: two heads there differ only in the last bits of a sum. */
+const SAME_SPOT_PX = 1e-6
+
+/**
+ * Where a click at (x, y) on the canvas lands before a crossing, the grid or a side: the existing
+ * point under it (`pointHit`, already within the points' radius) if there is one, else the nearest
+ * arrow head within `radiusPx` — the points' own radius, so a tip pulls exactly as a point does. A
+ * click a pixel off a lone tip used to make a free point beside it, and an angle measured on that
+ * point read 60.15° where the arrows make 60° (V5). Of heads at one spot (B's and R's at the top of
+ * a head-to-tail figure) the arrow drawn last wins, as pickAll has it: `heads` is in drawing order.
+ */
+export function pointOrHeadSnap(
+  pointHit: SnapInfo | null,
+  heads: readonly (HeadTarget & { screen: { x: number; y: number; visible: boolean } })[],
+  x: number,
+  y: number,
+  radiusPx: number
+): SnapInfo | null {
+  if (pointHit) return pointHit
+  let best: HeadTarget | null = null
+  let bestD = radiusPx
+  for (const h of heads) {
+    if (!h.screen.visible) continue
+    const d = Math.hypot(h.screen.x - x, h.screen.y - y)
+    if (d > radiusPx || (best && d > bestD + SAME_SPOT_PX)) continue
+    best = h
+    bestD = Math.min(bestD, d)
+  }
+  return best ? { p: best.head, kind: 'vectorHead', vectorId: best.id } : null
+}
+
+/** Equal but for the last bits a sum or a re-evaluation leaves. */
+const sameSpot = (a: V3, b: V3) => a.every((v, k) => Math.abs(v - b[k]) <= 1e-9 * Math.max(1, Math.abs(v)))
+
+/**
+ * During a drag, whether a point or head may still be snapped onto: not one that has moved since
+ * the drag began, nor one sitting where a dragged free arrow had its head then. Both move with the
+ * drag without being built on what is dragged, so `exclude` misses them: the answer R that the
+ * Vector Calculator lays out again from a dragged B has its head on B's in a head-to-tail figure,
+ * and so has a point on R's head. Snapping onto them held B's head where it already was, and the
+ * drag crept along in 12 px jumps. `baseline` is the drawing as the drag found it (core/store.ts
+ * beginGesture), `dragged` what the drag moves. A target that keeps still is one as before.
+ *
+ * The old-head rule is for what moves WITH an arrow only: another arrow's head and a point defined
+ * by a head (kind vectorHead). A plain point — free, on an object, a crossing, a midpoint — stays
+ * where it is, so an arrow drawn onto F and dragged by its body could not land its tail on F: the
+ * hint said "grid" and the tail went to the crossing beside it, where it said "on F" before.
+ */
+export function stillInDrag(baseline: ReadonlyMap<ObjId, Computed> | null, dragged: ReadonlySet<ObjId>, objects: Record<ObjId, SceneObject>): (id: ObjId, p: V3) => boolean {
+  if (!baseline) return () => true
+  const at = (c: Computed | undefined): V3 | undefined => (c?.type === 'point' ? c.p : c?.type === 'vector' ? add(c.tail, c.comp) : undefined)
+  // Only a free arrow's head moves with it: an arrow between two points ends on its end point,
+  // which stays a target while only the start is dragged.
+  const oldHeads: V3[] = []
+  for (const id of dragged) {
+    const o = objects[id]
+    const c = baseline.get(id)
+    if (o?.type === 'vector' && o.def.kind === 'free' && c?.type === 'vector') oldHeads.push(add(c.tail, c.comp))
+  }
+  /** A target that follows an arrow about: an arrow's head (the id is the arrow's) or a point on a head. */
+  const followsAnArrow = (id: ObjId): boolean => {
+    const o = objects[id]
+    return o?.type === 'vector' || (o?.type === 'point' && o.def.kind === 'vectorHead')
+  }
+  return (id, p) => {
+    const was = at(baseline.get(id))
+    if (was && !sameSpot(was, p)) return false
+    return !(followsAnArrow(id) && oldHeads.some((h) => sameSpot(h, p)))
+  }
 }
 
 /** The box a student drags with the Move tool, in canvas pixels; the corners are whichever way round the drag went. */

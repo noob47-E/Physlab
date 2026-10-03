@@ -182,3 +182,12 @@ export const RESULT_HEAD_GAP_PX = 15
 export function isResultArrow(o: { id: string; color: string; themed?: string }): boolean {
   return (o.themed ?? vectorToken(o.color)) === RESULT_TOKEN || mixParents.has(o.id)
 }
+
+/**
+ * Whether an arrow draws its own x- and y-components: when they are turned on, or while it is
+ * selected — unless it is auxiliary. A helper such as Components' Ax is a construction line, and
+ * selected it was resolved again into "Axx = 3 cm" and "Axy = 0 cm": components of a component.
+ */
+export function showsComponents(o: { auxiliary?: boolean; showComponents?: boolean }, selected: boolean): boolean {
+  return !!o.showComponents || (selected && !o.auxiliary)
+}

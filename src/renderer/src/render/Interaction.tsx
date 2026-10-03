@@ -5,7 +5,7 @@ import { FatLine } from './FatLine'
 import { niceStep, screenToPlane, toScreen, worldPerPixel, XY_PLANE } from './cameraUtils'
 import { labelAnchors, overlay, showTip } from './overlay'
 import { CURVE_PICK_PX, pickAll, pickAt, type Hit } from './picking'
-import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, resetTool, useTool, type Marquee, type SnapInfo } from './tools'
+import { acceptsFor, advanceTool, createsPointsOnEmpty, finishTool, headSnapTargets, pointOrHeadSnap, resetTool, stillInDrag, useTool, type Marquee, type SnapInfo } from './tools'
 import { drawingClickHit, joinsPointWithSnapOff, marqueeStarted, mergeSelection, normalizeRect, objectInRect, rightDragPanned, shiftConstrains, type S2 } from './selectMath'
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
@@ -143,8 +143,9 @@ export function Interaction() {
     const scr = (p: V3) => toScreen(ctxRef.current.camera, ctxRef.current.size, p)
 
     /**
-     * Magnetic snapping: jumps to an existing point, a grid crossing or an axis only when the cursor
-     * is close to it on screen; otherwise the position stays where the mouse is. Alt turns snapping off.
+     * Magnetic snapping: jumps to an existing point, an arrow's head, a grid crossing or an axis only
+     * when the cursor is close to it on screen; otherwise the position stays where the mouse is. Alt
+     * turns snapping off.
      */
     const snapAt = (x: number, y: number, plane: THREE.Plane, alt: boolean, exclude?: Set<ObjId>): SnapInfo | null => {
       const w = worldOn(x, y, plane)
@@ -152,16 +153,33 @@ export function Interaction() {
       const s = scene()
       const step = gridStep()
       const tidy = (v: number) => Math.round(v / (step / 20)) * (step / 20)
-      const onPoint = (): SnapInfo | null => {
-        const hit = pickAt(pickCtx(), x, y, (o, c) => c.type === 'point' && !exclude?.has(o.id))
+      // A drag also leaves out what moves with it without being built on it (stillInDrag): the
+      // answer R the Vector Calculator lays out again from a dragged B, and a point on R's head.
+      const still = exclude ? stillInDrag(s.baseline, exclude, s.objects) : () => true
+      const existingPoint = (): SnapInfo | null => {
+        const hit = pickAt(pickCtx(), x, y, (o, c) => c.type === 'point' && !exclude?.has(o.id) && still(o.id, c.p))
         const c = hit && hit.dist <= SNAP_POINT_PX ? s.ev.values.get(hit.id) : undefined
         return hit && c?.type === 'point' ? { p: c.p, kind: 'point', pointId: hit.id, label: s.objects[hit.id]?.name } : null
+      }
+      // What a click joins: an existing point, else an arrow's head with the points' radius (a
+      // point already there still wins). Nothing snapped to a head before: a click a pixel off a
+      // lone tip made a point beside it, and an angle measured on that point read 60.15° instead
+      // of 60° (V5).
+      const onPoint = (): SnapInfo | null => {
+        const heads = headSnapTargets(s.objects, s.order, s.ev, s.activeSpace, exclude)
+          .filter((h) => still(h.id, h.head))
+          .map((h) => ({ ...h, screen: scr(h.head) }))
+        const sn = pointOrHeadSnap(existingPoint(), heads, x, y, SNAP_POINT_PX)
+        if (sn?.kind !== 'vectorHead') return sn
+        const arrow = s.objects[sn.vectorId!]
+        return { ...sn, label: `head of ${arrow?.label ?? arrow?.name}` }
       }
       if (alt || !s.settings.snap) {
         // A point-making tool's click still joins a point right under it with snapping off
         // (drawingClickHit takes it), so the tip and ring say so too; the tip used to give the length
         // to the pointer while the side was built to the point (Fix 1). Vector and Text, which place
-        // their ends from this snap, stay free, and a drag (it passes `exclude`) never joins.
+        // their ends from this snap, stay free, and a drag (it passes `exclude`) never joins. An
+        // arrow's head joins where a point would (onPoint), as it does with snapping on.
         const joined = joinsPointWithSnapOff(createsPointsOnEmpty(s.tool), !!exclude) ? onPoint() : null
         return joined ?? { p: [tidy(w[0]), tidy(w[1]), w[2]], kind: 'free' }
       }
@@ -239,7 +257,15 @@ export function Interaction() {
     const fmtA = (r: number) => formatMeasure(r, 'angle', scene().settings)
     const coordText = (p: V3) => `(${[p[0], p[1]].map((v) => fmtL(v).replace(/ \S+$/, '')).join(', ')})`
     const snapNote = (sn: SnapInfo) =>
-      sn.kind === 'point' ? `  • on ${sn.label}` : sn.kind === 'onObject' || sn.kind === 'intersection' ? `  • ${sn.label}` : sn.kind === 'grid' ? '  • grid' : sn.kind === 'axis' ? '  • axis' : ''
+      sn.kind === 'point'
+        ? `  • on ${sn.label}`
+        : sn.kind === 'onObject' || sn.kind === 'intersection' || sn.kind === 'vectorHead'
+          ? `  • ${sn.label}`
+          : sn.kind === 'grid'
+            ? '  • grid'
+            : sn.kind === 'axis'
+              ? '  • axis'
+              : ''
 
     /** Existing point under the cursor (snapped), or a new free point there. */
     const pointAt = (x: number, y: number, alt: boolean): ObjId | null => {
@@ -248,13 +274,16 @@ export function Interaction() {
       if (sn.pointId) return sn.pointId
       const b = new Builder()
       // A point placed on a side belongs to it and slides along it afterwards; one placed on a
-      // crossing belongs to both lines and stays on the crossing when they move.
+      // crossing belongs to both lines and stays on the crossing when they move; one placed on an
+      // arrow's head stays on the tip when the arrow is dragged, retyped or laid out again.
       const p =
         sn.kind === 'intersection' && sn.a && sn.b && sn.index !== undefined
           ? b.point({ kind: 'intersection', a: sn.a, b: sn.b, index: sn.index })
           : sn.kind === 'onObject' && sn.onId
             ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 })
-            : b.point(sn.p)
+            : sn.kind === 'vectorHead' && sn.vectorId
+              ? b.point({ kind: 'vectorHead', vector: sn.vectorId })
+              : b.point(sn.p)
       b.commit(false)
       // Remember that the tool made this point, so Esc may take it away again — and only this.
       useTool.setState((t) => ({ created: [...t.created, p.id] }))
@@ -856,8 +885,10 @@ function usePreviewColors() {
     const accent = themeColor('--accent')
     const good = themeColor('--good')
     // Every snap colour is resolved here, once per theme, rather than in a closure that read the
-    // stylesheet again on each mouse move over a point.
-    const snap: Record<SnapInfo['kind'], string> = { point: themeColor('--sel-glow'), axis: accent, onObject: themeColor('--series-5'), intersection: themeColor('--key-intercept'), grid: good, free: good }
+    // stylesheet again on each mouse move over a point. A head joins as a point does, so it rings
+    // in the point's colour.
+    const point = themeColor('--sel-glow')
+    const snap: Record<SnapInfo['kind'], string> = { point, vectorHead: point, axis: accent, onObject: themeColor('--series-5'), intersection: themeColor('--key-intercept'), grid: good, free: good }
     return {
       band: themeColor('--text-dim'),
       // The stroke is the only thing on screen while a student draws, and the selection yellow
@@ -926,7 +957,7 @@ function ToolPreview() {
 
 function SnapMarker({ p, kind, color }: { p: V3; kind: SnapInfo['kind']; color: string }) {
   const wpp = useThreeWpp()
-  const r = (kind === 'point' || kind === 'onObject' || kind === 'intersection' ? 9 : 6) * wpp
+  const r = (kind === 'point' || kind === 'vectorHead' || kind === 'onObject' || kind === 'intersection' ? 9 : 6) * wpp
   const ring: V3[] = Array.from({ length: 33 }, (_, i) => {
     const t = (i / 32) * Math.PI * 2
     return [p[0] + r * Math.cos(t), p[1] + r * Math.sin(t), p[2]]

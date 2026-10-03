@@ -5,14 +5,16 @@
 // field into the start-up bundle — 1.4 MB before the first frame, for a menu item.
 
 import { create } from 'zustand'
+import type { MathNode } from 'mathjs'
 import type { DrawStyle } from '../core/visualize'
 import type { EvalResult, ObjId, SceneObject, SceneSettings, VectorObj } from '../core/types'
 import { useScene } from '../core/store'
 import { RESULT_COLOUR, RESULT_TOKEN, newId, nextColor, uniqueName } from '../core/naming'
 import { Builder } from '../core/factory'
-import { fitCamera } from '../render/viewState'
+import { fitCamera, useView } from '../render/viewState'
 import { latexToMath } from '../math/latexToMath'
-import { inDegrees, isUnit, math, preprocess, toV3 } from '../math/expr'
+import { inDegrees, isUnit, math, plainNumber, preprocess, toV3 } from '../math/expr'
+import { formatMeasure, measureValue, notation, sciExponent, superscriptPowers, texIJK, texMeasure, texPrecise, texSci, texUnit, type MeasureKind } from '../math/format'
 import { ZERO, add, fromPolar, heading, layoutVectors, len, neg, toDeg, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 
@@ -39,6 +41,23 @@ export interface Card {
   last?: V3
   /** The card drew its arrow itself, so picking another arrow for it takes the old one away. */
   own?: boolean
+  /**
+   * A size ∠ angle card's boxes are filled at the student's precision (5.66 ∠ 45° for 4i + 4j), so
+   * the card also keeps the vector they were filled from, with the two texts it wrote. While both
+   * boxes still read as written the card's value is that vector, not what the rounded texts say;
+   * editing either box makes what is typed rule again (V6).
+   */
+  exact?: { v: V3; mag: string; angle: string }
+}
+
+/**
+ * A number for a maths field at twelve significant digits and in no programming notation: String
+ * writes 10²¹ as "1e+21" and 1.6×10⁻¹⁹ as "1.6e-19", which a field would show as typed (H8).
+ */
+const exactNumber = (x: number): string => {
+  const text = String(Number(x.toPrecision(12)))
+  const sci = /^(-?[\d.]+)e([+-]\d+)$/.exec(text)
+  return sci ? `${sci[1]}\\times 10^{${Number(sci[2])}}` : text
 }
 
 /**
@@ -46,12 +65,22 @@ export interface Card {
  * digits keep any coordinate a student can draw or type exact while dropping the last-bit error
  * a drag leaves behind: a vector drawn to (2.875, 1.275) is stored as 2.875000000000001, and a
  * demoted card used to hand that string to the student's own field.
+ *
+ * What is noise depends on where the vector came from. One read off the drawing (the default) can
+ * carry a drag's 10⁻¹⁶, so anything under 10⁻¹² is dropped, and a vector wholly under that is 0. A
+ * vector a card holds (`held`) was typed or worked out: only a component under 10⁻¹² of its own
+ * size is noise (the 3.06×10⁻¹⁶ that 5∠90° leaves beside its 5), so 1.6×10⁻¹⁹ î is kept (H8).
  */
-export const ijkLatex = (v: V3): string =>
-  v
-    .map((c, i) => (Math.abs(c) < 1e-12 ? '' : `${c < 0 ? '-' : '+'}${Number(Math.abs(c).toPrecision(12))}\\hat{${'ijk'[i]}}`))
-    .join('')
-    .replace(/^\+/, '') || '0'
+export const ijkLatex = (v: V3, held = false): string => {
+  const big = Math.max(...v.map(Math.abs))
+  const floor = 1e-12 * (held ? big : Math.max(1, big))
+  return (
+    v
+      .map((c, i) => (c === 0 || Math.abs(c) < floor ? '' : `${c < 0 ? '-' : '+'}${exactNumber(Math.abs(c))}\\hat{${'ijk'[i]}}`))
+      .join('')
+      .replace(/^\+/, '') || '0'
+  )
+}
 
 /** The letters a new card is offered, in order; i, j and k are the unit vectors and never a name. */
 const CARD_LETTERS = 'ABCDEFGHLMNPQRSTUVW'
@@ -199,14 +228,37 @@ export interface Recipe {
   cards: { id: number; name: string }[]
   /** The same working, from those cards' values now (named as they were then). */
   solve: (vs: VS.NamedVec[], settings: SceneSettings) => VS.Solution | null
+  /**
+   * The box the working also reads, k for Scalar × and q for Magnetic force. `solve` takes the
+   * number from that box each time it works the answer out, and the answer is followed when the box
+   * is retyped, as it is when a card is (H9); so is its picture left on the graph once another
+   * answer is shown (G4a).
+   */
+  scalar?: 'k' | 'q'
 }
+
+/**
+ * Why an answer no longer follows from the cards: a card it was worked out from was removed, cannot
+ * be read for now (half typed), or every card can be read but the working fails on them (A/(A·B)
+ * with A ⟂ B). One sentence for all three told a student whose cards were all there and readable
+ * that a vector had been removed.
+ */
+export type StaleReason = 'removed' | 'unreadable' | 'unworkable'
 
 export interface Answer {
   sol: VS.Solution
   label: string
   from?: Recipe
-  /** Its picture was taken off the graph because a vector it was worked out from went or cannot be read. */
+  /** The cards no longer give it (see `staleWhy`). */
   stale?: boolean
+  staleWhy?: StaleReason
+  /** For 'unreadable' when every vector reads but the k or q box does not: which box. */
+  staleBox?: 'k' | 'q'
+  /**
+   * Its picture was on the graph and was taken off when a card it was worked out from was removed.
+   * The card said "its picture was taken off the graph" of every stale answer, drawn or not.
+   */
+  pictureTakenOff?: boolean
 }
 
 export interface VCState {
@@ -342,6 +394,21 @@ export function unknownNames(src: string, scope: Record<string, unknown>, cardNa
   return out
 }
 
+/**
+ * The names a worked-out line uses, read off its parse tree. A word-boundary search found no B in
+ * "A+2B" (2B is one word to it), so B was left out of the answer's recipe and picture: retyping or
+ * removing B changed nothing.
+ */
+export function namesIn(src: string): string[] {
+  const out: string[] = []
+  math.parse(src).traverse((node, path) => {
+    const n = node as unknown as { type: string; name?: string }
+    // A function's own name (sqrt, dot, polarVec) is not a value.
+    if (n.type === 'SymbolNode' && path !== 'fn' && n.name && !out.includes(n.name)) out.push(n.name)
+  })
+  return out
+}
+
 /** "10 N at 30°": a unit written straight after a number is a unit, not a missing vector. */
 function isUnitAfterNumber(name: string, parent: unknown): boolean {
   const p = parent as { type?: string; implicit?: boolean; args?: { type: string }[] } | null
@@ -362,6 +429,12 @@ export function unknownNameSentence(name: string, scope: Record<string, unknown>
   if (name.length > 1 && parts.every((p) => p in scope)) return `“${name}” is not one name. Put a sign between ${parts.join(' and ')}: ${parts.join(' × ')} for the cross product, ${parts.join(' · ')} for the dot product.`
   return `There is no vector called ${name}. Use a card's name (the letter on its left), or the unit vectors i, j and k.`
 }
+
+/** A number added to or taken from a vector: said in one place, for the parser's own refusals and for evaluateVectorLine's (H11). */
+const NUMBER_AND_VECTOR = 'Something here mixes a number and a vector in a way that has no meaning, like adding 3 to a vector. Check each part is a vector, like 3i, or a named card.'
+
+/** The sentence for a division by zero in a line that works out to a number or a vector (H6). */
+const DIVIDED_BY_ZERO = 'This cannot be worked out: something in it is divided by zero.'
 
 /**
  * The shared parser's messages, in words a beginner can act on: what is wrong, then how to put it
@@ -389,22 +462,141 @@ export function explainVectorError(e: unknown): string {
   if (/^Invalid left hand side|assignment/.test(raw)) return 'Leave out the = sign: type only the vector, like 3i + 4j.'
   if (/^Expected a vector or point/.test(raw)) return 'This works out to a number, not a vector. Give it a direction with i and j (3i + 4j) or an angle (10∠30°). A · B is a number; A × B is a vector.'
   if (/^Vectors need 2 or 3 components/.test(raw)) return 'A vector has 2 or 3 parts (x, y and z). Check the brackets hold 2 or 3 numbers.'
-  if (/Unexpected type of argument|Too few arguments|Too many arguments|Dimension mismatch/.test(raw))
-    return 'Something here mixes a number and a vector in a way that has no meaning, like adding 3 to a vector. Check each part is a vector, like 3i, or a named card.'
+  if (/Unexpected type of argument|Too few arguments|Too many arguments|Dimension mismatch/.test(raw)) return NUMBER_AND_VECTOR
   // A converter refusal (the ± rule) is already a sentence for the student.
   if (/^[A-Z][^()]*[.:]/.test(raw) && !/\(char \d+\)|function|expected:|undefined/.test(raw)) return raw
   return 'This cannot be read as a vector. Type it like 3i + 4j, or as a size and angle like 10∠30°.'
 }
 
 /**
+ * A scientific size written straight before the angle sign — 1×10^(-5)∠45°, 10^(-5)∠45° — as the
+ * one number it is. preprocess rewrites size ∠ angle first, and the size it takes is a plain number;
+ * only afterwards does it read 1×10^(-5) as a number. So "1×10^(-5)∠45°" was refused while
+ * 0.00001∠45° was read (H15).
+ */
+const sizeBeforeAngle = (s: string): string =>
+  s.replace(/(?:(\d+(?:\.\d+)?)\s*×\s*)?\b10\s*\^\s*\(?\s*(-?\d+)\s*\)?(?=\s*(?:∠|\bat\b))/g, (_, mantissa: string | undefined, exponent: string) => `${mantissa ?? 1}e${exponent}`)
+
+/**
+ * Refuses a number added to a vector or taken from it. mathjs adds the number to every part, so
+ * "8i + 2" (on the way to 8i + 2j) read 10i + 2j + 2k and "A − 1" 2i + 3j − k, and the arrow and
+ * every answer jumped to 3D; no textbook sum has such a term. Each + and − is judged on what its two
+ * sides work out to, so 2A, A − i, A/2 and |A| i are read as before (H11).
+ */
+function refuseNumberWithVector(src: string, scope: Record<string, unknown>): void {
+  if (!/[+-]/.test(src)) return
+  const isVector = (x: unknown): boolean => Array.isArray(x) || typeof (x as { toArray?: unknown } | null)?.toArray === 'function'
+  const isNumber = (x: unknown): boolean => typeof x === 'number' || isUnit(x)
+  math.parse(src).traverse((node: MathNode) => {
+    const op = node as unknown as { type: string; fn?: string; args?: { evaluate: (scope: Record<string, unknown>) => unknown }[] }
+    if (op.type !== 'OperatorNode' || (op.fn !== 'add' && op.fn !== 'subtract') || op.args?.length !== 2) return
+    let left: unknown
+    let right: unknown
+    try {
+      // Copies: working a side out must never leave a name behind in the scope.
+      left = op.args[0].evaluate({ ...scope })
+      right = op.args[1].evaluate({ ...scope })
+    } catch {
+      // A side that cannot be worked out is the evaluation's own error to report, in its own words.
+      return
+    }
+    if ((isVector(left) && isNumber(right)) || (isNumber(left) && isVector(right))) throw new PlainError(NUMBER_AND_VECTOR)
+  })
+}
+
+/**
+ * How big the quantities a typed line works with are, to tell the rounding noise its arithmetic
+ * leaves from what it gives (H17). 5∠30° + 5∠210° adds two vectors of 5 and leaves 8.9×10⁻¹⁶: no
+ * vector, but the last bits of a sum that cancels; 1.6×10⁻¹⁹ î is a vector of exactly that size.
+ * As the solver's isNoise reads a product against |A||B|: a sum is as big as its larger term, a
+ * product as its factors multiplied (× and · too), sin, cos and tan are 1, a vector or a number
+ * the line writes is its own size. Only what is added, multiplied or written as a size counts, so
+ * the angle of 5∠30° and the exponent of 10^{-19} do not.
+ */
+function lineScale(tree: MathNode, scope: Record<string, unknown>): number {
+  type N = { type: string; fn?: unknown; name?: string; value?: unknown; content?: N; args?: N[]; evaluate: (scope: Record<string, unknown>) => unknown }
+  const sizeOf = (x: unknown): number => {
+    if (typeof x === 'number') return Math.abs(x)
+    if (isUnit(x)) {
+      // A valueless unit (the N of "5 N") is a factor of 1.
+      try {
+        const n = Math.abs(plainNumber(x))
+        return Number.isFinite(n) ? n : 1
+      } catch {
+        return 1
+      }
+    }
+    const list = typeof (x as { toArray?: unknown } | null)?.toArray === 'function' ? (x as { toArray: () => unknown }).toArray() : x
+    return Array.isArray(list) ? Math.max(0, ...list.flat(2).map(sizeOf)) : 0
+  }
+  // A part of the line worked out whole: what a function of it, or a power, is worth.
+  const worth = (n: N): number => {
+    try {
+      return sizeOf(n.evaluate({ ...scope }))
+    } catch {
+      return 0
+    }
+  }
+  const walk = (n: N): number => {
+    const arg = (i: number): number => (n.args?.[i] ? walk(n.args[i]) : 0)
+    if (n.type === 'ConstantNode') return sizeOf(n.value)
+    if (n.type === 'SymbolNode') return n.name !== undefined && n.name in scope ? sizeOf(scope[n.name]) : worth(n) || 1
+    if (n.type === 'ParenthesisNode') return n.content ? walk(n.content) : 0
+    if (n.type === 'OperatorNode') {
+      if (n.args?.length === 1) return arg(0)
+      if (n.fn === 'add' || n.fn === 'subtract') return Math.max(arg(0), arg(1))
+      if (n.fn === 'multiply') return arg(0) * arg(1)
+      if (n.fn === 'divide') {
+        const by = n.args?.[1] ? worth(n.args[1]) : 0
+        return by > 0 ? arg(0) / by : arg(0)
+      }
+    }
+    if (n.type === 'FunctionNode') {
+      const name = (n.fn as { name?: string } | undefined)?.name ?? n.name
+      if (name === 'dot' || name === 'cross' || name === 'timesOrCross') return arg(0) * arg(1)
+      if (name === 'mag' || name === 'polarVec') return arg(0)
+      if (name === 'vec' || name === 'pt') return Math.max(0, ...(n.args ?? []).map(walk))
+      if (name === 'sin' || name === 'cos' || name === 'tan' || name === 'sec' || name === 'csc' || name === 'cot') return 1
+    }
+    return worth(n)
+  }
+  try {
+    const scale = walk(tree as unknown as N)
+    return Number.isFinite(scale) ? scale : 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * What a line gives with the noise of its arithmetic taken out: a number or a part of a vector
+ * under a part in 10¹² of the line's scale (or of the result itself, when that is bigger) is
+ * exactly 0, so the card, its arrow, its answers and its card line all read the same (H17).
+ */
+function withoutNoise(out: unknown, scale: number): unknown {
+  const list = typeof (out as { toArray?: unknown } | null)?.toArray === 'function' ? (out as { toArray: () => unknown }).toArray() : out
+  const numbers = (x: unknown): number[] => (typeof x === 'number' ? [x] : Array.isArray(x) ? x.flatMap(numbers) : [])
+  const all = numbers(list)
+  // A division by zero is the caller's to report, not noise.
+  if (!all.length || !all.every(Number.isFinite)) return out
+  const floor = 1e-12 * Math.max(scale, ...all.map(Math.abs))
+  const clean = (x: unknown): unknown => (typeof x === 'number' ? (Math.abs(x) < floor ? 0 : x) : Array.isArray(x) ? x.map(clean) : x)
+  return clean(list)
+}
+
+/**
  * Evaluates a typed vector line against the vectors it may use, refusing a name nothing gives a
- * value to (see unknownNames) with a sentence rather than a unit.
+ * value to (see unknownNames) with a sentence rather than a unit, and a number added to a vector.
+ * What it gives is free of the noise its own arithmetic left (see lineScale).
  */
 export function evaluateVectorLine(latex: string, scope: Record<string, unknown>, below: string[] = [], unreadable: string[] = []): { src: string; out: unknown } {
-  const src = preprocess(latexToMath(latex, { vectorOps: true }))
+  const src = preprocess(sizeBeforeAngle(latexToMath(latex, { vectorOps: true })))
   const unknown = unknownNames(src, scope, [...below, ...unreadable])
   if (unknown.length) throw new PlainError(unknownNameSentence(unknown[0], scope, below, unreadable))
-  return { src, out: math.evaluate(src, scope) }
+  refuseNumberWithVector(src, scope)
+  // math.evaluate itself: a test counts its calls to see each card is worked out once.
+  const out = math.evaluate(src, scope)
+  return { src, out: withoutNoise(out, lineScale(math.parse(src), scope)) }
 }
 
 /**
@@ -458,7 +650,21 @@ export function cardValue(card: Card, cards: Card[], ev: EvalResult): V3 | strin
 }
 
 function cardValueNow(card: Card, scope: Record<string, unknown>, unreadable: string[], below: string[], ev: EvalResult): V3 | string {
-  if (card.entry === 'polar') return fromPolar(evalNumber(card.mag), toRad(evalNumber(card.angle)))
+  if (card.entry === 'polar') {
+    // The vector the boxes were filled from, while both still read as they were written: 5.66 ∠ 45°
+    // is the 4i + 4j it was rounded from, not 3.9999…i + 4.0000…j (V6). A box the student has not
+    // touched is still that vector's own size or angle, so retyping the size of 5 ∠ 53.13° keeps the
+    // direction it had and does not turn it by the 0.0001° the box rounded away; a box that was
+    // edited is what was typed.
+    const kept = card.exact
+    if (kept && Array.isArray(kept.v) && kept.v.length === 3 && kept.v.every(Number.isFinite)) {
+      const sizeKept = kept.mag === card.mag
+      const angleKept = kept.angle === card.angle
+      if (sizeKept && angleKept) return kept.v
+      return fromPolar(sizeKept ? len(kept.v) : evalNumber(card.mag), angleKept ? heading(kept.v) : toRad(evalNumber(card.angle)))
+    }
+    return fromPolar(evalNumber(card.mag), toRad(evalNumber(card.angle)))
+  }
   if (card.entry === 'scene') {
     const c = card.sceneId ? ev.values.get(card.sceneId) : undefined
     if (c?.type === 'vector') return c.comp
@@ -469,6 +675,91 @@ function cardValueNow(card: Card, scope: Record<string, unknown>, unreadable: st
   // 1/0 gave components of Infinity, which the panel printed as "null".
   if (!v.every(Number.isFinite)) throw new PlainError('This vector cannot be worked out: something in it is divided by zero.')
   return v
+}
+
+// ---------------------------------------------------------------------------
+// What a card shows: its line under the boxes, in one number form (V2, V6, H7, H13)
+// ---------------------------------------------------------------------------
+
+/**
+ * The 2D camera's zoom floor in pixels per grid square: render/CameraRig.tsx's `minZoom`, which a
+ * test keeps equal to this. An arrow longer than the drawing is wide at that zoom is not on screen.
+ */
+export const MIN_ZOOM_2D = 0.05
+
+/**
+ * Why an arrow of `length` grid squares cannot be seen, or null when it fits across the drawing at
+ * the camera's zoom floor. The 19-digit size a student typed was drawn as nothing, with no word why
+ * (V2). The limit is written in the student's unit; `viewportPx` is the drawing's width on screen.
+ * With a coarse grid (1 square = 10⁶ cm) the limit is a power of ten, which formatMeasure writes
+ * "2.4×10^10" so a value can be read back; a sentence is not read back, and a caret is programming
+ * syntax, so it is raised: "2.4 × 10¹⁰ cm" (V6).
+ */
+export function tooBigToDraw(length: number, settings: SceneSettings, viewportPx: number = useView.getState().widthPx): string | null {
+  const limit = viewportPx / MIN_ZOOM_2D
+  if (length <= limit) return null
+  return `Too big to draw at this scale — the graph shows vectors up to ${superscriptPowers(formatMeasure(limit, 'length', settings))}. It is still used in every answer.`
+}
+
+/** c × 10^by with no multiplication in it: the digits stay as they were and only the exponent moves. */
+const shiftTen = (c: number, by: number): number => Number(c.toExponential().replace(/e([+-]\d+)$/, (_, e: string) => `e${Number(e) + by}`))
+
+/**
+ * A vector for the card line. texIJK drops anything under 10⁻¹² as a drag's noise, which wrote a
+ * vector typed as 1.6×10⁻¹⁹ î as 0⃗; a vector wholly under that is written in scientific form, one
+ * power of ten for the whole of it as the answers write it, instead (H13).
+ */
+function texCardVector(v: V3, big: number, s: SceneSettings): string {
+  if (big === 0 || big >= 1e-12) return texIJK(v, s)
+  const parts = v.filter((c) => c !== 0).length
+  if (parts === 1 && notation().components === 'ijk') {
+    const at = v.findIndex((c) => c !== 0)
+    return `${v[at] < 0 ? '-' : ''}${texSci(Math.abs(v[at]), s)}\\hat{${'ijk'[at]}}`
+  }
+  const e = sciExponent(big, s)
+  const inner = texIJK(v.map((c) => shiftTen(c, -e)) as V3, s)
+  // A pair or a column has its own brackets.
+  const own = notation().components === 'pair' || notation().components === 'column'
+  return `${own ? inner : `\\left(${inner}\\right)`}\\times 10^{${e}}`
+}
+
+/** A vector for an answer: texIJK, but one under its noise floor is written in scientific form, not as 0⃗ (H13, H17). */
+const texVector = (v: V3, s: SceneSettings): string => {
+  const big = Math.max(...v.map(Math.abs))
+  return texCardVector(v.map((c) => (Math.abs(c) < 1e-12 * big ? 0 : c)) as V3, big, s)
+}
+
+/**
+ * A number written mantissa × 10ⁿ with the unit vector or unit that follows it, or a vector's own
+ * brackets with their × 10ⁿ ((1.6î + 1.2ĵ) × 10⁻¹⁹): the pieces cardLineTex keeps whole. KaTeX may
+ * break a line after any × that is not inside a group, and a narrow panel wrote "8.18 ×" at the end of
+ * one line and "10¹⁹ ĵ" at the start of the next. A brace group is one atom to it: the line still
+ * breaks between the terms (after + − =), never inside one (G4c). The answers are not grouped, their
+ * TeX is compared as it is written.
+ */
+const WHOLE_NUMBER =
+  /(?:-?\d+(?:\.\d+)?|\\left\((?:(?!\\right\)).)*\\right\)|\\begin\{pmatrix\}(?:(?!\\end\{pmatrix\}).)*\\end\{pmatrix\})\\times 10\^\{-?\d+\}(?:\\hat\{[ijk]\}|\\,\\text\{[^}]*\}(?:\^\d)?)?/g
+
+/**
+ * A card's whole line for KaTeX: the vector, its size and, for a vector in the plane, its angle —
+ * one number form throughout, where the vector went through KaTeX and its size and angle through
+ * plain text (V6: "8.89×10^18" beside 8.89×10¹⁸). The zero vector has no direction, and says so
+ * where heading() gave it θ = 0° (H7). A vector under texIJK's and fmt's noise floor is written in
+ * scientific form, never as 0⃗ and |A| = 0 (H13); a component under 10⁻¹² of the vector's own size
+ * is noise beside it (5∠90° holds 3.06×10⁻¹⁶ in x) and is left out. Each × 10ⁿ number is grouped with
+ * its mantissa (WHOLE_NUMBER), so a narrow panel breaks the line between terms, never inside one.
+ */
+export function cardLineTex(name: string, v: V3, sizeKind: MeasureKind, settings: SceneSettings): string {
+  const big = Math.max(...v.map(Math.abs))
+  const clean = v.map((c) => (Math.abs(c) < 1e-12 * big ? 0 : c)) as V3
+  const size = len(clean)
+  const shown = measureValue(size, sizeKind, settings)
+  // texMeasure writes anything under 10⁻¹² as 0; the size of a tiny vector is a real number.
+  const sizeTex = size !== 0 && Math.abs(shown) < 1e-12 ? `${texSci(shown, settings)}${texUnit(sizeKind, settings)}` : texMeasure(size, sizeKind, settings)
+  const parts = [`\\vec{${name}} = ${texCardVector(clean, big, settings)}`, `|${name}| = ${sizeTex}`]
+  // In the plane: the vector keeps no z of its own, so it has an angle (unless it is the zero vector).
+  if (clean[2] === 0) parts.push(size === 0 ? '\\text{no direction}' : `\\theta = ${texMeasure(heading(clean), 'direction', settings)}`)
+  return parts.join('\\quad ').replace(WHOLE_NUMBER, '{$&}')
 }
 
 /**
@@ -541,9 +832,134 @@ export function solveAgain(from: Recipe, cards: Card[], values: (V3 | string)[],
   }
 }
 
+/**
+ * What each operation of the panel reads: its button's name, how many cards from the top it takes
+ * ('all' takes every card) and the box (k or q) it also reads. The panel's buttons are made from
+ * this, so the names a student sees and the ones an error sentence uses cannot differ.
+ */
+export interface OperationRule {
+  label: string
+  need: number | 'all'
+  field?: 'k' | 'q'
+}
+
+export const OPERATIONS: Record<string, OperationRule> = {
+  sum: { label: 'Add all', need: 'all' },
+  sub: { label: 'Subtract', need: 2 },
+  dot: { label: 'Dot', need: 2 },
+  cross: { label: 'Cross', need: 2 },
+  mag: { label: 'Size & angle', need: 1 },
+  resolve: { label: 'Components', need: 1 },
+  scale: { label: 'Scalar ×', need: 1, field: 'k' },
+  unit: { label: 'Unit vector', need: 1 },
+  angle: { label: 'Angle between', need: 2 },
+  proj: { label: 'Projection', need: 2 },
+  equil: { label: 'Equilibrium', need: 'all' },
+  torque: { label: 'Torque', need: 2 },
+  work: { label: 'Work', need: 2 },
+  lorentz: { label: 'Magnetic force', need: 2, field: 'q' },
+  relvel: { label: 'Relative velocity', need: 2 }
+}
+
+/**
+ * What the panel's operation buttons do: works the operation out from the cards it reads, in order
+ * from the top, and shows its answer; returns the sentence to tell the student when it cannot, else
+ * null. "First card = r, second = F" has to mean the cards the student can see, so a card that
+ * cannot be read stops the operation rather than being skipped (the third card would become F).
+ *
+ * The answer's recipe takes k or q from its box every time it works the answer out again, and the
+ * store follows those boxes as it follows the cards (keepAnswerTrue): retyping k moves R = kA (H9).
+ */
+export function runOperation(opId: string): string | null {
+  const rule = OPERATIONS[opId]
+  if (!rule) return null
+  const st = useVC.getState()
+  const sc = useScene.getState()
+  const values = cardValues(st.cards, sc.ev)
+  const wanted = rule.need === 'all' ? st.cards : st.cards.slice(0, rule.need)
+  if (rule.need !== 'all' && wanted.length < rule.need) return `${rule.label} needs ${rule.need} vectors. Add another card.`
+  if (rule.need === 'all' && wanted.length < 1) return 'Add a vector first.'
+  const named: VS.NamedVec[] = []
+  for (const c of wanted) {
+    const v = values[st.cards.indexOf(c)]
+    if (typeof v === 'string') return `Card ${c.name} cannot be read: ${v}`
+    named.push({ name: c.name, v })
+  }
+  try {
+    const solve = (vs: VS.NamedVec[], now: SceneSettings): VS.Solution | null => {
+      const boxes = useVC.getState()
+      return solveOperation(opId, vs, now, rule.field === 'k' ? evalNumber(boxes.k) : 0, rule.field === 'q' ? evalNumber(boxes.q) : 0)
+    }
+    const sol = solve(named, sc.settings)
+    if (!sol) return null
+    useVC.setState({ result: { sol, label: rule.label, from: { cards: wanted.map((c) => ({ id: c.id, name: c.name })), solve, scalar: rule.field } } })
+    return null
+  } catch (e) {
+    return explainVectorError(e)
+  }
+}
+
+/**
+ * A typed expression worked out from the cards' values, with the names of the cards it used.
+ * Names are checked first: an unknown letter would otherwise be one of mathjs's units. A line that
+ * works out to a number or a vector with a division by zero in it is refused, not answered "∞".
+ */
+export function exprSolution(expr: string, cards: { name: string; v: V3 | string }[], settings: SceneSettings): { sol: VS.Solution; used: string[] } {
+  const scope: Record<string, unknown> = { ...UNIT_VECTORS }
+  cards.forEach((c) => {
+    if (typeof c.v !== 'string') scope[c.name] = c.v
+  })
+  const unreadable = cards.filter((c) => typeof c.v === 'string').map((c) => c.name)
+  const { src, out } = inDegrees(() => evaluateVectorLine(expr, scope, [], unreadable))
+  const named = namesIn(src)
+  const inputs = cards.filter((x): x is { name: string; v: V3 } => typeof x.v !== 'string' && named.includes(x.name))
+  const used = inputs.map((x) => x.name)
+  if (typeof out === 'number') {
+    // 1/0 answered ∞ and 0/0 "undefined" (H6).
+    if (!Number.isFinite(out)) throw new PlainError(DIVIDED_BY_ZERO)
+    // Both strings are KaTeX: the plain-text form's "×10^-5" put only the minus in the superscript.
+    // What is left of the noise of its arithmetic is exactly 0 by now (evaluateVectorLine), so a number
+    // under texMeasure's floor is a real one, 1.6×10⁻¹⁹ from A·B of two tiny cards, and written as itself.
+    const shown = out !== 0 && Math.abs(out) < 1e-12 ? texSci(out, settings) : texMeasure(out, 'number', settings)
+    return { used, sol: { title: 'Result', steps: [{ tex: `${expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } }
+  }
+  const v = toV3(out)
+  if (!v.every(Number.isFinite)) throw new PlainError(DIVIDED_BY_ZERO)
+  const md = VS.solveMagnitudeDirection({ name: 'R', v }, settings)
+  const shownV = texVector(v, settings)
+  const sol: VS.Solution = {
+    title: 'Resultant of the expression',
+    steps: [{ text: 'Evaluate component by component:', tex: `\\vec{R} = ${expr} = ${shownV}` }, ...md.steps.slice(1)],
+    answers: [{ label: 'R', tex: shownV }, ...md.answers],
+    visual: { vectors: [...inputs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: 'R', v, role: 'result' as const }], mode: 'common-tail' }
+  }
+  return { sol, used }
+}
+
 /** The line under an answer: where to look next (only an answer with a picture can be drawn). */
 export const answerHint = (drawable: boolean): string =>
   drawable ? 'Next: Draw on graph shows it on the graph, and Steps shows how it was worked out.' : 'Next: Steps shows how it was worked out.'
+
+/**
+ * Whether the answer card offers Draw on graph and its layouts. A stale answer is not drawn: it is
+ * not the answer for the cards as they are, and drawing one put a second arrow A′ at A's old value
+ * beside the card's own A.
+ */
+export const canDraw = (a: Answer): boolean => !!a.sol.visual && !a.stale
+
+/**
+ * What a stale answer card says, for its reason. The picture is only mentioned when one was taken
+ * off the graph, and the button named is the one that works the answer out again (the expression
+ * box's is =). A card that cannot be read for now needs no button: the answer comes back by itself.
+ */
+export function staleSentence(a: Answer): string {
+  const button = a.label === 'Expression' ? '=' : a.label
+  // Every vector reads and the box beside the button does not: say which box, not a vector.
+  if (a.staleWhy === 'unreadable' && a.staleBox) return `The ${a.staleBox} box cannot be read now. Once it can, this answer is worked out again.`
+  if (a.staleWhy === 'unreadable') return 'A vector this was worked out from cannot be read now. Once it can, this answer is worked out again.'
+  if (a.staleWhy === 'unworkable') return `This answer cannot be worked out from the vectors as they are now. Press ${button} again to see why.`
+  return `A vector this was worked out from was removed${a.pictureTakenOff ? ', so its picture was taken off the graph' : ''}. Press ${button} again for the answer from the vectors you have now.`
+}
 
 // ---------------------------------------------------------------------------
 // One set of vectors: every readable card is an arrow on the drawing (Fix 25, Fix 26)
@@ -556,11 +972,34 @@ export const answerHint = (drawable: boolean): string =>
 // panel follows the drawing: an arrow that goes takes its card, an arrow that comes back (undo,
 // redo) brings its card back where it was.
 
-/** Components equal to the last bits a typed number can carry. */
-const same = (a: V3, b?: V3): boolean => !!b && a.every((x, k) => Math.abs(x - b[k]) <= 1e-9 * Math.max(1, Math.abs(x)))
+/**
+ * Components equal to the last bits a drag or a sum leaves: within a part in 10⁹ of the two
+ * vectors' own size. A drag's 2.875000000000001 for 2.875 is no change, while 1.6×10⁻¹⁹ î and
+ * 3.2×10⁻¹⁹ î are two vectors — an absolute 10⁻⁹ called everything under it the same (H12).
+ */
+const near = (a: V3, b: V3): boolean => {
+  const size = Math.max(...a.map(Math.abs), ...b.map(Math.abs))
+  return a.every((x, k) => Math.abs(x - b[k]) <= 1e-9 * size)
+}
 
-/** A number written for a card's field: twelve significant digits, no float noise. */
-const fieldNumber = (x: number): string => String(Number(x.toPrecision(12)))
+const same = (a: V3, b?: V3): boolean => !!b && near(a, b)
+
+/**
+ * A number written for a size ∠ angle box at the student's precision, in LaTeX and never as 1e+21:
+ * 5.66, 45, 8.89×10¹⁸ (V6, H8). Never a real number written as 0 either (the precision or the
+ * noise floor would round 0.004 or 1.6×10⁻¹⁹ away): that one is written in scientific form.
+ */
+const fieldText = (x: number, s: SceneSettings): string => {
+  const text = texPrecise(x, s)
+  return x !== 0 && /^-?0$/.test(text) ? texSci(x, s) : text
+}
+
+/** A size ∠ angle card's boxes for a vector, with the vector itself kept for them (V6). */
+function polarFields(v: V3, s: SceneSettings): Pick<Card, 'mag' | 'angle' | 'exact'> {
+  const mag = fieldText(len(v), s)
+  const angle = fieldText(toDeg(heading(v)), s)
+  return { mag, angle, exact: { v: [v[0], v[1], v[2]], mag, angle } }
+}
 
 /** What reconciling the cards with the drawing asks for. */
 export interface SyncPlan {
@@ -576,9 +1015,10 @@ export interface SyncPlan {
  * The one decision behind keeping the cards and the drawing in step, as a pure function of both.
  * For each card: a graph card reads its arrow; a typed card whose value changed moves its arrow;
  * an arrow that moved while its card did not (a drag, an undo) rewrites the card; the arrow's
- * name is the card's name; and a readable card with no arrow gets one, named after the card.
+ * name is the card's name; and a readable card with no arrow gets one, named after the card. A size ∠
+ * angle card rewritten from a drag is written at the student's precision, `settings`.
  */
-export function planSync(cards: Card[], objects: Record<ObjId, SceneObject>, ev: EvalResult): SyncPlan {
+export function planSync(cards: Card[], objects: Record<ObjId, SceneObject>, ev: EvalResult, settings: SceneSettings = useScene.getState().settings): SyncPlan {
   const create: VectorObj[] = []
   const write: SyncPlan['write'] = []
   // Runs on every change to the drawing, a drag's every frame included: nothing to do, nothing copied.
@@ -618,7 +1058,7 @@ export function planSync(cards: Card[], objects: Record<ObjId, SceneObject>, ev:
       }
       if (card.last && !same(drawn, card.last)) {
         // The arrow moved and the card did not: the card now says what the drawing says.
-        patch(card.entry === 'polar' ? { mag: fieldNumber(len(drawn)), angle: fieldNumber(toDeg(heading(drawn))), last: drawn } : { latex: ijkLatex(drawn), last: drawn })
+        patch(card.entry === 'polar' ? { ...polarFields(drawn, settings), last: drawn } : { latex: ijkLatex(drawn), last: drawn })
         return done(drawn)
       }
       if (typeof v === 'string') {
@@ -667,6 +1107,12 @@ let drawing = false
 let busy = false
 /** Set while Draw on graph lays out, lays out again or takes away its picture, for the same reason. */
 let relaying = false
+/**
+ * Set while the sync follows a change that took the drawn picture off the graph on its own: a redo
+ * of a card's removal takes the card's arrow and the picture keepAnswerTrue took away with it in
+ * one step, so the picture is already gone when the answer is looked at, and was taken off all the same.
+ */
+let pictureWentWithIt = false
 
 /** Starts drawing the cards on the drawing; the panel calls it when it opens. Safe to call again. */
 export function startCardSync(): void {
@@ -687,7 +1133,7 @@ function syncCards(): void {
   try {
     const cards = useVC.getState().cards
     const sc = useScene.getState()
-    const plan = planSync(cards, sc.objects, sc.ev)
+    const plan = planSync(cards, sc.objects, sc.ev, sc.settings)
     if (plan.create.length) {
       // A new arrow is an undo step, so Ctrl+Z takes it (and its card) away and Ctrl+Y brings both
       // back. With no history yet there is no older drawing an undo could restore without it,
@@ -729,12 +1175,12 @@ export const sceneReplaced = (s: { past: unknown[]; future: unknown[] }, prev: {
  * file's own and renaming the card A′ (which left B = 2A unreadable).
  */
 function carryOver(c: Card): Card {
-  return c.entry === 'scene' && c.last ? { ...c, entry: 'comp', latex: ijkLatex(c.last) } : c
+  return c.entry === 'scene' && c.last ? { ...c, entry: 'comp', latex: ijkLatex(c.last, true) } : c
 }
 
 /** Forgets what the last Draw on graph put on a drawing that is no longer there. */
 function forgetDrawn(): void {
-  Object.assign(drawn, { added: [], parents: [], results: [], slots: [], notes: [], sources: [], hidden: new Map(), inputs: new Map(), sol: null, style: null, from: undefined })
+  Object.assign(drawn, { added: [], parents: [], results: [], slots: [], notes: [], sources: [], hidden: new Map(), inputs: new Map(), comps: new Map(), sol: null, style: null, from: undefined, waiting: false, resultOnly: false, depth: 0 })
   drawn.moved.clear()
 }
 
@@ -767,19 +1213,63 @@ function followDrawing(prev: Record<ObjId, SceneObject>, next: Record<ObjId, Sce
   if (out !== cards) useVC.setState({ cards: out })
 }
 
+/**
+ * Which layout style each state of the drawing showed its drawn answer in. The style is the panel's
+ * (the chip lit, and the layout the next retype lays the picture out in again), so it sits outside
+ * the drawing's undo history: undoing a layout chip put the old layout back under the chip that was
+ * undone, and the next retype put the undone layout back. Keyed on the state itself, because an undo
+ * or a redo hands back the very same `objects`, and nothing else the student does is a state seen
+ * before.
+ */
+const styleAt = new WeakMap<object, DrawStyle | null>()
+
+/**
+ * The drawing went from one state to another. The state it leaves keeps the style it showed (a redo
+ * comes back to it), and one seen before shows its own again, while an answer is on it.
+ */
+function followStyle(prev: Record<ObjId, SceneObject>, next: Record<ObjId, SceneObject>): void {
+  styleAt.set(prev, drawn.style)
+  if (!styleAt.has(next) || !answerOnGraph(next)) return
+  const style = styleAt.get(next) ?? null
+  if (style === drawn.style && style === useVC.getState().style) return
+  drawn.style = style
+  useVC.setState({ style })
+}
+
 useScene.subscribe((s, prev) => {
   if (busy || relaying) return
-  if (s.objects !== prev.objects) followDrawing(prev.objects, s.objects, sceneReplaced(s, prev))
-  // The answer went (deleted, or undone) while its parents were hidden: they come back, or they
-  // would stay hidden with nothing on screen to say why.
-  if (s.objects !== prev.objects && answerOnGraph(prev.objects) && !answerOnGraph(s.objects) && !s.gesture) showParents()
-  // A copy that stood in for a card arrow went: the student's own arrow shows again.
-  if (s.objects !== prev.objects && drawn.hidden.size && !s.gesture) showOriginals(prev.objects, s.objects)
-  if (s.objects !== prev.objects || s.ev !== prev.ev) syncCards()
+  // Set before anything follows the change: removing the card in followDrawing already works the
+  // answer out again. A change this makes itself (showParents) is followed too, and hands it back.
+  const outer = pictureWentWithIt
+  pictureWentWithIt = s.objects !== prev.objects && pictureOnGraph(prev.objects) && !pictureOnGraph(s.objects)
+  try {
+    // First of all: the sync that follows lays a picture out in this style.
+    if (s.objects !== prev.objects) followStyle(prev.objects, s.objects)
+    if (s.objects !== prev.objects) followDrawing(prev.objects, s.objects, sceneReplaced(s, prev))
+    // The answer went (deleted, or undone) while its parents were hidden: they come back, or they
+    // would stay hidden with nothing on screen to say why.
+    if (s.objects !== prev.objects && answerOnGraph(prev.objects) && !answerOnGraph(s.objects) && !s.gesture) showParents()
+    // A copy that stood in for a card arrow went: the student's own arrow shows again.
+    if (s.objects !== prev.objects && drawn.hidden.size && !s.gesture) showOriginals(prev.objects, s.objects)
+    if (s.objects !== prev.objects || s.ev !== prev.ev) syncCards()
+  } finally {
+    pictureWentWithIt = outer
+  }
 })
 
 useVC.subscribe((s, prev) => {
+  // Noted as it arrives: the sync next sees it only after a card has changed, too late to tell
+  // what the card held when the button was pressed.
+  if (s.result !== prev.result) noteAnswer(s.result)
   if (s.cards !== prev.cards) syncCards()
+  else if (drawing && !busy) {
+    // The box the shown answer reads was retyped (k for Scalar ×, q for Magnetic force): the answer
+    // and its picture follow it, as they follow a card, and wait while it cannot be read (H9). So does
+    // an older picture still on the graph whose own working reads that box, though another answer is
+    // shown now: it followed its cards only, and jumped to the new k at the next card edit (G4a).
+    const retyped = (box?: 'k' | 'q') => !!box && s[box] !== prev[box]
+    if (retyped(s.result?.from?.scalar) || retyped(drawn.from?.scalar)) followAnswer()
+  }
 })
 
 /**
@@ -829,16 +1319,19 @@ export function pickArrow(cardId: number, sceneId: ObjId): void {
 
 /**
  * Switches how a card is entered without changing its vector: the new fields are filled from
- * what the card last showed, so a graph card switched to "typed" keeps its arrow where it was.
+ * what the card last showed, so a graph card switched to "typed" keeps its arrow where it was. The
+ * size ∠ angle boxes are written at the student's precision and the card keeps the exact vector
+ * (V6); the typed box is written as the vector itself, even one as small as 1.6×10⁻¹⁹ î (H8).
  */
 export function setEntry(cardId: number, entry: Entry): void {
+  const settings = useScene.getState().settings
   useVC.setState({
     cards: useVC.getState().cards.map((c) => {
       if (c.id !== cardId || c.entry === entry) return c
       const v = c.last
       if (!v) return { ...c, entry }
-      if (entry === 'comp') return { ...c, entry, latex: ijkLatex(v) }
-      if (entry === 'polar') return { ...c, entry, mag: fieldNumber(len(v)), angle: fieldNumber(toDeg(heading(v))) }
+      if (entry === 'comp') return { ...c, entry, latex: ijkLatex(v, true) }
+      if (entry === 'polar') return { ...c, entry, ...polarFields(v, settings) }
       return { ...c, entry }
     })
   })
@@ -876,9 +1369,29 @@ const drawn = {
   hidden: new Map<ObjId, ObjId>(),
   /** The card arrows the answer was worked out from, with the components they had then. */
   inputs: new Map<ObjId, V3>(),
+  /**
+   * The card arrow a 2D Components picture shows the components of, with its own showComponents
+   * before (undefined stays undefined): left on, every later picture showed A's components too,
+   * and a student's own "Always show components" must outlast the picture.
+   */
+  comps: new Map<ObjId, boolean | undefined>(),
   sol: null as VS.Solution | null,
   style: null as DrawStyle | null,
-  from: undefined as Recipe | undefined
+  from: undefined as Recipe | undefined,
+  /**
+   * The picture was seen on the graph and its answer, worked out again, has nothing to put there
+   * for now (the zero vector has no unit vector): it is drawn again as soon as the working has a
+   * picture, never lost on the way through zero. Set by drawAgain, ended by the next Draw on graph.
+   */
+  waiting: false,
+  /**
+   * Resultant only was on when the picture last had to wait, with no answer left on the graph to
+   * show beside the arrows it hides: it goes back on when the answer is drawn again. Read only
+   * while `waiting`.
+   */
+  resultOnly: false,
+  /** How many undo steps the last Draw on graph left, so a waiting picture ends with its undo. */
+  depth: 0
 }
 
 /**
@@ -888,9 +1401,6 @@ const drawn = {
  * twice. The command bar's own R = A + B has no token (only its old gold colour) and still gets one.
  */
 export const isCalcAnswer = (id: ObjId): boolean => drawn.added.includes(id) || useScene.getState().objects[id]?.themed === RESULT_TOKEN
-
-/** Components equal to the last bits a drag or a sum leaves. */
-const near = (a: V3, b: V3): boolean => a.every((x, k) => Math.abs(x - b[k]) <= 1e-9 * Math.max(1, Math.abs(x)))
 
 /** An arrow's components now, if it is still on the drawing. */
 function compOf(id: ObjId): V3 | undefined {
@@ -949,6 +1459,15 @@ function cardArrowFor(v: V3, used: Set<ObjId>, name: string): ObjId | undefined 
 const layoutInput = (vis: NonNullable<VS.Solution['visual']>) => vis.vectors.map((x) => ({ name: x.name, v: x.drawn ?? x.v, role: x.role, tail: x.tail }))
 
 /**
+ * Whether a picture is one vector in the plane with its x- and y-components (2D Components): what
+ * an arrow draws by itself when it shows its components.
+ */
+function inPlaneComponents(vis: NonNullable<VS.Solution['visual']>): boolean {
+  const [a, x, y, ...more] = vis.vectors
+  return !more.length && a?.role === 'input' && !a.drawn && x?.role === 'helper' && y?.role === 'helper' && Math.abs(a.v[2]) <= 1e-9 && near(x.v, [a.v[0], 0, 0]) && near(y.v, [0, a.v[1], 0])
+}
+
+/**
  * A copy of a card arrow that cannot be moved to where the layout puts it, standing there in its
  * colour. Its own name is A′ (A is taken by the original); it reads A, the vector it is. It is
  * auxiliary like the other things Draw on graph adds: a waiting graph card was offered it, and the
@@ -972,20 +1491,51 @@ function copyArrow(b: Builder, of: ObjId, a: { name: string; tail: V3; comp: V3 
 export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
   const vis = sol.visual
   if (!vis) return
+  // The answer already on the graph, under a layout chip or Draw on graph again: its own arrows
+  // are laid out again in place (switchLayout), so what a student built on them stays.
+  if (drawn.sol === sol && switchLayout(sol, vis, style)) {
+    useScene.getState().select([])
+    fitCamera()
+    return
+  }
+  // Only the answer the panel shows has a recipe: a picture of anything else is not worked out again.
+  const shown = useVC.getState().result
+  drawPicture(sol, vis, style, shown?.sol === sol ? shown.from : undefined, true)
+  // Nothing is left selected: a selected answer wears the selection band and looks heavier than
+  // its parents.
+  useScene.getState().select([])
+  fitCamera()
+}
+
+/**
+ * Puts an answer's picture on the graph and notes what it put there. `record` false is for the
+ * picture of a re-worked answer drawn again (drawAgain): the change that caused it is the undo
+ * step, so it is no step of its own, and the camera, the selection and the view mode stay as they
+ * are while a student types. `resultOnly` is for that silent picture only: Resultant only was on
+ * for the picture it replaces, and goes back on for this one (see drawAgain).
+ */
+function drawPicture(sol: VS.Solution, vis: NonNullable<VS.Solution['visual']>, style: DrawStyle | null, from: Recipe | undefined, record: boolean, resultOnly = false): void {
   relaying = true
   try {
     // The previous drawing goes first; the arrows it moved go back to where the student had them.
     const stale = drawn.added.filter((id) => useScene.getState().objects[id])
-    if (stale.length) useScene.getState().removeObjects(stale)
-    useScene.getState().beginGesture()
+    if (stale.length) useScene.getState().removeObjects(stale, { record })
+    if (record) useScene.getState().beginGesture()
     try {
-      for (const id of drawn.parents) setVisible(id, true)
-      for (const id of drawn.hidden.keys()) setVisible(id, true)
+      for (const id of drawn.parents) setVisible(id, true, record)
+      for (const id of drawn.hidden.keys()) setVisible(id, true, record)
       drawn.hidden.clear()
-      for (const [id, tail] of drawn.moved) moveTail(id, tail)
+      for (const [id, tail] of drawn.moved) moveTail(id, tail, record)
       drawn.moved.clear()
+      for (const [id, was] of drawn.comps) showComponentsOf(id, was, record)
+      drawn.comps.clear()
 
-      const lay = layoutVectors(layoutInput(vis), style ?? vis.mode ?? 'common-tail')
+      // 2D Components is the card's own arrow showing its components: the renderer draws Ax and Ay,
+      // their dashed guides and "Ax = …" labels from the arrow itself and follows it when it is
+      // dragged or retyped. Ax and Ay used to be added as arrows of their own, each selectable with
+      // a chip and, once selected, components of its own: "Axx = 4 cm", "Axy = 0 cm".
+      const own = inPlaneComponents(vis) ? cardArrowFor(vis.vectors[0].v, new Set(), vis.vectors[0].name) : undefined
+      const lay = layoutVectors(own ? [] : layoutInput(vis), style ?? vis.mode ?? 'common-tail')
       const b = new Builder()
       const used = new Set<ObjId>()
       const idOf = new Map<string, ObjId>()
@@ -996,11 +1546,7 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
       const sources: (ObjId | undefined)[] = []
       const hidden = new Map<ObjId, ObjId>()
       const inputs = new Map<ObjId, V3>()
-      const faint = (o: SceneObject) => {
-        o.themed = '--text-faint'
-        o.auxiliary = true
-        o.showLabel = false
-      }
+      const comps = new Map<ObjId, boolean | undefined>()
       lay.arrows.forEach((a, i) => {
         const src = vis.vectors[i]
         const standIn = !!src.drawn && !near(src.drawn, src.v)
@@ -1014,7 +1560,7 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
             inputs.set(id, compOf(id) ?? src.v)
             const was = useScene.getState().ev.values.get(id)
             const tail = was?.type === 'vector' ? was.tail : ZERO
-            if (near(tail, a.tail) || moveTail(id, a.tail)) {
+            if (near(tail, a.tail) || moveTail(id, a.tail, record)) {
               if (!near(tail, a.tail)) drawn.moved.set(id, tail)
               parents.push(id)
               idOf.set(a.name, id)
@@ -1029,16 +1575,20 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
             // name, stands where the layout puts it, and the original is hidden while it does:
             // left showing, two arrows both read A. It comes back with the picture's going.
             copyOf = id
-            setVisible(id, false)
+            setVisible(id, false, record)
           }
         }
         // A helper such as −B takes the colour of the arrow it is the negative of.
         const of = a.role === 'helper' ? vis.vectors.findIndex((x) => x.role === 'input' && near(neg(x.v), src.v)) : -1
         const ofId = of >= 0 ? idOf.get(vis.vectors[of].name) : undefined
         const color = a.role === 'result' ? RESULT_COLOUR : ofId ? useScene.getState().objects[ofId]?.color : undefined
+        // An input no card arrow holds is still drawn, so the picture stays joined up, but auxiliary
+        // as a copy is (its chip shows only while it is selected): drawn as an ordinary arrow it was
+        // a second A′ at a value the card no longer had, beside the card's own A, and a waiting
+        // graph card was offered it.
         const o = copyOf
           ? copyArrow(b, copyOf, a, standIn)
-          : b.vector({ kind: 'free', tail: a.tail, comp: a.comp }, { name: VS.sceneName(a.name), color, auxiliary: a.role === 'helper' || standIn })
+          : b.vector({ kind: 'free', tail: a.tail, comp: a.comp }, { name: VS.sceneName(a.name), color, auxiliary: a.role !== 'result' || standIn, showLabel: a.role !== 'helper' && !standIn })
         if (copyOf) hidden.set(copyOf, o.id)
         const label = VS.sceneLabel(a.name)
         if (label && !copyOf) o.label = label
@@ -1047,100 +1597,385 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
         idOf.set(a.name, o.id)
         slots.push(o.id)
         sources.push(copyOf)
-        if (a.role === 'result' && !standIn) results.push(o.id)
+        // An answer drawn at a stand-in length is still the answer. Filed with the parents, it was
+        // never laid out again when v was retyped, and Resultant only was never offered for it.
+        if (a.role === 'result') results.push(o.id)
         else parents.push(o.id)
         const note = standIn && src.note ? b.text(add(a.tail, a.comp), src.note, { name: `${o.name}note`, auxiliary: true }).id : undefined
         notes.push(note)
-        if (note) parents.push(note)
+        // An answer's note stays with it: Resultant only would hide "arrow not to scale" exactly when
+        // the stand-in is shown alone.
+        if (note && a.role !== 'result') parents.push(note)
       })
-      // A parallelogram's far sides: construction lines from each side's head to the answer's head,
-      // tied to the heads so they follow a drag.
       const answer = results[0]
-      if (answer && lay.sides.length) {
-        // Named, so the hidden points do not take the capitals the next card would be offered.
-        const head = (id: ObjId) => b.point({ kind: 'vectorHead', vector: id }, { name: 'head', auxiliary: true, visible: false, showLabel: false }).id
-        const r = head(answer)
-        for (const name of lay.sides) {
-          const id = idOf.get(name)
-          if (!id) continue
-          const s = b.segment(head(id), r, { auxiliary: true, showLabel: false })
-          faint(s)
-          parents.push(s.id)
-        }
+      if (answer && lay.sides.length) parents.push(...farSides(b, answer, lay.sides.flatMap((name) => idOf.get(name) ?? [])))
+      if (own) {
+        const o = useScene.getState().objects[own]
+        comps.set(own, o?.type === 'vector' ? o.showComponents : undefined)
+        showComponentsOf(own, true, record)
+        parents.push(own)
+        slots.push(own)
+        sources.push(own)
+        notes.push(undefined)
+        inputs.set(own, compOf(own) ?? vis.vectors[0].v)
       }
-      b.commit(false)
-      const shown = useVC.getState().result
+      if (b.created.length) useScene.getState().addObjects(b.created, { select: false, record })
       Object.assign(drawn, {
-        added: b.created.map((o) => o.id),
+        // Drawn again in silence, the picture it replaces stays listed: an undo of an earlier step
+        // can bring its arrows back, and they are still the picture's to take away (as takePictureOff
+        // leaves them), not a second answer beside the new one.
+        added: [...(record ? [] : drawn.added), ...b.created.map((o) => o.id)],
         parents,
-        results,
+        results: [...(record ? [] : drawn.results), ...results],
         slots,
         notes,
         sources,
         hidden,
         inputs,
+        comps,
         sol,
         style,
-        // Only the answer the panel shows has a recipe: a picture of anything else is not worked out again.
-        from: shown?.sol === sol ? shown.from : undefined
+        from,
+        waiting: false,
+        // With no answer in this picture (the zero vector's unit vector) there is nothing to show
+        // alone: the arrows stay as they are, and Resultant only is kept for the picture that comes back.
+        resultOnly: resultOnly && !results.length,
+        depth: record ? useScene.getState().past.length : drawn.depth
       })
-      if (shown?.sol === sol && shown.stale) useVC.setState({ result: { ...shown, stale: false } })
-      if (vis.vectors.some((x) => Math.abs((x.drawn ?? x.v)[2]) > 1e-9)) useScene.getState().setViewMode('3d')
+      // Drawn again, the arrows it hid showed again; they are hidden again with the new picture.
+      if (resultOnly && results.length) for (const id of parents) setVisible(id, false, false)
+      if (record && vis.vectors.some((x) => Math.abs((x.drawn ?? x.v)[2]) > 1e-9)) useScene.getState().setViewMode('3d')
     } finally {
-      useScene.getState().endGesture()
+      if (record) useScene.getState().endGesture()
     }
   } finally {
     relaying = false
   }
-  // Nothing is left selected: a selected answer wears the selection band and looks heavier than
-  // its parents.
-  useScene.getState().select([])
-  fitCamera()
 }
 
 /**
- * Keeps a drawn answer true to its vectors. It reuses the cards' own arrows, so retyping or dragging
- * A used to leave R at the old sum and B's tail at A's old head: R ≠ A + B on the graph beside a
- * card saying R = A + B. When an input's components change, the answer is worked out again from
- * its recipe and laid out in place, with no undo step of its own (the change that caused it is
- * the step, and undoing it brings the old picture back with the old vectors). When it cannot be
- * worked out again — an input went, or cannot be read — the picture is taken away and the answer
- * card says why.
+ * A parallelogram's far sides, built into `b`: construction lines from each side's head to the
+ * answer's head, tied to the heads so they follow a drag. Returns the lines.
  */
-function followAnswer(): void {
-  if (relaying || !drawn.results.length) return
+function farSides(b: Builder, answer: ObjId, sides: ObjId[]): ObjId[] {
+  // Named, so the hidden points do not take the capitals the next card would be offered.
+  const head = (id: ObjId) => b.point({ kind: 'vectorHead', vector: id }, { name: 'head', auxiliary: true, visible: false, showLabel: false }).id
+  const r = head(answer)
+  return sides.map((id) => {
+    const s = b.segment(head(id), r, { auxiliary: true, showLabel: false })
+    s.themed = '--text-faint'
+    return s.id
+  })
+}
+
+/**
+ * A layout chip under the answer already on the graph, or Draw on graph pressed for it again: the
+ * same arrows are laid out again in place, the card arrows and the answer keeping their ids, as a
+ * retyped card lays them out (V5). Drawn afresh, the answer R was removed and a new R made, and
+ * removeObjects took with the old R whatever a student had built on it: a point on its head and
+ * the angle measured there. A parallelogram's far sides are added on the way into Parallelogram
+ * and taken away on the way out, and the vectors "Resultant only" hid show again, as in a fresh
+ * drawing. One undo step, and none when nothing would change (the chip already shown). False when
+ * the picture cannot be laid out again, for drawAnswer to draw it afresh.
+ */
+function switchLayout(sol: VS.Solution, vis: NonNullable<VS.Solution['visual']>, style: DrawStyle | null): boolean {
   const sc = useScene.getState()
-  if (!answerOnGraph(sc.objects)) return
+  if (!pictureOnGraph(sc.objects) || !canLayOutAgain(vis)) return false
+  const lay = layoutVectors(drawn.comps.size ? [] : layoutInput(vis), style ?? vis.mode ?? 'common-tail')
+  // Only far sides are segments among what Draw on graph added.
+  const sides = drawn.added.filter((id) => sc.objects[id]?.type === 'segment')
+  const answer = drawn.results.find((id) => sc.objects[id])
+  const want = answer ? lay.sides.length : 0
+  const changes =
+    sides.length !== want ||
+    drawn.parents.some((id) => sc.objects[id] && !sc.objects[id].visible) ||
+    lay.arrows.some((a, i) => {
+      const c = sc.ev.values.get(drawn.slots[i])
+      // A card arrow keeps its own components: only its tail is laid out (placeInput).
+      return c?.type !== 'vector' || !near(c.tail, a.tail) || (drawn.slots[i] !== drawn.sources[i] && !near(c.comp, a.comp))
+    })
+  const was = drawn.style
+  drawn.style = style
+  if (!changes) return true
+  // The chip is one step of the drawing, but its style is not: the state its undo comes back to
+  // showed the style that was lit before it (followStyle puts that back, and the chip's own state
+  // when the chip is redone). Done here because the drawing's subscriber does not see a chip.
+  styleAt.set(sc.objects, was)
+  relaying = true
+  sc.beginGesture()
+  try {
+    for (const id of drawn.parents) setVisible(id, true)
+    layOutAgain(sol, true)
+    if (sides.length !== want) {
+      // The far sides there go with their hidden head points (only they are head points among what
+      // was added). Their ids stay in `drawn.added`, so far sides an undo brings back are still the
+      // picture's to take away. removeObjects records a step of its own even inside a gesture, and
+      // the chip is one step.
+      const objects = useScene.getState().objects
+      const old = drawn.added.filter((id) => {
+        const o = objects[id]
+        return o?.type === 'segment' || (o?.type === 'point' && o.def.kind === 'vectorHead')
+      })
+      if (old.length) useScene.getState().removeObjects(old, { record: false })
+      if (answer && want) {
+        const b = new Builder()
+        const lines = farSides(
+          b,
+          answer,
+          lay.sides.flatMap((name) => {
+            const i = lay.arrows.findIndex((a) => a.name === name)
+            return i >= 0 ? [drawn.slots[i]] : []
+          })
+        )
+        b.commit(false)
+        drawn.added.push(...b.created.map((o) => o.id))
+        drawn.parents.push(...lines)
+      }
+    }
+  } finally {
+    useScene.getState().endGesture()
+    relaying = false
+  }
+  return true
+}
+
+/**
+ * The card values (and the number in its k or q box) each answer was worked out from, so it is
+ * worked out again only when they change. Keyed on the working rather than the answer card, which is
+ * a new object each time it goes stale or comes back.
+ */
+const workedFrom = new WeakMap<VS.Solution, { vectors: (V3 | string | undefined)[]; scalar?: number | string }>()
+
+/** What a recipe's cards hold among every card's values, in its order; undefined for a card that went. */
+const recipeValues = (from: Recipe, cards: Card[], values: (V3 | string)[]) => from.cards.map(({ id }) => values[cards.findIndex((c) => c.id === id)])
+
+/**
+ * The number in the box a recipe also reads (k or q), or the sentence that says why it cannot be
+ * read; undefined when the working reads neither (H9).
+ */
+function scalarNow(from: Recipe): number | string | undefined {
+  if (!from.scalar) return undefined
+  try {
+    return evalNumber(useVC.getState()[from.scalar])
+  } catch (e) {
+    return explainVectorError(e)
+  }
+}
+
+const isVec = (v: V3 | string | undefined): v is V3 => Array.isArray(v)
+
+/** The same vectors, every one of them readable. */
+const sameVectors = (a: (V3 | string | undefined)[], b: (V3 | string | undefined)[]): boolean =>
+  a.length === b.length &&
+  a.every((v, i) => {
+    const w = b[i]
+    return isVec(v) && isVec(w) && near(v, w)
+  })
+
+/** Notes what a newly shown answer's cards hold, which is what it was worked out from. */
+function noteAnswer(a: Answer | null): void {
+  if (!a?.from || workedFrom.has(a.sol)) return
+  const cards = useVC.getState().cards
+  workedFrom.set(a.sol, { vectors: recipeValues(a.from, cards, cardValues(cards, useScene.getState().ev)), scalar: scalarNow(a.from) })
+}
+
+/** Keeps the answer the panel shows, and any older picture still on the graph, true to the cards. */
+function followAnswer(): void {
+  if (relaying) return
   const shown = useVC.getState().result
-  // An undo brought a picture back that had been taken away.
-  if (shown?.stale && shown.sol === drawn.sol) useVC.setState({ result: { ...shown, stale: false } })
+  if (shown?.from) keepAnswerTrue(shown, shown.from)
+  // The shown answer's own picture was looked after with it; any other follows its own recipe.
+  if (!shown?.from || drawn.sol !== useVC.getState().result?.sol) followPicture()
+}
+
+/**
+ * Keeps the answer under the cards true to them, drawn or not. A drawn answer reuses the cards' own
+ * arrows, so retyping or dragging A used to leave R at the old sum and B's tail at A's old head; and
+ * only a drawn answer with a result arrow was ever worked out again, so retyping A left "Ax = 4,
+ * Ay = 4" under a card reading 8i + 2j, and blanking or removing A left R = A + B with no A. When a
+ * card it was worked out from changes, it is worked out again and its picture laid out again in
+ * place, with no undo step of its own (the change that caused it is the step, and undoing that
+ * brings the old picture back with the old vectors). A picture that cannot be laid out in place,
+ * because the new working has other arrows (the zero vector has no unit vector) or none, is drawn
+ * again from it (drawAgain): a picture is never lost while its answer is shown. When one is
+ * removed, the answer is marked stale and its picture taken off the graph; when one cannot be read
+ * for now, or the working fails on the cards as they are, it is marked stale and its picture waits
+ * where it is.
+ */
+function keepAnswerTrue(shown: Answer, from: Recipe): void {
+  const sc = useScene.getState()
+  const cards = useVC.getState().cards
+  const values = cardValues(cards, sc.ev)
+  const now = recipeValues(from, cards, values)
+  const mine = drawn.sol === shown.sol
+  // A picture that waits for something to show ends with the Draw on graph that made it: undone,
+  // the student has taken it off themselves.
+  if (drawn.waiting && sc.past.length < drawn.depth) drawn.waiting = false
+  const there = mine && pictureOnGraph(sc.objects)
+  const wanted = there || (mine && drawn.waiting)
+  // k or q, for the working that reads one: a number, or the sentence that says it cannot be read.
+  const scalar = scalarNow(from)
+  const was = workedFrom.get(shown.sol)
+  if (was && sameVectors(now, was.vectors) && was.scalar === scalar) {
+    // Its vectors and its k or q are as they were: an undo brought a removed card back, or a
+    // half-typed one was finished as it had been.
+    if (shown.stale) useVC.setState({ result: { ...shown, stale: false, staleWhy: undefined, staleBox: undefined, pictureTakenOff: false } })
+    return
+  }
+  // Only a removed card takes the picture off: nothing but an undo brings that card back. A waiting
+  // picture shows nothing, but the arrows it moved are given back all the same; the undo that brings
+  // the card back brings it back too, as it brings back a picture that was showing.
+  if (now.some((v) => v === undefined)) {
+    if (wanted && !there) relay(takePictureOff)
+    // A redo takes the card and its picture away together, so no picture is left to take off here:
+    // it was taken off all the same, and the card says so as it did the first time.
+    return goStale(shown, 'removed', there, undefined, mine && pictureWentWithIt)
+  }
+  // A card that cannot be read for a moment ("3i+", or "8" before the i) keeps its arrow at its last
+  // value, so the picture still agrees with the drawing and waits where it is. Taken off, it was
+  // lost for good on the way from "3i+" to "3i+1j".
+  if (!now.every(isVec)) return goStale(shown, 'unreadable', false)
+  // The same for a k or q box left blank or half typed: the answer waits for a number (H9).
+  if (typeof scalar === 'string') return goStale(shown, 'unreadable', false, from.scalar)
+  const sol = solveAgain(from, cards, values, sc.settings)
+  // Every card readable but the working fails on them (A/(A·B) with A ⟂ B): the picture waits too,
+  // so a drag through such a point does not lose it.
+  if (!sol) return goStale(shown, 'unworkable', false)
+  workedFrom.set(sol, { vectors: now, scalar })
+  if (wanted)
+    relay(() => {
+      if (!layOutAgain(sol)) drawAgain(sol, from)
+    })
+  // In step with the answer card, so the picture is still known as this answer's.
+  if (mine) drawn.sol = sol
+  useVC.setState({ result: { ...shown, sol, stale: false, staleWhy: undefined, staleBox: undefined, pictureTakenOff: false } })
+}
+
+/**
+ * The picture of a re-worked answer that cannot be laid out where it is — the new working has a
+ * different number of arrows (one where the unit vector had two, once A is the zero vector) or
+ * none — replaced by one drawn from the new working, in the layout the student chose, with no undo
+ * step as typing is none. Taken off instead, it was lost for good: nothing drew it again when the
+ * size was typed on from 0 to 0.8. A working with nothing to draw leaves the picture waiting
+ * (drawn.waiting), to be drawn again, quietly, as soon as the working has one. Runs inside `relay`.
+ */
+function drawAgain(sol: VS.Solution, from: Recipe): void {
+  const vis = sol.visual
+  // Resultant only is read from the drawing, and drawing again shows the arrows it hid: read it
+  // first, to put it back on the new picture, or on the one that comes back after a wait.
+  const only = resultOnlyOn(useScene.getState().objects) || (drawn.waiting && drawn.resultOnly)
+  if (vis) drawPicture(sol, vis, drawn.style, from, false, only)
+  else {
+    takePictureOff()
+    Object.assign(drawn, { sol, from, resultOnly: only })
+  }
+  // Nothing of its own on the graph (the zero vector's unit vector, a working with no picture) is
+  // not a picture the student took away: it is waited for.
+  drawn.waiting = !pictureOnGraph(useScene.getState().objects)
+}
+
+/**
+ * Marks the answer the panel shows stale, taking its picture off the graph first when told to. `box`
+ * is the k or q box that cannot be read, when that and not a vector is why. `wentOff` is for a
+ * picture that has just gone from the graph without this taking it off (a redo of the removal).
+ */
+function goStale(shown: Answer, why: StaleReason, takeOff: boolean, box?: 'k' | 'q', wentOff = false): void {
+  if (takeOff) relay(takePictureOff)
+  // Once its picture has come off, the card says so until the answer comes back: an undo can bring
+  // the picture back, to be taken off again with the card still missing.
+  const off = why === 'removed' && (takeOff || wentOff || !!shown.pictureTakenOff)
+  if (shown.stale && shown.staleWhy === why && shown.staleBox === box && !!shown.pictureTakenOff === off) return
+  useVC.setState({ result: { ...shown, stale: true, staleWhy: why, staleBox: box, pictureTakenOff: off } })
+}
+
+/**
+ * A picture still on the graph of an answer the panel no longer shows follows its own recipe, as
+ * every picture did before: laid out again when one of its arrows changes, or taken off. The same
+ * when the k or q box its working reads is retyped (G4a), in place and with no undo step. While one
+ * of its cards cannot be read for a moment, or its k or q box cannot, it waits where it is, as the
+ * shown answer's picture does (keepAnswerTrue): only a card that is gone takes it off.
+ */
+function followPicture(): void {
+  const sc = useScene.getState()
+  if (!pictureOnGraph(sc.objects)) return
+  const from = drawn.from
+  // A k or q box left blank or half typed: the picture stays as it is, as the shown answer's does.
+  // It is laid out again once the box reads, the cards it was drawn from still differing by then.
+  const scalar = from ? scalarNow(from) : undefined
+  if (typeof scalar === 'string') return
+  // The box its working reads (k or q) holds another number than the one it was last worked out with (G4a).
+  const was = drawn.sol ? workedFrom.get(drawn.sol) : undefined
+  const retyped = !!from?.scalar && !!was && was.scalar !== scalar
   const changed = [...drawn.inputs].some(([id, v]) => {
     const c = compOf(id)
     return !c || !near(c, v)
   })
-  if (!changed) return
+  if (!changed && !retyped) return
+  const cards = useVC.getState().cards
+  const values = cardValues(cards, sc.ev)
+  // A card that cannot be read for a moment ("3i+" on the way to "3i+1j") keeps its arrow at its last
+  // value: the picture waits where it is, as the shown answer's does, and follows once the card reads.
+  // The retyped k or q was taking it off the graph for good here, with nothing to draw it again.
+  if (from) {
+    const now = recipeValues(from, cards, values)
+    if (!now.some((v) => v === undefined) && !now.every(isVec)) return
+  }
+  const sol = from ? solveAgain(from, cards, values, sc.settings) : null
+  relay(() => {
+    if (!sol || !layOutAgain(sol)) takePictureOff()
+  })
+  // Noted as every working is, so the next retype of k or q is told from this one.
+  if (sol && from) workedFrom.set(sol, { vectors: recipeValues(from, cards, values), scalar })
+}
+
+/** Runs a change to the picture with `relaying` set, so the drawing's subscriber leaves it alone. */
+function relay(change: () => void): void {
   relaying = true
   try {
-    if (!layOutAgain()) retireAnswer()
+    change()
   } finally {
     relaying = false
   }
 }
 
-/** Works the drawn answer out again and moves its arrows to match; false when it cannot. */
-function layOutAgain(): boolean {
-  const from = drawn.from
-  if (!from) return false
+/**
+ * Whether the last Draw on graph's picture is still on the drawing: its answer arrow, or, for a
+ * picture with none (Components is a vector and its parts), what it added or the components it
+ * turned on. Only an answer arrow counted, so a Components picture never followed its card.
+ */
+function pictureOnGraph(objects: Record<ObjId, SceneObject>): boolean {
+  if (drawn.results.length) return answerOnGraph(objects)
+  return (
+    drawn.added.some((id) => objects[id]) ||
+    [...drawn.comps.keys()].some((id) => {
+      const o = objects[id]
+      return o?.type === 'vector' && !!o.showComponents
+    })
+  )
+}
+
+/** Whether the drawn picture can show `vis` with the arrows it has. */
+function canLayOutAgain(vis: NonNullable<VS.Solution['visual']>): boolean {
   const sc = useScene.getState()
-  const cards = useVC.getState().cards
-  const sol = solveAgain(from, cards, cardValues(cards, sc.ev), sc.settings)
-  const vis = sol?.visual
+  // A Components picture is its arrow's own components, which follow the arrow by themselves; a
+  // vector gone 3D needs an Az that only helper arrows show.
+  if (drawn.comps.size) return inPlaneComponents(vis) && drawn.slots.every((id) => sc.objects[id])
   // Every arrow must still be there; a copy may be missing (an undo took it), its card arrow not.
-  if (!sol || !vis || vis.vectors.length !== drawn.slots.length || drawn.slots.some((id, i) => !sc.objects[drawn.sources[i] ?? id])) return false
-  const lay = layoutVectors(layoutInput(vis), drawn.style ?? vis.mode ?? 'common-tail')
+  return vis.vectors.length === drawn.slots.length && drawn.slots.every((id, i) => sc.objects[drawn.sources[i] ?? id])
+}
+
+/**
+ * Moves the drawn picture's arrows to match a new working of its answer; false when it cannot show
+ * it. `record` is for a layout chip, whose one undo step (its gesture) the moves belong to; a
+ * picture laid out again after a change that is already an undo step records nothing.
+ */
+function layOutAgain(sol: VS.Solution, record = false): boolean {
+  const vis = sol.visual
+  if (!vis || !canLayOutAgain(vis)) return false
+  const lay = layoutVectors(drawn.comps.size ? [] : layoutInput(vis), drawn.style ?? vis.mode ?? 'common-tail')
   lay.arrows.forEach((a, i) => {
     const src = drawn.sources[i]
-    if (src) placeInput(i, src, a, !!vis.vectors[i].drawn && !near(vis.vectors[i].drawn!, vis.vectors[i].v))
+    if (src) placeInput(i, src, a, !!vis.vectors[i].drawn && !near(vis.vectors[i].drawn!, vis.vectors[i].v), record)
     else setArrow(drawn.slots[i], a.tail, a.comp)
     const note = drawn.notes[i]
     const o = note ? useScene.getState().objects[note] : undefined
@@ -1152,13 +1987,11 @@ function layOutAgain(): boolean {
         (d) => {
           if (d.type === 'text') Object.assign(d, { p, text })
         },
-        false
+        record
       )
     }
   })
   drawn.inputs = new Map([...drawn.inputs.keys()].map((id) => [id, compOf(id) ?? ZERO]))
-  const shown = useVC.getState().result
-  if (shown && shown.sol === drawn.sol) useVC.setState({ result: { ...shown, sol, stale: false } })
   drawn.sol = sol
   return true
 }
@@ -1168,9 +2001,9 @@ function layOutAgain(): boolean {
  * can; when it cannot — an arrow between two points whose tail was dragged off the start — a copy
  * stands there instead and the original is hidden, as the first Draw on graph does. This ignored
  * the failed move before, and B and R were laid out as if A had moved: #18's broken head-to-tail
- * figure, reached through an edit instead of the first draw.
+ * figure, reached through an edit instead of the first draw. `record` as for layOutAgain.
  */
-function placeInput(i: number, src: ObjId, a: { name: string; tail: V3; comp: V3 }, standIn: boolean): void {
+function placeInput(i: number, src: ObjId, a: { name: string; tail: V3; comp: V3 }, standIn: boolean, record = false): void {
   const objects = () => useScene.getState().objects
   let slot = drawn.slots[i]
   // Its copy went with an undo, which also put the card arrow back as it was: that arrow again.
@@ -1183,7 +2016,7 @@ function placeInput(i: number, src: ObjId, a: { name: string; tail: V3; comp: V3
     const tail = was?.type === 'vector' ? was.tail : ZERO
     if (near(tail, a.tail)) return
     const moved = drawn.moved.has(src)
-    if (moveTail(src, a.tail, false)) {
+    if (moveTail(src, a.tail, record)) {
       if (!moved) drawn.moved.set(src, tail)
       return
     }
@@ -1194,12 +2027,12 @@ function placeInput(i: number, src: ObjId, a: { name: string; tail: V3; comp: V3
       const b = new Builder()
       const copy = copyArrow(b, src, a, standIn)
       copy.visible = !resultOnlyOn(objects())
-      useScene.getState().addObjects(b.created, { record: false })
+      useScene.getState().addObjects(b.created, { record })
       drawn.added.push(copy.id)
       drawn.hidden.set(src, copy.id)
       slot = copy.id
     }
-    setVisible(src, false, false)
+    setVisible(src, false, record)
     retarget(src, slot)
   }
   setArrow(slot, a.tail, a.comp)
@@ -1224,22 +2057,44 @@ function retarget(from: ObjId, to: ObjId): void {
   }
 }
 
-/** Takes a drawn answer off the graph when its vectors no longer give it, and puts the arrows back. */
-function retireAnswer(): void {
+/**
+ * Takes a drawn picture off the graph when its vectors no longer give it, and puts the arrows back
+ * as the student had them. Whether that makes the answer stale is the caller's to say: the picture
+ * of an answer the panel no longer shows, whose vector went 3D under it (Components), goes while
+ * its answer stays true; the shown answer's picture is drawn again instead (drawAgain).
+ */
+function takePictureOff(): void {
   const sc = useScene.getState()
   const gone = drawn.added.filter((id) => sc.objects[id])
   if (gone.length) sc.removeObjects(gone, { record: false })
   for (const [id, tail] of drawn.moved) moveTail(id, tail, false)
   for (const id of drawn.hidden.keys()) setVisible(id, true, false)
   drawn.hidden.clear()
+  for (const [id, was] of drawn.comps) showComponentsOf(id, was, false)
+  // Given back once: kept, the next Draw on graph gave it back again and switched off a "show
+  // components" the student had turned on since.
+  drawn.comps.clear()
   showParents()
-  const shown = useVC.getState().result
-  if (shown && shown.sol === drawn.sol) useVC.setState({ result: { ...shown, stale: true } })
 }
 
 function setVisible(id: ObjId, visible: boolean, record = true): void {
   const o = useScene.getState().objects[id]
   if (o && o.visible !== visible) useScene.getState().updateObject(id, (d) => void (d.visible = visible), record)
+}
+
+/** Whether an arrow draws its own components; undefined gives back an arrow that never said either way. */
+function showComponentsOf(id: ObjId, on: boolean | undefined, record = true): void {
+  const o = useScene.getState().objects[id]
+  if (o?.type !== 'vector' || o.showComponents === on) return
+  useScene.getState().updateObject(
+    id,
+    (d) => {
+      if (d.type !== 'vector') return
+      if (on === undefined) delete d.showComponents
+      else d.showComponents = on
+    },
+    record
+  )
 }
 
 /**

@@ -307,12 +307,42 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
             <div className="seg">
               {(
                 [
-                  ['arrow', 'A⃗'],
+                  // The arrow is drawn, not typed: a letter plus the combining arrow (U+20D7) has no glyph
+                  // in Segoe UI and showed as A and a box. An SVG in currentColor takes the button's on and
+                  // off colours in every theme, and em sizes follow the text size. A .seg button is 24 px
+                  // high and clips what leaves it, so the arrow sits in the span's own padding, inside the
+                  // button, and not above the letter the way a graph label's CSS arrow does. The padding is
+                  // the same below, so the letter keeps the baseline of the options beside it.
+                  [
+                    'arrow',
+                    <span className="relative inline-block py-[0.22em] leading-none">
+                      A
+                      <svg
+                        viewBox="0 0 12 5"
+                        aria-hidden="true"
+                        focusable="false"
+                        className="absolute left-1/2 top-0 h-[0.36em] w-[0.9em] -translate-x-1/2"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M0.8 2.5H11M8.4 0.7 11 2.5 8.4 4.3" />
+                      </svg>
+                    </span>
+                  ],
                   ['bold', 'A bold'],
                   ['underline', 'A̲']
                 ] as const
               ).map(([k, l]) => (
-                <button key={k} className={`whitespace-nowrap ${settings.vectorNotation === k ? 'on' : ''}`} onClick={() => set({ vectorNotation: k })}>
+                <button
+                  key={k}
+                  className={`whitespace-nowrap ${settings.vectorNotation === k ? 'on' : ''}`}
+                  // Without a name a screen reader would read the arrow button as just "A".
+                  aria-label={k === 'arrow' ? 'Arrow over the letter' : undefined}
+                  onClick={() => set({ vectorNotation: k })}
+                >
                   {l}
                 </button>
               ))}

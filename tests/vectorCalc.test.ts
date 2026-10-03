@@ -4,13 +4,15 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScene } from '../src/renderer/src/core/store'
-import type { EvalResult, SceneObject, SceneSettings, VectorObj } from '../src/renderer/src/core/types'
+import type { EvalResult, SceneObject, SceneSettings, TextObj, VectorObj } from '../src/renderer/src/core/types'
+import { componentTexts } from '../src/renderer/src/core/naming'
 import { add, layoutVectors, type V3 } from '../src/renderer/src/math/vec'
 import * as VS from '../src/renderer/src/math/vectorSolver'
-import { isResultArrow } from '../src/renderer/src/render/colourMix'
-import { CARDS_KEY, OLD_CARDS_KEY, NOTHING_PICKED, NO_ARROWS, PlainError, addVectorFromScene, cardValues, planSync, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, answerHint, cardValue, evalNumber, explainVectorError, nextStepHint, removeCard, renameCard, startCardSync, unknownNameSentence, unknownNames, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
+import { isResultArrow, showsComponents } from '../src/renderer/src/render/colourMix'
+import { CARDS_KEY, OLD_CARDS_KEY, NOTHING_PICKED, NO_ARROWS, PlainError, addVectorFromScene, answerOnGraph, canDraw, cardValues, planSync, drawAnswer, evaluateVectorLine, isCalcAnswer, namesIn, resultOnlyOn, setResultOnly, answerHint, cardValue, evalNumber, explainVectorError, nextStepHint, removeCard, renameCard, setEntry, solveOperation, staleSentence, startCardSync, unknownNameSentence, unknownNames, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
 import { readSource } from './helpers/repo'
-import { math } from '../src/renderer/src/math/expr'
+import { inDegrees, math, toV3 } from '../src/renderer/src/math/expr'
+import { texIJK } from '../src/renderer/src/math/format'
 
 const card = (id: number, name: string, extra: Partial<Card> = {}): Card => ({ id, name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '', ...extra })
 
@@ -119,7 +121,8 @@ describe('one way in', () => {
     const store = readSource('src/renderer/src/panels/vectorCalcStore.ts')
     expect(store).toContain("NOTHING_TYPED = 'nothing typed yet'")
     expect(store).toContain('return NOTHING_TYPED')
-    expect(src).toMatch(/Card \$\{wanted\[i\]\.name\} cannot be read: \$\{v\}/)
+    // The operations' picking moved into the store with runOperation (H9, tests/vectorPolish.test.ts runs it).
+    expect(store).toMatch(/Card \$\{c\.name\} cannot be read: \$\{v\}/)
   })
 
   it('shows all four drawing styles under the answer, two by two', () => {
@@ -467,7 +470,8 @@ describe('plain-English guidance (Fix 24)', () => {
     expect(answerHint(false)).not.toMatch(/Draw on graph/)
     const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
     expect(src).toMatch(/nextStepHint\(readable, readable\.indexOf\(card\.name\)\)/)
-    expect(src).toMatch(/answerHint\(!!st\.result\.sol\.visual\)/)
+    // The hint names Draw on graph only when the card offers it: a stale answer is not drawn (V3).
+    expect(src).toMatch(/answerHint\(canDraw\(st\.result\)\)/)
   })
 })
 
@@ -670,5 +674,779 @@ describe('Draw on graph and Resultant only (Fix 2)', () => {
     for (const cls of buttons) expect(cls).toMatch(/min-h-\[44px\]/)
     expect(src).toMatch(/drawAnswer\(st\.result!\.sol, st\.style\)/)
     expect(src).not.toMatch(/visualizeSolution/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 0.9 polish (P-VEC): an answer card and its picture follow the cards they were worked out from
+// ---------------------------------------------------------------------------
+
+describe('an answer and its picture follow their cards (V1, H2, V3, V4, H1)', () => {
+  const scene = () => useScene.getState()
+  const vectors = () => Object.values(scene().objects).filter((o): o is VectorObj => o.type === 'vector')
+  const compOf = (id: string) => {
+    const c = scene().ev.values.get(id)
+    return c?.type === 'vector' ? c.comp : undefined
+  }
+  const tailOf = (id: string) => {
+    const c = scene().ev.values.get(id)
+    return c?.type === 'vector' ? c.tail : undefined
+  }
+  /** Equal but for the last bits cos and sin leave; −0 is written 0, which toEqual would not take. */
+  const near = (a: readonly number[] | undefined, b: readonly number[]) => !!a && a.length === b.length && a.every((x, i) => Math.abs(x - b[i]) < 1e-9)
+  const round = (v: readonly number[]) => v.map((x) => Math.round(x * 1e6) / 1e6 + 0)
+  /** The names of the arrows on the graph whose components are one of these vectors. */
+  const holding = (...vs: V3[]) => vectors().filter((o) => vs.some((v) => near(compOf(o.id), v))).map((o) => o.name)
+  /**
+   * The components a picture shows on the graph: a helper arrow drawn for one, or an arrow drawing
+   * its own (showComponents: the renderer draws Ax along x and Ay along y from the arrow itself,
+   * render/ObjectViews.tsx). Either way of drawing them counts; what they show is what is tested.
+   */
+  const componentsShown = () =>
+    vectors()
+      .filter((o) => o.visible)
+      .flatMap((o) => {
+        const c = compOf(o.id)
+        if (!c) return []
+        if (o.auxiliary) return [round(c)]
+        return o.showComponents ? [round([c[0], 0, 0]), round([0, c[1], 0])] : []
+      })
+  const arrowOf = (name: string) => useVC.getState().cards.find((c) => c.name === name)!.sceneId
+  const result = () => useVC.getState().result!
+  const answers = () => result().sol.answers.map((a) => [a.label, a.tex])
+  const answer = (label: string) => result().sol.answers.find((a) => a.label === label)?.tex
+  /** A card's field changed, as the panel's updateCard does it: one new cards array. */
+  const edit = (name: string, patch: Partial<Card>) => useVC.setState({ cards: useVC.getState().cards.map((c) => (c.name === name ? { ...c, ...patch } : c)) })
+
+  /** The buttons used here, as VectorCalc.tsx's OPS has them: the label and how many cards each reads. */
+  const OPS: Record<string, [string, number | 'all']> = { sum: ['Add all', 'all'], mag: ['Size & angle', 1], resolve: ['Components', 1], lorentz: ['Magnetic force', 2], unit: ['Unit vector', 1], proj: ['Projection', 2] }
+  /**
+   * An operation button, pressed exactly as VectorCalc.tsx `run` makes its answer: the cards' values
+   * in one pass, solveOperation with k and q read from the panel's own fields, and a recipe naming
+   * the cards it read.
+   */
+  const press = (opId: string) => {
+    const [label, need] = OPS[opId]
+    const st = useVC.getState()
+    const values = cardValues(st.cards, scene().ev)
+    const wanted = need === 'all' ? st.cards : st.cards.slice(0, need)
+    const vs = wanted.map((c) => {
+      const v = values[st.cards.indexOf(c)]
+      if (typeof v === 'string') throw new Error(`Card ${c.name} cannot be read: ${v}`)
+      return { name: c.name, v }
+    })
+    const k = opId === 'scale' ? evalNumber(st.k) : 0
+    const q = opId === 'lorentz' ? evalNumber(st.q) : 0
+    const solve = (named: VS.NamedVec[], now: SceneSettings) => solveOperation(opId, named, now, k, q)
+    const sol = solve(vs, scene().settings)
+    if (!sol) throw new Error(`${label} gave no answer`)
+    useVC.setState({ result: { sol, label, from: { cards: wanted.map((c) => ({ id: c.id, name: c.name })), solve } } })
+  }
+  /** "Draw on graph" under the answer card: drawAnswer(st.result!.sol, st.style). */
+  const drawShown = () => drawAnswer(useVC.getState().result!.sol, useVC.getState().style)
+  /** A = 3i + 4j and B = 5j, the crew lead's example for H2. */
+  const AB = () => useVC.setState({ cards: [card(911, 'A', { latex: '3\\hat{i}+4\\hat{j}' }), card(912, 'B', { latex: '5\\hat{j}' })] })
+
+  const reset = () => {
+    useVC.setState({ cards: [], result: null, highlight: 0, style: null, k: '2', q: '1.6\\times10^{-19}' })
+    scene().newScene()
+    // Two decimal places, degrees: the numbers below are what a student with these settings reads.
+    scene().setSettings({ decimals: 2, precisionMode: 'dp', angleUnit: 'deg', unit: 'unit' })
+    startCardSync()
+  }
+  beforeEach(reset)
+
+  it('a result card follows its card when the card is retyped, with no picture on the graph (V1)', () => {
+    useVC.setState({ cards: [card(901, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    press('resolve')
+    expect(answers()).toEqual([['Ax', '4'], ['Ay', '4']])
+    expect(result().sol.steps[0].text).toBe('Given: magnitude A = 5.66 at θ = 45° with the +x axis.')
+    // The owner's report: the card read 8.25 ∠ 14.04° while the answer under it still said Ax = 4,
+    // Ay = 4 and "magnitude A = 5.66 at θ = 45°". Only followAnswer → layOutAgain ever worked an
+    // answer out again, and it returns at once unless the answer is drawn with a result arrow.
+    edit('A', { latex: '8\\hat{i}+2\\hat{j}' })
+    expect(compOf(arrowOf('A'))).toEqual([8, 2, 0])
+    expect(answers()).toEqual([['Ax', '8'], ['Ay', '2']])
+    expect(result().sol.steps[0].text).toBe('Given: magnitude A = 8.25 at θ = 14.04° with the +x axis.')
+    expect(result().sol.title).toBe('Resolve A into rectangular components')
+    expect(result().stale).toBeFalsy()
+  })
+
+  it('a result card follows its card when the card is switched to size ∠ angle 6∠0° (V1)', () => {
+    useVC.setState({ cards: [card(902, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    press('resolve')
+    // The chip fills the two boxes from the vector (5.66 ∠ 45°); the student then types 6 and 0.
+    setEntry(902, 'polar')
+    edit('A', { mag: '6' })
+    edit('A', { angle: '0' })
+    expect(round(compOf(arrowOf('A'))!)).toEqual([6, 0, 0])
+    expect(answers()).toEqual([['Ax', '6'], ['Ay', '0']])
+    expect(result().sol.steps[0].text).toBe('Given: magnitude A = 6 at θ = 0° with the +x axis.')
+  })
+
+  it('a result card with no picture is marked stale when a card it was worked out from is blanked (H2)', () => {
+    AB()
+    press('sum')
+    // A blank field cannot be read, but its arrow keeps (3, 4): nothing followAnswer compares changed.
+    edit('A', { latex: '' })
+    expect(result().stale).toBe(true)
+  })
+
+  it('a drawn answer is marked stale and stays where it is while a card it was worked out from is blanked (H2, R2)', () => {
+    AB()
+    press('sum')
+    drawShown()
+    const r = vectors().find((o) => o.name === 'R')!.id
+    const b = arrowOf('B')
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    edit('A', { latex: '' })
+    expect(result().stale).toBe(true)
+    // Corrected in round 2 (the head's decision): a card that cannot be read for a moment keeps its
+    // arrow at its last value, so the picture still agrees with the drawing and stays. Taken off as
+    // a removed card's picture is, it was lost for good on the way from "3i+" to "3i+1j".
+    expect(scene().objects[r]).toBeDefined()
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    expect(staleSentence(result())).not.toMatch(/picture/)
+  })
+
+  it('a result card is marked stale when a card it was worked out from is removed, drawn or not (H2)', () => {
+    // With its picture on the graph this already works (followAnswer → layOutAgain fails → retireAnswer)…
+    AB()
+    press('sum')
+    drawShown()
+    removeCard(911)
+    expect(vectors().some((o) => o.name === 'R')).toBe(false)
+    expect(result().stale).toBe(true)
+    // …with none, nothing looks: the card kept "R = A + B" with no card A left to be its A.
+    reset()
+    AB()
+    press('sum')
+    removeCard(911)
+    expect(useVC.getState().cards.map((c) => c.name)).toEqual(['B'])
+    expect(result().stale).toBe(true)
+  })
+
+  it('Draw on graph after a retype draws the vector the card holds now, never a second arrow at the old value (V3)', () => {
+    useVC.setState({ cards: [card(921, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    press('resolve')
+    edit('A', { latex: '8\\hat{i}+2\\hat{j}' })
+    drawShown()
+    // It drew A′ = (4, 4), not auxiliary, beside the card's own A = (8, 2), with the old Ax and Ay:
+    // cardArrowFor matches by value, found no arrow at (4, 4) and a fresh one was made.
+    expect(compOf(arrowOf('A'))).toEqual([8, 2, 0])
+    expect(holding([4, 4, 0], [4, 0, 0], [0, 4, 0])).toEqual([])
+    expect(vectors().filter((o) => !o.auxiliary).map((o) => o.name)).toEqual(['A'])
+  })
+
+  it('the Components picture on the graph follows a retype of its card (V3)', () => {
+    useVC.setState({ cards: [card(922, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    press('resolve')
+    drawShown()
+    expect(componentsShown()).toEqual(expect.arrayContaining([[4, 0, 0], [0, 4, 0]]))
+    // solveResolve's picture has no result arrow, so drawn.results is empty and followAnswer returns
+    // at once: Ax and Ay stayed at (4, 0) and (0, 4) under an arrow that now reads (8, 2).
+    edit('A', { latex: '8\\hat{i}+2\\hat{j}' })
+    expect(compOf(arrowOf('A'))).toEqual([8, 2, 0])
+    expect(holding([4, 4, 0], [4, 0, 0], [0, 4, 0])).toEqual([])
+    expect(componentsShown()).toEqual(expect.arrayContaining([[8, 0, 0], [0, 2, 0]]))
+  })
+
+  it('Draw on graph for 2D Components adds no arrows: the card’s own arrow shows its components, and gives them back when the picture goes (V4)', () => {
+    useVC.setState({ cards: [card(941, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    const a = arrowOf('A')
+    const arrow = () => scene().objects[a] as VectorObj
+    press('resolve')
+    const count = Object.keys(scene().objects).length
+    drawShown()
+    // Two selectable helper arrows Ax (4, 0) and Ay (0, 4) were added, each with its own chip and
+    // its own components "Axx = 4", "Axy = 0" when selected — components of a component.
+    expect(Object.keys(scene().objects).length).toBe(count)
+    expect(Object.values(scene().objects).filter((o) => /^A(x|y|xx|xy)$/.test(o.name)).map((o) => o.name)).toEqual([])
+    expect(arrow().showComponents).toBe(true)
+    expect(componentTexts(arrow(), compOf(a)!, scene().settings)).toEqual(['Ax = 4 u', 'Ay = 4 u'])
+    // One undo step takes the picture away, and redo brings it back.
+    scene().undo()
+    expect(!!arrow().showComponents).toBe(false)
+    scene().redo()
+    expect(arrow().showComponents).toBe(true)
+    // Another answer drawn: the arrow goes back to what it was (no components of its own).
+    press('mag')
+    drawShown()
+    expect(!!arrow().showComponents).toBe(false)
+    // A student who had "Always show components" on keeps it after the Components picture goes.
+    scene().updateObject(a, (d) => void (d.type === 'vector' && (d.showComponents = true)))
+    press('resolve')
+    drawShown()
+    press('mag')
+    drawShown()
+    expect(arrow().showComponents).toBe(true)
+  })
+
+  it('a magnetic force drawn at a stand-in length follows its card when v is retyped (H1)', () => {
+    // q is the panel's own 1.6×10⁻¹⁹ C and v × B = k̂: |F| is far too short to see beside v, so it is
+    // drawn at the reference length with a note giving its true size.
+    useVC.setState({ cards: [card(951, 'v', { latex: '\\hat{i}' }), card(952, 'B', { latex: '\\hat{j}' })] })
+    press('lorentz')
+    expect(answer('|F|')).toBe('1.6\\times 10^{-19}\\,\\text{N}')
+    drawShown()
+    const F = vectors().find((o) => o.name === 'F')!.id
+    const note = () => Object.values(scene().objects).find((o): o is TextObj => o.type === 'text')
+    expect(round(compOf(F)!)).toEqual([0, 0, 1])
+    expect(note()?.text).toBe('|F| = 1.6 × 10⁻¹⁹ N — arrow not to scale')
+    // v retyped as 2i doubles F. A stand-in is filed under drawn.parents, never drawn.results, so
+    // followAnswer returned at once; and nothing works out an answer card on its own (V1).
+    edit('v', { latex: '2\\hat{i}' })
+    const now = solveOperation('lorentz', [{ name: 'v', v: [2, 0, 0] }, { name: 'B', v: [0, 1, 0] }], scene().settings, 0, evalNumber(useVC.getState().q))!
+    expect(answer('|F|')).toBe('3.2\\times 10^{-19}\\,\\text{N}')
+    expect(result().sol.answers).toEqual(now.answers)
+    // The drawn stand-in follows (the reference length is now v's 2, the note 3.2×10⁻¹⁹ N), or it
+    // is taken off and the answer card says why.
+    if (scene().objects[F]) {
+      expect(round(compOf(F)!)).toEqual([0, 0, 2])
+      expect(note()?.text).toBe('|F| = 3.2 × 10⁻¹⁹ N — arrow not to scale')
+    } else expect(result().stale).toBe(true)
+  })
+
+  // Guards added by the fixer: the decisions behind the panel's words and buttons, and the edges.
+
+  it('a stale answer says why — a card unreadable for now, or removed (with its picture only when one came off) — and is not offered for drawing (H2, R2)', () => {
+    AB()
+    press('sum')
+    edit('A', { latex: '' })
+    expect(staleSentence(result())).toBe('A vector this was worked out from cannot be read now. Once it can, this answer is worked out again.')
+    expect(canDraw(result())).toBe(false)
+    // A typed back as it was: the answer follows from the cards again and can be drawn.
+    edit('A', { latex: '3\\hat{i}+4\\hat{j}' })
+    expect(result().stale).toBe(false)
+    expect(canDraw(result())).toBe(true)
+    removeCard(912)
+    expect(staleSentence(result())).toBe('A vector this was worked out from was removed. Press Add all again for the answer from the vectors you have now.')
+    scene().undo()
+    expect(result().stale).toBe(false)
+    drawShown()
+    removeCard(912)
+    expect(staleSentence(result())).toBe('A vector this was worked out from was removed, so its picture was taken off the graph. Press Add all again for the answer from the vectors you have now.')
+    // The expression box's button is =.
+    expect(staleSentence({ ...result(), label: 'Expression' })).toMatch(/Press = again/)
+    const src = readSource('src/renderer/src/panels/VectorCalc.tsx')
+    expect(src).toMatch(/st\.result\.stale && <div[^>]*>\{staleSentence\(st\.result\)\}/)
+    // Draw on graph and the layout chips both ask canDraw.
+    expect(src.match(/canDraw\(st\.result\) && \(/g)).toHaveLength(2)
+  })
+
+  it('Draw on graph handed a working of vectors no card holds draws them as auxiliary arrows (no chip unless selected, Labels.tsx), never as a second A (V3)', () => {
+    useVC.setState({ cards: [card(961, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    drawAnswer(VS.solveAddition([{ name: 'A', v: [1, 2, 0] }, { name: 'B', v: [2, 0, 0] }]), null)
+    expect(vectors().filter((o) => !o.auxiliary).map((o) => o.name).sort()).toEqual(['A', 'R'])
+    const old = vectors().filter((o) => o.auxiliary && near(compOf(o.id), [1, 2, 0]))
+    expect(old).toHaveLength(1)
+    expect(old[0].showLabel).toBe(true)
+  })
+
+  it('a stand-in answer is the answer: Resultant only is offered for it and keeps its not-to-scale note in view (H1)', () => {
+    useVC.setState({ cards: [card(953, 'v', { latex: '\\hat{i}' }), card(954, 'B', { latex: '\\hat{j}' })] })
+    press('lorentz')
+    drawShown()
+    expect(answerOnGraph(scene().objects)).toBe(true)
+    setResultOnly(true)
+    expect(resultOnlyOn(scene().objects)).toBe(true)
+    const inView = Object.values(scene().objects).filter((o) => o.visible && (o.type === 'vector' || o.type === 'text'))
+    expect(inView.map((o) => (o.type === 'text' ? 'note' : o.name)).sort()).toEqual(['F', 'note'])
+  })
+
+  it('Components gone 3D and back: the picture follows its answer — the 3D picture keeps Ax, Ay and Az, which follow the card, and A shows its own components again once it is in the plane (V3, V4, R6)', () => {
+    useVC.setState({ cards: [card(971, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    const arrow = () => scene().objects[arrowOf('A')] as VectorObj
+    press('resolve')
+    drawShown()
+    expect(arrow().showComponents).toBe(true)
+    const steps = scene().past.length
+    // An arrow's own components have no Az: the picture is drawn again as the 3D one, by itself and
+    // with no undo step. It used to come off here and was never drawn again.
+    edit('A', { latex: '3\\hat{i}+4\\hat{j}+5\\hat{k}' })
+    expect(!!arrow().showComponents).toBe(false)
+    expect(result().stale).toBeFalsy()
+    expect(answer('Az')).toBe('5')
+    expect(holding([3, 0, 0], [0, 4, 0], [0, 0, 5]).sort()).toEqual(['Ax', 'Ay', 'Az'])
+    edit('A', { latex: '\\hat{i}+2\\hat{j}+3\\hat{k}' })
+    expect(holding([1, 0, 0], [0, 2, 0], [0, 0, 3]).sort()).toEqual(['Ax', 'Ay', 'Az'])
+    edit('A', { latex: '5\\hat{i}' })
+    expect(arrow().showComponents).toBe(true)
+    expect(vectors().map((o) => o.name)).toEqual(['A'])
+    expect(scene().past.length).toBe(steps)
+  })
+
+  // Round 2 (the checker's FAIL): R1–R5.
+
+  /**
+   * The expression box's =, as VectorCalc.tsx `runExpr` and `exprSolution` make the answer: the line
+   * worked out from the readable cards, the cards it uses read off its parse tree (namesIn), and a
+   * recipe that works the same line out again from them.
+   */
+  const exprAnswer = (latex: string, named: VS.NamedVec[]) => {
+    const scope: Record<string, unknown> = { i: [1, 0, 0], j: [0, 1, 0], k: [0, 0, 1] }
+    for (const c of named) scope[c.name] = c.v
+    const { src, out } = inDegrees(() => evaluateVectorLine(latex, scope))
+    const v = toV3(out)
+    if (!v.every(Number.isFinite)) throw new PlainError('This cannot be worked out: something in it is divided by zero.')
+    const inputs = named.filter((c) => namesIn(src).includes(c.name))
+    const sol: VS.Solution = {
+      title: 'Resultant of the expression',
+      steps: [],
+      answers: [{ label: 'R', tex: texIJK(v, scene().settings) }],
+      visual: { vectors: [...inputs.map((x) => ({ name: x.name, v: x.v, role: 'input' as const })), { name: 'R', v, role: 'result' as const }], mode: 'common-tail' }
+    }
+    return { sol, used: inputs.map((x) => x.name) }
+  }
+  const typeExpr = (latex: string) => {
+    const st = useVC.getState()
+    const values = cardValues(st.cards, scene().ev)
+    const named = st.cards.flatMap((c, i) => {
+      const v = values[i]
+      return typeof v === 'string' ? [] : [{ name: c.name, v }]
+    })
+    const { sol, used } = exprAnswer(latex, named)
+    const cards = st.cards.filter((c) => used.includes(c.name)).map((c) => ({ id: c.id, name: c.name }))
+    useVC.setState({ result: { sol, label: 'Expression', from: { cards, solve: (n: VS.NamedVec[]) => exprAnswer(latex, n).sol } } })
+  }
+  /** The vector the shown answer gives, rounded. */
+  const resultVector = () => round(result().sol.visual!.vectors.find((x) => x.role === 'result')!.v)
+
+  it('an expression answer uses every card its line names, 2B included: retyping B moves it and its picture, removing B makes it stale (R1)', () => {
+    for (const [line, before, after] of [
+      ['\\vec{A}+2\\vec{B}', [3, 14, 0], [5, 4, 0]],
+      ['2\\vec{A}+\\vec{B}', [6, 13, 0], [7, 8, 0]]
+    ] as [string, V3, V3][]) {
+      reset()
+      AB()
+      // A word-boundary search found no B in "A+2B" (2B is one word to it), nor A in "2A+B".
+      expect(namesIn(evaluateVectorLine(line, { A: [3, 4, 0], B: [0, 5, 0] }).src)).toEqual(['A', 'B'])
+      typeExpr(line)
+      expect(result().from!.cards.map((c) => c.name)).toEqual(['A', 'B'])
+      expect(resultVector()).toEqual(before)
+      drawShown()
+      const r = vectors().find((o) => o.name === 'R')!.id
+      edit('B', { latex: '\\hat{i}' })
+      expect(resultVector()).toEqual(after)
+      expect(round(compOf(r)!)).toEqual(after)
+      removeCard(912)
+      expect(result().stale).toBe(true)
+      expect(scene().objects[r]).toBeUndefined()
+    }
+    // exprSolution moved from the panel into the store (H6): the names are read off its parse tree there.
+    const src = readSource('src/renderer/src/panels/vectorCalcStore.ts')
+    expect(src).toMatch(/namesIn\(src\)/)
+    expect(src).not.toMatch(/\\\\b\$\{/)
+  })
+
+  it('typing A through "3i+" to "3i+1j" keeps the Add all picture, then lays it out again in place, with no undo step (R2)', () => {
+    AB()
+    press('sum')
+    drawShown()
+    const r = vectors().find((o) => o.name === 'R')!.id
+    const b = arrowOf('B')
+    const steps = scene().past.length
+    edit('A', { latex: '3\\hat{i}+' })
+    // Half typed: the answer is stale and the picture waits where it was, as A's arrow does.
+    expect(result().stale).toBe(true)
+    expect(round(compOf(r)!)).toEqual([3, 9, 0])
+    edit('A', { latex: '3\\hat{i}+1\\hat{j}' })
+    expect(result().stale).toBe(false)
+    expect(resultVector()).toEqual([3, 6, 0])
+    expect(round(compOf(r)!)).toEqual([3, 6, 0])
+    expect(tailOf(b)).toEqual([3, 1, 0])
+    expect(scene().past.length).toBe(steps)
+  })
+
+  it('Components drawn, A typed 4i+4j → "8" → "8i": the picture waits through "8", then A shows its components (8, 0) (R2)', () => {
+    useVC.setState({ cards: [card(981, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    press('resolve')
+    drawShown()
+    const steps = scene().past.length
+    edit('A', { latex: '8' })
+    expect(result().stale).toBe(true)
+    expect(componentsShown()).toEqual([[4, 0, 0], [0, 4, 0]])
+    edit('A', { latex: '8\\hat{i}' })
+    expect(result().stale).toBe(false)
+    expect(answers()).toEqual([['Ax', '8'], ['Ay', '0']])
+    expect(componentsShown()).toEqual([[8, 0, 0], [0, 0, 0]])
+    expect(scene().past.length).toBe(steps)
+  })
+
+  it('a selected arrow shows its components; a selected helper such as 3D Components’ Ax does not unless they were turned on (R3, V4)', () => {
+    useVC.setState({ cards: [card(985, 'A', { latex: '3\\hat{i}+4\\hat{j}+5\\hat{k}' })] })
+    press('resolve')
+    drawShown()
+    const a = scene().objects[arrowOf('A')] as VectorObj
+    const ax = vectors().find((o) => o.name === 'Ax')!
+    expect(ax.auxiliary).toBe(true)
+    // Selected, Ax was resolved again: "Axx = 3 cm", "Axy = 0 cm" — components of a component.
+    expect(showsComponents(ax, true)).toBe(false)
+    expect(showsComponents(a, true)).toBe(true)
+    expect(showsComponents(a, false)).toBe(false)
+    expect(showsComponents({ ...ax, showComponents: true }, false)).toBe(true)
+    expect(readSource('src/renderer/src/render/ObjectViews.tsx')).toMatch(/const showComps = showsComponents\(obj, selected\)/)
+  })
+
+  it('a Components picture taken off gives its arrow back once: "show components" turned on afterwards outlasts the next Draw on graph (R4)', () => {
+    useVC.setState({ cards: [card(991, 'A', { latex: '4\\hat{i}+4\\hat{j}' })] })
+    const arrow = () => scene().objects[arrowOf('A')] as VectorObj
+    press('resolve')
+    drawShown()
+    // Another answer is shown now, so Components is an older picture (the shown answer's picture
+    // follows its vector into 3D and back, R6): into 3D and back, it comes off on the way and gives
+    // the arrow its own setting.
+    press('mag')
+    edit('A', { latex: '3\\hat{i}+4\\hat{j}+5\\hat{k}' })
+    edit('A', { latex: '5\\hat{i}' })
+    expect(!!arrow().showComponents).toBe(false)
+    // The student turns "Always show components" on for A, then draws the answer shown.
+    scene().updateObject(arrowOf('A'), (d) => void (d.type === 'vector' && (d.showComponents = true)))
+    drawShown()
+    expect(arrow().showComponents).toBe(true)
+  })
+
+  it('an answer that cannot be worked out from readable vectors says so, not that one was removed; its picture waits in place (R5)', () => {
+    AB()
+    typeExpr('\\vec{A}/(\\vec{A}\\cdot\\vec{B})')
+    expect(resultVector()).toEqual([0.15, 0.2, 0])
+    drawShown()
+    const r = vectors().find((o) => o.name === 'R')!.id
+    // B turned at right angles to A: A · B = 0, and A/0 cannot be worked out.
+    edit('B', { latex: '4\\hat{i}-3\\hat{j}' })
+    expect(result().stale).toBe(true)
+    expect(staleSentence(result())).toBe('This answer cannot be worked out from the vectors as they are now. Press = again to see why.')
+    expect(scene().objects[r]).toBeDefined()
+    // B turned back: worked out again, the picture laid out again in place.
+    edit('B', { latex: '5\\hat{j}' })
+    expect(result().stale).toBe(false)
+    expect(round(compOf(r)!)).toEqual([0.15, 0.2, 0])
+  })
+
+  // Round 3 (the checker's FAIL): a picture is never lost while its answer is shown and its cards are there.
+
+  /** The scene's own arrow of this name (â is "ahat" there), if it is on the drawing. */
+  const arrowNamed = (name: string) => vectors().find((o) => o.name === name)
+  const roundedOf = (name: string) => round(compOf(arrowNamed(name)!.id)!)
+
+  it('Unit vector drawn, A switched to size ∠ angle and its size retyped 5 → 0 → 0.8: â is gone while A is the zero vector, drawn again at 0.8, and typing adds no undo step (R6)', () => {
+    useVC.setState({ cards: [card(1001, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    press('unit')
+    drawShown()
+    expect(roundedOf('ahat')).toEqual([0.6, 0.8, 0])
+    const steps = scene().past.length
+    const redo = scene().future.length
+    setEntry(1001, 'polar')
+    edit('A', { mag: '0' })
+    // The zero vector has no unit vector: the answer says so, and is still the answer for the card.
+    expect(answers()).toEqual([['unit vector', '\\text{none: a zero vector has no direction}']])
+    expect(result().stale).toBeFalsy()
+    expect(arrowNamed('ahat')).toBeUndefined()
+    edit('A', { mag: '0.8' })
+    // Its picture was lost here for good: layOutAgain refused one arrow where there had been two,
+    // the picture was taken off, and nothing ever drew it again.
+    expect(result().stale).toBeFalsy()
+    expect(answer('unit vector')).toMatch(/0\.6.*0\.8/)
+    expect(roundedOf('ahat')).toEqual([0.6, 0.8, 0])
+    const a = compOf(arrowOf('A'))!
+    expect(Math.hypot(...a)).toBeCloseTo(0.8, 9)
+    expect((Math.atan2(a[1], a[0]) * 180) / Math.PI).toBeCloseTo(53.13, 2)
+    // Nothing of it is a step of its own: Ctrl+Z still takes the Draw on graph and nothing else.
+    expect(scene().past.length).toBe(steps)
+    expect(scene().future.length).toBe(redo)
+  })
+
+  it('Projection drawn in the student’s layout, A retyped through the zero vector: the picture comes back in the same layout with its arrows at their tails, and typing adds no undo step (R6)', () => {
+    AB()
+    useVC.setState({ style: 'head-to-tail' })
+    press('proj')
+    drawShown()
+    const b = arrowOf('B')
+    expect(roundedOf('proj')).toEqual([2.4, 3.2, 0])
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    const steps = scene().past.length
+    setEntry(911, 'polar')
+    edit('A', { mag: '0' })
+    expect(answers().map(([label]) => label)).toEqual(['B cos θ', 'proj of B on A'])
+    expect(result().stale).toBeFalsy()
+    // There is nothing to project onto: no shadow arrow, and B still at A's head (the layout kept).
+    expect(arrowNamed('proj')).toBeUndefined()
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    edit('A', { mag: '0.8' })
+    expect(roundedOf('proj')).toEqual([2.4, 3.2, 0])
+    expect(round(tailOf(b)!)).toEqual([0.48, 0.64, 0])
+    expect(result().stale).toBeFalsy()
+    expect(scene().past.length).toBe(steps)
+  })
+
+  it('a working with no picture at all takes the picture off quietly, and it is drawn again as soon as the working has one (R6)', () => {
+    useVC.setState({ cards: [card(1002, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    // Unit vector, but with no picture for the zero vector, as a working may have none.
+    const solve = (vs: VS.NamedVec[], now: SceneSettings) => {
+      const sol = solveOperation('unit', vs, now)!
+      return vs[0].v.every((x) => x === 0) ? { ...sol, visual: undefined } : sol
+    }
+    const sol = solve([{ name: 'A', v: [3, 4, 0] }], scene().settings)
+    useVC.setState({ result: { sol, label: 'Unit vector', from: { cards: [{ id: 1002, name: 'A' }], solve } } })
+    drawShown()
+    const steps = scene().past.length
+    setEntry(1002, 'polar')
+    edit('A', { mag: '0' })
+    expect(result().sol.visual).toBeUndefined()
+    expect(result().stale).toBeFalsy()
+    expect(arrowNamed('ahat')).toBeUndefined()
+    edit('A', { mag: '0.8' })
+    expect(roundedOf('ahat')).toEqual([0.6, 0.8, 0])
+    expect(scene().past.length).toBe(steps)
+  })
+
+  it('a card removed while the picture waits gives the arrows it moved back to their tails and nothing is drawn; the undo that brings the card back brings the waiting picture back (R6)', () => {
+    AB()
+    // B starts at (1, 1), where the student put it; head-to-tail moves it to A's head.
+    scene().updateObject(arrowOf('B'), (d) => void (d.type === 'vector' && (d.def = { kind: 'free', tail: [1, 1, 0], comp: [0, 5, 0] })))
+    useVC.setState({ style: 'head-to-tail' })
+    press('proj')
+    drawShown()
+    const b = arrowOf('B')
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    setEntry(911, 'polar')
+    edit('A', { mag: '0' })
+    expect(arrowNamed('proj')).toBeUndefined()
+    removeCard(911)
+    expect(result().stale).toBe(true)
+    expect(tailOf(b)).toEqual([1, 1, 0])
+    expect(arrowNamed('proj')).toBeUndefined()
+    scene().undo()
+    expect(result().stale).toBe(false)
+    edit('A', { mag: '0.8' })
+    expect(roundedOf('proj')).toEqual([2.4, 3.2, 0])
+  })
+
+  it('an earlier step undone after the picture was drawn again leaves one picture, still the card’s: the older arrows are taken away, not left beside the new ones (R6)', () => {
+    useVC.setState({ cards: [card(1004, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    press('unit')
+    drawShown()
+    // Something the student does after drawing (an empty step is enough): its snapshot holds the picture.
+    scene().beginGesture()
+    scene().endGesture()
+    setEntry(1004, 'polar')
+    edit('A', { mag: '0' })
+    edit('A', { mag: '0.8' })
+    // The undo brings the older arrows back with the older vector, 5 ∠ 53.13°.
+    scene().undo()
+    expect(vectors().filter((o) => o.name === 'ahat')).toHaveLength(1)
+    // The picture is still followed: A turned to 0° gives (1, 0), and there is still one â.
+    edit('A', { angle: '0' })
+    expect(vectors().filter((o) => o.name === 'ahat')).toHaveLength(1)
+    expect(roundedOf('ahat')).toEqual([1, 0, 0])
+  })
+
+  it('undoing the Draw on graph of a waiting picture is respected: typing the vector back does not draw it again (R6)', () => {
+    useVC.setState({ cards: [card(1003, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    press('unit')
+    drawShown()
+    setEntry(1003, 'polar')
+    edit('A', { mag: '0' })
+    scene().undo()
+    expect(arrowNamed('ahat')).toBeUndefined()
+    edit('A', { mag: '0.8' })
+    expect(arrowNamed('ahat')).toBeUndefined()
+    expect(result().stale).toBeFalsy()
+  })
+
+  // Three minor findings of the independent checkers: what lives outside the drawing's undo history
+  // (the lit layout chip and the style of the next lay-out; the card's sentence; Resultant only)
+  // must still agree with the drawing after an undo, a redo or a silent redraw.
+
+  /** A layout chip under the answer, as VectorCalc.tsx presses it: the choice is kept, a picture on the graph is laid out again. */
+  const chip = (k: Parameters<typeof drawAnswer>[1]) => {
+    useVC.setState({ style: k })
+    if (answerOnGraph(scene().objects)) drawAnswer(result().sol, k)
+  }
+
+  it('a layout chip undone puts the lit chip and the layout of the next retype back with the picture, and a redo brings them forward (M1)', () => {
+    AB()
+    press('sum')
+    drawShown()
+    const b = arrowOf('B')
+    // Auto is the sum's own head-to-tail: B at A's head.
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    expect(useVC.getState().style).toBeNull()
+    chip('common-tail')
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    scene().undo()
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    // The undone chip stayed lit, and the next retype laid the picture out in its layout again.
+    expect(useVC.getState().style).toBeNull()
+    scene().redo()
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    expect(useVC.getState().style).toBe('common-tail')
+    scene().undo()
+    edit('A', { latex: '5\\hat{i}' })
+    expect(tailOf(b)).toEqual([5, 0, 0])
+    expect(useVC.getState().style).toBeNull()
+  })
+
+  it('an undone chip lights the chip that was lit before it, even one whose own layout is the same as another’s, and a chip that changes nothing is no step (M1)', () => {
+    AB()
+    press('sum')
+    drawShown()
+    const b = arrowOf('B')
+    // Head-to-tail pressed over Auto draws what is there already: no undo step, but it is the choice.
+    const steps = scene().past.length
+    chip('head-to-tail')
+    expect(scene().past.length).toBe(steps)
+    chip('parallelogram')
+    expect(tailOf(b)).toEqual([0, 0, 0])
+    expect(scene().past.length).toBe(steps + 1)
+    scene().undo()
+    expect(tailOf(b)).toEqual([3, 4, 0])
+    expect(useVC.getState().style).toBe('head-to-tail')
+    scene().redo()
+    expect(useVC.getState().style).toBe('parallelogram')
+    // Pressed back and forth, each undo and redo lights the chip its layout was drawn by.
+    chip('common-tail')
+    chip('head-to-tail')
+    scene().undo()
+    expect(useVC.getState().style).toBe('common-tail')
+    scene().undo()
+    expect(useVC.getState().style).toBe('parallelogram')
+    scene().undo()
+    expect(useVC.getState().style).toBe('head-to-tail')
+    scene().redo()
+    scene().redo()
+    scene().redo()
+    expect(useVC.getState().style).toBe('head-to-tail')
+    expect(tailOf(b)).toEqual([3, 4, 0])
+  })
+
+  it('a redo of a chip after the cards were retyped in between still lights the chip (M1)', () => {
+    AB()
+    press('sum')
+    drawShown()
+    chip('common-tail')
+    // Typing is no undo step, but it is a change of the drawing: the state the redo comes back to is this one.
+    edit('A', { latex: '5\\hat{i}' })
+    expect(tailOf(arrowOf('B'))).toEqual([0, 0, 0])
+    scene().undo()
+    expect(useVC.getState().style).toBeNull()
+    scene().redo()
+    expect(useVC.getState().style).toBe('common-tail')
+  })
+
+  it('a redo of a card’s removal says again that its picture was taken off the graph (M2)', () => {
+    AB()
+    press('sum')
+    drawShown()
+    const clause = /, so its picture was taken off the graph\./
+    removeCard(912)
+    expect(result().stale).toBe(true)
+    expect(staleSentence(result())).toMatch(clause)
+    scene().undo()
+    expect(result().stale).toBe(false)
+    expect(result().pictureTakenOff).toBe(false)
+    scene().redo()
+    expect(result().stale).toBe(true)
+    expect(staleSentence(result())).toMatch(clause)
+    // And once more round: the card says so every time, not just the second.
+    scene().undo()
+    scene().redo()
+    expect(staleSentence(result())).toMatch(clause)
+  })
+
+  it('a redo of a card’s removal never claims a picture that was not on the graph (M2)', () => {
+    AB()
+    press('sum')
+    // Never drawn.
+    removeCard(912)
+    scene().undo()
+    scene().redo()
+    expect(result().stale).toBe(true)
+    expect(staleSentence(result())).not.toMatch(/picture/)
+    // Drawn, and taken away by hand before the card went.
+    reset()
+    AB()
+    press('sum')
+    drawShown()
+    scene().removeObjects(vectors().filter((o) => o.name === 'R').map((o) => o.id))
+    removeCard(912)
+    expect(staleSentence(result())).not.toMatch(/picture/)
+    scene().undo()
+    scene().redo()
+    expect(result().stale).toBe(true)
+    expect(staleSentence(result())).not.toMatch(/picture/)
+  })
+
+  it('Resultant only stays on while a Unit vector picture goes through the zero vector and comes back, with no undo step of its own (M3)', () => {
+    useVC.setState({ cards: [card(1011, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    press('unit')
+    drawShown()
+    setResultOnly(true)
+    const a = arrowOf('A')
+    expect(resultOnlyOn(scene().objects)).toBe(true)
+    const steps = scene().past.length
+    const redo = scene().future.length
+    setEntry(1011, 'polar')
+    edit('A', { mag: '0' })
+    // The zero vector has no unit vector: with no answer on the graph nothing is left hidden.
+    expect(arrowNamed('ahat')).toBeUndefined()
+    expect(scene().objects[a].visible).toBe(true)
+    edit('A', { mag: '0.8' })
+    expect(roundedOf('ahat')).toEqual([0.6, 0.8, 0])
+    // The picture is drawn again with A showing: Resultant only was lost here.
+    expect(scene().objects[a].visible).toBe(false)
+    expect(arrowNamed('ahat')!.visible).toBe(true)
+    expect(resultOnlyOn(scene().objects)).toBe(true)
+    expect(scene().past.length).toBe(steps)
+    expect(scene().future.length).toBe(redo)
+    // The button still works on the picture drawn again.
+    setResultOnly(false)
+    expect(scene().objects[a].visible).toBe(true)
+    expect(resultOnlyOn(scene().objects)).toBe(false)
+  })
+
+  it('a picture that was not on Resultant only does not come back on it (M3)', () => {
+    useVC.setState({ cards: [card(1012, 'A', { latex: '3\\hat{i}+4\\hat{j}' })] })
+    press('unit')
+    drawShown()
+    // On, and then turned off before the zero vector: nothing is remembered.
+    setResultOnly(true)
+    setResultOnly(false)
+    setEntry(1012, 'polar')
+    edit('A', { mag: '0' })
+    edit('A', { mag: '0.8' })
+    expect(resultOnlyOn(scene().objects)).toBe(false)
+    expect(scene().objects[arrowOf('A')].visible).toBe(true)
+    // A fresh Draw on graph ends the wait: nothing is held over from the earlier one.
+    setResultOnly(true)
+    edit('A', { mag: '0' })
+    drawShown()
+    edit('A', { mag: '0.8' })
+    expect(resultOnlyOn(scene().objects)).toBe(false)
+  })
+
+  it('Resultant only stays on when a picture is drawn again while its answer is still on the graph (M3)', () => {
+    AB()
+    // Add all, but a working that leaves a zero B out of its picture, so it cannot be laid out in place.
+    const solve = (vs: VS.NamedVec[], now: SceneSettings) => {
+      const sol = solveOperation('sum', vs, now)!
+      const noB = vs.some((x) => x.name === 'B' && x.v.every((c) => c === 0))
+      return noB && sol.visual ? { ...sol, visual: { ...sol.visual, vectors: sol.visual.vectors.filter((x) => x.name !== 'B') } } : sol
+    }
+    const cards = useVC.getState().cards
+    const sol = solve(cards.map((c, i) => ({ name: c.name, v: i ? [0, 5, 0] : [3, 4, 0] })), scene().settings)
+    useVC.setState({ result: { sol, label: 'Add all', from: { cards: cards.map((c) => ({ id: c.id, name: c.name })), solve } } })
+    drawShown()
+    setResultOnly(true)
+    expect(resultOnlyOn(scene().objects)).toBe(true)
+    const steps = scene().past.length
+    edit('B', { latex: '0\\hat{i}+0\\hat{j}' })
+    // R is still drawn, now from A alone: A hidden, R shown, as before.
+    const r = vectors().find((o) => o.name === 'R')!
+    expect(r.visible).toBe(true)
+    expect(round(compOf(r.id)!)).toEqual([3, 4, 0])
+    expect(scene().objects[arrowOf('A')].visible).toBe(false)
+    expect(resultOnlyOn(scene().objects)).toBe(true)
+    expect(scene().past.length).toBe(steps)
   })
 })
