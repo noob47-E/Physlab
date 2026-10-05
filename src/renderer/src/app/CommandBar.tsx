@@ -3,8 +3,9 @@ import { Calculator, CornerDownLeft } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { runCommand } from '../lang/commands'
 import { useScene } from '../core/store'
-import { cancelCas, useCasStatus } from '../math/cas'
+import { cancelCas, useCasStatus, warmupCasWhenIdle } from '../math/cas'
 import { describeCasStatus } from '../ui/casStatus'
+import { decideKey, recall } from './commandBarKeys'
 
 /**
  * One line, in plain words. The placeholder used to be a wall of syntax; a student who typed
@@ -79,17 +80,32 @@ export function CommandBar() {
   const [active, setActive] = useState(0)
   const history = useRef<string[]>([])
   const histIdx = useRef(-1)
+  const chosen = useRef(false) // the arrows moved the highlight since the text last changed
+  // The line being typed when the history walk began: walking back past the newest entry brings it
+  // back, so recalling a command never throws away a line that has not been run.
+  const draft = useRef('')
+  /** Text set from outside the keys (a prefill, a run, a recalled line) starts with no row picked. */
+  const unpick = () => {
+    setActive(0)
+    chosen.current = false
+  }
   const names = useScene(useShallow((s) => s.order.map((id) => s.objects[id]?.name).filter(Boolean)))
   const casStatus = useCasStatus((s) => s.status)
   const casBusy = useCasStatus((s) => s.busy)
   const casMessage = useCasStatus((s) => s.message)
-  const cas = describeCasStatus(casStatus, casBusy, casMessage)
+  const casStage = useCasStatus((s) => s.stage)
+  const cas = describeCasStatus(casStatus, casBusy, casMessage, casStage)
+  // The bar is on screen in every mode and any line typed here can reach the algebra engine, so
+  // its first load starts once the app has painted and gone idle, not on the first question.
+  useEffect(() => warmupCasWhenIdle(), [])
 
   useEffect(() => {
     // Search and other panels can prefill the command bar.
     const onFill = (e: Event) => {
       setText((e as CustomEvent<string>).detail)
       setOpen(false)
+      unpick()
+      histIdx.current = -1
       setTimeout(() => document.getElementById('command-input')?.focus(), 0)
     }
     window.addEventListener('physlab:command', onFill)
@@ -110,6 +126,7 @@ export function CommandBar() {
     histIdx.current = -1
     setText('')
     setOpen(false)
+    unpick()
     await runCommand(v)
   }
 
@@ -127,36 +144,35 @@ export function CommandBar() {
             setText(e.target.value)
             setOpen(true)
             setActive(0)
+            chosen.current = false
+            histIdx.current = -1
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              if (open && text.trim() === '' && suggestions[active]) {
-                setText(suggestions[active].insert)
-                return
-              }
-              submit(text)
-            } else if (e.key === 'Tab' && open && suggestions[active]) {
-              e.preventDefault()
-              setText(suggestions[active].insert)
-            } else if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              if (open && text) setActive((a) => Math.min(a + 1, suggestions.length - 1))
-              else if (history.current.length) {
-                histIdx.current = Math.max(histIdx.current - 1, -1)
-                setText(histIdx.current >= 0 ? history.current[histIdx.current] : '')
-              }
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault()
-              if (open && text && active > 0) setActive((a) => a - 1)
-              else if (history.current.length) {
-                histIdx.current = Math.min(histIdx.current + 1, history.current.length - 1)
-                setText(history.current[histIdx.current])
-                setOpen(false)
-              }
-            } else if (e.key === 'Escape') {
+            const a = decideKey({
+              key: e.key, open, text, suggestions: suggestions.length, active,
+              chosen: chosen.current, historyLength: history.current.length, histIdx: histIdx.current
+            })
+            if (a.kind === 'default') return // Tab and ordinary keys keep their normal behaviour
+            e.preventDefault()
+            if (a.kind === 'run') submit(text)
+            else if (a.kind === 'take') {
+              setText(suggestions[a.index].insert)
+              unpick()
+              // The taken line is the one being typed now; a later history walk keeps it as the draft.
+              histIdx.current = -1
+            } else if (a.kind === 'move') {
+              setActive(a.active)
+              chosen.current = true
+            } else if (a.kind === 'history') {
+              const r = recall(history.current, histIdx.current, a.histIdx, text, draft.current)
+              draft.current = r.draft
+              histIdx.current = a.histIdx
+              setText(r.text)
+              unpick()
+              if (e.key === 'ArrowUp') setOpen(false)
+            } else if (a.kind === 'close') {
               setOpen(false)
               ;(e.target as HTMLInputElement).blur()
             }

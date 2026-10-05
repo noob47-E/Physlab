@@ -24,6 +24,7 @@ import { math } from '../math/expr'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
 import { fieldHasText, type StepPref } from '../math/pure/reveal'
 import { cas, useCasStatus } from '../math/cas'
+import { casStartingSentence } from '../ui/casStatus'
 import { usePure, type PureEntry } from '../math/pure/store'
 import { JOBS, jobById, type JobId } from '../math/pure/run'
 import { parseExpr, varsOf } from '../math/pure/mono'
@@ -956,7 +957,8 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
   const input = usePure((s) => s.input)
   const inputLatex = usePure((s) => s.inputLatex)
   const run = usePure((s) => s.run)
-  const casStatus = useCasStatus((s) => s.status)
+  // The first-load stage, as a sentence (empty once the engine is ready): P17.
+  const casNote = useCasStatus((s) => (s.status === 'loading' ? casStartingSentence(s.stage) : ''))
   const [pref, setPref] = useState<StepPref>(readStepPref)
   const [showExamples, setShowExamples] = useState(false)
   const setPreference = (p: StepPref): void => {
@@ -1025,7 +1027,7 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
       />
       {asking && (
         <div className="px-3 pb-3 text-[color:var(--text-dim)]">
-          Checking that one a different way{casStatus === 'loading' ? ' (starting the algebra engine, this takes a moment the first time)' : ''}…
+          {casNote ? `Checking that one a different way. ${casNote}` : 'Checking that one a different way…'}
         </div>
       )}
       {!working.error && graphable(input) && (

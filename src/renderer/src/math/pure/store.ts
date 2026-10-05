@@ -11,7 +11,7 @@
 
 import { create } from 'zustand'
 import type { MathNode } from 'mathjs'
-import { cas, useCasStatus, type CasOp, type CasResult } from '../cas'
+import { cas, casWaitNote, followCasStart, type CasOp, type CasResult } from '../cas'
 import { calculusUnitNote, casInDegrees } from '../../calc/angle'
 import { scene } from '../../core/store'
 import { math, preprocess, splitArgs } from '../expr'
@@ -238,16 +238,23 @@ export const WORKING_IT_OUT = 'Working it out…'
 
 /** The working shown while SymPy is asked: the question, nothing pretending to be an answer. */
 function workingItOut(job: JobId, latex: string): Working {
-  const starting = useCasStatus.getState().status !== 'ready'
-  return {
+  // The first request waits for Pyodide to load; a bare "Working it out…" for ten seconds reads
+  // as a hang, so the sentence names the load stage and follows it while this working is shown.
+  const at = (note: string): Working => ({
     title: jobById(job).label,
     input: latex,
-    // The first request waits for Pyodide to load; a bare "Working it out…" for ten seconds
-    // reads as a hang.
-    method: starting ? `${WORKING_IT_OUT} (starting the algebra engine, which takes a moment the first time)` : WORKING_IT_OUT,
+    method: note ? `${WORKING_IT_OUT} ${note}` : WORKING_IT_OUT,
     moves: [],
     answers: []
-  }
+  })
+  let shown = at(casWaitNote())
+  followCasStart((note) => {
+    // Only while this very working is on the panel; a newer question or the answer replaces it.
+    if (usePure.getState().working !== shown) return
+    shown = at(note)
+    usePure.setState({ working: shown })
+  })
+  return shown
 }
 
 /** Function names the worker reads, longest first so "asin" is never cut down to "a·sin". */

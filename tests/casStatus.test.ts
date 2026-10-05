@@ -13,7 +13,9 @@ describe('what the command bar says about the algebra engine', () => {
 
   it('says it is working, in words, whatever the engine state', () => {
     expect(describeCasStatus('ready', 2).words).toBe('Working…')
-    expect(describeCasStatus('loading', 1).words).toBe('Working…')
+    // During the first load a question is queued, not worked on: the strip names the stage (P17).
+    expect(describeCasStatus('loading', 1, undefined, 2).words).toBe('Starting algebra (2 of 3)…')
+    expect(describeCasStatus('loading', 1, undefined, 2).tip).toMatch(/answered as soon as it is ready/)
   })
 
   it('says it is starting while the engine loads', () => {

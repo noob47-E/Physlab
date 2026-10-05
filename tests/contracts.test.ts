@@ -213,11 +213,13 @@ describe('the contract with the Python worker', () => {
     // Sent through cas() it was a request like any other: the strip said "Working…" with a Stop
     // button while SymPy loaded, and a slow first launch hit the 30 s timer and killed the worker.
     const client = readSource('src/renderer/src/math/cas.ts')
-    expect(client).toMatch(/warmupCas = \(\): void => \{\s*getWorker\(\)\.postMessage\(\{ op: 'warmup'/)
+    // P17: a second warm-up while a worker exists does nothing (tests/casBoot.test.ts drives it).
+    expect(client).toMatch(/warmupCas = \(\): void => \{\s*if \(worker\) return\s*getWorker\(\)\.postMessage\(\{ op: 'warmup'/)
     expect(client).not.toMatch(/warmupCas = \(\) => cas\(/)
     const worker = readSource('src/renderer/src/workers/cas.worker.ts')
     expect(worker).toContain("if (id === undefined || op === 'warmup')")
-    expect(worker).toContain('if (id !== undefined) postMessage({ id, result: { error: String(err) } })')
+    // A failed load still answers a waiting request, with a sentence and the raw text as detail.
+    expect(worker).toMatch(/if \(!py\) \{\s*postMessage\(\{ status: 'error'[^\n]*\n\s*if \(id !== undefined\) postMessage\(\{ id, result: \{ error: /)
   })
 })
 

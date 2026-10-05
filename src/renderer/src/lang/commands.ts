@@ -9,7 +9,8 @@ import { parseExpr } from '../core/evaluate'
 import { freeCapitals, isValidName } from '../core/naming'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector } from '../core/visualize'
-import { cas } from '../math/cas'
+import { cas, useCasStatus } from '../math/cas'
+import { casWaitNote, followCasStart } from '../ui/casStatus'
 import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
 import { fmtPrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
@@ -996,15 +997,24 @@ async function tryCas(input: string): Promise<boolean> {
   const s = scene()
   // In DEG mode the calculator's own d/dx works in degrees; the algebra engine must agree.
   const deg = casInDegrees(s.settings.angleUnit)
-  const id = s.pushLog({ input, kind: 'info', text: 'Solving… (the algebra engine takes a few seconds to start the first time)' })
+  // On the first use the line names the load stage as it moves, so it never reads as a freeze; it
+  // lets go of the status before the answer replaces it (followCasStart in ui/casStatus.ts).
+  const id = s.pushLog({ input, kind: 'info', text: `Solving… ${casWaitNote(useCasStatus.getState())}`.trim() })
+  followCasStart(useCasStatus, (note) => s.updateLog(id, { text: `Solving… ${note}` }))
   let payload: Record<string, unknown>
   let casOp = op
   switch (op) {
     case 'solve':
-    case 'nsolve':
+    case 'nsolve': {
       casOp = 'solve'
-      payload = { eqs: args.filter((a) => a.includes('=') || !/^[a-z]$/.test(a)), vars: args.filter((a) => /^[a-z]$/.test(a)) }
+      // solve({x + y = 3, x - y = 1}, {x, y}): splitArgs does not count braces, so the pieces
+      // arrive as "{x + y = 3", "x - y = 1}", "{x", "y}", and "{x" was sent as an equation with
+      // no letters at all. The list braces are taken off each piece before it is sorted.
+      const items = args.map((a) => a.replace(/^\s*\{/, '').replace(/\}\s*$/, '').trim()).filter(Boolean)
+      const isLetter = (a: string): boolean => /^[a-z]$/.test(a)
+      payload = { eqs: items.filter((a) => a.includes('=') || !isLetter(a)), vars: items.filter(isLetter) }
       break
+    }
     case 'diff':
     case 'derivative':
     case 'd/dx':

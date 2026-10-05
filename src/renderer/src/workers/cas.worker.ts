@@ -28,7 +28,9 @@ def _names(deg, greek=False):
     d = {
         'x': x, 'y': y, 'z': z, 't': t, 'a': a, 'b': b, 'c': c, 'k': k, 'n': n, 'm': m, 'theta': theta,
         'pi': sp.pi, 'e': sp.E, 'E': sp.E, 'i': sp.I, 'oo': sp.oo, 'inf': sp.oo,
-        'ln': sp.log, 'log': lambda v, base=None: sp.log(v, 10) if base is None else sp.log(base, v),
+        # log(a, b) is log base a of b, as on the calculator (expr.ts, and the field's log_a b):
+        # the first argument is the base, so log(2, 8) = 3. SymPy's own order is log(b, a).
+        'ln': sp.log, 'log': lambda a, b=None: sp.log(a, 10) if b is None else sp.log(b, a),
         'sqrt': sp.sqrt, 'cbrt': lambda v: sp.root(v, 3), 'abs': sp.Abs, 'Abs': sp.Abs,
         'nPr': lambda p, q: sp.factorial(p) / sp.factorial(p - q), 'nCr': sp.binomial,
     }
@@ -467,23 +469,23 @@ def cas_run(op, payload_json):
             res = sp.simplify(d)
             extra = {}
             if p.get('at') is not None:
-                extra['value'] = _out(res.subs(var, P(str(p['at']))))
+                extra['value'] = _out(res.subs(var, P(str(p['at']), deg)))
             return json.dumps(_out(res, **extra))
         if op == 'integrate':
             var = sp.Symbol(p.get('var', 'x'))
             f = P(p['expr'], deg)
             if p.get('lower') is not None and p.get('upper') is not None:
-                res = sp.integrate(f, (var, P(str(p['lower'])), P(str(p['upper']))))
+                res = sp.integrate(f, (var, P(str(p['lower']), deg), P(str(p['upper']), deg)))
             else:
                 res = sp.integrate(f, var)
             return json.dumps(_out(sp.simplify(res)))
         if op == 'limit':
             var = sp.Symbol(p.get('var', 'x'))
-            res = sp.limit(P(p['expr'], deg), var, P(str(p['to'])), p.get('dir', '+-'))
+            res = sp.limit(P(p['expr'], deg), var, P(str(p['to']), deg), p.get('dir', '+-'))
             return json.dumps(_out(res))
         if op == 'series':
             var = sp.Symbol(p.get('var', 'x'))
-            res = sp.series(P(p['expr'], deg), var, P(str(p.get('at', 0))), int(p.get('n', 6))).removeO()
+            res = sp.series(P(p['expr'], deg), var, P(str(p.get('at', 0)), deg), int(p.get('n', 6))).removeO()
             return json.dumps(_out(res))
         if op == 'solve':
             eqs = [_eq(s.strip(), deg) for s in p['eqs'] if s.strip()]
@@ -501,17 +503,34 @@ def cas_run(op, payload_json):
             return json.dumps(diff_steps_op(p))
         return json.dumps({'error': 'unknown operation ' + op})
     except Exception as ex:
-        return json.dumps({'error': str(ex)})
+        # The student sees this sentence in the bar, so it is never Python's own text
+        # ("invalid syntax (<string>, line 1)", "unexpected EOF while parsing"); that goes in detail.
+        return json.dumps({'error': _plain_error(ex), 'detail': str(ex)})
+
+def _plain_error(ex):
+    name = type(ex).__name__
+    if isinstance(ex, SyntaxError) or name in ('TokenError', 'SympifyError'):
+        return 'I could not read that. Check the brackets and signs.'
+    if isinstance(ex, ZeroDivisionError):
+        return 'That divides by zero, so it has no value.'
+    if isinstance(ex, NotImplementedError):
+        return 'This one cannot be worked out exactly.'
+    return 'I could not work this out. Check what you typed, or try a simpler form.'
 `
 
 let py: Py | null = null
 let loading: Promise<Py> | null = null
 
+// Each stage is reported so the client can say how far the first load has got (P17): the whole
+// load once read as a freeze. The stage numbers match CAS_BOOT_STAGES in ui/casStatus.ts.
 async function boot(): Promise<Py> {
+  postMessage({ status: 'loading', stage: 1 })
   const base = new URL('/pyodide/', self.location.href).href
   const mod = (await import(/* @vite-ignore */ `${base}pyodide.mjs`)) as { loadPyodide: (o: object) => Promise<Py> }
   const instance = await mod.loadPyodide({ indexURL: base })
+  postMessage({ status: 'loading', stage: 2 })
   await instance.loadPackage(['mpmath', 'sympy'])
+  postMessage({ status: 'loading', stage: 3 })
   instance.runPython(PRELUDE)
   return instance
 }
@@ -521,7 +540,6 @@ self.onmessage = async (e: MessageEvent<{ id?: number; op: string; payload: obje
   try {
     if (!py) {
       loading ??= boot()
-      postMessage({ status: 'loading' })
       try {
         py = await loading
       } catch (err) {
@@ -541,7 +559,13 @@ self.onmessage = async (e: MessageEvent<{ id?: number; op: string; payload: obje
     const json = run(op, JSON.stringify(payload))
     postMessage({ id, result: JSON.parse(json) })
   } catch (err) {
-    postMessage({ status: 'error', message: String(err) })
-    if (id !== undefined) postMessage({ id, result: { error: String(err) } })
+    // Only a failed load is an engine failure; after it, an error belongs to this one request and
+    // the next one is answered as usual, so the status is left alone and the student gets a sentence.
+    if (!py) {
+      postMessage({ status: 'error', message: String(err) })
+      if (id !== undefined) postMessage({ id, result: { error: 'The algebra engine could not start. Your next command starts it again.', detail: String(err) } })
+    } else if (id !== undefined) {
+      postMessage({ id, result: { error: 'I could not work this out. Check what you typed, or try a simpler form.', detail: String(err) } })
+    }
   }
 }
