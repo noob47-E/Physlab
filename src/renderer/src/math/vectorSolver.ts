@@ -9,7 +9,7 @@
 // Numbers and angles go through texMeasure / formatMeasure with the student's own settings
 // (decimals, significant figures, degrees or radians), never a fixed 4 d.p.
 
-import { add, angleBetween, cross, dot, heading, len, neg, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
+import { add, cross, dot, heading, len, neg, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
 import { angleTo, fmt, fmtSci, formatMeasure, sciExponent, shownValue, stepEq, stepPrecision, superscriptPowers, tex, texIJK, texMeasure, texSci, vecTex, type MeasureSettings } from './format'
 
 export interface Step {
@@ -98,7 +98,6 @@ function finish(sol: Solution): Solution {
   }
 }
 
-const is3D = (...vs: V3[]) => vs.some((v) => Math.abs(v[2]) > 1e-12)
 
 /** Not zero, but under the 1e-12 noise floor below which fmt writes 0. */
 const tinyReal = (n: number): boolean => n !== 0 && Math.abs(n) < 1e-12
@@ -149,15 +148,22 @@ const isNoise = (product: number, mA: number, mB: number): boolean => {
 }
 
 /**
- * A×B as the working writes it: the null vector when either vector has zero length (under 1e-12,
- * dotSteps' rule) or when the product is rounding noise. The torque and the magnetic force answer
- * with this too, so they never disagree with the cross-product working they show.
+ * The angle between two vectors in degrees, NaN only when one has exactly zero length. vec.ts's
+ * angleBetween gives NaN for any vector under 1e-12, so 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ had no angle with
+ * anything; atan2 of |A×B| and A·B is scale-free, so the angle of a tiny pair is as exact as any.
+ */
+const angleDeg = (a: V3, b: V3): number => (len(a) === 0 || len(b) === 0 ? NaN : toDeg(Math.atan2(len(cross(a, b)), dot(a, b))))
+
+/**
+ * A×B as the working writes it: the null vector when the product is rounding noise beside the
+ * vectors (isNoise), which takes in a vector of exactly zero length too, its product being exactly
+ * 0. Never "|A| < 1e-12": that made 3×10⁻¹⁹ î × 2×10⁻¹⁷ ĵ the null vector, though it is a real
+ * 6×10⁻³⁶ k̂. The torque and the magnetic force answer with this too, so they never disagree with
+ * the cross-product working they show.
  */
 function crossOf(a: V3, b: V3): V3 {
-  const mA = len(a)
-  const mB = len(b)
   const raw = cross(a, b)
-  return mA < 1e-12 || mB < 1e-12 || isNoise(len(raw), mA, mB) ? [0, 0, 0] : raw
+  return isNoise(len(raw), len(a), len(b)) ? [0, 0, 0] : raw
 }
 
 /**
@@ -194,15 +200,20 @@ function sumOf(vs: V3[], s: SolverSettings): V3 {
 function writersAt(q: SolverSettings) {
   const num = (n: number) => texMeasure(n, 'number', q)
   const read = (n: number) => shownValue(formatMeasure(n, 'number', q))
+  /**
+   * A number a line calculates with that may sit below the noise floor fmt applies: the sum of
+   * squares of 1×10⁻⁷ and 3×10⁻⁷ is 1×10⁻¹³, which num writes as 0 ("√0 = 3.16×10⁻⁷").
+   */
+  const sci = (n: number) => (tinyReal(n) ? texSci(n, q) : num(n))
+  const readSci = (n: number) => (tinyReal(n) ? shownValue(fmtSci(n, q)) : read(n))
+  const tinyVec = (v: V3): boolean => tinyReal(Math.max(...v.map(Math.abs)))
   return {
     num,
     numP: (n: number) => bracketed(n, num(n)),
-    /**
-     * A number a line calculates with that may sit below the noise floor fmt applies: the sum of
-     * squares of 1×10⁻⁷ and 3×10⁻⁷ is 1×10⁻¹³, which num writes as 0 ("√0 = 3.16×10⁻⁷").
-     */
-    sci: (n: number) => (tinyReal(n) ? texSci(n, q) : num(n)),
-    readSci: (n: number) => (tinyReal(n) ? shownValue(fmtSci(n, q)) : read(n)),
+    sci,
+    /** `sci`, bracketed for substituting into a formula, as numP brackets num. */
+    sciP: (n: number) => bracketed(n, sci(n)),
+    readSci,
     /** `sci` for a sentence or a title. */
     sciText: (n: number) => (tinyReal(n) ? fmtSci(n, q) : formatMeasure(n, 'number', q)),
     /** A vector written at this precision, for a line that calculates with its components. */
@@ -210,6 +221,14 @@ function writersAt(q: SolverSettings) {
     /** `ijk` for a vector that may lie wholly below the noise floor, and component i of it as read. */
     sciIJK: (v: V3) => sciVector(v, q).tex,
     readSciIJK: (v: V3, i: number) => sciVector(v, q).read(i),
+    /**
+     * Component i of v, judged beside the whole vector as sciVector judges it: in scientific form
+     * when all of v is under the noise floor (3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ), with a part that is only
+     * noise beside the rest set to 0 (tidyTiny); else as num writes it, so the 3×10⁻¹⁶ x part of
+     * 5∠90° still reads 0 instead of turning up as a scientific number. `readPart` is it read back.
+     */
+    part: (v: V3, i: number) => (tinyVec(v) ? sci(tidyTiny(v, q)[i]) : num(v[i])),
+    readPart: (v: V3, i: number) => (tinyVec(v) ? readSci(tidyTiny(v, q)[i]) : read(v[i])),
     text: (n: number) => formatMeasure(n, 'number', q),
     ang: (deg: number) => (Number.isNaN(deg) ? '\\text{undefined}' : texMeasure(toRad(deg), 'angle', q)),
     /** The number a student types into a calculator after reading `n` off the screen. */
@@ -266,6 +285,7 @@ function writers(s: SolverSettings) {
      */
     sci: (n: number) => (tiny(n) ? texSci(n, s) : num(n)),
     sciText: (n: number) => (tiny(n) ? fmtSci(n, s) : formatMeasure(n, 'number', s)),
+    sciP: (n: number) => bracketed(n, tiny(n) ? texSci(n, s) : num(n)),
     /** A vector whose components are all that tiny, written as (mantissa vector) × 10ⁿ. */
     sciIJK: (v: V3) => sciVector(v, s).tex,
     /** A number wrapped in brackets when negative or in scientific form, for substituting into a formula. */
@@ -296,8 +316,14 @@ const asWritten = (w: ReturnType<typeof writers>, x: number, y: number): boolean
  */
 const hasZ = (v: V3, s: SolverSettings): boolean => Math.abs(v[2] * mantissaFactor(Math.max(...v.map(Math.abs)), s)) > 1e-12
 
-/** θ measured anticlockwise from +x, 0..360°, or NaN for the zero vector. */
-export const directionDeg = (v: V3): number => (Math.abs(v[0]) < 1e-12 && Math.abs(v[1]) < 1e-12 ? NaN : toDeg(heading(v)))
+/** Whether any of the vectors has a z part, each judged by hasZ beside its own size. */
+const is3D = (s: SolverSettings, ...vs: V3[]): boolean => vs.some((v) => hasZ(v, s))
+
+/**
+ * θ measured anticlockwise from +x, 0..360°, or NaN for the zero vector. Only a vector with no x
+ * and no y part has no heading: 1.6×10⁻¹⁹ î points along +x, where "both under 1e-12" gave NaN.
+ */
+export const directionDeg = (v: V3): number => (v[0] === 0 && v[1] === 0 ? NaN : toDeg(heading(v)))
 
 /** Inverse trig in degrees, clamped so a rounded 1.0000001 is still a number. */
 const clamp1 = (x: number): number => Math.max(-1, Math.min(1, x))
@@ -584,28 +610,34 @@ export function solveAdditionCosineLaw(A: NamedVec, B: NamedVec, resultName = 'R
   const w = writers(s)
   const a = len(A.v)
   const bb = len(B.v)
-  const theta = toDeg(angleBetween(A.v, B.v))
-  const Rv = add(A.v, B.v)
-  const r = Math.sqrt(a * a + bb * bb + 2 * a * bb * Math.cos(toRad(theta)))
+  const theta = angleDeg(A.v, B.v)
+  // R is zero only when the sum is noise beside A and B (sumOf), as for 5∠0° + 5∠180°; "r < 1e-12"
+  // also zeroed 1.6×10⁻¹⁷∠0° + 2×10⁻¹⁷∠60°, a real 3.12×10⁻¹⁷.
+  const Rv = sumOf([A.v, B.v], s)
+  const rZero = Rv.every((c) => c === 0)
+  // The size of the summed vector, not √(a² + b² + 2ab cos θ): that formula cancels to 0 when B is
+  // almost −A (1î + (−1 + 10⁻¹⁰)î), and the sine line then divided by it while R was not zero.
+  const r = rZero ? 0 : len(Rv)
   // The angle between R and A is a geometric fact, not the arcsine: arcsine only ever gives an
   // acute angle, so for A = 1∠0°, B = 5∠120° it said 70.89° when R actually sits at 109.11°.
-  const alpha = r < 1e-12 ? 0 : toDeg(angleBetween(A.v, Rv))
-  const sinAlpha = r < 1e-12 ? 0 : Math.max(-1, Math.min(1, (bb * Math.sin(toRad(theta))) / r))
+  const alpha = rZero ? 0 : angleDeg(A.v, Rv)
+  const sinAlpha = rZero ? 0 : Math.max(-1, Math.min(1, (bb * Math.sin(toRad(theta))) / r))
   const acute = toDeg(Math.asin(sinAlpha))
   const obtuse = alpha > 90 + 1e-9
-  if (a < 1e-12 || bb < 1e-12) {
+  if (a === 0 || bb === 0) {
     // The law of cosines needs a triangle; with a zero vector there is none, and every line
-    // below would read "undefined".
-    const zero = a < 1e-12 ? A : B
-    const other = a < 1e-12 ? B : A
+    // below would read "undefined". Only a vector of exactly zero length comes here: 1×10⁻¹⁹ î
+    // is tiny but real, and makes a triangle like any other.
+    const zero = a === 0 ? A : B
+    const other = a === 0 ? B : A
     return finish({
       title: `${A.name} + ${B.name} by the law of cosines`,
       steps: [
-        { text: `${zero.name} has zero length, so there is no triangle to solve: the sum is just ${other.name}.`, tex: `${b(resultName)} = ${b(other.name)} = ${w.ijk(Rv)}` },
-        { tex: `${resultName} = ${w.num(r)}` }
+        { text: `${zero.name} has zero length, so there is no triangle to solve: the sum is just ${other.name}.`, tex: `${b(resultName)} = ${b(other.name)} = ${w.sciIJK(Rv)}` },
+        { tex: `${resultName} = ${w.sci(r)}` }
       ],
       answers: [
-        { label: resultName, tex: w.num(r) },
+        { label: resultName, tex: w.sci(r) },
         { label: 'angle with ' + A.name, tex: w.ang(0) }
       ],
       visual: { vectors: [{ name: A.name, v: A.v, role: 'input' }, { name: B.name, v: B.v, role: 'input' }, { name: resultName, v: Rv, role: 'result' }], mode: 'common-tail' }
@@ -614,29 +646,32 @@ export function solveAdditionCosineLaw(A: NamedVec, B: NamedVec, resultName = 'R
   // Each line is worked from the numbers written in it (Fix 4). R² is written with the digits
   // its square root needs; sin α with the digits its sin⁻¹ needs — sin⁻¹(0.55) is 33.37°, not the
   // 33.43° it used to claim, because the true sine was 0.55099.
+  // Sizes under fmt's noise floor (1.6×10⁻¹⁷) are real: they are written and read back in
+  // scientific form, and R is checked as written there (asWritten), where `same` writes both
+  // sides as 0 and passes anything.
   const term = 2 * a * bb * cosD(theta)
-  const rR2 = w.resultPrecision((q) => w.same(Math.sqrt(writersAt(q).readSci(r * r)), r))
+  const rR2 = w.resultPrecision((q) => asWritten(w, Math.sqrt(writersAt(q).readSci(r * r)), r))
   const cl = w.guard(
     (o) =>
-      w.sameSci(o.read(a) ** 2 + o.read(bb) ** 2 + 2 * o.read(a) * o.read(bb) * cosD(o.readAng(theta)), r * r, rR2.q) &&
+      w.sameSci(o.readSci(a) ** 2 + o.readSci(bb) ** 2 + 2 * o.readSci(a) * o.readSci(bb) * cosD(o.readAng(theta)), r * r, rR2.q) &&
       w.sameSci(o.readSci(a * a) + o.readSci(bb * bb) + o.readSci(term), r * r, rR2.q)
   )
   const rSin = w.resultPrecision((q) => w.sameAng(asinD(writersAt(q).read(sinAlpha)), acute))
   const sinAt = rSin.at
-  const sl = w.guard((o) => w.same((o.read(bb) * sinD(o.readAng(theta))) / o.read(r), sinAlpha, rSin.q))
+  const sl = w.guard((o) => w.same((o.readSci(bb) * sinD(o.readAng(theta))) / o.readSci(r), sinAlpha, rSin.q))
   const steps: Step[] = [
-    { text: `Sizes and the angle between them:`, tex: `${mag(A.name)} = ${w.num(a)},\\quad ${mag(B.name)} = ${w.num(bb)},\\quad \\theta = ${w.ang(theta)}` },
+    { text: `Sizes and the angle between them:`, tex: `${mag(A.name)} = ${w.sci(a)},\\quad ${mag(B.name)} = ${w.sci(bb)},\\quad \\theta = ${w.ang(theta)}` },
     {
       text: `Law of cosines (the angle inside the triangle is ${w.angText(180)} − θ, which flips the sign):`,
       tex:
         `${resultName}^2 = ${mag(A.name)}^2 + ${mag(B.name)}^2 + 2\\,${mag(A.name)}${mag(B.name)}\\cos\\theta` +
-        ` = ${cl.numP(a)}^2 + ${cl.numP(bb)}^2 + 2\\times ${cl.numP(a)}\\times ${cl.numP(bb)}\\cos ${cl.ang(theta)}` +
+        ` = ${cl.sciP(a)}^2 + ${cl.sciP(bb)}^2 + 2\\times ${cl.sciP(a)}\\times ${cl.sciP(bb)}\\cos ${cl.ang(theta)}` +
         ` ${cl.eq} ${cl.sci(a * a)} + ${cl.sci(bb * bb)} ${term < 0 ? '-' : '+'} ${cl.sci(Math.abs(term))} ${cl.eq} ${rR2.at.sci(r * r)}`
     },
-    { text: 'So the size of the resultant is', tex: `${resultName} = \\sqrt{${rR2.at.sci(r * r)}} ${rR2.eq} ${w.num(r)}` },
+    { text: 'So the size of the resultant is', tex: `${resultName} = \\sqrt{${rR2.at.sci(r * r)}} ${rR2.eq} ${w.sci(r)}` },
     {
       text: `Law of sines gives the angle α between ${resultName} and ${A.name}:`,
-      tex: `\\frac{\\sin\\alpha}{${mag(B.name)}} = \\frac{\\sin\\theta}{${resultName}} \\;\\Rightarrow\\; \\sin\\alpha = \\frac{${sl.num(bb)}\\sin ${sl.ang(theta)}}{${sl.num(r)}} ${sl.eq} ${sinAt.num(sinAlpha)}`
+      tex: `\\frac{\\sin\\alpha}{${mag(B.name)}} = \\frac{\\sin\\theta}{${resultName}} \\;\\Rightarrow\\; \\sin\\alpha = \\frac{${sl.sci(bb)}\\sin ${sl.ang(theta)}}{${sl.sci(r)}} ${sl.eq} ${sinAt.num(sinAlpha)}`
     }
   ]
   if (obtuse) {
@@ -653,7 +688,7 @@ export function solveAdditionCosineLaw(A: NamedVec, B: NamedVec, resultName = 'R
     title: `${A.name} + ${B.name} by the law of cosines`,
     steps,
     answers: [
-      { label: resultName, tex: w.num(r) },
+      { label: resultName, tex: w.sci(r) },
       { label: 'angle with ' + A.name, tex: w.ang(alpha) }
     ],
     visual: {
@@ -845,7 +880,7 @@ export function solveUnitVector(A: NamedVec, s: SolverSettings = DEFAULT_SETTING
     { tex: `${mag(A.name)} = ${w.sci(m)}` },
     { tex: `${hat} = \\frac{${g.sciIJK(A.v)}}{${g.sci(m)}} ${g.eq} ${w.ijk(u)}` },
     // Whether there is a z part is read off the unit vector: a tiny A's own z is under the floor.
-    { text: 'Check: its magnitude is', tex: unitCheck(w, is3D(u) ? u : [u[0], u[1]]) }
+    { text: 'Check: its magnitude is', tex: unitCheck(w, is3D(s, u) ? u : [u[0], u[1]]) }
   ]
   return finish({
     title: `Unit vector along ${A.name}`,
@@ -865,12 +900,14 @@ function dotSteps(A: NamedVec, B: NamedVec, s: SolverSettings) {
   const mA = len(A.v)
   const mB = len(B.v)
   const steps: Step[] = [
-    { text: 'Given:', tex: `${b(A.name)} = ${w.ijk(A.v)},\\quad ${b(B.name)} = ${w.ijk(B.v)}` }
+    { text: 'Given:', tex: `${b(A.name)} = ${w.sciIJK(A.v)},\\quad ${b(B.name)} = ${w.sciIJK(B.v)}` }
   ]
-  if (mA < 1e-12 || mB < 1e-12) {
+  if (mA === 0 || mB === 0) {
     // cos θ = A·B / (|A||B|) divides by zero: say so in one sentence instead of printing
-    // "undefined" three times and then calling the vectors perpendicular.
-    const zero = mA < 1e-12 ? A.name : B.name
+    // "undefined" three times and then calling the vectors perpendicular. Only a vector of exactly
+    // zero length: "under 1e-12" called 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ zero, though it has a size and a
+    // direction, and A·B with it is a real 10⁻³⁶-sized number.
+    const zero = mA === 0 ? A.name : B.name
     steps.push({ text: `${zero} has zero length, so ${A.name}·${B.name} = 0 and there is no angle between them.`, tex: `${b(A.name)}\\cdot${b(B.name)} = 0` })
     return { d: 0, mA, mB, cosT: NaN, theta: NaN, lined: false, steps }
   }
@@ -880,29 +917,30 @@ function dotSteps(A: NamedVec, B: NamedVec, s: SolverSettings) {
   const d = isNoise(raw, mA, mB) ? 0 : raw
   const lined = isNoise(len(cross(A.v, B.v)), mA, mB)
   const cosT = d / (mA * mB)
-  const theta = d === 0 ? 90 : lined ? (d > 0 ? 0 : 180) : toDeg(angleBetween(A.v, B.v))
+  const theta = d === 0 ? 90 : lined ? (d > 0 ? 0 : 180) : angleDeg(A.v, B.v)
   // A plane pair has no z-terms to write: "+ (0)(0)" added nothing and read as a step of its own.
-  const axes = is3D(A.v, B.v) ? [0, 1, 2] : [0, 1]
+  const axes = is3D(s, A.v, B.v) ? [0, 1, 2] : [0, 1]
   const xyz = ['x', 'y', 'z']
   // A real A·B under the noise floor (1×10⁻⁷ î · 1×10⁻⁷∠45° is 7×10⁻¹⁵) is written in scientific
   // form and checked as such: through num it was "0", and "0/(1×10⁻⁷×1×10⁻⁷) ≈ 0.7071" is false.
-  const products = (o: ReturnType<typeof writersAt>): boolean => asWritten(w, axes.reduce((acc, i) => acc + o.read(A.v[i]) * o.read(B.v[i]), 0), d)
+  // So are the components and sizes it is worked from (3×10⁻¹⁹ was written "(0)(0)").
+  const products = (o: ReturnType<typeof writersAt>): boolean => asWritten(w, axes.reduce((acc, i) => acc + o.readPart(A.v, i) * o.readPart(B.v, i), 0), d)
   const pr = d === 0 && raw !== 0 ? w.noiseGuard(products) : w.guard(products)
   // cos θ is written with the digits its cos⁻¹ needs (cos⁻¹(0.39) is 67.05°, not the 66.87° it
   // used to claim), and the division before it with the digits that give that cos θ.
   const rCos = w.resultPrecision((q) => w.sameAng(acosD(writersAt(q).read(cosT)), theta))
   const cosAt = rCos.at
-  const dv = w.guard((o) => w.same(o.readSci(d) / (o.read(mA) * o.read(mB)), cosT, rCos.q))
+  const dv = w.guard((o) => w.same(o.readSci(d) / (o.readSci(mA) * o.readSci(mB)), cosT, rCos.q))
   steps.push(
     {
       text: 'Scalar product in terms of rectangular components:',
       tex: `${b(A.name)}\\cdot${b(B.name)} = ${axes.map((i) => `${sub_(A.name, xyz[i])}${sub_(B.name, xyz[i])}`).join(' + ')}`
     },
-    { tex: `= ${axes.map((i) => `(${pr.num(A.v[i])})(${pr.num(B.v[i])})`).join(' + ')} ${pr.eq} ${w.sci(d)}` },
-    { text: 'Magnitudes:', tex: `${mag(A.name)} = ${w.num(mA)},\\quad ${mag(B.name)} = ${w.num(mB)}` },
+    { tex: `= ${axes.map((i) => `(${pr.part(A.v, i)})(${pr.part(B.v, i)})`).join(' + ')} ${pr.eq} ${w.sci(d)}` },
+    { text: 'Magnitudes:', tex: `${mag(A.name)} = ${w.sci(mA)},\\quad ${mag(B.name)} = ${w.sci(mB)}` },
     {
       text: 'Angle between them:',
-      tex: `\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}\\,${mag(B.name)}} = \\frac{${dv.sci(d)}}{${dv.num(mA)}\\times${dv.num(mB)}} ${dv.eq} ${cosAt.num(cosT)}`
+      tex: `\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}\\,${mag(B.name)}} = \\frac{${dv.sci(d)}}{${dv.sci(mA)}\\times${dv.sci(mB)}} ${dv.eq} ${cosAt.num(cosT)}`
     },
     { tex: `\\theta = \\cos^{-1}(${cosAt.num(cosT)}) ${rCos.eq} ${w.ang(theta)}` }
   )
@@ -917,10 +955,10 @@ export function solveDot(A: NamedVec, B: NamedVec, s: SolverSettings = DEFAULT_S
   const w = writers(s)
   const { d, mB, cosT, theta, steps } = dotSteps(A, B, s)
   if (!Number.isNaN(theta)) {
-    const g = w.guard((o) => w.same(o.read(mB) * cosD(o.readAng(theta)), mB * cosT))
+    const g = w.guard((o) => asWritten(w, o.readSci(mB) * cosD(o.readAng(theta)), mB * cosT))
     steps.push({
       text: `Meaning: ${A.name}·${B.name} = |${A.name}| × (projection of ${B.name} on ${A.name}).`,
-      tex: `${mag(B.name)}\\cos\\theta = ${g.num(mB)}\\cos ${g.ang(theta)} ${g.eq} ${w.num(mB * cosT)}`
+      tex: `${mag(B.name)}\\cos\\theta = ${g.sci(mB)}\\cos ${g.ang(theta)} ${g.eq} ${w.sci(mB * cosT)}`
     })
   }
   return finish({
@@ -953,13 +991,11 @@ export function solveAngleBetween(A: NamedVec, B: NamedVec, s: SolverSettings = 
 /** Vector (cross) product via determinant expansion. */
 export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C', s: SolverSettings = DEFAULT_SETTINGS): Solution {
   const w = writers(s)
-  const [ax, ay, az] = A.v
-  const [bx, by, bz] = B.v
   const mA = len(A.v)
   const mB = len(B.v)
-  // dotSteps' rule: under 1e-12 a vector has zero length and makes no angle θ, so there is no
-  // AB sin θ to check — that line read "0×5×sin undefined = undefined".
-  const zero = mA < 1e-12 ? A.name : mB < 1e-12 ? B.name : undefined
+  // dotSteps' rule: a vector of exactly zero length makes no angle θ, so there is no AB sin θ to
+  // check — that line read "0×5×sin undefined = undefined". A tiny one (3×10⁻¹⁹ î) is real.
+  const zero = mA === 0 ? A.name : mB === 0 ? B.name : undefined
   // The null vector for a zero-length input or rounding noise (crossOf), and only then: the
   // vectors are then parallel or antiparallel and θ is exactly 0° or 180°. Anything else is a real
   // vector, however small — two 10⁻⁷-long vectors at 98° give 7×10⁻¹⁴ k̂, which num wrote as 0⃗
@@ -969,26 +1005,29 @@ export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C', s: Solver
   const isNull = C.every((c) => c === 0)
   const snapped = isNull && cross(A.v, B.v).some((c) => c !== 0)
   const mC = len(C)
-  const theta = zero ? NaN : isNull ? (dot(A.v, B.v) > 0 ? 0 : 180) : toDeg(angleBetween(A.v, B.v))
+  const theta = zero ? NaN : isNull ? (dot(A.v, B.v) > 0 ? 0 : 180) : angleDeg(A.v, B.v)
   const pC = mantissaFactor(Math.max(...C.map(Math.abs)), s)
   // The determinant's entries are written with the digits that make each bracket, worked by a
-  // student, give the component written on the next line.
+  // student, give the component written on the next line. Each entry is written as its vector is
+  // (part): 3×10⁻¹⁹ in scientific form, where num wrote a determinant of zeros.
   const brackets = (o: ReturnType<typeof writersAt>): number[] => {
-    const [px, py, pz] = [o.read(ax), o.read(ay), o.read(az)]
-    const [qx, qy, qz] = [o.read(bx), o.read(by), o.read(bz)]
+    const [px, py, pz] = [0, 1, 2].map((i) => o.readPart(A.v, i))
+    const [qx, qy, qz] = [0, 1, 2].map((i) => o.readPart(B.v, i))
     return [py * qz - pz * qy, -(px * qz - pz * qx), px * qy - py * qx]
   }
   const expands = (o: ReturnType<typeof writersAt>): boolean => brackets(o).every((c, i) => w.same(c * pC, C[i] * pC))
   const e = snapped ? w.noiseGuard(expands) : w.guard(expands)
+  const [ex, ey, ez] = [0, 1, 2].map((i) => e.part(A.v, i))
+  const [fx, fy, fz] = [0, 1, 2].map((i) => e.part(B.v, i))
   const steps: Step[] = [
-    { text: 'Given:', tex: `${b(A.name)} = ${w.ijk(A.v)},\\quad ${b(B.name)} = ${w.ijk(B.v)}` },
+    { text: 'Given:', tex: `${b(A.name)} = ${w.sciIJK(A.v)},\\quad ${b(B.name)} = ${w.sciIJK(B.v)}` },
     {
       text: 'Write the cross product as a determinant:',
-      tex: `${b(A.name)}\\times${b(B.name)} = \\begin{vmatrix} \\hat{i} & \\hat{j} & \\hat{k} \\\\ ${e.num(ax)} & ${e.num(ay)} & ${e.num(az)} \\\\ ${e.num(bx)} & ${e.num(by)} & ${e.num(bz)} \\end{vmatrix}`
+      tex: `${b(A.name)}\\times${b(B.name)} = \\begin{vmatrix} \\hat{i} & \\hat{j} & \\hat{k} \\\\ ${ex} & ${ey} & ${ez} \\\\ ${fx} & ${fy} & ${fz} \\end{vmatrix}`
     },
     {
       text: 'Expand along the first row:',
-      tex: `= \\hat{i}\\,[(${e.num(ay)})(${e.num(bz)}) - (${e.num(az)})(${e.num(by)})] - \\hat{j}\\,[(${e.num(ax)})(${e.num(bz)}) - (${e.num(az)})(${e.num(bx)})] + \\hat{k}\\,[(${e.num(ax)})(${e.num(by)}) - (${e.num(ay)})(${e.num(bx)})]`
+      tex: `= \\hat{i}\\,[(${ey})(${fz}) - (${ez})(${fy})] - \\hat{j}\\,[(${ex})(${fz}) - (${ez})(${fx})] + \\hat{k}\\,[(${ex})(${fy}) - (${ey})(${fx})]`
     },
     { tex: `${b(resultName)} ${e.eq} ${w.sciIJK(C)}` },
     { text: 'Magnitude:', tex: `\\left|${b(resultName)}\\right| = ${rootOfSquares(w, [C[0], C[1], C[2]], mC, true)}` }
@@ -999,11 +1038,11 @@ export function solveCross(A: NamedVec, B: NamedVec, resultName = 'C', s: Solver
   } else {
     // AB sin θ is |A×B| itself: 0 for a null A×B, where θ is exactly 0° or 180°.
     const size = isNull ? 0 : mA * mB * sinD(theta)
-    const sines = (o: ReturnType<typeof writersAt>): boolean => asWritten(w, o.read(mA) * o.read(mB) * sinD(o.readAng(theta)), size)
+    const sines = (o: ReturnType<typeof writersAt>): boolean => asWritten(w, o.readSci(mA) * o.readSci(mB) * sinD(o.readAng(theta)), size)
     const sizeCheck = snapped ? w.noiseGuard(sines) : w.guard(sines)
     steps.push({
       text: `Check with |${A.name}×${B.name}| = ${A.name}${B.name} sin θ:`,
-      tex: `${sizeCheck.num(mA)}\\times${sizeCheck.num(mB)}\\times\\sin ${sizeCheck.ang(theta)} ${sizeCheck.eq} ${w.sci(size)}`
+      tex: `${sizeCheck.sci(mA)}\\times${sizeCheck.sci(mB)}\\times\\sin ${sizeCheck.ang(theta)} ${sizeCheck.eq} ${w.sci(size)}`
     })
   }
   steps.push({ text: `|${A.name}×${B.name}| is also the area of the parallelogram with sides ${A.name} and ${B.name}.`, tex: `\\text{Area} = ${w.sci(mC)}` })
@@ -1053,8 +1092,9 @@ export function solveProjection(B: NamedVec, A: NamedVec, s: SolverSettings = DE
     ],
     mode: 'common-tail'
   }
-  // Dividing by |A| = 0 printed "undefined" three times over; a zero vector has no direction to project onto.
-  if (mA < 1e-12) {
+  // Dividing by |A| = 0 printed "undefined" three times over; a zero vector has no direction to
+  // project onto. Only exactly zero: 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ has a direction, and "under 1e-12" lost it.
+  if (mA === 0) {
     return finish({
       title,
       steps: [{ text: `${A.name} has zero length, so there is no direction to project ${B.name} onto.` }],
@@ -1074,12 +1114,12 @@ export function solveProjection(B: NamedVec, A: NamedVec, s: SolverSettings = DE
   // |A|² = 1×10⁻¹⁴) is written in scientific form, as Dot writes it: through num it was 0, and
   // "0/1×10⁻⁷ ≈ 7×10⁻⁸" is false. The vector p is compared as the mantissas sciIJK writes.
   const pP = mantissaFactor(Math.max(...p.map(Math.abs)), s)
-  const g1 = w.guard((o) => asWritten(w, o.readSci(d) / o.read(mA), sc))
+  const g1 = w.guard((o) => asWritten(w, o.readSci(d) / o.readSci(mA), sc))
   const g2 = w.guard((o) => A.v.every((_, i) => w.same((o.readSci(d) / o.readSci(mA * mA)) * shown.readSciIJK(A.v, i) * pP, p[i] * pP)))
   const steps: Step[] = [
     {
       text: `Scalar projection of ${B.name} on ${A.name} (${B.name} cos θ):`,
-      tex: `${mag(B.name)}\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}} = \\frac{${g1.sci(d)}}{${g1.num(mA)}} ${g1.eq} ${w.sci(sc)}`
+      tex: `${mag(B.name)}\\cos\\theta = \\frac{${b(A.name)}\\cdot${b(B.name)}}{${mag(A.name)}} = \\frac{${g1.sci(d)}}{${g1.sci(mA)}} ${g1.eq} ${w.sci(sc)}`
     },
     {
       text: `Vector projection (the shadow of ${B.name} along ${A.name}):`,
@@ -1120,11 +1160,13 @@ export function solveRelativeVelocity(A: NamedVec, B: NamedVec, s: SolverSetting
  * when R leans back past the perpendicular the working says so and takes the angle from 180°.
  */
 function forceDirection(w: ReturnType<typeof writers>, Rx: number, Ry: number, alpha: number): Step[] {
-  if (Math.hypot(Rx, Ry) < 1e-12) return [{ text: 'The forces cancel, so the resultant is zero and has no direction.' }]
-  if (Math.abs(Rx) < 1e-12) return [{ text: `Rx = 0, so R is at right angles to F₁.`, tex: `\\alpha = ${w.ang(alpha)}` }]
-  const frac = (o: ReturnType<typeof writersAt>, abs: boolean): string => `\\frac{${o.num(abs ? Math.abs(Ry) : Ry)}}{${o.num(abs ? Math.abs(Rx) : Rx)}}`
+  // Rx and Ry come with their noise already set to exactly 0 (solveTwoForces), judged beside the
+  // forces: "|R| < 1e-12" made 1.6×10⁻¹⁷ N and 2×10⁻¹⁷ N at 60° cancel.
+  if (Rx === 0 && Ry === 0) return [{ text: 'The forces cancel, so the resultant is zero and has no direction.' }]
+  if (Rx === 0) return [{ text: `Rx = 0, so R is at right angles to F₁.`, tex: `\\alpha = ${w.ang(alpha)}` }]
+  const frac = (o: ReturnType<typeof writersAt>, abs: boolean): string => `\\frac{${o.sci(abs ? Math.abs(Ry) : Ry)}}{${o.sci(abs ? Math.abs(Rx) : Rx)}}`
   if (Rx > 0) {
-    const g = w.guard((o) => w.sameAng(atanD(o.read(Ry) / o.read(Rx)), alpha))
+    const g = w.guard((o) => w.sameAng(atanD(o.readSci(Ry) / o.readSci(Rx)), alpha))
     return [
       {
         text: 'Direction of R measured from F₁:',
@@ -1132,7 +1174,7 @@ function forceDirection(w: ReturnType<typeof writers>, Rx: number, Ry: number, a
       }
     ]
   }
-  const g = w.guard((o) => w.sameAng(o.readAng(180) - atanD(o.read(Math.abs(Ry)) / o.read(Math.abs(Rx))), Math.abs(alpha)))
+  const g = w.guard((o) => w.sameAng(o.readAng(180) - atanD(o.readSci(Math.abs(Ry)) / o.readSci(Math.abs(Rx))), Math.abs(alpha)))
   const inner = (half: string, nums: string): string => `${half} - \\tan^{-1}\\left(${nums}\\right)`
   const sym = '\\frac{|R_y|}{|R_x|}'
   return [
@@ -1152,47 +1194,69 @@ function forceDirection(w: ReturnType<typeof writers>, Rx: number, Ry: number, a
 export function solveTwoForces(F1: number, F2: number, thetaDeg: number, unit = 'N', s: SolverSettings = DEFAULT_SETTINGS): Solution {
   const w = writers(s)
   const t = toRad(thetaDeg)
-  const Rx = F1 + F2 * Math.cos(t)
-  const Ry = F2 * Math.sin(t)
+  // Rounding noise is judged beside the forces, never by an absolute size, so 1.6×10⁻¹⁷ N and
+  // 2×10⁻¹⁷ N at 60° keep their real 3.12×10⁻¹⁷ N while 5 N and 5 N at 180° (and 10²⁰⁰ N and
+  // 10²⁰⁰ N, whose Ry is a stored 1.2×10¹⁸⁴) cancel. Ry = F₂ sin θ is noise within 10⁻¹² of F₂, as
+  // isNoise judges a product; Rx = F₁ + F₂ cos θ is noise within 10⁻¹² of the sizes added, as sumOf
+  // judges a sum.
+  const rawX = F1 + F2 * Math.cos(t)
+  const rawY = F2 * Math.sin(t)
+  const Rx = Math.abs(rawX) <= 1e-12 * (Math.abs(F1) + Math.abs(F2)) ? 0 : rawX
+  const Ry = isNoise(rawY, Math.abs(F2), 1) ? 0 : rawY
   const R = Math.hypot(Rx, Ry)
-  const alpha = toDeg(Math.atan2(Ry, Rx))
+  // Forces that cancel leave no direction (the working says so), so α is undefined, not the
+  // heading of the noise: atan2 of 5 N + 5 N at 180° gave 90° from a stored Ry of 6×10⁻¹⁶.
+  const alpha = R === 0 ? NaN : toDeg(Math.atan2(Ry, Rx))
   const u = unit ? `\\,\\text{${unit}}` : ''
   // Every line is worked from the numbers written in it (Fix 4): "√(7.56² + 7.09²) = 10.37 N" was
   // false (it is 10.364), and the law-of-cosines and tan⁻¹ lines jumped from the formula to the
-  // answer without the numbers put in.
-  const gx = w.guard((o) => w.same(o.read(F1) + o.read(F2) * cosD(o.readAng(thetaDeg)), Rx))
-  const gy = w.guard((o) => w.same(o.read(F2) * sinD(o.readAng(thetaDeg)), Ry))
-  const sum = F1 * F1 + F2 * F2 + 2 * F1 * F2 * Math.cos(t)
-  const rSum = w.resultPrecision((q) => w.same(Math.sqrt(writersAt(q).readSci(sum)), R))
+  // answer without the numbers put in. Forces under fmt's noise floor are written and read back in
+  // scientific form and checked as written (asWritten), where num wrote them all as 0.
+  // A calculator's own Rx and Ry from the numbers as written carry the same noise, judged the same way.
+  const gx = w.guard((o) => {
+    const [f1, f2] = [o.readSci(F1), o.readSci(F2)]
+    const x = f1 + f2 * cosD(o.readAng(thetaDeg))
+    return asWritten(w, Math.abs(x) <= 1e-12 * (Math.abs(f1) + Math.abs(f2)) ? 0 : x, Rx)
+  })
+  const gy = w.guard((o) => {
+    const f2 = o.readSci(F2)
+    const y = f2 * sinD(o.readAng(thetaDeg))
+    return asWritten(w, isNoise(y, Math.abs(f2), 1) ? 0 : y, Ry)
+  })
+  // The sum under the root is 0 when R is, not the 10⁻⁵⁰ left over from 2.56×10⁻³⁴ + 2.56×10⁻³⁴ − 5.12×10⁻³⁴.
+  const sum = R === 0 ? 0 : F1 * F1 + F2 * F2 + 2 * F1 * F2 * Math.cos(t)
+  const rSum = w.resultPrecision((q) => asWritten(w, Math.sqrt(writersAt(q).readSci(sum)), R))
   // Both ends of the chain, as rootOfSquares checks them: the numbers put in must give the sum
   // written under the root AND root to R as written. Each "=" could hold on its own while the
   // first segment and the last disagree — √(0.380² + 8.63² + 2×0.380×8.63 cos 245°) is 8.4764,
   // never the 8.47 it ended on.
   const gc = w.guard((o) => {
-    const back = o.read(F1) ** 2 + o.read(F2) ** 2 + 2 * o.read(F1) * o.read(F2) * cosD(o.readAng(thetaDeg))
-    return w.same(Math.sqrt(Math.max(back, 0)), R) && w.sameSci(back, sum, rSum.q)
+    const [f1, f2] = [o.readSci(F1), o.readSci(F2)]
+    const raw = f1 ** 2 + f2 ** 2 + 2 * f1 * f2 * cosD(o.readAng(thetaDeg))
+    const back = Math.abs(raw) <= 1e-12 * (f1 ** 2 + f2 ** 2) ? 0 : raw
+    return asWritten(w, Math.sqrt(Math.max(back, 0)), R) && w.sameSci(back, sum, rSum.q)
   })
   const steps: Step[] = [
     { text: `Place F₁ along the +x axis and F₂ at θ = ${w.angText(thetaDeg)} to it.` },
     {
       text: 'x-component of the resultant:',
-      tex: `R_x = F_1\\cos ${w.ang(0)} + F_2\\cos\\theta = ${gx.num(F1)} + ${gx.num(F2)}\\cos ${gx.ang(thetaDeg)} ${gx.eq} ${w.num(Rx)}${u}`
+      tex: `R_x = F_1\\cos ${w.ang(0)} + F_2\\cos\\theta = ${gx.sci(F1)} + ${gx.sci(F2)}\\cos ${gx.ang(thetaDeg)} ${gx.eq} ${w.sci(Rx)}${u}`
     },
-    { text: 'y-component of the resultant:', tex: `R_y = F_1\\sin ${w.ang(0)} + F_2\\sin\\theta = ${gy.num(F2)}\\sin ${gy.ang(thetaDeg)} ${gy.eq} ${w.num(Ry)}${u}` },
-    { text: 'Magnitude:', tex: `R = \\sqrt{R_x^2 + R_y^2} = ${rootOfSquares(w, [Rx, Ry], R)}${u}` },
+    { text: 'y-component of the resultant:', tex: `R_y = F_1\\sin ${w.ang(0)} + F_2\\sin\\theta = ${gy.sci(F2)}\\sin ${gy.ang(thetaDeg)} ${gy.eq} ${w.sci(Ry)}${u}` },
+    { text: 'Magnitude:', tex: `R = \\sqrt{R_x^2 + R_y^2} = ${rootOfSquares(w, [Rx, Ry], R, true)}${u}` },
     {
       text: 'Same result from the law of cosines:',
       tex:
         `R = \\sqrt{F_1^2 + F_2^2 + 2F_1F_2\\cos\\theta}` +
-        ` = \\sqrt{${gc.numP(F1)}^2 + ${gc.numP(F2)}^2 + 2\\times ${gc.numP(F1)}\\times ${gc.numP(F2)}\\cos ${gc.ang(thetaDeg)}}` +
-        ` ${gc.eq} \\sqrt{${rSum.at.sci(sum)}} ${rSum.eq} ${w.num(R)}${u}`
+        ` = \\sqrt{${gc.sciP(F1)}^2 + ${gc.sciP(F2)}^2 + 2\\times ${gc.sciP(F1)}\\times ${gc.sciP(F2)}\\cos ${gc.ang(thetaDeg)}}` +
+        ` ${gc.eq} \\sqrt{${rSum.at.sci(sum)}} ${rSum.eq} ${w.sci(R)}${u}`
     },
     ...forceDirection(w, Rx, Ry, alpha)
   ]
   return finish({
     title: 'Resultant of two forces',
     steps,
-    answers: [{ label: 'R', tex: `${w.num(R)}${u}` }, { label: 'α', tex: w.ang(alpha) }],
+    answers: [{ label: 'R', tex: `${w.sci(R)}${u}` }, { label: 'α', tex: w.ang(alpha) }],
     visual: {
       vectors: [
         { name: 'F1', v: [F1, 0, 0], role: 'input' },

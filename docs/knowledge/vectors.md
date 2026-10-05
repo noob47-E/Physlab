@@ -78,3 +78,21 @@ the cards' own arrows (head-to-tail, parallelogram, from origin).
 - `tests/vectorSnap.test.ts` — head snapping, layout chips keeping a student's points/angle, plain point letters.
 - `tests/vectorPolish.test.ts` — the size limit, one number form, exact fields, k/q following, refusals, tiny numbers.
 - `tests/glmfixVectors.test.ts` — GLM audit regressions (#3 cards survive File ▸ New/Open, #16 primed names, #17 binding by name, #18 stand-in copies, #19 graph-card prompts).
+
+## Tiny and huge vectors (P-VEC2, 2026-10-06)
+- No magnitude in `math/vectorSolver.ts` is compared with an absolute 1e-12 any more: a vector has
+  zero length only when it is exactly 0; a cross product or a sum is zero only when it is noise
+  beside its parts (`isNoise`, `sumOf`); then the "cancel" / "Rx = 0" lines test exact zeros.
+  Forces of 1.6×10⁻¹⁷ N and 2×10⁻¹⁷ N at 60° give R = 3.1241×10⁻¹⁷ N, not "the forces cancel".
+- `angleDeg` (in the solver) replaces vec.ts `angleBetween` there, which returns NaN under 1e-12.
+- Tiny values in workings and answers go through `sci` / `sciIJK` / `part` (raised powers, never 0
+  or e-notation); `part` uses powers of ten only when the whole vector is tiny, so a 3×10⁻¹⁶ noise
+  part of 5∠90° still reads 0.
+- Guarded by `tests/vectorTiny.test.ts` (10⁻¹⁹, 10⁻¹⁷, everyday snapshots, 10²⁰⁰, true cancels).
+
+## Typed units are dropped, and said to be (P-VEC2)
+- A card's text goes latexToMath → preprocess → mathjs; only the numbers are kept, so `<3 m, 4 m>`
+  has size 5. `droppedUnits(text, cardNames)` (panels/vectorCalcStore.ts) lists the units that were
+  typed (not i/j/k, deg/rad or other cards' names) and the card and the expression box show one
+  plain line under the value. Guarded by `tests/vectorUnits.test.ts`.
+- The `sizeBeforeAngle` workaround stays until P-PARSE's `preprocess` fix lands (R2-3).

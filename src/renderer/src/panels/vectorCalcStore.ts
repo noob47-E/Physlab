@@ -585,6 +585,38 @@ function withoutNoise(out: unknown, scale: number): unknown {
 }
 
 /**
+ * The units a typed vector line leaves out (R2-2). A vector holds plain numbers: "<3 m, 4 m>" is
+ * worked as 3, 4 and its size 5 has no unit, which the student could not tell. Names of other cards
+ * (`names`) are never units, though mathjs reads B as the byte and N as the newton; i, j, k, the
+ * angle sign and degrees are not either. Null when nothing was dropped or the line cannot be read.
+ */
+export function droppedUnits(text: string, names: string[] = []): string[] | null {
+  if (!text.trim()) return null
+  const raised = text.replace(/[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (run) => `^{${run.replace(/[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => (c === '⁻' ? '-' : '⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(c).toString()))}}`)
+  const found: string[] = []
+  try {
+    math.parse(preprocess(sizeBeforeAngle(latexToMath(raised, { vectorOps: true })))).traverse((node, path) => {
+      const n = node as unknown as { type: string; name?: string }
+      if (n.type !== 'SymbolNode' || path === 'fn' || !n.name) return
+      if (n.name in UNIT_VECTORS || KNOWN_NAMES.has(n.name) || names.includes(n.name) || found.includes(n.name)) return
+      if ((math.Unit as unknown as { isValuelessUnit: (s: string) => boolean }).isValuelessUnit(n.name)) found.push(n.name)
+    })
+  } catch {
+    return null
+  }
+  return found.length ? found : null
+}
+
+/**
+ * The one line that tells the student typed units were left out. It does not name them: typed
+ * spaces vanish before the line is read, so "3 m s⁻²" is read as the one unit ms, and naming that
+ * ("the ms you typed") would be false.
+ */
+export function droppedUnitsSentence(units: string[]): string {
+  return `Units are left out in Vectors: the ${units.length === 1 ? 'unit' : 'units'} you typed ${units.length === 1 ? 'is' : 'are'} ignored, and only the numbers are used.`
+}
+
+/**
  * Evaluates a typed vector line against the vectors it may use, refusing a name nothing gives a
  * value to (see unknownNames) with a sentence rather than a unit, and a number added to a vector.
  * What it gives is free of the noise its own arithmetic left (see lineScale).

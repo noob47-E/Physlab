@@ -14,7 +14,7 @@ import { len, type V3 } from '../math/vec'
 import { useView } from '../render/viewState'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type OperationRule } from './vectorCalcStore'
+import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, droppedUnits, droppedUnitsSentence, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type OperationRule } from './vectorCalcStore'
 
 /** An operation's button: what it reads and is called (the store's OPERATIONS) with how it is drawn. */
 interface Op extends OperationRule {
@@ -83,6 +83,18 @@ export function VectorCalc() {
 
   // One pass from the top (cardValues): working each card out on its own redid every card above it.
   const values = useMemo(() => cardValues(st.cards, ev), [st.cards, ev])
+  // Said only of a line that reads: under a line that is refused ("k A", "3 m\hat{i}") the note
+  // named a unit (kA, mi) that nobody typed, beside an error saying the line could not be read.
+  const exprUnits = useMemo(() => {
+    const units = droppedUnits(st.expr, st.cards.map((c) => c.name))
+    if (!units) return null
+    try {
+      exprSolution(st.expr, st.cards.map((c, i) => ({ name: c.name, v: values[i] })), settings)
+      return units
+    } catch {
+      return null
+    }
+  }, [st.expr, st.cards, values, settings])
   // Helpers are not offered: a force arrow drawn to a stand-in length would read as the wrong vector.
   const sceneVectors = Object.values(objects).filter((o) => o.type === 'vector' && !o.auxiliary)
 
@@ -255,6 +267,7 @@ export function VectorCalc() {
                 <span className="text-[color:var(--bad)]">{v as string}</span>
               )}
             </div>
+            {ok && (() => { const gone = droppedUnits(card.entry === 'comp' ? card.latex : card.entry === 'polar' ? card.mag : '', st.cards.map((c) => c.name)); return gone ? <div className="pl-1 text-fine text-[color:var(--text-dim)]">{droppedUnitsSentence(gone)}</div> : null })()}
             {ok && tooBig && <div className="pl-1 text-small text-[color:var(--warn)]">{tooBig}</div>}
             {nameProblem.id === card.id && nameProblem.text && <div className="pl-1 text-small text-[color:var(--bad)]">{nameProblem.text}</div>}
             {ok && readable.includes(card.name) && <div className="pl-1 text-fine text-[color:var(--text-dim)]">{nextStepHint(readable, readable.indexOf(card.name))}</div>}
@@ -367,6 +380,7 @@ export function VectorCalc() {
               was pushed off the panel by a long expression. */}
           <div className="min-w-0 flex-1">
             <MathInput ref={exprRef} value={st.expr} onChange={(l) => set({ expr: l })} onEnter={runExpr} />
+            {exprUnits && <div className="pl-1 pt-1 text-fine text-[color:var(--text-dim)]">{droppedUnitsSentence(exprUnits)}</div>}
           </div>
           <button className="btn primary min-h-[44px] min-w-[44px]" onClick={runExpr}>
             =
