@@ -134,6 +134,16 @@ export function partialFractionsWorking(src: string): Working {
   const { poly: D } = polyFromExpr(den, name)
   if (pIsZero(D)) return failed(title, input, 'The bottom is zero.')
   if (pDeg(D) === 0) return failed(title, input, 'The bottom has no letter in it, so this is not a fraction that needs splitting.')
+  if (pIsZero(N0)) {
+    return {
+      title,
+      input,
+      moves: [],
+      answers: [{ label: 'Answer', tex: '0' }],
+      check: 'A fraction with 0 on top is 0, so there is nothing to split.',
+      checked: 'ok'
+    }
+  }
 
   const s = new Steps()
 
@@ -170,6 +180,14 @@ export function partialFractionsWorking(src: string): Working {
       constant = rMul(constant, poly[0] ?? R1)
       continue
     }
+    // A single-term factor (−x, −2x, 2x³) is its number times x repeated: the number joins the
+    // constant, so 1/(−x² − x) gives −1/x + 1/(x + 1), not 1/(−x) + …, and x³ gives one fraction
+    // for each power. Done here, not in commonFactor, whose −x is what Factorise should show.
+    if (poly.filter((c) => !rIsZero(c)).length === 1) {
+      constant = rMul(constant, pLead(poly))
+      for (let i = 0; i < pDeg(poly); i++) bases.push(pMonomial(1))
+      continue
+    }
     if (pDeg(poly) > 2) {
       return failed(title, input, `The bottom has a factor of power ${pDeg(poly)} that I cannot break down further, so I cannot split this one.`)
     }
@@ -194,7 +212,8 @@ export function partialFractionsWorking(src: string): Working {
     else grouped.push({ base: b, power: 1 })
   }
 
-  const denTex = `${rTex(constant) === '1' ? '' : rTex(constant)}${grouped
+  const constTex = rTex(constant) === '1' ? '' : rTex(constant) === '-1' ? '-' : rTex(constant)
+  const denTex = `${constTex}${grouped
     .map((g) => (g.power === 1 ? pTexBracketed(g.base, name) : `${pTexBracketed(g.base, name)}^{${g.power}}`))
     .join('')}`
   s.goal('Break the bottom into factors').add('Factorise the bottom — that is what decides the shape of the answer.', `${pTex(D, name)} = ${denTex}`, '\\text{factorise the denominator}')

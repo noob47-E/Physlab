@@ -98,7 +98,6 @@ export const rNum = (a: Rat): number => Number(a.n) / Number(a.d)
  */
 export function rFromNumber(x: number): Rat {
   if (!Number.isFinite(x)) throw new Error('not a finite number')
-  if (Number.isInteger(x)) return rat(BigInt(x))
   const s = String(x)
   const exp = s.match(/e([+-]?\d+)$/i)
   if (exp) {
@@ -106,6 +105,7 @@ export function rFromNumber(x: number): Rat {
     const mant = rFromNumber(Number(s.slice(0, exp.index)))
     return k >= 0 ? rMul(mant, rPow(rat(10n), k)) : rDiv(mant, rPow(rat(10n), -k))
   }
+  if (Number.isSafeInteger(x)) return rat(BigInt(x))
   const dot = s.indexOf('.')
   if (dot < 0) return rat(BigInt(s))
   const places = s.length - dot - 1

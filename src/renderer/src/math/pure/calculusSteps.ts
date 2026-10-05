@@ -303,22 +303,65 @@ function ratOf(text: string | undefined): Rat | null {
   return m ? rat(BigInt(m[1]), BigInt(m[2] ?? '1')) : null
 }
 
+/** A letter for a rule chip that is never the variable: d/dn n^k, not d/dn n^n. */
+function chipLetter(v: string, prefs: string[]): string {
+  const plain = v.replace(/^\\/, '').replace(/[{}]/g, '')
+  for (const c of prefs) if (c !== v && c !== plain && c !== `\\${plain}`) return c
+  return 'c'
+}
+
+/** Greek letters as SymPy's text spells them (lamda, because lambda is a Python word); pi is a number. */
+const SYMPY_GREEK = new Set(['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lamda', 'mu', 'nu', 'xi', 'omicron', 'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'])
+
+/** The two parts named in a sum chip, never the variable: (f + g), or (p + q) when f or g is it. */
+const sumPair = (v: string): [string, string] => {
+  const plain = v.replace(/^\\/, '').replace(/[{}]/g, '')
+  return plain === 'f' || plain === 'g' ? ['p', 'q'] : ['f', 'g']
+}
+/** dy/dx = dy/du · du/dx, with y never the variable or the inside's letter (sin(y²) by y read dy/dy). */
+const chainChip = (v: string, L: string): string => {
+  const Y = chipLetter(v, ['y', 'w', 'z', 'Y'].filter((c) => c !== L))
+  return `\\frac{d${Y}}{d${v}} = \\frac{d${Y}}{d${L}}\\cdot\\frac{d${L}}{d${v}}`
+}
+const sumChipD = (v: string): string => {
+  const [P, Q] = sumPair(v)
+  return `\\frac{d}{d${v}}(${P} + ${Q}) = ${P}' + ${Q}'`
+}
+
 // ---------------------------------------------------------------------------------------------
 // Integrals
 // ---------------------------------------------------------------------------------------------
 
 /** Rules answered by one standard result: each is one line of working. */
 const INT_ATOMIC: Record<string, { head: string; chip?: (v: string, n: IntegralRule) => string | undefined }> = {
-  ConstantRule: { head: 'Integrated a constant: it is multiplied by the variable.', chip: (v) => `\\int k${d(v)} = k${v} + C` },
+  ConstantRule: {
+    head: 'Integrated a constant: it is multiplied by the variable.',
+    chip: (v) => {
+      const k = chipLetter(v, ['k', 'c'])
+      return `\\int ${k}${d(v)} = ${k}${v} + C`
+    }
+  },
   PowerRule: {
     head: 'Used the power rule: raised the power by one and divided by the new power.',
-    chip: (v) => `\\int ${v}^{n}${d(v)} = \\frac{${v}^{n+1}}{n+1} + C,\\ n \\ne -1`
+    chip: (v) => {
+      const n = chipLetter(v, ['n', 'k', 'm'])
+      return `\\int ${v}^{${n}}${d(v)} = \\frac{${v}^{${n}+1}}{${n}+1} + C,\\ ${n} \\ne -1`
+    }
   },
-  NestedPowRule: { head: 'Used the power rule.', chip: (v) => `\\int ${v}^{n}${d(v)} = \\frac{${v}^{n+1}}{n+1} + C` },
+  NestedPowRule: {
+    head: 'Used the power rule.',
+    chip: (v) => {
+      const n = chipLetter(v, ['n', 'k', 'm'])
+      return `\\int ${v}^{${n}}${d(v)} = \\frac{${v}^{${n}+1}}{${n}+1} + C`
+    }
+  },
   ExpRule: {
     head: 'Used the exponential rule.',
-    chip: (v, n) =>
-      n.base?.text === 'E' ? `\\int e^{${v}}${d(v)} = e^{${v}} + C` : `\\int a^{${v}}${d(v)} = \\frac{a^{${v}}}{\\ln a} + C`
+    chip: (v, n) => {
+      if (n.base?.text === 'E') return `\\int e^{${v}}${d(v)} = e^{${v}} + C`
+      const a = chipLetter(v, ['a', 'b', 'c'])
+      return `\\int ${a}^{${v}}${d(v)} = \\frac{${a}^{${v}}}{\\ln ${a}} + C`
+    }
   },
   ReciprocalRule: {
     head: 'Used the reciprocal rule: the integral of one over something whose derivative is 1 is the log of its size.',
@@ -337,10 +380,13 @@ const INT_ATOMIC: Record<string, { head: string; chip?: (v: string, n: IntegralR
   CoshRule: { head: 'Used the standard result for cosh.', chip: (v) => `\\int \\cosh ${v}${d(v)} = \\sinh ${v} + C` },
   ArctanRule: {
     head: 'Used the standard result for one over a sum of squares.',
-    chip: (v, n) =>
-      n.a?.text === '1' && n.b?.text === '1' && n.c?.text === '1'
-        ? `\\int \\frac{1}{1 + ${v}^{2}}${d(v)} = \\tan^{-1} ${v} + C`
-        : `\\int \\frac{1}{a^{2} + ${v}^{2}}${d(v)} = \\frac{1}{a}\\tan^{-1}\\frac{${v}}{a} + C`
+    chip: (v, n) => {
+      if (n.a?.text === '1' && n.b?.text === '1' && n.c?.text === '1') {
+        return `\\int \\frac{1}{1 + ${v}^{2}}${d(v)} = \\tan^{-1} ${v} + C`
+      }
+      const a = chipLetter(v, ['a', 'b', 'c'])
+      return `\\int \\frac{1}{${a}^{2} + ${v}^{2}}${d(v)} = \\frac{1}{${a}}\\tan^{-1}\\frac{${v}}{${a}} + C`
+    }
   },
   ArcsinRule: {
     head: 'Used the standard result for one over the square root of one minus a square.',
@@ -533,7 +579,8 @@ function explainIntegral(n: IntegralRule, s: Steps, from?: string): string {
     }
     case 'AddRule': {
       s.goal('Integrate term by term')
-      s.add('Split the integral into one integral per term.', chain(lhs, termIntegrals(n, v)), `\\int (f + g)${d(v)} = \\int f${d(v)} + \\int g${d(v)}`)
+      const [P, Q] = sumPair(v)
+      s.add('Split the integral into one integral per term.', chain(lhs, termIntegrals(n, v)), `\\int (${P} + ${Q})${d(v)} = \\int ${P}${d(v)} + \\int ${Q}${d(v)}`)
       for (const k of n.substeps ?? []) if (!simple(k)) explainIntegral(k, s)
       s.add('Added the pieces.', chain(termIntegrals(n, v), withC(shownOf(n)), withC(res)))
       return res
@@ -691,6 +738,9 @@ function definiteAnswers(def: NonNullable<IntegralTree['definite']>, digits: Dig
   if (num !== null && (!exact || !ratOf(def.value.text))) {
     rows.push({ label: exact ? 'As a decimal' : 'Answer', tex: `\\approx ${texPrecise(num, digits)}` })
   }
+  if (rows.length === 0) {
+    rows.push({ label: 'Answer', tex: '\\text{The exact value depends on the symbols, so no single number can be shown.}' })
+  }
   return rows
 }
 
@@ -756,10 +806,23 @@ export function integralWorking(tree: IntegralTree, input: string, digits: Digit
       )
     } else {
       const infinite = def.infinite ?? /^-?oo$/.test(def.value.text.trim())
+      // A value still holding an integral AND another letter is one whose answer depends on that
+      // letter (∫₁^∞ x⁻ⁿ dx is finite only for n > 1); saying the function breaks between the
+      // limits was false there. With no other letter (∫₀¹ xˣ dx) the old line stands. SymPy's
+      // text names a symbol as a bare word not followed by "(": one letter, a letter with digits
+      // or a subscript (x1, n_0), or a Greek name spelt out (theta; lambda is lamda there).
+      // E and I are its e and i; pi, oo and True are longer words that are not Greek.
+      const isSymbol = (w: string): boolean => /^[A-Za-z](?:[0-9]+|_\w+)?$/.test(w) || SYMPY_GREEK.has(w)
+      const otherLetter = (def.value.text.match(/\b[A-Za-z]\w*\b(?!\s*\()/g) ?? []).some(
+        (w) => isSymbol(w) && w !== (tree.var || 'x').replace(/^lambda$/, 'lamda') && w !== (tree.var || 'x') && w !== 'E' && w !== 'I'
+      )
+      const open = def.value.latex.includes('\\int') && otherLetter
       s.add(
         infinite
           ? 'F(b) − F(a) does not apply here: the function goes to infinity between the limits, and the area under it is infinite.'
-          : 'F(b) − F(a) does not apply here: the function breaks between the limits, so the area was worked out directly.',
+          : open
+            ? 'F(b) − F(a) gives no single value here: whether the area is a finite number depends on the letters in the question.'
+            : 'F(b) − F(a) does not apply here: the function breaks between the limits, so the area was worked out directly.',
         `${shownInput} = ${def.value.latex}`
       )
     }
@@ -797,9 +860,21 @@ function methodOf(n: IntegralRule | undefined): string | undefined {
 // ---------------------------------------------------------------------------------------------
 
 const D_FN: Record<string, { head: string; chip: (v: string) => string }> = {
-  power: { head: 'Used the power rule: brought the power down and lowered it by one.', chip: (v) => `\\frac{d}{d${v}}${v}^{n} = n${v}^{n-1}` },
+  power: {
+    head: 'Used the power rule: brought the power down and lowered it by one.',
+    chip: (v) => {
+      const n = chipLetter(v, ['n', 'k', 'm'])
+      return `\\frac{d}{d${v}}${v}^{${n}} = ${n}${v}^{${n}-1}`
+    }
+  },
   exp: { head: 'Used the exponential rule: eˣ is its own derivative.', chip: (v) => `\\frac{d}{d${v}}e^{${v}} = e^{${v}}` },
-  exp_base: { head: 'Used the rule for a number raised to a power.', chip: (v) => `\\frac{d}{d${v}}a^{${v}} = a^{${v}}\\ln a` },
+  exp_base: {
+    head: 'Used the rule for a number raised to a power.',
+    chip: (v) => {
+      const a = chipLetter(v, ['a', 'b', 'c'])
+      return `\\frac{d}{d${v}}${a}^{${v}} = ${a}^{${v}}\\ln ${a}`
+    }
+  },
   log: { head: 'Used the rule for the natural log.', chip: (v) => `\\frac{d}{d${v}}\\ln ${v} = \\frac{1}{${v}}` },
   sin: { head: 'Used the derivative of sine.', chip: (v) => `\\frac{d}{d${v}}\\sin ${v} = \\cos ${v}` },
   cos: { head: 'Used the derivative of cosine.', chip: (v) => `\\frac{d}{d${v}}\\cos ${v} = -\\sin ${v}` },
@@ -814,7 +889,13 @@ const D_FN: Record<string, { head: string; chip: (v: string) => string }> = {
   sinh: { head: 'Used the derivative of sinh.', chip: (v) => `\\frac{d}{d${v}}\\sinh ${v} = \\cosh ${v}` },
   cosh: { head: 'Used the derivative of cosh.', chip: (v) => `\\frac{d}{d${v}}\\cosh ${v} = \\sinh ${v}` },
   tanh: { head: 'Used the derivative of tanh.', chip: (v) => `\\frac{d}{d${v}}\\tanh ${v} = \\operatorname{sech}^{2} ${v}` },
-  constant: { head: 'A constant does not change, so its derivative is 0.', chip: (v) => `\\frac{d}{d${v}}k = 0` },
+  constant: {
+    head: 'A constant does not change, so its derivative is 0.',
+    chip: (v) => {
+      const k = chipLetter(v, ['k', 'c'])
+      return `\\frac{d}{d${v}}${k} = 0`
+    }
+  },
   x: { head: 'The derivative of the variable itself is 1.', chip: (v) => `\\frac{d}{d${v}}${v} = 1` }
 }
 
@@ -837,7 +918,7 @@ function dChip(n: DerivRule, v: string): string | undefined {
   if (n.rule === 'constant_multiple' && n.substeps?.[0]) return dChip(n.substeps[0], v)
   if (n.rule === 'sum') {
     const chips = new Set((n.substeps ?? []).filter((k) => k.rule !== 'constant').map((k) => dChip(k, v)))
-    return chips.size === 1 ? [...chips][0] : `\\frac{d}{d${v}}(f + g) = f' + g'`
+    return chips.size === 1 ? [...chips][0] : sumChipD(v)
   }
   return undefined
 }
@@ -873,7 +954,7 @@ function dShown(n: DerivRule): string {
  * question already uses one of them (f x sin x, or g² sin g differentiated by g) or a chain rule in
  * the same working has taken it; "f = x" beside a constant f gave f two meanings at once (GLM #23).
  */
-export function factorNames(tree: DerivTree): [string, string] {
+function factorTaken(tree: DerivTree): Set<string> {
   // SymPy's own text of the question: a name not followed by "(" is a letter, not a function.
   const taken = new Set([tree.var, ...(tree.expr.text.match(/[A-Za-z_][A-Za-z0-9_]*(?![A-Za-z0-9_]*\s*\()/g) ?? [])])
   const walk = (n: DerivRule | undefined): void => {
@@ -882,6 +963,12 @@ export function factorNames(tree: DerivTree): [string, string] {
     n.substeps?.forEach(walk)
   }
   walk(tree.tree)
+  return taken
+}
+
+/** The first pair the question has not used, for one product or quotient rule. */
+export function factorNames(tree: DerivTree): [string, string] {
+  const taken = factorTaken(tree)
   const pairs: [string, string][] = [
     ['f', 'g'],
     ['u', 'v'],
@@ -891,7 +978,41 @@ export function factorNames(tree: DerivTree): [string, string] {
   return pairs.find(([a, b]) => !taken.has(a) && !taken.has(b)) ?? ['F', 'G']
 }
 
-function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [string, string] = ['f', 'g']): string {
+/** A fresh pair for every product or quotient in one working, so f in one line never changes meaning. */
+export function factorNamePairs(tree: DerivTree): () => [string, string] {
+  const taken = factorTaken(tree)
+  const pairs: [string, string][] = [
+    ['f', 'g'],
+    ['u', 'v'],
+    ['p', 'q'],
+    ['h', 'k']
+  ]
+  let next = 0
+  let fallback = 1
+  return () => {
+    for (let i = 0; i < pairs.length; i++) {
+      const [a, b] = pairs[(next + i) % pairs.length]
+      if (!taken.has(a) && !taken.has(b)) {
+        taken.add(a)
+        taken.add(b)
+        next = (next + i + 1) % pairs.length
+        return [a, b]
+      }
+    }
+    const a = `F_{${fallback}}`
+    const b = `G_{${fallback}}`
+    fallback += 1
+    return [a, b]
+  }
+}
+
+function explainDerivative(
+  n: DerivRule,
+  v: string,
+  U: string,
+  s: Steps,
+  fg: [string, string] | (() => [string, string]) = ['f', 'g']
+): string {
   const f = n.expr.latex
   const res = n.result.latex
   if (dSimple(n)) {
@@ -904,7 +1025,8 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [st
       const k = kids[0]
       const c = lat(n.constant)
       const inner = explainDerivative(k, v, U, s, fg)
-      s.add('Multiplied by the constant.', chain(dd(v, f), `${c === '-1' ? '-' : c}${dd(v, k.expr.latex)}`, scale(c, inner), res), `\\frac{d}{d${v}}(kf) = k\\frac{df}{d${v}}`)
+      const [K, P] = [chipLetter(v, ['k', 'c', 'a']), chipLetter(v, ['f', 'p', 'h'])]
+      s.add('Multiplied by the constant.', chain(dd(v, f), `${c === '-1' ? '-' : c}${dd(v, k.expr.latex)}`, scale(c, inner), res), `\\frac{d}{d${v}}(${K}${P}) = ${K}\\frac{d${P}}{d${v}}`)
       return res
     }
     case 'sum': {
@@ -913,7 +1035,7 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [st
       // The terms side by side first; when they combine ((1 + ln x) − 1) the working-out is its
       // own line, so the answer is never left as an unfinished sum.
       const termwise = n.shown?.latex ?? res
-      s.add('Differentiated term by term and added.', chain(dd(v, f), termwise), `\\frac{d}{d${v}}(f + g) = f' + g'`)
+      s.add('Differentiated term by term and added.', chain(dd(v, f), termwise), sumChipD(v))
       if (!same(termwise, res)) s.add('Tidied the answer.', chain(termwise, res))
       return res
     }
@@ -921,8 +1043,8 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [st
       const [a, b] = kids
       if (!a || !b) throw new Unexplained()
       s.goal('Product rule')
-      for (const k of kids) if (!dSimple(k) && k.rule !== 'sum') explainDerivative(k, v, U, s, fg)
-      const [F, G] = fg
+      for (const k of kids) if (!dSimple(k)) explainDerivative(k, v, U, s, fg)
+      const [F, G] = typeof fg === 'function' ? fg() : fg
       s.add(
         `Named the two factors ${F} and ${G} and differentiated each.`,
         `${F} = ${a.expr.latex},\\quad ${F}' = ${a.result.latex},\\qquad ${G} = ${b.expr.latex},\\quad ${G}' = ${b.result.latex}`
@@ -934,8 +1056,8 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [st
       const [top, bottom] = kids
       if (!top || !bottom) throw new Unexplained()
       s.goal('Quotient rule')
-      for (const k of kids) if (!dSimple(k) && k.rule !== 'sum') explainDerivative(k, v, U, s, fg)
-      const [F, G] = fg
+      for (const k of kids) if (!dSimple(k)) explainDerivative(k, v, U, s, fg)
+      const [F, G] = typeof fg === 'function' ? fg() : fg
       s.add(
         `Named the top ${F} and the bottom ${G} and differentiated each.`,
         `${F} = ${top.expr.latex},\\quad ${F}' = ${top.result.latex},\\qquad ${G} = ${bottom.expr.latex},\\quad ${G}' = ${bottom.result.latex}`
@@ -967,7 +1089,7 @@ function explainDerivative(n: DerivRule, v: string, U: string, s: Steps, fg: [st
         // Always outside′ · inside′ with the dot, in that order, so the rule is visible in the
         // line before it is tidied: cos(3x²) · 6x = 6x cos(3x²). A factor of 1 is not written.
         chain(dd(v, f), same(inner.result.latex, '1') ? lat(n.outer_at_inner) : `${br(lat(n.outer_at_inner))} \\cdot ${br(inner.result.latex)}`, res),
-        `\\frac{dy}{d${v}} = \\frac{dy}{d${L}}\\cdot\\frac{d${L}}{d${v}}`
+        chainChip(v, L)
       )
       return res
     }
@@ -986,7 +1108,7 @@ export function derivativeWorking(tree: DerivTree, input: string): Working {
   const s = new Steps()
   try {
     if (tree.unsupported || !tree.tree) throw new Unexplained()
-    explainDerivative(tree.tree, v, tree.u || 'u', s, factorNames(tree))
+    explainDerivative(tree.tree, v, tree.u || 'u', s, factorNamePairs(tree))
   } catch (e) {
     if (!(e instanceof Unexplained)) throw e
     return answerOnly(title, shownInput, tree.answer_latex, `${NO_STEPS}${radians}`, tree.checked)

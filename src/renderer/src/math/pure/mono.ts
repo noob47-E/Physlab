@@ -83,14 +83,34 @@ export function mulTerm(a: Term, b: Term): Term {
   return { c: rMul(a.c, b.c), v }
 }
 
+/**
+ * The size limits of exact working, which runs on the renderer's own thread. A power is built one
+ * multiplication at a time, so x^1000000000 froze the window and Factorise on x^300000 + x never
+ * came back: with one letter every tool answers a power of 1000 well inside a second, and no
+ * school question comes near it. With several letters the size is the number of terms, not the
+ * power — (x + y + z)^300 has 45 451 terms and took 24 s, and (x + y + z)^30 times (a + b + c)^30
+ * never came back — so every product stops past MAX_TERMS. A product whose term count could reach
+ * MAX_PAIRS is refused before it is worked out, since working it out is the slow part.
+ */
+export const MAX_POWER = 1000
+export const MAX_TERMS = 2000
+const MAX_PAIRS = 100_000
+const TOO_MANY_TERMS = `Multiplied out, this has more than ${MAX_TERMS} terms — too many to show. Try smaller powers.`
+
 export function eMul(a: Expr, b: Expr): Expr {
+  // Said as "too big to work out", not "too many terms": (x + 1)^320 (x − 1)^320 trips this with
+  // only 321 terms in its answer.
+  if (a.length * b.length > MAX_PAIRS) throw new NotPolynomial('That is too big to multiply out exactly here. Try smaller powers.')
   const out: Term[] = []
   for (const x of a) for (const y of b) out.push(mulTerm(x, y))
-  return normalize(out)
+  const product = normalize(out)
+  if (product.length > MAX_TERMS) throw new NotPolynomial(TOO_MANY_TERMS)
+  return product
 }
 
 export function ePow(a: Expr, k: number): Expr {
-  if (k < 0) throw new NotPolynomial('A negative power turns this into a fraction, which is not something I can factorise.')
+  if (k < 0) throw new NotPolynomial('A negative power turns this into a fraction, which I cannot work with in exact working.')
+  if (k > MAX_POWER) throw new NotPolynomial(`That power is too big to work out exactly here. Powers up to ${MAX_POWER} work.`)
   let out = constExpr(R1)
   for (let i = 0; i < k; i++) out = eMul(out, a)
   return out
@@ -241,12 +261,46 @@ function fromNode(node: MathNode): Expr {
  * front of a bracket gets its × written in; a letter inside a longer name (the n of sin) does not.
  */
 const IMPLICIT_CALL = /(?<![A-Za-z_])([A-Za-z](?:\^\d+)?)\s*\(/g
-export const writeTimes = (text: string): string => text.replace(IMPLICIT_CALL, '$1*(')
+
+/**
+ * mathjs reads a run of adjacent letters like `ab` as one symbol named "ab". Pure Math variables
+ * are single letters, so `ab` must be split into `a*b` before parsing. Known mathjs names (sin,
+ * sqrt, pi, e, Infinity, …) are left alone so `sin(x)` still reaches the FunctionNode refusal and
+ * `pi` is still refused instead of becoming p·i. A Greek letter's name is one letter too: preprocess
+ * turns θ into `theta` and varTex prints it back as \theta, so it must never become t·h·e·t·a —
+ * not even inside a longer run, where 2aθ arrives as `2atheta` and means 2·a·θ.
+ */
+const GREEK = new Set(['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'omicron', 'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'])
+const knownMathName = (name: string): boolean =>
+  name === 'pi' || name === 'e' || name === 'Infinity' || GREEK.has(name) || (math as unknown as Record<string, unknown>)[name] !== undefined
+
+export const writeTimes = (text: string): string => {
+  const splitLetters = text.replace(/[A-Za-z]+/g, (run) => {
+    if (run.length === 1 || knownMathName(run)) return run
+    return run
+      .split(/(theta)/)
+      .flatMap((part) => (part === 'theta' ? [part] : part.split('')))
+      .join('*')
+  })
+  return splitLetters.replace(IMPLICIT_CALL, '$1*(')
+}
+
+/**
+ * True when a typed number has more significant digits than a double holds (15 always survive).
+ * mathjs reads every number as a double before fromNode sees it, so 12345678901234567890 had
+ * already become …567168 and was factorised with a confident tick. Leading and trailing zeros
+ * do not count: 10^20 written out in full is exact.
+ */
+const tooManyDigits = (text: string): boolean =>
+  (text.match(/\d+(?:\.\d+)?|\.\d+/g) ?? []).some((n) => n.replace('.', '').replace(/^0+/, '').replace(/0+$/, '').length > 15)
 
 /** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */
 function readNode(src: string): MathNode {
   const text = src.trim()
   if (!text) throw new NotPolynomial('Nothing to work on yet — type an expression first.')
+  if (tooManyDigits(preprocess(text))) {
+    throw new NotPolynomial('A number here has more digits than I can keep exactly. Use at most 15 significant figures in each number.')
+  }
   try {
     return math.parse(writeTimes(preprocess(text)))
   } catch {

@@ -34,7 +34,7 @@ function readGroup(s: string, open: number): { body: string; end: number } | nul
   return null
 }
 
-const FRAC = /\\[dt]?frac\s*\{/
+const FRAC = /\\dfrac\s*\{/
 
 /**
  * Split a displayed sum into its signed terms. Returns null when the string is not the simple
@@ -45,10 +45,16 @@ export function splitDisplayedSum(latex: string): DisplayedTerm[] | null {
   let rest = latex.trim()
   let sign: 1 | -1 = 1
 
-  // A leading minus applies to the first term.
+  // A leading minus belongs to the first whole-part expression, unless it is a sign on the first
+  // fraction. Splitting "−x + 3" as minus the whole sum "(x + 3)" was the old bug; only a signed
+  // \dfrac term is carried as a sign.
   if (rest.startsWith('-')) {
-    sign = -1
-    rest = rest.slice(1).trim()
+    const after = rest.slice(1).trimStart()
+    const lead = FRAC.exec(after)
+    if (lead && lead.index === 0) {
+      sign = -1
+      rest = after
+    }
   }
 
   let guard = 0

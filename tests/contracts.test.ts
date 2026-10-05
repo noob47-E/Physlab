@@ -263,7 +263,8 @@ describe('reading a displayed answer back', () => {
 // A timeout on each of these so a lost ceiling FAILS the suite instead of hanging it.
 describe('searches stop instead of freezing the window', () => {
   it('a huge discriminant still answers', { timeout: 4000 }, () => {
-    const w = runPure('solve', 'x^2 + x + 1000000000000000003 = 0')
+    // 15 digits: a longer number loses digits before Pure Maths sees it and is refused (P-FIX-PURE U2).
+    const w = runPure('solve', 'x^2 + x + 999999999999989 = 0')
     expect(w.error).toBeUndefined()
     expect(w.answers.length).toBeGreaterThan(0)
   })

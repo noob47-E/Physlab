@@ -109,7 +109,7 @@ export function divideWorking(src: string): Working {
   let step = 0
 
   while (!pIsZero(rem) && pDeg(rem) >= pDeg(b)) {
-    if (step++ > 64) break
+    if (step++ > 200) break
     const shift = pDeg(rem) - pDeg(b)
     const factor = rDiv(pLead(rem), pLead(b))
     quotient[shift] = factor
@@ -145,6 +145,12 @@ export function divideWorking(src: string): Working {
     rows.push(row(product, topDeg, name, '-'))
     rows.push(row(next, topDeg, name, ''))
     rem = next
+  }
+
+  // Refused only when the loop stopped with dividing still to do: (x^201 − 1)/(x − 1) finishes on
+  // exactly the last allowed step and is a full, exact answer.
+  if (!pIsZero(rem) && pDeg(rem) >= pDeg(b)) {
+    return failed(title, input, 'The division needs too many steps to show here step by step.')
   }
 
   const q = pTrim(quotient)

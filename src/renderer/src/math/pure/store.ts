@@ -320,6 +320,15 @@ const isLetter = (named: string): boolean => /^[A-Za-z]$/.test(named) || WHOLE_N
 const pySpelling = (s: string): string => s.replace(/\blambda\b/g, 'lamda')
 
 /**
+ * Infinity as the worker reads it. The Maths field turns ∞ into mathjs's `Infinity`, a name the
+ * worker does not know, so its parser split it into the letters I·n·f·i·n·i·t·y (i being √−1) and
+ * ∫₀^∞ e^(−x) dx came back as 1 − e^(i f n² t y). SymPy spells infinity `oo`. Applied only to what
+ * is sent, never inside forSymPy: calculusVariable would read `oo` as the letter o.
+ */
+const infinityForSymPy = (s: string): string => s.replace(/\bInfinity\b|∞/g, 'oo')
+const boundForSymPy = (s: string): string => infinityForSymPy(pySpelling(forSymPy(s)))
+
+/**
  * The typed line as the worker's payload: "x e^x", "x^2, 0, 2" (limits), "t^2, t" (a letter),
  * "t^2, t, 0, 1". The keys are the ones `integral_steps` / `diff_steps` read in cas.worker.ts,
  * pinned by the fixtures recorded from them. `deg` goes only with trigonometry, because the
@@ -341,10 +350,10 @@ function stepsRequest(
   if (!expr || !lengthOk || (named !== undefined && !isLetter(named))) return { error: shapeSentence(job) }
   const v = named ?? calculusVariable(expr)
   const trig = calculusUnitNote(job === 'integrate' ? 'integrate' : 'diff', expr, deg) !== null
-  const payload: Record<string, unknown> = { expr: pySpelling(expr), var: pySpelling(v), deg: trig }
+  const payload: Record<string, unknown> = { expr: infinityForSymPy(pySpelling(expr)), var: pySpelling(v), deg: trig }
   if (limits) {
-    payload.lower = limits[0]
-    payload.upper = limits[1]
+    payload.lower = boundForSymPy(limits[0])
+    payload.upper = boundForSymPy(limits[1])
   }
   return { op: job === 'integrate' ? 'integral_steps' : 'diff_steps', payload }
 }

@@ -294,6 +294,8 @@ function ratio(v: number): [number, number] {
 }
 
 function linParts(a: Lin): { top: string; topTex: string; den: number; single: boolean } {
+  // A zero angle is a number, not an empty argument: cos 0, never cos().
+  if (a.length === 0) return { top: '0', topTex: '0', den: 1, single: true }
   // With π in it, each term is written on its own, in the order given (a positive one first):
   // π/2 − x, x − π/2, 3π/2 + x, cos π.
   if (a.some(([v]) => v === 'π')) {

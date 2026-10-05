@@ -8,7 +8,7 @@
 // beyond the table's own rounding would mean one of them is wrong.
 
 import { phi, phiInv } from './normal'
-import { fmtPrecise, texPrecise } from '../format'
+import { fmtPrecise, texPrecise, roundHalfAway } from '../format'
 
 /** How many decimal places the table prints. Every school table this project has seen uses 4. */
 export const PLACES = 4
@@ -39,7 +39,7 @@ export function paddedTex(v: number, places: number): string {
 
 /** Round to a number of places, the way the printer of the table did. */
 export const toPlaces = (v: number, places = PLACES): number => {
-  const r = Math.round(v * 10 ** places) / 10 ** places
+  const r = roundHalfAway(v, places)
   return r === 0 ? 0 : r
 }
 

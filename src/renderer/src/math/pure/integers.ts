@@ -135,6 +135,7 @@ export function factoriseNumberWorking(input: bigint): Working {
 interface Pairing {
   primes: bigint[]
   rows: { n: bigint; powers: number[] }[]
+  tooBig?: boolean
 }
 
 function lineUp(ns: bigint[]): Pairing {
@@ -146,7 +147,7 @@ function lineUp(ns: bigint[]): Pairing {
     n: ns[i],
     powers: primes.map((p) => f.factors.find(([q]) => q === p)?.[1] ?? 0)
   }))
-  return { primes, rows }
+  return { primes, rows, tooBig: each.some((f) => f.tooBig) }
 }
 
 /** A table of each number's prime powers, with a row per number. */
@@ -166,6 +167,7 @@ export function hcfWorking(ns: bigint[]): Working {
   if (ns.some((n) => n === 0n)) return failed(title, tex, 'Leave zero out — every number divides it, so the HCF is just the other number.')
   const pos = ns.map((n) => (n < 0n ? -n : n))
   const pair = lineUp(pos)
+  if (pair.tooBig) return failed(title, tex, 'Some of these numbers are too large for me to split all the way down. Try numbers below about 10¹⁴.')
   const s = new Steps()
 
   s.goal('Break each number into primes').add('Write each number as a product of primes.', tableTex(pair), '\\text{HCF} = \\text{common primes, lowest index}')
@@ -223,6 +225,7 @@ export function lcmWorking(ns: bigint[]): Working {
   if (ns.some((n) => n === 0n)) return failed(title, tex, 'Zero has no multiples to share, so leave it out.')
   const pos = ns.map((n) => (n < 0n ? -n : n))
   const pair = lineUp(pos)
+  if (pair.tooBig) return failed(title, tex, 'Some of these numbers are too large for me to split all the way down. Try numbers below about 10¹⁴.')
   const s = new Steps()
 
   s.goal('Break each number into primes').add('Write each number as a product of primes.', tableTex(pair), '\\text{LCM} = \\text{every prime, highest index}')

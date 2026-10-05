@@ -209,23 +209,27 @@ function bySubstitution(e: Expr, ctx: Ctx, pending: Expr[]): { parts: Expr[]; na
   const uFactors: Poly[] = roots.map((r) => pTrim([rNeg(rat(r.n)), rat(r.d)]))
   const content = rDiv(a, rat(roots[0].d * roots[1].d))
   const inU = pTrim([c, b, a])
+  // The new letter must be one the student cannot already see: u⁴ + 5u² + 4 needs v, and in
+  // u(v⁴ + 5v² + 4) the u taken out at the front is still on every line, so it needs w.
+  const onScreen = new Set([e, ...ctx.done, ...pending, ...(ctx.after ?? [])].flatMap((x) => varsOf(x)))
+  const sub = ['u', 'v', 'w', 't', 's'].find((l) => !onScreen.has(l)) ?? 'u'
 
   // The power is braced because texToPlain reads `^` the way LaTeX does, one digit at a time:
   // x^10 came out as "x¹0" in the heading and both sentences for x²⁰ + 5x¹⁰ + 4.
   ctx.s.goal(`Substitute for ${name}^{${k}}`).add(
-    `This is a quadratic in disguise: the powers are ${deg}, ${k} and 0. Write u = ${name}^{${k}} and it becomes a quadratic in u.`,
-    `u = ${name}^{${k}} \\;\\Rightarrow\\; ${pTex(inU, 'u')}`,
-    `\\text{substitute } u = ${name}^{${k}}`
+    `This is a quadratic in disguise: the powers are ${deg}, ${k} and 0. Write ${sub} = ${name}^{${k}} and it becomes a quadratic in ${sub}.`,
+    `${sub} = ${name}^{${k}} \\;\\Rightarrow\\; ${pTex(inU, sub)}`,
+    `\\text{substitute } ${sub} = ${name}^{${k}}`
   )
-  const uBrackets = `${rIsOne(content) ? '' : rTex(content)}${uFactors.map((f) => pTexBracketed(f, 'u')).join('')}`
+  const uBrackets = `${rIsOne(content) ? '' : rTex(content)}${uFactors.map((f) => pTexBracketed(f, sub)).join('')}`
   ctx.s.add(
-    `Factorise the quadratic in u. Its roots are u = ${texToPlain(rTex(roots[0]))} and u = ${texToPlain(rTex(roots[1]))}.`,
-    `${pTex(inU, 'u')} = ${uBrackets}`,
-    'a u^2 + b u + c = a(u - u_1)(u - u_2)'
+    `Factorise the quadratic in ${sub}. Its roots are ${sub} = ${texToPlain(rTex(roots[0]))} and ${sub} = ${texToPlain(rTex(roots[1]))}.`,
+    `${pTex(inU, sub)} = ${uBrackets}`,
+    `a ${sub}^2 + b ${sub} + c = a(${sub} - ${sub}_1)(${sub} - ${sub}_2)`
   )
   const parts = uFactors.map((f) => exprFromPoly([f[0], ...new Array(k - 1).fill(rat(0n)), f[1]], name))
   if (!rIsOne(content)) parts.unshift(constExpr(content))
-  ctx.s.add(`Put ${name}^{${k}} back in place of u.`, snapshot(ctx, [...pending, ...parts]))
+  ctx.s.add(`Put ${name}^{${k}} back in place of ${sub}.`, snapshot(ctx, [...pending, ...parts]))
   return { parts, name, k }
 }
 
