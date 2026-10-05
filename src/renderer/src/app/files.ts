@@ -145,10 +145,15 @@ export async function saveTextFile(content: string, defaultName: string, filterN
   if (api?.saveText) return api.saveText(content, defaultName, filterName, ext)
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
+  const href = URL.createObjectURL(blob)
+  a.href = href
   a.download = defaultName
+  document.body.appendChild(a)
   a.click()
+  a.remove()
+  // Let the browser start the download before revoking the object URL: Safari can cancel the
+  // download when the URL is revoked in the same tick.
+  setTimeout(() => URL.revokeObjectURL(href), 0)
   // The browser hands the file to the download folder, so there is no path to report back.
-  URL.revokeObjectURL(a.href)
   return 'download'
 }

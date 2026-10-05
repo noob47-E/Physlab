@@ -1,42 +1,41 @@
 import { RotateCcw, X } from 'lucide-react'
-import { clearAutosave, describeWork, useRecovery } from './autosave'
-import { scene, useScene } from '../core/store'
+import { MAX_COPIES, describeWork, discardRecovery, restoreRecovery, useRecovery } from './autosave'
+import { blankSceneFile, useScene } from '../core/store'
+import { HIDDEN_MODES } from './modes'
 
-/** "Restore your last work" strip, shown when the app finds unsaved work from a previous run. */
+/** "Restore your last work" strip, shown while a copy of unsaved work is waiting. */
 export function RecoveryBar() {
   const found = useRecovery((s) => s.found)
-  const set = useRecovery((s) => s.set)
+  const waiting = useRecovery((s) => s.waiting.length)
+  const dirty = useScene((s) => s.dirty)
   if (!found) return null
   const when = new Date(found.savedAt)
   const name = found.path ? found.path.split(/[\\/]/).pop() : 'untitled'
   // Only what differs from a new file is named; a title typed into an empty table, say, has
   // nothing to count, and then the time alone has to do.
-  const what = describeWork(found.file)
+  const what = describeWork(found.file, blankSceneFile(), HIDDEN_MODES.has('author'))
+  const details = `(${what ? `${what}, ` : ''}${when.toLocaleString()})`
   return (
     <div className="flex items-center gap-3 border-b border-warn/40 bg-warn/10 px-3 py-1.5 text-ink">
       <RotateCcw size={14} />
       <span className="flex-1">
-        PhysLab closed with unsaved work in <b>{name}</b> ({what ? `${what}, ` : ''}{when.toLocaleString()}).
+        {found.setAside ? (
+          <>
+            Your work from before the restore, in <b>{name}</b> {details}, is kept here.
+          </>
+        ) : (
+          <>
+            PhysLab closed with unsaved work in <b>{name}</b> {details}.
+          </>
+        )}
+        {' '}It stays until you restore or discard it (PhysLab keeps the newest {MAX_COPIES} copies)
+        {dirty ? '; restoring keeps what you have done since as another copy' : ''}.
+        {waiting ? ` ${waiting} more ${waiting === 1 ? 'copy' : 'copies'} after this one.` : ''}
       </span>
-      <button
-        className="btn h-6 primary"
-        onClick={() => {
-          scene().loadScene(found.file, found.path ?? null)
-          // Restored work is still unsaved work: keep protecting it until the student saves.
-          useScene.setState({ dirty: true })
-          set(null)
-        }}
-      >
+      <button className="btn h-6 primary" onClick={restoreRecovery}>
         Restore it
       </button>
-      <button
-        className="btn h-6"
-        onClick={() => {
-          set(null)
-          void clearAutosave()
-        }}
-        title="Throw the recovered copy away"
-      >
+      <button className="btn h-6" onClick={discardRecovery} title="Throw this copy away">
         <X size={12} /> Discard
       </button>
     </div>
