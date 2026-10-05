@@ -9,6 +9,7 @@
 
 import { statistics } from '../calc/engine'
 import { compileScalar } from '../math/expr'
+import { roundHalfAway, superscriptPowers, toExponentialHalfAway, toFixedHalfAway } from '../math/format'
 import type { FitShape } from './types'
 
 export interface Fit {
@@ -70,8 +71,12 @@ export function fitOf(xs: number[], ys: number[], shape: FitShape): Fit | null {
   const ssTot = ys.reduce((a, y) => a + (y - meanY) ** 2, 0)
   const ssRes = residuals.reduce((a, e) => a + e * e, 0)
   // Readings that are all the same have no spread to explain; call that a perfect fit only if the
-  // curve passes through them.
-  const r2 = ssTot < 1e-12 ? (ssRes < 1e-12 ? 1 : 0) : 1 - ssRes / ssTot
+  // curve passes through them. "No spread" means spread at the level of rounding in the numbers
+  // themselves, so values like 1e-7 are not all zero just because they are small, and readings of
+  // 1000000.000, .001, .0021 still have a spread to fit.
+  const yScale = ys.reduce((a, y) => Math.max(a, Math.abs(y)), 0)
+  const noise = Math.max(ys.length * (yScale * 1e-13) ** 2, Number.MIN_VALUE)
+  const r2 = ssTot <= noise ? (ssRes <= noise ? 1 : 0) : 1 - ssRes / ssTot
 
   const fit: Fit = { shape, label: label ?? shape, expr, coef, r2, predict, residuals }
 
@@ -94,18 +99,85 @@ export function rankFits(xs: number[], ys: number[]): Fit[] {
     .sort((a, b) => b.r2 - a.r2)
 }
 
+/** r² at or above this is a good fit: the shape follows the readings. */
+export const FIT_GOOD = 0.9
+/** At or above this the readings sit very close to the shape, and no other is worth offering. */
+export const FIT_CLOSE = 0.98
+/** Below this even the best shape does not follow the readings: nothing is worth naming. */
+export const FIT_FAIR = 0.7
+/** A good shape must beat the one in use by this much to be offered at all… */
+const WORTH_IT = 0.02
+/** …and by this much to be called "much better", or to be offered when it is only fair. */
+const MUCH_BETTER = 0.1
+
+/** What to tell the student about the shape they have chosen. */
+export type FitAdvice =
+  | { kind: 'none' }
+  /** Another shape fits better; `good` says whether it fits well, or only better. */
+  | { kind: 'better'; best: Fit; current: number | null; much: boolean; good: boolean }
+  /** No shape follows the readings: likely more than one bounce or swing in the table. */
+  | { kind: 'noShape'; best: Fit }
+
 /**
  * Whether another shape is worth suggesting over the one in use. A small improvement is not worth
- * pulling a student away from the straight line their practical was designed around, so the other
- * shape has to be clearly better and genuinely good.
+ * pulling a student away from the straight line their practical was designed around, so a good
+ * shape has to win by 0.02. A shape that is better but not good (r² 0.7–0.9) is still named when
+ * the one in use is poor and it wins by 0.1 — before, nothing under 0.9 was ever named and the
+ * student was left with "try another shape". When even the best is under 0.7 no shape is the
+ * answer, and saying so is more use than naming one.
  */
+export function fitAdvice(current: Fit | null, ranked: Fit[]): FitAdvice {
+  const now = current ? current.r2 : null
+  if (now !== null && now >= FIT_CLOSE) return { kind: 'none' }
+  // A shape with as many constants as there are readings passes through every point whatever
+  // they are (a parabola through any 3), so its perfect r² says nothing and is never offered.
+  const tells = (f: Fit): boolean => !f.residuals || !f.coef || f.residuals.length > Object.keys(f.coef).length
+  const best = ranked.find((f) => f.shape !== current?.shape && tells(f))
+  const top = Math.max(now ?? -Infinity, best?.r2 ?? -Infinity)
+  if (top < FIT_FAIR) {
+    const closest = ranked.find(tells) ?? current
+    return closest ? { kind: 'noShape', best: closest } : { kind: 'none' }
+  }
+  if (!best) return { kind: 'none' }
+  const gain = now === null ? Infinity : best.r2 - now
+  const much = gain >= MUCH_BETTER
+  if (best.r2 >= FIT_GOOD && gain >= WORTH_IT) return { kind: 'better', best, current: now, much, good: true }
+  if (best.r2 >= FIT_FAIR && much && (now === null || now < FIT_GOOD)) return { kind: 'better', best, current: now, much, good: false }
+  return { kind: 'none' }
+}
+
+/** Another shape to offer over the one in use, or null. */
 export function betterFit(current: Fit | null, ranked: Fit[]): Fit | null {
   if (!current) return null
-  const best = ranked.find((f) => f.shape !== current.shape)
-  if (!best) return null
-  if (best.r2 < 0.9) return null
-  if (best.r2 - current.r2 < 0.02) return null
-  return best
+  const advice = fitAdvice(current, ranked)
+  return advice.kind === 'better' ? advice.best : null
+}
+
+const SHAPE_NAMES: Record<FitShape, string> = {
+  linear: 'A straight line',
+  quadratic: 'A parabola',
+  log: 'A logarithm curve',
+  exp: 'An exponential curve',
+  power: 'A power curve',
+  inverse: 'An inverse curve'
+}
+
+/** r² as the advice writes it: two places, half away; a fit worse than a flat line reads 0. */
+const r2Text = (r2: number): string => toFixedHalfAway(Math.max(0, r2), 2)
+
+/** The advice in plain English, for the line under the fit. Empty when there is nothing to say. */
+export function adviceText(advice: FitAdvice): string {
+  if (advice.kind === 'none') return ''
+  if (advice.kind === 'noShape') {
+    return (
+      `No shape fits these readings well (the closest reaches r² ${r2Text(advice.best.r2)}). ` +
+      'If they cover more than one bounce or swing, keep only the rows from one bounce and fit those.'
+    )
+  }
+  const name = SHAPE_NAMES[advice.best.shape]
+  const score = advice.current === null ? `r² ${r2Text(advice.best.r2)}` : `r² ${r2Text(advice.best.r2)} vs ${r2Text(advice.current)}`
+  const verdict = advice.current === null ? `${name} fits these readings: ${score}` : `${name} fits ${advice.much ? 'much ' : ''}better: ${score}`
+  return advice.good ? `${verdict}.` : `${verdict} — but not closely, so check the readings for a mistake.`
 }
 
 /** What a gradient usually means when these two quantities are plotted against each other. */
@@ -131,13 +203,26 @@ export function gradientMeaning(yName: string, xName: string): string | null {
 export function pmText(value: number, error: number | undefined): string {
   // Readings that lie exactly on the line leave a standard error of about 1e-16, which is
   // arithmetic noise rather than a measurement: writing "± 0.0000000000000002" would be nonsense.
+  // Rounding goes through math/format.ts: the built-ins round the binary double, so 2.675 read 2.67.
   if (error === undefined || !Number.isFinite(error) || error <= 0 || error < Math.abs(value) * 1e-9) {
-    return Number.isFinite(value) ? String(Number(value.toPrecision(6))).replace('-', '−') : '—'
+    return Number.isFinite(value) ? sixFigures(value) : '—'
   }
-  const rounded = Number(error.toPrecision(1))
+  const rounded = roundHalfAway(error, 1, 'sf')
   const places = Math.max(0, -Math.floor(Math.log10(rounded)))
-  const show = (v: number) => v.toFixed(places).replace('-', '−')
+  const show = (v: number) => toFixedHalfAway(v, places).replace('-', '−')
   return `${show(value)} ± ${show(rounded)}`
+}
+
+/**
+ * Six significant figures with the zeros trimmed (3 reads 3, not 3.00000). Outside the range plain
+ * digits read well in, a raised power of ten: String() would have written "1.6e-19".
+ */
+function sixFigures(value: number): string {
+  const r = roundHalfAway(value, 6, 'sf')
+  const size = Math.abs(r)
+  if (size === 0 || (size >= 1e-4 && size < 1e9)) return String(r).replace('-', '−')
+  const [m, e] = toExponentialHalfAway(value, 5).split('e')
+  return superscriptPowers(`${m.replace(/\.?0+$/, '').replace('-', '−')}×10^${Number(e)}`)
 }
 
 export interface GradientRange {
@@ -164,14 +249,19 @@ export function gradientRange(xs: number[], ys: number[], xErr: number[], yErr: 
   const last = at(order[order.length - 1])
   if (first.ex === 0 && first.ey === 0 && last.ex === 0 && last.ey === 0) return null
 
-  const steepRun = last.x - last.ex - (first.x + first.ex)
-  const shallowRun = last.x + last.ex - (first.x - first.ex)
+  const shortRun = last.x - last.ex - (first.x + first.ex)
+  const longRun = last.x + last.ex - (first.x - first.ex)
   // Bars wide enough to overlap leave no line to draw: the readings are too close together to say
   // anything about the gradient.
-  if (steepRun <= 0 || shallowRun <= 0) return null
-  const steep = (last.y + last.ey - (first.y - first.ey)) / steepRun
-  const shallow = (last.y - last.ey - (first.y + first.ey)) / shallowRun
-  const min = Math.min(steep, shallow)
-  const max = Math.max(steep, shallow)
+  if (shortRun <= 0 || longRun <= 0) return null
+  const bigRise = last.y + last.ey - (first.y - first.ey)
+  const smallRise = last.y - last.ey - (first.y + first.ey)
+  // Every rise over every run, because which pairing is steepest depends on the sign: for a rising
+  // line it is the big rise over the short run, but for a falling one the most negative is the
+  // small (most negative) rise over the short run. Pairing them for a rising line only gave a
+  // falling line a ± a third of the size.
+  const slopes = [bigRise / shortRun, bigRise / longRun, smallRise / shortRun, smallRise / longRun]
+  const min = Math.min(...slopes)
+  const max = Math.max(...slopes)
   return { min, max, half: (max - min) / 2 }
 }

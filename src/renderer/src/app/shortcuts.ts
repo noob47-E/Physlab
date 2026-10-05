@@ -8,8 +8,7 @@ import { useTour } from './tour/Tour'
 import { isDrawingMode, modeById, useApp } from './modes'
 import { toolForKey } from './toolKeys'
 import { useSandbox } from '../sim/store'
-import { useLab } from '../lab/labStore'
-import { useAuthor } from '../questions/authorStore'
+import { runHistory } from './undoRoute'
 import { visibleOrder } from '../core/visibility'
 import { pressSpace, releaseSpace, resetSpace } from '../render/panKey'
 
@@ -59,35 +58,10 @@ export function useShortcuts() {
         return
       }
       if (isTyping(e)) return
-      if (ctrl && e.key.toLowerCase() === 'z') {
+      // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y reach the history of the mode in front (the Sandbox, Lab
+      // Data and Question Author each keep their own); undoRoute decides, for the Edit menu too.
+      if (ctrl && runHistory(useApp.getState().mode, { key: e.key, shift: e.shiftKey })) {
         e.preventDefault()
-        // The Sandbox keeps its own objects in its own store, so Ctrl+Z there has to reach that
-        // history rather than the drawing's.
-        if (useApp.getState().mode === 'sandbox') {
-          if (e.shiftKey) useSandbox.getState().redo()
-          else useSandbox.getState().undo()
-          return
-        }
-        if (useApp.getState().mode === 'lab') {
-          useLab.getState().undo()
-          return
-        }
-        // Question Author keeps the set's history: Ctrl+Z there used to undo the drawing behind
-        // it (the picture "Show it" drew) while the part the teacher removed stayed gone.
-        if (useApp.getState().mode === 'author') {
-          if (e.shiftKey) useAuthor.getState().redo()
-          else useAuthor.getState().undo()
-          return
-        }
-        if (e.shiftKey) s.redo()
-        else s.undo()
-        return
-      }
-      if (ctrl && e.key.toLowerCase() === 'y') {
-        e.preventDefault()
-        if (useApp.getState().mode === 'sandbox') useSandbox.getState().redo()
-        else if (useApp.getState().mode === 'author') useAuthor.getState().redo()
-        else s.redo()
         return
       }
       if (ctrl && e.key.toLowerCase() === 'a') {

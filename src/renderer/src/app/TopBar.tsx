@@ -44,6 +44,7 @@ import { spaceOf, visibleOrder } from '../core/visibility'
 import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { confirmClearDrawing } from './contextActions'
 import { modeTabs, type MeasuredModeWidths } from './modeSwitch'
+import { runHistory } from './undoRoute'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
 
 // The panels still import enterMode from here; it now lives with the rest of the layout code.
@@ -480,8 +481,9 @@ export function TopBar() {
       <Menu
         label="Edit"
         items={[
-          { label: 'Undo', sc: 'Ctrl+Z', run: () => (mode === 'sandbox' ? useSandbox.getState().undo() : s().undo()) },
-          { label: 'Redo', sc: 'Ctrl+Y', run: () => (mode === 'sandbox' ? useSandbox.getState().redo() : s().redo()) },
+          // The same history the keys reach: Lab Data and Question Author used to run the drawing's.
+          { label: 'Undo', sc: 'Ctrl+Z', run: () => void runHistory(mode, { menu: 'undo' }) },
+          { label: 'Redo', sc: 'Ctrl+Y', run: () => void runHistory(mode, { menu: 'redo' }) },
           '-',
           {
             label: 'Delete selected',

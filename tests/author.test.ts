@@ -66,7 +66,7 @@ describe('format 5: the question set in a .phys file', () => {
   it('steps a format-4 file up to format 5 and changes nothing else', () => {
     const raw = v4()
     const out = migrate(raw)
-    expect(FILE_VERSION).toBe(6)
+    expect(FILE_VERSION).toBe(7)
     expect(out.version).toBe(FILE_VERSION)
     expect({ ...out, version: 4 }).toEqual(raw)
     expect(raw.version).toBe(4)

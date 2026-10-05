@@ -3,8 +3,10 @@
 /** One column of the table. */
 export interface LabColumn {
   id: string
-  /** Short name, used in formulas and on the graph axes, e.g. "t". */
+  /** Short, formula-safe name, used in formulas and on the graph axes, e.g. "t". */
   name: string
+  /** Display name when it differs from the formula-safe name, e.g. "Drop height". */
+  label?: string
   /** Written after the name on the header and carried into the gradient, e.g. "s". */
   unit: string
   /** When set, the column is worked out from the others rather than typed, e.g. "t^2". */
@@ -32,6 +34,9 @@ export interface LabTable {
   columns: LabColumn[]
   /** One entry per column, in column order. null is an empty cell. */
   rows: (number | null)[][]
+  /** The text each typed cell was recorded with, same shape as rows. null means the cell was
+   *  computed or entered without a text form, and display falls back to formatting. */
+  reads?: (string | null)[][]
   /** Which columns are drawn against each other, and the shape fitted through them. */
   plot: { x: string; y: string; fit: FitShape }
 }

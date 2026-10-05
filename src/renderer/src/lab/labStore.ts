@@ -48,7 +48,10 @@ interface LabStore {
   update: (id: string, patch: (t: LabTable) => LabTable) => void
   /** Previous table lists, newest last. Deleting a column used to be final. */
   past: LabTable[][]
+  /** Table lists undone, newest last; a new edit clears them. Ctrl+Shift+Z used to undo again. */
+  future: LabTable[][]
   undo: () => void
+  redo: () => void
 }
 
 let lastRemembered = 0
@@ -57,8 +60,9 @@ function remember(get: () => LabStore, set: (p: Partial<LabStore>) => void): voi
   const now = Date.now()
   const burst = now - lastRemembered < 700 && get().past.length > 0
   lastRemembered = now
-  if (burst) return
-  set({ past: [...get().past, get().tables].slice(-50) })
+  // Whatever was undone is gone once the student changes something else.
+  if (burst) return set({ future: [] })
+  set({ past: [...get().past, get().tables].slice(-50), future: [] })
 }
 
 /**
@@ -73,15 +77,28 @@ export function uniqueTitle(tables: LabTable[], title: string): string {
 
 const first = emptyTable()
 
+/** Stays on the open table when it still exists after an undo or a redo. */
+const keepCurrent = (tables: LabTable[], id: string): string => (tables.some((t) => t.id === id) ? id : tables[0].id)
+
 export const useLab = create<LabStore>((set, get) => ({
   tables: [first],
   currentId: first.id,
   past: [],
+  future: [],
   undo: () => {
-    const past = get().past
+    const { past, future, tables } = get()
     const back = past[past.length - 1]
     if (!back) return
-    set({ tables: back, past: past.slice(0, -1), currentId: back.some((t) => t.id === get().currentId) ? get().currentId : back[0].id })
+    // The next edit starts a step of its own rather than folding into the one just undone.
+    lastRemembered = 0
+    set({ tables: back, past: past.slice(0, -1), future: [...future, tables], currentId: keepCurrent(back, get().currentId) })
+  },
+  redo: () => {
+    const { past, future, tables } = get()
+    const ahead = future[future.length - 1]
+    if (!ahead) return
+    lastRemembered = 0
+    set({ tables: ahead, past: [...past, tables], future: future.slice(0, -1), currentId: keepCurrent(ahead, get().currentId) })
   },
   setCurrent: (currentId) => set({ currentId }),
   addTable: () => {
@@ -91,7 +108,7 @@ export const useLab = create<LabStore>((set, get) => ({
   },
   appendTable: (t) => {
     remember(get, set)
-    const table = { ...t, title: uniqueTitle(get().tables, t.title) }
+    const table = { ...tidyReads(t), title: uniqueTitle(get().tables, t.title) }
     set({ tables: [...get().tables, table], currentId: table.id })
   },
   removeTable: (id) => {
@@ -101,8 +118,8 @@ export const useLab = create<LabStore>((set, get) => ({
     set({ tables: left, currentId: left.some((t) => t.id === get().currentId) ? get().currentId : left[0].id })
   },
   setTables: (tables) => {
-    const left = tables.length ? tables : [emptyTable()]
-    set({ tables: left, currentId: left[0].id, past: [] })
+    const left = tables.length ? tables.map(tidyReads) : [emptyTable()]
+    set({ tables: left, currentId: left[0].id, past: [], future: [] })
   },
   update: (id, patch) => {
     remember(get, set)
@@ -125,24 +142,70 @@ export const currentTable = (): LabTable => {
 // without a store, and the store's `update` applies them.
 // ---------------------------------------------------------------------------
 
-export const addRow = (t: LabTable): LabTable => ({ ...t, rows: [...t.rows, t.columns.map(() => null)] })
+// `reads` holds the text each typed reading was recorded with ("0.200"), in the same shape as
+// `rows`. Every edit that moves rows or columns moves it the same way: a text left one row out of
+// step would show the next row's figures against this row's number. recordedText (values.ts)
+// still checks each text against its number before it is shown, as a second line of defence.
 
-export const removeRow = (t: LabTable, index: number): LabTable => ({ ...t, rows: t.rows.filter((_, i) => i !== index) })
+/**
+ * The recorded texts cut to the shape of `rows`, anything that is not a string as null, or
+ * undefined when no cell has one (a table with no texts stays exactly as older files had it).
+ */
+function cleanReads(rows: (number | null)[][], reads: unknown): (string | null)[][] | undefined {
+  if (!Array.isArray(reads)) return undefined
+  let any = false
+  const out = rows.map((row, r) => {
+    const src: unknown = reads[r]
+    return row.map((_, c) => {
+      const text: unknown = Array.isArray(src) ? src[c] : undefined
+      if (typeof text !== 'string') return null
+      any = true
+      return text
+    })
+  })
+  return any ? out : undefined
+}
 
-export function setCell(t: LabTable, row: number, col: number, value: number | null): LabTable {
+/** The table with new rows and the texts that go with them; texts not passed are dropped. */
+function withRows(t: LabTable, rows: (number | null)[][], reads?: unknown): LabTable {
+  const { reads: _old, ...rest } = t
+  const kept = cleanReads(rows, reads)
+  return kept ? { ...rest, rows, reads: kept } : { ...rest, rows }
+}
+
+const readsOf = (t: LabTable): (string | null)[][] | undefined => cleanReads(t.rows, t.reads)
+
+/** A table from a file or a recording, its texts brought into line with its rows. */
+export const tidyReads = (t: LabTable): LabTable => withRows(t, t.rows, t.reads)
+
+export const addRow = (t: LabTable): LabTable => {
+  const reads = readsOf(t)
+  return withRows(t, [...t.rows, t.columns.map(() => null)], reads && [...reads, t.columns.map(() => null)])
+}
+
+export const removeRow = (t: LabTable, index: number): LabTable =>
+  withRows(t, t.rows.filter((_, i) => i !== index), readsOf(t)?.filter((_, i) => i !== index))
+
+/**
+ * Types one reading. `text` is how it was written ("0.200"); leave it out (a sum typed in, a value
+ * set from code) and the cell has no recorded text, so it shows its number.
+ */
+export function setCell(t: LabTable, row: number, col: number, value: number | null, text?: string | null): LabTable {
   const rows = t.rows.map((r, i) => (i === row ? r.map((v, c) => (c === col ? value : v)) : r))
-  return { ...t, rows }
+  const before = readsOf(t) ?? t.rows.map((r) => r.map(() => null))
+  const keep = value === null ? null : (text ?? null)
+  return withRows(t, rows, before.map((r, i) => (i === row ? r.map((v, c) => (c === col ? keep : v)) : r)))
 }
 
 /** Adds a column, at the end or beside another one when `at` says where. */
 export function addColumn(t: LabTable, col?: Partial<LabColumn>, at?: number): LabTable {
   const name = col?.name ?? nextColumnName(t)
-  const added: LabColumn = { id: nextId('col'), name, unit: col?.unit ?? '', formula: col?.formula, uncertaintyFor: col?.uncertaintyFor }
+  const added: LabColumn = { id: nextId('col'), name, unit: col?.unit ?? '', label: col?.label, formula: col?.formula, uncertaintyFor: col?.uncertaintyFor }
   const where = at === undefined ? t.columns.length : Math.max(0, Math.min(at, t.columns.length))
+  const insert = <T>(r: T[]): (T | null)[] => [...r.slice(0, where), null, ...r.slice(where)]
   return {
-    ...t,
-    columns: [...t.columns.slice(0, where), added, ...t.columns.slice(where)],
-    rows: t.rows.map((r) => [...r.slice(0, where), null, ...r.slice(where)])
+    ...withRows(t, t.rows.map(insert), readsOf(t)?.map(insert)),
+    columns: [...t.columns.slice(0, where), added, ...t.columns.slice(where)]
   }
 }
 
@@ -168,12 +231,14 @@ export function removeColumn(t: LabTable, id: string): LabTable {
   const columns = t.columns.filter((c) => c.id !== id)
   // A column that measured this one's uncertainty has nothing left to describe.
   const kept = columns.filter((c) => c.uncertaintyFor !== id)
+  // Removing the last real column while leaving only its own ± column would leave no columns at all.
+  if (kept.length === 0) return t
   const dropped = columns.filter((c) => c.uncertaintyFor === id).map((c) => t.columns.indexOf(c))
   const drop = new Set([index, ...dropped])
+  const keepCells = <T>(r: T[]): T[] => r.filter((_, i) => !drop.has(i))
   return {
-    ...t,
+    ...withRows(t, t.rows.map(keepCells), readsOf(t)?.map(keepCells)),
     columns: kept,
-    rows: t.rows.map((r) => r.filter((_, i) => !drop.has(i))),
     plot: {
       ...t.plot,
       x: drop.has(t.columns.findIndex((c) => c.id === t.plot.x)) ? (kept[0]?.id ?? '') : t.plot.x,
@@ -186,6 +251,9 @@ export function setColumn(t: LabTable, id: string, patch: Partial<LabColumn>): L
   const before = t.columns.find((c) => c.id === id)
   if (!before) return t
   const after = { ...before, ...patch }
+  // A new name typed in the name box replaces a pasted caption too: renaming "Drop height" to h left
+  // the old caption on the axes and in the CSV.
+  if (patch.name !== undefined && patch.name !== before.name && patch.label === undefined) delete after.label
   return {
     ...t,
     columns: t.columns.map((c) => {
@@ -203,11 +271,36 @@ export const setPlot = (t: LabTable, patch: Partial<{ x: string; y: string; fit:
   plot: { ...t.plot, ...patch }
 })
 
-/** Replace every reading, keeping the columns (what a paste or a CSV import does). */
-export const setRows = (t: LabTable, rows: (number | null)[][]): LabTable => ({
-  ...t,
-  rows: rows.map((r) => t.columns.map((_, c) => r[c] ?? null))
-})
+/**
+ * Replace every reading, keeping the columns (what a paste or a CSV import does). `reads` is the
+ * text each new reading was written with; the old texts never survive, as their rows are gone.
+ */
+export const setRows = (t: LabTable, rows: (number | null)[][], reads?: (string | null)[][]): LabTable =>
+  withRows(
+    t,
+    rows.map((r) => t.columns.map((_, c) => r[c] ?? null)),
+    reads
+  )
+
+/**
+ * Writes a pasted block with its top-left corner at (row, col), growing the rows to fit; the
+ * caller adds any columns first. Cells outside the block, and their texts, stay as they were.
+ */
+export function pasteRows(t: LabTable, row: number, col: number, rows: (number | null)[][], texts?: (string | null)[][]): LabTable {
+  const height = Math.max(t.rows.length, row + rows.length)
+  const blankRow = () => t.columns.map(() => null)
+  const nextRows = Array.from({ length: height }, (_, r) => [...(t.rows[r] ?? blankRow())])
+  const nextReads = Array.from({ length: height }, (_, r) => [...(readsOf(t)?.[r] ?? blankRow())])
+  rows.forEach((line, i) =>
+    line.forEach((v, j) => {
+      const c = col + j
+      if (c >= t.columns.length) return
+      nextRows[row + i][c] = v
+      nextReads[row + i][c] = v === null ? null : (texts?.[i]?.[j] ?? null)
+    })
+  )
+  return withRows(t, nextRows, nextReads)
+}
 
 /** A, B, C… skipping names already taken and the ones that read as numbers. */
 function nextColumnName(t: LabTable): string {

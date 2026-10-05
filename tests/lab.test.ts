@@ -362,10 +362,11 @@ describe('readings pasted in or read from a file', () => {
   })
 
   it('keeps the captions of a table that already has readings in it', () => {
+    // A paste at a cell writes from that cell on; it used to replace every reading in the table.
     const p = parseTable('a,b\n7,8')
-    const pasted = applyPaste(freeFall(), p)
+    const pasted = applyPaste(freeFall(), p, { row: 0, col: 0 })
     expect(pasted.columns.map((c) => c.name)).toEqual(['t', 'd'])
-    expect(pasted.rows).toEqual([[7, 8]])
+    expect(pasted.rows).toEqual([[7, 8], ...freeFall().rows.slice(1)])
   })
 
   it('names the file after the experiment', () => {

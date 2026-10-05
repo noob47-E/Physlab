@@ -114,7 +114,7 @@ describe('serialize → loadScene', () => {
     const { gridStyle: _g, ...older } = fullFile().settings
     scene().loadScene({ ...fullFile(), version: 2, settings: older })
     expect(scene().settings.gridStyle).toBe('lines')
-    expect(FILE_VERSION).toBe(6)
+    expect(FILE_VERSION).toBe(7)
   })
 
   it('keeps the label preferences of whoever is opening the file', () => {
@@ -314,7 +314,7 @@ describe('migrate', () => {
     const plain = { id: 'q1', title: 'Plain', statement: 'x', variables: [], parts: [{ type: 'number', prompt: 'x?', answer: '1', unit: 'none', tolerance: { kind: 'relative', value: 0.02 }, marks: 1 }], license: licence }
     const v5 = { app: 'PhysLab', version: 5, objects: [], settings: {}, questions: [plain] }
     const out = migrate(v5)
-    expect(FILE_VERSION).toBe(6)
+    expect(FILE_VERSION).toBe(7)
     expect({ ...out, version: 5 }).toEqual(v5)
     // Every kind format 2 adds, with error carried forward, showIf, a rung and a deeper link.
     const rich = {

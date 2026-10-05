@@ -35,7 +35,7 @@ import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './ty
 import type { Space } from './visibility'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
-export const FILE_VERSION: SceneFile['version'] = 6
+export const FILE_VERSION: SceneFile['version'] = 7
 
 type Raw = Record<string, unknown>
 
@@ -106,7 +106,7 @@ function checkLab(lab: unknown): void {
       typeof t.id === 'string' &&
       typeof t.title === 'string' &&
       Array.isArray(t.columns) &&
-      t.columns.every((c) => isRecord(c) && typeof c.id === 'string' && typeof c.name === 'string') &&
+      t.columns.every((c) => isRecord(c) && typeof c.id === 'string' && typeof c.name === 'string' && (c.label === undefined || typeof c.label === 'string')) &&
       Array.isArray(t.rows) &&
       t.rows.every((r) => Array.isArray(r)) &&
       isRecord(t.plot)
@@ -349,7 +349,8 @@ const STEPS: Record<number, (file: Raw) => Raw> = {
   2: v2ToV3,
   3: v3ToV4,
   4: v4ToV5,
-  5: v5ToV6
+  5: v5ToV6,
+  6: v6ToV7
 }
 
 function v1ToV2(file: Raw): Raw {
@@ -429,6 +430,16 @@ function v4ToV5(file: Raw): Raw {
  */
 function v5ToV6(file: Raw): Raw {
   return { ...file, version: 6 }
+}
+
+/**
+ * Format 7 lets a Lab Data cell keep the text it was typed with (`reads`, so 0.200 stays 0.200) and a
+ * column keep a caption with spaces (`label`). Both are optional and a format-6 table shows exactly
+ * as before, so nothing changes here; the number tells an older PhysLab that the file is newer
+ * than it, instead of letting it open the file and drop those texts on its next save.
+ */
+function v6ToV7(file: Raw): Raw {
+  return { ...file, version: 7 }
 }
 
 /**

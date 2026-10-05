@@ -264,7 +264,7 @@ export type ToolId =
 export interface SceneFile {
   app: 'PhysLab'
   /** The format this file is written in. `core/migrate.ts` lists the formats and steps older ones up. */
-  version: 6
+  version: 7
   objects: SceneObject[]
   settings: SceneSettings
   /** Lab tables. Optional, so an older file still opens here and a file from here still opens

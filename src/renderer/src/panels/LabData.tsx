@@ -1,38 +1,41 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Download, Eye, Lightbulb, Plus, Sigma, Trash2, Undo2, Upload, X } from 'lucide-react'
-import { math, preprocess } from '../math/expr'
 import { fmt, fmtPrecise, type Precision } from '../math/format'
 import { saveTextFile } from '../app/files'
 import { useScene } from '../core/store'
 import { visualizeReadings } from '../core/visualize'
-import { applyPaste, csvFileName, parseTable, toCsv } from '../lab/csv'
+import { applyPaste, csvFileName, parseTable, pasteTarget, toCsv } from '../lab/csv'
 import { addColumn, addRow, addUncertainty, DEFAULT_TABLE_TITLE, removeColumn, removeRow, setCell, setColumn, setPlot, useLab } from '../lab/labStore'
-import { columnHeader, headerOf, isUsableName, plotSeries, ratioUnit, resolveValues, uncertaintyIndex } from '../lab/values'
-import { betterFit, fitOf, gradientMeaning, gradientRange, MIN_POINTS, pmText, rankFits, type Fit } from '../lab/fit'
+import { columnHeader, headerOf, plotSeries, ratioUnit, readTyped, resolveValues, shownCell, typedColumnName, uncertaintyIndex } from '../lab/values'
+import { adviceText, fitAdvice, fitOf, gradientMeaning, gradientRange, MIN_POINTS, pmText, rankFits, type Fit } from '../lab/fit'
 import { FIT_LABELS, type FitShape, type LabColumn, type LabTable } from '../lab/types'
 import { LabChart, ResidualStrip } from './LabChart'
 
-/** A cell that may be empty. Accepts a typed expression ("9.8/2") the way the rest of PhysLab does. */
-function Cell({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
-  const [text, setText] = useState(value === null ? '' : String(value))
+/**
+ * A cell that may be empty. Accepts a typed expression ("9.8/2") the way the rest of PhysLab does.
+ * `shown` is the reading as recorded ("0.200", not "0.2"), from shownCell; what is typed goes back
+ * with its own written form so the figures survive (readTyped decides both).
+ */
+function Cell({ shown, row, col, onChange }: { shown: string; row: number; col: number; onChange: (v: number | null, text: string | null) => void }) {
+  const [text, setText] = useState(shown)
   const [focused, setFocused] = useState(false)
   useEffect(() => {
-    if (!focused) setText(value === null ? '' : String(value))
-  }, [value, focused])
+    if (!focused) setText(shown)
+  }, [shown, focused])
   const commit = () => {
-    const raw = text.trim()
-    if (!raw) return onChange(null)
-    try {
-      const v = Number(math.evaluate(preprocess(raw.replace(/−/g, '-'))))
-      onChange(Number.isFinite(v) ? v : null)
-    } catch {
-      setText(value === null ? '' : String(value))
-    }
+    // Leaving a cell untouched is not an edit: it used to add an empty step to Ctrl+Z, and a paste
+    // at this cell would be written over by the old text when the cell lost focus.
+    if (text === shown) return
+    const read = readTyped(text)
+    if (!read) return setText(shown)
+    onChange(read.value, read.text)
   }
   return (
     <input
       className="field num"
       value={text}
+      data-row={row}
+      data-col={col}
       inputMode="decimal"
       onFocus={(e) => {
         setFocused(true)
@@ -62,7 +65,21 @@ interface HeaderProps {
 
 function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }: HeaderProps) {
   const [showFormula, setShowFormula] = useState(!!col.formula)
-  const badName = !isUsableName(col.name)
+  // The box shows what the student reads (a pasted or typed caption) and edits it; the name that
+  // formulas use follows from it (typedColumnName) and is shown below when it differs.
+  const shownName = col.label?.trim() || col.name
+  const [draft, setDraft] = useState(shownName)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!editing) setDraft(shownName)
+  }, [shownName, editing])
+  const commitName = () => {
+    setEditing(false)
+    if (draft.trim() === shownName) return setDraft(shownName)
+    const next = typedColumnName(table, col.id, draft)
+    if (next) onPatch(next)
+    else setDraft(shownName)
+  }
   // A ± column is named, measured and removed with the column it belongs to, so it is shown as a
   // caption rather than two more boxes to fill in.
   const isError = !!col.uncertaintyFor
@@ -82,15 +99,28 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
         ) : (
           <>
             <input
-              className={`field w-12 px-1 text-center font-semibold italic ${badName ? 'text-warn' : ''}`}
-              value={col.name}
-              title={badName ? 'Use a letter, then letters or numbers, so formulas can refer to it' : 'Name used in formulas and on the graph'}
-              onChange={(e) => onPatch({ name: e.target.value })}
-              onKeyDown={(e) => e.stopPropagation()}
+              className="field min-h-[44px] px-1 text-center font-semibold italic"
+              style={{ width: `${Math.min(14, Math.max(5, draft.length + 2))}ch` }}
+              value={draft}
+              placeholder="name"
+              aria-label="Column name"
+              onFocus={(e) => {
+                setEditing(true)
+                e.target.select()
+              }}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                if (e.key === 'Escape') setDraft(shownName)
+                e.stopPropagation()
+              }}
             />
             <span className="text-ink-faint">/</span>
             <input
-              className="field w-12 px-1 text-center"
+              className="field min-h-[44px] px-1 text-center"
+              style={{ width: `${Math.min(10, Math.max(5, col.unit.length + 2))}ch` }}
+              aria-label="Column unit"
               value={col.unit}
               placeholder="unit"
               title="Unit, e.g. s or m"
@@ -122,6 +152,9 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
           )}
         </span>
       </div>
+      {!isError && (
+        <div className="px-1 text-fine text-ink-faint">{col.label?.trim() && col.label.trim() !== col.name ? `in formulas: ${col.name}` : 'name / unit — click to rename'}</div>
+      )}
       {showFormula && (
         <input
           className="field"
@@ -137,7 +170,7 @@ function HeaderCell({ table, col, onPatch, onRemove, onUncertainty, canRemove }:
 }
 
 /** The fitted shape written out with the student's own column names, numbers and precision. */
-function equationText(fit: Fit, y: string, x: string, settings: Exclude<Precision, number>): string {
+function equationText(fit: Fit, y: string, x: string, settings: Exclude<Precision, number>): ReactNode {
   const n = (v: number) => fmtPrecise(v, settings)
   const { coef: c } = fit
   switch (fit.shape) {
@@ -148,9 +181,19 @@ function equationText(fit: Fit, y: string, x: string, settings: Exclude<Precisio
     case 'log':
       return `${y} = ${n(c.a)} ${c.b < 0 ? '−' : '+'} ${n(Math.abs(c.b))} ln ${x}`
     case 'exp':
-      return `${y} = ${n(c.a)} e^(${n(c.b)} ${x})`
+      return (
+        <>
+          {y} = {n(c.a)} e<sup>{n(c.b)} {x}</sup>
+        </>
+      )
     case 'power':
-      return `${y} = ${n(c.a)} ${x}^${n(c.b)}`
+      // A raised power, never a caret: a student reads x with a small b above it.
+      return (
+        <>
+          {y} = {n(c.a)} {x}
+          <sup>{n(c.b)}</sup>
+        </>
+      )
     case 'inverse':
       return `${y} = ${n(c.a)} ${c.b < 0 ? '−' : '+'} ${n(Math.abs(c.b))}/${x}`
   }
@@ -170,16 +213,19 @@ export function LabData() {
   const resolved = useMemo(() => resolveValues(table), [table])
   const patch = (fn: Parameters<typeof update>[1]) => update(table.id, fn)
   const [showResiduals, setShowResiduals] = useState(false)
-  // What a paste or an import replaced, so it can be put back with one click: a student who pastes
-  // over an afternoon's readings should not lose them.
-  const [undo, setUndo] = useState<{ what: string; before: LabTable } | null>(null)
+  // What a paste or an import did, so it can be put back with one click: a student who pastes over
+  // an afternoon's readings should not lose them. The button runs the table's own undo (it used to
+  // keep a second copy of its own), and shows only while the paste is still the latest change.
+  const [undo, setUndo] = useState<{ what: string; after: LabTable[] } | null>(null)
+  const undoLab = useLab((s) => s.undo)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  const takeIn = (text: string, what: string) => {
+  /** `at` is the focused cell; without it (the table itself, or a file) the readings are replaced. */
+  const takeIn = (text: string, what: string, at?: { row: number; col: number }) => {
     const parsed = parseTable(text)
     if (!parsed.rows.length) return false
-    setUndo({ what: `${what} ${parsed.rows.length} ${parsed.rows.length === 1 ? 'row' : 'rows'}`, before: table })
-    patch((t) => applyPaste(t, parsed))
+    patch((t) => applyPaste(t, parsed, at))
+    setUndo({ what: `${what} ${parsed.rows.length} ${parsed.rows.length === 1 ? 'row' : 'rows'}`, after: useLab.getState().tables })
     return true
   }
 
@@ -187,7 +233,7 @@ export function LabData() {
   const { xs, ys } = series
   const fit = useMemo(() => fitOf(xs, ys, table.plot.fit), [xs, ys, table.plot.fit])
   const ranked = useMemo(() => rankFits(xs, ys), [xs, ys])
-  const better = useMemo(() => betterFit(fit, ranked), [fit, ranked])
+  const advice = useMemo(() => fitAdvice(fit, ranked), [fit, ranked])
   // Once there are error bars, the gradient's ± comes from them rather than from the scatter: that
   // is the steepest-and-shallowest-line method a practical is marked with.
   const bars = useMemo(() => gradientRange(xs, ys, series.xErr, series.yErr), [xs, ys, series])
@@ -242,11 +288,16 @@ export function LabData() {
         tabIndex={0}
         onPaste={(e) => {
           const text = e.clipboardData.getData('text')
-          // One value belongs to the cell the student is typing in; a block belongs to the table.
-          if (!text.trim() || !/[\t\n;,]/.test(text.trim())) return
+          const cell = (e.target as HTMLElement).closest<HTMLInputElement>('input[data-row]')
+          // One value belongs to the cell the student is typing in ("1,2" is a decimal comma); a
+          // block lands at that cell, or replaces the readings when the table itself is selected.
+          if (pasteTarget(text, !!cell) === 'text') return
           e.preventDefault()
           e.stopPropagation()
-          takeIn(text, 'Pasted')
+          const at = cell ? { row: Number(cell.dataset.row), col: Number(cell.dataset.col) } : undefined
+          // Let the cell go first, so its own text is not written back over the pasted one.
+          cell?.blur()
+          takeIn(text, 'Pasted', at)
         }}
       >
         <div className="grid min-w-min gap-1" style={{ gridTemplateColumns: `28px repeat(${table.columns.length}, minmax(104px, 1fr)) 26px` }}>
@@ -264,7 +315,7 @@ export function LabData() {
           ))}
           <div />
 
-          {table.rows.map((row, r) => (
+          {table.rows.map((_row, r) => (
             <FlatRow key={r}>
               <div className="flex items-center justify-center text-fine text-ink-faint">{r + 1}</div>
               {table.columns.map((col, c) =>
@@ -273,7 +324,7 @@ export function LabData() {
                     {resolved.values[r]?.[c] === null || resolved.values[r]?.[c] === undefined ? '' : fmtPrecise(resolved.values[r][c] as number, settings)}
                   </div>
                 ) : (
-                  <Cell key={col.id} value={row[c] ?? null} onChange={(v) => patch((t) => setCell(t, r, c, v))} />
+                  <Cell key={col.id} shown={shownCell(table, r, c)} row={r} col={c} onChange={(v, text) => patch((t) => setCell(t, r, c, v, text))} />
                 )
               )}
               <button className="icon-btn" title="Remove this row" onClick={() => patch((t) => removeRow(t, r))}>
@@ -321,14 +372,13 @@ export function LabData() {
         You can also copy readings out of a spreadsheet and paste them straight onto the table.
       </div>
 
-      {undo && (
+      {undo && undo.after === tables && (
         <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
           <span className="min-w-0 flex-1 text-ink">{undo.what}.</span>
           <button
             className="btn"
             onClick={() => {
-              const before = undo.before
-              patch(() => before)
+              undoLab()
               setUndo(null)
             }}
           >
@@ -398,12 +448,12 @@ export function LabData() {
         <div className="px-3 text-ink-faint">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>
       ) : fit ? (
         <div className="card mx-3 mt-2 border-warn/40 bg-warn/5 p-3">
-          <div className="text-lead text-ink-strong">{equationText(fit, yCol?.name ?? 'y', xCol?.name ?? 'x', settings)}</div>
+          <div className="text-lead text-ink-strong">{equationText(fit, yCol?.label?.trim() || yCol?.name || 'y', xCol?.label?.trim() || xCol?.name || 'x', settings)}</div>
           <div className="mt-1 text-ink-dim">
             {/* r² is a score of how well the line fits, not a measurement, so it keeps a fixed
                 four decimals: at 0 d.p. it would read "1" for every fit worth having. */}
             r² = {fmt(fit.r2, 4)}
-            {fit.r2 > 0.98 ? ' — the readings sit very close to this line.' : fit.r2 < 0.9 ? ' — the readings are scattered; check for a mistake, or try another shape.' : ''}
+            {fit.r2 > 0.98 ? ' — the readings sit very close to this line.' : fit.r2 < 0.9 && advice.kind === 'none' ? ' — the readings are scattered; check for a mistake.' : ''}
           </div>
           {fit.slope !== undefined && (
             <div className="mt-2">
@@ -430,15 +480,15 @@ export function LabData() {
         <div className="px-3 text-warn">This shape cannot be fitted to these readings — a logarithm or a power needs positive values.</div>
       )}
 
-      {better && (
+      {advice.kind !== 'none' && xs.length >= MIN_POINTS && (
         <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
           <Lightbulb size={14} className="shrink-0 text-warn" />
-          <span className="min-w-0 flex-1 text-ink">
-            {FIT_LABELS[better.shape].split('   ')[0].toLowerCase()} fits your readings better — r² {fmt(better.r2, 3)} against {fmt(fit?.r2 ?? 0, 3)}.
-          </span>
-          <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: better.shape }))}>
-            Use it
-          </button>
+          <span className="min-w-0 flex-1 text-ink">{adviceText(advice)}</span>
+          {advice.kind === 'better' && (
+            <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: advice.best.shape }))}>
+              Use it
+            </button>
+          )}
         </div>
       )}
 
