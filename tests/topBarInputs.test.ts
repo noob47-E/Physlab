@@ -39,17 +39,20 @@ describe('grid-scale box', () => {
 })
 
 describe('Ctrl+K palette', () => {
+  // Loading the palette pulls in much of the app (~3 s alone), so on a busy machine the 5 s default
+  // timed out in merge gates: the rows are built once, and the test gets the same 30 s as questionPlayer.
   it('"hide grid" ranks Grid: off first, "show grid" finds grid rows', async () => {
     const { buildItems, score } = await import('../src/renderer/src/app/SearchPalette')
+    const items = buildItems()
     const rank = (q: string) =>
-      buildItems()
+      items
         .map((i) => ({ i, s: score(i, q) }))
         .filter((r) => r.s > 0)
         .sort((a, b) => b.s - a.s)
     expect(rank('hide grid')[0]?.i.title).toBe('Grid: off')
     const show = rank('show grid').map((r) => r.i.title)
     expect(show.some((t) => t.startsWith('Grid') || t === 'Toggle grid')).toBe(true)
-  })
+  }, 30000)
   it('Point, Measure and Delete never open the Calculator (its Maths screen covers the drawing)', async () => {
     const { modeForTool } = await import('../src/renderer/src/app/SearchPalette')
     for (const t of ['point', 'distance', 'delete'] as const) {
