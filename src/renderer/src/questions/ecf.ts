@@ -12,7 +12,7 @@ import { inDegrees, math, preprocess } from '../math/expr'
 import { noiseFloor, type MeasureSettings } from '../math/format'
 import { checkFunctionPart } from './odeCheck'
 import { toAbsoluteTol } from './parts'
-import type { ECF, PQPart, PQQuestion, UnitId } from './pqjson'
+import { bandOf, type ECF, type PQPart, type PQQuestion, type UnitId } from './pqjson'
 import type { Played, PlayedPart } from './player'
 import { convertQuantity, formatQuantity, unitFromTail } from './units'
 import { conditionHolds, orderVariables, partLetter, RANDOM_RANGE, type Variant } from './variables'
@@ -80,6 +80,29 @@ export function answerValue(part: PQPart, text: string): number | null {
 }
 
 // ---------------------------------------------------------------------------
+// Units for error carried forward
+// ---------------------------------------------------------------------------
+
+/** The unit a student's answer to a part is in, as `answerValue` reads it. */
+function partAnswerUnit(part: PQPart | undefined): UnitId {
+  if (!part) return 'none'
+  if (part.type === 'number' || part.type === 'roots' || part.type === 'vector') return part.unit ?? 'none'
+  return 'none'
+}
+
+/** Converts a number from one unit to another; when either unit is missing there is no conversion. */
+function convertForECF(value: number, from: UnitId, to: UnitId): number | null {
+  const f = from ?? 'none'
+  const t = to ?? 'none'
+  if (f === t || f === 'none' || t === 'none') return value
+  try {
+    return convertQuantity(value, f, t)
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Marking with the student's own earlier answers
 // ---------------------------------------------------------------------------
 
@@ -130,10 +153,20 @@ function marksOf(c: Check, outOf: number): number {
  * 2 % was marked right, and part (b) must be marked against the true −3, with no note and no
  * penalty — a student rounding sensibly is not docked for it later.
  */
-function earlierIsRight(q: PQQuestion, partIndex: number, truth: number, x: number): boolean {
-  if (!Number.isFinite(truth)) return false
+function earlierIsRight(q: PQQuestion, partIndex: number, truthInVariableUnit: number, x: number, variableUnit: UnitId): boolean {
+  if (!Number.isFinite(truthInVariableUnit)) return false
   const earlier = q.parts[partIndex]
-  const tol = earlier?.type === 'number' ? toAbsoluteTol(earlier, truth) : 0
+  const earlierUnit = partAnswerUnit(earlier)
+  const truth = convertForECF(truthInVariableUnit, variableUnit, earlierUnit)
+  if (truth === null || !Number.isFinite(truth)) return false
+  // A roots or vector part is marked within its own band too (a root, or a component, against its own size):
+  // with a band of 0 an answer marked right there was still carried forward, with a note and a penalty.
+  let tol = 0
+  if (earlier?.type === 'number') tol = toAbsoluteTol(earlier, truth)
+  else if (earlier?.type === 'roots' || earlier?.type === 'vector') {
+    const band = bandOf(earlier.tolerance)
+    tol = band.kind === 'relative' ? Math.abs(truth) * band.value : band.value
+  }
   // The floor is the truth's own size's: 10⁻⁹ × max(1, |truth|) was 10⁻⁹ for a charge of
   // 1.6×10⁻¹⁹ C, so an earlier "0" counted as the true charge and nothing was carried forward.
   return Math.abs(x - truth) <= tol + noiseFloor(truth)
@@ -144,7 +177,10 @@ function noteFor(q: PQQuestion, carried: { part: number; variable: string; value
   const units = unitsOf(q)
   const items = carried.map((c) => {
     const earlier = q.parts[c.part]
-    const unit: UnitId = earlier?.type === 'number' ? earlier.unit : (units[c.variable] ?? 'none')
+    // The number noted is the student's own, in the unit of the part they typed it in: a roots
+    // part asked in cm was noted in its variable's metres ("60 m" for the 60 cm carried as 0.6 m).
+    const own = partAnswerUnit(earlier)
+    const unit: UnitId = earlier?.type === 'number' || own !== 'none' ? own : (units[c.variable] ?? 'none')
     return `part ${partLetter(c.part)}: ${formatQuantity(c.value, unit, settings)}`
   })
   const lead = items.length === 1 ? 'your answer to' : 'your answers to'
@@ -192,11 +228,16 @@ export function markWithECF(
 
   const overrides: Record<string, number> = {}
   const carried: { part: number; variable: string; value: number }[] = []
+  const variableUnits = unitsOf(q)
   for (const u of ecf.uses) {
     const x = earlier.get(u.part)
     if (x === undefined || !Number.isFinite(x)) continue
-    if (earlierIsRight(q, u.part, values[u.variable], x)) continue
-    overrides[u.variable] = x
+    const earlierUnit = partAnswerUnit(q.parts[u.part])
+    const variableUnit = variableUnits[u.variable] ?? 'none'
+    const inVariableUnit = convertForECF(x, earlierUnit, variableUnit)
+    if (inVariableUnit === null || !Number.isFinite(inVariableUnit)) continue
+    if (earlierIsRight(q, u.part, values[u.variable], x, variableUnit)) continue
+    overrides[u.variable] = inVariableUnit
     carried.push({ ...u, value: x })
   }
   if (carried.length === 0) return asIs(plain)

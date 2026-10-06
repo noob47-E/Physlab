@@ -13,13 +13,20 @@ export const isReadError = (r: unknown): r is { error: string } =>
   typeof r === 'object' && r !== null && !Array.isArray(r) && typeof (r as { error?: unknown }).error === 'string'
 
 /**
+ * An x typed for × in a power of ten — "3x10^8", "1.6 x 10^-19", "6.63x10⁻³⁴" — as ×, which the maths
+ * reader takes. Only in that shape: a number, the x, then 10 raised by ^ or a superscript; a lone x
+ * ("x = 3"), "3x" and "3 x 10" are left as typed.
+ */
+export const xAsTimes = (t: string): string => t.replace(/(\d\.?)\s*[xX]\s*(?=10\s*(?:\^|[⁺⁻⁰¹²³⁴⁵⁶⁷⁸⁹]))/g, '$1×')
+
+/**
  * One number from a short typed expression ("8.66", "5*sqrt(2)", "3/5", "−0.2"), in degrees like
  * every practice answer, or null. Only a real number counts: mathjs reads "3i" as a complex
  * number and "2 m" as a quantity, neither of which is what a student typing a vector component or
  * a root means, and both fail the `typeof` test below.
  */
 export function evalNumber(text: string): number | null {
-  const t = text.trim()
+  const t = xAsTimes(text.trim())
   if (t === '') return null
   try {
     const v = inDegrees(() => math.evaluate(preprocess(t)))
@@ -200,7 +207,8 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
   const unit: UnitId | null = withUnit ? tail.unit : null
   const whole = withUnit ? tail.value : t
   const body = unwrapIJK(whole) ?? whole
-  // Split before every + or − that is not inside brackets and not an exponent's sign (1e-3, 4×10^-3).
+  // Split before every + or − that is not inside brackets, not an exponent's sign (1e-3, 4×10^-3),
+  // and not a second sign in a row: "3i + -4j" is one positive i term and one negative j term.
   const terms: string[] = []
   let depth = 0
   let cur = ''
@@ -208,7 +216,8 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
     const c = body[i]
     if (c === '(') depth++
     if (c === ')') depth--
-    if ((c === '+' || c === '-') && depth === 0 && cur.trim() !== '' && !/(\de|\^)$/i.test(cur.trim())) {
+    const signRun = /^[+-]+$/.test(cur.trim())
+    if ((c === '+' || c === '-') && depth === 0 && cur.trim() !== '' && !signRun && !/(\de|\^)$/i.test(cur.trim())) {
       terms.push(cur)
       cur = ''
     }
@@ -219,13 +228,14 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
   const seen = [false, false, false]
   for (const raw of terms) {
     const term = raw.replace(/\s+/g, '')
-    const m = /^([+-]?)(.*?)\*?([ijk])$/.exec(term)
+    const m = /^([+-]*)(.*?)\*?([ijk])$/.exec(term)
     if (!m) return { error: `PhysLab could not read "${raw.trim()}". Each part needs its i, j or k, like 3i or −4j.` }
-    const [, sign, coef, axis] = m
+    const [, signs, coef, axis] = m
     const size = coef === '' ? 1 : (readPlainNumber(coef) ?? evalNumber(coef))
     if (size === null) return { error: `PhysLab could not read "${raw.trim()}". ${VECTOR_HELP}` }
+    const negative = (signs.match(/-/g) ?? []).length % 2 === 1
     const k = 'ijk'.indexOf(axis)
-    v[k] += sign === '-' ? -size : size
+    v[k] += negative ? -size : size
     seen[k] = true
   }
   return { v: seen[2] ? v : v.slice(0, 2), unit }

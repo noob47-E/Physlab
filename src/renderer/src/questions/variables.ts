@@ -199,7 +199,7 @@ export function conditionHolds(when: string, values: Record<string, number>): bo
   if (!read.symbols.every((s) => s in values || s in math)) return null
   // Before any comparison, whatever its result type: mathjs answers NaN != 5 with true, so a
   // draw whose d = √b had no value kept "d != 5" and was served with its "undefined" sentence.
-  if (read.symbols.some((s) => s in values && Number.isNaN(values[s]))) return false
+  if (read.symbols.some((s) => s in values && !Number.isFinite(values[s]))) return false
   let r: unknown
   try {
     r = inDegrees(() => read.run.evaluate({ ...values }))
@@ -302,8 +302,25 @@ function drawOnce(q: PQQuestion, seed: number): Variant {
           break
         }
       }
-      if (!avoided) problems.push(`${name} could not avoid the excluded values.`)
-      values[name] = value
+      // A hundred unlucky draws do not prove every value excluded (1..200 with 1..199 excluded leaves 200):
+      // the values left are listed and one of them is drawn; only an empty list is the author's problem.
+      if (!avoided && count <= 100000) {
+        const left: number[] = []
+        for (let k = 0; k < count; k++) {
+          const x = tidy(def.from + k * def.step)
+          if (!excluded.some((e) => near(x, e))) left.push(x)
+        }
+        if (left.length > 0) {
+          value = left[Math.floor(r() * left.length)]
+          avoided = true
+        }
+      }
+      if (!avoided) {
+        problems.push(`${name} could not avoid the excluded values.`)
+        values[name] = NaN
+      } else {
+        values[name] = value
+      }
     } else if (def.kind === 'list') {
       if (def.items.length === 0) {
         problems.push(`${name} has no values to choose from.`)

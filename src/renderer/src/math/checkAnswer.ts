@@ -9,6 +9,7 @@ import { fmtPrecise, fmtSci, noiseFloor, revealPrecision, type MeasureSettings }
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 import { UNITS } from '../questions/units'
+import { xAsTimes } from '../questions/answerText'
 
 export type Verdict = 'right' | 'close' | 'wrong' | 'empty' | 'unreadable'
 
@@ -72,8 +73,7 @@ export function parseAnswer(text: string): number | null {
   // not, and stripping every comma turned those into different numbers instead of "unreadable".
   // The leading group is one to three digits not starting with 0: "0,500" is a decimal written
   // with a comma, and reading it as 500 told the student "wrong power of ten" for a right answer.
-  let t = text
-    .trim()
+  let t = xAsTimes(text.trim())
     .replace(/−/g, '-')
     .replace(/(?<![\d.,])([1-9]\d{0,2})((?:,\d{3})+)(?![\d,])/g, (_, head: string, tail: string) => head + tail.replace(/,/g, ''))
   if (!t) return null
@@ -153,7 +153,10 @@ export function checkAnswer(text: string, f: AnswerField, s: Pick<MeasureSetting
   }
   for (const k of [-6, -3, -2, -1, 1, 2, 3, 6]) {
     const p = 10 ** k
-    if (f.value !== 0 && Math.abs(a - f.value * p) <= f.tol * p) {
+    // An answer near the largest number (10³⁰⁸) times 10 is ∞, and ∞ ≤ ∞ would give every typed number the hint.
+    const shifted = f.value * p
+    const band = f.tol * p
+    if (Number.isFinite(shifted) && Number.isFinite(band) && f.value !== 0 && Math.abs(a - shifted) <= band) {
       return { verdict: 'wrong', parsed: a, message: 'Right digits, wrong power of ten. Check the decimal point and the units.' }
     }
   }

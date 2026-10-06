@@ -444,7 +444,7 @@
           },
           {
             "blank": false,
-            "head": "So i = {int}, and the yearly interest rate is {perc}%."
+            "head": "So i = {iworked}: the yearly interest rate is {percworked}%, which is {perc}% to 2 decimal places."
           }
         ],
         "level": "worked"
@@ -506,6 +506,20 @@
           "def": {
             "kind": "expr",
             "expr": "ratio ^ (1 / n)"
+          }
+        },
+        {
+          "name": "iworked",
+          "def": {
+            "kind": "expr",
+            "expr": "intplus - 1"
+          }
+        },
+        {
+          "name": "percworked",
+          "def": {
+            "kind": "expr",
+            "expr": "100 * iworked"
           }
         }
       ]

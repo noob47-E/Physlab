@@ -717,7 +717,7 @@ export function showMotion(m: PQMotion, played: Played, settings: MeasureSetting
   let rows = 0
   if (m.sampleEvery !== undefined && m.sampleEvery.trim() !== '') {
     const every = numberIn(m.sampleEvery, values, 'how often the readings are taken')
-    if (!(every > 0)) throw new Error('Readings must be taken some time apart; this question asks for every 0 s.')
+    if (!(every > 0)) throw new Error(`Readings must be taken some time apart; this question asks for every ${fmtPrecise(every, settings)} s.`)
     const lab = useLab.getState()
     const already = lab.tables.find((t) => t.id === motionTables.get(played.problem.id))
     if (already) {
@@ -860,7 +860,7 @@ export function sandboxPlan(sb: PQSandbox, played: Played): SandboxPlan {
           return 0
         }
       })
-      return [v[0], v[1], v[2]]
+      return [v[0] ?? 0, v[1] ?? 0, v[2] ?? 0]
     }
     // Checked once at the start so a formula naming something that does not exist is a sentence now, not a silent 0 N.
     try {

@@ -3,6 +3,7 @@
 // JME is translated at import time. Nothing in this file touches React, the DOM or a store.
 
 import { fmtPrecise } from '../math/format'
+import { hasRightOption, isPictureKind, mathOwnsName, motionOk, optionOk, pictureOk, sandboxOk, stepItemsOk, stepLevelOk, trapsOk } from './shapeChecks'
 
 export type LicenseId = 'CC BY 4.0' | 'CC BY-SA 4.0' | 'CC0 1.0'
 
@@ -495,6 +496,49 @@ function checkQuestion(q: unknown, index: number): void {
   for (const v of q.variables) checkVariable(v, who, seen)
   q.parts.forEach((p, i) => checkPart(p, i, who, seen))
   checkFormat2Question(q, who)
+  checkNestedFields(q, who)
+}
+
+/**
+ * The optional fields that hold more than one level (steps, picture, motion, Sandbox scene, tags),
+ * down to what the Author panel and the player read on their first render. They were never looked
+ * at, so a hand-edited file with steps that were a word, or a push with two force components,
+ * opened fine and crashed the panel when the question came up; the same question inside a .phys
+ * file is refused by core/migrate.ts's own copy of these checks (see shapeChecks.ts).
+ */
+function checkNestedFields(q: Record<string, unknown>, who: string): void {
+  if (q.steps !== undefined) {
+    const s = q.steps
+    if (!isObj(s)) throw new Error(`${who} has steps PhysLab cannot read: they are a level and a list of steps.`)
+    if (!isStr(s.level)) throw new Error(`${who} does not say whether its steps are worked, half or solo.`)
+    if (!stepLevelOk(s.level)) throw new Error(`${who} gives its steps a level PhysLab does not know: ${s.level}; the levels are worked, half and solo.`)
+    if (!stepItemsOk(s.items)) throw new Error(`${who} has a step PhysLab cannot read: the steps are a list, and each has a sentence to say.`)
+  }
+  if (q.picture !== undefined) {
+    const p = q.picture
+    if (!isObj(p) || !isStr(p.kind)) throw new Error(`${who} has a picture that does not say what kind it is.`)
+    if (!isPictureKind(p.kind)) throw new Error(`${who} has a picture of a kind PhysLab does not know: ${p.kind}.`)
+    if (!pictureOk(p)) throw new Error(`${who} has a ${p.kind} picture that is missing something PhysLab needs to draw it.`)
+  }
+  if (q.motion !== undefined && !motionOk(q.motion)) {
+    throw new Error(`${who} has a motion PhysLab cannot read: it is a list of stretches, each with a duration, and the graphs to draw.`)
+  }
+  if (q.sandbox !== undefined) {
+    // A scene that names only its preset runs the experiment with no pushes of its own (a teacher's
+    // "the friction experiment beside the picture"). Every reader maps over `actuators` (player.ts
+    // `sandboxPlan`, the Author's scene tab), so the empty list is filled in here instead of being
+    // left for them to crash on; a list that is there must still be well formed.
+    if (isObj(q.sandbox) && q.sandbox.actuators === undefined) q.sandbox.actuators = []
+    if (!sandboxOk(q.sandbox)) {
+      throw new Error(`${who} has a Sandbox scene PhysLab cannot read: it names a preset, and each push names a body and gives a force in three parts.`)
+    }
+  }
+  if (q.tags !== undefined && !isStrings(q.tags)) throw new Error(`${who} lists its tags in a way PhysLab cannot read: they are a list of words.`)
+  // Save for Numbas lists these names (numbas.ts `toExam`: `.filter`, `n.trim()`), so one name
+  // written where a list belongs crashed it, and the Author said nothing.
+  if (isObj(q.imported) && q.imported.contributors !== undefined && !isStrings(q.imported.contributors)) {
+    throw new Error(`${who} lists the people who wrote it in a way PhysLab cannot read: they are a list of names.`)
+  }
 }
 
 /** The question-level fields of format 2: a condition on the variants, the rung, the deeper link, the list of changes. */
@@ -561,6 +605,8 @@ function checkVariable(v: unknown, who: string, seen: Set<string>): void {
 
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr)
 const isWhole = (v: unknown): v is number => isNum(v) && Number.isInteger(v)
+/** A checking range: two numbers, the smaller first. The letters are sampled across it, so a single point marks x³ right for x². */
+const isRange = (r: unknown): boolean => Array.isArray(r) && r.length === 2 && isNum(r[0]) && isNum(r[1]) && r[0] < r[1]
 
 /** A band tolerance (relative or absolute), as every part with a tolerance but a stated number part carries. */
 function isBand(t: unknown): boolean {
@@ -590,7 +636,13 @@ function checkPart(p: unknown, index: number, who: string, names: ReadonlySet<st
   switch (p.type) {
     case 'number':
       if (!isStr(p.answer)) throw new Error(`${who} has a number part with no answer.`)
+      // A unit left out is said to be missing; quoted back, it read "a unit PhysLab does not know: undefined".
+      if (p.unit === undefined) throw new Error(`${who} has a number part with no unit.`)
       if (!isUnit(p.unit)) throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.unit)}.`)
+      // The player maps over the list (`(part.traps ?? []).map`), so a group written where a list belongs crashed it.
+      if (p.traps !== undefined && !trapsOk(p.traps)) {
+        throw new Error(`${who} lists the common mistakes in part ${num(index + 1)} in a way PhysLab cannot read: each is a wrong value and a sentence saying why.`)
+      }
       if (isObj(p.tolerance) && p.tolerance.kind === 'stated') {
         if (!isStr(p.tolerance.uref) || p.tolerance.uref.trim() === '') {
           throw new Error(`${who} has a number part marked against the student's own uncertainty, but gives no uncertainty for its own answer.`)
@@ -609,17 +661,60 @@ function checkPart(p: unknown, index: number, who: string, names: ReadonlySet<st
       if (!Array.isArray(p.symbols) || !p.symbols.every(isStr)) {
         throw new Error(`${who} has an expression part that does not list the symbols a student may use.`)
       }
-      return
-    case 'choice':
-      if (!Array.isArray(p.choices)) throw new Error(`${who} has a choice part with no choices.`)
-      if (isObj(p.distractors) && !isUnit(p.distractors.unit)) {
-        throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.distractors.unit)}.`)
+      // The Question Author's own rule for these letters (authoring.ts `nameProblem`). A theta
+      // typed as θ is read as the name `theta`, which is not the listed "θ", so every answer to
+      // the part was marked wrong.
+      for (const sym of p.symbols as string[]) {
+        if (!VARIABLE_NAME.test(sym)) {
+          throw new Error(`${who} lets a student use '${sym}' in part ${num(index + 1)}; a name is a letter, then letters, digits or underscores.`)
+        }
+        if (RESERVED_NAMES.has(sym) || mathOwnsName(sym)) {
+          throw new Error(`${who} lets a student use '${sym}' in part ${num(index + 1)}, but that already means something in maths.`)
+        }
+      }
+      // The letters are sampled across this range (parts.ts `sampledCheck`): one number or a group
+      // marked the exact answer wrong, and a single point marked x³ right for x².
+      if (p.sampleRange !== undefined && !isRange(p.sampleRange)) {
+        throw new Error(`${who} has a checking range in part ${num(index + 1)} that is not two numbers, the smaller first.`)
       }
       return
+    case 'choice': {
+      if (!Array.isArray(p.choices)) throw new Error(`${who} has a choice part with no choices.`)
+      // Every written option is read (`c.correct`, `c.text.split`) whether or not the options are
+      // made up, so a null or a bare word among them crashed Problem Sets when the part came up.
+      if (!p.choices.every(optionOk)) {
+        throw new Error(`${who} has an option in part ${num(index + 1)} that PhysLab cannot read: each option is a sentence marked right or wrong, and may say why.`)
+      }
+      const made = p.distractors
+      if (made === undefined) {
+        // Options written out must include a right one, or the part can never be answered. When
+        // the options are made up the written list is ignored (it is empty in the bundled sample),
+        // so none is asked of it. A half-written question never gets here: the Author keeps its
+        // set in the .phys file (core/migrate.ts), and Export checks every part before it calls
+        // parsePQFile on what it is about to write.
+        if (!hasRightOption(p.choices)) throw new Error(`${who} has no option marked right in part ${num(index + 1)}.`)
+        return
+      }
+      if (isObj(made) && made.unit === undefined) {
+        throw new Error(`${who} lets PhysLab make up the options in part ${num(index + 1)} but does not give their unit.`)
+      }
+      if (isObj(made) && !isUnit(made.unit)) {
+        throw new Error(`${who} uses a unit PhysLab does not know: ${String(made.unit)}.`)
+      }
+      // `questionFormat` and the Solution tab read `rules.some` / `rules.includes`, so a group with only a unit crashed both.
+      if (!isObj(made) || !isStr(made.correct)) {
+        throw new Error(`${who} lets PhysLab make up the options in part ${num(index + 1)} but does not give the right answer to make them from.`)
+      }
+      if (!isStrings(made.rules)) {
+        throw new Error(`${who} lets PhysLab make up the options in part ${num(index + 1)} but does not list the kinds of wrong option to make.`)
+      }
+      return
+    }
     case 'vector':
       if (!isStrings(p.answer) || p.answer.length < 2 || p.answer.length > 3) {
         throw new Error(`${who} has a vector part whose answer is not two or three components.`)
       }
+      if (p.unit === undefined) throw new Error(`${who} has a vector part with no unit.`)
       if (!isUnit(p.unit)) throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.unit)}.`)
       checkBand(p.tolerance, who, 'vector')
       return
@@ -637,6 +732,7 @@ function checkPart(p: unknown, index: number, who: string, names: ReadonlySet<st
     case 'roots':
       // An empty list is allowed: it is the answer "no real roots".
       if (!isStrings(p.answer)) throw new Error(`${who} has a roots part whose answer is not a list of roots.`)
+      if (p.unit === undefined) throw new Error(`${who} has a roots part with no unit.`)
       if (!isUnit(p.unit)) throw new Error(`${who} uses a unit PhysLab does not know: ${String(p.unit)}.`)
       checkBand(p.tolerance, who, 'roots')
       if (p.multiplicity !== undefined && typeof p.multiplicity !== 'boolean') {
@@ -652,11 +748,8 @@ function checkPart(p: unknown, index: number, who: string, names: ReadonlySet<st
         throw new Error(`${who} has a function part with a starting condition PhysLab cannot read.`)
       }
       if (!isStr(p.model)) throw new Error(`${who} has a function part with no model answer.`)
-      if (p.sampleRange !== undefined) {
-        const r = p.sampleRange
-        if (!Array.isArray(r) || r.length !== 2 || !isNum(r[0]) || !isNum(r[1]) || r[0] >= r[1]) {
-          throw new Error(`${who} has a function part whose checking range is not two numbers, the smaller first.`)
-        }
+      if (p.sampleRange !== undefined && !isRange(p.sampleRange)) {
+        throw new Error(`${who} has a function part whose checking range is not two numbers, the smaller first.`)
       }
       return
     case 'proof':

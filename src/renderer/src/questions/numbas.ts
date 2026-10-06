@@ -1142,7 +1142,7 @@ function resolveScripts(s: string): string {
  * question's variables is a chip (chipLatex has already put a space inside a LaTeX group round a
  * variable's name); any other `{name}` is LaTeX grouping and loses its braces.
  */
-function speakTex(tex: string, names: ReadonlySet<string>): string {
+export function speakTex(tex: string, names: ReadonlySet<string>): string {
   const chips: string[] = []
   const kept = tex
     .replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (m, name: string) => (names.has(name) ? `${KEEP}${chips.push(name) - 1}${KEEP}` : m))

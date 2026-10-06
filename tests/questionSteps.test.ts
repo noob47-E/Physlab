@@ -16,7 +16,9 @@ import {
   nextLevel,
   readSolverArg,
   stepsToWorking,
+  spokenOf,
   texText,
+  textLines,
   type StepMove
 } from '../src/renderer/src/questions/steps'
 import { texQuantity } from '../src/renderer/src/questions/units'
@@ -122,6 +124,21 @@ describe('stepsToWorking', () => {
       for (const level of ['worked', 'half', 'solo'] as const) rendersAll(stepsToWorking(TRAIN, variant, SETTINGS, level), `seed ${seed} ${level}`)
     }
     renders(`\\text{${texText('100% of $5 & #1 {x} \\ a_b ^ ~')}}`, 'texText')
+  })
+
+  // A spoken choice set as \text{}: KaTeX refuses ∑ ∫ ∏ ≠ ∉ ∌ in text mode (pool q8965 threw).
+  it('sets a choice holding a maths-only symbol so KaTeX draws it', () => {
+    renders(`\\text{${texText('∑(x_i²- 2x_ix̄ + x̄²)')}}`, 'sum')
+    renders(`\\text{${texText('a ∉ B, A ∌ b, x ≠ 1, ∫ f dx, ∏ p')}}`, 'relations')
+  })
+
+  // The plain prompt (a box's label and accessible name) of an imported set question lost its braces,
+  // ∩ and ∈: "Let A=\-1,-3,-9\ and B=\m m is an odd integer \.Then A B is" (pool q16543).
+  it('speaks a prompt\'s set notation in the plain label', () => {
+    const fill = { values: {}, units: {}, settings: SETTINGS }
+    const plain = spokenOf(textLines(String.raw`Let \(A=\{-1,-3,-9\}\) and \(B=\{m\mid m \text{ is odd}\}\). Then \(A\subseteq B\) and \(n \in \mathbb{N}\), \(A \cap B\)`, fill).flat())
+    expect(plain).toBe('Let A={-1,-3,-9} and B={m| m is odd}. Then A⊆ B and n ∈ ℕ, A ∩ B')
+    expect(plain).not.toMatch(/\\/)
   })
 
   it('gives the answers even when there are no steps, and says ? for an answer it cannot work out', () => {

@@ -715,3 +715,18 @@ describe('the full Numbas question pack (built outside the repo, QN2)', () => {
     }
   })
 })
+
+// Q24 (N29): the last step said "So i = {int}", the exact rate, straight after a line worked from A
+// rounded to the cent — so the i a student read did not follow from the line above it.
+describe('Compound interest on savings: the rate follows from the line above it', () => {
+  it('names the i worked from the rounded A, and says it rounds to the answer at 2 decimal places', () => {
+    const q = file.questions.find((x) => x.title === 'Compound interest on savings')!
+    const last = q.steps!.items[q.steps!.items.length - 1]
+    expect(last.head).toContain('{iworked}')
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const { values } = drawVariables(q, seed)
+      expect(values.iworked).toBeCloseTo(values.intplus - 1, 15)
+      expect(Math.abs(values.percworked - values.perc)).toBeLessThan(0.005)
+    }
+  })
+})

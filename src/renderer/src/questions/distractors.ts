@@ -73,10 +73,10 @@ function ruleValues(rule: DistractorRule, expr: string, values: Record<string, n
     case 'power-of-ten':
       return [correct * 10, correct / 10]
     // The four rules below stand for the normal-distribution table-reading slips
-    // (math/pure/zscoreDistractors.ts has the full set, used for the standard-normal Working
-    // panel); here they generalise the same slip to whatever expr/values a normal-distribution
-    // choice part is authored with, re-evaluating the part's own expression with one variable
-    // changed the wrong way, exactly as every other rule in this switch does.
+    // (math/pure/zscoreDistractors.ts has a fuller set of the same slips, kept for a later use;
+    // nothing imports it today); here they generalise the same slip to whatever expr/values a
+    // normal-distribution choice part is authored with, re-evaluating the part's own expression
+    // with one variable changed the wrong way, exactly as every other rule in this switch does.
     case 'z-sign':
       return ['z' in values ? recompute(expr, { ...values, z: -values.z }) : 'x' in values && 'mean' in values ? recompute(expr, { ...values, x: 2 * values.mean - values.x }) : null]
     case 'z-one-minus':
@@ -128,7 +128,7 @@ export function generateChoices(part: ChoicePart, values: Record<string, number>
   for (const rule of rules) {
     for (const value of ruleValues(rule, expr, values, correctValue)) {
       if (value === null || !Number.isFinite(value)) continue
-      if (accepted.some((a) => Math.abs(a - value) <= distinctTol)) continue
+      if (rule !== 'g-10' && accepted.some((a) => Math.abs(a - value) <= distinctTol)) continue
       // Distinct numbers can still round to one text (0.006 m and 0.012 m are both "0.01 m" at
       // 2 dp), and two identical options, one right and one wrong, is not a question.
       const text = formatQuantity(value, unit, settings)

@@ -339,7 +339,7 @@ const TAIL_SPELLINGS: Map<string, UnitId> = new Map([
  */
 function buildTailPattern(): RegExp {
   const spellings = [...TAIL_SPELLINGS.keys()].sort((a, b) => b.length - a.length).map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  return new RegExp(`(?<=[\\d)\\s])\\s*(${spellings.join('|')})\\s*$`)
+  return new RegExp(`(?<=[\\d)\\s>\\]⁰¹²³⁴⁵⁶⁷⁸⁹])\\s*(${spellings.join('|')})\\s*$`)
 }
 
 const TAIL_PATTERN = buildTailPattern()

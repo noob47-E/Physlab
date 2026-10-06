@@ -15,6 +15,7 @@ import type { MathNode } from 'mathjs'
 import { math, preprocess } from '../math/expr'
 import { fmtPrecise, type MeasureSettings } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
+import { texToPlain } from '../math/pure/work'
 import { motionPieces } from './motion'
 import { evaluateInVariables } from './parts'
 import { bandOf, DEFAULT_BAND, type MotionSegment, type PQMotion, type PQPicture, type PQQuestion, type PQSandbox, type Tolerance, type UnitId } from './pqjson'
@@ -104,6 +105,16 @@ function readQuestion(q: PQQuestion, values: Record<string, number>): QuestionTe
   const prompts = q.parts.map((p) => words(p.prompt))
   return { statement, prompts, all: [statement, ...prompts].join(' '), maths }
 }
+
+/** The LaTeX commands that say a comparison or a probability, as the characters a rule reads. */
+const TEX_SAYS = new Map([['le', '≤'], ['leq', '≤'], ['leqslant', '≤'], ['lt', '<'], ['ge', '≥'], ['geq', '≥'], ['geqslant', '≥'], ['gt', '>'], ['Pr', 'P']])
+
+/**
+ * A maths span as the words read inline maths (texToPlain), lower case, keeping what it compares:
+ * texToPlain drops every command, so "P(X \le 65)" lost its ≤ and shaded the whole bell; and read
+ * as raw LaTeX, x^2 put a 2 on the number line and 1.5 \times 10^{6} three numbers.
+ */
+const plainMaths = (tex: string): string => texToPlain(tex.replace(/\\([a-zA-Z]+)/g, (m, name: string) => TEX_SAYS.get(name) ?? m)).toLowerCase()
 
 type Dimension = 'speed' | 'accel' | 'time' | 'length' | 'force' | 'mass' | 'angle'
 
@@ -432,6 +443,10 @@ const TOP_ALWAYS = /\b(maximum height|greatest height|highest point|max(?:imum)?
 // 20 m/s at an angle of 30° to the horizontal" rose at the whole 20 m/s to 20 m, where it rises 5 m.
 // A bare "horizontal" is not a launch: "dropped from 20 m onto horizontal ground" is a plain fall.
 const AT_AN_ANGLE = /\b(?:angle|elevation|horizontally|(?:to|above|below|with|from) the horizontal|horizontal (?:velocity|speed|component|distance|range))\b/
+// The part of it a slope's own angle never says, and the launch words that make an angle on a
+// hill a projectile's: "inclined at 30° to the horizontal" is the slope, "projected at 30°" is not.
+const LEVEL_LAUNCH = /\b(?:elevation|horizontally|horizontal (?:velocity|speed|component|distance|range))\b/
+const LAUNCHED = /\b(?:thrown|throws?|projected|launched|fired|kicked|hit|shot|struck)\b/
 // Two bodies in one question are two motions, never one: "a ball is dropped … a second ball is
 // thrown downward at 5 m/s" drew one fall from 30 m starting at 5 m/s, which is neither ball.
 // Each name with its own plural: "bodies", "lorries", "buses" and "people" are not the name plus "s".
@@ -553,7 +568,13 @@ function inferSuvat(text: QuestionText, qs: Quantity[], values: Record<string, n
     !incline &&
     ownAcceleration(said, gravityOf(qs, values)) === undefined &&
     (/\b(dropped|falls? from)\b/.test(text.all) || (DROPPED.test(text.all) && FROM_HEIGHT.test(text.all)))
-  if (THROWN_UP.test(text.all) || THROWN_DOWN.test(text.all) || falls || twoBodies(text.all)) return null
+  // A projectile is two motions at once, never one stretch: read as one, "thrown horizontally at
+  // 15 m/s from a cliff 20 m high … 2 s later" slowed at 5 m/s² along the cliff's 20 m height. On a
+  // slope an angle is the slope's ("inclined at 30°") and the motion along it is one line, so there
+  // only a launch at an angle, or leaving horizontally, is a projectile ("hill" is a slope too).
+  const angled = AT_AN_ANGLE.test(text.all) || qs.some((x) => x.dim === 'angle')
+  const projectile = incline ? LEVEL_LAUNCH.test(text.all) || (angled && LAUNCHED.test(text.all)) : angled
+  if (THROWN_UP.test(text.all) || THROWN_DOWN.test(text.all) || falls || twoBodies(text.all) || projectile) return null
   // A second stretch ("then … for 5 s", "for a further 100 m") is counted before equal values
   // merge: "accelerates … for 5 s, then continues steadily for 5 s" was one 5 s stretch ending at
   // 25 m where the journey goes 75 m. The merge is for one number said twice, not two stretches.
@@ -700,6 +721,14 @@ function inferFreeBody(text: QuestionText, qs: Quantity[], values: Record<string
   // from anything else is not guessed: drawn level, 50 N at 30° gave N = 98 N where it is 73 N.
   const angles = distinct(qs.filter((x) => x.dim === 'angle')).map((x) => x.value)
   if (angles.length > 1) return null
+  // Left/right words mirror a horizontal force: "pulled to the left" is a negative F and the
+  // friction against it acts to the right. A question that says both is contradictory. Only a
+  // direction said as one counts: a crate "left at rest" was pulled to the left, and "left over"
+  // or "at right angles" beside a real direction read as both and lost the diagram.
+  const leftWord = /\b(?:to(?:wards)? the left|leftwards?|west(?:wards?)?|backwards?)\b/.test(text.all)
+  const rightWord = /\b(?:to(?:wards)? the right|rightwards?|east(?:wards?)?|forwards?)\b/.test(text.all)
+  if (leftWord && rightWord) return null
+  const directionSign = leftWord ? -1 : 1
   let degrees = 0
   if (angles.length === 1) {
     const [below, above, vertical] = [BELOW_HORIZONTAL.test(text.all), ABOVE_HORIZONTAL.test(text.all), TO_VERTICAL.test(text.all)]
@@ -710,7 +739,7 @@ function inferFreeBody(text: QuestionText, qs: Quantity[], values: Record<string
   const muMatch = FRICTION_COEFF.exec(text.all)
   const mu = muMatch ? Number(muMatch[1].replace('−', '-')) : undefined
   const W = m * g
-  const Fx = F * Math.cos(theta)
+  const Fx = directionSign * F * Math.cos(theta)
   const Fy = F * Math.sin(theta)
   const N = W - Fy
   if (!(N >= 0)) return null
@@ -718,7 +747,7 @@ function inferFreeBody(text: QuestionText, qs: Quantity[], values: Record<string
   const items: Item[] = [{ name: 'F', v: [Fx, Fy], size: F }]
   // Friction is μN; only with a level pull is N = mg, and only then is it named μmg. A pull at an
   // angle lightens N, and "μmg" on that arrow taught a formula its length did not follow.
-  if (mu !== undefined && mu > 0) items.push({ name: theta === 0 ? 'μmg' : 'μN', v: [-mu * N, 0], size: mu * N })
+  if (mu !== undefined && mu > 0) items.push({ name: theta === 0 ? 'μmg' : 'μN', v: [-directionSign * mu * N, 0], size: mu * N })
   items.push({ name: 'mg', v: [0, -W], size: W }, { name: 'N', v: [0, N], size: N })
   const picture = (list: Item[]): Visual => ({ picture: { kind: 'vectors', items: list.map((it) => ({ name: it.name, v: it.v.map(lit), role: 'input' as const })) } })
   const revealing = items.filter((it) => holdsAny([it.size, ...it.v.filter((c) => c !== 0)], answers.numbers))
@@ -911,7 +940,9 @@ function inferFunction(text: QuestionText, answers: Answers): AutoVisual | null 
 
 const NORMAL_WORDS = /\b(normal(?:ly)? distribut\w*|normal model|bell curve)\b|\bn\s*\(\s*[−-]?\d/
 const MEAN = /\bmean\s*(?:of|is|=|μ\s*=)?\s*([−-]?\d+(?:\.\d+)?)/
+const BARE_MEAN = /(?:^|[\s;.!?])(?:\\mu|μ|\bmu\b)\s*=\s*([−-]?\d+(?:\.\d+)?)/
 const SD = /\bstandard deviation\s*(?:of|is|=|σ\s*=)?\s*(\d+(?:\.\d+)?)/
+const BARE_SD = /(?:^|[\s;.!?])(?:\\sigma|σ|\bsigma\b)\s*=\s*(\d+(?:\.\d+)?)/
 const VARIANCE = /\bvariance\s*(?:of|is|=)?\s*(\d+(?:\.\d+)?)/
 const N_OF = /\bn\s*\(\s*([−-]?\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*(\^\s*2|²)?\s*\)/
 const NUM = String.raw`([−-]?\d+(?:\.\d+)?)`
@@ -960,15 +991,26 @@ function inferNormal(text: QuestionText, answers: Answers): AutoVisual | null {
     mean = n(nOf[1])
     sd = nOf[3] ? n(nOf[2]) : Math.sqrt(n(nOf[2]))
   }
-  const m = MEAN.exec(text.all)
+  const allAndMaths = [text.all, ...text.maths.map((x) => x.toLowerCase())].join(' ')
+  const m = MEAN.exec(allAndMaths)
   if (m) mean = n(m[1])
-  const s = SD.exec(text.all)
-  const v = VARIANCE.exec(text.all)
+  else {
+    const bare = BARE_MEAN.exec(allAndMaths)
+    if (bare) mean = n(bare[1])
+  }
+  const s = SD.exec(allAndMaths)
+  const v = VARIANCE.exec(allAndMaths)
   if (s) sd = n(s[1])
   else if (v) sd = Math.sqrt(n(v[1]))
+  else {
+    const bare = BARE_SD.exec(allAndMaths)
+    if (bare) sd = n(bare[1])
+  }
   if (mean === undefined || sd === undefined || !(sd > 0)) return null
   let region: { from?: number; to?: number } = {}
-  for (const where of [...text.prompts, text.statement]) {
+  // The maths last, and in words: a region in a display line of its own ("$$P(X < 65)$$", as a
+  // Numbas import writes one) shaded the whole bell and, once answered, called the probability 1.
+  for (const where of [...text.prompts, text.statement, ...text.maths.map(plainMaths)]) {
     const hit = REGIONS.map(([re, read]) => {
       const r = re.exec(where)
       return r ? { at: r.index, region: read(r) } : null
@@ -1079,8 +1121,9 @@ export function numberLineOf(q: PQQuestion, variant: Variant): AutoVisual {
     const text = readQuestion(q, values)
     const seen: number[] = []
     // The parts' prompts too: an imported or bundled question often gives its numbers there
-    // ("What is 12 + 4?" under a bare "Answer it.").
-    for (const m of [text.statement, ...text.prompts].join(' ').matchAll(BARE_NUMBER)) {
+    // ("What is 12 + 4?" under a bare "Answer it."); and the maths, in words, for a display line
+    // ("$$12+4$$"), which the words leave out.
+    for (const m of [text.statement, ...text.prompts, ...text.maths.map(plainMaths)].join(' ').matchAll(BARE_NUMBER)) {
       const x = numberOf(m)
       if (!Number.isFinite(x) || holdsAny([x], answers.numbers) || seen.some((y) => same(x, y))) continue
       seen.push(x)
@@ -1185,7 +1228,8 @@ function turnsAndRoots(f: (x: number) => number, a: number, b: number): number[]
     const x = a + ((b - a) * i) / n
     const y = f(x)
     if (Number.isFinite(py) && Number.isFinite(y)) {
-      if (py * y < 0) {
+      if (y === 0) out.push(x)
+      else if (py * y < 0) {
         const r = bisect(f, px, x)
         out.push(r)
       }

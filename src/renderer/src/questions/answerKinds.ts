@@ -4,6 +4,7 @@
 // the most damage to trust, so every band here errs on the side of a right answer.
 // Headless: no React, no store, no DOM.
 
+import type { MathNode, OperatorNode, ParenthesisNode } from 'mathjs'
 import type { Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
 import { fmtPrecise, noiseFloor, roundHalfAway, toExponentialHalfAway, toFixedHalfAway, type MeasureSettings } from '../math/format'
@@ -104,14 +105,21 @@ export function checkStated(
   // Measured against the student's own value, the way a relative uncertainty is always quoted —
   // and quoting it against the reference would give the reference away (u ÷ 17.9 % = xref). A
   // value of 0 has no share to quote, so its sentence carries no number at all. Against a
-  // reference that is itself exactly 0 (a net force, a displacement that cancels) the value is
-  // the right one and the Eₙ test below judges it; refusing it there marked "0 ± 0.05" wrong
-  // against 0 ± 0.05, an Eₙ of 0.
-  if (x === 0 && u > 0 && ref.x !== 0) {
-    return { verdict: 'wrong', parsed: x, message: 'Your value is 0, so your uncertainty cannot be judged against it. Check your value.' }
+  // reference that is itself exactly 0 the Eₙ test below judges the value, but the cap still
+  // applies: the answer's only scale is the reference's own uncertainty, so a stated uncertainty
+  // more than 1/max times it is refused — and the value 0 is right there, so the sentence names the
+  // uncertainty. "0 ± 0.05" against 0 ± 0.05 stays right; an exact 0 with no uncertainty of its own
+  // has no scale to cap against, and Eₙ alone judges it.
+  if (x === 0 && u > 0) {
+    if (ref.x !== 0) {
+      return { verdict: 'wrong', parsed: x, message: 'Your value is 0, so your uncertainty cannot be judged against it. Check your value.' }
+    }
+    if (ref.u > 0 && u > (ref.u * (1 + 1e-9)) / max) {
+      return { verdict: 'wrong', parsed: x, message: 'Your uncertainty is far larger than this answer allows. Check your uncertainty.' }
+    }
   }
   const rel = x !== 0 ? u / Math.abs(x) : 0
-  if (rel > max * (1 + 1e-9)) {
+  if (x !== 0 && rel > max * (1 + 1e-9)) {
     return {
       verdict: 'wrong',
       parsed: x,
@@ -414,6 +422,36 @@ export function statedAnswerTex(value: number, uref: number, unit: UnitId, s: Pr
 const texAbs = (x: number, s: Precision): string => texQuantity(Math.abs(x), 'none', s)
 
 /**
+ * The largest of the terms an answer formula adds or takes away, at these values: the size its
+ * arithmetic noise is measured against. F + F cos 120° + F cos 240° adds terms of size 10 and leaves
+ * 10⁻¹⁵, which is noise; q·E adds nothing, so its 1.6×10⁻¹⁵ N is the answer, however big E is.
+ */
+function addedScale(expr: string, values: Record<string, number>): number {
+  const terms: MathNode[] = []
+  const walk = (n: MathNode): void => {
+    if (n.type === 'ParenthesisNode') return walk((n as ParenthesisNode).content)
+    const op = n as OperatorNode
+    if (n.type === 'OperatorNode' && ['add', 'subtract', 'unaryMinus', 'unaryPlus'].includes(op.fn)) return op.args.forEach(walk)
+    terms.push(n)
+  }
+  try {
+    walk(math.parse(preprocess(expr)))
+  } catch {
+    return 0
+  }
+  let scale = 0
+  for (const t of terms) {
+    try {
+      const v = Number(inDegrees(() => t.evaluate({ ...values })))
+      if (Number.isFinite(v)) scale = Math.max(scale, Math.abs(v))
+    } catch {
+      // A term with no value of its own adds no scale.
+    }
+  }
+  return scale
+}
+
+/**
  * The right answer of a format-2 part as LaTeX, for the revealed answer and the worked
  * solution's last line (answers are mandatory, Rule 3): 8.66 i + 5 j N, a matrix in brackets,
  * the roots in a list. Each number is written at the precision `revealSettings` gives it against
@@ -441,8 +479,14 @@ export function format2AnswerTex(part: Format2Part, values: Record<string, numbe
         // it, for up to three components (√3 / 2 < 1).
         const band = halfWidth(part.tolerance, length, 0)
         // Only a zero, or the arithmetic's hair off one (cos 90°), is left out — never a real small
-        // component: (0.004, 5) at 2 d.p. was revealed as "5j", and typed back that was wrong.
-        const terms = v.map((c, i) => ({ c, axis: `\\mathbf{${AXES[i]}}` })).filter(({ c }) => Math.abs(c) > noiseFloor(0, length))
+        // component: (0.004, 5) at 2 d.p. was revealed as "5j", and typed back that was wrong. But
+        // when every component is itself that hair — a resultant of equal forces 120° apart — the
+        // vector's own size is noise, so each component is also measured against the terms its own
+        // formula adds (F = 10 N each). That reveals the zero vector, while the force qE on an electron
+        // (1.6×10⁻¹⁵ N, E = 10⁴) adds nothing and stays the answer.
+        const terms = v
+          .map((c, i) => ({ c, axis: `\\mathbf{${AXES[i]}}`, scale: Math.max(length, addedScale(part.answer[i], values)) }))
+          .filter(({ c, scale }) => Math.abs(c) > noiseFloor(0, scale))
         const u = texUnit(part.unit)
         if (terms.length === 0) return u === '' ? '\\mathbf{0}' : `\\mathbf{0}\\,${u}`
         const body = terms.map(({ c, axis }, i) => `${c < 0 ? (i === 0 ? '-' : ' - ') : i === 0 ? '' : ' + '}${texAbs(c, revealSettings(c, band, s))}\\,${axis}`).join('')
@@ -467,7 +511,8 @@ export function format2AnswerTex(part: Format2Part, values: Record<string, numbe
         const entries = part.answer.map((row) => row.map((e) => valueOf(e, values)))
         if (entries.some((row) => row.some((x) => !Number.isFinite(x)))) return '\\text{?}' // see the roots above
         const largest = Math.max(0, ...entries.flat().map(Math.abs))
-        const rows = entries.map((row) => row.map((x) => entry(noiseToZero(x, largest))).join(' & '))
+        // Each entry is also measured against the terms its own formula adds, as a vector's components are.
+        const rows = entries.map((row, r) => row.map((x, c) => entry(noiseToZero(x, Math.max(largest, addedScale(part.answer[r][c], values))))).join(' & '))
         return `\\begin{pmatrix} ${rows.join(' \\\\ ')} \\end{pmatrix}`
       }
       case 'function':

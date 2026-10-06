@@ -7,9 +7,10 @@
 
 import type { SymbolNode } from 'mathjs'
 import { inDegrees, math, preprocess } from '../math/expr'
-import type { MeasureSettings } from '../math/format'
+import { toPrecisionHalfAway, type MeasureSettings } from '../math/format'
 import { JOBS, runPure, type JobId } from '../math/pure/run'
-import { texToPlain, type Answer, type Move, type Working } from '../math/pure/work'
+import { type Answer, type Move, type Working } from '../math/pure/work'
+import { speakTex } from './numbas'
 import type { V3 } from '../math/vec'
 import {
   solveAddition,
@@ -36,6 +37,7 @@ import {
   type SolverSettings
 } from '../math/vectorSolver'
 import { format2AnswerTex, statedAnswerTex } from './answerKinds'
+import { generateChoices } from './distractors'
 import { isCommandArgument, type FadingLevel, type PQPart, type PQQuestion, type PQStep, type UnitId } from './pqjson'
 import { toAbsoluteTol } from './parts'
 import { revealSettings, texQuantity, texUnit } from './units'
@@ -58,6 +60,36 @@ const COULD_NOT = 'PhysLab could not work this step out.'
 // ---------------------------------------------------------------------------
 
 const CHIP = /\{([A-Za-z][A-Za-z0-9_]*)\}/g
+
+/**
+ * A value as an engine reads it: cut to the 15 figures a double holds faithfully, in plain digits.
+ * A formula variable keeps the arithmetic's binary noise (a + b at 0.1 and 0.2 is
+ * 0.30000000000000004), which the exact-fraction engine worked as 7500000000000001/25000000000000000;
+ * and String() writes a tiny value as 1.6e-19, programming syntax in a line of maths.
+ */
+function exactDigits(v: number): string {
+  const text = toPrecisionHalfAway(v, 15)
+  return text.includes('.') ? text.replace(/\.?0+$/, '') : text
+}
+
+/** A chip that is the whole of an engine's argument, with nothing around it. */
+const LONE_CHIP = /^\s*\{[A-Za-z][A-Za-z0-9_]*\}\s*$/
+
+/**
+ * Chips in an engine's plain-maths input fill with the value itself, never the student's
+ * rounding: a pure or SymPy step must work the exact drawn number. A negative value goes in
+ * brackets, so `{k}^2` reads (−3)², not −(3²) — but not a chip that is the whole argument: a
+ * vector solver reads a lone `(-3)` as a vector with one component, and "multiply A by {k}" said
+ * it could not work the step out.
+ */
+function exactChipFill(text: string, values: Record<string, number>): string {
+  const lone = LONE_CHIP.test(text)
+  return text.replace(CHIP, (chip, name: string) => {
+    const v = values[name]
+    if (v === undefined || Number.isNaN(v)) return chip
+    return v < 0 && !lone ? `(${exactDigits(v)})` : exactDigits(v)
+  })
+}
 
 /**
  * Chips inside LaTeX: a value in brackets when negative, so `{a} \times 2` never reads
@@ -139,10 +171,17 @@ export function textLines(text: string, f: Fill): Segment[][] {
     .map((l) => lineSegments(l, f))
 }
 
-/** Segments read as one plain sentence: the maths spoken (texToPlain), never raw LaTeX. */
+/** No value is left to fill in here: the segments already hold the drawn numbers. */
+const FILLED: ReadonlySet<string> = new Set()
+
+/**
+ * Segments read as one plain sentence: the maths spoken, never raw LaTeX. Through the importer's
+ * reader (numbas.ts speakTex), not texToPlain, which deletes every command it does not know: an
+ * imported set question's label read "Let A=\-1,-3,-9\ and … Then A B is" (∩, ⊆, braces lost).
+ */
 export function spokenOf(segments: Segment[]): string {
   return segments
-    .map((s) => ('text' in s ? s.text : texToPlain(s.tex)))
+    .map((s) => ('text' in s ? s.text : speakTex(s.tex, FILLED)))
     .join('')
     .replace(/\s+/g, ' ')
     .trim()
@@ -155,9 +194,15 @@ const spoken = (text: string, f: Fill): string => spokenOf(textLines(text, f).fl
 // The answers
 // ---------------------------------------------------------------------------
 
-/** Text set inside \text{}: the characters TeX reads as commands are escaped, nothing else changes. */
+/**
+ * Text set inside \text{}: the characters TeX reads as commands are escaped, and the few symbols
+ * KaTeX draws only in maths (∑ ∏ ∫ ≠ ∉ ∌, as an imported choice speaks them) are set as maths
+ * inside the text — in text mode KaTeX threw on them. Nothing else changes.
+ */
 export function texText(text: string): string {
-  return text.replace(/[\\{}$&#%_^~]/g, (c) => (c === '\\' ? '\\textbackslash{}' : c === '^' ? '\\^{}' : c === '~' ? '\\~{}' : `\\${c}`))
+  return text
+    .replace(/[\\{}$&#%_^~]/g, (c) => (c === '\\' ? '\\textbackslash{}' : c === '^' ? '\\^{}' : c === '~' ? '\\~{}' : `\\${c}`))
+    .replace(/[∑∏∫≠∉∌]/g, (c) => `$${c}$`)
 }
 
 /**
@@ -213,7 +258,16 @@ function answerFor(part: PQPart, values: Record<string, number>, units: Record<s
     }
   }
   if (part.type !== 'choice') return { label, tex: format2AnswerTex(part, values, s) }
-  const right = part.choices.filter((c) => c.correct).map((c) => `\\text{${texText(substitute(c.text, values, units, s))}}`)
+  // Generated options whose right answer cannot be worked out reveal "?", as any answer that cannot
+  // be worked out does; the player says why in words. Unguarded, the throw took the whole question
+  // down before the player could say so.
+  let choices: readonly { text: string; correct: boolean }[]
+  try {
+    choices = part.distractors ? generateChoices(part, values, s) : part.choices
+  } catch {
+    choices = []
+  }
+  const right = choices.filter((c) => c.correct).map((c) => `\\text{${texText(substitute(c.text, values, units, s))}}`)
   return { label, tex: right.length > 0 ? right.join(',\\ ') : '\\text{?}' }
 }
 
@@ -318,7 +372,7 @@ function autoMoves(
   if (auto.engine === 'pure') {
     const def = JOBS.find((j) => j.id === auto.job)
     if (!def) return cannot()
-    const input = substitute(auto.input, values, {}, s)
+    const input = exactChipFill(auto.input, values)
     if (def.engine === 'cas') {
       const done = resolved?.get(casStepKey(def.id, input))
       return done ? casMoves(done, cannot) : [{ head: WORKING_IT_OUT_STEP, blank: false }]
@@ -332,11 +386,7 @@ function autoMoves(
   // Each chip is the value itself, not its text at the student's precision: filled in rounded,
   // a worked-out Fx = 25.98076 went into the solver as 25.98 and the working's last line could
   // disagree with the part's own answer in the last digit. The solver rounds what it shows.
-  const exact = (text: string): string =>
-    text.replace(CHIP, (chip, name: string) => {
-      const v = values[name]
-      return v === undefined || Number.isNaN(v) ? chip : String(v)
-    })
+  const exact = (text: string): string => exactChipFill(text, values)
   let args: unknown[]
   try {
     args = auto.args.map((a) => readSolverArg(exact(a), values))
@@ -464,7 +514,7 @@ export async function workCasSteps(
     if (auto?.engine !== 'pure') continue
     const def = JOBS.find((j) => j.id === auto.job)
     if (def?.engine !== 'cas') continue
-    const input = substitute(auto.input, values, {}, settings)
+    const input = exactChipFill(auto.input, values)
     wanted.set(casStepKey(def.id, input), { job: def.id, input })
   }
   if (!wanted.size) return null

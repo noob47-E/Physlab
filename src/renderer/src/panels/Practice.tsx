@@ -6,6 +6,7 @@ import { useScene } from '../core/store'
 import { enterMode } from '../app/layout'
 import { resultFilesOffered } from '../app/modes'
 import { showPanel } from '../app/panels'
+import { panelToFront } from './solverState'
 import { hiddenModeFileText, openQuestionFile } from '../app/files'
 import { checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
@@ -426,9 +427,10 @@ export function Practice() {
     try {
       const text = run()
       enterMode(mode)
-      // Practice and the Sandbox share a dock group, and the button just pressed is in Practice:
-      // left there, the Sandbox tab stayed behind it while the note said to press its Play.
-      if (mode === 'sandbox') showPanel('sandbox')
+      // Practice, the Sandbox and Lab Data share a dock group, and the button just pressed is in
+      // Practice: left there, the tab switched to stayed behind it while the note named it.
+      const front = panelToFront(mode)
+      if (front) showPanel(front)
       const where = mode === 'graphing' ? 'Graphing' : mode === 'sandbox' ? 'the Sandbox' : 'Lab Data'
       put({ note: { text: `${text} Switched to ${where} to show it; your place in the set is kept.`, error: false } })
     } catch (e) {

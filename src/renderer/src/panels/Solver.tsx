@@ -6,10 +6,7 @@ import { fromPolar, toRad, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
-
-type VecInput = { mode: 'comp' | 'polar' | 'scene'; comp: V3; mag: number; angle: number; sceneId: string; name: string }
-
-const newVec = (name: string, comp: V3 = [3, 4, 0]): VecInput => ({ mode: 'comp', comp, mag: 10, angle: 30, sceneId: '', name })
+import { newVec, vectorsOnChoose, vectorsToSolve, type VecInput } from './solverState'
 
 const PROBLEMS = [
   { id: 'components', label: 'Resolve a vector into components (Ax = A cos θ)' },
@@ -185,10 +182,7 @@ export function Solver() {
     setError('')
     const n = needVecs[id]
     const names = vecNames[id] ?? ['A', 'B', 'C']
-    if (n === -1) setVecs((v) => (v.length >= 2 ? v : [newVec('A', [3, 4, 0]), newVec('B', [2, -1, 0])]))
-    else if (n > 0) {
-      setVecs(Array.from({ length: n }, (_, i) => vecs[i] ? { ...vecs[i], name: names[i] } : newVec(names[i], i === 0 ? [3, 4, 0] : [2, -1, 0])))
-    }
+    setVecs((v) => vectorsOnChoose(v, n, names))
     if (id === 'magforce') setVecs([newVec('v', [1, 0, 0]), newVec('B', [0, 0, 1])])
   }
 
@@ -196,7 +190,7 @@ export function Solver() {
     setError('')
     setHintFirst(hint)
     try {
-      const vs = vecs.map(resolveVec)
+      const vs = vectorsToSolve(vecs, needVecs[problem]).map(resolveVec)
       let sol: VS.Solution
       switch (problem) {
         case 'components':
