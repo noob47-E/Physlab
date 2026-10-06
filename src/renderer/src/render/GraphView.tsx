@@ -9,13 +9,21 @@ import { useView } from './viewState'
 import { QUALITY, qualityNow } from './renderer'
 import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
-import { compileScalar } from '../math/expr'
-import { betweenMesh, implicitSegments, inequalityMesh, keyPoints, labelPoints, sampleExplicit, sampleParametric, samplePiecewise, surfaceGeometry, type KeyPoint } from '../math/graphs'
-import { fmt } from '../math/format'
+import { solutionsInX } from '../core/visualize'
+import { compileScalar, math, preprocess, symbolsOf } from '../math/expr'
+import { betweenMesh, carriedSolutions, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, surfaceGeometry, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
 import { themeColor, useTheme, useThemed, type Theme } from '../app/theme'
 import type { V3 } from '../math/vec'
 
 const scopeNow = () => useScene.getState().ev.scope
+
+/**
+ * Height of one key-point label in pixels: small text plus its padding and border (`.measure-label`),
+ * 22 px as measured in the app. At 20, labels stacked a line apart overlapped by 2 px.
+ */
+const LABEL_LINE = 22
+/** A key-point label's width in pixels, judged from its length; a little too wide only spreads labels a little more. */
+const labelWidth = (text: string): number => text.length * 7 + 14
 
 /**
  * The graph's own colours (a curve's colour is the object's) come from the stylesheet and are
@@ -39,7 +47,9 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const view = useView()
   // Any scene change may move a slider the graph depends on.
   const evVersion = useScene((s) => s.ev)
+  // Only the two settings the labels read, so changing any other setting does not redraw the graph.
   const decimals = useScene((s) => s.settings.decimals)
+  const precisionMode = useScene((s) => s.settings.precisionMode)
 
   const fns = useMemo(() => {
     try {
@@ -49,7 +59,10 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
           return { f: compileScalar(obj.exprs[0], ['x'], scopeNow) }
         case 'implicit':
         case 'inequality':
-          return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow) }
+          // An equation in x alone (x² = 4, (x − 1)² = 0) has no y to plot against: it is a vertical
+          // line at each solution, found from the roots of the formula (see `data`). Decided here,
+          // once per formula, not on every frame. An inequality keeps its boundary as it was.
+          return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow), vertical: obj.kind === 'implicit' && !symbolsOf(math.parse(preprocess(obj.exprs[0]))).includes('y') }
         case 'surface':
           return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow) }
         case 'polar':
@@ -72,6 +85,18 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
 
   const is2DBounds = !is3D
   const b = is2DBounds ? view : { xMin: -10, xMax: 10, yMin: -10, yMax: 10, viewH: 20, wpp: 0.02, widthPx: 1000 }
+  // The lines of an equation in x alone are drawn where the command bar said its solutions are: the
+  // curve cannot show them all (x^200 underflows to a stretch of zeros, x^(10⁹) − 2 jumps within
+  // 10⁻⁶ of 1). Worked out when the formula or the scene changes, never in a frame, and only for the
+  // graphs drawn this way; `scopeNow` reads the scene live, so `evVersion` stands for it.
+  const formula = obj.exprs[0]
+  const typedAs = obj.source
+  const solved = useMemo(
+    () => (fns.vertical ? solvedLineXs({ exprs: [formula], source: typedAs }, scopeNow(), solutionsInX) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+    [fns.vertical, formula, typedAs, evVersion]
+  )
+  const known = carriedSolutions(obj) ?? solved
 
   const data = useMemo(() => {
     const out: { polylines: V3[][]; segments?: V3[]; fill?: Float32Array; keys: KeyPoint[] } = { polylines: [], keys: [] }
@@ -81,7 +106,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         const n = Math.min(4000, Math.max(300, Math.round(((b.xMax - b.xMin) / b.wpp / 2) * QUALITY[qualityNow()].samples)))
         out.polylines = sampleExplicit(f, b.xMin, b.xMax, n, b.viewH)
         if (obj.showRoots || obj.showExtrema) {
-          out.keys = keyPoints(f, b.xMin, b.xMax, 1200).filter((k) => (k.kind === 'root' ? obj.showRoots : obj.showExtrema))
+          out.keys = shownKeyPoints(keyPoints(f, b.xMin, b.xMax, 1200), !!obj.showRoots, !!obj.showExtrema)
         }
       } else if (obj.kind === 'area' && fns.f) {
         const a = obj.tMin ?? 0
@@ -103,11 +128,20 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         out.polylines = [curve, [[a, 0, 0], curve[0]], [[bnd, 0, 0], curve[n]]]
       } else if ((obj.kind === 'implicit' || obj.kind === 'inequality') && fns.F) {
         const F = (x: number, y: number) => fns.F!({ x, y })
-        const cell = Math.max((b.wpp * 4) / QUALITY[qualityNow()].samples, (b.xMax - b.xMin) / 900)
-        const nx = Math.min(900, Math.ceil((b.xMax - b.xMin) / cell))
-        const ny = Math.min(900, Math.ceil((b.yMax - b.yMin) / cell))
-        out.segments = implicitSegments(F, b.xMin, b.xMax, b.yMin, b.yMax, nx, ny)
-        if (obj.kind === 'inequality') out.fill = inequalityMesh(F, obj.op ?? '<', b.xMin, b.xMax, b.yMin, b.yMax, Math.ceil(nx / 1.5), Math.ceil(ny / 1.5))
+        if (fns.vertical) {
+          // Marching squares needs a sign change, which (x − 1)² = 0 never has: the lines come from
+          // the roots, touching ones included. Each is two halves out from the middle of the view,
+          // so that the name (labelPoints takes the first point) sits beside the line, not on the
+          // view's edge.
+          const mid = (b.yMin + b.yMax) / 2
+          out.segments = verticalLineXs((x) => F(x, 0), b.xMin, b.xMax, undefined, known).flatMap((x): V3[] => [[x, mid, 0], [x, b.yMax, 0], [x, mid, 0], [x, b.yMin, 0]])
+        } else {
+          const cell = Math.max((b.wpp * 4) / QUALITY[qualityNow()].samples, (b.xMax - b.xMin) / 900)
+          const nx = Math.min(900, Math.ceil((b.xMax - b.xMin) / cell))
+          const ny = Math.min(900, Math.ceil((b.yMax - b.yMin) / cell))
+          out.segments = implicitSegments(F, b.xMin, b.xMax, b.yMin, b.yMax, nx, ny)
+          if (obj.kind === 'inequality') out.fill = inequalityMesh(F, obj.op ?? '<', b.xMin, b.xMax, b.yMin, b.yMax, Math.ceil(nx / 1.5), Math.ceil(ny / 1.5))
+        }
       } else if (obj.kind === 'piecewise' && fns.pieces) {
         // Sampled at the explicit curve's density over the widest piece, so a short piece is
         // never coarser than the curve beside it; the joins are made in samplePiecewise.
@@ -137,7 +171,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
     // `evVersion` is not read here: the compiled functions read the scene's scope through a
     // closure, so a moved slider changes the curve without changing `fns`.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax, obj.pieces])
+  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax, obj.pieces, known])
 
   useEffect(() => {
     const polys = data.segments ? pairsToPolys(data.segments) : data.polylines
@@ -146,6 +180,9 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       graphPolylines.delete(obj.id)
     }
   }, [data, obj.id])
+
+  // Worded once per set of points and precision, not on every frame.
+  const keyLabels = useMemo(() => data.keys.map((k) => keyPointLabel(k, { decimals, precisionMode })), [data.keys, decimals, precisionMode])
 
   const width = (obj.width ?? 2.4) + (selected ? 1 : 0) + (hovered ? 0.6 : 0)
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
@@ -166,11 +203,21 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
     } else labelAnchors.delete(obj.id)
     pool.begin()
     if (selected || hovered) {
-      for (const k of data.keys) {
+      const onScreen: number[] = []
+      const spots: LabelSpot[] = []
+      data.keys.forEach((k, i) => {
         const s = toScreen(cam, sz, [k.x, k.y, 0])
-        if (s.x < 0 || s.y < 0 || s.x > sz.width || s.y > sz.height) continue
-        pool.place(`(${fmt(k.x, decimals)}, ${fmt(k.y, decimals)})`, s.x + 8, s.y - 14, 'left', colors.key[k.kind])
-      }
+        // A position that is not a number passes every bounds test below and would be written as
+        // translate(NaNpx, …), which parks the label in the corner of the view.
+        if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) return
+        if (s.x < 0 || s.y < 0 || s.x > sz.width || s.y > sz.height) return
+        onScreen.push(i)
+        spots.push({ x: s.x, y: s.y, w: labelWidth(keyLabels[i]) })
+      })
+      // Two points close together on screen would otherwise print their labels over each other, and
+      // one near the right edge of the view has its label to the left of it, not cut off by the edge.
+      const placed = placeLabels(spots, LABEL_LINE, sz.width, sz.height)
+      onScreen.forEach((i, j) => pool.place(keyLabels[i], placed[j].x, placed[j].y, placed[j].align, colors.key[data.keys[i].kind]))
     }
     pool.end()
   })

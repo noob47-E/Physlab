@@ -5,14 +5,14 @@
 import type { MathNode } from 'mathjs'
 import { Builder } from '../core/factory'
 import { scene } from '../core/store'
-import { parseExpr } from '../core/evaluate'
 import { freeCapitals, isValidName } from '../core/naming'
+import { evaluateScene } from '../core/evaluate'
 import type { Computed, ObjId, SceneObject } from '../core/types'
-import { visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector } from '../core/visualize'
+import { drawability, inXAlone, NO_REAL_X, plainParseError, solutionsInX, visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector, type DrawSpec, type NamedGraphs, type XComplex, type XSolved } from '../core/visualize'
 import { cas, useCasStatus } from '../math/cas'
 import { casWaitNote, followCasStart } from '../ui/casStatus'
 import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
-import { fmtPrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
+import { fmtLabel, fmtPrecise, morePrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import { isPieceCorner } from '../math/lego'
@@ -20,6 +20,7 @@ import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
 import { normalRefusal, parseNormalQuery } from '../math/pure/zscore'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
+import { calcNum, type CalcPrecision } from '../calc/format'
 import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
 import { enterMode } from '../app/layout'
@@ -40,6 +41,16 @@ const kindOfName = (name: string): ValueKind | undefined => {
   if (o.type === 'point') return 'point'
   if (o.type === 'vector') return 'vector'
   return 'number'
+}
+
+/**
+ * A name for an example in a sentence ("call it something else, e.g. P = (1, 2)"): the first of these
+ * letters that no object in the scene has, else a free capital. Typing an example with a name that is
+ * taken would redefine that object, and the student may copy the example as it stands.
+ */
+function freeLetterFor(letters: string): string {
+  const names = scene().ev.names
+  return letters.split('').find((n) => !names.has(n)) ?? freeCapitals(names.keys(), 1)[0]
 }
 
 /** True when the expression uses no scene objects or variables (only numbers, π, e and units). */
@@ -99,14 +110,21 @@ const isGeo = (node: MathNode) => {
  * Kind inference and the step solver never learned that name, so `A × B` printed a bare
  * `[0, 0, -11]` with no steps and `C = A × B` refused with "not a number". Once the operands are
  * known the call is rewritten into the cross product or the ordinary product it stands for.
+ * The · key (dot) is the same: between two vectors it stays the dot product, and with a number on
+ * either side it is the ordinary product — `2·A` printed a vector with no steps and `C = 2·A` made
+ * one with none, because only a `*` reaches the scalar-multiple steps.
  */
 function resolveTimes(node: MathNode): MathNode {
   return node.transform((n) => {
     const fn = n as Node
-    if (fn.type !== 'FunctionNode' || (fn.fn as { name?: string }).name !== 'timesOrCross') return n
-    const a = resolveTimes((fn.args as MathNode[])[0])
-    const b = resolveTimes((fn.args as MathNode[])[1])
-    if (isGeo(a) && isGeo(b)) return new math.FunctionNode('cross', [a, b])
+    if (fn.type !== 'FunctionNode') return n
+    const fname = (fn.fn as { name?: string }).name
+    const args = fn.args as MathNode[]
+    // A word-form dot(A) or dot(A, B, C) is left to say in its own words what it is missing.
+    if ((fname !== 'timesOrCross' && fname !== 'dot') || args.length !== 2) return n
+    const a = resolveTimes(args[0])
+    const b = resolveTimes(args[1])
+    if (isGeo(a) && isGeo(b)) return new math.FunctionNode(fname === 'dot' ? 'dot' : 'cross', [a, b])
     return new math.OperatorNode('*', 'multiply', [a, b])
   })
 }
@@ -181,20 +199,59 @@ export async function runCommand(raw: string): Promise<void> {
     if (trySolverCommand(input)) return
     evaluatePlain(input)
   } catch (e) {
-    logError(input, friendlyError(e))
+    logError(input, friendlyError(e, input))
   }
 }
 
-function friendlyError(e: unknown): string {
+/** The parser's own words, which a student is never shown: "Parenthesis ) expected (char 7)". */
+const PARSER_WORDS = /\(char \d+\)|Value expected|Parenthesis [)\]] expected|Unexpected operator|Syntax ?error|End of (matrix|string)/i
+
+/**
+ * What to say of a name that has no value. x, y and z are a graph's letters, never a name (the graph
+ * routes keep them, and `y = (1, 2)` is refused), so "create it first, e.g. y = (1, 2)" is no advice.
+ */
+function unknownNameSentence(name: string): string {
+  if (name === 'x' || name === 'y' || name === 'z') return `${name} is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. ${freeLetterFor('abcmn')} = 2.`
+  return `I don't know "${name}". Create it first, e.g. ${name} = (1, 2).`
+}
+
+function friendlyError(e: unknown, input = ''): string {
   const msg = e instanceof Error ? e.message : String(e)
-  if (/Undefined symbol (\w+)/.test(msg)) return `I don't know "${msg.match(/Undefined symbol (\w+)/)![1]}". Create it first, e.g. ${msg.match(/Undefined symbol (\w+)/)![1]} = (1, 2).`
+  const unknown = msg.match(/Undefined symbol (\w+)/)?.[1]
+  if (unknown) return unknownNameSentence(unknown)
+  // f(2) after f(x) = x^2: the evaluator keeps no value for a graph, so it has no function f to call
+  // and says "Undefined function f", which is neither a graph's nor a typo's way of putting it.
+  const called = msg.match(/Undefined function (\S+)/)?.[1]
+  if (called) return Object.keys(namedGraphs()).includes(called) ? `${called} is a graph, so it cannot be used as a number in a formula yet.` : `PhysLab does not know a function called "${called}".`
   if (/Unexpected end/.test(msg)) return 'The expression is incomplete. Check your brackets.'
+  // mathjs reads 2 + 3 = 5 as an assignment to 2, and said so in its own words.
+  if (/Invalid left hand side/.test(msg)) return `Only a name can stand on the left of =, as in k = 2. To solve an equation, type it inside solve( ): solve(${input}).`
+  if (/Unexpected type of argument/.test(msg)) return 'A function was given the wrong kind of value — a vector or a point where it needs a number, for example.'
+  if (PARSER_WORDS.test(msg)) {
+    const why = plainParseError(msg)
+    return `${why.charAt(0).toUpperCase()}${why.slice(1)}.`
+  }
   return msg
 }
 
 // ---------------------------------------------------------------------------
 // Graphs: y = f(x), f(x) = ..., z = f(x,y), r = f(θ), implicit, inequalities, curves
 // ---------------------------------------------------------------------------
+
+const isFunctionName = (name: string): boolean => typeof (math as unknown as Record<string, unknown>)[name] === 'function'
+
+/**
+ * A polar formula with θ spelt theta, as the graph stores it, and a product wherever θ touches a
+ * name. The bare replace glued them: r = aθ (slider a) became "atheta", a name nobody has, and was
+ * refused as one. A space is the product the parser reads between two names (r = a θ already
+ * drew). A function name such as sin is left as typed — sinθ is no product.
+ */
+function thetaSpelt(text: string): string {
+  return text
+    .replace(/[A-Za-zπ]+(?=θ)/g, (run) => (isFunctionName(run) ? run : `${run} `))
+    .replace(/θ(?=[A-Za-zπθ])/g, 'θ ')
+    .replace(/θ/g, 'theta')
+}
 
 /**
  * A graph is stamped 'graphing' wherever it was typed (Builder.base), but nothing used to follow
@@ -208,86 +265,348 @@ function landInGraphing(): string {
   return ' Switched to Graphing to show it.'
 }
 
+/** A relation sign in a typed line: what it means (≤ is <=, ≠ is !=), where it stands, and its length as typed. */
+interface Relation {
+  op: '=' | '==' | '!=' | '<' | '>' | '<=' | '>='
+  at: number
+  len: number
+}
+
+const SPELT: Record<string, Relation['op']> = { '≤': '<=', '=<': '<=', '≥': '>=', '=>': '>=', '≠': '!=' }
+const INEQUALITY_OPS = new Set<Relation['op']>(['<', '>', '<=', '>='])
+
+/**
+ * The line with the words inside its quotes blanked out, every character kept as a space so a
+ * position found in the result is the same position in the line. A label says what it likes —
+ * Text("F = ma = 10 N") — and none of its signs is an equation: counting them turned that line away
+ * as "several equations", where it made a label before the refusal existed. A quote left open runs
+ * to the end of the line, as the Text command reads it (it strips a quote that is not closed too).
+ * A single quote is a label's only where it starts an argument; after a name or a bracket it is the
+ * prime of f'(x) = f''(x).
+ */
+function withoutQuotedText(line: string): string {
+  const blank = (words: string): string => ' '.repeat(words.length)
+  return line
+    .replace(/"([^"]*)(")?/g, (_all: string, words: string, close?: string) => `"${blank(words)}${close ?? ''}`)
+    .replace(/([(,]\s*)'([^']*)'(?=\s*[,)])/g, (_all: string, lead: string, words: string) => `${lead}'${blank(words)}'`)
+}
+
+/**
+ * The relation signs in a line, each counted once (<= is one sign, not < and =). Quoted words are
+ * blanked out first (withoutQuotedText). A vector literal brings a < and a > of its own, so it is
+ * blanked out too, found as preprocess (math/expr.ts) finds one — unless its < follows a name or a
+ * closing bracket: y < x, y > 2 is two inequalities, not y times the vector <x, y>.
+ */
+function relationsIn(line: string): Relation[] {
+  const unquoted = withoutQuotedText(line)
+  const masked = unquoted.replace(/[⟨<]([^<>=⟨⟩]*,[^<>=⟨⟩]*)[⟩>]/g, (lit: string, _inner: string, at: number) =>
+    lit.startsWith('<') && /[A-Za-zͰ-Ͽ_)\]'′″‴⁗]$/.test(unquoted.slice(0, at).trimEnd()) ? lit : ' '.repeat(lit.length)
+  )
+  return [...masked.matchAll(/<=|>=|=<|=>|==|!=|≤|≥|≠|<|>|=/g)].map((m) => ({ op: SPELT[m[0]] ?? (m[0] as Relation['op']), at: m.index ?? 0, len: m[0].length }))
+}
+
+const COUNTED = ['', 'one', 'two', 'three', 'four']
+
+/**
+ * The owner typed the help's graph examples run together and was told "Shaded region created."
+ * with nothing drawn: the inequality pattern took the first > and refused only when two more angle
+ * brackets remained, never for an =, and a line with two = went on to the calculator, which quoted
+ * mathjs. 1 < x < 3 was stored as one inequality with the true-or-false of x < 3 inside it. Each
+ * relation is a graph of its own, so the line is refused; a chain is split into the inequalities
+ * the student can type one by one.
+ */
+function refuseSeveral(input: string, rels: Relation[]): never {
+  if (!rels.every((r) => INEQUALITY_OPS.has(r.op))) throw new Error('That line holds several equations — type one at a time.')
+  const parts = chainParts(input, rels)
+  throw new Error(`That line holds ${COUNTED[rels.length] ?? 'several'} inequalities — type one at a time${parts.length ? `: ${parts.join(', then ')}` : ''}.`)
+}
+
+/** A chain's inequalities as each would be typed alone: 1 < x < 3 is 1 < x, then x < 3. */
+function chainParts(input: string, rels: Relation[]): string[] {
+  // y < x, y > 2: the student has separated them already.
+  const pieces = splitArgs(input)
+  if (pieces.length === rels.length && pieces.every((p) => relationsIn(p).length === 1)) return pieces
+  const ends = [0, ...rels.map((r) => r.at + r.len)]
+  const terms = [...rels.map((r, i) => input.slice(ends[i], r.at)), input.slice(ends[rels.length])].map((t) => t.trim())
+  if (terms.some((t) => !t || t.includes(','))) return []
+  return rels.map((r, i) => `${terms[i]} ${input.slice(r.at, r.at + r.len)} ${terms[i + 1]}`)
+}
+
+/**
+ * y ≠ x was split at the = of its != and drew the factorial curve y! = x, and y == x answered
+ * "Value expected (char 1)". A "not equal" region is the whole plane less one curve, and == is a
+ * programming language's equals.
+ */
+function refuseSign(input: string, rel: Relation): never {
+  const l = input.slice(0, rel.at).trim()
+  const r = input.slice(rel.at + rel.len).trim()
+  if (rel.op === '==') throw new Error(`One = sign is enough for an equation: type ${l} = ${r}.`)
+  throw new Error(`A "not equal" sign is true everywhere except along one curve, so there is no region to shade. Type < or > instead: ${l} < ${r} or ${l} > ${r}.`)
+}
+
+/**
+ * x, y and z are a graph's letters, and tryAssignment leaves them to the graph routes on purpose
+ * (y = 2x must stay a graph). So `y = (1, 2)` reached a route that could only say the graph had no
+ * real value for any x. A value that is a point or a vector on its own, with no x or y in it, is a
+ * name for one, whatever the student meant by the letter: say so, and offer a letter that no object
+ * in the scene has, because P = (1, 2) would move a point P that is already there.
+ */
+function refuseGraphLetterAsName(letter: string, rhs: string): void {
+  if (letter !== 'x' && letter !== 'y' && letter !== 'z') return
+  let node: Node
+  try {
+    node = parseNode(rhs)
+  } catch {
+    return // a formula that does not parse has the graph routes' own words
+  }
+  if (symbolsOf(node).some((s) => GRAPH_VARS.has(s))) return
+  // An unknown k stays a number here: on the bar it is the unit vector, in a graph a slider to make.
+  const kind = inferKind(node, (name) => kindOfName(name) ?? 'number')
+  if (kind !== 'point' && kind !== 'vector') return
+  // The example has the student's own number of coordinates: z = (1, 2, 3) was offered P = (1, 2).
+  const three = isThreeD(node)
+  const example = kind === 'point' ? (three ? '(1, 2, 3)' : '(1, 2)') : three ? '<1, 2, 3>' : '<1, 2>'
+  throw new Error(`${letter} is the letter a graph uses, so it cannot name a ${kind} — call it something else, e.g. ${freeLetterFor(kind === 'point' ? 'PQRST' : 'ABCDF')} = ${example}.`)
+}
+
+/** Whether a point or a vector is in three dimensions: typed with three coordinates, or with a part along z. */
+function isThreeD(node: Node): boolean {
+  const call = node as MathNode & { fn?: { name?: string }; args?: MathNode[] }
+  if (call.type === 'FunctionNode' && (call.fn?.name === 'pt' || call.fn?.name === 'vec') && call.args?.length === 3) return true
+  try {
+    return Math.abs(toV3(evaluateNode(node))[2]) > 1e-12
+  } catch {
+    return false // a sum that cannot be worked out has no third coordinate to go by
+  }
+}
+
+/** Only the scene's own names: the evaluator's scope also holds the clock t and the unit vectors i, j, k, which no graph reads as a slider. */
+function namedScope(): Record<string, unknown> {
+  const { names, scope } = scene().ev
+  const out: Record<string, unknown> = {}
+  for (const n of names.keys()) out[n] = scope[n]
+  return out
+}
+
+/**
+ * The scene's graphs by name, each with its formula when it is a plain y = f(x). The evaluator keeps
+ * no value for a graph, so a call such as g(x) looked like a slider's and was told to type g*(x).
+ */
+function namedGraphs(): NamedGraphs {
+  const out: NamedGraphs = {}
+  for (const o of Object.values(scene().objects)) if (o.type === 'graph') out[o.name] = o.kind === 'explicit' ? (o.exprs[0] ?? null) : null
+  return out
+}
+
+/**
+ * Refuses, in its own sentence, a graph that would show nothing (core/visualize.ts, drawability);
+ * otherwise returns what to add to the message — " — at k = −1 there is nothing to draw…" when it is
+ * empty only at the sliders' current values, or ''.
+ */
+function mustDraw(spec: DrawSpec): string {
+  const r = drawability(spec, namedScope(), scene().settings, namedGraphs())
+  if (!r.ok) throw new Error(r.reason)
+  return r.note ? ` — ${r.note}` : ''
+}
+
+const withNote = (text: string, note: string): string => (note ? `${text.replace(/\.$/, '')}${note}.` : text)
+
+/**
+ * sin(x) = 2 is an equation about the function sin, not the definition of a new function called
+ * sin: it made a graph named sin, the horizontal line y = 2. A name mathjs already has as a
+ * function (sin, cos, sqrt, ln, log, exp, abs…) is never a definition.
+ */
+const isBuiltinFunction = (name: string): boolean => Object.prototype.hasOwnProperty.call(math, name) && typeof (math as unknown as Record<string, unknown>)[name] === 'function'
+
+/** "a", "a and b", "a, b and c". */
+const listAnd = (items: string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`)
+
+/**
+ * The complex solutions of a polynomial with no real one, as the PhysLab Calculator's polynomial
+ * mode gives them (polyRoots, written with calcNum in the student's precision), each conjugate pair
+ * once with ±: x² + 4x + 13 = 0 is "x = −2 ± 3i".
+ */
+function complexSentence(pairs: XComplex[], p: CalcPrecision): string {
+  const said = pairs.map(({ re, im }) => {
+    const a = calcNum(re, p)
+    const b = calcNum(im, p)
+    const i = b === '1' ? 'i' : `${b}i`
+    return a === '0' ? `x = ±${i}` : `x = ${a} ± ${i}`
+  })
+  return said.length ? ` In complex numbers: ${listAnd(said)}.` : ''
+}
+
+/** How many digits past the student's own a list of solutions may add to tell two apart: past this they are one number to the last digit a double holds. */
+const MAX_EXTRA_DIGITS = 12
+
+/**
+ * The solutions as numbers in the student's precision. Two that print alike — x = 3 and x = 3.005
+ * are both "3" at two places — were listed as "x = 3 and x = 3", one solution said twice. Just
+ * those get digits added, all the same number of them and one more at a time, until the list tells
+ * apart (morePrecise); a solution that already looked different stays as it was.
+ */
+function solutionNumbers(xs: number[], p: CalcPrecision): string[] {
+  const base = xs.map((x) => calcNum(x, p))
+  const alike = base.map((l) => base.indexOf(l) !== base.lastIndexOf(l))
+  if (!alike.some(Boolean)) return base
+  let labels = base
+  for (let extra = 1; extra <= MAX_EXTRA_DIGITS; extra++) {
+    labels = xs.map((x, i) => (alike[i] ? calcNum(x, morePrecise(p, extra)) : base[i]))
+    if (new Set(labels).size === labels.length) break
+  }
+  return labels
+}
+
+/** What an equation in x alone came to, for the student: its solutions, ascending, each a vertical line. */
+function solvedSentence(sol: XSolved | null, p: CalcPrecision): string {
+  // Not named: a formula too slow to solve in time, or one that is empty only for now (the note says so).
+  if (sol?.kind !== 'real') return 'Drawn as a vertical line at each solution.'
+  const listed = listAnd(solutionNumbers(sol.xs, p).map((n) => `x = ${n}`))
+  if (sol.more) {
+    const again = sol.more === 'further' ? 'There are more solutions further out.' : `The pattern repeats every ${calcNum(sol.more.period, p)}.`
+    return `The solutions nearest 0 are ${listed} — each drawn as a vertical line. ${again}`
+  }
+  return sol.xs.length === 1 ? `The solution is ${listed} — drawn as a vertical line.` : `The solutions are ${listed} — each drawn as a vertical line.`
+}
+
+/**
+ * An equation in x alone: x² = 4, (x − 1)² = 0, sin(x) = 0.5, x² + 4x + 13 = 0. Nothing ties y to
+ * x, so it is a vertical line at each x that makes it true, and nothing at all when no real x does.
+ * That last was announced "Implicit curve created." with nothing on the screen; it is refused in a
+ * sentence that says why, with the complex solutions when it is a polynomial. One graph is made, with
+ * the student's own formula, so a slider in it still moves the lines (render/GraphView.tsx).
+ */
+function equationInX(input: string, lhs: string, rhs: string, expr: string): void {
+  const s = scene()
+  const p = s.settings
+  const sides: [string, string] = [lhs, rhs]
+  const r = drawability({ kind: 'implicit', exprs: [expr], sides }, namedScope(), p, namedGraphs())
+  if (!r.ok) {
+    const none = r.reason === NO_REAL_X ? solutionsInX(expr, sides, namedScope()) : null
+    throw new Error(r.reason + (none?.kind === 'none' ? complexSentence(none.complex, p) : ''))
+  }
+  const note = r.note ? ` — ${r.note}` : ''
+  visualizeGraph(input, [expr], 'implicit')
+  const sol = note ? null : solutionsInX(expr, sides, namedScope())
+  s.pushLog({ input, kind: 'result', text: withNote(solvedSentence(sol, p), note) + landInGraphing() })
+}
+
 function tryGraph(input: string): boolean {
   let m: RegExpMatchArray | null
   const s = scene()
 
-  if ((m = input.match(/^\s*y\s*=\s*(.+)$/)) && !usesSymbol(m[1], 'y')) {
+  // curve(…), piecewise(…), between(…) and tangent(…) read their own arguments and say how they are written.
+  const rels = /^\s*(curve|piecewise|between|tangent)\s*\(/i.test(input) ? [] : relationsIn(input)
+  if (rels.length > 1) refuseSeveral(input, rels)
+  const rel = rels.length ? rels[0] : undefined
+  // ≤ and ≥ (the Calculator writes its inequality answers with them) were turned into <= and >= only
+  // after this had looked for a relation, so y ≥ 2x answered: I don't know "y".
+  const line = rel ? input.slice(0, rel.at) + rel.op + input.slice(rel.at + rel.len) : input
+  const graphish = usesSymbol(line, 'x') || usesSymbol(line, 'y')
+  if (rel && graphish && (rel.op === '!=' || rel.op === '==')) refuseSign(input, rel)
+  if (rel?.op === '=') refuseGraphLetterAsName(line.slice(0, rel.at).trim(), line.slice(rel.at + 1))
+
+  if ((m = line.match(/^\s*y\s*=\s*(.+)$/)) && !usesSymbol(m[1], 'y')) {
     graphIfFunctionOfX(input, m[1], undefined)
     return true
   }
-  if ((m = input.match(/^\s*([A-Za-z]\w*)\s*\(\s*x\s*\)\s*=\s*(.+)$/))) {
+  if ((m = line.match(/^\s*([A-Za-z]\w*)\s*\(\s*x\s*\)\s*=\s*(.+)$/)) && !isBuiltinFunction(m[1])) {
     graphIfFunctionOfX(input, m[2], m[1])
     return true
   }
-  if ((m = input.match(/^\s*z\s*=\s*(.+)$/))) {
+  // Every route below asks mustDraw before it makes anything: each used to store the formula and
+  // announce it, and the viewport, compiling it later, drew nothing without a word.
+  if ((m = line.match(/^\s*z\s*=\s*(.+)$/))) {
+    const note = mustDraw({ kind: 'surface', exprs: [m[1]] })
     visualizeGraph(input, [m[1]], 'surface')
-    s.pushLog({ input, kind: 'result', text: 'Surface created in the 3D view.' + landInGraphing() })
+    s.pushLog({ input, kind: 'result', text: withNote('Surface created in the 3D view.', note) + landInGraphing() })
     return true
   }
-  if ((m = input.match(/^\s*r\s*=\s*(.+)$/)) && /θ|theta/.test(m[1])) {
-    visualizeGraph(input, [m[1].replace(/θ/g, 'theta')], 'polar', { tMin: 0, tMax: 2 * Math.PI })
-    s.pushLog({ input, kind: 'result', text: 'Polar curve created.' + landInGraphing() })
+  if ((m = line.match(/^\s*r\s*=\s*(.+)$/)) && /θ|theta/.test(m[1])) {
+    const expr = thetaSpelt(m[1])
+    const note = mustDraw({ kind: 'polar', exprs: [expr], tMin: 0, tMax: 2 * Math.PI })
+    visualizeGraph(input, [expr], 'polar', { tMin: 0, tMax: 2 * Math.PI })
+    s.pushLog({ input, kind: 'result', text: withNote('Polar curve created.', note) + landInGraphing() })
     return true
   }
-  if ((m = input.match(/^\s*curve\s*\((.+)\)\s*$/i))) {
+  if ((m = line.match(/^\s*curve\s*\((.+)\)\s*$/i))) {
     const parts = splitArgs(m[1])
     if (parts.length < 2) throw new Error('curve(x(t), y(t), tmin, tmax)')
-    const tMin = parts[2] ? Number(math.evaluate(preprocess(parts[2]))) : 0
-    const tMax = parts[3] ? Number(math.evaluate(preprocess(parts[3]))) : 2 * Math.PI
+    // numberArg reads a slider, as every other bound on the bar does; math.evaluate without the
+    // scope answered curve(cos(t), sin(t), 0, k) with I don't know "k" while k was on the screen.
+    const tMin = parts[2] ? numberArg(parts[2]) : 0
+    const tMax = parts[3] ? numberArg(parts[3]) : 2 * Math.PI
+    const note = mustDraw({ kind: 'parametric', exprs: [parts[0], parts[1]], tMin, tMax })
     visualizeGraph(input, [parts[0], parts[1]], 'parametric', { tMin, tMax })
-    s.pushLog({ input, kind: 'result', text: 'Parametric curve created.' + landInGraphing() })
+    s.pushLog({ input, kind: 'result', text: withNote('Parametric curve created.', note) + landInGraphing() })
     return true
   }
   // Question pictures, spelt the way they are said: a curve in pieces, the region between two
   // curves, the tangent at a point.
-  if ((m = input.match(/^\s*piecewise\s*\((.+)\)\s*$/i))) {
+  if ((m = line.match(/^\s*piecewise\s*\((.+)\)\s*$/i))) {
     const pieces = splitArgs(m[1]).map((part) => {
       const piece = part.match(/^(.+?)\s+from\s+(.+?)\s+to\s+(.+)$/i)
       if (!piece) throw new Error('Each piece is a formula and its stretch of x: piecewise(x^2 from -3 to 0, x from 0 to 2)')
       return { expr: piece[1].trim(), from: numberArg(piece[2]), to: numberArg(piece[3]) }
     })
+    const note = mustDraw({ kind: 'piecewise', exprs: pieces.map((p) => p.expr), pieces })
     visualizePiecewise(pieces, undefined, input)
-    s.pushLog({ input, kind: 'result', text: `Piecewise curve created with ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}.` + landInGraphing() })
+    s.pushLog({ input, kind: 'result', text: withNote(`Piecewise curve created with ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}.`, note) + landInGraphing() })
     return true
   }
-  if ((m = input.match(/^\s*between\s*\((.+)\)\s*$/i))) {
+  if ((m = line.match(/^\s*between\s*\((.+)\)\s*$/i))) {
     const parts = splitArgs(m[1])
     if (parts.length !== 4) throw new Error('between(first curve, second curve, from x, to x), e.g. between(x^2, x + 2, -1, 2)')
     const a = numberArg(parts[2])
     const bnd = numberArg(parts[3])
-    const area = visualizeBetween(parts[0], parts[1], a, bnd)
+    // betweenArea leaves out a column where a curve has no value, so a region with no value
+    // anywhere had an area of 0 and was announced: "Region shaded. … 0".
+    const note = mustDraw({ kind: 'between', exprs: [parts[0], parts[1]], tMin: Math.min(a, bnd), tMax: Math.max(a, bnd) })
+    // Empty at the sliders' values, the area is 0 and the label would say so: it stays off.
+    const area = visualizeBetween(parts[0], parts[1], a, bnd, undefined, note !== '')
     const p = s.settings
-    s.pushLog({ input, kind: 'result', text: `Region shaded. Area between the curves from x = ${fmtPrecise(Math.min(a, bnd), p)} to ${fmtPrecise(Math.max(a, bnd), p)}: ${fmtPrecise(area, p)}.` + landInGraphing() })
+    const said = note ? `Region shaded${note}.` : `Region shaded. Area between the curves from x = ${fmtLabel(Math.min(a, bnd), p)} to ${fmtLabel(Math.max(a, bnd), p)}: ${fmtLabel(area, p)}.`
+    s.pushLog({ input, kind: 'result', text: said + landInGraphing() })
     return true
   }
   // tangent(P, c) — a point and a circle — is the geometry command; this is a formula and a number.
-  const tan = input.match(/^\s*tangent\s*\((.+)\)\s*$/i)
+  const tan = line.match(/^\s*tangent\s*\((.+)\)\s*$/i)
   if (tan) {
     const [expr, at, ...rest] = splitArgs(tan[1])
     if (at !== undefined && rest.length === 0 && kindOfName(expr) === undefined && usesSymbol(expr, 'x')) {
+      // tangent(q*x, 1) with no slider q said the curve "has no value at x = 1". A refusal that writes
+      // the line out writes this one: tangent(sin(x), 1) for tangent(g(x), 1), not "y = sin(x)".
+      mustDraw({ kind: 'explicit', exprs: [expr], lineWith: (formula) => `tangent(${formula}, ${at})` })
       const a = numberArg(at)
       const { slope } = visualizeTangentAt(expr, a)
       const p = s.settings
-      s.pushLog({ input, kind: 'result', text: `Tangent drawn at x = ${fmtPrecise(a, p)}. Its slope is ${fmtPrecise(slope, p)}.` + landInGraphing() })
+      s.pushLog({ input, kind: 'result', text: `Tangent drawn at x = ${fmtLabel(a, p)}. Its slope is ${fmtLabel(slope, p)}.` + landInGraphing() })
       return true
     }
   }
-  const ineq = input.match(/^(.+?)(<=|>=|<|>)(.+)$/)
-  if (ineq && !/[<>].*[<>]/.test(input.replace(ineq[2], '')) && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
-    const op = ineq[2] as '<' | '<=' | '>' | '>='
-    visualizeGraph(input, [`(${ineq[1]}) - (${ineq[3]})`], 'inequality', { op })
-    s.pushLog({ input, kind: 'result', text: 'Shaded region created.' + landInGraphing() })
+  if (rel && INEQUALITY_OPS.has(rel.op) && graphish) {
+    const op = rel.op as '<' | '<=' | '>' | '>='
+    const expr = `(${line.slice(0, rel.at)}) - (${line.slice(rel.at + op.length)})`
+    // y > sin(x was shaded as nothing under "Shaded region created.": the viewport compiled it later and drew nothing.
+    const note = mustDraw({ kind: 'inequality', exprs: [expr], op })
+    visualizeGraph(input, [expr], 'inequality', { op })
+    s.pushLog({ input, kind: 'result', text: withNote('Shaded region created.', note) + landInGraphing() })
     return true
   }
-  const eq = input.match(/^([^=]+)=([^=]+)$/)
-  if (eq && (usesSymbol(input, 'x') || usesSymbol(input, 'y'))) {
-    const lhs = eq[1].trim()
+  if (rel?.op === '=' && graphish) {
+    const lhs = line.slice(0, rel.at)
+    const rhs = line.slice(rel.at + 1)
     // Primes as core/naming.ts isValidName allows them: points after Z are A′, A″ (Fix 11).
-    const isName = /^[A-Za-zͰ-Ͽ][\w'′″‴⁗]*$/.test(lhs) && !GRAPH_VARS.has(lhs)
+    const isName = /^[A-Za-zͰ-Ͽ][\w'′″‴⁗]*$/.test(lhs.trim()) && !GRAPH_VARS.has(lhs.trim())
     if (!isName) {
-      visualizeGraph(input, [`(${eq[1]}) - (${eq[2]})`], 'implicit')
-      s.pushLog({ input, kind: 'result', text: 'Implicit curve created.' + landInGraphing() })
+      const expr = `(${lhs}) - (${rhs})`
+      if (inXAlone(expr)) {
+        equationInX(input, lhs, rhs, expr)
+        return true
+      }
+      const note = mustDraw({ kind: 'implicit', exprs: [expr], sides: [lhs, rhs] })
+      visualizeGraph(input, [expr], 'implicit')
+      s.pushLog({ input, kind: 'result', text: withNote('Implicit curve created.', note) + landInGraphing() })
       return true
     }
   }
@@ -307,13 +626,14 @@ function numberArg(text: string): number {
   return n
 }
 
+/**
+ * y = f(x). The unknown-name check is mustDraw's, shared with every route: this one's own exempted
+ * only pi and e, so y = tau was told to make a slider while tau alone on the bar answered 6.283.
+ */
 function graphIfFunctionOfX(input: string, rhs: string, name?: string) {
-  const node = parseExpr(rhs).node
-  const syms = symbolsOf(node).filter((n) => !scene().ev.names.has(n) && n !== 'pi' && n !== 'e')
-  const unknown = syms.filter((n) => n !== 'x')
-  if (unknown.length) throw new Error(`Unknown name "${unknown[0]}" in the function. Make a slider first, e.g. ${unknown[0]} = 1`)
+  const note = mustDraw({ kind: 'explicit', exprs: [rhs] })
   visualizeGraph(input, [rhs], 'explicit', { name })
-  scene().pushLog({ input, kind: 'result', text: 'Graph created. Roots and turning points are marked.' + landInGraphing() })
+  scene().pushLog({ input, kind: 'result', text: (note ? `Graph created${note}.` : 'Graph created. Roots and turning points are marked.') + landInGraphing() })
 }
 
 function usesSymbol(src: string, sym: string): boolean {
@@ -328,6 +648,39 @@ function usesSymbol(src: string, sym: string): boolean {
 // Assignments: name = expression | geometry command
 // ---------------------------------------------------------------------------
 
+/** The prime signs a name may carry (core/naming.ts), at the end of it. */
+const PRIME_CHARS = /['′″‴⁗]+$/
+
+/** How many primes a name carries: ' and ′ one each, ″ two, ‴ three, ⁗ four. */
+const primesIn = (name: string): number => [...(name.match(PRIME_CHARS)?.[0] ?? '')].reduce((n, c) => n + ({ "'": 1, '′': 1, '″': 2, '‴': 3, '⁗': 4 }[c] ?? 0), 0)
+
+/**
+ * A full turn for every slider a line uses as an angle in degrees — the k of B = 3 ∠ k°, which
+ * preprocess writes k deg. A slider's range comes from its value, so the cross-product lesson's
+ * k = 60 stopped at 120 while the lesson says "Past 180°, C flips downward". The range only grows,
+ * so the value and a wider range the slider already had stay inside it. It rides on the line's own
+ * undo step: one undo takes back the line and the wider range together.
+ */
+function widenDegreeSliders(node: MathNode): void {
+  const s = scene()
+  const isDeg = (n: MathNode | undefined): boolean => n?.type === 'SymbolNode' && (n as unknown as { name: string }).name === 'deg'
+  node.traverse((n) => {
+    const op = n as MathNode & { fn?: string; args?: MathNode[] }
+    if (n.type !== 'OperatorNode' || op.fn !== 'multiply' || op.args?.length !== 2) return
+    let angle = isDeg(op.args[1]) ? op.args[0] : isDeg(op.args[0]) ? op.args[1] : undefined
+    while (angle?.type === 'ParenthesisNode') angle = (angle as unknown as { content: MathNode }).content
+    if (angle?.type !== 'SymbolNode') return
+    const id = s.ev.names.get((angle as unknown as { name: string }).name)
+    const o = id ? s.objects[id] : undefined
+    if (o?.type !== 'number' || !o.slider || (o.slider.min <= 0 && o.slider.max >= 360)) return
+    s.updateObject(o.id, (d) => {
+      if (d.type !== 'number' || !d.slider) return
+      d.slider.min = Math.min(d.slider.min, 0)
+      d.slider.max = Math.max(d.slider.max, 360)
+    }, false)
+  })
+}
+
 function tryAssignment(input: string): boolean {
   // ′ ″ ‴ ⁗ as in core/naming.ts isValidName: after Z the app names points A′, A″ (Fix 11), and a
   // student must be able to move or redefine them from the bar like any other point.
@@ -336,6 +689,13 @@ function tryAssignment(input: string): boolean {
   const [, name, rhs] = m
   if (GRAPH_VARS.has(name) || name === 'z') return false
   if (!isValidName(name)) throw new Error(`"${name}" is a reserved name. Try another.`)
+  // y'' = -y is a differential equation as a physics student writes one: a small letter with two
+  // primes, and no such letter in the scene to carry them (the bar names points A′ and A″, and a
+  // v′ beside a v is a name like any other). It cannot be solved, and the number it made could
+  // only be wrong, so it is said in a sentence and nothing is made.
+  if (primesIn(name) >= 2 && /^\p{Ll}/u.test(name) && !scene().ev.names.has(name.replace(PRIME_CHARS, ''))) {
+    throw new Error(`${name} = ${rhs.trim()} looks like a differential equation, and the bar cannot solve those. Type the graph you expect instead, e.g. y = sin(x).`)
+  }
   // A Lego piece's corners carry ordinary letters since Fix 17, so "E = (9, 9)" typed to make a
   // new point E would redefine one corner and bend the piece. It moves only as a whole.
   const taken = scene().ev.names.get(name)
@@ -376,8 +736,15 @@ function tryAssignment(input: string): boolean {
     }
   }
 
-  if (existing) redefine(existing, obj, b)
+  // The object is tried on a copy of the scene first: a line that can never work (y is no value, a
+  // needs itself) is refused with the scene as it was, where it was added and then reported, and what
+  // it made stayed. A value that mends when something moves is kept and said below.
+  const adds = existing ? replacement(existing, obj, b) : b.created
+  const failed = errorOnTrial(adds, existing ?? obj.id)
+  if (failed && !(MENDS_WHEN_THINGS_MOVE.test(failed) && !isConstant(node))) throw new Error(`${name}: ${failed}`)
+  if (existing) scene().addObjects(adds, { select: true })
   else b.commit()
+  widenDegreeSliders(node)
 
   const c = scene().ev.values.get(scene().ev.names.get(name) ?? '')
   const err = scene().ev.errors.get(scene().ev.names.get(name) ?? '')
@@ -454,15 +821,42 @@ function remapIds<T>(value: T, from: ObjId, to: ObjId): T {
   return value
 }
 
-function redefine(existingId: ObjId, obj: SceneObject, b: Builder) {
-  const s = scene()
-  const old = s.objects[existingId]
+/** What stands in the scene once `obj` has redefined `existingId`: the object under the old id, and the helpers made with it. */
+function replacement(existingId: ObjId, obj: SceneObject, b: Builder): SceneObject[] {
+  const old = scene().objects[existingId]
   const replaced = { ...obj, id: existingId, name: old.name, color: old.type === obj.type ? old.color : obj.color } as SceneObject
   const others = b.created.filter((o) => o.id !== obj.id)
   // Children created alongside (e.g. helper points) that referenced the new id must point at the old id.
   const fixed = others.map((o) => remapIds(o, obj.id, existingId) as SceneObject)
-  s.addObjects([replaced, ...fixed], { select: true })
+  return [replaced, ...fixed]
 }
+
+function redefine(existingId: ObjId, obj: SceneObject, b: Builder) {
+  scene().addObjects(replacement(existingId, obj, b), { select: true })
+}
+
+/**
+ * The error `id` would have, found on a copy of the scene before the scene is touched. A line that
+ * failed used to be added first and reported after, and what it made stayed: `y'' = -y` left a
+ * number y'' beside "Undefined symbol y", and `a = a + y` turned a good a into a broken one.
+ */
+function errorOnTrial(adds: SceneObject[], id: ObjId): string | undefined {
+  const s = scene()
+  const objects = { ...s.objects }
+  const order = [...s.order]
+  for (const o of adds) {
+    objects[o.id] = o
+    if (!order.includes(o.id)) order.push(o.id)
+  }
+  return evaluateScene(objects, order, s.settings, s.time).errors.get(id)
+}
+
+/**
+ * A value that is not a number for now, or hangs on an object that is not (1/k while the slider k
+ * is at 0): moving something mends it, so the object stays and the error is said. Everything else
+ * the evaluator reports is the definition's own and never mends.
+ */
+const MENDS_WHEN_THINGS_MOVE = /^(not a number|depends on an undefined object|.+ is undefined)$/
 
 // ---------------------------------------------------------------------------
 // Geometry commands
@@ -476,21 +870,60 @@ const GEO_ALIASES: Record<string, string> = {
   incenter: 'Incenter', orthocenter: 'Orthocenter', text: 'Text', square: 'Square', regularpolygon: 'RegularPolygon'
 }
 
+/**
+ * The most inputs a command reads, where it reads fewer than it was given without saying so:
+ * Square(P, (1, 0), 3) dropped the 3 and built a square. The others refuse a wrong count already.
+ */
+const MOST_INPUTS: Partial<Record<string, number>> = { Square: 2, RegularPolygon: 3, Triangle: 3, Intersect: 3, Slider: 4, Text: 2 }
+
+/**
+ * A command's inputs with a vector typed in angle brackets kept whole. splitArgs (math/expr.ts)
+ * groups only round and square brackets, so angle(<1, 0>, <0, 1>) was four inputs, "<1" among
+ * them. The brackets held are the ones preprocess reads as a vector: a comma inside, and no <, >
+ * or = within.
+ */
+function splitInputs(s: string): string[] {
+  const held = s.replace(/[⟨<][^<>=⟨⟩]*,[^<>=⟨⟩]*[⟩>]/g, (vector) => vector.replace(/,/g, '\u0001'))
+  // split/join, not a regex: a control character in a regex literal is a lint error (no-control-regex).
+  return splitArgs(held).map((a) => a.split('\u0001').join(','))
+}
+
+/** Whether an input stands for a vector: a vector's name, or what it is made of (<1, 0>, 2A, A + B). */
+function isVectorInput(text: string): boolean {
+  const k = kindOfName(text)
+  if (k !== undefined) return k === 'vector'
+  try {
+    return inferKind(parseNode(text), kindOfName) === 'vector'
+  } catch {
+    return false
+  }
+}
+
 function tryGeometryCommand(src: string, name: string | undefined, fullInput = src): boolean {
   const m = src.match(/^\s*([A-Za-z]+)\s*\((.*)\)\s*$/)
   if (!m) return false
   const cmd = GEO_ALIASES[m[1].toLowerCase()]
   if (!cmd) return false
-  // `angle(A, B)` with two vectors is a solver request, not a geometry angle.
+  // `angle(A, B)` with two vectors is a solver request, not a geometry angle — and so is one of two
+  // vectors typed out: decided by the names alone, angle(<1, 0>, <0, 1>) was "Wrong inputs for Angle".
+  // Vector( ) keeps the names-only rule: no solver reads it, and two vector names already end in
+  // "Undefined function Vector", which typed vectors should not be sent to.
+  const inputs = splitInputs(m[2])
+  if (cmd === 'Angle' && inputs.length === 2 && inputs.every(isVectorInput)) return false
   const rawArgs = splitArgs(m[2])
-  if (cmd === 'Angle' && rawArgs.length === 2 && rawArgs.every((a) => kindOfName(a) === 'vector')) return false
   if (cmd === 'Vector' && rawArgs.length === 2 && rawArgs.every((a) => kindOfName(a) === 'vector')) return false
 
   const b = new Builder()
   const names = scene().ev.names
   const objects = () => ({ ...scene().objects, ...Object.fromEntries(b.created.map((o) => [o.id, o])) })
 
-  const ref = (arg: string): ObjId => {
+  // Square(P) read a second point that was never typed and showed the student JavaScript's
+  // "Cannot read properties of undefined (reading 'trim')". Every case reads its points through
+  // ref, so one left out, or left blank as in Square(, P), is refused here in the command's words.
+  const wrongInputs = `Wrong inputs for ${cmd}. Type "help" to see examples.`
+  if (rawArgs.length > (MOST_INPUTS[cmd] ?? Infinity)) throw new Error(wrongInputs)
+  const ref = (arg: string | undefined): ObjId => {
+    if (!arg?.trim()) throw new Error(wrongInputs)
     const trimmed = arg.trim()
     const id = names.get(trimmed)
     if (id) return id
@@ -552,6 +985,8 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
       const p = ref(a[0])
       const q = ref(a[1])
       const n = cmd === 'Square' ? 4 : Number(math.evaluate(a[2] ?? '4'))
+      // 2 sides made a "polygon, area 0", 2.5 a triangle, and 0 or a negative number a polygon of two corners.
+      if (!Number.isInteger(n) || n < 3) throw new Error('A regular polygon needs a whole number of sides, 3 or more.')
       const P = b.created.find((o) => o.id === p) ?? scene().objects[p]
       const Q = b.created.find((o) => o.id === q) ?? scene().objects[q]
       const pn = P.name
@@ -635,18 +1070,30 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
     case 'Centroid':
     case 'Circumcenter':
     case 'Incenter':
-    case 'Orthocenter':
-      if (a.length === 1) primary = b.point({ kind: 'triangleCenter', poly: ref(a[0]), which: cmd.toLowerCase() as 'centroid' }, opts)
+    case 'Orthocenter': {
+      if (a.length !== 1) break
+      const poly = ref(a[0])
+      // The evaluator refuses anything else only after the point is made, so "B: needs a triangle"
+      // was said about a point that stayed in the drawing as an error.
+      const corners = scene().ev.values.get(poly)
+      if (typeOf(poly) !== 'polygon' || (corners?.type === 'polygon' && corners.pts.length !== 3)) {
+        const tri = freeLetterFor('TUVW')
+        throw new Error(`${cmd} needs a triangle, and ${a[0].trim()} is not one. Make a triangle first, e.g. ${tri} = Triangle((0, 0), (4, 0), (0, 3)), then ${cmd}(${tri}).`)
+      }
+      primary = b.point({ kind: 'triangleCenter', poly, which: cmd.toLowerCase() as 'centroid' }, opts)
       break
+    }
     case 'Text': {
       const text = a[0]?.replace(/^["']|["']$/g, '') ?? ''
-      const pos = a[1] ? toV3(math.evaluate(preprocess(a[1]))) : ([0, 0, 0] as V3)
+      if (!text.trim()) throw new Error('Text needs something to show, e.g. Text("label").')
+      // The position reads the scene's names like every other input: Text("hi", P) put the label at P.
+      const pos = a[1] ? toV3(math.evaluate(preprocess(a[1]), { ...scene().ev.scope })) : ([0, 0, 0] as V3)
       primary = b.text(pos, text, opts)
       break
     }
   }
 
-  if (!primary) throw new Error(`Wrong inputs for ${cmd}. Type "help" to see examples.`)
+  if (!primary) throw new Error(wrongInputs)
   const existing = name ? scene().ev.names.get(name) : undefined
   if (existing) redefine(existing, primary, b)
   else b.commit()
@@ -740,15 +1187,32 @@ export function solutionFor(root: MathNode, name?: string): VS.Solution | null {
 
 const SOLVER_FNS = new Set(['components', 'resolve', 'magnitude', 'magdir', 'direction', 'unit', 'angle', 'resultant', 'twoforces', 'equilibrium', 'torque', 'work', 'magforce', 'projection', 'add', 'subtract', 'dot', 'cross'])
 
+/** The most inputs each of them reads; add and equilibrium take any number. cross(A, r, F) answered A × r and left F out without a word. */
+const MOST_SOLVER_INPUTS: Partial<Record<string, number>> = {
+  components: 2, resolve: 2, magnitude: 1, magdir: 1, direction: 1, unit: 1, angle: 2, dot: 2, cross: 2, subtract: 2, projection: 2, resultant: 3, twoforces: 3, torque: 2, work: 2, magforce: 3
+}
+
 function trySolverCommand(input: string): boolean {
   const m = input.match(/^\s*([A-Za-z]+)\s*\((.*)\)\s*$/)
   if (!m || !SOLVER_FNS.has(m[1].toLowerCase())) return false
   const fn = m[1].toLowerCase()
   const settings = scene().settings
-  const args = splitArgs(m[2]).map((a) => parseNode(a))
-  const num = (n: Node) => Number(evaluateNode(n))
+  // cross(A) and resultant(5) read an input that was never typed and showed the student
+  // JavaScript's "Cannot read properties of undefined (reading 'type')"; a blank one, as in
+  // resultant(, 5, 3), was answered "R = undefined N". Every case reads its inputs through num and
+  // v, so one left out or left blank is refused there in the command's words — and so is a line
+  // with none at all, where add() and equilibrium() answered a sum and a balance of nothing.
+  const wrongInputs = `Wrong inputs for ${m[1]}. Type "help" for examples.`
+  // A vector typed in angle brackets is one input: angle(<1, 0>, <0, 1>) was read as "<1", "0>", …
+  const args = splitInputs(m[2]).map((a) => (a ? parseNode(a) : undefined))
+  if (!args.length || args.length > (MOST_SOLVER_INPUTS[fn] ?? Infinity)) throw new Error(wrongInputs)
+  const given = (n: Node | undefined): Node => {
+    if (!n) throw new Error(wrongInputs)
+    return n
+  }
+  const num = (n: Node | undefined) => Number(evaluateNode(given(n)))
   const namer = operandNamer()
-  const v = (i: number, name: string) => namer.arg(args[i], name)
+  const v = (i: number, name: string) => namer.arg(given(args[i]), name)
   let sol: VS.Solution | null = null
   switch (fn) {
     case 'components':
@@ -803,7 +1267,7 @@ function trySolverCommand(input: string): boolean {
       sol = VS.solveMagneticForce(num(args[0]), v(1, 'v').v, v(2, 'B').v, settings)
       break
   }
-  if (!sol) throw new Error(`Wrong inputs for ${m[1]}. Type "help" for examples.`)
+  if (!sol) throw new Error(wrongInputs)
   const finalSol = sol
   scene().pushLog({
     input,
@@ -1156,13 +1620,14 @@ function evaluatePlain(expr: string, shown = expr) {
   }
   // The student's precision, not a fixed ten digits (rule 4): with decimals set to 2, `1/3` used
   // to answer 0.3333333333 beside a panel showing |A| = 5.00. The ≈ tail after an exact form is
-  // the one place the full display stays, the way the calculator's S⇔D key shows it.
+  // in the same precision: it was kept at ten places on purpose, and read "= 1/3 ≈ 0.3333333333"
+  // at 2 d.p. (the wave head overruled that, polish H16).
   const text = typeof value === 'number' ? fmtPrecise(value, s.settings) : isUnit(value) ? `${fmtPrecise(plainNumber(value), s.settings)} ${value.formatUnits()}` : math.format(value, { precision: 10 })
   const id = s.pushLog({ input, kind: 'result', text: `= ${text}`, solution: solution ?? undefined })
   if (typeof value === 'number' && !Number.isInteger(value) && Number.isFinite(value) && isConstant(node)) {
     cas('exact', { expr: preprocess(expr), deg: casInDegrees(s.settings.angleUnit) }).then((r) => {
       if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text) {
-        s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${tex(value, 10)}` })
+        s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${texPrecise(value, s.settings)}` })
       }
     })
   }

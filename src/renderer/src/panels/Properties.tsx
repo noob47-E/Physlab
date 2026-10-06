@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ListOrdered, Trash2 } from 'lucide-react'
 import { useScene, scene } from '../core/store'
 import { isFree } from '../core/evaluate'
@@ -6,7 +7,7 @@ import { heading, len, toDeg, toRad, type V3 } from '../math/vec'
 import { fmt } from '../math/format'
 import * as VS from '../math/vectorSolver'
 import { Check, ColorField, NumField, TextField } from '../ui/fields'
-import { runCommand } from '../lang/commands'
+import { pointOnRange, replaceGraphEquation } from '../lang/graphEdit'
 import { shownColor } from '../app/theme'
 
 function V3Fields({ v, onChange }: { v: V3; onChange: (v: V3) => void }) {
@@ -30,6 +31,8 @@ export function Properties() {
   const remove = useScene((s) => s.removeObjects)
   const showSolution = useScene((s) => s.showSolution)
   const angleUnit = useScene((s) => s.settings.angleUnit)
+  // Why the Equation box refused the last line, for the graph it was typed for.
+  const [equationProblem, setEquationProblem] = useState<{ id: string; text: string } | null>(null)
 
   if (selection.length === 0) return <div className="panel p-4 text-ink-faint">Select an object to edit it.</div>
   if (selection.length > 1) {
@@ -136,9 +139,7 @@ export function Properties() {
             <input
               type="range"
               className="w-full"
-              min={0}
-              max={1}
-              step={0.001}
+              {...pointOnRange(objects[o.def.on], o.def.t)}
               value={o.def.t}
               onChange={(e) => set((d) => d.type === 'point' && d.def.kind === 'onObject' && void (d.def.t = Number(e.target.value)))}
             />
@@ -274,14 +275,22 @@ export function Properties() {
         <>
           <div className="prop-row">
             <label>Equation</label>
-            <TextField
-              mono
-              value={o.source}
-              onCommit={(v) => {
-                remove([o.id])
-                runCommand(v)
-              }}
-            />
+            <div className="min-w-0">
+              <TextField
+                mono
+                value={o.source}
+                onCommit={(v) => {
+                  // The new line runs first (lang/graphEdit.ts): a line the command bar refuses used to
+                  // leave the student with no graph, because the old one was deleted before it ran.
+                  void replaceGraphEquation(o.id, v).then((r) => setEquationProblem(r.ok ? null : { id: o.id, text: r.reason }))
+                }}
+              />
+              {equationProblem?.id === o.id && (
+                <div role="status" className="mt-0.5 text-small text-bad">
+                  {equationProblem.text}
+                </div>
+              )}
+            </div>
           </div>
           <div className="prop-row">
             <label>Line width</label>
