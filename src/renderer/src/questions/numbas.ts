@@ -7,7 +7,7 @@
 // or a function name a teacher has to look up. Headless: no React, no store, no DOM.
 
 import type { ConditionalNode, ConstantNode, FunctionNode, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
-import { math, preprocess, symbolsOf } from '../math/expr'
+import { inferKind, math, preprocess, symbolsOf } from '../math/expr'
 import { fmtPrecise } from '../math/format'
 import { texToPlain } from '../math/pure/work'
 import { licenseFromNumbas, refusalSentence } from './license'
@@ -294,7 +294,9 @@ class JmeParser {
           }
         }
         this.expectP(')')
-        return { t: 'call', f: t.v, args }
+        // Numbas folds a name to lower case when it looks it up (jme.normaliseName), so Random(1..5)
+        // and Sin(x) run there. Only a call is folded here: a variable keeps its case, as in PhysLab.
+        return { t: 'call', f: t.v.toLowerCase(), args }
       }
       return { t: 'name', v: t.v }
     }
@@ -412,7 +414,7 @@ function emitCall(n: Extract<JmeNode, { t: 'call' }>, trig: TrigMode): Emitted {
     if (n.args.length !== 2) throw new JmeRefusal('siground without two inputs')
     return atom(`number(format(${args().join(', ')}))`)
   }
-  // The app's calculator (math/expr.ts) follows the Casio convention JME also uses: log(x) is
+  // The app's calculator (math/expr.ts) follows the scientific-calculator convention JME also uses: log(x) is
   // base 10 and ln(x) natural, so both keep their names. Only the two-input form differs:
   // JME's log(x, b) is the log of x to base b; the calculator's log(a, b) is the log base a
   // of b, so the inputs swap.
@@ -520,7 +522,11 @@ export function jmeToVariableDef(src: string): VariableDef {
       if (arg.t === 'list') {
         const items = arg.items.map(plainNumber)
         if (items.some((v) => v === null)) throw new JmeRefusal('a random choice from things that are not numbers')
-        return { kind: 'list', items: items as number[] }
+        // `list except x` takes the element (or each element of a list) out of the list; dropping
+        // it drew values the author had excluded.
+        const kept = (items as number[]).filter((v) => !(exclude ?? []).includes(v))
+        if (exclude !== undefined && kept.length === 0) throw new JmeRefusal('a random choice with every value taken out by except')
+        return { kind: 'list', items: kept }
       }
       // random(30) is a choice from one value, which an author writes to pin a number for now.
       const only = plainNumber(arg)
@@ -572,19 +578,66 @@ const num = (v: number): string => fmtPrecise(v, SENTENCE_PRECISION)
 
 // --- HTML → lines ------------------------------------------------------------
 
+/**
+ * The named entities of HTML 4 (252 names) and `apos`, which XML adds: Numbas text is the HTML its
+ * editor writes, and the editor spells é, €, ü, φ and the curly quotes as names. The cached bank
+ * uses 86 of them, every one HTML 4's. The spaces are written as a plain space, and the soft
+ * hyphen and the zero-width marks as nothing.
+ */
 const ENTITIES: Record<string, string> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', times: '×', divide: '÷', deg: '°',
-  minus: '−', middot: '·', ndash: '–', mdash: '—', hellip: '…', pi: 'π', theta: 'θ', alpha: 'α',
-  beta: 'β', gamma: 'γ', mu: 'μ', omega: 'ω', lambda: 'λ', rho: 'ρ', Omega: 'Ω', plusmn: '±', le: '≤', ge: '≥'
+  // Markup
+  quot: '"', amp: '&', apos: "'", lt: '<', gt: '>',
+  // Latin-1: accents, currency, fractions
+  nbsp: ' ', iexcl: '¡', cent: '¢', pound: '£', curren: '¤', yen: '¥', brvbar: '¦', sect: '§',
+  uml: '¨', copy: '©', ordf: 'ª', laquo: '«', not: '¬', shy: '', reg: '®', macr: '¯', deg: '°',
+  plusmn: '±', sup2: '²', sup3: '³', acute: '´', micro: 'µ', para: '¶', middot: '·', cedil: '¸',
+  sup1: '¹', ordm: 'º', raquo: '»', frac14: '¼', frac12: '½', frac34: '¾', iquest: '¿', Agrave: 'À',
+  Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å', AElig: 'Æ', Ccedil: 'Ç', Egrave: 'È',
+  Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë', Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï', ETH: 'Ð',
+  Ntilde: 'Ñ', Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', times: '×', Oslash: 'Ø',
+  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü', Yacute: 'Ý', THORN: 'Þ', szlig: 'ß', agrave: 'à',
+  aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å', aelig: 'æ', ccedil: 'ç', egrave: 'è',
+  eacute: 'é', ecirc: 'ê', euml: 'ë', igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï', eth: 'ð',
+  ntilde: 'ñ', ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', divide: '÷', oslash: 'ø',
+  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü', yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
+  // Latin extended, modifiers
+  OElig: 'Œ', oelig: 'œ', Scaron: 'Š', scaron: 'š', Yuml: 'Ÿ', fnof: 'ƒ', circ: 'ˆ', tilde: '˜',
+  // Greek
+  Alpha: 'Α', Beta: 'Β', Gamma: 'Γ', Delta: 'Δ', Epsilon: 'Ε', Zeta: 'Ζ', Eta: 'Η', Theta: 'Θ',
+  Iota: 'Ι', Kappa: 'Κ', Lambda: 'Λ', Mu: 'Μ', Nu: 'Ν', Xi: 'Ξ', Omicron: 'Ο', Pi: 'Π', Rho: 'Ρ',
+  Sigma: 'Σ', Tau: 'Τ', Upsilon: 'Υ', Phi: 'Φ', Chi: 'Χ', Psi: 'Ψ', Omega: 'Ω', alpha: 'α', beta: 'β',
+  gamma: 'γ', delta: 'δ', epsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ', iota: 'ι', kappa: 'κ',
+  lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', omicron: 'ο', pi: 'π', rho: 'ρ', sigmaf: 'ς', sigma: 'σ',
+  tau: 'τ', upsilon: 'υ', phi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω', thetasym: 'ϑ', upsih: 'ϒ',
+  piv: 'ϖ',
+  // Spaces, dashes, quotes, bullets, primes, letter-like
+  ensp: ' ', emsp: ' ', thinsp: ' ', zwnj: '', zwj: '', lrm: '', rlm: '', ndash: '–', mdash: '—',
+  lsquo: '‘', rsquo: '’', sbquo: '‚', ldquo: '“', rdquo: '”', bdquo: '„', dagger: '†', Dagger: '‡',
+  bull: '•', hellip: '…', permil: '‰', prime: '′', Prime: '″', lsaquo: '‹', rsaquo: '›', oline: '‾',
+  frasl: '⁄', euro: '€', image: 'ℑ', weierp: '℘', real: 'ℜ', trade: '™', alefsym: 'ℵ',
+  // Arrows
+  larr: '←', uarr: '↑', rarr: '→', darr: '↓', harr: '↔', crarr: '↵', lArr: '⇐', uArr: '⇑', rArr: '⇒',
+  dArr: '⇓', hArr: '⇔',
+  // Maths
+  forall: '∀', part: '∂', exist: '∃', empty: '∅', nabla: '∇', isin: '∈', notin: '∉', ni: '∋',
+  prod: '∏', sum: '∑', minus: '−', lowast: '∗', radic: '√', prop: '∝', infin: '∞', ang: '∠', and: '∧',
+  or: '∨', cap: '∩', cup: '∪', int: '∫', there4: '∴', sim: '∼', cong: '≅', asymp: '≈', ne: '≠',
+  equiv: '≡', le: '≤', ge: '≥', sub: '⊂', sup: '⊃', nsub: '⊄', sube: '⊆', supe: '⊇', oplus: '⊕',
+  otimes: '⊗', perp: '⊥', sdot: '⋅',
+  // Brackets, shapes, suits
+  lceil: '⌈', rceil: '⌉', lfloor: '⌊', rfloor: '⌋', lang: '〈', rang: '〉', loz: '◊', spades: '♠',
+  clubs: '♣', hearts: '♥', diams: '♦'
 }
 
 function decodeEntities(s: string): string {
-  return s.replace(/&(#x[0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, (m, body: string) => {
+  return s.replace(/&(#x[0-9a-fA-F]+|#\d+|[A-Za-z][A-Za-z0-9]*);/g, (m, body: string) => {
     if (body[0] === '#') {
       const code = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10)
       return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m
     }
-    return ENTITIES[body] ?? m
+    // The table's own names only: `&constructor;` is no entity, and an object's inherited property
+    // of that name is a function whose source text would have been put into the sentence.
+    return Object.prototype.hasOwnProperty.call(ENTITIES, body) ? ENTITIES[body] : m
   })
 }
 
@@ -645,17 +698,128 @@ function chipLatex(tex: string, ctx: TextContext): string {
     .replace(/\\var\{([^{}]*)\}/g, (_m, inner: string) => chipFor(inner, ctx))
 }
 
-/** Plain text between the maths: `{…}` and `\var{…}` both show a value. */
+/**
+ * Plain text between the maths: `{…}` and `\var{…}` both show a value. A brace written `\{` or `\}`
+ * is a brace, not the start or end of a value: Numbas's own splitter skips the character after a
+ * backslash (util.splitbrackets), so `\{1, 2, 3\}` is words. It is kept as the brace it names; round
+ * a variable's name (`\{a\}`) it gets a space inside, as a LaTeX group does in chipLatex, because
+ * the player fills in any `{a}` and the author meant the letter.
+ */
 function chipText(text: string, ctx: TextContext): string {
-  // One pass, so the variables made for expressions are numbered in reading order.
-  return text.replace(/\\var\{([^{}]*)\}|\{([^{}]*)\}/g, (_m, a: string | undefined, b: string | undefined) => chipFor(a ?? b ?? '', ctx))
+  // One pass for the values, so the variables made for expressions are numbered in reading order.
+  // A backslash and the character after it are one unit, as Numbas reads them: `\\{a}` is a
+  // backslash and then a value, and `\{a\}` has no value in it.
+  return text
+    .replace(/\\var\{((?:[^{}\\]|\\[\s\S])*)\}|\\[\s\S]|\{((?:[^{}\\]|\\[\s\S])*)\}/g, (m, a: string | undefined, b: string | undefined) =>
+      a !== undefined || b !== undefined ? chipFor(a ?? b ?? '', ctx) : m
+    )
+    .replace(/\\\{([A-Za-z][A-Za-z0-9_]*)\\\}|\\([\s\S])/g, (m, name: string | undefined, c: string | undefined) =>
+      name !== undefined ? `{ ${name}}` : c === '{' || c === '}' ? c : m
+    )
 }
 
-const MATHS = /\\\(([\s\S]*?)\\\)|\\\[([\s\S]*?)\\\]/g
+// A tag or comment is matched wherever maths is looked for, only so it can be stepped over: a `$`
+// inside an attribute starts nothing, and maths may not run past one. `<` followed by a letter,
+// `/` or `!` is where a browser starts a tag (`x < 3` is not one), and a `>` inside a quoted
+// attribute does not end it.
+const TAG = String.raw`<!--[\s\S]*?-->|<[A-Za-z/!](?:[^>"']|"[^"]*"|'[^']*')*>`
+/**
+ * Where maths starts in Numbas text: `$$`, `$`, `\(`, `\[` or `\begin{env}`, the order Numbas's
+ * own reader (`contentsplitbrackets`) tries them in. Most of the public bank writes inline maths
+ * as `$…$`; read as plain text, every LaTeX group in it (the `{-1}` of `ms^{-1}`) was taken for a
+ * Numbas `{…}` value and became a made-up variable. `\$` is a dollar sign, as MathJax prints it.
+ */
+const MATHS_START = new RegExp(String.raw`${TAG}|\\\$|\$\$|\$|\\\(|\\\[|\\begin\{([A-Za-z]+\*?)\}`, 'g')
+/** A line break or comment inside maths is only the editor's layout; any other tag ends the paragraph the maths had to close in. */
+const SOFT_TAG = /^(?:<!--|<\s*w?br\b)/i
+
+/**
+ * The words from `from` to the end of its paragraph: to the first tag that is not a line break or
+ * comment. The line breaks and comments crossed on the way are taken out: they are layout, and what
+ * is inside a comment (a backslash, a brace) is not on the page, so it is no LaTeX left unclosed.
+ */
+function restOfParagraph(html: string, from: number): string {
+  const re = new RegExp(TAG, 'g')
+  re.lastIndex = from
+  let end = html.length
+  for (let m = re.exec(html); m; m = re.exec(html)) {
+    if (!SOFT_TAG.test(m[0])) {
+      end = m.index
+      break
+    }
+  }
+  return html.slice(from, end).replace(new RegExp(TAG, 'g'), ' ')
+}
+
+/** Where the maths opened by `start` ends: its closing delimiter's index and the index just past it, or null when a tag comes first. */
+function closeOf(html: string, from: number, start: string, env: string | undefined): { at: number; end: number } | null {
+  const close =
+    start === '$'
+      ? String.raw`\$`
+      : start === '$$'
+        ? String.raw`\$\$`
+        : start === '\\('
+          ? String.raw`\\\)`
+          : start === '\\['
+            ? String.raw`\\\]`
+            : String.raw`\\end\{${(env ?? '').replace('*', '\\*')}\}`
+  const re = new RegExp(String.raw`${TAG}|\\\$|${close}`, 'g')
+  re.lastIndex = from
+  for (let m = re.exec(html); m; m = re.exec(html)) {
+    if (m[0] === '\\$') continue
+    if (m[0][0] === '<') {
+      if (SOFT_TAG.test(m[0])) continue
+      return null
+    }
+    return { at: m.index, end: m.index + m[0].length }
+  }
+  return null
+}
+
 /** Where a lifted maths span sat in the text while the tags were stripped (a private-use character no page holds). */
 const MARK = '\uE000'
 const MARKED = /\uE000(\d+)\uE000/g
 const ONLY_MARK = /^\uE000\d+\uE000$/
+
+/**
+ * The maths of Numbas HTML lifted out into `spans`, each replaced by a MARK, found as MathJax
+ * finds it in the page Numbas shows: opened and closed within one paragraph, across nothing but
+ * line breaks. A `$` with no partner there is a dollar sign ("costs $5") — unless LaTeX follows
+ * it in its paragraph: that is maths its author never closed, which Numbas itself shows as raw
+ * LaTeX, and a `$$`, `\(`, `\[` or `\begin` with no partner would pair with the next maths
+ * PhysLab shows. Either way its question is skipped.
+ */
+function liftMaths(html: string, spans: { tex: string; display: boolean }[]): string {
+  let out = ''
+  let copied = 0
+  const starts = new RegExp(MATHS_START.source, 'g')
+  for (let m = starts.exec(html); m; m = starts.exec(html)) {
+    const start = m[0]
+    if (start[0] === '<' || start === '\\$') continue
+    const from = m.index + start.length
+    const close = closeOf(html, from, start, m[1])
+    if (close === null) {
+      // Numbas reads the rest of the paragraph as maths too: a \var{…} there still shows its
+      // value ("costs $\var{p}" reads "costs $12"), but none of its {…} were values and any other
+      // command showed its backslash. A lone $$ is left out: PhysLab reads a line starting $$ as
+      // display maths.
+      if (start === '$' && !/\\(?!\$)|[{}]/.test(restOfParagraph(html, from).replace(/\\var\{[^{}]*\}/g, ''))) continue
+      throw new Skip(`opens maths with ${start} but never closes it in the same paragraph`)
+    }
+    const env = start.startsWith('\\begin')
+    const inner = html.slice(from, close.at).replace(new RegExp(TAG, 'g'), ' ')
+    const tex = decodeEntities(env ? `${start}${inner}${html.slice(close.at, close.end)}` : inner).trim()
+    out += html.slice(copied, m.index)
+    copied = close.end
+    starts.lastIndex = close.end
+    // \[\] shows nothing in Numbas, so there is nothing to lift.
+    if (tex === '') continue
+    const display = start !== '$' && start !== '\\('
+    spans.push({ tex, display })
+    out += display ? `\n${MARK}${spans.length - 1}${MARK}\n` : `${MARK}${spans.length - 1}${MARK}`
+  }
+  return out + html.slice(copied)
+}
 
 /**
  * Numbas HTML → the lines of a PhysLab statement: plain text with chips, display maths on a
@@ -665,22 +829,18 @@ const ONLY_MARK = /^\uE000\d+\uE000$/
  */
 function htmlToLines(html: string, ctx: TextContext): string[] {
   if (/<\s*(img|table|iframe)\b/i.test(html)) throw new Skip('has a picture or table PhysLab cannot show')
+  // A chip shows a number to the student's precision; a fraction or a matrix layout it cannot
+  // give, and \var[…]{x} read as the chip {x} left "\var[fractionNumbers]" for KaTeX to refuse.
+  const styled = /\\var\s*(\[[^\]]*\])/.exec(html)
+  if (styled) throw new Skip(`shows a value with \\var${styled[1]}, which PhysLab cannot show`)
   const spans: { tex: string; display: boolean }[] = []
-  const lifted = html.replace(MATHS, (_m, inline: string | undefined, display: string | undefined) => {
-    const i = spans.length
-    if (display !== undefined) {
-      spans.push({ tex: decodeEntities(display).trim(), display: true })
-      return `\n${MARK}${i}${MARK}\n`
-    }
-    spans.push({ tex: decodeEntities(inline ?? ''), display: false })
-    return `${MARK}${i}${MARK}`
-  })
+  const lifted = liftMaths(html, spans)
   const text = decodeEntities(
     lifted
       .replace(/<\s*br\s*\/?\s*>/gi, '\n')
       .replace(/<\s*\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, '\n')
       .replace(/<\s*(li|tr)\b[^>]*>/gi, '\n')
-      .replace(/<[^>]+>/g, '')
+      .replace(new RegExp(TAG, 'g'), '')
   )
   // Chips are read in the order they appear, text and maths alike, so the variables made for
   // expressions in the text are numbered the way a reader meets them.
@@ -695,20 +855,331 @@ function htmlToLines(html: string, ctx: TextContext): string[] {
       }
       return line
         .split(MARKED)
-        .map((piece, k) => (k % 2 === 1 ? `\\(${chipLatex(spans[Number(piece)].tex, ctx)}\\)` : chipText(piece, ctx)))
+        .map((piece, k) => (k % 2 === 1 ? `\\(${chipLatex(spans[Number(piece)].tex, ctx)}\\)` : chipText(piece, ctx).replace(/\\\$/g, '$')))
         .join('')
     })
 }
 
-/** A chip kept whole through texToPlain, which would otherwise strip its braces. */
-const KEEP = '\uE001'
+// --- imported maths spoken as plain characters --------------------------------
+//
+// texToPlain was written for PhysLab's own generated sentences. Imported Numbas LaTeX is wider: it
+// deletes every command it does not know (μ, ∩, ≤, \sin, \infty …), strips every brace (so a script
+// such as n+1 loses where it ends), and its \left / \right / \cdot patterns also match the front of
+// \rightarrow and \cdots. speakTex therefore turns what it would delete into characters first, takes
+// every other command out whole, and brackets a script of more than one symbol.
 
-/** A plain sentence from a line: inline maths spoken (texToPlain), chips kept whole. */
-function spoken(line: string): string {
-  return line.replace(/\\\(([\s\S]*?)\\\)/g, (_m, tex: string) => {
-    const kept = tex.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, `${KEEP}$1${KEEP}`)
-    return texToPlain(kept).replace(/\uE001([A-Za-z][A-Za-z0-9_]*)\uE001/g, '{$1}')
+/** A chip (a variable's value) kept whole through texToPlain, which would otherwise strip its braces. */
+const KEEP = '\uE001'
+/** A brace the author escaped (`\{`, `\}`): a real brace in the sentence, kept through texToPlain's brace stripping. */
+const BRACE_OPEN = '\uE002'
+const BRACE_CLOSE = '\uE003'
+/** The braces of a `^{…}` or `_{…}` while texToPlain works inside it, so the end of the group is still known afterwards. */
+const SCRIPT_OPEN = '\uE004'
+const SCRIPT_CLOSE = '\uE005'
+
+// Maps, not plain objects: `\constructor` must not find Object's own property.
+const GREEK = new Map(
+  Object.entries({
+    alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η',
+    theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ', lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', omicron: 'ο',
+    pi: 'π', varpi: 'ϖ', rho: 'ρ', varrho: 'ϱ', sigma: 'σ', varsigma: 'ς', tau: 'τ', upsilon: 'υ',
+    phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+    Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π', Sigma: 'Σ', Upsilon: 'Υ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω'
   })
+)
+const FUNCTION_WORDS = new Set(
+  'sin cos tan sec csc cot arcsin arccos arctan sinh cosh tanh coth ln log lg exp lim liminf limsup max min sup inf det dim ker arg deg gcd hom Pr'.split(' ')
+)
+/** Symbols are kept with the spacing the author typed round them: "A \cap B" reads "A ∩ B". */
+const SYMBOLS = new Map(
+  Object.entries({
+    in: '∈', notin: '∉', ni: '∋', cap: '∩', cup: '∪', subset: '⊂', subseteq: '⊆', supset: '⊃', supseteq: '⊇', setminus: '∖',
+    le: '≤', leq: '≤', leqslant: '≤', ge: '≥', geq: '≥', geqslant: '≥', ne: '≠', neq: '≠', approx: '≈', equiv: '≡', sim: '∼', cong: '≅',
+    propto: '∝', ll: '≪', gg: '≫',
+    nexists: '∄', nsubseteq: '⊈', nsubset: '⊄', nsupseteq: '⊉', nsupset: '⊅', nleq: '≰', ngeq: '≱', nless: '≮', ngtr: '≯', nmid: '∤',
+    nparallel: '∦', nsim: '≁', ncong: '≇',
+    pm: '±', mp: '∓', div: '÷', ast: '*', star: '*', circ: '∘', bullet: '•',
+    infty: '∞', emptyset: '∅', varnothing: '∅', partial: '∂', nabla: '∇', sum: '∑', prod: '∏', int: '∫', ell: 'ℓ', hbar: 'ħ',
+    forall: '∀', exists: '∃', neg: '¬', land: '∧', wedge: '∧', lor: '∨', vee: '∨', therefore: '∴', because: '∵',
+    to: '→', rightarrow: '→', leftarrow: '←', leftrightarrow: '↔', Rightarrow: '⇒', Leftarrow: '⇐', Leftrightarrow: '⇔',
+    implies: '⟹', iff: '⟺', mapsto: '↦', uparrow: '↑', downarrow: '↓',
+    ldots: '…', dots: '…', cdots: '…', vdots: '⋮', ddots: '⋱',
+    angle: '∠', perp: '⊥', parallel: '∥', mid: '|', lt: '<', gt: '>', triangle: '△', prime: '′', degree: '°',
+    lfloor: '⌊', rfloor: '⌋', lceil: '⌈', rceil: '⌉', langle: '⟨', rangle: '⟩', vert: '|', lvert: '|', rvert: '|',
+    Vert: '‖', lVert: '‖', rVert: '‖', qquad: ' ',
+    // The dotless letters a unit vector's hat sits on (\hat{\imath}).
+    imath: 'ı', jmath: 'ȷ'
+  })
+)
+/** The commands texToPlain itself reads. Every other command is taken out here, whole: its `\left`, `\right`, `\cdot` and `\text` patterns match the front of a longer name. */
+const TEXTOPLAIN_WORDS = new Set(['frac', 'dfrac', 'sqrt', 'text', 'left', 'right', 'times', 'cdot', 'quad'])
+/** The fraction and binomial commands speakFractions reads (texToPlain would delete them and run the two numbers together). */
+const FRACTION_WORDS = new Set(['over', 'choose', 'binom', 'dbinom', 'tbinom'])
+/** Control symbols (a backslash and one character): braces become marks that survive texToPlain; spacing commands become a space. */
+const CONTROL_SYMBOLS = new Map<string, string>([
+  ['\\', ' '], ['{', BRACE_OPEN], ['}', BRACE_CLOSE], ['%', '%'], ['&', '&'], ['$', '$'], ['#', '#'],
+  [' ', ' '], [',', ' '], [';', ' '], [':', ' '], ['>', ' '], ['!', ''], ['|', '‖'], ['/', ''], ['-', '']
+])
+const BLACKBOARD = new Map(Object.entries({ N: 'ℕ', Z: 'ℤ', Q: 'ℚ', R: 'ℝ', C: 'ℂ' }))
+/** `\not` and the symbol it strikes through: dropping the `\not` of `\not\in` would say the opposite. */
+const NEGATED = new Map<string, string>([
+  ['\\in', '∉'], ['\\ni', '∌'], ['\\subset', '⊄'], ['\\subseteq', '⊈'], ['\\supset', '⊅'], ['\\supseteq', '⊉'], ['=', '≠'],
+  ['\\equiv', '≢'], ['\\approx', '≉'], ['\\sim', '≁'], ['\\cong', '≇'], ['\\le', '≰'], ['\\leq', '≰'],
+  ['\\leqslant', '≰'], ['\\ge', '≱'], ['\\geq', '≱'], ['\\geqslant', '≱'], ['<', '≮'], ['>', '≯'], ['\\parallel', '∦'], ['\\mid', '∤'],
+  ['\\exists', '∄']
+])
+/** The combining mark each accent command leaves on its one letter. */
+const ACCENTS = new Map(
+  Object.entries({
+    bar: '̄', overline: '̄', vec: '⃗', overrightarrow: '⃗', hat: '̂', widehat: '̂',
+    dot: '̇', ddot: '̈', tilde: '̃', widetilde: '̃'
+  })
+)
+const SUBSCRIPT_DIGITS = '₀₁₂₃₄₅₆₇₈₉'
+const SUPERSCRIPT_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹'
+const asSubscript = (digits: string): string => [...digits].map((d) => SUBSCRIPT_DIGITS[Number(d)]).join('')
+
+/**
+ * Commands and marks → characters, left to right so that `\\` and `\{` are read as the two-character
+ * commands they are. A space after a Greek letter was only there to end the command (`\mu R`): the
+ * page shows μR. A function name gets a space where a letter, digit or group follows (`\sin\theta`).
+ */
+function speakCommands(tex: string): string {
+  return tex
+    .replace(/\^\s*(?:\{\s*\\circ\s*\}|\\circ(?![A-Za-z]))/g, '°')
+    .replace(/\\(?:mathbb|Bbb)\s*(?:\{\s*([A-Za-z])\s*\}|([A-Za-z]))/g, (_m, braced: string | undefined, bare: string | undefined) => {
+      const letter = braced ?? bare ?? ''
+      return BLACKBOARD.get(letter) ?? letter
+    })
+    // The bar of a mean or of a complement stays on its letter (a combining macron): x-bar, not x. So do the
+    // arrow of a vector, the hat of a unit vector and the dots of a rate: "F = ma" was what \vec{F} = m\vec{a} lost.
+    .replace(
+      /\\(bar|overline|vec|overrightarrow|hat|widehat|dot|ddot|tilde|widetilde)(?![A-Za-z])\s*(?:\{\s*(\p{L}|\\[A-Za-z]+)\s*\}|(\p{L}|\\[A-Za-z]+))/gu,
+      (_m, accent: string, braced: string | undefined, bare: string | undefined) => (braced ?? bare ?? '') + (ACCENTS.get(accent) ?? '')
+    )
+    // `\not\in` is ∉: dropping the \not would say the opposite.
+    .replace(/\\not\s*(\\[A-Za-z]+|[=<>])/g, (_m, what: string) => NEGATED.get(what) ?? `not ${what}`)
+    // An environment's name and its column list are layout, not words.
+    .replace(/\\begin\{array\}\{[^{}]*\}/g, ' ')
+    .replace(/\\(?:begin|end)\{[A-Za-z]+\*?\}/g, ' ')
+    .replace(
+      /\\([A-Za-z]+)([ \t]*(?=[A-Za-z]))?|\\([\s\S])|&/g,
+      (m: string, word: string | undefined, gap: string | undefined, control: string | undefined, at: number, whole: string): string => {
+        // A bare `&` is an alignment mark; `\&` is a control symbol and keeps its character.
+        if (word === undefined) return control === undefined ? ' ' : (CONTROL_SYMBOLS.get(control) ?? m)
+        const space = gap ?? ''
+        const greek = GREEK.get(word)
+        if (greek !== undefined) return greek
+        const symbol = SYMBOLS.get(word)
+        if (symbol !== undefined) return symbol + space
+        if (FUNCTION_WORDS.has(word)) {
+          const after = whole.slice(at + m.length)
+          return word + (space !== '' || !/^(?:[0-9{]|\\(?!left|right))/.test(after) ? space : ' ')
+        }
+        if (word === 'tfrac') return `\\frac${space}`
+        // `\over`, `\choose` and `\binom` are turned into fractions and binomials by speakFractions once the scripts are marked.
+        return TEXTOPLAIN_WORDS.has(word) || FRACTION_WORDS.has(word) ? m : space
+      }
+    )
+}
+
+/**
+ * `_{12}` → ₁₂ and `_1` → ₁. Any other `^{…}` or `_{…}` has its braces swapped for SCRIPT marks, the
+ * closing brace found by counting so a group inside it does not end it early; resolveScripts reads it
+ * once texToPlain has worked inside (a fraction in an exponent). A superscript of digits is left
+ * as it is: texToPlain writes those.
+ */
+function markScripts(s: string): string {
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if ((c === '^' || c === '_') && s[i + 1] === '{') {
+      let depth = 0
+      let j = i + 1
+      for (; j < s.length; j++) {
+        if (s[j] === '{') depth++
+        else if (s[j] === '}' && --depth === 0) break
+      }
+      if (j < s.length) {
+        const inner = s.slice(i + 2, j)
+        const digits = inner.trim()
+        if (/^[0-9]+$/.test(digits)) out += c === '_' ? asSubscript(digits) : `^{${digits}}`
+        else out += `${c}${SCRIPT_OPEN}${markScripts(inner)}${SCRIPT_CLOSE}`
+        i = j
+        continue
+      }
+    }
+    out += c
+  }
+  return out.replace(/_([0-9])/g, (_m, d: string) => asSubscript(d))
+}
+
+/**
+ * The other ways TeX writes a fraction or a binomial coefficient: `{a \over b}` becomes `\frac{a}{b}`,
+ * which texToPlain reads, and `\binom{n}{r}` or `{n \choose r}` becomes C(n, r) (texToPlain would delete
+ * the command and leave "nr", a product). Done after markScripts, whose marks leave the groups
+ * it looks at free of nested braces.
+ */
+function speakFractions(tex: string): string {
+  return speakDivisionsAndRoots(
+    tex
+      .replace(/\{([^{}]*?)\\over(?![A-Za-z])([^{}]*)\}/g, (_m, top: string, bottom: string) => `\\frac{${top}}{${bottom}}`)
+      .replace(/\{([^{}]*?)\\choose(?![A-Za-z])([^{}]*)\}/g, (_m, n: string, r: string) => `C(${n.trim()}, ${r.trim()})`)
+      .replace(/\\[dt]?binom\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_m, n: string, r: string) => `C(${n.trim()}, ${r.trim()})`)
+  )
+}
+
+/** One argument of `\frac` or `\sqrt` read from `at`: a braced group (counted, so a group inside it does not end it), a chip, a command with its group, or one character with its accent marks. */
+function readArgument(s: string, at: number): { inner: string; end: number } | undefined {
+  let i = at
+  while (s[i] === ' ' || s[i] === '\t') i++
+  if (i >= s.length) return undefined
+  if (s[i] === '{') {
+    let depth = 0
+    for (let j = i; j < s.length; j++) {
+      if (s[j] === '{') depth++
+      else if (s[j] === '}' && --depth === 0) return { inner: s.slice(i + 1, j), end: j + 1 }
+    }
+    return undefined
+  }
+  const m = new RegExp(`^(?:${KEEP}\\d+${KEEP}|\\\\[A-Za-z]+(?:\\{[^{}]*\\})?|[\\p{L}\\p{N}]\\p{M}*)`, 'u').exec(s.slice(i))
+  return m ? { inner: m[0], end: i + m[0].length } : undefined
+}
+
+/** A part of a fraction or a root as the student will read it: its own fractions, roots, groups and scripts already spoken. */
+const plainPart = (tex: string): string => resolveScripts(texToPlain(speakFractions(tex)))
+/** One word, one number, one chip or one bracketed group needs no brackets of its own; a script (`τ_xy`, `x^n`) or a second word or term does. */
+const isOnePiece = (t: string): boolean => new RegExp(`^-?[\\p{L}\\p{M}\\p{N}.]+$|^${KEEP}\\d+${KEEP}$|^\\([^()]*\\)$`, 'u').test(t)
+const bracketed = (t: string): string => (isOnePiece(t) ? t : `(${t})`)
+
+/**
+ * `\frac` and `\sqrt`, left to right, each part read through plainPart. texToPlain reads only a flat
+ * `\frac{a}{b}` and writes `\sqrt{…}` as √ before an unbracketed argument: a fraction inside a fraction, a space
+ * before the brace, TeX's one-character arguments (`\frac 1 2`, `\frac\pi2`), a part holding a group
+ * (`\frac{\text{distance}}{\text{time}}`) and an unbraced or indexed root were run together ("1/42",
+ * "π2", "distancetime", "√b²-4ac", "2", "[3]x"). A part of more than one word or term is bracketed, and so is the
+ * whole fraction when a letter, a bracket, a power, a script, a chip or another fraction or root follows
+ * ("(3/10)x", "(2/3)²", "(3/4)π"), not "3/10x" read as 3 ÷ 10x.
+ */
+function speakDivisionsAndRoots(s: string): string {
+  const command = /\\(?:[dt]?frac|sqrt)(?![A-Za-z])/g
+  let out = ''
+  let from = 0
+  for (let m = command.exec(s); m; m = command.exec(s)) {
+    let read: string | undefined
+    let end = m.index + m[0].length
+    if (m[0] === '\\sqrt') {
+      const index = /^\s*\[([^\]]*)\]/.exec(s.slice(end))
+      if (index) end += index[0].length
+      const arg = readArgument(s, end)
+      if (arg) {
+        const inner = plainPart(arg.inner)
+        // A power under the root is bracketed too: √x² could be either (√x)² or √(x²).
+        const under = isOnePiece(inner) && !/[⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(inner) ? inner : `(${inner})`
+        read = rootSign(index ? plainPart(index[1]) : '') + under
+        end = arg.end
+      }
+    } else {
+      const top = readArgument(s, end)
+      const bottom = top && readArgument(s, top.end)
+      if (top && bottom) {
+        // A bottom of a number and a letter is a product: x/2a would read as (x/2)·a, so it is x/(2a).
+        const under = plainPart(bottom.inner)
+        const flat = `${bracketed(plainPart(top.inner))}/${/^-?[0-9.]+\p{L}/u.test(under) ? `(${under})` : bracketed(under)}`
+        const follows = new RegExp(`^\\s*(?:[\\p{L}(^_${KEEP}${SCRIPT_OPEN}]|\\\\(?:left|sqrt|[dt]?frac)(?![A-Za-z]))`, 'u')
+        // A fraction after a whole number is a mixed number (2\frac12 is two and a half): it keeps a space after the
+        // whole part, never "21/2", and no brackets of its own, "3 1/4 m".
+        const before = out + s.slice(from, m.index)
+        const mixed = new RegExp(`(?:^|[^\\p{L}\\p{N}\\p{M}^_.)}!${KEEP}${SCRIPT_CLOSE}])[0-9]+(?:\\.[0-9]+)?\\s*$`, 'u').test(before)
+        // Written straight after a letter, a power, a chip or a bracket it is a product, and is bracketed: {a}1/2
+        // would read 41/2 once the chip is filled in.
+        const glued = !mixed && !/\\[A-Za-z]+$/.test(before) && new RegExp(`[\\p{L}\\p{N}\\p{M})}!\\]${KEEP}${SCRIPT_CLOSE}]$`, 'u').test(before)
+        read = (mixed && !/\s$/.test(before) ? ' ' : '') + (!mixed && (glued || follows.test(s.slice(bottom.end))) ? `(${flat})` : flat)
+        end = bottom.end
+      }
+    }
+    // A command with nothing to read is left for texToPlain to take out.
+    if (read === undefined) continue
+    out += s.slice(from, m.index) + read
+    from = end
+    command.lastIndex = end
+  }
+  return out + s.slice(from)
+}
+
+/** The sign of a root with its index: √, ∛, ∜, a raised number or n (⁵√, ⁿ√), else the words "kth root of". */
+function rootSign(index: string): string {
+  const t = index.trim()
+  if (t === '' || t === '2') return '√'
+  if (t === '3') return '∛'
+  if (t === '4') return '∜'
+  if (/^[0-9]+$/.test(t)) return [...t].map((d) => SUPERSCRIPT_DIGITS[Number(d)]).join('') + '√'
+  if (t === 'n') return 'ⁿ√'
+  return `${bracketed(t)}th root of `
+}
+
+/**
+ * A script that is one letter, one number or one chip reads bare (`F_MAX`, `x^-1`); anything longer is bracketed (`y_(n-1)`,
+ * `x^(1/2)`). A subscript of several letters is a label (`τ_xy`); a power of several is a product (`e^(2x)`, never e^2x).
+ */
+function resolveScripts(s: string): string {
+  const group = new RegExp(`([\\^_])${SCRIPT_OPEN}([^${SCRIPT_OPEN}${SCRIPT_CLOSE}]*)${SCRIPT_CLOSE}`, 'g')
+  let prev: string
+  do {
+    prev = s
+    s = s.replace(group, (_m, mark: string, inner: string) => {
+      const t = inner.trim()
+      // Already one bracketed group (`^{(h)}`): no second pair.
+      const bare = mark === '^' ? /^-?(?:[\p{N}.]+|\p{L}\p{M}*|\uE001\d+\uE001)$|^\([^()]*\)$/u : /^-?[\p{L}\p{N}.\uE001]+$|^\([^()]*\)$/u
+      return t === '' ? '' : bare.test(t) ? `${mark}${t}` : `${mark}(${t})`
+    })
+  } while (s !== prev)
+  return s.replace(new RegExp(`[${SCRIPT_OPEN}${SCRIPT_CLOSE}]`, 'g'), '')
+}
+
+/**
+ * One piece of imported LaTeX as a plain sentence. Only `{name}` for a name that is one of the
+ * question's variables is a chip (chipLatex has already put a space inside a LaTeX group round a
+ * variable's name); any other `{name}` is LaTeX grouping and loses its braces.
+ */
+function speakTex(tex: string, names: ReadonlySet<string>): string {
+  const chips: string[] = []
+  const kept = tex
+    .replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (m, name: string) => (names.has(name) ? `${KEEP}${chips.push(name) - 1}${KEEP}` : m))
+    // chipLatex's space inside a group round a variable's name only kept it from being filled in; it is a plain group now.
+    .replace(/\{ +(?=[A-Za-z][A-Za-z0-9_]*\})/g, '{')
+  return (
+    resolveScripts(texToPlain(speakFractions(markScripts(speakCommands(kept)))))
+      // A brace the author escaped round a variable's name must not read as a chip the player fills in.
+      .replace(new RegExp(`${BRACE_OPEN}([A-Za-z][A-Za-z0-9_]*)${BRACE_CLOSE}`, 'g'), (m, name: string) => (names.has(name) ? `{ ${name}}` : m))
+      .split(BRACE_OPEN)
+      .join('{')
+      .split(BRACE_CLOSE)
+      .join('}')
+      .replace(/\uE001(\d+)\uE001/g, (_m, k: string) => `{${chips[Number(k)]}}`)
+  )
+}
+
+/** A plain sentence from a line: inline maths spoken (speakTex), chips of the question's variables kept whole. */
+function spoken(line: string, names: ReadonlySet<string>): string {
+  return line.replace(/\\\(([\s\S]*?)\\\)/g, (_m, tex: string) => speakTex(tex, names))
+}
+
+const NO_NAMES: ReadonlySet<string> = new Set()
+
+/**
+ * A question's title is a plain string, but its author may write maths in it between dollar signs
+ * ("apply $F=ma$ and $W=mg$"), and a title is nowhere a value is filled in, so every {name} in it
+ * is LaTeX grouping. The maths is spoken as a step's words are. A `$` opens maths only before a
+ * character that is not a space and closes it only after one and before no digit (pandoc's rule),
+ * so "from $5 to $10" stays two prices; `\$` is a dollar sign.
+ */
+function spokenTitle(title: string): string {
+  return title.replace(
+    /\\\$|\$\$([^$]+)\$\$|\\\(([\s\S]*?)\\\)|\$(?=\S)([^$]*[^$\s])\$(?!\d)/g,
+    (m: string, display: string | undefined, paren: string | undefined, inline: string | undefined) =>
+      m === '\\$' ? '$' : speakTex(display ?? paren ?? inline ?? '', NO_NAMES)
+  )
 }
 
 /**
@@ -716,15 +1187,15 @@ function spoken(line: string): string {
  * the step before it when that step has none, and otherwise a step of its own whose head is
  * the maths spoken, so a student reading only the heads still follows.
  */
-function linesToSteps(lines: string[]): PQStep[] {
+function linesToSteps(lines: string[], names: ReadonlySet<string>): PQStep[] {
   const out: PQStep[] = []
   for (const line of lines) {
     if (line.startsWith('$$')) {
       const tex = line.slice(2, -2)
       const last = out[out.length - 1]
       if (last && last.tex === undefined) last.tex = tex
-      else out.push({ head: spoken(`\\(${tex}\\)`), tex, blank: false })
-    } else out.push({ head: spoken(line), blank: false })
+      else out.push({ head: spoken(`\\(${tex}\\)`, names), tex, blank: false })
+    } else out.push({ head: spoken(line, names), blank: false })
   }
   return out
 }
@@ -759,6 +1230,16 @@ const REL_MAX_OLD = /^\((.*)\) \* \(1 \+ ([0-9.eE+-]+)\)$/
 const ABS_MIN = /^\((.*)\) - ([0-9.eE+-]+)$/
 const ABS_MAX = /^\((.*)\) \+ ([0-9.eE+-]+)$/
 
+/**
+ * The precision a part states: a number, or a string that spells one ("2": the editor writes it
+ * so). Blank (empty, spaces, null) or anything else is not stated, and comes back NaN. Number() read
+ * the blank ones as 0, which for significant figures is a band of 500 %.
+ */
+function statedPrecision(raw: unknown): number {
+  if (typeof raw === 'number') return raw
+  return typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN
+}
+
 interface NumberAnswer {
   answer: string
   tolerance: Tolerance
@@ -769,7 +1250,9 @@ interface NumberAnswer {
 /**
  * Numbas marks a number part right when it lies between two JME expressions; PhysLab wants one
  * answer and one tolerance that holds for every variant. Equal bounds are the answer itself
- * (checked to the part's precision, or 2 % when it names none). Otherwise the answer is the
+ * (checked to the part's precision, or exactly when it names none: Numbas accepts only a number
+ * between the bounds, "the smallest / largest value accepted as correct", so equal bounds leave
+ * that one number — the matrix part reads the same way). Otherwise the answer is the
  * midpoint and the tolerance is recovered when the gap, or the gap as a fraction of the sum,
  * simplifies to a number; when neither does, 2 % is assumed and the report says so.
  */
@@ -788,7 +1271,21 @@ function readNumberAnswer(minText: string, maxText: string, precisionType: strin
   if (min === max) {
     if (precisionType === 'dp' && precision !== null) return { answer: min, tolerance: { kind: 'absolute', value: 0.5 * 10 ** -precision } }
     if (precisionType === 'sigfig' && precision !== null) return { answer: min, tolerance: { kind: 'relative', value: 0.5 * 10 ** (1 - precision) } }
-    return { answer: min, tolerance: { kind: 'relative', value: 0.02 } }
+    // A precision the file asks for and this cannot read (a variable's name — 14 cached questions
+    // write "precision": "precision" — an expression, or none given) is not "no precision": exact
+    // would mark every answer typed at the stated precision wrong. The app's 2 % stands in, and
+    // the report says so, as for a gap it cannot read below.
+    if (precisionType === 'dp' || precisionType === 'sigfig') {
+      return {
+        answer: min,
+        tolerance: { kind: 'relative', value: 0.02 },
+        note: `PhysLab could not read how many ${precisionType === 'dp' ? 'decimal places' : 'significant figures'} it asks for, so it accepts ${num(2)} %`
+      }
+    }
+    // No precision at all: not the app's 2 %, which marked 101 right for an exact 100. A band of 0
+    // still forgives the arithmetic's last bit (checkAnswer's noise floor), so a typed 1/3 matches
+    // a worked-out 1/3.
+    return { answer: min, tolerance: { kind: 'absolute', value: 0 } }
   }
   const midpoint = `((${min}) + (${max})) / 2`
   let answer = midpoint
@@ -895,19 +1392,35 @@ function readVariables(raw: unknown, ordered: string[], matrices: Map<string, Jm
   return out
 }
 
-/** One part's steps, in the file's order: each step's prompt is a head, its display maths the tex. */
+/** A plain sentence from a line that may be display maths (`$$…$$`): its maths is spoken as inline maths is. */
+function spokenLine(line: string, names: ReadonlySet<string>): string {
+  return line.length > 4 && line.startsWith('$$') && line.endsWith('$$') ? spoken(`\\(${line.slice(2, -2)}\\)`, names) : spoken(line, names)
+}
+
+/**
+ * One step's lines with each run of lines of words made one line, so a step keeps one head for a
+ * stretch of words as it always had, and its display maths stays in its place between the runs.
+ */
+function joinWordRuns(lines: string[]): string[] {
+  const out: string[] = []
+  for (const line of lines) {
+    const last = out[out.length - 1]
+    if (last !== undefined && !last.startsWith('$$') && !line.startsWith('$$')) out[out.length - 1] = `${last} ${line}`
+    else out.push(line)
+  }
+  return out
+}
+
+/**
+ * One part's steps, in the file's order: a Numbas step's words are a head and the display
+ * equation after them its maths. A second equation in the same step, or words after one, make a
+ * step of their own (linesToSteps) instead of being dropped or folded into the first head.
+ */
 function readSteps(steps: unknown, ctx: TextContext, into: PQStep[]): void {
   if (!Array.isArray(steps)) return
   for (const s of steps) {
     if (!isObj(s)) continue
-    const lines = htmlToLines(asString(tryGet(s, 'prompt')), ctx)
-    const heads = lines.filter((l) => !l.startsWith('$$'))
-    const maths = lines.find((l) => l.startsWith('$$'))
-    if (heads.length === 0 && maths === undefined) continue
-    const tex = maths?.slice(2, -2)
-    const step: PQStep = { head: heads.length > 0 ? spoken(heads.join(' ')) : spoken(`\\(${tex}\\)`), blank: false }
-    if (tex !== undefined) step.tex = tex
-    into.push(step)
+    into.push(...linesToSteps(joinWordRuns(htmlToLines(asString(tryGet(s, 'prompt')), ctx)), ctx.names))
   }
 }
 
@@ -925,8 +1438,9 @@ function readChoicePart(p: Obj, label: string, promptLines: string[], ctx: TextC
   })
   const whys = tryGet(p, 'distractors')
   const choices = rawChoices.map((c, k) => {
-    const text = htmlToLines(asString(c), ctx).map(spoken).join(' ')
-    const why = Array.isArray(whys) ? htmlToLines(asString(whys[k]), ctx).map(spoken).join(' ') : ''
+    // A choice and its why are plain sentences: display maths in them is spoken too (spokenLine).
+    const text = htmlToLines(asString(c), ctx).map((line) => spokenLine(line, ctx.names)).join(' ')
+    const why = Array.isArray(whys) ? htmlToLines(asString(whys[k]), ctx).map((line) => spokenLine(line, ctx.names)).join(' ') : ''
     const choice: { text: string; correct: boolean; why?: string } = { text, correct: (scores[k] ?? 0) > 0 }
     if (why) choice.why = why
     return choice
@@ -979,7 +1493,7 @@ function readMatrixPart(p: Obj, label: string, promptLines: string[], ctx: TextC
   // those means "nothing set", not "match exactly".
   const rawTolerance = tryGet(p, 'tolerance')
   const gap = typeof rawTolerance === 'number' ? rawTolerance : NaN
-  const precision = Number(tryGet(p, 'precision'))
+  const precision = statedPrecision(tryGet(p, 'precision'))
   const precisionType = asString(tryGet(p, 'precisionType'))
   // A relative band has no Numbas equivalent (its tolerance is one absolute gap), so it goes out
   // as an exact 0 with the true value tucked into precisionMessage (writeMatrixPart, below) — a
@@ -999,7 +1513,15 @@ function readMatrixPart(p: Obj, label: string, promptLines: string[], ctx: TextC
   else if (gap === 0 && precisionType !== 'dp' && precisionType !== 'sigfig') tolerance = { kind: 'absolute', value: 0 }
   else if (precisionType === 'dp' && Number.isFinite(precision)) tolerance = { kind: 'absolute', value: 0.5 * 10 ** -precision }
   else if (precisionType === 'sigfig' && Number.isFinite(precision)) tolerance = { kind: 'relative', value: 0.5 * 10 ** (1 - precision) }
-  else tolerance = { ...DEFAULT_BAND }
+  else {
+    // Decimal places or significant figures asked for without a number that can be read (blank, a
+    // variable's name): not "no precision", so the app's 2 % stands in and the report says so, as it
+    // does for a number box.
+    if (precisionType === 'dp' || precisionType === 'sigfig') {
+      read.notes.push(`${label}: PhysLab could not read how many ${precisionType === 'dp' ? 'decimal places' : 'significant figures'} it asks for, so it accepts ${num(2)} %`)
+    }
+    tolerance = { ...DEFAULT_BAND }
+  }
   if (tryGet(p, 'allowResize') === true) read.notes.push(`${label} lets the student choose the size of the matrix in Numbas; PhysLab shows a box for each entry`)
   const part: PQPart = { type: 'matrix', prompt: promptLines.join('\n'), answer, tolerance, marks }
   if (tryGet(p, 'allowFractions') === true) part.allowFractions = true
@@ -1033,7 +1555,26 @@ function readParts(rawParts: unknown, ctx: TextContext, read: QuestionRead, wher
         read.statementLines.push(...lead)
         return
       }
+      // PhysLab writes the unit of a vector or of a set of roots once, as the last line of the
+      // gap-fill's prompt ("Give your answer in m."), and gives its boxes no prompt of their own.
+      // That line is the unit of every box that names none, not a sentence for the first box.
+      const written = UNIT_LINE.exec(lead[lead.length - 1] ?? '')
+      const unit = written && (UNIT_IDS as readonly string[]).includes(written[1]) ? (written[1] as UnitId) : null
+      if (unit) lead.pop()
       readParts(gaps, ctx, read, `${label}, `, `${path}g`, replaces(p) ? p : parent)
+      if (unit) {
+        let taken = false
+        for (const box of read.parts.slice(at)) {
+          if (box.type === 'number' && box.unit === 'none') {
+            box.unit = unit
+            taken = true
+          }
+        }
+        // No box took it (every gap an expression, a choice or a matrix, or each number box naming a
+        // unit of its own): the sentence is then the only place the student reads the unit, so it stays
+        // in the prompt, last, where it was.
+        if (!taken && written) lead.push(written[0])
+      }
       const first = read.parts[at]
       if (first && lead.length > 0) first.prompt = [...lead, first.prompt].filter((l) => l !== '').join('\n')
       // A gap-fill of one gap answers with that gap's number, so a later part may name either.
@@ -1073,7 +1614,7 @@ function readOnePart(p: Obj, type: string, label: string, ctx: TextContext, read
       unit = written[1] as UnitId
       promptLines.pop()
     } else unit = unitInPrompt(promptLines.join(' '))
-    const precision = Number(tryGet(p, 'precision'))
+    const precision = statedPrecision(tryGet(p, 'precision'))
     let got: NumberAnswer
     try {
       got = readNumberAnswer(
@@ -1253,12 +1794,12 @@ function readQuestion(raw: Obj, exam: Obj, title: string): { question: PQQuestio
   readCarried(read, ctx)
   const condition = readCondition(raw.variablesTest)
   // The advice is read first: a chip in it (`{2*m}`) makes a shown variable the matrix check must see too.
-  const steps = [...linesToSteps(htmlToLines(asString(raw.advice), ctx)), ...read.steps]
+  const steps = [...linesToSteps(htmlToLines(asString(raw.advice), ctx), ctx.names), ...read.steps]
   noMatrixArithmetic(ctx, read.parts, condition)
 
   const question: PQQuestion = {
     id: stableId(raw),
-    title: asString(raw.name),
+    title: spokenTitle(asString(raw.name)),
     statement: read.statementLines.join('\n'),
     variables: ctx.vars,
     parts: read.parts,
@@ -1364,13 +1905,41 @@ function unitTagged(n: Node, unit: string): Node | null {
 }
 
 /**
+ * `a · b` is dot(a, b) once preprocess has read it, and PhysLab's dot multiplies two numbers and
+ * scales a vector by a number; only two vectors make a dot product. JME's dot() is that last case
+ * alone — its reference lists "vector, vector", "matrix, vector", "vector, matrix" and "matrix,
+ * matrix" → number, never a plain number — so a file carrying dot(2, A) cannot run in Numbas and
+ * PhysLab's own importer refuses to read it back. Every name in a question is a number
+ * (variables.ts draws each one with Number(…)), so a · is a product, JME's `*` ("number, vector →
+ * vector" and "vector, number → vector" included), unless both sides are written as vectors
+ * (vec(…), [a, b]): there JME's own dot() stays. Spelling those vector literals the JME way is not
+ * done anywhere in this exporter, and the importer refuses vectors, so that case keeps only the name.
+ *
+ * The product is made as a node, not as text, so mathjs brackets it by where it stands: a dot()
+ * typed as a call in x/dot(y, z) is x/(y * z), where the bare text x / y * z would be (x/y)·z.
+ */
+function dotsToProducts(tree: Node): Node {
+  const isVector = (n: Node): boolean => {
+    const kind = inferKind(n, () => 'number')
+    return kind === 'vector' || kind === 'point'
+  }
+  const swap = (n: Node): Node => {
+    if (!isFn(n, ['dot']) || n.args.length !== 2) return n
+    const [a, b] = n.args
+    if (isVector(a) && isVector(b)) return n
+    return new math.OperatorNode('*', 'multiply', [a.transform(swap), b.transform(swap)])
+  }
+  return tree.transform(swap)
+}
+
+/**
  * mathjs → JME, undoing what `jmeToMath` did: round → precround, the calculator's log(a, b) →
  * JME's log(x, b), `sin(x * 180 / pi)` → sin(x), `asin(x) * pi / 180` → arcsin(x), a ? b : c →
- * if. A bare `sin(e)` is a PhysLab author's own, in degrees, and JME's sin takes radians, so it
- * is written `sin(radians(e))` and a bare `asin(e)` as `degrees(arcsin(e))` — except for an
- * expression part (`trig === 'same'`), where the student types in the convention the answer is
- * checked in and the names stay. Everything else mathjs prints is JME already (`+ - * / ^`,
- * `and or not`, the function names).
+ * if, and a · between numbers → a * b (dotsToProducts). A bare `sin(e)` is a PhysLab author's own,
+ * in degrees, and JME's sin takes radians, so it is written `sin(radians(e))` and a bare `asin(e)`
+ * as `degrees(arcsin(e))` — except for an expression part (`trig === 'same'`), where the student
+ * types in the convention the answer is checked in and the names stay. Everything else mathjs
+ * prints is JME already (`+ - * / ^`, `and or not`, the function names).
  */
 export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
   const options = {
@@ -1403,7 +1972,11 @@ export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
         // `2 × 3` is the calculator's own spelling; JME has only *.
         if (name === 'timesOrCross' && args.length === 2) return s(new math.OperatorNode('*', 'multiply', [args[0], args[1]]))
         if ((name === 'sin' || name === 'cos' || name === 'tan') && args.length === 1) {
-          const rad = radianArgument(args[0]) ?? unitTagged(args[0], 'rad')
+          // `* 180 / pi` is the importer's own conversion in a number or a variable (trig 'radians'),
+          // so only there is it taken off. An expression part (trig 'same') is marked in radians
+          // and jmeToMath adds no factor to it: one met there is the author's, and sin(x * 180 / pi)
+          // is not sin(x). An explicit `x rad` is a unit the author wrote, in either mode.
+          const rad = (trig === 'radians' ? radianArgument(args[0]) : null) ?? unitTagged(args[0], 'rad')
           if (rad) return `${name}(${s(unparen(rad))})`
           const deg = unitTagged(args[0], 'deg')
           if (deg) return `${name}(radians(${s(unparen(deg))}))`
@@ -1419,11 +1992,14 @@ export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
         const op = node as OperatorNode
         if (op.op === '==') return `${s(op.args[0])} = ${s(op.args[1])}`
         if (op.op === '!=') return `${s(op.args[0])} <> ${s(op.args[1])}`
-        // asin(x) * pi / 180 → arcsin(x); x * pi / 180 → radians(x); x * 180 / pi → degrees(x).
+        // asin(x) * pi / 180 → arcsin(x) (number or variable only); x * pi / 180 → radians(x);
+        // x * 180 / pi → degrees(x).
         if (op.op === '/' && op.args.length === 2 && isOp(op.args[0], '*') && op.args[0].args.length === 2) {
           const [left, right] = op.args[0].args
           if (isSymbol(right, 'pi') && isConst(op.args[1], 180)) {
-            if (isFn(left, Object.keys(ARC)) && left.args.length === 1) return `${ARC[left.fn.name]}(${s(left.args[0])})`
+            // Like the sin case above: in an expression part (trig 'same') the `* pi / 180` after
+            // an asin is the author's own, so it is written radians(arcsin(x)), not arcsin(x).
+            if (trig === 'radians' && isFn(left, Object.keys(ARC)) && left.args.length === 1) return `${ARC[left.fn.name]}(${s(left.args[0])})`
             return `radians(${s(left)})`
           }
           if (isConst(right, 180) && isSymbol(op.args[1], 'pi')) return `degrees(${s(left)})`
@@ -1438,12 +2014,14 @@ export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
       return undefined
     }
   }
-  return math.parse(preprocess(expr)).toString(options)
+  return dotsToProducts(math.parse(preprocess(expr))).toString(options)
 }
 
 // --- text ----------------------------------------------------------------------
 
 const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+/** Words for a Numbas page: Numbas reads a bare `$` as the start of maths, so a dollar sign goes out as `\$`. */
+const escapeText = (s: string): string => escapeHtml(s).replace(/\$/g, '\\$')
 
 /**
  * LaTeX for Numbas: a chip becomes `\var{v}`, a protected group `{ v}` its plain self, and a
@@ -1462,7 +2040,7 @@ function lineToHtml(line: string): string {
   if (line.startsWith('$$') && line.endsWith('$$')) return `<p>\\[${latexOut(line.slice(2, -2))}\\]</p>`
   const html = line
     .split(/(\\\([\s\S]*?\\\))/)
-    .map((piece, k) => (k % 2 === 1 ? `\\(${latexOut(piece.slice(2, -2))}\\)` : escapeHtml(piece)))
+    .map((piece, k) => (k % 2 === 1 ? `\\(${latexOut(piece.slice(2, -2))}\\)` : escapeText(piece)))
     .join('')
   return `<p>${html}</p>`
 }
@@ -1740,7 +2318,7 @@ function proofAdvice(q: PQQuestion): string {
   return q.parts
     .map((p, i) => {
       if (p.type !== 'proof') return ''
-      const checks = p.selfCheck.length > 0 ? `<ul>${p.selfCheck.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''
+      const checks = p.selfCheck.length > 0 ? `<ul>${p.selfCheck.map((c) => `<li>${escapeText(c)}</li>`).join('')}</ul>` : ''
       return `<p>A model proof for part ${num(i + 1)}:</p>${textToHtml(p.model)}${checks}`
     })
     .join('')
