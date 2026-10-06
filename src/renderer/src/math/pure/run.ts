@@ -22,6 +22,7 @@ import {
   termTex,
   varTex,
   varsOf,
+  writeTimes,
   type Expr,
   type Summand,
   type Term
@@ -31,7 +32,7 @@ import { hcfAlgebraWorking, lcmAlgebraWorking } from './algebraHcf'
 import { factoriseWorking, factorsOf, isNumericLine, wantsAllowI } from './factor'
 import { divideWorking } from './divide'
 import { partialFractionsWorking } from './partial'
-import { complexWorking, factoriseComplexWorking, solveQuadraticWorking } from './complex'
+import { complexWorking, factoriseComplexWorking, isSurdLine, solveQuadraticWorking, surdWorking } from './complex'
 import { normalRefusal, parseNormalQuery, zscoreWorking } from './zscore'
 import { Steps, failed, texToPlain, type Working } from './work'
 import { isTrigIdentity, trigWorking } from './trigIdentity'
@@ -404,6 +405,10 @@ export function runPure(job: JobId, input: string): Working {
     case 'factor': {
       // A bare number means primes; anything with a letter means brackets.
       if (WHOLE.test(src)) return factoriseNumberWorking(BigInt(src))
+      // A line of numbers with a square root in it is not an expression to factorise, and "that is
+      // just a number" was the whole of the answer to √50 (P22b). It is simplified, with the steps
+      // the textbook gives; this job is where Auto sends a numeric line, so it is worked from here.
+      if (isSurdLine(src)) return surdWorking(src)
       try {
         const e = parseExpr(src)
         if (isConstant(e)) {
@@ -471,18 +476,37 @@ export function suggestJob(src: string): JobId {
   if (!s) return 'factor'
   if (parseNormalQuery(s)) return 'normal'
   if (WHOLE.test(s)) return 'primes'
-  if (s.includes(',')) return 'hcf'
-  if (/(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(s)) return 'complex'
+  // Through writeTimes, because an i typed in front of its root reaches here glued to the root's
+  // name ("isqrt(3)"): 1/(√2 − i√5) went to Divide and (1 + i√3)² to Factorise (P22).
+  const hasI = /(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(writeTimes(s))
+  // HCF takes a list, and a list's commas stand outside every bracket (asList splits it the same
+  // way). A comma inside one belongs to a function: ∛8 arrives as nthRoot(8, 3) and log₂8 as
+  // log(2, 8), and both were sent to HCF, which refused them (H15); only a line with i was spared (P22).
+  if (commaOutsideBrackets(s)) return 'hcf'
+  if (hasI) return 'complex'
   // sin²x + cos²x = 1 is an identity to prove, not an equation to solve; sin x = 0.5 stays with Solve.
   if (isTrigIdentity(s)) return 'trigidentity'
   if (s.includes('=')) return 'solve'
-  // A plain sum — 2/3 + √2, 1/2 + 1/3 — has nothing to divide out or split; Factorise says so in
-  // one sentence, where Divide used to complain that sqrt is not something it can factorise.
-  if (isNumericLine(s)) return 'factor'
+  // A plain sum — 1/2 + 1/3 — has nothing to divide out or split; Factorise says so in one
+  // sentence, where Divide used to complain that sqrt is not something it can factorise. A line
+  // with a square root in it — 3√2 + 2√2, 1/(√3 + 1) — is simplified from the same job (P22b);
+  // isSurdLine also holds 3sqrt(2), whose glued number made isNumericLine miss it and Divide refuse it.
+  if (isSurdLine(s) || isNumericLine(s)) return 'factor'
   if (s.includes('/')) return fractionJob(s)
   // A quadratic with no real roots, or x⁴ + 1, is exactly what "Factorise with i" is for; sending
   // it to the real factoriser would only produce "does not break into simpler factors".
   return wantsI(s) ? 'factorComplex' : 'factor'
+}
+
+/** Whether a comma stands outside every bracket, as the commas of a list do. */
+function commaOutsideBrackets(s: string): boolean {
+  let depth = 0
+  for (const c of s) {
+    if (c === '(' || c === '[' || c === '{') depth++
+    else if (c === ')' || c === ']' || c === '}') depth--
+    else if (c === ',' && depth === 0) return true
+  }
+  return false
 }
 
 /**

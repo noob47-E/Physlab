@@ -378,7 +378,8 @@ function autoMoves(
       return done ? casMoves(done, cannot) : [{ head: WORKING_IT_OUT_STEP, blank: false }]
     }
     const working = runPure(def.id, input)
-    if (working.error) return cannot(working.error)
+    // `noWorking` is an answer with no moves (the Complex job on a line it cannot write exactly): not an error, but nothing to splice in either.
+    if (working.error || working.noWorking) return cannot(working.error || working.reason)
     return working.moves.map((m) => ({ ...m, blank: false }))
   }
   const solver = VECTOR_SOLVERS[auto.solver]

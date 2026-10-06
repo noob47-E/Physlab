@@ -11,6 +11,74 @@ export const math = create(all, { number: 'number', precision: 64 })
 // Points after Z are named A′, A″ (core/naming.ts); a prime straight after a letter or another prime is part of the name.
 { const p = math.parse as unknown as { isAlpha: (c: string, prev: string, next: string) => boolean }; const alpha = p.isAlpha; p.isAlpha = (c, prev, next) => alpha(c, prev, next) || ('′″‴⁗'.includes(c) && !!prev && (alpha(prev, '', '') || '′″‴⁗'.includes(prev))) }
 
+/**
+ * The units the Maths screen's Units lists offer that mathjs 15.2.0 does not have, and the ones
+ * it has with stale digits. `override` makes a second run harmless (createUnit throws on a name
+ * that already exists), so a hot reload that runs this again cannot break it.
+ *
+ * mathjs reads a name as a unit whenever nothing in scope has that name, on every route that
+ * shares this instance, so a short symbol defined here would swallow a letter a student types:
+ * - au: the IAU 2012 astronomical unit, exactly. Not AU — the calculator's constant is AU_len.
+ * - lightyear: c × one Julian year. Not ly — a two-letter symbol is caught the same way as pc.
+ * - parsec: 648 000/π au. Not pc — E = 2pc (momentum × c) on the command bar would answer "E = 2".
+ * - knot: 1852 m an hour, exactly. mathjs's own example, 0.514444444 m/s, is 8.6×10⁻¹⁰ m/s out.
+ * - dalton: the atomic mass unit (CODATA 2022); the Mass list shows it as u. Not u itself —
+ *   preprocess() turns μ into u, so f = 0.3μ would answer "f = 0.3", and u is SUVAT's initial speed.
+ * - cal: the thermochemical calorie, with the short prefixes, so kcal is 4184 J.
+ * - eV and electronvolt, torr, mmHg and acre replace mathjs's own: its electronvolt is CODATA
+ *   2010's, it gave both pressures 133.322 Pa (1 atm read 760.0021 torr) and the acre 4046.86 m².
+ *   Each keeps its prefixes and its plural or lower-case alias.
+ *
+ * None of them changes what a worked-out answer is written in: 2 m * 2 m stays 4 m^2 and
+ * 10 N * 2 m stays 20 J, as on a bare mathjs, where only a unit the student types moves the
+ * answers for its own quantity.
+ */
+export function defineUnits(): void {
+  // mathjs writes an answer in the unit its "auto" unit system holds for that quantity, and
+  // Unit.parse moves that entry to every unit it reads. createUnit reads each name it makes and
+  // each definition, so on a bare 15.2.0 instance this block alone left auto with MASS as dalton,
+  // TIME as hour, ENERGY as electronvolt and PRESSURE as mmHg, and added entries for SURFACE (acre)
+  // and the knot's speed: 2 m * 2 m read "9.9e-4 acre", 10 N * 2 m "124.8 exaelectronvolt",
+  // 10 N / (1 m^2) "0.075 mmHg", 10 N / (2 m/s^2) "3.0e+27 dalton", 1 / (2 Hz) "1.4e-4 hour" and
+  // 100 m / 9.58 s "20.29 knot". si, cgs and us were not touched, but a new base is written into
+  // whichever system is current, so every system is put back as found: in place, because mathjs
+  // keeps hold of the system object itself, and with no entry the block added.
+  const systems = Object.values(math.Unit.UNIT_SYSTEMS)
+  const found = systems.map((system) => Object.fromEntries(Object.entries(system).map(([quantity, entry]) => [quantity, { ...entry }])))
+  math.createUnit(
+    {
+      au: '149597870700 m',
+      lightyear: '9460730472580800 m',
+      // After au, which it is defined from: createUnit makes the units in this order.
+      parsec: `${648000 / Math.PI} au`,
+      knot: '1852 m/hour',
+      dalton: '1.66053906892e-27 kg',
+      cal: { definition: '4.184 J', prefixes: 'short' },
+      eV: { definition: '1.602176634e-19 J', prefixes: 'short' },
+      electronvolt: { definition: '1.602176634e-19 J', prefixes: 'long', aliases: ['electronvolts'] },
+      // A torr is 1/760 of a standard atmosphere by definition.
+      torr: `${101325 / 760} Pa`,
+      mmHg: { definition: '133.322387415 Pa', aliases: ['mmhg'] },
+      acre: { definition: '4046.8564224 m^2', aliases: ['acres'] }
+    },
+    { override: true }
+  )
+  systems.forEach((system, i) => {
+    for (const quantity of Object.keys(system)) delete system[quantity]
+    Object.assign(system, found[i])
+  })
+  // mathjs has no base unit for a speed, so createUnit made one for the knot. The restore above
+  // took its entry out of the unit systems, but while the knot keeps that base Unit.parse writes
+  // it back whenever a student types a knot, and every speed worked out afterwards comes out in
+  // knots. Without the base the knot still converts, by its dimensions, and an answer in m/s
+  // stays in m/s.
+  const knot = math.Unit.UNITS.knot as unknown as { base?: { key: string } }
+  const key = knot.base?.key
+  delete knot.base
+  if (key) delete math.Unit.BASE_UNITS[key]
+}
+defineUnits()
+
 let angleMode: 'deg' | 'rad' = 'deg'
 export const setAngleMode = (m: 'deg' | 'rad') => {
   angleMode = m

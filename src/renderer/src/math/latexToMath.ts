@@ -34,6 +34,68 @@ const UNICODE_ALIASES: [RegExp, string][] = [
 
 const PM_REFUSAL = 'Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.'
 
+/**
+ * Where the ×10ˣ key's mark stood, between reading it and the end of latexToMath, which turns it into
+ * text. A private-use character (U+E010), so a ᴇ typed or pasted into the field is never mistaken for it
+ * (that one is the calculator's own, read by the engine's input step in calc/engine.ts) and the mark
+ * never leaves this file. Built from its code rather than typed, because an invisible character in the
+ * source is one an editor can lose.
+ */
+const E10 = String.fromCharCode(0xe010)
+/**
+ * The plain number a piece of text ends with, if it does. Nothing that can belong to a name stands in front
+ * of it: any letter or digit (Greek ones too, so α2 is a name) or a dot (1.2.5 is no number).
+ */
+const NUMBER_AT_END = /(?<![\p{L}\p{N}_.])(\d+(?:\.\d*)?|\.\d+)$/u
+/** A power that is a sign and digits and nothing else — 3, -19, +3 — which a number can take as a plain e-number. */
+const WHOLE_POWER = /^[+-]?\d+$/
+
+/** The ")" that closes the "(" at `open`, or -1 when it is never closed. */
+function closingBracket(text: string, open: number): number {
+  if (text[open] !== '(') return -1
+  let depth = 0
+  for (let k = open; k < text.length; k++) {
+    if (text[k] === '(') depth++
+    else if (text[k] === ')' && --depth === 0) return k
+  }
+  return -1
+}
+
+/**
+ * Writes out every ×10ˣ mark standardForm left in `text` (each is E10 and "(power)"). A plain number in front
+ * of a mark is the mantissa of the number the key builds — mark, 10 and power are ONE number in standard form
+ * — so the number and the mark leave as one number whatever the power looks like, and 1 ÷ 2 ×10ˣ 3 divides by
+ * 2000, never by 2 and then multiplies by 1000:
+ *   - a power of a sign and digits joins it as a plain e-number, 1.6 + mark + (-19) is 1.6e-19, which the
+ *     calculator, the working and SymPy all read alike;
+ *   - any other power (a bracket, a sum: 2 ×10ˣ (-3), 2 ×10ˣ 1+2) goes in a bracket of its own, 2*10^((-3)),
+ *     because without it a ÷ in front takes only the 2: 1 ÷ 2 ×10ˣ (-3) read 0.0005 and 6 ÷ 2 ×10ˣ (-2)
+ *     read 0.03 where the numbers the student built are 1 ÷ 0.002 = 500 and 6 ÷ 0.02 = 300.
+ * Anything else in front of the mark — a bracket, a fraction, a root, a letter, a name that ends in a digit —
+ * is scaled by ten to the power, "*10^", as the × key and a 10^ would have done. So is a number whose power
+ * runs on into a digit or a dot (2, the mark, (3) and a typed 5 is neither 2×10³⁵ nor 2×10³ times 5): left
+ * as it always was, it is refused where it is read. A mark whose bracket is never closed is left to be refused too.
+ */
+function resolveStandardForm(text: string): string {
+  let out = ''
+  // What is in `out` already: text before this index (and the marks inside a power that was written out).
+  let done = 0
+  for (let at = text.indexOf(E10); at !== -1; at = text.indexOf(E10, done)) {
+    const close = closingBracket(text, at + 1)
+    const mantissa = NUMBER_AT_END.exec(text.slice(0, at))?.[1]
+    if (mantissa === undefined || close === -1 || /[\d.]/.test(text[close + 1] ?? '')) {
+      out += `${text.slice(done, at)}*10^`
+      done = at + 1
+      continue
+    }
+    // A mark inside the power (2 ×10ˣ (3 ×10ˣ 2)) is a number of its own, written out first.
+    const power = resolveStandardForm(text.slice(at + 2, close))
+    out += text.slice(done, at - mantissa.length) + (WHOLE_POWER.test(power) ? `${mantissa}e${power}` : `(${mantissa}*10^(${power}))`)
+    done = close + 1
+  }
+  return out + text.slice(done)
+}
+
 function tokenize(raw: string): Tok[] {
   const src = UNICODE_ALIASES.reduce((s, [re, to]) => s.replace(re, to), raw)
   const out: Tok[] = []
@@ -112,11 +174,40 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
 
   /** Parenthesised argument after a function name, or a single atom if not parenthesised. */
   const fnArg = (): string => {
-    if (peek() === '\\left' || peek() === '\\mleft' || peek() === '(') {
+    // A plain "(" opens the argument the way \left( does and is read to its own ")": \sin(30),
+    // \ln(2), \sin(2(15)). It used to go through atom() with \left, but atom() takes just the one "("
+    // token, so the argument came out empty and "30)" was left over: sin()30) — "check the brackets".
+    // The depth keeps an inner pair from ending the argument early. A closer that belongs to an
+    // enclosing group ends it as well (an unclosed bracket closes there, as an unclosed \left( does),
+    // so it is never swallowed as text. Inside the bracket a letter in front of a root or function
+    // is kept apart from it the same way a sequence does.
+    if (peek() === '(') {
+      next()
+      let s = ''
+      let depth = 0
+      while (i < t.length && !GROUP_CLOSERS.includes(peek()) && !(peek() === ')' && depth === 0)) {
+        if (peek() === '(') depth++
+        else if (peek() === ')') depth--
+        s += gapBefore(s, peek()) + atom()
+      }
+      if (peek() === ')') next()
+      return s
+    }
+    if (peek() === '\\left' || peek() === '\\mleft') {
       const s = atom()
       return s.startsWith('(') ? s.slice(1, -1) : s
     }
     if (peek() === '{') return arg()
+    // A fraction or a root straight after the name is the whole argument, the way a book reads sin π/6 and
+    // ln √x. MathLive writes exactly this when a function is typed on the keyboard and "/" follows
+    // (\sin\frac{\pi}{6}; the keypad's own function keys bring their brackets). The run below knows only
+    // letters, digits and a few Greek names, so the fraction used to end the argument as the empty string:
+    // the line reached the engine as sin()((π)/(6)), which mathjs refused, and the half-angle identity typed
+    // with fractions was refused in Working too. atom() reads the fraction or root as it does inside
+    // \left( … \right), so with the brackets typed or not the text is the same. d/dx reads its body through
+    // here as well: d/dx 1/x and d/dx √x were "diff(, x)" with the body left outside.
+    const lead = peek()
+    if (lead === '\\frac' || lead === '\\dfrac' || lead === '\\tfrac' || lead === '\\sqrt') return atom()
     // \sin x, \sin 2x → take a run of simple tokens (numbers/letters) as the argument.
     let s = ''
     while (i < t.length) {
@@ -125,6 +216,47 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       else break
     }
     return s
+  }
+
+  /**
+   * What comes after the ×10ˣ key's mark (\mathord{\times}, already read): the 10 and the power on it.
+   * Mark, 10 and power are ONE number in standard form, so they leave as E10 + "(power)" and the end of
+   * this function joins that to the number in front of it, so that 1 ÷ 2 ×10ˣ 3 is 1 ÷ 2000 (0.0005), not
+   * (1 ÷ 2) × 1000. A plain \times never comes this way: it only ever multiplies. When the 10 is no longer
+   * exactly 10 — the student deleted into it, or typed another digit after it — nothing is standard form
+   * any more and the mark was an ordinary ×.
+   */
+  const standardForm = (): string => {
+    const times = opts.vectorOps ? '×' : '*'
+    if (t[i] !== '1' || t[i + 1] !== '0' || /^[0-9.]$/.test(t[i + 2] ?? '')) return times
+    i += 2
+    if (peek() !== '^') return `${times}10`
+    next()
+    return `${E10}(${arg().trim()})`
+  }
+
+  /**
+   * The power of a pasted standard form, and nothing else. MathLive reads a pasted "^" the way TeX does:
+   * the superscript is only the minus, or only the first digit, and the rest of the power is left on the
+   * line — the pasted text 1.6×10^-19 reaches this function as 1.6\times10^{-}19 and 6.02×10^23 as
+   * 6.02\times10^23, which read as "10 to the minus, then 19" and "10², then 3": an error, or a wrong
+   * number. After a × and a 10 the digits behind such a ^ are its power, so they are taken with it (a
+   * one-digit power, 3×10^8, and a braced one, 10^{23}, are already right and are left alone). Returns ''
+   * and moves nowhere when what follows is not that. The pasted line is a multiplication like any other ×.
+   */
+  const pastedPower = (): string => {
+    if (t[i] !== '1' || t[i + 1] !== '0' || t[i + 2] !== '^') return ''
+    let j = i + 3
+    let sign = ''
+    if (t[j] === '{' && (t[j + 1] === '-' || t[j + 1] === '+') && t[j + 2] === '}') {
+      sign = t[j + 1]
+      j += 3
+    }
+    const from = j
+    while (/^\d$/.test(t[j] ?? '')) j++
+    if (j === from || (sign === '' && j - from < 2)) return ''
+    i = j
+    return sign + t.slice(from, j).join('')
   }
 
   const atom = (): string => {
@@ -225,8 +357,18 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       case 'cdot':
       case 'bullet':
         return opts.vectorOps ? '·' : '*'
-      case 'times':
-        return opts.vectorOps ? '×' : '*'
+      case 'times': {
+        const times = opts.vectorOps ? '×' : '*'
+        const power = pastedPower()
+        return power ? `${times}10^(${power})` : times
+      }
+      case 'mathord':
+        // The ×10ˣ key's mark. Any other \mathord is not understood, as before.
+        if (t[i] === '{' && t[i + 1] === '\\times' && t[i + 2] === '}') {
+          i += 3
+          return standardForm()
+        }
+        break
       case 'div':
         return '/'
       case 'pm':
@@ -386,17 +528,60 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
     return name
   }
 
+  /** Tokens that can only close a group some caller opened; they never belong inside a bracket's own text. */
+  const GROUP_CLOSERS = ['}', '\\right', '\\mright', '\\bigr', '\\Bigr']
+
+  /**
+   * The name `text` ends in — a letter or π with any letters and digits after it (x, π, F1; the 2 of
+   * 2x is a number in front of the name, not part of it) — or '' when it ends in a number or a
+   * symbol. It walks back over the last stretch instead of running a regular expression over the
+   * whole text, so a long expression costs no more than a short one.
+   */
+  const nameAtEnd = (text: string): string => {
+    let k = text.length
+    while (k > 0 && /[\p{L}\p{N}_]/u.test(text[k - 1])) k--
+    const stretch = text.slice(k)
+    const first = stretch.search(/[\p{L}_]/u)
+    return first < 0 ? '' : stretch.slice(first)
+  }
+
+  /**
+   * What goes in front of `tok` when `before` is the text written so far: a "*" (or, after i, a
+   * space) where the two would be glued into one name, else ''.
+   * A root, a function and π come out as sqrt(…), sin(…) and π with nothing in front of them, so a
+   * name standing just before one was glued on: x√2 became "xsqrt" (no such function), Aπ became "Api"
+   * once π turned into pi, and a·tan 45° became "atan" — a real function, the inverse, so the screen
+   * answered 88.7 without a word. Only a name ending the text and one of these tokens coming next
+   * count: a number in front (3sqrt(2)), a closing bracket (the (x+1) of (x+1)√2) and another root
+   * are products mathjs already reads, and a letter before "(" is a call, f(2), so it gets no sign.
+   * The sign is "*", which mathjs and the calculus route read alike (2x*cos(x^(2)), as
+   * math/pure/store.ts hands it to SymPy); never ×, because in vector mode × is the cross product.
+   * The one exception is the imaginary unit, which gets a space: the Complex working reads "i√5" as
+   * the implicit product it is, splits "isqrt(5)" that way itself (math/pure/mono.ts writeTimes) and
+   * takes a typed sign for a product to multiply out — with a "*", 1/(√2 − i√5) opened with a step
+   * that rewrote a sign nobody typed instead of multiplying by the conjugate.
+   */
+  const gapBefore = (before: string, tok: string): string => {
+    if (!tok.startsWith('\\')) return ''
+    const name = tok.slice(1)
+    if (!(name === 'sqrt' || name === 'pi' || FUNCS.has(name) || ARC[name])) return ''
+    const written = nameAtEnd(before)
+    return written === '' ? '' : written === 'i' ? ' ' : '*'
+  }
+
   /** Sequence until a closing token. */
   function seq(until: string | string[] | null): string {
     const stops = until === null ? [] : Array.isArray(until) ? until : [until]
     let s = ''
-    while (i < t.length && !stops.includes(peek())) s += atom()
+    while (i < t.length && !stops.includes(peek())) s += gapBefore(s, peek()) + atom()
     return s
   }
 
   const out = seq(null)
-  return out
-    .replace(/\s+/g, ' ')
-    .replace(/(\d)\s+(\d)/g, '$1$2')
-    .trim()
+  const text = out.replace(/\s+/g, ' ').replace(/(\d)\s+(\d)/g, '$1$2')
+  // The ×10ˣ key's number is one number (see standardForm), written out by resolveStandardForm: a plain
+  // number in front of the mark joins it, a bracket, a fraction, a root or a letter is scaled by ten to the
+  // power instead. A line without the mark is returned exactly as it always was.
+  const resolved = text.includes(E10) ? resolveStandardForm(text) : text
+  return resolved.trim()
 }

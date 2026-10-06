@@ -217,6 +217,32 @@ describe('stepsToWorking', () => {
     expect(w.answers[0].tex).toBe('-2')
   })
 
+  it('says it could not, with the reason, when the Complex job has the answer but no working to splice in (polish G2)', () => {
+    // Since P22 the Complex job answers a line it cannot work exactly with `noWorking: true`, a
+    // `reason` and no moves. The auto step read only `error`, so these two lines spliced in nothing
+    // and the student saw the working jump from one step to the next as if it had been complete.
+    const q: PQQuestion = {
+      ...TRAIN,
+      variables: [{ name: 'b', def: { kind: 'list', items: [5] } }],
+      parts: [{ type: 'number', prompt: 'Real part?', answer: 'sqrt(10) - sqrt(3)', unit: 'none', tolerance: { kind: 'relative', value: 0.02 }, marks: 1 }],
+      steps: {
+        level: 'worked',
+        items: [
+          { head: 'Multiply out.' },
+          { head: '', auto: { engine: 'pure', job: 'complex', input: '(sqrt(2) + sqrt(3) i)(sqrt({b}) + i)' } },
+          { head: '', auto: { engine: 'pure', job: 'complex', input: '2^0.5 + i' } },
+          { head: 'Done.' }
+        ]
+      }
+    }
+    const w = stepsToWorking(q, drawVariables(q, 1), SETTINGS)
+    rendersAll(w, 'auto complex noWorking')
+    // Each line is one "could not" move, not an empty list, and each carries its own reason.
+    expect(w.moves.map((m) => m.head)).toEqual(['Multiply out.', 'PhysLab could not work this step out.', 'PhysLab could not work this step out.', 'Done.'])
+    expect(w.moves[1].note).toMatch(/two different roots/)
+    expect(w.moves[2].note).toMatch(/whole-number powers/)
+  })
+
   it('splices in a vector solver for an auto step, reading its inputs from the filled-in text', () => {
     const q: PQQuestion = {
       ...TRAIN,

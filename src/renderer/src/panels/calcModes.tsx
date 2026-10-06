@@ -14,16 +14,22 @@ import {
   poissonCd,
   poissonPd,
   polyInequality,
-  polyRoots,
   polyToExpr,
   propagate,
   roundSig,
+  sciNotation,
   solveLinearSystem,
   statistics,
   type RegressionType
 } from '../calc/engine'
 import { calcNum, mathFormatOptions } from '../calc/format'
+import { matrixLine, sheetValues, tableRows, typedUnits } from '../calc/modeLines'
+import { errorSentence } from '../calc/errors'
+import { polynomialRootRows } from '../calc/roots'
+import { SHEET_COLS } from '../calc/sheet'
+import { predictY } from '../calc/stats'
 import { CONSTANTS } from '../calc/constants'
+import { UNIT_PRESETS, convertListed, unitLabel } from '../calc/units'
 import { themeColor } from '../app/theme'
 import { math } from '../math/expr'
 import { Builder } from '../core/factory'
@@ -137,20 +143,25 @@ function visualizeMatrix2D(M: number[][], label: string) {
 
 function MatrixMode() {
   const matrices = useCalc((s) => s.matrices)
+  const angleUnit = useScene((s) => s.settings.angleUnit)
   const [expr, setExpr] = useState('MatA * MatB')
-  const [out, setOut] = useState<{ tex: string; value: unknown } | null>(null)
+  const [result, setOut] = useState<{ tex: string; value: unknown; angle: string; matrices: unknown } | null>(null)
+  // A result belongs to the angle unit and the matrices it was worked out with: after a DEG/RAD switch or an edit it
+  // went on showing sin(MatA) of the old unit or the old MatA until = was pressed again, so it is left off instead.
+  const out = result && result.angle === angleUnit && result.matrices === matrices ? result : null
   const [err, setErr] = useState('')
   const run = (e = expr) => {
     setErr('')
     try {
-      const v = math.evaluate(casioToMath(e.replace(/\bInv\(/g, 'inv(').replace(/\bTrn\(/g, 'transpose(').replace(/\bIdn\(/g, 'identity(')), { ...matrices })
+      const v = matrixLine(e, matrices, angleUnit)
       const eig = e.startsWith('eigs(') ? v : null
       if (eig) {
         const vals = (eig as { values: unknown }).values
-        setOut({ tex: `\\lambda = ${matTex(vals)}`, value: vals })
-      } else setOut({ tex: matTex(v), value: v })
+        setOut({ tex: `\\lambda = ${matTex(vals)}`, value: vals, angle: angleUnit, matrices })
+      } else setOut({ tex: matTex(v), value: v, angle: angleUnit, matrices })
     } catch (x) {
-      setErr(String(x))
+      // The sentence every other calculator line gives, not the engine's own text ("Error: Dimension mismatch …").
+      setErr(errorSentence(x).sentence)
     }
   }
   const quick = ['MatA + MatB', 'MatA * MatB', 'det(MatA)', 'inv(MatA)', 'transpose(MatA)', 'MatA^2', 'eigs(MatA)', 'trace(MatA)', 'MatA * inv(MatB)']
@@ -198,19 +209,22 @@ function MatrixMode() {
 function VectorMode() {
   const vectors = useCalc((s) => s.vectors)
   const showSolution = useScene((s) => s.showSolution)
+  // The student's precision and angle unit, as the vector problem solver writes them: without them every solution
+  // here was 4 d.p. in degrees, whatever the screen said (H17).
+  const settings = useScene((s) => s.settings)
   const set = (name: string, v: number[]) => useCalc.setState((s) => ({ vectors: { ...s.vectors, [name]: v } }))
   const [a, setA] = useState('VctA')
   const [b, setB] = useState('VctB')
   const v3 = (n: string): V3 => [vectors[n][0] ?? 0, vectors[n][1] ?? 0, vectors[n][2] ?? 0]
   const nv = (n: string) => ({ name: n.replace('Vct', ''), v: v3(n) })
   const ops: { label: string; sol: () => VS.Solution }[] = [
-    { label: `${a} + ${b}`, sol: () => VS.solveAddition([nv(a), nv(b)]) },
-    { label: `${a} − ${b}`, sol: () => VS.solveSubtraction(nv(a), nv(b)) },
-    { label: `${a} · ${b}`, sol: () => VS.solveDot(nv(a), nv(b)) },
-    { label: `${a} × ${b}`, sol: () => VS.solveCross(nv(a), nv(b)) },
-    { label: `|${a}|`, sol: () => VS.solveMagnitudeDirection(nv(a)) },
-    { label: `unit ${a}`, sol: () => VS.solveUnitVector(nv(a)) },
-    { label: `proj ${b} on ${a}`, sol: () => VS.solveProjection(nv(b), nv(a)) }
+    { label: `${a} + ${b}`, sol: () => VS.solveAddition([nv(a), nv(b)], 'R', settings) },
+    { label: `${a} − ${b}`, sol: () => VS.solveSubtraction(nv(a), nv(b), 'R', settings) },
+    { label: `${a} · ${b}`, sol: () => VS.solveDot(nv(a), nv(b), settings) },
+    { label: `${a} × ${b}`, sol: () => VS.solveCross(nv(a), nv(b), 'C', settings) },
+    { label: `|${a}|`, sol: () => VS.solveMagnitudeDirection(nv(a), settings) },
+    { label: `unit ${a}`, sol: () => VS.solveUnitVector(nv(a), settings) },
+    { label: `proj ${b} on ${a}`, sol: () => VS.solveProjection(nv(b), nv(a), settings) }
   ]
   const [sol, setSol] = useState<VS.Solution | null>(null)
   return (
@@ -306,7 +320,7 @@ function StatMode() {
     b.commit()
     useScene.getState().setViewMode('2d')
   }
-  const predict = typeof res !== 'string' && res.expr ? Number(math.evaluate(res.expr.replace(/ln\(/g, 'log(').replace(/log\(x\)/g, 'log(x)'), { x: predictX })) : NaN
+  const predict = typeof res !== 'string' ? predictY(res, predictX) : NaN
 
   return (
     <div className="flex flex-col gap-2">
@@ -502,26 +516,12 @@ function DistMode() {
 // ---------------------------------------------------------------------------
 
 function TableMode() {
+  const angleUnit = useScene((s) => s.settings.angleUnit)
   const [fx, setFx] = useState('x^2 - 2x')
   const [gx, setGx] = useState('')
   const [range, setRange] = useState({ start: -3, end: 3, step: 0.5 })
-  const rows = useMemo(() => {
-    const out: { x: number; f: number | string; g: number | string }[] = []
-    const count = Math.min(200, Math.floor((range.end - range.start) / range.step + 1e-9) + 1)
-    for (let i = 0; i < count; i++) {
-      const x = range.start + i * range.step
-      const ev = (e: string) => {
-        if (!e.trim()) return ''
-        try {
-          return Number(math.evaluate(casioToMath(e), { x }))
-        } catch {
-          return 'ERROR'
-        }
-      }
-      out.push({ x, f: ev(fx), g: ev(gx) })
-    }
-    return out
-  }, [fx, gx, range])
+  // angleUnit is a dependency: switching DEG/RAD has to give the table its new numbers, not keep the old ones.
+  const rows = useMemo(() => tableRows(fx, gx, range, angleUnit), [fx, gx, range, angleUnit])
   return (
     <div className="flex flex-col gap-2">
       <Row label="f(x) =">
@@ -613,16 +613,15 @@ function EquationMode() {
       }
     } else {
       const c = coef.slice(0, deg + 1)
-      const roots = polyRoots(c)
+      // The rows are decided in calc/roots.ts, where they can be compared with x = ?, the Solve job and the bar.
+      const rows = polynomialRootRows(c)
       const expr = polyToExpr(c)
       out = (
         <>
-          {roots.map((r, i) => (
+          {rows.map((row, i) => (
             <div key={i} className="flex justify-between">
-              <span>x{i + 1} =</span>
-              <span>
-                {r.im === 0 ? exactForm(r.re) ? <Tex tex={exactForm(r.re)!} /> : calcNum(r.re) : `${calcNum(r.re)} ${r.im < 0 ? '−' : '+'} ${calcNum(Math.abs(r.im))}i`}
-              </span>
+              <span>{row.label}</span>
+              <span>{row.tex ? <Tex tex={row.tex} /> : row.text}</span>
             </div>
           ))}
           {deg === 2 && c[0] !== 0 && (
@@ -803,43 +802,13 @@ function RatioMode() {
 
 // ---------------------------------------------------------------------------
 
-const COLS = ['A', 'B', 'C', 'D', 'E']
+const COLS = SHEET_COLS
 
 function SheetMode() {
+  const angleUnit = useScene((s) => s.settings.angleUnit)
   const [cells, setCells] = useState<Record<string, string>>({ A1: '1', A2: '2', A3: '3', B1: '=A1^2', B2: '=A2^2', B3: '=A3^2', C1: '=sum(B1:B3)' })
   const [edit, setEdit] = useState<string | null>(null)
-  const values = useMemo(() => {
-    const vals: Record<string, number | string> = {}
-    const evalCell = (id: string, depth = 0): number | string => {
-      if (id in vals) return vals[id]
-      const raw = cells[id] ?? ''
-      if (depth > 50) return 'CIRC'
-      if (!raw.startsWith('=')) {
-        const n = Number(raw)
-        vals[id] = raw === '' ? '' : Number.isFinite(n) ? n : raw
-        return vals[id]
-      }
-      try {
-        const expr = raw.slice(1).replace(/([A-E])(\d+):([A-E])(\d+)/g, (_m, c1, r1, c2, r2) => {
-          const list: string[] = []
-          for (let c = COLS.indexOf(c1); c <= COLS.indexOf(c2); c++) for (let r = Number(r1); r <= Number(r2); r++) list.push(`${COLS[c]}${r}`)
-          return `[${list.join(',')}]`
-        })
-        const scope: Record<string, number> = {}
-        for (const ref of expr.match(/\b[A-E]\d+\b/g) ?? []) {
-          const v = evalCell(ref, depth + 1)
-          scope[ref] = typeof v === 'number' ? v : 0
-        }
-        const r = Number(math.evaluate(casioToMath(expr), scope))
-        vals[id] = Number.isFinite(r) ? r : 'ERROR'
-      } catch {
-        vals[id] = 'ERROR'
-      }
-      return vals[id]
-    }
-    for (let r = 1; r <= 15; r++) for (const c of COLS) evalCell(`${c}${r}`)
-    return vals
-  }, [cells])
+  const values = useMemo(() => sheetValues(cells, angleUnit), [cells, angleUnit])
   return (
     <div className="flex flex-col gap-2">
       <div className="text-fine text-[color:var(--text-faint)]">Type numbers or formulas starting with = (e.g. =A1*2, =sum(A1:A5), =mean(B1:B4)).</div>
@@ -896,40 +865,17 @@ function SheetMode() {
 
 // ---------------------------------------------------------------------------
 
-const UNIT_PRESETS: [string, string[]][] = [
-  ['Length', ['m', 'cm', 'mm', 'km', 'inch', 'ft', 'yard', 'mile', 'angstrom', 'lightyear']],
-  ['Mass', ['kg', 'g', 'mg', 'tonne', 'lb', 'oz', 'u']],
-  ['Time', ['s', 'ms', 'minute', 'hour', 'day', 'year']],
-  ['Speed', ['m/s', 'km/h', 'mi/h', 'ft/s', 'knot']],
-  ['Force', ['N', 'kN', 'dyn', 'lbf', 'kgf']],
-  ['Energy', ['J', 'kJ', 'cal', 'kcal', 'eV', 'kWh', 'erg', 'BTU']],
-  ['Power', ['W', 'kW', 'hp']],
-  ['Pressure', ['Pa', 'kPa', 'bar', 'atm', 'mmHg', 'psi', 'torr']],
-  ['Temperature', ['degC', 'K', 'degF']],
-  ['Angle', ['deg', 'rad', 'grad']],
-  ['Area', ['m^2', 'cm^2', 'km^2', 'hectare', 'acre']],
-  ['Volume', ['m^3', 'L', 'mL', 'cm^3', 'gallon']],
-  ['Charge & current', ['C', 'mC', 'uC', 'A', 'mA']]
-]
-
 function UnitsMode() {
+  const angleUnit = useScene((s) => s.settings.angleUnit)
   const [value, setValue] = useState(72)
   const [cat, setCat] = useState(3)
   const [from, setFrom] = useState('km/h')
   const [to, setTo] = useState('m/s')
   const [free, setFree] = useState('5 N m to J')
-  let result: string
-  try {
-    result = calcNum(Number(math.unit(value, from).toNumber(to)))
-  } catch (e) {
-    result = String(e instanceof Error ? e.message : e)
-  }
-  let freeOut: string
-  try {
-    freeOut = math.format(math.evaluate(free), { precision: 10 })
-  } catch (e) {
-    freeOut = String(e instanceof Error ? e.message : e)
-  }
+  // Each line is an answer or a sentence; the target unit is part of the answer, so it can never
+  // trail after a refusal.
+  const result = convertListed(value, from, to)
+  const freeOut = typedUnits(free, angleUnit)
   const units = UNIT_PRESETS[cat][1]
   return (
     <div className="flex flex-col gap-2">
@@ -953,25 +899,27 @@ function UnitsMode() {
         <NumField className="w-28" value={value} onChange={setValue} />
         <select className="field w-28" value={from} onChange={(e) => setFrom(e.target.value)}>
           {units.map((u) => (
-            <option key={u}>{u}</option>
+            <option key={u} value={u}>
+              {unitLabel(u)}
+            </option>
           ))}
         </select>
         <span className="text-[color:var(--text-dim)]">→</span>
         <select className="field w-28" value={to} onChange={(e) => setTo(e.target.value)}>
           {units.map((u) => (
-            <option key={u}>{u}</option>
+            <option key={u} value={u}>
+              {unitLabel(u)}
+            </option>
           ))}
         </select>
       </div>
       <Screen>
-        <div className="text-right text-display">
-          {result} {to}
-        </div>
+        {result.refused ? <span className="text-[color:var(--bad)]">{result.text}</span> : <div className="text-right text-display">{result.text}</div>}
       </Screen>
       <div className="text-[color:var(--text-dim)]">Or type any conversion (any units, even combined):</div>
       <input className="field font-mono" value={free} onChange={(e) => setFree(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
       <Screen>
-        <div className="text-right">{freeOut}</div>
+        {freeOut.refused ? <span className="text-[color:var(--bad)]">{freeOut.text}</span> : <div className="text-right">{freeOut.text}</div>}
       </Screen>
     </div>
   )
@@ -1045,7 +993,7 @@ function MeasureMode() {
         ) : (
           <div className="mt-1 text-[color:var(--text)]">
             <b className="text-[color:var(--text-strong)]">{sf.count}</b> significant figure{sf.count === 1 ? '' : 's'}. <span className="text-[color:var(--text-dim)]">{sf.explanation}</span>
-            <div className="mt-1">Scientific notation: {Number.isFinite(numVal) ? numVal.toExponential(Math.max(0, sf.count - 1)).replace('e', ' × 10^') : '—'}</div>
+            <div className="mt-1">Scientific notation: {Number.isFinite(numVal) ? sciNotation(numVal, sf.count) : '—'}</div>
           </div>
         )}
         <div className="mt-2 flex items-center gap-2">

@@ -12,7 +12,7 @@ import { drawability, inXAlone, NO_REAL_X, plainParseError, solutionsInX, visual
 import { cas, useCasStatus } from '../math/cas'
 import { casWaitNote, followCasStart } from '../ui/casStatus'
 import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
-import { fmtLabel, fmtPrecise, morePrecise, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
+import { fmtLabel, fmtPrecise, morePrecise, superscriptPowers, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import { isPieceCorner } from '../math/lego'
@@ -20,6 +20,8 @@ import * as VS from '../math/vectorSolver'
 import { linearToLatex, runPure, type JobId } from '../math/pure/run'
 import { normalRefusal, parseNormalQuery } from '../math/pure/zscore'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
+import { formatComplex } from '../calc/engine'
+import { orderRoots } from '../calc/roots'
 import { calcNum, type CalcPrecision } from '../calc/format'
 import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
 import { showPanel } from '../app/panels'
@@ -428,13 +430,16 @@ const listAnd = (items: string[]): string => (items.length < 2 ? items.join('') 
  */
 function complexSentence(pairs: XComplex[], p: CalcPrecision): string {
   const said = pairs.map(({ re, im }) => {
-    const a = calcNum(re, p)
-    const b = calcNum(im, p)
+    const a = sayNum(re, p)
+    const b = sayNum(im, p)
     const i = b === '1' ? 'i' : `${b}i`
     return a === '0' ? `x = ±${i}` : `x = ${a} ± ${i}`
   })
   return said.length ? ` In complex numbers: ${listAnd(said)}.` : ''
 }
+
+/** A number in a sentence about solutions: the calculator's own digits, the power of ten raised ("1 × 10⁻⁸", never "1×10^-8"). */
+const sayNum = (x: number, p: CalcPrecision): string => superscriptPowers(calcNum(x, p))
 
 /** How many digits past the student's own a list of solutions may add to tell two apart: past this they are one number to the last digit a double holds. */
 const MAX_EXTRA_DIGITS = 12
@@ -446,12 +451,12 @@ const MAX_EXTRA_DIGITS = 12
  * apart (morePrecise); a solution that already looked different stays as it was.
  */
 function solutionNumbers(xs: number[], p: CalcPrecision): string[] {
-  const base = xs.map((x) => calcNum(x, p))
+  const base = xs.map((x) => sayNum(x, p))
   const alike = base.map((l) => base.indexOf(l) !== base.lastIndexOf(l))
   if (!alike.some(Boolean)) return base
   let labels = base
   for (let extra = 1; extra <= MAX_EXTRA_DIGITS; extra++) {
-    labels = xs.map((x, i) => (alike[i] ? calcNum(x, morePrecise(p, extra)) : base[i]))
+    labels = xs.map((x, i) => (alike[i] ? sayNum(x, morePrecise(p, extra)) : base[i]))
     if (new Set(labels).size === labels.length) break
   }
   return labels
@@ -463,7 +468,7 @@ function solvedSentence(sol: XSolved | null, p: CalcPrecision): string {
   if (sol?.kind !== 'real') return 'Drawn as a vertical line at each solution.'
   const listed = listAnd(solutionNumbers(sol.xs, p).map((n) => `x = ${n}`))
   if (sol.more) {
-    const again = sol.more === 'further' ? 'There are more solutions further out.' : `The pattern repeats every ${calcNum(sol.more.period, p)}.`
+    const again = sol.more === 'further' ? 'There are more solutions further out.' : `The pattern repeats every ${sayNum(sol.more.period, p)}.`
     return `The solutions nearest 0 are ${listed} — each drawn as a vertical line. ${again}`
   }
   return sol.xs.length === 1 ? `The solution is ${listed} — drawn as a vertical line.` : `The solutions are ${listed} — each drawn as a vertical line.`
@@ -1519,9 +1524,7 @@ async function tryCas(input: string): Promise<boolean> {
       s.updateLog(id, { kind: 'result', text: 'No solution.' })
       return true
     }
-    const texOut = rows
-      .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !/^-?\d+$/.test(v.text) ? ` \\approx ${fmtNumeric(v.numeric, s.settings)}` : ''}`).join(',\\ '))
-      .join('\\quad\\text{or}\\quad ')
+    const texOut = solveRowsTex(rows, s.settings)
     const single = args.length === 1 && rows.every((row) => Object.keys(row).length === 1 && 'x' in row)
     const roots = single ? rows.map((row) => row.x.numeric).filter((n) => n && n.im === undefined).map((n) => n!.re) : []
     s.updateLog(id, {
@@ -1582,8 +1585,37 @@ async function tryCas(input: string): Promise<boolean> {
   return true
 }
 
-/** The decimal beside an exact answer, in the student's precision (rule 4), real or complex. */
-const fmtNumeric = (n: { re: number; im?: number }, p: Precision) => (n.im === undefined ? texAt(n.re, p) : `${texAt(n.re, p)} ${n.im < 0 ? '-' : '+'} ${texAt(Math.abs(n.im), p)}i`)
+/**
+ * The decimal beside an exact answer, in the student's precision (rule 4), real or complex. A complex
+ * one is written by the same formatter as on the Maths screen (2i, never 0 + 2i or 0 + 1i).
+ */
+const fmtNumeric = (n: { re: number; im?: number }, p: Precision) => formatComplex(n.re, n.im ?? 0, (v) => texAt(v, p), 'tex')
+
+/** One value of a SymPy solve() row, as the CAS worker sends it (CasValue in math/cas.ts). */
+type SolveValue = { latex: string; text: string; numeric: { re: number; im?: number } | null }
+
+/** A decimal beside a value that is already whole says nothing: x = 3, x = −2 + 3i. */
+const isWholeValue = (v: SolveValue): boolean => /^-?\d+$/.test(v.text) || (!!v.numeric && Number.isInteger(v.numeric.re) && Number.isInteger(v.numeric.im ?? 0))
+
+/**
+ * The bar's answer line for SymPy's solve() rows: each letter with its exact value, and the
+ * decimal beside a value that is not whole. SymPy lists roots in an order of its own (−2i before 2i),
+ * so the roots of one unknown are put in the order every other route uses: real roots smallest
+ * first, then each conjugate pair with the +i root first. (A quadratic reaches SymPy only when the
+ * Solve job refuses it; the Solve job's own answers keep their formula order.) Pure, so the line can
+ * be compared with the other routes that answer the same equation (x = ?, Equations mode, the Solve job).
+ */
+export function solveRowsTex(rows: Record<string, SolveValue>[], p: Precision): string {
+  const valueOf = (row: Record<string, SolveValue>): { re: number; im: number } | null => {
+    const n = Object.values(row)[0].numeric
+    return n ? { re: n.re, im: n.im ?? 0 } : null
+  }
+  // A system's solution (x and y in one row) has no single root to order by: SymPy's order stays.
+  const ordered = rows.every((row) => Object.keys(row).length === 1) ? orderRoots(rows, valueOf) : rows
+  return ordered
+    .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !isWholeValue(v) ? ` \\approx ${fmtNumeric(v.numeric, p)}` : ''}`).join(',\\ '))
+    .join('\\quad\\text{or}\\quad ')
+}
 
 // ---------------------------------------------------------------------------
 // Plain expressions

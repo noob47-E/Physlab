@@ -1499,7 +1499,8 @@ describe('an equation in x alone is solved, not plotted as a curve (polish P4)',
     // x − sin x is exactly 0 for every |x| below 4×10⁻⁸, and the scan found the edge of that stretch.
     for (const line of ['sin(x) = x', 'x = sin(x)']) expect((await typed(line)).last.text, line).toContain('The solution is x = 0 — drawn as a vertical line.')
     // A solution that is really there so close to 0 stays: sin x = 5×10⁻⁷ is not 0.
-    expect((await typed('sin(x) = 5e-7')).last.text).toContain('x = 5×10^-7')
+    // Raised, as every sentence writes a power of ten (P-CALC H18): it was "x = 5×10^-7".
+    expect((await typed('sin(x) = 5e-7')).last.text).toContain('x = 5 × 10⁻⁷')
   })
 
   it('names a repeated root exactly, at any precision and however often it is repeated', async () => {

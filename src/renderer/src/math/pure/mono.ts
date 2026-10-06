@@ -261,6 +261,17 @@ function fromNode(node: MathNode): Expr {
  * front of a bracket gets its × written in; a letter inside a longer name (the n of sin) does not.
  */
 const IMPLICIT_CALL = /(?<![A-Za-z_])([A-Za-z](?:\^\d+)?)\s*\(/g
+/**
+ * "i√3" is i times √3, written that way as often as √3 i. The Maths field's converter glues the i
+ * to the root's name ("isqrt(3)", latexToMath.ts), which mathjs reads as a call to a function
+ * nobody defined, and the stand-alone i that picks the Complex job is never seen (P22). It glues
+ * i and π the same way: e^{iπ} arrives as e^(ipi), a letter called "ipi". An i on its own in front
+ * of one of the function names the converter writes, or of π, and a π in front of an i, are split
+ * off with a space — mathjs reads that as a product, as typed — and no real name is spelt like
+ * that, so nothing else is read differently.
+ */
+const GLUED_I = /(?<![A-Za-z_])i(?=(?:sqrt|nthRoot|a?(?:sin|cos|tan)h?|sec|csc|cot|exp|ln|log)\s*\(|pi(?![A-Za-z_]))/g
+const GLUED_PI = /(?<![A-Za-z_])pi(?=i(?![A-Za-z_]))/g
 
 /**
  * mathjs reads a run of adjacent letters like `ab` as one symbol named "ab". Pure Math variables
@@ -275,7 +286,9 @@ const knownMathName = (name: string): boolean =>
   name === 'pi' || name === 'e' || name === 'Infinity' || GREEK.has(name) || (math as unknown as Record<string, unknown>)[name] !== undefined
 
 export const writeTimes = (text: string): string => {
-  const splitLetters = text.replace(/[A-Za-z]+/g, (run) => {
+  // The glued i and π are split off first: as one run "isqrt" or "ipi" would become i·s·q·r·t or i·p·i.
+  const unglued = text.replace(GLUED_I, 'i ').replace(GLUED_PI, 'pi ')
+  const splitLetters = unglued.replace(/[A-Za-z]+/g, (run) => {
     if (run.length === 1 || knownMathName(run)) return run
     return run
       .split(/(theta)/)

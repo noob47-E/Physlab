@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { BookOpen, Check, Copy, Lightbulb, Pencil, TriangleAlert } from 'lucide-react'
 import { Tex } from '../ui/Tex'
+import { answerCopyLine, labelTex } from '../calc/labels'
 import { JOBS, type JobId } from '../math/pure/run'
 import { texToPlain, type Working as WorkingDoc } from '../math/pure/work'
 import { STEP_PREF_KEY, checkTone, initialShown, invitesTry, offeredJob, stepPrefFrom, type StepPref } from '../math/pure/reveal'
@@ -131,7 +132,8 @@ export function WorkingView({
       `${doc.title}:  ${doc.input}`,
       // A stage heading travels with its move, so the pasted working keeps the "what for" above the "how".
       ...doc.moves.map((m, i) => `${m.subgoal ? `${texToPlain(m.subgoal)}\n` : ''}${i + 1}. ${m.head}${m.rule ? `   [${m.rule}]` : ''}${m.tex ? `\n   ${m.tex}` : ''}`),
-      ...doc.answers.map((a) => `${a.label} ${a.tex}`),
+      // How the label is written as text is decided in calc/labels.ts, beside how the panel draws it.
+      ...doc.answers.map(answerCopyLine),
       doc.check ? texToPlain(doc.check) : ''
     ]
     navigator.clipboard?.writeText(lines.filter(Boolean).join('\n')).then(
@@ -251,12 +253,16 @@ export function AnswerCard({ doc }: { doc: WorkingDoc }) {
   return (
     <div className="pure-answer mx-3 mt-3">
       <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--warn)]">Answer</div>
-      {doc.answers.map((a, i) => (
-        <div key={`${a.label}-${i}`} className="flex items-baseline gap-3 py-0.5">
-          <span className="w-24 shrink-0 text-[color:var(--text-dim)]">{a.label}</span>
-          <Tex tex={a.tex} className="text-lead text-ink-strong" />
-        </div>
-      ))}
+      {doc.answers.map((a, i) => {
+        // calc/labels.ts decides whether the label is a symbol, drawn as maths (x_1 =), or a word kept as text (Quotient).
+        const symbol = labelTex(a.label)
+        return (
+          <div key={`${a.label}-${i}`} className="flex items-baseline gap-3 py-0.5">
+            <span className="w-24 shrink-0 text-[color:var(--text-dim)]">{symbol === null ? a.label : <Tex tex={symbol} />}</span>
+            <Tex tex={a.tex} className="text-lead text-ink-strong" />
+          </div>
+        )
+      })}
       {doc.noWorking && (
         <div className="mt-2 text-[color:var(--text-dim)]">
           That answer is right, but this one is past the methods I can write out by hand, so there are no steps for it.

@@ -15,10 +15,10 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronUp, Eye, History, Keyboard, Play, Sparkles, Trash2, X } from 'lucide-react'
 import { casInDegrees } from '../calc/angle'
 import { FIELD_MODES, MODE_HINTS, MODE_LABELS, clearCalcHistory, isFieldMode, useCalc, type CalcMode, type FieldMode, type HistoryItem } from '../calc/calcStore'
-import { casioToMath, evaluateComp, type Base } from '../calc/engine'
+import { casioToMath, withAngle, type Base } from '../calc/engine'
 import { calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
-import { answerStillFor, evaluateInput, isHeavy, lettersIn, mainLine, type Answered, type EvalResult } from '../calc/evaluateInput'
+import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, mainLine, readValueBoxes, shownText, tangentAt, type Answered, type EvalResult } from '../calc/evaluateInput'
 import { groupsForMode, type KeyDef, type KeyGroup, type KeyGroupId } from '../calc/keys'
 import { math } from '../math/expr'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
@@ -161,14 +161,21 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   // click inside leaves it open for. It used to hang under the field alone, exactly over the
   // answer card, so = on the keypad showed nothing until the keypad was closed.
   const headBox = useRef<HTMLDivElement>(null)
-  // The answer remembers the mode it was worked out under and the line it answers: a mode
-  // switch keeps the field's text (the store holds it) but an answer from the other mode's
+  const [base, setBase] = useState<Base>(10)
+  // The answer remembers the mode it was worked out under, the line it answers, and the angle unit and base it was
+  // worked out in: a mode switch keeps the field's text (the store holds it) but an answer from the other mode's
   // rules is not shown under this one, and an answer to a line the student has since edited is
   // not shown under the new line either — on one screen it read as the answer to that line.
+  // Switching DEG/RAD or the base leaves the text alone too, so sin(30) = 0.5 sat under a RAD screen (it is −0.988
+  // there) and FF read as a hex number sat under Decimal (H4). The answer that does not belong to the settings now is
+  // dropped while rendering — React's own way for state that follows a setting — so no stale card is ever painted,
+  // and going back to the old setting does not bring an old card back.
   const [answered, setAnswered] = useState<Answered | null>(null)
-  const result = answered?.mode === mode ? answered.result : null
+  const held = answerStillUnder(answered, { angle: angleUnit, base })
+  if (held !== answered) setAnswered(held)
+  const result = held?.mode === mode ? held.result : null
   /** A fresh answer belongs to what the field holds now. */
-  const setResult = (r: EvalResult | null): void => setAnswered(r ? { mode, input: useCalc.getState().input, result: r } : null)
+  const setResult = (r: EvalResult | null): void => setAnswered(r ? { mode, input: useCalc.getState().input, angle: angleUnit, base, result: r } : null)
   // Every keystroke lands here: one store write, and no render of this screen.
   const onEdit = useCallback((latex: string) => useCalc.setState({ input: latex }), [])
   // The answer follows the store's line, not the keystroke: it is dropped on the first change
@@ -184,7 +191,6 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   )
   const [showExact, setShowExact] = useState(true)
   const [eng, setEng] = useState(false)
-  const [base, setBase] = useState<Base>(10)
   const [asked, setAsked] = useState<{ mode: FieldMode; letters: string[] } | null>(null)
   const [keypad, setKeypad] = useState(false)
   // A new working — from Work it out, the command bar, a recalled entry or the tour — takes the
@@ -229,10 +235,12 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     const run = (): void => {
       const r = evaluateInput(mode, s.input, opts)
       if (!r) return
-      setAnswered({ mode, input: s.input, result: r })
+      setAnswered({ mode, input: s.input, angle: angleUnit, base, result: r })
       if (r.error) return
       useCalc.setState({
-        ans: r.value,
+        // "No real solution. In complex numbers: …" is an answer with no number in it: Ans stays the
+        // last number, where an undefined Ans would read as 0 in the next line.
+        ans: r.value === undefined ? s.ans : r.value,
         vars: r.solved ? { ...s.vars, x: r.value } : s.vars,
         history: [{ input: s.input, result: r.main, mode }, ...s.history].slice(0, 100)
       })
@@ -334,16 +342,16 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   const onKey = useCallback((k: KeyDef) => actions.current.press(k), [])
   const closeKeypad = useCallback(() => setKeypad(false), [])
 
-  /** Draws the line in the viewport; true when something was drawn. */
-  const draw = (input: string): boolean => {
+  /** Draws the line in the viewport; true when something was drawn. Its numbers are read in the screen's unit (see draw). */
+  const drawLine = (input: string): boolean => {
     const s = useCalc.getState()
     const ddx = input.match(/^ddx\((.*)\)$/)
     if (ddx) {
-      const [f, a] = args(ddx[1])
-      const x0 = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
-      const fx = Number(math.evaluate(casioToMath(f), { ...constantScope(), ...s.vars, x: x0 }))
-      const slope = Number(evaluateComp(input, { vars: s.vars, ans: s.ans, angle: 'rad' }).value)
-      visualizeTangent(casioToMath(f), x0, fx, slope)
+      // The point, the height and the slope all come from the engine the answer card uses, in the screen's unit, so the
+      // tangent drawn has the slope the card shows: d/dx(sin(x), 30) in degrees drew cos(30 rad) = 0.154 under a card
+      // that said 0.01511, because the slope was worked out in radians and the height in whatever mode the maths held (H3).
+      const t = tangentAt(input, { vars: s.vars, ans: s.ans, angle: angleUnit })
+      visualizeTangent(casioToMath(t.f), t.x0, t.fx, t.slope)
       return true
     }
     const integ = input.match(/^integral\((.*)\)$/)
@@ -402,6 +410,10 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     return false
   }
 
+  // Every bare evaluation inside drawLine (a limit, a point, a sum's terms, a vector's angle) reads sin and atan in the
+  // screen's unit and leaves the mode that was held as it was, whatever an earlier line set (H3).
+  const draw = (input: string): boolean => withAngle(angleUnit, () => drawLine(input))
+
   const visualize = (): void => {
     let input: string
     try {
@@ -416,7 +428,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       // without bringing it forward went where the student could not see it.
       if (draw(input)) showPanel('viewport')
     } catch (e) {
-      setResult({ main: '', src: input, error: { sentence: 'I cannot draw that one.', detail: String(e) } })
+      // The message alone: String(e) put "Error: " in front of the tangent's own sentence ("There is no tangent there…").
+      setResult({ main: '', src: input, error: { sentence: 'I cannot draw that one.', detail: e instanceof Error ? e.message : String(e) } })
     }
   }
 
@@ -496,8 +509,12 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
           <div className="card p-2">
             <div className="mb-1 text-fine text-[color:var(--text-dim)]">Give each letter a value, then press Calculate</div>
             <WithValuesForm
+              // A different set of letters is a new question: a form kept from the old one would still read, and name
+              // in its sentence, boxes that are no longer on the screen, and would show no box value for the new letter.
+              key={withValues.join(',')}
               vars={withValues}
               initial={useCalc.getState().vars}
+              angleUnit={angleUnit}
               onSubmit={(vals) => {
                 useCalc.setState({ vars: { ...useCalc.getState().vars, ...vals } })
                 evaluate(vals)
@@ -751,7 +768,7 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
       {result.extra && (
         <div className="text-small leading-5 text-[color:var(--text-dim)]">
           {result.extra.map((x, i) => (
-            <div key={i}>{x}</div>
+            <div key={i}>{shownText(x)}</div>
           ))}
         </div>
       )}
@@ -778,19 +795,43 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
   )
 }
 
-function WithValuesForm({ vars, initial, onSubmit }: { vars: string[]; initial: Record<string, unknown>; onSubmit: (v: Record<string, number>) => void }) {
+function WithValuesForm({ vars, initial, angleUnit, onSubmit }: { vars: string[]; initial: Record<string, unknown>; angleUnit: 'deg' | 'rad'; onSubmit: (v: Record<string, number>) => void }) {
   const [vals, setVals] = useState<Record<string, string>>(Object.fromEntries(vars.map((v) => [v, String(initial[v] ?? 0)])))
+  // The boxes the last press could not read, and the sentence that names them (H5). A box with letters or half a sum
+  // used to throw out of the click handler and Calculate did nothing at all; an empty box, 1 ÷ 0 or an i went into the
+  // stored letters as NaN or ∞. The boxes keep what the student typed; the next keystroke in any box clears the sentence.
+  const [unread, setUnread] = useState<{ letters: string[]; sentence: string } | null>(null)
+  const calculate = (): void => {
+    const read = readValueBoxes(vals, angleUnit)
+    if (!read.ok) return setUnread(read)
+    setUnread(null)
+    onSubmit(read.values)
+  }
   return (
     <div className="flex flex-wrap items-center gap-2">
       {vars.map((v) => (
         <label key={v} className="flex items-center gap-1">
           <span className="font-semibold italic text-[color:var(--text)]">{v} =</span>
-          <input className="field num w-20" value={vals[v]} onChange={(e) => setVals({ ...vals, [v]: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
+          <input
+            className="field num w-20"
+            value={vals[v]}
+            aria-invalid={unread?.letters.includes(v) ? true : undefined}
+            onChange={(e) => {
+              setVals({ ...vals, [v]: e.target.value })
+              setUnread(null)
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
         </label>
       ))}
-      <button className="btn primary" onClick={() => onSubmit(Object.fromEntries(Object.entries(vals).map(([k, v]) => [k, Number(math.evaluate(casioToMath(v)))])))}>
+      <button className="btn primary" onClick={calculate}>
         Calculate
       </button>
+      {unread && (
+        <div role="alert" className="basis-full text-fine text-[color:var(--bad)]">
+          {unread.sentence}
+        </div>
+      )}
     </div>
   )
 }
@@ -845,14 +886,13 @@ function VarField({ name, value }: { name: string; value: unknown }) {
   const [text, setText] = useState(shown)
   // The store's value changed from elsewhere (an equation solved for x, an answer stored).
   useEffect(() => setText(shown), [shown])
+  const angleUnit = useScene((s) => s.settings.angleUnit)
+  // Read as a "with values" box is, in the screen's angle unit: sin(30) typed here was worked out in whatever mode
+  // the maths last held (H17). A box it cannot read goes back to the value it had.
   const commit = (): void => {
-    try {
-      const v = Number(math.evaluate(casioToMath(text)))
-      if (Number.isFinite(v)) useCalc.setState({ vars: { ...useCalc.getState().vars, [name]: v } })
-      else setText(shown)
-    } catch {
-      setText(shown)
-    }
+    const read = readValueBoxes({ [name]: text }, angleUnit)
+    if (read.ok) useCalc.setState({ vars: { ...useCalc.getState().vars, [name]: read.values[name] } })
+    else setText(shown)
   }
   return (
     <input
@@ -895,7 +935,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
       {calcs.slice(0, shownCalcs).map((h, i) => (
         <button key={i} className="flex w-full items-center justify-between gap-3 px-2 py-1 text-left hover:bg-[color:var(--sel-row)]" onClick={() => pickCalc(h)} title="Put this back in the field">
           <span className="truncate text-[color:var(--text)]">{h.mode === 'BASE-N' ? h.input : <Tex tex={h.input} />}</span>
-          <span className="shrink-0 font-mono text-[color:var(--code-text)]">{h.result}</span>
+          <span className="shrink-0 font-mono text-[color:var(--code-text)]">{shownText(h.result)}</span>
         </button>
       ))}
       {calcs.length > shownCalcs && (

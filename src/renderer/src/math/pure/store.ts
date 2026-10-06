@@ -136,6 +136,10 @@ export const usePure = create<PureState>((set, get) => ({
       return
     }
 
+    // A power past the limit is past SymPy's time too: x^100000 kept "Checking that one a different way…" up for a
+    // minute and then nothing. Its refusal already says how far this goes, so it stands at once.
+    if (TOO_BIG.test(working.error)) return
+
     // The answer is not optional. When this engine cannot show working, SymPy is asked for the
     // result alone, and the panel says plainly that the steps are missing.
     void askCas(j, src, shown, runSeq, set, get)
@@ -481,7 +485,7 @@ async function askCas(
           .join(',\\quad ')
       : res.latex
     if (res.error || !answer) {
-      set({ asking: false })
+      otherWayFailed(asked, set, get)
       return
     }
     const working: Working = {
@@ -497,6 +501,19 @@ async function askCas(
     // An answer is an answer: it goes into the history like any other, and recalling it asks again.
     remember(job, src, latex, working, set, get)
   } catch {
-    set({ asking: false })
+    otherWayFailed(asked, set, get)
   }
+}
+
+/** The sentence a refusal ends with when SymPy could not answer either: the waiting line never just goes away. */
+export const OTHER_WAY_FAILED = 'I tried another way as well, and it could not work this out either.'
+
+/** A refusal so large that asking SymPy would only make the student wait (mono.ts MAX_POWER, and the like). */
+const TOO_BIG = /too big|too large|too many/i
+
+function otherWayFailed(asked: number, set: (p: Partial<PureState>) => void, get: () => PureState): void {
+  if (!casAnswerIsCurrent(asked, get().runSeq)) return
+  const current = get().working
+  if (!current?.error || current.error.includes(OTHER_WAY_FAILED)) return set({ asking: false })
+  set({ asking: false, working: { ...current, error: `${current.error} ${OTHER_WAY_FAILED}` } })
 }

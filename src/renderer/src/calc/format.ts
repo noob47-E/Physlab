@@ -111,7 +111,15 @@ export function calcEng(v: number, s: CalcPrecision = calcPrecision()): string {
   return `${trimZeros(text)}×10^${e}`
 }
 
-/** The precision as mathjs wants it, for complex numbers, matrices and units. */
-export function mathFormatOptions(s: CalcPrecision = calcPrecision()): { notation?: 'fixed'; precision: number } {
-  return s.precisionMode === 'sf' ? { precision: Math.max(1, s.decimals) } : { notation: 'fixed', precision: s.decimals }
+/**
+ * What mathjs's formatter is handed for complex numbers, matrices and units: a callback that writes
+ * every number in them (a complex number's parts, each entry, a unit's value) with calcNum, so it
+ * rounds the decimal the student saw, half away from zero, as a number on its own does. Handing
+ * mathjs a precision instead let it round the binary double — 0.35 × 3, stored 1.0499999999999998,
+ * read "1.0" at one decimal place where the same number alone reads 1.1 — pad 2.00i, and switch to
+ * e-notation ("1.235e+5") from 10⁵.
+ */
+export function mathFormatOptions(s: CalcPrecision = calcPrecision()): (value: unknown) => string {
+  // mathjs hands a BigNumber over as itself, not as a number.
+  return (value) => calcNum(typeof value === 'number' ? value : Number(value), s)
 }

@@ -151,7 +151,10 @@ const FUNCTIONS: KeyDef[] = [
   {
     id: 'fact',
     label: 'n!',
-    tex: '#0!',
+    // n!, %, ° and r∠θ are written after what the student has typed, so they take #@ — the selection and nothing
+    // more, as the ×10ˣ key does. #0 leaves an empty box in front of the key when nothing is selected, the caret goes
+    // into it, and the next digit typed lands there instead of after the mark. With a selection they wrap it as before.
+    tex: '#@!',
     hint: 'Factorial: 5! = 5 × 4 × 3 × 2 × 1',
     more: [
       { id: 'gcd', label: 'HCF', tex: op('GCD', 2), hint: 'Highest common factor of two numbers' },
@@ -160,8 +163,8 @@ const FUNCTIONS: KeyDef[] = [
   },
   { id: 'ncr', label: 'nCr', tex: op('nCr', 2), hint: 'Combinations: ways to choose r things from n' },
   { id: 'npr', label: 'nPr', tex: op('nPr', 2), hint: 'Permutations: ways to arrange r things chosen from n' },
-  { id: 'percent', label: '%', tex: '#0\\%', hint: 'Per cent: 25% is 0.25' },
-  { id: 'degree', label: '°', tex: '#0^{\\circ}', hint: 'Degrees, whatever the angle unit is set to' },
+  { id: 'percent', label: '%', tex: '#@\\%', hint: 'Per cent: 25% is 0.25' },
+  { id: 'degree', label: '°', tex: '#@^{\\circ}', hint: 'Degrees, whatever the angle unit is set to' },
   {
     id: 'pol',
     label: 'polar',
@@ -202,7 +205,13 @@ const TEMPLATES: KeyDef[] = [
   { id: 'tpow', label: '▭ʸ', tex: '#0^{#?}', hint: 'A power' },
   { id: 'troot', label: 'ⁿ√▭', tex: '\\sqrt[#?]{#0}', hint: 'A root of any order' },
   { id: 'matrix', label: '[▭]', tex: '\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}', hint: 'A 2 × 2 matrix; use ▶ to move between the boxes' },
-  { id: 'e10', label: '×10ˣ', tex: '#0\\times10^{#?}', hint: 'Standard form: 3 × 10⁸' }
+  // The one key that makes a standard-form number, which is ONE number: 1 ÷ 2 ×10ˣ 3 is 1 ÷ 2000. It used to
+  // write \times10^{…}, exactly what the × key and then 10^ write, so the converter could not tell them
+  // apart and read 1 ÷ 2 × 1000 = 500. \mathord{\times} is the key's mark: MathLive keeps it as inserted
+  // through typing, moving, deleting and setValue, draws a tight ×10, and latexToMath reads it, with the 10
+  // and its power, as one number. #@ is the selection and nothing more: #0 leaves an empty box in front of
+  // the key when nothing is selected, and the first digit typed after pressing it went into that box.
+  { id: 'e10', label: '×10ˣ', tex: '#@\\mathord{\\times}10^{#?}', hint: 'Standard form, one number: 3, then this key, then 8 is 3 × 10⁸' }
 ]
 
 const COMPLEX: KeyDef[] = [
@@ -210,10 +219,11 @@ const COMPLEX: KeyDef[] = [
   {
     id: 'polar',
     label: 'r∠θ',
-    tex: '#0\\times e^{i\\times#?}',
+    tex: '#@\\times e^{i\\times#?}',
     // e^{iθ} wants radians whatever the switch says, and a ° inside the power is a unit the
     // engine cannot raise e to; in degrees the angle is turned into radians on the way in.
-    texDeg: '#0\\times e^{i\\times\\frac{#?\\times\\pi}{180}}',
+    // #@ and not #0, like n! and %: the size is typed first, and no box is left in front of it.
+    texDeg: '#@\\times e^{i\\times\\frac{#?\\times\\pi}{180}}',
     hint: 'Polar form: a size times e to the iθ, with θ in the angle unit shown beside the field'
   },
   { id: 'arg', label: 'arg', tex: op('arg'), hint: 'The argument: the angle of a complex number' },

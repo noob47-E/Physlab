@@ -12,7 +12,7 @@ export interface ErrorSentence {
 }
 
 /** The letters the calculator holds a value for: what the Variables drawer offers. */
-const OWN_LETTERS = /^[A-FMxy]$/
+export const OWN_LETTERS = /^[A-FMxy]$/
 
 /**
  * Whether the engine's words are worth showing under the sentence. "Undefined symbol k" tells a
@@ -26,8 +26,11 @@ export function errorSentence(raw: unknown): ErrorSentence {
   // The engine's words are kept underneath for a student who wants them, except the Bases
   // engine's two handheld-style messages, which say nothing the sentence does not.
   const detail = /^(Syntax|Math) ERROR$/.test(msg.trim()) || !readable(msg) ? undefined : msg.trim() || undefined
-  // The converter's own refusals are already sentences written for the student.
-  if (/^Choose \+ or −/.test(msg)) return { sentence: msg }
+  // The converter's own refusals, the integral's (calc/engine.ts integrate), the sum's and product's
+  // ("That sum has too many terms…", calc/engine.ts series) and the line that tries to store a letter
+  // ("Typing A = … does not store a value", calc/engine.ts refuseStoring) are already sentences written
+  // for the student; the generic fallback below would bury them as small print.
+  if (/^Choose \+ or −|^The area cannot be worked out|^That (sum|product) |^Typing .+ does not store a value\./.test(msg)) return { sentence: msg }
   if (/Empty/.test(msg)) return { sentence: 'Type something first.' }
   if (/No solution/i.test(msg)) return { sentence: 'No solution I can find near 0. Try giving x a value close to the answer first.', detail }
   // The Bases engine's one "Math ERROR" is a division by zero; everything else it refuses is syntax.
