@@ -11,7 +11,7 @@ import type { Computed, ObjId, SceneObject } from '../core/types'
 import { drawability, inXAlone, NO_REAL_X, plainParseError, solutionsInX, visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector, type DrawSpec, type NamedGraphs, type XComplex, type XSolved } from '../core/visualize'
 import { cas, useCasStatus } from '../math/cas'
 import { casWaitNote, followCasStart } from '../ui/casStatus'
-import { inferKind, isUnit, math, plainNumber, preprocess, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
+import { inferKind, isUnit, math, plainNumber, preprocess, sceneNames, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
 import { fmtLabel, fmtPrecise, morePrecise, superscriptPowers, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
@@ -82,7 +82,8 @@ function unknownSymbols(node: MathNode): string[] {
     if (child.type !== 'SymbolNode') return
     if (parent?.type === 'FunctionNode' && path === 'fn') return
     const name = (child as unknown as { name: string }).name
-    if (names.has(name) || KNOWN_SYMBOLS.has(name)) return
+    // A θ slider is in the scope as theta too (core/evaluate.ts publish, P-PARSE W2).
+    if (names.has(name) || Object.prototype.hasOwnProperty.call(scene().ev.scope, name) || KNOWN_SYMBOLS.has(name)) return
     const p = parent as (MathNode & { fn?: string; implicit?: boolean; args?: MathNode[] }) | null
     const afterNumber = p?.type === 'OperatorNode' && (p.fn === 'multiply' || p.fn === 'divide') && p.args?.some((a) => a.type === 'ConstantNode' || a.type === 'OperatorNode')
     const compoundUnit = p?.type === 'OperatorNode' && (p.fn === 'divide' || p.fn === 'pow') && isUnitName(name)
@@ -131,7 +132,7 @@ function resolveTimes(node: MathNode): MathNode {
   })
 }
 
-const parseNode = (src: string): Node => resolveTimes(math.parse(preprocess(src))) as Node
+const parseNode = (src: string): Node => resolveTimes(math.parse(preprocess(src, sceneNames()))) as Node
 
 /** A number in LaTeX at a fixed number of decimals, or in the student's own precision. */
 const texAt = (n: number, p: Precision): string => (typeof p === 'number' ? tex(n, p) : texPrecise(n, p))
@@ -301,8 +302,15 @@ function withoutQuotedText(line: string): string {
  */
 function relationsIn(line: string): Relation[] {
   const unquoted = withoutQuotedText(line)
+  // A vector literal is no relation. One written against a name or a bracket is a vector too when the
+  // line ends or an operand ends after its > (k<1, 2>, as math/expr.ts reads it: AFTER_VECTOR); otherwise
+  // that < and > compare, as in x < 3, x > 1. B = k<1, 2> was "several equations".
   const masked = unquoted.replace(/[⟨<]([^<>=⟨⟩]*,[^<>=⟨⟩]*)[⟩>]/g, (lit: string, _inner: string, at: number) =>
-    lit.startsWith('<') && /[A-Za-zͰ-Ͽ_)\]'′″‴⁗]$/.test(unquoted.slice(0, at).trimEnd()) ? lit : ' '.repeat(lit.length)
+    lit.startsWith('<') &&
+    /[A-Za-zͰ-Ͽ_)\]'′″‴⁗]$/.test(unquoted.slice(0, at).trimEnd()) &&
+    !/^\s*(?:$|[,;)\]}*/÷×·⋅^=?:])/.test(unquoted.slice(at + lit.length))
+      ? lit
+      : ' '.repeat(lit.length)
   )
   return [...masked.matchAll(/<=|>=|=<|=>|==|!=|≤|≥|≠|<|>|=/g)].map((m) => ({ op: SPELT[m[0]] ?? (m[0] as Relation['op']), at: m.index ?? 0, len: m[0].length }))
 }
@@ -622,7 +630,7 @@ function tryGraph(input: string): boolean {
 function numberArg(text: string): number {
   let v: unknown
   try {
-    v = math.evaluate(preprocess(text), { ...scene().ev.scope })
+    v = math.evaluate(preprocess(text, sceneNames()), { ...scene().ev.scope })
   } catch {
     throw new Error(`"${text.trim()}" is not a number.`)
   }
@@ -643,7 +651,7 @@ function graphIfFunctionOfX(input: string, rhs: string, name?: string) {
 
 function usesSymbol(src: string, sym: string): boolean {
   try {
-    return symbolsOf(math.parse(preprocess(src.replace(/(<=|>=|<|>|=)/g, ',')))).includes(sym)
+    return symbolsOf(math.parse(preprocess(src.replace(/(<=|>=|<|>|=)/g, ','), sceneNames()))).includes(sym)
   } catch {
     return new RegExp(`(^|[^A-Za-z_])${sym}([^A-Za-z_(]|$)`).test(src)
   }
@@ -1476,10 +1484,10 @@ async function tryCas(input: string): Promise<boolean> {
     case 'solve':
     case 'nsolve': {
       casOp = 'solve'
-      // solve({x + y = 3, x - y = 1}, {x, y}): splitArgs does not count braces, so the pieces
-      // arrive as "{x + y = 3", "x - y = 1}", "{x", "y}", and "{x" was sent as an equation with
-      // no letters at all. The list braces are taken off each piece before it is sorted.
-      const items = args.map((a) => a.replace(/^\s*\{/, '').replace(/\}\s*$/, '').trim()).filter(Boolean)
+      // solve({x + y = 3, x - y = 1}, {x, y}): splitArgs keeps a braced list whole, so each argument
+      // has its braces taken off and is split at its own commas before the pieces are sorted
+      // (with the braces left on, "{x" was once sent as an equation with no letters at all).
+      const items = args.flatMap((a) => splitArgs(a.replace(/^\s*\{/, '').replace(/\}\s*$/, ''))).map((a) => a.trim()).filter(Boolean)
       const isLetter = (a: string): boolean => /^[a-z]$/.test(a)
       payload = { eqs: items.filter((a) => a.includes('=') || !isLetter(a)), vars: items.filter(isLetter) }
       break

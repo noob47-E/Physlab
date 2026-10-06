@@ -10,7 +10,7 @@ import { QUALITY, qualityNow } from './renderer'
 import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
 import { solutionsInX } from '../core/visualize'
-import { compileScalar, math, preprocess, symbolsOf } from '../math/expr'
+import { compileScalar, math, preprocess, sceneNames, symbolsOf } from '../math/expr'
 import { betweenMesh, carriedSolutions, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, surfaceGeometry, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
 import { themeColor, useTheme, useThemed, type Theme } from '../app/theme'
 import type { V3 } from '../math/vec'
@@ -51,37 +51,40 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const decimals = useScene((s) => s.settings.decimals)
   const precisionMode = useScene((s) => s.settings.precisionMode)
 
+  // What the scene's names stand for where a bracket is written against them (math/expr.ts preprocess): a
+  // slider p in p(1 + x) multiplies, a graph f in f(x + 1) is called. evaluate.ts records them on every evaluation.
+  const names = sceneNames()
   const fns = useMemo(() => {
     try {
       switch (obj.kind) {
         case 'explicit':
         case 'area':
-          return { f: compileScalar(obj.exprs[0], ['x'], scopeNow) }
+          return { f: compileScalar(obj.exprs[0], ['x'], scopeNow, names) }
         case 'implicit':
         case 'inequality':
           // An equation in x alone (x² = 4, (x − 1)² = 0) has no y to plot against: it is a vertical
           // line at each solution, found from the roots of the formula (see `data`). Decided here,
           // once per formula, not on every frame. An inequality keeps its boundary as it was.
-          return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow), vertical: obj.kind === 'implicit' && !symbolsOf(math.parse(preprocess(obj.exprs[0]))).includes('y') }
+          return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow, names), vertical: obj.kind === 'implicit' && !symbolsOf(math.parse(preprocess(obj.exprs[0], names))).includes('y') }
         case 'surface':
-          return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow) }
+          return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow, names) }
         case 'polar':
-          return { f: compileScalar(obj.exprs[0], ['theta', 't'], scopeNow) }
+          return { f: compileScalar(obj.exprs[0], ['theta', 't'], scopeNow, names) }
         case 'parametric':
-          return { fx: compileScalar(obj.exprs[0], ['t'], scopeNow), fy: compileScalar(obj.exprs[1], ['t'], scopeNow) }
+          return { fx: compileScalar(obj.exprs[0], ['t'], scopeNow, names), fy: compileScalar(obj.exprs[1], ['t'], scopeNow, names) }
         case 'piecewise':
           // The formulas are read from exprs, which mirror the pieces one to one: renaming a slider
           // rewrites every graph's exprs, and a piece compiled from its own copy would go on
           // naming a slider that no longer exists and vanish.
-          return { pieces: (obj.pieces ?? []).map((p, i) => ({ f: compileScalar(obj.exprs[i] ?? p.expr, ['x'], scopeNow), from: p.from, to: p.to })) }
+          return { pieces: (obj.pieces ?? []).map((p, i) => ({ f: compileScalar(obj.exprs[i] ?? p.expr, ['x'], scopeNow, names), from: p.from, to: p.to })) }
         case 'between':
-          return { f: compileScalar(obj.exprs[0], ['x'], scopeNow), g: compileScalar(obj.exprs[1], ['x'], scopeNow) }
+          return { f: compileScalar(obj.exprs[0], ['x'], scopeNow, names), g: compileScalar(obj.exprs[1], ['x'], scopeNow, names) }
       }
     } catch (e) {
       return { error: String(e) }
     }
     return {}
-  }, [obj.kind, obj.exprs, obj.pieces])
+  }, [obj.kind, obj.exprs, obj.pieces, names])
 
   const is2DBounds = !is3D
   const b = is2DBounds ? view : { xMin: -10, xMax: 10, yMin: -10, yMax: 10, viewH: 20, wpp: 0.02, widthPx: 1000 }

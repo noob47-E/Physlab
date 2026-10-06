@@ -758,10 +758,11 @@ describe('a teacher\'s file', () => {
 
 describe('a letter before a bracket', () => {
   it('is a product for the part\'s own letters and the question\'s variables, and a function otherwise', () => {
-    expect(lettersBeforeBrackets('x(x+1)', ['x'])).toBe('x * (x + 1)')
+    // One letter against a bracket is already a product in preprocess (P-PARSE R1): handed back as typed.
+    expect(lettersBeforeBrackets('x(x+1)', ['x'])).toBe('x(x+1)')
     expect(lettersBeforeBrackets('sin(x)', ['x'])).toBe('sin(x)')
     expect(lettersBeforeBrackets('x^2 + x', ['x'])).toBe('x^2 + x')
-    expect(lettersBeforeBrackets('t(1 + t(2))', ['t'])).toBe('t * (1 + t * (2))')
+    expect(lettersBeforeBrackets('t(1 + t(2))', ['t'])).toBe('t(1 + t(2))')
   })
 
   it('marks the thrown ball\'s factorised height t(u − 4.9t) right on every seed', () => {

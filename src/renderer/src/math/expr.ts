@@ -105,6 +105,12 @@ type AnyVal = unknown
 export const isUnit = (x: AnyVal): x is { toNumber: (u: string) => number; formatUnits: () => string } =>
   typeof x === 'object' && x !== null && typeof (x as { toNumber?: unknown }).toNumber === 'function' && typeof (x as { formatUnits?: unknown }).formatUnits === 'function'
 
+/** A mathjs complex number. */
+const isComplex = (x: AnyVal): boolean => typeof x === 'object' && x !== null && math.typeOf(x) === 'Complex'
+
+/** A number, or a quantity's value in SI base units (10 cm is 0.1): two quantities of one kind compare. */
+const siNumber = (x: AnyVal): number => (isUnit(x) ? Number((x as unknown as { value: number }).value) : Number(x))
+
 /** Angle argument → radians (numbers follow the angle mode, units convert). */
 export function toRadians(x: AnyVal): number {
   if (isUnit(x)) return x.toNumber('rad')
@@ -138,24 +144,60 @@ for (const name of ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'asin', 'acos', 'a
   origTrig[name] = (math as unknown as Record<string, (v: AnyVal) => AnyVal>)[name]
 }
 const origLog = (math as unknown as Record<string, (v: AnyVal) => AnyVal>).log
+const origAdd = (math as unknown as Record<string, (a: AnyVal, b: AnyVal) => AnyVal>).add
+const origSubtract = (math as unknown as Record<string, (a: AnyVal, b: AnyVal) => AnyVal>).subtract
+
+/** A vector as typed maths makes one: a list of 2 or 3 entries that are not lists themselves (a matrix row is not). */
+function isVectorLike(x: AnyVal): boolean {
+  const arr = Array.isArray(x) ? x : x !== null && typeof x === 'object' && typeof (x as { toArray?: unknown }).toArray === 'function' ? (x as { toArray: () => unknown }).toArray() : null
+  return Array.isArray(arr) && arr.length >= 2 && arr.length <= 3 && arr.every((v) => !Array.isArray(v))
+}
+const isScalarLike = (x: AnyVal): boolean => typeof x === 'number' || isUnit(x) || isComplex(x)
+
+/**
+ * mathjs adds a number to every component of a list, so 3 + <4, 0> was <7, 3>: an answer no course gives (R4.9).
+ * A number and a vector are refused in one sentence; a matrix with a number (the Calculator's MatA + 2) and
+ * everything else go to mathjs as before.
+ */
+function guardNumberAndVector(a: AnyVal, b: AnyVal): void {
+  if ((isScalarLike(a) && isVectorLike(b)) || (isVectorLike(a) && isScalarLike(b))) {
+    throw new Error('A number and a vector cannot be added or taken away. Add a vector to a vector, e.g. <3, 0> + <4, 0>, or a size to a size, e.g. 3 + |<4, 0>|.')
+  }
+}
 
 math.import(
   {
+    // mathjs's add takes any number of terms; each pair is checked on the way.
+    add: (...terms: AnyVal[]) =>
+      terms.reduce((sum, term) => {
+        guardNumberAndVector(sum, term)
+        return origAdd(sum, term)
+      }),
+    subtract: (a: AnyVal, b: AnyVal) => {
+      guardNumberAndVector(a, b)
+      return origSubtract(a, b)
+    },
     sin: (x: AnyVal) => (typeof x === 'number' || isUnit(x) ? Math.sin(toRadians(x)) : origTrig.sin(x)),
     cos: (x: AnyVal) => (typeof x === 'number' || isUnit(x) ? Math.cos(toRadians(x)) : origTrig.cos(x)),
     tan: (x: AnyVal) => (typeof x === 'number' || isUnit(x) ? Math.tan(toRadians(x)) : origTrig.tan(x)),
-    sec: (x: AnyVal) => 1 / Math.cos(toRadians(x)),
-    csc: (x: AnyVal) => 1 / Math.sin(toRadians(x)),
-    cot: (x: AnyVal) => 1 / Math.tan(toRadians(x)),
+    // A complex number or a matrix goes to mathjs's own, as sin, cos and tan do: sec(i) was 1/cos(NaN).
+    sec: (x: AnyVal) => (typeof x === 'number' || isUnit(x) ? 1 / Math.cos(toRadians(x)) : origTrig.sec(x)),
+    csc: (x: AnyVal) => (typeof x === 'number' || isUnit(x) ? 1 / Math.sin(toRadians(x)) : origTrig.csc(x)),
+    cot: (x: AnyVal) => (typeof x === 'number' || isUnit(x) ? 1 / Math.tan(toRadians(x)) : origTrig.cot(x)),
     asin: (x: AnyVal) => (typeof x === 'number' && Math.abs(x) <= 1 ? fromRadians(Math.asin(x)) : origTrig.asin(x)),
     acos: (x: AnyVal) => (typeof x === 'number' && Math.abs(x) <= 1 ? fromRadians(Math.acos(x)) : origTrig.acos(x)),
     atan: (x: AnyVal) => (typeof x === 'number' ? fromRadians(Math.atan(x)) : origTrig.atan(x)),
-    atan2: (y: AnyVal, x: AnyVal) => fromRadians(Math.atan2(Number(y), Number(x))),
-    // Casio convention: log(x) is base 10, log(a, b) is log base a of b, ln is natural.
+    // Two lengths (or any two quantities of one kind) give the angle of (x, y) as two numbers do: each is
+    // taken in SI, so atan2(10 m, 5 m) is 63.4°, where Number() of a unit was NaN.
+    atan2: (y: AnyVal, x: AnyVal) => fromRadians(Math.atan2(siNumber(y), siNumber(x))),
+    // The handheld calculator convention: log(x) is base 10, log(a, b) is log base a of b, ln is natural.
     ln: (x: AnyVal) => (typeof x === 'number' && x > 0 ? Math.log(x) : origLog(x)),
     log: (a: AnyVal, b?: AnyVal) => {
       if (b === undefined) return typeof a === 'number' && a > 0 ? Math.log10(a) : math.divide(origLog(a) as never, Math.LN10)
-      return Math.log(Number(b)) / Math.log(Number(a))
+      // A complex number (or a base or argument of 0 or less) is worked as ln b / ln a in complex numbers: log(2, i)
+      // was ln(NaN) / ln 2.
+      if (typeof a === 'number' && typeof b === 'number' && a > 0 && b > 0) return Math.log(b) / Math.log(a)
+      return math.divide(origLog(b) as never, origLog(a) as never)
     },
     // vector & geometry helpers
     pt: (...c: AnyVal[]) => [plainNumber(c[0]), plainNumber(c[1]), c.length > 2 ? plainNumber(c[2]) : 0],
@@ -186,7 +228,8 @@ math.import(
     // ordinary multiplication otherwise. A textbook writes 2·3 and 5·√2 for products and 2·A for a
     // scaled vector; all three were refused with "Expected a vector or point".
     dot: (a: AnyVal, b: AnyVal) => {
-      const scalar = (v: AnyVal) => typeof v === 'number' || isUnit(v)
+      // A complex number is a scalar too: √−4 · √−9 is −6, as with ×.
+      const scalar = (v: AnyVal) => typeof v === 'number' || isUnit(v) || isComplex(v)
       const list = (v: AnyVal) => Array.isArray(v) || (typeof v === 'object' && v !== null && typeof (v as { toArray?: unknown }).toArray === 'function')
       if (scalar(a) && scalar(b)) return math.multiply(a as never, b as never)
       if ((scalar(a) && list(b)) || (list(a) && scalar(b))) {
@@ -196,7 +239,8 @@ math.import(
       if (list(a) && list(b)) return vdot(toV3(a), toV3(b))
       throw new Error('Expected a number or a vector on each side of ·')
     },
-    mag: (a: AnyVal) => (typeof a === 'number' ? Math.abs(a) : isUnit(a) ? math.abs(a as never) : len(toV3(a))),
+    // |3 + 4i| is the modulus 5: a complex number was read as a vector and refused.
+    mag: (a: AnyVal) => (typeof a === 'number' ? Math.abs(a) : isUnit(a) || isComplex(a) ? math.abs(a as never) : len(toV3(a))),
     unitVec: (a: AnyVal) => normalize(toV3(a)),
     angleBetween: (a: AnyVal, b: AnyVal) => fromRadians(angleBetween(toV3(a), toV3(b))),
     proj: (b: AnyVal, a: AnyVal) => project(toV3(b), toV3(a)),
@@ -255,15 +299,151 @@ function matchBackward(s: string, close: number): number {
   return -1
 }
 
-function hasTopLevelComma(s: string): boolean {
-  let depth = 0
-  for (const ch of s) {
-    if (ch === '(' || ch === '[') depth++
-    else if (ch === ')' || ch === ']') depth--
-    else if (ch === ',' && depth === 0) return true
-  }
-  return false
+// ---------------------------------------------------------------------------
+// <…> vectors, and the commas between arguments
+// ---------------------------------------------------------------------------
+// On paper < is two signs: the bracket that opens a vector <3, 4> and "less than". A reader tells
+// them apart by where the sign stands, as a minus is told from a negative sign:
+// - A < that starts an operand — at the start, or after an opening bracket or bar, a comma or an
+//   operator — opens a vector: A = <3, 4>, cross(A, <1, 0>), 2 × <1, 2>, |<3, 4>|.
+// - A < with an operand before it (a name, a number, a closing bracket or bar, a vector) opens a
+//   vector that the operand multiplies, as 2x is 2 × x — 2<1, 2> is 2 × <1, 2> — but only when
+//   what follows its > cannot be the right-hand side of a comparison: the end, a closing bracket,
+//   a comma, an operator that cannot start an operand (* / × · ^ =), a sign before another vector
+//   (2<1, 2> + <3, 4>) or the bar that closes a |…| opened before the vector (|2<1, 2>|).
+//   Otherwise it is "less than": x < 3, x > 1 and 0 < x, y > 1 are two comparisons each, as the >
+//   of a comparison always has an operand after it.
+// - <= never opens a vector and >= never closes one; ⟨ never compares.
+// - A vector closes at the first > or ⟩ at its own bracket level, so brackets inside it are fine
+//   (<cos(t), sin(t)>, <f(1, 2), 3>), and it has a comma at that level (<3> is left as typed).
+// preprocess, splitArgs and hasTopLevelComma all read vectors through angleVectors, so they cannot
+// disagree. Before, splitArgs counted only ( and [ and cut cross(A, <1, 0>) into A, <1 and 0>
+// ("Value expected"), while preprocess took any <…> holding a comma for a vector, so the two
+// comparisons x < 3, x > 1 became x vec( 3, x ) 1.
+
+/**
+ * What can stand just before an operand: an opening bracket, a comma, a statement's end or an
+ * operator. Anything else — a letter, a digit, a closing bracket, a postfix sign such as ! % ° or a
+ * superscript — ends an operand. A bar or a > is told by what it did (angleVectors).
+ */
+const BEFORE_OPERAND = '([{⟨,;\n=<>≤≥≠+-−–*/÷×·⋅^?:'
+
+/** What can follow a vector but never begins the right-hand side of a comparison. */
+const AFTER_VECTOR = ',;\n)]}*/÷×·⋅^=?:'
+
+/** One <…> or ⟨…⟩ vector: where it closes, and whether an operand written before it multiplies it. */
+interface AngleVector {
+  close: number
+  scaled: boolean
 }
+
+/** The <…> and ⟨…⟩ vectors in `s`, by the rule above, keyed by where each one opens. */
+function angleVectors(s: string): Map<number, AngleVector> {
+  const vectors = new Map<number, AngleVector>()
+  // The > or ⟩ of each vector found so far, and each bar that closed a |…|: both end an operand.
+  const closers = new Set<number>()
+  const closingBars = new Set<number>()
+  // What is still open, innermost last: a ( [ { or an opening bar, or the < or ⟨ of a
+  // vector-to-be with whether a comma has come at its own level and an operand stands before it.
+  const open: { at: number; comma: boolean; scaled: boolean }[] = []
+  const isAngle = (k: number): boolean => s[open[k].at] === '<' || s[open[k].at] === '⟨'
+  /** The innermost bracket or bar still open at or below `k`, past any vector-to-be; −1 if none. */
+  const bracketBelow = (k: number): number => {
+    while (k >= 0 && isAngle(k)) k--
+    return k
+  }
+  const operandBefore = (i: number): boolean => {
+    const j = back(s, i - 1)
+    if (j < 0) return false
+    if (s[j] === '|') return closingBars.has(j)
+    if (s[j] === '>' || s[j] === '⟩') return closers.has(j)
+    return !BEFORE_OPERAND.includes(s[j])
+  }
+  /** Whether what follows the > at `i` lets the < at open[top], written after an operand, be a vector. */
+  const endsScaledVector = (i: number, top: number): boolean => {
+    const n = ahead(s, i + 1)
+    if (n >= s.length || AFTER_VECTOR.includes(s[n])) return true
+    // 2<1, 2> + <3, 4>: a sign before another vector, where x > -1 has a number after its sign.
+    if ('+-−–'.includes(s[n])) return '<⟨'.includes(s[ahead(s, n + 1)] ?? ' ')
+    // |2<1, 2>|: the bar closes a |…| opened before the vector, where x > |y| opens one.
+    const k = bracketBelow(top - 1)
+    return s[n] === '|' && k >= 0 && s[open[k].at] === '|'
+  }
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    const top = open.length - 1
+    if (c === '(' || c === '[' || c === '{') open.push({ at: i, comma: false, scaled: false })
+    else if (c === ')' || c === ']' || c === '}') {
+      // It closes the innermost bracket. A < or a bar still open inside it met no partner there.
+      let k = top
+      while (k >= 0 && (isAngle(k) || s[open[k].at] === '|')) k--
+      open.length = Math.max(k, 0)
+    } else if (c === '|') {
+      // A bar closes the innermost |…| when an operand stands before it (|x|, ||x| − 1|), and opens
+      // one otherwise — after an operand too when none is open, as 2|<3, 4>| is 2 × |<3, 4>|.
+      const k = bracketBelow(top)
+      if (k >= 0 && s[open[k].at] === '|' && operandBefore(i)) {
+        closingBars.add(i)
+        open.length = k
+      } else open.push({ at: i, comma: false, scaled: false })
+    } else if (c === ',') {
+      if (top >= 0 && isAngle(top)) open[top].comma = true
+    } else if (c === '⟨' || (c === '<' && s[i + 1] !== '=')) open.push({ at: i, comma: false, scaled: operandBefore(i) })
+    else if (((c === '>' && s[i + 1] !== '=') || c === '⟩') && top >= 0 && isAngle(top)) {
+      const v = open[top]
+      if (v.comma && (!v.scaled || s[v.at] === '⟨' || endsScaledVector(i, top))) {
+        vectors.set(v.at, { close: i, scaled: v.scaled })
+        closers.add(i)
+      }
+      open.length = top
+    }
+  }
+  return vectors
+}
+
+/**
+ * <3, 4> and ⟨3, 4⟩ → vec(3, 4); a < or > that compares is left as it is. A vector written against
+ * an operand gets the × it stands for, 2<1, 2> → 2×vec(1, 2), so the × reader takes the operand as
+ * it takes the 2 of 2 × <1, 2>: a bare vec( would have joined a name before it into one, xvec(…).
+ */
+function vectorCalls(s: string): string {
+  const vectors = angleVectors(s)
+  if (vectors.size === 0) return s
+  const closes = new Set([...vectors.values()].map((v) => v.close))
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    const v = vectors.get(i)
+    out += v ? (v.scaled ? '×vec(' : 'vec(') : closes.has(i) ? ')' : s[i]
+  }
+  return out
+}
+
+/**
+ * Where the commas between arguments are: outside every bracket — { } as well as ( ) and [ ], so a
+ * braced list such as solve({x + y = 3, x - y = 1}, {x, y}) keeps its commas, where it was cut into
+ * four pieces — and outside every <…> vector.
+ */
+function topLevelCommas(s: string): number[] {
+  const vectors = angleVectors(s)
+  const commas: number[] = []
+  let depth = 0
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    const vector = vectors.get(i)
+    if (vector) i = vector.close
+    else if (c === '(' || c === '[' || c === '{') depth++
+    else if (c === ')' || c === ']' || c === '}') depth--
+    else if (c === ',' && depth === 0) commas.push(i)
+  }
+  return commas
+}
+
+function hasTopLevelComma(s: string): boolean {
+  return topLevelCommas(s).length > 0
+}
+
+/** A number literal, e-notation included, that ends the text and is no name's tail (the 2 of 2, not of x2). */
+const NUMBER_AT_END = /(?:^|[^A-Za-z0-9_Ͱ-Ͽ'′″‴⁗.])(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/
 
 /** `(3, 4)` → `pt(3, 4)` when the parentheses are not a function call. */
 function tuplesToPoints(s: string): string {
@@ -281,7 +461,11 @@ function tuplesToPoints(s: string): string {
         break
       }
       const inner = tuplesToPoints(s.slice(i + 1, close))
-      const isCall = prev !== '' && (IDENT.test(prev) || prev === ')' || prev === ']')
+      // A number written against a pair is no function's name: 2(3, 4) is 2 × (3, 4), the point
+      // (6, 8), as 2 × (3, 4) already was — it went to mathjs as a call of 2 and was refused with
+      // "Parenthesis ) expected". The digit that ends a name (f2, x2, log2) still makes a call.
+      const afterNumber = /\d/.test(prev) && NUMBER_AT_END.test(out.slice(0, j + 1))
+      const isCall = prev !== '' && ((IDENT.test(prev) && !afterNumber) || prev === ')' || prev === ']')
       out += !isCall && hasTopLevelComma(inner) ? `pt(${inner})` : `(${inner})`
       i = close + 1
     } else {
@@ -485,6 +669,148 @@ function percentToDivision(s: string): string {
   return s
 }
 
+// ---------------------------------------------------------------------------
+// A name written against a bracket
+// ---------------------------------------------------------------------------
+// On paper x(x + 1) is x times (x + 1), and f(2) is f at 2. mathjs reads every name before a
+// bracket as a call, so x(x + 1) went on as a call to a function called x: a graph of y = x(x + 1)
+// said "Graph created" and drew nothing, the bar answered a(a + 1) with "'a' is not a function"
+// and the Calculator refused A(B + 1). A name that stands for a value is now put in brackets of its
+// own, (x)(x + 1), which mathjs reads as the product it already made of (x)(x + 1) and 2(x + 1): a
+// power or a ! on the bracket is still worked first (x(x + 1)² is x · 9), and the product is one
+// factor under a division (1/x(x + 1) is 1/6 at x = 2, as 1/x y is). Every other name is called.
+// What a name stands for is decided, in turn, by
+// 1. mathjs: a function it knows (sin, sqrt, ln, log, abs, gamma, pt, mag …) is called;
+// 2. the names the caller passes (SceneNames): a function — a graph, f(x) = x², then f(2) — is
+//    called, and a value — a slider, a point, a formula's own variable — multiplies (p(1 + r) for a
+//    slider p, mass(x + 1) for a slider mass, A′(2) for a point A′);
+// 3. the name itself: a number mathjs knows by name (e, pi, tau) and θ multiply, and so does one
+//    Latin letter with any digits or _subscript after it (x, t, k1, v_0) — except f, g, h, the
+//    letters a function is named with, and p, q, which PhysLab names its graphs after too (f1 …).
+//    Anything else is called as written: a longer name (ab, sinn, log_2) is a function's name on
+//    paper, as sin and sinh are; a Greek letter or a primed name (ω, Φ, f′) may well be one; and
+//    phi(1.96) is the normal area Φ(1.96) on the bar, never 1.618 × 1.96.
+// Whatever the name, the left side of a definition (f(x) = …, g(t) = …) and brackets holding a
+// list (A(1, 2), f(x, y)) are left as written: mathjs keeps the one as a definition, and a list is
+// no factor.
+// Names are only ever passed, never picked up: a line read with none — in the Calculator, a Problem
+// Sets answer, Lab Data, the vector calculator — reads the same whatever the scene holds. A route
+// that reads the scene's own lines passes sceneNames(), which core/evaluate.ts records each time it
+// reads the scene; compileScalar passes its own variables.
+
+/** What names stand for, as a route that knows them passes them to preprocess. */
+export interface SceneNames {
+  /** Sliders, points, vectors, lengths, a formula's own variables: a bracket written against one multiplies it. */
+  readonly values: ReadonlySet<string>
+  /** Graphs (f(x) = …): a bracket written against one calls it. */
+  readonly functions: ReadonlySet<string>
+}
+
+const NO_NAMES: SceneNames = { values: new Set(), functions: new Set() }
+let lastSceneNames: SceneNames = NO_NAMES
+
+const sameNames = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...a].every((n) => b.has(n))
+
+/**
+ * Records what the scene's names stand for — its graphs and its values — for the routes that read
+ * the scene's own lines to pass to preprocess (sceneNames). core/evaluate.ts calls it at the start of
+ * every evaluation, so File New, Open, undo and redo each leave exactly the new scene's names.
+ * Nothing reads them unasked. True when they changed, for a cache of lines read with them.
+ */
+export function setSceneNames(names: { values: Iterable<string>; functions: Iterable<string> }): boolean {
+  const values = new Set(names.values)
+  const functions = new Set(names.functions)
+  if (sameNames(values, lastSceneNames.values) && sameNames(functions, lastSceneNames.functions)) return false
+  lastSceneNames = { values, functions }
+  return true
+}
+
+/** The scene's names as its last evaluation recorded them (setSceneNames): for a route that reads the scene's own lines. */
+export const sceneNames = (): SceneNames => lastSceneNames
+
+/**
+ * The number mathjs knows by this name — pi, e, tau, phi, Infinity … — or undefined. A formula
+ * reads one of these where the scene has no value of that name, as the command bar does, and a
+ * check of what a graph can read must ask the same question (compileScalar, below).
+ */
+export function namedConstant(name: string): number | undefined {
+  const v = (math as unknown as Record<string, unknown>)[name]
+  return typeof v === 'number' ? v : undefined
+}
+
+/** One Latin letter with any digits or _subscript after it: x, t, k1, v_0, F_net. */
+const ONE_LETTER = /^[A-Za-z](?:\d+|_[A-Za-z0-9_]+)?$/
+/** The letters a function is named with, which PhysLab names its graphs after (core/naming.ts): f, g, h, p, q, f1 … */
+const FUNCTION_LETTER = /^[fghpq]\d*$/
+/** One name and nothing else: the parameter of a definition such as f(x) = … */
+const LONE_NAME = /^\s*[A-Za-z_Ͱ-Ͽ][A-Za-z0-9_Ͱ-Ͽ′″‴⁗]*\s*$/
+
+/** Whether a bracket written against this name multiplies it (1–3 above) rather than calling it. */
+function multipliesBracket(name: string, names: SceneNames): boolean {
+  if (typeof (math as unknown as Record<string, unknown>)[name] === 'function') return false
+  if (names.functions.has(name)) return false
+  if (names.values.has(name)) return true
+  if (name === 'phi') return false
+  if (name === 'theta' || namedConstant(name) !== undefined) return true
+  return ONE_LETTER.test(name) && !FUNCTION_LETTER.test(name)
+}
+
+/** Whether the bracket opening at `open`, written against `name`, multiplies it. */
+function bracketMultiplies(s: string, name: string, open: number, statementStart: boolean, names: SceneNames): boolean {
+  const close = matchForward(s, open)
+  // An unclosed bracket is left for mathjs to point out.
+  if (close < 0) return false
+  const inner = s.slice(open + 1, close)
+  if (!inner.trim() || hasTopLevelComma(inner)) return false
+  const after = ahead(s, close + 1)
+  if (statementStart && LONE_NAME.test(inner) && s[after] === '=' && s[after + 1] !== '=') return false
+  return multipliesBracket(name, names)
+}
+
+/**
+ * Puts a name that stands for a value in brackets of its own where a bracket is written against
+ * it: x(x + 1) → (x)(x + 1), 2a(b + c) → 2(a)(b + c). Names and numbers are taken as mathjs takes
+ * them — with its own test of a name's letters, primes and _ included — so 1e3(2) stays a number
+ * times a bracket and x2(3) is the name x2.
+ */
+function bracketProducts(s: string, names: SceneNames): string {
+  const isAlpha = (math.parse as unknown as { isAlpha: (c: string, prev: string, next: string) => boolean }).isAlpha
+  const letterAt = (i: number): boolean => isAlpha(s[i], s[i - 1] ?? '', s[i + 1] ?? '')
+  let out = ''
+  let i = 0
+  // Nothing but spaces since the statement began: where a definition's name stands.
+  let statementStart = true
+  while (i < s.length) {
+    const c = s[i]
+    if (/\d/.test(c) || (c === '.' && /\d/.test(s[i + 1] ?? ''))) {
+      NUMBER.lastIndex = i
+      NUMBER.exec(s)
+      const end = Math.max(NUMBER.lastIndex, i + 1)
+      out += s.slice(i, end)
+      i = end
+      statementStart = false
+      continue
+    }
+    if (letterAt(i)) {
+      let j = i + 1
+      while (j < s.length && (letterAt(j) || /\d/.test(s[j]))) j++
+      const name = s.slice(i, j)
+      const open = ahead(s, j)
+      // A name after a point is a property (a.b(c)), never a factor.
+      const product = s[open] === '(' && s[i - 1] !== '.' && bracketMultiplies(s, name, open, statementStart, names)
+      out += product ? `(${name})` : name
+      i = j
+      statementStart = false
+      continue
+    }
+    if (c === ';' || c === '\n') statementStart = true
+    else if (!SPACE.test(c)) statementStart = false
+    out += c
+    i++
+  }
+  return out
+}
+
 const SUPERSCRIPT: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '⁺': '+' }
 const plainDigits = (t: string): string => [...t].map((c) => SUPERSCRIPT[c] ?? c).join('')
 
@@ -505,15 +831,91 @@ function x10Literal(whole: string, mantissa: string, sign: string | undefined, e
   return `${m}e${sup !== undefined ? plainDigits(sup) : `${sign ?? bracketSign}${exp ?? bracketExp}`}`
 }
 
-export function preprocess(src: string): string {
+/**
+ * The name a formula reads for a scene object's name: preprocess spells θ out as theta, π as pi and μ as u,
+ * so a slider named θ must also be published as theta for 2θ to find it (W2; core/evaluate.ts publish).
+ */
+export const speltName = (name: string): string => name.replace(/[πθµμ]/g, (c) => (c === 'π' ? 'pi' : c === 'θ' ? 'theta' : 'u'))
+
+/** The functions a calculator writes with a raised −1 for their inverse: sin⁻¹ is asin. */
+const INVERTIBLE = 'sinh|cosh|tanh|sin|cos|tan|sec|csc|cot'
+
+/**
+ * A superscript on a function's name, as a calculator and a textbook write it: sin⁻¹(0.5) is the inverse
+ * sine, and sin²(30) is the sine squared, (sin(30))². Read as powers, sin⁻¹(0.5) was sin to the −1
+ * times 0.5 and sin²(30) sin to the 2 times 30 — both refused. A superscript on a number or a bracket
+ * stays a power (3², (sin 30)²).
+ */
+function trigSuperscripts(s: string): string {
+  s = s.replace(new RegExp(`(?<![A-Za-z_])(${INVERTIBLE})⁻¹(?=\\s*\\()`, 'g'), 'a$1')
+  const raised = new RegExp(`(?<![A-Za-z_])(${INVERTIBLE}|ln|log)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)(?=\\s*\\()`, 'g')
+  let out = ''
+  let from = 0
+  for (let m = raised.exec(s); m; m = raised.exec(s)) {
+    const open = s.indexOf('(', m.index + m[0].length)
+    const close = matchForward(s, open)
+    if (close < 0) continue
+    out += `${s.slice(from, m.index)}(${m[1]}${s.slice(open, close + 1)})^${plainDigits(m[2])}`
+    from = close + 1
+    raised.lastIndex = close + 1
+  }
+  return out + s.slice(from)
+}
+
+/**
+ * |…| as mag(…), with the bars nested the way they are written: ||x| − 1| and |x − |y||. A bar opens at
+ * the start, after an operator, a bracket, a comma or another opening bar, and closes after a value; the
+ * one-level reading took ||x| − 1| as |·| beside x and refused it. Bars that do not pair up are left as
+ * typed, for mathjs to point out.
+ */
+function magnitudeBars(s: string): string {
+  let out = ''
+  let open = 0
+  for (const c of s) {
+    if (c !== '|') {
+      out += c
+      continue
+    }
+    const before = out.trimEnd().slice(-1)
+    const opens = open === 0 || before === '' || /[([{,+\-*/^=<>!:;×·⋅÷%]/.test(before)
+    if (opens) {
+      out += 'mag('
+      open++
+    } else {
+      out += ')'
+      open--
+    }
+  }
+  return open === 0 ? out : s
+}
+
+/**
+ * Typed maths → mathjs syntax. `names` says what names stand for where a bracket is written
+ * against them (a graph f is called, a slider p multiplies): only a route that knows them passes
+ * them — the scene's own lines pass sceneNames() — and a line read without them reads the same
+ * whatever any scene holds.
+ */
+export function preprocess(src: string, names: SceneNames = NO_NAMES): string {
   let s = src
+    // Every space is an ordinary space: PhysLab writes no-break spaces round × (math/format.ts), and a paste may
+    // bring a narrow or thin one, which the × and · readers took for part of an operand (2 × 3 refused).
+    .replace(/[\u00a0\u2007\u2009\u200a\u202f]/g, ' ')
     .replace(/[−–]/g, '-')
     .replace(/÷/g, '/')
-    .replace(/π/g, 'pi')
-    .replace(/θ/g, 'theta')
+    // π and θ are one letter each: written against another letter or a number they multiply it (πr², 2πr,
+    // rθ), where spelt out as pi and theta they ran into one unknown name (pir, rtheta).
+    .replace(/[πθ]/g, (c: string, at: number, str: string) => {
+      const name = c === 'π' ? 'pi' : 'theta'
+      return `${/[A-Za-z0-9_.)′″‴]/.test(str[at - 1] ?? '') ? ' ' : ''}${name}${/[A-Za-z0-9_]/.test(str[at + 1] ?? '') ? ' ' : ''}`
+    })
     .replace(/√\s*\(/g, 'sqrt(')
+    // A number under √ or ∛ is the whole number, e-notation included: √1e-3 is the root of 0.001, not √1e − 3,
+    // and ∛-8 is the cube root of −8.
+    .replace(/√\s*(\d+(?:\.\d*)?(?:[eE][-+]?\d+)?|\.\d+(?:[eE][-+]?\d+)?)/g, 'sqrt($1)')
     .replace(/√\s*([A-Za-z0-9_.]+)/g, 'sqrt($1)')
     .replace(/∛\s*\(/g, 'cbrt(')
+    .replace(/∛\s*(-?(?:\d+(?:\.\d*)?(?:[eE][-+]?\d+)?|\.\d+(?:[eE][-+]?\d+)?))/g, 'cbrt($1)')
+    .replace(/∛\s*([A-Za-z_][A-Za-z0-9_]*)/g, 'cbrt($1)')
     .replace(/µ|μ/g, 'u')
     .replace(/≤/g, '<=')
     .replace(/≥/g, '>=')
@@ -528,6 +930,7 @@ export function preprocess(src: string): string {
   // reaches the 10 N ∠ 30° rule below. Only the signs PhysLab prints (× · ⋅) make one: a plain * is
   // an ordinary product, as in mathjs and in a Numbas answer, so 1/2*10^3 is (1/2) × 1000 = 500.
   s = s.replace(X10, x10Literal)
+  s = trigSuperscripts(s)
   // A superscript exponent, as PhysLab and a phone keyboard write one: the whole run is the
   // exponent, so 2⁴ is 2^4, 10⁻³ is 10^(-3) and 2³² is 2^32 (not 2^3^2); m/s² and x⁻¹ read as
   // before. Bracketed when a digit follows, so x²3 is refused rather than read as x^23.
@@ -542,8 +945,13 @@ export function preprocess(src: string): string {
     'polarVec($1, $2)'
   )
   s = s.replace(/°/g, ' deg')
-  s = s.replace(/[⟨<]([^<>=⟨⟩]*,[^<>=⟨⟩]*)[⟩>]/g, 'vec($1)')
-  s = s.replace(/\|([^|]+)\|/g, 'mag($1)')
+  // <3, 4> is a vector and x < 3 a comparison, told apart as splitArgs tells them (angleVectors).
+  s = vectorCalls(s)
+  s = magnitudeBars(s)
+  // x(x + 1) is x times (x + 1), as on paper, and f(2) is still f at 2 (bracketProducts, above).
+  // Every name is in its final spelling by now (π is pi, θ is theta), and every call this function
+  // writes (sqrt, mag, vec, polarVec) is a function mathjs knows.
+  s = bracketProducts(s, names)
   s = tuplesToPoints(s)
   s = percentToDivision(s)
   s = infixToCall(s, '×', 'timesOrCross')
@@ -676,10 +1084,14 @@ export type ScalarFn = (vars: Record<string, number>) => number
  * Compiles an expression over variables (e.g. x, y, t) into a native JS function.
  * Other symbols are read from `scope` at call time so sliders update live.
  * Trig uses radians (graph convention).
+ * `names` is what the formula's other names stand for before a bracket, as the route reading it
+ * knows them (a graph of the scene passes sceneNames()); the variables are values whatever is
+ * passed, so a Lab Data column called mass multiplies the bracket in mass(v + 1).
  */
-export function compileScalar(expr: string, varNames: string[], scope: () => Record<string, unknown>): ScalarFn {
-  const node = math.parse(preprocess(expr))
+export function compileScalar(expr: string, varNames: string[], scope: () => Record<string, unknown>, names: SceneNames = NO_NAMES): ScalarFn {
   const vars = new Set(varNames)
+  const read: SceneNames = { values: new Set([...names.values, ...varNames]), functions: new Set([...names.functions].filter((n) => !vars.has(n))) }
+  const node = math.parse(preprocess(expr, read))
   const gen = (nd: MathNode): string => {
     const n = nd as MathNode & Record<string, unknown>
     switch (nd.type) {
@@ -688,11 +1100,12 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
       case 'SymbolNode': {
         const name = n.name as string
         if (vars.has(name)) return `v[${JSON.stringify(name)}]`
-        if (name === 'pi') return '(Math.PI)'
-        if (name === 'e') return '(Math.E)'
-        if (name === 'tau') return '(2*Math.PI)'
-        if (name === 'Infinity') return 'Infinity'
-        return `N(s(), ${JSON.stringify(name)})`
+        // Any other name is read as the command bar reads it: the scene's own value when it has
+        // one, otherwise the number mathjs knows by that name (namedConstant). Only pi, e, tau and
+        // Infinity were known here, and ahead of the scene, so y = phi*x drew nothing while the bar
+        // answered phi = 1.618…, and y = tau*x was drawn as 2πx beside a slider tau = 3.
+        const constant = namedConstant(name)
+        return `N(s(), ${JSON.stringify(name)}, ${constant === undefined ? 'NaN' : `(${constant})`})`
       }
       case 'ParenthesisNode':
         return `(${gen(n.content as MathNode)})`
@@ -720,10 +1133,12 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
         throw new Error(`unsupported syntax ${nd.type}`)
     }
   }
-  const N = (sc: Record<string, unknown>, name: string): number => {
+  // A name the scope holds is its value there, and no number when that is a point or a vector; a
+  // name it does not hold is the constant of that name, if there is one.
+  const N = (sc: Record<string, unknown>, name: string, constant: number): number => {
+    if (!Object.prototype.hasOwnProperty.call(sc, name)) return constant
     const val = sc[name]
-    if (typeof val === 'number') return val
-    return NaN
+    return typeof val === 'number' ? val : NaN
   }
   try {
     const body = `return (${gen(node)});`
@@ -747,21 +1162,18 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
 }
 
 /**
- * Splits `a, b, f(c, d)` into its arguments, ignoring commas inside brackets.
+ * Splits `a, b, f(c, d)` into its arguments, ignoring commas inside brackets — ( ), [ ] and { } —
+ * and inside a <…> vector, so cross(A, <1, 0>) has two arguments, as on paper.
  * The command bar and the calculator share it so both read arguments the same way.
  */
 export function splitArgs(s: string): string[] {
   const out: string[] = []
-  let depth = 0
-  let cur = ''
-  for (const ch of s) {
-    if (ch === '(' || ch === '[') depth++
-    if (ch === ')' || ch === ']') depth--
-    if (ch === ',' && depth === 0) {
-      out.push(cur.trim())
-      cur = ''
-    } else cur += ch
+  let from = 0
+  for (const at of topLevelCommas(s)) {
+    out.push(s.slice(from, at).trim())
+    from = at + 1
   }
-  if (cur.trim()) out.push(cur.trim())
+  const last = s.slice(from).trim()
+  if (last) out.push(last)
   return out
 }

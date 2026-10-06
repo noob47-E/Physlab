@@ -79,8 +79,10 @@ describe('variable conditions: only the variants the author wants', () => {
   it('a misspelt function (sqr for sqrt) is unreadable, named at once, never a hundred false draws', () => {
     expect(conditionHolds('sqr(b) > 2', { b: 9 })).toBeNull()
     expect(conditionHolds('sqr(b) > 2', { b: 1 })).toBeNull()
-    // A variable written as if it were a function, b(a + 1) for b × (a + 1), is no function either.
-    expect(conditionHolds('b(a + 1) > 2', { a: 1, b: 3 })).toBeNull()
+    // A variable written against a bracket, b(a + 1), is the product b × (a + 1), as the author means (P-PARSE R1):
+    // it used to be read as a call to a function b and the condition was unreadable.
+    expect(conditionHolds('b(a + 1) > 2', { a: 1, b: 3 })).toBe(true)
+    expect(conditionHolds('b(a + 1) > 7', { a: 1, b: 3 })).toBe(false)
     // Known functions still read: ln, abs and tan are PhysLab's own.
     expect(conditionHolds('ln(b) > 1 and abs(b) < 10', { b: 9 })).toBe(true)
     const v = drawVariables(quadratic('sqr(b) > 2'), 1)

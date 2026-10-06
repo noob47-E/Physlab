@@ -220,9 +220,12 @@ describe('checkExpressionPart', () => {
   })
 
   it('rewrites only the letters it is given', () => {
-    expect(lettersBeforeBrackets('x(x+1)', ['x'])).toBe('x * (x + 1)')
+    // One letter against a bracket is already a product in preprocess (P-PARSE R1), so it is handed back as typed;
+    // a longer name of the part's own is still turned into a product here.
+    expect(lettersBeforeBrackets('x(x+1)', ['x'])).toBe('x(x+1)')
     expect(lettersBeforeBrackets('sin(x)', ['x', 'sin'])).toBe('sin(x)')
-    expect(lettersBeforeBrackets('t(1 + t(2))', ['t'])).toBe('t * (1 + t * (2))')
+    expect(lettersBeforeBrackets('t(1 + t(2))', ['t'])).toBe('t(1 + t(2))')
+    expect(lettersBeforeBrackets('rate(1 + rate(2))', ['rate'])).toBe('rate * (1 + rate * (2))')
   })
 })
 

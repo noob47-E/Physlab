@@ -14,7 +14,7 @@ import {
   type GLine
 } from '../math/geometry'
 import { asGLine, canIntersect, intersectionsOf } from '../math/intersections'
-import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode } from '../math/expr'
+import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode, setSceneNames, sceneNames, speltName } from '../math/expr'
 import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
 import type { Computed, EvalResult, ObjId, SceneObject, SceneSettings } from './types'
 
@@ -32,7 +32,8 @@ const exprCache = new Map<string, ParsedExpr>()
 export function parseExpr(src: string): ParsedExpr {
   let hit = exprCache.get(src)
   if (!hit) {
-    const node = math.parse(preprocess(src))
+    // A scene object's own line reads the scene's names: b = p(1 + r) multiplies by the slider p.
+    const node = math.parse(preprocess(src, sceneNames()))
     hit = { node, compiled: node.compile(), symbols: symbolsOf(node) }
     if (exprCache.size > 2000) exprCache.clear()
     exprCache.set(src, hit)
@@ -49,6 +50,12 @@ export function evaluateScene(
   time: number
 ): EvalResult {
   setAngleMode(settings.angleUnit)
+  // What this scene's names stand for before a bracket, for the routes that read its lines (math/expr.ts
+  // sceneNames): a graph is called, f(2); a value — the kinds publish() below puts in the scope — multiplies,
+  // p(1 + r). Recorded at every evaluation, so File New, Open, undo and redo leave exactly this scene's names.
+  const named = order.map((id) => objects[id]).filter((o): o is SceneObject => !!o)
+  // A line parsed under the old names would keep its old reading in the cache.
+  if (setSceneNames({ values: named.filter((o) => ['point', 'vector', 'number', 'segment', 'circle', 'angle'].includes(o.type)).flatMap((o) => [o.name, speltName(o.name)]), functions: named.filter((o) => o.type === 'graph').map((o) => o.name) })) exprCache.clear()
   const values = new Map<ObjId, Computed>()
   const errors = new Map<ObjId, string>()
   const names = new Map<string, ObjId>()
@@ -287,6 +294,10 @@ export function evaluateScene(
         scope[o.name] = fromRadians(c.value)
         break
     }
+    // A formula reads θ as theta (math/expr.ts preprocess), so a slider named θ is published under that
+    // spelling too: 2θ was "I don't know theta" right after θ = 30 (P-PARSE W2).
+    const spelt = speltName(o.name)
+    if (spelt !== o.name && Object.prototype.hasOwnProperty.call(scope, o.name) && !Object.prototype.hasOwnProperty.call(scope, spelt)) scope[spelt] = scope[o.name]
   }
 
   let pending = order.filter((id) => objects[id])

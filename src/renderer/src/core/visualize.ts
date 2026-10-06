@@ -5,7 +5,7 @@ import { Builder } from './factory'
 import { scene } from './store'
 import type { V3 } from '../math/vec'
 import { planDrawing, type DrawStyle, type Solution, type VisualVector } from '../math/vectorSolver'
-import { compileScalar, math, preprocess, symbolsOf, type ScalarFn } from '../math/expr'
+import { compileScalar, math, namedConstant, preprocess, sceneNames, symbolsOf, type ScalarFn } from '../math/expr'
 import { fmtLabel, type Precision } from '../math/format'
 import { betweenArea, curveBox, implicitSegments, inequalityMesh, slopeAt, surfaceGeometry, verticalLineXs, type Box, type Fx, type Fxy } from '../math/graphs'
 import { parseExpr, varsOf, writeTimes } from '../math/pure/mono'
@@ -161,7 +161,7 @@ const inGraphing = <T extends SceneObject>(o: T): T => {
 
 /** A curve's formula as a function of x that reads the scene's sliders, the way the viewport draws it. */
 const curveOf = (expr: string) => {
-  const f = compileScalar(expr, ['x'], () => scene().ev.scope)
+  const f = compileScalar(expr, ['x'], () => scene().ev.scope, sceneNames())
   return (x: number) => f({ x })
 }
 
@@ -597,8 +597,6 @@ const DRAW_PLACE: Record<DrawKind, string> = {
   polar: 'formula',
   parametric: 'formula'
 }
-/** The constants compileScalar reads for itself (math/expr.ts); any other name is read from the scope. */
-const DRAW_CONSTANTS = new Set(['pi', 'e', 'tau', 'Infinity'])
 /** sampleExplicit leaves out every point higher than this (math/graphs.ts): a curve that is all above it never shows. */
 const EXPLICIT_LIMIT = 1e7
 /**
@@ -840,12 +838,13 @@ function formulaProblem(spec: DrawSpec, scope: Record<string, unknown>, graphs: 
   for (const expr of spec.exprs) {
     let node: MathNode
     try {
-      node = math.parse(preprocess(expr))
+      node = math.parse(preprocess(expr, sceneNames()))
     } catch (e) {
       return cannotDraw(spec.kind, plainParseError(e instanceof Error ? e.message : String(e)))
     }
     for (const name of symbolsOf(node)) {
-      if (vars.has(name) || DRAW_CONSTANTS.has(name)) continue
+      // A constant compileScalar reads for itself (math/expr.ts namedConstant: pi, e, tau, phi …) needs no slider.
+      if (vars.has(name) || (!(name in scope) && namedConstant(name) !== undefined)) continue
       if (name in scope) {
         // A point, a vector or another graph: the compiler reads it as no value and draws nothing.
         if (typeof scope[name] !== 'number') return `"${name}" is not a number, so it cannot be used in the ${place}.`
@@ -853,8 +852,6 @@ function formulaProblem(spec: DrawSpec, scope: Record<string, unknown>, graphs: 
       }
       // sin(30°) reaches the parser as sin(30 deg), and deg is not a slider to make.
       if (name === 'deg' || name === 'rad') return `A graph reads angles in radians, so ° and rad cannot be used in the ${place}: type sin(x), not sin(x°).`
-      // A real constant, but one compileScalar does not know: it would read phi as a missing slider.
-      if (name === 'phi') return `A graph cannot read phi yet — type its value in its place: (1 + sqrt(5))/2.`
       // x, y and z are left to the graph routes (tryAssignment): x = 1 and y = 1 are lines and z = 1
       // a plane, so "make a slider first, e.g. y = 1" after f(x) = y drew a line instead of a slider.
       if (name === 'x' || name === 'y' || name === 'z') return `Unknown name "${name}" in the ${place}. ${name} is the letter graphs use, so it cannot be a slider — use another letter, e.g. k = 1`
@@ -1019,7 +1016,7 @@ export type XSolved =
 /** Whether a formula has no y in it. One that does not read is not (the route that reads it has the words). */
 export function inXAlone(expr: string): boolean {
   try {
-    return !symbolsOf(math.parse(preprocess(expr))).includes('y')
+    return !symbolsOf(math.parse(preprocess(expr, sceneNames()))).includes('y')
   } catch {
     return false
   }
@@ -1381,7 +1378,7 @@ function withoutZeroPower(sides: [string, string] | undefined): [string, string]
 function sideFns(sides: [string, string] | undefined, live: Record<string, unknown>): [Fx, Fx] | null {
   if (!sides) return null
   try {
-    const [left, right] = sides.map((side) => compileScalar(side, ['x'], () => live))
+    const [left, right] = sides.map((side) => compileScalar(side, ['x'], () => live, sceneNames()))
     return [(x) => left({ x }), (x) => right({ x })]
   } catch {
     return null
@@ -1416,7 +1413,7 @@ export function solutionsInX(expr: string, sides: [string, string] | undefined, 
     // A high power set to 0 is solved from the thing that is raised (withoutZeroPower).
     const less = withoutZeroPower(sides)
     const solving = less ? `(${less[0]}) - (${less[1]})` : expr
-    const f = compileScalar(solving, ['x', 'y'], () => live)
+    const f = compileScalar(solving, ['x', 'y'], () => live, sceneNames())
     const g: Fx = (x) => {
       tick()
       return f({ x, y: 0 })
@@ -1452,7 +1449,7 @@ function xOnlyOf(spec: DrawSpec, live: Record<string, unknown>, timed: (f: Scala
   if (!less) return { sides: sideFns(spec.sides, live) }
   const expr = `(${less[0]}) - (${less[1]})`
   try {
-    const f = timed(compileScalar(expr, ['x', 'y'], () => live))
+    const f = timed(compileScalar(expr, ['x', 'y'], () => live, sceneNames()))
     return { sides: sideFns(less, live), solving: { expr, g: (x) => f({ x, y: 0 }) } }
   } catch {
     return { sides: sideFns(spec.sides, live) }
@@ -1618,7 +1615,7 @@ export function drawability(spec: DrawSpec, scope: Record<string, unknown>, digi
     tick()
     return f(v)
   }
-  const fns: ScalarFn[] = spec.exprs.map((e) => timed(compileScalar(e, vars, () => live)))
+  const fns: ScalarFn[] = spec.exprs.map((e) => timed(compileScalar(e, vars, () => live, sceneNames())))
   // An equation in x alone is judged by its solutions, not by a curve in x and y.
   const only: XOnly | undefined = spec.kind === 'implicit' && inXAlone(spec.exprs[0]) ? xOnlyOf(spec, live, timed) : undefined
   let why: string | null
@@ -1651,7 +1648,7 @@ export function drawability(spec: DrawSpec, scope: Record<string, unknown>, digi
     }
     return { ok: false, reason: cannotDraw(spec.kind, said) }
   }
-  const used = new Set(spec.exprs.flatMap((e) => symbolsOf(math.parse(preprocess(e)))))
+  const used = new Set(spec.exprs.flatMap((e) => symbolsOf(math.parse(preprocess(e, sceneNames())))))
   const sliders = [...used].filter((n) => typeof scope[n] === 'number' && !vars.includes(n))
   if (!sliders.length) return refused()
   const at = sliders.map((n) => `${n} = ${fmtLabel(scope[n] as number, digits)}`).join(' and ')

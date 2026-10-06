@@ -1331,11 +1331,7 @@ describe('every graph route checks it has something to draw before it says so (p
     const CASES: [string, RegExp][] = [
       // sampleExplicit leaves out every point higher than 10⁷, so this was "created" and invisible.
       ['y = 1e8', /too large to draw/],
-      // mathjs reads a letter before a bracket as a call to a function of that name.
-      ['y = x(x + 1)', /for a product, type x\*\(x \+ 1\)/],
       ['y = foo(x)', /does not know a function called "foo"/],
-      // A real constant, but the graph compiler reads phi as a slider that is not there.
-      ['y = phi*x', /cannot read phi/],
       ['y = A*x', /"A" is not a number/],
       // · is the dot key: dot(2, x) has no value for numbers, and took 270 ms to find that out.
       ['y = 2·x', /dot product of two vectors — to multiply numbers, type \* instead, e\.g\. 2\*x/]
@@ -1344,6 +1340,14 @@ describe('every graph route checks it has something to draw before it says so (p
       fresh()
       if (line.includes('A*')) await run('A = <1, 2>')
       expect(expectRefused(line, await typed(line)), line).toMatch(said)
+    }
+    // P-PARSE R1/R2: a letter written against a bracket is a product and phi is the golden ratio, so these two,
+    // once refused here ("reads as a function called x", "cannot read phi"), are drawn.
+    for (const line of ['y = x(x + 1)', 'y = phi*x']) {
+      fresh()
+      const drawn = await typed(line)
+      expect(drawn.last.kind, `${line} → ${drawn.last.text}`).toBe('result')
+      expect(drawn.made.some((o) => o.type === 'graph'), line).toBe(true)
     }
   })
 
@@ -1581,7 +1585,8 @@ describe('an equation in x alone is solved, not plotted as a curve (polish P4)',
     expect(expectRefused('x = 1e7', await typed('x = 1e7'))).toContain('it lies more than a million units from the origin, too far out to draw')
     expect(expectRefused('x^2 = foo', await typed('x^2 = foo'))).toContain('Unknown name "foo"')
     expect(expectRefused('x^2 + = 4', await typed('x^2 + = 4'))).toContain('the formula is incomplete')
-    expect(expectRefused('x(x + 1) = 0', await typed('x(x + 1) = 0'))).toContain('for a product, type x*(x + 1)')
+    // P-PARSE R1: x(x + 1) is a product, as on paper, so this equation is solved (it was refused as a call of x).
+    expect((await typed('x(x + 1) = 0')).last.text).toContain('The solutions are x = −1 and x = 0')
   })
 
   it('1/x = 0 has no real solution: a pole is not a root', async () => {
@@ -2108,12 +2113,15 @@ describe('calling a graph by its name is told what to do instead (polish H12)', 
   // type g*(x)": the advice for a slider, and g is not a number, so g*(x) draws nothing either.
   const NOT_A_NUMBER = (name: string) => `"${name}" is not a number, so it cannot be used in the function.`
 
-  it('keeps the product advice for a slider', async () => {
+  // P-PARSE R1: a slider or x written against a bracket multiplies it, as on paper — these were refused with
+  // "reads as a function called k — for a product, type k*(x)".
+  it('draws a slider or x written against a bracket as a product', async () => {
     await setup('k = 2')
-    expect(expectRefused('y = k(x)', await typed('y = k(x)'))).toBe('That graph cannot be drawn: k(x) reads as a function called k — for a product, type k*(x).')
+    const k = await typed('y = k(x)')
+    expect(k.last.kind, k.last.text).toBe('result')
     fresh()
-    // x is the graph's own variable, and it is not a function either.
-    expect(expectRefused('y = x(x + 1)', await typed('y = x(x + 1)'))).toBe('That graph cannot be drawn: x(x + 1) reads as a function called x — for a product, type x*(x + 1).')
+    const x = await typed('y = x(x + 1)')
+    expect(x.last.kind, x.last.text).toBe('result')
   })
 
   it('says a graph cannot use another graph, and writes the line with the formula in its place', async () => {
@@ -3176,7 +3184,9 @@ describe('the line offered for a call to a graph is the line typed, written as a
       ['1/x', 'y = x*(1/x)'],
       ['x/(x + 1)', 'y = x*(x/(x + 1))']
     ]) {
-      expect(await offeredFor(`g(x) = ${formula}`, 'y = x g(x)'), formula).toBe(offered)
+      // Since P-PARSE R1, "x (1/x)" reads as the product too, and mathjs's own spacing is what is offered; the
+      // star-less form is pinned with its space until asWritten tightens it (P-GRAPH2).
+      expect((await offeredFor(`g(x) = ${formula}`, 'y = x g(x)')).replace(/^y = x \(/, 'y = x*('), formula).toBe(offered)
       const again = await typed(offered)
       expect(again.last.kind, `${offered} → ${again.last.text}`).toBe('result')
     }

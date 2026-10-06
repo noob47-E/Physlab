@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { directionAngles, toDeg } from '../src/renderer/src/math/vec'
-import { compileScalar, getAngleMode, inDegrees, inferKind, math, preprocess, setAngleMode, symbolsOf, toV3 } from '../src/renderer/src/math/expr'
+import { compileScalar, getAngleMode, inDegrees, inferKind, math, preprocess, setAngleMode, splitArgs, symbolsOf, toV3 } from '../src/renderer/src/math/expr'
 import { resetGlobals } from './helpers/globals'
 
 beforeEach(resetGlobals)
@@ -19,6 +19,20 @@ describe('preprocess', () => {
     expect(preprocess('10 ∠ 30°')).toBe('polarVec(10, 30 deg)')
     expect(preprocess('10 N at 30°')).toBe('polarVec(10 N, 30 deg)')
     expect(preprocess('<3, 4>')).toBe('vec(3, 4)')
+  })
+})
+
+describe('splitArgs', () => {
+  it('keeps a braced list whole: { } are brackets, as matchForward already counts them', () => {
+    // solve({x + y = 3, x - y = 1}, {x, y}) reached the algebra engine as four broken pieces.
+    expect(splitArgs('{x + y = 3, x - y = 1}, {x, y}')).toEqual(['{x + y = 3, x - y = 1}', '{x, y}'])
+    expect(splitArgs('f({1, 2}), [3, 4], (5, 6)')).toEqual(['f({1, 2})', '[3, 4]', '(5, 6)'])
+  })
+  it('reads < as preprocess does: x < 3, x > 1 is two comparisons, never the vector <3, x>', () => {
+    // preprocess took the text "< 3, x >" between them for a vector and wrote x vec( 3, x ) 1.
+    expect(preprocess('x < 3, x > 1')).toBe('x < 3, x > 1')
+    expect(preprocess('|x| < 3, |y| > 1')).toBe('mag(x) < 3, mag(y) > 1')
+    expect(splitArgs('|x| < 3, |y| > 1')).toEqual(['|x| < 3', '|y| > 1'])
   })
 })
 

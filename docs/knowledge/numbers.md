@@ -70,3 +70,4 @@ tests/format.test.ts · questionReveal · checkAnswer · answerKinds · ecf · c
 - `lab/fit.ts` `pmText`
 - mathjs via `mathFormatOptions`
 - the Calculator panel's keypad converter, which turns any "×10" into a power (calc/engine.ts:14; P-CALC)
+- Parsing typed maths: [parsing.md](parsing.md).

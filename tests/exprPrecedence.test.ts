@@ -475,8 +475,9 @@ describe('EXPR: ×, · and the ×10 form follow ordinary precedence, and a numbe
     it('GUARD: A·B is still the dot product 1', () => {
       expect(ev('A·B', vectors())).toBe(1)
     })
-    it('anything else is refused in words: sqrt(-4)·2 has a complex number on one side', () => {
-      expect(() => ev('sqrt(-4)·2')).toThrow('Expected a number or a vector on each side of ·')
+    // P-PARSE H4: a complex number is a scalar to · as it is to ×, so sqrt(-4)·2 is 4i (it was refused).
+    it('a complex number beside a number is multiplied: sqrt(-4)·2 is 4i', () => {
+      expect(String(ev('sqrt(-4)·2'))).toBe('4i')
     })
   })
 
