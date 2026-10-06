@@ -96,7 +96,8 @@ export function Outliner() {
                   }}
                   className={`group flex h-7 cursor-pointer items-center gap-2 px-2 ${sel ? 'bg-sel' : hovered === o.id ? 'bg-surface-3' : ''}`}
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cssColor(o), opacity: o.visible ? 1 : 0.3 }} />
+                  {/* A thin outline in the theme's line colour: a near-white object made in Moonlight was an invisible dot in Light (H13c). */}
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cssColor(o), opacity: o.visible ? 1 : 0.3, border: '1px solid var(--line-2)' }} />
                   <span className={`w-12 shrink-0 truncate font-math font-semibold italic ${o.auxiliary ? 'text-ink-faint' : 'text-ink-strong'}`}>
                     {o.label ?? o.name}
                   </span>

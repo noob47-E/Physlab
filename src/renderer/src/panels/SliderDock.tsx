@@ -56,7 +56,10 @@ export function SliderDock() {
         return (
           <div key={o.id} className="flex items-center gap-2">
             {/* The name never shrinks away; the range gives up space instead. */}
-            <span className="min-w-[1.5rem] max-w-[6rem] shrink-0 truncate font-math font-semibold italic" style={{ color: o.color }}>
+            {/* The slider's own colour is a dot; the name is in the dock's text colour. Written in its own colour, a
+                slider made in Moonlight (near-white) was almost invisible on the Light theme's dock (H13c). */}
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.color, border: '1px solid var(--line-2)' }} />
+            <span className="min-w-[1.5rem] max-w-[6rem] shrink-0 truncate font-math font-semibold italic" style={{ color: 'var(--label-text)' }}>
               {o.name}
             </span>
             <input
