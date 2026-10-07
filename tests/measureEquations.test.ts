@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useScene } from '../src/renderer/src/core/store'
 import type { SceneObject } from '../src/renderer/src/core/types'
-import { rowsFor } from '../src/renderer/src/panels/Measurements'
+import { pairRows, rowsFor } from '../src/renderer/src/panels/Measurements'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { circleEquationText, lineEquation, lineEquationText } from '../src/renderer/src/math/geometry'
 
@@ -17,6 +17,8 @@ const equationOf = (name: string) => {
   const row = rowsFor(o, (id) => sc().ev.values.get(id), sc().objects)[0].rows.find((r) => r.label === 'Equation')
   return row?.value
 }
+
+const pairOf = (a: string, b: string) => pairRows(byName(a), byName(b), (id) => sc().ev.values.get(id))!.rows
 
 describe('Measure panel equations in textbook form', () => {
   beforeEach(() => sc().newScene())
@@ -85,5 +87,51 @@ describe('lineEquationText and circleEquationText', () => {
   it('folds the sign of the centre into the bracket', () => {
     expect(circleEquationText([-4, -1, 0], 2)).toBe('(x + 4)² + (y + 1)² = 4')
     expect(circleEquationText([0, -2.5, 0], 1)).toBe('x² + (y + 2.5)² = 1')
+  })
+})
+
+describe('Measure panel equations for lines and circles off the page (H7)', () => {
+  const rowsNamed = (name: string) => {
+    const o = byName(name)
+    return rowsFor(o, (id) => sc().ev.values.get(id), sc().objects)[0].rows
+  }
+  beforeEach(() => sc().newScene())
+
+  it('a segment that climbs has a vector equation and no slope, inclination or y-intercept', async () => {
+    await runCommand('P = (0, 0, 0)')
+    await runCommand('Q = (1, 1, 1)')
+    await runCommand('s = Segment(P, Q)')
+    const rows = rowsNamed('s')
+    expect(rows.find((r) => r.label === 'Equation')?.value).toBe('r = (0, 0, 0) + t(1, 1, 1)')
+    expect(rows.some((r) => /Slope|Inclination|y-intercept/.test(r.label))).toBe(false)
+    await runCommand('R = (0, 0, 2)')
+    await runCommand('u = Segment(P, R)')
+    expect(rowsNamed('u').find((r) => r.label === 'Equation')?.value).toBe('r = (0, 0, 0) + t(0, 0, 2)')
+  })
+
+  it('a level segment above the page gives its height too', async () => {
+    await runCommand('P = (-5, 6, 2)')
+    await runCommand('Q = (-1, 6, 2)')
+    await runCommand('s = Segment(P, Q)')
+    expect(equationOf('s')).toBe('y = 6, z = 2')
+  })
+
+  it('a circle above the page gives its height', async () => {
+    await runCommand('k = Circle((0, 0, 5), 2)')
+    expect(equationOf('k')).toBe('x² + y² = 4, z = 5')
+  })
+
+  it('two points at different heights get no slope', async () => {
+    await runCommand('P = (0, 0, 0)')
+    await runCommand('Q = (1, 2, 3)')
+    const rows = pairOf('P', 'Q')
+    expect(rows.some((r) => r.label === 'Slope')).toBe(false)
+  })
+
+  it('two lines in an upright plane meet, and lines that pass at different heights say so (H2)', async () => {
+    for (const line of ['A = (0, 0, 0)', 'B = (1, 0, 1)', 'C = (2, 0, 0)', 'D = (1, 0, 1.5)', 'm = Line(A, B)', 'n = Line(C, D)']) await runCommand(line)
+    expect(pairOf('m', 'n').find((r) => r.label === 'Intersection')?.value).toBe('(1.2, 0, 1.2)')
+    for (const line of ['E = (0, 0, 3)', 'F = (0, 1, 3)', 'g = Line(E, F)']) await runCommand(line)
+    expect(pairOf('m', 'g').find((r) => r.label === 'Intersection')?.value).toMatch(/skew/)
   })
 })

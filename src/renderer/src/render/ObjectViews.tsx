@@ -9,10 +9,10 @@ import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneO
 import { isFree } from '../core/evaluate'
 import { visibleIn } from '../core/visibility'
 import { componentTexts, freeCapitals } from '../core/naming'
-import { centroid } from '../math/geometry'
+import { centroid, polygonPlane } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure, superscriptPowers } from '../math/format'
-import { decompose, type Decomposition } from '../math/decompose'
+import { decompose, partLabel, type Decomposition } from '../math/decompose'
 import { fillOutline, fillsWhole } from './fillMath'
 import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
@@ -505,7 +505,6 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   )
 })
 
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 
 /** Right-angle marks where a cut meets a side of the shape at 90°. */
 function rightAngleMarks(cuts: [V3, V3][], pts: V3[], size: number): V3[][] {
@@ -544,15 +543,29 @@ function DecomposedParts({ dec, pts, wpp }: { obj: PolygonObj; dec: Decompositio
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label part-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
   // Each part is filled to its own corners (fillOutline says why), so the geometry no longer
-  // depends on the zoom and is not rebuilt on every wheel step.
-  const geos = useMemo(() => dec.parts.map((part) => new THREE.ShapeGeometry(new THREE.Shape(fillOutline(part.pts).map(([x, y]) => new THREE.Vector2(x, y))))), [dec])
+  // depends on the zoom and is not rebuilt on every wheel step. A part off the page is filled in its
+  // own plane and set back there (Decompose leaves a tilted shape's parts on the shape); they were
+  // all drawn on the floor.
+  const geos = useMemo(
+    () =>
+      dec.parts.map((part) => {
+        if (part.pts.every((p) => p[2] === 0)) return new THREE.ShapeGeometry(new THREE.Shape(fillOutline(part.pts).map(([x, y]) => new THREE.Vector2(x, y))))
+        const plane = polygonPlane(part.pts)
+        if (!plane) return new THREE.BufferGeometry()
+        const g = new THREE.ShapeGeometry(new THREE.Shape(fillOutline(plane.flat).map(([x, y]) => new THREE.Vector2(x, y))))
+        const [u, v, n, o] = [plane.u, plane.v, plane.normal, plane.origin]
+        g.applyMatrix4(new THREE.Matrix4().set(u[0], v[0], n[0], o[0], u[1], v[1], n[1], o[1], u[2], v[2], n[2], o[2], 0, 0, 0, 1))
+        return g
+      }),
+    [dec]
+  )
   useEffect(() => () => geos.forEach((g) => g.dispose()), [geos])
   useFrame(({ camera, size }) => {
     pool.begin()
     if (dec.parts.length > 1) {
       dec.parts.forEach((part, i) => {
         const s = toScreen(camera, size, centroid(part.pts))
-        pool.place(ROMAN[i] ?? String(i + 1), s.x, s.y, 'center', colors.series[i % SERIES_COUNT])
+        pool.place(partLabel(i), s.x, s.y, 'center', colors.series[i % SERIES_COUNT])
       })
       // Letters for the corners the cut created.
       dec.newPoints.forEach((p, i) => {

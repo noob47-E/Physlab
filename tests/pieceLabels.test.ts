@@ -144,3 +144,95 @@ describe('settleLabel, the one collision pass', () => {
     for (const p of placed) expect(intersect(got, p)).toBe(false)
   })
 })
+
+describe('sideways dodge clears the label (H11)', () => {
+  // With every rung above and below taken, settleLabel tries the label's own row to either side.
+  // That step was half the label's own width, so beside a label as wide as itself on the same spot
+  // the two still overlapped by half a width less the gap: the step was refused and the label was
+  // drawn on top of the one it was dodging.
+  const H = CHIP_H
+  /** Labels of width `w` at `x` filling the row at y = 100 and all six rungs above and below it, 28 px apart. */
+  const stack = (x: number, w: number): LabelBox[] => Array.from({ length: 13 }, (_, i) => ({ x, y: 100 + (i - 6) * (H + 2), w, h: H }))
+  /** `k` more labels in that row on each side of a stack at x = 0, each 100 px wide and 2 px from the next. */
+  const beside = (k: number): LabelBox[] => [1, -1].flatMap((s) => Array.from({ length: k }, (_, i) => ({ x: s * (i + 1) * 102, y: 100, w: 100, h: H })))
+  const want: LabelBox = { x: 0, y: 100, w: 100, h: H }
+  const clearOfAll = (got: LabelBox, placed: LabelBox[]) => {
+    for (const p of placed) expect(intersect(got, p), `${JSON.stringify(got)} lies on ${JSON.stringify(p)}`).toBe(false)
+  }
+
+  it('two piece labels on one spot, every rung above and below taken: the second sits just past the first', () => {
+    const w = chipW('ΔEFG · 6 u²') // 102.25 px, as drawn
+    const first: LabelBox = { x: 200, y: 100, w, h: H }
+    // The old step of w/2 + 2 px still overlapped the first label by w/2 − 2 = 49 px, so it was refused.
+    expect(intersect({ ...first, x: first.x + w / 2 + 2 }, first)).toBe(true)
+    const placed = stack(200, w)
+    const got = settleLabel({ ...first }, placed)
+    clearOfAll(got, placed)
+    expect(got).toEqual({ ...first, x: 200 + w + 2 })
+  })
+
+  it('goes left when the right is taken, and right when the left is taken', () => {
+    const rightTaken = [...stack(0, 100), { x: 102, y: 100, w: 100, h: H }]
+    const a = settleLabel(want, rightTaken)
+    clearOfAll(a, rightTaken)
+    expect(a).toEqual({ ...want, x: -102 })
+    const leftTaken = [...stack(0, 100), { x: -102, y: 100, w: 100, h: H }]
+    const b = settleLabel(want, leftTaken)
+    clearOfAll(b, leftTaken)
+    expect(b).toEqual({ ...want, x: 102 })
+  })
+
+  it('a place to the side that lands on a third label is refused, not used', () => {
+    // The third label covers the far corner of the place just past the first label, on one side
+    // and then the other; the other side is nearer than going on past it (244 px away).
+    const cases: [LabelBox, number][] = [
+      [{ x: 182, y: 110, w: 60, h: H }, -102],
+      [{ x: -142, y: 110, w: 60, h: H }, 102]
+    ]
+    for (const [third, x] of cases) {
+      const placed = [...stack(0, 100), third]
+      const got = settleLabel(want, placed)
+      expect(intersect(got, third), JSON.stringify(got)).toBe(false)
+      clearOfAll(got, placed)
+      expect(got).toEqual({ ...want, x })
+    }
+  })
+
+  it('with both places beside it taken it goes further along, to the nearer free place (the right on a tie)', () => {
+    const both = [...stack(0, 100), ...beside(1)]
+    const got = settleLabel(want, both)
+    clearOfAll(got, both)
+    expect(got).toEqual({ ...want, x: 204 })
+    // A shorter label on the left leaves a nearer free place on that side.
+    const shortLeft = [...stack(0, 100), { x: 102, y: 100, w: 100, h: H }, { x: -62, y: 100, w: 60, h: H }]
+    const got2 = settleLabel(want, shortLeft)
+    clearOfAll(got2, shortLeft)
+    expect(got2).toEqual({ ...want, x: -164 })
+  })
+
+  it('is measured from the edge of the label it must clear: past a wider label, and only as far as it must', () => {
+    // A 56 px side label wanting the middle of a 230 px piece label: a step of its own width plus
+    // the gap (to x = 130) would still be inside it.
+    const side: LabelBox = { x: 72, y: 100, w: 56, h: H }
+    const wide = stack(-15, 230)
+    const got = settleLabel(side, wide)
+    clearOfAll(got, wide)
+    expect(got).toEqual({ ...side, x: 217 })
+    // Labels covering only its last 10 px: a 12 px step to the left clears them.
+    const end = stack(90, 50)
+    const got2 = settleLabel(want, end)
+    clearOfAll(got2, end)
+    expect(got2).toEqual({ ...want, x: -12 })
+  })
+
+  it('keeps the spot it names, on purpose, only when nothing is free within six labels either way', () => {
+    // Five more labels in its row on each side: the place past the sixth label is free.
+    const five = [...stack(0, 100), ...beside(5)]
+    const got = settleLabel(want, five)
+    clearOfAll(got, five)
+    expect(got).toEqual({ ...want, x: 612 })
+    // Six on each side: nothing is free within reach, so it stays where it wanted to be rather than
+    // being carried off beside something else it would seem to name.
+    expect(settleLabel(want, [...stack(0, 100), ...beside(6)])).toEqual(want)
+  })
+})

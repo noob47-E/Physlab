@@ -39,6 +39,17 @@ export type Original = V3[] | string
  * pieces overlap somewhere the edges did not show (one piece lying across another).
  */
 export function outlineOf(pieces: V3[][], eps = EPS): V3[] | null {
+  const t = tiling(pieces, eps)
+  return Array.isArray(t) ? t : null
+}
+
+/**
+ * outlineOf, saying why there is none: 'overlap' when a stretch of side is walked the same way
+ * by two pieces or the loop holds less area than the pieces (some of it is covered twice),
+ * 'gap' for anything else. Both used to be one null, which Fuse read as a gap, so two squares
+ * half over each other were told "there is a gap".
+ */
+function tiling(pieces: V3[][], eps: number): V3[] | 'gap' | 'overlap' {
   const verts: V3[] = []
   const idx = (p: V3): number => {
     const i = verts.findIndex((q) => dist(p, q) <= eps)
@@ -50,7 +61,7 @@ export function outlineOf(pieces: V3[][], eps = EPS): V3[] | null {
     .map((pc) => toCCW(cleanPolygon(pc)))
     .filter((pc) => pc.length >= 3)
     .map((pc) => pc.map(idx))
-  if (polys.length === 0) return null
+  if (polys.length === 0) return 'gap'
 
   // The corners lying on the segment a–b, in order from a: the corners the edge is split at.
   const along = (a: number, b: number): number[] => {
@@ -65,7 +76,10 @@ export function outlineOf(pieces: V3[][], eps = EPS): V3[] | null {
       const crossZ = d[0] * w[1] - d[1] * w[0]
       if (Math.abs(crossZ) > eps * Math.sqrt(l2)) return
       const t = (d[0] * w[0] + d[1] * w[1]) / l2
-      if (t > eps && t < 1 - eps) inner.push({ k, t })
+      // Strictly between the ends by more than eps, a length: t is a fraction of the side, so on a
+      // side 1000 long "t > eps" passed over a corner 0.0005 from its end, where no corner merges.
+      const len = Math.sqrt(l2)
+      if (t * len > eps && (1 - t) * len > eps) inner.push({ k, t })
     })
     inner.sort((p, q) => p.t - q.t)
     return [a, ...inner.map((h) => h.k), b]
@@ -82,7 +96,7 @@ export function outlineOf(pieces: V3[][], eps = EPS): V3[] | null {
         const v = chain[k + 1]
         const key = u < v ? `${u}|${v}` : `${v}|${u}`
         const n = (net.get(key) ?? 0) + (u < v ? 1 : -1)
-        if (Math.abs(n) > 1) return null
+        if (Math.abs(n) > 1) return 'overlap'
         net.set(key, n)
       }
     }
@@ -96,11 +110,11 @@ export function outlineOf(pieces: V3[][], eps = EPS): V3[] | null {
     const [from, to] = n > 0 ? [lo, hi] : [hi, lo]
     // A corner two boundary edges leave from is a pinch: pieces touching at a single point, or a
     // hole between them. That is not one shape.
-    if (next.has(from)) return null
+    if (next.has(from)) return 'gap'
     next.set(from, to)
     boundary++
   }
-  if (boundary < 3) return null
+  if (boundary < 3) return 'gap'
 
   const start = next.keys().next().value as number
   const loop: V3[] = []
@@ -108,19 +122,20 @@ export function outlineOf(pieces: V3[][], eps = EPS): V3[] | null {
   do {
     loop.push(verts[at])
     const to = next.get(at)
-    if (to === undefined) return null
+    if (to === undefined) return 'gap'
     at = to
   } while (at !== start && loop.length <= boundary)
   // A second loop means two separate groups of pieces (or a hole): the walk did not use every edge.
-  if (at !== start || loop.length !== boundary) return null
+  if (at !== start || loop.length !== boundary) return 'gap'
 
   // Cleaned with the same tolerance the vertices were merged at. Tighter (the 1e-9 default)
   // and a piece turned twenty-four times by 15° — rounded to 1e-9 on every turn — kept the two
   // collinear corners along its side, so a hexagon put back exactly was called a decagon.
   const outline = cleanPolygon(loop, eps)
-  if (outline.length < 3) return null
+  if (outline.length < 3) return 'gap'
   const total = pieces.reduce((s, pc) => s + polygonArea(pc), 0)
-  if (Math.abs(polygonArea(outline) - total) > 1e-6 * Math.max(1, total)) return null
+  const area = polygonArea(outline)
+  if (Math.abs(area - total) > 1e-6 * Math.max(1, total)) return area < total ? 'overlap' : 'gap'
   return outline
 }
 
@@ -295,7 +310,7 @@ export function piecesOverlap(pieces: V3[][], eps = EPS): boolean {
  */
 export function fuseResult(pieces: V3[][], original: Original): FuseResult {
   if (pieces.length < 2) return { ok: false, sentence: ONE_PIECE_SENTENCE }
-  if (piecesOverlap(pieces)) return { ok: false, sentence: OVERLAP_SENTENCE }
+  if (piecesOverlap(pieces) || tiling(pieces, EPS) === 'overlap') return { ok: false, sentence: OVERLAP_SENTENCE }
   const status = legoStatus(pieces, original)
   if (status.kind === 'apart') return { ok: false, sentence: GAP_SENTENCE }
   const area = polygonArea(status.outline)

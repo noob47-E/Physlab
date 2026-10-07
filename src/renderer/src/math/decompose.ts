@@ -7,8 +7,8 @@
 // Cuts may add new corners: a right trapezium only becomes a rectangle plus a right triangle
 // if a new point is dropped on one of its sides.
 
-import { cross, dist, sub, type V3 } from './vec'
-import { polygonArea, signedArea2D } from './geometry'
+import { add, cross, dist, scale, sub, type V3 } from './vec'
+import { polygonArea, polygonPlane, signedArea2D } from './geometry'
 import { classifyPolygon, cleanPolygon, type ShapeClass, type ShapeKind } from './shapes'
 
 export interface Part {
@@ -47,7 +47,13 @@ const PENALTY: Record<ShapeKind, number> = {
   trapezium: 2.5,
   kite: 3,
   'regular-polygon': 3,
-  polygon: 20
+  polygon: 20,
+  // Corners not in one plane make no flat piece, so they cost as much as a shape with no formula.
+  // None reaches here (decompose lays every shape flat first), but every kind needs a cost.
+  skew: 20,
+  // Nor does a bow-tie or a line of corners: never a piece of a decomposition.
+  crossed: 20,
+  degenerate: 20
 }
 
 /** Cost when only rectangles, squares and triangles count. */
@@ -63,10 +69,23 @@ const BASIC: Partial<Record<ShapeKind, number>> = {
 }
 
 /** Shapes a student has a formula for. */
-const SIMPLE = new Set<ShapeKind>(Object.keys(PENALTY).filter((k) => k !== 'polygon') as ShapeKind[])
+const SIMPLE = new Set<ShapeKind>(Object.keys(PENALTY).filter((k) => !['polygon', 'skew', 'crossed', 'degenerate'].includes(k)) as ShapeKind[])
 
 const accepts = (kind: ShapeKind, goal: DecomposeGoal) => (goal === 'basic' ? kind in BASIC : SIMPLE.has(kind))
 const penaltyOf = (kind: ShapeKind, goal: DecomposeGoal) => (goal === 'basic' ? BASIC[kind] ?? 20 : PENALTY[kind])
+
+/**
+ * The Roman numeral that labels part `i` (from 0) of a decomposition: I, II, … XII, XIII, … The
+ * labels were a list that stopped at XII, so part 13 had no badge and its area read "A_undefined".
+ */
+export function partLabel(i: number): string {
+  let n = i + 1
+  let out = ''
+  for (const [v, r] of [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']] as const) {
+    for (; n >= v; n -= v) out += r
+  }
+  return out
+}
 
 const toCCW = (pts: V3[]) => (signedArea2D(pts) < 0 ? [...pts].reverse() : pts)
 const round9 = (v: number) => Math.round(v * 1e9) / 1e9
@@ -359,8 +378,47 @@ function allWays(pts: V3[], goal: DecomposeGoal): { parts: Part[]; newPoints: V3
 /**
  * Best split of a simple polygon into shapes with known area formulas.
  * `index` picks another way of splitting it (the "Other way" button).
+ *
+ * A shape off the page is split in its own plane and its parts put back there. Every corner used
+ * to be pressed flat onto z = 0 first, so a tilted house was split as its shadow (parts adding up
+ * to 26.4 u² for its 33 u², shaded on the floor) and an upright shape, whose shadow is a line, was
+ * "already a simple shape" whatever it was. A shape on the page (z = 0) is split exactly as before.
  */
 export function decompose(input: V3[], goal: DecomposeGoal = 'basic', index = 0): Decomposition {
+  if (input.every((p) => p[2] === 0)) return decomposeFlat(input, goal, index)
+  const z = input[0][2]
+  // Level above the page: split as on the page, at its own height.
+  if (input.every((p) => p[2] === z)) return lift(decomposeFlat(input, goal, index), input, (p) => [p[0], p[1], z])
+  const plane = polygonPlane(input)
+  if (!plane || !plane.planar) {
+    // Corners in no one plane make no flat shape to split; the part carries the sentence that says so.
+    const whole: Part = { pts: input, cls: classifyPolygon(input), area: 0 }
+    return { parts: [whole], cuts: [], newPoints: [], alternatives: 1 }
+  }
+  const { origin, u, v } = plane
+  return lift(decomposeFlat(plane.flat, goal, index), input, (p) => add(origin, add(scale(u, p[0]), scale(v, p[1]))))
+}
+
+/**
+ * A split worked out flat, carried back to where the shape is. A carried point that lands on one of
+ * the shape's own corners (to rounding) is that corner exactly, so the parts' corners keep their
+ * letters.
+ */
+function lift(dec: Decomposition, corners: V3[], to: (p: V3) => V3): Decomposition {
+  const size = corners.reduce((m, p) => Math.max(m, dist(p, corners[0])), 0)
+  const at = (p: V3): V3 => {
+    const q = to(p)
+    return corners.find((c) => dist(c, q) <= 1e-9 * Math.max(1, size)) ?? q
+  }
+  return {
+    parts: dec.parts.map((part) => ({ ...part, pts: part.pts.map(at) })),
+    cuts: dec.cuts.map(([a, b]): [V3, V3] => [at(a), at(b)]),
+    newPoints: dec.newPoints.map(at),
+    alternatives: dec.alternatives
+  }
+}
+
+function decomposeFlat(input: V3[], goal: DecomposeGoal, index: number): Decomposition {
   const pts = toCCW(cleanPolygon(input.map((p) => [p[0], p[1], 0] as V3)))
   const whole = makePart(pts)
   const single: Decomposition = { parts: [whole], cuts: [], newPoints: [], alternatives: 1 }

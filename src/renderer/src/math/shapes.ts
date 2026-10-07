@@ -1,7 +1,7 @@
 // Shape recognition: classify exact polygons, and turn rough freehand strokes into perfect shapes.
 
 import { add, angleBetween, cross, dist, dot, len, normalize, scale, sub, type V3 } from './vec'
-import { centroid, polygonArea, signedArea2D } from './geometry'
+import { centroid, polygonArea, polygonPlane, signedArea2D } from './geometry'
 
 export type ShapeKind =
   | 'equilateral-triangle'
@@ -18,6 +18,12 @@ export type ShapeKind =
   | 'kite'
   | 'regular-polygon'
   | 'polygon'
+  /** Corners that do not all lie in one plane: not a flat shape, so no flat name fits. */
+  | 'skew'
+  /** Two of its sides cross (a bow-tie): no single inside, so no flat name fits. */
+  | 'crossed'
+  /** All its corners on one line (or on top of each other): it encloses nothing. */
+  | 'degenerate'
 
 export interface ShapeClass {
   kind: ShapeKind
@@ -29,6 +35,11 @@ export interface ShapeClass {
   rectilinear: boolean
   /** For trapeziums: indices [i, i+1] and [j, j+1] of the parallel sides. */
   parallelSides?: [number, number]
+  /**
+   * Only for kinds 'skew', 'crossed' and 'degenerate': one plain sentence telling the student why
+   * the shape has no flat name, area or interior angles.
+   */
+  notAShape?: string
 }
 
 const POLY_NAMES: Record<number, string> = { 5: 'pentagon', 6: 'hexagon', 7: 'heptagon', 8: 'octagon', 9: 'nonagon', 10: 'decagon', 12: 'dodecagon' }
@@ -37,8 +48,26 @@ export function polygonName(n: number): string {
   return POLY_NAMES[n] ?? `${n}-gon`
 }
 
-/** Interior angle at each vertex (radians, 0..2π) for a simple polygon. */
+/**
+ * Every corner at the same height: the shape lies level, like one drawn on the page, so plain
+ * x–y maths measures it exactly. Such shapes keep the code they always had, bit for bit; the 2-D
+ * callers (decompose, lego) set z to 0 themselves and always land here.
+ */
+const levelInXY = (pts: V3[]) => pts.every((p) => p[2] === pts[0][2])
+
+/**
+ * Interior angle at each corner (radians, 0..2π, reflex angles kept) of a simple polygon,
+ * measured in the polygon's own plane, whichever way round its corners are listed. A shape that
+ * is not level is laid flat in its plane first: read from above it was only its shadow, so an
+ * upright square (a line from above) had four angles of 0. Corners not all in one plane are
+ * measured as seen face-on along their Newell normal (classifyPolygon calls them skew).
+ */
 export function interiorAngles(pts: V3[]): number[] {
+  if (!levelInXY(pts)) {
+    const plane = polygonPlane(pts)
+    // Laid flat the corners are level and run anticlockwise, so the code below measures them.
+    if (plane) return interiorAngles(plane.flat)
+  }
   const n = pts.length
   const ccw = signedArea2D(pts) >= 0
   return pts.map((p, i) => {
@@ -57,7 +86,34 @@ export function sideLengths(pts: V3[]): number[] {
   return pts.map((p, i) => dist(p, pts[(i + 1) % pts.length]))
 }
 
-/** Removes duplicate and collinear vertices. */
+/**
+ * How thin the triangle a corner makes with its two neighbours must be before cleanPolygon may
+ * count the corner as in line: its least height at most this fraction of its longest side. A
+ * corner standing off its neighbours' line by more than a thousandth is a corner at any size.
+ */
+const THIN = 1e-3
+
+/**
+ * Removes duplicate corners, and corners in line with their two neighbours.
+ *
+ * A corner is in line when twice the triangle it makes with its neighbours, |ab × ac|, is at most
+ * eps × (the gap a–c, or 1 if that is shorter) — the rule as it always was, which every 2-D
+ * caller is tuned to: decompose and lego round corners to 1e-9 and merge corners that nearly
+ * meet, so a corner meant to lie on a side can sit 1e-9 or more off it, and on a short side that
+ * rule allows a little more than eps. A purely relative test (a fraction of the side) was finer
+ * than that dust on short sides and changed how shapes of ordinary size were cut up.
+ *
+ * But that rule weighs an area against a length, so the height it allows, eps ÷ gap, outgrows a
+ * small shape: every square smaller than about 0.00003 lost a corner and became a triangle. So a
+ * corner also has to make a THIN triangle before it can go; that test compares length with
+ * length, the same at every size, and a corner that stands clearly off the line fails it (a
+ * square's makes 0.5). It never overrules the old rule for a triangle whose longest side is
+ * √(eps ÷ THIN) or more: 0.001 at the default eps, 0.03 at lego's 1e-6.
+ *
+ * The whole cross product is read, so a shape in any plane is judged alike; only its z part used
+ * to be, which is 0 for a shape standing upright, so every corner of an upright square looked in
+ * line. For a level shape the whole length equals |z part|, so its decisions are unchanged.
+ */
 export function cleanPolygon(pts: V3[], eps = 1e-9): V3[] {
   let out = pts.filter((p, i) => dist(p, pts[(i + 1) % pts.length]) > eps)
   let changed = true
@@ -67,8 +123,10 @@ export function cleanPolygon(pts: V3[], eps = 1e-9): V3[] {
       const a = out[(i - 1 + out.length) % out.length]
       const b = out[i]
       const c = out[(i + 1) % out.length]
-      const area2 = Math.abs(cross(sub(b, a), sub(c, a))[2])
-      if (area2 <= eps * Math.max(1, dist(a, c))) {
+      // Twice the triangle's area, in whatever plane it lies.
+      const area2 = len(cross(sub(b, a), sub(c, a)))
+      const longest = Math.max(dist(a, b), dist(b, c), dist(a, c))
+      if (area2 <= eps * Math.max(1, dist(a, c)) && area2 <= THIN * longest * longest) {
         out = out.filter((_, j) => j !== i)
         changed = true
         break
@@ -85,12 +143,78 @@ function parallel(d1: V3, d2: V3, tolRad: number): boolean {
   return a < tolRad || Math.PI - a < tolRad
 }
 
+/** What a student is told when a polygon's corners do not all lie in one plane. */
+const NOT_FLAT = 'Its corners do not all lie in one flat plane, so it is not a flat shape and has no area or interior angles of its own.'
+const CROSSED = 'Two of its sides cross each other, so it has no single inside and no area or interior angles of its own.'
+const IN_LINE = 'All its corners lie on one straight line, so it encloses nothing and has no area or interior angles.'
+
+/**
+ * Whether two sides that share no corner cross, read in x and y (the caller lays the corners flat
+ * first). Only a true crossing counts: a corner that just touches another side, as when a corner is
+ * dragged onto it, leaves a shape with one inside still.
+ */
+function sidesCross(pts: V3[]): boolean {
+  const n = pts.length
+  const size = pts.reduce((m, p) => Math.max(m, Math.abs(p[0] - pts[0][0]), Math.abs(p[1] - pts[0][1])), 0)
+  const tiny = 1e-12 * size * size
+  const side = (a: V3, b: V3, c: V3) => {
+    const o = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    return o > tiny ? 1 : o < -tiny ? -1 : 0
+  }
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue
+      const [a, b, c, d] = [pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]]
+      const s1 = side(a, b, c)
+      const s2 = side(a, b, d)
+      const s3 = side(c, d, a)
+      const s4 = side(c, d, b)
+      if (s1 * s2 < 0 && s3 * s4 < 0) return true
+    }
+  }
+  return false
+}
+
+/** A triangle all but flat by cleanPolygon's own rule: the one it uses to drop a corner in line. */
+function inLine([a, b, c]: V3[], eps = 1e-9): boolean {
+  const area2 = len(cross(sub(b, a), sub(c, a)))
+  const longest = Math.max(dist(a, b), dist(b, c), dist(a, c))
+  return area2 <= eps * Math.max(1, dist(a, c)) && area2 <= THIN * longest * longest
+}
+
 /**
  * Classify a polygon exactly (within small tolerances). Used live for every polygon in the scene,
  * so dragging a rectangle's corner turns it into a parallelogram or trapezium immediately.
  */
 export function classifyPolygon(input: V3[], tolDeg = 0.25, tolRel = 0.002): ShapeClass {
-  const pts = cleanPolygon(input)
+  let pts = cleanPolygon(input)
+  // Corners in a line used to be named from their sides: (0, 0), (1, 0), (2, 0) has sides 1, 1, 2,
+  // so it was an "Isosceles triangle" with angles 0°, 180°, 0°. cleanPolygon takes in-line corners
+  // away down to three, so three is where such a shape shows.
+  if (pts.length < 3 || (pts.length === 3 && inLine(pts))) {
+    return { kind: 'degenerate', name: 'Corners in a line', n: pts.length, convex: false, rectilinear: false, notAShape: IN_LINE }
+  }
+  const crossed = (): ShapeClass => {
+    const m = pts.length
+    return { kind: 'crossed', name: `Crossed ${m === 4 ? 'quadrilateral' : polygonName(m)}`, n: m, convex: false, rectilinear: false, notAShape: CROSSED }
+  }
+  if (!levelInXY(pts)) {
+    // A shape that is not level is named in its own plane: laid flat there it gets the name the
+    // same shape gets on the page (it used to be named from its shadow on the x–y plane, so an
+    // upright square was a triangle and a skew quadrilateral a kite). Corners that do not lie in
+    // one plane make no flat shape, so no flat name is true of them.
+    const plane = polygonPlane(pts)
+    if (plane && !plane.planar && pts.length >= 4) {
+      const m = pts.length
+      return { kind: 'skew', name: `Skew ${m === 4 ? 'quadrilateral' : polygonName(m)}`, n: m, convex: false, rectilinear: false, notAShape: NOT_FLAT }
+    }
+    // No plane at all with four or more corners left: a bow-tie whose two loops cancel exactly.
+    if (!plane) return crossed()
+    pts = plane.flat
+  }
+  // A bow-tie used to be a "Concave quadrilateral" (angles 45°, 315°, 315°, 45°) with area 0, or the
+  // difference of its loops when they differ.
+  if (sidesCross(pts)) return crossed()
   const n = pts.length
   const tol = (tolDeg * Math.PI) / 180
   const angles = n >= 3 ? interiorAngles(pts) : []

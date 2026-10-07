@@ -120,7 +120,7 @@ describe('the parts of a decomposed shape (Fix 19)', () => {
   it('the Measure card lists the congruent parts under the parts', () => {
     const src = readSource('src/renderer/src/panels/ShapeInfo.tsx')
     expect(src).toMatch(/congruentParts\(\s*dec\.parts\.map\(\(part\) => \(\{ names: part\.pts\.map\(nameAt\), pts: part\.pts \}\)\)/)
-    expect(src).toMatch(/\{ROMAN\[pair\.i\]\} and \{ROMAN\[pair\.j\]\} are congruent\./)
+    expect(src).toMatch(/\{partLabel\(pair\.i\)\} and \{partLabel\(pair\.j\)\} are congruent\./)
   })
 })
 

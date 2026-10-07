@@ -2,9 +2,9 @@
 // plus what to highlight in the drawing when the student hovers a formula or a symbol.
 
 import { add, dist, mid, normalize, scale, sub, type V3 } from './vec'
-import { footOfPerpendicular, polygonArea, centroid } from './geometry'
+import { footOfPerpendicular, polygonArea, polygonPlane, centroid } from './geometry'
 import { classifyPolygon, type ShapeClass } from './shapes'
-import { measureValue, texMeasure, fmtPrecise, type MeasureKind, type MeasureSettings } from './format'
+import { measureValue, texMeasure, texPrecise, texUnit, fmtPrecise, type MeasureKind, type MeasureSettings } from './format'
 import { exactForm } from '../calc/engine'
 
 export interface Highlight {
@@ -46,16 +46,38 @@ export interface ShapeReport {
 
 const circlePolygon = (c: V3, r: number, n = 96): V3[] => Array.from({ length: n }, (_, k) => [c[0] + r * Math.cos((2 * Math.PI * k) / n), c[1] + r * Math.sin((2 * Math.PI * k) / n), c[2]])
 
-/** Number in the chosen real unit, without the unit (for substitutions). */
+/**
+ * Number in the chosen real unit, without the unit (for substitutions), written for KaTeX. The
+ * plain text "1.20×10^-7" it once gave was drawn 1.20 × 10⁻7 (KaTeX raises only the one token
+ * after ^, here the minus), and "1.00×10^12" as 1.00 × 10¹2.
+ */
 function num(v: number, kind: MeasureKind, s: MeasureSettings): string {
-  return fmtPrecise(measureValue(v, kind, s), s).replace('−', '-')
+  return texPrecise(measureValue(v, kind, s), s)
+}
+
+/**
+ * A number squared in a substitution. One written in powers of ten goes in brackets, as the
+ * square's (s)^2 always has: bare, "4.00\times 10^{9}^2" is a double superscript KaTeX will not
+ * draw, and the student got the raw line in red instead of the working.
+ */
+function numSquared(v: number, kind: MeasureKind, s: MeasureSettings): string {
+  const t = num(v, kind, s)
+  return `${t.includes('\\times') ? `(${t})` : t}^2`
 }
 
 /** Answer with units, plus the exact form (fraction, √, π) when it is a clean number. */
 export function answerTex(v: number, kind: MeasureKind, s: MeasureSettings, piFactor = false): string {
   const real = measureValue(v, kind, s)
   const withUnit = texMeasure(v, kind, s)
-  const unit = withUnit.replace(/^[^\\]*?(\\,.*)?$/, '$1')
+  // The unit is asked for, not cut off the answer: the pattern that cut it stopped at the first
+  // backslash, so "1.26\times 10^{9}\,\text{cm}^2" or "33.33^\circ" put the whole answer where the
+  // unit belongs ("\frac{100}{3}33.33^\circ \approx 33.33^\circ").
+  const unit = texUnit(kind, s)
+  // Only a plain number and its unit gets an exact form beside it. Not a bearing: it is words, and
+  // its 56.67 is not the angle from east an exact form would be of. Not an answer in powers of ten:
+  // at that size a double cannot tell an exact fraction from a near one (4√2 × 10⁹ was offered as
+  // 11313708499/2), and past 10²¹ JavaScript writes the whole number as "1e+22".
+  if (withUnit !== `${texPrecise(real, s)}${unit}` || withUnit.includes('\\times 10^')) return withUnit
   if (piFactor) {
     const k = real / Math.PI
     const ex = exactForm(k)
@@ -108,7 +130,7 @@ export function polygonReport(input: V3[], names: string[], s: MeasureSettings):
       rows.push({ title: 'Area', general: 'A = l \\times w', symbols: [l, w], substitution: `A = ${num(l.value, 'length', s)} \\times ${num(w.value, 'length', s)}`, value: area, kind: 'area', highlight: { region } })
       rows.push(perimeterRow('P = 2(l + w)', [l, w], `P = 2(${num(l.value, 'length', s)} + ${num(w.value, 'length', s)})`))
       const d = { sym: 'd', label: nm(0, 2), value: L(0, 2), kind: 'length' as const, highlight: { segments: [seg(pts[0], pts[2])] } }
-      rows.push({ title: 'Diagonal', general: 'd = \\sqrt{l^2 + w^2}', symbols: [l, w, d], substitution: `d = \\sqrt{${num(l.value, 'length', s)}^2 + ${num(w.value, 'length', s)}^2}`, value: d.value, kind: 'length', highlight: d.highlight })
+      rows.push({ title: 'Diagonal', general: 'd = \\sqrt{l^2 + w^2}', symbols: [l, w, d], substitution: `d = \\sqrt{${numSquared(l.value, 'length', s)} + ${numSquared(w.value, 'length', s)}}`, value: d.value, kind: 'length', highlight: d.highlight })
       break
     }
     case 'parallelogram':
@@ -168,13 +190,13 @@ export function polygonReport(input: V3[], names: string[], s: MeasureSettings):
       const right = angles.findIndex((x) => Math.abs(x - Math.PI / 2) < 1e-3)
       if (cls.kind === 'equilateral-triangle') {
         const a = sym('a', 0, 1)
-        rows.push({ title: 'Area', general: 'A = \\frac{\\sqrt{3}}{4}a^2', symbols: [a], substitution: `A = \\frac{\\sqrt{3}}{4} \\times ${num(a.value, 'length', s)}^2`, value: area, kind: 'area', highlight: { region } })
+        rows.push({ title: 'Area', general: 'A = \\frac{\\sqrt{3}}{4}a^2', symbols: [a], substitution: `A = \\frac{\\sqrt{3}}{4} \\times ${numSquared(a.value, 'length', s)}`, value: area, kind: 'area', highlight: { region } })
       } else if (right >= 0) {
         const b = sym('b', right, (right + 1) % 3)
         const p = { ...sym('p', right, (right + 2) % 3) }
         rows.push({ title: 'Area', general: 'A = \\tfrac{1}{2} \\times b \\times p', symbols: [b, p], substitution: `A = \\tfrac{1}{2} \\times ${num(b.value, 'length', s)} \\times ${num(p.value, 'length', s)}`, value: area, kind: 'area', highlight: { region } })
         const hyp = sym('c', (right + 1) % 3, (right + 2) % 3)
-        rows.push({ title: 'Hypotenuse (Pythagoras)', general: 'c = \\sqrt{b^2 + p^2}', symbols: [b, p, hyp], substitution: `c = \\sqrt{${num(b.value, 'length', s)}^2 + ${num(p.value, 'length', s)}^2}`, value: hyp.value, kind: 'length', highlight: hyp.highlight })
+        rows.push({ title: 'Hypotenuse (Pythagoras)', general: 'c = \\sqrt{b^2 + p^2}', symbols: [b, p, hyp], substitution: `c = \\sqrt{${numSquared(b.value, 'length', s)} + ${numSquared(p.value, 'length', s)}}`, value: hyp.value, kind: 'length', highlight: hyp.highlight })
       } else {
         const b = sym('b', 0, 1)
         const foot = footOfPerpendicular(pts[2], { kind: 'line', p: pts[0], d: sub(pts[1], pts[0]) })
@@ -213,12 +235,26 @@ export function polygonReport(input: V3[], names: string[], s: MeasureSettings):
       rows.push(perimeterRow('P = n \\times s', [side], `P = ${n} \\times ${num(side.value, 'length', s)}`))
       break
     }
+    case 'skew':
+    case 'crossed':
+    case 'degenerate': {
+      // Corners not in one plane, sides that cross or corners in a line bound no single flat
+      // inside: there is no area to work out, only the distance round.
+      rows.push(perimeterRow('P = \\text{sum of all sides}', [], `P = ${pts.map((_, k) => num(L(k, (k + 1) % n), 'length', s)).join(' + ')}`))
+      return { name: cls.name, cls, rows, note: cls.notAShape }
+    }
     default: {
+      // A shape that is not level is summed in its own plane, from its first corner along u and v;
+      // read off x and y it was its shadow's sum (all zeros for an upright one) beside its true area.
+      const level = pts.every((p) => p[2] === pts[0][2])
+      const plane = level ? null : polygonPlane(pts)
+      const q = plane ? plane.flat.map((p): V3 => [p[0] - plane.flat[0][0], p[1] - plane.flat[0][1], 0]) : pts
+      const [x, y] = plane ? ['u', 'v'] : ['x', 'y']
       rows.push({
-        title: 'Area (shoelace formula)',
-        general: 'A = \\tfrac{1}{2}\\left|\\sum_{i} (x_i y_{i+1} - x_{i+1} y_i)\\right|',
+        title: plane ? 'Area (shoelace formula, in the shape’s own plane)' : 'Area (shoelace formula)',
+        general: `A = \\tfrac{1}{2}\\left|\\sum_{i} (${x}_i ${y}_{i+1} - ${x}_{i+1} ${y}_i)\\right|`,
         symbols: [],
-        substitution: `A = \\tfrac{1}{2}\\left|${pts.map((p, i) => `(${num(p[0], 'length', s)})(${num(pts[(i + 1) % n][1], 'length', s)}) - (${num(pts[(i + 1) % n][0], 'length', s)})(${num(p[1], 'length', s)})`).slice(0, 6).join(' + ')}${n > 6 ? ' + \\dots' : ''}\\right|`,
+        substitution: `A = \\tfrac{1}{2}\\left|${q.map((p, i) => `(${num(p[0], 'length', s)})(${num(q[(i + 1) % n][1], 'length', s)}) - (${num(q[(i + 1) % n][0], 'length', s)})(${num(p[1], 'length', s)})`).slice(0, 6).join(' + ')}${n > 6 ? ' + \\dots' : ''}\\right|`,
         value: area,
         kind: 'area',
         highlight: { region }
@@ -241,7 +277,7 @@ export function circleReport(c: V3, r: number, centerName: string, s: MeasureSet
   const edge = add(c, scale([1, 0, 0], r))
   const rSym: FormulaSymbol = { sym: 'r', label: `${centerName} to circle`, value: r, kind: 'length', highlight: { segments: [[c, edge]] } }
   const rows: FormulaRow[] = [
-    { title: 'Area', general: 'A = \\pi r^2', symbols: [rSym], substitution: `A = \\pi \\times ${num(r, 'length', s)}^2`, value: Math.PI * r * r, kind: 'area', highlight: { region } },
+    { title: 'Area', general: 'A = \\pi r^2', symbols: [rSym], substitution: `A = \\pi \\times ${numSquared(r, 'length', s)}`, value: Math.PI * r * r, kind: 'area', highlight: { region } },
     { title: 'Circumference', general: 'C = 2\\pi r', symbols: [rSym], substitution: `C = 2\\pi \\times ${num(r, 'length', s)}`, value: 2 * Math.PI * r, kind: 'length', highlight: { segments: region.map((p, i) => [p, region[(i + 1) % region.length]] as [V3, V3]) } },
     { title: 'Diameter', general: 'd = 2r', symbols: [rSym], substitution: `d = 2 \\times ${num(r, 'length', s)}`, value: 2 * r, kind: 'length', highlight: { segments: [[add(c, [-r, 0, 0]), edge]] } }
   ]

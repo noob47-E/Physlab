@@ -168,10 +168,10 @@ const hits = (a: LabelBox, b: LabelBox) => a.x < b.x + b.w && a.x + a.w > b.x &&
 
 /**
  * The collision pass every label goes through: the first free place on a ladder of steps below
- * and above where it wants to be (then to either side), or where it wanted to be if every step is
- * taken. The old pass slid the box to just past whichever label it hit, alternating down and up;
- * with the two long piece labels and four side labels at the middle of a cut it bounced between
- * two taken places and gave up on top of one.
+ * and above where it wants to be, then the nearest free place along its own row to either side,
+ * or where it wanted to be if all of those are taken. The old pass slid the box to just past
+ * whichever label it hit, alternating down and up; with the two long piece labels and four side
+ * labels at the middle of a cut it bounced between two taken places and gave up on top of one.
  */
 export function settleLabel(box: LabelBox, placed: readonly LabelBox[], gap = 2, rungs = 6): LabelBox {
   if (!placed.some((p) => hits(box, p))) return box
@@ -182,10 +182,25 @@ export function settleLabel(box: LabelBox, placed: readonly LabelBox[], gap = 2,
       if (!placed.some((p) => hits(b, p))) return b
     }
   }
-  for (const s of [1, -1]) {
-    const b = { ...box, x: box.x + s * (box.w / 2 + gap) }
-    if (!placed.some((p) => hits(b, p))) return b
+  // Sideways, each step goes just past the edge of every label the box is on, so it clears labels
+  // of any width. The old step was half the label's own width: beside a label as wide as itself on
+  // the same spot they still overlapped by half a width less the gap, the step was refused, and the
+  // label was drawn on top of the one it dodged. A step that lands on another label goes on past
+  // that one too, always the same way, so it cannot bounce back; at most `rungs` steps, as above.
+  const along = (s: 1 | -1): LabelBox | null => {
+    let b = box
+    for (let k = 1; k <= rungs; k++) {
+      const on = placed.filter((p) => hits(b, p))
+      b = { ...b, x: s > 0 ? Math.max(...on.map((p) => p.x + p.w)) + gap : Math.min(...on.map((p) => p.x)) - b.w - gap }
+      if (!placed.some((p) => hits(b, p))) return b
+    }
+    return null
   }
+  const free = [along(1), along(-1)].filter((b): b is LabelBox => b !== null)
+  // The nearer side wins, the right on a tie (it was tried first before).
+  if (free.length) return free.reduce((a, b) => (Math.abs(b.x - box.x) < Math.abs(a.x - box.x) ? b : a))
+  // Nothing is free within reach, so the label stays on the spot it names, on purpose: carried
+  // further it would stand beside some other object and seem to name that one instead.
   return box
 }
 

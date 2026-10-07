@@ -539,6 +539,12 @@ export const useScene = create<SceneState>()((set, get) => {
       const parent = objects[id]
       const pts = cornersOf(id, ev)
       if (parent?.type !== 'polygon' || !pts) return
+      // Pieces are flat shapes on the page: one off it would be pressed flat onto z = 0 (an upright
+      // triangle was "already a simple shape", a tilted one fell to the floor in pieces).
+      if (pts.some((p) => p[2] !== 0)) {
+        get().pushLog({ input: '', kind: 'info', text: 'Only a shape lying flat on the page (every corner at z = 0) can be broken apart into pieces.' })
+        return
+      }
       // A simple shape (a rectangle, a triangle) is cut in two rather than refused.
       const parts = legoParts(pts, parent.decomposeGoal ?? 'basic', parent.decomposeIndex ?? 0)
       if (parts.length < 2) {

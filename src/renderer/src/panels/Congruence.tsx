@@ -7,7 +7,7 @@ import { useScene } from '../core/store'
 import type { ObjId, PolygonObj } from '../core/types'
 import { Builder } from '../core/factory'
 import { compareTriangles, triangleFromSides, type Tri } from '../math/congruence'
-import { formatMeasure } from '../math/format'
+import { formatMeasure, unitSuffix, worldValue, type MeasureSettings } from '../math/format'
 import type { V3 } from '../math/vec'
 import { useMarks, type Marks } from '../render/Marks'
 import { NumField } from '../ui/fields'
@@ -122,16 +122,26 @@ function Row({ label, a, b, equal }: { label: string; a: string; b: string; equa
   )
 }
 
+/**
+ * Sides typed in the drawing's unit, as the panel labels them, turned into grid lengths: at
+ * 1 square = 2 cm, a 3, 4, 5 triangle is 1.5, 2 and 2.5 squares. They were read as squares, so it
+ * came out 6, 8, 10 cm.
+ */
+export const sidesInWorld = (sides: [number, number, number], s: MeasureSettings): [number, number, number] =>
+  sides.map((v) => worldValue(v, 'length', s)) as [number, number, number]
+
 /** A triangle typed in by its three sides, drawn beside the last thing on the page. */
 export function TriangleFromSides() {
   const [sides, setSides] = useState<[number, number, number]>([3, 4, 5])
+  const unit = useScene((s) => unitSuffix('length', s.settings).trim())
   const [error, setError] = useState('')
   const draw = () => {
     const s = useScene.getState()
     // Put it to the right of everything already drawn, so two typed triangles sit side by side.
     let x = 0
     for (const c of s.ev.values.values()) if (c.type === 'point') x = Math.max(x, c.p[0] + 1)
-    const pts = triangleFromSides(sides[0], sides[1], sides[2], [x, 0, 0])
+    const [sa, sb, sc] = sidesInWorld(sides, s.settings)
+    const pts = triangleFromSides(sa, sb, sc, [x, 0, 0])
     if (!pts) {
       setError('Those three sides cannot make a triangle: the two shorter ones must add up to more than the longest.')
       return
@@ -164,6 +174,7 @@ export function TriangleFromSides() {
             </div>
           </label>
         ))}
+        {unit && <span className="text-ink-faint">{unit}</span>}
         <button className="btn" onClick={draw}>
           Draw
         </button>

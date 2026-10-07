@@ -3,7 +3,7 @@ import { Combine, FlipHorizontal2, Puzzle, RotateCcw, RotateCw, Scissors, Shapes
 import { useScene } from '../core/store'
 import type { ObjId } from '../core/types'
 import { freeCapitals } from '../core/naming'
-import { decompose, type DecomposeGoal } from '../math/decompose'
+import { decompose, partLabel, type DecomposeGoal } from '../math/decompose'
 import { fuseChoice, legoStatus, pieceLettered } from '../math/lego'
 import { congruentParts } from '../math/congruence'
 import { formatMeasure } from '../math/format'
@@ -11,8 +11,6 @@ import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
 import { Tex } from '../ui/Tex'
-
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 
 function Hover({ h, owner, children, className = '' }: { h: Highlight; owner: ObjId; children: React.ReactNode; className?: string }) {
   const set = useHighlight((s) => s.set)
@@ -120,10 +118,12 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       const dec = obj.decomposed ? decompose(c.pts, goal, decIndex) : null
       // Corners made by the cut get the next free capitals, the same letter in every part.
       const letters = dec ? freeCapitals(Object.values(objects).map((o) => o.name), dec.newPoints.length) : []
+      // Matched in 3-D: Decompose now leaves a shape off the page where it is, and two corners of an
+      // upright shape can share x and y.
       const nameAt = (p: V3): string => {
-        const k = c.pts.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-7)
+        const k = c.pts.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) < 1e-7)
         if (k >= 0) return names[k]
-        const n = dec ? dec.newPoints.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-7) : -1
+        const n = dec ? dec.newPoints.findIndex((q) => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) < 1e-7) : -1
         return n >= 0 ? letters[n] ?? '?' : '?'
       }
       // Parts that are the same shape — the two triangles either side of a trapezium's rectangle,
@@ -242,7 +242,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
 
       {data.kind === 'polygon' && data.dec ? (
         <div>
-          {data.dec.parts.length === 1 ? (
+          {data.dec.parts.length === 1 && data.dec.parts[0].cls.notAShape ? (
+            <div className="px-2 py-2 text-ink-dim">{data.dec.parts[0].cls.notAShape}</div>
+          ) : data.dec.parts.length === 1 ? (
             <div className="px-2 py-2 text-ink-dim">
               This is already a simple shape; no need to split it.
               {goal === 'basic' && <span className="text-ink-faint"> It is a rectangle, square or triangle already.</span>}
@@ -258,7 +260,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                 return (
                   <div key={i} className="border-t border-line">
                     <Hover h={{ region: part.pts }} owner={id} className="mx-1 mt-1 flex items-center gap-2">
-                      <span className="rounded bg-surface-4 px-1.5 text-fine font-bold text-ink-strong">{ROMAN[i]}</span>
+                      <span className="rounded bg-surface-4 px-1.5 text-fine font-bold text-ink-strong">{partLabel(i)}</span>
                       <span className="text-ink-strong">
                         {part.cls.name}{' '}
                         <span className="font-math italic text-ink-dim">
@@ -266,7 +268,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
                         </span>
                       </span>
                       <span className="flex-1" />
-                      <Tex tex={`A_{${ROMAN[i]}} = ${answerTex(part.area, 'area', settings)}`} className="text-ink-strong" />
+                      <Tex tex={`A_{${partLabel(i)}} = ${answerTex(part.area, 'area', settings)}`} className="text-ink-strong" />
                     </Hover>
                     {areaRow && <Row row={{ ...areaRow, highlight: { ...areaRow.highlight, region: part.pts } }} owner={id} />}
                   </div>
@@ -275,14 +277,14 @@ export function ShapeInfo({ id }: { id: ObjId }) {
               {data.same.map((pair) => (
                 <div key={`${pair.i}-${pair.j}`} className="border-t border-line px-2 py-1.5 text-ink">
                   <span className="mr-1 font-semibold text-good">
-                    {ROMAN[pair.i]} and {ROMAN[pair.j]} are congruent.
+                    {partLabel(pair.i)} and {partLabel(pair.j)} are congruent.
                   </span>
                   {pair.sentence}
                 </div>
               ))}
               <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-line pt-2 text-lead text-ink-strong">
                 <Tex
-                  tex={`A = ${data.dec.parts.map((_, i) => `A_{${ROMAN[i]}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
+                  tex={`A = ${data.dec.parts.map((_, i) => `A_{${partLabel(i)}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
                 />
               </Hover>
             </>

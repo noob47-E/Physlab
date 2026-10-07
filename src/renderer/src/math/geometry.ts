@@ -26,6 +26,7 @@ export function paramInRange(kind: LineKind, t: number): boolean {
 }
 
 export function lineLineIntersection(l1: GLine, l2: GLine): V3 | null {
+  if (l1.d[2] !== 0 || l2.d[2] !== 0) return lineLineIntersection3D(l1, l2)
   const denom = l1.d[0] * l2.d[1] - l1.d[1] * l2.d[0]
   if (Math.abs(denom) < EPS) return null
   const w = sub(l2.p, l1.p)
@@ -40,7 +41,39 @@ export function lineLineIntersection(l1: GLine, l2: GLine): V3 | null {
   return p1
 }
 
+/**
+ * Where two lines meet when either leaves the level: the closest points of the two, which must
+ * coincide. Read in x and y only, two lines crossing in an upright plane had no x–y cross and were
+ * "parallel — none".
+ */
+function lineLineIntersection3D(l1: GLine, l2: GLine): V3 | null {
+  const n = cross(l1.d, l2.d)
+  const nn = dot(n, n)
+  if (nn <= 1e-20 * dot(l1.d, l1.d) * dot(l2.d, l2.d)) return null
+  const w = sub(l2.p, l1.p)
+  const t = dot(cross(w, l2.d), n) / nn
+  const u = dot(cross(w, l1.d), n) / nn
+  if (!paramInRange(l1.kind, t) || !paramInRange(l2.kind, u)) return null
+  const p1 = add(l1.p, scale(l1.d, t))
+  // Skew lines pass each other: their closest points are apart.
+  if (dist(p1, add(l2.p, scale(l2.d, u))) > 1e-6 * Math.max(1, len(w), len(l1.d), len(l2.d))) return null
+  return p1
+}
+
+/**
+ * Where a line meets a circle. A circle lies level, at its centre's height: the line meets it where
+ * it crosses that level, and only if that point is on the circle. It used to be met as a sphere, so
+ * a line straight down through the centre met a circle of radius 1 at (0, 0, ±1).
+ */
 export function lineCircleIntersection(l: GLine, c: GCircle): V3[] {
+  const dz = l.d[2]
+  if (Math.abs(dz) > EPS * Math.max(1, len(l.d))) {
+    const t = (c.c[2] - l.p[2]) / dz
+    if (!paramInRange(l.kind, t)) return []
+    const p = add(l.p, scale(l.d, t))
+    return Math.abs(dist(p, c.c) - c.r) <= 1e-9 * Math.max(1, c.r) ? [[p[0], p[1], c.c[2]]] : []
+  }
+  if (Math.abs(l.p[2] - c.c[2]) > 1e-9 * Math.max(1, c.r)) return []
   const f = sub(l.p, c.c)
   const A = dot(l.d, l.d)
   const B = 2 * dot(f, l.d)
@@ -114,7 +147,11 @@ export function circumcenter(a: V3, b: V3, c: V3): V3 | null {
   ]
 }
 
-/** Signed area (counter-clockwise positive) of a planar polygon in the xy plane. */
+/**
+ * Signed area (counter-clockwise positive) of a planar polygon in the xy plane. It reads x and y
+ * only, so a caller lays the corners flat first; a shape in any other plane goes through
+ * polygonPlane, whose `flat` corners this reads correctly.
+ */
 export function signedArea2D(pts: V3[]): number {
   let s = 0
   for (let i = 0; i < pts.length; i++) {
@@ -131,6 +168,69 @@ export function polygonArea(pts: V3[]): number {
   let acc: V3 = [0, 0, 0]
   for (let i = 0; i < pts.length; i++) acc = add(acc, cross(pts[i], pts[(i + 1) % pts.length]))
   return len(acc) / 2
+}
+
+/**
+ * How far corners may lie off one plane and still make a flat shape, as a fraction of the
+ * polygon's size (the distance from its centre to its farthest corner): one part in a thousand.
+ * - Rounding dust (about 1e-16) and a corner nudged by 1e-8 are far inside it.
+ * - Corners typed to 3 decimal places move up to √3 × 0.0005 ≈ 0.0009 off their true plane. Of
+ *   20 000 tilted regular polygons typed that way, none whose corners lie 1 or more from its
+ *   centre was bent past it (the worst, 0.00082); a smaller shape typed that coarsely can be,
+ *   and is then called skew, since its typed corners really are not in one plane.
+ * - A bend inside it changes sides and angles only to second order (about a millionth), far
+ *   below the 0.2 % and 0.25° the shape names allow, so the flat name stays the right one.
+ * - A corner lifted on purpose by a few thousandths of the shape's size is caught: a 2 × 2
+ *   square with one corner raised 0.006 is called skew.
+ */
+export const PLANAR_TOL = 1e-3
+
+/** A polygon's own plane, with its corners laid out in it. */
+export interface PolygonPlane {
+  /** Unit normal: seen from its tip, the corners run anticlockwise. */
+  normal: V3
+  /** The corners' average; the plane passes through it. */
+  origin: V3
+  /** Unit axes along the plane, at right angles, with u × v = normal. */
+  u: V3
+  v: V3
+  /**
+   * Each corner p as [(p − origin)·u, (p − origin)·v, 0]: lengths and angles kept, and the
+   * corners run anticlockwise, so 2-D code (signedArea2D, interiorAngles) reads them as it would
+   * a shape drawn on the page.
+   */
+  flat: V3[]
+  /** Every corner lies within relTol × size of the plane (size: the farthest corner's distance from origin). */
+  planar: boolean
+}
+
+/**
+ * The plane a polygon lies in, found from Newell's normal, with its corners laid out flat in that
+ * plane: for a shape anywhere in space, not only one on the page. Null when there is no plane to
+ * find: fewer than three corners, all of them on one line, or a shape crossing itself whose two
+ * loops have equal areas going opposite ways (Newell's normal is then nothing).
+ */
+export function polygonPlane(pts: V3[], relTol = PLANAR_TOL): PolygonPlane | null {
+  if (pts.length < 3) return null
+  const origin = centroid(pts)
+  const rel = pts.map((p) => sub(p, origin))
+  // Newell's normal: the sides' cross products added up give twice the area, pointing the way a
+  // right hand curls round the corners. Unlike the cross product at one corner, it is not thrown
+  // by a corner in line with its neighbours or one sitting slightly off the plane; taken about the
+  // centre, a shape far from the origin loses no digits to it.
+  let n: V3 = [0, 0, 0]
+  for (let i = 0; i < rel.length; i++) n = add(n, cross(rel[i], rel[(i + 1) % rel.length]))
+  const size = rel.reduce((m, r) => Math.max(m, len(r)), 0)
+  if (!(len(n) > 1e-12 * size * size)) return null
+  const normal = normalize(n)
+  const planar = rel.every((r) => Math.abs(dot(r, normal)) <= relTol * size)
+  // Axes along the plane: v across the normal from the x axis (from the y axis when the normal is
+  // near the x axis, where that cross product fades away), then u = v × normal. So u × v = normal,
+  // and the corners run anticlockwise in (u, v) just as they do seen from the normal's tip. For a
+  // shape on the page listed anticlockwise, u and v are the x and y axes themselves.
+  const v = normalize(cross(normal, Math.abs(normal[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]))
+  const u = cross(v, normal)
+  return { normal, origin, u, v, flat: rel.map((r): V3 => [dot(r, u), dot(r, v), 0]), planar }
 }
 
 export function perimeter(pts: V3[], closed = true): number {
@@ -289,9 +389,30 @@ export function circleEquationText(centre: V3, r: number, digits = 3): string {
   return `${part('x', centre[0])} + ${part('y', centre[1])} = ${fmt(r * r, digits)}`
 }
 
+const point3 = (p: V3, digits: number) => `(${fmt(p[0], digits)}, ${fmt(p[1], digits)}, ${fmt(p[2], digits)})`
+
+/**
+ * The equation of the line through p and q, true in 3-D: on the page, the textbook form; level
+ * above it, that and its height ("y = 6, z = 2"); climbing, the vector form r = p + t(q − p). It
+ * used to be the line's shadow's equation, so (0, 0, 0)–(1, 1, 1) read "x − y = 0".
+ */
+export function lineEquation3DText(p: V3, q: V3, digits = 3): string {
+  if (p[2] !== q[2]) return `r = ${point3(p, digits)} + t${point3(sub(q, p), digits)}`
+  const flat = lineEquationText(lineEquation(p, q), digits)
+  return Math.abs(p[2]) > 1e-12 ? `${flat}, z = ${fmt(p[2], digits)}` : flat
+}
+
+/** A circle's equation with its height when it is not on the page: "x² + y² = 4, z = 5". */
+export function circleEquation3DText(centre: V3, r: number, digits = 3): string {
+  const flat = circleEquationText(centre, r, digits)
+  return Math.abs(centre[2]) > 1e-12 ? `${flat}, z = ${fmt(centre[2], digits)}` : flat
+}
+
 export function perpendicularBisector(a: V3, b: V3): GLine {
   const d = sub(b, a)
-  return { kind: 'line', p: mid(a, b), d: [-d[1], d[0], 0] }
+  // A segment straight up has no level direction across it; any level one is square to it.
+  const across: V3 = [-d[1], d[0], 0]
+  return { kind: 'line', p: mid(a, b), d: len(across) > 1e-12 * len(d) ? across : [1, 0, 0] }
 }
 
 /** Internal angle bisector at vertex between rays to a and b. */

@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ListOrdered } from 'lucide-react'
 import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
-import { circleEquationText, distanceToLineLike, footOfPerpendicular, lineEquation, lineEquationText, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
+import { circleEquation3DText, distanceToLineLike, footOfPerpendicular, lineEquation, lineEquation3DText, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
-import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, unitSuffix, worldValue } from '../math/format'
+import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, superscriptPowers, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
 import { isPieceCorner, namedByLetters, pieceLettered, pieceMeasures } from '../math/lego'
 import { classifyPolygon } from '../math/shapes'
@@ -20,11 +20,16 @@ import { displayName } from '../core/naming'
 import { CongruenceCard, TriangleFromSides } from './Congruence'
 import { trianglesToCompare } from '../math/congruence'
 
-type Row = {
+export type Row = {
   label: string
   value: number | string
   kind?: 'num' | 'length' | 'area' | 'angle' | 'direction' | 'text'
   accent?: boolean
+  /**
+   * A vector's own unit ("N", "m/s"): its rows read in it at the student's precision, never in the
+   * grid's unit — a force of 10 N read "10 u", or "20 cm" at 1 square = 2 cm.
+   */
+  unit?: string
   /**
    * Set when PhysLab can make the value be whatever is typed — a length whose far end is a free
    * point, an angle whose arm can turn. Rows without it stay read-only, because a measurement
@@ -33,6 +38,10 @@ type Row = {
   set?: (value: number) => void
 }
 type Get = (id: ObjId) => Computed | undefined
+
+/** What a direction row says for a zero vector, which has none: it used to read 0°, "0" or "undefined°". */
+const NO_DIRECTION = 'undefined — a zero vector has no direction'
+const isZero = (v: V3) => !(len(v) > 1e-12)
 
 /** "circle, centre J" as a heading: "Circle, centre J". */
 const capitalised = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
@@ -46,26 +55,36 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
         { label: 'x', value: c.p[0], kind: 'length' },
         { label: 'y', value: c.p[1], kind: 'length' }
       ]
-      if (Math.abs(c.p[2]) > 1e-12) rows.push({ label: 'z', value: c.p[2], kind: 'length' })
-      rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' }, { label: 'Angle from +x', value: heading(c.p), kind: 'direction' })
+      const threeD = Math.abs(c.p[2]) > 1e-12
+      if (threeD) rows.push({ label: 'z', value: c.p[2], kind: 'length' })
+      rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' })
+      // Off the page, a heading from +x is only the shadow's: (0, 0, 5) read 0°. OP's angles with the
+      // axes, as the vector card gives them.
+      if (!threeD) rows.push({ label: 'Angle from +x', value: heading(c.p), kind: 'direction' })
+      else {
+        const [a, b, g] = directionAngles(c.p)
+        rows.push({ label: 'α with x-axis', value: a, kind: 'angle' }, { label: 'β with y-axis', value: b, kind: 'angle' }, { label: 'γ with z-axis', value: g, kind: 'angle' })
+      }
       return [{ title: `Point ${o.name}`, rows }]
     }
     case 'vector': {
       const v = c.comp
+      const unit = o.type === 'vector' && o.unit ? o.unit : undefined
       const rows: Row[] = [
-        { label: `${o.name}x (x-component)`, value: v[0], kind: 'length' },
-        { label: `${o.name}y (y-component)`, value: v[1], kind: 'length' }
+        { label: `${o.name}x (x-component)`, value: v[0], kind: 'length', unit },
+        { label: `${o.name}y (y-component)`, value: v[1], kind: 'length', unit }
       ]
       const threeD = Math.abs(v[2]) > 1e-12
-      if (threeD) rows.push({ label: `${o.name}z (z-component)`, value: v[2], kind: 'length' })
-      rows.push({ label: `|${o.name}| magnitude`, value: len(v), kind: 'length', accent: true })
-      if (!threeD) rows.push({ label: 'θ with +x axis', value: heading(v), kind: 'direction', accent: true })
+      if (threeD) rows.push({ label: `${o.name}z (z-component)`, value: v[2], kind: 'length', unit })
+      rows.push({ label: `|${o.name}| magnitude`, value: len(v), kind: 'length', accent: true, unit })
+      if (isZero(v)) rows.push({ label: 'θ with +x axis', value: NO_DIRECTION, kind: 'text' })
+      else if (!threeD) rows.push({ label: 'θ with +x axis', value: heading(v), kind: 'direction', accent: true })
       else {
         const [a, b, g] = directionAngles(v)
         rows.push({ label: 'α with x-axis', value: a, kind: 'angle' }, { label: 'β with y-axis', value: b, kind: 'angle' }, { label: 'γ with z-axis', value: g, kind: 'angle' })
       }
-      rows.push({ label: 'Unit vector', value: fmtIJK(normalize(v), 4), kind: 'text' }, { label: 'Tail', value: fmtPoint(c.tail), kind: 'text' }, { label: 'Head', value: fmtPoint(add(c.tail, v)), kind: 'text' })
-      return [{ title: `Vector ${o.name} = ${fmtIJK(v)}`, rows }]
+      rows.push({ label: 'Unit vector', value: isZero(v) ? NO_DIRECTION : fmtIJK(normalize(v), 4), kind: 'text' }, { label: 'Tail', value: fmtPoint(c.tail), kind: 'text' }, { label: 'Head', value: fmtPoint(add(c.tail, v)), kind: 'text' })
+      return [{ title: `Vector ${o.name} = ${superscriptPowers(fmtIJK(v))}`, rows }]
     }
     case 'segment':
     case 'ray':
@@ -73,6 +92,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
       const a = c.line.p
       const b = add(a, c.line.d)
       const eq = lineEquation(a, b)
+      const level = a[2] === b[2]
       const rows: Row[] = []
       if (c.type === 'segment') {
         // A length can be typed when the far end is a point PhysLab is free to move: the end
@@ -97,12 +117,16 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
           { label: 'Midpoint', value: fmtPoint(mid(a, b)), kind: 'text' }
         )
       }
-      rows.push(
-        { label: 'Slope m', value: Number.isFinite(eq.slope) ? eq.slope : 'vertical (undefined)', kind: Number.isFinite(eq.slope) ? 'num' : 'text' },
-        { label: 'Inclination', value: eq.inclination, kind: 'angle' },
-        { label: 'Equation', value: lineEquationText(eq), kind: 'text' }
-      )
-      if (Number.isFinite(eq.yIntercept)) rows.push({ label: 'y-intercept', value: eq.yIntercept, kind: 'length' })
+      // Slope, inclination and y-intercept belong to a line on a level: one that climbs had its
+      // shadow's, and an equation in x and y only ("x − y = 0" for (0, 0, 0)–(1, 1, 1)).
+      if (level) {
+        rows.push(
+          { label: 'Slope m', value: Number.isFinite(eq.slope) ? eq.slope : 'vertical (undefined)', kind: Number.isFinite(eq.slope) ? 'num' : 'text' },
+          { label: 'Inclination', value: eq.inclination, kind: 'angle' }
+        )
+      }
+      rows.push({ label: 'Equation', value: lineEquation3DText(a, b), kind: 'text' })
+      if (level && Number.isFinite(eq.yIntercept)) rows.push({ label: 'y-intercept', value: eq.yIntercept, kind: 'length' })
       // The side the drawing calls FC is "Segment FC" here too, never its stored name "d".
       const groups = [{ title: `${c.type[0].toUpperCase()}${c.type.slice(1)} ${displayName(o, objects).replace(/^ray /, '')}`, rows }]
       // A side of a triangle/polygon: also show the whole shape.
@@ -124,7 +148,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
             { label: 'Diameter', value: 2 * r, kind: 'length' },
             { label: 'Circumference 2πr', value: 2 * Math.PI * r, kind: 'length' },
             { label: 'Area πr²', value: Math.PI * r * r, kind: 'area' },
-            { label: 'Equation', value: circleEquationText(ctr, r), kind: 'text' }
+            { label: 'Equation', value: circleEquation3DText(ctr, r), kind: 'text' }
           ]
         }
       ]
@@ -138,13 +162,21 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
         return [{ title: `${o.label ?? 'Piece'}, a piece of a shape`, rows: pieceMeasures(pts).map((r) => ({ ...r, accent: r.kind === 'area' })) }]
       }
       const names = (o.type === 'polygon' ? o.points : []).map((id) => objects[id]?.name ?? '?')
+      const cls = classifyPolygon(pts)
+      if (cls.notAShape) {
+        // Corners not in one plane, a bow-tie or corners in a line: sides and perimeter are true of
+        // it, an area or angles are not (an upright skew quadrilateral used to show its shadow's).
+        const rows: Row[] = pts.map((p, i) => ({ label: `Side ${names[i]}${names[(i + 1) % pts.length]}`, value: dist(p, pts[(i + 1) % pts.length]), kind: 'length' as const }))
+        rows.push({ label: 'Perimeter', value: rows.reduce((s, r) => s + (r.value as number), 0), kind: 'length' }, { label: 'Area', value: cls.notAShape, kind: 'text' })
+        return [{ title: `${cls.name} ${names.join('')}`, rows }]
+      }
       if (pts.length === 3) {
         const t = triangleInfo(pts[0], pts[1], pts[2])
         const [A, B, C] = names
         return [
           {
             // Named as ShapeInfo and the chip name it ("Right-angled triangle EFG"), not plain "Triangle".
-            title: `${classifyPolygon(pts).name} ${A}${B}${C}`,
+            title: `${cls.name} ${A}${B}${C}`,
             rows: [
               { label: `Side ${B}${C} (a)`, value: t.sides[0], kind: 'length', accent: true },
               { label: `Side ${C}${A} (b)`, value: t.sides[1], kind: 'length', accent: true },
@@ -170,7 +202,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
       rows.push({ label: 'Perimeter', value: rows.reduce((s, r) => s + (r.value as number), 0), kind: 'length' }, { label: 'Area', value: polygonArea(pts), kind: 'area', accent: true })
       // Named as ShapeInfo names it: a rectangle fused back from its halves reads "Rectangle ABCD",
       // not "Polygon poly1" (Fix 17).
-      return [{ title: `${classifyPolygon(pts).name} ${names.join('')}`, rows }]
+      return [{ title: `${cls.name} ${names.join('')}`, rows }]
     }
     case 'angle': {
       // Typing an angle turns whichever arm is free about the vertex, keeping its length. If both
@@ -218,7 +250,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
   }
 }
 
-function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; rows: Row[] } | null {
+export function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; rows: Row[] } | null {
   const ca = get(a.id)
   const cb = get(b.id)
   if (!ca || !cb) return null
@@ -228,13 +260,14 @@ function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; ro
     return {
       title: `${a.name} and ${b.name}`,
       rows: [
-        { label: 'Angle between', value: angleBetween(A, B), kind: 'angle', accent: true },
+        isZero(A) || isZero(B) ? { label: 'Angle between', value: NO_DIRECTION, kind: 'text' } : { label: 'Angle between', value: angleBetween(A, B), kind: 'angle', accent: true },
         { label: `${a.name}·${b.name}`, value: dot(A, B), accent: true },
         { label: `${a.name}×${b.name}`, value: fmtIJK(cross(A, B), 3), kind: 'text' },
         { label: `|${a.name}×${b.name}| (parallelogram area)`, value: len(cross(A, B)), kind: 'area' },
         { label: `|${a.name}+${b.name}|`, value: len(add(A, B)), kind: 'length' },
         { label: `|${a.name}−${b.name}|`, value: len(sub(A, B)), kind: 'length' },
-        { label: `Projection of ${b.name} on ${a.name}`, value: dot(A, B) / (len(A) || 1), kind: 'length' }
+        // Nothing projects onto a zero vector: this read 0 while the steps button said undefined.
+        { label: `Projection of ${b.name} on ${a.name}`, value: isZero(A) ? NO_DIRECTION : dot(A, B) / len(A), kind: isZero(A) ? 'text' : 'length' }
       ]
     }
   }
@@ -249,7 +282,7 @@ function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; ro
       rows: [
         { label: `Distance ${a.name}${b.name}`, value: dist(P, Q), kind: 'length', accent: true },
         { label: 'Midpoint', value: fmtPoint(mid(P, Q)), kind: 'text' },
-        { label: 'Slope', value: Number.isFinite(eq.slope) ? eq.slope : 'undefined', kind: Number.isFinite(eq.slope) ? 'num' : 'text' },
+        ...(P[2] === Q[2] ? [{ label: 'Slope', value: Number.isFinite(eq.slope) ? eq.slope : 'undefined', kind: Number.isFinite(eq.slope) ? ('num' as const) : ('text' as const) }] : []),
         { label: `Vector ${a.name}→${b.name}`, value: fmtIJK(sub(Q, P)), kind: 'text' }
       ]
     }
@@ -275,7 +308,8 @@ function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; ro
       title: 'Two lines',
       rows: [
         { label: 'Angle between', value: acute, kind: 'angle', accent: true },
-        { label: 'Intersection', value: X ? fmtPoint(X) : 'parallel — none', kind: 'text' },
+        // Lines that are not parallel and do not meet pass each other at different heights.
+        { label: 'Intersection', value: X ? fmtPoint(X) : acute < 1e-9 ? 'parallel — none' : 'none — they pass without meeting (skew lines)', kind: 'text' },
         { label: 'Relation', value: acute < 1e-9 ? 'parallel' : Math.abs(acute - Math.PI / 2) < 1e-9 ? 'perpendicular' : 'neither', kind: 'text' }
       ]
     }
@@ -294,10 +328,46 @@ function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: string; ro
   return null
 }
 
+/** The kind a row's number is formatted as. */
+const kindOf = (row: Row) => (row.kind === 'angle' || row.kind === 'direction' || row.kind === 'length' || row.kind === 'area' ? row.kind : 'number')
+
+/**
+ * A value as its row shows it: in the vector's own unit when it has one, else the drawing's, with
+ * powers of ten raised (N44: at 1 square = 1.5×10¹⁰ the cards wrote "3.11x10^10 u").
+ */
+function valueText(v: number | string, row: Row, settings: SceneSettings, k: ReturnType<typeof kindOf> = kindOf(row)): string {
+  if (typeof v === 'string') return superscriptPowers(v)
+  return superscriptPowers(row.unit ? `${fmtPrecise(v, settings)} ${row.unit}` : formatMeasure(v, k, settings))
+}
+
+/** The text a row shows (exported for the tests). */
+export const rowText = (row: Row, settings: SceneSettings): string => valueText(row.value, row, settings)
+
+/**
+ * How a typed-into box reads when not being typed in: lengths and angles at the student's
+ * precision, as the drawing labels them. An angle box showed "36.8699 °" beside 36.87°.
+ */
+export function boxDisplay(k: ReturnType<typeof kindOf>, settings: SceneSettings): ((v: number) => string) | undefined {
+  return k === 'length' || k === 'angle' ? (v) => fmtPrecise(v, settings) : undefined
+}
+
+/**
+ * The number a box hands back when it loses focus, or null for none: Escape cancels, and a box
+ * left as it was filled in changes nothing (focusing then leaving one wrote 4.4721 back over the
+ * point's true place and added an undo step).
+ */
+export function typedValue(text: string, seed: string, cancelled: boolean): number | null {
+  if (cancelled || text === seed) return null
+  const raw = text.trim().replace(/−/g, '-')
+  if (!raw) return null
+  const v = Number(raw)
+  return Number.isFinite(v) ? v : null
+}
+
 function RowView({ row, base, settings }: { row: Row; base?: Row; settings: SceneSettings }) {
   // 'direction' is a heading from +x, so the compass-bearing setting applies to it; corner angles stay 'angle'.
-  const k = row.kind === 'angle' || row.kind === 'direction' || row.kind === 'length' || row.kind === 'area' ? row.kind : 'number'
-  const show = (v: number | string) => (typeof v === 'string' ? v : formatMeasure(v, k, settings))
+  const k = kindOf(row)
+  const show = (v: number | string) => valueText(v, row, settings, k)
   const delta = base && typeof row.value === 'number' && typeof base.value === 'number' ? row.value - base.value : 0
   return (
     <>
@@ -311,7 +381,7 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
             suffix={unitSuffix(k, settings)}
             // A length reads at the student's precision, as the tip while drawing and the label on
             // the drawing do: the box used to show 4.6063 u beside a segment labelled 4.61 u (Fix 1).
-            display={k === 'length' ? (v) => fmtPrecise(v, settings) : undefined}
+            display={boxDisplay(k, settings)}
             onSet={(shown) => row.set!(worldValue(shown, k, settings))}
           />
         ) : (
@@ -321,7 +391,7 @@ function RowView({ row, base, settings }: { row: Row; base?: Row; settings: Scen
           <span className={`ml-2 text-fine ${delta > 0 ? 'text-good' : 'text-bad'}`}>
             Δ {delta > 0 ? '+' : '−'}
             {/* A change of heading is an amount of turning, never a bearing. */}
-            {formatMeasure(Math.abs(delta), k === 'direction' ? 'angle' : k, settings)}
+            {valueText(Math.abs(delta), row, settings, k === 'direction' ? 'angle' : k)}
           </span>
         )}
       </div>
@@ -504,13 +574,14 @@ export function Measurements() {
 function EditableValue({ value, suffix, display, onSet }: { value: number; suffix: string; display?: (v: number) => string; onSet: (shown: number) => void }) {
   const [text, setText] = useState('')
   const [editing, setEditing] = useState(false)
+  const cancelled = useRef(false)
+  const seed = fmt(value, 4).replace(/−/g, '-')
   const shown = editing ? text : display ? display(value) : fmt(value, 4)
   const commit = () => {
     setEditing(false)
-    const raw = text.trim().replace(/−/g, '-')
-    if (!raw) return
-    const v = Number(raw)
-    if (Number.isFinite(v)) onSet(v)
+    const v = typedValue(text, seed, cancelled.current)
+    cancelled.current = false
+    if (v !== null) onSet(v)
   }
   return (
     <span className="inline-flex items-center gap-1">
@@ -520,7 +591,8 @@ function EditableValue({ value, suffix, display, onSet }: { value: number; suffi
         title="Type a value and the drawing moves to match"
         onFocus={(e) => {
           setEditing(true)
-          setText(fmt(value, 4).replace(/−/g, '-'))
+          cancelled.current = false
+          setText(seed)
           e.target.select()
         }}
         onChange={(e) => setText(e.target.value)}
@@ -528,6 +600,7 @@ function EditableValue({ value, suffix, display, onSet }: { value: number; suffi
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           if (e.key === 'Escape') {
+            cancelled.current = true
             setEditing(false)
             ;(e.target as HTMLInputElement).blur()
           }

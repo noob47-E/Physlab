@@ -96,8 +96,13 @@ export function compareTriangles(A: Tri, B: Tri, opts: CompareOptions = {}): Con
   const nAngles = ea.filter(Boolean).length
   const matchedName = perm.map((j) => B.names[j]).join('')
   const reasons: string[] = []
-  const sideLine = (p: Pair) => `${p.a} = ${p.b} = ${fl(p.valueA)}`
-  const angleLine = (p: Pair) => `∠${p.a} = ∠${p.b} = ${fa(p.valueA)}`
+  // Each triangle's own value: one figure for both only when both print the same. Parts equal only
+  // within the yardstick say so, rather than printing one triangle's value as if it were both.
+  const within = { side: '0.5 %', angle: fa(tol * 2) }
+  const pairLine = (p: Pair, a: string, b: string, f: (v: number) => string) =>
+    f(p.valueA) === f(p.valueB) ? `${a} = ${b} = ${f(p.valueA)}` : `${a} = ${f(p.valueA)} and ${b} = ${f(p.valueB)}, equal to within ${within[p.kind]}`
+  const sideLine = (p: Pair) => pairLine(p, p.a, p.b, fl)
+  const angleLine = (p: Pair) => pairLine(p, `∠${p.a}`, `∠${p.b}`, fa)
 
   let test: CongruenceTest | null = null
   if (nSides === 3) {
@@ -141,6 +146,13 @@ export function compareTriangles(A: Tri, B: Tri, opts: CompareOptions = {}): Con
     }
   }
 
+  // Congruent only when every one of the six matched parts agrees within the same yardstick; the
+  // rule is then the reason cited. Three parts were enough before, so 10, 10 at 60° and 10.05, 10.05
+  // at 60.5° passed by SAS while their third sides, 10 and 10.13, were unequal by that yardstick.
+  if (nSides < 3 || nAngles < 3) {
+    test = null
+    reasons.length = 0
+  }
   const congruent = test !== null
   const nameA = A.names.join('')
   if (congruent) {

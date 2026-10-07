@@ -166,7 +166,9 @@ describe('Fix 1: the Measure panel’s Length box reads at the student’s preci
       expect(box).toBe(formatMeasure(length, 'length', settings))
     }
     const panel = readSource('src/renderer/src/panels/Measurements.tsx')
-    expect(panel).toMatch(/display=\{k === 'length' \? \(v\) => fmtPrecise\(v, settings\) : undefined\}/)
+    // Lengths and angles alike (H15: an angle box read 36.8699 beside 36.87°).
+    expect(panel).toMatch(/display=\{boxDisplay\(k, settings\)\}/)
+    expect(panel).toMatch(/k === 'length' \|\| k === 'angle' \? \(v\) => fmtPrecise\(v, settings\) : undefined/)
     expect(panel).toMatch(/const shown = editing \? text : display \? display\(value\) : fmt\(value, 4\)/)
   })
 })
