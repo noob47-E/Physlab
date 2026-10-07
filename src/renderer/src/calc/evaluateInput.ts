@@ -6,7 +6,7 @@
 // line, the extras, the exact form when one is known at once, and a sentence when it fails.
 // It never touches the store: the caller decides what to remember.
 
-import { argOf, calcScope, casioToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, isEquationInX, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
+import { argOf, calcScope, keypadToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, isEquationInX, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
 import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
 import { errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
@@ -149,7 +149,7 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       // Numbers mode: set and left, one Complex answer in radians made every later bare evaluation (the Table, a
       // tangent) work in radians without a word.
       return withAngle(opts.angle, (): EvalResult => {
-        const node = math.parse(casioToMath(src))
+        const node = math.parse(keypadToMath(src))
         // A = 5 here answered 5 and stored nothing — a number that looked like a stored letter (H7). Numbers mode
         // refuses it in words that point to Variables; this mode reads the same line the same way.
         refuseStoring(node)
@@ -293,7 +293,7 @@ export type ValueBoxes = { ok: true; values: Record<string, number> } | { ok: fa
 function readBox(text: string, angle: 'deg' | 'rad'): number | null {
   if (!text.trim()) return null
   try {
-    const v: unknown = withAngle(angle, () => math.evaluate(casioToMath(text)))
+    const v: unknown = withAngle(angle, () => math.evaluate(keypadToMath(text)))
     // Only a number counts: true and a quoted "2" came back as a boolean and a string, and Number() made them 1 and 2.
     return typeof v === 'number' && Number.isFinite(v) ? v : null
   } catch {

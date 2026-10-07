@@ -939,7 +939,7 @@ describe("the algebra engine's angle unit", () => {
 
   it('says so when calculus was done in degrees, and only then', async () => {
     // In DEG mode integrate(sin(x), 0, pi) is ≈0.048 where every textbook says 2: the calculator
-    // follows the fx-991EX, but the line has to say which unit it used.
+    // follows a scientific calculator, but the line has to say which unit it used.
     const note = /\\text\{\(angles in degrees; switch to RAD for the textbook form\)\}/
     let last = await run('integrate(sin(x), 0, pi)')
     expect(last.tex).toMatch(note)

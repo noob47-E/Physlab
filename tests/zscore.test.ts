@@ -294,7 +294,7 @@ describe('the worked answers', () => {
     expect(answerOf(w)).toBe('0.6826')
     expect(w.moves.some((m) => m.tex === 'P(-1.00 < Z < 1.00) = \\Phi(1.00) - \\Phi(-1.00) = 0.8413 - 0.1587 = 0.6826')).toBe(true)
     expect(w.check).toMatch(/0\.682689/)
-    // S-Q.md lists 0.6827 (the formula, and an fx-991EX): the check line names it beside the table's 0.6826.
+    // S-Q.md lists 0.6827 (the formula, and a scientific calculator): the check line names it beside the table's 0.6826.
     expect(w.check).toMatch(/0\.6827, the value a calculator shows/)
     expect(zscoreWorking(q('P(Z < 1.96)')).check).not.toMatch(/calculator shows/)
     expect(w.checked).toBe('ok')

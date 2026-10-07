@@ -1,5 +1,5 @@
 // Scientific constants (CODATA 2022 — the 2022 adjustment, published as NIST SP 959, May 2024;
-// https://physics.nist.gov/cuu/Constants/Table/allascii.txt), numbered like the fx-991EX CONST
+// https://physics.nist.gov/cuu/Constants/Table/allascii.txt), numbered like a scientific calculator’s CONST
 // list, plus extras. Constants fixed by the 2019 SI redefinition (h, e, k_B, N_A, c, and anything
 // built only from them: F, R, sigma_SB, c_1, c_2, phi_0, G_0, R_K, K_J, g_n, atm_std, t_C) do not
 // move between adjustments and are unchanged from CODATA 2018. Measured constants shifted in

@@ -2,7 +2,7 @@
 // without a screen.
 
 import { math } from '../math/expr'
-import { casioToMath } from './engine'
+import { keypadToMath } from './engine'
 
 /** The grid's columns, and its rows (the panel draws this many of each). */
 export const SHEET_COLS = ['A', 'B', 'C', 'D', 'E']
@@ -72,7 +72,7 @@ export function evaluateSheet(cells: Record<string, string>): Record<string, num
       if (circular) show(id, 'CIRC')
       else if (broken) show(id, 'ERROR')
       else {
-        const r = Number(math.evaluate(casioToMath(expr), scope))
+        const r = Number(math.evaluate(keypadToMath(expr), scope))
         if (Number.isFinite(r)) vals[id] = r
         else show(id, 'ERROR')
       }

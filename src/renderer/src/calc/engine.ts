@@ -1,4 +1,4 @@
-// Numeric engine behind the calculator panel (fx-991EX feature set and more).
+// Numeric engine behind the calculator panel (a scientific calculator’s feature set and more).
 
 import type { MathNode } from 'mathjs'
 import { fromRadians, getAngleMode, math, preprocess, setAngleMode, splitArgs } from '../math/expr'
@@ -11,7 +11,7 @@ import { calcNum, mathFormatOptions } from './format'
 // Input normalisation: calculator key symbols → mathjs
 // ---------------------------------------------------------------------------
 
-export function casioToMath(src: string): string {
+export function keypadToMath(src: string): string {
   let s = src
     // A plain × is a multiplication, always. This used to turn every "×10" into "*10^" whether or
     // not a power followed it, so 2×100 came out as 2, 3×10+1 as 30 and 2×10 was a syntax error — on
@@ -302,7 +302,7 @@ function lambdaOf(node: MathNode, scope: MapLike, variable = 'x') {
   // answered a different question from the one that was typed: in DEG mode, sin(30) means 30
   // degrees, so ddx(sin(x), 30) has to mean the slope at 30 degrees too — otherwise the same
   // number means two things on one screen, and the answer disagrees with the calculator in the
-  // student's hand. (The fx-991EX manual advises the user to switch to Rad for trig calculus;
+  // student's hand. (A scientific calculator’s manual advises the user to switch to Rad for trig calculus;
   // it does not switch for them.)
   return (v: number) => {
     const here = { ...base, [variable]: v }
@@ -643,8 +643,8 @@ function evaluateCompLine(input: string, ctx: CalcContext): CalcOutput {
   const pol = src.match(/^Pol\((.*)\)$/i)
   const polArgs = pol ? splitArgs(pol[1]) : null
   if (polArgs?.length === 2) {
-    const x = Number(math.evaluate(casioToMath(polArgs[0]), scope))
-    const y = Number(math.evaluate(casioToMath(polArgs[1]), scope))
+    const x = Number(math.evaluate(keypadToMath(polArgs[0]), scope))
+    const y = Number(math.evaluate(keypadToMath(polArgs[1]), scope))
     const r = Math.hypot(x, y)
     const theta = Math.atan2(y, x)
     const th = ctx.angle === 'deg' ? (theta * 180) / Math.PI : theta
@@ -653,16 +653,16 @@ function evaluateCompLine(input: string, ctx: CalcContext): CalcOutput {
   const rec = src.match(/^Rec\((.*)\)$/i)
   const recArgs = rec ? splitArgs(rec[1]) : null
   if (recArgs?.length === 2) {
-    const r = Number(math.evaluate(casioToMath(recArgs[0]), scope))
-    const t = Number(math.evaluate(casioToMath(recArgs[1]), scope))
+    const r = Number(math.evaluate(keypadToMath(recArgs[0]), scope))
+    const t = Number(math.evaluate(keypadToMath(recArgs[1]), scope))
     const tr = ctx.angle === 'deg' ? (t * Math.PI) / 180 : t
     return { value: r * Math.cos(tr), text: `x = ${calcNum(r * Math.cos(tr))}`, extra: [`y = ${calcNum(r * Math.sin(tr))}`] }
   }
   // SOLVE: an equation in x
   if (isEquationInX(src)) {
     const [l, r] = src.split('=')
-    const fl = math.compile(casioToMath(l))
-    const fr = math.compile(casioToMath(r))
+    const fl = math.compile(keypadToMath(l))
+    const fr = math.compile(keypadToMath(r))
     const f = (x: number) => Number(fl.evaluate({ ...scope, x })) - Number(fr.evaluate({ ...scope, x }))
     const guess = typeof ctx.vars.x === 'number' ? (ctx.vars.x as number) : 0
     // The search works the equation out thousands of times. Every try opened a budget of its own, so a Σ of 100 000
@@ -672,7 +672,7 @@ function evaluateCompLine(input: string, ctx: CalcContext): CalcOutput {
     const root = withOneBudget(workOwnerOf(src), () => solveNumeric(f, guess))
     return { value: root, text: `x = ${calcNum(root)}`, extra: [`L − R = ${calcNum(f(root))}`] }
   }
-  const node = math.parse(casioToMath(src))
+  const node = math.parse(keypadToMath(src))
   refuseStoring(node)
   // Odd roots of negative numbers are real here, with the principal value beside them; a square
   // root of a negative number is named when it is why the answer has an i in it.

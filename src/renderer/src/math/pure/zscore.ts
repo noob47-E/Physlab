@@ -479,7 +479,7 @@ export function zscoreWorking(q: NormalQuery, opts: ZOptions = {}): Working {
   // and both still be right.
   const ok = Math.abs(answer - formula) <= 1.5e-4
   // P(−1 < Z < 1): the table route gives 0.8413 − 0.1587 = 0.6826, a calculator 0.6827. Both are
-  // said, so a student checking on an fx-991EX sees why the last digit differs.
+  // said, so a student checking on a scientific calculator sees why the last digit differs.
   const calc = toPlaces(formula, PLACES)
   const also = ok && !same(calc, answer) ? ` To four places that is ${probText(calc)}, the value a calculator shows; the table route gives ${probText(answer)} because each reading was rounded to four places first.` : ''
   return {

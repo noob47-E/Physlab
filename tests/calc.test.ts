@@ -163,7 +163,7 @@ describe('calculus follows the angle mode, like the real calculator', () => {
   const rad = { vars: {}, ans: 0, angle: 'rad' as const }
 
   it('differentiates in degrees when the calculator is in DEG', () => {
-    // d/dx sin(x°) = cos(x°) × π/180 — what an fx-991EX shows in DEG mode.
+    // d/dx sin(x°) = cos(x°) × π/180 — what a scientific calculator shows in DEG mode.
     expect(Number(evaluateComp('ddx(sin(x), 30)', deg).value)).toBeCloseTo((Math.cos(Math.PI / 6) * Math.PI) / 180, 6)
     expect(Number(evaluateComp('integral(sin(x), 0, 90)', deg).value)).toBeCloseTo(180 / Math.PI, 4)
   })
@@ -242,7 +242,7 @@ describe('the calculator writes numbers with the precision setting', () => {
   it('uses exponent form for very large and very small values, and the error words', () => {
     expect(calcNum(6.02214076e23, { decimals: 3, precisionMode: 'sf' })).toBe('6.02×10^23')
     expect(calcNum(1.6e-19, { decimals: 2, precisionMode: 'dp' })).toBe('1.6×10^-19')
-    // Words, not a handheld's "Math ERROR" (0.6: nothing on the Maths screen reads like the fx-991EX).
+    // Words, not a handheld's "Math ERROR" (0.6: nothing on the Maths screen reads like a handheld calculator).
     expect(calcNum(NaN)).toBe('no value')
     expect(calcNum(Infinity)).toBe('∞')
     expect(calcNum(-Infinity)).toBe('−∞')

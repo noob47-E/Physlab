@@ -3,7 +3,7 @@
 // The command bar used to send SymPy the degree flag only when the expression had no x, y or t
 // in it, so in DEG mode diff(sin(x)) went out in radians while the calculator's own ddx(sin(x), 30)
 // worked in degrees (calc/engine.ts, lambdaOf). The same expression meant two things on one
-// screen. The calculator follows the angle mode the way the fx-991EX does, so the algebra engine
+// screen. The calculator follows the angle mode the way a scientific calculator does, so the algebra engine
 // now follows it too, letters or not.
 
 import type { AngleUnit } from '../math/format'
@@ -19,7 +19,7 @@ const TRIG = /\b(a?(sin|cos|tan|sec|csc|cot)h?|arc(sin|cos|tan))\b/i
 
 /**
  * The note a calculus answer carries in DEG mode, or null when the unit made no difference.
- * Degrees are what the calculator and the fx-991EX use, so the algebra engine uses them too —
+ * Degrees are what the calculator uses, as a scientific calculator does, so the algebra engine uses them too —
  * but a textbook's ∫₀^π sin x dx = 2 is a radian result, and an answer of 0.048 with nothing
  * said about the unit is a puzzle, not an answer.
  */

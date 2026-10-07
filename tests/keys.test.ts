@@ -12,7 +12,7 @@ import { RENDERER_SRC as ROOT } from './helpers/repo'
 import { resetGlobals } from './helpers/globals'
 import { KEY_GROUPS, allKeys, groupsForMode, type KeyDef, type KeyGroup } from '../src/renderer/src/calc/keys'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
-import { casioToMath, evaluateBaseN, evaluateComp } from '../src/renderer/src/calc/engine'
+import { keypadToMath, evaluateBaseN, evaluateComp } from '../src/renderer/src/calc/engine'
 import { constantScope } from '../src/renderer/src/calc/constants'
 import { math } from '../src/renderer/src/math/expr'
 import { MODE_LABELS } from '../src/renderer/src/calc/calcStore'
@@ -81,10 +81,10 @@ describe('every key the keypad offers', () => {
       const src = latexToMath(inContext(k))
       expect(src, `${k.id}: ${k.tex}`).toMatch(/\S/)
       if (group.id === 'complex' || k.id === 'i') {
-        const v = math.evaluate(casioToMath(src), { ...constantScope(), ...ctx.vars, i: math.complex(0, 1), Ans: ctx.ans })
+        const v = math.evaluate(keypadToMath(src), { ...constantScope(), ...ctx.vars, i: math.complex(0, 1), Ans: ctx.ans })
         expect(isFiniteValue(v), `${k.id}: ${src}`).toBe(true)
         if (k.texDeg) {
-          const d = math.evaluate(casioToMath(latexToMath(filled(k.texDeg))), { ...constantScope(), ...ctx.vars, i: math.complex(0, 1), Ans: ctx.ans })
+          const d = math.evaluate(keypadToMath(latexToMath(filled(k.texDeg))), { ...constantScope(), ...ctx.vars, i: math.complex(0, 1), Ans: ctx.ans })
           expect(isFiniteValue(d), `${k.id} in degrees: ${k.texDeg}`).toBe(true)
         }
         continue
@@ -108,7 +108,7 @@ describe('every key the keypad offers', () => {
     // line under it reported the angle in degrees.
     const polar = keys.find((k) => k.id === 'polar')!
     const at = (tex: string, r: string, th: string): { re: number; im: number } =>
-      math.complex(math.evaluate(casioToMath(latexToMath(tex.replace(/#[0@]/, r).replace('#?', th))), { ...constantScope(), i: math.complex(0, 1) }) as never) as unknown as { re: number; im: number }
+      math.complex(math.evaluate(keypadToMath(latexToMath(tex.replace(/#[0@]/, r).replace('#?', th))), { ...constantScope(), i: math.complex(0, 1) }) as never) as unknown as { re: number; im: number }
     const deg = at(polar.texDeg!, '2', '90')
     expect(deg.re).toBeCloseTo(0, 9)
     expect(deg.im).toBeCloseTo(2, 9)
@@ -231,7 +231,7 @@ describe('H11 — a key pressed after what the student typed leaves no empty box
     expect(latexToMath(wrap('fact', '5'))).toBe('5!')
     expect(latexToMath(wrap('percent', '5'))).toBe('5%')
     expect(latexToMath(wrap('degree', '5'))).toBe('5°')
-    const polar = math.complex(math.evaluate(casioToMath(latexToMath(wrap('polar', '2').replace('#?', '\\frac{\\pi}{2}'))), { ...constantScope(), i: math.complex(0, 1) }) as never) as unknown as { re: number; im: number }
+    const polar = math.complex(math.evaluate(keypadToMath(latexToMath(wrap('polar', '2').replace('#?', '\\frac{\\pi}{2}'))), { ...constantScope(), i: math.complex(0, 1) }) as never) as unknown as { re: number; im: number }
     expect(polar.re).toBeCloseTo(0, 9)
     expect(polar.im).toBeCloseTo(2, 9)
   })
@@ -251,7 +251,7 @@ describe('the engine’s input step: a literal × multiplies, and ᴇ is part of
   // The matrix box, the spreadsheet cells and the with-values boxes hand their text straight to the engine's
   // input step (calc/engine.ts), so a literal × reaches it. It used to turn every "×10" into "*10^", with or
   // without a ^ after it.
-  const run = (s: string): unknown => math.evaluate(casioToMath(s), { ...constantScope(), x: 2, x2: 5, Ans: 5, 'α2': 5 })
+  const run = (s: string): unknown => math.evaluate(keypadToMath(s), { ...constantScope(), x: 2, x2: 5, Ans: 5, 'α2': 5 })
   const near = (got: unknown, want: number): void => {
     expect(typeof got, String(got)).toBe('number')
     expect((got as number) / want).toBeCloseTo(1, 12)
@@ -306,9 +306,9 @@ describe('the engine’s input step: a literal × multiplies, and ᴇ is part of
     // 1.2.5% was rewritten to "1.(2.5/100)", which mathjs reads as 1. × 0.025 and answers 0.025: a number nobody
     // typed. A digit or a dot right before a candidate makes it the tail of something longer, so it is left alone
     // and the line is refused. What the student meets is the refusal: since P-NUM, preprocess (which
-    // casioToMath ends with) turns every postfix % into a division itself, so the text in between is
+    // keypadToMath ends with) turns every postfix % into a division itself, so the text in between is
     // no longer this step's alone to pin.
-    expect(casioToMath('1.2.5%')).not.toBe('1.(2.5/100)')
+    expect(keypadToMath('1.2.5%')).not.toBe('1.(2.5/100)')
     expect(() => run('1.2.5%')).toThrow()
     expect(() => run('1..5%')).toThrow()
   })
@@ -321,7 +321,7 @@ describe('the engine’s input step: a literal × multiplies, and ᴇ is part of
     // name x2 (5 here) times 10³, never the literal "x2e3".
     expect(run('α2ᴇ3')).toBe(5000)
     expect(run('x2ᴇ3')).toBe(5000)
-    expect(casioToMath('x2ᴇ3')).not.toContain('x2e3')
+    expect(keypadToMath('x2ᴇ3')).not.toContain('x2e3')
     // A power that is no whole number is not a literal either.
     near(run('2ᴇ0.5'), 2 * 10 ** 0.5)
   })
@@ -333,7 +333,7 @@ const files = (dir: string): string[] =>
     return statSync(p).isDirectory() ? files(p) : name.endsWith('.ts') || name.endsWith('.tsx') ? [p] : []
   })
 
-describe('nothing that looks like the fx-991EX survives', () => {
+describe('nothing that looks like a handheld calculator survives', () => {
   // A word a student reads on screen. The engine's own throw messages are not on screen: the
   // Maths screen turns every one into a sentence (calc/errors.ts, tests/maths.test.ts), and
   // tests/calc.test.ts pins them, so a `throw new Error('…')` and the pattern that recognises

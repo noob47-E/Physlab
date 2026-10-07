@@ -5,7 +5,7 @@ Spreadsheet), "Work it out" (the exact working), and the command bar's solve(). 
 Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure maths in `pure-maths.md`.
 
 ## File map
-- `calc/engine.ts` — `evaluateComp` (one line), `casioToMath`, `integrate`/series with ONE work budget per line
+- `calc/engine.ts` — `evaluateComp` (one line), `keypadToMath`, `integrate`/series with ONE work budget per line
   (`withOneBudget`), `formatComplex` (the one complex formatter), `polyRoots`, `exactForm`/`toFraction`, `refuseStoring`.
 - `calc/evaluateInput.ts` — the screen's route: LaTeX → linear text → engine; `readValueBoxes` (with-values boxes and
   the Variables box), `tangentAt`, `answerStillUnder` (an answer is dropped after a DEG/RAD or base switch).

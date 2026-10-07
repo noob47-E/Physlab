@@ -17,7 +17,7 @@
 // Pure functions of numbers and text, so each route can be compared with the others in a test.
 
 import { math } from '../math/expr'
-import { casioToMath, constantOf, exactForm, formatComplex, formatImaginary, polyRoots, type Cx, type ExprNode } from './engine'
+import { keypadToMath, constantOf, exactForm, formatComplex, formatImaginary, polyRoots, type Cx, type ExprNode } from './engine'
 import { calcNum } from './format'
 import { labelText } from './labels'
 
@@ -273,8 +273,8 @@ export function polynomialInX(left: string, right: string, scope: Record<string,
   let l: Poly | null
   let r: Poly | null
   try {
-    l = readPolynomial(math.parse(casioToMath(left)) as ExprNode, scope)
-    r = readPolynomial(math.parse(casioToMath(right)) as ExprNode, scope)
+    l = readPolynomial(math.parse(keypadToMath(left)) as ExprNode, scope)
+    r = readPolynomial(math.parse(keypadToMath(right)) as ExprNode, scope)
   } catch {
     return null
   }

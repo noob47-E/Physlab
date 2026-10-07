@@ -15,7 +15,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronUp, Eye, History, Keyboard, Play, Sparkles, Trash2, X } from 'lucide-react'
 import { casInDegrees } from '../calc/angle'
 import { FIELD_MODES, MODE_HINTS, MODE_LABELS, clearCalcHistory, isFieldMode, useCalc, type CalcMode, type FieldMode, type HistoryItem } from '../calc/calcStore'
-import { casioToMath, withAngle, type Base } from '../calc/engine'
+import { keypadToMath, withAngle, type Base } from '../calc/engine'
 import { calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
 import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, mainLine, readValueBoxes, shownText, tangentAt, type Answered, type EvalResult } from '../calc/evaluateInput'
@@ -245,7 +245,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
         history: [{ input: s.input, result: r.main, mode }, ...s.history].slice(0, 100)
       })
       if (r.askExact) {
-        cas('exact', { expr: casioToMath(r.src), deg: casInDegrees(angleUnit) }).then((res) => {
+        cas('exact', { expr: keypadToMath(r.src), deg: casInDegrees(angleUnit) }).then((res) => {
           if (!res.error && res.latex && !/\./.test(res.text) && res.text.length < 60) {
             // The exact form amends the answer it was asked for, and only while that answer is
             // still the one held. SymPy can take seconds on a cold start, and an answer worked
@@ -351,20 +351,20 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       // tangent drawn has the slope the card shows: d/dx(sin(x), 30) in degrees drew cos(30 rad) = 0.154 under a card
       // that said 0.01511, because the slope was worked out in radians and the height in whatever mode the maths held (H3).
       const t = tangentAt(input, { vars: s.vars, ans: s.ans, angle: angleUnit })
-      visualizeTangent(casioToMath(t.f), t.x0, t.fx, t.slope)
+      visualizeTangent(keypadToMath(t.f), t.x0, t.fx, t.slope)
       return true
     }
     const integ = input.match(/^integral\((.*)\)$/)
     if (integ) {
       const [f, a, b] = args(integ[1])
-      const lo = Number(math.evaluate(casioToMath(a), { ...constantScope(), ...s.vars }))
-      const hi = Number(math.evaluate(casioToMath(b), { ...constantScope(), ...s.vars }))
-      visualizeArea(casioToMath(f), lo, hi, `∫ ${f} dx from ${a} to ${b}`)
+      const lo = Number(math.evaluate(keypadToMath(a), { ...constantScope(), ...s.vars }))
+      const hi = Number(math.evaluate(keypadToMath(b), { ...constantScope(), ...s.vars }))
+      visualizeArea(keypadToMath(f), lo, hi, `∫ ${f} dx from ${a} to ${b}`)
       return true
     }
     const pol = input.match(/^(Pol|Rec)\((.*)\)$/i)
     if (pol) {
-      const [p, q] = args(pol[2]).map((t) => Number(math.evaluate(casioToMath(t), { ...constantScope(), ...s.vars })))
+      const [p, q] = args(pol[2]).map((t) => Number(math.evaluate(keypadToMath(t), { ...constantScope(), ...s.vars })))
       const rad = angleUnit === 'deg' ? (q * Math.PI) / 180 : q
       visualizeVector(pol[1].toLowerCase() === 'pol' ? [p, q, 0] : [p * Math.cos(rad), p * Math.sin(rad), 0])
       return true
@@ -376,22 +376,22 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     }
     if (/=/.test(input) && /x/.test(input)) {
       const [l, r] = input.split('=')
-      visualizeGraph(`y = ${l} − (${r})`, [`(${casioToMath(l)}) - (${casioToMath(r)})`], 'explicit')
+      visualizeGraph(`y = ${l} − (${r})`, [`(${keypadToMath(l)}) - (${keypadToMath(r)})`], 'explicit')
       return true
     }
     if (/(^|[^a-z])x([^a-z]|$)/.test(input)) {
-      visualizeGraph(`y = ${input}`, [casioToMath(input)], 'explicit')
+      visualizeGraph(`y = ${input}`, [keypadToMath(input)], 'explicit')
       return true
     }
     const sig = input.match(/^sigma\((.*)\)$/)
     if (sig) {
       const [f, a, b] = args(sig[1])
-      const lo = Number(math.evaluate(casioToMath(a)))
-      const hi = Math.min(Number(math.evaluate(casioToMath(b))), lo + 60)
+      const lo = Number(math.evaluate(keypadToMath(a)))
+      const hi = Math.min(Number(math.evaluate(keypadToMath(b))), lo + 60)
       const bld = new Builder()
-      bld.graph({ kind: 'explicit', source: `y = ${f}`, exprs: [casioToMath(f)] })
+      bld.graph({ kind: 'explicit', source: `y = ${f}`, exprs: [keypadToMath(f)] })
       for (let k = lo; k <= hi; k++) {
-        const y = Number(math.evaluate(casioToMath(f), { x: k }))
+        const y = Number(math.evaluate(keypadToMath(f), { x: k }))
         const top = bld.point([k, y, 0], { auxiliary: true, showLabel: false })
         const baseP = bld.point([k, 0, 0], { auxiliary: true, visible: false })
         bld.segment(baseP.id, top.id, { color: themeColor('--accent'), showLabel: false })

@@ -49,7 +49,7 @@ These came from the student who started it, and they are repeated at the top of
 
 1. **No AI in the product.** Stated explicitly and repeatedly. Everything offline.
 2. **It must feel like a calculator, not a programming language.** The user is afraid of code.
-   Input is fx-991EX-shaped: natural maths, buttons, a command bar of one-liners. No syntax that
+   Input is shaped like a scientific calculator: natural maths, buttons, a command bar of one-liners. No syntax that
    looks like programming.
 3. **Answers are mandatory; working is a bonus.** Every feature must produce the result. Steps,
    hints and pictures are welcome on top, never instead.
@@ -72,7 +72,7 @@ The starting point: a dockable workspace with a 2D/3D viewport and the first six
 - **Vectors** — draw them, measure them, add them.
 - **Shapes & geometry** — points, segments, polygons, circles, constructions.
 - **Graphing** — typed equations plotted in the viewport.
-- **A calculator** in natural textbook maths, with the fx-991EX mode set.
+- **A calculator** in natural textbook maths, with a scientific calculator’s mode set.
 - **Examples** and a **GPU Lab** (millions of charged particles in E and B fields on the graphics
   card).
 
@@ -603,8 +603,8 @@ commit alone; the whole run is 125 files, +8,309/−1,760 across the phase and r
   same as the ordinary Dark theme, so native scrollbars and controls behave. The View menu's grid
   rows and the Settings segment both carry a tick (`sc`) for whichever grid or theme is actually
   showing, which they did not before.
-- **One Maths screen replaces the handheld-style calculator.** The buttons-and-tiny-LCD, Casio-101
-  look is gone: a single natural-maths field with a popup keypad that opens under the field and
+- **One Maths screen replaces the handheld-style calculator.** The buttons-and-tiny-LCD look of a
+  handheld is gone: a single natural-maths field with a popup keypad that opens under the field and
   stays open for the next click, physical typing answers exactly like the keypad, and the field
   keeps up with the student rather than the other way round. `MathLive` no longer sits in the
   start-up bundle for a layout with no maths field open — `app/contextActions.ts` was found to
@@ -854,7 +854,7 @@ Eight working modes, eight reserved.
 
 | Mode | State | What it does |
 | --- | --- | --- |
-| Calculator | working | Natural textbook maths, all fifteen fx-991EX modes, and the Pure Math working area |
+| Calculator | working | Natural textbook maths, all fifteen scientific-calculator modes, and the Pure Math working area |
 | Vectors | working | Vector calculator, drawing with live measurements, step-by-step solutions |
 | Geometry | working | Sketch recognition, algebraic area, decomposition, constructions |
 | Graphing | working | Explicit, implicit, polar, parametric and 3D surfaces, with roots and turning points |

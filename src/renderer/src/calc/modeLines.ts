@@ -8,7 +8,7 @@
 // screen's unit, runs in it, and leaves the shared mode exactly the way it found it (engine.ts withAngle).
 
 import { math } from '../math/expr'
-import { casioToMath, withAngle, type CalcContext } from './engine'
+import { keypadToMath, withAngle, type CalcContext } from './engine'
 import { evaluateSheet } from './sheet'
 import { convertTyped, type UnitAnswer } from './units'
 
@@ -31,7 +31,7 @@ export interface TableRange {
 function tableCell(line: string, x: number): number | string {
   if (!line.trim()) return ''
   try {
-    return Number(math.evaluate(casioToMath(line), { x }))
+    return Number(math.evaluate(keypadToMath(line), { x }))
   } catch {
     return 'ERROR'
   }
@@ -60,7 +60,7 @@ export function tableRows(fx: string, gx: string, range: TableRange, angle: Scre
  */
 export function matrixLine(line: string, matrices: Record<string, number[][]>, angle: ScreenAngle): unknown {
   return withAngle(angle, () =>
-    math.evaluate(casioToMath(line.replace(/\bInv\(/g, 'inv(').replace(/\bTrn\(/g, 'transpose(').replace(/\bIdn\(/g, 'identity(')), { ...matrices })
+    math.evaluate(keypadToMath(line.replace(/\bInv\(/g, 'inv(').replace(/\bTrn\(/g, 'transpose(').replace(/\bIdn\(/g, 'identity(')), { ...matrices })
   )
 }
 

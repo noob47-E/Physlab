@@ -4,7 +4,7 @@ import { useCalc, type CalcMode } from '../calc/calcStore'
 import {
   binomialCd,
   binomialPd,
-  casioToMath,
+  keypadToMath,
   countSigFigs,
   dimensionsOf,
   exactForm,
@@ -561,8 +561,8 @@ function TableMode() {
       <button
         className="btn w-fit"
         onClick={() => {
-          visualizeGraph(`f(x) = ${fx}`, [casioToMath(fx)], 'explicit', { name: 'f' })
-          if (gx.trim()) visualizeGraph(`g(x) = ${gx}`, [casioToMath(gx)], 'explicit', { name: 'g' })
+          visualizeGraph(`f(x) = ${fx}`, [keypadToMath(fx)], 'explicit', { name: 'f' })
+          if (gx.trim()) visualizeGraph(`g(x) = ${gx}`, [keypadToMath(gx)], 'explicit', { name: 'g' })
         }}
       >
         <Eye size={13} /> Visualize graphs
