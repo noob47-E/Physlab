@@ -248,16 +248,19 @@ function closingIn(v: number[], noise: number): { to: number; within: number } {
  * there; the nearest is no nearer than the rounding of x allows (3 + 10⁻¹⁶ is 3), and if the
  * window is so small that not even a factor of ten is left between the points, nothing is claimed.
  */
-function edgeLimit(f: Fx, edge: number, dir: number, look: number): { to: number; size: number } {
+function edgeLimit(f: Fx, edge: number, dir: number, look: number): { to: number; size: number; nearest: number } {
   const far = Math.min(look, 1e-6 * Math.max(1, Math.abs(edge)))
   const near = Math.max(far / 1e6, 4096 * Number.EPSILON * Math.abs(edge))
   // The factor between one point and the next: a thousand, or less where the rounding of x allows less.
   const k = Math.sqrt(far / near)
-  if (!(k >= 10)) return { to: NaN, size: NaN }
+  if (!(k >= 10)) return { to: NaN, size: NaN, nearest: NaN }
   const v = [far, far / k, far / (k * k)].map((d) => f(edge + dir * d))
-  if (!v.every(Number.isFinite)) return { to: NaN, size: NaN }
+  if (!v.every(Number.isFinite)) return { to: NaN, size: NaN, nearest: NaN }
   const size = Math.max(...v.map(Math.abs))
-  return { to: closingIn(v, 1e-12 * size).to, size }
+  // `nearest` is the curve's size at the point nearest the edge, which the limit is judged against: a steep
+  // curve is far larger a step away, and 1e6√x + 0.01 (1000 at 10⁻⁶, 1.01 at 10⁻¹²) tending to 0.01 was
+  // within a ten-thousandth of 1000 and its edge taken for a root (H27).
+  return { to: closingIn(v, 1e-12 * size).to, size, nearest: Math.abs(v[2]) }
 }
 
 /**
@@ -319,7 +322,13 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
   // through infinity; false for a pole, where |f| blows up instead.
   const rootBetween = (a: number, b: number): boolean => {
     const r = bisect(f, a, b, 60, offAt0)
-    if (!(Math.abs(f(r)) < span * 1e-6 + 1e-9)) return false
+    const fr = Math.abs(f(r))
+    if (!(fr < span * 1e-6 + 1e-9)) return false
+    // Small beside the curve at both ends of the bracket too: exp(1/x) − 2 jumps from −2 to +∞ at 0 and the halving
+    // ends on its −2, which a window whose tallest sample is huge took for 0 (H33). A true root's |f| there is far
+    // below both ends.
+    const ends = [f(a), f(b)].map(Math.abs).filter(Number.isFinite)
+    if (ends.length && fr > 1e-3 * Math.min(...ends) + 1e-12) return false
     found.push({ x: snapRoot(r), y: 0, kinds: ['root'] })
     return true
   }
@@ -390,7 +399,7 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
       continue
     }
     // The curve lies to the left of the edge where the sample at i has a value, to the right where it has none.
-    const { to, size } = edgeLimit(f, inside, here ? -1 : 1, look)
+    const { to, size, nearest } = edgeLimit(f, inside, here ? -1 : 1, look)
     // A limit across the axis by more than rounding: the crossing is between the edge and `inside`,
     // and the halving goes on towards the edge until the curve is across.
     if (across(to) && Math.abs(to) > 1e-9 * size) {
@@ -410,7 +419,7 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
       }
       if (crossed) continue
     }
-    if (Math.abs(to) <= TENDS_TO_ZERO * size) found.push({ x: snapRoot(inside), y: 0, kinds: ['root'] })
+    if (Math.abs(to) <= TENDS_TO_ZERO * nearest) found.push({ x: snapRoot(inside), y: 0, kinds: ['root'] })
   }
   for (let s = 1; s < n; s++) {
     const yp = ys[s - 1]
@@ -1066,7 +1075,11 @@ export function slopeAt(f: Fx, a: number): number {
   // The step grows with |a| so f(a ± h) still differ in their last digits far from 0, but only up
   // to ten times: uncapped it was h = 1 at a = 1000, and sin x there read 0.56124 for cos 1000 =
   // 0.56238. At h = 0.01 the rounding error stays below 10⁻⁸ of the slope out to |a| = 10⁶.
-  const h = 1e-3 * Math.min(Math.max(1, Math.abs(a)), 10)
+  const usual = 1e-3 * Math.min(Math.max(1, Math.abs(a)), 10)
+  // Near 0 the step is kept to a thousandth of the distance to 0, where it was more than a hundredth of it: a pole or
+  // the end of a domain at 0 is not stepped across or leaned on (tangent(1/x, 0.001) "had no slope", and 1/x at
+  // 0.01 read −9999.75). Never below 10⁻⁸, so an ordinary slope keeps its digits.
+  const h = a !== 0 && usual > 1e-2 * Math.abs(a) ? Math.max(1e-3 * Math.abs(a), 1e-8) : usual
   const central = (step: number) => (f(a + step) - f(a - step)) / (2 * step)
   const coarse = central(h)
   const fine = central(h / 2)

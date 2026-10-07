@@ -593,7 +593,16 @@ function tryGraph(input: string): boolean {
       const a = numberArg(at)
       const { slope } = visualizeTangentAt(expr, a)
       const p = s.settings
-      s.pushLog({ input, kind: 'result', text: `Tangent drawn at x = ${fmtLabel(a, p)}. Its slope is ${fmtLabel(slope, p)}.` + landInGraphing() })
+      // The x the student typed is named as typed: 0.001 at two places read "x = 0", a point the tangent is not at.
+      const atLabel = fmtLabel(a, p)
+      const typed = at.trim()
+      const xSaid =
+        a !== 0 && /^[−-]?0(?:\.0*)?$/.test(atLabel)
+          ? /^-?\d*\.?\d+$/.test(typed)
+            ? typed.replace(/^-/, '−')
+            : fmtLabel(a, { decimals: 3, precisionMode: 'sf' })
+          : atLabel
+      s.pushLog({ input, kind: 'result', text: `Tangent drawn at x = ${xSaid}. Its slope is ${fmtLabel(slope, p)}.` + landInGraphing() })
       return true
     }
   }
@@ -924,7 +933,12 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
   const inputs = splitInputs(m[2])
   if (cmd === 'Angle' && inputs.length === 2 && inputs.every(isVectorInput)) return false
   const rawArgs = splitArgs(m[2])
-  if (cmd === 'Vector' && rawArgs.length === 2 && rawArgs.every((a) => kindOfName(a) === 'vector')) return false
+  // Two vectors are no tail and tip: the command says what it takes, where it went on to "PhysLab does not know a
+  // function called Vector" (H28).
+  if (cmd === 'Vector' && rawArgs.length === 2 && rawArgs.every((a) => kindOfName(a) === 'vector')) {
+    const [p, q] = rawArgs.map((a) => a.trim())
+    throw new Error(`Vector( ) takes two points — its tail and its tip — or one vector, and ${p} and ${q} are vectors. For the vector from the tip of ${p} to the tip of ${q}, type ${q} - ${p}.`)
+  }
 
   const b = new Builder()
   const names = scene().ev.names

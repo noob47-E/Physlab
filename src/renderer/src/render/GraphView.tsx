@@ -90,16 +90,30 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const b = is2DBounds ? view : { xMin: -10, xMax: 10, yMin: -10, yMax: 10, viewH: 20, wpp: 0.02, widthPx: 1000 }
   // The lines of an equation in x alone are drawn where the command bar said its solutions are: the
   // curve cannot show them all (x^200 underflows to a stretch of zeros, x^(10⁹) − 2 jumps within
-  // 10⁻⁶ of 1). Worked out when the formula or the scene changes, never in a frame, and only for the
-  // graphs drawn this way; `scopeNow` reads the scene live, so `evVersion` stands for it.
+  // 10⁻⁶ of 1). Worked out only for the graphs drawn this way, and only when the formula or a value it reads
+  // changes (below), never in a frame.
   const formula = obj.exprs[0]
   const typedAs = obj.source
+  // P4perf: solving sin(x) = a took 15–19 ms, and it ran on every drag frame and Play step (evVersion), even where
+  // the graph carries the bar's own solutions. It runs now only without them, and again only when the formula or
+  // the value of a name it reads changes — dragging anything else leaves the lines where they are.
+  const carried = carriedSolutions(obj)
+  const isCarried = carried !== undefined
+  const reads = useMemo(() => {
+    try {
+      return symbolsOf(math.parse(preprocess(formula ?? '', names))).filter((s) => s !== 'x')
+    } catch {
+      return []
+    }
+  }, [formula, names])
+  const scopeNowValues = scopeNow()
+  const readsKey = reads.map((s) => JSON.stringify(scopeNowValues[s] ?? null)).join('|')
   const solved = useMemo(
-    () => (fns.vertical ? solvedLineXs({ exprs: [formula], source: typedAs }, scopeNow(), solutionsInX) : undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-    [fns.vertical, formula, typedAs, evVersion]
+    () => (fns.vertical && !isCarried ? solvedLineXs({ exprs: [formula], source: typedAs }, scopeNow(), solutionsInX) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: readsKey stands for the scope this formula reads
+    [fns.vertical, isCarried, formula, typedAs, readsKey]
   )
-  const known = carriedSolutions(obj) ?? solved
+  const known = carried ?? solved
 
   const data = useMemo(() => {
     const out: { polylines: V3[][]; segments?: V3[]; fill?: Float32Array; keys: KeyPoint[] } = { polylines: [], keys: [] }

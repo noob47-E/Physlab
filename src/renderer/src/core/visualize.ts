@@ -736,6 +736,9 @@ function asWritten(node: MathNode): string {
   const nice = tight(node.toString({ parenthesis: 'auto' }))
     .replace(/(\d) (?=[A-DF-Za-df-z](?![\w(])|\()/g, '$1')
     .replace(/\) (?=\()/g, ')')
+    // A letter against a bracket is a product since P-PARSE R1 (x(1/x)), so mathjs's "x (1/x)" loses its space;
+    // `means` below still checks that the line reads back as this formula.
+    .replace(/(?<![A-Za-z])([A-Za-z]) (?=\()/g, '$1')
   const means = (text: string): boolean => {
     try {
       return shapeOf(math.parse(preprocess(text))) === shapeOf(node)
@@ -824,8 +827,10 @@ function callProblem(node: MathNode, vars: Set<string>, scope: Record<string, un
     if (name in graphs) said = graphCalled(node, kind, graphs, lineWith)
     else if (vars.has(name) || (name in scope && typeof scope[name] === 'number')) said = cannotDraw(kind, `${n.toString()} reads as a function called ${name} — for a product, type ${name}*(${inside.join(', ')})`)
     else if (name in scope) said = `"${name}" is not a number, so it cannot be used in the ${DRAW_PLACE[kind]}.`
-    // preprocess turns · into dot(…), which needs two vectors and is never a number on a graph.
-    else if (name === 'dot') said = cannotDraw(kind, `· is the dot product of two vectors — to multiply numbers, type * instead, e.g. ${inside.join('*')}`)
+    // preprocess turns · into dot(…). Between numbers it is their product, as × is (y = 2·x was refused, H32); a
+    // vector written out beside it is never a number on a graph. (A vector by name is refused above: not a number.)
+    else if (name === 'dot' && call.args.some((a) => a.type === 'FunctionNode' && ['vec', 'pt', 'polarVec'].includes((a as MathNode & { fn: { name?: string } }).fn.name ?? '')))
+      said = cannotDraw(kind, `· beside a vector is the dot product of two vectors, which a graph cannot draw — to multiply numbers, type * or ·, e.g. ${inside.join('*')}`)
     else if (!knownFunction(name, call.args.length)) said = cannotDraw(kind, `PhysLab does not know a function called "${name}"`)
   })
   return said
@@ -1033,10 +1038,18 @@ const MAX_LISTED = 6
 /** Where the two sides are compared and a repeat is looked for: off every whole number. */
 const AGREE_AT = Array.from({ length: 61 }, (_, i) => -23.7 + 0.7919 * i)
 
-/** Ascending, with solutions closer than `tol` of their size taken for one. */
-function distinct(xs: number[], tol: number): number[] {
+/**
+ * Ascending, with solutions closer than `tol` of their size taken for one. With `relative` the size is the
+ * solutions' own, never less than 1: x² = 10⁻²⁰ is ±10⁻¹⁰, two solutions 2 × 10⁻¹⁰ apart, which an
+ * absolute 10⁻⁹ below 1 took for one (H30). The numeric scans keep the floor of 1 their own noise needs.
+ */
+function distinct(xs: number[], tol: number, relative = false): number[] {
   const out: number[] = []
-  for (const x of [...xs].sort((a, b) => a - b)) if (!out.length || x - out[out.length - 1] > tol * Math.max(1, Math.abs(x))) out.push(x)
+  for (const x of [...xs].sort((a, b) => a - b)) {
+    const last = out[out.length - 1]
+    const size = relative ? Math.max(Math.abs(x), Math.abs(last ?? x)) : Math.max(1, Math.abs(x))
+    if (!out.length || x - last > tol * size) out.push(x)
+  }
   return out
 }
 
@@ -1211,11 +1224,14 @@ function exactSolutions(expr: string): { real: number[]; complex: XComplex[] } |
   const coeffs = prim.map((c) => rNum(c)).reverse()
   if (!coeffs.every(Number.isFinite)) return null
   const roots = polyRoots(coeffs)
-  // polyRoots is good to only about 10⁻⁸ beside a double root, and then reads two real solutions as a
-  // complex pair. The sign of a quadratic's discriminant is settled on its exact coefficients.
-  const close = roots.some((r) => r.im !== 0) ? realPairOfQuadratic(prim) : null
-  if (close) return { real: distinct(close, 1e-9), complex: [] }
-  return { real: distinct(roots.filter((r) => r.im === 0).map((r) => r.re), 1e-9), complex: roots.filter((r) => r.im > 0).map(({ re, im }) => ({ re, im })) }
+  // polyRoots is good to only about 10⁻⁸ beside a double root: it read two real solutions as a complex pair, and
+  // (x − 1)² = 10⁻²⁰ as 0.999999995 and 1.000000003 (H29). A quadratic's discriminant is settled on its exact
+  // coefficients, and when it is positive the pair is worked out from it. Two solutions closer than 10⁻¹² of
+  // their size are one to the last digit a sentence can add to tell them apart (lang/commands.ts
+  // MAX_EXTRA_DIGITS): (x − 1)(x − 1.0000000000001) = 0 is the one solution 1, 1 ± 10⁻¹⁰ are two.
+  const pair = realPairOfQuadratic(prim)
+  if (pair) return { real: distinct(pair, 1e-12, true), complex: [] }
+  return { real: distinct(roots.filter((r) => r.im === 0).map((r) => r.re), 1e-9, true), complex: roots.filter((r) => r.im > 0).map(({ re, im }) => ({ re, im })) }
 }
 
 /**
@@ -1289,13 +1305,24 @@ function periodOf(g: Fx, near: number[]): number | null {
 /** The roots of g in every window of `spans`, merged; with `quick`, the first window that has any. */
 function scanRoots(g: Fx, spans: number[], quick: boolean): number[] {
   const found: number[] = []
+  // The windows already scanned, with their sample step: a finer one is the better judge of what lies inside it.
+  const scanned: { x0: number; x1: number; step: number; roots: number[] }[] = []
   for (const h of spans) {
     const [x0, x1] = windowOf(h)
     // Past ±1000 the samples are more than a unit apart whatever their number, so all that is asked
     // out there is whether anything is (every root a bisection finds is a true one): a quarter of the
     // samples is enough, at a quarter of the cost. That matters for an equation with no root at all,
     // sin(x) = 2, which tries all eight windows.
-    found.push(...verticalLineXs(g, x0, x1, h > 1000 ? 300 : 1200))
+    const n = h > 1000 ? 300 : 1200
+    const roots = verticalLineXs(g, x0, x1, n)
+    const step = (x1 - x0) / n
+    // A root a coarse window reports where a finer one already looked and found none is the coarse window's
+    // misreading of a domain edge: 10⁶√x + 0.01 = 0 was "x = 0" from the windows 10⁴ wide and more, whose step
+    // is too long to see that the curve ends at 0.01 (H27).
+    const seen = (r: number): boolean => r >= x0 && r <= x1
+    const tolerance = (r: number): number => 1e-6 * Math.max(1, Math.abs(r))
+    found.push(...roots.filter((r) => !scanned.some((w) => w.step < step && r >= w.x0 && r <= w.x1 && !w.roots.some((q) => Math.abs(q - r) <= tolerance(r)))))
+    scanned.push({ x0, x1, step, roots: roots.filter(seen) })
     if (quick && found.length) break
   }
   return distinct(found, 1e-6)

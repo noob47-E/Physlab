@@ -102,14 +102,22 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
   "(polish H23)"; raw parser text → "(polish H24)"; a degree slider stopped at 120 → "(polish H20)"; a near-double
   root was called complex → "(polish H26)"; `y'' = -y` left an object behind → "(polish H15)".
 - Editing a graph's equation in Properties deleted the graph → `tests/graphEdit.test.ts`.
+- Round 2 (P-GRAPH2, `tests/graph2.test.ts`):
+  - **The end of a domain is judged against the curve beside it, not a far sample**: 10⁶√x + 0.01 tends to 0.01 (H27),
+    and the bar's scan trusts a finer window over a coarser one where both cover an x.
+  - **A quadratic's real pair comes from its exact discriminant**, never polyRoots (1 ± 10⁻¹⁰; H29); solutions near 0
+    are told apart by their own size (±10⁻¹⁰; H30).
+  - **A root is small beside both ends of its bracket**: a pole's jump (exp(1/x) − 2 at 0) is never one (H33).
+  - **slopeAt keeps its step within a thousandth of the distance to 0** near 0 (H31).
+  - **· between numbers is a product** on a graph (compileScalar `dot`); beside a written vector it is refused (H32).
+  - **An x-only equation's lines are solved only when its formula or a value it reads changes** (P4perf: 18.5 ms a
+    solve of sin(x) = a ran on every drag frame).
 
 ## Known limits (not bugs to chase blindly)
 - A curve with a cancellation-noise extremum, e.g. (1 − cos x)/x² at 0, gets no turning point there.
 - Step functions with a jump smaller than 1.5 view heights are drawn with a riser.
 - `x^14 + 1 = 0` gets no "In complex numbers" line: the exact route stops at degree 12.
-- The graph compiler (`compileScalar`, math/expr.ts) is another part's; a formula it cannot read is refused here with a
-  plain sentence rather than drawn wrong (`y = phi*x`; `y = x(x + 1)` is read as a call to x — if the parser later
-  reads it as a product, the refusal test in "says in words why the viewport could never show a formula" must become
-  a drawn-graph test).
-- `splitArgs` (math/expr.ts) does not group `<…>`, so a typed vector literal inside a geometry or solver command
-  (`Vector(<1, 2>)`, `cross(A, <1, 0>)`) is cut at its comma; name the vector first (`B = <1, 2>`).
+- A curve 10¹² times steeper than its offset at a domain's end (10¹²√x + 0.01) on a window a million wide is still
+  marked with a root there: every point the edge check reaches is ~10⁶, and its 0.01 is within an edge's rounding.
+- Since P-PARSE (0.9) a letter against a bracket is a product and phi is the golden ratio, so `y = x(x + 1)` and
+  `y = phi*x` are drawn, and `splitArgs` keeps `<…>` whole (`cross(A, <1, 0>)` works).

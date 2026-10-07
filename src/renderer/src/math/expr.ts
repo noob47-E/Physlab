@@ -1055,7 +1055,9 @@ const JS_FUNCS: Record<string, string> = {
   ln: 'Math.log', log10: 'Math.log10', log2: 'Math.log2', floor: 'Math.floor', ceil: 'Math.ceil', round: 'Math.round',
   sign: 'Math.sign', min: 'Math.min', max: 'Math.max', pow: 'Math.pow', hypot: 'Math.hypot', mag: 'Math.abs',
   sec: 'F.sec', csc: 'F.csc', cot: 'F.cot', nthRoot: 'F.nthRoot', mod: 'F.mod', fix: 'Math.trunc', factorial: 'F.fact',
-  gamma: 'F.gamma', sinc: 'F.sinc', heaviside: 'F.step', step: 'F.step', random: 'Math.random', mean: 'F.mean'
+  gamma: 'F.gamma', sinc: 'F.sinc', heaviside: 'F.step', step: 'F.step', random: 'Math.random', mean: 'F.mean',
+  // · between two numbers (2·x, which preprocess writes dot(2, x)) is their product on a graph, as × is.
+  dot: 'F.times'
 }
 
 const F = {
@@ -1066,6 +1068,7 @@ const F = {
   // n % 2 is −1 for a negative odd n in JavaScript, so compare the size.
   nthRoot: (x: number, n: number) => (x < 0 && Math.abs(n % 2) === 1 ? -Math.pow(-x, 1 / n) : Math.pow(x, 1 / n)),
   mod: (a: number, b: number) => ((a % b) + b) % b,
+  times: (a: number, b: number) => a * b,
   fact: (n: number) => math.gamma(n + 1),
   gamma: (n: number) => math.gamma(n),
   sinc: (x: number) => (Math.abs(x) < 1e-12 ? 1 : Math.sin(x) / x),

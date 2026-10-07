@@ -1333,8 +1333,8 @@ describe('every graph route checks it has something to draw before it says so (p
       ['y = 1e8', /too large to draw/],
       ['y = foo(x)', /does not know a function called "foo"/],
       ['y = A*x', /"A" is not a number/],
-      // · is the dot key: dot(2, x) has no value for numbers, and took 270 ms to find that out.
-      ['y = 2·x', /dot product of two vectors — to multiply numbers, type \* instead, e\.g\. 2\*x/]
+      // · beside a vector written out is a dot product, which a graph cannot draw.
+      ['y = <1, 2>·x', /dot product of two vectors/]
     ]
     for (const [line, said] of CASES) {
       fresh()
@@ -1343,7 +1343,8 @@ describe('every graph route checks it has something to draw before it says so (p
     }
     // P-PARSE R1/R2: a letter written against a bracket is a product and phi is the golden ratio, so these two,
     // once refused here ("reads as a function called x", "cannot read phi"), are drawn.
-    for (const line of ['y = x(x + 1)', 'y = phi*x']) {
+    // P-GRAPH2 H32: · between numbers multiplies, as × does, so y = 2·x is drawn (it was refused as a dot product).
+    for (const line of ['y = x(x + 1)', 'y = phi*x', 'y = 2·x']) {
       fresh()
       const drawn = await typed(line)
       expect(drawn.last.kind, `${line} → ${drawn.last.text}`).toBe('result')
@@ -2714,16 +2715,18 @@ describe('two solutions that print alike are told apart, and a graph letter is n
     scene().setSettings({ decimals: 2, precisionMode: 'dp' })
   })
 
-  it('x = 3 and x = 3.005 at two decimal places are not both listed as "x = 3"', async () => {
-    const { last } = await typed('(x - 3)(x - 3.005) = 0')
+  // 3.004, not 3.005: since P-GRAPH2 H29 a quadratic's pair is exact, and 3.005 at two places is 3.01, which
+  // already tells apart from 3 (it was 3.00499… from polyRoots).
+  it('x = 3 and x = 3.004 at two decimal places are not both listed as "x = 3"', async () => {
+    const { last } = await typed('(x - 3)(x - 3.004) = 0')
     expect(last.kind).toBe('result')
-    expect(last.text).toContain('The solutions are x = 3 and x = 3.005 — each drawn as a vertical line.')
+    expect(last.text).toContain('The solutions are x = 3 and x = 3.004 — each drawn as a vertical line.')
   })
 
   it('does the same in significant figures', async () => {
     scene().setSettings({ decimals: 3, precisionMode: 'sf' })
-    const { last } = await typed('(x - 3)(x - 3.005) = 0')
-    expect(last.text).toContain('The solutions are x = 3 and x = 3.005 — each drawn as a vertical line.')
+    const { last } = await typed('(x - 3)(x - 3.004) = 0')
+    expect(last.text).toContain('The solutions are x = 3 and x = 3.004 — each drawn as a vertical line.')
   })
 
   it('adds digits only to the solutions that need them, one more at a time', async () => {
@@ -3178,15 +3181,13 @@ describe('the line offered for a call to a graph is the line typed, written as a
   })
 
   // mathjs writes x times (1 / x) as "x * 1 / x", which is another shape, and failing that as
-  // "x (1 / x)", which reads as a call of x and is refused: the line offered did not draw.
+  // "x (1 / x)". Since P-PARSE R1 a letter against a bracket is a product, so it is offered as written on paper.
   it('x times a graph that is a quotient is offered as a product with its bracket, and that line draws', async () => {
     for (const [formula, offered] of [
-      ['1/x', 'y = x*(1/x)'],
-      ['x/(x + 1)', 'y = x*(x/(x + 1))']
+      ['1/x', 'y = x(1/x)'],
+      ['x/(x + 1)', 'y = x(x/(x + 1))']
     ]) {
-      // Since P-PARSE R1, "x (1/x)" reads as the product too, and mathjs's own spacing is what is offered; the
-      // star-less form is pinned with its space until asWritten tightens it (P-GRAPH2).
-      expect((await offeredFor(`g(x) = ${formula}`, 'y = x g(x)')).replace(/^y = x \(/, 'y = x*('), formula).toBe(offered)
+      expect(await offeredFor(`g(x) = ${formula}`, 'y = x g(x)'), formula).toBe(offered)
       const again = await typed(offered)
       expect(again.last.kind, `${offered} → ${again.last.text}`).toBe('result')
     }
@@ -3336,7 +3337,8 @@ describe('a quadratic with two real solutions that are very close is not called 
   it('the same on the negative side, and with a bigger gap that polyRoots also misread', async () => {
     for (const [line, says] of [
       ['(x + 1)(x + 1.0000000000001) = 0', /^The solution is x = −1 — drawn as a vertical line\./],
-      ['(x - 3)(x - 3.0000000001) = 0', /^The solution is x = 3 — drawn as a vertical line\./]
+      // 10⁻¹⁰ apart is two solutions, as (x − 1)² = 10⁻²⁰ is 1 ± 10⁻¹⁰ (P-GRAPH2 H29); 10⁻¹³ apart is one.
+      ['(x - 3)(x - 3.0000000001) = 0', /^The solutions are x = 3 and x = 3\.0000000001 — each drawn as a vertical line\./]
     ] as [string, RegExp][]) {
       fresh()
       const { last } = await typed(line)
