@@ -58,8 +58,8 @@ export function useShortcuts() {
         return
       }
       if (isTyping(e)) return
-      // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y reach the history of the mode in front (the Sandbox, Lab
-      // Data and Question Author each keep their own); undoRoute decides, for the Edit menu too.
+      // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y reach the history of the mode in front (the Sandbox and Lab
+      // Data each keep their own); undoRoute decides, for the Edit menu too.
       if (ctrl && runHistory(useApp.getState().mode, { key: e.key, shift: e.shiftKey })) {
         e.preventDefault()
         return

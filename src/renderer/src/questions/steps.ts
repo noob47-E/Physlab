@@ -501,7 +501,7 @@ export function stepsToWorking(
  * The SymPy replies a question's Integrate and Differentiate steps need, keyed by `casStepKey` for
  * `stepsToWorking`: `work` is asked once per distinct line, and a line it could not answer gets a
  * reply that says so, never a step left "Working it out…". Null when there is no such step. The
- * player (`resolveAutoSteps`) and the Question Author's preview of an engine step both use it.
+ * player (`resolveAutoSteps`) uses it.
  */
 export async function workCasSteps(
   q: PQQuestion,

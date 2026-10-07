@@ -4,10 +4,9 @@ import { BookOpen, Check, ChevronRight, ChevronsDown, Eye, FolderOpen, Lightbulb
 import { visualizeSolution } from '../core/visualize'
 import { useScene } from '../core/store'
 import { enterMode } from '../app/layout'
-import { resultFilesOffered } from '../app/modes'
 import { showPanel } from '../app/panels'
 import { panelToFront } from './solverState'
-import { hiddenModeFileText, openQuestionFile } from '../app/files'
+import { classResultsFileText, openQuestionFile } from '../app/files'
 import { checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import type { FadingLevel, PQQuestion } from '../questions/pqjson'
@@ -33,9 +32,8 @@ import {
   type Played,
   type VisualPlan
 } from '../questions/player'
-import { buildResultFile, recordFirstTries, resultParts, serializeResultFile, type PQResultPart } from '../questions/results'
+import { recordFirstTries, resultParts, type PQResultPart } from '../questions/results'
 import { nextLevel, resolveAutoSteps } from '../questions/steps'
-import { saveTextFile } from '../app/files'
 import { workSteps } from '../math/pure/store'
 import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
@@ -212,7 +210,7 @@ function Steps({ steps, shown }: { steps: { text?: string; tex?: string }[]; sho
 /**
  * The visual buttons a question offers (Fix 21). 'first' is the one "Show the picture" (or "Open
  * the experiment") for whatever the question shows first. An author may give one question a
- * picture, a motion and an experiment together, and Question Author previews each: the student
+ * picture, a motion and an experiment together: the student
  * gets each of them too — "Draw the motion" beside an authored picture, "Open the experiment"
  * beside an authored picture or motion — so one button never hides the rest.
  */
@@ -240,10 +238,6 @@ export function Practice() {
   const [source, setSource] = useState<Source>(saved.source)
   const [setId, setSetId] = useState(saved.setId)
   const [now, setNow] = useState(() => Date.now())
-  // "Save my results for my teacher" (opt-in): the name box is never required, and nothing is
-  // written to disk until the button below is pressed.
-  const [teacherName, setTeacherName] = useState('')
-  const [saveNote, setSaveNote] = useState<string | null>(null)
   const session = useSession()
   const teacher = useTeacherSets()
   const { items, index, typed, checks, hints, lines, revealed, results, startedAt, note } = session
@@ -312,9 +306,6 @@ export function Practice() {
   const begin = (next: Item[], setQuestions: PQQuestion[] = []) => {
     put({ items: next, index: 0, results: [], questionLevel: useSession.getState().level, setQuestions, ...blankQuestionState() })
     setNow(Date.now())
-    // A new set starts with nothing saved yet: last set's "Saved" (or refusal) note must not sit
-    // beside this one's Save button and tell the student their unsaved results already went out.
-    setSaveNote(null)
   }
 
   const startSet = () => {
@@ -336,7 +327,7 @@ export function Practice() {
     const f = await openQuestionFile()
     if (!f) return
     // A class-results file is not a question set; say what it is, not "not a question file".
-    const refused = hiddenModeFileText(f.name, f.content)
+    const refused = classResultsFileText(f.name, f.content)
     if (refused) return void useTeacherSets.setState({ error: refused, report: [] })
     try {
       const set = loadTeacherFile(f.content, f.name)
@@ -435,28 +426,6 @@ export function Practice() {
       put({ note: { text: `${text} Switched to ${where} to show it; your place in the set is kept.`, error: false } })
     } catch (e) {
       put({ note: { text: e instanceof Error ? e.message : String(e), error: true } })
-    }
-  }
-
-  /** The finished set's own question-bank results — a vector-topic problem has no `question` and
-   *  is never in a `.pqresult` file, because a result file names a part by the author's own index
-   *  and a generated problem has no author. */
-  const questionResults = results.filter((r): r is Result & { question: NonNullable<Result['question']> } => !!r.question)
-
-  /** Writes a `.pqresult` file from this finished set, only when the button is pressed. */
-  const saveForTeacher = async () => {
-    const file = buildResultFile({
-      setId: pickedSet?.id ?? setId,
-      setTitle: pickedSet?.title ?? setId,
-      student: teacherName,
-      items: questionResults.map((r) => ({ questionId: r.question.id, seed: r.question.seed, parts: r.question.parts, hints: r.hints, seconds: r.seconds }))
-    })
-    const safeName = (pickedSet?.title ?? 'results').replace(/[^\w -]+/g, '').trim() || 'results'
-    try {
-      const path = await saveTextFile(serializeResultFile(file), `${safeName}.pqresult`, 'Result file', 'pqresult')
-      setSaveNote(path ? 'Saved. Give this file to your teacher — PhysLab never sends it anywhere on its own.' : null)
-    } catch (e) {
-      setSaveNote(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -622,27 +591,6 @@ export function Practice() {
             </div>
           ))}
         </div>
-        {resultFilesOffered() && questionResults.length > 0 && (
-          <div className="card mx-3 mt-3 p-3">
-            <div className="font-semibold text-ink-strong">Save my results for my teacher</div>
-            <div className="text-ink-dim">
-              A file with each part you answered, whether it was right first time and in the end, your marks, the hints you
-              used and the time you took — never sent anywhere by PhysLab. You choose who it goes to.
-            </div>
-            <input
-              className="field min-h-[44px] mt-2 w-full"
-              value={teacherName}
-              onChange={(e) => setTeacherName(e.target.value)}
-              placeholder="Your name (optional)"
-              aria-label="Your name for your teacher (optional)"
-              spellCheck={false}
-            />
-            <button className="btn mt-2 min-h-[44px]" onClick={saveForTeacher}>
-              Save my results for my teacher
-            </button>
-            {saveNote && <div className="mt-1 text-ink-dim">{saveNote}</div>}
-          </div>
-        )}
         <div className="mt-3 flex flex-wrap gap-2 px-3">
           <button className="btn primary min-h-[44px]" onClick={startSet}>
             <RotateCcw size={13} /> Another set

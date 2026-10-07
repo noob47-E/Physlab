@@ -431,29 +431,14 @@ describe('the "does not separate" flag', () => {
 })
 
 describe('nothing is written without the button', () => {
-  // The repo has no DOM test tooling, so this reads the source: the only file write in Problem
-  // Sets is the one inside saveForTeacher, and saveForTeacher runs only from the Save button.
+  // The repo has no DOM test tooling, so this reads the source. "Save my results for my teacher"
+  // was taken out with Class Results in 0.9: Problem Sets writes no file at all.
   const src = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
   const practice = src('src/renderer/src/panels/Practice.tsx')
 
-  it('Practice writes a file in one place only, inside saveForTeacher', () => {
-    expect(practice.match(/saveTextFile\(/g)).toHaveLength(1)
-    const start = practice.indexOf('const saveForTeacher')
-    expect(start).toBeGreaterThan(-1)
-    const call = practice.indexOf('saveTextFile(')
-    // The call sits in saveForTeacher's own body, before the next top-level function of the panel.
-    const nextFn = practice.slice(start + 1).search(/\n {2}(const|function) \w+/)
-    expect(nextFn).toBeGreaterThan(-1)
-    expect(call).toBeGreaterThan(start)
-    expect(call).toBeLessThan(start + 1 + nextFn)
-  })
-
-  it('saveForTeacher runs only from the Save button', () => {
-    const uses = [...practice.matchAll(/saveForTeacher/g)].map((m) => m.index!)
-    expect(uses).toHaveLength(2) // its declaration and one onClick
-    expect(practice.slice(uses[1] - 'onClick={'.length, uses[1])).toBe('onClick={')
-    const button = practice.slice(practice.lastIndexOf('<button', uses[1]), practice.indexOf('</button>', uses[1]))
-    expect(button).toContain('Save my results for my teacher')
+  it('Practice writes no file', () => {
+    expect(practice).not.toMatch(/saveTextFile\(/)
+    expect(practice).not.toContain('saveForTeacher')
   })
 
   it('results.ts imports nothing: no file, network or IPC access', () => {

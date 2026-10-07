@@ -1,5 +1,5 @@
 // A formula written the way a student writes it, for every sentence a person reads: the picture
-// note in Problem Sets and the problem rows of Question Author's preview. Headless.
+// note in Problem Sets. Headless.
 
 import type { ConstantNode, MathNode, OperatorNode, ParenthesisNode } from 'mathjs'
 import { math, preprocess } from '../math/expr'

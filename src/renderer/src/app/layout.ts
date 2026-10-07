@@ -111,7 +111,11 @@ export function restoreLayout(api: DockviewApi): boolean {
 /** The mode the last session was in, if a usable one was saved. */
 export function savedMode(): ModeId | null {
   const m = readSaved()?.mode
-  return m && MODES.some((d) => d.id === m && d.ready) ? m : null
+  if (!m) return null
+  // A mode this build does not have (Question Author, Class Results) is handed on as it was saved:
+  // openableMode turns it into Problem Sets.
+  if (!MODES.some((d) => d.id === m)) return m as ModeId
+  return MODES.some((d) => d.id === m && d.ready) ? m : null
 }
 
 let resetting = false

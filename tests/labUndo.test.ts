@@ -157,15 +157,15 @@ describe('which history a key or the Edit menu reaches', () => {
     expect(routeHistory('lab', { key: 'y', shift: false })).toEqual({ stack: 'lab', action: 'redo' })
   })
   it('sends the Edit menu to the same place as the keys', () => {
-    for (const mode of ['lab', 'sandbox', 'author', 'motion', 'geometry']) {
+    for (const mode of ['lab', 'sandbox', 'motion', 'geometry']) {
       expect(routeHistory(mode, { menu: 'undo' })).toEqual(routeHistory(mode, { key: 'z', shift: false }))
       expect(routeHistory(mode, { menu: 'redo' })).toEqual(routeHistory(mode, { key: 'y', shift: false }))
     }
   })
-  it('keeps the Sandbox, the Question Author and the drawing on their own histories', () => {
+  it('keeps the Sandbox and the drawing on their own histories; a mode with none undoes the drawing', () => {
     expect(routeHistory('sandbox', { key: 'z', shift: true })).toEqual({ stack: 'sandbox', action: 'redo' })
-    expect(routeHistory('author', { menu: 'undo' })).toEqual({ stack: 'author', action: 'undo' })
-    expect(routeHistory('author', { key: 'y', shift: false })).toEqual({ stack: 'author', action: 'redo' })
+    // Question Author kept its own history until it was taken out of PhysLab in 0.9.
+    expect(routeHistory('author', { menu: 'undo' })).toEqual({ stack: 'scene', action: 'undo' })
     expect(routeHistory('motion', { key: 'z', shift: false })).toEqual({ stack: 'scene', action: 'undo' })
     expect(routeHistory('geometry', { key: 'Z', shift: true })).toEqual({ stack: 'scene', action: 'redo' })
   })

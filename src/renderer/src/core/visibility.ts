@@ -25,10 +25,7 @@ export function spaceOf(mode: ModeId): Space | null {
       return 'vectors'
     case 'shapes':
       return 'shapes'
-    // Question Author's "Show it" draws with the same calls the player uses, which put the picture
-    // in Graphing; looking at that drawing, the teacher sees it beside the question being written.
     case 'graphing':
-    case 'author':
       return 'graphing'
     case 'lab':
       return 'lab'

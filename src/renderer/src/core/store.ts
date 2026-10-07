@@ -6,7 +6,6 @@ import type { EvalResult, ObjId, PointObj, PolygonObj, SceneFile, SceneObject, S
 import type { Solution } from '../math/vectorSolver'
 import { emptyTable, useLab } from '../lab/labStore'
 import { startingScene, useSandbox } from '../sim/store'
-import { useAuthor } from '../questions/authorStore'
 import { DEFAULT_WORLD } from '../sim/types'
 import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
 import { renameInObjects, renameProblem } from './rename'
@@ -763,7 +762,6 @@ export const useScene = create<SceneState>()((set, get) => {
     newScene: () => {
       useLab.getState().setTables([])
       useSandbox.getState().loadSandbox()
-      useAuthor.getState().setQuestions([])
       set({
         objects: {},
         order: [],
@@ -781,9 +779,11 @@ export const useScene = create<SceneState>()((set, get) => {
     loadScene: (raw, path = null) => {
       // Check and convert before touching anything: a bad file used to wipe the lab tables and then throw.
       const file = migrate(raw)
+      // Question Author was taken out of PhysLab: a file saved with a teacher's question set opens
+      // without it, and says so once.
+      const droppedSet = typeof raw === 'object' && raw !== null && Array.isArray((raw as { questions?: unknown }).questions) && (raw as { questions: unknown[] }).questions.length > 0
       useLab.getState().setTables(file.lab ?? [])
       useSandbox.getState().loadSandbox(file.sandbox)
-      useAuthor.getState().setQuestions(file.questions ?? [])
       const objects: Record<ObjId, SceneObject> = {}
       for (const o of file.objects) objects[o.id] = o
       const order = file.objects.map((o) => o.id)
@@ -807,16 +807,18 @@ export const useScene = create<SceneState>()((set, get) => {
         filePath: path,
         dirty: false
       })
+      if (droppedSet) get().pushLog({ input: 'open', kind: 'info', text: QUESTION_SET_LEFT_OUT })
     },
     serialize: () => {
       const { objects, order, settings } = get()
-      // An empty question set is left out, so a project with none is the same file it was in format 4.
-      const questions = useAuthor.getState().questions
-      return { app: 'PhysLab', version: FILE_VERSION, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot(), ...(questions.length ? { questions } : {}) }
+      return { app: 'PhysLab', version: FILE_VERSION, objects: order.map((id) => objects[id]), settings, lab: useLab.getState().tables, sandbox: useSandbox.getState().snapshot() }
     },
     markSaved: (path) => set({ filePath: path, dirty: false })
   }
 })
+
+/** Said once when a file from before 0.9 carries a question set written in Question Author. */
+export const QUESTION_SET_LEFT_OUT = 'This file also holds a question set written in Question Author, which is no longer part of PhysLab. Everything else in it has opened; the question set was left out.'
 
 /** Convenience: read the current state outside React. */
 export const scene = () => useScene.getState()
@@ -841,11 +843,6 @@ useLab.subscribe(() => useScene.setState({ dirty: true }))
 // not the live values published every tenth of a second.
 useSandbox.subscribe((s, prev) => {
   if (s.bodies !== prev.bodies || s.links !== prev.links || s.world !== prev.world || s.sideView !== prev.sideView) useScene.setState({ dirty: true })
-})
-
-// A question written in Question Author is work too; moving between questions is not.
-useAuthor.subscribe((s, prev) => {
-  if (s.questions !== prev.questions) useScene.setState({ dirty: true })
 })
 
 // Handy while developing: inspect the drawing from the browser console.

@@ -3,7 +3,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FILE_VERSION, migrate, migrateLabelSettings, parseSceneFile, spacesForV1 } from '../src/renderer/src/core/migrate'
-import { blankSceneFile, DEFAULT_SETTINGS, useScene } from '../src/renderer/src/core/store'
+import { blankSceneFile, DEFAULT_SETTINGS, QUESTION_SET_LEFT_OUT, useScene } from '../src/renderer/src/core/store'
 import type { SceneFile, SceneObject } from '../src/renderer/src/core/types'
 import { describeWork, hasWork } from '../src/renderer/src/app/autosave'
 import { openFailureText, saveFailureText } from '../src/renderer/src/core/fileErrors'
@@ -309,35 +309,35 @@ describe('migrate', () => {
     expect((raw as { version: number }).version).toBe(1)
   })
 
-  it('format 5 → 6: a question set steps up unchanged, and a format-2 question in it opens instead of being called damaged', () => {
+  it('a format-5 or format-6 file with a Question Author set opens without it, damaged or not, and keeps everything else', () => {
     const licence = { id: 'CC BY 4.0', holder: 'PhysLab' }
     const plain = { id: 'q1', title: 'Plain', statement: 'x', variables: [], parts: [{ type: 'number', prompt: 'x?', answer: '1', unit: 'none', tolerance: { kind: 'relative', value: 0.02 }, marks: 1 }], license: licence }
-    const v5 = { app: 'PhysLab', version: 5, objects: [], settings: {}, questions: [plain] }
+    const P = { id: 'mP', name: 'P', visible: true, locked: false, color: '#000', showLabel: true, type: 'point', def: { kind: 'free', p: [1, 2, 0] } }
+    const v5 = { app: 'PhysLab', version: 5, objects: [P], settings: { unit: 'cm', unitPerSquare: 2 }, questions: [plain] }
     const out = migrate(v5)
     expect(FILE_VERSION).toBe(7)
-    expect({ ...out, version: 5 }).toEqual(v5)
-    // Every kind format 2 adds, with error carried forward, showIf, a rung and a deeper link.
-    const rich = {
-      ...plain,
-      id: 'q2',
-      title: 'Rich',
-      rung: 4,
-      deeper: 'q1',
-      condition: { when: 'a > 0', maxRuns: 50 },
-      parts: [
-        { type: 'number', prompt: 'E?', answer: '0.559146', unit: 'none', tolerance: { kind: 'stated', uref: '0.000001' }, marks: 1 },
-        { type: 'vector', prompt: 'F?', answer: ['3', '4'], unit: 'N', tolerance: { kind: 'relative', value: 0.02 }, marks: 1, showIf: 'a > 1' },
-        { type: 'matrix', prompt: 'M?', answer: [['1', '0'], ['0', '1']], tolerance: { kind: 'absolute', value: 0.01 }, marks: 1 },
-        { type: 'roots', prompt: 'x?', answer: ['2', '-3'], unit: 'none', tolerance: { kind: 'absolute', value: 0.01 }, marks: 1, ecf: { uses: [{ part: 0, variable: 'a' }], strategy: 'originalfirst', penalty: 0 } },
-        { type: 'function', prompt: 'y?', x: 'x', y: 'y', ode: "y'' + y = 0", initial: [{ at: '0', order: 0, value: '0' }], model: 'sin(x)', marks: 1 },
-        { type: 'proof', prompt: 'Prove it.', model: 'Because.', selfCheck: ['You said why.'], marks: 0 }
-      ]
+    expect('questions' in out).toBe(false)
+    const { questions: _q, ...rest } = v5
+    expect({ ...out, version: 5 }).toEqual(rest)
+    // A set Question Author would have called damaged is not checked any more: the file opens.
+    for (const bad of [{ ...plain, rung: 7 }, { ...plain, license: { id: 'All rights reserved', holder: 'x' } }, 'not a question', null]) {
+      expect(() => parseSceneFile(JSON.stringify({ ...v5, version: 6, questions: [bad] })), JSON.stringify(bad)).not.toThrow()
     }
-    expect(parseSceneFile(JSON.stringify({ ...v5, version: 6, questions: [rich] })).questions).toEqual([rich])
-    // …while what Practice could not draw is still refused with the sentence, not a crash.
-    for (const bad of [{ ...rich, rung: 7 }, { ...rich, parts: [{ ...rich.parts[2], answer: [['1', '0'], ['0']] }] }, { ...rich, parts: [{ ...rich.parts[5], selfCheck: 'x' }] }]) {
-      expect(() => parseSceneFile(JSON.stringify({ ...v5, version: 6, questions: [bad] }))).toThrow("Question 'Rich' in this file is damaged.")
-    }
+    expect(() => parseSceneFile(JSON.stringify({ ...v5, version: 6, questions: 'damaged' }))).not.toThrow()
+  })
+
+  it('a project with a Question Author set says once that the set was left out, and loads the rest', () => {
+    const P = { id: 'mP', name: 'P', visible: true, locked: false, color: '#000', showLabel: true, type: 'point', def: { kind: 'free', p: [1, 2, 0] } }
+    const plain = { id: 'q1', title: 'Plain', statement: 'x', variables: [], parts: [], license: { id: 'CC BY 4.0', holder: 'PhysLab' } }
+    scene().clearLog()
+    scene().loadScene({ app: 'PhysLab', version: 5, objects: [P], settings: {}, questions: [plain] }, 'old.phys')
+    expect(scene().order).toEqual(['mP'])
+    expect(scene().log.map((l) => l.text)).toEqual([QUESTION_SET_LEFT_OUT])
+    expect('questions' in scene().serialize()).toBe(false)
+    // A file without a set says nothing.
+    scene().clearLog()
+    scene().loadScene({ app: 'PhysLab', version: 5, objects: [P], settings: {} }, 'plain.phys')
+    expect(scene().log).toEqual([])
   })
 
   it('a format-1 file with any stamped object leaves its spaceless objects alone: they were made that way', () => {

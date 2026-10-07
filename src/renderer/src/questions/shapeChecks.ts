@@ -1,11 +1,9 @@
 // The shapes of a question's nested fields, as plain yes-or-no checks on parsed JSON. `parsePQFile`
 // used to look only at the top level of each question and part, so a hand-edited file with
 // "choices": [null], "traps": {} or steps that were a word opened fine and crashed Problem Sets
-// (or the Question Author) when the question came up, while the same question saved inside a .phys
-// file was refused at once by core/migrate.ts's own copy of these checks (`partOk`, `PICTURE_OK`,
-// `motionOk`, `sandboxOk`, `stepsOk`). Keep the two in step until migrate.ts calls these instead.
+// when the question came up.
 // Headless: no React, no store, no DOM. The sentences a teacher reads are pqjson.ts's business;
-// this file only says whether a shape is one the Author panel and the player can draw.
+// this file only says whether a shape is one the player can draw.
 
 import { math } from '../math/expr'
 import type { FadingLevel, MotionSegment, PQMotion, PQPicture } from './pqjson'
@@ -36,7 +34,7 @@ export const trapsOk = (t: unknown): boolean => each(t, (x) => isStr(x.value) &&
 
 /**
  * True for a name mathjs itself supplies (pi, e, phi, sin …), which a letter a student may use in an
- * answer cannot take: the same test the Question Author applies to the letters it is given.
+ * answer cannot take: the same test a question's own letters are checked with.
  */
 export function mathOwnsName(name: string): boolean {
   const t = math.typeOf((math as unknown as Record<string, unknown>)[name])

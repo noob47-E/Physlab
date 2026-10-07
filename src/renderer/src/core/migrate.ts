@@ -19,16 +19,15 @@
 //   4  from 0.9: arrows are drawn in theme tokens (--vec-1 … --vec-6). An arrow in one of the eight
 //      colours 0.6.1–0.7 handed out gets the token that took its colour's place, in `themed`, so it
 //      follows the theme; a colour the student picked stays theirs because it is read as a hex.
-//   5  from 0.9: the file may carry `questions`, the question set a teacher is writing in Question
-//      Author. A format-4 file has none and comes through as it was; a question anywhere is
-//      checked for its licence and its shape by `checkQuestions`, whatever the format says.
+//   5  from 0.9: the file may carry `questions`, the question set a teacher was writing in Question
+//      Author. Question Author has since been taken out of PhysLab: a set in any file is left out
+//      when it opens (`migrate`), never checked or refused, and the rest of the file opens as it was.
 //   6  from 0.9: a question in the set may use the question-file format 2 — vector, matrix, roots,
 //      function, proof and Lego parts, a number marked against the student's stated uncertainty,
 //      error carried forward, a part shown only under a condition, a rung and a "Go deeper" link.
 //      A format-5 PhysLab would call such a question damaged; format 6 makes it say "saved by a
 //      newer PhysLab" instead. A format-5 file comes through as it was.
 
-import { LICENSE_IDS, type FadingLevel, type MotionSegment, type PQMotion, type PQPicture } from '../questions/pqjson'
 import { directDependents } from './evaluate'
 import { OLD_ARROW_COLOURS, PALETTE, vectorToken } from './naming'
 import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
@@ -71,7 +70,10 @@ export function migrate(raw: unknown): SceneFile {
     file = step(file)
     version = file.version as number
   }
-  return { ...file, objects: (file.objects as Raw[]).map(checkLego) } as unknown as SceneFile
+  const out: Raw = { ...file, objects: (file.objects as Raw[]).map(checkLego) }
+  // A question set from Question Author (formats 5–7), which this PhysLab no longer has, is left out.
+  delete out.questions
+  return out as unknown as SceneFile
 }
 
 /** The things every format has had: what makes a file a PhysLab project at all. */
@@ -87,7 +89,6 @@ function checkShape(raw: unknown): Raw {
   if (raw.settings !== undefined && !isRecord(raw.settings)) throw new Error('The settings in this file are damaged.')
   if (raw.lab !== undefined) checkLab(raw.lab)
   if (raw.sandbox !== undefined) checkSandbox(raw.sandbox)
-  if (raw.questions !== undefined) checkQuestions(raw.questions)
   return { ...raw }
 }
 
@@ -132,197 +133,6 @@ function checkSandbox(sb: unknown): void {
   }
   if (sb.world !== undefined && !isRecord(sb.world)) throw new Error('The world settings in the sandbox are damaged.')
   if (sb.sideView !== undefined && typeof sb.sideView !== 'boolean') throw new Error('The sandbox view setting in this file is damaged.')
-}
-
-const isStrings = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === 'string')
-
-/**
- * The question set Question Author writes (format 5), checked on every file whatever its format:
- * a lego record checked only on the way up from an older format let a damaged one through in a
- * file of the current format. Two things are checked, and only two, because a question in a
- * project is allowed to be half-written (a range still being typed, a part with no answer yet):
- *
- * - its licence: nothing may be used without one of the three PhysLab may carry, and the holder
- *   must at least be a string, though it may still be empty while the teacher writes;
- * - its shape: what the Author panel reads on its first render, down to each variable's rule and
- *   each part's fields. A question with no list of parts, a list variable with no items or a
- *   number part with no tolerance crashed the panel after the old scene was already gone, as a
- *   lab table with no columns once did.
- *
- * A file failing either is refused with a sentence naming the question, like any damaged block.
- */
-const isNum = (v: unknown): v is number => typeof v === 'number'
-
-/**
- * A variable's rule, down to what its row in the Variables tab reads: a list with no items or a
- * range with no ends passed a check on `kind` alone and then crashed the tab.
- */
-function variableDefOk(d: unknown): boolean {
-  if (!isRecord(d)) return false
-  if (d.kind === 'range') return isNum(d.from) && isNum(d.to) && isNum(d.step) && (d.exclude === undefined || (Array.isArray(d.exclude) && d.exclude.every(isNum)))
-  if (d.kind === 'list') return Array.isArray(d.items) && d.items.every(isNum)
-  if (d.kind === 'expr') return typeof d.expr === 'string'
-  return false
-}
-
-/** A band tolerance, or (format 6, number parts) the reference uncertainty a stated answer is tested against. */
-const toleranceOk = (t: unknown): boolean => isRecord(t) && ((t.kind === 'stated' && typeof t.uref === 'string') || (typeof t.kind === 'string' && isNum(t.value)))
-
-/** Format 6: what any part may carry — error carried forward and a condition for showing it — as Practice reads them. */
-function partCommonOk(p: Raw): boolean {
-  const e = p.ecf
-  const ecfOk =
-    e === undefined ||
-    (isRecord(e) &&
-      Array.isArray(e.uses) &&
-      e.uses.every((u) => isRecord(u) && isNum(u.part) && typeof u.variable === 'string') &&
-      typeof e.strategy === 'string' &&
-      isNum(e.penalty))
-  return ecfOk && (p.showIf === undefined || typeof p.showIf === 'string')
-}
-
-/** A part, down to what its card in the Solution tab and its row in Practice read (a tolerance, a choice's options, a matrix's rows). */
-function partOk(p: unknown): boolean {
-  if (!isRecord(p) || typeof p.prompt !== 'string' || !partCommonOk(p)) return false
-  if (p.type === 'number') {
-    return (
-      typeof p.answer === 'string' &&
-      typeof p.unit === 'string' &&
-      toleranceOk(p.tolerance) &&
-      (p.traps === undefined || (Array.isArray(p.traps) && p.traps.every((x) => isRecord(x) && typeof x.value === 'string' && typeof x.why === 'string')))
-    )
-  }
-  if (p.type === 'expression') return typeof p.answer === 'string' && isStrings(p.symbols)
-  if (p.type === 'choice') {
-    // Generated choices: the Solution tab reads `distractors.rules.includes(rule)` for every rule
-    // it offers, so a hand-edited object with no rule list crashed it.
-    const d = p.distractors
-    const distractorsOk = d === undefined || (isRecord(d) && typeof d.correct === 'string' && typeof d.unit === 'string' && isStrings(d.rules))
-    return distractorsOk && Array.isArray(p.choices) && p.choices.every((c) => isRecord(c) && typeof c.text === 'string' && typeof c.correct === 'boolean')
-  }
-  // Format 6's kinds. A matrix's rows must be the same length: Practice lays one box per entry
-  // from the first row, and a ragged row marked against it compared an entry with nothing.
-  if (p.type === 'vector' || p.type === 'roots') return isStrings(p.answer) && typeof p.unit === 'string' && toleranceOk(p.tolerance)
-  if (p.type === 'matrix') {
-    const rows = p.answer
-    return Array.isArray(rows) && rows.every(isStrings) && rows.every((r) => (r as string[]).length === (rows[0] as string[]).length) && toleranceOk(p.tolerance)
-  }
-  if (p.type === 'function') {
-    return (
-      typeof p.x === 'string' &&
-      typeof p.y === 'string' &&
-      typeof p.ode === 'string' &&
-      typeof p.model === 'string' &&
-      Array.isArray(p.initial) &&
-      p.initial.every((c) => isRecord(c) && typeof c.at === 'string' && (c.order === 0 || c.order === 1) && typeof c.value === 'string')
-    )
-  }
-  if (p.type === 'proof') return typeof p.model === 'string' && isStrings(p.selfCheck)
-  if (p.type === 'lego') return Array.isArray(p.target) && p.target.every((c) => Array.isArray(c) && c.length === 2 && isStrings(c)) && isNum(p.pieces)
-  return false
-}
-
-/** Format 6's question fields, as the Practice header and the Depth chips read them: a rung is 1 to 5, a link names a question. */
-function questionFieldsOk(q: Raw): boolean {
-  const c = q.condition
-  return (
-    (c === undefined || (isRecord(c) && typeof c.when === 'string' && isNum(c.maxRuns))) &&
-    (q.rung === undefined || (Number.isInteger(q.rung) && (q.rung as number) >= 1 && (q.rung as number) <= 5)) &&
-    (q.deeper === undefined || typeof q.deeper === 'string')
-  )
-}
-
-const isStr = (v: unknown): boolean => typeof v === 'string'
-/** An optional field: absent, or of its type. A hand-edited `xMin: 0` is not a formula. */
-const opt = (v: unknown, ok: (v: unknown) => boolean): boolean => v === undefined || ok(v)
-/** A list of records, each passing `ok`. */
-const each = (v: unknown, ok: (r: Raw) => boolean): boolean => Array.isArray(v) && v.every((r) => isRecord(r) && ok(r))
-
-/**
- * Each picture kind, down to the fields the Author panel's scene tab and Practice read on their
- * first render: a piecewise picture with no `pieces` passed a check that never looked at the
- * picture, and the scene tab crashed at `pieces.map`. Keyed on every kind of `PQPicture`, so a
- * kind added there cannot be forgotten here: the file stops compiling until it has its row.
- */
-const PICTURE_OK: Record<PQPicture['kind'], (p: Raw) => boolean> = {
-  curve: (p) => isStr(p.expr) && opt(p.xMin, isStr) && opt(p.xMax, isStr),
-  piecewise: (p) => each(p.pieces, (s) => isStr(s.expr) && isStr(s.from) && isStr(s.to)),
-  between: (p) => isStr(p.upper) && isStr(p.lower) && isStr(p.from) && isStr(p.to) && opt(p.label, isStr),
-  tangent: (p) => isStr(p.expr) && isStr(p.at),
-  normal: (p) => isStr(p.mean) && isStr(p.sd) && opt(p.from, isStr) && opt(p.to, isStr),
-  vectors: (p) => each(p.items, (a) => isStr(a.name) && isStrings(a.v) && opt(a.tail, isStrings) && opt(a.role, (r) => r === 'input' || r === 'result')),
-  dots: (p) => isStr(p.count) && opt(p.perRow, isNum),
-  curves: (p) => each(p.items, (c) => isStr(c.expr) && isStr(c.label) && opt(c.from, isStr) && opt(c.to, isStr)),
-  numberline: (p) => each(p.items, (m) => isStr(m.label) && isStr(m.value))
-}
-
-const SEGMENT_OK: Record<MotionSegment['kind'], (s: Raw) => boolean> = {
-  rest: () => true,
-  uniform: (s) => isStr(s.v),
-  accelerate: (s) => isStr(s.a)
-}
-const PLOTS: readonly unknown[] = ['x-t', 'v-t', 'a-t'] satisfies PQMotion['plots']
-const LEVELS: readonly unknown[] = ['worked', 'half', 'solo'] satisfies FadingLevel[]
-
-const pictureOk = (p: unknown): boolean => isRecord(p) && Object.hasOwn(PICTURE_OK, String(p.kind)) && PICTURE_OK[p.kind as PQPicture['kind']](p)
-
-/** A motion as the scene tab lists its stretches (`segments.map`) and Practice plots it. */
-const motionOk = (m: unknown): boolean =>
-  isRecord(m) &&
-  each(m.segments, (s) => isStr(s.duration) && Object.hasOwn(SEGMENT_OK, String(s.kind)) && SEGMENT_OK[s.kind as MotionSegment['kind']](s)) &&
-  Array.isArray(m.plots) &&
-  m.plots.every((x) => PLOTS.includes(x)) &&
-  opt(m.x0, isStr) &&
-  opt(m.v0, isStr) &&
-  opt(m.sampleEvery, isStr)
-
-/** A Sandbox scene as the scene tab lists its pushes (`actuators.map`): each a body and three force formulas. */
-const sandboxOk = (s: unknown): boolean =>
-  isRecord(s) &&
-  isStr(s.preset) &&
-  each(s.actuators, (a) => isStr(a.body) && isStrings(a.force) && (a.force as string[]).length === 3 && opt(a.from, isStr) && opt(a.until, isStr)) &&
-  opt(s.record, isStr)
-
-/**
- * A worked step, down to its `auto` job: the Solution tab reads an engine step's `input.trim()`
- * and a vector step's `args`, and looks its fading level up in a list of three (an unknown level
- * crashed on `.about`).
- */
-const autoOk = (a: unknown): boolean =>
-  isRecord(a) && ((a.engine === 'pure' && isStr(a.job) && isStr(a.input)) || (a.engine === 'vectors' && isStr(a.solver) && isStrings(a.args)))
-const stepsOk = (s: unknown): boolean =>
-  isRecord(s) &&
-  LEVELS.includes(s.level) &&
-  each(
-    s.items,
-    (st) => isStr(st.head) && opt(st.tex, isStr) && opt(st.rule, isStr) && opt(st.note, isStr) && opt(st.blank, (b) => typeof b === 'boolean') && opt(st.auto, autoOk)
-  )
-
-function checkQuestions(qs: unknown): void {
-  if (!Array.isArray(qs)) throw new Error('The question set in this file is damaged.')
-  qs.forEach((q, i) => {
-    const who = isRecord(q) && typeof q.title === 'string' && q.title.trim() !== '' ? `Question '${q.title}'` : `Question ${i + 1}`
-    if (!isRecord(q)) throw new Error(`${who} in this file is damaged.`)
-    const l = q.license
-    if (!isRecord(l) || typeof l.id !== 'string' || l.id.trim() === '') throw new Error(`${who} in this file says nothing about its licence, so PhysLab cannot use it.`)
-    if (!(LICENSE_IDS as readonly string[]).includes(l.id)) throw new Error(`${who} in this file is licensed '${l.id}', which PhysLab may not use.`)
-    if (typeof l.holder !== 'string') throw new Error(`${who} in this file does not say who holds its licence.`)
-    const ok =
-      typeof q.id === 'string' &&
-      typeof q.title === 'string' &&
-      typeof q.statement === 'string' &&
-      Array.isArray(q.variables) &&
-      q.variables.every((v) => isRecord(v) && typeof v.name === 'string' && variableDefOk(v.def)) &&
-      Array.isArray(q.parts) &&
-      q.parts.every(partOk) &&
-      opt(q.steps, stepsOk) &&
-      opt(q.picture, pictureOk) &&
-      opt(q.motion, motionOk) &&
-      opt(q.sandbox, sandboxOk) &&
-      (q.tags === undefined || isStrings(q.tags)) &&
-      questionFieldsOk(q)
-    if (!ok) throw new Error(`${who} in this file is damaged.`)
-  })
 }
 
 /** Each object must at least be something the evaluator can name and look up. */
@@ -415,19 +225,12 @@ function v3ToV4(file: Raw): Raw {
   }
 }
 
-/**
- * Format 5 only adds the optional question set. A format-4 file never had one, and any that a
- * hand-edited file carries has already been through `checkQuestions`, so the step is the bump.
- */
+/** Format 5 only added the optional question set (left out on opening now), so the step is the bump. */
 function v4ToV5(file: Raw): Raw {
   return { ...file, version: 5 }
 }
 
-/**
- * Format 6 only lets the question set hold format-2 questions. A format-5 file's questions are all
- * format 1, and `checkQuestions` has already checked every question the file holds, so the step is
- * the bump.
- */
+/** Format 6 only let the question set hold format-2 questions, so the step is the bump. */
 function v5ToV6(file: Raw): Raw {
   return { ...file, version: 6 }
 }

@@ -63,7 +63,7 @@ export function hasWork(file: SceneFile, blank: SceneFile = blankSceneFile()): b
  * readings typed into Lab Data came back as "0 objects, a sandbox with 3 things" — the three
  * being the starting scene nobody had touched.
  */
-export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile(), hideAuthor = false): string {
+export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile()): string {
   const parts: string[] = []
   const objects = file.objects.length
   if (objects) parts.push(`${objects} ${objects === 1 ? 'object' : 'objects'}`)
@@ -76,8 +76,6 @@ export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile(
   const extraEmpty = emptyTables - blankEmpty
   if (extraEmpty > 0) parts.push(`${extraEmpty} empty ${extraEmpty === 1 ? 'table' : 'tables'}`)
   else if (file.lab !== undefined && file.lab.length === 0 && (blank.lab ?? []).length > 0) parts.push('no lab tables')
-  const questions = file.questions?.length ?? 0
-  if (questions) parts.push(hideAuthor ? `${questions} ${questions === 1 ? 'question' : 'questions'}` : `${questions} ${questions === 1 ? 'question' : 'questions'} in Question Author`)
   const sandbox = asLoaded(file, blank).sandbox
   if (sandbox && blank.sandbox && fingerprint({ ...blank, sandbox }) !== fingerprint(blank)) {
     const same = sandbox.bodies.length === blank.sandbox.bodies.length && !sandbox.links.length
@@ -96,8 +94,7 @@ export function describeWork(file: SceneFile, blank: SceneFile = blankSceneFile(
  */
 function asLoaded(file: SceneFile, blank: SceneFile): SceneFile {
   const sandbox = file.sandbox && blank.sandbox ? { ...blank.sandbox, ...file.sandbox, world: { ...DEFAULT_WORLD, ...file.sandbox.world } } : blank.sandbox
-  const { questions, ...rest } = file
-  return { ...rest, lab: file.lab?.length ? file.lab : blank.lab, sandbox, ...(questions?.length ? { questions } : {}) }
+  return { ...file, lab: file.lab?.length ? file.lab : blank.lab, sandbox }
 }
 
 /** The file as text with ids replaced by their order of appearance, and the parts that are not work left out. */

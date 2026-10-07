@@ -26,8 +26,6 @@ export type ModeId =
   | 'nuclear'
   | 'problems'
   | 'lab'
-  | 'author'
-  | 'results'
 
 export interface ModeDef {
   id: ModeId
@@ -123,34 +121,16 @@ export const MODES: ModeDef[] = [
     tools: ['select', '|', 'vector', 'point', '|', 'delete'],
     panel: 'practice',
     view: '2d'
-  },
-  {
-    id: 'author',
-    label: 'Question Author',
-    description: 'Write a question with random numbers, a picture or an experiment, and the worked steps; save it as a set for your class.',
-    ready: true,
-    tools: ['select'],
-    panel: 'author',
-    view: '2d'
-  },
-  {
-    id: 'results',
-    label: 'Class Results',
-    description: 'Open the result files your class saved from Problem Sets and see each question part’s facility, correlation and discrimination, worked out on this computer.',
-    ready: true,
-    tools: ['select'],
-    panel: 'classresults',
-    view: '2d'
   }
 ]
 
 /**
- * Modes this build keeps out of reach. Question Author and Class Results are not ready for students
- * or for the science exhibition (owner, 2026-10-01), so no tab, More modes row, search row, View-menu
- * panel, saved layout, results card or opened file leads to them. Nothing is deleted: their code,
- * tests and file formats stay. To bring both back, empty this set: `new Set<ModeId>()`.
+ * Modes this build keeps out of reach: none today. Question Author and Class Results were kept here
+ * until 0.9, then taken out of the app (owner, 2026-10-06; archived at the tag
+ * archive/question-author-0.9). The mechanism stays for the next mode that is not ready: put its id
+ * in this set and no tab, More modes row, search row, View-menu panel or saved layout leads to it.
  */
-export const HIDDEN_MODES: ReadonlySet<ModeId> = new Set<ModeId>(['author', 'results'])
+export const HIDDEN_MODES: ReadonlySet<ModeId> = new Set<ModeId>()
 
 // Each helper below takes the set as its last parameter, defaulting to HIDDEN_MODES, so a test can
 // pass an empty one and see the modes come back: the default is the switch, nothing else is.
@@ -172,13 +152,11 @@ export const hiddenPanels = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): string
 ]
 
 /**
- * The mode a saved session may open in. A hidden mode opens Problem Sets, the visible mode nearest
- * to both: it plays the sets Question Author writes and makes the results Class Results reads.
+ * The mode a saved session may open in. A hidden mode, or one this build does not have (a session
+ * last left in Question Author or Class Results), opens Problem Sets, the mode nearest to both.
  */
-export const openableMode = (id: ModeId, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeId => (hidden.has(id) ? 'problems' : id)
-
-/** A result file is only worth saving while the mode that reads it is in the build. */
-export const resultFilesOffered = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean => !hidden.has('results')
+export const openableMode = (id: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeId =>
+  hidden.has(id as ModeId) || !MODES.some((m) => m.id === id) ? 'problems' : (id as ModeId)
 
 /**
  * Whether the mode shows the maths drawing, whose 2D/3D switch, grid and snapping apply. The

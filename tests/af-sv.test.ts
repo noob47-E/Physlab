@@ -3,7 +3,6 @@ import { blankSceneFile, scene, useScene } from '../src/renderer/src/core/store'
 import { describeWork, discardRecovery, hasWork, restoreRecovery, startAutosave, useRecovery } from '../src/renderer/src/app/autosave'
 import { emptyTable } from '../src/renderer/src/lab/labStore'
 import type { SceneFile, SceneObject } from '../src/renderer/src/core/types'
-import { readSource } from './helpers/repo'
 
 const KEY = 'physlab.autosave'
 
@@ -119,7 +118,7 @@ describe('S1: a pending recovery copy is never overwritten (desktop bridge path)
   })
 })
 
-describe('describeWork: empty lab tables and hidden author', () => {
+describe('describeWork: empty lab tables', () => {
   it('names an added empty lab table instead of leaving the description empty', () => {
     const blank = blankSceneFile()
     const extra = emptyTable('Added table')
@@ -128,11 +127,6 @@ describe('describeWork: empty lab tables and hidden author', () => {
     expect(describeWork(file)).toBe('1 empty table')
   })
 
-  it('hides the Question Author name when author mode is hidden', () => {
-    const file: SceneFile = { ...blankSceneFile(), questions: [{} as never] }
-    expect(describeWork(file, blankSceneFile(), true)).toBe('1 question')
-    expect(readSource('src/renderer/src/app/RecoveryBar.tsx')).toContain("HIDDEN_MODES.has('author')")
-  })
 })
 
 const names = (s: { file: SceneFile } | null | undefined): string[] => (s?.file.objects ?? []).map((o) => o.name)

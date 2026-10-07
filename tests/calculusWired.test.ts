@@ -119,7 +119,6 @@ import type { MeasureSettings } from '../src/renderer/src/math/format'
 import type { PQQuestion } from '../src/renderer/src/questions/pqjson'
 import { playQuestion } from '../src/renderer/src/questions/player'
 import { WORKING_IT_OUT_STEP, resolveAutoSteps } from '../src/renderer/src/questions/steps'
-import { previewAutoStep, previewAutoStepWorked } from '../src/renderer/src/questions/authoring'
 
 const renders = (tex: string, where: string): void => {
   expect(() => katex.renderToString(tex, { displayMode: true, throwOnError: true, strict: 'ignore' }), `${where}: ${tex}`).not.toThrow()
@@ -518,40 +517,12 @@ describe('a question step worked by SymPy', () => {
     expect(failing.working.moves[1]).toMatchObject({ head: 'PhysLab could not work this step out.', note: 'The algebra engine did not answer.' })
   })
 
-  it('the Question Author previews a Differentiate step as its working, not "Working it out…" for good', async () => {
-    const q = question('worked', 'differentiate', 'x^2*sin(x)')
-    const step = q.steps!.items[1]
-    // The synchronous preview can only hold the place; the worked one is the teacher's real preview.
-    expect(previewAutoStep(q, step, S).map((m) => m.head)).toEqual([WORKING_IT_OUT_STEP])
-    const moves = (await previewAutoStepWorked(q, step, S, workSteps))!
-    const heads = moves.map((m) => m.head)
-    expect(heads).not.toContain(WORKING_IT_OUT_STEP)
-    expect(heads).toContain('Used the product rule.')
-    expect(moves.find((m) => m.head === 'Used the product rule.')!.tex).toContain(String.raw`2 x \sin {x} + x^{2} \cos {x}`)
-    moves.forEach((m, i) => m.tex && renders(m.tex, `author preview move ${i + 1}`))
-
-    // A step the Pure engine answers at once has nothing to wait for.
-    const factor = question('worked', 'factor', 'x^2 - 1')
-    expect(await previewAutoStepWorked(factor, factor.steps!.items[1], S, workSteps)).toBeNull()
-
-    // A worker that fails is the one "could not" line, which keeps the Add button off.
-    const failed = await previewAutoStepWorked(q, step, S, async () => {
-      throw new Error('gone')
-    })
-    expect(failed).toHaveLength(1)
-    expect(failed![0]).toMatchObject({ head: 'PhysLab could not work this step out.', note: 'The algebra engine did not answer.' })
-  })
-
-  it('Problem Sets and the Question Author both ask SymPy for these steps (nothing asked, so they said "Working it out…" for good)', () => {
+  it('Problem Sets asks SymPy for these steps (nothing asked, so it said "Working it out…" for good)', () => {
     const src = (file: string): string => readFileSync(repoPath('src', 'renderer', 'src', 'panels', file), 'utf8')
     const practice = src('Practice.tsx')
     expect(practice).toMatch(/resolveAutoSteps\(playedNow, settings, workSteps\)/)
     // The reply is kept with the copy of the question it was worked for, never put on the next one.
     expect(practice).toMatch(/worked\?\.from === playedNow \? worked\.played : playedNow/)
-    const author = src('AuthorSolution.tsx')
-    expect(author).toMatch(/previewAutoStepWorked\(q, step, settings, workSteps\)/)
-    expect(author.match(/useAutoPreview\(q, /g)?.length).toBe(2)
-    expect(author).toMatch(/disabled=\{!step \|\| failed \|\| pending \|\|/)
   })
 })
 

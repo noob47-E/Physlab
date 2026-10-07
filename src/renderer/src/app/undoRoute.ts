@@ -1,19 +1,18 @@
 // Which history Undo and Redo reach. The keyboard and the Edit menu both ask here, so they cannot
 // drift apart again: Ctrl+Shift+Z used to undo a second time in Lab Data, Ctrl+Y redid the drawing
-// behind the table, and Edit ▸ Undo/Redo ran the drawing's history in Lab Data and Question Author.
+// behind the table, and Edit ▸ Undo/Redo ran the drawing's history in Lab Data.
 
 import { scene } from '../core/store'
 import { useLab } from '../lab/labStore'
-import { useAuthor } from '../questions/authorStore'
 import { useSandbox } from '../sim/store'
 
-export type HistoryStack = 'lab' | 'sandbox' | 'author' | 'scene'
+export type HistoryStack = 'lab' | 'sandbox' | 'scene'
 export type HistoryAction = 'undo' | 'redo'
 export type HistoryInput = { key: string; shift: boolean } | { menu: HistoryAction }
 
 /** The modes that keep a history of their own; every other mode undoes the drawing. */
 function stackFor(mode: string): HistoryStack {
-  return mode === 'lab' || mode === 'sandbox' || mode === 'author' ? mode : 'scene'
+  return mode === 'lab' || mode === 'sandbox' ? mode : 'scene'
 }
 
 /** Ctrl+Z undoes, Ctrl+Shift+Z and Ctrl+Y redo; null for any other key. */
@@ -30,7 +29,6 @@ export function routeHistory(mode: string, input: HistoryInput): { stack: Histor
 const STACKS: Record<HistoryStack, () => { undo: () => void; redo: () => void }> = {
   lab: () => useLab.getState(),
   sandbox: () => useSandbox.getState(),
-  author: () => useAuthor.getState(),
   scene: () => scene()
 }
 

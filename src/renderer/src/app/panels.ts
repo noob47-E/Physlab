@@ -19,15 +19,13 @@ export const PANEL_TITLES: Record<string, string> = {
   vectorcalc: 'Vector Calculator',
   solver: 'Solver',
   practice: 'Practice',
-  author: 'Author',
   labdata: 'Lab Data',
   maths: 'Maths',
   console: 'Console',
   timeline: 'Timeline',
   graphs: 'Graphs',
   gpulab: 'GPU Lab',
-  sandbox: 'Sandbox',
-  classresults: 'Class Results'
+  sandbox: 'Sandbox'
 }
 
 /** True for a panel that belongs to a mode this build keeps out of reach (HIDDEN_MODES in modes.ts). */
@@ -48,7 +46,7 @@ const PANEL_GROUPS: string[][] = [
   ['viewport', 'maths'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
-  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'author', 'labdata', 'sandbox', 'gpulab', 'classresults'],
+  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab'],
   ['console', 'timeline', 'graphs']
 ]
 
@@ -141,6 +139,8 @@ export function dropHiddenPanels(): boolean {
     const panel = api.getPanel(id)
     if (panel) api.removePanel(panel)
   }
+  // A layout saved by an older build may hold a panel this one does not have (Author, Class Results).
+  for (const panel of [...api.panels]) if (!PANEL_TITLES[panel.id]) api.removePanel(panel)
   refreshOpenPanels()
   return api.panels.length > 0
 }

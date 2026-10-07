@@ -2,7 +2,6 @@ import { scene } from '../core/store'
 import { parseSceneFile } from '../core/migrate'
 import { openFailureText, saveFailureText } from '../core/fileErrors'
 import { RESULT_FORMAT } from '../questions/results'
-import { HIDDEN_MODES, type ModeId } from './modes'
 
 type Bridge = {
   isDesktop: boolean
@@ -60,7 +59,7 @@ export async function openQuestionFile(): Promise<{ name: string; content: strin
   })
 }
 
-const CLASS_RESULTS_NOT_HERE = 'Class results are not in this version of PhysLab.'
+export const CLASS_RESULTS_NOT_HERE = 'Class results are not part of PhysLab.'
 
 // The two marks of a result file, looked for in its text rather than parsed out of it: this file
 // keeps its own JSON parsing out (tests/persistence.test.ts), so no parser message can reach the
@@ -70,14 +69,12 @@ const RESULT_APP = /"app"\s*:\s*"PhysLab"/
 const RESULT_MARK = new RegExp(`"format"\\s*:\\s*"${RESULT_FORMAT}"`)
 
 /**
- * A sentence for a file that belongs to a mode this build keeps out of reach, or null when the file
- * is fine to open. Class Results is the only such mode with a file of its own that a student can be
- * handed (a `.pqresult`, saved from Problem Sets). Opened without this it was only "This is not a
+ * A sentence for a class-results file (a `.pqresult`, which builds before 0.9 saved from Problem
+ * Sets), or null when the file is fine to open. Opened without this it was only "This is not a
  * PhysLab project" (or "…question file"), which sends a student looking for what they did wrong. A
  * renamed result file is still one, so what is inside counts as well as the name.
  */
-export function hiddenModeFileText(name: string, content: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): string | null {
-  if (!hidden.has('results')) return null
+export function classResultsFileText(name: string, content: string): string | null {
   if (/\.pqresult$/i.test(name) || (RESULT_APP.test(content) && RESULT_MARK.test(content))) return CLASS_RESULTS_NOT_HERE
   return null
 }
@@ -88,7 +85,7 @@ export function hiddenModeFileText(name: string, content: string, hidden: Readon
  * Exported so a test can cross this boundary without a dialog.
  */
 export function loadProjectText(content: string, path: string) {
-  const refused = hiddenModeFileText(path, content)
+  const refused = classResultsFileText(path, content)
   if (refused) {
     scene().pushLog({ input: 'open', kind: 'error', text: refused })
     return

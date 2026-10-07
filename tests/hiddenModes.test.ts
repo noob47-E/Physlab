@@ -1,9 +1,8 @@
-// Question Author and Class Results are out of every student's reach in this build (owner,
-// 2026-10-01: neither is ready for students or for the science exhibition). Nothing is deleted:
-// their code, their tests and their file formats stay, and ONE switch, HIDDEN_MODES in
-// app/modes.ts, brings both back. Each test below is a way a student could have got to either of
-// them, so a door opened by accident later fails here, and the last group shows the switch really
-// is one switch.
+// Question Author and Class Results were kept out of every student's reach from 2026-10-01 and taken
+// out of the app in 0.9 (owner, 2026-10-06; archived at the tag archive/question-author-0.9). Each
+// test below is a way a student could have got to either of them, so a door left by accident fails
+// here. ONE switch, HIDDEN_MODES in app/modes.ts, still hides a mode that is not ready; it is empty
+// today, and the last group shows it still works as one switch.
 //
 // Pure, no DOM: pages are read as text, the dock is a plain object with the few members panels.ts
 // uses, and the Ctrl+K rows are built and pressed for real with only enterMode stood in for.
@@ -21,7 +20,6 @@ import {
   modeById,
   openableMode,
   readyModes,
-  resultFilesOffered,
   useApp,
   type ModeId
 } from '../src/renderer/src/app/modes'
@@ -38,10 +36,10 @@ import { RENDERER_SRC, readSource, repoPath } from './helpers/repo'
 const { entered } = vi.hoisted(() => ({ entered: [] as string[] }))
 vi.mock('../src/renderer/src/app/layout', () => ({ enterMode: (id: string) => void entered.push(id) }))
 
-/** The requirement itself, not the implementation's table: the two modes and the two panels they own. */
-const HIDDEN_MODE_IDS: ModeId[] = ['author', 'results']
+/** The requirement itself: the two modes and the two panels they owned, which this build no longer has. */
+const HIDDEN_MODE_IDS: string[] = ['author', 'results']
 const HIDDEN_PANEL_IDS = ['author', 'classresults']
-const REFUSAL = 'Class results are not in this version of PhysLab.'
+const REFUSAL = 'Class results are not part of PhysLab.'
 
 /** The few parts of dockview that panels.ts touches, as a plain object a node test can hold. */
 function fakeDock(open: string[]) {
@@ -192,8 +190,7 @@ describe('a student cannot reach Question Author or Class Results', () => {
     }, 120_000)
 
     it('has no row called Question Author, Class Results or Author', () => {
-      const names = [...HIDDEN_MODE_IDS.map((id) => modeById(id).label), ...HIDDEN_PANEL_IDS.map((id) => PANEL_TITLES[id])]
-      expect(names).toEqual(['Question Author', 'Class Results', 'Author', 'Class Results'])
+      const names = ['Question Author', 'Class Results', 'Author']
       for (const r of rows()) expect(names, `${r.group}: ${r.title}`).not.toContain(r.title)
     })
 
@@ -296,17 +293,17 @@ describe('a student cannot reach Question Author or Class Results', () => {
 
     const resultText = () => serializeResultFile(buildResultFile({ setId: 'physics-mechanics', setTitle: 'Mechanics', student: 'Aisha', items: [] }))
 
-    it('is told "not in this version" when the file is a class-results file by name, in any letter case', () => {
+    it('is told "not part of PhysLab" when the file is a class-results file by name, in any letter case', () => {
       for (const name of ['class.pqresult', 'CLASS.PQRESULT', 'Set 1.PqResult', 'C:\\Users\\Aisha\\Desktop\\set1.pqresult', '/home/aisha/set1.pqresult']) {
-        expect(files.hiddenModeFileText(name, ''), name).toBe(REFUSAL)
+        expect(files.classResultsFileText(name, ''), name).toBe(REFUSAL)
       }
     })
 
     it('is told the same when the file is a class-results file by what is inside, whatever it is called', () => {
       for (const name of ['results.json', 'results.txt', 'results', 'lesson.phys', 'forces.pqjson']) {
-        expect(files.hiddenModeFileText(name, resultText()), name).toBe(REFUSAL)
+        expect(files.classResultsFileText(name, resultText()), name).toBe(REFUSAL)
       }
-      expect(files.hiddenModeFileText('r.txt', '{"app":"PhysLab","format":"pqresult","version":1}')).toBe(REFUSAL)
+      expect(files.classResultsFileText('r.txt', '{"app":"PhysLab","format":"pqresult","version":1}')).toBe(REFUSAL)
       expect(RESULT_FORMAT).toBe('pqresult')
     })
 
@@ -314,14 +311,14 @@ describe('a student cannot reach Question Author or Class Results', () => {
       const project = JSON.stringify(scene().serialize())
       const questions = readFileSync(repoPath('src', 'renderer', 'src', 'questions', 'bank', 'sample.pqjson'), 'utf8')
       const exam = '// Numbas version: exam_results_page_options\n{"name":"Forces","questions":[]}'
-      expect(files.hiddenModeFileText('lesson.phys', project)).toBeNull()
-      expect(files.hiddenModeFileText('sample.pqjson', questions)).toBeNull()
-      expect(files.hiddenModeFileText('forces.exam', exam)).toBeNull()
+      expect(files.classResultsFileText('lesson.phys', project)).toBeNull()
+      expect(files.classResultsFileText('sample.pqjson', questions)).toBeNull()
+      expect(files.classResultsFileText('forces.exam', exam)).toBeNull()
     })
 
     it('is not stopped by text that only looks a little like a result file', () => {
       for (const text of ['{"app":"PhysLab","format":"pqjson","version":1,"questions":[]}', '{"app":"Other","format":"pqresult"}', '{"format":"pqresult"}', '[]', 'null', '{"app":', '']) {
-        expect(files.hiddenModeFileText('notes.json', text), text).toBeNull()
+        expect(files.classResultsFileText('notes.json', text), text).toBeNull()
       }
     })
 
@@ -364,8 +361,8 @@ describe('a student cannot reach Question Author or Class Results', () => {
       // From the function's first line to its own closing brace, the first one indented two spaces.
       const open = src.match(/const openFile = async \(\) => \{[\s\S]*?\n {2}\}\n/)?.[0] ?? ''
       expect(open, 'Practice.tsx openFile was not found').toContain('loadTeacherFile(')
-      expect(open, 'openFile never asks hiddenModeFileText').toContain('hiddenModeFileText(')
-      expect(open.indexOf('hiddenModeFileText('), 'the refusal must come before the file is read as a set').toBeLessThan(open.indexOf('loadTeacherFile('))
+      expect(open, 'openFile never asks classResultsFileText').toContain('classResultsFileText(')
+      expect(open.indexOf('classResultsFileText('), 'the refusal must come before the file is read as a set').toBeLessThan(open.indexOf('loadTeacherFile('))
       expect(has(open, /useTeacherSets\.setState\(\{ error: refused, report: \[\] \}\)/), 'the refusal is shown as the panel error').toBe(true)
     })
   })
@@ -425,90 +422,78 @@ describe('a session saved in Question Author or Class Results', () => {
 })
 
 // ---------------------------------------------------------------------------------------------
-// M3 — Problem Sets' results card
+// M3 — the modes, panels and files are gone; Problem Sets saves no result file
 // ---------------------------------------------------------------------------------------------
 
-describe('a finished set in Problem Sets', () => {
-  it('offers no result file while the mode that reads it is out of the build', () => {
-    expect(resultFilesOffered()).toBe(false)
+describe('Question Author and Class Results are out of the app', () => {
+  it('have no mode, no panel and no registered view', () => {
+    for (const id of HIDDEN_MODE_IDS) expect(MODES.some((m) => m.id === id), id).toBe(false)
+    for (const id of HIDDEN_PANEL_IDS) expect(PANEL_TITLES[id], id).toBeUndefined()
+    const app = readSource('src/renderer/src/app/App.tsx')
+    expect(has(app, /panels\/Author|panels\/ClassResults/), 'App.tsx still imports a removed panel').toBe(false)
   })
 
-  it('shows the "Save my results for my teacher" card only when result files are offered', () => {
+  it('have no files left in the renderer', () => {
+    const rels = rendererSources().map((f) => f.rel)
+    for (const f of ['panels/Author.tsx', 'panels/AuthorScene.tsx', 'panels/AuthorSolution.tsx', 'panels/AuthorVariables.tsx', 'panels/ClassResults.tsx', 'questions/authoring.ts', 'questions/authorKinds.ts', 'questions/authorStore.ts']) {
+      expect(rels, f).not.toContain(f)
+    }
+  })
+
+  it('leave Problem Sets with no "Save my results for my teacher" card', () => {
     const src = readSource('src/renderer/src/panels/Practice.tsx')
-    // The card's own title, not the comment that names it further up the file.
-    const at = src.indexOf('>Save my results for my teacher</div>')
-    expect(at, 'the card is gone from Practice.tsx').toBeGreaterThan(0)
-    expect(has(src.slice(Math.max(0, at - 220), at), /resultFilesOffered\(\)\s*&&\s*questionResults\.length\s*>\s*0/), 'the card is not gated on resultFilesOffered()').toBe(true)
+    expect(src).not.toContain('Save my results for my teacher')
+    expect(src).not.toContain('saveForTeacher')
   })
 })
 
 // ---------------------------------------------------------------------------------------------
-// M4 — one switch brings both back; nothing was deleted
+// M4 — the one switch still works, shown on a mode that exists
 // ---------------------------------------------------------------------------------------------
 
 describe('the one switch', () => {
   const none = new Set<ModeId>()
+  const some = new Set<ModeId>(['sandbox'])
 
-  it('is a single set, declared once in app/modes.ts, holding exactly Question Author and Class Results', () => {
-    expect([...HIDDEN_MODES].sort()).toEqual(['author', 'results'])
+  it('is a single set, declared once in app/modes.ts, and empty today', () => {
+    expect([...HIDDEN_MODES]).toEqual([])
     const declared = rendererSources()
       .filter((f) => /\b(?:const|let|var)\s+HIDDEN_MODES\b/.test(f.text))
       .map((f) => f.rel)
     expect(declared).toEqual(['app/modes.ts'])
   })
 
-  it('brings both tabs, both More modes rows, both panels and the results card back when the set is empty', () => {
-    expect(readyModes(none).map((m) => m.id)).toEqual(MODES.filter((m) => m.ready).map((m) => m.id))
-    expect(readyModes(none).map((m) => m.id)).toEqual(expect.arrayContaining(HIDDEN_MODE_IDS))
+  it('hides a mode put in it: no tab, no More modes row, no panel, and a saved session opens Problem Sets', () => {
+    expect(readyModes(some).map((m) => m.id)).not.toContain('sandbox')
+    expect(readyModes(none).map((m) => m.id)).toContain('sandbox')
+    expect(hiddenPanels(some)).toEqual(['sandbox'])
+    expect(isPanelHidden('sandbox', some)).toBe(true)
+    expect(panelList(some).map((p) => p.id)).not.toContain('sandbox')
+    expect(isModeHidden('sandbox', some)).toBe(true)
+    expect(openableMode('sandbox', some)).toBe('problems')
+    expect(openableMode('sandbox', none)).toBe('sandbox')
     expect(comingSoonModes(none).map((m) => m.id)).toEqual(MODES.filter((m) => !m.ready).map((m) => m.id))
-    expect(hiddenPanels(none)).toEqual([])
-    for (const id of HIDDEN_PANEL_IDS) expect(isPanelHidden(id, none), id).toBe(false)
-    expect(panelList(none).map((p) => p.id)).toEqual(Object.keys(PANEL_TITLES))
-    expect(panelList(none).map((p) => p.id)).toEqual(expect.arrayContaining(HIDDEN_PANEL_IDS))
-    for (const id of HIDDEN_MODE_IDS) {
-      expect(isModeHidden(id, none), id).toBe(false)
-      expect(openableMode(id, none), id).toBe(id)
-    }
-    expect(resultFilesOffered(none)).toBe(true)
   })
 
-  it('stops refusing class-results files when the set is empty', async () => {
-    const { hiddenModeFileText } = await importFiles()
-    const text = serializeResultFile(buildResultFile({ setId: 's', setTitle: 'S', items: [] }))
-    expect(hiddenModeFileText('class.pqresult', text, none)).toBeNull()
-    expect(hiddenModeFileText('class.pqresult', text, HIDDEN_MODES)).toBe(REFUSAL)
-  })
-
-  it('is what every helper uses when it is given nothing, so editing the set is the whole switch', async () => {
-    const { hiddenModeFileText } = await importFiles()
-    const text = serializeResultFile(buildResultFile({ setId: 's', setTitle: 'S', items: [] }))
+  it('is what every helper uses when it is given nothing, so editing the set is the whole switch', () => {
     expect(readyModes()).toEqual(readyModes(HIDDEN_MODES))
     expect(comingSoonModes()).toEqual(comingSoonModes(HIDDEN_MODES))
-    expect(hiddenPanels()).toEqual(hiddenPanels(HIDDEN_MODES))
-    expect(hiddenPanels()).toEqual(HIDDEN_PANEL_IDS)
+    expect(hiddenPanels()).toEqual([])
     expect(panelList()).toEqual(panelList(HIDDEN_MODES))
     expect(PANEL_LIST).toEqual(panelList(HIDDEN_MODES))
-    expect(resultFilesOffered()).toBe(resultFilesOffered(HIDDEN_MODES))
-    for (const id of Object.keys(PANEL_TITLES)) expect(isPanelHidden(id), id).toBe(isPanelHidden(id, HIDDEN_MODES))
+    expect(PANEL_LIST.map((p) => p.id)).toEqual(Object.keys(PANEL_TITLES))
+    for (const id of Object.keys(PANEL_TITLES)) expect(isPanelHidden(id), id).toBe(false)
     for (const m of MODES) {
-      expect(isModeHidden(m.id), m.id).toBe(HIDDEN_MODES.has(m.id))
-      expect(openableMode(m.id), m.id).toBe(openableMode(m.id, HIDDEN_MODES))
+      expect(isModeHidden(m.id), m.id).toBe(false)
+      expect(openableMode(m.id), m.id).toBe(m.id)
     }
-    expect(hiddenModeFileText('class.pqresult', text)).toBe(hiddenModeFileText('class.pqresult', text, HIDDEN_MODES))
   })
 
-  it('deletes nothing: both modes stay ready, both panels stay registered, and their code and format stay', () => {
-    for (const id of HIDDEN_MODE_IDS) expect(MODES.some((m) => m.id === id && m.ready), id).toBe(true)
-    expect(modeById('author').panel).toBe('author')
-    expect(modeById('results').panel).toBe('classresults')
-    expect(PANEL_TITLES.author).toBe('Author')
-    expect(PANEL_TITLES.classresults).toBe('Class Results')
-    const app = readSource('src/renderer/src/app/App.tsx')
-    expect(has(app, /author: Author,/), 'App.tsx no longer registers the Author panel').toBe(true)
-    expect(has(app, /classresults: ClassResults/), 'App.tsx no longer registers the Class Results panel').toBe(true)
-    for (const f of ['panels/Author.tsx', 'panels/ClassResults.tsx', 'questions/authorStore.ts', 'questions/results.ts']) {
-      expect(() => readSource(`src/renderer/src/${f}`), f).not.toThrow()
-    }
+  it('keeps refusing class-results files whatever the set holds, and the result format stays known', async () => {
+    const { classResultsFileText } = await importFiles()
+    const text = serializeResultFile(buildResultFile({ setId: 's', setTitle: 'S', items: [] }))
+    expect(classResultsFileText('class.pqresult', text)).toBe(REFUSAL)
     expect(RESULT_FORMAT).toBe('pqresult')
+    expect(modeById('problems').panel).toBe('practice')
   })
 })

@@ -481,7 +481,7 @@ export function TopBar() {
       <Menu
         label="Edit"
         items={[
-          // The same history the keys reach: Lab Data and Question Author used to run the drawing's.
+          // The same history the keys reach: Lab Data used to run the drawing's.
           { label: 'Undo', sc: 'Ctrl+Z', run: () => void runHistory(mode, { menu: 'undo' }) },
           { label: 'Redo', sc: 'Ctrl+Y', run: () => void runHistory(mode, { menu: 'redo' }) },
           '-',

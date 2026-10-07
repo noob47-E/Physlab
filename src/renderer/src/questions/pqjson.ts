@@ -661,7 +661,7 @@ function checkPart(p: unknown, index: number, who: string, names: ReadonlySet<st
       if (!Array.isArray(p.symbols) || !p.symbols.every(isStr)) {
         throw new Error(`${who} has an expression part that does not list the symbols a student may use.`)
       }
-      // The Question Author's own rule for these letters (authoring.ts `nameProblem`). A theta
+      // The rule question letters follow (it was Question Author's `nameProblem`). A theta
       // typed as θ is read as the name `theta`, which is not the listed "θ", so every answer to
       // the part was marked wrong.
       for (const sym of p.symbols as string[]) {

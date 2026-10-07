@@ -27,10 +27,8 @@ import { runCommand } from '../src/renderer/src/lang/commands'
 const SPACES: Space[] = ['vectors', 'shapes', 'graphing', 'lab']
 // One list each, used by both tests below: written twice, a new mode added to only one of them
 // would have failed the completeness guard or silently missed the null check.
-const WITH_DRAWING: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab', 'author']
-// Class Results (0.9-QR2) has no scene of its own — a teacher's result files have no drawing to
-// put on screen — so it gets the whole scene like any other mode with no space, same as Sandbox.
-const NO_DRAWING: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear', 'results']
+const WITH_DRAWING: ModeId[] = ['vectors', 'calculator', 'problems', 'shapes', 'graphing', 'lab']
+const NO_DRAWING: ModeId[] = ['gpu', 'sandbox', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear']
 
 const obj = (name: string, space?: Space): SceneObject =>
   ({ id: name, name, type: 'point', def: [0, 0, 0], color: '#fff', visible: true, locked: false, showLabel: true, space }) as unknown as SceneObject
@@ -42,8 +40,6 @@ describe('which drawing a mode looks at', () => {
     expect(spaceOf('problems')).toBe('vectors')
     expect(spaceOf('shapes')).toBe('shapes')
     expect(spaceOf('graphing')).toBe('graphing')
-    // Question Author's "Show it" draws in Graphing, and the teacher sees it beside the question.
-    expect(spaceOf('author')).toBe('graphing')
     expect(spaceOf('lab')).toBe('lab')
   })
 

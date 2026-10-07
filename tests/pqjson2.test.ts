@@ -6,7 +6,6 @@
 
 import { describe, expect, it } from 'vitest'
 import { readSource } from './helpers/repo'
-import { renameVariable, unanswered, variableInUse } from '../src/renderer/src/questions/authoring'
 import { toExam } from '../src/renderer/src/questions/numbas'
 import {
   formatVersionOf,
@@ -202,57 +201,11 @@ describe('code written for format 1 meets a format-2 part', () => {
     expect(isFormat1Part(stated)).toBe(false)
   })
 
-  it('renames a variable inside a vector answer, and the renamed file still reads', () => {
-    const renamed = renameVariable(q, 'F', 'P')
-    expect((renamed.parts[2] as Extract<PQPart, { type: 'vector' }>).answer).toEqual(['P', '0'])
-    expect(parsePQFile(text({ ...renamed, variables: renamed.variables })).questions[0].parts[2]).toMatchObject({ answer: ['P', '0'] })
-  })
-
-  it('sees a vector with an empty component as not yet answered', () => {
-    expect(unanswered(q.parts[2])).toBe(false)
-    expect(unanswered({ ...(q.parts[2] as Extract<PQPart, { type: 'vector' }>), answer: ['F', ' '] })).toBe(true)
-  })
-
   it('leaves a format-2 part Numbas cannot ask out of a Numbas file with a sentence, keeping the rest', () => {
     // A vector goes out as number boxes (QE3, tests/numbas2.test.ts); a Lego part has no Numbas form at all.
     const lego: PQPart = { type: 'lego', prompt: 'Fill it.', target: [['0', '0'], ['2', '0'], ['0', '2']], pieces: 2, marks: 1 }
     const exam = toExam(fileOf({ ...q, parts: [...q.parts.slice(0, 2), lego] }))
     expect(exam).toContain("PhysLab's part 3 fills a shape with Lego pieces, which Numbas cannot ask, so it is left out.")
     expect((exam.match(/"type": ?"numberentry"/g) ?? []).length).toBe(2)
-  })
-})
-
-describe('renaming a variable reaches every format-2 field that names it', () => {
-  type NumberPart = Extract<PQPart, { type: 'number' }>
-  // k is used in ONE place only in each case, so the rename and variableInUse have nothing else to find.
-  const withK = (change: (q: PQQuestion) => PQQuestion): PQQuestion =>
-    change({ ...train(), variables: [...train().variables, { name: 'k', def: { kind: 'list', items: [2] } }] })
-  const second = (q: PQQuestion): NumberPart => q.parts[1] as NumberPart
-  const withPart = (q: PQQuestion, extra: Partial<NumberPart>): PQQuestion => ({ ...q, parts: [q.parts[0], { ...second(q), ...extra } as PQPart] })
-  const reread = (q: PQQuestion): PQQuestion => parsePQFile(text(q)).questions[0]
-
-  const cases: [string, PQQuestion, (q: PQQuestion) => unknown][] = [
-    ['an answer carried forward', withK((q) => withPart(q, { ecf: { uses: [{ part: 0, variable: 'k' }], strategy: 'originalfirst', penalty: 0 } })), (q) => second(q).ecf?.uses[0].variable],
-    ['the condition that shows a part', withK((q) => withPart(q, { showIf: 'k > 1' })), (q) => second(q).showIf],
-    ["the variants' condition", withK((q) => ({ ...q, condition: { when: 'k > 1', maxRuns: 10 } })), (q) => q.condition?.when],
-    ['a stated reference uncertainty', withK((q) => withPart(q, { tolerance: { kind: 'stated', uref: 'k/1000' } })), (q) => (second(q).tolerance as { uref: string }).uref]
-  ]
-
-  for (const [where, q, field] of cases) {
-    it(`follows the new name in ${where}, and the saved file opens again`, () => {
-      expect(variableInUse(q, 'k')).toBe(true)
-      const renamed = renameVariable(q, 'k', 'kk')
-      expect(JSON.stringify(field(renamed))).toContain('kk')
-      const back = reread(renamed)
-      expect(field(back)).toEqual(field(renamed))
-      expect(variableInUse(back, 'kk')).toBe(true)
-    })
-  }
-
-  it('reproduces the reported file: a, used in ecf, showIf and the condition, renamed to acc', () => {
-    const q: PQQuestion = { ...withPart(train(), { showIf: 'a > 1', ecf: { uses: [{ part: 0, variable: 'a' }], strategy: 'originalfirst', penalty: 0 } }), condition: { when: 'a > 1', maxRuns: 5 } }
-    const renamed = reread(renameVariable(q, 'a', 'acc'))
-    expect(second(renamed)).toMatchObject({ showIf: 'acc > 1', ecf: { uses: [{ part: 0, variable: 'acc' }] } })
-    expect(renamed.condition?.when).toBe('acc > 1')
   })
 })

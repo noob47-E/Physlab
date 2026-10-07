@@ -33,9 +33,7 @@ const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.G
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
-const Author = lazy(() => import('../panels/Author').then((m) => ({ default: m.Author })))
 const LabData = lazy(() => import('../panels/LabData').then((m) => ({ default: m.LabData })))
-const ClassResults = lazy(() => import('../panels/ClassResults').then((m) => ({ default: m.ClassResults })))
 
 const PANEL_VIEWS: Record<string, React.ComponentType> = {
   viewport: Viewport,
@@ -46,15 +44,13 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   vectorcalc: VectorCalc,
   solver: Solver,
   practice: Practice,
-  author: Author,
   labdata: LabData,
   maths: Maths,
   console: Console,
   timeline: Timeline,
   graphs: Graphs,
   gpulab: GpuLab,
-  sandbox: SandboxPanel,
-  classresults: ClassResults
+  sandbox: SandboxPanel
 }
 
 const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
@@ -114,8 +110,9 @@ export function App() {
             setDockApi(e.api)
             try {
               const bench = location.hash.includes('bench')
-              // A session left in a hidden mode opens in Problem Sets; a layout that held nothing but
-              // hidden panels comes back empty from dropHiddenPanels, and is rebuilt below.
+              // A session left in a hidden mode, or in one this build no longer has (Question Author,
+              // Class Results), opens in Problem Sets; a layout that held nothing but such panels comes
+              // back empty from dropHiddenPanels, and is rebuilt below.
               const mode = bench ? 'gpu' : openableMode(savedMode() ?? 'vectors')
               const restored = !bench && restoreLayout(e.api) && dropHiddenPanels()
               if (!restored) buildLayout(e.api, mode)

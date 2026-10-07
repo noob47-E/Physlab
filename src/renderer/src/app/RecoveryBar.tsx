@@ -1,7 +1,6 @@
 import { RotateCcw, X } from 'lucide-react'
 import { MAX_COPIES, describeWork, discardRecovery, restoreRecovery, useRecovery } from './autosave'
 import { blankSceneFile, useScene } from '../core/store'
-import { HIDDEN_MODES } from './modes'
 
 /** "Restore your last work" strip, shown while a copy of unsaved work is waiting. */
 export function RecoveryBar() {
@@ -13,7 +12,7 @@ export function RecoveryBar() {
   const name = found.path ? found.path.split(/[\\/]/).pop() : 'untitled'
   // Only what differs from a new file is named; a title typed into an empty table, say, has
   // nothing to count, and then the time alone has to do.
-  const what = describeWork(found.file, blankSceneFile(), HIDDEN_MODES.has('author'))
+  const what = describeWork(found.file, blankSceneFile())
   const details = `(${what ? `${what}, ` : ''}${when.toLocaleString()})`
   return (
     <div className="flex items-center gap-3 border-b border-warn/40 bg-warn/10 px-3 py-1.5 text-ink">
