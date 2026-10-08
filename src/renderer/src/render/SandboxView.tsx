@@ -11,7 +11,8 @@ import { grabForceCap, SimWorld, STRIDE } from '../sim/world'
 import type { BodyDef, BodyId, BodyState, Link, LinkKind } from '../sim/types'
 import type { V3 } from '../math/vec'
 import { energyOf, groundTopOf } from '../sim/energy'
-import { sampleOf, type Sample } from '../sim/recording'
+import { FALL_LIMIT, recordReadings } from '../sim/stepping'
+import { dragSetsStart } from '../sim/inspector'
 import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
 import { niceStep, toScreen } from './cameraUtils'
@@ -80,8 +81,6 @@ let published = 0
  */
 const joinCursor: { p: V3 | null } = { p: null }
 
-/** How far below the floor a body may fall before it is put back where it started. */
-const FALL_LIMIT = 10
 
 type Drag = {
   id: BodyId
@@ -224,9 +223,12 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
       if (!d || !w) return
       if (d.place) {
-        // The definition follows the drag, so Reset, undo and the file all agree with the screen.
+        // The definition follows the drag, so Reset, undo and the file all agree with the screen —
+        // before the run. Paused part-way, a moving body is only put somewhere to go on from: its
+        // start stays where the run began (H18).
         const st = w.state(d.id)
-        if (st) useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
+        const def = defOf(d.id)
+        if (st && def && dragSetsStart(w.time, def)) useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
         invalidate()
         return
       }
@@ -381,15 +383,18 @@ export function SandboxView() {
     const g = group.current
     if (!w || !g) return
     if (playing && mode === 'sandbox') {
-      const { transforms, contacts } = w.step(Math.min(dt, 0.1))
+      const { transforms, contacts, samples } = w.step(Math.min(dt, 0.1))
       applyTransforms(g, transforms, w.bodyOrder)
       if (contacts.length) pushContacts(contacts)
+      // The recording comes from the engine's own readings, not from the live publish below: that
+      // one fires when a frame happens to land past 0.1 s, which put the readings 0.1167 s apart
+      // (0.15 s on a slow frame) with none at t = 0.
+      recordReadings(samples, bodies, world.gravity, groundTop)
       // Live values for the panel, about ten times a second. Publishing every frame would
       // re-render the whole panel sixty times a second to move a digit no one can read that fast.
       if (w.time - published > 0.1 || w.time < published) {
         published = w.time
         const live: Record<string, BodyState> = {}
-        const samples: Record<string, Sample> = {}
         for (const d of bodies) {
           const s = w.state(d.id)
           if (!s) continue
@@ -401,11 +406,8 @@ export function SandboxView() {
             continue
           }
           live[d.id] = s
-          // The same tick records the run, so a student can plot what they just watched.
-          if (d.motion === 'dynamic') samples[d.id] = sampleOf(d, s, w.time, world.gravity, groundTop)
         }
         useSandbox.setState({ live, engineTime: w.time })
-        useSandbox.getState().record(samples)
       }
       if (check.current && Math.floor(w.time) !== check.current.last) {
         check.current.last = Math.floor(w.time)
@@ -432,7 +434,7 @@ export function SandboxView() {
     if (settings.labelShow !== 'never') {
       bodies.forEach((def) => {
         if (def.motion === 'static') return
-        const st = w.state(def.id)
+        const st = w.drawn(def.id)
         if (!st) return
         const show = settings.labelShow === 'always' || selection === def.id
         if (!show) return
@@ -615,7 +617,7 @@ function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
     const w = sim.current
     if (!w) return
     for (const [id, slot] of slots) {
-      const st = w.state(id)
+      const st = w.drawn(id)
       if (!st) continue
       const speed = Math.hypot(st.velocity[0], st.velocity[1], st.velocity[2])
       if (speed < 0.05) {
@@ -659,7 +661,7 @@ function PushArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
     if (!w) return
     actuators.forEach((a, i) => {
       const slot = slots[i]
-      const st = w.state(a.bodyId)
+      const st = w.drawn(a.bodyId)
       const t = w.time
       const f = st && a.from <= t && t < a.until ? a.force(t) : null
       const size = f ? Math.hypot(f[0], f[1], f[2]) : 0
@@ -814,8 +816,8 @@ function StraightLink({ sim, link, colour }: { sim: React.RefObject<SimWorld | n
   useFrame(() => {
     const w = sim.current
     if (!w) return
-    const a = w.state(link.a)
-    const b = w.state(link.b)
+    const a = w.drawn(link.a)
+    const b = w.drawn(link.b)
     if (!a || !b) return
     const attr = geo.getAttribute('position') as THREE.BufferAttribute
     attr.array.set(linkSegments(link.kind, a.position, b.position))

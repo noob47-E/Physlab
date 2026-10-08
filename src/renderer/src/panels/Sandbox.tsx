@@ -4,13 +4,13 @@ import { Beaker, Box, ChevronDown, ChevronRight, Circle, CircleDot, Cone, Cylind
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useScene } from '../core/store'
 import { dragCoefficient, materialById, MATERIALS } from '../sim/materials'
-import { energyOf, groundTopOf, momentumSize, readoutStates, systemEnergy, systemMomentum } from '../sim/energy'
+import { floorOf, momentumSize, sceneEnergy, systemMomentum } from '../sim/energy'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { GRAVITY_PRESETS, LINK_LABELS, type BodyDef, type BodyState, type LinkKind, type ShapeKind } from '../sim/types'
 import { groupedPresets, launchVelocity, presetBadges, PRESETS, searchPresets, startPreset, type Preset } from '../sim/presets'
 import { LINK_KINDS } from '../sim/links'
 import { joinPrompt, LINK_CARDS, linkCard, noWheelNote, wheelsAbove } from '../sim/join'
-import { ALWAYS_SHOWN, BODY_FOLDS, connectionsProminent, controlsIn, FOLD_TITLES, joinCandidates, readFold, writeFold, type ControlKey, type FoldId, type FoldStore } from '../sim/inspector'
+import { ALWAYS_SHOWN, BODY_FOLDS, CONTACT_HINT, connectionsProminent, controlsIn, FOLD_TITLES, joinCandidates, readFold, showsLive, showsMotionAids, sizeFields, writeFold, type ControlKey, type FoldId, type FoldStore } from '../sim/inspector'
 import { QUANTITIES, quantity, tableFrom, type QuantityKey } from '../sim/recording'
 import { useLab } from '../lab/labStore'
 import type { SceneSettings } from '../core/types'
@@ -19,6 +19,7 @@ import { enterMode } from '../app/layout'
 import { useJoltState } from '../sim/jolt'
 import { NumField } from '../ui/fields'
 import { clockText, widestClockText } from '../sim/transport'
+import { stepOneFrame } from '../sim/stepping'
 import { formatMeasure } from '../math/format'
 import { useToolCard } from '../ui/useToolCard'
 
@@ -89,22 +90,9 @@ function Vec3Row({ label, value, unit, live, onChange }: { label: string; value:
   )
 }
 
-/** Only the dimensions the shape actually uses: a ball has a radius, not a width, a height and a depth. */
+/** Only the dimensions the shape actually uses, named for what they do (sim/inspector.ts sizeFields). */
 function SizeRow({ sel, onChange }: { sel: BodyDef; onChange: (size: V) => void }) {
-  const [a, b, c] = sel.size
-  const fields: { label: string; value: number; set: (v: number) => V }[] =
-    sel.shape === 'sphere'
-      ? [{ label: 'radius', value: a, set: (r) => [r, r, r] }]
-      : sel.shape === 'cylinder' || sel.shape === 'capsule'
-        ? [
-            { label: 'radius', value: a, set: (r) => [r, b, r] },
-            { label: 'height', value: b, set: (h) => [a, h, a] }
-          ]
-        : [
-            { label: 'width', value: a, set: (w) => [w, b, c] },
-            { label: 'height', value: b, set: (h) => [a, h, c] },
-            { label: 'depth', value: c, set: (d) => [a, b, d] }
-          ]
+  const fields = sizeFields(sel.shape, sel.size)
   return (
     <div className="prop-row">
       <label>
@@ -113,7 +101,7 @@ function SizeRow({ sel, onChange }: { sel: BodyDef; onChange: (size: V) => void 
       <div className="flex gap-1">
         {fields.map((f) => (
           <label key={f.label} className="flex min-w-0 flex-1 items-center gap-1" title={f.label}>
-            <span className="text-fine text-[color:var(--text-faint)]">{f.label[0]}</span>
+            <span className="text-fine text-[color:var(--text-faint)]">{f.letter}</span>
             <NumField value={f.value} onChange={(v) => onChange(f.set(Math.max(0.01, v)))} />
           </label>
         ))}
@@ -180,6 +168,7 @@ export function Sandbox() {
   const startJoin = useSandbox((s) => s.startJoin)
   const joinPick = useSandbox((s) => s.joinPick)
   const playing = useScene((s) => s.playing)
+  const engineTime = useSandbox((s) => s.engineTime)
   const num = useNum()
   const sel = bodies.find((b) => b.id === selection)
   const loading = useJoltState() !== 'ready'
@@ -256,7 +245,7 @@ export function Sandbox() {
 
       <Pushes />
 
-      {sel && <Selected sel={sel} live={playing ? (live[sel.id] ?? null) : null} update={update} />}
+      {sel && <Selected sel={sel} live={showsLive(playing, engineTime) ? (live[sel.id] ?? null) : null} update={update} />}
 
       <Connections selected={selection} partner={partner} />
       <EnergyReadout />
@@ -337,8 +326,7 @@ function Transport() {
         className="icon-btn"
         onClick={() => {
           setPlaying(false)
-          engine.world?.step(1 / 60)
-          useSandbox.setState({ engineTime: engine.world?.time ?? 0 })
+          stepOneFrame()
         }}
         title="Step one frame (1/60 s)"
       >
@@ -421,7 +409,8 @@ function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null;
         </div>
       </div>
     ),
-    show: () => (
+    // A fixed object never moves: no arrow or trail to offer (H27).
+    show: () => showsMotionAids(sel) && (
       <div className="prop-row">
         <label>Show</label>
         <div className="flex flex-wrap items-center gap-3">
@@ -454,7 +443,12 @@ function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null;
       </div>
     ),
     restitution: () => <Slider label="Bounciness e" value={sel.restitution} min={0} max={1} step={0.01} onChange={(restitution) => update(sel.id, { restitution })} />,
-    friction: () => <Slider label="Friction μ" value={sel.friction} min={0} max={1.5} step={0.01} onChange={(friction) => update(sel.id, { friction })} />,
+    friction: () => (
+      <>
+        <Slider label="Friction μ" value={sel.friction} min={0} max={1.5} step={0.01} onChange={(friction) => update(sel.id, { friction })} />
+        <div className="px-3 pb-1 text-fine text-[color:var(--text-faint)]">{CONTACT_HINT}</div>
+      </>
+    ),
     angularVelocity: () => moves && <Vec3Row label="Spin" unit="rad/s" value={sel.angularVelocity} live={live?.angularVelocity ?? null} onChange={(angularVelocity) => update(sel.id, { angularVelocity })} />,
     lock: () =>
       moves && (
@@ -620,42 +614,58 @@ function WorldSection() {
  */
 function EnergyReadout() {
   const bodies = useSandbox((s) => s.bodies)
+  const links = useSandbox((s) => s.links)
   const live = useSandbox((s) => s.live)
   const gravity = useSandbox((s) => s.world.gravity)
   const num = useNum()
-  const datum = groundTopOf(bodies)
 
   // Before Play the rows read the typed start (Fix 22): rendering nothing until the engine
   // reported made the Energy bar, a row per body and the floor note appear all at once on Play,
   // and everything below — Gravity, Slow motion — dropped 276 px under the student's pointer.
-  const known = readoutStates(bodies, live, massOf).map(({ def, state }) => ({ def, state, energy: energyOf(def, state, gravity, datum) }))
+  // A spring is in the scene from the start too, so its line and its row never wait for Play.
+  const { known, springs, total } = sceneEnergy(bodies, links, live, gravity, massOf)
   if (!known.length) return null
-  const total = systemEnergy(known.map((p) => p.energy))
   // The vector sum, not the sum of the sizes: after a head-on bounce the two momenta point
   // opposite ways and it is their difference that a collision leaves unchanged. Every preset
   // sentence that quotes a kg m/s quotes this number; the per-body lines below only had to be
   // added up by hand.
   const momentum = Math.hypot(...systemMomentum(known.map((p) => p.state)))
-  // The split between movement and height, as a bar: watching it tip over as something falls is
-  // the whole lesson.
+  // The split between movement, height and the spring, as a bar: watching it tip over as something
+  // falls, or the energy pass between the blue and the green as a block swings on a spring, is the
+  // whole lesson. The green part is only drawn when the scene has a spring, so any other scene
+  // reads exactly as it did.
   const pe = Math.max(0, total.potential)
-  const share = total.kinetic + pe > 1e-9 ? total.kinetic / (total.kinetic + pe) : 0
+  const sum = total.kinetic + pe + total.elastic
+  const part = (v: number) => `${sum > 1e-9 ? (v / sum) * 100 : 0}%`
+  const springy = springs.length > 0
 
   return (
     <>
       <div className="section-title mt-2">Energy</div>
       <div className="px-3 pb-2">
         <div className="flex h-2 overflow-hidden rounded-full border border-[color:var(--line-2)]">
-          <div className="bg-[var(--accent)]" style={{ width: `${share * 100}%` }} title="Kinetic" />
-          <div className="flex-1 bg-[var(--warn)]" title="Potential" />
+          <div className="bg-[var(--accent)]" style={{ width: part(total.kinetic) }} title="Kinetic" />
+          {springy ? (
+            <>
+              <div className="bg-[var(--warn)]" style={{ width: part(pe) }} title="Potential" />
+              <div className="flex-1 bg-[var(--good)]" title="Spring" />
+            </>
+          ) : (
+            <div className="flex-1 bg-[var(--warn)]" title="Potential" />
+          )}
         </div>
-        {/* Two fixed lines, never wrapped and never cut short: a reading that grows a digit
-            mid-run and wraps pushes every control below it down (Fix 22), and a number cut to
-            "3.48×10^-1…" reads as a different number. Each reading keeps its full width. */}
+        {/* Two fixed lines (three with a spring), never wrapped and never cut short: a reading that
+            grows a digit mid-run and wraps pushes every control below it down (Fix 22), and a number
+            cut to "3.48×10^-1…" reads as a different number. Each reading keeps its full width. */}
         <div className="mt-1 flex justify-between gap-2 whitespace-nowrap text-small">
           <span className="shrink-0 tabular-nums text-[color:var(--accent)]">KE {num(total.kinetic, 'J')}</span>
           <span className="shrink-0 tabular-nums text-[color:var(--warn)]">PE {num(total.potential, 'J')}</span>
         </div>
+        {springy && (
+          <div className="mt-0.5 whitespace-nowrap text-small">
+            <span className="tabular-nums text-[color:var(--good)]">Spring {num(total.elastic, 'J')}</span>
+          </div>
+        )}
         <div className="mt-0.5 flex justify-between gap-2 whitespace-nowrap text-small">
           <span className="shrink-0 tabular-nums font-semibold text-[color:var(--text-strong)]">total {num(total.total, 'J')}</span>
           <span className="shrink-0 tabular-nums text-[color:var(--text)]" title="Momentum of everything together: the size of the vector sum of every mass × velocity">
@@ -679,7 +689,24 @@ function EnergyReadout() {
           </div>
         </div>
       ))}
-      <div className="px-3 pt-1 text-fine text-[color:var(--text-faint)]">Heights are measured from the top of the floor.</div>
+      {/* A spring gets the same two lines: what it joins and what it holds, then how far it is
+          pulled out or squeezed, which is the x in the ½kx² it is holding. */}
+      {springs.map(({ link, a, b, stretch, energy }) => (
+        <div key={link.id} className="px-3 pb-0.5 text-small text-[color:var(--text-dim)]">
+          <div className="flex justify-between gap-2 whitespace-nowrap">
+            <span className="min-w-0 truncate text-[color:var(--text)]">
+              {a.name} to {b.name} spring
+            </span>
+            <span className="shrink-0 tabular-nums">holds {num(energy.elastic, 'J')}</span>
+          </div>
+          <div className="whitespace-nowrap">
+            <span className="tabular-nums">{Math.abs(stretch) < 1e-9 ? 'at its natural length' : `${stretch > 0 ? 'stretched' : 'squeezed'} ${num(Math.abs(stretch), 'm')}`}</span>
+          </div>
+        </div>
+      ))}
+      <div className="px-3 pt-1 text-fine text-[color:var(--text-faint)]">
+        {floorOf(bodies) ? 'Heights are measured from the top of the floor.' : 'There is no floor, so heights are measured from zero.'}
+      </div>
     </>
   )
 }
@@ -734,6 +761,8 @@ function Presets() {
     setPlaying(false)
     loadPreset(p.id)
     setOpen(false)
+    // The search is done with once an experiment is picked (H28): reopened, the list starts whole.
+    setQuery('')
   }
   return (
     <div className="px-2 pb-1">

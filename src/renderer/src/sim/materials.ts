@@ -2,6 +2,8 @@
 // coefficient of friction, e the coefficient of restitution (bounciness) against a hard floor.
 // Values are the usual textbook/handbook figures, rounded to what a student would quote.
 
+import { intoBody } from './energy'
+
 export interface Material {
   id: string
   label: string
@@ -76,6 +78,15 @@ export function frontalArea(shape: string, size: [number, number, number], dir: 
       // Box-like: the projected area of the three faces.
       return ax * b * c + ay * a * c + az * a * b
   }
+}
+
+/**
+ * The frontal area of a body turned by `rotation` (a unit quaternion x, y, z, w) and moving along the
+ * world direction `dir`: the direction is taken into the body's own frame first (H22). Read
+ * unturned, a plank turned on end and falling end-first met the air with its broad face.
+ */
+export function frontalAreaTurned(shape: string, size: [number, number, number], rotation: readonly number[], dir: [number, number, number]): number {
+  return frontalArea(shape, size, intoBody(dir, rotation))
 }
 
 /** Drag coefficient of a shape when the user has not set one. */

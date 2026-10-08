@@ -386,9 +386,11 @@ describe('sending a Sandbox recording to Lab Data', () => {
   it('tableFrom gives the recording columns with their units, height against time to begin with', () => {
     const t = tableFrom('Ball', samples)
     expect(t.title).toBe('Ball — from the Sandbox')
-    expect(t.columns.map((c) => `${c.name}/${c.unit}`)).toEqual(['t/s', 'x/m', 'y/m', 'v/m/s', 'KE/J'])
+    // PE and momentum joined the five in 0.9 (P-SIM H30): the panel plotted them, Send left them out.
+    expect(t.columns.map((c) => `${c.name}/${c.unit}`)).toEqual(['t/s', 'x/m', 'y/m', 'v/m/s', 'KE/J', 'PE/J', 'p/kg m/s'])
     expect(t.rows).toEqual(rowsFor(samples))
-    expect(t.rows[1]).toEqual([0.5, 0, 3.7738, 4.905, 12.03])
+    expect(t.rows[1].slice(0, 5)).toEqual([0.5, 0, 3.7738, 4.905, 12.03])
+    expect(t.rows[1]).toHaveLength(7)
     expect(t.columns.find((c) => c.id === t.plot.x)?.name).toBe('t')
     expect(t.columns.find((c) => c.id === t.plot.y)?.name).toBe('y')
   })

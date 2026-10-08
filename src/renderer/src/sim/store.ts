@@ -46,7 +46,9 @@ export const engine: { world: SimWorld | null } = {
 
 // A question's pushes travel with the bodies they name: Ctrl+Z after removing a pushed body used
 // to bring the body back without its push, so pressing Play showed it sitting still.
-type Snapshot = { bodies: BodyDef[]; links: Link[]; actuators: Actuator[] }
+// The world settings travel too (H3): undoing a preset, or a change of gravity, used to bring the
+// objects back under the other scene's gravity and air.
+type Snapshot = { bodies: BodyDef[]; links: Link[]; actuators: Actuator[]; world: WorldSettings }
 
 export interface SandboxState {
   bodies: BodyDef[]
@@ -221,7 +223,11 @@ export function spawnAt(shape: ShapeKind, bodies: BodyDef[]): [number, number, n
   // A pulley on the floor is no use to anyone; it hangs above the last object.
   if (shape === 'pulley') {
     const last = bodies.filter((b) => b.shape !== 'ground').pop()
-    return [last ? last.position[0] : 0, groundTopOf(bodies) + 3.5, 0]
+    const y = groundTopOf(bodies) + 3.5
+    let x = last ? last.position[0] : 0
+    // Beside a wheel already hanging there, never inside it (H5): a second pulley spawned on the first.
+    while (bodies.some((b) => b.shape === 'pulley' && Math.hypot(b.position[0] - x, b.position[1] - y, b.position[2]) < 0.8)) x += 1
+    return [x, y, 0]
   }
   const others = bodies.filter((b) => b.shape !== 'ground')
   let x = 0
@@ -300,7 +306,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     const used = new Set(bodies.map((b) => b.name))
     const letter = LETTERS.find((l) => !used.has(l)) ?? `X${bodies.length}`
     const def = makeBody(shape, shape === 'ground' ? 'Floor' : letter, at ?? spawnAt(shape, bodies))
-    set({ bodies: [...bodies, def], selection: def.id })
+    // The new object is the one chosen; a Shift-click pair from before is over (H6).
+    set({ bodies: [...bodies, def], selection: def.id, partner: null })
     return def
   },
 
@@ -346,7 +353,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     const join = get().joinMode
     set({
       bodies,
-      links: get().links.filter((l) => l.a !== id && l.b !== id),
+      // A rope over a wheel goes with the wheel (H1): it was kept, hanging from nothing.
+      links: get().links.filter((l) => l.a !== id && l.b !== id && l.over !== id),
       selection: get().selection === id ? null : get().selection,
       partner: get().partner === id ? null : get().partner,
       // Half a pair is no pair: start the connection again, without the old refusal.
@@ -364,7 +372,10 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   // 200 m of ground is the easiest miss there is. The rule lives here so the list and the
   // viewport cannot disagree about it.
   setPartner: (partner) => set({ partner: partner === null || partner === get().selection || get().bodies.find((b) => b.id === partner)?.shape === 'ground' ? null : partner }),
-  setWorld: (patch) => set({ world: { ...get().world, ...patch } }),
+  setWorld: (patch) => {
+    remember(set, get, `world:${Object.keys(patch).join(',')}`)
+    set({ world: { ...get().world, ...patch } })
+  },
   pushContacts: (c) => (c.length ? set({ contacts: [...c].reverse().concat(get().contacts).slice(0, 60) }) : undefined),
   clearContacts: () => set({ contacts: [] }),
   setScene: (bodies, world, links) => {
@@ -471,17 +482,19 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   setSideView: (sideView) => set({ sideView }),
 
   undo: () => {
-    const { past, future, bodies, links, actuators } = get()
+    const { past, future, bodies, links, actuators, world } = get()
     const back = past[past.length - 1]
     if (!back) return
-    set({ bodies: back.bodies, links: back.links, actuators: back.actuators, past: past.slice(0, -1), future: [...future, { bodies, links, actuators }], selection: null, partner: null })
+    endBurst()
+    set({ bodies: back.bodies, links: back.links, actuators: back.actuators, world: back.world, past: past.slice(0, -1), future: [...future, { bodies, links, actuators, world }], selection: null, partner: null })
     engine.world?.setActuators(back.actuators)
   },
   redo: () => {
-    const { past, future, bodies, links, actuators } = get()
+    const { past, future, bodies, links, actuators, world } = get()
     const next = future[future.length - 1]
     if (!next) return
-    set({ bodies: next.bodies, links: next.links, actuators: next.actuators, future: future.slice(0, -1), past: [...past, { bodies, links, actuators }], selection: null, partner: null })
+    endBurst()
+    set({ bodies: next.bodies, links: next.links, actuators: next.actuators, world: next.world, future: future.slice(0, -1), past: [...past, { bodies, links, actuators, world }], selection: null, partner: null })
     engine.world?.setActuators(next.actuators)
   },
   canUndo: () => get().past.length > 0,
@@ -530,7 +543,15 @@ function remember(set: (p: Partial<SandboxState>) => void, get: () => SandboxSta
   lastRemembered = now
   lastTag = tag
   if (burst) return
-  set({ past: [...get().past, { bodies: get().bodies, links: get().links, actuators: get().actuators }].slice(-30), future: [] })
+  set({ past: [...get().past, { bodies: get().bodies, links: get().links, actuators: get().actuators, world: get().world }].slice(-30), future: [] })
+}
+
+/**
+ * Undo and Redo end a burst (H2): an edit straight after Undo, with the same tag inside the 700 ms,
+ * folded into the edit before it, so it kept the stale Redo and was undone with that edit.
+ */
+function endBurst(): void {
+  lastTag = ''
 }
 
 /** Mass a body will have, for the panels (the engine works it out the same way). */

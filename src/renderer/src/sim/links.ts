@@ -4,9 +4,53 @@
 
 import type { BodyDef, Link, LinkKind } from './types'
 import type { V3 } from '../math/vec'
-import { rotateByEuler } from './rotate'
+import { eulerToQuat, rotateByEuler } from './rotate'
 
 export const LINK_KINDS: LinkKind[] = ['string', 'rod', 'spring', 'rope', 'pulley', 'hinge', 'weld']
+
+/** Rotates a world-space vector into a body's local frame (the frame Jolt's local-point settings use). */
+export function toLocal(rotation: V3, v: V3): V3 {
+  const [x, y, z, w] = eulerToQuat(rotation)
+  // The inverse of a unit quaternion is its conjugate: negate the vector part.
+  const ix = -x
+  const iy = -y
+  const iz = -z
+  const iw = w
+  const tx = iy * v[2] - iz * v[1]
+  const ty = iz * v[0] - ix * v[2]
+  const tz = ix * v[1] - iy * v[0]
+  return [
+    v[0] + 2 * (iw * tx + iy * tz - iz * ty),
+    v[1] + 2 * (iw * ty + iz * tx - ix * tz),
+    v[2] + 2 * (iw * tz + ix * ty - iy * tx)
+  ]
+}
+
+/**
+ * How far a body reaches from its centre along `dir` for a rope. `dir` is world space, length 1.
+ * Unlike `reachOf`, this can leave through the end cap of a cylinder or capsule.
+ */
+export function reachAlong(b: BodyDef, dir: V3): number {
+  const [a, h] = b.size
+  switch (b.shape) {
+    case 'sphere':
+      return a
+    case 'cylinder':
+    case 'capsule': {
+      const local = toLocal(b.rotation, dir)
+      const radial = Math.hypot(local[0], local[2])
+      const axial = Math.abs(local[1])
+      const half = b.shape === 'capsule' ? h / 2 + a : h / 2
+      // A rope leaves through whichever it meets first along dir: the side, at the radius, or an
+      // end cap, at half the height (a capsule's rounded cap is taken at its tip).
+      const viaSide = radial > 1e-9 ? a / radial : Infinity
+      const viaCap = axial > 1e-9 ? half / axial : Infinity
+      return Math.min(viaSide, viaCap)
+    }
+    default:
+      return reachOf(b)
+  }
+}
 
 /** How far a body reaches from its centre along a rope: a rope ties to the surface, not the middle. */
 export function reachOf(b: BodyDef): number {
@@ -184,7 +228,10 @@ export function makeLink(id: string, kind: LinkKind, a: BodyDef, b: BodyDef, opt
   const base: Link = { id, kind, a: a.id, b: b.id, length: Math.max(0.05, gap), stiffness: 200, damping: 0.5 }
   switch (kind) {
     case 'rope': {
-      const length = Math.max(0.2, gap - reachOf(a) - reachOf(b))
+      let dir: V3 = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
+      const span = Math.hypot(...dir)
+      dir = span > 1e-6 ? [dir[0] / span, dir[1] / span, dir[2] / span] : [0, -1, 0]
+      const length = Math.max(0.2, gap - reachAlong(a, dir) - reachAlong(b, [-dir[0], -dir[1], -dir[2]]))
       return { ...base, length, segments: ropeSegments(length) }
     }
     case 'pulley': {
@@ -192,9 +239,11 @@ export function makeLink(id: string, kind: LinkKind, a: BodyDef, b: BodyDef, opt
       const { p1, p2 } = pulleyRim(opts.over, pa, pb)
       return { ...base, over: opts.over.id, length: dist(pa, p1) + dist(pb, p2) }
     }
-    case 'hinge':
+    case 'hinge': {
       // The hinge sits at b's centre: join a plank to its pivot, a door to its post.
-      return { ...base, pivotA: [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], pivotB: [0, 0, 0] }
+      const offset: V3 = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
+      return { ...base, pivotA: toLocal(a.rotation, offset), pivotB: [0, 0, 0] }
+    }
     default:
       return base
   }

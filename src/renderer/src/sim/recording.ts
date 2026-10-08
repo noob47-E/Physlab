@@ -57,22 +57,41 @@ export function addSample(list: Sample[], s: Sample): Sample[] {
   return next.length > MAX_SAMPLES ? next.slice(next.length - MAX_SAMPLES) : next
 }
 
+/** A recorded value to five figures, as text: 1.2 is "1.2000", the precision it was recorded to. */
+const fiveFigures = (v: number): string => v.toPrecision(5)
+
+/**
+ * The samples as texts for a Lab Data table, keeping the trailing zeros of their precision (Lab
+ * Data shows a cell's text only where it reads back as the cell's number, so an exponent form such
+ * as "3.0000e-7" falls back to the number itself).
+ */
+export function readsFor(samples: Sample[]): (string | null)[][] {
+  return samples.map((s) => [s.t, s.x, s.y, s.v, s.ke, s.pe, s.p].map(fiveFigures))
+}
+
 /**
  * The samples as rows for a Lab Data table. Values are rounded to five figures: a simulation can
  * print seventeen, and no measurement in a school lab has more than three or four.
  */
 export function rowsFor(samples: Sample[]): (number | null)[][] {
-  const round = (v: number) => Number(v.toPrecision(5))
-  return samples.map((s) => [round(s.t), round(s.x), round(s.y), round(s.v), round(s.ke)])
+  // From the same text as readsFor, so a cell and its text always agree; a tiny value such as 3e-7
+  // stays a number (the measurement formatter writes it with a raised power, which is no number).
+  const round = (v: number) => Number(fiveFigures(v))
+  return samples.map((s) => [s.t, s.x, s.y, s.v, s.ke, s.pe, s.p].map(round))
 }
 
-/** The columns those rows fill, named and with their units, the way the table headers read. */
+/**
+ * The columns those rows fill, named and with their units, the way the table headers read. PE and
+ * momentum were plotted in the panel but left out of what Send to Lab Data sent (H30).
+ */
 export const RECORDING_COLUMNS: { name: string; unit: string }[] = [
   { name: 't', unit: 's' },
   { name: 'x', unit: 'm' },
   { name: 'y', unit: 'm' },
   { name: 'v', unit: 'm/s' },
-  { name: 'KE', unit: 'J' }
+  { name: 'KE', unit: 'J' },
+  { name: 'PE', unit: 'J' },
+  { name: 'p', unit: 'kg m/s' }
 ]
 
 /**
@@ -86,8 +105,9 @@ export function tableFrom(name: string, samples: Sample[]): LabTable {
     title: `${name} — from the Sandbox`,
     columns,
     rows: rowsFor(samples),
+    reads: readsFor(samples),
     // Height against time to begin with; the student picks the pair they actually want.
-    plot: { x: columns[0].id, y: columns[2].id, fit: 'linear' }
+    plot: { x: columns[0].id, y: columns[2].id, fit: 'quadratic' }
   }
 }
 

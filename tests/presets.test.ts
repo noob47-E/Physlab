@@ -40,7 +40,7 @@ const tugRope = ropeLinkMass([2, 4], ropeSegments(1.7)) * ropeSegments(1.7)
  */
 const EXPECTED: Record<string, [number, string][]> = {
   fall: [[1, 'kg'], [5, 'm'], [Math.sqrt((2 * 5) / G), 's'], [Math.sqrt(2 * G * 5), 'm/s']],
-  projectile: [[14, 'm/s'], [(14 * 14 * Math.sin(Math.PI / 3)) / G, 'm'], [(14 * Math.sin(Math.PI / 6)) ** 2 / (2 * G), 'm']],
+  projectile: [[14, 'm/s'], [(14 * 14 * Math.sin(Math.PI / 3)) / G, 'm'], [0.3 + (14 * Math.sin(Math.PI / 6)) ** 2 / (2 * G), 'm']],
   cliff: [[4, 'm'], [3, 'm/s'], [Math.sqrt(8 / G), 's'], [3 * Math.sqrt(8 / G), 'm']],
   drop: [[5, 'kg'], [0.5, 'kg'], [6, 'm'], [Math.sqrt(12 / G), 's']],
   moon: [[1.62, 'm/s²'], [5, 'm'], [Math.sqrt(10 / 1.62), 's'], [Math.sqrt(10 / G), 's']],

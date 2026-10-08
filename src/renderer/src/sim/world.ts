@@ -7,8 +7,8 @@
 //  * `step()` hands back a plain Float32Array, so the renderer never touches Jolt objects.
 
 import { loadJolt, type Jolt } from './jolt'
-import { dragCoefficient, frontalArea, materialById, shapeVolume } from './materials'
-import { pulleyPartnerMove, pulleyRim, reachOf, ropeLayout, ropeLinkMass, ropeSegments } from './links'
+import { dragCoefficient, frontalAreaTurned, materialById, shapeVolume } from './materials'
+import { pulleyPartnerMove, pulleyRim, reachAlong, ropeLayout, ropeLinkMass, ropeSegments, toLocal } from './links'
 import { eulerToQuat } from './rotate'
 import type { Actuator, BodyDef, BodyId, BodyState, ContactEvent, Link, WorldSettings } from './types'
 import { DEFAULT_WORLD } from './types'
@@ -46,6 +46,64 @@ const ROPE_RADIUS = 0.02
 /** The one empty list handed back for a body nothing is pushing. */
 const NO_ACTUATORS: Actuator[] = []
 
+const samePoses = (a: Float32Array, b: Float32Array): boolean => a.length === b.length && a.every((v, i) => v === b[i])
+
+/**
+ * The poses `alpha` of the way from `from` to `to` (0 to 1), into `out`: positions in a straight
+ * line, rotations along the shorter way round (a quaternion and its negative are the same turn).
+ */
+function blendPoses(from: Float32Array, to: Float32Array, alpha: number, out: Float32Array): void {
+  const a = Math.min(1, Math.max(0, alpha))
+  for (let o = 0; o + STRIDE <= out.length; o += STRIDE) {
+    for (let k = 0; k < 3; k++) out[o + k] = from[o + k] + (to[o + k] - from[o + k]) * a
+    let dot = 0
+    for (let k = 3; k < 7; k++) dot += from[o + k] * to[o + k]
+    const sign = dot < 0 ? -1 : 1
+    let n = 0
+    for (let k = 3; k < 7; k++) {
+      out[o + k] = from[o + k] * (1 - a) + to[o + k] * sign * a
+      n += out[o + k] * out[o + k]
+    }
+    n = Math.sqrt(n) || 1
+    for (let k = 3; k < 7; k++) out[o + k] /= n
+  }
+}
+
+/**
+ * A cone's collision hull: its apex, and its base as a ring of points on the circle it is drawn with
+ * (radius a/2, as THREE.ConeGeometry, shapeVolume and the inertia all take it). It used to be four
+ * corners at ±a/2: a pyramid whose corners stood 41 % past the drawn base (H17).
+ */
+export function coneHull(a: number, b: number, sides = 24): V3[] {
+  const r = Math.max(0.01, a / 2)
+  const hy = Math.max(0.01, b / 2)
+  const ring = Array.from({ length: sides }, (_, i): V3 => [r * Math.cos((2 * Math.PI * i) / sides), -hy, r * Math.sin((2 * Math.PI * i) / sides)])
+  return [[0, hy, 0], ...ring]
+}
+
+/** The physics advances in fixed steps of 1/60 s, whatever the frame rate. */
+const STEPS_PER_SECOND = 60
+const FIXED = 1 / STEPS_PER_SECOND
+
+/**
+ * A reading is taken on every 6th fixed step: ten a second, on t = 0, 0.1, 0.2 … of the
+ * simulation's own clock, so a recorded run is a table on a grid and not a scatter of frame times.
+ */
+const READING_EVERY = 6
+
+/**
+ * What the engine saw of every moving body at one reading time. The Sandbox recorder is built
+ * from these and never from the frame loop: a frame can span several steps and only the last
+ * one's state is left to look at afterwards, so the frame loop cannot know what the world looked
+ * like on the step a reading belongs to.
+ */
+export interface SimSample {
+  /** The simulation clock at this reading: a multiple of 0.1 s, exact (steps / 60, not a running sum). */
+  t: number
+  /** Every moving (dynamic) body's state at that moment, by id. Floors, walls and ramps are not read. */
+  states: Record<BodyId, BodyState>
+}
+
 interface Entry {
   def: BodyDef
   /** The Jolt Body itself: a stable pointer. A BodyID returned by value is a temporary
@@ -74,6 +132,14 @@ export class SimWorld {
   private entries = new Map<BodyId, Entry>()
   private order: BodyId[] = []
   private transforms = new Float32Array(0)
+  /**
+   * The poses before and after the last fixed step. A frame draws the pose between them, as far
+   * along as the time it has gathered towards the next step (P13): at 0.1× a step falls due once in
+   * ten frames, and drawing the last step's pose left a moving body still for nine frames and then
+   * jumped it.
+   */
+  private prevPose = new Float32Array(0)
+  private curPose = new Float32Array(0)
   private contacts: ContactEvent[] = []
   private settings: WorldSettings = { ...DEFAULT_WORLD }
   private accumulator = 0
@@ -92,8 +158,20 @@ export class SimWorld {
    * run: a Reset rebuilds the bodies and must find the same push waiting at t = 0.
    */
   private actuators = new Map<BodyId, Actuator[]>()
-  /** Simulated time in seconds since the last reset. */
-  time = 0
+  /**
+   * Fixed steps taken since the last reset. The clock is this count, not a running sum of 1/60:
+   * six steps added up read 0.09999999999999999, so "is it past 0.1 s yet?" was false at step 6
+   * and true only at step 7, and a hundred and twenty read 1.9999999999999978. A count over 60
+   * is the nearest number to the true time at every step.
+   */
+  private steps = 0
+  /** Whether this run's t = 0 reading has been handed out (see `step`). Reset with the step count. */
+  private startRead = false
+
+  /** Simulated time in seconds since the last reset: the step count over 60, the nearest number to it. */
+  get time(): number {
+    return this.steps / STEPS_PER_SECOND
+  }
 
   private constructor(jolt: Jolt) {
     this.jolt = jolt
@@ -151,7 +229,8 @@ export class SimWorld {
     // to something that no longer exists.
     this.removeLinks()
     for (const id of [...this.order]) this.removeBody(id)
-    this.time = 0
+    this.steps = 0
+    this.startRead = false
     this.accumulator = 0
     this.contacts = []
     this.grabbed = null
@@ -465,7 +544,8 @@ export class SimWorld {
     const J = this.jolt as unknown as AnyJolt & Jolt
     const wheel = link.over ? this.entries.get(link.over) : undefined
     if (!wheel) return
-    const { p1, p2 } = pulleyRim(wheel.def, this.positionOf(a), this.positionOf(b))
+    // The wheel where it is now: placed or dragged since it was made, its rim moved with it.
+    const { p1, p2 } = pulleyRim({ ...wheel.def, position: this.positionOf(wheel) }, this.positionOf(a), this.positionOf(b))
     const settings = this.track(new J.PulleyConstraintSettings())
     settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
     settings.set_mBodyPoint1(this.rv3([0, 0, 0]))
@@ -491,8 +571,11 @@ export class SimWorld {
     let dir: V3 = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
     const span = Math.hypot(...dir)
     dir = span > 1e-6 ? [dir[0] / span, dir[1] / span, dir[2] / span] : [0, -1, 0]
-    const reachA = reachOf(a.def)
-    const reachB = reachOf(b.def)
+    const negDir: V3 = [-dir[0], -dir[1], -dir[2]]
+    const reachA = reachAlong(a.def, dir)
+    const reachB = reachAlong(b.def, negDir)
+    const localA = toLocal(a.def.rotation, dir)
+    const localB = toLocal(b.def.rotation, negDir)
     const start: V3 = [pa[0] + dir[0] * reachA, pa[1] + dir[1] * reachA, pa[2] + dir[2] * reachA]
     const end: V3 = [pb[0] - dir[0] * reachB, pb[1] - dir[1] * reachB, pb[2] - dir[2] * reachB]
     // The rope is as long as its definition says, not as long as the gap happens to be: a
@@ -557,9 +640,9 @@ export class SimWorld {
       this.physics.AddConstraint(c)
       rope.constraints.push(c)
     }
-    pin(a.body, [dir[0] * reachA, dir[1] * reachA, dir[2] * reachA], rope.bodies[0], [0, -half, 0])
+    pin(a.body, [localA[0] * reachA, localA[1] * reachA, localA[2] * reachA], rope.bodies[0], [0, -half, 0])
     for (let i = 0; i + 1 < n; i++) pin(rope.bodies[i], [0, half, 0], rope.bodies[i + 1], [0, -half, 0])
-    pin(rope.bodies[n - 1], [0, half, 0], b.body, [-dir[0] * reachB, -dir[1] * reachB, -dir[2] * reachB])
+    pin(rope.bodies[n - 1], [0, half, 0], b.body, [localB[0] * reachB, localB[1] * reachB, localB[2] * reachB])
     // The joints are solved one at a time, and against a load a hundred times heavier than a
     // link each pass moves the link and hardly the load: a hanging load stretched the chain a
     // few centimetres, and a chain shorter than the gap could not reel its load in at all, so
@@ -641,7 +724,12 @@ export class SimWorld {
     const list = defs ?? this.order.map((id) => this.entries.get(id)!.def)
     const joins = links ?? this.linkDefs
     const kept = new Map<BodyId, { def: BodyDef; state: BodyState }>()
-    const time = this.time
+    // The clock is the step count, so these two are what "the clock keeps counting" means: with
+    // them restored the run goes on from the same step, on the same grid, with no second t = 0.
+    const steps = this.steps
+    const startRead = this.startRead
+    // The time gathered towards the next step too: dropped, every mid-run edit lost up to a step.
+    const accumulator = this.accumulator
     if (preserve) {
       for (const id of this.order) {
         const e = this.entries.get(id)
@@ -655,7 +743,11 @@ export class SimWorld {
       const k = kept.get(def.id)
       if (k && k.def === def) this.placeState(def.id, k.state)
     }
-    if (preserve) this.time = time
+    if (preserve) {
+      this.steps = steps
+      this.startRead = startRead
+      this.accumulator = accumulator
+    }
     // Constraints are built after the bodies, because each one needs both of them to exist.
     this.linkDefs = joins
     this.setLinks(joins)
@@ -727,13 +819,7 @@ export class SimWorld {
             [hx, -hy, hz],
             [-hx, hy, hz]
           ]
-        : [
-            [0, hy, 0],
-            [-hx, -hy, -hz],
-            [hx, -hy, -hz],
-            [hx, -hy, hz],
-            [-hx, -hy, hz]
-          ]
+        : coneHull(a, b)
     const pts = this.track(new J.ArrayVec3())
     for (const p of corners) {
       const v = this.v3(p)
@@ -766,21 +852,87 @@ export class SimWorld {
    * Advances the world by up to `dt` real seconds (scaled by the slow-motion setting)
    * in fixed 1/60 s steps, and returns the new positions.
    * The accumulator is clamped so a slow machine falls behind gracefully instead of freezing.
+   *
+   * It also hands back the readings the recorder is made of: one on every 6th fixed step (see
+   * `SimSample`), and the t = 0 one before the first step of a run. They are taken here, inside
+   * the loop, because that is the only place the state at step 6k exists; they are named by the
+   * step count, so they land on 0, 0.1, 0.2 … whatever the frame rate or the slow-motion setting.
+   * Most calls return none.
    */
-  step(dt: number): { transforms: Float32Array; contacts: ContactEvent[] } {
-    const FIXED = 1 / 60
+  step(dt: number): { transforms: Float32Array; contacts: ContactEvent[]; samples: SimSample[] } {
     this.accumulator = Math.min(this.accumulator + dt * this.settings.timeScale, FIXED * 3)
+    return this.advance(dt > 0)
+  }
+
+  /**
+   * Exactly one fixed step, whatever the time scale: the Sandbox's "Step one frame". Through step()
+   * a frame of 1/60 s in slow motion was a tenth of a step, and nothing moved.
+   */
+  stepOnce(): { transforms: Float32Array; contacts: ContactEvent[]; samples: SimSample[] } {
+    this.accumulator = FIXED
+    const out = this.advance(true)
+    // Nothing gathered towards a next step: the pose drawn is the one the step reached.
+    this.prevPose.set(this.curPose)
+    this.transforms.set(this.curPose)
+    return out
+  }
+
+  /** Runs the fixed steps the accumulator holds; `running` is whether time is going (not a paused redraw). */
+  private advance(running: boolean): { transforms: Float32Array; contacts: ContactEvent[]; samples: SimSample[] } {
     this.contacts = []
+    const samples: SimSample[] = []
+    // The run's first reading is the untouched start. A paused frame calls step(0) every frame, so
+    // `dt > 0` is what says the run is going, and the flag keeps it to one per run; `steps === 0`
+    // is the guard that the start is never a state some steps have already moved.
+    if (running && !this.startRead && this.steps === 0) {
+      this.startRead = true
+      samples.push(this.snapshot())
+    }
+    const size = this.order.length * STRIDE
+    if (this.curPose.length !== size) {
+      // Bodies were added or taken away: start the blend afresh from where everything is.
+      this.curPose = new Float32Array(size)
+      this.prevPose = new Float32Array(size)
+      this.readPoses(this.curPose)
+      this.prevPose.set(this.curPose)
+    }
+    let stepped = false
     while (this.accumulator >= FIXED) {
       // beforeStep reads the contacts the last step found; the listener refills them during Step.
       this.beforeStep(FIXED)
       this.touching.clear()
+      // Before the last step of this call: that pose is where the drawn blend starts.
+      if (this.accumulator - FIXED < FIXED) this.readPoses(this.prevPose)
       this.joltInterface.Step(FIXED, this.settings.collisionSteps)
+      stepped = true
       this.accumulator -= FIXED
-      this.time += FIXED
+      this.steps += 1
+      if (this.steps % READING_EVERY === 0) samples.push(this.snapshot())
     }
-    this.readTransforms()
-    return { transforms: this.transforms, contacts: this.contacts }
+    // The engine's own pose now. With no step taken, a pose that differs from the last step's was
+    // put there from outside (a drag, a placed body, an edit): draw it where it is at once.
+    this.readPoses(this.transforms)
+    if (stepped) this.curPose.set(this.transforms)
+    else if (!samePoses(this.transforms, this.curPose)) {
+      this.curPose.set(this.transforms)
+      this.prevPose.set(this.transforms)
+    }
+    blendPoses(this.prevPose, this.curPose, this.accumulator / FIXED, this.transforms)
+    return { transforms: this.transforms, contacts: this.contacts, samples }
+  }
+
+  /**
+   * The state of every moving body at this step, labelled with the clock. It only reads: no body is
+   * moved or created, so it is safe inside the step loop.
+   */
+  private snapshot(): SimSample {
+    const states: Record<BodyId, BodyState> = {}
+    for (const id of this.order) {
+      if (this.entries.get(id)?.def.motion !== 'dynamic') continue
+      const st = this.state(id)
+      if (st) states[id] = st
+    }
+    return { t: this.time, states }
   }
 
   /**
@@ -803,11 +955,13 @@ export class SimWorld {
     // Sixty times a second for every body: the ordinary case, no actuator at all, must not
     // allocate anything.
     if (!mine) return NO_ACTUATORS
-    // The window is judged at the middle of the step, not its start. The clock is a running sum
-    // of 1/60, so at a nominal 2 s it reads 1.9999999999999978 and a window "from 1 s to 2 s"
-    // judged on the raw reading acted for 61 steps while "2 s to 3 s" got 59: a question saying
-    // 3 N for one second read 3.05 m/s in the panel. A step whose midpoint lies inside the
-    // window is half a step from either edge, further than the rounding can ever drift.
+    // The window is judged at the middle of the step, not its start. The clock used to be a
+    // running sum of 1/60, which at a nominal 2 s read 1.9999999999999978, and a window "from 1 s
+    // to 2 s" judged on the raw reading acted for 61 steps while "2 s to 3 s" got 59: a question
+    // saying 3 N for one second read 3.05 m/s in the panel. The clock is now a step count and
+    // exact, but a window's edges are typed or imported numbers (0.1 + 0.2 is 0.30000000000000004),
+    // so the middle is still the safe place to judge: a step whose midpoint lies inside the
+    // window is half a step from either edge, further than any rounding can drift.
     const t = this.time + dt / 2
     return mine.filter((a) => a.from <= t && t < a.until)
   }
@@ -833,7 +987,9 @@ export class SimWorld {
         if (speed > 1e-4) {
           const dir: V3 = [rel[0] / speed, rel[1] / speed, rel[2] / speed]
           const cd = e.def.dragCd ?? dragCoefficient(e.def.shape)
-          const area = e.def.dragArea ?? frontalArea(e.def.shape, e.def.size, dir)
+          // The face the air meets is the one turned towards the motion (H22), not the unturned one.
+          const q = body.GetRotation()
+          const area = e.def.dragArea ?? frontalAreaTurned(e.def.shape, e.def.size, [q.GetX(), q.GetY(), q.GetZ(), q.GetW()], dir)
           const mag = 0.5 * rho * cd * area * speed * speed
           const f = this.v3([-dir[0] * mag, -dir[1] * mag, -dir[2] * mag])
           body.AddForce(f)
@@ -915,25 +1071,39 @@ export class SimWorld {
     void dt
   }
 
-  private readTransforms() {
+  /** Every body's position and rotation, in body order, into `into` (STRIDE numbers each). */
+  private readPoses(into: Float32Array) {
     this.order.forEach((id, i) => {
       const e = this.entries.get(id)!
       const p = e.body.GetPosition()
       const q = e.body.GetRotation()
       const o = i * STRIDE
-      this.transforms[o] = p.GetX()
-      this.transforms[o + 1] = p.GetY()
-      this.transforms[o + 2] = p.GetZ()
-      this.transforms[o + 3] = q.GetX()
-      this.transforms[o + 4] = q.GetY()
-      this.transforms[o + 5] = q.GetZ()
-      this.transforms[o + 6] = q.GetW()
+      into[o] = p.GetX()
+      into[o + 1] = p.GetY()
+      into[o + 2] = p.GetZ()
+      into[o + 3] = q.GetX()
+      into[o + 4] = q.GetY()
+      into[o + 5] = q.GetZ()
+      into[o + 6] = q.GetW()
     })
   }
 
   /** Body ids in the same order as the transform buffer. */
   get bodyOrder(): BodyId[] {
     return this.order
+  }
+
+  /**
+   * A body's state with the position and rotation it is drawn at this frame, for whatever is drawn
+   * beside it (labels, arrows, the lines of a link). Bodies are drawn between the last two steps
+   * (P13); read off the engine, those followed in jumps in slow motion and sat apart from their body.
+   */
+  drawn(id: BodyId): BodyState | null {
+    const st = this.state(id)
+    const o = this.order.indexOf(id) * STRIDE
+    const t = this.transforms
+    if (!st || o < 0 || o + STRIDE > t.length) return st
+    return { ...st, position: [t[o], t[o + 1], t[o + 2]], rotation: [t[o + 3], t[o + 4], t[o + 5], t[o + 6]] }
   }
 
   state(id: BodyId): BodyState | null {
@@ -999,6 +1169,11 @@ export class SimWorld {
       const wheel = link.over ? this.entries.get(link.over) : undefined
       if (!partner || !wheel || partner.def.motion !== 'dynamic') continue
       this.put(partner, pulleyPartnerMove(wheel.def, from, position, this.positionOf(partner)))
+    }
+    // A rope or pulley bakes its end points and rim into its constraints. Move a wheel or a rope
+    // end and those must be laid again, exactly as updateBody does.
+    if (this.linkDefs.some((l) => l.over === id || ((l.kind === 'pulley' || l.kind === 'rope') && (l.a === id || l.b === id)))) {
+      this.setLinks(this.linkDefs)
     }
   }
 

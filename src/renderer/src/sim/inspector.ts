@@ -85,3 +85,70 @@ export const connectionsProminent = (selection: BodyId | null, partner: BodyId |
 
 /** The bodies a selected one can be joined to: not itself, not the floor. */
 export const joinCandidates = (bodies: BodyDef[], selection: BodyId | null): BodyDef[] => bodies.filter((b) => b.id !== selection && b.shape !== 'ground')
+
+/** One size box of a body: what it is called, the letter on the box, and the size it gives. */
+export interface SizeField {
+  label: string
+  letter: string
+  value: number
+  set: (v: number) => [number, number, number]
+}
+
+/**
+ * The size boxes a shape really uses, named for what they do (H26). A cone's depth and a pulley's
+ * depth did nothing; a pulley's radius was called its width; a capsule's height was its straight
+ * middle only, the round ends not counted.
+ */
+export function sizeFields(shape: BodyDef['shape'], size: [number, number, number]): SizeField[] {
+  const [a, b, c] = size
+  switch (shape) {
+    case 'sphere':
+      return [{ label: 'radius', letter: 'r', value: a, set: (r) => [r, r, r] }]
+    case 'cylinder':
+      return [
+        { label: 'radius', letter: 'r', value: a, set: (r) => [r, b, r] },
+        { label: 'height', letter: 'h', value: b, set: (h) => [a, h, a] }
+      ]
+    case 'capsule':
+      // Its whole height, round ends and all: the size keeps the straight middle, b = height − 2r.
+      return [
+        { label: 'radius', letter: 'r', value: a, set: (r) => [r, b, r] },
+        { label: 'height', letter: 'h', value: b + 2 * a, set: (h) => [a, Math.max(0.01, h - 2 * a), a] }
+      ]
+    case 'pulley':
+      return [
+        { label: 'radius', letter: 'r', value: a, set: (r) => [r, b, r] },
+        { label: 'thickness', letter: 't', value: b, set: (t) => [a, t, a] }
+      ]
+    case 'cone':
+      return [
+        { label: 'base width', letter: 'w', value: a, set: (w) => [w, b, w] },
+        { label: 'height', letter: 'h', value: b, set: (h) => [a, h, a] }
+      ]
+    default:
+      return [
+        { label: 'width', letter: 'w', value: a, set: (w) => [w, b, c] },
+        { label: 'height', letter: 'h', value: b, set: (h) => [a, h, c] },
+        { label: 'depth', letter: 'd', value: c, set: (d) => [a, b, d] }
+      ]
+  }
+}
+
+/** A fixed object never moves, so it has no velocity arrow or trail to show (H27). */
+export const showsMotionAids = (def: BodyDef): boolean => def.motion === 'dynamic'
+
+/**
+ * Whether the inspector shows the engine's live values: while the run plays, and while it is
+ * paused part-way (H24) — paused at 2.3 s it showed the typed start, not where the body was.
+ */
+export const showsLive = (playing: boolean, engineTime: number): boolean => playing || engineTime > 0
+
+/**
+ * Whether dragging a body sets where it starts. Before the run it does; paused part-way through,
+ * a moving body is only put somewhere for the run to go on from (H18) — the drag used to rewrite
+ * its start, so Reset sent it back to the drag's end, not where the run began.
+ */
+export const dragSetsStart = (engineTime: number, def: BodyDef): boolean => engineTime === 0 || def.motion !== 'dynamic'
+
+/** How two surfaces in contact combine what each says (H29), under the friction and bounce sliders. */
+export const CONTACT_HINT = 'Where two objects touch, friction is √(μ₁ × μ₂) of the two and the bounce is the larger e.'

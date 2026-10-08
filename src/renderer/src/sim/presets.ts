@@ -88,7 +88,7 @@ export const PRESETS: Preset[] = [
     label: 'Projectile',
     topic: 'Motion',
     tags: ['projectile', 'gravity', 'launch', 'angle', 'range'],
-    about: 'A ball launched at 14 m/s and 30°. Range v² sin 2θ / g = 17.3 m; greatest height 2.5 m. Read both off the trail.',
+    about: 'A ball launched at 14 m/s and 30°. Range v² sin 2θ / g = 17.3 m; greatest height 2.8 m. Read both off the trail.',
     build: () => ({
       bodies: [floor(), ball('P', [-8, 0.3, 0], { size: [0.3, 0.3, 0.3], mass: 0.5, velocity: launchVelocity(14, 30), restitution: 0.3 })],
       world: VACUUM
@@ -152,7 +152,7 @@ export const PRESETS: Preset[] = [
       // The ball rests on the slope with its centre 1.5 m above where it ends up on the floor,
       // so the drop in the sentence is the drop it makes. A steel slope: concrete's rolling
       // resistance took 3 % off the speed over five metres.
-      bodies: [floor(), put('ramp', 'Slope', [-2, 0.75, 0], { size: [5, 1.5, 1.5], material: 'steel' }), ball('A', [-4.4, 1.75, 0], { size: [0.25, 0.25, 0.25] })],
+      bodies: [floor(), put('ramp', 'Slope', [-2, 0.75, 0], { size: [5, 1.5, 1.5], material: 'steel' }), ball('A', [-4.4, 1.731, 0], { size: [0.25, 0.25, 0.25] })],
       world: VACUUM
     })
   },
@@ -165,9 +165,10 @@ export const PRESETS: Preset[] = [
     build: () => ({
       bodies: [
         floor(),
-        put('ramp', 'Slope', [-2, 1.5, 0], { size: [8, 3, 3], friction: 0.9 }),
-        ball('Ball', [-5.2, 3.5, 0.9], { size: [0.25, 0.25, 0.25], friction: 0.9 }),
-        put('box', 'Block', [-5.2, 3.45, -0.9], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1, material: 'plastic', friction: 0.02, trace: true })
+        put('ramp', 'Slope', [-2, 1.5, 0.9], { size: [8, 3, 1.4], friction: 0.9 }),
+        put('ramp', 'Ice lane', [-2, 1.5, -0.9], { size: [8, 3, 1.4], material: 'ice', friction: 0 }),
+        ball('Ball', [-5.2, 2.967, 0.9], { size: [0.25, 0.25, 0.25], friction: 0.9 }),
+        put('box', 'Block', [-5.2, 2.914, -0.9], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1, material: 'plastic', friction: 0, rotation: [0, 0, -20.556], trace: true })
       ],
       world: { ...VACUUM, twoD: false }
     })
@@ -356,8 +357,8 @@ export const PRESETS: Preset[] = [
     build: () => ({
       bodies: [
         floor('ice'),
-        put('box', 'Gun', [0, 0.35, 0], { size: [1.2, 0.6, 0.6], massMode: 'mass', mass: 10, velocity: [-2.5, 0, 0], material: 'wood', trace: true }),
-        put('sphere', 'Bullet', [1.2, 0.35, 0], { size: [0.12, 0.12, 0.12], massMode: 'mass', mass: 0.5, velocity: [50, 0, 0], material: 'lead', trace: true })
+        put('box', 'Gun', [0, 0.3, 0], { size: [1.2, 0.6, 0.6], massMode: 'mass', mass: 10, velocity: [-2.5, 0, 0], material: 'wood', trace: true }),
+        put('sphere', 'Bullet', [1.2, 0.3, 0], { size: [0.12, 0.12, 0.12], massMode: 'mass', mass: 0.5, velocity: [50, 0, 0], material: 'lead', trace: true })
       ],
       world: { ...VACUUM, timeScale: 0.1 }
     })
@@ -407,7 +408,7 @@ export const PRESETS: Preset[] = [
       const a = put('box', 'A', [0, 0.25, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 2, material: 'wood', friction: 0, restitution: 0 })
       const b = put('box', 'B', [1.5, 0.25, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 2, material: 'wood', friction: 0, restitution: 0 })
       return {
-        bodies: [floor('ice'), a, b, ball('Ball', [-3, 0.25, 0], { velocity: [6, 0, 0], restitution: 0, friction: 0 })],
+        bodies: [floor('ice'), a, b, ball('Ball', [-3, 0.2, 0], { velocity: [6, 0, 0], restitution: 0, friction: 0 })],
         world: VACUUM,
         links: [join('rod', a, b)]
       }
