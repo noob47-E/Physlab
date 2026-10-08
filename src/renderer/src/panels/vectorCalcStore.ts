@@ -382,16 +382,66 @@ const KNOWN_NAMES = new Set(['pi', 'e', 'tau', 'phi', 'deg', 'rad'])
  */
 export function unknownNames(src: string, scope: Record<string, unknown>, cardNames: string[] = []): string[] {
   const out: string[] = []
-  math.parse(src).traverse((node, path, parent) => {
+  const root = math.parse(src)
+  const units = unitsAfterNumbers(root)
+  root.traverse((node, path, parent) => {
     const n = node as unknown as { type: string; name?: string }
     // A function's own name (sqrt, dot, polarVec) is not a value.
     if (n.type !== 'SymbolNode' || path === 'fn' || !n.name) return
     if (n.name in scope || KNOWN_NAMES.has(n.name) || out.includes(n.name)) return
     // 2A is twice card A even when card A cannot be read: a card's name is never a unit.
-    if (!cardNames.includes(n.name) && isUnitAfterNumber(n.name, parent)) return
+    if (!cardNames.includes(n.name) && (isUnitAfterNumber(n.name, parent) || units.has(node))) return
     out.push(n.name)
   })
   return out
+}
+
+type UnitNode = { type: string; name?: string; op?: string; implicit?: boolean; args?: UnitNode[] }
+
+const isValuelessUnit = (name: string): boolean => {
+  try {
+    return (math as unknown as { Unit: { isValuelessUnit: (s: string) => boolean } }).Unit.isValuelessUnit(name)
+  } catch {
+    return false
+  }
+}
+
+/** A unit and nothing else: N, m/s, s^2, kg m. */
+const isUnitOnly = (n: UnitNode | undefined): boolean =>
+  !!n &&
+  ((n.type === 'SymbolNode' && !!n.name && isValuelessUnit(n.name)) ||
+    (n.type === 'ParenthesisNode' && isUnitOnly((n as unknown as { content: UnitNode }).content)) ||
+    (n.type === 'OperatorNode' && ((n.op === '*' && !!n.implicit) || n.op === '/') && (n.args ?? []).every(isUnitOnly)) ||
+    (n.type === 'OperatorNode' && n.op === '^' && isUnitOnly(n.args?.[0]) && n.args?.[1]?.type === 'ConstantNode'))
+
+/** A number with its units after it: 10 N, 10 N m, 10 kg m/s, 9.8 m/s^2. */
+const isMeasure = (n: UnitNode | undefined): boolean =>
+  !!n &&
+  n.type === 'OperatorNode' &&
+  ((n.op === '*' && !!n.implicit) || n.op === '/') &&
+  (n.args?.[0]?.type === 'ConstantNode' || isMeasure(n.args?.[0])) &&
+  isUnitOnly(n.args?.[1])
+
+/**
+ * The unit symbols of every number-with-units in a line — "10 kg m/s ∠ 30°", "10 N m at 30°". Only
+ * the unit straight after the number was known (isUnitAfterNumber), so once a size could carry more
+ * than one unit word the second one, m, was refused as "There is no vector called m".
+ */
+function unitsAfterNumbers(root: unknown): Set<unknown> {
+  const found = new Set<unknown>()
+  ;(root as { traverse: (cb: (node: unknown) => void) => void }).traverse((node) => {
+    const n = node as UnitNode
+    if (!isMeasure(n)) return
+    const mark = (u: UnitNode | undefined): void => {
+      if (!u) return
+      if (u.type === 'SymbolNode') found.add(u)
+      else if (u.type === 'ParenthesisNode') mark((u as unknown as { content: UnitNode }).content)
+      else if (u.op === '^') mark(u.args?.[0])
+      else for (const a of u.args ?? []) mark(a)
+    }
+    mark(n.args?.[1])
+  })
+  return found
 }
 
 /**
@@ -467,15 +517,6 @@ export function explainVectorError(e: unknown): string {
   if (/^[A-Z][^()]*[.:]/.test(raw) && !/\(char \d+\)|function|expected:|undefined/.test(raw)) return raw
   return 'This cannot be read as a vector. Type it like 3i + 4j, or as a size and angle like 10∠30°.'
 }
-
-/**
- * A scientific size written straight before the angle sign — 1×10^(-5)∠45°, 10^(-5)∠45° — as the
- * one number it is. preprocess rewrites size ∠ angle first, and the size it takes is a plain number;
- * only afterwards does it read 1×10^(-5) as a number. So "1×10^(-5)∠45°" was refused while
- * 0.00001∠45° was read (H15).
- */
-const sizeBeforeAngle = (s: string): string =>
-  s.replace(/(?:(\d+(?:\.\d+)?)\s*×\s*)?\b10\s*\^\s*\(?\s*(-?\d+)\s*\)?(?=\s*(?:∠|\bat\b))/g, (_, mantissa: string | undefined, exponent: string) => `${mantissa ?? 1}e${exponent}`)
 
 /**
  * Refuses a number added to a vector or taken from it. mathjs adds the number to every part, so
@@ -595,7 +636,7 @@ export function droppedUnits(text: string, names: string[] = []): string[] | nul
   const raised = text.replace(/[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (run) => `^{${run.replace(/[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => (c === '⁻' ? '-' : '⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(c).toString()))}}`)
   const found: string[] = []
   try {
-    math.parse(preprocess(sizeBeforeAngle(latexToMath(raised, { vectorOps: true })))).traverse((node, path) => {
+    math.parse(preprocess(latexToMath(raised, { vectorOps: true }))).traverse((node, path) => {
       const n = node as unknown as { type: string; name?: string }
       if (n.type !== 'SymbolNode' || path === 'fn' || !n.name) return
       if (n.name in UNIT_VECTORS || KNOWN_NAMES.has(n.name) || names.includes(n.name) || found.includes(n.name)) return
@@ -622,7 +663,7 @@ export function droppedUnitsSentence(units: string[]): string {
  * What it gives is free of the noise its own arithmetic left (see lineScale).
  */
 export function evaluateVectorLine(latex: string, scope: Record<string, unknown>, below: string[] = [], unreadable: string[] = []): { src: string; out: unknown } {
-  const src = preprocess(sizeBeforeAngle(latexToMath(latex, { vectorOps: true })))
+  const src = preprocess(latexToMath(latex, { vectorOps: true }))
   const unknown = unknownNames(src, scope, [...below, ...unreadable])
   if (unknown.length) throw new PlainError(unknownNameSentence(unknown[0], scope, below, unreadable))
   refuseNumberWithVector(src, scope)

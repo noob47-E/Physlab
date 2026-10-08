@@ -113,23 +113,63 @@ describe('grabbing and lifting', () => {
     world.destroy()
   })
 
-  it('a structural edit to one body leaves the others mid-flight', async () => {
+  // H20, the owner's choice (2026-10-08, "Keep going"): a body changed part-way through a run keeps
+  // its place and speed, the other bodies too; only Reset takes them back to the start. Before, the
+  // edited body alone jumped back to its start, which read as a Reset nobody had asked for.
+  it('a structural edit part-way through keeps every body where it is and as fast as it was (H20)', async () => {
     const world = await makeWorld({ gravity: 0, airDensity: 0 })
     const a = body({ position: [0, 5, 0], velocity: [3, 0, 0] })
     const b = body({ position: [0, 8, 0], velocity: [3, 0, 0] })
     world.addBody(a)
     world.addBody(b)
     run(world, 1)
-    const before = world.state(a.id)!.position[0]
+    const beforeA = world.state(a.id)!
+    const beforeB = world.state(b.id)!
     const heavier = { ...b, mass: 5 }
     world.rebuild([a, heavier], [], true)
-    expect(world.state(a.id)!.position[0]).toBeCloseTo(before, 3)
+    expect(world.state(a.id)!.position[0]).toBeCloseTo(beforeA.position[0], 3)
     expect(world.state(a.id)!.velocity[0]).toBeCloseTo(3, 3)
-    expect(world.state(b.id)!.position[0]).toBeCloseTo(0, 3)
+    for (let i = 0; i < 3; i++) {
+      expect(world.state(b.id)!.position[i]).toBeCloseTo(beforeB.position[i], 6)
+      expect(world.state(b.id)!.velocity[i]).toBeCloseTo(beforeB.velocity[i], 6)
+    }
     expect(world.time).toBeGreaterThan(0.9)
     world.rebuild([a, heavier], [])
     expect(world.state(a.id)!.position[0]).toBeCloseTo(0, 3)
+    expect(world.state(b.id)!.position[0]).toBeCloseTo(0, 3)
     expect(world.time).toBe(0)
+    world.destroy()
+  })
+
+  it('part-way through, a typed start position or velocity changes where Reset goes, not the moving body (H20)', async () => {
+    const world = await makeWorld({ gravity: 0, airDensity: 0 })
+    const a = body({ position: [0, 5, 0], velocity: [3, 0, 0] })
+    world.addBody(a)
+    run(world, 1)
+    const before = world.state(a.id)!
+    const moved: BodyDef = { ...a, position: [2, 6, 0], velocity: [0, 1, 0] }
+    world.updateBody(moved)
+    const now = world.state(a.id)!
+    for (let i = 0; i < 3; i++) {
+      expect(now.position[i]).toBeCloseTo(before.position[i], 6)
+      expect(now.velocity[i]).toBeCloseTo(before.velocity[i], 6)
+    }
+    world.rebuild([moved], [])
+    expect(world.state(a.id)!.position[0]).toBeCloseTo(2, 6)
+    expect(world.state(a.id)!.position[1]).toBeCloseTo(6, 6)
+    expect(world.state(a.id)!.velocity[1]).toBeCloseTo(1, 6)
+    world.destroy()
+  })
+
+  it('before a run starts, a typed position or a heavier body still moves it at once', async () => {
+    const world = await makeWorld({ gravity: 0, airDensity: 0 })
+    const a = body({ position: [0, 5, 0] })
+    world.addBody(a)
+    world.updateBody({ ...a, position: [1, 5, 0] })
+    expect(world.state(a.id)!.position[0]).toBeCloseTo(1, 6)
+    const heavier: BodyDef = { ...a, position: [2, 5, 0], mass: 5 }
+    world.rebuild([heavier], [], true)
+    expect(world.state(a.id)!.position[0]).toBeCloseTo(2, 6)
     world.destroy()
   })
 

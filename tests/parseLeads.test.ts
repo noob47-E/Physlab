@@ -304,9 +304,7 @@ describe('R4.2 a superscript on a function name (sin⁻¹, sin²)', () => {
   })
 })
 
-// HELD for the next round (P-PARSE batch B6, not in the Pro-account queue): a real lead, proven by this
-// failing test; it runs again when its batch is fixed.
-describe.skip('R4.3 ∠ size with a unit of more than one word', () => {
+describe('R4.3 ∠ size with a unit of more than one word', () => {
   it('reads 10 kg m/s ∠ 30° and 10 N m at 30° as a vector of size 10 at 30°', () => {
     expectVector(value('10 kg m/s ∠ 30°'), [8.6602540378, 5])
     expectVector(value('10 kg m/s at 30°'), [8.6602540378, 5])
@@ -321,9 +319,7 @@ describe.skip('R4.3 ∠ size with a unit of more than one word', () => {
   })
 })
 
-// HELD for the next round (P-PARSE batch B6, not in the Pro-account queue): a real lead, proven by this
-// failing test; it runs again when its batch is fixed.
-describe.skip('R4.4 ∠ size given by a name or a bracket', () => {
+describe('R4.4 ∠ size given by a name or a bracket', () => {
   it('reads r ∠ 30° and (3 + 2) ∠ 30° as a vector of size 5 at 30°', () => {
     expectVector(value('r ∠ 30°', { r: 5 }), [4.3301270189, 2.5])
     expectVector(value('(3+2) ∠ 30°'), [4.3301270189, 2.5])
@@ -334,6 +330,51 @@ describe.skip('R4.4 ∠ size given by a name or a bracket', () => {
     expect(errors()).toEqual([])
     vectorNamed('A', [4.3301270189, 2.5, 0])
     vectorNamed('B', [4.3301270189, 2.5, 0])
+  })
+
+  it('guard: a long word or sentence with no ∠ is read at once (the size rule once tried every split into unit words)', () => {
+    for (const typed of ['kineticenergyofthebodyatthetopofthehill + 1', 'the ball goes up and then comes down quickly again and again', '10 abcdefghijklmnopqrstuvwxyzabcdefghij']) {
+      const t = performance.now()
+      try { preprocess(typed) } catch { /* only the time matters here */ }
+      expect(performance.now() - t, typed).toBeLessThan(50)
+    }
+  })
+
+  it('a size that is no number — a function or a point — is refused in words, never a vector of NaN', () => {
+    expect(() => value('sin at 30')).toThrow(/size before ∠ must be a number/)
+    expect(() => value('(1, 2) ∠ 30°')).toThrow(/size before ∠ must be a number/)
+  })
+
+  it('guard: a bracket written against a call is not taken for the size', () => {
+    expect(() => value('sin(30) ∠ 30°')).toThrow()
+    expect(preprocess('2 × r ∠ 30°')).toContain('polarVec(r, 30 deg)')
+  })
+})
+
+// R5: a size in standard form with no number in front of its 10 — 10^(-5) ∠ 45°, as the keypad's
+// 10ˣ key writes it — is the size 10⁻⁵. The rule took only a plain number before ∠, so the ")" in
+// front of it left the line unread; the Vectors panel worked round it (sizeBeforeAngle, P-VEC2 R2-3).
+describe('R5 ∠ size written as a power of ten', () => {
+  // 10⁻⁵ at 45°: each part is 10⁻⁵ × cos 45° = 7.0710678119×10⁻⁶.
+  const expectSmall = (v: unknown) => {
+    expect(Array.isArray(v), 'a vector').toBe(true)
+    const a = v as number[]
+    expect(a[0] / 1e-5).toBeCloseTo(0.70710678119, 9)
+    expect(a[1] / 1e-5).toBeCloseTo(0.70710678119, 9)
+  }
+
+  it('reads 1×10⁻⁵ ∠ 45°, 10^(-5) ∠ 45°, 10^-5 ∠ 45° and 10⁻⁵ at 45° as a vector of size 1×10⁻⁵ at 45°', () => {
+    expectSmall(value('1×10⁻⁵∠45°'))
+    expectSmall(value('10^(-5)∠45°'))
+    expectSmall(value('10^-5 ∠ 45°'))
+    expectSmall(value('10⁻⁵ at 45°'))
+  })
+
+  it('the bar makes E = 1×10⁻⁵∠45° and F = 10^(-5) ∠ 45°', async () => {
+    await run('E = 1×10⁻⁵∠45°', 'F = 10^(-5) ∠ 45°')
+    expect(errors()).toEqual([])
+    vectorNamed('E', [7.0710678119e-6, 7.0710678119e-6, 0])
+    vectorNamed('F', [7.0710678119e-6, 7.0710678119e-6, 0])
   })
 })
 

@@ -43,5 +43,7 @@ parseNumberPlusVector.test.ts, expr.test.ts, exprPrecedence.test.ts.
 Done in P-PARSE2 (2026-10-08): B5 (R4.8, H5 — juxtaposed factors join the operand left of ×; a space before a call's
 bracket is skipped), B7 (H3 — a graph's mod is the floor mod mathjs uses), the latexToMath leads (A00/A01: sin x², subscripts,
 ^-2, ⟨ ⟩, a Σ's "= 5" left outside it, d/dθ, d/dx before a function name).
-Still held: B6 (R4.3/R4.4 ∠ sizes with a multi-word unit, a name or a bracket; R5 size∠angle after ×10 — the patch
-run HELD it) and W1 (a typed ∞ limit read as letters: the pure Maths payload is built in math/pure/store.ts).
+Done in P-HELD (2026-10-08): B6 — the size before ∠ or "at" (`SIZE_AT_ANGLE`) is a number, a name, a bracket or a
+power of ten, then any unit words (r ∠ 30°, (3+2) ∠ 30°, 10^(-5) ∠ 45°, 10 kg m/s ∠ 30°); it never starts against a
+name or a closing bracket, so sin(30) ∠ 30° is still refused; the Vectors panel's sizeBeforeAngle workaround is gone.
+W1 — the algebra worker reads ∞ and Infinity as oo on every route (tests/casWorker.test.ts). Nothing is held now.

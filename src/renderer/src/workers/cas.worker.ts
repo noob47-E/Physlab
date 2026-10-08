@@ -27,7 +27,9 @@ GREEK_LETTERS = ('alpha', 'beta', 'gamma', 'phi', 'omega', 'lamda', 'mu', 'tau',
 def _names(deg, greek=False):
     d = {
         'x': x, 'y': y, 'z': z, 't': t, 'a': a, 'b': b, 'c': c, 'k': k, 'n': n, 'm': m, 'theta': theta,
-        'pi': sp.pi, 'e': sp.E, 'E': sp.E, 'i': sp.I, 'oo': sp.oo, 'inf': sp.oo,
+        # Infinity is how mathjs, and so the command bar, spells ∞: unknown here, the parser split it
+        # into the letters I*n*f*i*n*i*t*y, with i the square root of -1 (W1).
+        'pi': sp.pi, 'e': sp.E, 'E': sp.E, 'i': sp.I, 'oo': sp.oo, 'inf': sp.oo, 'Infinity': sp.oo,
         # log(a, b) is log base a of b, as on the calculator (expr.ts, and the field's log_a b):
         # the first argument is the base, so log(2, 8) = 3. SymPy's own order is log(b, a).
         'ln': sp.log, 'log': lambda a, b=None: sp.log(a, 10) if b is None else sp.log(b, a),
@@ -45,7 +47,7 @@ def _names(deg, greek=False):
     return d
 
 def P(s, deg=False, greek=False):
-    s = s.replace('π', 'pi').replace('√', 'sqrt').replace('×', '*').replace('÷', '/').replace('−', '-')
+    s = s.replace('π', 'pi').replace('√', 'sqrt').replace('×', '*').replace('÷', '/').replace('−', '-').replace('∞', 'oo')
     return parse_expr(s, local_dict=_names(deg, greek), transformations=TRANSFORMS, evaluate=True)
 
 def _num(v):

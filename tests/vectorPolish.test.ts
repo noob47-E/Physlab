@@ -82,6 +82,7 @@ import {
   PlainError,
   cardLineTex,
   cardValues,
+  droppedUnits,
   drawAnswer,
   evalNumber,
   evaluateVectorLine,
@@ -652,6 +653,16 @@ describe('H15 — a scientific size before ∠ is read like the plain number', (
     expectSameSize(typed('10\\angle30^{\\circ}'), fromPolar(10, toRad(30)), '10 ∠ 30°')
     expectSameSize(typed('2\\times10^{3}\\hat{i}+5\\hat{j}'), [2000, 5, 0], '2×10³ î + 5 ĵ')
     expectSameSize(typed('10^{2}\\hat{i}'), [100, 0, 0], '10² î')
+  })
+
+  // P-HELD R4.3: the size before ∠ may carry several unit words now, so the panel must not take the
+  // second word (m in 10 N m) for a card's name: it said "There is no vector called m".
+  it('a size with several unit words before ∠ is read, and its units are the ones said to be left out (R4.3)', () => {
+    expectSameSize(toV3(evaluateVectorLine(String.raw`10\ N\ m\angle30^{\circ}`, {}).out), fromPolar(10, toRad(30)), '10 N m ∠ 30°')
+    expectSameSize(toV3(evaluateVectorLine(String.raw`10\ \mathrm{kg}\ \mathrm{m}/\mathrm{s}\angle30^{\circ}`, {}).out), fromPolar(10, toRad(30)), '10 kg m/s ∠ 30°')
+    expect(droppedUnits(String.raw`10\ kg\ m/s\angle30^{\circ}`)).toEqual(['kg', 'm', 's'])
+    // A name that is no unit is still refused in words.
+    expect(() => evaluateVectorLine(String.raw`10\ N\ q\angle30^{\circ}`, {})).toThrow(/no vector called q/)
   })
 })
 

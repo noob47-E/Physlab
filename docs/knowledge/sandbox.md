@@ -27,6 +27,9 @@ hinge, weld), plays it, reads energy and momentum, records a run and sends it to
 - **Step one frame is one fixed step** whatever the time scale, recorded and published like a frame.
 - **A body's definition is its start.** The world never rewrites a body's definition (a placed body
   keeps `def`); a drag before the run sets the start, a drag paused part-way only places the body.
+- **An edit part-way through a run never sends a moving body back** (H20, the owner's choice): a
+  changed mass, size or material keeps its place and speed, and typed position or velocity change
+  only where Reset goes (`updateBody` `startOnly`, `rebuild` with preserve; tests/sandbox.test.ts H20).
 - **Undo restores bodies, links, pushes and the world settings together.**
 - A preset's sentence and its run must agree (tests/presets.test.ts checks the quoted numbers).
 
@@ -45,5 +48,3 @@ hinge, weld), plays it, reads energy and momentum, records a run and sends it to
 - Jolt's soft spring loses energy (tests/energy.test.ts keeps the 1 % target as an expected fail).
 - A rope's links have a small mass (≤ 10 % of the lightest load) that the readout leaves out: the
   readout follows the light-string model a student is taught (H16).
-- Editing a body's mass or size part-way through a run restarts that body (pinned in
-  tests/sandbox.test.ts; H20 held for a decision).

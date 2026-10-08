@@ -389,10 +389,13 @@ export class SimWorld {
       if (was.angularDamping !== def.angularDamping) mp.SetAngularDamping(def.angularDamping)
     }
     // Position and velocity are only pushed when they really changed, so a body mid-flight is not
-    // yanked back to the number sitting in the panel on every unrelated edit.
-    const moved = was.position.some((v, i) => v !== def.position[i])
+    // yanked back to the number sitting in the panel on every unrelated edit. Part-way through a
+    // run they are a moving body's start, not where it is now: typing them changes where Reset
+    // goes and the run carries on (H20, the owner's choice). A fixed body is where its numbers say.
+    const startOnly = this.steps > 0 && def.motion === 'dynamic'
+    const moved = !startOnly && was.position.some((v, i) => v !== def.position[i])
     if (moved) this.setPosition(def.id, def.position)
-    if (was.velocity.some((v, i) => v !== def.velocity[i])) this.setVelocity(def.id, def.velocity)
+    if (!startOnly && was.velocity.some((v, i) => v !== def.velocity[i])) this.setVelocity(def.id, def.velocity)
     // Rotation and spin were neither structural nor applied, so typing them did nothing at all.
     const turned = was.rotation.some((v, i) => v !== def.rotation[i])
     if (turned) this.setRotation(def.id, def.rotation)
@@ -718,7 +721,9 @@ export class SimWorld {
    *
    * With `preserve`, bodies whose definition object is unchanged keep their live position,
    * velocity and the clock keeps counting: changing one crate's mass mid-run used to snap every
-   * other object back to its start, which read as a Reset nobody had asked for.
+   * other object back to its start, which read as a Reset nobody had asked for. Part-way through a
+   * run the changed body keeps its place and speed too (H20, the owner's choice): it alone went
+   * back to its start. Before the run, and for a body that was fixed, the definition is the place.
    */
   rebuild(defs?: BodyDef[], links?: Link[], preserve = false): void {
     const list = defs ?? this.order.map((id) => this.entries.get(id)!.def)
@@ -741,7 +746,7 @@ export class SimWorld {
     for (const def of list) {
       this.addBody(def)
       const k = kept.get(def.id)
-      if (k && k.def === def) this.placeState(def.id, k.state)
+      if (k && (k.def === def || (steps > 0 && k.def.motion === 'dynamic'))) this.placeState(def.id, k.state)
     }
     if (preserve) {
       this.steps = steps

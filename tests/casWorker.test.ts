@@ -55,3 +55,21 @@ describe('L3: degree mode also applies inside a point, a limit and a bound', () 
     expect(ask('integrate', { expr: 'cos(x)', var: 'x', lower: '0', upper: 'acos(0)', deg: false }).text).toBe('1')
   })
 })
+
+// W1: the command bar sends its arguments as typed, so integrate(e^(-x), 0, ∞) reached the worker
+// with the sign ∞ (which it could not read) and integrate(e^(-x), 0, Infinity) with mathjs's spelling,
+// which its parser split into the letters I·n·f·i·n·i·t·y (i being √−1). The Maths screen already
+// sends oo (U16, math/pure/store.ts); every other route reaches the worker's own parser.
+describe('W1: ∞ and Infinity are infinity wherever the worker reads them', () => {
+  it('∫ from 0 to ∞ of e^(−x) dx = 1, typed with ∞, with Infinity, or with oo', () => {
+    for (const upper of ['∞', 'Infinity', 'oo']) {
+      expect(ask('integrate', { expr: 'e^(-x)', var: 'x', lower: '0', upper, deg: false }).text, upper).toBe('1')
+    }
+  })
+
+  it('the limit of 1/x as x → ∞ or −Infinity is 0, and ∫ from −∞ to 0 of e^x dx = 1', () => {
+    expect(ask('limit', { expr: '1/x', var: 'x', to: '∞', deg: false }).text).toBe('0')
+    expect(ask('limit', { expr: '1/x', var: 'x', to: '-Infinity', deg: false }).text).toBe('0')
+    expect(ask('integrate', { expr: 'e^x', var: 'x', lower: '-∞', upper: '0', deg: false }).text).toBe('1')
+  })
+})

@@ -203,7 +203,10 @@ math.import(
     pt: (...c: AnyVal[]) => [plainNumber(c[0]), plainNumber(c[1]), c.length > 2 ? plainNumber(c[2]) : 0],
     vec: (...c: AnyVal[]) => [plainNumber(c[0]), plainNumber(c[1]), c.length > 2 ? plainNumber(c[2]) : 0],
     polarVec: (r: AnyVal, theta: AnyVal) => {
-      const m = plainNumber(r)
+      // The size before ∠ may be a name or a bracket now, so it can be a function (sin at 30) or a point
+      // ((1, 2) ∠ 30°): Number() of those is NaN, and the vector came out NaN, NaN with no word said.
+      const m = typeof r === 'function' || Array.isArray(r) ? NaN : plainNumber(r)
+      if (!Number.isFinite(m)) throw new Error('The size before ∠ must be a number, like 10∠30° or 10 N at 30°.')
       const t = toRadians(theta)
       return [m * Math.cos(t), m * Math.sin(t), 0]
     },
@@ -897,6 +900,15 @@ function magnitudeBars(s: string): string {
 }
 
 /**
+ * size ∠ angle and size at angle: the size (a number with or without a unit against it, a name or a bracket; raised to
+ * a power; then more unit words) and the angle. Each further unit word starts after a space or a /: with the gap
+ * optional, a long word with no ∠ after it could be split into unit words in every possible way, and a typed line
+ * such as "kineticenergyofthebody" froze the app while the rule tried them all.
+ */
+const SIZE_AT_ANGLE =
+  /(?<![\w.)\]′″‴⁗^])((?:(?:\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|\.\d+)(?:\s*[A-Za-z]+(?:\^-?\d+)?)?|[A-Za-z_][\w′″‴⁗]*|\([^()]*\))(?:\s*\^\s*(?:-?\d+(?:\.\d+)?|\(\s*-?\d+(?:\.\d+)?\s*\)))?(?:(?:\s+|\s*\/\s*)[A-Za-z]+(?:\^-?\d+)?)*)\s*(?:∠|\bat\b)\s*(-?\d+(?:\.\d+)?\s*°?|-?[A-Za-z_][\w′″‴⁗]*\s*°?|\([^()]*\)\s*°?)/g
+
+/**
  * Typed maths → mathjs syntax. `names` says what names stand for where a bracket is written
  * against them (a graph f is called, a slider p multiplies): only a route that knows them passes
  * them — the scene's own lines pass sceneNames() — and a line read without them reads the same
@@ -946,11 +958,12 @@ export function preprocess(src: string, names: SceneNames = NO_NAMES): string {
   )
   // magnitude/angle notation: 10 ∠ 30°, 10 N at 30°. The size may be in e-notation, with a capital E
   // as often as not (1E3 ∠ 30°): with only a lowercase e matched, the rule took the 3 alone and
-  // left "1E" in front of polarVec(3, 30 deg), which mathjs cannot read.
-  s = s.replace(
-    /(\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?:\s*[A-Za-z]+(?:\/[A-Za-z]+)?(?:\^-?\d+)?)?)\s*(?:∠|\bat\b)\s*(-?\d+(?:\.\d+)?\s*°?|-?[A-Za-z_][\w′″‴⁗]*\s*°?|\([^()]*\)\s*°?)/g,
-    'polarVec($1, $2)'
-  )
+  // left "1E" in front of polarVec(3, 30 deg), which mathjs cannot read. The size may also be a name
+  // (r ∠ 30°), a bracket ((3 + 2) ∠ 30°) or a power of ten (10^(-5) ∠ 45°, as 10⁻⁵ reads by now), and
+  // its unit may be several words (10 kg m/s ∠ 30°): the rule took one plain number and one unit word,
+  // so these were refused, or 10 N m at 30° read as a unit "N m at deg" (R4.3, R4.4, R5). The size
+  // never starts against a name or a closing bracket, so sin(30) ∠ 30° does not take (30) for it.
+  s = s.replace(SIZE_AT_ANGLE, 'polarVec($1, $2)')
   s = s.replace(/°/g, ' deg')
   // <3, 4> is a vector and x < 3 a comparison, told apart as splitArgs tells them (angleVectors).
   s = vectorCalls(s)
