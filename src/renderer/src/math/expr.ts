@@ -533,12 +533,14 @@ function wordStart(s: string, i: number): number {
 function atomStart(s: string, i: number): number {
   if (i < 0) return -1
   if (s[i] === ')' || s[i] === ']' || s[i] === '}') {
-    while (s[i] === ')' || s[i] === ']' || s[i] === '}') {
+    let firstOpen = -1
+    while (i >= 0 && (s[i] === ')' || s[i] === ']' || s[i] === '}')) {
       const open = matchBackward(s, i)
       if (open < 0) return -1
-      i = open - 1
+      firstOpen = open
+      i = back(s, open - 1)
     }
-    return isWordChar(s[i]) ? wordStart(s, i) : i + 1
+    return i >= 0 && isWordChar(s[i]) ? wordStart(s, i) : firstOpen
   }
   return isWordChar(s[i]) ? wordStart(s, i) : -1
 }
@@ -570,8 +572,9 @@ function leftOperandStart(s: string, end: number): number {
   let start = factorStart(s, back(s, end))
   while (start >= 0) {
     const j = back(s, start - 1)
-    if (s[j] !== '/' && s[j] !== '*') break
-    const prev = factorStart(s, back(s, j - 1))
+    if (j < 0) break
+    const isOp = s[j] === '/' || s[j] === '*'
+    const prev = factorStart(s, isOp ? back(s, j - 1) : j)
     if (prev < 0) break
     start = prev
   }
@@ -589,7 +592,11 @@ function wordEnd(s: string, i: number): number {
 /** End of the atom starting at `i` — a name, a number or brackets, with any call or index brackets written against it — or -1. */
 function atomEnd(s: string, i: number): number {
   let j = s[i] === '(' || s[i] === '[' || s[i] === '{' ? matchForward(s, i) : isWordChar(s[i]) ? wordEnd(s, i) : -1
-  while (j >= 0 && (s[j + 1] === '(' || s[j + 1] === '[')) j = matchForward(s, j + 1)
+  while (j >= 0) {
+    const n = ahead(s, j + 1)
+    if (n < s.length && (s[n] === '(' || s[n] === '[')) j = matchForward(s, n)
+    else break
+  }
   return j
 }
 
@@ -1077,7 +1084,7 @@ const F = {
 }
 
 const OPS: Record<string, string> = {
-  add: '+', subtract: '-', multiply: '*', divide: '/', mod: '%', smaller: '<', larger: '>',
+  add: '+', subtract: '-', multiply: '*', divide: '/', smaller: '<', larger: '>',
   smallerEq: '<=', largerEq: '>=', equal: '===', unequal: '!==', and: '&&', or: '||'
 }
 
@@ -1120,6 +1127,7 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
         if (fn === 'pow') return `Math.pow(${gen(args[0])}, ${gen(args[1])})`
         if (fn === 'factorial') return `F.fact(${gen(args[0])})`
         if (fn === 'not') return `(!${gen(args[0])} ? 1 : 0)`
+        if (fn === 'mod') return `F.mod(${gen(args[0])}, ${gen(args[1])})`
         const op = OPS[fn]
         if (!op) throw new Error(`unsupported operator ${fn}`)
         return `(${gen(args[0])} ${op} ${gen(args[1])})`

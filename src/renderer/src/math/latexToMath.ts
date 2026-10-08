@@ -208,11 +208,19 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
     // here as well: d/dx 1/x and d/dx √x were "diff(, x)" with the body left outside.
     const lead = peek()
     if (lead === '\\frac' || lead === '\\dfrac' || lead === '\\tfrac' || lead === '\\sqrt') return atom()
-    // \sin x, \sin 2x → take a run of simple tokens (numbers/letters) as the argument.
+    // A function straight after another name or after d/dx is the whole argument with its own: d/dx sin x
+    // was diff(, x)sin(x), the body left outside.
+    if (lead?.startsWith('\\') && FUNCS.has(lead.slice(1))) return atom()
+    // \sin x, \sin 2x, \sin 30°, \sin μ, \sin x! → take a run of simple tokens as the argument.
     let s = ''
     while (i < t.length) {
-      if (/^[0-9a-zA-Z.]$|^\\(pi|theta|alpha|beta|phi)$/.test(peek())) s += atom()
-      else if (peek() === '^' && (t[i + 1] === '\\circ' || (t[i + 1] === '{' && t[i + 2] === '\\circ' && t[i + 3] === '}'))) s += atom()
+      const p = peek() ?? ''
+      if (p === '^' || p === '_') {
+        s += atom()
+        continue
+      }
+      const greek = p.startsWith('\\') && GREEK[p.slice(1)] !== undefined
+      if (/^[0-9a-zA-Z.!°]$/.test(p) || greek) s += atom()
       else break
     }
     return s
@@ -269,14 +277,19 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
     }
     if (tok === '#?') return ''
     if (tok === '^') {
-      const a = arg()
+      let a = arg()
+      if ((a === '-' || a === '+') && /^\d$/.test(peek() ?? '')) {
+        let digits = ''
+        while (i < t.length && /^\d$/.test(peek() ?? '')) digits += atom()
+        a += digits
+      }
       if (a === '°' || a === '(°)') return '°'
       if (a === "'" || a === '\\prime') return "'"
       return `^(${a})`
     }
     if (tok === '_') {
       const a = arg()
-      return /^[A-Za-z0-9]+$/.test(a) ? a : `_${a}`
+      return /^[A-Za-z0-9]+$/.test(a) ? a : `_(${a})`
     }
     if (!tok.startsWith('\\')) {
       if (tok === '·') return opts.vectorOps ? '·' : '*'
@@ -319,7 +332,7 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       case 'tfrac': {
         const a = arg()
         const b = arg()
-        const dm = b.match(/^(?:\(?d\)?|\\differentialD)\s*([a-z])$/)
+        const dm = b.match(/^(?:\(?d\)?|\\differentialD)\s*([a-zA-Z\u0370-\u03FF])$/u)
         if ((a === 'd' || a === '(d)') && dm) {
           const body = fnArg()
           return `diff(${body}, ${dm[1]})`
@@ -409,6 +422,14 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       case 'placeholder':
         arg()
         return ''
+      case 'langle':
+        return '<'
+      case 'rangle':
+        return '>'
+      case 'lbrack':
+        return '['
+      case 'rbrack':
+        return ']'
       case 'begin': {
         // \begin{pmatrix} 3 \\ 4 \end{pmatrix}: a column vector, or any matrix, cell by cell.
         // Rows are split at \\ and cells at &; each cell is a small expression of its own.
@@ -498,10 +519,10 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
             hi = arg()
           }
         }
-        const m = lo.match(/^([a-z])=(.*)$/)
+        const m = lo.match(/^([a-zA-Z])=(.*)$/)
         const v = m ? m[1] : 'x'
         const from = m ? m[2] : lo
-        const body = seq(null)
+        const body = seq(['=', '<', '>', '\\le', '\\leq', '\\ge', '\\geq', '\\ne', '\\neq'])
         return `${name === 'sum' ? 'sigma' : 'product'}(${body.replace(new RegExp(`\\b${v}\\b`, 'g'), 'x')}, ${from}, ${hi})`
       }
     }

@@ -408,9 +408,7 @@ describe('R4.7 sec, csc and cot of a complex number', () => {
   })
 })
 
-// HELD for the next round (P-PARSE batch B5, not in the Pro-account queue): a real lead, proven by this
-// failing test; it runs again when its batch is fixed.
-describe.skip('R4.8 3 N × A takes N alone as the left operand', () => {
+describe('R4.8 3 N × A takes N alone as the left operand', () => {
   it('takes the quantity 3 N as the left operand of ×', () => {
     const node = math.parse(preprocess('3 N × A'))
     const call = node.filter((n: MathNode) => n.type === 'FunctionNode' && (n as FunctionNode).fn.name === 'timesOrCross')[0] as FunctionNode | undefined
@@ -476,7 +474,7 @@ describe('H2 √ of a number in e-notation', () => {
 
 // HELD for the next round (P-PARSE batch B7, not in the Pro-account queue): a real lead, proven by this
 // failing test; it runs again when its batch is fixed.
-describe.skip('H3 mod in a drawn graph', () => {
+describe('H3 mod in a drawn graph', () => {
   it('compiles x mod 3 as the modulo, positive for a negative x', () => {
     const f = compileScalar('x mod 3', ['x'], () => ({}))
     expect(f({ x: -5 })).toBe(1)
@@ -511,9 +509,7 @@ describe('H4 · between complex numbers', () => {
   })
 })
 
-// HELD for the next round (P-PARSE batch B5, not in the Pro-account queue): a real lead, proven by this
-// failing test; it runs again when its batch is fixed.
-describe.skip('H5 a space before a call\'s bracket beside × or ·', () => {
+describe('H5 a space before a call\'s bracket beside × or ·', () => {
   it('reads 2 × sin (30), sin (30) × 2 and 2 · sqrt (4) with the call whole', () => {
     expect(value('2 × sin (30)')).toBeCloseTo(1, 12)
     expect(value('sin (30) × 2')).toBeCloseTo(1, 12)
