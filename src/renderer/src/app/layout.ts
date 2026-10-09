@@ -13,7 +13,7 @@ import { QUALITY, qualityNow } from '../render/renderer'
 import { useParticleLab } from '../render/GpuParticles'
 import { warmupCas } from '../math/cas'
 import { MODES, modeById, useApp, type ModeId } from './modes'
-import { PANEL_TITLES, isPanelOpen, refreshOpenPanels, showPanel } from './panels'
+import { hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, regroupWithViewport, showPanel } from './panels'
 import { LAYOUT_VERSION, columns, needsLayoutRebuild, panelHome, panelsForMode, type LayoutStamp } from './layoutMath'
 
 export const LAYOUT_KEY = 'physlab.layout'
@@ -38,7 +38,15 @@ export function enterMode(id: ModeId) {
   // The centre panel is switched directly: requestFocus holds one panel at a time, so asking
   // for two in a row would lose the first.
   if (m.centre) showPanel(m.centre)
-  else if (isPanelOpen('maths')) showPanel('viewport')
+  else if (isPanelOpen('maths')) {
+    // Visualize may have split the Maths screen off beside the drawing: in a mode without a centre
+    // panel it goes back behind the drawing, as a tab, instead of keeping a column everywhere.
+    regroupWithViewport('maths')
+    showPanel('viewport')
+  }
+  // Graphing's own list does not follow the student into other modes (the Console did, and the
+  // owner saw it under Geometry).
+  if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
   if (m.panel) s.requestFocus(m.panel)
   if (!m.ready) s.pushLog({ input: m.label, kind: 'info', text: `${m.label} is coming in the next build stages: ${m.description}` })
   // Pyodide takes several seconds to wake. Starting it the moment the calculator opens means the
@@ -72,12 +80,19 @@ export function buildLayout(api: DockviewApi, modeId: ModeId): void {
   const c = columns(api.width, api.height)
   api.clear()
   api.addPanel({ id: 'viewport', component: 'viewport', title: PANEL_TITLES.viewport, minimumWidth: c.viewportMin })
+  let leftDone: string | null = null
   for (const id of panelsForMode(m)) {
     if (id === 'viewport' || !PANEL_TITLES[id]) continue
     const home = panelHome(id)
     const base = { id, component: id, title: PANEL_TITLES[id] }
     if (home === 'centre') api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'within' } })
-    else if (home === 'left') api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'left' }, initialWidth: c.examples, minimumWidth: c.examplesMin })
+    // A second left panel (Graphing's Examples and Expressions) is a tab beside the first, not a
+    // second column: two columns took about 460 px of a 1366 px laptop.
+    else if (home === 'left' && leftDone) api.addPanel({ ...base, position: { referencePanel: leftDone, direction: 'within' } })
+    else if (home === 'left') {
+      api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'left' }, initialWidth: c.examples, minimumWidth: c.examplesMin })
+      leftDone = id
+    }
     else if (home === 'below') api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'below' }, initialHeight: c.bottom, minimumHeight: c.bottomMin })
     else api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'right' }, initialWidth: c.side, minimumWidth: c.sideMin })
   }

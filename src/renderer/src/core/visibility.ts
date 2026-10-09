@@ -20,13 +20,13 @@ export type Space = 'vectors' | 'shapes' | 'graphing' | 'lab'
 export function spaceOf(mode: ModeId): Space | null {
   switch (mode) {
     case 'calculator':
+    case 'graphing':
+      return 'graphing'
     case 'vectors':
     case 'problems':
       return 'vectors'
     case 'shapes':
       return 'shapes'
-    case 'graphing':
-      return 'graphing'
     case 'lab':
       return 'lab'
     default:

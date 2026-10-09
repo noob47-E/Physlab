@@ -31,7 +31,7 @@ import type { LengthUnit, ToolId } from '../core/types'
 import { shelfFitLabel, TOOLS } from '../render/tools'
 import { saveViewportImage } from '../render/exportImage'
 import { THEMES, THEME_LABELS, useTheme } from './theme'
-import { useTour } from './tour/Tour'
+import { StartHereChip, useTour } from './tour/Tour'
 import { enterMode, resetLayout } from './layout'
 import { PANEL_LIST, togglePanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
@@ -543,7 +543,13 @@ export function TopBar() {
         label="Help"
         items={[
           { label: 'Take the tour', run: () => useTour.getState().start() },
-          { label: 'Practice tasks', run: () => useTour.getState().setMissions(true) },
+          {
+            label: 'Start here',
+            run: () => {
+              useTour.getState().setChipHidden(false)
+              useTour.getState().setMissions(true)
+            }
+          },
           { label: 'Keyboard and mouse', run: () => useTour.getState().setShortcuts(true) },
           '-',
           // Which build is this? Handy after installing an update over an older one.
@@ -592,6 +598,8 @@ export function TopBar() {
           ]}
         />
       </div>
+
+      <StartHereChip />
 
       <button data-tour="search" className="menu-btn flex items-center gap-2 text-[var(--text-dim)]" onClick={() => setSearchOpen(true)} title="Search everything (Ctrl+K)">
         <Search size={14} />
@@ -643,7 +651,7 @@ function ToolButton({ id, on, label, onClick }: { id: ToolId; on: boolean; label
   const info = TOOLS.find((t) => t.id === id)!
   const card = useToolCard(`tool:${id}`)
   return (
-    <button className={`tool ${on ? 'on' : ''}`} onClick={onClick} aria-label={label ? undefined : info.label} {...card}>
+    <button data-tour={`tool-${id}`} className={`tool ${on ? 'on' : ''}`} onClick={onClick} aria-label={label ? undefined : info.label} {...card}>
       {ICONS[id]}
       {label && <span>{info.label}</span>}
     </button>

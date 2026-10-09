@@ -34,9 +34,9 @@ const obj = (name: string, space?: Space): SceneObject =>
   ({ id: name, name, type: 'point', def: [0, 0, 0], color: '#fff', visible: true, locked: false, showLabel: true, space }) as unknown as SceneObject
 
 describe('which drawing a mode looks at', () => {
-  it('sends the calculator, the vectors and the practice problems to one drawing', () => {
+  it('sends the vectors and the practice problems to one drawing, and the calculator to graphing', () => {
     expect(spaceOf('vectors')).toBe('vectors')
-    expect(spaceOf('calculator')).toBe('vectors')
+    expect(spaceOf('calculator')).toBe('graphing')
     expect(spaceOf('problems')).toBe('vectors')
     expect(spaceOf('shapes')).toBe('shapes')
     expect(spaceOf('graphing')).toBe('graphing')

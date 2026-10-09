@@ -75,7 +75,9 @@ export interface LayoutStamp {
 
 // 3: the `calculator` and `working` panels became one `maths` panel. A saved layout that still
 // names the dead ids would restore with empty tabs, so the version bump rebuilds it.
-export const LAYOUT_VERSION = 3
+// 4: the Console is no longer a mode's own panel (Graphing has Expressions), so a saved layout
+// that still holds it — in Graphing, or left open in Geometry after a visit — is rebuilt once.
+export const LAYOUT_VERSION = 4
 
 /**
  * A saved layout is used again only when it was made by this schema for this size of window.
@@ -97,6 +99,7 @@ export function panelHome(id: string): PanelHome {
       return 'centre'
     case 'outliner':
     case 'examples':
+    case 'expressions':
       return 'left'
     case 'console':
     case 'timeline':

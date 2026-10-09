@@ -302,7 +302,7 @@ function Transport() {
   const settings = useScene((s) => s.settings)
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-[color:var(--line)] bg-[var(--bg-1)] px-3 py-2">
-      <button className="btn primary" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
+      <button className="btn primary" data-tour="play" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
         {playing ? <Pause size={13} /> : <Play size={13} />}
         {/* Both words share one cell and the other one is hidden, so the button is as wide as
             "Pause" either way: "Play" turning into the wider "Pause" was enough to push the row

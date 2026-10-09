@@ -24,8 +24,9 @@ import { formatComplex } from '../calc/engine'
 import { orderRoots } from '../calc/roots'
 import { calcNum, type CalcPrecision } from '../calc/format'
 import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
-import { showPanel } from '../app/panels'
+import { showBeside, showPanel } from '../app/panels'
 import { enterMode } from '../app/layout'
+import { useApp } from '../app/modes'
 
 type Node = MathNode & Record<string, unknown>
 
@@ -268,7 +269,12 @@ function thetaSpelt(text: string): string {
  * graph exists, so a refused line (an unknown name) leaves the student where they were.
  */
 function landInGraphing(): string {
-  if (scene().activeSpace === 'graphing') return ''
+  if (scene().activeSpace === 'graphing') {
+    // The Calculator looks at the Graphing drawing too (P-GCALC GC1): the picture opens beside the
+    // Maths screen there, instead of switching away from the working.
+    if (useApp.getState().mode === 'calculator') showBeside('viewport', 'maths')
+    return ''
+  }
   enterMode('graphing')
   return ' Switched to Graphing to show it.'
 }
@@ -1561,8 +1567,8 @@ async function tryCas(input: string): Promise<boolean> {
       visualize: single && args[0].includes('=')
         ? () => {
             const [l, rr] = args[0].split('=')
-            visualizeGraph(`y = ${l} - (${rr})`, [`(${l}) - (${rr})`], 'explicit')
-            roots.forEach((x0) => visualizePoint([x0, 0, 0]))
+            // Pressed again, the graph already drawn is shown, and its roots are already marked.
+            if (visualizeGraph(`y = ${l} - (${rr})`, [`(${l}) - (${rr})`], 'explicit', { reuse: true })) roots.forEach((x0) => visualizePoint([x0, 0, 0]))
           }
         : undefined
     })
@@ -1601,7 +1607,7 @@ async function tryCas(input: string): Promise<boolean> {
     kind: 'result',
     text: undefined,
     tex: `${label ? label + ' = ' : ''}${r.latex}${plusC}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}${unitNote ? `\\quad\\text{(${unitNote})}` : ''}`,
-    visualize: isFunctionResult ? () => visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit') : undefined,
+    visualize: isFunctionResult ? () => void visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit', { reuse: true }) : undefined,
     working: steps
       ? () => {
           usePure.getState().run(steps.job, steps.input, linearToLatex(steps.input))

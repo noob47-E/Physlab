@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { materialById } from './materials'
 import { groundTopOf } from './energy'
+import { bumpAction } from '../core/actionSignals'
 import { DEFAULT_WORLD, type Actuator, type BodyDef, type BodyId, type BodyState, type ContactEvent, type Link, type LinkKind, type ShapeKind, type WorldSettings } from './types'
 import { SimWorld } from './world'
 import { addSample, type Sample } from './recording'
@@ -500,7 +501,10 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
 
-  resetRun: () => set({ runNonce: get().runNonce + 1, engineTime: 0, live: {}, recording: {}, contacts: [] }),
+  resetRun: () => {
+    bumpAction('resets') // the Start here mission's Reset (a preset load also zeroes the clock, but is not one)
+    set({ runNonce: get().runNonce + 1, engineTime: 0, live: {}, recording: {}, contacts: [] })
+  },
   snapshot: () => ({ bodies: get().bodies, links: get().links, world: get().world, sideView: get().sideView }),
   loadSandbox: (file) => {
     set({

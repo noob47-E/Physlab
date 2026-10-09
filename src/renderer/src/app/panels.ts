@@ -6,7 +6,7 @@
 
 import { create } from 'zustand'
 import type { DockviewApi } from 'dockview-react'
-import { columns, panelHome } from './layoutMath'
+import { columns, panelHome, windowClass } from './layoutMath'
 import { HIDDEN_MODES, hiddenPanels, type ModeId } from './modes'
 
 /** Panel id → the name shown on its tab. */
@@ -24,6 +24,7 @@ export const PANEL_TITLES: Record<string, string> = {
   console: 'Console',
   timeline: 'Timeline',
   graphs: 'Graphs',
+  expressions: 'Expressions',
   gpulab: 'GPU Lab',
   sandbox: 'Sandbox'
 }
@@ -42,7 +43,8 @@ export const PANEL_LIST = panelList()
 
 /** Which panels share a home, so a closed one comes back beside the ones it lived with. */
 const PANEL_GROUPS: string[][] = [
-  ['outliner', 'examples'],
+  // Graphing's list of lines lives on the left with the other lists.
+  ['outliner', 'examples', 'expressions'],
   ['viewport', 'maths'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
@@ -109,6 +111,43 @@ export function showPanel(id: string): void {
     })
   }
   api.getPanel(id)?.api.setActive()
+  refreshOpenPanels()
+}
+
+/**
+ * Show panel `id` NEXT TO panel `besideId`, both in view (P-GCALC GC2). The Calculator's Visualize
+ * used to bring the drawing forward as a tab in the Maths screen's own group, hiding the working
+ * it was drawing. Now the drawing moves into its own group to the right of Maths (below it on a
+ * narrow window); moved, not re-made, so the drawing keeps its view. Already beside: it is only made
+ * active. With `besideId` closed it is simply shown.
+ */
+export function showBeside(id: string, besideId: string): void {
+  const api = dockApi
+  if (!api || !PANEL_TITLES[id] || isPanelHidden(id)) return
+  const beside = api.getPanel(besideId)
+  if (!beside) return showPanel(id)
+  const narrow = windowClass(api.width) === 'narrow'
+  const panel = api.getPanel(id)
+  if (panel) {
+    if (panel.api.group === beside.api.group) panel.api.moveTo({ group: beside.api.group, position: narrow ? 'bottom' : 'right' })
+  } else {
+    api.addPanel({ id, component: id, title: PANEL_TITLES[id], position: { referencePanel: besideId, direction: narrow ? 'below' : 'right' } })
+  }
+  api.getPanel(id)?.api.setActive()
+  refreshOpenPanels()
+}
+
+/**
+ * Puts panel `id` back into the drawing's own group when showBeside split it off (P-GCALC GC2): a
+ * mode with no centre panel must not keep the Maths screen as a column beside its drawing.
+ */
+export function regroupWithViewport(id: string): void {
+  const api = dockApi
+  const panel = api?.getPanel(id)
+  const viewport = api?.getPanel('viewport')
+  if (!api || !panel || !viewport || panel.api.group === viewport.api.group) return
+  panel.api.moveTo({ group: viewport.api.group, position: 'center' })
+  viewport.api.setActive()
   refreshOpenPanels()
 }
 

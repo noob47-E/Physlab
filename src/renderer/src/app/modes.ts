@@ -83,7 +83,7 @@ export const MODES: ModeDef[] = [
     description: 'Graph functions, equations, inequalities, polar and parametric curves, 3D surfaces.',
     ready: true,
     tools: ['select', '|', 'point', 'intersect', 'distance', '|', 'delete'],
-    panel: 'console',
+    panel: 'expressions',
     examples: true
   },
   {

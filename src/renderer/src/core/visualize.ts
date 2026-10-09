@@ -136,12 +136,29 @@ export function visualizePoint(p: V3, name?: string): void {
   remember('value', b)
 }
 
-export function visualizeGraph(source: string, exprs: string[], kind: GraphKind = 'explicit', extra: { tMin?: number; tMax?: number; op?: '<' | '<=' | '>' | '>='; name?: string; color?: string } = {}): void {
+/**
+ * Draws a graph. With `reuse` (the Visualize buttons), a line that is already drawn is selected and
+ * shown instead: pressing Visualize twice on one line used to stack a second, identical graph and a
+ * second Expressions row. Returns whether it drew a new graph. A line typed in the bar never reuses.
+ */
+export function visualizeGraph(source: string, exprs: string[], kind: GraphKind = 'explicit', extra: { tMin?: number; tMax?: number; op?: '<' | '<=' | '>' | '>='; name?: string; color?: string; reuse?: boolean } = {}): boolean {
+  if (extra.reuse) {
+    const same = Object.values(scene().objects).find(
+      (o) => o.type === 'graph' && o.kind === kind && o.op === extra.op && o.tMin === extra.tMin && o.tMax === extra.tMax && o.exprs.length === exprs.length && o.exprs.every((e, i) => e === exprs[i])
+    )
+    if (same) {
+      if (!same.visible) scene().updateObject(same.id, (d) => void (d.visible = true))
+      scene().select([same.id])
+      scene().setViewMode(kind === 'surface' ? '3d' : '2d')
+      return false
+    }
+  }
   const b = new Builder()
   b.graph({ kind, source, exprs, tMin: extra.tMin, tMax: extra.tMax, op: extra.op, showRoots: kind === 'explicit', showExtrema: kind === 'explicit' }, { name: extra.name, color: extra.color })
   b.commit()
   if (kind === 'surface') scene().setViewMode('3d')
   else scene().setViewMode('2d')
+  return true
 }
 
 /** The student's precision for a number written on the drawing. */

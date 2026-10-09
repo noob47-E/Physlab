@@ -638,7 +638,7 @@ function EquationMode() {
           )}
         </>
       )
-      visualize = () => visualizeGraph(`y = ${expr}`, [expr], 'explicit')
+      visualize = () => void visualizeGraph(`y = ${expr}`, [expr], 'explicit', { reuse: true })
     }
   } catch (e) {
     out = <span className="text-[color:var(--bad)]">{e instanceof Error ? e.message : String(e)}</span>

@@ -2,10 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Calculator, CornerDownLeft } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { runCommand } from '../lang/commands'
-import { useScene } from '../core/store'
+import { scene, useScene } from '../core/store'
 import { cancelCas, useCasStatus, warmupCasWhenIdle } from '../math/cas'
 import { describeCasStatus } from '../ui/casStatus'
 import { decideKey, recall } from './commandBarKeys'
+import { AnswerLine } from './AnswerLine'
+import { bumpAction } from '../core/actionSignals'
+
+const graphCount = (): number => Object.values(scene().objects).filter((o) => o.type === 'graph').length
 
 /**
  * One line, in plain words. The placeholder used to be a wall of syntax; a student who typed
@@ -127,10 +131,14 @@ export function CommandBar() {
     setText('')
     setOpen(false)
     unpick()
+    const graphsBefore = graphCount()
     await runCommand(v)
+    // A graph the student typed: the Start here mission counts this, not graphs loaded from a file.
+    if (graphCount() > graphsBefore) bumpAction('typedGraphs')
   }
 
   return (
+    <>
     <div className="cmdbar">
       <Calculator size={16} className="text-ink-faint" />
       <div className="relative flex-1">
@@ -222,5 +230,8 @@ export function CommandBar() {
         )}
       </span>
     </div>
+    {/* The Console is closed by default, so the newest answer shows here (answers are mandatory). */}
+    <AnswerLine />
+    </>
   )
 }

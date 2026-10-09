@@ -429,8 +429,8 @@ describe('the store, without the handheld', () => {
     // It follows the panel's scroll and the head's growth.
     expect(maths).toMatch(/document\.addEventListener\('scroll', place, true\)/)
     expect(maths).toMatch(/new ResizeObserver\(place\)/)
-    // Drawing goes to the viewport tab beside this screen, where a hidden drawing used to land.
-    expect(maths).toMatch(/if \(draw\(input\)\) showPanel\('viewport'\)/)
+    // Drawing opens the viewport beside this screen (P-GCALC GC2), where a hidden drawing used to land.
+    expect(maths).toMatch(/if \(draw\(input\)\) \{\s*showBeside\('viewport', 'maths'\)/)
   })
 
   it('does not start the algebra engine twice', () => {

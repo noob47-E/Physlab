@@ -78,6 +78,8 @@ export interface SceneState {
    * drawn answer whose vectors were removed, and the undo that brings them back brings it back.
    */
   removeObjects: (ids: ObjId[], opts?: { record?: boolean }) => void
+  /** The objects in a new order (the Expressions list's Move up / Move down), as one undo step. */
+  setOrder: (order: ObjId[]) => void
   /**
    * Geometry Lego. `breakApart` turns a decomposed polygon into one free polygon per part, each
    * a rigid piece the student slides, turns and flips; `fusePieces` joins touching shapes —
@@ -514,6 +516,13 @@ export const useScene = create<SceneState>()((set, get) => {
       const history = rec && !gesture ? record() : {}
       const updated = produce(objects[id], recipe)
       commit({ ...objects, [id]: updated }, order, history)
+    },
+
+    setOrder: (next) => {
+      const { objects, order } = get()
+      // Only a reordering of the same objects: anything else is not this action's to do.
+      if (next.length !== order.length || next.some((id) => !objects[id]) || next.every((id, i) => id === order[i])) return
+      commit(objects, next, record())
     },
 
     removeObjects: (ids, opts = {}) => {

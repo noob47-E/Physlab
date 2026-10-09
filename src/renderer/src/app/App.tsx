@@ -30,6 +30,7 @@ const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.S
 const VectorCalc = lazy(() => import('../panels/VectorCalc').then((m) => ({ default: m.VectorCalc })))
 const Maths = lazy(() => import('../panels/Maths').then((m) => ({ default: m.Maths })))
 const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.Graphs })))
+const Expressions = lazy(() => import('../panels/Expressions').then((m) => ({ default: m.Expressions })))
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
@@ -49,6 +50,7 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   console: Console,
   timeline: Timeline,
   graphs: Graphs,
+  expressions: Expressions,
   gpulab: GpuLab,
   sandbox: SandboxPanel
 }

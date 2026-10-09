@@ -136,8 +136,8 @@ Examples ▸ **Free fall: find g from d and t** sets the whole thing up in one c
 
 ## Help for new users
 
-- On the first run a welcome card offers a **two-minute tour** and four starting points.
-- **Help ▸ Practice tasks** lists small tasks ("Draw a vector", "Sketch a shape", "Split a shape into simple parts") that tick themselves off as you do them.
+- On the first run a welcome card offers a **two-minute tour**, **Start here (6 missions)** and four starting points.
+- **Help ▸ Start here** (and the "Start here N of 6" chip in the top bar) lists six missions — show your working, draw a graph, draw and drag a vector, find the area of a shape, run an experiment, answer a question — that tick themselves off as you do them; **Show me** points at the first thing to press.
 - **Help ▸ Keyboard and mouse** lists every shortcut. Everything is also in **Ctrl+K**.
 
 ## Measurements

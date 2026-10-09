@@ -5,6 +5,7 @@ import { scene } from '../core/store'
 import { useParticleLab } from '../render/GpuParticles'
 import { fitCamera, resetCamera } from '../render/viewState'
 import { enterMode } from '../app/layout'
+import type { ModeId } from '../app/modes'
 import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
 
@@ -22,6 +23,12 @@ export interface Example {
   what: string
   tryThis: string
   commands: string[]
+  /**
+   * The mode to open before the commands run, so what they make is stored in that mode's drawing:
+   * a slider made from Vectors (the launch mode) stayed in the Vectors drawing, and Graphing's
+   * Slider dock never showed it.
+   */
+  mode?: ModeId
   after?: () => void
 }
 
@@ -171,6 +178,7 @@ export const EXAMPLES: Example[] = [
     what: 'Area = \u03c0r\u00b2 and circumference = 2\u03c0r, each shown as the formula, the numbers and the answer.',
     tryThis: 'Drag the centre or change the radius in Properties and watch both update.',
     commands: ['P = (0, 0)', 'Circle(P, 3)'],
+    mode: 'shapes',
     after: () => {
       const c = Object.values(scene().objects).find((o) => o.type === 'circle')
       enterMode('shapes')
@@ -185,6 +193,7 @@ export const EXAMPLES: Example[] = [
     what: 'A house shape is a rectangle plus a triangle. PhysLab recognises it and splits it into simple shapes.',
     tryThis: 'In the Measure tab press Decompose, then hover the formulas to shade each part. Drag the roof point up and down.',
     commands: ['Polygon((0,0), (6,0), (6,4), (3,7), (0,4))'],
+    mode: 'shapes',
     after: () => {
       const poly = Object.values(scene().objects).find((o) => o.type === 'polygon')
       enterMode('shapes')
@@ -224,7 +233,8 @@ export const EXAMPLES: Example[] = [
     level: 'Intermediate',
     what: 'y = x tan θ − g x² / (2 v² cos² θ). Sliders v (speed) and a (angle in degrees).',
     tryThis: 'Drag the sliders. The marked root is the range; the top point is the maximum height.',
-    commands: ['v = 15', 'a = 45', 'y = x*tan(a*pi/180) - 9.8*x^2/(2*v^2*cos(a*pi/180)^2)']
+    commands: ['v = 15', 'a = 45', 'y = x*tan(a*pi/180) - 9.8*x^2/(2*v^2*cos(a*pi/180)^2)'],
+    mode: 'graphing'
   },
   {
     title: 'Charged particles in a magnetic field',
@@ -248,6 +258,48 @@ export const EXAMPLES: Example[] = [
       useLab.getState().setTables([freeFallReadings()])
       enterMode('lab')
     }
+  },
+  // Pictures made of equations (P-GCALC GC6, the owner: "a person should be able to make cool
+  // pictures with it too"). tests/examplePictures.test.ts runs each one through the command bar.
+  {
+    title: 'A smiley face',
+    topic: 'Drawing a picture with equations',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'Circles and a curve make a face. Change the numbers to change the smile.',
+    tryThis: 'Change 0.3 in the smile to 0.6 in the Expressions list. Save it with File ▸ Export the drawing as an image…',
+    commands: ['x^2 + y^2 = 16', '(x + 1.5)^2 + (y - 1.5)^2 = 0.25', '(x - 1.5)^2 + (y - 1.5)^2 = 0.25', 'piecewise(0.3x^2 - 2 from -2 to 2)'],
+    mode: 'graphing'
+  },
+  {
+    title: 'A flower',
+    topic: 'Polar curves',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'A polar curve. Change 5 to another whole number for more or fewer petals.',
+    tryThis: 'Try 4, then 7: an even number gives twice as many petals. Save it with File ▸ Export the drawing as an image…',
+    commands: ['r = 3 cos(5θ)'],
+    mode: 'graphing'
+  },
+  {
+    title: 'Waves that move',
+    topic: 'Moving a graph with a slider',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'Press play on the slider k and watch the wave travel.',
+    tryThis: 'Drag k by hand too: both waves slide along, the smaller one half as fast. Save it with File ▸ Export the drawing as an image…',
+    commands: ['k = 0', 'y = sin(x - k)', 'y = 0.5 sin(2x - k)'],
+    mode: 'graphing'
+  },
+  {
+    title: 'A shaded window',
+    topic: 'Shading with inequalities',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'Inequalities shade a region. Change the numbers to move the edges.',
+    tryThis: 'The window is where all three shadings overlap. Save it with File ▸ Export the drawing as an image…',
+    commands: ['y < 3', 'y > -1', 'y < x + 4'],
+    mode: 'graphing'
   }
 ]
 
@@ -284,6 +336,7 @@ export async function runExample(ex: Example): Promise<void> {
   s.newScene()
   s.setViewMode('2d')
   resetCamera()
+  if (ex.mode) enterMode(ex.mode)
   for (const c of ex.commands) await runCommand(c)
   ex.after?.()
   fitCamera()

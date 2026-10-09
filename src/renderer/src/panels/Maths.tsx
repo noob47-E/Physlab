@@ -31,7 +31,8 @@ import { parseExpr, varsOf } from '../math/pure/mono'
 import { useScene } from '../core/store'
 import { themeColor } from '../app/theme'
 import { placeTourCard } from '../app/layoutMath'
-import { showPanel } from '../app/panels'
+import { showBeside } from '../app/panels'
+import { enterMode } from '../app/layout'
 import { visualizeArea, visualizeGraph, visualizePoint, visualizeTangent, visualizeVector } from '../core/visualize'
 import { Builder } from '../core/factory'
 import { Tex } from '../ui/Tex'
@@ -376,11 +377,12 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     }
     if (/=/.test(input) && /x/.test(input)) {
       const [l, r] = input.split('=')
-      visualizeGraph(`y = ${l} − (${r})`, [`(${keypadToMath(l)}) - (${keypadToMath(r)})`], 'explicit')
+      // reuse: Visualize again on the same line shows the graph already drawn rather than a second copy.
+      visualizeGraph(`y = ${l} − (${r})`, [`(${keypadToMath(l)}) - (${keypadToMath(r)})`], 'explicit', { reuse: true })
       return true
     }
     if (/(^|[^a-z])x([^a-z]|$)/.test(input)) {
-      visualizeGraph(`y = ${input}`, [keypadToMath(input)], 'explicit')
+      visualizeGraph(`y = ${input}`, [keypadToMath(input)], 'explicit', { reuse: true })
       return true
     }
     const sig = input.match(/^sigma\((.*)\)$/)
@@ -413,6 +415,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   // Every bare evaluation inside drawLine (a limit, a point, a sum's terms, a vector's angle) reads sin and atan in the
   // screen's unit and leaves the mode that was held as it was, whatever an earlier line set (H3).
   const draw = (input: string): boolean => withAngle(angleUnit, () => drawLine(input))
+  // Set once Visualize has drawn something: then Open in Graphing has a picture to open.
+  const [drew, setDrew] = useState(false)
 
   const visualize = (): void => {
     let input: string
@@ -424,9 +428,11 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     }
     if (!input || mode === 'BASE-N') return
     try {
-      // The viewport is a tab beside this screen in the default layout, so a drawing made
-      // without bringing it forward went where the student could not see it.
-      if (draw(input)) showPanel('viewport')
+      // The drawing opens beside this screen, so the picture and the working are seen together.
+      if (draw(input)) {
+        showBeside('viewport', 'maths')
+        setDrew(true)
+      }
     } catch (e) {
       // The message alone: String(e) put "Error: " in front of the tangent's own sentence ("There is no tangent there…").
       setResult({ main: '', src: input, error: { sentence: 'I cannot draw that one.', detail: e instanceof Error ? e.message : String(e) } })
@@ -455,7 +461,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
             =
           </button>
           <div className="relative flex items-center">
-            <button className="btn" onClick={() => workOut()} disabled={mode === 'BASE-N'} title="Show the steps, worked out exactly">
+            <button className="btn" data-tour="work-it-out" onClick={() => workOut()} disabled={mode === 'BASE-N'} title="Show the steps, worked out exactly">
               <Play size={13} /> Work it out
             </button>
             <button className="btn ghost px-1" onClick={() => setJobs(!jobs)} disabled={mode === 'BASE-N'} title="Work it out as a particular kind of question">
@@ -475,6 +481,11 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
           <button className="btn" onClick={visualize} disabled={mode === 'BASE-N'} title="Show this calculation in the viewport (graph, tangent, area, vector…)">
             <Eye size={13} /> Visualize
           </button>
+          {drew && (
+            <button className="btn" onClick={() => enterMode('graphing')} title="Open this picture in Graphing, with its list of expressions">
+              Open in Graphing
+            </button>
+          )}
           <div className="seg" title="The angle unit for sin, cos and tan">
             <button className={angleUnit === 'deg' ? 'on' : ''} onClick={() => setSettings({ angleUnit: 'deg' })}>
               DEG
@@ -1078,8 +1089,8 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
             onClick={() => {
               // visualizeGraph wants the expression itself, not "y = …", and an equation is
               // graphed as its left-hand side so the roots land where the curve crosses y = 0.
-              visualizeGraph(input, [input.split('=')[0].trim()], 'explicit')
-              showPanel('viewport')
+              visualizeGraph(input, [input.split('=')[0].trim()], 'explicit', { reuse: true })
+              showBeside('viewport', 'maths')
             }}
           >
             <Eye size={13} /> Show on the graph

@@ -38,6 +38,7 @@ import { workSteps } from '../math/pure/store'
 import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
 import { PartRows, questionVerdict, SegmentLines, tally, type PartAnswer, type RowCheck } from './QuestionParts'
+import { usePracticeMission } from './practiceMission'
 
 const SETTINGS_KEY = 'physlab.practice'
 const LEVELS: Level[] = ['Basic', 'Intermediate', 'Advanced']
@@ -366,6 +367,7 @@ export function Practice() {
     // recorded once and never replaced; one first tried after the full solution is not right first time.
     const s = useSession.getState()
     put({ checks: next, firstTries: recordFirstTries(s.firstTries, next, s.revealed) })
+    if (Object.values(next).some((c) => c && c.verdict !== 'empty')) usePracticeMission.getState().mark()
   }
 
   /** Records this question and moves on; `insert` (Go deeper) is played next, before the rest of the set. */
@@ -482,7 +484,7 @@ export function Practice() {
               </div>
             </div>
             <div className="mt-3 px-3">
-              <button className="btn primary min-h-[44px]" disabled={chosen.length === 0} onClick={startSet}>
+              <button className="btn primary min-h-[44px]" data-tour="start-practice" disabled={chosen.length === 0} onClick={startSet}>
                 <Sparkles size={13} /> Start practice
               </button>
               {chosen.length === 0 && <div className="mt-1 text-warn">Choose at least one topic.</div>}
@@ -536,7 +538,7 @@ export function Practice() {
               </div>
             )}
             <div className="mt-3 px-3">
-              <button className="btn primary min-h-[44px]" disabled={toPlay.length === 0} onClick={startSet}>
+              <button className="btn primary min-h-[44px]" data-tour="start-practice" disabled={toPlay.length === 0} onClick={startSet}>
                 <Sparkles size={13} /> Start {pickedSet ? `“${pickedSet.title}”` : 'practice'}
                 {atDepth !== null && ` — ${toPlay.length} question${toPlay.length === 1 ? '' : 's'}`}
               </button>
@@ -682,7 +684,11 @@ export function Practice() {
             revealed={revealed}
             onChange={(key, v) => put({ typed: { ...useSession.getState().typed, [key]: v } })}
             onEnter={check}
-            onModelShown={() => put({ modelShown: true })}
+            onModelShown={() => {
+              put({ modelShown: true })
+              // A proof-only question has no Check button: seeing the model proof is its answer, so it ticks the Start here mission too.
+              if (unmarked) usePracticeMission.getState().mark()
+            }}
           />
         </div>
 

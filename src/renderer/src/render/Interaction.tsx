@@ -25,6 +25,17 @@ import { visibleOrder } from '../core/visibility'
 import { minorStepOf, normaliseGridStyle, sketchSnap, snapStep, snapToGrid, styleFor3D } from './gridMath'
 import { legoSnap, pieceSnapTolerance, slideAlong } from '../math/lego'
 import { themeColor, useThemed } from '../app/theme'
+import { bumpAction, pressAction } from '../core/actionSignals'
+
+/**
+ * Tells the Start here missions what a Move-tool press just did: a click or tap on a shape, or a
+ * drag of a vector's head. They count actions, because the screen alone cannot show a tap on a
+ * shape that was already selected (core/actionSignals.ts).
+ */
+function signalAction(s: { objects: Record<string, { type: string }> }, id: string, part: string | undefined): void {
+  const k = pressAction(s.objects[id]?.type, part)
+  if (k) bumpAction(k)
+}
 
 interface DragState {
   hit: Hit
@@ -704,6 +715,7 @@ export function Interaction() {
         if (d.moved) s.endGesture()
         const next = selectionAfterClick(s.selection, d.hit.id, e.shiftKey, d.moved)
         if (next) s.select(next)
+        signalAction(s, d.hit.id, d.moved ? d.hit.part : 'click')
         setControls(true)
         showTip(null)
         return
@@ -719,6 +731,7 @@ export function Interaction() {
       if (tool === 'select') {
         const next = dn.hit ? selectionAfterClick(s.selection, dn.hit.id, e.shiftKey, Math.hypot(x - dn.x, y - dn.y) >= 3) : null
         if (next) s.select(next)
+        if (dn.hit && Math.hypot(x - dn.x, y - dn.y) < 3) signalAction(s, dn.hit.id, 'click')
         return
       }
       const clickLike = Math.hypot(x - dn.x, y - dn.y) < 5
