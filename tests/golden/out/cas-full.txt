@@ -1,0 +1,60 @@
+simplify {"deg":false,"expr":"sin(x)^2+cos(x)^2"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+expand {"deg":false,"expr":"(x+2)^6"}  =>  {"latex": "x^{6} + 12 x^{5} + 60 x^{4} + 160 x^{3} + 240 x^{2} + 192 x + 64", "text": "x**6 + 12*x**5 + 60*x**4 + 160*x**3 + 240*x**2 + 192*x + 64", "numeric": null}
+factor {"deg":false,"expr":"x^4-16"}  =>  {"latex": "\\left(x - 2\\right) \\left(x + 2\\right) \\left(x^{2} + 4\\right)", "text": "(x - 2)*(x + 2)*(x**2 + 4)", "numeric": null}
+apart {"deg":false,"expr":"1/(x^2-1)"}  =>  {"latex": "- \\frac{1}{2 \\left(x + 1\\right)} + \\frac{1}{2 \\left(x - 1\\right)}", "text": "-1/(2*(x + 1)) + 1/(2*(x - 1))", "numeric": null}
+diff {"deg":false,"expr":"x^2*sin(x)","var":"x","order":1}  =>  {"latex": "x \\left(x \\cos{\\left(x \\right)} + 2 \\sin{\\left(x \\right)}\\right)", "text": "x*(x*cos(x) + 2*sin(x))", "numeric": null}
+integrate {"deg":false,"expr":"x*exp(x)","var":"x"}  =>  {"latex": "\\left(x - 1\\right) e^{x}", "text": "(x - 1)*exp(x)", "numeric": null}
+integrate {"deg":false,"expr":"exp(-x)","var":"x","lower":"0","upper":"oo"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+limit {"deg":false,"expr":"sin(x)/x","var":"x","to":"0"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+series {"deg":false,"expr":"exp(x)","var":"x","at":"0","n":6}  =>  {"latex": "\\frac{x^{5}}{120} + \\frac{x^{4}}{24} + \\frac{x^{3}}{6} + \\frac{x^{2}}{2} + x + 1", "text": "x**5/120 + x**4/24 + x**3/6 + x**2/2 + x + 1", "numeric": null}
+solve {"deg":false,"eqs":["x^2-5x+6=0"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "2", "text": "2", "numeric": {"re": 2.0}}}, {"x": {"latex": "3", "text": "3", "numeric": {"re": 3.0}}}], "vars": ["x"]}
+simplify {"deg":false,"expr":"(x^2-1)/(x-1)"}  =>  {"latex": "x + 1", "text": "x + 1", "numeric": null}
+simplify {"deg":false,"expr":"log(2, 8)"}  =>  {"latex": "3", "text": "3", "numeric": {"re": 3.0}}
+simplify {"deg":false,"expr":"sqrt(50)"}  =>  {"latex": "5 \\sqrt{2}", "text": "5*sqrt(2)", "numeric": {"re": 7.0710678118654755}}
+simplify {"deg":true,"expr":"sin(30)"}  =>  {"latex": "\\frac{1}{2}", "text": "1/2", "numeric": {"re": 0.5}}
+simplify {"deg":false,"expr":"(-8)^(1/3)"}  =>  {"latex": "2 \\sqrt[3]{-1}", "text": "2*(-1)**(1/3)", "numeric": {"re": 1.0, "im": 1.7320508075688772}}
+simplify {"deg":false,"expr":"exp(i*pi)+1"}  =>  {"latex": "0", "text": "0", "numeric": {"re": 0.0}}
+exact {"deg":false,"expr":"0.3333333333333333"}  =>  {"latex": "\\frac{1}{3}", "text": "1/3", "numeric": {"re": 0.3333333333333333}}
+exact {"deg":false,"expr":"1.4142135623730951"}  =>  {"latex": "\\sqrt{2}", "text": "sqrt(2)", "numeric": {"re": 1.4142135623730951}}
+eval {"deg":true,"expr":"cos(60)^2"}  =>  {"latex": "\\frac{1}{4}", "text": "1/4", "numeric": {"re": 0.25}}
+eval {"deg":false,"expr":"2^100"}  =>  {"latex": "1267650600228229401496703205376", "text": "1267650600228229401496703205376", "numeric": {"re": 1.2676506002282294e+30}}
+expand {"deg":false,"expr":"(a+b)^5"}  =>  {"latex": "a^{5} + 5 a^{4} b + 10 a^{3} b^{2} + 10 a^{2} b^{3} + 5 a b^{4} + b^{5}", "text": "a**5 + 5*a**4*b + 10*a**3*b**2 + 10*a**2*b**3 + 5*a*b**4 + b**5", "numeric": null}
+expand {"deg":false,"expr":"(2x-3)(x+4)"}  =>  {"latex": "2 x^{2} + 5 x - 12", "text": "2*x**2 + 5*x - 12", "numeric": null}
+factor {"deg":false,"expr":"x^2+4"}  =>  {"latex": "x^{2} + 4", "text": "x**2 + 4", "numeric": null}
+factor {"deg":false,"expr":"6a^2b+9ab^2"}  =>  {"latex": "3 a b \\left(2 a + 3 b\\right)", "text": "3*a*b*(2*a + 3*b)", "numeric": null}
+factor {"deg":false,"expr":"x^3-1"}  =>  {"latex": "\\left(x - 1\\right) \\left(x^{2} + x + 1\\right)", "text": "(x - 1)*(x**2 + x + 1)", "numeric": null}
+factor_complex {"deg":false,"expr":"x^2+4"}  =>  {"latex": "\\left(x - 2 i\\right) \\left(x + 2 i\\right)", "text": "(x - 2*I)*(x + 2*I)", "numeric": null}
+factor_complex {"deg":false,"expr":"x^4-1"}  =>  {"latex": "\\left(x - 1\\right) \\left(x + 1\\right) \\left(x - i\\right) \\left(x + i\\right)", "text": "(x - 1)*(x + 1)*(x - I)*(x + I)", "numeric": null}
+apart {"deg":false,"expr":"(x+3)/(2x^3)"}  =>  {"latex": "\\frac{1}{2 x^{2}} + \\frac{3}{2 x^{3}}", "text": "1/(2*x**2) + 3/(2*x**3)", "numeric": null}
+apart {"deg":false,"expr":"1/(x^3(x+1))"}  =>  {"latex": "- \\frac{1}{x + 1} + \\frac{1}{x} - \\frac{1}{x^{2}} + \\frac{1}{x^{3}}", "text": "-1/(x + 1) + 1/x - 1/x**2 + x**(-3)", "numeric": null}
+diff {"deg":false,"expr":"exp(x)*cos(x)","var":"x","order":2}  =>  {"latex": "- 2 e^{x} \\sin{\\left(x \\right)}", "text": "-2*exp(x)*sin(x)", "numeric": null}
+diff {"deg":false,"expr":"x^x","var":"x","order":1}  =>  {"latex": "x^{x} \\left(\\log{\\left(x \\right)} + 1\\right)", "text": "x**x*(log(x) + 1)", "numeric": null}
+diff {"deg":true,"expr":"sin(x)","var":"x","order":1}  =>  {"latex": "\\frac{\\pi \\cos{\\left(\\frac{\\pi x}{180} \\right)}}{180}", "text": "pi*cos(pi*x/180)/180", "numeric": null}
+diff {"deg":false,"expr":"ln(x^2+1)","var":"x","order":1,"at":"1"}  =>  {"latex": "\\frac{2 x}{x^{2} + 1}", "text": "2*x/(x**2 + 1)", "numeric": null, "value": {"latex": "1", "text": "1", "numeric": {"re": 1.0}}}
+diff {"deg":false,"expr":"t^3-4t","var":"t","order":1}  =>  {"latex": "3 t^{2} - 4", "text": "3*t**2 - 4", "numeric": null}
+integrate {"deg":false,"expr":"sin(x)^2","var":"x"}  =>  {"latex": "\\frac{x}{2} - \\frac{\\sin{\\left(2 x \\right)}}{4}", "text": "x/2 - sin(2*x)/4", "numeric": null}
+integrate {"deg":false,"expr":"1/x","var":"x","lower":"1","upper":"e"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+integrate {"deg":false,"expr":"1/x^2","var":"x","lower":"1","upper":"∞"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+integrate {"deg":false,"expr":"exp(-x^2)","var":"x","lower":"-oo","upper":"oo"}  =>  {"latex": "\\sqrt{\\pi}", "text": "sqrt(pi)", "numeric": {"re": 1.772453850905516}}
+integrate {"deg":false,"expr":"1/x","var":"x","lower":"-1","upper":"1"}  =>  {"latex": "\\text{NaN}", "text": "nan", "numeric": {"re": NaN, "im": NaN}}
+integrate {"deg":false,"expr":"sqrt(1-x^2)","var":"x","lower":"0","upper":"1"}  =>  {"latex": "\\frac{\\pi}{4}", "text": "pi/4", "numeric": {"re": 0.7853981633974483}}
+integrate {"deg":true,"expr":"cos(x)","var":"x","lower":"0","upper":"90"}  =>  {"latex": "\\frac{180}{\\pi}", "text": "180/pi", "numeric": {"re": 57.29577951308232}}
+limit {"deg":false,"expr":"1/x","var":"x","to":"oo"}  =>  {"latex": "0", "text": "0", "numeric": {"re": 0.0}}
+limit {"deg":false,"expr":"(1+1/n)^n","var":"n","to":"∞"}  =>  {"latex": "e", "text": "E", "numeric": {"re": 2.718281828459045}}
+limit {"deg":false,"expr":"1/x","var":"x","to":"0","dir":"+"}  =>  {"latex": "\\infty", "text": "oo", "numeric": {"re": Infinity}}
+limit {"deg":false,"expr":"1/x","var":"x","to":"0","dir":"-"}  =>  {"latex": "-\\infty", "text": "-oo", "numeric": {"re": -Infinity}}
+limit {"deg":false,"expr":"1/x","var":"x","to":"0"}  =>  {"latex": "\\tilde{\\infty}", "text": "zoo", "numeric": {"re": NaN, "im": NaN}}
+limit {"deg":false,"expr":"x*sin(1/x)","var":"x","to":"Infinity"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+series {"deg":false,"expr":"sin(x)","var":"x","at":"0","n":8}  =>  {"latex": "- \\frac{x^{7}}{5040} + \\frac{x^{5}}{120} - \\frac{x^{3}}{6} + x", "text": "-x**7/5040 + x**5/120 - x**3/6 + x", "numeric": null}
+series {"deg":false,"expr":"ln(x)","var":"x","at":"1","n":4}  =>  {"latex": "x + \\frac{\\left(x - 1\\right)^{3}}{3} - \\frac{\\left(x - 1\\right)^{2}}{2} - 1", "text": "x + (x - 1)**3/3 - (x - 1)**2/2 - 1", "numeric": null}
+series {"deg":false,"expr":"1/(1-x)","var":"x","at":"0","n":5}  =>  {"latex": "x^{4} + x^{3} + x^{2} + x + 1", "text": "x**4 + x**3 + x**2 + x + 1", "numeric": null}
+solve {"deg":false,"eqs":["x+y=3","x-y=1"],"vars":["x","y"]}  =>  {"solutions": [{"x": {"latex": "2", "text": "2", "numeric": {"re": 2.0}}, "y": {"latex": "1", "text": "1", "numeric": {"re": 1.0}}}], "vars": ["x", "y"]}
+solve {"deg":false,"eqs":["x^3-6x^2+11x-6=0"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "1", "text": "1", "numeric": {"re": 1.0}}}, {"x": {"latex": "2", "text": "2", "numeric": {"re": 2.0}}}, {"x": {"latex": "3", "text": "3", "numeric": {"re": 3.0}}}], "vars": ["x"]}
+solve {"deg":false,"eqs":["x^2+1=0"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "- i", "text": "-I", "numeric": {"re": 0.0, "im": -1.0}}}, {"x": {"latex": "i", "text": "I", "numeric": {"re": 0.0, "im": 1.0}}}], "vars": ["x"]}
+solve {"deg":false,"eqs":["sin(x)=1/2"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "\\frac{\\pi}{6}", "text": "pi/6", "numeric": {"re": 0.5235987755982989}}}, {"x": {"latex": "\\frac{5 \\pi}{6}", "text": "5*pi/6", "numeric": {"re": 2.6179938779914944}}}], "vars": ["x"]}
+solve {"deg":false,"eqs":["2^x=8"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "3", "text": "3", "numeric": {"re": 3.0}}}], "vars": ["x"]}
+solve {"deg":false,"eqs":["x^2=x^2"],"vars":["x"]}  =>  {"solutions": [], "vars": ["x"]}
+solve {"deg":false,"eqs":["a*x+b=0"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "- \\frac{b}{a}", "text": "-b/a", "numeric": null}}], "vars": ["x"]}
+simplify {"deg":false,"expr":"(x+"}  =>  {"error": "I could not read that. Check the brackets and signs.", "detail": "('unexpected EOF in multi-line statement', (1, 0))"}
+simplify {"deg":false,"expr":"1/0"}  =>  {"latex": "\\tilde{\\infty}", "text": "zoo", "numeric": {"re": NaN, "im": NaN}}
+frobnicate {"deg":false,"expr":"x"}  =>  {"error": "unknown operation frobnicate"}

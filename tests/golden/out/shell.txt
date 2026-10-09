@@ -1,0 +1,23 @@
+clampPrecision 0 sf  =>  1
+clampPrecision 0 dp  =>  0
+clampPrecision 5 sf  =>  5
+clampPrecision 15 sf  =>  12
+clampPrecision -2 dp  =>  0
+clampPrecision NaN sf  =>  1
+clampPrecision Infinity dp  =>  0
+scaleFromText ""  =>  null
+scaleFromText "0"  =>  null
+scaleFromText "0."  =>  null
+scaleFromText "."  =>  null
+scaleFromText "2.5"  =>  2.5
+scaleFromText "-1"  =>  null
+scaleFromText "abc"  =>  null
+scaleFromText " 3.14 "  =>  3.14
+scaleFromText "1e2"  =>  100
+SESSION initial  =>  objects: 0, dirty: false, activeSpace: vectors
+SESSION setActiveSpace graphing  =>  objects: 0, dirty: false, activeSpace: graphing
+SESSION add point A = (0, 0)  =>  objects: 1, dirty: true, activeSpace: graphing
+SESSION undo  =>  objects: 0, dirty: true, activeSpace: graphing
+SESSION redo  =>  objects: 1, dirty: true, activeSpace: graphing
+SESSION setSettings  =>  decimals: 3, dirty: true
+SESSION clearDrawing  =>  objects: 0, dirty: true, activeSpace: graphing

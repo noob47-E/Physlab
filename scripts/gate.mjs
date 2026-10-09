@@ -36,7 +36,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(here, '..')
 const REPORT_DIR = process.env.PHYSLAB_GATE_REPORT_DIR || 'C:\\my_projects\\PhysLab-backups\\gate'
 
-function sh(cmd, args) {
+function sh(cmd, args, env = {}) {
   const startedAt = Date.now()
   // Every argument here is a fixed literal this file writes itself (a flag, a config path, a
   // temp dir this same run just built with Date.now()) — never anything a user typed — so
@@ -44,7 +44,9 @@ function sh(cmd, args) {
   // array to, since it does not escape the pieces) is safe; a piece with a space (a temp path)
   // is quoted so the shell still treats it as one argument.
   const quoted = [cmd, ...args].map((piece) => (/\s/.test(piece) ? `"${piece}"` : piece)).join(' ')
-  const result = spawnSync(quoted, { cwd: repoRoot, shell: true, encoding: 'utf8' })
+  // A PHYSLAB_GOLDEN_UPDATE=1 left in the shell would rewrite every golden file and pass green: the
+  // gate only ever compares (tests/golden/harness.ts).
+  const result = spawnSync(quoted, { cwd: repoRoot, shell: true, encoding: 'utf8', env: { ...process.env, ...env, PHYSLAB_GOLDEN_UPDATE: '0' } })
   return {
     ok: result.status === 0,
     durationMs: Date.now() - startedAt,
@@ -69,6 +71,11 @@ const RUNNERS = {
   typecheck: () => {
     const r = sh('npx', ['tsc', '--noEmit', '-p', 'tsconfig.json'])
     return { ...r, summary: r.ok ? '0 errors' : 'errors found', detail: r.ok ? undefined : tail(r.output, 40) }
+  },
+  'golden-full': () => {
+    // The slow golden sweeps (tests/golden/harness.ts GOLDEN_FULL); the quick ones already ran in `tests`.
+    const r = sh('npx', ['vitest', 'run', 'tests/golden'], { PHYSLAB_GOLDEN_FULL: '1' })
+    return { ...r, summary: r.ok ? 'no answer changed' : 'a sweep changed', detail: r.ok ? undefined : tail(r.output, 60) }
   },
   lint: () => {
     const r = sh('npx', ['eslint', '.'])

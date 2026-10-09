@@ -81,6 +81,14 @@ export const STEP_DEFS = [
     note: 'not set up yet (Idea 12 §5.7, Wave 8)'
   },
   {
+    // The clean-up wave's slow golden sweeps (CLEANUP-PLAN.md §2: questions, presets, all 60
+    // algebra-engine jobs); the quick ones run inside `tests` at every level.
+    id: 'golden-full',
+    level: 'full',
+    label: 'golden sweeps (the slow ones)',
+    area: 'full'
+  },
+  {
     id: 'oracle-tests',
     level: 'full',
     label: 'SymPy / mpmath reference answers',

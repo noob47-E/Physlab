@@ -1,0 +1,437 @@
+A = (3, 4)  =>  result | tex: A = (3, 4, 0)
+A = <3, 4>  =>  result | tex: A = 3\hat{i} + 4\hat{j},\quad \text{magnitude } 5,\ \theta = 53.13^\circ
+A = 3i + 4j  =>  result | tex: A = 3\hat{i} + 4\hat{j},\quad \text{magnitude } 5,\ \theta = 53.13^\circ
+F = 10 N ∠ 30°  =>  result | tex: F = 8.66\hat{i} + 5\hat{j},\quad \text{magnitude } 10,\ \theta = 30^\circ
+R = A + B  =>  result | tex: R = 5\hat{i} + 3\hat{j},\quad \text{magnitude } 5.83,\ \theta = 30.96^\circ [Made: R: vector]
+A · B  =>  result | text: = 2
+A × B  =>  result | tex: -11\hat{k},\quad \text{magnitude } 11
+|A|  =>  result | text: = 5
+unit(A)  =>  result | tex: unit vector = 0.6\hat{i} + 0.8\hat{j}
+angle(A, B)  =>  result | tex: θ = 79.7^\circ
+proj(B, A)  =>  result | tex: 0.24\hat{i} + 0.32\hat{j},\quad \text{magnitude } 0.4,\ \theta = 53.13^\circ
+components(10, 30)  =>  result | tex: Ax = 8.66,\quad Ay = 5
+resultant(5, 5, 120)  =>  result | tex: R = 5\,\text{N},\quad α = 60^\circ
+equilibrium(A, B, C)  =>  result | tex: E = -4\hat{i} - 5\hat{j},\quad |E| = 6.4
+torque(r, F)  =>  result | tex: τ = 10\hat{k}\,\text{N m},\quad |τ| = 10\,\text{N m},\quad θ = 90^\circ
+work(F, d)  =>  result | tex: W = 0\,\text{J},\quad θ = 90^\circ
+magforce(q, v, B)  =>  result | tex: F = -2\hat{k}\,\text{N},\quad |F| = 2\,\text{N}
+Triangle((0,0), (4,0), (0,3))  =>  result | tex: poly1 = \text{triangle, area } 6 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon]
+Segment(P, Q)  =>  result | tex: a = \text{length } 4 [Made: a: segment]
+Line(P, Q)  =>  result | tex: l = \text{line through } (0, 0) [Made: l: line]
+Circle(P, 3)  =>  result | tex: c1 = \text{circle, } r = 3 [Made: c1: circle]
+Midpoint(P, Q)  =>  result | tex: D = (2, 0, 0) [Made: D: point]
+Perpendicular(P, f)  =>  result | tex: l = \text{line through } (0, 0) [Made: l: line]
+Intersect(f, g)  =>  result | tex: D = (4, 0, 0) [Made: D: point]
+Angle(P, Q, S)  =>  result | tex: α = 36.87^\circ [Made: α: angle]
+y = x^2 - 4  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+f(x) = sin(x)  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+x^2 + y^2 = 9  =>  result | text: Implicit curve created. [Made: f1: graph]
+y > x^2  =>  result | text: Shaded region created. [Made: f1: graph]
+r = 2cos(θ)  =>  result | text: Polar curve created. [Made: f1: graph]
+curve(cos(t), sin(t), 0, 2π)  =>  result | text: Parametric curve created. [Made: f1: graph]
+z = sin(x)cos(y)  =>  result | text: Surface created in the 3D view. [Made: f1: graph]
+piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)  =>  result | text: Piecewise curve created with 3 pieces. [Made: f1: graph]
+between(x^2, x + 2, -1, 2)  =>  result | text: Region shaded. Area between the curves from x = −1 to 2: 4.5. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+tangent(x^2, 1)  =>  result | text: Tangent drawn at x = 1. Its slope is 2. [Made: T: point, f1: graph, slopeText: text, tangent: graph]
+k = 2  =>  result | tex: k = 2 [Made: k: number]
+solve(x^2 - 5x + 6 = 0)  =>  result | tex: x_1 = 3,\quad x_2 = 2
+diff(x^3)  =>  result | tex: \frac{d}{dx}\left(x^3\right) = \text{diff}
+integrate(x^2, 0, 3)  =>  result | tex: \int_{0}^{3}x^2\,dx = \text{integrate}
+factor(x^2-1)  =>  result | tex: \left(x - 1\right)\left(x + 1\right)
+P(Z < 1.96)  =>  result | tex: \text{P(Z < 1.96)} = 0.9750
+P(45 < X < 60), X ~ N(50, 5^2)  =>  result | tex: \text{P(45 < X < 60)} = 0.8185
+invnorm(0.975)  =>  result | tex: \text{z} = 1.960
+invnorm(0.9), X ~ N(50, 10^2)  =>  result | tex: \text{x} = 62.82
+prove(sin 2x = 2 sin x cos x)  =>  result | tex: \text{Proved}\;\sin 2x = 2 \sin x \cos x
+delete A  =>  info | text: Deleted A.
+undo  =>  
+clear  =>  info | text: Scene cleared.
+2d  =>  
+3d  =>  
+play  =>  
+pause  =>  
+resolve(A)  =>  result | tex: Ax = 3,\quad Ay = 4
+resolve(10, 30)  =>  result | tex: Ax = 8.66,\quad Ay = 5
+components(3i + 4j + 5k)  =>  result | tex: Dx = 3,\quad Dy = 4,\quad Dz = 5,\quad |D| = 7.07,\quad α, β, γ = 64.9^\circ,\ 55.55^\circ,\ 45^\circ
+resolve(3i + 4j + 5k)  =>  result | tex: Dx = 3,\quad Dy = 4,\quad Dz = 5,\quad |D| = 7.07,\quad α, β, γ = 64.9^\circ,\ 55.55^\circ,\ 45^\circ
+D = A - B  =>  result | tex: D = 1\hat{i} + 5\hat{j},\quad \text{magnitude } 5.1,\ \theta = 78.69^\circ [Made: D: vector]
+E = 2A  =>  result | tex: E = 6\hat{i} + 8\hat{j},\quad \text{magnitude } 10,\ \theta = 53.13^\circ [Made: E: vector]
+N = A × B  =>  result | tex: N = -11\hat{k},\quad \text{magnitude } 11 [Made: N: vector]
+(A + B) × A  =>  result | tex: 11\hat{k},\quad \text{magnitude } 11
+A × (A + B)  =>  result | tex: -11\hat{k},\quad \text{magnitude } 11
+A × B × A  =>  result | tex: 44\hat{i} - 33\hat{j},\quad \text{magnitude } 55,\ \theta = 323.13^\circ
+(A + B) · A  =>  result | text: = 27
+A × <1, 0>  =>  result | tex: -4\hat{k},\quad \text{magnitude } 4
+cross(A + B, A)  =>  result | tex: D×A = 11\hat{k},\quad |D×A| = 11,\quad θ = 22.17^\circ
+dot(A + B, A)  =>  result | tex: D·A = 27,\quad θ = 22.17^\circ
+unit(A + B)  =>  result | tex: unit vector = 0.86\hat{i} + 0.51\hat{j}
+components(A + B)  =>  result | tex: Dx = 5,\quad Dy = 3
+C = <0, 0, 1>  =>  result | tex: C = 1\hat{k},\quad \text{magnitude } 1
+cross(A + B, 2B)  =>  result | tex: D×E = -22\hat{k},\quad |D×E| = 22,\quad θ = 57.53^\circ
+2 × 3  =>  result | text: = 6
+3 N × 2  =>  result | text: = 6 N
+2.5×10^3  =>  result | text: = 2500
+2 × A  =>  result | tex: 6\hat{i} + 8\hat{j},\quad \text{magnitude } 10,\ \theta = 53.13^\circ
+C = 2 × A  =>  result | tex: C = 6\hat{i} + 8\hat{j},\quad \text{magnitude } 10,\ \theta = 53.13^\circ
+D = A × 2  =>  result | tex: D = 6\hat{i} + 8\hat{j},\quad \text{magnitude } 10,\ \theta = 53.13^\circ [Made: D: vector]
+G = 10 N ∠ 30°  =>  result | tex: G = 8.66\hat{i} + 5\hat{j},\quad \text{magnitude } 10,\ \theta = 30^\circ [Made: G: vector]
+H = 2 × G  =>  error | text: "G" does not exist yet. Create it first, for example  G = <1, 2>  or  G = (1, 2)  or  G = 5
+k = 2 × 3  =>  result | tex: k = 6 [Made: k: number]
+Z = 2 × A × B  =>  result | tex: Z = -22\hat{k},\quad \text{magnitude } 22 [Made: Z: vector]
+H = 2 × 10^3 × A  =>  result | tex: H = 6000\hat{i} + 8000\hat{j},\quad \text{magnitude } 10000,\ \theta = 53.13^\circ [Made: H: vector]
+W = A × B  =>  result | tex: W = -11\hat{k},\quad \text{magnitude } 11 [Made: W: vector]
+T = A + B + C  =>  result | tex: T = 4\hat{i} + 5\hat{j},\quad \text{magnitude } 6.4,\ \theta = 51.34^\circ [Made: T: vector]
+factor(6x^2-x-1)  =>  result | tex: \left(2x - 1\right)\left(3x + 1\right)
+hcf(12, 18)  =>  result | tex: \text{HCF} = 6
+divide((x^3-1)/(x-1))  =>  result | tex: \text{Quotient}\;x^{2} + x + 1,\quad \text{Remainder}\;0
+solve(θ^2 = 4)  =>  result | tex: \theta_1 = 2,\quad \theta_2 = -2
+solve(theta^2 = 4)  =>  result | tex: \theta_1 = 2,\quad \theta_2 = -2
+solve(x1 + 2 = 5)  =>  result | tex: \text{x1} = 3
+solve(sigma^2 = 4)  =>  result | tex: \sigma_1 = 2,\quad \sigma_2 = -2
+solve(rho^2 = 4)  =>  result | tex: \rho_1 = 2,\quad \rho_2 = -2
+solve(kappa^2 = 4)  =>  result | tex: \kappa_1 = 2,\quad \kappa_2 = -2
+solve(psi^2 = 4)  =>  result | tex: \psi_1 = 2,\quad \psi_2 = -2
+primes(7)  =>  result | tex: 7
+primes(12)  =>  result | tex: 12 = 2^{2} \times 3
+partial(3x+5, (x+1)(x+2))  =>  result | tex: \dfrac{2}{x + 1} + \dfrac{1}{x + 2}
+complex(3, 4)  =>  result | text: = 3 + 4i
+divide(10, 2)  =>  result | text: = 5
+divide(2e3, 4)  =>  result | text: = 500
+divide(pi, 2)  =>  result | tex: = \text{exact} \approx 1.57
+divide(sin(x), x)  =>  result | tex: \text{apart}
+partial(sin(x), x)  =>  result | tex: \text{apart}
+partial((sin(x))/(x))  =>  result | tex: \text{apart}
+factorise(sin(x)+1)  =>  result | tex: \text{factor}
+factorize(sin(x)+1)  =>  result | tex: \text{factor}
+factor(sin(x)+1)  =>  result | tex: \text{factor}
+solve(x^3 - x = 0)  =>  result | text: No solution.
+P(x_1 < X < x_2) = 0.95, X ~ N(50, 10^2)  =>  result | tex: \text{x₁} = 30.4,\quad \text{x₂} = 69.6
+f(2)  =>  error | text: PhysLab does not know a function called "f".
+p(x) = x^2  =>  result | text: Graph created. Roots and turning points are marked. [Made: p1: graph]
+p(2)  =>  error | text: p is a graph, so it cannot be used as a number in a formula yet.
+solve(sin(x) = 0.5)  =>  result | text: No solution.
+integrate(sin(x), 0, pi)  =>  result | tex: \int_{0}^{pi}sin(x)\,dx = \text{integrate}\quad\text{(angles in degrees; switch to RAD for the textbook form)}
+diff(cos(x))  =>  result | tex: \frac{d}{dx}\left(cos(x)\right) = \text{diff}\quad\text{(angles in degrees; switch to RAD for the textbook form)}
+simplify(sin(x)^2 + cos(x)^2)  =>  result | tex: \text{simplify}
+1/3  =>  result | tex: = \text{exact} \approx 0.33
+7/3 N  =>  result | text: = 2.33 N
+A / 3  =>  result | tex: 1\hat{i} + 1.33\hat{j},\quad \text{magnitude } 1.67,\ \theta = 53.13^\circ
+(1/3, 2/3)  =>  result | tex: (0.33, 0.67, 0)
+simplify(sqrt(2))  =>  result | tex: \text{simplify}
+delete Z  =>  error | text: Nothing with that name.
+Text("F = ma = 10 N")  =>  result | tex: text1 =  [Made: text1: text]
+Text("a = b = c")  =>  result | tex: text1 =  [Made: text1: text]
+Text('a = b = c')  =>  result | tex: text1 =  [Made: text1: text]
+Text("1 < x < 3 is a chain")  =>  result | tex: text1 =  [Made: text1: text]
+Text("y = x^2 and z = 3", (1, 2))  =>  result | tex: text1 =  [Made: text1: text]
+L = Text("a = b = c")  =>  result | tex: L =  [Made: L: text]
+y = f(x) + 1  =>  error | text: "f" is not a number, so it cannot be used in the function.
+x^2 = y  =>  result | text: Implicit curve created. [Made: f1: graph]
+sin(x) = y  =>  result | text: Implicit curve created. [Made: f1: graph]
+cos(x) = y  =>  result | text: Implicit curve created. [Made: f1: graph]
+sqrt(x) = 2  =>  result | text: The solution is x = 4 — drawn as a vertical line. [Made: f1: graph]
+ln(x) = 1  =>  result | text: The solution is x = 2.72 — drawn as a vertical line. [Made: f1: graph]
+abs(x) = 3  =>  result | text: The solutions are x = −3 and x = 3 — each drawn as a vertical line. [Made: f1: graph]
+x*sin(x) = 0  =>  result | text: The solutions nearest 0 are x = −9.42, x = −6.28, x = −3.14, x = 0, x = 3.14, x = 6.28 and x = 9.42 — each drawn as a vertical line. There are more solutions further out. [Made: f1: graph]
+sin(x) = x/10  =>  result | text: The solutions are x = −8.42, x = −7.07, x = −2.85, x = 0, x = 2.85, x = 7.07 and x = 8.42 — each drawn as a vertical line. [Made: f1: graph]
+sin(x) = x  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x = sin(x)  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+sin(x) = 5e-7  =>  result | text: The solutions nearest 0 are x = −9.42, x = −6.28, x = −3.14, x = 5 × 10⁻⁷, x = 3.14, x = 6.28 and x = 9.42 — each drawn as a vertical line. The pattern repeats every 6.28. [Made: f1: graph]
+(x - 1)^3 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+(x - 2)^4 = 0  =>  result | text: The solution is x = 2 — drawn as a vertical line. [Made: f1: graph]
+(x + 1)^2 * (x - 3) = 0  =>  result | text: The solutions are x = −1 and x = 3 — each drawn as a vertical line. [Made: f1: graph]
+x^3 - 6x^2 + 11x - 6 = 0  =>  result | text: The solutions are x = 1, x = 2 and x = 3 — each drawn as a vertical line. [Made: f1: graph]
+x^2 + 1 = 0  =>  error | text: No real x makes this true — it has no points on the graph. In complex numbers: x = ±i.
+x^2 + 9 = 0  =>  error | text: No real x makes this true — it has no points on the graph. In complex numbers: x = ±3i.
+x^2 + 2x + 2 = 0  =>  error | text: No real x makes this true — it has no points on the graph. In complex numbers: x = −1 ± i.
+x^4 + 1 = 0  =>  error | text: No real x makes this true — it has no points on the graph. In complex numbers: x = −0.71 ± 0.71i and x = 0.71 ± 0.71i.
+x^4 + 3x^2 + 2 = 0  =>  error | text: No real x makes this true — it has no points on the graph. In complex numbers: x = ±i and x = ±1.41i.
+x^3 = 1  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+x^2 = k  =>  error | text: Unknown name "k" in the equation. Make a slider first, e.g. k = 1
+x(x + 1) = 0  =>  result | text: The solutions are x = −1 and x = 0 — each drawn as a vertical line. [Made: f1: graph]
+Square(P, (1, 0))  =>  result | tex: poly1 = \text{polygon, area } 1 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+RegularPolygon(P, (1, 0), 6)  =>  result | tex: poly1 = \text{polygon, area } 2.6 [Made: D: point, E: point, G: point, H: point, J: point, a1: segment, a2: segment, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+cross(A, r)  =>  result | tex: A×r = -8\hat{k},\quad |A×r| = 8,\quad θ = 53.13^\circ
+dot(A, r)  =>  result | tex: A·r = 6,\quad θ = 53.13^\circ
+subtract(A, r)  =>  result | tex: R = 1\hat{i} + 4\hat{j},\quad |R| = 4.12,\quad θ = 75.96^\circ
+projection(A, r)  =>  result | tex: A cos θ = 3,\quad proj of A on r = 3\hat{i}
+twoforces(1, 2, 90)  =>  result | tex: R = 2.24\,\text{N},\quad α = 63.43^\circ
+magnitude(A)  =>  result | tex: |A| = 5,\quad θ = 53.13^\circ
+add(A)  =>  result | tex: R = 3\hat{i} + 4\hat{j},\quad |R| = 5,\quad θ = 53.13^\circ
+equilibrium(A)  =>  result | tex: E = -3\hat{i} - 4\hat{j},\quad |E| = 5
+Centroid(T)  =>  error | text: "T" is not a point or object
+RegularPolygon(P, (1, 0), 3)  =>  result | tex: poly1 = \text{triangle, area } 0.43 [Made: D: point, E: point, a: segment, b: segment, c: segment, poly1: polygon]
+RegularPolygon(P, (1, 0), 4)  =>  result | tex: poly1 = \text{polygon, area } 1 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+RegularPolygon(P, (1, 0), 12)  =>  result | tex: poly1 = \text{polygon, area } 11.2 [Made: D: point, E: point, G: point, H: point, J: point, K: point, L: point, M: point, N: point, O: point, R: point, a1: segment, a2: segment, a3: segment, a4: segment, a5: segment, a6: segment, a7: segment, a8: segment, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+Text("hi", Q)  =>  result | tex: text1 =  [Made: text1: text]
+Text("hi", A)  =>  result | tex: text1 =  [Made: text1: text]
+Text("hi", Q + A)  =>  result | tex: text1 =  [Made: text1: text]
+Text("hi", (5, 6))  =>  result | tex: text1 =  [Made: text1: text]
+piecewise(sqrt(x - 5) from 0 to 2, x^2 from 2 to 4)  =>  result | text: Piecewise curve created with 2 pieces — the piece sqrt(x - 5) from 0 to 2 has no real value, so it shows nothing. [Made: f1: graph]
+piecewise(sqrt(x - 5) from 0 to 2, x^2 from 2 to 4, sqrt(-x - 9) from 4 to 6)  =>  result | text: Piecewise curve created with 3 pieces — the piece sqrt(x - 5) from 0 to 2 has no real value, so it shows nothing; the piece sqrt(-x - 9) from 4 to 6 has no real value, so it shows nothing. [Made: f1: graph]
+piecewise(x from 1 to 1, x^2 from 2 to 4)  =>  result | text: Piecewise curve created with 2 pieces — the piece x from 1 to 1 has no stretch of x, so it shows nothing. [Made: f1: graph]
+piecewise(x^2 from 1e8 to 2e8, x from 0 to 1)  =>  result | text: Piecewise curve created with 2 pieces — the piece x^2 from 100000000 to 200000000 has only values beyond ten million, too large to draw, so it shows nothing. [Made: f1: graph]
+piecewise(x^2 from 0 to 1)  =>  result | text: Piecewise curve created with 1 piece. [Made: f1: graph]
+piecewise(sqrt(k*x) from 0 to 2, sqrt(k*x) from 2 to 4)  =>  error | text: Unknown name "k" in the function. Make a slider first, e.g. k = 1
+y = g(x)*g(x)  =>  error | text: "g" is not a number, so it cannot be used in the function.
+y = g(x) + 2*g(x - 1)  =>  error | text: "g" is not a number, so it cannot be used in the function.
+y = g(x)^2 + g(2*x)  =>  error | text: "g" is not a number, so it cannot be used in the function.
+y = g(g(x))  =>  error | text: "g" is not a number, so it cannot be used in the function.
+y = h(x)*h(x)*h(1)  =>  error | text: h is a graph, and a graph cannot use another graph yet — type its formula instead, e.g. y = x^2*x^2*1^2.
+x^1e9 = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x^(1e9) = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x^100000 = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x^1000000000 = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x^(10^9) = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x^1e6 = 1  =>  result | text: The solutions are x = −1 and x = 1 — each drawn as a vertical line. [Made: f1: graph]
+x^1000001 = -1  =>  result | text: The solution is x = −1 — drawn as a vertical line. [Made: f1: graph]
+x^1000001 = 1  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+3*x^100000 - 6 = 0  =>  result | text: The solutions are x = −1 and x = 1 — each drawn as a vertical line. [Made: f1: graph]
+x^20 = 1  =>  result | text: The solutions are x = −1 and x = 1 — each drawn as a vertical line. [Made: f1: graph]
+2*x^13 + 2 = 0  =>  result | text: The solution is x = −1 — drawn as a vertical line. [Made: f1: graph]
+x^1000001 = -4  =>  result | text: The solution is x = −1 — drawn as a vertical line. [Made: f1: graph]
+x^1e6 + x = 0  =>  result | text: The solutions are x = −1 and x = 0 — each drawn as a vertical line. [Made: f1: graph]
+x^1e+9 = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x^1E9 = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+sqrt(x) = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+sqrt(x - 3) = 0  =>  result | text: The solution is x = 3 — drawn as a vertical line. [Made: f1: graph]
+acos(x) = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+sqrt(1 - x^2) = 0  =>  result | text: The solutions are x = −1 and x = 1 — each drawn as a vertical line. [Made: f1: graph]
+sqrt(x + 23.7) = 0  =>  result | text: The solution is x = −23.7 — drawn as a vertical line. [Made: f1: graph]
+sqrt(-x) = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+x*sqrt(x) = 0  =>  result | text: The solution is x = 0 — drawn as a vertical line. [Made: f1: graph]
+sqrt(9 - x^2) = 0  =>  result | text: The solutions are x = −3 and x = 3 — each drawn as a vertical line. [Made: f1: graph]
+ln(x + 24.7) = 0  =>  result | text: The solution is x = −23.7 — drawn as a vertical line. [Made: f1: graph]
+between(sin(100 pi x), 0, 0, 4)  =>  result | text: Region shaded. Area between the curves from x = 0 to 4: 2.55. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+between(sin(x), 0, 0, 400 pi)  =>  result | text: Region shaded. Area between the curves from x = 0 to 1256.64: 800.04. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+between(1e12, 1e12 + 1, 0, 1)  =>  result | text: Region shaded. Area between the curves from x = 0 to 1: 1. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+between(1e6, 1e6 + 0.000001, 0, 1)  =>  result | text: Region shaded. Area between the curves from x = 0 to 1: 1 × 10⁻⁶. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+x^20*(x^20 - 1)*(x^20 - 2)*(x^20 + 3) = 0  =>  result | text: The solutions are x = −1.04, x = −1, x = 0, x = 1 and x = 1.04 — each drawn as a vertical line. [Made: f1: graph]
+(x - 1)^100 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+(x - 1)^1000 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+0 = (x - 1)^100  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+(x - 1)^1e9 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+((x - 1)^30)^40 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+(2*x - 3)^100 = 0  =>  result | text: The solution is x = 1.5 — drawn as a vertical line. [Made: f1: graph]
+(x^2 - 4)^50 = 0  =>  result | text: The solutions are x = −2 and x = 2 — each drawn as a vertical line. [Made: f1: graph]
+sin(x)^100 = 0  =>  result | text: The solutions nearest 0 are x = −9.42, x = −6.28, x = −3.14, x = 0, x = 3.14, x = 6.28 and x = 9.42 — each drawn as a vertical line. The pattern repeats every 6.28. [Made: f1: graph]
+(x - 1)^100 = 1  =>  result | text: The solutions are x = 0 and x = 2 — each drawn as a vertical line. [Made: f1: graph]
+tangent(1e-9*x, 1e9)  =>  result | text: Tangent drawn at x = 1 × 10⁹. Its slope is 1 × 10⁻⁹. [Made: T: point, f1: graph, slopeText: text, tangent: graph]
+between(1e-9*x^2, 0, 0, 1)  =>  result | text: Region shaded. Area between the curves from x = 0 to 1: 3.33 × 10⁻¹⁰. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+(x - 1)(x - 1.0000000000001) = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+x^2 - 2.0000000000001x + 1.0000000000001 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+(x + 1)(x + 1.0000000000001) = 0  =>  result | text: The solution is x = −1 — drawn as a vertical line. [Made: f1: graph]
+(x - 3)(x - 3.0000000001) = 0  =>  result | text: The solutions are x = 3 and x = 3.0000000001 — each drawn as a vertical line. [Made: f1: graph]
+A, <1, 0>  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+<2, 0, 0>, <0, 3, 0>  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+A, <cos(t), sin(t)>  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+⟨1, 2⟩, ⟨3, 4⟩  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+x < 0, -x, x  =>  result | text: Shaded region created. [Made: f1: graph]
+x^2, 0 < x < 2  =>  error | text: That line holds two inequalities — type one at a time.
+x^2 < 4, x  =>  result | text: Shaded region created. [Made: f1: graph]
+x < 3, x > 1  =>  error | text: That line holds two inequalities — type one at a time: x < 3, then x > 1.
+cross(A, <1, 0>)  =>  result | tex: A×D = -4\hat{k},\quad |A×D| = 4,\quad θ = 53.13^\circ
+unit(<cos(30), sin(30)>)  =>  result | tex: unit vector = 0.87\hat{i} + 0.5\hat{j}
+dot(<1, 2>, <3, 4>)  =>  result | tex: D·E = 11,\quad θ = 10.3^\circ
+torque(<2, 0, 0>, <0, 3, 0>)  =>  result | tex: τ = 6\hat{k}\,\text{N m},\quad |τ| = 6\,\text{N m},\quad θ = 90^\circ
+2<1, 2>  =>  result | tex: 2\hat{i} + 4\hat{j},\quad \text{magnitude } 4.47,\ \theta = 63.43^\circ
+2 < 1  =>  result | text: = false
+2<1  =>  result | text: = false
+x < 3  =>  result | text: Shaded region created. [Made: f1: graph]
+2×<1,2>  =>  result | tex: 2\hat{i} + 4\hat{j},\quad \text{magnitude } 4.47,\ \theta = 63.43^\circ
+mag(2<1, 2>)  =>  result | tex: = \text{exact} \approx 4.47
+2<1, 2>, 3  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+cross(2<1, 0>, <0, 1>)  =>  result | tex: D×E = 2\hat{k},\quad |D×E| = 2,\quad θ = 90^\circ
+0 < x, y > 1  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+x < 3, x > -1  =>  error | text: That line holds two inequalities — type one at a time: x < 3, then x > -1.
+a < b, c > d  =>  error | text: That line holds two inequalities — type one at a time: a < b, then c > d.
+x < 0, -x, x > 0, x  =>  error | text: That line holds two inequalities — type one at a time.
+x < 3, x > |y|  =>  error | text: That line holds two inequalities — type one at a time: x < 3, then x > |y|.
+piecewise(x < 0, -x, x > 0, x)  =>  error | text: Each piece is a formula and its stretch of x: piecewise(x^2 from -3 to 0, x from 0 to 2)
+2<1,2> + <3,4>  =>  result | tex: 5\hat{i} + 8\hat{j},\quad \text{magnitude } 9.43,\ \theta = 57.99^\circ
+|2<1,2>|  =>  result | tex: = \text{exact} \approx 4.47
+|2<1,2>| + 1  =>  result | tex: = \text{exact} \approx 5.47
+x<1,2>  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+(x+1)<1,2>  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+x<1,2>·<3,4>  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+k<cos(t), sin(t)>  =>  result | tex: 1\hat{j},\quad \text{magnitude } 1,\ \theta = 90^\circ
+2|<3,4>|  =>  result | text: = 10
+|<3,4>| < 3, |y| > 1  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+<1, x >= 3>  =>  error | text: That line holds several equations — type one at a time.
+πr^2  =>  error | text: For A^b, A must be 2 dimensional (A has 1 dimensions)
+2πr  =>  result | tex: 12.57\hat{i},\quad \text{magnitude } 12.57,\ \theta = 0^\circ
+rπ  =>  result | tex: 6.28\hat{i},\quad \text{magnitude } 6.28,\ \theta = 0^\circ
+rθ  =>  error | text: I don't know "theta". Create it first, e.g. theta = (1, 2).
+sin⁻¹(0.5)  =>  result | tex: = \text{exact} \approx 30
+cos⁻¹(0.5)  =>  result | tex: = \text{exact} \approx 60
+tan⁻¹(1)  =>  result | text: = 45
+sin²(30)  =>  result | tex: = \text{exact} \approx 0.25
+3²  =>  result | text: = 9
+2⁻¹  =>  result | tex: = \text{exact} \approx 0.5
+(sin(30))²  =>  result | tex: = \text{exact} \approx 0.25
+10 kg m/s ∠ 30°  =>  result | tex: 8.66\hat{i} + 5\hat{j},\quad \text{magnitude } 10,\ \theta = 30^\circ
+10 kg m/s at 30°  =>  result | tex: 8.66\hat{i} + 5\hat{j},\quad \text{magnitude } 10,\ \theta = 30^\circ
+10 N m ∠ 30°  =>  result | tex: 8.66\hat{i} + 5\hat{j},\quad \text{magnitude } 10,\ \theta = 30^\circ
+r ∠ 30°  =>  error | text: The size before ∠ must be a number, like 10∠30° or 10 N at 30°.
+(3+2) ∠ 30°  =>  result | tex: 4.33\hat{i} + 2.5\hat{j},\quad \text{magnitude } 5,\ \theta = 30^\circ
+1×10⁻⁵∠45°  =>  result | tex: 7.07\times 10^{-6}\hat{i} + 7.07\times 10^{-6}\hat{j},\quad \text{magnitude } 1\times 10^{-5},\ \theta = 45^\circ
+10^(-5)∠45°  =>  result | tex: 7.07\times 10^{-6}\hat{i} + 7.07\times 10^{-6}\hat{j},\quad \text{magnitude } 1\times 10^{-5},\ \theta = 45^\circ
+10^-5 ∠ 45°  =>  result | tex: 7.07\times 10^{-6}\hat{i} + 7.07\times 10^{-6}\hat{j},\quad \text{magnitude } 1\times 10^{-5},\ \theta = 45^\circ
+10⁻⁵ at 45°  =>  result | tex: 7.07\times 10^{-6}\hat{i} + 7.07\times 10^{-6}\hat{j},\quad \text{magnitude } 1\times 10^{-5},\ \theta = 45^\circ
+||x|-1|  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+||x| - 1|  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+|x - |y||  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+|a|·|b|  =>  error | text: "a" does not exist yet. Create it first, for example  a = <1, 2>  or  a = (1, 2)  or  a = 5
+|a| + |b|  =>  error | text: "a" does not exist yet. Create it first, for example  a = <1, 2>  or  a = (1, 2)  or  a = 5
+|3+4i|  =>  error | text: A number and a vector cannot be added or taken away. Add a vector to a vector, e.g. <3, 0> + <4, 0>, or a size to a size, e.g. 3 + |<4, 0>|.
+|sqrt(-4)|  =>  result | text: = 2
+sec(i)  =>  error | text: Function 'sec' doesn't apply to matrices. To call it elementwise on a matrix 'M', try 'map(M, sec)'.
+csc(i)  =>  error | text: Function 'csc' doesn't apply to matrices. To call it elementwise on a matrix 'M', try 'map(M, csc)'.
+cot(i)  =>  error | text: Function 'cot' doesn't apply to matrices. To call it elementwise on a matrix 'M', try 'map(M, cot)'.
+3 N × A  =>  result | tex: 9\hat{i} + 12\hat{j},\quad \text{magnitude } 15,\ \theta = 53.13^\circ
+1/2 m × v^2  =>  error | text: For A^b, A must be 2 dimensional (A has 1 dimensions)
+∛8  =>  result | text: = 2
+∛-8  =>  result | text: = −2
+∛ 27  =>  result | text: = 3
+∛(8)  =>  result | text: = 2
+√1e-3  =>  result | tex: = \text{exact} \approx 0.03
+√1E-3  =>  result | tex: = \text{exact} \approx 0.03
+√2e3  =>  result | tex: = \text{exact} \approx 44.72
+x mod 3  =>  error | text: x is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. a = 2.
+5 mod 3  =>  result | text: = 2
+sqrt(-4) · sqrt(-9)  =>  result | text: = -6
+(3+4i) · 2  =>  error | text: A number and a vector cannot be added or taken away. Add a vector to a vector, e.g. <3, 0> + <4, 0>, or a size to a size, e.g. 3 + |<4, 0>|.
+2 × sin (30)  =>  result | tex: = \text{exact} \approx 1
+sin (30) × 2  =>  result | tex: = \text{exact} \approx 1
+2 · sqrt (4)  =>  result | text: = 4
+atan2(10 m, 5 m)  =>  result | tex: = \text{exact} \approx 63.43
+log(2, i)  =>  error | text: Too few arguments in function log (expected: any, index: 1)
+help  =>  info | text: Examples (press Enter after each): ⏎   A = (3, 4)                 point ⏎   A = <3, 4>   or  A = 3i + 4j   or   F = 10 N ∠ 30°     vector ⏎   R = A + B                  live resultant (updates when you drag A or B) ⏎   A · B    A × B    |A|    unit(A)    angle(A, B)    proj(B, A)     with steps ⏎   components(10, 30)         resolve 10 at 30° into x and y parts ⏎   resultant(5, 5, 120)       two forces and the angle between them ⏎   equilibrium(A, B, C)       the force that balances them ⏎   torque(r, F)   work(F, d)   magforce(q, v, B) ⏎   Triangle((0,0), (4,0), (0,3))   Segment(P, Q)   Line(P, Q)   Circle(P, 3) ⏎   Midpoint(P, Q)  Perpendicular(P, f)  Intersect(f, g)  Angle(P, Q, S) ⏎   y = x^2 - 4      f(x) = sin(x)      x^2 + y^2 = 9      y > x^2 ⏎   r = 2cos(θ)      curve(cos(t), sin(t), 0, 2π)      z = sin(x)cos(y) ⏎   piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)     one curve in pieces ⏎   between(x^2, x + 2, -1, 2)   shade between two curves      tangent(x^2, 1)   the tangent at a point ⏎   k = 2  (makes a slider you can drag) ⏎   solve(x^2 - 5x + 6 = 0)   diff(x^3)   integrate(x^2, 0, 3)   factor(x^2-1) ⏎   P(Z < 1.96)   P(45 < X < 60), X ~ N(50, 5^2)     the standard normal table, with steps ⏎   invnorm(0.975)   invnorm(0.9), X ~ N(50, 10^2)     the z (or x) for a given area ⏎   prove(sin 2x = 2 sin x cos x)   a trig identity, proved one named step at a time ⏎   delete A     undo     clear     2d / 3d     play / pause
+?  =>  info | text: Examples (press Enter after each): ⏎   A = (3, 4)                 point ⏎   A = <3, 4>   or  A = 3i + 4j   or   F = 10 N ∠ 30°     vector ⏎   R = A + B                  live resultant (updates when you drag A or B) ⏎   A · B    A × B    |A|    unit(A)    angle(A, B)    proj(B, A)     with steps ⏎   components(10, 30)         resolve 10 at 30° into x and y parts ⏎   resultant(5, 5, 120)       two forces and the angle between them ⏎   equilibrium(A, B, C)       the force that balances them ⏎   torque(r, F)   work(F, d)   magforce(q, v, B) ⏎   Triangle((0,0), (4,0), (0,3))   Segment(P, Q)   Line(P, Q)   Circle(P, 3) ⏎   Midpoint(P, Q)  Perpendicular(P, f)  Intersect(f, g)  Angle(P, Q, S) ⏎   y = x^2 - 4      f(x) = sin(x)      x^2 + y^2 = 9      y > x^2 ⏎   r = 2cos(θ)      curve(cos(t), sin(t), 0, 2π)      z = sin(x)cos(y) ⏎   piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)     one curve in pieces ⏎   between(x^2, x + 2, -1, 2)   shade between two curves      tangent(x^2, 1)   the tangent at a point ⏎   k = 2  (makes a slider you can drag) ⏎   solve(x^2 - 5x + 6 = 0)   diff(x^3)   integrate(x^2, 0, 3)   factor(x^2-1) ⏎   P(Z < 1.96)   P(45 < X < 60), X ~ N(50, 5^2)     the standard normal table, with steps ⏎   invnorm(0.975)   invnorm(0.9), X ~ N(50, 10^2)     the z (or x) for a given area ⏎   prove(sin 2x = 2 sin x cos x)   a trig identity, proved one named step at a time ⏎   delete A     undo     clear     2d / 3d     play / pause
+C = A × B  =>  result | tex: C = -11\hat{k},\quad \text{magnitude } 11
+A = <1, 1>  =>  result | tex: A = 1\hat{i} + 1\hat{j},\quad \text{magnitude } 1.41,\ \theta = 45^\circ
+(A × B) · A  =>  result | text: = 0
+A = <1, 0>  =>  result | tex: A = 1\hat{i},\quad \text{magnitude } 1,\ \theta = 0^\circ
+C = A  =>  result | tex: C = 3\hat{i} + 4\hat{j},\quad \text{magnitude } 5,\ \theta = 53.13^\circ
+A + B  =>  result | tex: 5\hat{i} + 3\hat{j},\quad \text{magnitude } 5.83,\ \theta = 30.96^\circ
+C = <-1, 2>  =>  result | tex: C = -1\hat{i} + 2\hat{j},\quad \text{magnitude } 2.24,\ \theta = 116.57^\circ
+divide(x^3-1, x-1)  =>  result | tex: \text{Quotient}\;x^{2} + x + 1,\quad \text{Remainder}\;0
+primes(x)  =>  error | text: Prime factors need a whole number, like 360.
+divide(x^3-1, x-1, 3)  =>  error | text: divide(numerator, denominator) or divide(fraction)
+P(X < 65)  =>  error | text: X needs its distribution after the probability, as in P(X < 65), X ~ N(50, 10²) for a mean of 50 and a standard deviation of 10. For the standard curve itself, use Z.
+P(Z < 1), X ~ N(50, 10^2)  =>  error | text: Z is already standard, with mean 0 and standard deviation 1, so it takes no distribution. For a value from X ~ N(50, 10²) use X, as in P(X < 1), X ~ N(50, 10²), or leave the distribution off.
+f(x) = x^2  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+solve  =>  error | text: "solve" does not exist yet. Create it first, for example  solve = <1, 2>  or  solve = (1, 2)  or  solve = 5
+A = <1, 2>  =>  result | tex: A = 1\hat{i} + 2\hat{j},\quad \text{magnitude } 2.24,\ \theta = 63.43^\circ
+2/3  =>  result | tex: = \text{exact} \approx 0.67
+1/2  =>  result | tex: = \text{exact} \approx 0.5
+Circle((0,0), 3  =>  error | text: A bracket is not closed — check the brackets.
+pi = 3  =>  error | text: "pi" is a reserved name. Try another.
+q = 2  =>  result | tex: q = 2
+k = -1  =>  result | tex: k = -1 [Made: k: number]
+k = 4  =>  result | tex: k = 4 [Made: k: number]
+k = 9  =>  result | tex: k = 9 [Made: k: number]
+P = (0, 0)  =>  result | tex: P = (0, 0, 0)
+P = (5, 5)  =>  result | tex: P = (5, 5, 0)
+P = (1, 2)  =>  result | tex: P = (1, 2, 0)
+k = 4.1e13  =>  result | tex: k = 4.1\times 10^{13} [Made: k: number]
+k = 0  =>  result | tex: k = 0 [Made: k: number]
+k = 1  =>  result | tex: k = 1 [Made: k: number]
+f = Line(P, (1, 1))  =>  result | tex: f = \text{line through } (0, 0) [Made: D: point]
+T = Triangle(P, (6, 0), (0, 3))  =>  result | tex: T = \text{triangle, area } 9 [Made: D: point, E: point, T: polygon, a: segment, b: segment, c: segment]
+Q = (3, 4)  =>  result | tex: Q = (3, 4, 0)
+a = 1  =>  result | tex: a = 1 [Made: a: number]
+A = <1, 2, 3>  =>  result | tex: A = 1\hat{i} + 2\hat{j} + 3\hat{k},\quad \text{magnitude } 3.74
+C = 2·A  =>  result | tex: C = 6\hat{i} + 8\hat{j},\quad \text{magnitude } 10,\ \theta = 53.13^\circ
+D = A·2  =>  result | tex: D = 6\hat{i} + 8\hat{j},\quad \text{magnitude } 10,\ \theta = 53.13^\circ [Made: D: vector]
+A·B  =>  result | text: = 2
+2·3  =>  result | text: = 6
+k = 2·3  =>  result | tex: k = 6 [Made: k: number]
+a = 2  =>  result | tex: a = 2 [Made: a: number]
+a = 3  =>  result | tex: a = 3 [Made: a: number]
+3 ++ 4  =>  result | text: = 7
+B = 2 ∠ k  =>  result | tex: B = \text{undefined}\hat{i} + \text{undefined}\hat{j},\quad \text{magnitude } \text{undefined},\ \theta = \text{undefined}^\circ
+k = -400  =>  result | tex: k = -400 [Made: k: number]
+B = 3 ∠ k°  =>  result | tex: B = \text{undefined}\hat{i} + \text{undefined}\hat{j},\quad \text{magnitude } \text{undefined},\ \theta = \text{undefined}^\circ
+k = 60  =>  result | tex: k = 60 [Made: k: number]
+add(<1, 0>, <0, 1>)  =>  result | tex: R = 1\hat{i} + 1\hat{j},\quad |R| = 1.41,\quad θ = 45^\circ
+k = 1e10  =>  result | tex: k = 1\times 10^{10} [Made: k: number]
+h(x) = sin(x)  =>  result | text: Graph created. Roots and turning points are marked. [Made: h1: graph]
+b = h(1)  =>  error | text: h is a graph, so it cannot be used as a number in a formula yet.
+a = sqrt(16)  =>  result | tex: a = 4 [Made: a: number]
+g(x) = f(2) + x  =>  error | text: "f" is not a number, so it cannot be used in the function.
+z = sqrt(-1 - x^2 - y^2)  =>  error | text: That surface cannot be drawn: it has no real value for any x and y from −6 to 6, the square the 3D view shows.
+z = sin(x  =>  error | text: That surface cannot be drawn: a bracket is not closed — check the brackets.
+r = sqrt(-1 - θ)  =>  error | text: That polar curve cannot be drawn: r has no real value for any θ.
+curve(sqrt(-1 - t^2), t, 0, 1)  =>  error | text: That curve cannot be drawn: it has no real point for t from 0 to 1.
+curve(t^2 +, t)  =>  error | text: That curve cannot be drawn: the formula is incomplete — a number or a letter is missing.
+piecewise(sqrt(x) from -3 to -1)  =>  error | text: That piecewise curve cannot be drawn: the piece sqrt(x) from −3 to −1 has no real value.
+x^2 + y^2 < -1  =>  error | text: That inequality cannot be drawn: it is true for no area of the plane, so there is nothing to shade.
+x^2 + y^2 = -1  =>  error | text: That curve cannot be drawn: no point (x, y) makes its two sides equal.
+y = sqrt(-1 - x^2)  =>  error | text: That graph cannot be drawn: it has no real value for any x.
+y = sin(x  =>  error | text: That graph cannot be drawn: a bracket is not closed — check the brackets.
+between(sqrt(-1 - x^2), x, 0, 1)  =>  error | text: That region cannot be shaded: y = sqrt(-1 - x^2) has no real value between x = 0 and 1.
+z = q*x  =>  result | text: Surface created in the 3D view. [Made: f1: graph]
+r = q*θ  =>  result | text: Polar curve created. [Made: f1: graph]
+curve(q*t, t)  =>  result | text: Parametric curve created. [Made: f1: graph]
+piecewise(q*x from 0 to 1)  =>  result | text: Piecewise curve created with 1 piece. [Made: f1: graph]
+x^2 + y^2 < q  =>  result | text: Shaded region created. [Made: f1: graph]
+x^2 + y^2 = q  =>  result | text: Implicit curve created. [Made: f1: graph]
+between(x^2, q*x, 0, 1)  =>  result | text: Region shaded. Area between the curves from x = 0 to 1: 0.67. [Made: areaText: text, f1: graph, f2: graph, region: graph]
+tangent(q*x, 1)  =>  result | text: Tangent drawn at x = 1. Its slope is 2. [Made: T: point, f1: graph, slopeText: text, tangent: graph]
+x^2 = 4  =>  result | text: The solutions are x = −2 and x = 2 — each drawn as a vertical line. [Made: f1: graph]
+(x - 1)^2 = 0  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
+x^3 = x  =>  result | text: The solutions are x = −1, x = 0 and x = 1 — each drawn as a vertical line. [Made: f1: graph]
+2x + 1 = 0  =>  result | text: The solution is x = −0.5 — drawn as a vertical line. [Made: f1: graph]
+e^x = 2  =>  result | text: The solution is x = 0.69 — drawn as a vertical line. [Made: f1: graph]
+Square(P)  =>  error | text: Wrong inputs for Square. Type "help" to see examples.
+Square()  =>  error | text: Wrong inputs for Square. Type "help" to see examples.
+RegularPolygon(P)  =>  error | text: Wrong inputs for RegularPolygon. Type "help" to see examples.
+cross(A)  =>  error | text: Wrong inputs for cross. Type "help" for examples.
+dot(A)  =>  error | text: Wrong inputs for dot. Type "help" for examples.
+subtract(A)  =>  error | text: Wrong inputs for subtract. Type "help" for examples.
+projection(A)  =>  error | text: Wrong inputs for projection. Type "help" for examples.
+torque(r)  =>  error | text: Wrong inputs for torque. Type "help" for examples.
+work(F)  =>  error | text: Wrong inputs for work. Type "help" for examples.
+magforce(1, v)  =>  error | text: Wrong inputs for magforce. Type "help" for examples.
+resultant(5)  =>  error | text: Wrong inputs for resultant. Type "help" for examples.
+Square(P, )  =>  error | text: Wrong inputs for Square. Type "help" to see examples.
+magnitude()  =>  error | text: Wrong inputs for magnitude. Type "help" for examples.
+twoforces(1, 2)  =>  error | text: Wrong inputs for twoforces. Type "help" for examples.
+add()  =>  error | text: Wrong inputs for add. Type "help" for examples.
+equilibrium()  =>  error | text: Wrong inputs for equilibrium. Type "help" for examples.
+resultant(, 5, 3)  =>  error | text: Wrong inputs for resultant. Type "help" for examples.
+components(, 30)  =>  error | text: Wrong inputs for components. Type "help" for examples.
+cross(, A)  =>  error | text: Wrong inputs for cross. Type "help" for examples.
+Square(, P)  =>  error | text: Wrong inputs for Square. Type "help" to see examples.
+Line(P)  =>  error | text: Wrong inputs for Line. Type "help" to see examples.
+Circle(P)  =>  error | text: Wrong inputs for Circle. Type "help" to see examples.
+Triangle((0,0), (4,0))  =>  error | text: Triangle needs at least 3 points
+Polygon(A)  =>  error | text: Polygon needs at least 3 points
+angle(A)  =>  error | text: Wrong inputs for Angle. Type "help" to see examples.
+midpoint(A)  =>  error | text: Wrong inputs for Midpoint. Type "help" to see examples.
+distance(A)  =>  error | text: Expected a vector or point
+resolve(<3, 4>)  =>  result | tex: Dx = 3,\quad Dy = 4
+magnitude(<3, 4>)  =>  result | tex: |D| = 5,\quad θ = 53.13^\circ
+k = 3  =>  result | tex: k = 3 [Made: k: number]
+r = 3  =>  result | tex: r = 3
+y = 2πx  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+s1 = sin⁻¹(0.5)  =>  result | tex: s1 = 30 [Made: s1: number]
+y = sin²(x) + cos²(x)  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+p = 10 kg m/s ∠ 30°  =>  result | tex: p = 8.66\hat{i} + 5\hat{j},\quad \text{magnitude } 10,\ \theta = 30^\circ
+r = 5  =>  result | tex: r = 5
+E = 1×10⁻⁵∠45°  =>  result | tex: E = 7.07\times 10^{-6}\hat{i} + 7.07\times 10^{-6}\hat{j},\quad \text{magnitude } 1\times 10^{-5},\ \theta = 45^\circ [Made: E: vector]
+a = -3  =>  result | tex: a = -3 [Made: a: number]
+y = ||x| - 1|  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+z1 = |sqrt(-4)|  =>  result | tex: z1 = 2 [Made: z1: number]
+m = 2  =>  result | tex: m = 2 [Made: m: number]
+c1 = ∛8  =>  result | tex: c1 = 2 [Made: c1: number]
+s1 = √1e-3  =>  result | tex: s1 = 0.03 [Made: s1: number]
+y = x mod 3  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
+h = 2 × sin (30)  =>  result | tex: h = 1
+g1 = atan2(10 m, 5 m)  =>  result | tex: g1 = 63.43
+3,5  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+1,000  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+2,5+1  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
+f(1,2)  =>  error | text: PhysLab does not know a function called "f".
+\left(1,2\right)  =>  error | text: Part of it cannot be read — check the formula for a typing slip.

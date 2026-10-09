@@ -4,3 +4,6 @@ dist/
 *.log
 .vitest/
 .mcp.json
+
+# The golden sweeps' recorded outputs are part of the tests (CLEANUP-PLAN.md CW0).
+!tests/golden/out/

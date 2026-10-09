@@ -1,0 +1,440 @@
+BAR x^2 = a (a = -2)  =>  result: Drawn as a vertical line at each solution — at a = −2 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE x^2 = a (a = -2)  =>  no real x; complex none
+BAR x^2 = a (a = -1)  =>  result: Drawn as a vertical line at each solution — at a = −1 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE x^2 = a (a = -1)  =>  no real x; complex none
+BAR x^2 = a (a = 0)  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^2 = a (a = 0)  =>  x = 0
+BAR x^2 = a (a = 1)  =>  result: The solutions are x = −1 and x = 1 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^2 = a (a = 1)  =>  x = -1, 1
+BAR x^2 = a (a = 2)  =>  result: The solutions are x = −1.41 and x = 1.41 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^2 = a (a = 2)  =>  x = -1.41421356237, 1.41421356237
+BAR x^3 - a*x = 0 (a = -2)  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^3 - a*x = 0 (a = -2)  =>  x = 0
+BAR x^3 - a*x = 0 (a = -1)  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^3 - a*x = 0 (a = -1)  =>  x = 0
+BAR x^3 - a*x = 0 (a = 0)  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^3 - a*x = 0 (a = 0)  =>  x = 0
+BAR x^3 - a*x = 0 (a = 1)  =>  result: The solutions are x = −1, x = 0 and x = 1 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^3 - a*x = 0 (a = 1)  =>  x = -1, 0, 1
+BAR x^3 - a*x = 0 (a = 2)  =>  result: The solutions are x = −1.41, x = 0 and x = 1.41 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^3 - a*x = 0 (a = 2)  =>  x = -1.41421356237, 0, 1.41421356237
+BAR sin(x) = a (a = -2)  =>  result: Drawn as a vertical line at each solution — at a = −2 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE sin(x) = a (a = -2)  =>  no real x; complex none
+BAR sin(x) = a (a = -1)  =>  result: The solutions nearest 0 are x = −14.14, x = −7.85, x = −1.57, x = 4.71, x = 11 and x = 17.28 — each drawn as a vertical line. The pattern repeats every 6.28. Switched to Graphing to show it.
+SOLVE sin(x) = a (a = -1)  =>  x = -14.1371669412, -7.85398163397, -1.57079632679, 4.71238898038, 10.9955742876, 17.2787595947 (repeats every 6.28318530718)
+BAR sin(x) = a (a = 0)  =>  result: The solutions nearest 0 are x = −9.42, x = −6.28, x = −3.14, x = 0, x = 3.14, x = 6.28 and x = 9.42 — each drawn as a vertical line. The pattern repeats every 6.28. Switched to Graphing to show it.
+SOLVE sin(x) = a (a = 0)  =>  x = -9.42477796077, -6.28318530718, -3.14159265359, 0, 3.14159265359, 6.28318530718, 9.42477796077 (repeats every 6.28318530718)
+BAR sin(x) = a (a = 1)  =>  result: The solutions nearest 0 are x = −17.28, x = −11, x = −4.71, x = 1.57, x = 7.85 and x = 14.14 — each drawn as a vertical line. The pattern repeats every 6.28. Switched to Graphing to show it.
+SOLVE sin(x) = a (a = 1)  =>  x = -17.2787595947, -10.9955742876, -4.71238898038, 1.57079632679, 7.85398163397, 14.1371669412 (repeats every 6.28318530718)
+BAR sin(x) = a (a = 2)  =>  result: Drawn as a vertical line at each solution — at a = 2 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE sin(x) = a (a = 2)  =>  no real x; complex none
+BAR x^2 + a*x + 1 = 0 (a = -2)  =>  result: The solution is x = 1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^2 + a*x + 1 = 0 (a = -2)  =>  x = 1.00000000154
+BAR x^2 + a*x + 1 = 0 (a = -1)  =>  result: Drawn as a vertical line at each solution — at a = −1 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE x^2 + a*x + 1 = 0 (a = -1)  =>  no real x; complex none
+BAR x^2 + a*x + 1 = 0 (a = 0)  =>  result: Drawn as a vertical line at each solution — at a = 0 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE x^2 + a*x + 1 = 0 (a = 0)  =>  no real x; complex none
+BAR x^2 + a*x + 1 = 0 (a = 1)  =>  result: Drawn as a vertical line at each solution — at a = 1 there is nothing to draw; move a to see it. Switched to Graphing to show it.
+SOLVE x^2 + a*x + 1 = 0 (a = 1)  =>  no real x; complex none
+BAR x^2 + a*x + 1 = 0 (a = 2)  =>  result: The solution is x = −1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE x^2 + a*x + 1 = 0 (a = 2)  =>  x = -1.00000000154
+BAR (x - 0)^3 = 0  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)^3 = 0  =>  x = 0
+BAR (x - -2)^2 = 0  =>  result: The solution is x = −2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)^2 = 0  =>  x = -2
+BAR (x - -3)^5 = 0  =>  result: The solution is x = −3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)^5 = 0  =>  x = -3
+BAR (x - -5)^4 = 0  =>  result: The solution is x = −5 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)^4 = 0  =>  x = -5
+BAR (x - 3)^4 = 0  =>  result: The solution is x = 3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)^4 = 0  =>  x = 3
+BAR (x - 2)^3 = 0  =>  result: The solution is x = 2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)^3 = 0  =>  x = 2
+BAR (x - 0)^2 = 0  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)^2 = 0  =>  x = 0
+BAR (x - -1.9088996056241427)(x - -2.045900205761317)(x - -1.996105409807956) = 0  =>  result: The solutions are x = −2.05, x = −2 and x = −1.91 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1.9088996056241427)(x - -2.045900205761317)(x - -1.996105409807956) = 0  =>  x = -2.04590020576, -1.99610540981, -1.90889960562
+BAR (x - -2.92934670781893)(x - -3.067402692043896)(x - -2.9966429183813443) = 0  =>  result: The solutions are x = −3.07, x = −3 and x = −2.93 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2.92934670781893)(x - -3.067402692043896)(x - -2.9966429183813443) = 0  =>  x = -3.06740269204, -2.99664291838, -2.92934670782
+BAR (x - -4.949793810013717)(x - -5.088905178326475)(x - -4.997180426954732) = 0  =>  result: The solutions are x = −5.09, x = −5 and x = −4.95 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4.949793810013717)(x - -5.088905178326475)(x - -4.997180426954732) = 0  =>  x = -5.08890517833, -4.99718042695, -4.94979381001
+BAR (x - 4.029759087791495)(x - 3.9895923353909466)(x - 4.0022820644718795) = 0  =>  result: The solutions are x = 3.99, x = 4 and x = 4.03 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4.029759087791495)(x - 3.9895923353909466)(x - 4.0022820644718795) = 0  =>  x = 3.98959233539, 4.00228206447, 4.02975908779
+BAR (x - 2.0093119855967077)(x - 1.9680898491083676)(x - 2.001744555898491) = 0  =>  result: The solutions are x = 1.97, x = 2 and x = 2.01 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2.0093119855967077)(x - 1.9680898491083676)(x - 2.001744555898491) = 0  =>  x = 1.96808984911, 2.0017445559, 2.0093119856
+BAR (x - 0.08886488340192045)(x - -0.053412637174211255)(x - 0.0012070473251028808) = 0  =>  result: The solutions are x = −0.053, x = 0.0012 and x = 0.089 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0.08886488340192045)(x - -0.053412637174211255)(x - 0.0012070473251028808) = 0  =>  x = -0.0534126371742, 0.0012070473251, 0.0888648834019
+BAR x^2 - -2*x + 50 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −1 ± 7i.
+SOLVE x^2 - -2*x + 50 = 0  =>  no real x; complex -1 + 7i
+BAR x^2 - -6*x + 34 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −3 ± 5i.
+SOLVE x^2 - -6*x + 34 = 0  =>  no real x; complex -3 + 5i
+BAR x^2 - -10*x + 34 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −5 ± 3i.
+SOLVE x^2 - -10*x + 34 = 0  =>  no real x; complex -5 + 3i
+BAR x^2 - 8*x + 17 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 4 ± i.
+SOLVE x^2 - 8*x + 17 = 0  =>  no real x; complex 4 + 1i
+BAR x^2 - 4*x + 85 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 2 ± 9i.
+SOLVE x^2 - 4*x + 85 = 0  =>  no real x; complex 2 + 9i
+BAR x^2 - 0*x + 49 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = ±7i.
+SOLVE x^2 - 0*x + 49 = 0  =>  no real x; complex 0 + 7i
+BAR (x - -1)(x - -0.999999) = 0  =>  result: The solutions are x = −1 and x = −0.999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)(x - -0.999999) = 0  =>  x = -1, -0.999999
+BAR (x - -3)(x - -2.9999) = 0  =>  result: The solutions are x = −3 and x = −2.9999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)(x - -2.9999) = 0  =>  x = -3, -2.9999
+BAR (x - -5)(x - -4.99) = 0  =>  result: The solutions are x = −5 and x = −4.99 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)(x - -4.99) = 0  =>  x = -5, -4.99
+BAR (x - 4)(x - 4.0000000001) = 0  =>  result: The solutions are x = 4 and x = 4.0000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)(x - 4.0000000001) = 0  =>  x = 4, 4.0000000001
+BAR (x - 2)(x - 2.00000001) = 0  =>  result: The solutions are x = 2 and x = 2.00000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)(x - 2.00000001) = 0  =>  x = 2, 2.00000001
+BAR (x - 1)(x - 1.000001) = 0  =>  result: The solutions are x = 1 and x = 1.000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)(x - 1.000001) = 0  =>  x = 1, 1.000001
+BAR (x - -1)(x - -0.9999) = 0  =>  result: The solutions are x = −1 and x = −0.9999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)(x - -0.9999) = 0  =>  x = -1, -0.9999
+BAR (x - -3)^2 = 0  =>  result: The solution is x = −3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)^2 = 0  =>  x = -3
+BAR (x - -4)^5 = 0  =>  result: The solution is x = −4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)^5 = 0  =>  x = -4
+BAR (x - 4)^4 = 0  =>  result: The solution is x = 4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)^4 = 0  =>  x = 4
+BAR (x - 2)^3 = 0  =>  result: The solution is x = 2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)^3 = 0  =>  x = 2
+BAR (x - 1)^2 = 0  =>  result: The solution is x = 1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)^2 = 0  =>  x = 1
+BAR (x - -1)^2 = 0  =>  result: The solution is x = −1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)^2 = 0  =>  x = -1
+BAR (x - -2.920077160493827)(x - -3.083462362825789)(x - -2.999543124142661) = 0  =>  result: The solutions are x = −3.08, x = −3 and x = −2.92 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2.920077160493827)(x - -3.083462362825789)(x - -2.999543124142661) = 0  =>  x = -3.08346236283, -2.99954312414, -2.92007716049
+BAR (x - -3.9405242626886143)(x - -4.004964849108368)(x - -3.990080632716049) = 0  =>  result: The solutions are x = −4, x = −3.99 and x = −3.94 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3.9405242626886143)(x - -4.004964849108368)(x - -3.990080632716049) = 0  =>  x = -4.00496484911, -3.99008063272, -3.94052426269
+BAR (x - 4.0390286351165985)(x - 3.9735326646090536)(x - 4.0093818587105625) = 0  =>  result: The solutions are x = 3.97, x = 4.01 and x = 4.04 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4.0390286351165985)(x - 3.9735326646090536)(x - 4.0093818587105625) = 0  =>  x = 3.97353266461, 4.00938185871, 4.03902863512
+BAR (x - 3.018581532921811)(x - 2.9520301783264746)(x - 3.008844350137174) = 0  =>  result: The solutions are x = 2.95, x = 3.01 and x = 3.02 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3.018581532921811)(x - 2.9520301783264746)(x - 3.008844350137174) = 0  =>  x = 2.95203017833, 3.00884435014, 3.01858153292
+BAR (x - 1.0981344307270233)(x - 0.9305276920438957)(x - 1.008306841563786) = 0  =>  result: The solutions are x = 0.93, x = 1.01 and x = 1.1 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1.0981344307270233)(x - 0.9305276920438957)(x - 1.008306841563786) = 0  =>  x = 0.930527692044, 1.00830684156, 1.09813443073
+BAR (x - -0.9223126714677641)(x - -1.0909747942386832)(x - -0.9922306670096022) = 0  =>  result: The solutions are x = −1.09, x = −0.99 and x = −0.92 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -0.9223126714677641)(x - -1.0909747942386832)(x - -0.9922306670096022) = 0  =>  x = -1.09097479424, -0.99223066701, -0.922312671468
+BAR x^2 - -4*x + 40 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −2 ± 6i.
+SOLVE x^2 - -4*x + 40 = 0  =>  no real x; complex -2 + 6i
+BAR x^2 - -8*x + 32 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −4 ± 4i.
+SOLVE x^2 - -8*x + 32 = 0  =>  no real x; complex -4 + 4i
+BAR x^2 - 8*x + 20 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 4 ± 2i.
+SOLVE x^2 - 8*x + 20 = 0  =>  no real x; complex 4 + 2i
+BAR x^2 - 6*x + 109 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 3 ± 10i.
+SOLVE x^2 - 6*x + 109 = 0  =>  no real x; complex 3 + 10i
+BAR x^2 - 2*x + 65 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 1 ± 8i.
+SOLVE x^2 - 2*x + 65 = 0  =>  no real x; complex 1 + 8i
+BAR x^2 - -2*x + 37 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −1 ± 6i.
+SOLVE x^2 - -2*x + 37 = 0  =>  no real x; complex -1 + 6i
+BAR (x - -2)(x - -1.99999) = 0  =>  result: The solutions are x = −2 and x = −1.99999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)(x - -1.99999) = 0  =>  x = -2, -1.99999
+BAR (x - -4)(x - -3.999) = 0  =>  result: The solutions are x = −4 and x = −3.999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)(x - -3.999) = 0  =>  x = -4, -3.999
+BAR (x - 4)(x - 4.00000000001) = 0  =>  result: The solutions are x = 4 and x = 4.00000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)(x - 4.00000000001) = 0  =>  x = 4, 4.00000000001
+BAR (x - 3)(x - 3.000000001) = 0  =>  result: The solutions are x = 3 and x = 3.000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)(x - 3.000000001) = 0  =>  x = 3, 3.000000001
+BAR (x - 1)(x - 1.0000001) = 0  =>  result: The solutions are x = 1 and x = 1.0000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)(x - 1.0000001) = 0  =>  x = 1, 1.0000001
+BAR (x - 0)(x - 0.00001) = 0  =>  result: The solutions are x = 0 and x = 1 × 10⁻⁵ — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)(x - 0.00001) = 0  =>  x = 0, 0.00001
+BAR (x - -2)(x - -1.999) = 0  =>  result: The solutions are x = −2 and x = −1.999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)(x - -1.999) = 0  =>  x = -2, -1.999
+BAR (x - -4)^5 = 0  =>  result: The solution is x = −4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)^5 = 0  =>  x = -4
+BAR (x - -5)^4 = 0  =>  result: The solution is x = −5 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)^4 = 0  =>  x = -5
+BAR (x - 3)^4 = 0  =>  result: The solution is x = 3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)^4 = 0  =>  x = 3
+BAR (x - 1)^3 = 0  =>  result: The solution is x = 1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)^3 = 0  =>  x = 1
+BAR (x - 0)^2 = 0  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)^2 = 0  =>  x = 0
+BAR (x - -2)^5 = 0  =>  result: The solution is x = −2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)^5 = 0  =>  x = -2
+BAR (x - -3.9312547153635116)(x - -4.02102451989026)(x - -3.9929808384773664) = 0  =>  result: The solutions are x = −4.02, x = −3.99 and x = −3.93 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3.9312547153635116)(x - -4.02102451989026)(x - -3.9929808384773664) = 0  =>  x = -4.02102451989, -3.99298083848, -3.93125471536
+BAR (x - -4.951701817558299)(x - -5.04252700617284)(x - -4.993518347050754) = 0  =>  result: The solutions are x = −5.04, x = −4.99 and x = −4.95 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4.951701817558299)(x - -5.04252700617284)(x - -4.993518347050754) = 0  =>  x = -5.04252700617, -4.99351834705, -4.95170181756
+BAR (x - 3.0278510802469136)(x - 2.9359705075445817)(x - 3.0059441443758574) = 0  =>  result: The solutions are x = 2.94, x = 3.01 and x = 3.03 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3.0278510802469136)(x - 2.9359705075445817)(x - 3.0059441443758574) = 0  =>  x = 2.93597050754, 3.00594414438, 3.02785108025
+BAR (x - 1.0074039780521262)(x - 0.9144680212620028)(x - 1.0054066358024691) = 0  =>  result: The solutions are x = 0.91, x = 1.005 and x = 1.007 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1.0074039780521262)(x - 0.9144680212620028)(x - 1.0054066358024691) = 0  =>  x = 0.914468021262, 1.0054066358, 1.00740397805
+BAR (x - 0.08695687585733883)(x - -0.007034465020576132)(x - 0.004869127229080933) = 0  =>  result: The solutions are x = −0.007, x = 0.0049 and x = 0.087 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0.08695687585733883)(x - -0.007034465020576132)(x - 0.004869127229080933) = 0  =>  x = -0.00703446502058, 0.00486912722908, 0.0869568758573
+BAR (x - -1.9334902263374485)(x - -2.028536951303155)(x - -1.9956683813443072) = 0  =>  result: The solutions are x = −2.03, x = −2 and x = −1.93 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1.9334902263374485)(x - -2.028536951303155)(x - -1.9956683813443072) = 0  =>  x = -2.0285369513, -1.99566838134, -1.93349022634
+BAR x^2 - -6*x + 34 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −3 ± 5i.
+SOLVE x^2 - -6*x + 34 = 0  =>  no real x; complex -3 + 5i
+BAR x^2 - -10*x + 34 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −5 ± 3i.
+SOLVE x^2 - -10*x + 34 = 0  =>  no real x; complex -5 + 3i
+BAR x^2 - 6*x + 10 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 3 ± i.
+SOLVE x^2 - 6*x + 10 = 0  =>  no real x; complex 3 + 1i
+BAR x^2 - 4*x + 85 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 2 ± 9i.
+SOLVE x^2 - 4*x + 85 = 0  =>  no real x; complex 2 + 9i
+BAR x^2 - 0*x + 49 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = ±7i.
+SOLVE x^2 - 0*x + 49 = 0  =>  no real x; complex 0 + 7i
+BAR x^2 - -4*x + 29 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −2 ± 5i.
+SOLVE x^2 - -4*x + 29 = 0  =>  no real x; complex -2 + 5i
+BAR (x - -3)(x - -2.9999) = 0  =>  result: The solutions are x = −3 and x = −2.9999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)(x - -2.9999) = 0  =>  x = -3, -2.9999
+BAR (x - -5)(x - -4.99) = 0  =>  result: The solutions are x = −5 and x = −4.99 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)(x - -4.99) = 0  =>  x = -5, -4.99
+BAR (x - 3)(x - 3.0000000001) = 0  =>  result: The solutions are x = 3 and x = 3.0000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)(x - 3.0000000001) = 0  =>  x = 3, 3.0000000001
+BAR (x - 2)(x - 2.00000001) = 0  =>  result: The solutions are x = 2 and x = 2.00000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)(x - 2.00000001) = 0  =>  x = 2, 2.00000001
+BAR (x - 0)(x - 0.000001) = 0  =>  result: The solutions are x = 0 and x = 1 × 10⁻⁶ — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)(x - 0.000001) = 0  =>  x = 0, 0.000001
+BAR (x - -1)(x - -0.9999) = 0  =>  result: The solutions are x = −1 and x = −0.9999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)(x - -0.9999) = 0  =>  x = -1, -0.9999
+BAR (x - -3)(x - -2.99) = 0  =>  result: The solutions are x = −3 and x = −2.99 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)(x - -2.99) = 0  =>  x = -3, -2.99
+BAR (x - -5)^5 = 0  =>  result: The solution is x = −5 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)^5 = 0  =>  x = -5
+BAR (x - 4)^4 = 0  =>  result: The solution is x = 4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)^4 = 0  =>  x = 4
+BAR (x - 2)^3 = 0  =>  result: The solution is x = 2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)^3 = 0  =>  x = 2
+BAR (x - 0)^2 = 0  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)^2 = 0  =>  x = 0
+BAR (x - -1)^5 = 0  =>  result: The solution is x = −1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)^5 = 0  =>  x = -1
+BAR (x - -3)^5 = 0  =>  result: The solution is x = −3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)^5 = 0  =>  x = -3
+BAR (x - -4.942432270233196)(x - -5.058586676954732)(x - -4.996418552812071) = 0  =>  result: The solutions are x = −5.06, x = −5 and x = −4.94 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4.942432270233196)(x - -5.058586676954732)(x - -4.996418552812071) = 0  =>  x = -5.05858667695, -4.99641855281, -4.94243227023
+BAR (x - 4.037120627572016)(x - 3.9199108367626887)(x - 4.003043938614541) = 0  =>  result: The solutions are x = 3.92, x = 4 and x = 4.04 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4.037120627572016)(x - 3.9199108367626887)(x - 4.003043938614541) = 0  =>  x = 3.91991083676, 4.00304393861, 4.03712062757
+BAR (x - 2.016673525377229)(x - 1.9984083504801098)(x - 2.0025064300411524) = 0  =>  result: The solution is x = 2.02 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2.016673525377229)(x - 1.9984083504801098)(x - 2.0025064300411524) = 0  =>  x = 2.01667352538
+BAR (x - 0.0962264231824417)(x - -0.023094135802469135)(x - 0.0019689214677640603) = 0  =>  result: The solutions are x = −0.023, x = 0.002 and x = 0.096 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0.0962264231824417)(x - -0.023094135802469135)(x - 0.0019689214677640603) = 0  =>  x = -0.0230941358025, 0.00196892146776, 0.0962264231824
+BAR (x - -0.9242206790123457)(x - -1.044596622085048)(x - -0.9985685871056241) = 0  =>  result: The solutions are x = −1.04, x = −1 and x = −0.92 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -0.9242206790123457)(x - -1.044596622085048)(x - -0.9985685871056241) = 0  =>  x = -1.04459662209, -0.998568587106, -0.924220679012
+BAR (x - -2.944667781207133)(x - -3.066099108367627)(x - -2.9991060956790125) = 0  =>  result: The solutions are x = −3.07, x = −3 and x = −2.94 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2.944667781207133)(x - -3.066099108367627)(x - -2.9991060956790125) = 0  =>  x = -3.06609910837, -2.99910609568, -2.94466778121
+BAR x^2 - -8*x + 32 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −4 ± 4i.
+SOLVE x^2 - -8*x + 32 = 0  =>  no real x; complex -4 + 4i
+BAR x^2 - 8*x + 20 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 4 ± 2i.
+SOLVE x^2 - 8*x + 20 = 0  =>  no real x; complex 4 + 2i
+BAR x^2 - 4*x + 104 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 2 ± 10i.
+SOLVE x^2 - 4*x + 104 = 0  =>  no real x; complex 2 + 10i
+BAR x^2 - 2*x + 65 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 1 ± 8i.
+SOLVE x^2 - 2*x + 65 = 0  =>  no real x; complex 1 + 8i
+BAR x^2 - -2*x + 37 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −1 ± 6i.
+SOLVE x^2 - -2*x + 37 = 0  =>  no real x; complex -1 + 6i
+BAR x^2 - -6*x + 25 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −3 ± 4i.
+SOLVE x^2 - -6*x + 25 = 0  =>  no real x; complex -3 + 4i
+BAR x^2 - -8*x + 20 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −4 ± 2i.
+SOLVE x^2 - -8*x + 20 = 0  =>  no real x; complex -4 + 2i
+BAR (x - 4)(x - 4.00000000001) = 0  =>  result: The solutions are x = 4 and x = 4.00000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)(x - 4.00000000001) = 0  =>  x = 4, 4.00000000001
+BAR (x - 2)(x - 2.000000001) = 0  =>  result: The solutions are x = 2 and x = 2.000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)(x - 2.000000001) = 0  =>  x = 2, 2.000000001
+BAR (x - 1)(x - 1.0000001) = 0  =>  result: The solutions are x = 1 and x = 1.0000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)(x - 1.0000001) = 0  =>  x = 1, 1.0000001
+BAR (x - -1)(x - -0.99999) = 0  =>  result: The solutions are x = −1 and x = −0.99999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)(x - -0.99999) = 0  =>  x = -1, -0.99999
+BAR (x - -2)(x - -1.99) = 0  =>  result: The solutions are x = −2 and x = −1.99 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)(x - -1.99) = 0  =>  x = -2, -1.99
+BAR (x - -4)(x - -3.9999999999) = 0  =>  result: The solutions are x = −4 and x = −3.9999999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)(x - -3.9999999999) = 0  =>  x = -4, -3.9999999999
+BAR (x - 4)^4 = 0  =>  result: The solution is x = 4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)^4 = 0  =>  x = 4
+BAR (x - 3)^3 = 0  =>  result: The solution is x = 3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)^3 = 0  =>  x = 3
+BAR (x - 1)^3 = 0  =>  result: The solution is x = 1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)^3 = 0  =>  x = 1
+BAR (x - -1)^2 = 0  =>  result: The solution is x = −1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)^2 = 0  =>  x = -1
+BAR (x - -2)^5 = 0  =>  result: The solution is x = −2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)^5 = 0  =>  x = -2
+BAR (x - -4)^4 = 0  =>  result: The solution is x = −4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)^4 = 0  =>  x = -4
+BAR (x - 4.04639017489712)(x - 3.9038511659807957)(x - 4.000143732853224) = 0  =>  result: The solutions are x = 3.9, x = 4 and x = 4.05 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4.04639017489712)(x - 3.9038511659807957)(x - 4.000143732853224) = 0  =>  x = 3.90385116598, 4.00014373285, 4.0463901749
+BAR (x - 3.025943072702332)(x - 2.982348679698217)(x - 3.0096062242798354) = 0  =>  result: The solutions are x = 2.98, x = 3.01 and x = 3.03 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3.025943072702332)(x - 2.982348679698217)(x - 3.0096062242798354) = 0  =>  x = 2.9823486797, 3.00960622428, 3.0259430727
+BAR (x - 1.0054959705075446)(x - 0.9608461934156378)(x - 1.0090687157064473) = 0  =>  result: The solutions are x = 0.96, x = 1.005 and x = 1.009 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1.0054959705075446)(x - 0.9608461934156378)(x - 1.0090687157064473) = 0  =>  x = 0.960846193416, 1.00549597051, 1.00906871571
+BAR (x - -0.9149511316872427)(x - -1.060656292866941)(x - -0.991468792866941) = 0  =>  result: The solutions are x = −1.06, x = −0.99 and x = −0.91 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -0.9149511316872427)(x - -1.060656292866941)(x - -0.991468792866941) = 0  =>  x = -1.06065629287, -0.991468792867, -0.914951131687
+BAR (x - -1.9353982338820301)(x - -2.0821587791495197)(x - -1.9920063014403293) = 0  =>  result: The solutions are x = −2.08, x = −1.99 and x = −1.94 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1.9353982338820301)(x - -2.0821587791495197)(x - -1.9920063014403293) = 0  =>  x = -2.08215877915, -1.99200630144, -1.93539823388
+BAR (x - -3.9558453360768175)(x - -4.003661265432099)(x - -3.9925438100137174) = 0  =>  result: The solutions are x = −4, x = −3.99 and x = −3.96 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3.9558453360768175)(x - -4.003661265432099)(x - -3.9925438100137174) = 0  =>  x = -4.00366126543, -3.99254381001, -3.95584533608
+BAR x^2 - -10*x + 34 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −5 ± 3i.
+SOLVE x^2 - -10*x + 34 = 0  =>  no real x; complex -5 + 3i
+BAR x^2 - 6*x + 10 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 3 ± i.
+SOLVE x^2 - 6*x + 10 = 0  =>  no real x; complex 3 + 1i
+BAR x^2 - 2*x + 82 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 1 ± 9i.
+SOLVE x^2 - 2*x + 82 = 0  =>  no real x; complex 1 + 9i
+BAR x^2 - 0*x + 49 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = ±7i.
+SOLVE x^2 - 0*x + 49 = 0  =>  no real x; complex 0 + 7i
+BAR x^2 - -4*x + 29 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −2 ± 5i.
+SOLVE x^2 - -4*x + 29 = 0  =>  no real x; complex -2 + 5i
+BAR x^2 - -8*x + 25 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −4 ± 3i.
+SOLVE x^2 - -8*x + 25 = 0  =>  no real x; complex -4 + 3i
+BAR x^2 - -10*x + 26 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −5 ± i.
+SOLVE x^2 - -10*x + 26 = 0  =>  no real x; complex -5 + 1i
+BAR (x - 3)(x - 3.0000000001) = 0  =>  result: The solutions are x = 3 and x = 3.0000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)(x - 3.0000000001) = 0  =>  x = 3, 3.0000000001
+BAR (x - 1)(x - 1.00000001) = 0  =>  result: The solutions are x = 1 and x = 1.00000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)(x - 1.00000001) = 0  =>  x = 1, 1.00000001
+BAR (x - 0)(x - 0.00001) = 0  =>  result: The solutions are x = 0 and x = 1 × 10⁻⁵ — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)(x - 0.00001) = 0  =>  x = 0, 0.00001
+BAR (x - -2)(x - -1.999) = 0  =>  result: The solutions are x = −2 and x = −1.999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)(x - -1.999) = 0  =>  x = -2, -1.999
+BAR (x - -4)(x - -3.99999999999) = 0  =>  result: The solutions are x = −4 and x = −3.99999999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)(x - -3.99999999999) = 0  =>  x = -4, -3.99999999999
+BAR (x - -5)(x - -4.999999999) = 0  =>  result: The solutions are x = −5 and x = −4.999999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)(x - -4.999999999) = 0  =>  x = -5, -4.999999999
+BAR (x - 3)^4 = 0  =>  result: The solution is x = 3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)^4 = 0  =>  x = 3
+BAR (x - 2)^3 = 0  =>  result: The solution is x = 2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)^3 = 0  =>  x = 2
+BAR (x - 0)^2 = 0  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)^2 = 0  =>  x = 0
+BAR (x - -2)^5 = 0  =>  result: The solution is x = −2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)^5 = 0  =>  x = -2
+BAR (x - -3)^5 = 0  =>  result: The solution is x = −3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)^5 = 0  =>  x = -3
+BAR (x - -5)^4 = 0  =>  result: The solution is x = −5 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)^4 = 0  =>  x = -5
+BAR (x - 3.0352126200274347)(x - 2.966289008916324)(x - 3.0067060185185186) = 0  =>  result: The solutions are x = 2.97, x = 3.01 and x = 3.04 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3.0352126200274347)(x - 2.966289008916324)(x - 3.0067060185185186) = 0  =>  x = 2.96628900892, 3.00670601852, 3.03521262003
+BAR (x - 2.0147655178326476)(x - 1.9447865226337449)(x - 2.0061685099451303) = 0  =>  result: The solutions are x = 1.94, x = 2.006 and x = 2.015 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2.0147655178326476)(x - 1.9447865226337449)(x - 2.0061685099451303) = 0  =>  x = 1.94478652263, 2.00616850995, 2.01476551783
+BAR (x - 0.09431841563786009)(x - -0.07671596364883403)(x - 0.005631001371742113) = 0  =>  result: The solutions are x = −0.077, x = 0.0056 and x = 0.094 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0.09431841563786009)(x - -0.07671596364883403)(x - 0.005631001371742113) = 0  =>  x = -0.0767159636488, 0.00563100137174, 0.0943184156379
+BAR (x - -1.9261286865569274)(x - -2.0982184499314127)(x - -1.994906507201646) = 0  =>  result: The solutions are x = −2.1, x = −1.99 and x = −1.93 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1.9261286865569274)(x - -2.0982184499314127)(x - -1.994906507201646) = 0  =>  x = -2.09821844993, -1.9949065072, -1.92612868656
+BAR (x - -2.9465757887517148)(x - -3.0197209362139916)(x - -2.995444015775034) = 0  =>  result: The solutions are x = −3.02, x = −3 and x = −2.95 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2.9465757887517148)(x - -3.0197209362139916)(x - -2.995444015775034) = 0  =>  x = -3.01972093621, -2.99544401578, -2.94657578875
+BAR (x - -4.967022890946502)(x - -5.041223422496571)(x - -4.995981524348423) = 0  =>  result: The solutions are x = −5.04, x = −5 and x = −4.97 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4.967022890946502)(x - -5.041223422496571)(x - -4.995981524348423) = 0  =>  x = -5.0412234225, -4.99598152435, -4.96702289095
+BAR x^2 - 8*x + 20 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 4 ± 2i.
+SOLVE x^2 - 8*x + 20 = 0  =>  no real x; complex 4 + 2i
+BAR x^2 - 4*x + 104 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 2 ± 10i.
+SOLVE x^2 - 4*x + 104 = 0  =>  no real x; complex 2 + 10i
+BAR x^2 - 0*x + 64 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = ±8i.
+SOLVE x^2 - 0*x + 64 = 0  =>  no real x; complex 0 + 8i
+BAR x^2 - -2*x + 37 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −1 ± 6i.
+SOLVE x^2 - -2*x + 37 = 0  =>  no real x; complex -1 + 6i
+BAR x^2 - -6*x + 25 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −3 ± 4i.
+SOLVE x^2 - -6*x + 25 = 0  =>  no real x; complex -3 + 4i
+BAR x^2 - -10*x + 29 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −5 ± 2i.
+SOLVE x^2 - -10*x + 29 = 0  =>  no real x; complex -5 + 2i
+BAR x^2 - 8*x + 97 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 4 ± 9i.
+SOLVE x^2 - 8*x + 97 = 0  =>  no real x; complex 4 + 9i
+BAR (x - 2)(x - 2.00000001) = 0  =>  result: The solutions are x = 2 and x = 2.00000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)(x - 2.00000001) = 0  =>  x = 2, 2.00000001
+BAR (x - 0)(x - 0.000001) = 0  =>  result: The solutions are x = 0 and x = 1 × 10⁻⁶ — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)(x - 0.000001) = 0  =>  x = 0, 0.000001
+BAR (x - -1)(x - -0.9999) = 0  =>  result: The solutions are x = −1 and x = −0.9999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)(x - -0.9999) = 0  =>  x = -1, -0.9999
+BAR (x - -3)(x - -2.99) = 0  =>  result: The solutions are x = −3 and x = −2.99 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)(x - -2.99) = 0  =>  x = -3, -2.99
+BAR (x - -5)(x - -4.9999999999) = 0  =>  result: The solutions are x = −5 and x = −4.9999999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)(x - -4.9999999999) = 0  =>  x = -5, -4.9999999999
+BAR (x - 4)(x - 4.00000001) = 0  =>  result: The solutions are x = 4 and x = 4.00000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)(x - 4.00000001) = 0  =>  x = 4, 4.00000001
+BAR (x - 2)^3 = 0  =>  result: The solution is x = 2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2)^3 = 0  =>  x = 2
+BAR (x - 1)^3 = 0  =>  result: The solution is x = 1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)^3 = 0  =>  x = 1
+BAR (x - -1)^2 = 0  =>  result: The solution is x = −1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)^2 = 0  =>  x = -1
+BAR (x - -3)^5 = 0  =>  result: The solution is x = −3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)^5 = 0  =>  x = -3
+BAR (x - -4)^4 = 0  =>  result: The solution is x = −4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)^4 = 0  =>  x = -4
+BAR (x - 4)^3 = 0  =>  result: The solution is x = 4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)^3 = 0  =>  x = 4
+BAR (x - 2.0240350651577503)(x - 1.9287268518518519)(x - 2.0032683041838135) = 0  =>  result: The solutions are x = 1.93, x = 2 and x = 2.02 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 2.0240350651577503)(x - 1.9287268518518519)(x - 2.0032683041838135) = 0  =>  x = 1.92872685185, 2.00326830418, 2.02403506516
+BAR (x - 1.003587962962963)(x - 0.907224365569273)(x - 1.0027307956104252) = 0  =>  result: The solutions are x = 0.91, x = 1.003 and x = 1.004 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1.003587962962963)(x - 0.907224365569273)(x - 1.0027307956104252) = 0  =>  x = 0.907224365569, 1.00273079561, 1.00358796296
+BAR (x - -0.9168591392318244)(x - -1.0142781207133058)(x - -0.997806712962963) = 0  =>  result: The solutions are x = −1.01, x = −1 and x = −0.92 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -0.9168591392318244)(x - -1.0142781207133058)(x - -0.997806712962963) = 0  =>  x = -1.01427812071, -0.997806712963, -0.916859139232
+BAR (x - -2.937306241426612)(x - -3.0357806069958846)(x - -2.9983442215363514) = 0  =>  result: The solutions are x = −3.04, x = −3 and x = −2.94 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2.937306241426612)(x - -3.0357806069958846)(x - -2.9983442215363514) = 0  =>  x = -3.035780607, -2.99834422154, -2.93730624143
+BAR (x - -3.957753343621399)(x - -4.057283093278464)(x - -3.9988817301097392) = 0  =>  result: The solutions are x = −4.06, x = −4 and x = −3.96 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3.957753343621399)(x - -4.057283093278464)(x - -3.9988817301097392) = 0  =>  x = -4.05728309328, -3.99888173011, -3.95775334362
+BAR (x - 4.021799554183813)(x - 3.9212144204389574)(x - 4.000580761316872) = 0  =>  result: The solutions are x = 3.92, x = 4 and x = 4.02 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4.021799554183813)(x - 3.9212144204389574)(x - 4.000580761316872) = 0  =>  x = 3.92121442044, 4.00058076132, 4.02179955418
+BAR x^2 - 4*x + 5 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 2 ± i.
+SOLVE x^2 - 4*x + 5 = 0  =>  no real x; complex 2 + 1i
+BAR x^2 - 2*x + 82 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 1 ± 9i.
+SOLVE x^2 - 2*x + 82 = 0  =>  no real x; complex 1 + 9i
+BAR x^2 - -2*x + 50 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −1 ± 7i.
+SOLVE x^2 - -2*x + 50 = 0  =>  no real x; complex -1 + 7i
+BAR x^2 - -4*x + 29 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −2 ± 5i.
+SOLVE x^2 - -4*x + 29 = 0  =>  no real x; complex -2 + 5i
+BAR x^2 - -8*x + 20 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −4 ± 2i.
+SOLVE x^2 - -8*x + 20 = 0  =>  no real x; complex -4 + 2i
+BAR x^2 - 8*x + 116 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 4 ± 10i.
+SOLVE x^2 - 8*x + 116 = 0  =>  no real x; complex 4 + 10i
+BAR x^2 - 6*x + 73 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 3 ± 8i.
+SOLVE x^2 - 6*x + 73 = 0  =>  no real x; complex 3 + 8i
+BAR (x - 1)(x - 1.0000001) = 0  =>  result: The solutions are x = 1 and x = 1.0000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)(x - 1.0000001) = 0  =>  x = 1, 1.0000001
+BAR (x - -1)(x - -0.99999) = 0  =>  result: The solutions are x = −1 and x = −0.99999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1)(x - -0.99999) = 0  =>  x = -1, -0.99999
+BAR (x - -2)(x - -1.999) = 0  =>  result: The solutions are x = −2 and x = −1.999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)(x - -1.999) = 0  =>  x = -2, -1.999
+BAR (x - -4)(x - -3.99999999999) = 0  =>  result: The solutions are x = −4 and x = −3.99999999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)(x - -3.99999999999) = 0  =>  x = -4, -3.99999999999
+BAR (x - 4)(x - 4.000000001) = 0  =>  result: The solutions are x = 4 and x = 4.000000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 4)(x - 4.000000001) = 0  =>  x = 4, 4.000000001
+BAR (x - 3)(x - 3.0000001) = 0  =>  result: The solutions are x = 3 and x = 3.0000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)(x - 3.0000001) = 0  =>  x = 3, 3.0000001
+BAR (x - 1)^3 = 0  =>  result: The solution is x = 1 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1)^3 = 0  =>  x = 1
+BAR (x - 0)^2 = 0  =>  result: The solution is x = 0 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)^2 = 0  =>  x = 0
+BAR (x - -2)^5 = 0  =>  result: The solution is x = −2 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)^5 = 0  =>  x = -2
+BAR (x - -4)^4 = 0  =>  result: The solution is x = −4 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4)^4 = 0  =>  x = -4
+BAR (x - -5)^4 = 0  =>  result: The solution is x = −5 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)^4 = 0  =>  x = -5
+BAR (x - 3)^3 = 0  =>  result: The solution is x = 3 — drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)^3 = 0  =>  x = 3
+BAR (x - 1.012857510288066)(x - 0.99116469478738)(x - 1.0098305898491085) = 0  =>  result: The solutions are x = 0.99, x = 1.01 and x = 1.013 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1.012857510288066)(x - 0.99116469478738)(x - 1.0098305898491085) = 0  =>  x = 0.991164694787, 1.00983058985, 1.01285751029
+BAR (x - 0.09241040809327847)(x - -0.030337791495198902)(x - 0.009293081275720164) = 0  =>  result: The solutions are x = −0.03, x = 0.0093 and x = 0.092 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0.09241040809327847)(x - -0.030337791495198902)(x - 0.009293081275720164) = 0  =>  x = -0.0303377914952, 0.00929308127572, 0.0924104080933
+BAR (x - -1.928036694101509)(x - -2.051840277777778)(x - -1.991244427297668) = 0  =>  result: The solutions are x = −2.05, x = −1.99 and x = −1.93 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -1.928036694101509)(x - -2.051840277777778)(x - -1.991244427297668) = 0  =>  x = -2.05184027778, -1.9912444273, -1.9280366941
+BAR (x - -3.9484837962962964)(x - -4.073342764060357)(x - -3.9917819358710562) = 0  =>  result: The solutions are x = −4.07, x = −3.99 and x = −3.95 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3.9484837962962964)(x - -4.073342764060357)(x - -3.9917819358710562) = 0  =>  x = -4.07334276406, -3.99178193587, -3.9484837963
+BAR (x - -4.968930898491084)(x - -5.094845250342935)(x - -4.992319444444444) = 0  =>  result: The solutions are x = −5.09, x = −4.99 and x = −4.97 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -4.968930898491084)(x - -5.094845250342935)(x - -4.992319444444444) = 0  =>  x = -5.09484525034, -4.99231944444, -4.96893089849
+BAR (x - 3.0106219993141288)(x - 2.9836522633744855)(x - 3.007143046982167) = 0  =>  result: The solutions are x = 2.98, x = 3.007 and x = 3.011 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3.0106219993141288)(x - 2.9836522633744855)(x - 3.007143046982167) = 0  =>  x = 2.98365226337, 3.00714304698, 3.01062199931
+BAR (x - 1.0901748971193417)(x - 0.9621497770919067)(x - 1.006605538408779) = 0  =>  result: The solutions are x = 0.96, x = 1.01 and x = 1.09 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 1.0901748971193417)(x - 0.9621497770919067)(x - 1.006605538408779) = 0  =>  x = 0.962149777092, 1.00660553841, 1.09017489712
+BAR x^2 - 0*x + 49 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = ±7i.
+SOLVE x^2 - 0*x + 49 = 0  =>  no real x; complex 0 + 7i
+BAR x^2 - -4*x + 29 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −2 ± 5i.
+SOLVE x^2 - -4*x + 29 = 0  =>  no real x; complex -2 + 5i
+BAR x^2 - -6*x + 18 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −3 ± 3i.
+SOLVE x^2 - -6*x + 18 = 0  =>  no real x; complex -3 + 3i
+BAR x^2 - -10*x + 26 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = −5 ± i.
+SOLVE x^2 - -10*x + 26 = 0  =>  no real x; complex -5 + 1i
+BAR x^2 - 6*x + 90 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 3 ± 9i.
+SOLVE x^2 - 6*x + 90 = 0  =>  no real x; complex 3 + 9i
+BAR x^2 - 4*x + 53 = 0  =>  error: No real x makes this true — it has no points on the graph. In complex numbers: x = 2 ± 7i.
+SOLVE x^2 - 4*x + 53 = 0  =>  no real x; complex 2 + 7i
+BAR (x - 0)(x - 0.000001) = 0  =>  result: The solutions are x = 0 and x = 1 × 10⁻⁶ — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 0)(x - 0.000001) = 0  =>  x = 0, 0.000001
+BAR (x - -2)(x - -1.9999) = 0  =>  result: The solutions are x = −2 and x = −1.9999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -2)(x - -1.9999) = 0  =>  x = -2, -1.9999
+BAR (x - -3)(x - -2.99) = 0  =>  result: The solutions are x = −3 and x = −2.99 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -3)(x - -2.99) = 0  =>  x = -3, -2.99
+BAR (x - -5)(x - -4.9999999999) = 0  =>  result: The solutions are x = −5 and x = −4.9999999999 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - -5)(x - -4.9999999999) = 0  =>  x = -5, -4.9999999999
+BAR (x - 3)(x - 3.00000001) = 0  =>  result: The solutions are x = 3 and x = 3.00000001 — each drawn as a vertical line. Switched to Graphing to show it.
+SOLVE (x - 3)(x - 3.00000001) = 0  =>  x = 3, 3.00000001

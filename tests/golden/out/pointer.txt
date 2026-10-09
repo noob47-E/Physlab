@@ -1,0 +1,46 @@
+SCENE a free point and a free vector  =>  P(point) drag=yes moves=P | A(vector) drag=yes moves=A
+SCENE a resultant of two vectors  =>  A(vector) drag=yes moves=A | B(vector) drag=yes moves=B | R(vector) drag=yes moves=A | B′tail(point) drag=no moves=— | B′(vector) drag=yes moves=B
+SCENE a segment and its midpoint  =>  A(point) drag=yes moves=A | B(point) drag=yes moves=B | a(segment) drag=yes moves=A+B | M(point) drag=no moves=—
+SCENE a triangle  =>  A(point) drag=yes moves=A | B(point) drag=yes moves=B | C(point) drag=yes moves=C | poly1(polygon) drag=yes moves=A+B+C | a(segment) drag=yes moves=A+B | b(segment) drag=yes moves=B+C | c(segment) drag=yes moves=C+A
+SCENE a polygon of five corners  =>  A(point) drag=yes moves=A | B(point) drag=yes moves=B | C(point) drag=yes moves=C | D(point) drag=yes moves=D | E(point) drag=yes moves=E | poly1(polygon) drag=yes moves=A+B+C+D+E | a(segment) drag=yes moves=A+B | b(segment) drag=yes moves=B+C | c(segment) drag=yes moves=C+D | d(segment) drag=yes moves=D+E | p(segment) drag=yes moves=E+A
+SCENE a circle on a centre  =>  C(point) drag=yes moves=C | c1(circle) drag=yes moves=C
+SCENE a line and a point  =>  A(point) drag=yes moves=A | B(point) drag=yes moves=B | f(line) drag=yes moves=A+B | Q(point) drag=yes moves=Q
+SCENE a graph and a slider  =>  a(number) drag=no moves=— | f(graph) drag=no moves=—
+SCENE a point on a graph  =>  f(graph) drag=no moves=— | T(point) drag=yes moves=T
+SCENE a square  =>  A(point) drag=yes moves=A | B(point) drag=yes moves=B | C(point) drag=no moves=— | D(point) drag=no moves=— | poly1(polygon) drag=yes moves=A+B | a(segment) drag=yes moves=A+B | b(segment) drag=yes moves=B | c(segment) drag=no moves=— | d(segment) drag=yes moves=A
+CLICK sel=[] on p1 shift=false moved=false  =>  ["p1"]
+CLICK sel=[p1] on p1 shift=false moved=false  =>  null
+CLICK sel=[p1] on p2 shift=false moved=false  =>  ["p2"]
+CLICK sel=[p1] on p2 shift=true moved=false  =>  null
+CLICK sel=[p1,p2] on p1 shift=true moved=false  =>  null
+CLICK sel=[p1] on p1 shift=false moved=true  =>  null
+CLICK sel=[p1,p2] on p3 shift=false moved=true  =>  null
+TIP 0  =>  length 0 u | angle 0° | number 0
+TIP 1  =>  length 1 u | angle 57.3° | number 1
+TIP 1.2345  =>  length 1.23 u | angle 70.73° | number 1.23
+TIP 2.5e-7  =>  length 2.5 × 10⁻⁷ u | angle 1.43 × 10⁻⁵° | number 2.5 × 10⁻⁷
+TIP 123456789  =>  length 123456789 u | angle 7.07 × 10⁹° | number 123456789
+TIP -3.75  =>  length −3.75 u | angle −214.86° | number −3.75
+TIP 0.7853981633974483  =>  length 0.79 u | angle 45° | number 0.79
+TIP 3.141592653589793  =>  length 3.14 u | angle 180° | number 3.14
+TIP 1e-16  =>  length 0 u | angle 0° | number 0
+TOOL select  =>  label Move | points on empty space false
+TOOL sketch  =>  label Sketch | points on empty space false
+TOOL point  =>  label Point | points on empty space true
+TOOL vector  =>  label Vector | points on empty space false
+TOOL segment  =>  label Segment | points on empty space true
+TOOL line  =>  label Line | points on empty space true
+TOOL ray  =>  label Ray | points on empty space true
+TOOL circle  =>  label Circle | points on empty space true
+TOOL triangle  =>  label Triangle | points on empty space true
+TOOL polygon  =>  label Polygon | points on empty space true
+TOOL angle  =>  label Angle | points on empty space true
+TOOL distance  =>  label Measure | points on empty space true
+TOOL midpoint  =>  label Midpoint | points on empty space true
+TOOL perpendicular  =>  label Perpendicular | points on empty space false
+TOOL parallel  =>  label Parallel | points on empty space false
+TOOL perpBisector  =>  label Perp._bisector | points on empty space true
+TOOL angleBisector  =>  label Angle_bisector | points on empty space true
+TOOL intersect  =>  label Intersect | points on empty space false
+TOOL text  =>  label Text | points on empty space false
+TOOL delete  =>  label Delete | points on empty space false

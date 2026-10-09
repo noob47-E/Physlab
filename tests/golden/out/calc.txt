@@ -1,0 +1,312 @@
+COMP deg 2+3\times4  =>  14
+COMP deg \frac{1}{3}+\frac{1}{6}  =>  0.5 | exact \frac{1}{2}
+COMP deg \sqrt{50}  =>  7.071067812 | exact 5\sqrt{2}
+COMP deg \sin\left(30\right)  =>  0.5 | exact \frac{1}{2}
+COMP deg \cos\left(60\right)^{2}  =>  0.25 | exact \frac{1}{4}
+COMP deg 1.6\times10^{-19}\times6.02\times10^{23}  =>  96320 | exact 96320
+COMP deg 25.37\div20  =>  1.2685 | exact \frac{2537}{2000}
+COMP deg 2^{10}  =>  1024
+COMP deg \ln\left(e^{3}\right)  =>  3
+COMP deg \log\left(1000\right)  =>  3
+COMP deg 5!  =>  120
+COMP deg \frac{\sqrt{3}}{2}  =>  0.8660254038 | exact \frac{\sqrt{3}}{2}
+COMP deg \left(2+\sqrt{3}\right)\left(2-\sqrt{3}\right)  =>  1 | exact 1
+COMP deg \pi\times3^{2}  =>  28.27433388 | exact 9\pi
+COMP deg \tan\left(45\right)  =>  1 | exact 1
+COMP deg \frac{9.8\times2.5^{2}}{2}  =>  30.625 | exact \frac{245}{8}
+COMP deg \sqrt[3]{27}  =>  3
+COMP deg 1\div2\times10^{3}  =>  500
+COMP deg \frac{1}{\sqrt{3}+1}  =>  0.3660254038
+COMP deg 0.35\times3  =>  1.05 | exact \frac{21}{20}
+COMP deg \sum_{n=1}^{5}n^{2}=55  =>  true | L − R = 0
+COMP deg \sum_{n=1}^{5}n^{2}=56  =>  false | L − R = −1
+COMP deg sigma(x,1,100000)=5  =>  false | L − R = 5.000049995×10^9
+COMP deg x+sigma(x,1,100)=5100  =>  x = 50 | L − R = 0
+COMP deg 2x=4  =>  x = 2 | L − R = 0
+COMP deg x^2=4  =>  x = 2 | L − R = 0
+COMP deg x^2+x+1=0  =>  No real solution. In complex numbers: x = −0.5 ± 0.8660254038i
+COMP deg \sin\;30  =>  0.5 | exact \frac{1}{2}
+COMP deg \log_{2}\;8  =>  3
+COMP deg \left(-8\right)^{\frac{1}{3}}  =>  −2 | real root — principal value 1 + 1.732050808i
+COMP deg \sqrt[3]{-8}  =>  −2 | real root — principal value 1 + 1.732050808i
+COMP deg \frac{2}{3}+\sqrt{2}  =>  2.080880229
+COMP deg 1e-20+1  =>  1
+COMP deg 10^{100}  =>  1×10^100 | exact 1\times 10^{100}
+COMP deg \frac{1}{0}  =>  REFUSED That divides by zero.
+COMP deg 0\div0  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
+COMP deg x^100000  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg \int_{0}^{\pi}\sin x\,dx  =>  0.08610697004
+COMP deg \frac{d}{dx}x^{2}  =>  REFUSED Those numbers do not fit this function.
+COMP deg integral(1.6e-19*x,0,1)=1e-19  =>  false | L − R = −2×10^-20
+COMP deg 5=5  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
+COMP deg A+B=7  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
+COMP deg \sin^{-1}\left(0.5\right)  =>  30 | exact 30
+COMP deg \sin^{2}30  =>  0.25 | exact \frac{1}{4}
+COMP deg 3\times10^{8}\times2  =>  600000000
+COMP deg 3,5  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg 1,000  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg 2,5+1  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg f(1,2)  =>  REFUSED There is no function called f. Check the spelling, or pick one from the keypad.
+COMP deg \left(1,2\right)  =>  [1, 2, 0]
+COMP rad \sin\left(1\right)  =>  0.8414709848
+COMP eng \sin\left(1\right)  =>  17.45240644×10^-3
+COMP rad \cos\left(\pi\right)  =>  −1
+COMP eng \cos\left(\pi\right)  =>  998.4971499×10^-3
+COMP rad \tan\left(60\right)  =>  0.3200403894
+COMP eng \tan\left(60\right)  =>  1.732050808×10^0 | exact \sqrt{3}
+COMP rad \sin^{-1}\left(1\right)  =>  1.570796327 | exact \frac{\pi}{2}
+COMP eng \sin^{-1}\left(1\right)  =>  90×10^0
+CMPLX \left(2+3i\right)\left(1-i\right)  =>  5 + i | size 5.099019514, angle 0.1973955598 rad | conjugate 5 − i
+CMPLX \sqrt{-4}  =>  2i | size 2, angle 1.570796327 rad | conjugate −2i
+CMPLX i^{2}  =>  −1 | size 1, angle 3.141592654 rad | conjugate −1
+CMPLX \frac{1}{1+i}  =>  0.5 − 0.5i | size 0.7071067812, angle −0.7853981634 rad | conjugate 0.5 + 0.5i
+CMPLX \left|3+4i\right|  =>  5 | size 5, angle 0 rad | conjugate 5
+BASE-N hex FF+1  =>  100 | decimal 256 | hex 100 | binary 000100000000 | octal 400
+BASE-N hex 1010  =>  1010 | decimal 4112 | hex 1010 | binary 0001000000010000 | octal 10020
+BASE-N hex 7\times8  =>  REFUSED Only the digits of this base are allowed here: 0 to 9 and A to F in hexadecimal. "\" is not one of them.
+BASE-N hex FF\div3  =>  REFUSED Only the digits of this base are allowed here: 0 to 9 and A to F in hexadecimal. "\" is not one of them.
+COMP rad \sum_{n=1}^{5}n^{2}=55  =>  true | L − R = 0
+COMP rad \sum_{n=1}^{5}n^{2}=56  =>  false | L − R = −1
+COMP rad sigma(x,1,100000)=5  =>  false | L − R = 5.000049995×10^9
+COMP rad x+sigma(x,1,100)=5100  =>  x = 50 | L − R = 0
+COMP rad 2x=4  =>  x = 2 | L − R = 0
+COMP rad x^2=4  =>  x = 2 | L − R = 0
+COMP rad x^2+x+1=0  =>  No real solution. In complex numbers: x = −0.5 ± 0.8660254038i
+COMP rad \sin\;30  =>  −0.9880316241
+COMP rad \log_{2}\;8  =>  3
+COMP rad \left(-8\right)^{\frac{1}{3}}  =>  −2 | real root — principal value 1 + 1.732050808i
+COMP rad \sqrt[3]{-8}  =>  −2 | real root — principal value 1 + 1.732050808i
+COMP rad \frac{2}{3}+\sqrt{2}  =>  2.080880229
+COMP rad 1e-20+1  =>  1
+COMP rad 10^{100}  =>  1×10^100 | exact 1\times 10^{100}
+COMP rad \frac{1}{0}  =>  REFUSED That divides by zero.
+COMP rad 0\div0  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
+COMP rad x^100000  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP rad \int_{0}^{\pi}\sin x\,dx  =>  2 | exact 2
+COMP rad \frac{d}{dx}x^{2}  =>  REFUSED Those numbers do not fit this function.
+COMP rad integral(1.6e-19*x,0,1)=1e-19  =>  false | L − R = −2×10^-20
+COMP rad 5=5  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
+COMP rad A+B=7  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
+COMP rad \sin^{-1}\left(0.5\right)  =>  0.5235987756 | exact \frac{\pi}{6}
+COMP rad \sin^{2}30  =>  0.9762064902
+COMP rad 3\times10^{8}\times2  =>  600000000
+COMP deg 4000×√(2)  =>  5656.854249 | exact 4000\sqrt{2}
+COMP rad 4000×√(2)  =>  5656.854249 | exact 4000\sqrt{2}
+COMP deg 1350×√(3)  =>  2338.26859 | exact 1350\sqrt{3}
+COMP rad 1350×√(3)  =>  2338.26859 | exact 1350\sqrt{3}
+COMP deg 1000×√(2)+0.5  =>  1414.713562
+COMP rad 1000×√(2)+0.5  =>  1414.713562
+COMP deg 1000×π+0.5  =>  3142.092654
+COMP rad 1000×π+0.5  =>  3142.092654
+COMP deg 22/7  =>  3.142857143 | exact \frac{22}{7}
+COMP rad 22/7  =>  3.142857143 | exact \frac{22}{7}
+COMP deg 0.1+0.2  =>  0.3 | exact \frac{3}{10}
+COMP rad 0.1+0.2  =>  0.3 | exact \frac{3}{10}
+COMP deg 2/3+1/7  =>  0.8095238095 | exact \frac{17}{21}
+COMP rad 2/3+1/7  =>  0.8095238095 | exact \frac{17}{21}
+COMP deg 10^22  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP rad 10^22  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg AU_len  =>  1.495978707×10^11
+COMP rad AU_len  =>  1.495978707×10^11
+COMP deg 2u  =>  REFUSED I don't know what u is. Use one of the letters A to F, M, x or y for a value, or check the spelling. [Undefined symbol u]
+COMP rad 2u  =>  REFUSED I don't know what u is. Use one of the letters A to F, M, x or y for a value, or check the spelling. [Undefined symbol u]
+COMP deg \int_{-8}^{0}x^{\frac{1}{3}}\,dx  =>  −12 | exact -12
+COMP rad \int_{-8}^{0}x^{\frac{1}{3}}\,dx  =>  −12 | exact -12
+COMP deg \int_{-8}^{8}x^{\frac{1}{3}}\,dx  =>  0
+COMP rad \int_{-8}^{8}x^{\frac{1}{3}}\,dx  =>  0
+COMP deg \int_{-8}^{8}x^{\frac{2}{3}}\,dx  =>  38.4 | exact \frac{192}{5}
+COMP rad \int_{-8}^{8}x^{\frac{2}{3}}\,dx  =>  38.4 | exact \frac{192}{5}
+COMP deg \int_{-1}^{1}\sqrt{x}\,dx  =>  REFUSED The area cannot be worked out: the expression has no value at some points between the limits — perhaps a root of a negative number, or 0 ÷ 0.
+COMP rad \int_{-1}^{1}\sqrt{x}\,dx  =>  REFUSED The area cannot be worked out: the expression has no value at some points between the limits — perhaps a root of a negative number, or 0 ÷ 0.
+COMP deg \int_{0}^{1}A\cdot x\,dx  =>  REFUSED The area cannot be worked out: the expression has no value at some points between the limits — perhaps a root of a negative number, or 0 ÷ 0.
+COMP rad \int_{0}^{1}A\cdot x\,dx  =>  REFUSED The area cannot be worked out: the expression has no value at some points between the limits — perhaps a root of a negative number, or 0 ÷ 0.
+COMP deg \int_{0}^{\frac{1}{0}}x\,dx  =>  REFUSED The area cannot be worked out: the limits have to be ordinary numbers.
+COMP rad \int_{0}^{\frac{1}{0}}x\,dx  =>  REFUSED The area cannot be worked out: the limits have to be ordinary numbers.
+COMP deg \int_{0}^{1}\ln\left(x\right)\,dx  =>  REFUSED The area cannot be worked out: the expression grows without limit at some point between the limits — like 1 ÷ 0 or ln 0 does.
+COMP rad \int_{0}^{1}\ln\left(x\right)\,dx  =>  REFUSED The area cannot be worked out: the expression grows without limit at some point between the limits — like 1 ÷ 0 or ln 0 does.
+COMP deg \int_{0}^{1}x^{2}\,dx  =>  0.3333333333 | exact \frac{1}{3}
+COMP rad \int_{0}^{1}x^{2}\,dx  =>  0.3333333333 | exact \frac{1}{3}
+COMP deg \sum_{x=1}^{100}x  =>  5050
+COMP rad \sum_{x=1}^{100}x  =>  5050
+COMP deg \prod_{x=1}^{5}x  =>  120
+COMP rad \prod_{x=1}^{5}x  =>  120
+COMP deg A=5  =>  REFUSED Typing A = … does not store a value. Under Variables, type the value beside A, or work the number out and press Store.
+COMP rad A=5  =>  REFUSED Typing A = … does not store a value. Under Variables, type the value beside A, or work the number out and press Store.
+COMP deg f(t)=t^2  =>  REFUSED Typing f(t) = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
+COMP rad f(t)=t^2  =>  REFUSED Typing f(t) = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
+COMP deg x=5  =>  x = 5 | L − R = 0
+COMP rad x=5  =>  x = 5 | L − R = 0
+COMP deg \sum_{x=1}^{3}x=5  =>  false | L − R = 1
+COMP rad \sum_{x=1}^{3}x=5  =>  false | L − R = 1
+COMP deg sin(30)  =>  0.5 | exact \frac{1}{2}
+COMP rad sin(30)  =>  −0.9880316241
+COMP deg 2×3÷4  =>  1.5 | exact \frac{3}{2}
+COMP rad 2×3÷4  =>  1.5 | exact \frac{3}{2}
+COMP deg √(16)+3²  =>  13
+COMP rad √(16)+3²  =>  13
+COMP deg nCr(5,2)  =>  10
+COMP rad nCr(5,2)  =>  10
+COMP deg 30°30'  =>  30.5 | exact \frac{61}{2}
+COMP rad 30°30'  =>  30.5 | exact \frac{61}{2}
+COMP deg ddx(x^3, 2)  =>  12
+COMP rad ddx(x^3, 2)  =>  12
+COMP deg integral(x^2, 0, 3)  =>  9
+COMP rad integral(x^2, 0, 3)  =>  9
+COMP deg sigma(x, 1, 100)  =>  5050
+COMP rad sigma(x, 1, 100)  =>  5050
+COMP deg Ans + 1  =>  1
+COMP rad Ans + 1  =>  1
+COMP deg x^2 = 2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
+COMP rad x^2 = 2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
+COMP deg Pol(3, 4)  =>  r = 5 | θ = 53.13010235°
+COMP rad Pol(3, 4)  =>  r = 5 | θ = 0.927295218 rad
+COMP deg Pol(max(1,3), 4)  =>  r = 5 | θ = 53.13010235°
+COMP rad Pol(max(1,3), 4)  =>  r = 5 | θ = 0.927295218 rad
+COMP deg Pol(3*cos(0), 4)  =>  r = 5 | θ = 53.13010235°
+COMP rad Pol(3*cos(0), 4)  =>  r = 5 | θ = 0.927295218 rad
+COMP deg Rec(√(4), 60)  =>  x = 1 | y = 1.732050808
+COMP rad Rec(√(4), 60)  =>  x = −1.904825961 | y = −0.6096212422
+COMP deg Rec(max(1,2), 60)  =>  x = 1 | y = 1.732050808
+COMP rad Rec(max(1,2), 60)  =>  x = −1.904825961 | y = −0.6096212422
+COMP deg ddx(sin(x), 30)  =>  0.0151149947
+COMP rad ddx(sin(x), 30)  =>  0.1542514457
+COMP deg integral(sin(x), 0, 90)  =>  57.29577951
+COMP rad integral(sin(x), 0, 90)  =>  1.448073616
+COMP deg integral(sin(x), 0, pi)  =>  0.08610697004
+COMP rad integral(sin(x), 0, pi)  =>  2 | exact 2
+COMP deg h_P  =>  6.62607015×10^-34
+COMP rad h_P  =>  6.62607015×10^-34
+COMP deg hP  =>  6.62607015×10^-34
+COMP rad hP  =>  6.62607015×10^-34
+COMP deg 2*mp  =>  3.345243852×10^-27
+COMP rad 2*mp  =>  3.345243852×10^-27
+COMP deg AUlen  =>  1.495978707×10^11
+COMP rad AUlen  =>  1.495978707×10^11
+COMP deg ddx(x^(1/3), -8)  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP rad ddx(x^(1/3), -8)  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg sigma(x^(1/3), -8, -1)  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP rad sigma(x^(1/3), -8, -1)  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg 25.37÷20  =>  1.2685 | exact \frac{2537}{2000}
+COMP rad 25.37÷20  =>  1.2685 | exact \frac{2537}{2000}
+COMP deg sigma(b2bterm(x), 1, 100000) = 5  =>  REFUSED There is no function called b2bterm. Check the spelling, or pick one from the keypad.
+COMP rad sigma(b2bterm(x), 1, 100000) = 5  =>  REFUSED There is no function called b2bterm. Check the spelling, or pick one from the keypad.
+COMP deg product(b2bterm(1), 1, 100000) + 0*x = 5  =>  REFUSED There is no function called b2bterm. Check the spelling, or pick one from the keypad.
+COMP rad product(b2bterm(1), 1, 100000) + 0*x = 5  =>  REFUSED There is no function called b2bterm. Check the spelling, or pick one from the keypad.
+COMP deg integral(b2bterm(x)^2, 0, x)^2 = -1  =>  REFUSED There is no function called b2bterm. Check the spelling, or pick one from the keypad.
+COMP rad integral(b2bterm(x)^2, 0, x)^2 = -1  =>  REFUSED There is no function called b2bterm. Check the spelling, or pick one from the keypad.
+COMP deg sigma(1/x^2, 1, 100) = 2  =>  false | L − R = −0.3650160998
+COMP rad sigma(1/x^2, 1, 100) = 2  =>  false | L − R = −0.3650160998
+COMP deg A = 5  =>  REFUSED Typing A = … does not store a value. Under Variables, type the value beside A, or work the number out and press Store.
+COMP rad A = 5  =>  REFUSED Typing A = … does not store a value. Under Variables, type the value beside A, or work the number out and press Store.
+COMP deg speed = 5  =>  REFUSED Typing speed = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
+COMP rad speed = 5  =>  REFUSED Typing speed = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
+COMP deg f(t) = t^2  =>  REFUSED Typing f(t) = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
+COMP rad f(t) = t^2  =>  REFUSED Typing f(t) = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
+COMP deg 2A + 1  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
+COMP rad 2A + 1  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
+COMP deg sin(1)  =>  0.01745240644
+COMP rad sin(1)  =>  0.8414709848
+COMP deg 1  =>  1
+COMP rad 1  =>  1
+COMP deg sigma(x^2,1,5)=55  =>  true | L − R = 0
+COMP rad sigma(x^2,1,5)=55  =>  true | L − R = 0
+COMP deg sigma(x^2,1,100000)=333338333350000  =>  true | L − R = 0
+COMP rad sigma(x^2,1,100000)=333338333350000  =>  true | L − R = 0
+COMP deg sigma(x^2,1,100000)=333338333000000  =>  false | L − R = 350000
+COMP rad sigma(x^2,1,100000)=333338333000000  =>  false | L − R = 350000
+COMP deg sigma(1/x^2,1,100000)=1.6449240668982262  =>  true | L − R = 0
+COMP rad sigma(1/x^2,1,100000)=1.6449240668982262  =>  true | L − R = 0
+COMP deg sigma(1e-20*x,1,3)=5e-20  =>  false | L − R = 1×10^-20
+COMP rad sigma(1e-20*x,1,3)=5e-20  =>  false | L − R = 1×10^-20
+COMP deg sigma(1e-20*x,1,3)=6e-20  =>  true | L − R = 0
+COMP rad sigma(1e-20*x,1,3)=6e-20  =>  true | L − R = 0
+COMP deg sigma(0*x,1,3)=0  =>  true | L − R = 0
+COMP rad sigma(0*x,1,3)=0  =>  true | L − R = 0
+COMP deg \frac{1}{2}+\sqrt{9}  =>  3.5 | exact \frac{7}{2}
+COMP rad \frac{1}{2}+\sqrt{9}  =>  3.5 | exact \frac{7}{2}
+COMP deg \sqrt{2}  =>  1.414213562 | exact \sqrt{2}
+COMP rad \sqrt{2}  =>  1.414213562 | exact \sqrt{2}
+COMP deg \frac{\pi}{3}  =>  1.047197551 | exact \frac{\pi}{3}
+COMP rad \frac{\pi}{3}  =>  1.047197551 | exact \frac{\pi}{3}
+COMP deg \sqrt{2}+\frac{1}{3}  =>  1.747546896
+COMP rad \sqrt{2}+\frac{1}{3}  =>  1.747546896
+COMP deg 3+4  =>  7
+COMP rad 3+4  =>  7
+COMP deg \placeholder{}  =>  (nothing)
+COMP rad \placeholder{}  =>  (nothing)
+COMP deg 2+  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP rad 2+  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+COMP deg 2 \pm 3  =>  REFUSED Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.
+COMP rad 2 \pm 3  =>  REFUSED Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.
+COMP deg 2k+1  =>  REFUSED I don't know what k is. Use one of the letters A to F, M, x or y for a value, or check the spelling. [Undefined symbol k]
+COMP rad 2k+1  =>  REFUSED I don't know what k is. Use one of the letters A to F, M, x or y for a value, or check the spelling. [Undefined symbol k]
+COMP deg 5\div0  =>  REFUSED That divides by zero.
+COMP rad 5\div0  =>  REFUSED That divides by zero.
+COMP deg \frac{0}{0}  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
+COMP rad \frac{0}{0}  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
+COMP deg \ln\left(0\right)  =>  REFUSED That runs off to infinity — like 1 ÷ 0 or ln 0 does — so there is no number to show.
+COMP rad \ln\left(0\right)  =>  REFUSED That runs off to infinity — like 1 ÷ 0 or ln 0 does — so there is no number to show.
+COMP deg x^{2}=2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
+COMP rad x^{2}=2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
+COMP deg \sin\left(x\right)=2  =>  REFUSED No solution I can find near 0. Try giving x a value close to the answer first. [No solution found]
+COMP rad \sin\left(x\right)=2  =>  REFUSED No solution I can find near 0. Try giving x a value close to the answer first. [No solution found]
+COMP deg 12345  =>  12345
+COMP rad 12345  =>  12345
+COMP deg 12345\times678  =>  8369910
+COMP rad 12345\times678  =>  8369910
+COMP deg x^{3}-1=0  =>  x = 1 | L − R = 0
+COMP rad x^{3}-1=0  =>  x = 1 | L − R = 0
+COMP deg \sqrt{9}  =>  3
+COMP rad \sqrt{9}  =>  3
+COMP deg \left(-8\right)^{\frac{1}{2}}  =>  2.828427125i | imaginary — the answer has an i part, so it is a complex number
+COMP rad \left(-8\right)^{\frac{1}{2}}  =>  2.828427125i | imaginary — the answer has an i part, so it is a complex number
+COMP deg x^{2}+6x+9=0  =>  x = −3 | L − R = 0
+COMP rad x^{2}+6x+9=0  =>  x = −3 | L − R = 0
+COMP deg x^{3}-3x+2=0  =>  x = 1 | L − R = 0
+COMP rad x^{3}-3x+2=0  =>  x = 1 | L − R = 0
+COMP deg \sqrt{-4}+1  =>  1 + 2i | imaginary — √(−4) = 2i
+COMP rad \sqrt{-4}+1  =>  1 + 2i | imaginary — √(−4) = 2i
+COMP deg \sqrt{-4}\times\sqrt{-4}  =>  −4
+COMP rad \sqrt{-4}\times\sqrt{-4}  =>  −4
+COMP deg x^{\frac{1}{3}}  =>  1.25992105
+COMP rad x^{\frac{1}{3}}  =>  1.25992105
+COMP deg x^{2}-\sin\left(30\right)=0  =>  x = 0.7071067812 | L − R = −5.551115123×10^-17
+COMP rad x^{2}-\sin\left(30\right)=0  =>  No real solution. In complex numbers: x = ±0.9939977988i
+COMP deg \left(x+\sin\left(30\right)\right)^{2}=0  =>  x = −0.5 | L − R = 0
+COMP rad \left(x+\sin\left(30\right)\right)^{2}=0  =>  x = 0.9880316241 | L − R = 0
+COMP deg arg(-1)  =>  180
+COMP rad arg(-1)  =>  3.141592654 | exact \pi
+COMP deg A(B+1)  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
+COMP rad A(B+1)  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
+COMP deg Abs(-3)  =>  3
+COMP rad Abs(-3)  =>  3
+CMPLX rad \operatorname{re}\left(3+4i\right)  =>  REFUSED There is no function called re. Check the spelling, or pick one from the keypad.
+CMPLX deg \operatorname{re}\left(3+4i\right)  =>  REFUSED There is no function called re. Check the spelling, or pick one from the keypad.
+CMPLX rad x^{2}=-4  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
+CMPLX deg x^{2}=-4  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
+CMPLX rad \operatorname{nCr}\left(2+3i,2\right)  =>  REFUSED Those numbers do not fit this function.
+CMPLX deg \operatorname{nCr}\left(2+3i,2\right)  =>  REFUSED Those numbers do not fit this function.
+CMPLX rad (3+4i)(1-2i)  =>  11 − 2i | size 11.18033989, angle −0.1798534998 rad | conjugate 11 + 2i
+CMPLX deg (3+4i)(1-2i)  =>  11 − 2i | size 11.18033989, angle −10.30484647° | conjugate 11 + 2i
+CMPLX rad \operatorname{arg}\left(-2i\right)  =>  −1.570796327 | size 1.570796327, angle 3.141592654 rad | conjugate −1.570796327
+CMPLX deg \operatorname{arg}\left(-2i\right)  =>  −90 | size 90, angle 180° | conjugate −90
+CMPLX rad 2\times e^{i\times\frac{90\times\pi}{180}}  =>  2i | size 2, angle 1.570796327 rad | conjugate −2i
+CMPLX deg 2\times e^{i\times\frac{90\times\pi}{180}}  =>  2i | size 2, angle 90° | conjugate −2i
+CMPLX rad 3+4i  =>  3 + 4i | size 5, angle 0.927295218 rad | conjugate 3 − 4i
+CMPLX deg 3+4i  =>  3 + 4i | size 5, angle 53.13010235° | conjugate 3 − 4i
+CMPLX rad \left(-8\right)^{\frac{2}{3}}  =>  4 | real root — principal value −2 + 3.464101615i | size 4, angle 0 rad | conjugate 4
+CMPLX deg \left(-8\right)^{\frac{2}{3}}  =>  4 | real root — principal value −2 + 3.464101615i | size 4, angle 0° | conjugate 4
+CMPLX rad 1+i  =>  1 + i | size 1.414213562, angle 0.7853981634 rad | conjugate 1 − i
+CMPLX deg 1+i  =>  1 + i | size 1.414213562, angle 45° | conjugate 1 − i
+CMPLX rad 2+3i  =>  2 + 3i | size 3.605551275, angle 0.9827937232 rad | conjugate 2 − 3i
+CMPLX deg 2+3i  =>  2 + 3i | size 3.605551275, angle 56.30993247° | conjugate 2 − 3i
+BASE-N hex      =>  (nothing)
+BASE-N hex FF + 1  =>  100 | decimal 256 | hex 100 | binary 000100000000 | octal 400
+BASE-N hex 5/0  =>  REFUSED That divides by zero.
+BASE-N hex 12  =>  12 | decimal 18 | hex 12 | binary 00010010 | octal 22
+BASE-N hex FG  =>  REFUSED Only the digits of this base are allowed here: 0 to 9 and A to F in hexadecimal. "G" is not one of them.
+BASE-N hex 18  =>  18 | decimal 24 | hex 18 | binary 00011000 | octal 30
+BASE-N hex 1A  =>  1A | decimal 26 | hex 1A | binary 00011010 | octal 32
+BASE-N hex 1010 and 0110  =>  10 | decimal 16 | hex 10 | binary 00010000 | octal 20
+BASE-N hex 1 +  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
+BASE-N hex FF  =>  FF | decimal 255 | hex FF | binary 11111111 | octal 377

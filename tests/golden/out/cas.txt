@@ -1,0 +1,10 @@
+simplify {"deg":false,"expr":"sin(x)^2+cos(x)^2"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+expand {"deg":false,"expr":"(x+2)^6"}  =>  {"latex": "x^{6} + 12 x^{5} + 60 x^{4} + 160 x^{3} + 240 x^{2} + 192 x + 64", "text": "x**6 + 12*x**5 + 60*x**4 + 160*x**3 + 240*x**2 + 192*x + 64", "numeric": null}
+factor {"deg":false,"expr":"x^4-16"}  =>  {"latex": "\\left(x - 2\\right) \\left(x + 2\\right) \\left(x^{2} + 4\\right)", "text": "(x - 2)*(x + 2)*(x**2 + 4)", "numeric": null}
+apart {"deg":false,"expr":"1/(x^2-1)"}  =>  {"latex": "- \\frac{1}{2 \\left(x + 1\\right)} + \\frac{1}{2 \\left(x - 1\\right)}", "text": "-1/(2*(x + 1)) + 1/(2*(x - 1))", "numeric": null}
+diff {"deg":false,"expr":"x^2*sin(x)","var":"x","order":1}  =>  {"latex": "x \\left(x \\cos{\\left(x \\right)} + 2 \\sin{\\left(x \\right)}\\right)", "text": "x*(x*cos(x) + 2*sin(x))", "numeric": null}
+integrate {"deg":false,"expr":"x*exp(x)","var":"x"}  =>  {"latex": "\\left(x - 1\\right) e^{x}", "text": "(x - 1)*exp(x)", "numeric": null}
+integrate {"deg":false,"expr":"exp(-x)","var":"x","lower":"0","upper":"oo"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+limit {"deg":false,"expr":"sin(x)/x","var":"x","to":"0"}  =>  {"latex": "1", "text": "1", "numeric": {"re": 1.0}}
+series {"deg":false,"expr":"exp(x)","var":"x","at":"0","n":6}  =>  {"latex": "\\frac{x^{5}}{120} + \\frac{x^{4}}{24} + \\frac{x^{3}}{6} + \\frac{x^{2}}{2} + x + 1", "text": "x**5/120 + x**4/24 + x**3/6 + x**2/2 + x + 1", "numeric": null}
+solve {"deg":false,"eqs":["x^2-5x+6=0"],"vars":["x"]}  =>  {"solutions": [{"x": {"latex": "2", "text": "2", "numeric": {"re": 2.0}}}, {"x": {"latex": "3", "text": "3", "numeric": {"re": 3.0}}}], "vars": ["x"]}
