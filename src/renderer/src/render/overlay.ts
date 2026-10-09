@@ -50,6 +50,7 @@ export class SpanPool {
     this.used++
     if (el.textContent !== text) el.textContent = text
     const tx = align === 'center' ? '-50%' : align === 'right' ? '-100%' : '0'
+    // eslint-disable-next-line no-restricted-syntax -- a CSS length for the label box, not a number a student reads
     el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(${tx}, -50%)`
     el.style.display = ''
     el.style.color = color ?? ''

@@ -45,6 +45,7 @@ const SENTENCE_PRECISION = { decimals: 4, precisionMode: 'dp' as const }
  * brackets, so "v − 3" never becomes "x - -3" or reads as a subtraction the author did not mean.
  */
 function lit(v: number): string {
+  // eslint-disable-next-line no-restricted-syntax -- tidies a double to 12 figures before it is used as a number, never shown
   const t = Number(v.toPrecision(12))
   const s = String(t)
   return t < 0 ? `(${s})` : s
@@ -151,10 +152,12 @@ const MAX_ROWS = 1000
  */
 export function motionTable(pieces: MotionPieces, every: number, title: string): LabTable {
   const step = Math.max(every, pieces.total / MAX_ROWS)
+  // eslint-disable-next-line no-restricted-syntax -- rounds a table time to 5 figures as a number before it is written
   const round = (v: number): number => Number(v.toPrecision(5))
   const times: number[] = []
   if (step > 0 && Number.isFinite(step)) {
     const count = Math.floor(pieces.total / step + 1e-9)
+    // eslint-disable-next-line no-restricted-syntax -- tidies a double to 12 figures before it is used as a number, never shown
     for (let k = 0; k <= count; k++) times.push(Number((k * step).toPrecision(12)))
   }
   if (times.length === 0 || Math.abs(times[times.length - 1] - pieces.total) > 1e-9) times.push(pieces.total)

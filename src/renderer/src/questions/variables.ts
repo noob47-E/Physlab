@@ -127,6 +127,7 @@ export interface Variant {
  * from + k·step lands on 0.30000000000000004 for k = 3 and step 0.1; twelve significant digits is
  * far finer than any step an author types and far coarser than the double's own noise.
  */
+// eslint-disable-next-line no-restricted-syntax -- tidies a double to 12 figures before it is used as a number, never shown
 const tidy = (v: number): number => Number(v.toPrecision(12))
 
 const near = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b))

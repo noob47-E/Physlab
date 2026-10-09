@@ -186,6 +186,7 @@ export function signatureOf(pts: V3[]): string {
     const sides = sideLengths(Q)
     const angles = interiorAngles(Q)
     // Side i runs from corner i to corner i+1, whose angle is the one it arrives at.
+    // eslint-disable-next-line no-restricted-syntax -- a key that tells pieces apart, not text
     return sides.map((s, i) => `${Number(s.toPrecision(7))},${Math.round(toDeg(angles[(i + 1) % Q.length]) * 1e4) / 1e4}`)
   }
   let best: string | null = null

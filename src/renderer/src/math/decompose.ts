@@ -364,6 +364,7 @@ function allWays(pts: V3[], goal: DecomposeGoal): { parts: Part[]; newPoints: V3
     if (Math.abs(total - target) > 1e-6 * Math.max(1, target)) continue
     const newPoints = extraPoints(parts, pts)
     const key = parts
+      // eslint-disable-next-line no-restricted-syntax -- a key that tells pieces apart, not text
       .map((p) => `${p.cls.kind}:${p.area.toFixed(6)}`)
       .sort()
       .join('|')

@@ -420,8 +420,10 @@ export function SandboxView() {
             const sp = toScreen(state.camera, state.size, st.position)
             const onScreen = sp.visible && sp.x > 0 && sp.y > 0 && sp.x < state.size.width && sp.y < state.size.height
             const en = energyOf(d, st, world.gravity, groundTop)
+            // eslint-disable-next-line no-restricted-syntax -- a PHYSLAB_CHECK log line read by the test harness, not the screen
             return `${d.name} pos=${st.position.map((n) => n.toFixed(2)).join(',')} v=${Math.hypot(...st.velocity).toFixed(2)} KE=${en.kinetic.toFixed(1)} PE=${en.potential.toFixed(1)} E=${en.total.toFixed(1)} screen=${sp.x.toFixed(0)},${sp.y.toFixed(0)} size=${state.size.width}x${state.size.height} cam=${state.camera.position.toArray().map((n) => n.toFixed(1)).join(',')}${onScreen ? '' : ' OFFSCREEN'}`
           })
+        // eslint-disable-next-line no-restricted-syntax -- a PHYSLAB_CHECK log line read by the test harness, not the screen
         console.info(`PHYSLAB_CHECK sandbox t=${w.time.toFixed(1)} bodies=${bodies.length} contacts=${check.current.contacts} ${lines.join(' | ')}`)
       }
       if (check.current) check.current.contacts += contacts.length

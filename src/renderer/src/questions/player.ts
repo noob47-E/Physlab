@@ -385,6 +385,7 @@ export function bindValues(expr: string, values: Record<string, number>, keep: r
       const name = (n as SymbolNode).name
       const v = values[name]
       if (!keep.includes(name) && v !== undefined && Number.isFinite(v)) {
+        // eslint-disable-next-line no-restricted-syntax -- tidies a double to 12 figures before it is used as a number, never shown
         const c = new math.ConstantNode(Number(v.toPrecision(12)))
         return v < 0 ? new math.ParenthesisNode(c) : c
       }

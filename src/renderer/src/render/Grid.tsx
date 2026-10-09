@@ -232,6 +232,7 @@ export function Grid2D() {
     if (trace) {
       const verts = path === 'shader' ? 4 : drawnVertices(minor.geometry)
       console.info(
+        // eslint-disable-next-line no-restricted-syntax -- a PHYSLAB_CHECK log line read by the test harness, not the screen
         `PHYSLAB_CHECK grid f${trace} path=${path} backend=${backend} build=${buildMs.current.toFixed(2)}ms size=${size.width}x${size.height} zoom=${zoom} step=${majorStep}/${minorStep} x=[${b.xMin.toFixed(2)},${b.xMax.toFixed(2)}] y=[${b.yMin.toFixed(2)},${b.yMax.toFixed(2)}] key=${key} prev=${prev.key} verts=${verts} axes=${axes.x.length} grid=${showGrid} axesOn=${showAxes}`
       )
     }

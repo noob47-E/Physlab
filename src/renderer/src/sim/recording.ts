@@ -58,6 +58,7 @@ export function addSample(list: Sample[], s: Sample): Sample[] {
 }
 
 /** A recorded value to five figures, as text: 1.2 is "1.2000", the precision it was recorded to. */
+// eslint-disable-next-line no-restricted-syntax -- the recording's own text format (five figures, as recorded), not the screen
 const fiveFigures = (v: number): string => v.toPrecision(5)
 
 /**

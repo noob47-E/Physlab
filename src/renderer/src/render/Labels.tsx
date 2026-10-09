@@ -290,12 +290,14 @@ export function LabelProjector() {
       let box: LabelBox = { x: s.x + dx - cached.w / 2, y: s.y + dy - cached.h / 2, w: cached.w, h: cached.h }
       // Hidden (fading) labels keep following their object but never push visible ones aside.
       if (el.classList.contains('is-away')) {
+        // eslint-disable-next-line no-restricted-syntax -- a CSS length for the label box, not a number a student reads
         el.style.transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`
         continue
       }
       // The first free place on a ladder of steps below and above (pieceLabels.ts, settleLabel).
       box = settleLabel(box, placed)
       placed.push(box)
+      // eslint-disable-next-line no-restricted-syntax -- a CSS length for the label box, not a number a student reads
       el.style.transform = `translate(${box.x.toFixed(1)}px, ${box.y.toFixed(1)}px)`
     }
   })

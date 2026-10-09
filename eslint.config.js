@@ -11,6 +11,61 @@ import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
+// Any reach for the method, not only a call: x.toFixed(2), x?.toFixed(2), x['toFixed'](2),
+// Number.prototype.toFixed.call(x), x.toFixed.bind(x).
+const WRITER_MESSAGE = 'A number for the screen goes through math/format.ts (fmt, fmtLabel, formatQuantity), not toFixed/toPrecision/toExponential.'
+const FENCE_TO_FIXED = [
+  { selector: 'MemberExpression[computed=false][property.name=/^(toFixed|toPrecision|toExponential)$/]', message: WRITER_MESSAGE },
+  { selector: 'MemberExpression[computed=true][property.value=/^(toFixed|toPrecision|toExponential)$/]', message: WRITER_MESSAGE }
+]
+// 1e-12 however it is spelt: 1e-12, 1E-12, 1.0e-12, 1e-012, 0.000000000001 (a minus is a separate token).
+const FENCE_NOISE = {
+  selector: 'Literal[raw=/^(1(\\.0*)?e-0*12|0\\.0{11}1)$/i]',
+  message: 'Rounding noise is judged by math/noise.ts (isNoise, sameNumber), relative to the inputs, not by a fixed 1e-12.'
+}
+
+/**
+ * The files that may still call toFixed/toPrecision ('toFixed'), use a 1e-12 ('noise') or both.
+ * The final list is the first group; the interim list shrinks file by file as each clean-up part
+ * moves its numbers (all gone by the end of CW9). Never add an interim file.
+ */
+export const FENCE_ALLOWED = [
+  // Final: the number writer itself, and the noise rule's own constants.
+  { files: ['src/renderer/src/math/format.ts', 'src/renderer/src/math/noise.ts'], allow: 'both' },
+  // Interim (2026-10-09: 29 files). toFixed: display numbers, moved by CW3 (CW3b for the three it
+  // names); noise: hand-picked 1e-12 floors, moved to math/noise.ts by CW9. Non-display lines are
+  // marked in place (eslint-disable-next-line … -- why) and are part of the final list.
+  { files: ['src/renderer/src/calc/engine.ts'], allow: 'noise' }, // 5 × 1e-12 — CW9
+  { files: ['src/renderer/src/calc/format.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/calc/roots.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/core/evaluate.ts'], allow: 'noise' }, // 2 × 1e-12 — CW9
+  { files: ['src/renderer/src/core/visualize.ts'], allow: 'noise' }, // 3 × 1e-12 — CW9
+  { files: ['src/renderer/src/lab/fit.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/lang/commands.ts'], allow: 'noise' }, // 2 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/checkAnswer.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/expr.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/geometry.ts'], allow: 'noise' }, // 6 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/graphs.ts'], allow: 'noise' }, // 3 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/lego.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/pure/complex.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/pure/table.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/pure/trigIdentity.ts'], allow: 'both' }, // 2 toFixed — CW3b; 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/shapeFormulas.ts'], allow: 'toFixed' }, // 1 toFixed — CW3
+  { files: ['src/renderer/src/math/shapes.ts'], allow: 'noise' }, // 5 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/vec.ts'], allow: 'noise' }, // 6 × 1e-12 — CW9
+  { files: ['src/renderer/src/math/vectorSolver.ts'], allow: 'noise' }, // 15 × 1e-12 — CW9
+  { files: ['src/renderer/src/panels/Measurements.tsx'], allow: 'noise' }, // 3 × 1e-12 — CW9
+  { files: ['src/renderer/src/panels/Properties.tsx'], allow: 'noise' }, // 2 × 1e-12 — CW9
+  { files: ['src/renderer/src/panels/vectorCalcStore.ts'], allow: 'both' }, // 2 toFixed — CW3b; 7 × 1e-12 — CW9
+  { files: ['src/renderer/src/questions/autoVisual.ts'], allow: 'both' }, // 1 toFixed — CW3b; 6 × 1e-12 — CW9
+  { files: ['src/renderer/src/questions/legoPart.ts'], allow: 'noise' }, // 2 × 1e-12 — CW9
+  { files: ['src/renderer/src/render/Interaction.tsx'], allow: 'noise' }, // 2 × 1e-12 — CW9
+  { files: ['src/renderer/src/render/Labels.tsx'], allow: 'noise' }, // 3 × 1e-12 — CW9
+  { files: ['src/renderer/src/render/gridMath.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/render/pieceLabels.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+  { files: ['src/renderer/src/render/viewMath.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
+]
+
 export default tseslint.config(
   {
     // Build output, dependencies and the vendored Pyodide/Jolt bundles are not ours to lint.
@@ -56,5 +111,17 @@ export default tseslint.config(
       // slots, filled in every frame. Without the compiler there is no memoisation to lose.
       'react-hooks/preserve-manual-memoization': 'warn'
     }
-  }
+  },
+  {
+    // The clean-up's fences (CLEANUP-PLAN.md CW1). Numbers reach a screen through one writer,
+    // math/format.ts, and rounding noise is judged by one rule, math/noise.ts: a new toFixed or
+    // toPrecision elsewhere, or a hand-picked 1e-12, is an error. FENCE_ALLOWED below lists the
+    // files that may still have them, each with its reason.
+    files: ['src/**/*.{ts,tsx}'],
+    rules: { 'no-restricted-syntax': ['error', ...FENCE_TO_FIXED, FENCE_NOISE] }
+  },
+  ...FENCE_ALLOWED.map(({ files, allow }) => ({
+    files,
+    rules: { 'no-restricted-syntax': allow === 'both' ? 'off' : ['error', ...(allow === 'toFixed' ? [FENCE_NOISE] : FENCE_TO_FIXED)] }
+  }))
 )

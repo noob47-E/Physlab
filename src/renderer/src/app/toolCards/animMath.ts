@@ -43,4 +43,5 @@ export function cursorStops(clicks: [Pt] | [Pt, Pt], home: Pt = CURSOR_HOME): CS
 export const appearClass = (second = false): string => (second ? 'tc-appear tc-late' : 'tc-appear')
 
 /** The time a reduced-motion viewer is shown, as the negative delay that freezes the loop there. */
+// eslint-disable-next-line no-restricted-syntax -- a CSS animation delay in seconds, not a number a student reads
 export const reducedMotionDelay = (): string => `-${Number((LOOP_SECONDS * REDUCED_MOTION_FRAME).toFixed(2))}s`

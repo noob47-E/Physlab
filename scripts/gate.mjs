@@ -79,7 +79,12 @@ const RUNNERS = {
   },
   lint: () => {
     const r = sh('npx', ['eslint', '.'])
-    return { ...r, summary: r.ok ? '0 errors' : 'errors found', detail: r.ok ? undefined : tail(r.output, 40) }
+    if (!r.ok) return { ...r, summary: 'errors found', detail: tail(r.output, 40) }
+    // No new unused export or unused file (CLEANUP-PLAN.md CW1): scripts/deadcode-baseline.txt only shrinks.
+    const dead = sh('node', ['scripts/deadcode.mjs', '--check'])
+    const durationMs = r.durationMs + dead.durationMs
+    if (!dead.ok) return { ...dead, durationMs, summary: 'dead-code baseline out of date', detail: tail(dead.output, 40) }
+    return { ...r, durationMs, summary: '0 errors' }
   },
   tests: () => {
     const r = sh('npx', vitestArgs())
