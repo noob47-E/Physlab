@@ -11,12 +11,13 @@ import { pointOnRange, replaceGraphEquation } from '../lang/graphEdit'
 import { shownColor } from '../app/theme'
 
 function V3Fields({ v, onChange }: { v: V3; onChange: (v: V3) => void }) {
+  const decimals = useScene((s) => s.settings.decimals)
   return (
     <div className="grid grid-cols-3 gap-1">
       {(['x', 'y', 'z'] as const).map((ax, i) => (
         <div key={ax} className="relative">
           <span className="pointer-events-none absolute left-1.5 top-1 text-fine text-ink-faint">{ax}</span>
-          <NumField value={v[i]} onChange={(n) => onChange(v.map((c, j) => (j === i ? n : c)) as V3)} />
+          <NumField value={v[i]} decimals={decimals} onChange={(n) => onChange(v.map((c, j) => (j === i ? n : c)) as V3)} />
         </div>
       ))}
     </div>
@@ -31,6 +32,7 @@ export function Properties() {
   const remove = useScene((s) => s.removeObjects)
   const showSolution = useScene((s) => s.showSolution)
   const angleUnit = useScene((s) => s.settings.angleUnit)
+  const decimals = useScene((s) => s.settings.decimals)
   // Why the Equation box refused the last line, for the graph it was typed for.
   const [equationProblem, setEquationProblem] = useState<{ id: string; text: string } | null>(null)
 
@@ -160,6 +162,7 @@ export function Properties() {
                 <label>Magnitude</label>
                 <NumField
                   value={len(c.comp)}
+                  decimals={decimals}
                   onChange={(m) =>
                     set((d) => {
                       if (d.type !== 'vector' || d.def.kind !== 'free') return
@@ -174,6 +177,7 @@ export function Properties() {
                   <label>Angle θ ({angleUnit === 'deg' ? '°' : 'rad'})</label>
                   <NumField
                     value={angleUnit === 'deg' ? toDeg(heading(c.comp)) : heading(c.comp)}
+                    decimals={decimals}
                     onChange={(a) =>
                       set((d) => {
                         if (d.type !== 'vector' || d.def.kind !== 'free') return

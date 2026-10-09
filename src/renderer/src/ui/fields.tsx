@@ -3,20 +3,34 @@ import { math, preprocess } from '../math/expr'
 import { fmt } from '../math/format'
 import { SWATCHES } from './swatches'
 
+/**
+ * The number a NumField commits, or null for nothing to commit: only text the student has EDITED
+ * is read. The box shows the value rounded to the screen's decimals (P-FIX-BROWSER F6), so
+ * committing the shown text on every blur wrote the rounding back — tabbing through a point's x
+ * moved 1.2345 to 1.23, and through Magnitude or Angle rescaled or turned the vector.
+ */
+export function committedValue(text: string, edited: boolean): number | null {
+  if (!edited) return null
+  const v = Number(math.evaluate(preprocess(text)))
+  return Number.isFinite(v) ? v : null
+}
+
 /** Number input that accepts expressions (e.g. "sqrt(2)", "10cos(30)") and commits on Enter/blur. */
 export function NumField({ value, onChange, decimals = 4, className = '' }: { value: number; onChange: (v: number) => void; decimals?: number; className?: string }) {
   const [text, setText] = useState(fmt(value, decimals).replace('−', '-'))
   const [focused, setFocused] = useState(false)
+  const [edited, setEdited] = useState(false)
   useEffect(() => {
     if (!focused) setText(fmt(value, decimals).replace('−', '-').replace('×10^', 'e'))
   }, [value, focused, decimals])
   const commit = () => {
     try {
-      const v = Number(math.evaluate(preprocess(text)))
-      if (Number.isFinite(v)) onChange(v)
+      const v = committedValue(text, edited)
+      if (v !== null) onChange(v)
     } catch {
       setText(fmt(value, decimals))
     }
+    setEdited(false)
   }
   return (
     <input
@@ -30,7 +44,10 @@ export function NumField({ value, onChange, decimals = 4, className = '' }: { va
         setFocused(false)
         commit()
       }}
-      onChange={(e) => setText(e.target.value)}
+      onChange={(e) => {
+        setText(e.target.value)
+        setEdited(true)
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           commit()

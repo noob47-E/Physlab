@@ -64,6 +64,7 @@ export const MathInput = forwardRef<MathInputHandle, Props>(function MathInput({
       try {
         mf.smartFence = true
         mf.smartSuperscript = true
+        mf.mathModeSpace = '\\;'
         mf.mathVirtualKeyboardPolicy = 'manual'
         mf.popoverPolicy = 'off'
         mf.menuItems = []

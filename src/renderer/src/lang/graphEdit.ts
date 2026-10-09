@@ -120,11 +120,28 @@ function takeDefinition(into: GraphObj, from: GraphObj): void {
  * or anything that is not a graph: the old graph stays, nothing else in the scene changes, and the
  * reason comes back in a sentence for the panel to show under the field.
  */
+/**
+ * A line that is only a y = f(x) graph's right-hand side: it has an x, no relation sign, and is not
+ * a command such as between(…), tangent(…) or Circle(…), which draw their own pictures. A line
+ * with no x (3 + 4) only calculates and keeps its own sentence.
+ */
+export function bareRightSide(text: string): boolean {
+  if (/[=<>≤≥≠]/.test(text)) return false
+  if (/^\s*(?:between|tangent|curve|piecewise|[A-Z][A-Za-z]*)\s*\(/.test(text)) return false
+  return /(^|[^A-Za-z])x([^A-Za-z]|$)/.test(text)
+}
+
 export async function replaceGraphEquation(id: ObjId, line: string): Promise<GraphEdit> {
-  const text = line.trim()
-  if (scene().objects[id]?.type !== 'graph') return { ok: false, reason: GONE }
+  let text = line.trim()
+  const obj = scene().objects[id]
+  if (obj?.type !== 'graph') return { ok: false, reason: GONE }
   if (!text) return { ok: false, reason: EMPTY }
   if (WIPES.test(text)) return { ok: false, reason: NOT_A_GRAPH }
+
+  // An explicit graph's box takes its right-hand side alone too: x^2 + 1 for y = x^2 used to be
+  // refused as a stray x (browser check BAR-06, F3). Only a line with no relation sign at all: y < x
+  // or x = 2 keep their own meaning.
+  if (obj.kind === 'explicit' && bareRightSide(text)) text = `y = ${text}`
 
   const stock = stockOf()
   const seen = stock.log.at(-1)?.id ?? 0

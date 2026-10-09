@@ -1535,11 +1535,12 @@ describe('B2b — distributions at the edges, solve budget, letter = value, angl
     expect(messageOf(() => evaluateComp('product(b2bterm(1), 1, 100000) + 0*x = 5', ctx))).toMatch(/^That product is too much work to multiply one by one/)
     expect(terms).toBeLessThanOrEqual(1_000_000)
     expect(terms).toBeGreaterThan(100_000)
-    // The line as it was typed when it froze the app, on the Maths screen: a sentence, and nothing to keep.
+    // The line as it was typed when it froze the app, on the Maths screen: its x is only the sum's index, so it is a
+    // statement (P-FIX-BROWSER F1), worked out once — false, with nothing to keep — instead of a search for x.
     const r = evaluateInput('COMP', 'sigma(x,1,100000)=5', maths)
-    expect(r?.error?.sentence).toMatch(/^That sum is too much work to add one by one/)
+    expect(r?.main).toBe('false')
     expect(r?.value).toBeUndefined()
-    expect(r?.solved).toBeUndefined()
+    expect(r?.solved).toBe(false)
   }, 20000)
 
   it('H14: an integral in the equation has the integral’s budget for the whole search, in the integral’s words', () => {
@@ -1628,9 +1629,10 @@ describe('B2b — distributions at the edges, solve budget, letter = value, angl
     expect(evaluateInput('COMP', '5=5', maths)?.error?.sentence).toBe('Equations are solved in Numbers mode: type both sides with = and press x = ?')
     // Only the line as typed is refused. The converter writes "x=5" into the summand of a sum typed with an = after it,
     // which nobody typed as a store: that line is refused as it always was, not as a store.
+    // Since P-FIX-BROWSER F1 it is checked as the statement it is: 1 + 2 + 3 = 5 is false.
     const sumThenEquals = evaluateInput('COMP', '\\sum_{x=1}^{3}x=5', maths)
-    expect(sumThenEquals?.error?.sentence).toBeTruthy()
-    expect(sumThenEquals?.error?.sentence).not.toMatch(/does not store/)
+    expect(sumThenEquals?.main).toBe('false')
+    expect(sumThenEquals?.error?.sentence ?? '').not.toMatch(/does not store/)
   })
 
   // ---- H3 (engine half) ---------------------------------------------------------------------------------------------

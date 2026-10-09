@@ -84,7 +84,12 @@ function unknownSymbols(node: MathNode): string[] {
     const name = (child as unknown as { name: string }).name
     // A θ slider is in the scope as theta too (core/evaluate.ts publish, P-PARSE W2).
     if (names.has(name) || Object.prototype.hasOwnProperty.call(scene().ev.scope, name) || KNOWN_SYMBOLS.has(name)) return
-    const p = parent as (MathNode & { fn?: string; implicit?: boolean; args?: MathNode[] }) | null
+    const p = parent as (MathNode & { fn?: string | { name?: string }; implicit?: boolean; args?: MathNode[] }) | null
+    // A function's name as the size before ∠ ("sin at 30"): polarVec says the size must be a number,
+    // which is the sentence that helps (browser check BAR-16, F4). Only there: elsewhere a function
+    // name typed as a value (a = gamma, 5 * distance) keeps "does not exist yet" (it is not a value).
+    const fnName = p?.type === 'FunctionNode' && typeof p.fn === 'object' ? p.fn?.name : undefined
+    if (fnName === 'polarVec' && path === 'args[0]' && typeof (math as unknown as Record<string, unknown>)[name] === 'function') return
     const afterNumber = p?.type === 'OperatorNode' && (p.fn === 'multiply' || p.fn === 'divide') && p.args?.some((a) => a.type === 'ConstantNode' || a.type === 'OperatorNode')
     const compoundUnit = p?.type === 'OperatorNode' && (p.fn === 'divide' || p.fn === 'pow') && isUnitName(name)
     if (isUnitName(name) && (afterNumber || compoundUnit)) return

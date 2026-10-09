@@ -578,6 +578,43 @@ function imaginaryNotes(value: unknown, squareRoots: number[]): string[] {
 /** An equation with x in it: x = ? solves it. */
 export const isEquationInX = (src: string): boolean => /^[^=]+=[^=]+$/.test(src) && /(^|[^A-Za-z])x([^A-Za-z]|$)/.test(src)
 
+/**
+ * Whether the expression depends on the x of the line: an x that is not the index variable of a Σ,
+ * Π, ∫ or d/dx. Each of those runs its first argument with an index variable of its own, and
+ * integrate() names its variable of integration in its second argument, so only the x's outside
+ * them read the line's x — and the limits of each, which are read in the line's own scope:
+ * integrate(t, t, 0, x) = 2 still has x to solve for. An equation whose x's are all index variables
+ * is a statement about two numbers, not something to solve for x (browser check CALC-10, F1).
+ */
+export function hasFreeX(src: string): boolean {
+  let node: MathNode
+  try {
+    node = math.parse(keypadToMath(src))
+  } catch {
+    // Unreadable here: let the solver say what is wrong, as it does.
+    return true
+  }
+  let free = false
+  const visit = (n: MathNode): void => {
+    if (free) return
+    if (n.type === 'SymbolNode') {
+      if ((n as ExprNode).name === 'x') free = true
+      return
+    }
+    if (n.type === 'FunctionNode') {
+      const name = ((n as ExprNode).fn as { name?: string }).name ?? ''
+      const args = ((n as ExprNode).args ?? []) as ExprNode[]
+      // Σ, Π, ∫ and d/dx: the body (args[0]) has its own index; the limits and the point do not.
+      if (CALCULUS.has(name)) return args.slice(1).forEach((a) => visit(a))
+      // integrate(body, variable, from, to): the body and the variable are its own; the limits are not.
+      if (name === 'integrate') return args.slice(2).forEach((a) => visit(a))
+    }
+    n.forEach((child) => visit(child as MathNode))
+  }
+  visit(node)
+  return free
+}
+
 export interface CalcOutput {
   value: unknown
   /** Main display string. */

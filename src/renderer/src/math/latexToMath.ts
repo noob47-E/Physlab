@@ -159,6 +159,11 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
 
   const peek = () => t[i]
   const next = () => t[i++]
+  /** Reads past LaTeX spacing (\, \; \: \! \  \quad \qquad), which says nothing about the maths. */
+  const SPACING = new Set(['\\,', '\\;', '\\:', '\\!', '\\ ', '\\quad', '\\qquad'])
+  const skipSpacing = (): void => {
+    while (i < t.length && SPACING.has(t[i])) i++
+  }
 
   /** A single argument: {group} or one token. */
   const arg = (): string => {
@@ -334,6 +339,7 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
         const b = arg()
         const dm = b.match(/^(?:\(?d\)?|\\differentialD)\s*([a-zA-Z\u0370-\u03FF])$/u)
         if ((a === 'd' || a === '(d)') && dm) {
+          skipSpacing() // d/dx\;x^2: the typed space is only the gap before the body
           const body = fnArg()
           return `diff(${body}, ${dm[1]})`
         }
@@ -529,6 +535,10 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
     if (GREEK[name]) return GREEK[name]
     if (FUNCS.has(name) || ARC[name]) {
       let fname = ARC[name] ?? name
+      // The maths field writes a typed space as \; (P-FIX-BROWSER F9, so "10 N m" keeps its spaces):
+      // after a function's name it is only the space between the name and what it takes, as in
+      // "sin 30" — read past it, or \sin\;30 became "sin() 30".
+      skipSpacing()
       // \sin^{-1} → asin, \sin^2 x → sin(x)^2
       let power = ''
       if (peek() === '^') {
@@ -538,10 +548,12 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
         if (p === '-1' && INVERSE[fname]) fname = INVERSE[fname]
         else if (p) power = `^(${p})`
         else i = save
+        skipSpacing()
       }
       if (fname === 'log' && peek() === '_') {
         next()
         const base = arg()
+        skipSpacing() // \log_{2}\;8: the typed space is only the gap before what log takes
         return `log(${base}, ${fnArg()})${power}`
       }
       return `${fname}(${fnArg()})${power}`

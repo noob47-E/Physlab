@@ -6,7 +6,7 @@
 // line, the extras, the exact form when one is known at once, and a sentence when it fails.
 // It never touches the store: the caller decides what to remember.
 
-import { argOf, calcScope, keypadToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, isEquationInX, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
+import { argOf, calcScope, keypadToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, hasFreeX, isEquationInX, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
 import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
 import { errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
@@ -15,6 +15,9 @@ import { math, splitArgs } from '../math/expr'
 import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
 import type { FieldMode } from './calcStore'
+
+/** How many units in the last place two sides of a true statement may differ by (rounding in a long sum). */
+const STATEMENT_ULPS = 1024
 
 export interface EvalOptions {
   vars: Record<string, unknown>
@@ -176,6 +179,23 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     const ctx: CalcContext = { vars: opts.vars, ans: opts.ans, angle: opts.angle }
     let out: CalcOutput
     if (isEquationInX(src)) {
+      const [left, right] = src.split('=')
+      // An equation whose x's are all the index variables of a Σ, Π, ∫ or d/dx is a statement about
+      // two numbers, not something to solve: the search cannot tell the two apart, so a true
+      // statement came back as "x = <the stored x>" ("Σ x² from 1 to 5 = 55" answered "x = 2" while x
+      // was stored as 2; browser check CALC-10, F1). It is marked true or false and stores nothing (a
+      // false one used to get "Try giving x a value", with no x to give). "Holds" is relative to the
+      // size of the sides alone, and tight: a sum to 10⁵ carries rounding far above 10⁻¹⁴, while
+      // 10⁹ = 10⁹ + 1 must stay false, and so must 1.6×10⁻¹⁹ = 10⁻¹⁹ — no absolute floor (AGENTS.md).
+      // A side that is not a plain number (a unit, NaN) goes to the search as before.
+      if (!hasFreeX(left) && !hasFreeX(right)) {
+        const l = Number(evaluateComp(left, ctx).value)
+        const r = Number(evaluateComp(right, ctx).value)
+        if (Number.isFinite(l) && Number.isFinite(r)) {
+          const holds = Math.abs(l - r) <= STATEMENT_ULPS * Number.EPSILON * Math.max(Math.abs(l), Math.abs(r))
+          return { main: holds ? 'true' : 'false', src, extra: [`L − R = ${holds ? '0' : calcNum(l - r)}`], exact: null, solved: false }
+        }
+      }
       const answer = solveEquation(src, ctx)
       // No real root, but where the roots are is known: an answer to the question, not an error, and
       // no number to keep — so no x is stored from it and the eng chip leaves the sentence alone.

@@ -45,13 +45,23 @@ const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null &
  * message says in plain words what is wrong with it.
  */
 export function parseSceneFile(text: string): SceneFile {
+  return migrate(parseProjectText(text))
+}
+
+/**
+ * The text of a .phys file as its raw JSON, with the same sentence for a half-copied file.
+ * Exported apart because `loadScene` reads what a file held before it was migrated — a Question
+ * Author set, which `migrate` leaves out — so the open path hands `loadScene` the raw object and
+ * its own `migrate` does the converting, where the check still sees the set (browser check SHELL-02, F2).
+ */
+export function parseProjectText(text: string): unknown {
   let raw: unknown
   try {
     raw = JSON.parse(text)
   } catch {
     throw new Error('This file cannot be read: it is not complete, or it is not a PhysLab project.')
   }
-  return migrate(raw)
+  return raw
 }
 
 /**

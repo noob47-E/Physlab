@@ -25,7 +25,7 @@ import {
 import { calcNum, mathFormatOptions } from '../calc/format'
 import { matrixLine, sheetValues, tableRows, typedUnits } from '../calc/modeLines'
 import { errorSentence } from '../calc/errors'
-import { polynomialRootRows } from '../calc/roots'
+import { beyondTheReals, polynomialRootRows } from '../calc/roots'
 import { SHEET_COLS } from '../calc/sheet'
 import { predictY } from '../calc/stats'
 import { CONSTANTS } from '../calc/constants'
@@ -39,6 +39,7 @@ import * as VS from '../math/vectorSolver'
 import type { V3 } from '../math/vec'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
+import { superscriptPowers } from '../math/format'
 
 export function ModePanel({ mode }: { mode: CalcMode }) {
   switch (mode) {
@@ -613,17 +614,23 @@ function EquationMode() {
       }
     } else {
       const c = coef.slice(0, deg + 1)
-      // The rows are decided in calc/roots.ts, where they can be compared with x = ?, the Solve job and the bar.
+      // The rows are decided in calc/roots.ts, where they can be compared with x = ?, the Solve job and the bar;
+      // with no real root the screen says so in the same sentence as the Numbers screen (CALC-03, F7).
+      const btr = beyondTheReals(c, 0)
       const rows = polynomialRootRows(c)
       const expr = polyToExpr(c)
       out = (
         <>
-          {rows.map((row, i) => (
-            <div key={i} className="flex justify-between">
-              <span>{row.label}</span>
-              <span>{row.tex ? <Tex tex={row.tex} /> : row.text}</span>
-            </div>
-          ))}
+          {btr && 'sentence' in btr ? (
+            <div className="text-[color:var(--text)]">{btr.sentence}</div>
+          ) : (
+            rows.map((row, i) => (
+              <div key={i} className="flex justify-between">
+                <span>{row.label}</span>
+                <span>{row.tex ? <Tex tex={row.tex} /> : row.text}</span>
+              </div>
+            ))
+          )}
           {deg === 2 && c[0] !== 0 && (
             <div className="mt-1 border-t border-[color:var(--line-2)] pt-1 text-small">
               Turning point: ({calcNum(-c[1] / (2 * c[0]))}, {calcNum(c[2] - (c[1] * c[1]) / (4 * c[0]))}) · discriminant b²−4ac = {calcNum(c[1] * c[1] - 4 * c[0] * c[2])}
@@ -914,12 +921,12 @@ function UnitsMode() {
         </select>
       </div>
       <Screen>
-        {result.refused ? <span className="text-[color:var(--bad)]">{result.text}</span> : <div className="text-right text-display">{result.text}</div>}
+        {result.refused ? <span className="text-[color:var(--bad)]">{result.text}</span> : <div className="text-right text-display">{superscriptPowers(result.text)}</div>}
       </Screen>
       <div className="text-[color:var(--text-dim)]">Or type any conversion (any units, even combined):</div>
       <input className="field font-mono" value={free} onChange={(e) => setFree(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
       <Screen>
-        {freeOut.refused ? <span className="text-[color:var(--bad)]">{freeOut.text}</span> : <div className="text-right">{freeOut.text}</div>}
+        {freeOut.refused ? <span className="text-[color:var(--bad)]">{freeOut.text}</span> : <div className="text-right">{superscriptPowers(freeOut.text)}</div>}
       </Screen>
     </div>
   )

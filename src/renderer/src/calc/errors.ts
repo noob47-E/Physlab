@@ -62,6 +62,7 @@ export function errorSentence(raw: unknown): ErrorSentence {
   if (/Unexpected end|Value expected|Unexpected|Syntax|Cannot convert/i.test(msg)) {
     return { sentence: "I can't read that — check the brackets, and that every operator has a number on each side.", detail }
   }
+  if (/doesn't apply to matrices/i.test(msg)) return { sentence: 'That function takes a number, not a matrix.', detail }
   if (/must be|out of range|not (a )?(valid|supported)|expected/i.test(msg)) return { sentence: 'Those numbers do not fit this function.', detail }
   if (/too large|Maximum|overflow|stack/i.test(msg)) return { sentence: 'That is too big for me to work out.', detail }
   return { sentence: "I can't work that out.", detail }

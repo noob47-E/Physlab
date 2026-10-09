@@ -1,5 +1,5 @@
 import { scene } from '../core/store'
-import { parseSceneFile } from '../core/migrate'
+import { parseProjectText } from '../core/migrate'
 import { openFailureText, saveFailureText } from '../core/fileErrors'
 import { RESULT_FORMAT } from '../questions/results'
 
@@ -91,9 +91,11 @@ export function loadProjectText(content: string, path: string) {
     return
   }
   try {
-    // parseSceneFile says in a sentence what is wrong with a half-copied or foreign file; parsing
-    // the text here used to put "SyntaxError: Unexpected end of JSON input" in the console.
-    scene().loadScene(parseSceneFile(content), path)
+    // parseProjectText says in a sentence what is wrong with a half-copied file and loadScene's own
+    // migrate with a foreign one; parsing the text here used to put "SyntaxError: Unexpected end of
+    // JSON input" in the console. The raw object is handed over, not the migrated scene: loadScene
+    // checks raw.questions for a Question Author set, which migrate leaves out (F2).
+    scene().loadScene(parseProjectText(content), path)
     scene().pushLog({ input: 'open', kind: 'info', text: `Opened ${path}` })
   } catch (e) {
     scene().pushLog({ input: 'open', kind: 'error', text: openFailureText(path, e) })

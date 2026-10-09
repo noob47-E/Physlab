@@ -517,9 +517,10 @@ describe('what the console says when a file cannot be opened or saved', () => {
     })()
     expect(openFailureText(String.raw`C:\work\bounce.phys`, halfCopied)).toBe('Could not open bounce.phys: This file cannot be read: it is not complete, or it is not a PhysLab project.')
     expect(openFailureText('/home/s/notes.phys', new Error('This file was not saved by PhysLab.'))).toBe('Could not open notes.phys: This file was not saved by PhysLab.')
-    // The app goes through parseSceneFile, which is where those sentences live.
+    // The app goes through parseProjectText (the half-copied sentence) and loadScene's own migrate
+    // (the foreign-file sentence), which is where those sentences live (F2 kept the raw file for loadScene).
     const files = readSource('src/renderer/src/app/files.ts')
-    expect(files).toContain('parseSceneFile(content)')
+    expect(files).toContain('scene().loadScene(parseProjectText(content), path)')
     expect(files).not.toContain('JSON.parse')
   })
 
