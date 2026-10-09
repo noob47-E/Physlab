@@ -14,7 +14,7 @@ import { frameGraphs, NORMAL_STRETCH, visualizeBetween, visualizeCurves, visuali
 import { useLab } from '../lab/labStore'
 import type { Check } from '../math/checkAnswer'
 import { inDegrees, math, preprocess } from '../math/expr'
-import { fmtPrecise, type MeasureSettings } from '../math/format'
+import { fmt, fmtPrecise, type MeasureSettings } from '../math/format'
 import type { AnswerField, Problem } from '../math/problems'
 import type { Working } from '../math/pure/work'
 import type { V3 } from '../math/vec'
@@ -30,7 +30,7 @@ import { checkLegoPart, legoAnswer, legoShapesNow } from './legoPart'
 import { checkFunctionPart } from './odeCheck'
 import { checkExpressionPart, checkNumberPart, evaluateInVariables, toAbsoluteTol } from './parts'
 import type { FadingLevel, PQMotion, PQPart, PQPicture, PQQuestion, PQSandbox, UnitId } from './pqjson'
-import { spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
+import { NO_RIGHT_CHOICE, spokenOf, stepsToWorking, textLines, type Fill, type Segment } from './steps'
 import { formatQuantity, revealSettings, unitOfComponents, UNITS } from './units'
 import { hasVisual, visualOf, type VisualPlan } from './autoVisual'
 import { plainFormula } from './plainFormula'
@@ -150,6 +150,9 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
       if (rows === 0 || cols === 0) flag(`"${prompt}" has no entries to fill in, so it cannot be marked.`)
       return { ...base, matrix: { rows, cols } }
     }
+    // The reveal under a Lego part, in the owner's words (2026-10-09): "Answer: the target shape".
+    // The row once drew its Verdict with no answer and never revealed, so the solution never showed.
+    if (part.type === 'lego') return { ...base, answerText: 'the target shape' }
     if (part.type === 'proof') {
       return { ...base, model: textLines(part.model, fill), selfCheck: part.selfCheck.map((line) => textLines(line, fill).flat()) }
     }
@@ -192,7 +195,10 @@ export function playQuestion(q: PQQuestion, seed: number, settings: MeasureSetti
         return { ...c, text: spokenOf(segments), segments, why: c.why === undefined ? undefined : plain(c.why) }
       })
       const right = choices.filter((c) => c.correct)
-      return { ...base, choices, multi: right.length > 1, answerText: right.map((c) => c.text).join(', ') }
+      // No right option among options that were worked out: the reveal says so in the owner's words
+      // (2026-10-09), where it read "Answer: " with nothing after it.
+      const answerText = right.length > 0 ? right.map((c) => c.text).join(', ') : choices.length > 0 ? NO_RIGHT_CHOICE : '?'
+      return { ...base, choices, multi: right.length > 1, answerText }
     }
     return base
   })
@@ -482,7 +488,8 @@ export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSet
     case 'dots': {
       const count = numberIn(pic.count, values, 'how many dots to draw')
       if (!Number.isInteger(count) || count < 0) throw new Error(`Dots are counted in whole numbers; this picture asks for ${fmtPrecise(count, settings)}.`)
-      if (count > MAX_DOTS) throw new Error(`${fmtPrecise(count, settings)} dots are too many to count by eye; PhysLab draws at most ${fmtPrecise(MAX_DOTS, settings)}.`)
+      // Counts are whole numbers, never written to the student's figures ("5.0×10^2 dots").
+      if (count > MAX_DOTS) throw new Error(`${fmt(count, 0)} dots are too many to count by eye; PhysLab draws at most ${fmt(MAX_DOTS, 0)}.`)
       const perRow = pic.perRow !== undefined && Number.isInteger(pic.perRow) && pic.perRow > 0 ? pic.perRow : 10
       return { kind: 'dots', count, perRow }
     }
@@ -573,7 +580,8 @@ export function showPicture(plan: PicturePlan, settings: MeasureSettings, hideVa
       }
       case 'piecewise':
         visualizePiecewise(plan.pieces)
-        return { note: `Drawn: one curve in ${n(plan.pieces.length)} pieces.` }
+        // A count, not a measurement: at 2 figures it read "one curve in 2.0 pieces".
+        return { note: `Drawn: one curve in ${fmt(plan.pieces.length, 0)} pieces.` }
       case 'between': {
         const area = visualizeBetween(plan.upper, plan.lower, plan.from, plan.to, plan.label, hideValue)
         const where = `The shaded region between x = ${n(Math.min(plan.from, plan.to))} and x = ${n(Math.max(plan.from, plan.to))}`
@@ -630,7 +638,7 @@ export function showPicture(plan: PicturePlan, settings: MeasureSettings, hideVa
       }
       case 'dots':
         visualizeDots(plan.count, plan.perRow)
-        return { note: plan.count === 0 ? 'Drawn: no dots at all.' : `Drawn: dots in rows of ${n(plan.perRow)}.` }
+        return { note: plan.count === 0 ? 'Drawn: no dots at all.' : `Drawn: dots in rows of ${fmt(plan.perRow, 0)}.` }
       case 'curves':
         visualizeCurves(plan.items)
         return { note: `Drawn: ${plan.items.map((it) => it.label).join(', ')}.` }

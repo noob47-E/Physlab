@@ -6,7 +6,7 @@
 import type { ConstantNode, FunctionNode, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
 import type { LengthUnit } from '../core/types'
 import { math, preprocess } from '../math/expr'
-import { fmtPrecise, fmtSci, revealPrecision, texPrecise, texSci, type MeasureSettings } from '../math/format'
+import { fmtPrecise, fmtSci, revealPrecision, superscriptPowers, texPrecise, texSci, type MeasureSettings } from '../math/format'
 import { UNIT_IDS, type UnitId } from './pqjson'
 
 export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
@@ -266,20 +266,28 @@ export function fromLengthUnit(v: number, u: LengthUnit, to: UnitId): number | n
 
 /**
  * The number a chip or an answer shows: `fmtPrecise`/`fmtSci` (the scientific form once a value
- * strays far from 1, so a charge of 1.6×10⁻¹⁹ never rounds to 0) followed by the unit's label. A
- * degree sign sits against its number, as `formatMeasure` writes it, never with a space.
+ * strays far from 1, so a charge of 1.6×10⁻¹⁹ never rounds to 0) with its power of ten raised,
+ * followed by the unit's label. A degree sign sits against its number, as `formatMeasure` writes
+ * it, never with a space. The power was once left as "1.6×10^-19 C" in the statement's chips, the
+ * revealed answer and the error-carried-forward note: a caret is programming on screen (rule 2).
  */
 export function formatQuantity(v: number, unit: UnitId, settings: Precision): string {
+  const shown = superscriptPowers(quantityNumber(v, settings))
+  const info = UNITS[unit]
+  if (info.label === '') return shown
+  const gap = info.label === '°' || info.label === '°C' ? '' : ' '
+  return `${shown}${gap}${info.label}`
+}
+
+/** formatQuantity's number in the caret form `shownValue` reads back, for `revealSettings`. */
+function quantityNumber(v: number, settings: Precision): string {
   const abs = Math.abs(v)
   let shown = abs >= 1e6 || (abs > 0 && abs < 1e-3) ? fmtSci(v, settings) : fmtPrecise(v, settings)
   // The fixed cutoff above is not tied to the student's precision: at 2 dp both 0.0012 m and its
   // half-double 0.0024 m printed as "0 m", one right and one wrong with the same text. A known
   // value that rounds away at this precision goes scientific instead.
   if (v !== 0 && (shown === '0' || shown === '−0')) shown = fmtSci(v, settings)
-  const info = UNITS[unit]
-  if (info.label === '') return shown
-  const gap = info.label === '°' || info.label === '°C' ? '' : ' '
-  return `${shown}${gap}${info.label}`
+  return shown
 }
 
 /**
@@ -288,7 +296,7 @@ export function formatQuantity(v: number, unit: UnitId, settings: Precision): st
  * the box and on the full solution's Answer card must mark right when typed back.
  */
 export function revealSettings<S extends Precision>(v: number, tol: number, settings: S): S {
-  return revealPrecision(v, tol, settings, (x, q) => formatQuantity(x, 'none', q))
+  return revealPrecision(v, tol, settings, quantityNumber)
 }
 
 /**

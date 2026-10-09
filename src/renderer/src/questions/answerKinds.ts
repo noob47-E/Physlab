@@ -500,7 +500,10 @@ export function format2AnswerTex(part: Format2Part, values: Record<string, numbe
         if (roots.some((x) => !Number.isFinite(x))) return '\\text{?}'
         if (roots.length === 0) return '\\text{no real roots}'
         const largest = Math.max(0, ...roots.map(Math.abs))
-        return roots
+        // A repeated root is revealed once, as checkRootsPart counts it unless the part sets
+        // multiplicity (with the same bands): "2" was marked right and the reveal said "2, 2".
+        const shown = part.multiplicity === true ? roots : distinct(roots, (x) => halfWidth(part.tolerance, x, noiseFloor(x, largest)))
+        return shown
           .map((x) => noiseToZero(x, largest))
           .map((x) => texQuantity(x, part.unit, revealSettings(x, halfWidth(part.tolerance, x, 0), s)))
           .join(',\\ ')

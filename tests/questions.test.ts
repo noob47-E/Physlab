@@ -418,9 +418,9 @@ describe('randomRange', () => {
 describe('substitute', () => {
   it('writes a tiny known value through fmtSci, never as 0', () => {
     const out = substitute('The charge is {q}.', { q: 1.6e-19 }, { q: 'C' }, PRECISION)
-    expect(out).toBe('The charge is 1.6×10^-19 C.')
+    expect(out).toBe('The charge is 1.6\u00a0×\u00a010⁻¹⁹ C.')
     expect(out).not.toContain(' 0 C')
-    expect(substitute('{n}', { n: 2.5e6 }, {}, PRECISION)).toBe('2.5×10^6')
+    expect(substitute('{n}', { n: 2.5e6 }, {}, PRECISION)).toBe('2.5\u00a0×\u00a010⁶')
   })
 
   it('appends the unit label with a space, but a degree sign sits against the number', () => {

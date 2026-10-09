@@ -106,7 +106,8 @@ describe('stepsToWorking', () => {
     expect(w.moves[1].note).toBe(`The train had ${u} m/s to start with.`)
     // A degree sits against its number; a tiny known value is scientific, never 0.
     expect(w.moves[2].tex).toBe(`\\theta = ${variant.values.theta}^{\\circ}, q = 1.6\\times 10^{-19}\\,\\mathrm{C}`)
-    expect(w.moves[2].head).toContain('1.6×10^-19 C')
+    // Raised, never "1.6×10^-19 C" (rule 2); a step head's spaces are plain ones.
+    expect(w.moves[2].head).toContain('1.6 × 10⁻¹⁹ C')
     // One answer per part, from the same numbers.
     expect(w.answers.map((x) => x.label)).toEqual([`Speed after ${t} s?`, 'The charge?', 'Speed as a function of time s.', 'Speeding up or slowing down?'])
     expect(w.answers[0].tex).toBe(`${vend}\\,\\mathrm{m/s}`)

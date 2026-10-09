@@ -5,7 +5,7 @@
 
 import { inDegrees, math, preprocess } from '../math/expr'
 import type { UnitId } from './pqjson'
-import { convertQuantity, unitFromTail } from './units'
+import { convertQuantity, unitFromTail, UNITS } from './units'
 
 export type Read<T> = T | { error: string }
 
@@ -120,6 +120,10 @@ export function readVector(text: string): Read<{ v: number[]; unit: UnitId | nul
     .replace(/ĵ/g, 'j')
     .replace(/([ijk])̂/g, '$1')
   if (t === '') return { error: VECTOR_HELP }
+  // The zero vector, "0" or "0 N": vectors in equilibrium add up to it, and the reveal writes it
+  // as 0. It was refused as "Type the vector as 3i + 4j…".
+  const zero = unitFromTail(t)
+  if (/^[+-]?0*\.?0+$/.test(zero.value.trim())) return { v: [0, 0], unit: zero.unit }
   return readPolar(t) ?? readBracketed(t) ?? readIJK(t) ?? { error: VECTOR_HELP }
 }
 
@@ -257,7 +261,10 @@ export function readSet(text: string, unit?: UnitId): Read<number[]> {
   const t = dashes(text.trim())
   if (t === '') return { error: SET_HELP }
   if (NO_ROOTS.test(t)) return []
-  const body = t.replace(/^\{\s*(.*?)\s*\}$/, '$1')
+  // Curly braces round the set, or one pair of round ones ("(1 ± 2)", "(2, −3)") — never two pairs
+  // that only start and end the text, as in "(1+3)/2, (5-1)/2".
+  const curly = t.replace(/^\{\s*(.*?)\s*\}$/, '$1')
+  const body = oneBracketPair(curly) ?? curly
   const items = splitTop(body, /\s*(?:,|;|\bor\b|\band\b)\s*/iy).map((s) => s.trim())
   const out: number[] = []
   for (const item of items) {
@@ -270,8 +277,10 @@ export function readSet(text: string, unit?: UnitId): Read<number[]> {
       both = true
       s = s.slice(pm[0].length)
     }
-    // "x = −1 ± √2", the quadratic formula's form: two roots, a + b and a − b.
-    const halves = both ? [s] : splitTop(s.replace(/\+\/?-/g, '±'), /±/y)
+    // "x = −1 ± √2", the quadratic formula's form: two roots, a + b and a − b. "+-", "+/-" and
+    // "+ / -" with spaces are ±, as the leading form above reads them; "1 + - 2" was worked out as
+    // 1 + (−2), one root where there are two.
+    const halves = both ? [s] : splitTop(s.replace(/\+\s*\/?\s*-/g, '±'), /±/y)
     if (halves.length > 2) return { error: `Type one ± in each value: "${item}" has more. ${SET_HELP}` }
     const read: number[] = []
     for (const half of halves) {
@@ -292,6 +301,18 @@ export function readSet(text: string, unit?: UnitId): Read<number[]> {
   return out
 }
 
+/** What is inside one pair of round brackets round the whole of `s`, else null. */
+function oneBracketPair(s: string): string | null {
+  if (!s.startsWith('(') || !s.endsWith(')')) return null
+  let depth = 0
+  for (let i = 0; i < s.length - 1; i++) {
+    if (s[i] === '(') depth++
+    else if (s[i] === ')') depth--
+    if (depth === 0) return null
+  }
+  return s.slice(1, -1).trim()
+}
+
 /** One value of a set, with a unit after it converted to the part's `unit`; `item` is what the student typed, for the sentence. */
 function readSetValue(s: string, item: string, unit: UnitId | undefined): number | { error: string } {
   let value: number | null
@@ -310,7 +331,8 @@ function readSetValue(s: string, item: string, unit: UnitId | undefined): number
 // One matrix entry
 // ---------------------------------------------------------------------------
 
-const FRACTION = /^([+-]?\d+)\s*\/\s*([+-]?\d+)$/
+// A sign may stand apart from its digits ("- 1/2"), which was refused.
+const FRACTION = /^([+-]?)\s*(\d+)\s*\/\s*([+-]?)\s*(\d+)$/
 
 /**
  * One entry of a matrix answer: a number as it is written ("0.6", "−0.2", "1.5e-3", and the ×10
@@ -324,8 +346,9 @@ export function readMatrixCell(text: string, allowFractions: boolean): number | 
   if (x !== null) return x
   const f = FRACTION.exec(t)
   if (f && allowFractions) {
-    const d = Number(f[2])
-    return d === 0 ? null : Number(f[1]) / d
+    const [, ns, n, ds, d] = f
+    if (Number(d) === 0) return null
+    return ((ns === '-') !== (ds === '-') ? -1 : 1) * (Number(n) / Number(d))
   }
   return null
 }
@@ -347,15 +370,16 @@ export function readStated(text: string): Read<{ x: number; u: number; unit: Uni
   let t = dashes(text.trim()).replace(/\\pm/g, '±').replace(/\+\s*\/?\s*-/g, '±')
   if (t === '') return { error: 'Type your value and its uncertainty, like 2.50 ± 0.05.' }
   const tail = unitFromTail(t)
-  const unit = tail.unit
+  let unit = tail.unit
 
-  // A bracket holding a ±, then one ×10 power for both halves. Groups: what is in the bracket, then
-  // the exponent after a caret, in brackets after a caret, or raised in superscript digits. Split
-  // at the ± alone, the first half was "(6.6261" and was refused as "could not read the value".
-  const shared = /^\(\s*(.+?)\s*\)\s*[×·⋅x*]\s*10\s*(?:\^\s*(?:([+-]?\d+)|\(\s*([+-]?\d+)\s*\))|([⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+))$/.exec(tail.value)
+  // A bracket holding a ±, then one power of ten for both halves. Groups: what is in the bracket,
+  // then the exponent after a caret, in brackets after a caret, raised in superscript digits, or
+  // after an e as a calculator writes it ("(1.602 ± 0.002)e-19", once refused). Split at the ±
+  // alone, the first half was "(6.6261" and was refused as "could not read the value".
+  const shared = /^\(\s*(.+?)\s*\)\s*(?:[×·⋅x*]\s*10\s*(?:\^\s*(?:([+-]?\d+)|\(\s*([+-]?\d+)\s*\))|([⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+))|[eE]\s*([+-]?\d+))$/.exec(tail.value)
   if (shared && shared[1].includes('±')) {
-    const [, inner, caret, bracketed, raised] = shared
-    const power = caret ?? bracketed ?? unraised(raised)
+    const [, inner, caret, bracketed, raised, eNotation] = shared
+    const power = caret ?? bracketed ?? eNotation ?? unraised(raised)
     const halves = inner.split('±').map((h) => h.trim())
     if (halves.length !== 2) return { error: 'Type one ± between your value and its uncertainty.' }
     // The power goes on each half as e-notation ("6.6261e-34", "0.0012e-34") and is read as one
@@ -389,6 +413,23 @@ export function readStated(text: string): Read<{ x: number; u: number; unit: Uni
     return { error: `Give your uncertainty too, like ${t} ± ${lastDigit(t)}.` }
   }
   if (halves.length !== 2) return { error: 'Type one ± between your value and its uncertainty.' }
+  // A unit on the value as well as on the uncertainty ("5 m ± 0.1 m", or inside a bracket): the
+  // value was read as "5 m" and refused. Two different units are refused in the owner's words
+  // (2026-10-09).
+  const left = unitFromTail(halves[0])
+  const right = unitFromTail(halves[1])
+  if (left.unit !== null || right.unit !== null) {
+    // A unit on the uncertainty AND another after it ("5 m ± 0.1 m s") is not one unit: refused as
+    // before, never read with the trailing one dropped.
+    if (right.unit !== null && unit !== null) return { error: `PhysLab could not read the uncertainty "${halves[1].trim()}".` }
+    const after = right.unit ?? unit
+    if (left.unit !== null && after !== null && left.unit !== after) {
+      return { error: `The value and its ± part need the same unit: ${UNITS[left.unit].label} and ${UNITS[after].label} don't match.` }
+    }
+    unit = left.unit ?? after
+    halves[0] = left.value
+    halves[1] = right.value
+  }
   const x = evalNumber(halves[0])
   const u = evalNumber(halves[1])
   if (x === null) return { error: `PhysLab could not read the value "${halves[0].trim()}".` }

@@ -864,7 +864,7 @@ export function Practice() {
         <button className="btn primary min-h-[44px]" onClick={check}>
           <Check size={13} /> Check my answer
         </button>
-        <button className="btn min-h-[44px]" onClick={() => put({ hints: Math.min(hints + 1, steps.length) })} disabled={!revealed && hints >= steps.length}>
+        <button className="btn min-h-[44px]" onClick={() => put({ hints: Math.min(hints + 1, steps.length) })} disabled={revealed || hints >= steps.length}>
           <Lightbulb size={13} /> {hints === 0 ? 'Hint' : 'Next hint'}
         </button>
         {(anyChecked || hints > 0) && !revealed && (

@@ -94,16 +94,16 @@ describe('formatQuantity', () => {
   })
 
   it('goes to the scientific form for a very small or very large known value', () => {
-    expect(formatQuantity(1.6e-19, 'C', PRECISION)).toContain('×10^')
+    expect(formatQuantity(1.6e-19, 'C', PRECISION)).toBe('1.6\u00a0×\u00a010⁻¹⁹ C')
     expect(formatQuantity(1.6e-19, 'C', PRECISION)).not.toContain(' 0 C')
-    expect(formatQuantity(2.5e7, 'W', PRECISION)).toContain('×10^')
+    expect(formatQuantity(2.5e7, 'W', PRECISION)).toBe('2.5\u00a0×\u00a010⁷ W')
   })
 
   it('goes scientific for a known value that would otherwise round to 0 at the student\'s precision', () => {
     // The fixed 1e-3 cutoff let 0.0012 m print as "0 m" at 2 dp — the same text as a wrong
     // choice half its size, and the very thing the scientific form exists to prevent.
-    expect(formatQuantity(0.0012, 'm', PRECISION)).toBe('1.2×10^-3 m')
-    expect(formatQuantity(-0.0012, 'm', PRECISION)).toBe('−1.2×10^-3 m')
+    expect(formatQuantity(0.0012, 'm', PRECISION)).toBe('1.2\u00a0×\u00a010⁻³ m')
+    expect(formatQuantity(-0.0012, 'm', PRECISION)).toBe('−1.2\u00a0×\u00a010⁻³ m')
     expect(formatQuantity(0, 'm', PRECISION)).toBe('0 m')
     expect(formatQuantity(0.0012, 'm', { decimals: 4, precisionMode: 'dp' })).toBe('0.0012 m')
   })

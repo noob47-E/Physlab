@@ -268,8 +268,14 @@ function answerFor(part: PQPart, values: Record<string, number>, units: Record<s
     choices = []
   }
   const right = choices.filter((c) => c.correct).map((c) => `\\text{${texText(substitute(c.text, values, units, s))}}`)
-  return { label, tex: right.length > 0 ? right.join(',\\ ') : '\\text{?}' }
+  // Options with none marked right say so, as the reveal under the part does; options that could
+  // not be worked out at all leave "?".
+  const none = choices.length > 0 ? `\\text{${NO_RIGHT_CHOICE}}` : '\\text{?}'
+  return { label, tex: right.length > 0 ? right.join(',\\ ') : none }
 }
+
+/** A choice part's reveal when none of its options is marked right (owner's wording, 2026-10-09). */
+export const NO_RIGHT_CHOICE = 'none of the choices is right.'
 
 // ---------------------------------------------------------------------------
 // Steps the engine writes

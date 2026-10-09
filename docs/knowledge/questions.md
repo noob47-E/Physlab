@@ -49,7 +49,19 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
 - The bundled school-maths bank and the external Question Pack (`PhysLab-content\PhysLab Question Pack.pqjson`)
   must hold the same questions exactly (tests/content.test.ts): edit both, back the pack up first.
 - vitest has no DOM: a panel decision worth testing goes into a pure function (`solverState.ts`), plus a browser check.
+- An expression part's sampled check took anything under an absolute 10⁻¹² as zero, so "0" was right for 10⁻¹⁴·x.
+  A side that is exactly 0 is now held to noise RELATIVE to the terms that cancelled and the formulas' size across
+  the sample (`termScale`, `noiseFloor`) — tests/fb2-marking.test.ts.
+- Shown text raises its powers: `formatQuantity`, `expectedText`, the ODE sentences and `plainFormula` (every whole
+  power; `preprocess` reads them back). `revealSettings` tests the CARET form (`quantityNumber`), because
+  `shownValue` reads that form — tests/fb2-carets.test.ts (guard sweep) and tests/rawPowers.test.ts.
+- A reveal says what the marker accepts: a repeated root once unless `multiplicity`; a Lego part "the target
+  shape"; a choice part with no right option "none of the choices is right." (`NO_RIGHT_CHOICE`) —
+  tests/fb2-reveal.test.ts, tests/fb2-lego-reveal.test.ts.
+- Answer readers (`answerText.ts`) take "+ -" with spaces as ±, one bracket pair round a set, "- 1/2", the zero
+  vector "0", units on both halves of a stated value (two different ones refused in words) and "(a ± b)e-19" —
+  tests/fb2-answer-reading.test.ts.
 
 ## Guards
 tests/zeroAnswers.test.ts, tests/vectorAnswerReading.test.ts, tests/playerGuards.test.ts, tests/answerTimesSign.test.ts,
-tests/ecfUnits.test.ts, tests/questionSteps.test.ts, tests/solverState.test.ts, tests/content.test.ts.
+tests/ecfUnits.test.ts, tests/questionSteps.test.ts, tests/solverState.test.ts, tests/content.test.ts, tests/fb2-*.test.ts.

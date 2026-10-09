@@ -205,7 +205,7 @@ describe('picture bindings', () => {
   it('says what it drew as a student writes it, and the graph\'s equation reads back the same curve', () => {
     expect(plainFormula('3 * x ^ 2')).toBe('3x²')
     expect(plainFormula('2 * x ^ 2 + (-3)')).toBe('2x² + (−3)')
-    expect(plainFormula('x ^ 4 - 2 * x')).toBe('x^4 − 2x')
+    expect(plainFormula('x ^ 4 - 2 * x')).toBe('x⁴ − 2x')
     expect(plainFormula('x ^ (-1) + sin(x) / x')).toBe('x⁻¹ + sin(x) / x')
     expect(plainFormula('x * sqrt(x)')).toBe('x × sqrt(x)')
     const q = train({ variables: [...train().variables, { name: 'a', def: { kind: 'list', items: [3] } }], picture: { kind: 'curve', expr: 'a*x^2 - 2x' } })

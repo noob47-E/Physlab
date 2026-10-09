@@ -298,7 +298,7 @@ function ProofRow({ p, label, many, value, revealed, onChange, onModelShown }: R
  * writes it as the part's answer and runs the question's own Check, so the part is marked and
  * counted like any box (and the question's Check reads the drawing again whenever it runs).
  */
-function LegoRow({ p, label, many, value, check, played, onChange, onEnter }: RowProps) {
+function LegoRow({ p, label, many, value, check, revealed, played, onChange, onEnter }: RowProps) {
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null)
   // Read from the drawing on every change of it, never kept: laying out another Lego part takes
   // this part's pieces away, and a remembered "laid out" went on offering "Start again" for pieces
@@ -351,7 +351,9 @@ function LegoRow({ p, label, many, value, check, played, onChange, onEnter }: Ro
       {note && <div className={`mt-1 ${note.error ? 'text-bad' : 'text-ink-dim'}`}>{note.text}</div>}
       {shown && isCorrect(shown) && <div className="mt-1 text-good">{LEGO_RIGHT}</div>}
       {/* Not a try: what to do next, in the dim ink of a note, not the red of a wrong answer. */}
-      {shown?.verdict === 'unreadable' ? <div className="mt-1 text-ink-dim">{shown.message}</div> : <Verdict c={shown} revealed={false} answer={null} />}
+      {shown?.verdict === 'unreadable' && <div className="mt-1 text-ink-dim">{shown.message}</div>}
+      {/* The solution shows on reveal whatever the last check said (it once never showed at all). */}
+      <Verdict c={shown?.verdict === 'unreadable' ? undefined : shown} revealed={revealed} answer={p.answerText} />
     </div>
   )
 }

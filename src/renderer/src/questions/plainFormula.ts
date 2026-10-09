@@ -4,15 +4,20 @@
 import type { ConstantNode, MathNode, OperatorNode, ParenthesisNode } from 'mathjs'
 import { math, preprocess } from '../math/expr'
 
-/** The powers the calculator reads back as superscripts (preprocess turns ², ³ and ⁻¹ into ^). */
-const SUPERSCRIPT: Record<string, string> = { '2': '²', '3': '³', '-1': '⁻¹' }
+/**
+ * A whole-number power raised, as `preprocess` reads it back (x⁴ is x^4, x⁻² is x^(-2), x¹² is
+ * x^12); null for any other power. Only ², ³ and ⁻¹ were raised once, so a picture note or a
+ * condition sentence read "x^4" — programming on screen (rule 2).
+ */
+const RAISED: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' }
+const raised = (power: string): string | null => (/^-?\d+$/.test(power) ? [...power].map((c) => RAISED[c]).join('') : null)
 
 /**
  * A bound formula written the way a student writes it: 3x² − 2x, not mathjs's 3 * x ^ 2 - 2 * x,
  * which is programming (rule 2). It stays something the command bar reads back, because it
- * becomes the graph's equation and editing that equation runs it as a command: ² ³ ⁻¹ and −
- * are what `preprocess` understands, a number before a letter or a bracket is a product, and
- * every other product is ×.
+ * becomes the graph's equation and editing that equation runs it as a command: raised whole
+ * powers and − are what `preprocess` understands, a number before a letter or a bracket is a
+ * product, and every other product is ×.
  */
 export function plainFormula(expr: string): string {
   const letterLike = (n: MathNode): boolean =>
@@ -35,7 +40,8 @@ export function plainFormula(expr: string): string {
             : negated?.type === 'ConstantNode'
               ? `-${String((negated as ConstantNode).value)}`
               : ''
-        return SUPERSCRIPT[key] ? `${s(base)}${SUPERSCRIPT[key]}` : `${s(base)}^${s(exp)}`
+        const up = raised(key)
+        return up ? `${s(base)}${up}` : `${s(base)}^${s(exp)}`
       }
       if (op.fn === 'multiply' && op.args.length === 2) {
         const [a, b] = op.args

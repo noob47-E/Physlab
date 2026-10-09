@@ -5,7 +5,7 @@
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
 import { inDegrees, math, preprocess } from './expr'
-import { fmtPrecise, fmtSci, noiseFloor, revealPrecision, type MeasureSettings } from './format'
+import { fmtPrecise, fmtSci, noiseFloor, revealPrecision, superscriptPowers, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 import { UNITS } from '../questions/units'
@@ -177,7 +177,8 @@ export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals'
   const n = show(v, revealPrecision(v, f.tol, s, show))
   // A degree sign sits against its number, as formatMeasure writes it: "36.87°", not "36.87 °".
   const gap = f.unit === '°' ? '' : ' '
-  return `${n}${f.unit ? `${gap}${f.unit}` : ''}`
+  // The power of ten raised, "1.6 × 10⁻¹⁹ N": the reveal once read "1.6×10^-19 N" (rule 2).
+  return superscriptPowers(`${n}${f.unit ? `${gap}${f.unit}` : ''}`)
 }
 
 /**

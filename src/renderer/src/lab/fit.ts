@@ -42,6 +42,9 @@ export const MIN_POINTS = 3
  */
 export function fitOf(xs: number[], ys: number[], shape: FitShape): Fit | null {
   if (xs.length < MIN_POINTS || xs.length !== ys.length) return null
+  // A reading that is not a number (NaN from an empty or broken cell, ±∞) has no place on any curve:
+  // it made r² NaN, and rankFits then sorted on NaN, so the "best" shape hung on the row order.
+  if (!xs.every(Number.isFinite) || !ys.every(Number.isFinite)) return null
   let expr: string | undefined
   let label: string | undefined
   let coef: Record<string, number> | undefined
@@ -77,6 +80,7 @@ export function fitOf(xs: number[], ys: number[], shape: FitShape): Fit | null {
   const yScale = ys.reduce((a, y) => Math.max(a, Math.abs(y)), 0)
   const noise = Math.max(ys.length * (yScale * 1e-13) ** 2, Number.MIN_VALUE)
   const r2 = ssTot <= noise ? (ssRes <= noise ? 1 : 0) : 1 - ssRes / ssTot
+  if (!Number.isFinite(r2)) return null
 
   const fit: Fit = { shape, label: label ?? shape, expr, coef, r2, predict, residuals }
 
@@ -86,8 +90,14 @@ export function fitOf(xs: number[], ys: number[], shape: FitShape): Fit | null {
     const meanX = xs.reduce((a, b) => a + b, 0) / xs.length
     const sxx = xs.reduce((a, x) => a + (x - meanX) ** 2, 0)
     // The textbook standard error of a gradient: how much the scatter about the line could have
-    // tilted it. Needs at least one degree of freedom left over.
-    if (xs.length > 2 && sxx > 1e-12) fit.slopeError = Math.sqrt(ssRes / (xs.length - 2) / sxx)
+    // tilted it. Needs at least one degree of freedom left over, and x readings that differ by more
+    // than rounding — measured RELATIVE to their own size, as the y spread is above. An absolute
+    // sxx > 1e-12 dropped the error for every x near 10⁻⁷ (sxx about 10⁻¹³), however real its scatter.
+    const xScale = xs.reduce((a, x) => Math.max(a, Math.abs(x)), 0)
+    const xNoise = Math.max(xs.length * (xScale * 1e-13) ** 2, Number.MIN_VALUE)
+    // Readings exactly on the line (ssRes at rounding level, the same `noise` r² uses) have no
+    // scatter, so an error of 0: far from zero their rounding read as "3.30000000000 ± 0.00000000003".
+    if (xs.length > 2 && sxx > xNoise) fit.slopeError = ssRes > noise ? Math.sqrt(ssRes / (xs.length - 2) / sxx) : 0
   }
   return fit
 }
@@ -201,10 +211,12 @@ export function gradientMeaning(yName: string, xName: string): string | null {
  * more digits than the uncertainty supports is the mistake this prevents.
  */
 export function pmText(value: number, error: number | undefined): string {
-  // Readings that lie exactly on the line leave a standard error of about 1e-16, which is
-  // arithmetic noise rather than a measurement: writing "± 0.0000000000000002" would be nonsense.
+  // Readings that lie exactly on the line leave a standard error of about 1e-16 of the value, which
+  // is arithmetic noise rather than a measurement: writing "± 0.0000000000000002" would be nonsense.
+  // The cut is a millionth of a millionth of the value, far above that noise and far below any real
+  // uncertainty: at 1e-9 a gradient of 1 × 10⁹ ± 0.5 lost its ±.
   // Rounding goes through math/format.ts: the built-ins round the binary double, so 2.675 read 2.67.
-  if (error === undefined || !Number.isFinite(error) || error <= 0 || error < Math.abs(value) * 1e-9) {
+  if (error === undefined || !Number.isFinite(error) || error <= 0 || error < Math.abs(value) * 1e-12) {
     return Number.isFinite(value) ? sixFigures(value) : '—'
   }
   const rounded = roundHalfAway(error, 1, 'sf')
@@ -243,10 +255,13 @@ export interface GradientRange {
  */
 export function gradientRange(xs: number[], ys: number[], xErr: number[], yErr: number[]): GradientRange | null {
   if (xs.length < 2) return null
+  // A reading that is not a number cannot be sorted into first and last: it gave { NaN, NaN }.
+  if (!xs.every(Number.isFinite) || !ys.every(Number.isFinite)) return null
   const at = (i: number) => ({ x: xs[i], y: ys[i], ex: xErr[i] ?? 0, ey: yErr[i] ?? 0 })
   const order = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b])
   const first = at(order[0])
   const last = at(order[order.length - 1])
+  if (![first.ex, first.ey, last.ex, last.ey].every(Number.isFinite)) return null
   if (first.ex === 0 && first.ey === 0 && last.ex === 0 && last.ey === 0) return null
 
   const shortRun = last.x - last.ex - (first.x + first.ex)

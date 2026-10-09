@@ -4,9 +4,9 @@
 // check (exact, algebraic, numeric) since `checkAnswer` only ever compares two numbers.
 // Headless: no React, no store, no DOM.
 
-import type { FunctionNode, MathNode, SymbolNode } from 'mathjs'
+import type { FunctionNode, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
 import { getAngleMode, inDegrees, isUnit, math, preprocess, setAngleMode, symbolsOf } from '../math/expr'
-import type { MeasureSettings } from '../math/format'
+import { noiseFloor, type MeasureSettings } from '../math/format'
 import { checkAnswer, parseAnswer, UNIT_TAIL, type Check } from '../math/checkAnswer'
 import type { AnswerField, Trap } from '../math/problems'
 import { rngFor } from '../math/problems'
@@ -170,7 +170,10 @@ function readDegreeAngles(node: MathNode): MathNode {
     } catch {
       return n
     }
-    return typeof value === 'number' && Number.isFinite(value) ? new math.ConstantNode(value) : n
+    // A sine, cosine or tangent is of size 1, so what is left under 10⁻¹⁵ of that is rounding:
+    // cos 90° is 0, not 6×10⁻¹⁷, which a relative check would take for a real (tiny) value.
+    if (typeof value === 'number' && Number.isFinite(value)) return new math.ConstantNode(Math.abs(value) < 1e-15 ? 0 : value)
+    return n
   })
 }
 
@@ -355,6 +358,53 @@ export function checkExpressionPart(
   })
 }
 
+/** Functions whose value is held to about 1 by what they are: cos 90° or ln 1 left as 6×10⁻¹⁷ is noise. */
+const UNIT_SIZED = new Set(['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'ln', 'log', 'log10', 'log2'])
+
+/**
+ * The size of the terms a formula adds or subtracts at one point, carried through ×, ÷ and powers:
+ * sin²x + cos²x − 1 has terms near 1, so what it leaves is floating noise next to them, and so does
+ * x·(sin²x + cos²x − 1), whose size is x times that, or F·d·cos 90°, a cosine being of size 1;
+ * 10⁻¹⁴·x, (10⁻⁸x)² and e⁻⁵⁰·x are as big as their values. Taking only the top-level terms made
+ * such a product one term of noise size, and a right "0" was marked wrong.
+ */
+function termScale(node: MathNode, scope: Record<string, number>): number {
+  const value = (n: MathNode): number => {
+    try {
+      const v = Number(n.evaluate({ ...scope }))
+      return Number.isFinite(v) ? Math.abs(v) : 0
+    } catch {
+      // A piece with no value of its own adds no scale.
+      return 0
+    }
+  }
+  const size = (n: MathNode): number => {
+    if (n.type === 'ParenthesisNode') return size((n as ParenthesisNode).content)
+    if (n.type === 'OperatorNode') {
+      const op = n as OperatorNode
+      if (['add', 'subtract', 'unaryMinus', 'unaryPlus'].includes(op.fn)) return Math.max(0, ...op.args.map(size))
+      if (op.fn === 'multiply') return op.args.reduce((k, a) => k * size(a), 1)
+      if (op.fn === 'divide' && op.args.length === 2) {
+        const below = value(op.args[1])
+        return below > 0 ? size(op.args[0]) / below : 0
+      }
+      if (op.fn === 'pow' && op.args.length === 2) {
+        const power = Number(op.args[1].evaluate({ ...scope }))
+        if (Number.isFinite(power)) return Math.max(value(n), size(op.args[0]) ** power)
+      }
+    }
+    if (n.type === 'FunctionNode') {
+      const f = n as FunctionNode
+      const name = (f.fn as unknown as { name?: string }).name ?? ''
+      if (UNIT_SIZED.has(name)) return Math.max(value(n), 1)
+      if (name === 'sqrt' && f.args.length === 1) return Math.max(value(n), Math.sqrt(size(f.args[0])))
+      if (name === 'abs' && f.args.length === 1) return size(f.args[0])
+    }
+    return value(n)
+  }
+  return size(node)
+}
+
 /**
  * The numeric stage on its own: the two sides at 7 points per symbol across `sampleRange`, in
  * whatever angle mode the caller set. `symbols` are the part's own, as typed text reads them.
@@ -362,26 +412,36 @@ export function checkExpressionPart(
 function sampledCheck(text: string, part: ExpressionPart, symbols: string[], values: Record<string, number>): Check {
   const range = part.sampleRange ?? [1, 2]
   const points = sampleGrid(symbols, 7, range, 1)
-  let finite = 0
-  let maxRelError = 0
+  const samples: { a: number; b: number; sizeA: number; sizeB: number }[] = []
   for (const point of points) {
     const scope = { ...values, ...point }
-    let a: number
-    let b: number
     try {
-      a = Number(readExpression(part.answer).evaluate({ ...scope }))
-      b = Number(readExpression(text).evaluate({ ...scope }))
+      const answer = readExpression(part.answer)
+      const typed = readExpression(text)
+      const a = Number(answer.evaluate({ ...scope }))
+      const b = Number(typed.evaluate({ ...scope }))
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue
+      samples.push({ a, b, sizeA: termScale(answer, scope), sizeB: termScale(typed, scope) })
     } catch {
       continue
     }
-    if (!Number.isFinite(a) || !Number.isFinite(b)) continue
-    finite++
+  }
+  const finite = samples.length
+  // How big the two formulas are anywhere in the sample: a value that is noise next to that (sin πx
+  // landing near a whole x) is no evidence of a wrong answer.
+  const sampleScale = Math.max(0, ...samples.map(({ a, b }) => Math.max(Math.abs(a), Math.abs(b))))
+  let maxRelError = 0
+  for (const { a, b, sizeA, sizeB } of samples) {
     // Relative to the larger side, never to max(1, |a|): that made the check absolute for every
     // answer below 1 and passed 2e-7·x for 1e-7·x — an electron-sized constant a factor of two
     // off. A side that is exactly zero (an identity that cancels) has nothing to be relative to,
-    // so the other side must then be zero to within floating noise.
+    // so the other side must then be zero to within floating noise — noise RELATIVE to the terms
+    // that cancelled IN THE SIDE THAT IS NOT ZERO and to the formulas' own size. An absolute 10⁻¹²
+    // floor marked "0" right for 10⁻¹⁴·x, since every SI answer of that size sat under it; and the
+    // zero side's own cancelled terms ("1e20·x − 1e20·x") must never widen the other side's floor.
     const scale = Math.max(Math.abs(a), Math.abs(b))
-    const rel = a === 0 || b === 0 ? (scale <= 1e-12 ? 0 : 1) : Math.abs(a - b) / scale
+    const terms = a === 0 ? sizeB : sizeA
+    const rel = a === 0 || b === 0 ? (scale <= noiseFloor(0, Math.max(terms, sampleScale)) ? 0 : 1) : Math.abs(a - b) / scale
     maxRelError = Math.max(maxRelError, rel)
   }
 

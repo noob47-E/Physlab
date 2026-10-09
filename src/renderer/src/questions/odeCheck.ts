@@ -8,7 +8,8 @@
 import type { EvalFunction, FunctionNode, MathNode, OperatorNode, ParenthesisNode, SymbolNode } from 'mathjs'
 import type { Check } from '../math/checkAnswer'
 import { getAngleMode, math, preprocess, setAngleMode, symbolsOf } from '../math/expr'
-import { fmtPrecise, type MeasureSettings } from '../math/format'
+import { fmtLabel, type MeasureSettings } from '../math/format'
+import { formatQuantity } from './units'
 import { lettersBeforeBrackets, withoutNameEquals } from './parts'
 import type { PQPart, UnitId } from './pqjson'
 
@@ -245,7 +246,7 @@ export function checkFunctionPart(
     if (finite < 5) {
       return {
         verdict: 'wrong',
-        message: `Your formula has no value at most points from ${xName} = ${fmtPrecise(lo, settings)} to ${fmtPrecise(hi, settings)}, where the answer must hold.`
+        message: `Your formula has no value at most points from ${xName} = ${fmtLabel(lo, settings)} to ${fmtLabel(hi, settings)}, where the answer must hold.`
       }
     }
     if (worst > ROUNDING) return { verdict: 'wrong', message: NOT_A_SOLUTION }
@@ -274,8 +275,10 @@ export function checkFunctionPart(
       const local = Math.max(0, ...[g(at - delta), g(at + delta)].filter(Number.isFinite).map(Math.abs))
       const scale = Math.max(Math.abs(want), Math.abs(got), local)
       const rel = !Number.isFinite(got) ? Infinity : scale === 0 ? (got === want ? 0 : 1) : Math.abs(got - want) / scale
-      const name = `${yName}${ic.order === 1 ? '′' : ''}(${fmtPrecise(at, settings)})`
-      if (rel > ROUNDING) misses.push(`${name} should be ${fmtPrecise(want, settings)}`)
+      // Powers raised (the sentence read "y(0) should be 1×10^10"), and a known starting value
+      // written as a known answer is, so a tiny one is never "should be 0".
+      const name = `${yName}${ic.order === 1 ? '′' : ''}(${fmtLabel(at, settings)})`
+      if (rel > ROUNDING) misses.push(`${name} should be ${formatQuantity(want, 'none', settings)}`)
       else if (rel > EXACT) rounded = true
     }
     if (misses.length > 0) {

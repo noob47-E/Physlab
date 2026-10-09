@@ -296,15 +296,15 @@ describe('expectedText', () => {
     // A degree sign sits against its number, the way formatMeasure writes it.
     expect(expectedText(field({ value: -7.25, unit: '°' }), { decimals: 1, precisionMode: 'dp' })).toBe('−7.3°')
     expect(expectedText(angle(36.8698976), { decimals: 2, precisionMode: 'dp' })).toBe('36.87°')
-    expect(expectedText(field({ value: 6.674e-11, unit: 'N' }), { decimals: 3, precisionMode: 'sf' })).toBe('6.67×10^-11 N')
-    expect(expectedText(field({ value: 2.5e-7, unit: 'm' }), { decimals: 3, precisionMode: 'sf' })).toBe('2.50×10^-7 m')
+    expect(expectedText(field({ value: 6.674e-11, unit: 'N' }), { decimals: 3, precisionMode: 'sf' })).toBe('6.67\u00a0×\u00a010⁻¹¹ N')
+    expect(expectedText(field({ value: 2.5e-7, unit: 'm' }), { decimals: 3, precisionMode: 'sf' })).toBe('2.50\u00a0×\u00a010⁻⁷ m')
   })
 
   it('reveals an answer smaller than the display noise floor instead of calling it 0', () => {
     // fmt writes anything under 1e-12 as 0 for a dragged point; a known answer is not noise.
-    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }), { decimals: 2, precisionMode: 'sf' })).toBe('1.6×10^-19 N')
-    expect(expectedText(field({ value: -1.6e-19, unit: 'N' }), { decimals: 3, precisionMode: 'sf' })).toBe('−1.60×10^-19 N')
-    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }))).toBe('1.6×10^-19 N')
+    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }), { decimals: 2, precisionMode: 'sf' })).toBe('1.6\u00a0×\u00a010⁻¹⁹ N')
+    expect(expectedText(field({ value: -1.6e-19, unit: 'N' }), { decimals: 3, precisionMode: 'sf' })).toBe('−1.60\u00a0×\u00a010⁻¹⁹ N')
+    expect(expectedText(field({ value: 1.6e-19, unit: 'N' }))).toBe('1.6\u00a0×\u00a010⁻¹⁹ N')
     expect(parseAnswer(expectedText(field({ value: 1.6e-19 })))).toBeCloseTo(1.6e-19, 25)
     expect(checkAnswer(expectedText(field({ value: 1.6e-19 }), { decimals: 2, precisionMode: 'sf' }), field({ value: 1.6e-19, tol: 1.6e-21 })).verdict).toBe('right')
     // An answer of exactly zero is still 0.
@@ -564,7 +564,7 @@ describe('M5: every unit label PhysLab knows can be typed after a number', () =>
     }
   })
 
-  it('the electron charge as the reveal writes it, "1.6×10^-19 C", and as it is typed, "1.6e-19 C", is read as 1.6e-19 and marks right', () => {
+  it('the electron charge as the reveal writes it, "1.6 × 10⁻¹⁹ C", and as it is typed, "1.6e-19 C", is read as 1.6e-19 and marks right', () => {
     const charge = field({ value: 1.6e-19, tol: 0.02 * 1.6e-19, unit: 'C' })
     for (const typed of ['1.6×10^-19 C', '1.6e-19 C', '1.6E-19 C', '1.6 × 10⁻¹⁹ C', '1.6e-19C']) {
       expect.soft(parseAnswer(typed), `"${typed}" read`).toBe(1.6e-19)
@@ -572,7 +572,7 @@ describe('M5: every unit label PhysLab knows can be typed after a number', () =>
     }
     // What the "show me" button prints for it, typed back.
     const shown = expectedText(charge, { decimals: 2, precisionMode: 'dp' })
-    expect(shown).toBe('1.6×10^-19 C')
+    expect(shown).toBe('1.6\u00a0×\u00a010⁻¹⁹ C')
     expect(checkAnswer(shown, charge).verdict).toBe('right')
   })
 
