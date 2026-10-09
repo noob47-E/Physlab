@@ -1,3 +1,5 @@
+<img src="Images/icon.png" width="72" align="left" />
+
 # PhysLab
 
 **Maths and physics you can see.** A free, open-source maths and physics lab for students and teachers.
@@ -71,7 +73,8 @@ teach the app by doing.
 
 1. Download `PhysLab Setup 0.9.0-preview.4.exe` from the [latest release](https://github.com/noob47-E/Physlab/releases/latest).
 2. Run it. Windows may warn you because the installer isn't signed yet: choose **More info → Run anyway**.
-3. Updating? Just run the new installer. It keeps your settings and your saved work.
+3. Updating? Just run the new installer. It replaces your older PhysLab and keeps your settings and saved work.
+   Files saved in 0.9 use a new format that older versions cannot open.
 
 This is a **preview**: it works, but you may still find bugs. Please report them in
 [Issues](https://github.com/noob47-E/Physlab/issues).
