@@ -348,6 +348,12 @@ neighbour is open.
   attribute on every rebuild. Read the draw range, not `attribute.count`. Guard: `tests/gpuBuffers.test.ts`.
 - **`superscriptPowers` writes U+00A0 around ×.** Write it as ` ` in source, never as a raw character: lint rejects
   the raw character, and readers cannot see it. A shown value typed back still reads (`tests/rawPowers.test.ts`).
+- **A refactor must leave every golden sweep byte-identical** (`tests/golden/`, CLEANUP-PLAN.md §2). A change of answer
+  that is meant goes in a commit of its own that names it, made with `PHYSLAB_GOLDEN_UPDATE=1`; `npm run gate -- full`
+  runs the slow sweeps and never rewrites. Writing a sweep: a new scene keeps the last one's space (set it first), the
+  bar's objects get random ids (name them by name or order), the physics engine differs world to world inside one
+  process (one warm-up run), and the identity prover and graph checks read the clock (`freezeClock()` where it is
+  safe). The root `.gitignore`'s `out/` would hide `tests/golden/out`: the exception after it must stay.
 
 ## Code knowledge
 
