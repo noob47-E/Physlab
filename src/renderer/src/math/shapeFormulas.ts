@@ -84,6 +84,7 @@ export function answerTex(v: number, kind: MeasureKind, s: MeasureSettings, piFa
     if (ex && !/sqrt|pi/.test(ex)) return `${ex === '1' ? '' : ex}\\pi${unit} \\approx ${withUnit}`
   }
   // Exact forms only help when the decimal is rounded (⅓, √2, π); 5.5 stays 5.5.
+  // eslint-disable-next-line no-restricted-syntax -- compares the value with itself rounded (is the decimal already exact?); never shown
   const roundedExactly = Math.abs(real - Number(real.toFixed(Math.min(s.decimals, 10)))) < 1e-9
   if (roundedExactly) return withUnit
   const ex = exactForm(real)

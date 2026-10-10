@@ -2,10 +2,10 @@
 
 import type { MathNode } from 'mathjs'
 import { fromRadians, getAngleMode, math, preprocess, setAngleMode, splitArgs } from '../math/expr'
-import { fmtPrecise, fmtSci, superscriptPowers, texSci, type DigitSettings } from '../math/format'
+import { texSci } from '../math/format'
 import { constantScope } from './constants'
 import { OWN_LETTERS } from './errors'
-import { calcNum, mathFormatOptions } from './format'
+import { calcNum, formatComplex, mathFormatOptions } from './format'
 
 // ---------------------------------------------------------------------------
 // Input normalisation: calculator key symbols → mathjs
@@ -725,32 +725,6 @@ function evaluateCompLine(input: string, ctx: CalcContext): CalcOutput {
   return { value, text: formatValue(value), latexInput, ...(extra.length ? { extra } : {}) }
 }
 
-/**
- * The imaginary part of a number without its sign, as a student writes it: i, 2i, 1.5i. A part that
- * is 1 once written (1, or 0.99999999999 at ten figures) is just i, never 1i.
- */
-export function formatImaginary(im: number, num: (n: number) => string = calcNum): string {
-  const magnitude = num(Math.abs(im))
-  return magnitude === '1' ? 'i' : `${magnitude}i`
-}
-
-/**
- * ONE complex number as a student writes it — 2i, −i, −2 + 3i — and the only place that decides how.
- * Numbers and Complex mode (formatValue), Equations mode's rows, the "no real solution" sentence of
- * x = ? and the command bar's decimal beside an exact root all come through here, so one root never
- * reads "0 + 2i" on one screen and "2i" on the next (polish item P7).
- *
- * `num` writes one number the way its screen does (calcNum on the Maths screen, texAt in the bar)
- * and writes the sign of a negative real part itself. The minus between the parts and in front of
- * the i is the typographic − in text and the plain - in TeX.
- */
-export function formatComplex(re: number, im: number, num: (n: number) => string = calcNum, style: 'text' | 'tex' = 'text'): string {
-  const minus = style === 'tex' ? '-' : '−'
-  if (im === 0) return num(re)
-  if (re === 0) return `${im < 0 ? minus : ''}${formatImaginary(im, num)}`
-  return `${num(re)} ${im < 0 ? minus : '+'} ${formatImaginary(im, num)}`
-}
-
 export function formatValue(v: unknown): string {
   if (typeof v === 'number') return calcNum(v)
   if (typeof v === 'boolean') return v ? 'true' : 'false'
@@ -1337,32 +1311,6 @@ export function countSigFigs(raw: string): { count: number; explanation: string 
     sig = trimmed
   } else if (/0$/.test(sig)) note += ' Trailing zeros after the decimal point ARE significant.'
   return { count: sig.length, explanation: note }
-}
-
-/**
- * `v` rounded to `n` significant figures and written as the rest of PhysLab writes it: the
- * digits the student sees, half away from zero (25.37 ÷ 20 = 1.2685 is 1.269 at 4 figures, 2.675
- * is 2.68 at 3), the zeros that are figures kept (1.2 at 4 is 1.200), the app's own minus, and a
- * real power of ten — never "1.23e+5" — once a number is too big or small for plain digits. This
- * used to be Number(v.toPrecision(n)).toPrecision(n), which rounds the binary double behind the
- * number: 1.2685 is stored just under the half and read 1.268.
- */
-export function roundSig(v: number, n: number): string {
-  const s: DigitSettings = { decimals: n, precisionMode: 'sf' }
-  // fmtPrecise calls anything under 10⁻¹² zero, right for a length dragged onto the axis and wrong
-  // for the charge on an electron (calcNum splits it off for the same reason): fmtSci has no floor.
-  return superscriptPowers(Math.abs(v) < 1e-12 ? fmtSci(v, s) : fmtPrecise(v, s))
-}
-
-/**
- * A number in scientific notation as the Measure card writes it, "4.560 × 10⁻³": `figures` digits
- * (the typed number's own count, so 0.004560 keeps its last zero), rounded as roundSig rounds, with a
- * real raised power — the card used to write "4.560 × 10^-3" and "3.20 × 10^+4", a caret and a plus
- * no student writes. A double holds 15 figures: a longer typed number has no more real digits to
- * show, and toExponential printed its binary noise instead.
- */
-export function sciNotation(v: number, figures: number): string {
-  return superscriptPowers(fmtSci(v, { decimals: Math.min(15, figures), precisionMode: 'sf' }))
 }
 
 interface Measured {

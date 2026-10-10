@@ -17,8 +17,8 @@
 // Pure functions of numbers and text, so each route can be compared with the others in a test.
 
 import { math } from '../math/expr'
-import { keypadToMath, constantOf, exactForm, formatComplex, formatImaginary, polyRoots, type Cx, type ExprNode } from './engine'
-import { calcNum } from './format'
+import { keypadToMath, constantOf, exactForm, polyRoots, type Cx, type ExprNode } from './engine'
+import { calcNum, formatComplex, formatImaginary } from './format'
 import { labelText } from './labels'
 
 interface RootRow {

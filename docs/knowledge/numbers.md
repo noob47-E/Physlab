@@ -6,11 +6,12 @@ P-NUM (0.9). Every number a student sees goes through `math/format.ts`; never ca
 
 ## File map
 - `math/format.ts` — the writers and the rounding rule:
-  - `fmt`/`tex` (decimal places), `fmtPrecise`/`texPrecise` (the student's d.p. or s.f.), `fmtSci`/`texSci` (scientific form, no noise floor), `formatMeasure`/`texMeasure` (with units), `fmtIJK`/`texIJK` (vectors), `toDMS`;
+  - `fmt`/`tex` (decimal places), `fmtPrecise`/`texPrecise` (the student's d.p. or s.f.), `fmtSci`/`texSci` (scientific form, no noise floor), `formatMeasure`/`texMeasure` (with units), `measureNumber` / `texMeasure(…, false)` (the same number without its unit — never cut the unit off with a regex), `fmtIJK`/`texIJK` (vectors), `toDMS`;
+  - `roundSig` (n significant figures, raised powers: the Calculator's sig-fig card) and `sciNotation` (the Measure card's scientific form, the typed number's own figures);
   - `roundHalfAway`, `toFixedHalfAway`, `toPrecisionHalfAway`, `toExponentialHalfAway` — THE rounding rule;
   - `fmtLabel`/`superscriptPowers` — the label form;
   - `revealPrecision`, `noiseFloor`, `stepPrecision`, `shownValue` (reads a shown number back).
-- `calc/format.ts` — the Calculator's number: `calcNum`, `calcEng`, `exponentForm`.
+- `calc/format.ts` — the Calculator's number, a layer over math/format.ts: `calcNum`, `calcEng`, `exponentForm`, and the one complex-number writer `formatComplex` / `formatImaginary` (2i, −i, −2 + 3i; moved from calc/engine.ts in CW3 — math/format.ts cannot hold it, since it would import `calcNum` back).
   - `mathFormatOptions` hands complex numbers, matrices and units to mathjs, which rounds the shortest string without the 15-figure cut (its callers are P-CALC's).
 - `math/checkAnswer.ts` — `near` (the one right/wrong comparison of a typed number) and `expectedText` (Practice's reveal).
 - `questions/answerKinds.ts`:
@@ -64,10 +65,22 @@ P-NUM (0.9). Every number a student sees goes through `math/format.ts`; never ca
 ## Tests
 tests/format.test.ts · questionReveal · checkAnswer · answerKinds · ecf · content · practiceTolerance · exprPrecedence.
 
-## Not yet on the rule (other parts' files, which switch to the helpers here)
-- `calc/engine.ts` `roundSig`
-- `panels/calcModes.tsx` (the sig-fig card)
-- `lab/fit.ts` `pmText`
-- mathjs via `mathFormatOptions`
+## The one writer (CLEANUP-PLAN.md CW3)
+Every number a student sees goes through math/format.ts (or calc/format.ts, built on it). A `toFixed`,
+`toPrecision` or `toExponential` anywhere else fails lint (the files on the fence's interim list in eslint.config.js
+excepted until their part moves them), unless the line says why it is not for display
+(`// eslint-disable-next-line no-restricted-syntax -- …`: CSS lengths, keys, log lines, tidying a double before
+it is used as a number). Which to call: a measure with its unit → `formatMeasure`/`texMeasure`; its number alone →
+`measureNumber` / `texMeasure(…, false)`; a plain number in the student's precision → `fmtPrecise`/`texPrecise`;
+a Calculator number → `calcNum`; a complex number → `formatComplex`; a label → `fmtLabel`.
+
+Traps met in CW3: the old way to get a number without its unit cut the last word off a written measure — a
+unit of two words would lose only its last (the bar keeps only the first word of `10 N m` today:
+tests/cw3-found/vectorTwoWordUnit.test.ts); and TeX cut out of `answerTex` kept the space after `\approx`,
+harmless to KaTeX but not to a string comparison.
+
+## Not yet on the rule
 - the Calculator panel's keypad converter, which turns any "×10" into a power (calc/engine.ts:14; P-CALC)
+- a vector's full label still cuts the unit off its components' amounts (render/Labels.tsx): safe while units are
+  one word (see the trap above).
 - Parsing typed maths: [parsing.md](parsing.md).

@@ -6,7 +6,7 @@ import { freeCapitals } from '../core/naming'
 import { decompose, partLabel, type DecomposeGoal } from '../math/decompose'
 import { fuseChoice, legoStatus, pieceLettered } from '../math/lego'
 import { congruentParts } from '../math/congruence'
-import { formatMeasure } from '../math/format'
+import { formatMeasure, texMeasure } from '../math/format'
 import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
@@ -284,7 +284,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
               ))}
               <Hover h={{ region: data.pts }} owner={id} className="m-1 border-t border-line pt-2 text-lead text-ink-strong">
                 <Tex
-                  tex={`A = ${data.dec.parts.map((_, i) => `A_{${partLabel(i)}}`).join(' + ')} = ${data.dec.parts.map((p) => answerTex(p.area, 'area', settings).split('\\approx').pop()!.replace(/\\,\\text\{[^}]*\}(\^\d)?/, '')).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
+                  tex={`A = ${data.dec.parts.map((_, i) => `A_{${partLabel(i)}}`).join(' + ')} = ${data.dec.parts.map((p) => texMeasure(p.area, 'area', settings, false)).join(' + ')} = ${answerTex(data.dec.parts.reduce((s, p) => s + p.area, 0), 'area', settings)}`}
                 />
               </Hover>
             </>

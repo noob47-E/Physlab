@@ -19,8 +19,6 @@ import {
   polyInequality,
   polyRoots,
   propagate,
-  roundSig,
-  sciNotation,
   solveLinearSystem,
   statistics,
   toFraction
@@ -28,6 +26,7 @@ import {
 import { polynomialRootRows } from '../src/renderer/src/calc/roots'
 import { answerTex, polygonReport } from '../src/renderer/src/math/shapeFormulas'
 import { calcEng, calcNum, mathFormatOptions, setCalcPrecisionSource } from '../src/renderer/src/calc/format'
+import { roundSig, sciNotation } from '../src/renderer/src/math/format'
 import { casInDegrees } from '../src/renderer/src/calc/angle'
 import { useCalc } from '../src/renderer/src/calc/calcStore'
 import { parseAnswer } from '../src/renderer/src/math/checkAnswer'

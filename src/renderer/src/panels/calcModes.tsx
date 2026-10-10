@@ -16,8 +16,6 @@ import {
   polyInequality,
   polyToExpr,
   propagate,
-  roundSig,
-  sciNotation,
   solveLinearSystem,
   statistics,
   type RegressionType
@@ -39,7 +37,7 @@ import * as VS from '../math/vectorSolver'
 import type { V3 } from '../math/vec'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
-import { superscriptPowers } from '../math/format'
+import { roundSig, sciNotation, superscriptPowers } from '../math/format'
 
 export function ModePanel({ mode }: { mode: CalcMode }) {
   switch (mode) {

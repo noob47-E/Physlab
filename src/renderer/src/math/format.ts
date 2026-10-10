@@ -378,7 +378,12 @@ export function unitSuffix(kind: MeasureKind, s: MeasureSettings): string {
 /** "12 cm²", "53.13°", "5 u" — and a direction as "N 36.87° E" when bearings are chosen. */
 export function formatMeasure(v: number, kind: MeasureKind, s: MeasureSettings): string {
   if (asBearing(kind, s)) return bearingText(v, s)
-  return `${fmtPrecise(measureValue(v, kind, s), s)}${unitSuffix(kind, s)}`
+  return `${measureNumber(v, kind, s)}${unitSuffix(kind, s)}`
+}
+
+/** A measure's number alone, in the student's unit and precision: "12", "0.33" — for a list of coordinates that names the unit once, or none. */
+export function measureNumber(v: number, kind: MeasureKind, s: MeasureSettings): string {
+  return fmtPrecise(measureValue(v, kind, s), s)
 }
 
 /** LaTeX version: "12\,\text{cm}^2". */
@@ -763,4 +768,35 @@ export const stepEq = (holds: boolean): string => (holds ? '=' : '\\approx')
 export function worldValue(shown: number, kind: MeasureKind, s: MeasureSettings): number {
   if (isAngular(kind)) return angleTo(shown, s.angleUnit)
   return shown / Math.pow(s.unitPerSquare, DIM[kind])
+}
+
+// ---------------------------------------------------------------------------
+// Significant-figure rounding (the calculator's card) — thin wrappers that
+// choose the right writer for the size of the number
+// ---------------------------------------------------------------------------
+
+/**
+ * `v` rounded to `n` significant figures and written as the rest of PhysLab writes it: the
+ * digits the student sees, half away from zero (25.37 ÷ 20 = 1.2685 is 1.269 at 4 figures, 2.675
+ * is 2.68 at 3), the zeros that are figures kept (1.2 at 4 is 1.200), the app's own minus, and a
+ * real power of ten — never "1.23e+5" — once a number is too big or small for plain digits. This
+ * used to be Number(v.toPrecision(n)).toPrecision(n), which rounds the binary double behind the
+ * number: 1.2685 is stored just under the half and read 1.268.
+ */
+export function roundSig(v: number, n: number): string {
+  const s: DigitSettings = { decimals: n, precisionMode: 'sf' }
+  // fmtPrecise calls anything under 10⁻¹² zero, right for a length dragged onto the axis and wrong
+  // for the charge on an electron (calcNum splits it off for the same reason): fmtSci has no floor.
+  return superscriptPowers(Math.abs(v) < 1e-12 ? fmtSci(v, s) : fmtPrecise(v, s))
+}
+
+/**
+ * A number in scientific notation as the Measure card writes it, "4.560 × 10⁻³": `figures` digits
+ * (the typed number's own count, so 0.004560 keeps its last zero), rounded as roundSig rounds, with a
+ * real raised power — the card used to write "4.560 × 10^-3" and "3.20 × 10^+4", a caret and a plus
+ * no student writes. A double holds 15 figures: a longer typed number has no more real digits to
+ * show, and toExponential printed its binary noise instead.
+ */
+export function sciNotation(v: number, figures: number): string {
+  return superscriptPowers(fmtSci(v, { decimals: Math.min(15, figures), precisionMode: 'sf' }))
 }

@@ -152,7 +152,7 @@ const MAX_ROWS = 1000
  */
 export function motionTable(pieces: MotionPieces, every: number, title: string): LabTable {
   const step = Math.max(every, pieces.total / MAX_ROWS)
-  // eslint-disable-next-line no-restricted-syntax -- rounds a table time to 5 figures as a number before it is written
+  // eslint-disable-next-line no-restricted-syntax -- picks the digits Lab Data then writes (the double's rounding, not half away); changing it waits for the owner (OWNER-APPROVALS CW3-4)
   const round = (v: number): number => Number(v.toPrecision(5))
   const times: number[] = []
   if (step > 0 && Number.isFinite(step)) {

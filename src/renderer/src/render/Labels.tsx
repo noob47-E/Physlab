@@ -7,7 +7,7 @@ import { useScene } from '../core/store'
 import { displayName, vectorAmount } from '../core/naming'
 import { cssColor } from '../app/theme'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
-import { fmtSci, formatMeasure, measureValue, superscriptPowers, unitSuffix } from '../math/format'
+import { fmtSci, formatMeasure, measureNumber, measureValue, superscriptPowers, unitSuffix } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import { duplicateSides, PIECE_LETTER_PX, settleLabel, sharedCornerLabels, type LabelBox, type MergedCorner } from './pieceLabels'
@@ -88,7 +88,7 @@ function measureTextAsFormatted(o: SceneObject, c: Computed | undefined, s: Scen
     case 'polygon':
       return `Area ${formatMeasure(polygonArea(c.pts), 'area', s)}`
     case 'point':
-      return full ? `(${c.p.slice(0, Math.abs(c.p[2]) > 1e-9 ? 3 : 2).map((v) => formatMeasure(v, 'length', s).replace(/ \S+$/, '')).join(', ')})` : ''
+      return full ? `(${c.p.slice(0, Math.abs(c.p[2]) > 1e-9 ? 3 : 2).map((v) => measureNumber(v, 'length', s)).join(', ')})` : ''
     default:
       return ''
   }

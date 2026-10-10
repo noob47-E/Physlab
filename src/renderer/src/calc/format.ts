@@ -123,3 +123,29 @@ export function mathFormatOptions(s: CalcPrecision = calcPrecision()): (value: u
   // mathjs hands a BigNumber over as itself, not as a number.
   return (value) => calcNum(typeof value === 'number' ? value : Number(value), s)
 }
+
+/**
+ * The imaginary part of a number without its sign, as a student writes it: i, 2i, 1.5i. A part that
+ * is 1 once written (1, or 0.99999999999 at ten figures) is just i, never 1i.
+ */
+export function formatImaginary(im: number, num: (n: number) => string = calcNum): string {
+  const magnitude = num(Math.abs(im))
+  return magnitude === '1' ? 'i' : `${magnitude}i`
+}
+
+/**
+ * ONE complex number as a student writes it — 2i, −i, −2 + 3i — and the only place that decides how.
+ * Numbers and Complex mode (formatValue), Equations mode's rows, the "no real solution" sentence of
+ * x = ? and the command bar's decimal beside an exact root all come through here, so one root never
+ * reads "0 + 2i" on one screen and "2i" on the next (polish item P7).
+ *
+ * `num` writes one number the way its screen does (calcNum on the Maths screen, texAt in the bar)
+ * and writes the sign of a negative real part itself. The minus between the parts and in front of
+ * the i is the typographic − in text and the plain - in TeX.
+ */
+export function formatComplex(re: number, im: number, num: (n: number) => string = calcNum, style: 'text' | 'tex' = 'text'): string {
+  const minus = style === 'tex' ? '-' : '−'
+  if (im === 0) return num(re)
+  if (re === 0) return `${im < 0 ? minus : ''}${formatImaginary(im, num)}`
+  return `${num(re)} ${im < 0 ? minus : '+'} ${formatImaginary(im, num)}`
+}

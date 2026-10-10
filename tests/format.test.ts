@@ -33,12 +33,13 @@ import {
   toPrecisionHalfAway,
   unitSuffix,
   worldValue,
+  roundSig,
   type MeasureKind,
   type MeasureSettings,
   type Precision
 } from '../src/renderer/src/math/format'
 import type { LengthUnit } from '../src/renderer/src/core/types'
-import { calcEng, calcNum } from '../src/renderer/src/calc/format'
+import { calcEng, calcNum, formatComplex } from '../src/renderer/src/calc/format'
 import { compareTriangles } from '../src/renderer/src/math/congruence'
 import { statedAnswerTex } from '../src/renderer/src/questions/answerKinds'
 
@@ -1343,5 +1344,70 @@ describe('P6 speed — the fast path gives exactly what the exact rule gives', (
     expect(fmtPrecise(-9.99e-7, SF(3))).toBe('−9.99×10^-7')
     expect(fmtPrecise(1.5e-6, SF(3))).toBe('0.00000150')
     expect(fmtPrecise(-2.5, SF(3))).toBe('−2.50')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// roundSig — one significant-figure rounding for the calculator's card
+// ---------------------------------------------------------------------------
+
+describe('roundSig', () => {
+  it('writes a number in the student\'s significant figures with raised powers', () => {
+    // 25.37 / 20 = 1.2685, stored just under the half; the decimal rule rounds up to 1.269
+    expect(roundSig(1.2685, 4)).toBe('1.269')
+    expect(roundSig(2.675, 3)).toBe('2.68')
+    expect(roundSig(1.2, 4)).toBe('1.200')
+    expect(roundSig(0, 3)).toBe('0')
+    expect(roundSig(-2.5, 3)).toBe('−2.50')
+    // 123456 at 3 s.f. stays plain: 123000 is under 10⁹, fmtPrecise keeps plain digits
+    expect(roundSig(123456, 3)).toBe('123000')
+    expect(roundSig(0.0012345, 4)).toBe('0.001235')
+    expect(roundSig(9.9995, 4)).toBe('10.00')
+  })
+
+  it('writes tiny values in scientific form with no noise floor', () => {
+    // fmtPrecise writes anything under 10⁻¹² as 0; roundSig keeps the value via fmtSci
+    // superscriptPowers uses U+00A0 (non-breaking space) around the ×
+    expect(roundSig(1e-15, 3)).toBe('1.00\u00a0×\u00a010⁻¹⁵')
+    expect(roundSig(1.6e-19, 2)).toBe('1.6\u00a0×\u00a010⁻¹⁹')
+  })
+
+  it('writes non-finite values as the app writes them', () => {
+    expect(roundSig(NaN, 3)).toBe('undefined')
+    expect(roundSig(Infinity, 3)).toBe('∞')
+    expect(roundSig(-Infinity, 3)).toBe('−∞')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// formatComplex — one complex number as a student writes it
+// ---------------------------------------------------------------------------
+
+describe('formatComplex', () => {
+  const num = (v: number) => roundSig(v, 4)
+
+  it('writes a pure real number as the real part alone', () => {
+    expect(formatComplex(3, 0, num)).toBe('3.000')
+  })
+
+  it('writes a pure imaginary number', () => {
+    // In significant-figures mode, 1 at 4 s.f. keeps its zeros: "1.000", so the "just i" rule
+    // (formatImaginary drops the 1 only when the magnitude reads exactly "1") does not fire here.
+    expect(formatComplex(0, 2, num)).toBe('2.000i')
+    expect(formatComplex(0, -2, num)).toBe('−2.000i')
+  })
+
+  it('writes both parts with the right sign', () => {
+    expect(formatComplex(3, 4, num)).toBe('3.000 + 4.000i')
+    expect(formatComplex(3, -4, num)).toBe('3.000 − 4.000i')
+    expect(formatComplex(-3, 4, num)).toBe('−3.000 + 4.000i')
+    expect(formatComplex(-3, -4, num)).toBe('−3.000 − 4.000i')
+  })
+
+  it('uses an ASCII minus between the parts in TeX style', () => {
+    // The num function writes its own minus (typographic), so the real part keeps it;
+    // only the between-minus is ASCII in tex mode.
+    expect(formatComplex(3, -4, num, 'tex')).toBe('3.000 - 4.000i')
+    expect(formatComplex(-3, -4, num, 'tex')).toBe('−3.000 - 4.000i')
   })
 })

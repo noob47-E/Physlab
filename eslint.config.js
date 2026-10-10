@@ -50,7 +50,6 @@ export const FENCE_ALLOWED = [
   { files: ['src/renderer/src/math/pure/complex.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
   { files: ['src/renderer/src/math/pure/table.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
   { files: ['src/renderer/src/math/pure/trigIdentity.ts'], allow: 'both' }, // 2 toFixed — CW3b; 1 × 1e-12 — CW9
-  { files: ['src/renderer/src/math/shapeFormulas.ts'], allow: 'toFixed' }, // 1 toFixed — CW3
   { files: ['src/renderer/src/math/shapes.ts'], allow: 'noise' }, // 5 × 1e-12 — CW9
   { files: ['src/renderer/src/math/vec.ts'], allow: 'noise' }, // 6 × 1e-12 — CW9
   { files: ['src/renderer/src/math/vectorSolver.ts'], allow: 'noise' }, // 15 × 1e-12 — CW9
