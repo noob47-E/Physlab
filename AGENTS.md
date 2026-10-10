@@ -380,6 +380,9 @@ neighbour is open.
   `app/download.ts`.** The bridge is missing in the browser build. It is declared once (globals.d.ts, from the preload's
   own type): a private cast once hid a missing field, and each hand-made picker or link had its own cancel and
   URL-revoke rules. Guards: `tests/filesBridge.test.ts` (its cast list may only shrink), `tests/download.test.ts`.
+- **The scene store's helpers never import the store.** `core/legoScene.ts` (Break apart and Fuse) and `core/doomed.ts`
+  (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
+  them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.
 
 ## Code knowledge
 
