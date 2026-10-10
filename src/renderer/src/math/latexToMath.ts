@@ -4,6 +4,14 @@
 //   3\hat{i}+4\hat{j} → 3i+4j           \vec{A}\times\vec{B} → A×B (vector mode) or A*B
 //   10\angle30^{\circ} → 10∠30°         \left|\vec{A}\right| → |A|
 //   \int_{0}^{\pi}\sin x\,dx → integral(sin(x), 0, π)
+//
+// This is the LaTeX-to-text step only: reading the text is preprocess's job, the one reader of typed
+// maths (π, °, ∠, |…|, <…> and, in vector mode, × and · are left to it). It still writes \div as / and \le,
+// \ge, \ne as <=, >=, != although preprocess reads ÷ ≤ ≥ ≠ the same way, because not every caller
+// reads this text through preprocess: Pure Maths hands it to its job finder and the algebra engine
+// as it is (math/pure/store.ts), and the Maths screen asks whether it holds an = before inserting
+// one (panels/Maths.tsx), which "x ≤ 3" would not. tests/golden/reader.golden.test.ts pins what
+// each route reads.
 
 interface LatexOptions {
   /** × and · mean cross and dot products (vector calculator) instead of multiplication. */

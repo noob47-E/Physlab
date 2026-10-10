@@ -133,6 +133,8 @@ export function toV3(x: AnyVal): V3 {
   if (arr && typeof arr === 'object' && typeof (arr as { toArray?: unknown }).toArray === 'function') {
     arr = (arr as { toArray: () => unknown }).toArray()
   }
+  // The Vectors panel turns this text into a sentence (panels/vectorCalcStore.ts) but the bar shows it as
+  // it is, after distance(3, 4) or unit(5): a sentence for the bar is parked for the owner (CW6a-1).
   if (!Array.isArray(arr)) throw new Error('Expected a vector or point')
   const flat = (arr as unknown[]).flat(2).map((v) => plainNumber(v))
   if (flat.length < 2 || flat.length > 3) throw new Error('Vectors need 2 or 3 components')
@@ -201,6 +203,8 @@ math.import(
       return math.divide(origLog(b) as never, origLog(a) as never)
     },
     // vector & geometry helpers
+    // pt and vec keep three numbers and drop any more without a word: |<1, 2, 3, 4>| is the size of
+    // <1, 2, 3>. Refusing a fourth is parked for the owner (CW6a-3).
     pt: (...c: AnyVal[]) => [plainNumber(c[0]), plainNumber(c[1]), c.length > 2 ? plainNumber(c[2]) : 0],
     vec: (...c: AnyVal[]) => [plainNumber(c[0]), plainNumber(c[1]), c.length > 2 ? plainNumber(c[2]) : 0],
     polarVec: (r: AnyVal, theta: AnyVal) => {

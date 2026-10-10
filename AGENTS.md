@@ -392,6 +392,10 @@ neighbour is open.
   letters filters that list where it uses it, and says why. Never write an alphabet of your own.
   tests/nameList.test.ts reads 147 names through every reader and fails on any change. KaTeX draws `\epsilon` and
   `\phi` as ϵ and ϕ.
+- **A copy of a reading rule is a second rule.** The bar's relation count and command inputs held regex copies of
+  preprocess's vector rule, so B = k<1, 2> + <3, 4> was refused as "several equations" although preprocess read it
+  fine. Ask the one reader (math/expr.ts angleVectors / splitArgs), or say in place why not.
+  tests/golden/reader.golden.test.ts shows any change in what a line becomes.
 - **The scene store's helpers never import the store.** `core/legoScene.ts` (Break apart and Fuse) and `core/doomed.ts`
   (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
   them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.

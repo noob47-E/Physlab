@@ -305,17 +305,27 @@ function withoutQuotedText(line: string): string {
 }
 
 /**
+ * A bracket the bar takes for a vector literal: a comma inside, and no <, >, = or angle bracket within.
+ * relationsIn and splitInputs share it. It is a copy of preprocess's own rule (math/expr.ts
+ * angleVectors), not a call to it, and the two differ on a few lines — B = k<1, 2> + <3, 4> is one
+ * assignment to preprocess and "several equations" here — so one rule for both would change what the
+ * bar says: parked for the owner (OWNER-APPROVALS CW6a-2, tests/readerRules.test.ts).
+ */
+const VECTOR_LITERAL = /[⟨<][^<>=⟨⟩]*,[^<>=⟨⟩]*[⟩>]/g
+
+/**
  * The relation signs in a line, each counted once (<= is one sign, not < and =). Quoted words are
  * blanked out first (withoutQuotedText). A vector literal brings a < and a > of its own, so it is
- * blanked out too, found as preprocess (math/expr.ts) finds one — unless its < follows a name or a
- * closing bracket: y < x, y > 2 is two inequalities, not y times the vector <x, y>.
+ * blanked out too (VECTOR_LITERAL) — unless its < follows a name or a closing bracket and no operand
+ * ends after its >: y < x, y > 2 is two inequalities, not y times the vector <x, y>.
  */
 function relationsIn(line: string): Relation[] {
   const unquoted = withoutQuotedText(line)
   // A vector literal is no relation. One written against a name or a bracket is a vector too when the
-  // line ends or an operand ends after its > (k<1, 2>, as math/expr.ts reads it: AFTER_VECTOR); otherwise
-  // that < and > compare, as in x < 3, x > 1. B = k<1, 2> was "several equations".
-  const masked = unquoted.replace(/[⟨<]([^<>=⟨⟩]*,[^<>=⟨⟩]*)[⟩>]/g, (lit: string, _inner: string, at: number) =>
+  // line ends or an operand ends after its > (k<1, 2>: the signs math/expr.ts lists in AFTER_VECTOR, but
+  // not a sign before another vector or a closing |, as preprocess also allows); otherwise that < and >
+  // compare, as in x < 3, x > 1. B = k<1, 2> was "several equations".
+  const masked = unquoted.replace(VECTOR_LITERAL, (lit: string, at: number) =>
     lit.startsWith('<') &&
     /[A-Za-zͰ-Ͽ_)\]'′″‴⁗]$/.test(unquoted.slice(0, at).trimEnd()) &&
     !/^\s*(?:$|[,;)\]}*/÷×·⋅^=?:])/.test(unquoted.slice(at + lit.length))
@@ -911,13 +921,14 @@ const GEO_ALIASES: Record<string, string> = {
 const MOST_INPUTS: Partial<Record<string, number>> = { Square: 2, RegularPolygon: 3, Triangle: 3, Intersect: 3, Slider: 4, Text: 2 }
 
 /**
- * A command's inputs with a vector typed in angle brackets kept whole. splitArgs (math/expr.ts)
- * groups only round and square brackets, so angle(<1, 0>, <0, 1>) was four inputs, "<1" among
- * them. The brackets held are the ones preprocess reads as a vector: a comma inside, and no <, >
- * or = within.
+ * A command's inputs with a vector typed in angle brackets kept whole: angle(<1, 0>, <0, 1>) was once
+ * four inputs, "<1" among them. splitArgs (math/expr.ts) now keeps a vector whole by preprocess's own
+ * rule; this holds every bracket VECTOR_LITERAL takes for one, a comparison too (angle(x < 3, y > 1)
+ * is one input here and two to splitArgs), so splitArgs alone would change a command's inputs: parked
+ * with relationsIn (OWNER-APPROVALS CW6a-2).
  */
 function splitInputs(s: string): string[] {
-  const held = s.replace(/[⟨<][^<>=⟨⟩]*,[^<>=⟨⟩]*[⟩>]/g, (vector) => vector.replace(/,/g, '\u0001'))
+  const held = s.replace(VECTOR_LITERAL, (vector) => vector.replace(/,/g, '\u0001'))
   // split/join, not a regex: a control character in a regex literal is a lint error (no-control-regex).
   return splitArgs(held).map((a) => a.split('\u0001').join(','))
 }
@@ -1512,7 +1523,9 @@ async function tryCas(input: string): Promise<boolean> {
       casOp = 'solve'
       // solve({x + y = 3, x - y = 1}, {x, y}): splitArgs keeps a braced list whole, so each argument
       // has its braces taken off and is split at its own commas before the pieces are sorted
-      // (with the braces left on, "{x" was once sent as an equation with no letters at all).
+      // (with the braces left on, "{x" was once sent as an equation with no letters at all). The two
+      // braces are taken off without checking they are one pair: {a, b} * {c, d} = 1 is split at
+      // "b} * {c". A paired strip is parked for the owner (CW6a-4).
       const items = args.flatMap((a) => splitArgs(a.replace(/^\s*\{/, '').replace(/\}\s*$/, ''))).map((a) => a.trim()).filter(Boolean)
       const isLetter = (a: string): boolean => /^[a-z]$/.test(a)
       payload = { eqs: items.filter((a) => a.includes('=') || !isLetter(a)), vars: items.filter(isLetter) }

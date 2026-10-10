@@ -22,7 +22,8 @@ const BASELINE = join(REPO_ROOT, 'tests', 'guards', 'caret-baseline.txt')
 const NOT_A_SCREEN: Record<string, string> = {
   cas: "the algebra worker's raw reply; the app writes its numbers through its own writer",
   'cas-full': "the algebra worker's raw reply, as for cas",
-  files: 'the saved project file itself (JSON), which no student reads'
+  files: 'the saved project file itself (JSON), which no student reads',
+  reader: 'the text each route hands mathjs before anything is worked out (CW6a), which no student reads'
 }
 
 /** A piece that is data inside a judged sweep: a Numbas author's own formula (name = "…"), as the bank holds it. */

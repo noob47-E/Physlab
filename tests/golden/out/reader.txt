@@ -1,0 +1,929 @@
+BAR A = (3, 4)  =>  A = pt(3, 4)
+BAR A = <3, 4>  =>  A = vec(3, 4)
+BAR A = 3i + 4j  =>  A = 3i + 4j
+BAR F = 10 N ∠ 30°  =>  F = polarVec(10 N, 30 deg)
+BAR R = A + B  =>  R = A + B
+BAR A · B  =>  dot(A, B)
+BAR A × B  =>  timesOrCross(A, B)
+BAR |A|  =>  mag(A)
+BAR unit(A)  =>  unit(A)
+BAR angle(A, B)  =>  angle(A, B)
+BAR proj(B, A)  =>  proj(B, A)
+BAR components(10, 30)  =>  components(10, 30)
+BAR resultant(5, 5, 120)  =>  resultant(5, 5, 120)
+BAR equilibrium(A, B, C)  =>  equilibrium(A, B, C)
+BAR torque(r, F)  =>  torque(r, F)
+BAR work(F, d)  =>  work(F, d)
+BAR magforce(q, v, B)  =>  magforce(q, v, B)
+BAR Triangle((0,0), (4,0), (0,3))  =>  Triangle(pt(0,0), pt(4,0), pt(0,3))
+BAR Segment(P, Q)  =>  Segment(P, Q)
+BAR Line(P, Q)  =>  Line(P, Q)
+BAR Circle(P, 3)  =>  Circle(P, 3)
+BAR Midpoint(P, Q)  =>  Midpoint(P, Q)
+BAR Perpendicular(P, f)  =>  Perpendicular(P, f)
+BAR Intersect(f, g)  =>  Intersect(f, g)
+BAR Angle(P, Q, S)  =>  Angle(P, Q, S)
+BAR y = x^2 - 4  =>  y = x^2 - 4
+BAR f(x) = sin(x)  =>  f(x) = sin(x)
+BAR x^2 + y^2 = 9  =>  x^2 + y^2 = 9
+BAR y > x^2  =>  y > x^2
+BAR r = 2cos(θ)  =>  r = 2cos(theta)
+BAR curve(cos(t), sin(t), 0, 2π)  =>  curve(cos(t), sin(t), 0, 2 pi)
+BAR z = sin(x)cos(y)  =>  z = sin(x)cos(y)
+BAR piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)  =>  piecewise(x^2 from -3 to 0, x from 0 to 2, 2 from 2 to 4)
+BAR between(x^2, x + 2, -1, 2)  =>  between(x^2, x + 2, -1, 2)
+BAR tangent(x^2, 1)  =>  tangent(x^2, 1)
+BAR k = 2  =>  k = 2
+BAR solve(x^2 - 5x + 6 = 0)  =>  solve(x^2 - 5x + 6 = 0)
+BAR diff(x^3)  =>  diff(x^3)
+BAR integrate(x^2, 0, 3)  =>  integrate(x^2, 0, 3)
+BAR factor(x^2-1)  =>  factor(x^2-1)
+BAR P(Z < 1.96)  =>  (P)(Z < 1.96)
+BAR P(45 < X < 60), X ~ N(50, 5^2)  =>  (P)(45 < X < 60), X ~ N(50, 5^2)
+BAR invnorm(0.975)  =>  invnorm(0.975)
+BAR invnorm(0.9), X ~ N(50, 10^2)  =>  invnorm(0.9), X ~ N(50, 10^2)
+BAR prove(sin 2x = 2 sin x cos x)  =>  prove(sin 2x = 2 sin x cos x)
+BAR delete A  =>  delete A
+BAR undo  =>  undo
+BAR clear  =>  clear
+BAR 2d  =>  2d
+BAR 3d  =>  3d
+BAR play  =>  play
+BAR pause  =>  pause
+BAR resolve(A)  =>  resolve(A)
+BAR resolve(10, 30)  =>  resolve(10, 30)
+BAR components(3i + 4j + 5k)  =>  components(3i + 4j + 5k)
+BAR resolve(3i + 4j + 5k)  =>  resolve(3i + 4j + 5k)
+BAR D = A - B  =>  D = A - B
+BAR E = 2A  =>  E = 2A
+BAR N = A × B  =>  N = timesOrCross(A, B)
+BAR (A + B) × A  =>  timesOrCross((A + B), A)
+BAR A × (A + B)  =>  timesOrCross(A, (A + B))
+BAR A × B × A  =>  timesOrCross(timesOrCross(A, B), A)
+BAR (A + B) · A  =>  dot((A + B), A)
+BAR A × <1, 0>  =>  timesOrCross(A, vec(1, 0))
+BAR cross(A + B, A)  =>  cross(A + B, A)
+BAR dot(A + B, A)  =>  dot(A + B, A)
+BAR unit(A + B)  =>  unit(A + B)
+BAR components(A + B)  =>  components(A + B)
+BAR C = <0, 0, 1>  =>  C = vec(0, 0, 1)
+BAR cross(A + B, 2B)  =>  cross(A + B, 2B)
+BAR 2 × 3  =>  timesOrCross(2, 3)
+BAR 3 N × 2  =>  timesOrCross(3 N, 2)
+BAR 2.5×10^3  =>  2.5e3
+BAR 2 × A  =>  timesOrCross(2, A)
+BAR C = 2 × A  =>  C = timesOrCross(2, A)
+BAR D = A × 2  =>  D = timesOrCross(A, 2)
+BAR G = 10 N ∠ 30°  =>  G = polarVec(10 N, 30 deg)
+BAR H = 2 × G  =>  H = timesOrCross(2, G)
+BAR k = 2 × 3  =>  k = timesOrCross(2, 3)
+BAR Z = 2 × A × B  =>  Z = timesOrCross(timesOrCross(2, A), B)
+BAR H = 2 × 10^3 × A  =>  H = timesOrCross(2e3, A)
+BAR W = A × B  =>  W = timesOrCross(A, B)
+BAR T = A + B + C  =>  T = A + B + C
+BAR factor(6x^2-x-1)  =>  factor(6x^2-x-1)
+BAR hcf(12, 18)  =>  hcf(12, 18)
+BAR divide((x^3-1)/(x-1))  =>  divide((x^3-1)/(x-1))
+BAR solve(θ^2 = 4)  =>  solve(theta^2 = 4)
+BAR solve(theta^2 = 4)  =>  solve(theta^2 = 4)
+BAR solve(x1 + 2 = 5)  =>  solve(x1 + 2 = 5)
+BAR solve(sigma^2 = 4)  =>  solve(sigma^2 = 4)
+BAR solve(rho^2 = 4)  =>  solve(rho^2 = 4)
+BAR solve(kappa^2 = 4)  =>  solve(kappa^2 = 4)
+BAR solve(psi^2 = 4)  =>  solve(psi^2 = 4)
+BAR primes(7)  =>  primes(7)
+BAR primes(12)  =>  primes(12)
+BAR partial(3x+5, (x+1)(x+2))  =>  partial(3x+5, (x+1)(x+2))
+BAR complex(3, 4)  =>  complex(3, 4)
+BAR divide(10, 2)  =>  divide(10, 2)
+BAR divide(2e3, 4)  =>  divide(2e3, 4)
+BAR divide(pi, 2)  =>  divide(pi, 2)
+BAR divide(sin(x), x)  =>  divide(sin(x), x)
+BAR partial(sin(x), x)  =>  partial(sin(x), x)
+BAR partial((sin(x))/(x))  =>  partial((sin(x))/(x))
+BAR factorise(sin(x)+1)  =>  factorise(sin(x)+1)
+BAR factorize(sin(x)+1)  =>  factorize(sin(x)+1)
+BAR factor(sin(x)+1)  =>  factor(sin(x)+1)
+BAR solve(x^3 - x = 0)  =>  solve(x^3 - x = 0)
+BAR P(x_1 < X < x_2) = 0.95, X ~ N(50, 10^2)  =>  (P)(x_1 < X < x_2) = 0.95, X ~ N(50, 10^2)
+BAR f(2)  =>  f(2)
+BAR p(x) = x^2  =>  p(x) = x^2
+BAR p(2)  =>  p(2)
+BAR solve(sin(x) = 0.5)  =>  solve(sin(x) = 0.5)
+BAR integrate(sin(x), 0, pi)  =>  integrate(sin(x), 0, pi)
+BAR diff(cos(x))  =>  diff(cos(x))
+BAR simplify(sin(x)^2 + cos(x)^2)  =>  simplify(sin(x)^2 + cos(x)^2)
+BAR 1/3  =>  1/3
+BAR 7/3 N  =>  7/3 N
+BAR A / 3  =>  A / 3
+BAR (1/3, 2/3)  =>  pt(1/3, 2/3)
+BAR simplify(sqrt(2))  =>  simplify(sqrt(2))
+BAR delete Z  =>  delete Z
+BAR Text("F = ma = 10 N")  =>  Text("F = ma = 10 N")
+BAR Text("a = b = c")  =>  Text("a = b = c")
+BAR Text('a = b = c')  =>  Text('a = b = c')
+BAR Text("1 < x < 3 is a chain")  =>  Text("1 < x < 3 is a chain")
+BAR Text("y = x^2 and z = 3", (1, 2))  =>  Text("y = x^2 and z = 3", pt(1, 2))
+BAR L = Text("a = b = c")  =>  L = Text("a = b = c")
+BAR y = f(x) + 1  =>  y = f(x) + 1
+BAR x^2 = y  =>  x^2 = y
+BAR sin(x) = y  =>  sin(x) = y
+BAR cos(x) = y  =>  cos(x) = y
+BAR sqrt(x) = 2  =>  sqrt(x) = 2
+BAR ln(x) = 1  =>  ln(x) = 1
+BAR abs(x) = 3  =>  abs(x) = 3
+BAR x*sin(x) = 0  =>  x*sin(x) = 0
+BAR sin(x) = x/10  =>  sin(x) = x/10
+BAR sin(x) = x  =>  sin(x) = x
+BAR x = sin(x)  =>  x = sin(x)
+BAR sin(x) = 5e-7  =>  sin(x) = 5e-7
+BAR (x - 1)^3 = 0  =>  (x - 1)^3 = 0
+BAR (x - 2)^4 = 0  =>  (x - 2)^4 = 0
+BAR (x + 1)^2 * (x - 3) = 0  =>  (x + 1)^2 * (x - 3) = 0
+BAR x^3 - 6x^2 + 11x - 6 = 0  =>  x^3 - 6x^2 + 11x - 6 = 0
+BAR x^2 + 1 = 0  =>  x^2 + 1 = 0
+BAR x^2 + 9 = 0  =>  x^2 + 9 = 0
+BAR x^2 + 2x + 2 = 0  =>  x^2 + 2x + 2 = 0
+BAR x^4 + 1 = 0  =>  x^4 + 1 = 0
+BAR x^4 + 3x^2 + 2 = 0  =>  x^4 + 3x^2 + 2 = 0
+BAR x^3 = 1  =>  x^3 = 1
+BAR x^2 = k  =>  x^2 = k
+BAR x(x + 1) = 0  =>  (x)(x + 1) = 0
+BAR Square(P, (1, 0))  =>  Square(P, pt(1, 0))
+BAR RegularPolygon(P, (1, 0), 6)  =>  RegularPolygon(P, pt(1, 0), 6)
+BAR cross(A, r)  =>  cross(A, r)
+BAR dot(A, r)  =>  dot(A, r)
+BAR subtract(A, r)  =>  subtract(A, r)
+BAR projection(A, r)  =>  projection(A, r)
+BAR twoforces(1, 2, 90)  =>  twoforces(1, 2, 90)
+BAR magnitude(A)  =>  magnitude(A)
+BAR add(A)  =>  add(A)
+BAR equilibrium(A)  =>  equilibrium(A)
+BAR Centroid(T)  =>  Centroid(T)
+BAR RegularPolygon(P, (1, 0), 3)  =>  RegularPolygon(P, pt(1, 0), 3)
+BAR RegularPolygon(P, (1, 0), 4)  =>  RegularPolygon(P, pt(1, 0), 4)
+BAR RegularPolygon(P, (1, 0), 12)  =>  RegularPolygon(P, pt(1, 0), 12)
+BAR Text("hi", Q)  =>  Text("hi", Q)
+BAR Text("hi", A)  =>  Text("hi", A)
+BAR Text("hi", Q + A)  =>  Text("hi", Q + A)
+BAR Text("hi", (5, 6))  =>  Text("hi", pt(5, 6))
+BAR piecewise(sqrt(x - 5) from 0 to 2, x^2 from 2 to 4)  =>  piecewise(sqrt(x - 5) from 0 to 2, x^2 from 2 to 4)
+BAR piecewise(sqrt(x - 5) from 0 to 2, x^2 from 2 to 4, sqrt(-x - 9) from 4 to 6)  =>  piecewise(sqrt(x - 5) from 0 to 2, x^2 from 2 to 4, sqrt(-x - 9) from 4 to 6)
+BAR piecewise(x from 1 to 1, x^2 from 2 to 4)  =>  piecewise(x from 1 to 1, x^2 from 2 to 4)
+BAR piecewise(x^2 from 1e8 to 2e8, x from 0 to 1)  =>  piecewise(x^2 from 1e8 to 2e8, x from 0 to 1)
+BAR piecewise(x^2 from 0 to 1)  =>  piecewise(x^2 from 0 to 1)
+BAR piecewise(sqrt(k*x) from 0 to 2, sqrt(k*x) from 2 to 4)  =>  piecewise(sqrt(k*x) from 0 to 2, sqrt(k*x) from 2 to 4)
+BAR y = g(x)*g(x)  =>  y = g(x)*g(x)
+BAR y = g(x) + 2*g(x - 1)  =>  y = g(x) + 2*g(x - 1)
+BAR y = g(x)^2 + g(2*x)  =>  y = g(x)^2 + g(2*x)
+BAR y = g(g(x))  =>  y = g(g(x))
+BAR y = h(x)*h(x)*h(1)  =>  y = h(x)*h(x)*h(1)
+BAR x^1e9 = 0  =>  x^1e9 = 0
+BAR x^(1e9) = 0  =>  x^(1e9) = 0
+BAR x^100000 = 0  =>  x^100000 = 0
+BAR x^1000000000 = 0  =>  x^1000000000 = 0
+BAR x^(10^9) = 0  =>  x^(10^9) = 0
+BAR x^1e6 = 1  =>  x^1e6 = 1
+BAR x^1000001 = -1  =>  x^1000001 = -1
+BAR x^1000001 = 1  =>  x^1000001 = 1
+BAR 3*x^100000 - 6 = 0  =>  3*x^100000 - 6 = 0
+BAR x^20 = 1  =>  x^20 = 1
+BAR 2*x^13 + 2 = 0  =>  2*x^13 + 2 = 0
+BAR x^1000001 = -4  =>  x^1000001 = -4
+BAR x^1e6 + x = 0  =>  x^1e6 + x = 0
+BAR x^1e+9 = 0  =>  x^1e+9 = 0
+BAR x^1E9 = 0  =>  x^1E9 = 0
+BAR sqrt(x) = 0  =>  sqrt(x) = 0
+BAR sqrt(x - 3) = 0  =>  sqrt(x - 3) = 0
+BAR acos(x) = 0  =>  acos(x) = 0
+BAR sqrt(1 - x^2) = 0  =>  sqrt(1 - x^2) = 0
+BAR sqrt(x + 23.7) = 0  =>  sqrt(x + 23.7) = 0
+BAR sqrt(-x) = 0  =>  sqrt(-x) = 0
+BAR x*sqrt(x) = 0  =>  x*sqrt(x) = 0
+BAR sqrt(9 - x^2) = 0  =>  sqrt(9 - x^2) = 0
+BAR ln(x + 24.7) = 0  =>  ln(x + 24.7) = 0
+BAR between(sin(100 pi x), 0, 0, 4)  =>  between(sin(100 pi x), 0, 0, 4)
+BAR between(sin(x), 0, 0, 400 pi)  =>  between(sin(x), 0, 0, 400 pi)
+BAR between(1e12, 1e12 + 1, 0, 1)  =>  between(1e12, 1e12 + 1, 0, 1)
+BAR between(1e6, 1e6 + 0.000001, 0, 1)  =>  between(1e6, 1e6 + 0.000001, 0, 1)
+BAR x^20*(x^20 - 1)*(x^20 - 2)*(x^20 + 3) = 0  =>  x^20*(x^20 - 1)*(x^20 - 2)*(x^20 + 3) = 0
+BAR (x - 1)^100 = 0  =>  (x - 1)^100 = 0
+BAR (x - 1)^1000 = 0  =>  (x - 1)^1000 = 0
+BAR 0 = (x - 1)^100  =>  0 = (x - 1)^100
+BAR (x - 1)^1e9 = 0  =>  (x - 1)^1e9 = 0
+BAR ((x - 1)^30)^40 = 0  =>  ((x - 1)^30)^40 = 0
+BAR (2*x - 3)^100 = 0  =>  (2*x - 3)^100 = 0
+BAR (x^2 - 4)^50 = 0  =>  (x^2 - 4)^50 = 0
+BAR sin(x)^100 = 0  =>  sin(x)^100 = 0
+BAR (x - 1)^100 = 1  =>  (x - 1)^100 = 1
+BAR tangent(1e-9*x, 1e9)  =>  tangent(1e-9*x, 1e9)
+BAR between(1e-9*x^2, 0, 0, 1)  =>  between(1e-9*x^2, 0, 0, 1)
+BAR (x - 1)(x - 1.0000000000001) = 0  =>  (x - 1)(x - 1.0000000000001) = 0
+BAR x^2 - 2.0000000000001x + 1.0000000000001 = 0  =>  x^2 - 2.0000000000001x + 1.0000000000001 = 0
+BAR (x + 1)(x + 1.0000000000001) = 0  =>  (x + 1)(x + 1.0000000000001) = 0
+BAR (x - 3)(x - 3.0000000001) = 0  =>  (x - 3)(x - 3.0000000001) = 0
+BAR A, <1, 0>  =>  A, vec(1, 0)
+BAR <2, 0, 0>, <0, 3, 0>  =>  vec(2, 0, 0), vec(0, 3, 0)
+BAR A, <cos(t), sin(t)>  =>  A, vec(cos(t), sin(t))
+BAR ⟨1, 2⟩, ⟨3, 4⟩  =>  vec(1, 2), vec(3, 4)
+BAR x < 0, -x, x  =>  x < 0, -x, x
+BAR x^2, 0 < x < 2  =>  x^2, 0 < x < 2
+BAR x^2 < 4, x  =>  x^2 < 4, x
+BAR x < 3, x > 1  =>  x < 3, x > 1
+BAR cross(A, <1, 0>)  =>  cross(A, vec(1, 0))
+BAR unit(<cos(30), sin(30)>)  =>  unit(vec(cos(30), sin(30)))
+BAR dot(<1, 2>, <3, 4>)  =>  dot(vec(1, 2), vec(3, 4))
+BAR torque(<2, 0, 0>, <0, 3, 0>)  =>  torque(vec(2, 0, 0), vec(0, 3, 0))
+BAR 2<1, 2>  =>  timesOrCross(2, vec(1, 2))
+BAR 2 < 1  =>  2 < 1
+BAR 2<1  =>  2<1
+BAR x < 3  =>  x < 3
+BAR 2×<1,2>  =>  timesOrCross(2, vec(1,2))
+BAR mag(2<1, 2>)  =>  mag(timesOrCross(2, vec(1, 2)))
+BAR 2<1, 2>, 3  =>  timesOrCross(2, vec(1, 2)), 3
+BAR cross(2<1, 0>, <0, 1>)  =>  cross(timesOrCross(2, vec(1, 0)), vec(0, 1))
+BAR 0 < x, y > 1  =>  0 < x, y > 1
+BAR x < 3, x > -1  =>  x < 3, x > -1
+BAR a < b, c > d  =>  a < b, c > d
+BAR x < 0, -x, x > 0, x  =>  x < 0, -x, x > 0, x
+BAR x < 3, x > |y|  =>  x < 3, x > mag(y)
+BAR piecewise(x < 0, -x, x > 0, x)  =>  piecewise(x < 0, -x, x > 0, x)
+BAR 2<1,2> + <3,4>  =>  timesOrCross(2, vec(1,2)) + vec(3,4)
+BAR |2<1,2>|  =>  mag(timesOrCross(2, vec(1,2)))
+BAR |2<1,2>| + 1  =>  mag(timesOrCross(2, vec(1,2))) + 1
+BAR x<1,2>  =>  timesOrCross(x, vec(1,2))
+BAR (x+1)<1,2>  =>  timesOrCross((x+1), vec(1,2))
+BAR x<1,2>·<3,4>  =>  dot(timesOrCross(x, vec(1,2)), vec(3,4))
+BAR k<cos(t), sin(t)>  =>  timesOrCross(k, vec(cos(t), sin(t)))
+BAR 2|<3,4>|  =>  2mag(vec(3,4))
+BAR |<3,4>| < 3, |y| > 1  =>  mag(vec(3,4)) < 3, mag(y) > 1
+BAR <1, x >= 3>  =>  vec(1, x >= 3)
+BAR πr^2  =>  pi r^2
+BAR 2πr  =>  2 pi r
+BAR rπ  =>  r pi
+BAR rθ  =>  r theta
+BAR sin⁻¹(0.5)  =>  asin(0.5)
+BAR cos⁻¹(0.5)  =>  acos(0.5)
+BAR tan⁻¹(1)  =>  atan(1)
+BAR sin²(30)  =>  (sin(30))^2
+BAR 3²  =>  3^2
+BAR 2⁻¹  =>  2^(-1)
+BAR (sin(30))²  =>  (sin(30))^2
+BAR 10 kg m/s ∠ 30°  =>  polarVec(10 kg m/s, 30 deg)
+BAR 10 kg m/s at 30°  =>  polarVec(10 kg m/s, 30 deg)
+BAR 10 N m ∠ 30°  =>  polarVec(10 N m, 30 deg)
+BAR r ∠ 30°  =>  polarVec(r, 30 deg)
+BAR (3+2) ∠ 30°  =>  polarVec((3+2), 30 deg)
+BAR 1×10⁻⁵∠45°  =>  polarVec(1e-5, 45 deg)
+BAR 10^(-5)∠45°  =>  polarVec(10^(-5), 45 deg)
+BAR 10^-5 ∠ 45°  =>  polarVec(10^-5, 45 deg)
+BAR 10⁻⁵ at 45°  =>  polarVec(10^(-5), 45 deg)
+BAR ||x|-1|  =>  mag(mag(x)-1)
+BAR ||x| - 1|  =>  mag(mag(x) - 1)
+BAR |x - |y||  =>  mag(x - mag(y))
+BAR |a|·|b|  =>  dot(mag(a), mag(b))
+BAR |a| + |b|  =>  mag(a) + mag(b)
+BAR |3+4i|  =>  mag(3+4i)
+BAR |sqrt(-4)|  =>  mag(sqrt(-4))
+BAR sec(i)  =>  sec(i)
+BAR csc(i)  =>  csc(i)
+BAR cot(i)  =>  cot(i)
+BAR 3 N × A  =>  timesOrCross(3 N, A)
+BAR 1/2 m × v^2  =>  timesOrCross(1/2 m, v^2)
+BAR ∛8  =>  cbrt(8)
+BAR ∛-8  =>  cbrt(-8)
+BAR ∛ 27  =>  cbrt(27)
+BAR ∛(8)  =>  cbrt(8)
+BAR √1e-3  =>  sqrt(1e-3)
+BAR √1E-3  =>  sqrt(1E-3)
+BAR √2e3  =>  sqrt(2e3)
+BAR x mod 3  =>  x mod 3
+BAR 5 mod 3  =>  5 mod 3
+BAR sqrt(-4) · sqrt(-9)  =>  dot(sqrt(-4), sqrt(-9))
+BAR (3+4i) · 2  =>  dot((3+4i), 2)
+BAR 2 × sin (30)  =>  timesOrCross(2, sin (30))
+BAR sin (30) × 2  =>  timesOrCross(sin (30), 2)
+BAR 2 · sqrt (4)  =>  dot(2, sqrt (4))
+BAR atan2(10 m, 5 m)  =>  atan2(10 m, 5 m)
+BAR log(2, i)  =>  log(2, i)
+BAR help  =>  help
+BAR ?  =>  ?
+BAR C = A × B  =>  C = timesOrCross(A, B)
+BAR A = <1, 1>  =>  A = vec(1, 1)
+BAR (A × B) · A  =>  dot((timesOrCross(A, B)), A)
+BAR A = <1, 0>  =>  A = vec(1, 0)
+BAR C = A  =>  C = A
+BAR A + B  =>  A + B
+BAR C = <-1, 2>  =>  C = vec(-1, 2)
+BAR divide(x^3-1, x-1)  =>  divide(x^3-1, x-1)
+BAR primes(x)  =>  primes(x)
+BAR divide(x^3-1, x-1, 3)  =>  divide(x^3-1, x-1, 3)
+BAR P(X < 65)  =>  (P)(X < 65)
+BAR P(Z < 1), X ~ N(50, 10^2)  =>  (P)(Z < 1), X ~ N(50, 10^2)
+BAR f(x) = x^2  =>  f(x) = x^2
+BAR solve  =>  solve
+BAR A = <1, 2>  =>  A = vec(1, 2)
+BAR 2/3  =>  2/3
+BAR 1/2  =>  1/2
+BAR Circle((0,0), 3  =>  Circle((0,0), 3
+BAR pi = 3  =>  pi = 3
+BAR q = 2  =>  q = 2
+BAR k = -1  =>  k = -1
+BAR k = 4  =>  k = 4
+BAR k = 9  =>  k = 9
+BAR P = (0, 0)  =>  P = pt(0, 0)
+BAR P = (5, 5)  =>  P = pt(5, 5)
+BAR P = (1, 2)  =>  P = pt(1, 2)
+BAR k = 4.1e13  =>  k = 4.1e13
+BAR k = 0  =>  k = 0
+BAR k = 1  =>  k = 1
+BAR f = Line(P, (1, 1))  =>  f = Line(P, pt(1, 1))
+BAR T = Triangle(P, (6, 0), (0, 3))  =>  T = Triangle(P, pt(6, 0), pt(0, 3))
+BAR Q = (3, 4)  =>  Q = pt(3, 4)
+BAR a = 1  =>  a = 1
+BAR A = <1, 2, 3>  =>  A = vec(1, 2, 3)
+BAR C = 2·A  =>  C = dot(2, A)
+BAR D = A·2  =>  D = dot(A, 2)
+BAR A·B  =>  dot(A, B)
+BAR 2·3  =>  dot(2, 3)
+BAR k = 2·3  =>  k = dot(2, 3)
+BAR a = 2  =>  a = 2
+BAR a = 3  =>  a = 3
+BAR 3 ++ 4  =>  3 ++ 4
+BAR B = 2 ∠ k  =>  B = polarVec(2, k)
+BAR k = -400  =>  k = -400
+BAR B = 3 ∠ k°  =>  B = polarVec(3, k deg)
+BAR k = 60  =>  k = 60
+BAR add(<1, 0>, <0, 1>)  =>  add(vec(1, 0), vec(0, 1))
+BAR k = 1e10  =>  k = 1e10
+BAR h(x) = sin(x)  =>  h(x) = sin(x)
+BAR b = h(1)  =>  b = h(1)
+BAR a = sqrt(16)  =>  a = sqrt(16)
+BAR g(x) = f(2) + x  =>  g(x) = f(2) + x
+BAR z = sqrt(-1 - x^2 - y^2)  =>  z = sqrt(-1 - x^2 - y^2)
+BAR z = sin(x  =>  z = sin(x
+BAR r = sqrt(-1 - θ)  =>  r = sqrt(-1 - theta)
+BAR curve(sqrt(-1 - t^2), t, 0, 1)  =>  curve(sqrt(-1 - t^2), t, 0, 1)
+BAR curve(t^2 +, t)  =>  curve(t^2 +, t)
+BAR piecewise(sqrt(x) from -3 to -1)  =>  piecewise(sqrt(x) from -3 to -1)
+BAR x^2 + y^2 < -1  =>  x^2 + y^2 < -1
+BAR x^2 + y^2 = -1  =>  x^2 + y^2 = -1
+BAR y = sqrt(-1 - x^2)  =>  y = sqrt(-1 - x^2)
+BAR y = sin(x  =>  y = sin(x
+BAR between(sqrt(-1 - x^2), x, 0, 1)  =>  between(sqrt(-1 - x^2), x, 0, 1)
+BAR z = q*x  =>  z = q*x
+BAR r = q*θ  =>  r = q*theta
+BAR curve(q*t, t)  =>  curve(q*t, t)
+BAR piecewise(q*x from 0 to 1)  =>  piecewise(q*x from 0 to 1)
+BAR x^2 + y^2 < q  =>  x^2 + y^2 < q
+BAR x^2 + y^2 = q  =>  x^2 + y^2 = q
+BAR between(x^2, q*x, 0, 1)  =>  between(x^2, q*x, 0, 1)
+BAR tangent(q*x, 1)  =>  tangent(q*x, 1)
+BAR x^2 = 4  =>  x^2 = 4
+BAR (x - 1)^2 = 0  =>  (x - 1)^2 = 0
+BAR x^3 = x  =>  x^3 = x
+BAR 2x + 1 = 0  =>  2x + 1 = 0
+BAR e^x = 2  =>  e^x = 2
+BAR Square(P)  =>  Square(P)
+BAR Square()  =>  Square()
+BAR RegularPolygon(P)  =>  RegularPolygon(P)
+BAR cross(A)  =>  cross(A)
+BAR dot(A)  =>  dot(A)
+BAR subtract(A)  =>  subtract(A)
+BAR projection(A)  =>  projection(A)
+BAR torque(r)  =>  torque(r)
+BAR work(F)  =>  work(F)
+BAR magforce(1, v)  =>  magforce(1, v)
+BAR resultant(5)  =>  resultant(5)
+BAR Square(P, )  =>  Square(P, )
+BAR magnitude()  =>  magnitude()
+BAR twoforces(1, 2)  =>  twoforces(1, 2)
+BAR add()  =>  add()
+BAR equilibrium()  =>  equilibrium()
+BAR resultant(, 5, 3)  =>  resultant(, 5, 3)
+BAR components(, 30)  =>  components(, 30)
+BAR cross(, A)  =>  cross(, A)
+BAR Square(, P)  =>  Square(, P)
+BAR Line(P)  =>  Line(P)
+BAR Circle(P)  =>  Circle(P)
+BAR Triangle((0,0), (4,0))  =>  Triangle(pt(0,0), pt(4,0))
+BAR Polygon(A)  =>  Polygon(A)
+BAR angle(A)  =>  angle(A)
+BAR midpoint(A)  =>  midpoint(A)
+BAR distance(A)  =>  distance(A)
+BAR resolve(<3, 4>)  =>  resolve(vec(3, 4))
+BAR magnitude(<3, 4>)  =>  magnitude(vec(3, 4))
+BAR k = 3  =>  k = 3
+BAR r = 3  =>  r = 3
+BAR y = 2πx  =>  y = 2 pi x
+BAR s1 = sin⁻¹(0.5)  =>  s1 = asin(0.5)
+BAR y = sin²(x) + cos²(x)  =>  y = (sin(x))^2 + (cos(x))^2
+BAR p = 10 kg m/s ∠ 30°  =>  p = polarVec(10 kg m/s, 30 deg)
+BAR r = 5  =>  r = 5
+BAR E = 1×10⁻⁵∠45°  =>  E = polarVec(1e-5, 45 deg)
+BAR a = -3  =>  a = -3
+BAR y = ||x| - 1|  =>  y = mag(mag(x) - 1)
+BAR z1 = |sqrt(-4)|  =>  z1 = mag(sqrt(-4))
+BAR m = 2  =>  m = 2
+BAR c1 = ∛8  =>  c1 = cbrt(8)
+BAR s1 = √1e-3  =>  s1 = sqrt(1e-3)
+BAR y = x mod 3  =>  y = x mod 3
+BAR h = 2 × sin (30)  =>  h = timesOrCross(2, sin (30))
+BAR g1 = atan2(10 m, 5 m)  =>  g1 = atan2(10 m, 5 m)
+BAR 3,5  =>  3,5
+BAR 1,000  =>  1,000
+BAR 2,5+1  =>  2,5+1
+BAR f(1,2)  =>  f(1,2)
+BAR \left(1,2\right)  =>  \left(1,2\right)
+CALC 2+3\times4  =>  2+3*4
+VECTORS 2+3\times4  =>  2+timesOrCross(3, 4)
+CALC \frac{1}{3}+\frac{1}{6}  =>  ((1)/(3))+((1)/(6))
+VECTORS \frac{1}{3}+\frac{1}{6}  =>  ((1)/(3))+((1)/(6))
+CALC \sqrt{50}  =>  sqrt(50)
+VECTORS \sqrt{50}  =>  sqrt(50)
+CALC \sin\left(30\right)  =>  sin(30)
+VECTORS \sin\left(30\right)  =>  sin(30)
+CALC \cos\left(60\right)^{2}  =>  cos(60)^(2)
+VECTORS \cos\left(60\right)^{2}  =>  cos(60)^(2)
+CALC 1.6\times10^{-19}\times6.02\times10^{23}  =>  1.6*10^(-19)*6.02*10^(23)
+VECTORS 1.6\times10^{-19}\times6.02\times10^{23}  =>  timesOrCross(1.6e-19, 6.02e23)
+CALC 25.37\div20  =>  25.37/20
+VECTORS 25.37\div20  =>  25.37/20
+CALC 2^{10}  =>  2^(10)
+VECTORS 2^{10}  =>  2^(10)
+CALC \ln\left(e^{3}\right)  =>  ln(e^(3))
+VECTORS \ln\left(e^{3}\right)  =>  ln(e^(3))
+CALC \log\left(1000\right)  =>  log(1000)
+VECTORS \log\left(1000\right)  =>  log(1000)
+CALC 5!  =>  5!
+VECTORS 5!  =>  5!
+CALC \frac{\sqrt{3}}{2}  =>  ((sqrt(3))/(2))
+VECTORS \frac{\sqrt{3}}{2}  =>  ((sqrt(3))/(2))
+CALC \left(2+\sqrt{3}\right)\left(2-\sqrt{3}\right)  =>  (2+sqrt(3))(2-sqrt(3))
+VECTORS \left(2+\sqrt{3}\right)\left(2-\sqrt{3}\right)  =>  (2+sqrt(3))(2-sqrt(3))
+CALC \pi\times3^{2}  =>  pi*3^(2)
+VECTORS \pi\times3^{2}  =>  timesOrCross(pi, 3^(2))
+CALC \tan\left(45\right)  =>  tan(45)
+VECTORS \tan\left(45\right)  =>  tan(45)
+CALC \frac{9.8\times2.5^{2}}{2}  =>  ((9.8*2.5^(2))/(2))
+VECTORS \frac{9.8\times2.5^{2}}{2}  =>  ((timesOrCross(9.8, 2.5^(2)))/(2))
+CALC \sqrt[3]{27}  =>  nthRoot(27, 3)
+VECTORS \sqrt[3]{27}  =>  nthRoot(27, 3)
+CALC 1\div2\times10^{3}  =>  1/2*10^(3)
+VECTORS 1\div2\times10^{3}  =>  1/2e3
+CALC \frac{1}{\sqrt{3}+1}  =>  ((1)/(sqrt(3)+1))
+VECTORS \frac{1}{\sqrt{3}+1}  =>  ((1)/(sqrt(3)+1))
+CALC 0.35\times3  =>  0.35*3
+VECTORS 0.35\times3  =>  timesOrCross(0.35, 3)
+CALC \sum_{n=1}^{5}n^{2}=55  =>  sigma(x^(2), 1, 5)=55
+VECTORS \sum_{n=1}^{5}n^{2}=55  =>  sigma(x^(2), 1, 5)=55
+CALC \sum_{n=1}^{5}n^{2}=56  =>  sigma(x^(2), 1, 5)=56
+VECTORS \sum_{n=1}^{5}n^{2}=56  =>  sigma(x^(2), 1, 5)=56
+CALC sigma(x,1,100000)=5  =>  sigma(x,1,100000)=5
+VECTORS sigma(x,1,100000)=5  =>  sigma(x,1,100000)=5
+CALC x+sigma(x,1,100)=5100  =>  x+sigma(x,1,100)=5100
+VECTORS x+sigma(x,1,100)=5100  =>  x+sigma(x,1,100)=5100
+CALC 2x=4  =>  2x=4
+VECTORS 2x=4  =>  2x=4
+CALC x^2=4  =>  x^(2)=4
+VECTORS x^2=4  =>  x^(2)=4
+CALC x^2+x+1=0  =>  x^(2)+x+1=0
+VECTORS x^2+x+1=0  =>  x^(2)+x+1=0
+CALC \sin\;30  =>  sin(30)
+VECTORS \sin\;30  =>  sin(30)
+CALC \log_{2}\;8  =>  log(2, 8)
+VECTORS \log_{2}\;8  =>  log(2, 8)
+CALC \left(-8\right)^{\frac{1}{3}}  =>  (-8)^(((1)/(3)))
+VECTORS \left(-8\right)^{\frac{1}{3}}  =>  (-8)^(((1)/(3)))
+CALC \sqrt[3]{-8}  =>  nthRoot(-8, 3)
+VECTORS \sqrt[3]{-8}  =>  nthRoot(-8, 3)
+CALC \frac{2}{3}+\sqrt{2}  =>  ((2)/(3))+sqrt(2)
+VECTORS \frac{2}{3}+\sqrt{2}  =>  ((2)/(3))+sqrt(2)
+CALC 1e-20+1  =>  1e-20+1
+VECTORS 1e-20+1  =>  1e-20+1
+CALC 10^{100}  =>  10^(100)
+VECTORS 10^{100}  =>  10^(100)
+CALC \frac{1}{0}  =>  ((1)/(0))
+VECTORS \frac{1}{0}  =>  ((1)/(0))
+CALC 0\div0  =>  0/0
+VECTORS 0\div0  =>  0/0
+CALC x^100000  =>  x^(1)00000
+VECTORS x^100000  =>  x^(1)00000
+CALC \int_{0}^{\pi}\sin x\,dx  =>  integral(sin(x), 0, pi)
+VECTORS \int_{0}^{\pi}\sin x\,dx  =>  integral(sin(x), 0, pi)
+CALC \frac{d}{dx}x^{2}  =>  diff(x^(2), x)
+VECTORS \frac{d}{dx}x^{2}  =>  diff(x^(2), x)
+CALC integral(1.6e-19*x,0,1)=1e-19  =>  integral(1.6e-19*x,0,1)=1e-19
+VECTORS integral(1.6e-19*x,0,1)=1e-19  =>  integral(1.6e-19*x,0,1)=1e-19
+CALC 5=5  =>  5=5
+VECTORS 5=5  =>  5=5
+CALC A+B=7  =>  A+B=7
+VECTORS A+B=7  =>  A+B=7
+CALC \sin^{-1}\left(0.5\right)  =>  asin(0.5)
+VECTORS \sin^{-1}\left(0.5\right)  =>  asin(0.5)
+CALC \sin^{2}30  =>  sin(30)^(2)
+VECTORS \sin^{2}30  =>  sin(30)^(2)
+CALC 3\times10^{8}\times2  =>  3*10^(8)*2
+VECTORS 3\times10^{8}\times2  =>  timesOrCross(3e8, 2)
+CALC 3,5  =>  3,5
+VECTORS 3,5  =>  3,5
+CALC 1,000  =>  1,000
+VECTORS 1,000  =>  1,000
+CALC 2,5+1  =>  2,5+1
+VECTORS 2,5+1  =>  2,5+1
+CALC f(1,2)  =>  f(1,2)
+VECTORS f(1,2)  =>  f(1,2)
+CALC \left(1,2\right)  =>  pt(1,2)
+VECTORS \left(1,2\right)  =>  pt(1,2)
+CALC \sin\left(1\right)  =>  sin(1)
+VECTORS \sin\left(1\right)  =>  sin(1)
+CALC \cos\left(\pi\right)  =>  cos(pi)
+VECTORS \cos\left(\pi\right)  =>  cos(pi)
+CALC \tan\left(60\right)  =>  tan(60)
+VECTORS \tan\left(60\right)  =>  tan(60)
+CALC \sin^{-1}\left(1\right)  =>  asin(1)
+VECTORS \sin^{-1}\left(1\right)  =>  asin(1)
+CALC \left(2+3i\right)\left(1-i\right)  =>  (2+3i)(1-i)
+VECTORS \left(2+3i\right)\left(1-i\right)  =>  (2+3i)(1-i)
+CALC \sqrt{-4}  =>  sqrt(-4)
+VECTORS \sqrt{-4}  =>  sqrt(-4)
+CALC i^{2}  =>  i^(2)
+VECTORS i^{2}  =>  i^(2)
+CALC \frac{1}{1+i}  =>  ((1)/(1+i))
+VECTORS \frac{1}{1+i}  =>  ((1)/(1+i))
+CALC \left|3+4i\right|  =>  mag(3+4i)
+VECTORS \left|3+4i\right|  =>  mag(3+4i)
+CALC 4000×√(2)  =>  4000*sqrt(2)
+VECTORS 4000×√(2)  =>  timesOrCross(4000, sqrt(2))
+CALC 1350×√(3)  =>  1350*sqrt(3)
+VECTORS 1350×√(3)  =>  timesOrCross(1350, sqrt(3))
+CALC 1000×√(2)+0.5  =>  1000*sqrt(2)+0.5
+VECTORS 1000×√(2)+0.5  =>  timesOrCross(1000, sqrt(2))+0.5
+CALC 1000×π+0.5  =>  1000*pi+0.5
+VECTORS 1000×π+0.5  =>  timesOrCross(1000, pi)+0.5
+CALC 22/7  =>  22/7
+VECTORS 22/7  =>  22/7
+CALC 0.1+0.2  =>  0.1+0.2
+VECTORS 0.1+0.2  =>  0.1+0.2
+CALC 2/3+1/7  =>  2/3+1/7
+VECTORS 2/3+1/7  =>  2/3+1/7
+CALC 10^22  =>  10^(2)2
+VECTORS 10^22  =>  10^(2)2
+CALC AU_len  =>  AUlen
+VECTORS AU_len  =>  AUlen
+CALC 2u  =>  2u
+VECTORS 2u  =>  2u
+CALC \int_{-8}^{0}x^{\frac{1}{3}}\,dx  =>  integral(x^(((1)/(3))), -8, 0)
+VECTORS \int_{-8}^{0}x^{\frac{1}{3}}\,dx  =>  integral(x^(((1)/(3))), -8, 0)
+CALC \int_{-8}^{8}x^{\frac{1}{3}}\,dx  =>  integral(x^(((1)/(3))), -8, 8)
+VECTORS \int_{-8}^{8}x^{\frac{1}{3}}\,dx  =>  integral(x^(((1)/(3))), -8, 8)
+CALC \int_{-8}^{8}x^{\frac{2}{3}}\,dx  =>  integral(x^(((2)/(3))), -8, 8)
+VECTORS \int_{-8}^{8}x^{\frac{2}{3}}\,dx  =>  integral(x^(((2)/(3))), -8, 8)
+CALC \int_{-1}^{1}\sqrt{x}\,dx  =>  integral(sqrt(x), -1, 1)
+VECTORS \int_{-1}^{1}\sqrt{x}\,dx  =>  integral(sqrt(x), -1, 1)
+CALC \int_{0}^{1}A\cdot x\,dx  =>  integral(A*x, 0, 1)
+VECTORS \int_{0}^{1}A\cdot x\,dx  =>  integral(dot(A, x), 0, 1)
+CALC \int_{0}^{\frac{1}{0}}x\,dx  =>  integral(x, 0, ((1)/(0)))
+VECTORS \int_{0}^{\frac{1}{0}}x\,dx  =>  integral(x, 0, ((1)/(0)))
+CALC \int_{0}^{1}\ln\left(x\right)\,dx  =>  integral(ln(x), 0, 1)
+VECTORS \int_{0}^{1}\ln\left(x\right)\,dx  =>  integral(ln(x), 0, 1)
+CALC \int_{0}^{1}x^{2}\,dx  =>  integral(x^(2), 0, 1)
+VECTORS \int_{0}^{1}x^{2}\,dx  =>  integral(x^(2), 0, 1)
+CALC \sum_{x=1}^{100}x  =>  sigma(x, 1, 100)
+VECTORS \sum_{x=1}^{100}x  =>  sigma(x, 1, 100)
+CALC \prod_{x=1}^{5}x  =>  product(x, 1, 5)
+VECTORS \prod_{x=1}^{5}x  =>  product(x, 1, 5)
+CALC A=5  =>  A=5
+VECTORS A=5  =>  A=5
+CALC f(t)=t^2  =>  f(t)=t^(2)
+VECTORS f(t)=t^2  =>  f(t)=t^(2)
+CALC x=5  =>  x=5
+VECTORS x=5  =>  x=5
+CALC \sum_{x=1}^{3}x=5  =>  sigma(x, 1, 3)=5
+VECTORS \sum_{x=1}^{3}x=5  =>  sigma(x, 1, 3)=5
+CALC sin(30)  =>  sin(30)
+VECTORS sin(30)  =>  sin(30)
+CALC 2×3÷4  =>  2*3/4
+VECTORS 2×3÷4  =>  timesOrCross(2, 3)/4
+CALC √(16)+3²  =>  sqrt(16)+3^(2)
+VECTORS √(16)+3²  =>  sqrt(16)+3^(2)
+CALC nCr(5,2)  =>  nCr(5,2)
+VECTORS nCr(5,2)  =>  nCr(5,2)
+CALC 30°30'  =>  (30+30/60+0/3600)
+VECTORS 30°30'  =>  30 deg30'
+CALC ddx(x^3, 2)  =>  ddx(x^(3),2)
+VECTORS ddx(x^3, 2)  =>  ddx(x^(3),2)
+CALC integral(x^2, 0, 3)  =>  integral(x^(2),0,3)
+VECTORS integral(x^2, 0, 3)  =>  integral(x^(2),0,3)
+CALC sigma(x, 1, 100)  =>  sigma(x,1,100)
+VECTORS sigma(x, 1, 100)  =>  sigma(x,1,100)
+CALC Ans + 1  =>  Ans+1
+VECTORS Ans + 1  =>  Ans+1
+CALC x^2 = 2  =>  x^(2)=2
+VECTORS x^2 = 2  =>  x^(2)=2
+CALC Pol(3, 4)  =>  Pol(3,4)
+VECTORS Pol(3, 4)  =>  Pol(3,4)
+CALC Pol(max(1,3), 4)  =>  Pol(max(1,3),4)
+VECTORS Pol(max(1,3), 4)  =>  Pol(max(1,3),4)
+CALC Pol(3*cos(0), 4)  =>  Pol(3*cos(0),4)
+VECTORS Pol(3*cos(0), 4)  =>  Pol(3*cos(0),4)
+CALC Rec(√(4), 60)  =>  Rec(sqrt(4),60)
+VECTORS Rec(√(4), 60)  =>  Rec(sqrt(4),60)
+CALC Rec(max(1,2), 60)  =>  Rec(max(1,2),60)
+VECTORS Rec(max(1,2), 60)  =>  Rec(max(1,2),60)
+CALC ddx(sin(x), 30)  =>  ddx(sin(x),30)
+VECTORS ddx(sin(x), 30)  =>  ddx(sin(x),30)
+CALC integral(sin(x), 0, 90)  =>  integral(sin(x),0,90)
+VECTORS integral(sin(x), 0, 90)  =>  integral(sin(x),0,90)
+CALC integral(sin(x), 0, pi)  =>  integral(sin(x),0,pi)
+VECTORS integral(sin(x), 0, pi)  =>  integral(sin(x),0,pi)
+CALC h_P  =>  hP
+VECTORS h_P  =>  hP
+CALC hP  =>  hP
+VECTORS hP  =>  hP
+CALC 2*mp  =>  2*mp
+VECTORS 2*mp  =>  2*mp
+CALC AUlen  =>  AUlen
+VECTORS AUlen  =>  AUlen
+CALC ddx(x^(1/3), -8)  =>  ddx(x^(()1/3),-8)
+VECTORS ddx(x^(1/3), -8)  =>  ddx(x^(()1/3),-8)
+CALC sigma(x^(1/3), -8, -1)  =>  sigma(x^(()1/3),-8,-1)
+VECTORS sigma(x^(1/3), -8, -1)  =>  sigma(x^(()1/3),-8,-1)
+CALC 25.37÷20  =>  25.37/20
+VECTORS 25.37÷20  =>  25.37/20
+CALC sigma(b2bterm(x), 1, 100000) = 5  =>  sigma(b2bterm(x),1,100000)=5
+VECTORS sigma(b2bterm(x), 1, 100000) = 5  =>  sigma(b2bterm(x),1,100000)=5
+CALC product(b2bterm(1), 1, 100000) + 0*x = 5  =>  product(b2bterm(1),1,100000)+0*x=5
+VECTORS product(b2bterm(1), 1, 100000) + 0*x = 5  =>  product(b2bterm(1),1,100000)+0*x=5
+CALC integral(b2bterm(x)^2, 0, x)^2 = -1  =>  integral(b2bterm(x)^(2),0,x)^(2)=-1
+VECTORS integral(b2bterm(x)^2, 0, x)^2 = -1  =>  integral(b2bterm(x)^(2),0,x)^(2)=-1
+CALC sigma(1/x^2, 1, 100) = 2  =>  sigma(1/x^(2),1,100)=2
+VECTORS sigma(1/x^2, 1, 100) = 2  =>  sigma(1/x^(2),1,100)=2
+CALC A = 5  =>  A=5
+VECTORS A = 5  =>  A=5
+CALC speed = 5  =>  speed=5
+VECTORS speed = 5  =>  speed=5
+CALC f(t) = t^2  =>  f(t)=t^(2)
+VECTORS f(t) = t^2  =>  f(t)=t^(2)
+CALC 2A + 1  =>  2A+1
+VECTORS 2A + 1  =>  2A+1
+CALC sin(1)  =>  sin(1)
+VECTORS sin(1)  =>  sin(1)
+CALC 1  =>  1
+VECTORS 1  =>  1
+CALC sigma(x^2,1,5)=55  =>  sigma(x^(2),1,5)=55
+VECTORS sigma(x^2,1,5)=55  =>  sigma(x^(2),1,5)=55
+CALC sigma(x^2,1,100000)=333338333350000  =>  sigma(x^(2),1,100000)=333338333350000
+VECTORS sigma(x^2,1,100000)=333338333350000  =>  sigma(x^(2),1,100000)=333338333350000
+CALC sigma(x^2,1,100000)=333338333000000  =>  sigma(x^(2),1,100000)=333338333000000
+VECTORS sigma(x^2,1,100000)=333338333000000  =>  sigma(x^(2),1,100000)=333338333000000
+CALC sigma(1/x^2,1,100000)=1.6449240668982262  =>  sigma(1/x^(2),1,100000)=1.6449240668982262
+VECTORS sigma(1/x^2,1,100000)=1.6449240668982262  =>  sigma(1/x^(2),1,100000)=1.6449240668982262
+CALC sigma(1e-20*x,1,3)=5e-20  =>  sigma(1e-20*x,1,3)=5e-20
+VECTORS sigma(1e-20*x,1,3)=5e-20  =>  sigma(1e-20*x,1,3)=5e-20
+CALC sigma(1e-20*x,1,3)=6e-20  =>  sigma(1e-20*x,1,3)=6e-20
+VECTORS sigma(1e-20*x,1,3)=6e-20  =>  sigma(1e-20*x,1,3)=6e-20
+CALC sigma(0*x,1,3)=0  =>  sigma(0*x,1,3)=0
+VECTORS sigma(0*x,1,3)=0  =>  sigma(0*x,1,3)=0
+CALC \frac{1}{2}+\sqrt{9}  =>  ((1)/(2))+sqrt(9)
+VECTORS \frac{1}{2}+\sqrt{9}  =>  ((1)/(2))+sqrt(9)
+CALC \sqrt{2}  =>  sqrt(2)
+VECTORS \sqrt{2}  =>  sqrt(2)
+CALC \frac{\pi}{3}  =>  ((pi)/(3))
+VECTORS \frac{\pi}{3}  =>  ((pi)/(3))
+CALC \sqrt{2}+\frac{1}{3}  =>  sqrt(2)+((1)/(3))
+VECTORS \sqrt{2}+\frac{1}{3}  =>  sqrt(2)+((1)/(3))
+CALC 3+4  =>  3+4
+VECTORS 3+4  =>  3+4
+CALC \placeholder{}  =>  
+VECTORS \placeholder{}  =>  
+CALC 2+  =>  2+
+VECTORS 2+  =>  2+
+CALC 2 \pm 3  =>  THROWS Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.
+VECTORS 2 \pm 3  =>  THROWS Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.
+CALC 2k+1  =>  2k+1
+VECTORS 2k+1  =>  2k+1
+CALC 5\div0  =>  5/0
+VECTORS 5\div0  =>  5/0
+CALC \frac{0}{0}  =>  ((0)/(0))
+VECTORS \frac{0}{0}  =>  ((0)/(0))
+CALC \ln\left(0\right)  =>  ln(0)
+VECTORS \ln\left(0\right)  =>  ln(0)
+CALC x^{2}=2  =>  x^(2)=2
+VECTORS x^{2}=2  =>  x^(2)=2
+CALC \sin\left(x\right)=2  =>  sin(x)=2
+VECTORS \sin\left(x\right)=2  =>  sin(x)=2
+CALC 12345  =>  12345
+VECTORS 12345  =>  12345
+CALC 12345\times678  =>  12345*678
+VECTORS 12345\times678  =>  timesOrCross(12345, 678)
+CALC x^{3}-1=0  =>  x^(3)-1=0
+VECTORS x^{3}-1=0  =>  x^(3)-1=0
+CALC \sqrt{9}  =>  sqrt(9)
+VECTORS \sqrt{9}  =>  sqrt(9)
+CALC \left(-8\right)^{\frac{1}{2}}  =>  (-8)^(((1)/(2)))
+VECTORS \left(-8\right)^{\frac{1}{2}}  =>  (-8)^(((1)/(2)))
+CALC x^{2}+6x+9=0  =>  x^(2)+6x+9=0
+VECTORS x^{2}+6x+9=0  =>  x^(2)+6x+9=0
+CALC x^{3}-3x+2=0  =>  x^(3)-3x+2=0
+VECTORS x^{3}-3x+2=0  =>  x^(3)-3x+2=0
+CALC \sqrt{-4}+1  =>  sqrt(-4)+1
+VECTORS \sqrt{-4}+1  =>  sqrt(-4)+1
+CALC \sqrt{-4}\times\sqrt{-4}  =>  sqrt(-4)*sqrt(-4)
+VECTORS \sqrt{-4}\times\sqrt{-4}  =>  timesOrCross(sqrt(-4), sqrt(-4))
+CALC x^{\frac{1}{3}}  =>  x^(((1)/(3)))
+VECTORS x^{\frac{1}{3}}  =>  x^(((1)/(3)))
+CALC x^{2}-\sin\left(30\right)=0  =>  x^(2)-sin(30)=0
+VECTORS x^{2}-\sin\left(30\right)=0  =>  x^(2)-sin(30)=0
+CALC \left(x+\sin\left(30\right)\right)^{2}=0  =>  (x+sin(30))^(2)=0
+VECTORS \left(x+\sin\left(30\right)\right)^{2}=0  =>  (x+sin(30))^(2)=0
+CALC arg(-1)  =>  arg(-1)
+VECTORS arg(-1)  =>  arg(-1)
+CALC A(B+1)  =>  (A)(B+1)
+VECTORS A(B+1)  =>  (A)(B+1)
+CALC Abs(-3)  =>  Abs(-3)
+VECTORS Abs(-3)  =>  Abs(-3)
+CALC \operatorname{re}\left(3+4i\right)  =>  re(3+4i)
+VECTORS \operatorname{re}\left(3+4i\right)  =>  re(3+4i)
+CALC x^{2}=-4  =>  x^(2)=-4
+VECTORS x^{2}=-4  =>  x^(2)=-4
+CALC \operatorname{nCr}\left(2+3i,2\right)  =>  nCr(2+3i,2)
+VECTORS \operatorname{nCr}\left(2+3i,2\right)  =>  nCr(2+3i,2)
+CALC (3+4i)(1-2i)  =>  (3+4i)(1-2i)
+VECTORS (3+4i)(1-2i)  =>  (3+4i)(1-2i)
+CALC \operatorname{arg}\left(-2i\right)  =>  arg(-2i)
+VECTORS \operatorname{arg}\left(-2i\right)  =>  arg(-2i)
+CALC 2\times e^{i\times\frac{90\times\pi}{180}}  =>  2*e^(i*((90*pi)/(180)))
+VECTORS 2\times e^{i\times\frac{90\times\pi}{180}}  =>  timesOrCross(2, e^(timesOrCross(i, ((timesOrCross(90, pi))/(180)))))
+CALC 3+4i  =>  3+4i
+VECTORS 3+4i  =>  3+4i
+CALC \left(-8\right)^{\frac{2}{3}}  =>  (-8)^(((2)/(3)))
+VECTORS \left(-8\right)^{\frac{2}{3}}  =>  (-8)^(((2)/(3)))
+CALC 1+i  =>  1+i
+VECTORS 1+i  =>  1+i
+CALC 2+3i  =>  2+3i
+VECTORS 2+3i  =>  2+3i
+LATEX 2+3\times4  =>  2+3*4
+LATEX \frac{1}{3}+\frac{1}{6}  =>  ((1)/(3))+((1)/(6))
+LATEX \sqrt{50}  =>  sqrt(50)
+LATEX \sin\left(30\right)  =>  sin(30)
+LATEX \cos\left(60\right)^{2}  =>  cos(60)^(2)
+LATEX 1.6\times10^{-19}\times6.02\times10^{23}  =>  1.6*10^(-19)*6.02*10^(23)
+LATEX 25.37\div20  =>  25.37/20
+LATEX 2^{10}  =>  2^(10)
+LATEX \ln\left(e^{3}\right)  =>  ln(e^(3))
+LATEX \log\left(1000\right)  =>  log(1000)
+LATEX 5!  =>  5!
+LATEX \frac{\sqrt{3}}{2}  =>  ((sqrt(3))/(2))
+LATEX \left(2+\sqrt{3}\right)\left(2-\sqrt{3}\right)  =>  (2+sqrt(3))(2-sqrt(3))
+LATEX \pi\times3^{2}  =>  π*3^(2)
+LATEX \tan\left(45\right)  =>  tan(45)
+LATEX \frac{9.8\times2.5^{2}}{2}  =>  ((9.8*2.5^(2))/(2))
+LATEX \sqrt[3]{27}  =>  nthRoot(27, 3)
+LATEX 1\div2\times10^{3}  =>  1/2*10^(3)
+LATEX \frac{1}{\sqrt{3}+1}  =>  ((1)/(sqrt(3)+1))
+LATEX 0.35\times3  =>  0.35*3
+LATEX \sum_{n=1}^{5}n^{2}=55  =>  sigma(x^(2), 1, 5)=55
+LATEX \sum_{n=1}^{5}n^{2}=56  =>  sigma(x^(2), 1, 5)=56
+LATEX sigma(x,1,100000)=5  =>  sigma(x,1,100000)=5
+LATEX x+sigma(x,1,100)=5100  =>  x+sigma(x,1,100)=5100
+LATEX 2x=4  =>  2x=4
+LATEX x^2=4  =>  x^(2)=4
+LATEX x^2+x+1=0  =>  x^(2)+x+1=0
+LATEX \sin\;30  =>  sin(30)
+LATEX \log_{2}\;8  =>  log(2, 8)
+LATEX \left(-8\right)^{\frac{1}{3}}  =>  (-8)^(((1)/(3)))
+LATEX \sqrt[3]{-8}  =>  nthRoot(-8, 3)
+LATEX \frac{2}{3}+\sqrt{2}  =>  ((2)/(3))+sqrt(2)
+LATEX 1e-20+1  =>  1e-20+1
+LATEX 10^{100}  =>  10^(100)
+LATEX \frac{1}{0}  =>  ((1)/(0))
+LATEX 0\div0  =>  0/0
+LATEX x^100000  =>  x^(1)00000
+LATEX \int_{0}^{\pi}\sin x\,dx  =>  integral(sin(x), 0, π)
+LATEX \frac{d}{dx}x^{2}  =>  diff(x^(2), x)
+LATEX integral(1.6e-19*x,0,1)=1e-19  =>  integral(1.6e-19*x,0,1)=1e-19
+LATEX 5=5  =>  5=5
+LATEX A+B=7  =>  A+B=7
+LATEX \sin^{-1}\left(0.5\right)  =>  asin(0.5)
+LATEX \sin^{2}30  =>  sin(30)^(2)
+LATEX 3\times10^{8}\times2  =>  3*10^(8)*2
+LATEX 3,5  =>  3,5
+LATEX 1,000  =>  1,000
+LATEX 2,5+1  =>  2,5+1
+LATEX f(1,2)  =>  f(1,2)
+LATEX \left(1,2\right)  =>  (1,2)
+LATEX \sin\left(1\right)  =>  sin(1)
+LATEX \cos\left(\pi\right)  =>  cos(π)
+LATEX \tan\left(60\right)  =>  tan(60)
+LATEX \sin^{-1}\left(1\right)  =>  asin(1)
+LATEX \left(2+3i\right)\left(1-i\right)  =>  (2+3i)(1-i)
+LATEX \sqrt{-4}  =>  sqrt(-4)
+LATEX i^{2}  =>  i^(2)
+LATEX \frac{1}{1+i}  =>  ((1)/(1+i))
+LATEX \left|3+4i\right|  =>  |3+4i|
+LATEX 4000×√(2)  =>  4000*√(2)
+LATEX 1350×√(3)  =>  1350*√(3)
+LATEX 1000×√(2)+0.5  =>  1000*√(2)+0.5
+LATEX 1000×π+0.5  =>  1000*π+0.5
+LATEX 22/7  =>  22/7
+LATEX 0.1+0.2  =>  0.1+0.2
+LATEX 2/3+1/7  =>  2/3+1/7
+LATEX 10^22  =>  10^(2)2
+LATEX AU_len  =>  AUlen
+LATEX 2u  =>  2u
+LATEX \int_{-8}^{0}x^{\frac{1}{3}}\,dx  =>  integral(x^(((1)/(3))), -8, 0)
+LATEX \int_{-8}^{8}x^{\frac{1}{3}}\,dx  =>  integral(x^(((1)/(3))), -8, 8)
+LATEX \int_{-8}^{8}x^{\frac{2}{3}}\,dx  =>  integral(x^(((2)/(3))), -8, 8)
+LATEX \int_{-1}^{1}\sqrt{x}\,dx  =>  integral(sqrt(x), -1, 1)
+LATEX \int_{0}^{1}A\cdot x\,dx  =>  integral(A*x, 0, 1)
+LATEX \int_{0}^{\frac{1}{0}}x\,dx  =>  integral(x, 0, ((1)/(0)))
+LATEX \int_{0}^{1}\ln\left(x\right)\,dx  =>  integral(ln(x), 0, 1)
+LATEX \int_{0}^{1}x^{2}\,dx  =>  integral(x^(2), 0, 1)
+LATEX \sum_{x=1}^{100}x  =>  sigma(x, 1, 100)
+LATEX \prod_{x=1}^{5}x  =>  product(x, 1, 5)
+LATEX A=5  =>  A=5
+LATEX f(t)=t^2  =>  f(t)=t^(2)
+LATEX x=5  =>  x=5
+LATEX \sum_{x=1}^{3}x=5  =>  sigma(x, 1, 3)=5
+LATEX sin(30)  =>  sin(30)
+LATEX 2×3÷4  =>  2*3÷4
+LATEX √(16)+3²  =>  √(16)+3^(2)
+LATEX nCr(5,2)  =>  nCr(5,2)
+LATEX 30°30'  =>  30°30'
+LATEX ddx(x^3, 2)  =>  ddx(x^(3),2)
+LATEX integral(x^2, 0, 3)  =>  integral(x^(2),0,3)
+LATEX sigma(x, 1, 100)  =>  sigma(x,1,100)
+LATEX Ans + 1  =>  Ans+1
+LATEX x^2 = 2  =>  x^(2)=2
+LATEX Pol(3, 4)  =>  Pol(3,4)
+LATEX Pol(max(1,3), 4)  =>  Pol(max(1,3),4)
+LATEX Pol(3*cos(0), 4)  =>  Pol(3*cos(0),4)
+LATEX Rec(√(4), 60)  =>  Rec(√(4),60)
+LATEX Rec(max(1,2), 60)  =>  Rec(max(1,2),60)
+LATEX ddx(sin(x), 30)  =>  ddx(sin(x),30)
+LATEX integral(sin(x), 0, 90)  =>  integral(sin(x),0,90)
+LATEX integral(sin(x), 0, pi)  =>  integral(sin(x),0,pi)
+LATEX h_P  =>  hP
+LATEX hP  =>  hP
+LATEX 2*mp  =>  2*mp
+LATEX AUlen  =>  AUlen
+LATEX ddx(x^(1/3), -8)  =>  ddx(x^(()1/3),-8)
+LATEX sigma(x^(1/3), -8, -1)  =>  sigma(x^(()1/3),-8,-1)
+LATEX 25.37÷20  =>  25.37÷20
+LATEX sigma(b2bterm(x), 1, 100000) = 5  =>  sigma(b2bterm(x),1,100000)=5
+LATEX product(b2bterm(1), 1, 100000) + 0*x = 5  =>  product(b2bterm(1),1,100000)+0*x=5
+LATEX integral(b2bterm(x)^2, 0, x)^2 = -1  =>  integral(b2bterm(x)^(2),0,x)^(2)=-1
+LATEX sigma(1/x^2, 1, 100) = 2  =>  sigma(1/x^(2),1,100)=2
+LATEX A = 5  =>  A=5
+LATEX speed = 5  =>  speed=5
+LATEX f(t) = t^2  =>  f(t)=t^(2)
+LATEX 2A + 1  =>  2A+1
+LATEX sin(1)  =>  sin(1)
+LATEX 1  =>  1
+LATEX sigma(x^2,1,5)=55  =>  sigma(x^(2),1,5)=55
+LATEX sigma(x^2,1,100000)=333338333350000  =>  sigma(x^(2),1,100000)=333338333350000
+LATEX sigma(x^2,1,100000)=333338333000000  =>  sigma(x^(2),1,100000)=333338333000000
+LATEX sigma(1/x^2,1,100000)=1.6449240668982262  =>  sigma(1/x^(2),1,100000)=1.6449240668982262
+LATEX sigma(1e-20*x,1,3)=5e-20  =>  sigma(1e-20*x,1,3)=5e-20
+LATEX sigma(1e-20*x,1,3)=6e-20  =>  sigma(1e-20*x,1,3)=6e-20
+LATEX sigma(0*x,1,3)=0  =>  sigma(0*x,1,3)=0
+LATEX \frac{1}{2}+\sqrt{9}  =>  ((1)/(2))+sqrt(9)
+LATEX \sqrt{2}  =>  sqrt(2)
+LATEX \frac{\pi}{3}  =>  ((π)/(3))
+LATEX \sqrt{2}+\frac{1}{3}  =>  sqrt(2)+((1)/(3))
+LATEX 3+4  =>  3+4
+LATEX \placeholder{}  =>  
+LATEX 2+  =>  2+
+LATEX 2 \pm 3  =>  THROWS Choose + or −: PhysLab works one case at a time, so ask for the + answer and the − answer separately.
+LATEX 2k+1  =>  2k+1
+LATEX 5\div0  =>  5/0
+LATEX \frac{0}{0}  =>  ((0)/(0))
+LATEX \ln\left(0\right)  =>  ln(0)
+LATEX x^{2}=2  =>  x^(2)=2
+LATEX \sin\left(x\right)=2  =>  sin(x)=2
+LATEX 12345  =>  12345
+LATEX 12345\times678  =>  12345*678
+LATEX x^{3}-1=0  =>  x^(3)-1=0
+LATEX \sqrt{9}  =>  sqrt(9)
+LATEX \left(-8\right)^{\frac{1}{2}}  =>  (-8)^(((1)/(2)))
+LATEX x^{2}+6x+9=0  =>  x^(2)+6x+9=0
+LATEX x^{3}-3x+2=0  =>  x^(3)-3x+2=0
+LATEX \sqrt{-4}+1  =>  sqrt(-4)+1
+LATEX \sqrt{-4}\times\sqrt{-4}  =>  sqrt(-4)*sqrt(-4)
+LATEX x^{\frac{1}{3}}  =>  x^(((1)/(3)))
+LATEX x^{2}-\sin\left(30\right)=0  =>  x^(2)-sin(30)=0
+LATEX \left(x+\sin\left(30\right)\right)^{2}=0  =>  (x+sin(30))^(2)=0
+LATEX arg(-1)  =>  arg(-1)
+LATEX A(B+1)  =>  A(B+1)
+LATEX Abs(-3)  =>  Abs(-3)
+LATEX \operatorname{re}\left(3+4i\right)  =>  re(3+4i)
+LATEX x^{2}=-4  =>  x^(2)=-4
+LATEX \operatorname{nCr}\left(2+3i,2\right)  =>  nCr(2+3i,2)
+LATEX (3+4i)(1-2i)  =>  (3+4i)(1-2i)
+LATEX \operatorname{arg}\left(-2i\right)  =>  arg(-2i)
+LATEX 2\times e^{i\times\frac{90\times\pi}{180}}  =>  2*e^(i*((90*π)/(180)))
+LATEX 3+4i  =>  3+4i
+LATEX \left(-8\right)^{\frac{2}{3}}  =>  (-8)^(((2)/(3)))
+LATEX 1+i  =>  1+i
+LATEX 2+3i  =>  2+3i

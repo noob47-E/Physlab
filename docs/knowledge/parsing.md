@@ -29,15 +29,50 @@ P-PARSE (0.9). Numbers, ×10 literals and rounding are in `numbers.md`; LaTeX fr
 8. **Complex numbers are scalars** to `·`, `|…|`, sec/csc/cot and log(a, b).
 9. **A number and a vector are never added**: 3 + <4, 0> is refused in words; a matrix plus a number still broadcasts.
 
+## One reader (CLEANUP-PLAN.md CW6a)
+- **preprocess is the one reader of typed maths.** latexToMath is the LaTeX-to-text step: it leaves π, °, ∠, |…|,
+  <…> and (in vector mode) × and · to preprocess. It still writes \div as / and \le \ge \ne as <= >= != itself,
+  because some callers read its text without preprocess: Pure Maths' job finder and algebra-engine route
+  (math/pure/store.ts) and the Maths screen's "is there an = yet?" test (panels/Maths.tsx).
+- **The vector rule has two copies in the bar**: lang/commands.ts `VECTOR_LITERAL`, used by `relationsIn` (counting
+  relation signs) and `splitInputs` (a command's inputs). They are regex copies of preprocess's `angleVectors`, not
+  calls to it, and they differ on some lines. B = k<1, 2> + <3, 4> is one assignment to preprocess and "several
+  equations" to relationsIn; angle(x < 3, y > 1) is two arguments to splitArgs and one input to splitInputs (the bar
+  refuses that line before it splits it today, as two inequalities). Joining
+  them changes what the bar says, so it is parked for the owner (OWNER-APPROVALS CW6a-2).
+- **Arguments split by splitArgs everywhere in the bar**; `tryCas` takes the braces off solve's lists and splits each
+  list with splitArgs again.
+- tests/golden/reader.golden.test.ts writes what every bar and calc sweep input becomes once read, before a route
+  splits it, on each route: the bar's preprocess; the Calculator's latexToMath + keypadToMath; the Vectors panel's
+  latexToMath + preprocess; and latexToMath alone (what Pure Maths and the Maths screen read). Bases mode is left out:
+  it never reaches either reader.
+
 ## Traps
-- The bar's relation count (lang/commands.ts relationsIn) must mask a vector literal the way rule 6 reads it, or
-  `B = k<1, 2>` is "several equations".
+- The bar's relation count (lang/commands.ts relationsIn) masks a vector literal with its own copy of rule 6 (see
+  "One reader"): without the mask `B = k<1, 2>` is "several equations", and where the copy differs from preprocess a
+  vector line still is (CW6a-2).
+- A raw error text from the reader reaches the bar: "Expected a vector or point" (math/expr.ts toV3) after
+  distance(3, 4) or unit(5); the Vectors panel words it, the bar does not (CW6a-1).
 - Overriding a mathjs function in `math.import` replaces it for every dependent function: keep its arity (add is n-ary).
-- `solve({…}, {x, y})`: splitArgs keeps braces whole, so the caller splits each braced list itself.
+- `solve({…}, {x, y})`: splitArgs keeps braces whole, so the caller splits each braced list itself — and its strip is
+  not paired: solve({a, b} * {c, d} = 1, a) sends "b} * {c" as an equation (CW6a-4).
+- math/expr.ts `pt` and `vec` keep three numbers and drop a fourth without a word: |<1, 2, 3, 4>| answers 3.74, the
+  size of <1, 2, 3> (CW6a-3).
 
 ## Guards
 tests/parseImplicit.test.ts, parseLeads.test.ts (held batches skipped with a note), parseSpaces.test.ts,
-parseNumberPlusVector.test.ts, expr.test.ts, exprPrecedence.test.ts.
+parseNumberPlusVector.test.ts, expr.test.ts, exprPrecedence.test.ts, readerRules.test.ts (the vector rule's copies,
+with it.fails for CW6a-1 … CW6a-4), golden/reader.golden.test.ts.
+
+## Left for later (found in CW6a, not in its files)
+- More argument splitters that do not call splitArgs: math/pure/run.ts `commaOutsideBrackets`, panels/Maths.tsx
+  `args` (round brackets only), questions/answerText.ts `splitTop`, questions/steps.ts (a plain split at commas).
+- ∞ for the engine: math/engine/sympy/spelling.ts is the rule (math/pure/store.ts `infinityForSymPy` is gone);
+  workers/cas.worker.ts `P()` still turns a literal ∞ into oo itself, and its name table reads Infinity and inf.
+- Pure Maths' algebra-engine route reads latexToMath's text without preprocess (math/pure/store.ts).
+- latexToMath's size and shape (the audit's rows; the file is CW6a's, but this is a split, not a change of reader):
+  one 465-line function, and its FUNCS / ARC / UNICODE_ALIASES lists written into it — for the split of the big files
+  (CW10) and the how-to notes (CW13).
 
 ## Held for the next round
 Done in P-PARSE2 (2026-10-08): B5 (R4.8, H5 — juxtaposed factors join the operand left of ×; a space before a call's
