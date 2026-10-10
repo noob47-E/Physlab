@@ -7,7 +7,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import type { V3 } from '../math/vec'
 import { writeLinePoints } from './gpuBuffers'
 
-export interface FatLineProps {
+interface FatLineProps {
   /** Polyline vertices, or pairs of segment endpoints when `segments` is true. */
   points: V3[] | Float32Array
   color: string

@@ -18,7 +18,7 @@ export interface Highlight {
   dashed?: [V3, V3][]
 }
 
-export interface FormulaSymbol {
+interface FormulaSymbol {
   sym: string
   /** e.g. "AB" */
   label: string

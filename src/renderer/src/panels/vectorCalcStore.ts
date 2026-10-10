@@ -180,7 +180,7 @@ function saveCards(cards: Card[]): void {
 // ---------------------------------------------------------------------------
 
 /** What the panel does when the drawing's selection changes. */
-export type SelectionMatch =
+type SelectionMatch =
   /** The selected vector already has a card: highlight that one. */
   | { kind: 'card'; cardId: number }
   /** A card is waiting for this vector (blank, or demoted from it): make it read the vector, then highlight it. */
@@ -224,7 +224,7 @@ export function cardForSelection(cards: Card[], selection: ObjId[], objects: Rec
  * and the numbers it used. A picture of the answer is worked out again from it when one of those
  * vectors changes, so the graph never shows R ≠ A + B beside a card that says R = A + B.
  */
-export interface Recipe {
+interface Recipe {
   cards: { id: number; name: string }[]
   /** The same working, from those cards' values now (named as they were then). */
   solve: (vs: VS.NamedVec[], settings: SceneSettings) => VS.Solution | null
@@ -243,9 +243,9 @@ export interface Recipe {
  * with A ⟂ B). One sentence for all three told a student whose cards were all there and readable
  * that a vector had been removed.
  */
-export type StaleReason = 'removed' | 'unreadable' | 'unworkable'
+type StaleReason = 'removed' | 'unreadable' | 'unworkable'
 
-export interface Answer {
+interface Answer {
   sol: VS.Solution
   label: string
   from?: Recipe
@@ -261,7 +261,7 @@ export interface Answer {
   pictureTakenOff?: boolean
 }
 
-export interface VCState {
+interface VCState {
   cards: Card[]
   expr: string
   k: string
@@ -355,7 +355,7 @@ export function evalNumber(latex: string): number {
 }
 
 /** What a card waiting for its vector says instead of a value: not an error, a prompt. */
-export const NOTHING_TYPED = 'nothing typed yet'
+const NOTHING_TYPED = 'nothing typed yet'
 export const NOTHING_PICKED = 'Choose an arrow from the graph in the list above: this card then shows its x- and y-components, size and angle, and follows the arrow when you drag it.'
 /** The graph card's prompt when the graph has no arrow to offer yet. */
 export const NO_ARROWS = 'There is no arrow on the graph yet. Draw one with the Vector tool and it appears in the list above, or switch this card to “typed”.'
@@ -891,7 +891,7 @@ export function solveOperation(op: string, vs: VS.NamedVec[], settings: SceneSet
 }
 
 /** An answer worked out again from its recipe and the cards as they are now; null when it cannot be. */
-export function solveAgain(from: Recipe, cards: Card[], values: (V3 | string)[], settings: SceneSettings): VS.Solution | null {
+function solveAgain(from: Recipe, cards: Card[], values: (V3 | string)[], settings: SceneSettings): VS.Solution | null {
   const named: VS.NamedVec[] = []
   for (const { id, name } of from.cards) {
     const v = values[cards.findIndex((c) => c.id === id)]
@@ -1075,7 +1075,7 @@ function polarFields(v: V3, s: SceneSettings): Pick<Card, 'mag' | 'angle' | 'exa
 }
 
 /** What reconciling the cards with the drawing asks for. */
-export interface SyncPlan {
+interface SyncPlan {
   /** The cards afterwards; the same array when nothing about them changed. */
   cards: Card[]
   /** Arrows to add for cards that have none on the drawing. */
@@ -1237,7 +1237,7 @@ function syncCards(): void {
  * typed "clear" (newScene / loadScene) start a new history in the same step as the new objects.
  * Nothing else leaves both histories empty — an edit adds to the past, undo adds to the future.
  */
-export const sceneReplaced = (s: { past: unknown[]; future: unknown[] }, prev: { past: unknown[] }): boolean => s.past !== prev.past && !s.past.length && !s.future.length
+const sceneReplaced = (s: { past: unknown[]; future: unknown[] }, prev: { past: unknown[] }): boolean => s.past !== prev.past && !s.past.length && !s.future.length
 
 /**
  * A card carried into a new drawing: its arrow went with the old one, but the card is the

@@ -273,7 +273,7 @@ export function menuForObject(id: ObjId): MenuGroup[] {
 }
 
 /** The sentence shown where the command is offered but no drawing is open (the Sandbox, the GPU Lab). */
-export const NO_DRAWING_TO_CLEAR = 'No drawing is open here. Go to Vectors, Geometry, Graphing or Lab Data: each has a drawing of its own.'
+const NO_DRAWING_TO_CLEAR = 'No drawing is open here. Go to Vectors, Geometry, Graphing or Lab Data: each has a drawing of its own.'
 
 /** Asks before clearing the drawing. Undo brings everything back, but a whole drawing is worth a question. */
 export function confirmClearDrawing(): void {

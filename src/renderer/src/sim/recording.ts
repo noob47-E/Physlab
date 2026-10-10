@@ -5,7 +5,7 @@
 // already knows how to plot, fit and read a gradient from, so a student can go from "watch it
 // fall" to "find g" without typing a single reading.
 
-import type { BodyDef, BodyId, BodyState } from './types'
+import type { BodyDef, BodyState } from './types'
 import type { LabTable } from '../lab/types'
 import { energyOf, momentumSize } from './energy'
 
@@ -66,7 +66,7 @@ const fiveFigures = (v: number): string => v.toPrecision(5)
  * Data shows a cell's text only where it reads back as the cell's number, so an exponent form such
  * as "3.0000e-7" falls back to the number itself).
  */
-export function readsFor(samples: Sample[]): (string | null)[][] {
+function readsFor(samples: Sample[]): (string | null)[][] {
   return samples.map((s) => [s.t, s.x, s.y, s.v, s.ke, s.pe, s.p].map(fiveFigures))
 }
 
@@ -111,5 +111,3 @@ export function tableFrom(name: string, samples: Sample[]): LabTable {
     plot: { x: columns[0].id, y: columns[2].id, fit: 'quadratic' }
   }
 }
-
-export const bodyKey = (id: BodyId): string => id

@@ -12,7 +12,7 @@ import { phiInv, pdf } from './normal'
 import { tablePhi, toPlaces } from './table'
 import type { NormalQuery } from './zscore'
 
-export type ZMisconception =
+type ZMisconception =
   | 'z-sign'            // reads Φ(|z|) for a negative z: the minus sign dropped at the table
   | 'z-one-minus'       // the "1 −" forgotten for an upper tail, or added where none belongs
   | 'z-no-standardise'  // looks x up in the table as if it were already z
@@ -34,7 +34,7 @@ export const Z_WHY: Record<ZMisconception, string> = {
   'z-central-for-tail': 'That treats the area as a middle area with two tails. Here all of the rest is in one tail.'
 }
 
-export interface ZDistractor {
+interface ZDistractor {
   /** The wrong value, at the places the answer is shown with (4 for an area, 3 for z, 2 for x). */
   value: number
   rule: ZMisconception

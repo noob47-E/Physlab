@@ -19,7 +19,6 @@ import { conditionHolds, orderVariables, partLetter, RANDOM_RANGE, type Variant 
 
 const CANNOT_MARK = 'PhysLab could not work out the answer to this part, so it cannot mark it.'
 
-export { partLetter }
 
 // ---------------------------------------------------------------------------
 // Working the variables out again
@@ -122,7 +121,7 @@ const unitsOf = (q: PQQuestion): Record<string, UnitId | undefined> => Object.fr
  * The plain marking of one part's answer against a set of values, with no error carried forward:
  * the caller's own (Practice: `(values) => checkPlayedPart(p, answer, played with values, settings)`).
  */
-export type PlainMarker = (values: Record<string, number>) => Check
+type PlainMarker = (values: Record<string, number>) => Check
 
 /** One part marked against a given set of values. A function part goes to its equation check; every other kind to the caller's plain marking. */
 function markAgainst(p: PlayedPart, answer: string | number[], played: Played, values: Record<string, number>, settings: MeasureSettings, mark: PlainMarker): Check {

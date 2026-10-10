@@ -87,7 +87,6 @@ export function Check({ checked, onChange, label }: { checked: boolean; onChange
   )
 }
 
-export { SWATCHES } from './swatches'
 
 export function ColorField({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (

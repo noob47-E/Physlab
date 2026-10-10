@@ -2,7 +2,7 @@
 // can check the choice: the dialog used to be fixed to .phys, and a teacher opening a question
 // file in the desktop app could not see a single .pqjson or .exam.
 
-export interface OpenFilter {
+interface OpenFilter {
   name: string
   extensions: string[]
 }

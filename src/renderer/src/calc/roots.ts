@@ -21,7 +21,7 @@ import { keypadToMath, constantOf, exactForm, formatComplex, formatImaginary, po
 import { calcNum } from './format'
 import { labelText } from './labels'
 
-export interface RootRow {
+interface RootRow {
   /** What the row is called on screen: "x₁ =", "x₂ =", … or "x =" when there is one root. */
   label: string
   /** The root's exact form as TeX — real roots only (a whole number, a fraction, a surd) — or null. */
@@ -180,7 +180,7 @@ function squareFree(c: number[]): number[] {
  * top of this file. A quadratic is worked out from its formula, a cubic or higher by Durand–Kerner
  * after the repeated roots are taken out, so every root is found to full accuracy and shown once.
  */
-export function polynomialRoots(coeffs: number[]): Cx[] {
+function polynomialRoots(coeffs: number[]): Cx[] {
   const c = [...coeffs]
   while (c.length > 1 && Math.abs(c[0]) < 1e-15) c.shift()
   const n = c.length - 1

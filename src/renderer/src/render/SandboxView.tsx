@@ -687,10 +687,9 @@ function PushArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   )
 }
 
-export { massOf }
 
 /** The points of a connection between two positions: a straight line, or a zigzag for a spring. */
-export function linkSegments(kind: LinkKind, from: V3, to: V3): number[] {
+function linkSegments(kind: LinkKind, from: V3, to: V3): number[] {
   if (kind !== 'spring') return [...from, ...to]
   // A zigzag along the line, so it is obviously a spring: the number of coils stays the same
   // while it stretches, which is how a drawn spring behaves in a textbook.

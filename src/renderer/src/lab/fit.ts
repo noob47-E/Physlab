@@ -110,18 +110,18 @@ export function rankFits(xs: number[], ys: number[]): Fit[] {
 }
 
 /** r² at or above this is a good fit: the shape follows the readings. */
-export const FIT_GOOD = 0.9
+const FIT_GOOD = 0.9
 /** At or above this the readings sit very close to the shape, and no other is worth offering. */
-export const FIT_CLOSE = 0.98
+const FIT_CLOSE = 0.98
 /** Below this even the best shape does not follow the readings: nothing is worth naming. */
-export const FIT_FAIR = 0.7
+const FIT_FAIR = 0.7
 /** A good shape must beat the one in use by this much to be offered at all… */
 const WORTH_IT = 0.02
 /** …and by this much to be called "much better", or to be offered when it is only fair. */
 const MUCH_BETTER = 0.1
 
 /** What to tell the student about the shape they have chosen. */
-export type FitAdvice =
+type FitAdvice =
   | { kind: 'none' }
   /** Another shape fits better; `good` says whether it fits well, or only better. */
   | { kind: 'better'; best: Fit; current: number | null; much: boolean; good: boolean }
@@ -237,7 +237,7 @@ function sixFigures(value: number): string {
   return superscriptPowers(`${m.replace(/\.?0+$/, '').replace('-', '−')}×10^${Number(e)}`)
 }
 
-export interface GradientRange {
+interface GradientRange {
   /** The shallowest line that still passes through every error bar. */
   min: number
   /** The steepest one. */

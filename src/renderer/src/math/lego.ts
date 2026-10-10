@@ -21,14 +21,14 @@ const round9 = (v: number): number => Math.round(v * 1e9) / 1e9
 const toCCW = (pts: V3[]): V3[] => (signedArea2D(pts) < 0 ? [...pts].reverse() : pts)
 
 /** What the pieces on the table make together. */
-export type LegoStatus =
+type LegoStatus =
   | { kind: 'apart' }
   | { kind: 'original'; outline: V3[] }
   /** One closed shape, but not the one the pieces came from; `name` is what it is ("Parallelogram"). */
   | { kind: 'different'; outline: V3[]; name: string }
 
 /** The shape the pieces were cut from: its corners, or the signature `signatureOf` gave them. */
-export type Original = V3[] | string
+type Original = V3[] | string
 
 /**
  * The outline of pieces that tile one region without a gap or an overlap, or null when they do
@@ -241,7 +241,7 @@ export function legoStatus(pieces: V3[][], original: Original): LegoStatus {
 }
 
 /** The pieces fused, with what a student is told about it. */
-export type FuseResult =
+type FuseResult =
   | { ok: true; kind: 'original' | 'different'; outline: V3[]; name: string; area: number; perimeter: number }
   | { ok: false; sentence: string }
 
@@ -322,7 +322,7 @@ export function fuseResult(pieces: V3[][], original: Original): FuseResult {
 }
 
 /** One shape offered to Fuse: its corners and, for a piece, where it came from. */
-export interface FuseShape {
+interface FuseShape {
   pts: V3[]
   lego?: LegoRecord
 }
@@ -334,7 +334,7 @@ export interface FuseShape {
  * - `new`: anything else that closes up — pieces of two shapes, plain shapes, or one shape's
  *   pieces in a new outline — a new shape in the theme's new-shape colour.
  */
-export type FusePlan =
+type FusePlan =
   | { ok: false; sentence: string }
   | { ok: true; kind: 'original' | 'partial' | 'new'; outline: V3[]; name: string; area: number; perimeter: number; source?: LegoRecord }
 
@@ -400,7 +400,7 @@ export const pieceSnapTolerance = (wpp: number, px = SNAP_PIECE_PX): number => p
  * edge fit also says which way the side runs (`along`, a unit vector), so the caller can let the
  * grid tidy the piece's movement along the side while the fit keeps it glued across the side.
  */
-export type LegoSnap =
+type LegoSnap =
   | { delta: V3; how: 'corner' }
   | { delta: V3; how: 'edge'; along: V3 }
   | { delta: V3; how: 'none' }

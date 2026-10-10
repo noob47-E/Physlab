@@ -9,11 +9,11 @@ export type Jolt = typeof JoltType
 let loading: Promise<Jolt> | null = null
 
 /** Progress text for the UI while the engine loads. */
-export type LoadState = 'idle' | 'loading' | 'ready' | 'error'
+type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 let state: LoadState = 'idle'
 const listeners = new Set<(s: LoadState, message?: string) => void>()
 
-export const joltState = () => state
+const joltState = () => state
 
 /**
  * React hook: re-renders when the engine finishes loading. Read through the store hook rather
@@ -23,7 +23,7 @@ export const joltState = () => state
 export function useJoltState(): LoadState {
   return useSyncExternalStore(onJoltState, joltState)
 }
-export function onJoltState(fn: (s: LoadState, message?: string) => void): () => void {
+function onJoltState(fn: (s: LoadState, message?: string) => void): () => void {
   listeners.add(fn)
   return () => listeners.delete(fn)
 }

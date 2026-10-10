@@ -43,10 +43,8 @@ export function rat(n: bigint | number, d: bigint | number = 1n): Rat {
 
 export const R0 = rat(0n)
 export const R1 = rat(1n)
-export const RM1 = rat(-1n)
 
 export const rIsZero = (a: Rat): boolean => a.n === 0n
-export const rIsInt = (a: Rat): boolean => a.d === 1n
 export const rIsNeg = (a: Rat): boolean => a.n < 0n
 export const rIsOne = (a: Rat): boolean => a.n === 1n && a.d === 1n
 
@@ -70,8 +68,6 @@ export function rCmp(a: Rat, b: Rat): number {
 }
 
 export const rSign = (a: Rat): number => (a.n < 0n ? -1 : a.n > 0n ? 1 : 0)
-export const rMax = (a: Rat, b: Rat): Rat => (rCmp(a, b) >= 0 ? a : b)
-export const rMin = (a: Rat, b: Rat): Rat => (rCmp(a, b) <= 0 ? a : b)
 
 /** a^k for a whole k (negative k inverts). */
 export function rPow(a: Rat, k: number): Rat {
@@ -122,11 +118,6 @@ export function rTex(a: Rat): string {
   if (a.d === 1n) return String(a.n)
   const sign = a.n < 0n ? '-' : ''
   return `${sign}\\frac{${babs(a.n)}}{${a.d}}`
-}
-
-/** LaTeX for a coefficient inside a longer sum, where a leading minus is written by the caller. */
-export function rTexAbs(a: Rat): string {
-  return rTex(rAbs(a))
 }
 
 /** The smallest positive whole number that clears every denominator in the list. */

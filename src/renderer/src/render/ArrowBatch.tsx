@@ -88,7 +88,7 @@ export function useArrowBatched(is3D: boolean): boolean | null {
   return useBatchState((s) => batchDecision(ticket.current, s.flushes, s.arrows2D, is3D, s.hosts > 0))
 }
 
-export interface BatchedArrowProps {
+interface BatchedArrowProps {
   tail: V3
   comp: V3
   color: string

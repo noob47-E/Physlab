@@ -83,7 +83,7 @@ function useDrawingColors() {
   )
 }
 
-export interface ViewProps<T extends SceneObject, C extends Computed> {
+interface ViewProps<T extends SceneObject, C extends Computed> {
   obj: T
   c: C
   selected: boolean

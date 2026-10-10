@@ -53,7 +53,7 @@ export type JobId =
   | 'integrate'
   | 'differentiate'
 
-export interface JobDef {
+interface JobDef {
   id: JobId
   label: string
   /** One line under the button, in plain words. */

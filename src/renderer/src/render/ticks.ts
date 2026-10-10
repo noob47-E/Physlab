@@ -10,14 +10,14 @@
 // always on a line the grid actually draws.
 
 /** Talbot's nice numbers, most preferred first. */
-export const TALBOT_Q = [1, 5, 2, 2.5, 4, 3]
+const TALBOT_Q = [1, 5, 2, 2.5, 4, 3]
 
 /** Weights of simplicity, coverage, density and legibility (the paper's and R's defaults). */
-export const TALBOT_W: [number, number, number, number] = [0.25, 0.2, 0.5, 0.05]
+const TALBOT_W: [number, number, number, number] = [0.25, 0.2, 0.5, 0.05]
 
 const EPS = Number.EPSILON * 100
 
-export interface TalbotTicks {
+interface TalbotTicks {
   /** Distance between neighbouring labels: j·q·10^z. */
   step: number
   /** How many of the base step q·10^z one label step skips; callers must never assume 1. */
@@ -121,7 +121,7 @@ export function isMultipleOf(a: number, b: number): boolean {
 }
 
 /** The spacing the grid aims for between two labels, and the least it ever allows. */
-export const LABEL_PX = 80
+const LABEL_PX = 80
 export const MIN_LABEL_PX = 60
 /** The stretch of axis the label step is chosen for: ten labels' worth. */
 const CANON_PX = 10 * LABEL_PX

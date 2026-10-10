@@ -14,7 +14,7 @@ import * as T from 'three/webgpu'
 import type { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 
 /** Room for `n` items: the next power of two, so a slowly growing grid or line rarely reallocates. */
-export function capacityFor(n: number): number {
+function capacityFor(n: number): number {
   return n <= 1 ? 1 : 2 ** Math.ceil(Math.log2(n))
 }
 

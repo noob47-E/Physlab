@@ -24,7 +24,7 @@ interface MenuState {
   close: () => void
 }
 
-export const useContextMenu = create<MenuState>((set) => ({
+const useContextMenu = create<MenuState>((set) => ({
   at: null,
   groups: [],
   open: (x, y, groups) => set({ at: groups.length ? { x, y } : null, groups }),

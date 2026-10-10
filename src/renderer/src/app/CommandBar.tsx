@@ -16,10 +16,9 @@ const graphCount = (): number => Object.values(scene().objects).filter((o) => o.
  * "vector 3,4" in words, saw nothing happen and then read that wall felt stupid and closed the app.
  * The examples it listed live in QUICK_EXAMPLES and the suggestion list under the bar instead.
  */
-export const PLACEHOLDER = 'Type a sum, an equation or a shape…  ·  Ctrl+K to search'
+const PLACEHOLDER = 'Type a sum, an equation or a shape…  ·  Ctrl+K to search'
 
 /** The handful of things worth trying first, for the palette and the help text to show. */
-export { QUICK_EXAMPLES } from '../ui/quickExamples'
 
 export const CATALOG: { insert: string; desc: string; group: string }[] = [
   { insert: 'A = (3, 4)', desc: 'Point', group: 'Create' },

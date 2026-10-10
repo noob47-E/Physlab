@@ -11,7 +11,7 @@ import { Steps, failed, type Working } from './work'
 
 import { MAX_TRIAL } from './limits'
 
-export interface Factorisation {
+interface Factorisation {
   n: bigint
   /** Prime → how many times it divides in, smallest prime first. */
   factors: [bigint, number][]
@@ -47,7 +47,7 @@ export function primeFactorise(input: bigint): Factorisation {
 }
 
 /** 2^{3} \times 3^{2} \times 5 */
-export function factorTex(f: Factorisation): string {
+function factorTex(f: Factorisation): string {
   if (f.factors.length === 0) return String(f.n)
   const body = f.factors.map(([p, k]) => (k === 1 ? String(p) : `${p}^{${k}}`)).join(' \\times ')
   return f.n < 0n ? `-\\,${body}` : body
@@ -176,7 +176,7 @@ export function hcfWorking(ns: bigint[]): Working {
     s.add(...breakMove(r.n, f))
   }
 
-  const commonPowers = pair.primes.map((p, i) => Math.min(...pair.rows.map((r) => r.powers[i])))
+  const commonPowers = pair.primes.map((_p, i) => Math.min(...pair.rows.map((r) => r.powers[i])))
   const kept = pair.primes.map((p, i) => [p, commonPowers[i]] as [bigint, number]).filter(([, k]) => k > 0)
 
   if (kept.length === 0) {
@@ -234,7 +234,7 @@ export function lcmWorking(ns: bigint[]): Working {
     s.add(...breakMove(r.n, f))
   }
 
-  const topPowers = pair.primes.map((p, i) => Math.max(...pair.rows.map((r) => r.powers[i])))
+  const topPowers = pair.primes.map((_p, i) => Math.max(...pair.rows.map((r) => r.powers[i])))
   const kept = pair.primes.map((p, i) => [p, topPowers[i]] as [bigint, number]).filter(([, k]) => k > 0)
   s.goal('Take every prime you see').add(
     'Take every prime that appears anywhere, each at its highest index.',

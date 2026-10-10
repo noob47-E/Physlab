@@ -15,7 +15,7 @@
 // All three are null where there is nothing to say — one file, or every student the same way.
 
 export const RESULT_FORMAT = 'pqresult'
-export const RESULT_VERSION = 1
+const RESULT_VERSION = 1
 
 /** One counted part of one played question, as a result file remembers it. */
 export interface PQResultPart {
@@ -225,7 +225,7 @@ export function parseResultFile(text: string, forSetId?: string): PQResultFile {
 // Item statistics
 // ---------------------------------------------------------------------------
 
-export interface ItemStat {
+interface ItemStat {
   questionId: string
   partIndex: number
   /** Students who answered the part (`PQResultPart.answered`); one left blank or skipped is not counted. */

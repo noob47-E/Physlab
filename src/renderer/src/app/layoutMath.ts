@@ -5,16 +5,16 @@
 // and a 1366-pixel laptop at 125 % scaling was left with a viewport the size of a postcard.
 
 /** A panel's own tools, without the separators. */
-export type ToolList = readonly string[]
+type ToolList = readonly string[]
 
-export const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 
 /**
  * Which class of window a layout was built for. A layout saved on a wide screen is rebuilt when
  * the app next opens on a narrow one: dockview rescales proportionally, but 430 px of side panel
  * scaled to a 960 px window leaves nothing to draw in.
  */
-export type WindowClass = 'narrow' | 'medium' | 'wide'
+type WindowClass = 'narrow' | 'medium' | 'wide'
 
 export function windowClass(width: number): WindowClass {
   if (width < 1150) return 'narrow'
@@ -33,7 +33,7 @@ export function barDensity(width: number): BarDensity {
   return 'full'
 }
 
-export interface Columns {
+interface Columns {
   /** The mode's side panel (right of the drawing). */
   side: number
   sideMin: number
@@ -90,7 +90,7 @@ export function needsLayoutRebuild(saved: Partial<LayoutStamp> | null | undefine
 }
 
 /** Where a panel lives when it has no open neighbour to sit beside. */
-export type PanelHome = 'centre' | 'left' | 'right' | 'below'
+type PanelHome = 'centre' | 'left' | 'right' | 'below'
 
 export function panelHome(id: string): PanelHome {
   switch (id) {
@@ -110,7 +110,7 @@ export function panelHome(id: string): PanelHome {
   }
 }
 
-export interface ModeShape {
+interface ModeShape {
   panel?: string
   centre?: string
   examples?: boolean
@@ -129,21 +129,21 @@ export function panelsForMode(mode: ModeShape): string[] {
 }
 
 /** The tool shelf: full labels, icons only when the labels would not fit, or gone entirely. */
-export type ShelfMode = 'full' | 'icons' | 'hidden'
+type ShelfMode = 'full' | 'icons' | 'hidden'
 
 // Measured from the stylesheet: a labelled tool is at least 50 px wide plus 2 px gap, an
 // icon-only one 32 px, a separator 1 px with 6 px margins and the 2 px gap, and the shelf has
 // 16 px of padding.
 export const SHELF_TOOL_FULL = 52
-export const SHELF_TOOL_ICON = 34
-export const SHELF_SEP = 15
-export const SHELF_PAD = 16
+const SHELF_TOOL_ICON = 34
+const SHELF_SEP = 15
+const SHELF_PAD = 16
 /** A character of the 10.5 px label, and the button's own side padding. */
-export const SHELF_CHAR = 5.4
-export const SHELF_TOOL_PAD = 12
+const SHELF_CHAR = 5.4
+const SHELF_TOOL_PAD = 12
 
 /** The label a tool shows under its icon, when the caller knows it. */
-export type LabelOf = (id: string) => string | undefined
+type LabelOf = (id: string) => string | undefined
 
 /**
  * A labelled tool is as wide as its longest word: the button shrinks to that when the shelf is

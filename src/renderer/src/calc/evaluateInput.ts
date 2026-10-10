@@ -49,7 +49,7 @@ export interface EvalResult {
  * The two settings of the screen an answer depends on: the angle unit (Numbers and Complex read it in sin, arg and the
  * angle line) and the base (Bases reads it to read the line and to write the answer).
  */
-export interface AnswerSettings {
+interface AnswerSettings {
   angle: 'deg' | 'rad'
   base: Base
 }
@@ -271,7 +271,7 @@ export function lettersIn(src: string): string[] {
 }
 
 /** What the viewport needs to draw the tangent of a `ddx(f, a)` line. */
-export interface Tangent {
+interface Tangent {
   /** The curve, as typed in the line. */
   f: string
   /** The point the tangent touches, and the curve's height there. */
@@ -307,7 +307,7 @@ export function tangentAt(input: string, ctx: CalcContext): Tangent {
 }
 
 /** The "with values…" boxes as numbers, or the letters whose boxes could not be read and a sentence saying so. */
-export type ValueBoxes = { ok: true; values: Record<string, number> } | { ok: false; letters: string[]; sentence: string }
+type ValueBoxes = { ok: true; values: Record<string, number> } | { ok: false; letters: string[]; sentence: string }
 
 /** One box as a finite number in the screen's angle unit, or null: empty, letters, half a sum, 1 ÷ 0, an i, a unit. */
 function readBox(text: string, angle: 'deg' | 'rad'): number | null {

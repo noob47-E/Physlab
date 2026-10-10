@@ -11,9 +11,9 @@
 // More button as drawn, and passes them in.
 
 /** A tab's label is 13 px: the widest word measured ("Geometry") averages 7.1 px a letter, so 7.5 is safe. */
-export const MODE_TAB_CHAR = 7.5
+const MODE_TAB_CHAR = 7.5
 /** 11 px of padding each side (8 px at 1440 px and below: the estimate keeps the larger). */
-export const MODE_TAB_PAD = 22
+const MODE_TAB_PAD = 22
 /** `gap-1` between tabs. */
 export const MODE_TAB_GAP = 4
 /** The "More modes ▾" button and the gap before it. */
@@ -33,7 +33,7 @@ export interface MeasuredModeWidths {
   more?: number
 }
 
-export interface ModeTabs {
+interface ModeTabs {
   /** Indices (into the ready modes) shown as tabs, in their usual order. */
   tabs: number[]
   /** Indices that do not fit and go in the More menu, in their usual order. */

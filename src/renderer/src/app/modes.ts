@@ -27,7 +27,7 @@ export type ModeId =
   | 'problems'
   | 'lab'
 
-export interface ModeDef {
+interface ModeDef {
   id: ModeId
   label: string
   description: string

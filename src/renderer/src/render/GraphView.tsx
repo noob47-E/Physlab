@@ -204,6 +204,8 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   const width = (obj.width ?? 2.4) + (selected ? 1 : 0) + (hovered ? 0.6 : 0)
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   useEffect(() => () => pool.dispose(), [pool])
+  // Kept though camera and size are not read: useThree() subscribes the graph to the canvas, so it redraws
+  // its labels when the view is resized (removing it needs a test of that first; CW14 left it).
   const { camera, size } = useThree()
   const { theme, colors } = useGraphColors()
 

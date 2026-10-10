@@ -59,7 +59,7 @@ export async function openQuestionFile(): Promise<{ name: string; content: strin
   })
 }
 
-export const CLASS_RESULTS_NOT_HERE = 'Class results are not part of PhysLab.'
+const CLASS_RESULTS_NOT_HERE = 'Class results are not part of PhysLab.'
 
 // The two marks of a result file, looked for in its text rather than parsed out of it: this file
 // keeps its own JSON parsing out (tests/persistence.test.ts), so no parser message can reach the

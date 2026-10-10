@@ -11,7 +11,7 @@
 import { CONSTANTS } from './constants'
 import type { CalcMode } from './calcStore'
 
-export type KeyAction = 'eq' | 'del' | 'clear' | 'left' | 'right' | 'solve' | 'calc' | `mode:${CalcMode}`
+type KeyAction = 'eq' | 'del' | 'clear' | 'left' | 'right' | 'solve' | 'calc' | `mode:${CalcMode}`
 
 export interface KeyDef {
   id: string

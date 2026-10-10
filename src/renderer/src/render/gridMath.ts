@@ -97,7 +97,7 @@ export function dotQuads(dots: number[], h: number): number[] {
 }
 
 /** Flat xyz triples: line ends for `minor` and `major` (two per line), one point per dot. */
-export interface GridVertices {
+interface GridVertices {
   minor: number[]
   major: number[]
   dots: number[]
@@ -414,7 +414,7 @@ export function snapToGrid(style: GridStyle, p: V3, major: number, minor: number
 export const GRID_SHADER_WEBGL2 = true
 
 /** The styles the shader draws: the three square-line papers. Dots, polar circles and the isometric and hex lattices keep their line segments. */
-export const SHADER_GRID_STYLES: readonly GridStyle[] = ['lines', 'fine', 'paper']
+const SHADER_GRID_STYLES: readonly GridStyle[] = ['lines', 'fine', 'paper']
 
 /**
  * How the grid is drawn: by the shader or by line segments. Only the 2-D square styles use the

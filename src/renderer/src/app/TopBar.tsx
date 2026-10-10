@@ -47,8 +47,6 @@ import { modeTabs, type MeasuredModeWidths } from './modeSwitch'
 import { runHistory } from './undoRoute'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
 
-// The panels still import enterMode from here; it now lives with the rest of the layout code.
-export { enterMode } from './layout'
 
 const ICONS: Record<ToolId, React.ReactNode> = {
   select: <MousePointer2 size={16} />,
@@ -116,7 +114,7 @@ function useZoom(): [number, (level: number) => void, boolean] {
  * not a ref object: the tool shelf swaps its root element when a mode hides it, and an observer
  * left on the old node would report nothing for the new one.
  */
-export function useContainerWidth(): [(el: HTMLElement | null) => void, number] {
+function useContainerWidth(): [(el: HTMLElement | null) => void, number] {
   const [el, setEl] = useState<HTMLElement | null>(null)
   const [width, setWidth] = useState(0)
   useLayoutEffect(() => {
@@ -184,7 +182,7 @@ function useOutsideClose(open: boolean, close: () => void) {
   return ref
 }
 
-export type MenuItem = { label: string; sc?: string; run: () => void; disabled?: boolean; on?: boolean } | '-'
+type MenuItem = { label: string; sc?: string; run: () => void; disabled?: boolean; on?: boolean } | '-'
 
 function Menu({ label, items, title, className = '' }: { label: React.ReactNode; items: MenuItem[]; title?: string; className?: string }) {
   const [open, setOpen] = useState(false)

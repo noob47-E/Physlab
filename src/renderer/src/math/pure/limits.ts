@@ -10,12 +10,6 @@
 
 export const MAX_TRIAL = 2_000_000
 
-/** What a search reports when it ran out of budget rather than out of candidates. */
-export interface Truncated {
-  /** True when the search stopped early, so a negative result means "did not find", not "none". */
-  tooBig?: boolean
-}
-
 /** The sentence shown when a search was cut short. Never claim there is nothing to find. */
 export const TOO_BIG_TO_SEARCH =
   'The numbers here are too large for me to search all the way through. There may be factors I did not find.'

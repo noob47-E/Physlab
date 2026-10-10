@@ -29,7 +29,7 @@ interface ParsedExpr {
 
 const exprCache = new Map<string, ParsedExpr>()
 
-export function parseExpr(src: string): ParsedExpr {
+function parseExpr(src: string): ParsedExpr {
   let hit = exprCache.get(src)
   if (!hit) {
     // A scene object's own line reads the scene's names: b = p(1 + r) multiplies by the slider p.

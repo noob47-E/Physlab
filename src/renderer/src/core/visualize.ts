@@ -305,7 +305,7 @@ function stretchOf(expr: string, from?: number, to?: number): Omit<GraphObj, 'id
 }
 
 /** The standard normal density: every normal picture is drawn on the z scale, where it is this curve. */
-export const NORMAL_PDF = 'exp(-x^2 / 2) / sqrt(2 * pi)'
+const NORMAL_PDF = 'exp(-x^2 / 2) / sqrt(2 * pi)'
 
 /**
  * How many times taller than the density the bell is drawn. On the z scale the density peaks at
@@ -320,10 +320,10 @@ export const NORMAL_STRETCH = 5
  * How far out an open tail counts, in standard deviations. The area past 6σ is below 10⁻⁹, so
  * P(X < 65) worked out from 6σ below the mean is the probability to every digit a student is shown.
  */
-export const NORMAL_TAIL = 6
+const NORMAL_TAIL = 6
 
 /** The drawn bell runs this far each side; past 4σ it is flat against the axis anyway, and the shading stops there too. */
-export const NORMAL_SPAN = 4
+const NORMAL_SPAN = 4
 
 const standardPdf = (z: number): number => Math.exp((-z * z) / 2) / Math.sqrt(2 * Math.PI)
 
@@ -519,14 +519,6 @@ export function frameGraphs(ids: string[]): boolean {
   return true
 }
 
-/** Marks points (e.g. equation roots) on the x-axis. */
-export function visualizeRoots(roots: number[], expr?: string): void {
-  const b = new Builder()
-  if (expr) b.graph({ kind: 'explicit', source: `y = ${expr}`, exprs: [expr], showRoots: true, showExtrema: true })
-  roots.forEach((r) => b.point([r, 0, 0], {}))
-  b.commit()
-}
-
 /**
  * Lab readings on the drawing: the measured points, and the fitted line through them as a graph
  * object that lives in the scene like anything else — so it can be measured, zoomed, exported as a
@@ -579,7 +571,7 @@ export interface DrawSpec {
 }
 
 /** Something to draw — perhaps only once a slider moves, which the note says — or why not, in a sentence. */
-export type Drawability = { ok: true; note?: string } | { ok: false; reason: string }
+type Drawability = { ok: true; note?: string } | { ok: false; reason: string }
 
 type DrawKind = DrawSpec['kind']
 type Digits = Exclude<Precision, number>
@@ -666,7 +658,7 @@ const SLOW_VALUE_MS = 0.005
 class OutOfTime extends Error {}
 
 /** What a check may spend: the clock (for a slow formula only) and the number of values (for any). */
-export interface DrawLimits {
+interface DrawLimits {
   ms: number
   values: number
 }

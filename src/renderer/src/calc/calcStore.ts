@@ -85,7 +85,7 @@ export interface HistoryItem {
   mode: CalcMode
 }
 
-export interface CalcStore {
+interface CalcStore {
   mode: CalcMode
   input: string
   /**

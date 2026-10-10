@@ -41,7 +41,6 @@ export const pLead = (p: Poly): Rat => {
   const t = pTrim(p)
   return t.length ? t[t.length - 1] : R0
 }
-export const pConst = (c: Rat): Poly => pTrim([c])
 
 export function pAdd(a: Poly, b: Poly): Poly {
   const out: Poly = []
@@ -99,7 +98,7 @@ export const pEq = (a: Poly, b: Poly): boolean => {
 }
 
 /** Divide through by the leading coefficient. */
-export function pMonic(p: Poly): Poly {
+function pMonic(p: Poly): Poly {
   const l = pLead(p)
   return rIsZero(l) ? p : pScale(p, rDiv(R1, l))
 }
@@ -135,7 +134,7 @@ export function pPrimitive(p: Poly): { content: Rat; prim: Poly } {
  * Every fraction that could be a root, by the rational root theorem: ± (factor of the constant)
  * over (factor of the leading coefficient).
  */
-export function rationalRootCandidates(p: Poly): Rat[] {
+function rationalRootCandidates(p: Poly): Rat[] {
   const { prim } = pPrimitive(p)
   if (prim.length < 2) return []
   let low = 0
@@ -244,7 +243,7 @@ const termCount = (p: Poly): number => pTrim(p).filter((c) => !rIsZero(c)).lengt
  * (Fix 4: a substitution is shown, not just its result): 3x + 5 at x = 1 is "3(1) + 5",
  * x − 2 at x = 1 is "1 − 2", at x = −½ it is "−½ − 2".
  */
-export function pTexAt(p: Poly, name: string, at: Rat): string {
+export function pTexAt(p: Poly, at: Rat): string {
   const bare = at.d === 1n && !rIsNeg(at)
   const val = rTex(at)
   const parts: string[] = []

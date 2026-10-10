@@ -11,7 +11,7 @@ import { plainFormula } from './plainFormula'
 import { RESERVED_NAMES, type PQQuestion, type PQVariable, type UnitId } from './pqjson'
 import { formatQuantity } from './units'
 
-export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
 /** Numbers quoted inside a problem sentence are not the student's measurements; the plain default does. */
 const SENTENCE_PRECISION: Precision = { decimals: 4, precisionMode: 'dp' }
@@ -37,7 +37,7 @@ function isBuiltIn(name: string): boolean {
  * a unit of charge later. A range or a list depends on nothing. A formula mathjs cannot parse
  * has no dependencies here; `drawVariables` reports it in words when it tries to evaluate it.
  */
-export function dependenciesOf(v: PQVariable, known: Set<string>): string[] {
+function dependenciesOf(v: PQVariable, known: Set<string>): string[] {
   if (v.def.kind !== 'expr') return []
   let names: string[]
   try {
@@ -48,7 +48,7 @@ export function dependenciesOf(v: PQVariable, known: Set<string>): string[] {
   return names.filter((n) => known.has(n) || !isBuiltIn(n))
 }
 
-export type VariableOrder =
+type VariableOrder =
   | { order: string[] }
   | { cycle: string[] }
   | { unknown: { name: string; uses: string } }
@@ -380,7 +380,7 @@ function drawOnce(q: PQQuestion, seed: number): Variant {
 }
 
 /** A preview row: one variant, and — when the question keeps only some variants — why this one is not kept. */
-export interface PreviewVariant extends Variant {
+interface PreviewVariant extends Variant {
   /** Set when the row fails the question's condition: a student with this seed gets the next draw that meets it. */
   rejected?: string
 }

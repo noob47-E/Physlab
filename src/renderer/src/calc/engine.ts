@@ -48,7 +48,7 @@ export function keypadToMath(src: string): string {
 // Calculus helpers
 // ---------------------------------------------------------------------------
 
-export function derivativeAt(f: (x: number) => number, x: number): number {
+function derivativeAt(f: (x: number) => number, x: number): number {
   const h = 1e-3 * Math.max(1, Math.abs(x))
   return (-f(x + 2 * h) + 8 * f(x + h) - 8 * f(x - h) + f(x - 2 * h)) / (12 * h)
 }
@@ -465,7 +465,7 @@ interface RealRoot {
   principal: unknown
 }
 
-export interface RootRun {
+interface RootRun {
   value: unknown
   /** Notes naming each real root taken, with the principal (complex) value beside it. */
   roots: string[]
@@ -879,7 +879,7 @@ export function exactForm(v: number): string | null {
 
 export type Base = 2 | 8 | 10 | 16
 
-export function toInt32(x: number): number {
+function toInt32(x: number): number {
   return x | 0
 }
 
@@ -1365,7 +1365,7 @@ export function sciNotation(v: number, figures: number): string {
   return superscriptPowers(fmtSci(v, { decimals: Math.min(15, figures), precisionMode: 'sf' }))
 }
 
-export interface Measured {
+interface Measured {
   value: number
   unc: number
 }
@@ -1405,4 +1405,3 @@ export function dimensionsOf(unitExpr: string): string {
   return parts.length ? `[${parts.join(' ')}]` : '[dimensionless]'
 }
 
-export { setAngleMode }

@@ -309,9 +309,9 @@ export function partialFractionsWorking(src: string): Working {
       // bracket is zero, and the other brackets stay as factors so the student can see them.
       const others = pieces.filter((o) => o !== p)
       const lead = rEq(constant, R1) ? '' : rEq(constant, rNeg(R1)) ? '-' : rTex(constant)
-      const restAt = others.map((o) => `\\left(${pTexAt(o.base, name, root)}\\right)`).join('')
+      const restAt = others.map((o) => `\\left(${pTexAt(o.base, root)}\\right)`).join('')
       const coef = rEq(bottom, R1) ? '' : rEq(bottom, rNeg(R1)) ? '-' : rTex(bottom)
-      const chain = [`${pTexAt(N, name, root)} = ${lead}${L}${restAt}`]
+      const chain = [`${pTexAt(N, root)} = ${lead}${L}${restAt}`]
       if (!rEq(bottom, R1)) chain.push(`${rTex(top)} = ${coef}${L}`)
       chain.push(`${L} = ${rTex(rDiv(top, bottom))}`)
       s.add(`Put ${name} = ${texToPlain(rTex(root))} in, which kills every term except ${L}.`, chain.join(' \\;\\Rightarrow\\; '), `${name} = ${rTex(root)}`)
@@ -413,4 +413,3 @@ function displayedAgrees(answer: string, name: string, num: Poly, den: Poly): bo
   return checked > 0
 }
 
-export { rat }

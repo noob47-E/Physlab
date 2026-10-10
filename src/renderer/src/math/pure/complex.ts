@@ -31,7 +31,7 @@ import {
 } from './rat'
 import { NotPolynomial, evalAt, exprTex, parseExpr, parseFraction, varsOf, writeTimes, type Expr } from './mono'
 import { math, preprocess } from '../expr'
-import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, exprFromPoly, type Poly } from './poly'
+import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from './poly'
 import { factorsOf } from './factor'
 import { texAngle, type DigitSettings } from '../format'
 import { calcNum } from '../../calc/format'
@@ -73,21 +73,19 @@ import {
 } from './cxpoly'
 import { Steps, failed, texToPlain, type Answer, type Working } from './work'
 
-export { simplifySurd }
 
 /** An exact complex number: both parts are fractions. */
-export interface Cx {
+interface Cx {
   re: Rat
   im: Rat
 }
 
-export const cx = (re: Rat, im: Rat = R0): Cx => ({ re, im })
-export const cxIsReal = (z: Cx): boolean => rIsZero(z.im)
-export const cxAdd = (a: Cx, b: Cx): Cx => cx(rAdd(a.re, b.re), rAdd(a.im, b.im))
-export const cxSub = (a: Cx, b: Cx): Cx => cx(rSub(a.re, b.re), rSub(a.im, b.im))
-export const cxMul = (a: Cx, b: Cx): Cx =>
+const cx = (re: Rat, im: Rat = R0): Cx => ({ re, im })
+const cxIsReal = (z: Cx): boolean => rIsZero(z.im)
+const cxAdd = (a: Cx, b: Cx): Cx => cx(rAdd(a.re, b.re), rAdd(a.im, b.im))
+const cxMul = (a: Cx, b: Cx): Cx =>
   cx(rSub(rMul(a.re, b.re), rMul(a.im, b.im)), rAdd(rMul(a.re, b.im), rMul(a.im, b.re)))
-export const cxConj = (z: Cx): Cx => cx(z.re, rNeg(z.im))
+const cxConj = (z: Cx): Cx => cx(z.re, rNeg(z.im))
 
 /** A number squared as written by hand: 2², (−1)², (½)². */
 const squaredTex = (r: Rat): string => (rIsNeg(r) || r.d !== 1n ? `\\left(${rTex(r)}\\right)^2` : `${rTex(r)}^2`)
@@ -106,7 +104,7 @@ function signedTex(parts: { c: Rat; s: string }[]): string {
 }
 
 /** a + bi, written the way a student would: 3 − 2i, not 3 + (−2)i. */
-export function cxTex(z: Cx): string {
+function cxTex(z: Cx): string {
   if (rIsZero(z.im)) return rTex(z.re)
   const coef = rIsOne(rAbs(z.im)) ? '' : rTex(rAbs(z.im))
   const body = `${coef}i`
@@ -137,7 +135,7 @@ function surdOf(a: Rat): string {
 // ---------------------------------------------------------------- powers of i
 
 /** Reduce an expression in the letter i to a single complex number, using i² = −1. */
-export function reduceI(e: Expr): Cx {
+function reduceI(e: Expr): Cx {
   let z = cx(R0, R0)
   for (const t of e) {
     const others = Object.keys(t.v).filter((k) => k !== 'i')
@@ -1982,7 +1980,7 @@ const unknownWords = (name: string): string => labelText(name)
  */
 const TWO_EQUALS = 'An equation has one equals sign, and I found more than one.'
 
-export function solveLinearWorking(src: string): Working {
+function solveLinearWorking(src: string): Working {
   const title = 'Solve'
   const sides = src.split('=')
   // "2x = 6 = 3" used to be solved as 2x = 6, with the rest silently dropped.
@@ -2055,7 +2053,7 @@ export function solveLinearWorking(src: string): Working {
   const ok = rEq(lv, rv)
   // The value is shown going in, side by side (Fix 4): "3x + 4 = 10, 10 = 10" gave a result
   // without its working and then a line that changed nothing.
-  const side = (e: Expr, v: Rat): string => (varsOf(e).length ? `${pTexAt(polyFromExpr(e, name).poly, name, x)} = ${rTex(v)}` : rTex(v))
+  const side = (e: Expr, v: Rat): string => (varsOf(e).length ? `${pTexAt(polyFromExpr(e, name).poly, x)} = ${rTex(v)}` : rTex(v))
   s.goal('Check the answer').add(
     `Put ${nameWords} = ${texToPlain(rTex(x))} into each side of the original equation: both sides must come to the same number.`,
     `\\text{LHS} = ${side(lhs, lv)},\\quad \\text{RHS} = ${side(rhs, rv)}`
@@ -2446,4 +2444,3 @@ function factoriseComplexSteps(src: string): Working {
   }
 }
 
-export { exprFromPoly, type Poly }

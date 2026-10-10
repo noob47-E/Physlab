@@ -7,7 +7,7 @@ import { triangleInfo } from './geometry'
 import { interiorAngles, sideLengths } from './shapes'
 import type { V3 } from './vec'
 
-export type CongruenceTest = 'SSS' | 'SAS' | 'ASA' | 'AAS' | 'RHS'
+type CongruenceTest = 'SSS' | 'SAS' | 'ASA' | 'AAS' | 'RHS'
 
 export interface Tri {
   /** Corner names in order, e.g. ['A', 'B', 'C']. */
@@ -16,7 +16,7 @@ export interface Tri {
 }
 
 /** One matched pair of parts: side AB against side DE, or angle B against angle E. */
-export interface Pair {
+interface Pair {
   kind: 'side' | 'angle'
   /** The part in the first triangle, e.g. "AB" or "B". */
   a: string
@@ -26,7 +26,7 @@ export interface Pair {
   equal: boolean
 }
 
-export interface Congruence {
+interface Congruence {
   congruent: boolean
   test: CongruenceTest | null
   /** For each corner of the first triangle, the corner of the second it matches. */
@@ -53,7 +53,7 @@ const PERMS: [number, number, number][] = [
 /** Side opposite corner i is between the other two corners. */
 const sideName = (names: [string, string, string], i: number) => names[(i + 1) % 3] + names[(i + 2) % 3]
 
-export interface CompareOptions {
+interface CompareOptions {
   /** Relative tolerance on lengths, and the same figure in radians for angles. Drawings snap to a grid, so 0.5 % is forgiving without being wrong. */
   tolerance?: number
   /** How to write a length and an angle in the reasons. */
@@ -195,7 +195,7 @@ export function triangleFromSides(a: number, b: number, c: number, at: V3 = [0, 
 }
 
 /** A named polygon to compare: corner letters in order, with the corners. */
-export interface NamedShape {
+interface NamedShape {
   names: string[]
   pts: V3[]
 }
@@ -230,7 +230,7 @@ export function comparePolygons(A: NamedShape, B: NamedShape, tolerance = 5e-3):
 }
 
 /** Two parts found congruent: which two, and the sentence that says so and why. */
-export interface CongruentPair {
+interface CongruentPair {
   i: number
   j: number
   /** The rule for two triangles (SSS, SAS …); null for other polygons, matched side by side and angle by angle. */

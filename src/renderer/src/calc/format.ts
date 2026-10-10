@@ -22,7 +22,7 @@ export const setCalcPrecisionSource = (fn: () => CalcPrecision): void => {
   source = fn
 }
 
-export const calcPrecision = (): CalcPrecision => source()
+const calcPrecision = (): CalcPrecision => source()
 
 /**
  * A number as the calculator shows it.

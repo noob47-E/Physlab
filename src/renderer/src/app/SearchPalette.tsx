@@ -23,7 +23,7 @@ interface Item {
 }
 
 /** Put text into the command bar and focus it. */
-export function fillCommandBar(text: string) {
+function fillCommandBar(text: string) {
   window.dispatchEvent(new CustomEvent('physlab:command', { detail: text }))
 }
 

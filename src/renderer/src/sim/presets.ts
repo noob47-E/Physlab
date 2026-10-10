@@ -9,7 +9,7 @@
 import { makeBody } from './store'
 import { makeLink, ropeSegments } from './links'
 import { materialById } from './materials'
-import { DEFAULT_WORLD, type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
+import { type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
 
 export interface Preset {
   id: string
@@ -505,9 +505,6 @@ export const presetById = (id: string): Preset | undefined => PRESETS.find((p) =
 
 /** The preset behind the "Start here" button. */
 export const startPreset = (): Preset => presetById(START_PRESET_ID) ?? PRESETS[0]
-
-/** The world a preset wants, on top of the defaults, so one experiment cannot leave the next in slow motion. */
-export const worldFor = (p: Preset): WorldSettings => ({ ...DEFAULT_WORLD, ...(p.build().world ?? {}) })
 
 export const PRESET_TOPICS: Preset['topic'][] = ['Motion', 'Forces', 'Energy', 'Momentum', 'Oscillation']
 

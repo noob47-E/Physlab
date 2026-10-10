@@ -53,7 +53,7 @@ export function rowCol(z: number): { row: string; col: string } {
 }
 
 
-export interface Inverse {
+interface Inverse {
   /** z at three places — the exact inverse, rounded. */
   z: number
   /** 'cell': p is printed in the table at exactly this z. 'between': p lies between the two cells. */

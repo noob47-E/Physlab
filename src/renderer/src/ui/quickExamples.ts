@@ -5,7 +5,7 @@
 // used to be offered on its own, and the student's second click produced an error about a vector
 // that did not exist.
 
-export interface QuickExample {
+interface QuickExample {
   /** What goes into the command bar. */
   insert: string
   /** What it makes, in plain words. */

@@ -30,7 +30,7 @@ export function tokenValue(block: string, name: string): string | undefined {
 }
 
 /** WCAG relative luminance of a #rrggbb colour. */
-export function luminance(hex: string): number {
+function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }

@@ -104,7 +104,7 @@ function resolveVec(v: VecInput): VS.NamedVec {
 }
 
 /** The worked solution. With `startHidden` the steps arrive one press at a time, like a tutor. */
-export function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; startHidden?: boolean }) {
+function SolutionView({ sol, startHidden = false }: { sol: VS.Solution; startHidden?: boolean }) {
   const [shown, setShown] = useState(startHidden ? 0 : sol.steps.length)
   useEffect(() => setShown(startHidden ? 0 : sol.steps.length), [sol, startHidden])
   const more = sol.steps.length - shown

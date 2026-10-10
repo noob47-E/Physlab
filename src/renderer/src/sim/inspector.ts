@@ -30,7 +30,7 @@ export const FOLD_OF = {
   rolling: 'advanced'
 } as const satisfies Record<string, FoldId>
 
-export type FoldedKey = keyof typeof FOLD_OF
+type FoldedKey = keyof typeof FOLD_OF
 /** Every control the inspector has a row for. */
 export type ControlKey = (typeof ALWAYS_SHOWN)[number] | FoldedKey
 
@@ -87,7 +87,7 @@ export const connectionsProminent = (selection: BodyId | null, partner: BodyId |
 export const joinCandidates = (bodies: BodyDef[], selection: BodyId | null): BodyDef[] => bodies.filter((b) => b.id !== selection && b.shape !== 'ground')
 
 /** One size box of a body: what it is called, the letter on the box, and the size it gives. */
-export interface SizeField {
+interface SizeField {
   label: string
   letter: string
   value: number

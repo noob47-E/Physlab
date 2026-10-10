@@ -3,11 +3,7 @@
 export type V3 = [number, number, number]
 
 export const ZERO: V3 = [0, 0, 0]
-export const I_HAT: V3 = [1, 0, 0]
-export const J_HAT: V3 = [0, 1, 0]
-export const K_HAT: V3 = [0, 0, 1]
 
-export const v3 = (x = 0, y = 0, z = 0): V3 => [x, y, z]
 export const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 export const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 export const scale = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k]
@@ -20,15 +16,13 @@ export const cross = (a: V3, b: V3): V3 => [
 ]
 export const len = (a: V3): number => Math.hypot(a[0], a[1], a[2])
 export const dist = (a: V3, b: V3): number => len(sub(a, b))
-export const lerp = (a: V3, b: V3, t: number): V3 => add(a, scale(sub(b, a), t))
+const lerp = (a: V3, b: V3, t: number): V3 => add(a, scale(sub(b, a), t))
 export const mid = (a: V3, b: V3): V3 => lerp(a, b, 0.5)
 export const normalize = (a: V3): V3 => {
   const l = len(a)
   return l < 1e-12 ? [0, 0, 0] : scale(a, 1 / l)
 }
-export const isZero = (a: V3, eps = 1e-12): boolean => len(a) < eps
-export const equals = (a: V3, b: V3, eps = 1e-9): boolean => dist(a, b) < eps
-export const is2D = (a: V3): boolean => Math.abs(a[2]) < 1e-12
+const equals = (a: V3, b: V3, eps = 1e-9): boolean => dist(a, b) < eps
 
 /** Angle between two vectors in radians, 0..π. */
 export const angleBetween = (a: V3, b: V3): number => {
@@ -77,11 +71,11 @@ export const toRad = (deg: number): number => (deg * Math.PI) / 180
 // Laying out a vector answer the way a textbook draws it (Fix 2)
 // ---------------------------------------------------------------------------
 
-export type LayoutRole = 'input' | 'result' | 'helper'
-export type LayoutStyle = 'head-to-tail' | 'parallelogram' | 'common-tail'
+type LayoutRole = 'input' | 'result' | 'helper'
+type LayoutStyle = 'head-to-tail' | 'parallelogram' | 'common-tail'
 
 /** A vector of an answer: an input (a card's arrow), the answer, or a helper such as −B. */
-export interface LayoutVector {
+interface LayoutVector {
   name: string
   v: V3
   role?: LayoutRole
@@ -89,14 +83,14 @@ export interface LayoutVector {
   tail?: V3
 }
 
-export interface LaidOut {
+interface LaidOut {
   name: string
   role: LayoutRole
   tail: V3
   comp: V3
 }
 
-export interface Layout {
+interface Layout {
   arrows: LaidOut[]
   /** A parallelogram's far sides: the arrows whose heads are joined to the answer's head. */
   sides: string[]

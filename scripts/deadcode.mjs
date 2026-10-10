@@ -126,8 +126,14 @@ for (const f of allFiles) {
     }
     const spec = m[3] ?? m[5] ?? m[6]
     const clause = m[4]
-    const names = m[3] ? ['*'] : clause ? clause.split(',').map((x) => x.trim().split(/\s+as\s+/)[0]).filter(Boolean) : ['default']
+    const names = m[3] ? ['*'] : clause ? clause.split(',').map((x) => x.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]).filter(Boolean) : ['default']
     addUse(f, resolveImport(f, spec), names)
+    // `export { a, b as c } from '…'` also exports a and c from this file: a re-export nobody imports
+    // through is dead too (CW14 found three the first version of this script could not see).
+    if (clause) for (const x of clause.split(',')) {
+      const name = x.trim().replace(/^type\s+/, '').split(/\s+as\s+/).pop()
+      if (name) exportsOf.get(f).add(name)
+    }
   }
   for (const m of t.matchAll(DYN_IMPORT)) {
     const target = resolveImport(f, m[1])

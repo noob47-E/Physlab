@@ -26,11 +26,11 @@ import { fmtPrecise } from '../format'
 // The canonical form
 // ---------------------------------------------------------------------------------------------
 
-export type Fn = 'sin' | 'cos' | 'tan' | 'cot' | 'sec' | 'csc'
+type Fn = 'sin' | 'cos' | 'tan' | 'cot' | 'sec' | 'csc'
 const FN_ORDER: Record<Fn, number> = { sin: 0, cos: 1, tan: 2, cot: 3, sec: 4, csc: 5 }
 
 /** A linear angle: [variable, coefficient] pairs, sorted by variable, no zero coefficients. */
-export type Lin = readonly (readonly [string, number])[]
+type Lin = readonly (readonly [string, number])[]
 
 interface FnBase {
   readonly k: 'f'
@@ -51,13 +51,13 @@ interface Factor {
   readonly e: number
 }
 /** c × Π bᵉ. `key` names the product without its coefficient, so like terms share it. */
-export interface Mono {
+interface Mono {
   readonly c: number
   readonly fs: readonly Factor[]
   readonly key: string
 }
 /** A sum of terms. Every expression is one of these; a number is a sum of one bare term. */
-export interface Sum {
+interface Sum {
   readonly t: readonly Mono[]
   readonly key: string
 }
@@ -162,15 +162,15 @@ function sumOf(terms: readonly (Mono | null)[]): Sum {
   return { t, key: t.length === 0 ? '0' : t.map((m) => `${m.c}·${m.key}`).join(' + ') }
 }
 
-export const num = (v: number): Sum => sumOf([mono(v, [])])
+const num = (v: number): Sum => sumOf([mono(v, [])])
 const asMono = (s: Sum): Mono | null =>
   s.t.length === 0 ? null : s.t.length === 1 ? s.t[0] : mono(1, [{ b: sumBase(s), e: 1 }])
 const monoMul = (p: Mono | null, q: Mono | null): Mono | null => (p && q ? mono(p.c * q.c, [...p.fs, ...q.fs]) : null)
-export const add = (...xs: Sum[]): Sum => sumOf(xs.flatMap((x) => x.t))
-export const mul = (...xs: Sum[]): Sum => sumOf([xs.map(asMono).reduce((p, q) => monoMul(p, q), mono(1, []))])
-export const neg = (x: Sum): Sum => mul(num(-1), x)
-export const sub = (x: Sum, y: Sum): Sum => add(x, neg(y))
-export function pow(x: Sum, n: number): Sum {
+const add = (...xs: Sum[]): Sum => sumOf(xs.flatMap((x) => x.t))
+const mul = (...xs: Sum[]): Sum => sumOf([xs.map(asMono).reduce((p, q) => monoMul(p, q), mono(1, []))])
+const neg = (x: Sum): Sum => mul(num(-1), x)
+const sub = (x: Sum, y: Sum): Sum => add(x, neg(y))
+function pow(x: Sum, n: number): Sum {
   if (n === 0) return num(1)
   const m = asMono(x)
   if (!m) {
@@ -179,14 +179,14 @@ export function pow(x: Sum, n: number): Sum {
   }
   return sumOf([mono(m.c ** n, m.fs.map((y) => ({ b: y.b, e: y.e * n })))])
 }
-export const div = (x: Sum, y: Sum): Sum => mul(x, pow(y, -1))
+const div = (x: Sum, y: Sum): Sum => mul(x, pow(y, -1))
 const monoSum = (m: Mono | null): Sum => sumOf([m])
 
 /**
  * f(u) as an expression, with the odd/even rules applied silently so an angle never starts with
  * a minus sign: sin(−u) = −sin u, cos(−u) = cos u. A student does this without calling it a step.
  */
-export function fn(f: Fn, a: Lin): Sum {
+function fn(f: Fn, a: Lin): Sum {
   if (a.length === 0) {
     const v = evalFn(f, 0)
     if (!Number.isFinite(v)) throw new Error(`${f} 0 is undefined`)
@@ -247,7 +247,7 @@ export function evaluate(s: Sum, at: Record<string, number>): number {
 }
 
 /** Fully multiply out every bracket on the top (bottoms are left alone). */
-export function expand(s: Sum): Sum {
+function expand(s: Sum): Sum {
   const out: Sum[] = []
   for (const m of s.t) {
     let acc: Sum = monoSum(mono(m.c, m.fs.filter((x) => !(x.b.k === 's' && x.e > 0))))
@@ -353,7 +353,7 @@ function fnTex(f: Fn, a: Lin, e: number, inBar = false): string {
   return `${name}${p}\\left(\\frac{${topTex}}{${den}}\\right)`
 }
 
-export interface Printed {
+interface Printed {
   text: string
   tex: string
   /**
@@ -803,7 +803,7 @@ export function parseIdentity(text: string): { lhs: Sum; rhs: Sum; lhsText: stri
 // ---------------------------------------------------------------------------------------------
 
 /** One step: the new expression, what was done in words (forwards and read backwards), a chip. */
-export interface Rewrite {
+interface Rewrite {
   s: Sum
   /** Past tense, what the step did going left to right. */
   fwd: string
@@ -1494,7 +1494,7 @@ export function rewrites(s: Sum, targets: Set<string>, strict = true): Rewrite[]
 // The search
 // ---------------------------------------------------------------------------------------------
 
-export interface TrigLine {
+interface TrigLine {
   /** The expression on this line, in a student's notation. */
   text: string
   tex: string
@@ -1505,7 +1505,7 @@ export interface TrigLine {
   id: string
 }
 
-export interface ProveOptions {
+interface ProveOptions {
   /** Combined depth of the two searches. */
   maxDepth?: number
   /** Stop after this many expressions have been looked at. */
@@ -1535,7 +1535,7 @@ function allArgs(s: Sum, out = new Set<string>()): Set<string> {
   return out
 }
 
-export interface Proof {
+interface Proof {
   lines: TrigLine[]
   rules: string[]
   /** Expressions looked at, for the spike's statistics. */
@@ -1685,7 +1685,7 @@ export function proveIdentity(lhs: Sum, rhs: Sum, opts: ProveOptions = {}): Proo
  * the same to `places` decimal places is passed over for the next, so the sentence always shows a
  * difference. Two sides that differ only further out are shown to as many places as that takes.
  */
-export function notEqualSentence(lhsText: string, rhsText: string, lhs: Sum, rhs: Sum, places = 3): string {
+function notEqualSentence(lhsText: string, rhsText: string, lhs: Sum, rhs: Sum, places = 3): string {
   const names = [...new Set([...allArgs(lhs), ...allArgs(rhs)].flatMap((k) => k.match(/[A-Za-zθ]/g) ?? []))]
   const known: Record<string, number> = { x: 1, A: 1, B: 0.3, θ: 1, t: 1 }
   const spare = [0.3, 0.6, 0.8, 1.2, 1.5]

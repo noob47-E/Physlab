@@ -14,7 +14,7 @@ import { checkStated } from './answerKinds'
 import { bandOf, type PQPart, type UnitId } from './pqjson'
 import { convertQuantity, unitFromTail, UNITS } from './units'
 
-export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
 type NumberPart = Extract<PQPart, { type: 'number' }>
 type ExpressionPart = Extract<PQPart, { type: 'expression' }>

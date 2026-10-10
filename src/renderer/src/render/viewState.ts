@@ -3,7 +3,7 @@ import { turnAngles, type TurnDirection } from './viewMath'
 import { overlay } from './overlay'
 
 /** Coarse view information that React components can subscribe to (updated only on significant camera changes). */
-export interface ViewInfo {
+interface ViewInfo {
   /** Sampling bounds (visible area plus a margin). */
   xMin: number
   xMax: number
@@ -30,7 +30,7 @@ export const useView = create<ViewInfo>(() => ({
 
 /** Request to reset / frame the camera; CameraRig listens. */
 /** A box on the drawing to frame, lowest corner and highest corner. */
-export type FitBox = { min: [number, number, number]; max: [number, number, number] }
+type FitBox = { min: [number, number, number]; max: [number, number, number] }
 export const useCameraCommand = create<{ nonce: number; kind: 'home' | 'fit'; box?: FitBox }>(() => ({ nonce: 0, kind: 'home' }))
 export const resetCamera = () => {
   // Home means home: a turn still easing in would carry the view off again.

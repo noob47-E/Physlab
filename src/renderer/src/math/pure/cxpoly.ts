@@ -48,7 +48,6 @@ export function surd(q: Rat, r: Rat = R0, n: bigint = 1n): Surd {
   return { q, r: rMul(r, rat(out)), n: inner }
 }
 
-export const surdOfRat = (q: Rat): Surd => surd(q)
 export const surdIsRational = (s: Surd): boolean => rIsZero(s.r)
 export const surdIsZero = (s: Surd): boolean => rIsZero(s.q) && rIsZero(s.r)
 export const surdEq = (a: Surd, b: Surd): boolean => rEq(a.q, b.q) && rEq(a.r, b.r) && (rIsZero(a.r) || a.n === b.n)
@@ -84,7 +83,7 @@ export function surdInv(a: Surd): Surd {
   return surd(rDiv(a.q, norm), rDiv(rNeg(a.r), norm), a.n)
 }
 
-export const surdDiv = (a: Surd, b: Surd): Surd => surdMul(a, surdInv(b))
+const surdDiv = (a: Surd, b: Surd): Surd => surdMul(a, surdInv(b))
 
 /** √m for a non-negative fraction m, as a surd: √(p/q) = √(pq)/q. */
 export function surdSqrt(m: Rat): Surd {
@@ -129,14 +128,13 @@ export interface CxS {
 export const cxs = (re: Surd, im: Surd = surd(R0)): CxS => ({ re, im })
 export const cxsOfRat = (q: Rat): CxS => cxs(surd(q))
 export const cxsIsReal = (z: CxS): boolean => surdIsZero(z.im)
-export const cxsIsRational = (z: CxS): boolean => cxsIsReal(z) && surdIsRational(z.re)
+const cxsIsRational = (z: CxS): boolean => cxsIsReal(z) && surdIsRational(z.re)
 export const cxsConj = (z: CxS): CxS => cxs(z.re, surdNeg(z.im))
-export const cxsNeg = (z: CxS): CxS => cxs(surdNeg(z.re), surdNeg(z.im))
+const cxsNeg = (z: CxS): CxS => cxs(surdNeg(z.re), surdNeg(z.im))
 export const cxsAdd = (a: CxS, b: CxS): CxS => cxs(surdAdd(a.re, b.re), surdAdd(a.im, b.im))
-export const cxsSub = (a: CxS, b: CxS): CxS => cxs(surdSub(a.re, b.re), surdSub(a.im, b.im))
 export const cxsMul = (a: CxS, b: CxS): CxS =>
   cxs(surdSub(surdMul(a.re, b.re), surdMul(a.im, b.im)), surdAdd(surdMul(a.re, b.im), surdMul(a.im, b.re)))
-export const cxsEq = (a: CxS, b: CxS): boolean => surdEq(a.re, b.re) && surdEq(a.im, b.im)
+const cxsEq = (a: CxS, b: CxS): boolean => surdEq(a.re, b.re) && surdEq(a.im, b.im)
 
 /** a + bi written the way a student writes it: 3 − 2i, −½ + ½√3i, never 3 + (−2)i. */
 export function cxsTex(z: CxS): string {
@@ -166,9 +164,9 @@ export const spFromPoly = (p: Poly): SPoly => pTrim(p).map(cxsOfRat)
 /** x − root, as a polynomial. */
 export const spLinear = (root: CxS): SPoly => [cxsNeg(root), cxsOfRat(R1)]
 
-export const spConst = (c: Rat): SPoly => [cxsOfRat(c)]
+const spConst = (c: Rat): SPoly => [cxsOfRat(c)]
 
-export function spMul(a: SPoly, b: SPoly): SPoly {
+function spMul(a: SPoly, b: SPoly): SPoly {
   if (a.length === 0 || b.length === 0) return []
   const zero = cxsOfRat(R0)
   const out: SPoly = new Array(a.length + b.length - 1).fill(zero)
@@ -179,7 +177,7 @@ export function spMul(a: SPoly, b: SPoly): SPoly {
 }
 
 /** Back to ordinary rational coefficients, or null when a surd or an i survived. */
-export function spToPoly(p: SPoly): Poly | null {
+function spToPoly(p: SPoly): Poly | null {
   const out: Poly = []
   for (const c of p) {
     if (!cxsIsRational(c)) return null

@@ -11,7 +11,7 @@ const GREEK = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'φ', 'ψ', 'ω']
 const CAPITALS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'.split('')
 
 /** The marks after a letter on its `round`-th pass through the alphabet: none, ′, ″, ‴, ⁗, then more ′. */
-export function primes(round: number): string {
+function primes(round: number): string {
   if (round <= 0) return ''
   return ['′', '″', '‴', '⁗'][round - 1] ?? '′'.repeat(round)
 }

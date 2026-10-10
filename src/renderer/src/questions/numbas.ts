@@ -304,7 +304,7 @@ class JmeParser {
   }
 }
 
-export function parseJme(src: string): JmeNode {
+function parseJme(src: string): JmeNode {
   return new JmeParser(tokenize(src)).parse()
 }
 
@@ -321,7 +321,7 @@ export function parseJme(src: string): JmeNode {
  * home as those. An expression part is different: the student types `sin(x)` in the same
  * convention the answer is checked in, so there the names stay as they are.
  */
-export type TrigMode = 'radians' | 'same'
+type TrigMode = 'radians' | 'same'
 
 /** mathjs precedence, used only to decide where a bracket is needed. */
 const P = { cond: 0, or: 1, and: 2, cmp: 3, add: 4, mul: 5, un: 6, pow: 7, atom: 9 }
@@ -544,7 +544,7 @@ export function jmeToVariableDef(src: string): VariableDef {
 // Reading an .exam
 // ===========================================================================
 
-export interface ExamImport {
+interface ExamImport {
   file: PQFile
   /** One plain sentence per skipped question or per thing worth telling the teacher. */
   report: string[]
@@ -564,7 +564,7 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
  * Exact case first, then all-lowercase: Numbas's own rule for reading a part, because files
  * from older editors wrote `minvalue` and `checkingtype` where the schema now says `minValue`.
  */
-export function tryGet(o: Obj, key: string): unknown {
+function tryGet(o: Obj, key: string): unknown {
   if (Object.prototype.hasOwnProperty.call(o, key)) return o[key]
   const lower = key.toLowerCase()
   return Object.prototype.hasOwnProperty.call(o, lower) ? o[lower] : undefined

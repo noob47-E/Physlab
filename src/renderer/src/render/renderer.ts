@@ -5,7 +5,7 @@ import { create } from 'zustand'
 // Make every three/webgpu class available as a JSX element (<mesh>, <lineSegments>…).
 extend(THREE as unknown as Record<string, new (...args: unknown[]) => unknown>)
 
-export type Quality = 'low' | 'medium' | 'high'
+type Quality = 'low' | 'medium' | 'high'
 
 export const useGpuInfo = create<{
   backend: 'WebGPU' | 'WebGL2' | 'starting'
@@ -74,4 +74,3 @@ export async function createRenderer(props: DefaultProps): Promise<THREE.WebGPUR
   return renderer
 }
 
-export { THREE }

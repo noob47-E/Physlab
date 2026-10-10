@@ -4,10 +4,10 @@
 // like a calculator. A student needs to know only whether the algebra is ready, still starting,
 // busy on their question, or not available — in plain words, and nothing at all when all is well.
 
-export type CasState = 'idle' | 'loading' | 'ready' | 'error'
-export type CasTone = 'good' | 'warn' | 'bad' | 'faint'
+type CasState = 'idle' | 'loading' | 'ready' | 'error'
+type CasTone = 'good' | 'warn' | 'bad' | 'faint'
 
-export interface CasStatusText {
+interface CasStatusText {
   /** Colour of the quiet dot. */
   tone: CasTone
   /** Short words beside the dot; empty when there is nothing worth saying. */

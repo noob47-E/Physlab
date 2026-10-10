@@ -112,7 +112,7 @@ const isComplex = (x: AnyVal): boolean => typeof x === 'object' && x !== null &&
 const siNumber = (x: AnyVal): number => (isUnit(x) ? Number((x as unknown as { value: number }).value) : Number(x))
 
 /** Angle argument → radians (numbers follow the angle mode, units convert). */
-export function toRadians(x: AnyVal): number {
+function toRadians(x: AnyVal): number {
   if (isUnit(x)) return x.toNumber('rad')
   const n = Number(x)
   return angleMode === 'deg' ? (n * Math.PI) / 180 : n

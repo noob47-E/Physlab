@@ -7,7 +7,7 @@
 
 import type { LogEntry } from '../core/store'
 
-export interface AnswerLineView {
+interface AnswerLineView {
   text?: string
   tex?: string
   kind: LogEntry['kind']

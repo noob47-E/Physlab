@@ -57,7 +57,7 @@ export type CircleDef =
  */
 export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area' | 'piecewise' | 'between'
 
-export interface ObjectBase {
+interface ObjectBase {
   id: ObjId
   name: string
   visible: boolean

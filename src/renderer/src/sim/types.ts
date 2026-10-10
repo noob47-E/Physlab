@@ -8,7 +8,7 @@ export type BodyId = string
 /** Shapes a student can drop into the world. Sizes are in metres. */
 export type ShapeKind = 'box' | 'sphere' | 'cylinder' | 'capsule' | 'cone' | 'ramp' | 'plank' | 'wall' | 'ground' | 'pulley'
 
-export type MotionKind = 'dynamic' | 'static' | 'kinematic'
+type MotionKind = 'dynamic' | 'static' | 'kinematic'
 
 export interface BodyDef {
   id: BodyId

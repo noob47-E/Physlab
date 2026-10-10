@@ -1180,7 +1180,7 @@ function operandNamer(): { arg: (node: Node, preferred: string) => VecArg; lette
  * solution. `name` is what the result is being assigned to, so the steps say F for
  * `F = 10 N ∠ 30°` rather than the solver's default A.
  */
-export function solutionFor(root: MathNode, name?: string): VS.Solution | null {
+function solutionFor(root: MathNode, name?: string): VS.Solution | null {
   let node = root as Node
   // The command bar answers in the student's own precision and angle unit, like the panels.
   const settings = scene().settings

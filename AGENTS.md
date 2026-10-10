@@ -354,6 +354,19 @@ neighbour is open.
   bar's objects get random ids (name them by name or order), the physics engine differs world to world inside one
   process (one warm-up run), and the identity prover and graph checks read the clock (`freezeClock()` where it is
   safe). The root `.gitignore`'s `out/` would hide `tests/golden/out`: the exception after it must stay.
+- **The clean-up's lists only shrink.** `tests/guards/caret-baseline.txt` (raw ^ and e-notation on screen),
+  `FENCE_ALLOWED` in eslint.config.js (toFixed/toPrecision/toExponential and 1e-12 outside math/format.ts and
+  math/noise.ts) and `scripts/deadcode-baseline.txt` (unused exports) each fail on a new entry and on an entry that is
+  no longer true. A number for the screen goes through math/format.ts; a non-display toFixed (a CSS length, a key, a
+  log line) carries `// eslint-disable-next-line no-restricted-syntax -- why`. Guards: `tests/guards/`.
+- **Rounding noise is relative, never an absolute floor** (`math/noise.ts`). Judge a product dividing first —
+  `isNoise(p / |A|, |B|)`, since |A||B| overflows at 10¹⁵⁵ — and a line's number against every number on the line.
+  `sameNumber` is "the same computed number" (10⁻¹⁵); it is not the marking rule (tol + 10⁻⁹ of the answer).
+- **Prove a removal with `npm run smoke` too**, not only the suite: it builds the app, opens every ready mode in a
+  hidden window (with its own throwaway user data) and fails on any console error. A new ready mode must be added to
+  `scripts/smoke-main.mjs` or the run fails. tsconfig has `noUnusedLocals` and `noUnusedParameters` on: an unused
+  callback slot is written `_name`. Code a test reaches by reading source text, or through a module object, keeps its
+  `export` (see `scripts/deadcode-baseline.txt` and reports/P-CW14-REPORT.md).
 
 ## Code knowledge
 

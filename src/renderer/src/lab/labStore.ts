@@ -131,12 +131,6 @@ export const useLab = create<LabStore>((set, get) => ({
 // (guarded for the test runner, which has no window)
 if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __useLab?: typeof useLab }).__useLab = useLab
 
-/** The table being edited. */
-export const currentTable = (): LabTable => {
-  const { tables, currentId } = useLab.getState()
-  return tables.find((t) => t.id === currentId) ?? tables[0]
-}
-
 // ---------------------------------------------------------------------------
 // Editing one table. These are plain functions on a table so they can be tested
 // without a store, and the store's `update` applies them.
@@ -176,7 +170,7 @@ function withRows(t: LabTable, rows: (number | null)[][], reads?: unknown): LabT
 const readsOf = (t: LabTable): (string | null)[][] | undefined => cleanReads(t.rows, t.reads)
 
 /** A table from a file or a recording, its texts brought into line with its rows. */
-export const tidyReads = (t: LabTable): LabTable => withRows(t, t.rows, t.reads)
+const tidyReads = (t: LabTable): LabTable => withRows(t, t.rows, t.reads)
 
 export const addRow = (t: LabTable): LabTable => {
   const reads = readsOf(t)
@@ -221,7 +215,7 @@ export function addUncertainty(t: LabTable, parentId: string): LabTable {
 }
 
 /** "t" → "t_u". A name mathjs will take, so the column can be used in a formula like any other. */
-export function uncertaintyName(parent: string): string {
+function uncertaintyName(parent: string): string {
   return isUsableName(parent) ? `${parent}_u` : 'u'
 }
 

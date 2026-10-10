@@ -24,11 +24,11 @@ import { unitsCompatible, UNITS } from './units'
 import type { Variant } from './variables'
 
 /** One thing to draw: a picture in Graphing, or a motion drawn as x–t and v–t curves. */
-export type Visual = { picture: PQPicture; motion?: undefined } | { motion: PQMotion; picture?: undefined }
+type Visual = { picture: PQPicture; motion?: undefined } | { motion: PQMotion; picture?: undefined }
 
-export type InferRule = 'suvat' | 'vertical' | 'freebody' | 'function' | 'normal' | 'vector' | 'roots' | 'numberline'
+type InferRule = 'suvat' | 'vertical' | 'freebody' | 'function' | 'normal' | 'vector' | 'roots' | 'numberline'
 
-export interface AutoVisual {
+interface AutoVisual {
   rule: InferRule
   /** The whole picture, every number written in. */
   visual: Visual

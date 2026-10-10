@@ -5,7 +5,7 @@
 //   10\angle30^{\circ} → 10∠30°         \left|\vec{A}\right| → |A|
 //   \int_{0}^{\pi}\sin x\,dx → integral(sin(x), 0, π)
 
-export interface LatexOptions {
+interface LatexOptions {
   /** × and · mean cross and dot products (vector calculator) instead of multiplication. */
   vectorOps?: boolean
 }

@@ -23,7 +23,7 @@ export const GPU_COUNTS = [100_000, 500_000, 1_000_000, 2_000_000] as const
 export const CPU_COUNTS = [5_000, 10_000, 20_000, 50_000] as const
 export const CPU_DEFAULT_COUNT = 20_000
 
-export type ParticlePath = 'gpu' | 'cpu'
+type ParticlePath = 'gpu' | 'cpu'
 
 /** Which way the particles are moved: on the graphics card with WebGPU, on the processor with WebGL2, not yet while the renderer is starting. */
 export function particlePath(backend: 'WebGPU' | 'WebGL2' | 'starting'): ParticlePath | null {

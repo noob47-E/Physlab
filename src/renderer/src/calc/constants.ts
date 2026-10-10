@@ -6,7 +6,7 @@
 // 2022 — most from the electron and proton mass measurements — see PROGRESS.md / the 0.9-GATE
 // commit for the full list of what changed from 2018 and by how much.
 
-export interface PhysConst {
+interface PhysConst {
   no: number
   symbol: string
   name: string

@@ -60,7 +60,7 @@ export interface Problem {
   solution: VS.Solution
 }
 
-export type Rng = () => number
+type Rng = () => number
 
 /** Small deterministic generator (mulberry32): the same seed always gives the same problem. */
 export function rngFor(seed: number): Rng {
@@ -100,7 +100,7 @@ const ANGLES = [15, 20, 25, 30, 35, 37, 40, 45, 50, 53, 55, 60, 65, 70, 75] as c
 const vec2 = (r: Rng, lo = -9, hi = 9): V3 => [nz(r, lo, hi), nz(r, lo, hi), 0]
 const compText = (name: string, v: V3) => `${name} = (${v[0]}, ${v[1]})`
 
-export interface Topic {
+interface Topic {
   id: TopicId
   label: string
   level: Level
@@ -443,7 +443,7 @@ export const TOPICS: Topic[] = [
   }
 ]
 
-export const topicById = (id: TopicId): Topic => TOPICS.find((t) => t.id === id) ?? TOPICS[0]
+const topicById = (id: TopicId): Topic => TOPICS.find((t) => t.id === id) ?? TOPICS[0]
 
 /** One problem from a topic. The same seed always gives the same problem. */
 export function generate(topic: TopicId, seed = Math.floor(Math.random() * 1e9)): Problem {

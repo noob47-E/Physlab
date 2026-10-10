@@ -17,7 +17,7 @@ import { runCommand } from './commands'
 // The Equation box of a graph
 // ---------------------------------------------------------------------------
 
-export type GraphEdit = { ok: true } | { ok: false; reason: string }
+type GraphEdit = { ok: true } | { ok: false; reason: string }
 
 const KEPT = 'The graph keeps its old equation.'
 const GONE = 'This graph is no longer there, so its equation cannot be changed.'
@@ -27,7 +27,7 @@ const NOT_A_GRAPH = `That line does not draw a graph. Type an equation such as y
 const WIPES = /^(clear|new)$/i
 
 /** What the line did to the scene, judged from the scene before and after it. */
-export type EditOutcome =
+type EditOutcome =
   | { kind: 'one-graph'; fresh: ObjId }
   /** Several objects at once, at least one a graph (between(…) is three curves and a label): a picture. */
   | { kind: 'picture' }
@@ -125,7 +125,7 @@ function takeDefinition(into: GraphObj, from: GraphObj): void {
  * a command such as between(…), tangent(…) or Circle(…), which draw their own pictures. A line
  * with no x (3 + 4) only calculates and keeps its own sentence.
  */
-export function bareRightSide(text: string): boolean {
+function bareRightSide(text: string): boolean {
   if (/[=<>≤≥≠]/.test(text)) return false
   if (/^\s*(?:between|tangent|curve|piecewise|[A-Z][A-Za-z]*)\s*\(/.test(text)) return false
   return /(^|[^A-Za-z])x([^A-Za-z]|$)/.test(text)
@@ -184,7 +184,7 @@ export async function replaceGraphEquation(id: ObjId, line: string): Promise<Gra
 // The slider of a point that sits on another object
 // ---------------------------------------------------------------------------
 
-export interface SliderRange {
+interface SliderRange {
   min: number
   max: number
   step: number

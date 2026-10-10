@@ -21,7 +21,7 @@ export const ALL_DONE_MESSAGE =
  * A touch screen, by its pointer: a touchscreen laptop used with a mouse keeps the mouse words
  * (the old test, 'ontouchstart' or touch points, called every such laptop a touch screen).
  */
-export const isCoarse = (): boolean => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+const isCoarse = (): boolean => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
 
 export function formatMissionHint(hint: string, isTouch: boolean): string {
   if (!isTouch) return hint

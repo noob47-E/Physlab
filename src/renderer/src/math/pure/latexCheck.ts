@@ -14,7 +14,7 @@ import { NotPolynomial, evalAt, parseExpr } from './mono'
 import { latexToMath } from '../latexToMath'
 
 /** One term of a displayed sum. `den` is null for a whole-number part written without a fraction. */
-export interface DisplayedTerm {
+interface DisplayedTerm {
   sign: 1 | -1
   num: string
   den: string | null

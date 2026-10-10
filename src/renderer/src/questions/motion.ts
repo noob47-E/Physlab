@@ -17,7 +17,7 @@ export interface MotionPiece {
 }
 
 /** One stretch with its numbers worked out: where it starts and how it moves. */
-export interface Stretch {
+interface Stretch {
   kind: MotionSegment['kind']
   t0: number
   t1: number

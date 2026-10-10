@@ -99,7 +99,7 @@ function measureTextAsFormatted(o: SceneObject, c: Computed | undefined, s: Scen
  * a shape brings its sides and corners, a side brings its end points,
  * and a dragged point brings the sides and shapes it moves.
  */
-export function activeLabelIds(ids: ObjId[], objects: Record<ObjId, SceneObject>, dragging: boolean): Set<ObjId> {
+function activeLabelIds(ids: ObjId[], objects: Record<ObjId, SceneObject>, dragging: boolean): Set<ObjId> {
   const out = new Set<ObjId>()
   const all = Object.values(objects)
   for (const id of ids) {

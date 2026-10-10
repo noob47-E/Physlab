@@ -154,7 +154,7 @@ export function resolveValues(table: LabTable): Resolved {
 export const uncertaintyIndex = (table: LabTable, columnId: string): number =>
   table.columns.findIndex((c) => c.uncertaintyFor === columnId)
 
-export interface PlotSeries {
+interface PlotSeries {
   xs: number[]
   ys: number[]
   /** One per kept reading, or empty when that column has no ± column. */

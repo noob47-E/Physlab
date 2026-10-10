@@ -79,7 +79,7 @@ function Verdict({ c, revealed, answer }: { c: RowCheck | undefined; revealed: b
 }
 
 /** One line of words and inline maths; a display equation stands on its own. */
-export function SegmentLine({ segments }: { segments: Segment[] }) {
+function SegmentLine({ segments }: { segments: Segment[] }) {
   return (
     <>
       {segments.map((s, i) =>
@@ -401,7 +401,7 @@ function ChoiceRow({ p, label, many, value, check, revealed, onChange }: RowProp
 }
 
 /** The right row for the part's kind. */
-export function QuestionPartRow(props: RowProps) {
+function QuestionPartRow(props: RowProps) {
   switch (props.p.part.type) {
     case 'choice':
       return <ChoiceRow {...props} />

@@ -15,7 +15,7 @@ import { cell, padded, paddedTex, readInverse, rowCol, tablePhi, toPlaces, Z_MAX
 import { failed, Steps, type Working } from './work'
 import { fmtPrecise, texPrecise } from '../format'
 
-export interface NormalDist {
+interface NormalDist {
   mean: number
   /** The standard deviation σ (always positive). */
   sd: number
@@ -25,7 +25,7 @@ export interface NormalDist {
   spread: number
 }
 
-export type Tail = 'below' | 'above' | 'central'
+type Tail = 'below' | 'above' | 'central'
 
 export type NormalQuery =
   | { kind: 'below'; x: number; dist?: NormalDist }
@@ -429,7 +429,7 @@ function readAbove(c: Ctx, z: number): number {
   return w
 }
 
-export interface ZOptions {
+interface ZOptions {
   /** Places for a found x in an inverse question (the z always has three). */
   xDecimals?: number
 }

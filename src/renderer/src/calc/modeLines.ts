@@ -13,16 +13,16 @@ import { evaluateSheet } from './sheet'
 import { convertTyped, type UnitAnswer } from './units'
 
 /** The screen's angle unit (Settings → angleUnit), the one the Numbers mode works in. */
-export type ScreenAngle = CalcContext['angle']
+type ScreenAngle = CalcContext['angle']
 
-export interface TableRow {
+interface TableRow {
   x: number
   /** A number, '' when the f(x) box is empty, 'ERROR' when the line cannot be worked out at this x. */
   f: number | string
   g: number | string
 }
 
-export interface TableRange {
+interface TableRange {
   start: number
   end: number
   step: number

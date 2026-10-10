@@ -179,7 +179,7 @@ function forbiddenFound(questions: PQQuestion[]): string[] {
 /** Every choice a student could have picked instead, one distractor at a time. */
 function distractorsFor(p: PlayedPart): PartAnswer[] {
   if (p.part.type !== 'choice') return []
-  return (p.choices ?? []).map((c, i) => i).filter((i) => !p.choices![i].correct).map((i) => [i])
+  return (p.choices ?? []).map((_c, i) => i).filter((i) => !p.choices![i].correct).map((i) => [i])
 }
 
 /** Every "question #seed part: typed" whose answer is a whole number and yet one more or one

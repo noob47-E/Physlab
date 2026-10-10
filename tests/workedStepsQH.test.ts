@@ -206,7 +206,7 @@ describe('Q28: pure and SymPy engine steps work with the exact drawn value, not 
     }
 
     let sent = ''
-    await workCasSteps(q, { a: 0.125 }, S, async (_job, input) => {
+    await workCasSteps(q, { a: 0.125 }, async (_job, input) => {
       sent = input
       return { title: _job, input, moves: [], answers: [], error: 'test' }
     })

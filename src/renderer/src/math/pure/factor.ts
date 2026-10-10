@@ -46,7 +46,6 @@ import {
   findRationalRootDetailed,
   pDeg,
   pDivMod,
-  pMul,
   pPrimitive,
   pTex,
   pTexBracketed,
@@ -559,7 +558,7 @@ function factorAll(e: Expr, ctx: Ctx, pending: Expr[], depth = 0): Expr[] {
 
 // ---------------------------------------------------------------- entry point
 
-export interface FactorOutcome {
+interface FactorOutcome {
   working: Working
   factors: Expr[]
 }
@@ -736,4 +735,3 @@ export function factorsOf(e: Expr): Expr[] {
   return factorAll(e, ctx, []).filter((p) => p.length > 0)
 }
 
-export { pMul }

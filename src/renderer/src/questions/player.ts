@@ -37,14 +37,14 @@ import { plainFormula } from './plainFormula'
 import { drawVariables, substitute, type Variant } from './variables'
 
 /** The Problem shape without the vector topic and level a generated vector problem carries. */
-export type QuestionProblem = Omit<Problem, 'topic' | 'level'>
+type QuestionProblem = Omit<Problem, 'topic' | 'level'>
 
 // The text helpers live beside the steps, which need them too (a step's heading is read the same
 // way as a prompt); the panel and the tests still reach them here.
-export { lineSegments, spokenOf, textLines, type Segment } from './steps'
+export { spokenOf, type Segment } from './steps'
 
 /** One option of a choice part: `text` spoken plainly (for marking and reading aloud), `segments` for the eye. */
-export interface PlayedChoice extends Choice {
+interface PlayedChoice extends Choice {
   segments: Segment[]
 }
 
@@ -331,7 +331,7 @@ export function markPlayed(played: Played, typed: Readonly<Record<string, PartAn
 // ---------------------------------------------------------------------------
 
 /** The five rungs in the words of Idea 1's ladder (§7), first look to research. */
-export const RUNG_NAMES: Record<1 | 2 | 3 | 4 | 5, string> = {
+const RUNG_NAMES: Record<1 | 2 | 3 | 4 | 5, string> = {
   1: 'First look',
   2: 'School',
   3: 'Pre-university',
@@ -410,7 +410,7 @@ function numberIn(expr: string, values: Record<string, number>, what: string): n
 // Pictures
 // ---------------------------------------------------------------------------
 
-export type PicturePlan =
+type PicturePlan =
   | { kind: 'curve'; expr: string; xMin?: number; xMax?: number }
   | { kind: 'piecewise'; pieces: { expr: string; from: number; to: number }[] }
   | { kind: 'between'; upper: string; lower: string; from: number; to: number; label?: string }
@@ -523,7 +523,7 @@ export function picturePlan(pic: PQPicture, played: Played, settings: MeasureSet
 export { plainFormula }
 export { hasVisual, INFERRED_NOTE, type VisualPlan } from './autoVisual'
 
-export interface PictureShown {
+interface PictureShown {
   /** One sentence on what was drawn, for the panel. */
   note: string
   /** The shaded region's area, or the tangent's slope, exactly as the drawing worked it out. */
@@ -660,7 +660,7 @@ export function showPicture(plan: PicturePlan, settings: MeasureSettings, hideVa
  */
 const motionTables = new Map<string, string>()
 
-export interface MotionShown {
+interface MotionShown {
   pieces: MotionPieces
   /** How many readings went into Lab Data, or 0 when the question asks for none. */
   rows: number
@@ -831,14 +831,14 @@ export function showAuthoredMotion(plan: VisualPlan, played: Played, settings: M
 // Sandbox
 // ---------------------------------------------------------------------------
 
-export interface PushPlan {
+interface PushPlan {
   body: string
   force: (t: number) => V3
   from: number
   until: number
 }
 
-export interface SandboxPlan {
+interface SandboxPlan {
   preset: string
   pushes: PushPlan[]
   record?: string

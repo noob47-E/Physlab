@@ -50,7 +50,7 @@ export function invitesTry(moves: number, shown: number, trying: boolean): boole
 }
 
 /** "Treat as": the job chosen by hand, or the one guessed from what was typed. */
-export type TreatAs = JobId | 'auto'
+type TreatAs = JobId | 'auto'
 
 export function resolveJob(treatAs: TreatAs, text: string): JobId {
   return treatAs === 'auto' ? suggestJob(text) : treatAs

@@ -16,7 +16,7 @@ import { rEq, rMul, rSub, rTex, rat, R1, type Rat } from './rat'
 import { texPrecise, type DigitSettings } from '../format'
 
 /** One expression as the worker prints it: LaTeX to show, SymPy text to read back. */
-export interface TexText {
+interface TexText {
   latex: string
   text: string
 }
@@ -25,7 +25,7 @@ export interface TexText {
  * One node of SymPy's `integral_steps` tree, serialised over its dataclass fields. Only the fields
  * this file reads are named; a rule SymPy adds later arrives whole and is refused politely.
  */
-export interface IntegralRule {
+interface IntegralRule {
   rule: string
   integrand: TexText | null
   variable: TexText | null
@@ -94,7 +94,7 @@ export interface IntegralTree {
   error?: string
 }
 
-export type DerivRuleName =
+type DerivRuleName =
   | 'constant'
   | 'x'
   | 'sum'
@@ -121,7 +121,7 @@ export type DerivRuleName =
   | 'tanh'
 
 /** One node of the worker's derivative walk (`diff_steps`). */
-export interface DerivRule {
+interface DerivRule {
   rule: DerivRuleName
   expr: TexText
   /** The derivative, written in the order the rule produces it (f′g + fg′, not SymPy's order). */
@@ -180,7 +180,7 @@ export const RADIANS_NOTE =
 // ---------------------------------------------------------------------------------------------
 
 /** True when `tex` has a + or − between terms at the top level (so it needs brackets to be multiplied). */
-export function isSum(tex: string): boolean {
+function isSum(tex: string): boolean {
   let depth = 0
   const s = tex.trim()
   for (let i = 0; i < s.length; i++) {
@@ -205,13 +205,13 @@ export function isSum(tex: string): boolean {
 const isNeg = (tex: string): boolean => tex.trim().startsWith('-')
 
 /** Brackets a factor when multiplying it would change its meaning: a sum or a negative. */
-export function br(tex: string): string {
+function br(tex: string): string {
   const t = tex.trim()
   return isSum(t) || isNeg(t) ? `\\left(${t}\\right)` : t
 }
 
 /** a × b as a book writes it: juxtaposed, with a dot only where two numbers would run together. */
-export function times(a: string, b: string): string {
+function times(a: string, b: string): string {
   const A = br(a)
   const B = br(b)
   if (A === '1') return B
@@ -233,27 +233,27 @@ export function times(a: string, b: string): string {
 }
 
 /** a − b and a + b with the sign of b folded in: never "+ −" (Fix 4's rule). */
-export function plus(a: string, b: string): string {
+function plus(a: string, b: string): string {
   const t = b.trim()
   if (!a.trim()) return t
   return isNeg(t) ? `${a} - ${t.replace(/^-\s*/, '')}` : `${a} + ${t}`
 }
 
-export function minus(a: string, b: string): string {
+function minus(a: string, b: string): string {
   const t = b.trim()
   if (isSum(t)) return `${a} - \\left(${t}\\right)`
   return isNeg(t) ? `${a} + ${t.replace(/^-\s*/, '')}` : `${a} - ${t}`
 }
 
 /** −F, with the sign folded into F when F already carries one. */
-export function negate(f: string): string {
+function negate(f: string): string {
   const t = f.trim()
   if (isSum(t)) return `-\\left(${t}\\right)`
   return isNeg(t) ? t.replace(/^-\s*/, '') : `-${t}`
 }
 
 /** a × b with the signs of both pulled to the front: 2x · (−cos x) is −2x cos x. */
-export function timesSigned(a: string, b: string): string {
+function timesSigned(a: string, b: string): string {
   const na = isNeg(a) && !isSum(a)
   const nb = isNeg(b) && !isSum(b)
   const prod = times(na ? negate(a) : a, nb ? negate(b) : b)
@@ -275,7 +275,7 @@ const d = (v: string): string => `\\,d${v}`
  * lambda is a word Python keeps for itself) is \lambda. "d/dtheta" and "dalpha" were written out in
  * letters (GLM #25).
  */
-export function varTex(name: string): string {
+function varTex(name: string): string {
   if (name === 'lamda') return '\\lambda'
   return /^(?:alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|rho|sigma|tau|upsilon|phi|chi|psi|omega)$/.test(name) ? `\\${name}` : name
 }
@@ -966,20 +966,8 @@ function factorTaken(tree: DerivTree): Set<string> {
   return taken
 }
 
-/** The first pair the question has not used, for one product or quotient rule. */
-export function factorNames(tree: DerivTree): [string, string] {
-  const taken = factorTaken(tree)
-  const pairs: [string, string][] = [
-    ['f', 'g'],
-    ['u', 'v'],
-    ['p', 'q'],
-    ['h', 'k']
-  ]
-  return pairs.find(([a, b]) => !taken.has(a) && !taken.has(b)) ?? ['F', 'G']
-}
-
 /** A fresh pair for every product or quotient in one working, so f in one line never changes meaning. */
-export function factorNamePairs(tree: DerivTree): () => [string, string] {
+function factorNamePairs(tree: DerivTree): () => [string, string] {
   const taken = factorTaken(tree)
   const pairs: [string, string][] = [
     ['f', 'g'],

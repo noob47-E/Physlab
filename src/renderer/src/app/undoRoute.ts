@@ -6,9 +6,9 @@ import { scene } from '../core/store'
 import { useLab } from '../lab/labStore'
 import { useSandbox } from '../sim/store'
 
-export type HistoryStack = 'lab' | 'sandbox' | 'scene'
-export type HistoryAction = 'undo' | 'redo'
-export type HistoryInput = { key: string; shift: boolean } | { menu: HistoryAction }
+type HistoryStack = 'lab' | 'sandbox' | 'scene'
+type HistoryAction = 'undo' | 'redo'
+type HistoryInput = { key: string; shift: boolean } | { menu: HistoryAction }
 
 /** The modes that keep a history of their own; every other mode undoes the drawing. */
 function stackFor(mode: string): HistoryStack {

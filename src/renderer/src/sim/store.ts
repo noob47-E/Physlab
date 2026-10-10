@@ -18,7 +18,7 @@ import { joinPick, linkRefusal, START_JOIN, type JoinMode } from './join'
 import { presetById } from './presets'
 
 /** What addLink hands back: the link, or the sentence that says why there is none. */
-export type LinkResult = { ok: true; link: Link } | { ok: false; why: string }
+type LinkResult = { ok: true; link: Link } | { ok: false; why: string }
 
 let counter = 0
 const nextId = () => `sb${Date.now().toString(36)}${(counter++).toString(36)}`
@@ -51,7 +51,7 @@ export const engine: { world: SimWorld | null } = {
 // objects back under the other scene's gravity and air.
 type Snapshot = { bodies: BodyDef[]; links: Link[]; actuators: Actuator[]; world: WorldSettings }
 
-export interface SandboxState {
+interface SandboxState {
   bodies: BodyDef[]
   world: WorldSettings
   selection: BodyId | null

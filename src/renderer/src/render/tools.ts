@@ -8,9 +8,7 @@ import type { Computed, EvalResult, ObjId, SceneObject, ToolId } from '../core/t
 import { visibleOrder, type Space } from '../core/visibility'
 import { add, type V3 } from '../math/vec'
 
-export type Need = 'point' | 'lineLike' | 'curve' | 'any' | 'segmentOrPoint'
-
-export interface ToolInfo {
+interface ToolInfo {
   id: ToolId
   label: string
   key: string
@@ -68,7 +66,7 @@ export interface SnapInfo {
 }
 
 /** An arrow's head as a snap target: the arrow, and where its head is in the drawing. */
-export interface HeadTarget {
+interface HeadTarget {
   id: ObjId
   head: V3
 }
@@ -169,7 +167,7 @@ export interface Marquee {
   y1: number
 }
 
-export interface ToolRuntime {
+interface ToolRuntime {
   picks: ObjId[]
   cursor: V3 | null
   /** World position where a vector drag started. */
@@ -194,9 +192,6 @@ export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dra
 // The snap marker goes too: a tool that has finished, or been swapped for another, has nothing to
 // point at, and the ring used to stay on the last crossing until the mouse moved again.
 export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [], sides: [], marquee: null, snap: null })
-
-/** Is a tool part-way through a drawing (so Finish / Undo point / Cancel apply)? */
-export const isDrawing = (): boolean => useTool.getState().picks.length > 0
 
 /**
  * Delete the picked points that this drawing made itself (`created`) and nothing ended up using.
@@ -310,7 +305,7 @@ export function createsPointsOnEmpty(tool: ToolId): boolean {
  * When segments drawn one by one close into a loop (e.g. four sides of a rectangle), turn the loop
  * into a polygon so it is recognised and its area can be shown.
  */
-export function closeLoopIfAny(newSegmentId: ObjId): void {
+function closeLoopIfAny(newSegmentId: ObjId): void {
   const s = scene()
   const seg = s.objects[newSegmentId]
   if (!seg || seg.type !== 'segment') return

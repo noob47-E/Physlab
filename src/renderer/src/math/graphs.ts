@@ -79,7 +79,7 @@ export function sampleExplicit(f: Fx, xMin: number, xMax: number, n: number, vie
 }
 
 /** What a key point of a graph is. One point can be several: the bottom of y = x² − 4 is its min and its y-intercept. */
-export type KeyKind = 'root' | 'max' | 'min' | 'yIntercept'
+type KeyKind = 'root' | 'max' | 'min' | 'yIntercept'
 
 export interface KeyPoint {
   x: number
@@ -603,7 +603,7 @@ export interface LineSolved {
 }
 
 /** The solver of the command bar (core/visualize.ts solutionsInX): the formula, its sides as typed, and the scene's names. */
-export type LineSolver = (expr: string, sides: [string, string] | undefined, scope: Record<string, unknown>) => LineSolved | null
+type LineSolver = (expr: string, sides: [string, string] | undefined, scope: Record<string, unknown>) => LineSolved | null
 
 /**
  * The solutions of a graph of an equation in x alone, from the solver the command bar names them
@@ -685,7 +685,7 @@ export function spreadLabels(spots: readonly LabelSpot[], lineHeight: number): {
 }
 
 /** Where a key point's label is drawn: the anchor in screen pixels, and which end of the text sits on it. */
-export interface PlacedLabel {
+interface PlacedLabel {
   x: number
   /** The middle of the label's height. */
   y: number
@@ -892,7 +892,7 @@ export function surfaceGeometry(f: Fxy, half: number, n: number) {
 }
 
 /** Compact approximation of the Turbo colour map. */
-export function turbo(t: number): [number, number, number] {
+function turbo(t: number): [number, number, number] {
   t = Math.max(0, Math.min(1, t))
   const r = 0.1357 + t * (4.5974 - t * (42.3277 - t * (130.5887 - t * (150.5666 - t * 58.1375))))
   const g = 0.0914 + t * (2.1856 + t * (4.8052 - t * (14.0195 - t * (4.2109 + t * 2.7747))))
@@ -905,7 +905,7 @@ export function turbo(t: number): [number, number, number] {
 // ---------------------------------------------------------------------------
 
 /** One formula of a piecewise curve and the stretch of x it holds on. */
-export interface Piece {
+interface Piece {
   f: Fx
   from: number
   to: number

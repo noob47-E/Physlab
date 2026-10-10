@@ -59,17 +59,17 @@ export function polygonCornerMark(prev: V3, v: V3, next: V3, orientation: number
 }
 
 /** The normal of the plane of two arms, or null when they are parallel. */
-export function planeNormal(u: V3, v: V3): V3 | null {
+function planeNormal(u: V3, v: V3): V3 | null {
   const n = cross(u, v)
   return len(n) < 1e-9 * Math.max(1, len(u) * len(v)) ? null : normalize(n)
 }
 
-export interface TickMark {
+interface TickMark {
   a: V3
   b: V3
   n: number
 }
-export interface ArcMark {
+interface ArcMark {
   vertex: V3
   a: V3
   b: V3

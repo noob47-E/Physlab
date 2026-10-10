@@ -18,7 +18,7 @@ export const HEAD_HALF_ANGLE_DEG = 25
  */
 export const HALO_TIP_PX = 1.1 / Math.sin((HEAD_HALF_ANGLE_DEG * Math.PI) / 180)
 
-export interface ArrowHead {
+interface ArrowHead {
   /** Head length along the arrow, in world units. */
   headLen: number
   /** Half the width of the head's base, in world units. */
@@ -73,7 +73,7 @@ export interface Px {
 }
 
 /** A label's offset from its point, in screen pixels, to the label's centre. */
-export interface LabelOffset {
+interface LabelOffset {
   dx: number
   dy: number
 }
@@ -158,7 +158,7 @@ export const FINE_TURN_STEP_DEG = 5
 export const MAX_ELEVATION_DEG = 89
 
 /** A camera position as seen from the target: distance, compass angle from +x, height angle above the floor (radians). */
-export interface Orbit {
+interface Orbit {
   r: number
   azimuth: number
   elevation: number

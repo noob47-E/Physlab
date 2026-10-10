@@ -49,7 +49,7 @@ function Row({ row, owner, piFactor }: { row: FormulaRow; owner: ObjId; piFactor
   )
 }
 
-export function ShapeReportView({ report, owner, piFactor }: { report: ShapeReport; owner: ObjId; piFactor?: boolean }) {
+function ShapeReportView({ report, owner, piFactor }: { report: ShapeReport; owner: ObjId; piFactor?: boolean }) {
   return (
     <>
       {report.rows.map((r) => (

@@ -143,7 +143,7 @@ const CVD: Record<Exclude<Vision, 'normal'>, number[][]> = {
 }
 
 /** A colour as someone with the given colour vision sees it (sRGB in, sRGB out). */
-export function simulateVision(rgb: RGB, vision: Vision): RGB {
+function simulateVision(rgb: RGB, vision: Vision): RGB {
   if (vision === 'normal') return rgb
   const l = rgb.map(toLinear)
   const m = CVD[vision]

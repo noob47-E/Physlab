@@ -50,7 +50,7 @@ export interface BandTolerance {
  * Format 2, number parts only (rung 5): the student states their own uncertainty ("0.5591 ±
  * 0.0001") and the answer is right when the Eₙ test passes, |x − xref| ≤ √(u² + uref²).
  */
-export interface StatedTolerance {
+interface StatedTolerance {
   kind: 'stated'
   /** The reference value's own standard uncertainty, a mathjs expression in the variables. */
   uref: string
@@ -73,13 +73,13 @@ export interface ECF {
 }
 
 /** Fields any part may carry in format 2. */
-export interface PartCommon {
+interface PartCommon {
   ecf?: ECF
   /** A mathjs condition in the question's variables; the part is shown and counted only when it holds. */
   showIf?: string
 }
 
-export interface NamedTrap {
+interface NamedTrap {
   /** mathjs expression in the variables: the wrong answer a known mistake gives. */
   value: string
   /** Plain sentence: "You used g = 10; this question says 9.8." */
@@ -193,7 +193,7 @@ export type PQPart = (
 export const FORMAT1_PART_TYPES = ['number', 'expression', 'choice'] as const
 
 /** A part 0.7.0 could already hold: number (with a band tolerance), expression or choice. */
-export type Format1Part = (Extract<PQPart, { type: 'number' }> & { tolerance: BandTolerance }) | Extract<PQPart, { type: 'expression' | 'choice' }>
+type Format1Part = (Extract<PQPart, { type: 'number' }> & { tolerance: BandTolerance }) | Extract<PQPart, { type: 'expression' | 'choice' }>
 
 /** Every other part: the four answer kinds of format 2, proof and lego. */
 export type Format2Part = Exclude<PQPart, { type: (typeof FORMAT1_PART_TYPES)[number] }>
@@ -216,53 +216,6 @@ export const DEFAULT_BAND: BandTolerance = { kind: 'relative', value: 0.02 }
  * anyway — the Author's band editor, a Numbas range — it reads as the 2 % default.
  */
 export const bandOf = (t: Tolerance): BandTolerance => (t.kind === 'stated' ? DEFAULT_BAND : t)
-
-/**
- * The same format-2 part with `f` applied to every formula in it (answers, the ODE and its
- * starting values, the model, the Lego corners); prompts and sentences are left alone. Renaming
- * a variable goes through this, so a vector's components follow a renamed `F` like a number's
- * answer does.
- */
-export function mapFormat2Formulas(p: Format2Part, f: (formula: string) => string): Format2Part {
-  switch (p.type) {
-    case 'vector':
-    case 'roots':
-      return { ...p, answer: p.answer.map(f) }
-    case 'matrix':
-      return { ...p, answer: p.answer.map((row) => row.map(f)) }
-    case 'function':
-      return { ...p, ode: f(p.ode), model: f(p.model), initial: p.initial.map((c) => ({ ...c, at: f(c.at), value: f(c.value) })) }
-    case 'lego':
-      return { ...p, target: p.target.map(([x, y]) => [f(x), f(y)] as [string, string]) }
-    case 'proof':
-      return p
-  }
-}
-
-/**
- * Any part with `f` applied to the format-2 fields that name a variable outside its answer — the
- * condition that shows it, a stated part's reference uncertainty — and `rename` to each variable
- * an earlier answer is carried into. Renaming a variable goes through this too: a field left on
- * the old name makes the saved file refuse to open ("carries an answer into 'a', but 'a' is not
- * one of its variables").
- */
-export function mapPartNames(p: PQPart, f: (formula: string) => string, rename: (name: string) => string): PQPart {
-  const out: PQPart = { ...p }
-  if (p.showIf !== undefined) out.showIf = f(p.showIf)
-  if (p.ecf !== undefined) out.ecf = { ...p.ecf, uses: p.ecf.uses.map((u) => ({ ...u, variable: rename(u.variable) })) }
-  if (out.type === 'number' && out.tolerance.kind === 'stated') out.tolerance = { ...out.tolerance, uref: f(out.tolerance.uref) }
-  return out
-}
-
-/** Every formula in a format-2 part, in the order `mapFormat2Formulas` visits them. */
-export function format2Formulas(p: Format2Part): string[] {
-  const out: string[] = []
-  mapFormat2Formulas(p, (s) => {
-    out.push(s)
-    return s
-  })
-  return out
-}
 
 export type DistractorRule =
   | 'sign'             // −answer
@@ -371,7 +324,7 @@ export interface PQQuestion {
 }
 
 /** The file formats this PhysLab reads. A file is written in the lowest one that holds it. */
-export type PQVersion = 1 | 2
+type PQVersion = 1 | 2
 
 export interface PQFile {
   app: 'PhysLab'

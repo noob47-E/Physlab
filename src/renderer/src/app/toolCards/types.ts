@@ -12,7 +12,7 @@ import type { ToolId } from '../../core/types'
 import type { LinkKind, ShapeKind } from '../../sim/types'
 
 /** The Sandbox ADD buttons offer every shape but the ground, which every scene already has. */
-export type AddShape = Exclude<ShapeKind, 'ground'>
+type AddShape = Exclude<ShapeKind, 'ground'>
 
 export type ToolCardKey = `tool:${ToolId}` | `add:${AddShape}` | `link:${LinkKind}`
 

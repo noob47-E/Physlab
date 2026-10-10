@@ -13,7 +13,7 @@ import type { Format2Part, PQPart, Tolerance, UnitId } from './pqjson'
 import { bandOf } from './pqjson'
 import { convertQuantity, revealSettings, texQuantity, texUnit, UNITS } from './units'
 
-export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
 type VectorPart = Extract<PQPart, { type: 'vector' }>
 type MatrixPart = Extract<PQPart, { type: 'matrix' }>
@@ -61,7 +61,7 @@ function unitFactor(from: UnitId | null, to: UnitId, what: string): number | { e
 // ---------------------------------------------------------------------------
 
 /** The largest uncertainty accepted when the author sets none: 10 % of the student's value. */
-export const DEFAULT_MAX_REL_U = 0.1
+const DEFAULT_MAX_REL_U = 0.1
 
 /**
  * The Eₙ test (ISO/IEC 17043): two results agree when |x − xref| ≤ √(u² + uref²), i.e. Eₙ ≤ 1.
@@ -214,7 +214,7 @@ export function checkVectorPart(text: string, part: VectorPart, values: Record<s
 
 export type CellVerdict = 'right' | 'wrong' | 'empty' | 'unreadable'
 
-export interface MatrixCheck extends Check {
+interface MatrixCheck extends Check {
   /** One verdict per entry, in the answer's rows and columns (empty when the sizes differ). */
   cells: CellVerdict[][]
   /** Marks earned: shared out entry by entry with `markPerCell`, else all or nothing. */

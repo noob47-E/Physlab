@@ -6,7 +6,7 @@
 
 import { type MathNode } from 'mathjs'
 import { math, preprocess } from '../expr'
-import { R0, R1, rAdd, rEq, rFromNumber, rGcd, rIsNeg, rIsOne, rMul, rNeg, rPow, rat, rTex, rAbs, type Rat } from './rat'
+import { R0, R1, rAdd, rEq, rFromNumber, rGcd, rIsNeg, rIsOne, rMul, rNeg, rPow, rTex, rAbs, type Rat } from './rat'
 
 /** One term: a coefficient and the powers of each variable. Absent variable = power 0. */
 export interface Term {
@@ -33,11 +33,9 @@ export const varsOf = (e: Expr): string[] => {
   return [...s].sort()
 }
 
-export const totalDegree = (t: Term): number => Object.values(t.v).reduce((a, b) => a + b, 0)
-export const degreeIn = (e: Expr, name: string): number => e.reduce((m, t) => Math.max(m, t.v[name] ?? 0), 0)
+const totalDegree = (t: Term): number => Object.values(t.v).reduce((a, b) => a + b, 0)
 export const exprDegree = (e: Expr): number => e.reduce((m, t) => Math.max(m, totalDegree(t)), 0)
 export const isConstant = (e: Expr): boolean => e.every((t) => totalDegree(t) === 0)
-export const exprIsZero = (e: Expr): boolean => e.length === 0
 
 /** Combine like terms, drop zeros, and order: highest degree first, then alphabetically. */
 export function normalize(terms: Term[]): Expr {
@@ -75,7 +73,6 @@ export const varExpr = (name: string, power = 1): Expr => normalize([{ c: R1, v:
 export const eAdd = (a: Expr, b: Expr): Expr => normalize([...a, ...b])
 export const eNeg = (a: Expr): Expr => a.map((t) => ({ c: rNeg(t.c), v: { ...t.v } }))
 export const eSub = (a: Expr, b: Expr): Expr => eAdd(a, eNeg(b))
-export const eScale = (a: Expr, k: Rat): Expr => normalize(a.map((t) => ({ c: rMul(t.c, k), v: { ...t.v } })))
 
 export function mulTerm(a: Term, b: Term): Term {
   const v: Record<string, number> = { ...a.v }
@@ -92,8 +89,8 @@ export function mulTerm(a: Term, b: Term): Term {
  * never came back — so every product stops past MAX_TERMS. A product whose term count could reach
  * MAX_PAIRS is refused before it is worked out, since working it out is the slow part.
  */
-export const MAX_POWER = 1000
-export const MAX_TERMS = 2000
+const MAX_POWER = 1000
+const MAX_TERMS = 2000
 const MAX_PAIRS = 100_000
 const TOO_MANY_TERMS = `Multiplied out, this has more than ${MAX_TERMS} terms — too many to show. Try smaller powers.`
 
@@ -339,7 +336,7 @@ interface Product {
 }
 
 /**
- * The factors of one product node — see parseFactors.
+ * The factors of one product node.
  *
  * A leading minus inside the product is peeled off as the sign: mathjs reads −(x + 1)(x − 1) as
  * (−(x + 1))·(x − 1), and folding the minus into the bracket showed the student a grid for
@@ -390,17 +387,6 @@ function productOfNode(node: MathNode): Product {
     })
   }
   return { neg, factors: merged.map((f) => f.e), shown: merged.map((f) => f.tex ?? exprTexBracketed(f.e)).join('') }
-}
-
-/**
- * The factors of a product, each expanded on its own but not multiplied together.
- *
- * (2x + 3)(3x − 1) comes back as [2x + 3, 3x − 1] and (x + 1)² as [x + 1, x + 1], which is what
- * Expand needs to show the distribution rather than restate the answer. Anything that is not a
- * product at the top level comes back as a single factor.
- */
-export function parseFactors(src: string): Expr[] {
-  return productOfNode(readNode(src)).factors
 }
 
 /** One piece of a sum: its sign, the factors of the product it is, and the product as typed. */
@@ -486,4 +472,3 @@ export function evalAt(e: Expr, at: Record<string, Rat>): Rat {
   return sum
 }
 
-export { rat }

@@ -17,7 +17,7 @@ export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
  * radians are dimensionless — but it is kept as its own slot so `rad/s` and `Hz` (both "per
  * second" in bare SI terms) are never treated as the same thing.
  */
-export type Dim = readonly [number, number, number, number, number, number, number]
+type Dim = readonly [number, number, number, number, number, number, number]
 
 const D = (m: number, kg: number, s: number, A: number, K: number, mol: number, rad: number): Dim => [m, kg, s, A, K, mol, rad]
 
@@ -44,7 +44,7 @@ const TEMPERATURE = D(0, 0, 0, 0, 1, 0, 0)
 const AMOUNT = D(0, 0, 0, 0, 0, 1, 0)
 const MOMENTUM = D(1, 1, -1, 0, 0, 0, 0)
 
-export interface UnitInfo {
+interface UnitInfo {
   /** How the unit is written after a number: "m/s", "°", "Ω". */
   label: string
   /** In words, for a "that is in <name>" sentence: "metres per second". */

@@ -6,7 +6,7 @@ import type { Computed, EvalResult, ObjId, SceneObject } from '../core/types'
 import { add, normalize, scale, type V3 } from '../math/vec'
 import { POINT_REACH_PX } from './viewMath'
 
-export type HitPart = 'body' | 'head' | 'tail'
+type HitPart = 'body' | 'head' | 'tail'
 
 export interface Hit {
   id: ObjId

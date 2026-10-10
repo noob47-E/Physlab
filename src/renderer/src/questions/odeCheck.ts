@@ -14,13 +14,13 @@ import { lettersBeforeBrackets, withoutNameEquals } from './parts'
 import type { PQPart, UnitId } from './pqjson'
 
 export type FunctionPart = Extract<PQPart, { type: 'function' }>
-export type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
+type Precision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
 /** Numbers quoted in a sentence: y′(0) should be 1, v(0) should be 2. */
 const SENTENCE_PRECISION: Precision = { decimals: 4, precisionMode: 'dp' }
 
 /** The design's range: seven points between 0.1 and 1, clear of the x = 0 where many solutions start. */
-export const DEFAULT_SAMPLE_RANGE: [number, number] = [0.1, 1]
+const DEFAULT_SAMPLE_RANGE: [number, number] = [0.1, 1]
 const POINTS = 7
 
 // Relative sizes of the mismatch. Exact arithmetic leaves ~10⁻¹⁵; a formula typed with its

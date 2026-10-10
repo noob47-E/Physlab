@@ -59,7 +59,7 @@ function unbrace(s: string): string {
 }
 
 /** Split at a separator that is not inside braces or brackets. */
-export function splitTop(s: string, sep: RegExp): string[] {
+function splitTop(s: string, sep: RegExp): string[] {
   const parts: string[] = []
   let depth = 0
   let last = 0
@@ -95,7 +95,7 @@ function plainNumber(seg: string): { value: number; decimals: number } | null {
  * form such as "A\cos\theta" is not something to recompute). Angles in degrees become mathjs
  * degree units, so cos 30° is worked out in degrees exactly as a calculator in DEG mode does.
  */
-export function numeric(seg: string, degrees: boolean): string | null {
+function numeric(seg: string, degrees: boolean): string | null {
   let s = seg
     .replace(/\\left|\\right|\\,|\\;|\\!|\\quad|\\displaystyle/g, ' ')
     .replace(/\^\\circ/g, ' deg ')
@@ -149,10 +149,10 @@ function evaluate(expr: string, degrees: boolean): number | null {
 }
 
 /** The statements of a line: "A = 5,\quad B = 5" is two, "x ⇒ y" is two, "a \approx b" claims nothing. */
-export const statements = (tex: string): string[] =>
+const statements = (tex: string): string[] =>
   splitTop(tex, /^(,\s*\\quad|\\qquad|\\quad|\\;\\Rightarrow\\;|\\Rightarrow|\\to|\\approx|\\text\{\s*(and|or)\s*\}|,\\\s)/)
 
-export interface Falsehood {
+interface Falsehood {
   line: string
   claim: string
   got: number
@@ -163,7 +163,7 @@ export interface Falsehood {
  * given: it comes off before the number is read. Without this every line ending in a unit was
  * skipped without a word, and a false "√(7.56² + 7.09²) = 10.37 N" passed.
  */
-export const stripUnit = (seg: string): string => seg.replace(/(?<=[\d}])\s*(?:\\,)?\\text\{[^{}]*\}\s*$/, '').trim()
+const stripUnit = (seg: string): string => seg.replace(/(?<=[\d}])\s*(?:\\,)?\\text\{[^{}]*\}\s*$/, '').trim()
 
 const IJK_NUM = String.raw`\d+(?:\.\d+)?(?:\\times\s*10\^\{-?\d+\})?`
 /** One run of unit-vector terms, "4.01\hat{i} - 2.01\hat{j} + 0.41\hat{k}". */
@@ -182,7 +182,7 @@ interface VectorSeg {
  * as "3(1î + 1ĵ) = 3.01î + 3.01ĵ" is three claims a calculator can check: 3 × 1 = 3.01 is false.
  * "(…)/4.4" and "(−1.6)(…)" and "(…)×10⁻¹⁹" all come apart the same way.
  */
-export function vectorSeg(seg: string): VectorSeg | null {
+function vectorSeg(seg: string): VectorSeg | null {
   const spans = [...seg.matchAll(IJK_SPAN)]
   if (spans.length !== 1) return null
   const span = spans[0]
@@ -217,7 +217,7 @@ export function vectorSeg(seg: string): VectorSeg | null {
  * later in the same chain, to the places shown there"; two neighbouring segments written the same
  * are a step that changes nothing, and count as false too.
  */
-export function falseClaims(tex: string, sf?: number): Falsehood[] {
+function falseClaims(tex: string, sf?: number): Falsehood[] {
   // Half a unit in the last place shown. At 3 significant figures "1300" means 1295 to 1305: its
   // trailing zeros are not places the student was shown, so they widen the allowance.
   const allowance = (n: { value: number; decimals: number }, text: string): number => {
@@ -593,7 +593,7 @@ describe('the line reader itself', () => {
 type Cx = [number, number]
 
 /** A LaTeX segment as a function of x (complex-valued, so a + bi lines are read too), or null when it is not plain algebra. */
-export function algebra(seg: string): ((x: number) => Cx) | null {
+function algebra(seg: string): ((x: number) => Cx) | null {
   if (/\\text|\\begin|\\Rightarrow|\\overline|\\pm|\\mid|\\ne|\\in|\\sum|\\prod|[<>|]|\\ldots/.test(seg) || !seg.trim()) return null
   let src: string
   try {
@@ -645,7 +645,7 @@ function fractions(tex: string): { num: string; den: string }[] {
 }
 
 /** Rough writing in one piece of LaTeX: a doubled sign, a fraction in a fraction, a bracket as a whole denominator. */
-export function texFaults(tex: string): string[] {
+function texFaults(tex: string): string[] {
   const out: string[] = []
   const flat = tex.replace(/\\left|\\right|\\,|\\!/g, '')
   if (/[+-]\s*-(?!\s*&)/.test(flat.replace(/&\s*-/g, '&'))) out.push(`a doubled sign: ${tex}`)
@@ -657,7 +657,7 @@ export function texFaults(tex: string): string[] {
 }
 
 /** Rough writing in a sentence: numbering, a space before a colon, "3/10x". */
-export function sentenceFaults(text: string): string[] {
+function sentenceFaults(text: string): string[] {
   const out: string[] = []
   if (/^\d+\.\s/.test(text)) out.push(`numbers itself: ${text}`)
   if (/\s:/.test(text)) out.push(`a space before a colon: ${text}`)
@@ -667,7 +667,7 @@ export function sentenceFaults(text: string): string[] {
 }
 
 /** Every false or rough line in a piece of Calculator working. */
-export function workingFaults(w: Working): string[] {
+function workingFaults(w: Working): string[] {
   const out: string[] = []
   if (w.error) return [`error: ${w.error}`]
   for (const [k, m] of w.moves.entries()) {
@@ -698,7 +698,7 @@ export function workingFaults(w: Working): string[] {
 }
 
 /** Lines that stand for the whole expression (no "=") must still be worth the question. */
-export function chainFaults(w: Working, question: string): string[] {
+function chainFaults(w: Working, question: string): string[] {
   const q = algebra(question)
   if (!q) return [`could not read the question ${question}`]
   const out: string[] = []

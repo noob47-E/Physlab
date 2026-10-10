@@ -86,7 +86,7 @@ export function insidePolygon(p: V3, pts: V3[]): boolean {
 }
 
 /** How far the name label is moved away from the cut, as a share of the centroid's own distance from it. */
-export const AWAY_FROM_CUT = 0.5
+const AWAY_FROM_CUT = 0.5
 
 /**
  * Where a piece's name label stands: its centroid, moved away from the side it shares with

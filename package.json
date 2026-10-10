@@ -15,6 +15,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . && node scripts/deadcode.mjs --check",
+    "smoke": "node scripts/smoke.mjs",
     "gate": "node scripts/gate.mjs",
     "hooks:install": "node scripts/install-hooks.mjs"
   },

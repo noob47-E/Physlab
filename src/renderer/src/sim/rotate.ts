@@ -6,7 +6,7 @@
 import type { V3 } from '../math/vec'
 
 /** x, y, z, w — the order Jolt's Quat takes them in. */
-export type Quat = [number, number, number, number]
+type Quat = [number, number, number, number]
 
 export function eulerToQuat(deg: V3): Quat {
   const [x, y, z] = deg.map((d) => (d * Math.PI) / 180)
@@ -20,7 +20,7 @@ export function eulerToQuat(deg: V3): Quat {
 }
 
 /** `v` turned by `q`: the world position of a point given in the body's own frame. */
-export function rotateVec(q: Quat, v: V3): V3 {
+function rotateVec(q: Quat, v: V3): V3 {
   const [qx, qy, qz, qw] = q
   // v' = v + 2 q_v × (q_v × v + w v)
   const tx = 2 * (qy * v[2] - qz * v[1])

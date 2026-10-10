@@ -11,7 +11,7 @@ import type { AnswerField } from './problems'
 import { UNITS } from '../questions/units'
 import { xAsTimes } from '../questions/answerText'
 
-export type Verdict = 'right' | 'close' | 'wrong' | 'empty' | 'unreadable'
+type Verdict = 'right' | 'close' | 'wrong' | 'empty' | 'unreadable'
 
 export interface Check {
   verdict: Verdict

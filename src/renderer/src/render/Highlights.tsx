@@ -25,7 +25,7 @@ export const useHighlight = create<{ h: Highlight | null; set: (h: Highlight | n
 }))
 
 /** Horizontal hatch lines clipped to a polygon (scanline intersections). */
-export function hatchSegments(region: V3[], spacing: number): V3[] {
+function hatchSegments(region: V3[], spacing: number): V3[] {
   if (region.length < 3 || spacing <= 0) return []
   const ys = region.map((p) => p[1])
   const yMin = Math.min(...ys)

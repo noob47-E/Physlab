@@ -4,7 +4,7 @@
 
 import { intoBody } from './energy'
 
-export interface Material {
+interface Material {
   id: string
   label: string
   density: number

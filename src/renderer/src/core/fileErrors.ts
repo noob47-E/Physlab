@@ -10,7 +10,7 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
  * Electron wraps anything the main process throws as "Error invoking remote method 'file:save':
  * Error: <message>". The student should read the message alone.
  */
-export const plainBridgeError = (e: unknown): string => messageOf(e).replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '')
+const plainBridgeError = (e: unknown): string => messageOf(e).replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '')
 
 /** "Could not open notes.phys: This file cannot be read: …" — the file's name, then the reason. */
 export const openFailureText = (path: string, e: unknown): string => `Could not open ${fileName(path)}: ${plainBridgeError(e)}`

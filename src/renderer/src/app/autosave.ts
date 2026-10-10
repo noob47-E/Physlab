@@ -20,7 +20,7 @@ type Bridge = {
 
 const bridge = () => (window as unknown as { physlab?: Bridge }).physlab
 
-export interface Snapshot {
+interface Snapshot {
   savedAt: number
   path: string | null
   file: SceneFile
@@ -181,7 +181,7 @@ async function write(text: string) {
   }
 }
 
-export async function clearAutosave(): Promise<void> {
+async function clearAutosave(): Promise<void> {
   const b = bridge()
   if (b?.autosaveClear) await b.autosaveClear()
   else {

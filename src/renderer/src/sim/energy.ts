@@ -8,7 +8,7 @@
 import type { BodyDef, BodyState, Link } from './types'
 import type { V3 } from '../math/vec'
 
-export interface Energy {
+interface Energy {
   /** ½mv², the energy of going somewhere. */
   linear: number
   /** ½Iω², the energy of spinning. A rolling ball has both. */
@@ -60,7 +60,7 @@ const square = (v: V3) => v[0] * v[0] + v[1] * v[1] + v[2] * v[2]
  * cylinder, capsule, pulley and cone stand along y). The spin energy uses all three (H15): one
  * figure, the axial one, read a cylinder tumbling end over end at a fraction of its true energy.
  */
-export function principalMoments(def: BodyDef, mass: number): V3 {
+function principalMoments(def: BodyDef, mass: number): V3 {
   const [a, b, c] = def.size
   switch (def.shape) {
     case 'sphere':
@@ -220,7 +220,7 @@ export function readoutStates(bodies: BodyDef[], live: Record<string, BodyState>
 }
 
 /** One spring as the Energy readout lists it. */
-export interface SpringReading {
+interface SpringReading {
   link: Link
   a: BodyDef
   b: BodyDef
@@ -249,7 +249,7 @@ export function springReadings(bodies: BodyDef[], links: Link[], live: Record<st
 }
 
 /** What the Energy readout shows, worked out in one place so a test runs the same arithmetic the panel does. */
-export interface SceneEnergy {
+interface SceneEnergy {
   /** The height potential energy is measured from. */
   datum: number
   /** Every moving body, with the state it was read from. */

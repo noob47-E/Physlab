@@ -8,7 +8,7 @@ import { addColumn, pasteRows, setRows } from './labStore'
 import type { LabColumn, LabTable } from './types'
 import { columnHeader, formulaName, isUsableName, readingText, recordedText, type Resolved } from './values'
 
-export interface ParsedTable {
+interface ParsedTable {
   /** What the first line called each column, when it was not all numbers. */
   header: { name: string; unit: string }[] | null
   rows: (number | null)[][]
@@ -39,7 +39,7 @@ export function cellNumber(cell: string, decimalComma = false): number | null {
 }
 
 /** "t / s", "t (s)" and "t" all give back a name and a unit. */
-export function headerCell(cell: string): { name: string; unit: string } {
+function headerCell(cell: string): { name: string; unit: string } {
   // splitLine has already taken CSV's double quotes off ("""x""" is the caption "x"), so only a
   // pair of single quotes, which CSV does not use, is taken off here.
   const text = cell.trim().replace(/^'([\s\S]*)'$/, '$1')

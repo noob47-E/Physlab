@@ -18,7 +18,6 @@ export function setExportContext(c: Ctx | null): void {
   ctx = c
   if (import.meta.env?.DEV) (window as unknown as { __physlabCtx?: Ctx | null }).__physlabCtx = c
 }
-export const canExport = () => !!ctx
 
 /** Position of one overlay element inside the viewport, read from its transform. */
 function elementBox(el: HTMLElement): { x: number; y: number } | null {
@@ -61,13 +60,13 @@ function drawLabels(c: CanvasRenderingContext2D, scale: number) {
 }
 
 /** What an export at `scale` makes from a canvas shown at `cssWidth` × `cssHeight` CSS pixels. */
-export type ExportPlan = { width: number; height: number; ratio: number } | { refusal: string }
+type ExportPlan = { width: number; height: number; ratio: number } | { refusal: string }
 
 /** The sentence shown when the drawing is not on screen to be exported. */
-export const EXPORT_HIDDEN = `The drawing is behind another tab. Click the ${PANEL_TITLES.viewport} tab to bring it to the front, then export again.`
+const EXPORT_HIDDEN = `The drawing is behind another tab. Click the ${PANEL_TITLES.viewport} tab to bring it to the front, then export again.`
 
 /** The largest side, in pixels, the export asks the renderer for: a common GPU texture limit. */
-export const EXPORT_MAX_SIDE = 8192
+const EXPORT_MAX_SIDE = 8192
 
 /**
  * The size of the exported picture and the pixel ratio the frame is drawn at. Both come from the

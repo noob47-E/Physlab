@@ -16,7 +16,7 @@ export interface KeyState {
   histIdx: number
 }
 
-export type KeyAction =
+type KeyAction =
   | { kind: 'run' }
   | { kind: 'take'; index: number }
   | { kind: 'move'; active: number }

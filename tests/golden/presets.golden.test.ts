@@ -16,7 +16,7 @@ async function sweep(): Promise<string[]> {
     const world = await SimWorld.create({ ...DEFAULT_WORLD, ...(built.world ?? {}) })
     world.rebuild(built.bodies, built.links ?? [])
 
-    const recordAt = (step: number, tLabel: string) => {
+    const recordAt = (tLabel: string) => {
       // A body by its name and place in the preset: its id is made fresh (random) on every build.
       for (const [n, b] of built.bodies.entries()) {
         const s = world.state(b.id)
@@ -31,12 +31,12 @@ async function sweep(): Promise<string[]> {
       }
     }
 
-    recordAt(0, '0s')
+    recordAt('0s')
     for (let i = 1; i <= 600; i++) {
       world.stepOnce()
-      if (i === 60) recordAt(60, '1s')
-      if (i === 300) recordAt(300, '5s')
-      if (i === 600) recordAt(600, '10s')
+      if (i === 60) recordAt('1s')
+      if (i === 300) recordAt('5s')
+      if (i === 600) recordAt('10s')
     }
     
     world.destroy()

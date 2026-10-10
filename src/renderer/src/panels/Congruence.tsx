@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Equal, Shapes } from 'lucide-react'
 import { useScene } from '../core/store'
-import type { ObjId, PolygonObj } from '../core/types'
+import type { ObjId } from '../core/types'
 import { Builder } from '../core/factory'
 import { compareTriangles, triangleFromSides, type Tri } from '../math/congruence'
 import { formatMeasure, unitSuffix, worldValue, type MeasureSettings } from '../math/format'
@@ -184,5 +184,3 @@ export function TriangleFromSides() {
     </div>
   )
 }
-
-export const isTriangle = (o: PolygonObj | undefined) => !!o && o.points.length === 3

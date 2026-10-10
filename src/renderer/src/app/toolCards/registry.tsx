@@ -10,7 +10,6 @@ import { LINK_GROUP } from './anims/links'
 import { TOOL_GROUP } from './anims/tools'
 import type { ToolCardDef, ToolCardKey } from './types'
 
-export type { ToolCardDef, ToolCardKey } from './types'
 
 export const TOOL_CARDS: Record<ToolCardKey, ToolCardDef> = { ...TOOL_GROUP, ...ADD_GROUP, ...LINK_GROUP }
 

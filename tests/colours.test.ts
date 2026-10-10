@@ -46,7 +46,7 @@ const SIZES: { what: string; re: RegExp }[] = [
 ]
 
 /** Every match of every pattern, with its line number, so a failure says where to look. */
-export function findLeaks(source: string, patterns: { what: string; re: RegExp }[]): string[] {
+function findLeaks(source: string, patterns: { what: string; re: RegExp }[]): string[] {
   const out: string[] = []
   source.split('\n').forEach((line, i) => {
     for (const { what, re } of patterns) {

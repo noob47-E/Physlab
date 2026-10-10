@@ -1,7 +1,7 @@
 import { add, angleBetween, cross, dist, dot, len, mid, normalize, scale, sub, type V3 } from './vec'
 import { fmt } from './format'
 
-export type LineKind = 'line' | 'segment' | 'ray'
+type LineKind = 'line' | 'segment' | 'ray'
 
 /** A line-like object: points p + t·d. Segment: t ∈ [0,1]; ray: t ≥ 0. */
 export interface GLine {
@@ -17,9 +17,7 @@ export interface GCircle {
 
 const EPS = 1e-10
 
-export const lineThrough = (a: V3, b: V3, kind: LineKind = 'line'): GLine => ({ kind, p: a, d: sub(b, a) })
-
-export function paramInRange(kind: LineKind, t: number): boolean {
+function paramInRange(kind: LineKind, t: number): boolean {
   if (kind === 'segment') return t >= -1e-9 && t <= 1 + 1e-9
   if (kind === 'ray') return t >= -1e-9
   return true
@@ -112,10 +110,6 @@ export function footOfPerpendicular(p: V3, l: GLine): V3 {
   return add(l.p, scale(l.d, t))
 }
 
-export function distancePointLine(p: V3, l: GLine): number {
-  return dist(p, footOfPerpendicular(p, l))
-}
-
 /** Distance from p to a line-like object, honouring segment/ray limits. */
 export function distanceToLineLike(p: V3, l: GLine): number {
   const dd = dot(l.d, l.d)
@@ -131,7 +125,7 @@ export function circleFrom3(a: V3, b: V3, c: V3): GCircle | null {
   return center ? { c: center, r: dist(center, a) } : null
 }
 
-export function circumcenter(a: V3, b: V3, c: V3): V3 | null {
+function circumcenter(a: V3, b: V3, c: V3): V3 | null {
   // The formula below is 2D only, so a tilted 3D triangle would get a wrong centre.
   const z = a[2]
   if (Math.abs(b[2] - z) > 1e-9 || Math.abs(c[2] - z) > 1e-9) return null
@@ -183,10 +177,10 @@ export function polygonArea(pts: V3[]): number {
  * - A corner lifted on purpose by a few thousandths of the shape's size is caught: a 2 × 2
  *   square with one corner raised 0.006 is called skew.
  */
-export const PLANAR_TOL = 1e-3
+const PLANAR_TOL = 1e-3
 
 /** A polygon's own plane, with its corners laid out in it. */
-export interface PolygonPlane {
+interface PolygonPlane {
   /** Unit normal: seen from its tip, the corners run anticlockwise. */
   normal: V3
   /** The corners' average; the plane passes through it. */
@@ -259,7 +253,7 @@ export function orientedAngleAt(a: V3, vertex: V3, b: V3): number {
   return t
 }
 
-export interface TriangleInfo {
+interface TriangleInfo {
   /** Side lengths opposite each vertex: a = |BC|, b = |CA|, c = |AB|. */
   sides: [number, number, number]
   /** Interior angles at A, B, C in radians. */
@@ -314,7 +308,7 @@ export function triangleInfo(A: V3, B: V3, C: V3): TriangleInfo {
   }
 }
 
-export interface LineEquation {
+interface LineEquation {
   /** ax + by = c */
   a: number
   b: number

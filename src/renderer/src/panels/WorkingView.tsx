@@ -248,7 +248,7 @@ export function WorkingView({
   )
 }
 
-export function AnswerCard({ doc }: { doc: WorkingDoc }) {
+function AnswerCard({ doc }: { doc: WorkingDoc }) {
   const tone = checkTone(doc)
   return (
     <div className="pure-answer mx-3 mt-3">

@@ -10,11 +10,11 @@ import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
 
 /** Level tags replace grade levels: the same topic turns up in many classes. */
-export type Level = 'Basic' | 'Intermediate' | 'Advanced'
+type Level = 'Basic' | 'Intermediate' | 'Advanced'
 
-export type Area = 'Vectors' | 'Shapes & geometry' | 'Graphs & functions' | 'Motion' | 'Electricity & magnetism'
+type Area = 'Vectors' | 'Shapes & geometry' | 'Graphs & functions' | 'Motion' | 'Electricity & magnetism'
 
-export interface Example {
+interface Example {
   title: string
   /** What it teaches, in plain words (no book or chapter numbers). */
   topic: string

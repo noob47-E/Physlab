@@ -7,7 +7,7 @@
 
 import type { Fit } from './fit'
 
-export interface ChartSeries {
+interface ChartSeries {
   /** The shared x axis, in order. */
   x: number[]
   /** The measured points; null where this x belongs to the curve only. */

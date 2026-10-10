@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { CAS_BOOT_STAGES, casWaitNote as waitNote, followCasStart as followStart } from '../ui/casStatus'
 
-export interface CasValue {
+interface CasValue {
   latex: string
   text: string
   numeric: { re: number; im?: number } | null

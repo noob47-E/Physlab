@@ -33,7 +33,7 @@ export const CARD_CLOSERS: ReadonlyArray<{ on: 'window' | 'document'; type: stri
   { on: 'document', type: 'scroll', capture: true }
 ]
 
-export interface ShownCard {
+interface ShownCard {
   key: string
   /** The button's box in window coordinates, which the card is placed beside. */
   anchor: Box

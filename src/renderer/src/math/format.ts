@@ -7,7 +7,7 @@ export type AngleUnit = 'deg' | 'rad' | 'grad'
 // Notation: every book writes vectors a little differently, so the user chooses
 // ---------------------------------------------------------------------------
 
-export interface Notation {
+interface Notation {
   /** How a vector's letter is written. */
   vector: 'arrow' | 'bold' | 'underline'
   /** How its components are written. */

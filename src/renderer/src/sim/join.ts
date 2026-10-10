@@ -6,7 +6,7 @@
 
 import type { BodyDef, BodyId, Link, LinkKind } from './types'
 
-export type JoinStep = 'first' | 'second' | 'kind'
+type JoinStep = 'first' | 'second' | 'kind'
 
 export interface JoinMode {
   step: JoinStep

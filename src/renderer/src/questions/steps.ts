@@ -347,10 +347,10 @@ export function readSolverArg(text: string, values: Record<string, number>): unk
 export const WORKING_IT_OUT_STEP = 'Working it out…'
 
 /** Where a SymPy-worked step's reply is kept: its job and its line with this variant's numbers in. */
-export const casStepKey = (job: string, input: string): string => `${job}\u0000${input}`
+const casStepKey = (job: string, input: string): string => `${job}\u0000${input}`
 
 /** Integrate or Differentiate one line through SymPy (the app passes math/pure/store.ts `workSteps`). */
-export type StepWorker = (job: JobId, input: string) => Promise<Working>
+type StepWorker = (job: JobId, input: string) => Promise<Working>
 
 /** A SymPy-worked step's reply as moves: its steps, or its answer alone with the reason, never nothing. */
 function casMoves(done: Working, cannot: (why?: string) => StepMove[]): StepMove[] {
@@ -369,7 +369,6 @@ function casMoves(done: Working, cannot: (why?: string) => StepMove[]): StepMove
 function autoMoves(
   step: PQStep,
   values: Record<string, number>,
-  units: Record<string, UnitId | undefined>,
   s: MeasureSettings,
   resolved?: ReadonlyMap<string, Working>
 ): StepMove[] {
@@ -480,7 +479,7 @@ export function stepsToWorking(
   const moves: StepMove[] = []
   for (const step of q.steps?.items ?? []) {
     if (step.auto) {
-      moves.push(...autoMoves(step, values, units, settings, resolved))
+      moves.push(...autoMoves(step, values, settings, resolved))
       continue
     }
     const m: StepMove = { head: plain(step.head), blank: step.blank === true }
@@ -512,7 +511,6 @@ export function stepsToWorking(
 export async function workCasSteps(
   q: PQQuestion,
   values: Record<string, number>,
-  settings: MeasureSettings,
   work: StepWorker
 ): Promise<Map<string, Working> | null> {
   const wanted = new Map<string, { job: JobId; input: string }>()
@@ -549,7 +547,7 @@ export async function workCasSteps(
  */
 export async function resolveAutoSteps(played: Played, settings: MeasureSettings, work: StepWorker): Promise<Played> {
   const q = played.question
-  const resolved = await workCasSteps(q, played.variant.values, settings, work)
+  const resolved = await workCasSteps(q, played.variant.values, work)
   if (!resolved) return played
   const working = stepsToWorking(q, played.variant, settings, played.level, resolved)
   const full = played.level === 'worked' ? working : stepsToWorking(q, played.variant, settings, 'worked', resolved)

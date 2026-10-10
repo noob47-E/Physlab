@@ -7,7 +7,7 @@ import { inDegrees, math, preprocess } from '../math/expr'
 import type { UnitId } from './pqjson'
 import { convertQuantity, unitFromTail, UNITS } from './units'
 
-export type Read<T> = T | { error: string }
+type Read<T> = T | { error: string }
 
 export const isReadError = (r: unknown): r is { error: string } =>
   typeof r === 'object' && r !== null && !Array.isArray(r) && typeof (r as { error?: unknown }).error === 'string'

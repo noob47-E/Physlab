@@ -8,7 +8,7 @@
 // student's Backspace.
 
 /** The parts of an element these checks look at. Loose, so a test can pass a plain object. */
-export interface KeyTarget {
+interface KeyTarget {
   tagName?: string
   isContentEditable?: boolean
   getAttribute?: (name: string) => string | null

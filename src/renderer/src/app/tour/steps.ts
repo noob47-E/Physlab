@@ -24,7 +24,7 @@ export const WELCOME_JOB: JobId = 'factor'
  */
 export const WELCOME_PROMISE = 'Factorise 6x² + 7x − 3'
 
-export interface TourStep {
+interface TourStep {
   /** Element to spotlight (a data-tour name). Missing element: the card is centred. */
   anchor?: string
   title: string

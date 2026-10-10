@@ -44,7 +44,7 @@ export interface ShapeClass {
 
 const POLY_NAMES: Record<number, string> = { 5: 'pentagon', 6: 'hexagon', 7: 'heptagon', 8: 'octagon', 9: 'nonagon', 10: 'decagon', 12: 'dodecagon' }
 
-export function polygonName(n: number): string {
+function polygonName(n: number): string {
   return POLY_NAMES[n] ?? `${n}-gon`
 }
 
@@ -270,14 +270,14 @@ export function classifyPolygon(input: V3[], tolDeg = 0.25, tolRel = 0.002): Sha
 // Freehand stroke recognition
 // ---------------------------------------------------------------------------
 
-export type Recognized =
+type Recognized =
   | { kind: 'segment'; a: V3; b: V3 }
   | { kind: 'circle'; center: V3; r: number }
   | { kind: 'polygon'; pts: V3[]; label: string }
   | { kind: 'none'; reason: string }
 
 /** Ramer–Douglas–Peucker simplification (open polyline). */
-export function rdp(points: V3[], eps: number): V3[] {
+function rdp(points: V3[], eps: number): V3[] {
   if (points.length < 3) return points
   const a = points[0]
   const b = points[points.length - 1]
@@ -323,7 +323,7 @@ function pathLength(points: V3[]): number {
   return s
 }
 
-export interface RecognizeOptions {
+interface RecognizeOptions {
   /** Grid step used to snap corners, centres and radii (0 = no snapping). */
   gridStep: number
   /**
@@ -417,7 +417,7 @@ function meanDistanceToPolygon(points: V3[], poly: V3[]): number {
 }
 
 /** Makes nearly-regular shapes exact (right angles, equal sides, parallel sides) and snaps to the grid. */
-export function beautifyPolygon(corners: V3[], step: number, snapPoint?: (p: V3) => V3): Recognized {
+function beautifyPolygon(corners: V3[], step: number, snapPoint?: (p: V3) => V3): Recognized {
   const snapP = (p: V3): V3 => (snapPoint ? snapPoint(p) : step > 0 ? snapPt(p, step) : p)
   const n = corners.length
   let pts = corners.map((p) => [p[0], p[1], 0] as V3)
