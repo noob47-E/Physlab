@@ -11,13 +11,12 @@
 
 import { create } from 'zustand'
 import type { MathNode } from 'mathjs'
-import { cas, casWaitNote, followCasStart, type CasOp, type CasResult } from '../cas'
+import { ask, useEngineStatus, workSteps as engineWorkSteps, type EngineJob, type EngineRequest } from '../engine'
+import { casWaitNote, followCasStart } from '../../ui/casStatus'
 import { calculusUnitNote, casInDegrees } from '../../calc/angle'
 import { scene } from '../../core/store'
 import { math, preprocess, splitArgs } from '../expr'
-import type { DigitSettings } from '../format'
 import { latexToMath } from '../latexToMath'
-import { derivativeWorking, integralWorking, type DerivTree, type IntegralTree } from './calculusSteps'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
 
@@ -65,10 +64,10 @@ interface PureState {
   /** LaTeX, for the maths field. Never pass `input` where this is wanted. */
   inputLatex: string
   working: Working | null
-  /** True while SymPy is being asked for an answer this engine could not work out itself. */
+  /** True while the algebra engine is being asked for an answer this engine could not work out itself. */
   asking: boolean
   /**
-   * Counts every run. A SymPy answer carries the number of the run that asked for it, and is
+   * Counts every run. An algebra-engine answer carries the number of the run that asked for it, and is
    * dropped unless that is still the latest run. Comparing the input text instead let a slow
    * answer for an earlier problem land after the student had moved on to a later one with the
    * same text, or after a newer run had already answered.
@@ -107,7 +106,7 @@ export const usePure = create<PureState>((set, get) => ({
     const src = (input ?? get().input).trim()
     if (!src) return
     if (jobById(j).engine === 'cas') {
-      // Integrate and Differentiate are worked by SymPy, which answers a moment later (seconds on
+      // Integrate and Differentiate are worked by the algebra engine, which answers a moment later (seconds on
       // its first start). The panel says so at once rather than keeping the last question's
       // working on screen under the new one; the answer lands only while this is still the latest run.
       const shown = latex ?? src
@@ -136,11 +135,11 @@ export const usePure = create<PureState>((set, get) => ({
       return
     }
 
-    // A power past the limit is past SymPy's time too: x^100000 kept "Checking that one a different way…" up for a
+    // A power past the limit is past the algebra engine's time too: x^100000 kept "Checking that one a different way…" up for a
     // minute and then nothing. Its refusal already says how far this goes, so it stands at once.
     if (TOO_BIG.test(working.error)) return
 
-    // The answer is not optional. When this engine cannot show working, SymPy is asked for the
+    // The answer is not optional. When this engine cannot show working, the algebra engine is asked for the
     // result alone, and the panel says plainly that the steps are missing.
     void askCas(j, src, shown, runSeq, set, get)
   },
@@ -177,17 +176,17 @@ export const usePure = create<PureState>((set, get) => ({
 }))
 
 /**
- * Which Pure Math jobs have a sensible SymPy equivalent to fall back on.
+ * Which Pure Math jobs the algebra engine can take over when this engine cannot show working.
  *
- * `partial` and `divide` map to `apart`, not `simplify`. SymPy's simplify on a fraction returns
- * the fraction, so the panel would print the question back as though it were the answer — worse
- * than showing nothing.
+ * `partial` and `divide` map to `apart`, not `simplify`: simplify on a fraction returns the
+ * fraction, so the panel would print the question back as though it were the answer — worse than
+ * showing nothing.
  */
-const CAS_OP: Partial<Record<JobId, CasOp>> = {
+const ENGINE_JOB: Partial<Record<JobId, EngineJob>> = {
   factor: 'factor',
-  // Not plain `factor`: SymPy's default factors over the rationals, so the fallback for
-  // "Factorise with i" used to hand back x² + 4 untouched and call it the answer.
-  factorComplex: 'factor_complex',
+  // Not plain `factor`, which factors over the rationals: the fallback for "Factorise with i"
+  // used to hand back x² + 4 untouched and call it the answer.
+  factorComplex: 'factorComplex',
   expand: 'expand',
   solve: 'solve',
   partial: 'apart',
@@ -212,37 +211,35 @@ function remember(job: JobId, src: string, latex: string, working: Working, set:
 }
 
 /**
- * The request for a job, as one pure function.
- *
- * This exists because the payload key is a contract with Python in another file, and it was wrong:
- * `solve` was sent `equations` while the worker reads `eqs`, so every fallback failed silently.
- * Stated once, it can be pinned by a test.
+ * The algebra engine's request for a job, as one pure function, or null when the engine has no
+ * such job. Stated once, so it can be pinned by a test (each adapter's own spelling of it is
+ * pinned in turn: a wrong payload key once made every solve fallback fail in silence).
  */
-export function casRequestFor(job: JobId, src: string, deg: boolean): { op: CasOp; payload: Record<string, unknown> } | null {
+export function engineRequestFor(job: JobId, src: string, deg: boolean): { job: EngineJob; req: EngineRequest } | null {
   if (job === 'integrate' || job === 'differentiate') {
-    const req = stepsRequest(job, src, deg)
-    return 'error' in req ? null : req
+    const r = stepsRequest(job, src, deg)
+    return 'error' in r ? null : r
   }
-  const op = CAS_OP[job]
-  if (!op) return null
-  // Sent with every request: without it the worker read radians, so solve(sin(x) = 0.5) answered
+  const engineJob = ENGINE_JOB[job]
+  if (!engineJob) return null
+  // Sent with every request: without it the engine read radians, so solve(sin(x) = 0.5) answered
   // π/6 here and 30 in the command bar, in the same DEG mode on the same screen.
-  return op === 'solve' ? { op, payload: { eqs: [src], deg } } : { op, payload: { expr: src, deg } }
+  return engineJob === 'solve' ? { job: engineJob, req: { eqs: [src], deg } } : { job: engineJob, req: { expr: src, deg } }
 }
 
-/** True when a SymPy answer that was asked for by run `asked` may still be shown. */
+/** True when an engine answer that was asked for by run `asked` may still be shown. */
 export const casAnswerIsCurrent = (asked: number, latest: number): boolean => asked === latest
 
 // ---------------------------------------------------------------------------------------------
-// Calculus working (Integrate, Differentiate): SymPy's rule tree, set out by calculusSteps.ts
+// Calculus working (Integrate, Differentiate): worked by the algebra engine (math/engine)
 // ---------------------------------------------------------------------------------------------
 
-/** What the panel says between asking SymPy and its reply. */
+/** What the panel says between asking the algebra engine and its reply. */
 export const WORKING_IT_OUT = 'Working it out…'
 
-/** The working shown while SymPy is asked: the question, nothing pretending to be an answer. */
+/** The working shown while the engine is asked: the question, nothing pretending to be an answer. */
 function workingItOut(job: JobId, latex: string): Working {
-  // The first request waits for Pyodide to load; a bare "Working it out…" for ten seconds reads
+  // The first request waits for the engine to load; a bare "Working it out…" for ten seconds reads
   // as a hang, so the sentence names the load stage and follows it while this working is shown.
   const at = (note: string): Working => ({
     title: jobById(job).label,
@@ -251,8 +248,8 @@ function workingItOut(job: JobId, latex: string): Working {
     moves: [],
     answers: []
   })
-  let shown = at(casWaitNote())
-  followCasStart((note) => {
+  let shown = at(casWaitNote(useEngineStatus.getState()))
+  followCasStart(useEngineStatus, (note) => {
     // Only while this very working is on the panel; a newer question or the answer replaces it.
     if (usePure.getState().working !== shown) return
     shown = at(note)
@@ -261,12 +258,12 @@ function workingItOut(job: JobId, latex: string): Working {
   return shown
 }
 
-/** Function names the worker reads, longest first so "asin" is never cut down to "a·sin". */
+/** Function names the engine reads, longest first so "asin" is never cut down to "a·sin". */
 const FUNCTIONS = ['arcsin', 'arccos', 'arctan', 'asinh', 'acosh', 'atanh', 'asin', 'acos', 'atan', 'acot', 'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'exp', 'abs', 'log', 'ln']
 
 /**
  * A function name glued to the letter before it, taken apart: "2xcos(x^(2))" → "2x*cos(x^(2))".
- * The Maths field's converter writes 2x cos(x²) that way, and SymPy's parser splits an unknown
+ * The Maths field's converter writes 2x cos(x²) that way, and the engine's parser split an unknown
  * name into single letters, so ∫ 2x cos(x²) dx came back as c·o·s·x⁴/2.
  */
 export function gluedFunctionsApart(expr: string): string {
@@ -284,11 +281,11 @@ const GREEK: Record<string, string> = {
 }
 
 /**
- * The line as the worker's parser needs it: Greek letters spelt out (the field writes θ, and the
- * letter to differentiate by is spelt theta, so d/dθ(θ sin θ) came back as 0), then glued
- * function names taken apart.
+ * The line with every name spelt plainly, as an engine's parser needs it: Greek letters spelt out
+ * (the field writes θ, and the letter to differentiate by is spelt theta, so d/dθ(θ sin θ) came
+ * back as 0), then glued function names taken apart.
  */
-export function forSymPy(expr: string): string {
+export function spelledOut(expr: string): string {
   return gluedFunctionsApart(expr.replace(/[θαβγφωλμτσρψ]/g, (c) => GREEK[c]))
 }
 
@@ -299,7 +296,7 @@ const WHOLE_NAMES = new Set(['theta', 'alpha', 'beta', 'gamma', 'phi', 'omega', 
 /**
  * The letter to integrate or differentiate by when the student names none: x when it is there,
  * otherwise the only letter there is (∫ t² gives t³/3, not t²x), otherwise x. A run of letters
- * with no sign between them is a product of single letters (te^t is t·e^t), as SymPy reads it.
+ * with no sign between them is a product of single letters (te^t is t·e^t), as the engine reads it.
  */
 export function calculusVariable(expr: string): string {
   let names: string[]
@@ -327,46 +324,34 @@ export function calculusVariable(expr: string): string {
 /** A letter to differentiate or integrate by: one Latin letter, or a Greek one spelt out (GLM #25). */
 const isLetter = (named: string): boolean => /^[A-Za-z]$/.test(named) || WHOLE_NAMES.has(named)
 
-/** lambda is a word Python keeps for itself, so SymPy spells the letter lamda (and prints it \lambda). */
-const pySpelling = (s: string): string => s.replace(/\blambda\b/g, 'lamda')
-
 /**
- * Infinity as the worker reads it. The Maths field turns ∞ into mathjs's `Infinity`, a name the
- * worker does not know, so its parser split it into the letters I·n·f·i·n·i·t·y (i being √−1) and
- * ∫₀^∞ e^(−x) dx came back as 1 − e^(i f n² t y). SymPy spells infinity `oo`. Applied only to what
- * is sent, never inside forSymPy: calculusVariable would read `oo` as the letter o.
- */
-const infinityForSymPy = (s: string): string => s.replace(/\bInfinity\b|∞/g, 'oo')
-const boundForSymPy = (s: string): string => infinityForSymPy(pySpelling(forSymPy(s)))
-
-/**
- * The typed line as the worker's payload: "x e^x", "x^2, 0, 2" (limits), "t^2, t" (a letter),
- * "t^2, t, 0, 1". The keys are the ones `integral_steps` / `diff_steps` read in cas.worker.ts,
- * pinned by the fixtures recorded from them. `deg` goes only with trigonometry, because the
- * worker's "worked in radians" sentence is noise under ∫x² dx.
+ * The typed line as the engine's request: "x e^x", "x^2, 0, 2" (limits), "t^2, t" (a letter),
+ * "t^2, t, 0, 1". Infinity stays ∞ or Infinity, and lambda stays lambda: spelling them for one
+ * engine is that engine's adapter's job. `deg` goes only with trigonometry, because the engine's
+ * "worked in radians" sentence is noise under ∫x² dx.
  */
 function stepsRequest(
   job: 'integrate' | 'differentiate',
   src: string,
   deg: boolean
-): { op: CasOp; payload: Record<string, unknown> } | { error: string } {
+): { job: EngineJob; req: EngineRequest } | { error: string } {
   const parts = splitArgs(src)
     .map((p) => p.trim())
     .filter(Boolean)
-  const expr = parts[0] === undefined ? undefined : forSymPy(parts[0])
-  const named = parts.length === 2 || parts.length === 4 ? forSymPy(parts[1]) : undefined
+  const expr = parts[0] === undefined ? undefined : spelledOut(parts[0])
+  const named = parts.length === 2 || parts.length === 4 ? spelledOut(parts[1]) : undefined
   const limits = parts.length === 3 ? parts.slice(1) : parts.length === 4 ? parts.slice(2) : null
   // Integrate: f | f, letter | f, a, b | f, letter, a, b. Differentiate: f | f, letter.
   const lengthOk = parts.length >= 1 && parts.length <= (job === 'integrate' ? 4 : 2)
   if (!expr || !lengthOk || (named !== undefined && !isLetter(named))) return { error: shapeSentence(job) }
   const v = named ?? calculusVariable(expr)
   const trig = calculusUnitNote(job === 'integrate' ? 'integrate' : 'diff', expr, deg) !== null
-  const payload: Record<string, unknown> = { expr: infinityForSymPy(pySpelling(expr)), var: pySpelling(v), deg: trig }
+  const req: EngineRequest = { expr, var: v, deg: trig }
   if (limits) {
-    payload.lower = boundForSymPy(limits[0])
-    payload.upper = boundForSymPy(limits[1])
+    req.lower = spelledOut(limits[0])
+    req.upper = spelledOut(limits[1])
   }
-  return { op: job === 'integrate' ? 'integral_steps' : 'diff_steps', payload }
+  return { job: job === 'integrate' ? 'integralSteps' : 'diffSteps', req }
 }
 
 function shapeSentence(job: 'integrate' | 'differentiate'): string {
@@ -388,7 +373,7 @@ export function calculusJobFor(casOp: string, args: string[]): { job: 'integrate
   // while a line with no letter is worked in the one Working guesses from the expression (t), so
   // the answer said 0 and its own working said 3t². An x is left off the line only where Working
   // would guess x too (x^2 stays "x^2", not "x^2, x"); any other letter is written as typed.
-  const guessed = calculusVariable(forSymPy(f))
+  const guessed = calculusVariable(spelledOut(f))
   const withLetter = (letter: string, rest: string[] = []): string =>
     letter === 'x' && guessed === 'x' ? [f, ...rest].join(', ') : [f, letter, ...rest].join(', ')
   if (casOp === 'diff') {
@@ -398,32 +383,13 @@ export function calculusJobFor(casOp: string, args: string[]): { job: 'integrate
     // The bar reads integrate(f, a, b) as limits in x, whatever a fourth argument says.
     pick = { job: 'integrate', input: args.length >= 3 ? withLetter('x', [second, third]) : withLetter(second || 'x') }
   }
-  return pick && casRequestFor(pick.job, pick.input, false) ? pick : null
-}
-
-/** A worker failure in words: the client's own sentences stand; Python's text never reaches a student. */
-function stepsErrorSentence(job: JobId, error: string): string {
-  if (/^(This took too long|The algebra engine|Cancelled)/.test(error)) return error
-  const verb = job === 'integrate' ? 'integrate' : 'differentiate'
-  // The example as a student reads it: the job's own `example` is the typed form (x^2 sin(x)).
-  const example = job === 'integrate' ? 'x eˣ' : 'x² sin x'
-  return `PhysLab could not read that as something to ${verb}. Write it the way the example shows: ${example}.`
-}
-
-/** The worker's reply to a calculus job as the working the panel shows. Pure: fixtures go straight in. */
-export function stepsWorkingFor(job: JobId, src: string, reply: CasResult | IntegralTree | DerivTree, digits?: DigitSettings): Working {
-  const label = jobById(job).label
-  if (reply.error) return failed(label, src, stepsErrorSentence(job, reply.error))
-  try {
-    return job === 'integrate' ? integralWorking(reply as IntegralTree, src, digits) : derivativeWorking(reply as DerivTree, src)
-  } catch {
-    return failed(label, src, 'Something went wrong while setting out that working.')
-  }
+  return pick && engineRequestFor(pick.job, pick.input, false) ? pick : null
 }
 
 /**
- * Integrate or Differentiate one line, the whole way: the request, SymPy, the working. Used by the
- * Working panel and by a question's engine step, which both need the same answer for the same line.
+ * Integrate or Differentiate one line, the whole way: the request, the engine, the working (a
+ * refusal comes back already in PhysLab's words). Used by the Working panel and by a question's
+ * engine step, which both need the same answer for the same line.
  */
 export async function workSteps(job: JobId, src: string): Promise<Working> {
   const label = jobById(job).label
@@ -432,7 +398,7 @@ export async function workSteps(job: JobId, src: string): Promise<Working> {
   const req = stepsRequest(job, src, casInDegrees(settings.angleUnit))
   if ('error' in req) return failed(label, src, req.error)
   try {
-    return stepsWorkingFor(job, src, await cas(req.op, req.payload), settings)
+    return await engineWorkSteps(req.job as 'integralSteps' | 'diffSteps', req.req, { input: src, digits: settings })
   } catch {
     return failed(label, src, 'Something went wrong while working that out.')
   }
@@ -464,12 +430,12 @@ async function askCas(
   set: (p: Partial<PureState>) => void,
   get: () => PureState
 ): Promise<void> {
-  const req = casRequestFor(job, src, casInDegrees(scene().settings.angleUnit))
-  if (!req) return
+  const r = engineRequestFor(job, src, casInDegrees(scene().settings.angleUnit))
+  if (!r) return
   set({ asking: true })
   try {
-    const res = await cas(req.op, req.payload)
-    // The question may have moved on while Pyodide was waking up.
+    const res = await ask(r.job as Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, r.req)
+    // The question may have moved on while the engine was waking up.
     if (!casAnswerIsCurrent(asked, get().runSeq)) return
     const current = get().working
     if (!current?.error) return
@@ -505,10 +471,10 @@ async function askCas(
   }
 }
 
-/** The sentence a refusal ends with when SymPy could not answer either: the waiting line never just goes away. */
+/** The sentence a refusal ends with when the algebra engine could not answer either: the waiting line never just goes away. */
 export const OTHER_WAY_FAILED = 'I tried another way as well, and it could not work this out either.'
 
-/** A refusal so large that asking SymPy would only make the student wait (mono.ts MAX_POWER, and the like). */
+/** A refusal so large that asking the engine would only make the student wait (mono.ts MAX_POWER, and the like). */
 const TOO_BIG = /too big|too large|too many/i
 
 function otherWayFailed(asked: number, set: (p: Partial<PureState>) => void, get: () => PureState): void {

@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import katex from 'katex'
 import { JOBS, runPure, type JobId } from '../src/renderer/src/math/pure/run'
-import { stepsWorkingFor } from '../src/renderer/src/math/pure/store'
+import { stepsWorkingFor } from './helpers/sympyRequests'
 import type { Working } from '../src/renderer/src/math/pure/work'
 import { recordedFor } from './helpers/calculusFixtures'
 

@@ -9,7 +9,7 @@ import { freeCapitals, isValidName } from '../core/naming'
 import { evaluateScene } from '../core/evaluate'
 import type { Computed, ObjId, SceneObject } from '../core/types'
 import { drawability, inXAlone, NO_REAL_X, plainParseError, solutionsInX, visualizeBetween, visualizeGraph, visualizePiecewise, visualizePoint, visualizeSolution, visualizeTangentAt, visualizeVector, type DrawSpec, type NamedGraphs, type XComplex, type XSolved } from '../core/visualize'
-import { cas, useCasStatus } from '../math/cas'
+import { ask, useEngineStatus, type EngineJob, type EngineRequest } from '../math/engine'
 import { casWaitNote, followCasStart } from '../ui/casStatus'
 import { inferKind, isUnit, math, plainNumber, preprocess, sceneNames, splitArgs, symbolsOf, toV3, type ValueKind } from '../math/expr'
 import { fmtLabel, fmtPrecise, morePrecise, superscriptPowers, tex, texIJK, texMeasure, texPrecise, type Precision } from '../math/format'
@@ -23,7 +23,7 @@ import { calculusUnitNote, casInDegrees } from '../calc/angle'
 import { formatComplex } from '../calc/engine'
 import { orderRoots } from '../calc/roots'
 import { calcNum, type CalcPrecision } from '../calc/format'
-import { calculusJobFor, casRequestFor, forSymPy, usePure } from '../math/pure/store'
+import { calculusJobFor, engineRequestFor, spelledOut, usePure } from '../math/pure/store'
 import { showBeside, showPanel } from '../app/panels'
 import { enterMode } from '../app/layout'
 import { useApp } from '../app/modes'
@@ -1326,7 +1326,7 @@ function trySolverCommand(input: string): boolean {
 // ---------------------------------------------------------------------------
 // Pure Math: factorise, divide, partial fractions, HCF/LCM, complex numbers.
 // These run offline and instantly, and they write out their working, so they are tried before
-// the SymPy worker. Anything they cannot do falls through to tryCas, which still gives an answer.
+// the algebra engine. Anything they cannot do falls through to tryCas, which still gives an answer.
 // ---------------------------------------------------------------------------
 
 const PURE_WORDS: Record<string, JobId> = {
@@ -1345,7 +1345,7 @@ const PURE_WORDS: Record<string, JobId> = {
   complex: 'complex',
   solve: 'solve',
   // prove(sin 2x = 2 sin x cos x). A plain calculation such as mathjs's identity(3) still works:
-  // a refused identity with no SymPy fallback is tried as a calculation below.
+  // a refused identity with no algebra-engine fallback is tried as a calculation below.
   prove: 'trigidentity',
   identity: 'trigidentity'
 }
@@ -1416,7 +1416,7 @@ function tryPureMath(input: string): boolean {
   if (!job) return false
 
   const args = splitArgs(m[2])
-  // A third argument has no meaning here, and sent on as it was, `x^3-1,x-1,3` reached SymPy as
+  // A third argument has no meaning here, and sent on as it was, `x^3-1,x-1,3` reached the algebra engine as
   // one string and came back as a parser complaint rather than the shape the bar wants.
   if ((job === 'divide' || job === 'partial') && args.length > 2) throw new Error(`${m[1]}(numerator, denominator) or ${m[1]}(fraction)`)
   // solve(x^2-4, x) names the unknown; the pure solver works that out for itself.
@@ -1436,17 +1436,17 @@ function tryPureMath(input: string): boolean {
     // A fraction of plain numbers is arithmetic: the refusal itself says "the calculator will do
     // that one", so it does, and divide(10, 2) answers 5 as it did before the two-argument form.
     // "Plain" is decided by parsing, not by looking for letters: the e of 2e3 and the name pi
-    // are numbers too, and divide(2e3, 4) was being sent to SymPy for a 500 the calculator had.
+    // are numbers too, and divide(2e3, 4) was being sent to the algebra engine for a 500 the calculator had.
     if ((job === 'divide' || job === 'partial') && isPlainArithmetic(body)) {
       evaluatePlain(body, input)
       return true
     }
     // Not something the step engine can do. The Working panel's own fallback table
-    // (math/pure/store.ts) says which jobs SymPy can take over, and the caller sends those on so
+    // (math/pure/store.ts) says which jobs the algebra engine can take over, and the caller sends those on so
     // an answer still appears. The rest are tried as a plain calculation, which is where
     // complex(3, 4) is answered; only when that fails too is the refusal the last word, because
     // its reason ("needs a whole number") is worth more than `I don't know "x"`.
-    if (casRequestFor(job, body, casInDegrees(scene().settings.angleUnit))) return false
+    if (engineRequestFor(job, body, casInDegrees(scene().settings.angleUnit))) return false
     try {
       evaluatePlain(input)
     } catch {
@@ -1493,7 +1493,7 @@ function tryPureMath(input: string): boolean {
 async function tryCas(input: string): Promise<boolean> {
   const m = input.match(/^\s*(solve|nsolve|diff|derivative|d\/dx|integrate|integral|limit|series|simplify|expand|factor|factorise|factorize|divide|partial|partialfractions|exact)\s*\((.*)\)\s*$/i)
   if (!m) return false
-  // The step engine spells it three ways; SymPy knows one.
+  // The step engine spells it three ways; the algebra engine knows one.
   const op = m[1].toLowerCase().replace(/^factori[sz]e$/, 'factor')
   const args = splitArgs(m[2])
   const s = scene()
@@ -1501,9 +1501,9 @@ async function tryCas(input: string): Promise<boolean> {
   const deg = casInDegrees(s.settings.angleUnit)
   // On the first use the line names the load stage as it moves, so it never reads as a freeze; it
   // lets go of the status before the answer replaces it (followCasStart in ui/casStatus.ts).
-  const id = s.pushLog({ input, kind: 'info', text: `Solving… ${casWaitNote(useCasStatus.getState())}`.trim() })
-  followCasStart(useCasStatus, (note) => s.updateLog(id, { text: `Solving… ${note}` }))
-  let payload: Record<string, unknown>
+  const id = s.pushLog({ input, kind: 'info', text: `Solving… ${casWaitNote(useEngineStatus.getState())}`.trim() })
+  followCasStart(useEngineStatus, (note) => s.updateLog(id, { text: `Solving… ${note}` }))
+  let payload: Omit<EngineRequest, 'deg'>
   let casOp = op
   switch (op) {
     case 'solve':
@@ -1532,12 +1532,14 @@ async function tryCas(input: string): Promise<boolean> {
       payload = { expr: args[0], var: 'x', to: args[1] ?? '0' }
       break
     case 'series':
-      payload = { expr: args[0], var: 'x', at: args[1] ?? '0', n: args[2] ?? 6 }
+      // A term count that is not a whole number (3.5, or left empty after its comma) is refused, as
+      // it always was: it goes as NaN, which the engine cannot count with.
+      payload = { expr: args[0], var: 'x', at: args[1] ?? '0', n: args[2] === undefined ? 6 : /^\s*\d+\s*$/.test(args[2]) ? Number(args[2]) : NaN }
       break
     case 'divide':
     case 'partial':
     case 'partialfractions':
-      // What the step engine refused (divide(sin(x), x)) goes to SymPy's apart, the same route
+      // What the step engine refused (divide(sin(x), x)) goes to the algebra engine's apart, the same route
       // the Working panel takes, as the one fraction the two arguments stand for.
       casOp = 'apart'
       payload = { expr: args.length === 2 ? `(${args[0]})/(${args[1]})` : args.join(',') }
@@ -1545,8 +1547,7 @@ async function tryCas(input: string): Promise<boolean> {
     default:
       payload = { expr: args.join(',') }
   }
-  payload.deg = deg
-  const r = await cas(casOp, payload)
+  const r = await ask(casOp as Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, { ...payload, deg })
   if (r.error) {
     s.updateLog(id, { kind: 'error', text: r.error })
     return true
@@ -1579,8 +1580,8 @@ async function tryCas(input: string): Promise<boolean> {
   // command \intx, and every indefinite integral from the bar rendered as a red KaTeX error.
   // The label names the letter the answer was worked in: diff(t^3, t) = 3t² used to read d/dx, and
   // diff(θ^2, θ) = 2θ read d/dx(θ²), which is 0. θ and theta are one letter, written \theta, as in
-  // the working behind the same line (forSymPy spells θ theta for it).
-  const byLetter = forSymPy((args[1] ?? '').trim())
+  // the working behind the same line (spelledOut spells θ theta for it).
+  const byLetter = spelledOut((args[1] ?? '').trim())
   const letter =
     casOp === 'integrate' && args.length >= 3
       ? 'x'
@@ -1596,18 +1597,18 @@ async function tryCas(input: string): Promise<boolean> {
   const label = casOp === 'diff' ? (dBy ? `${dBy}\\left(${args[0]}\\right)` : '') : casOp === 'integrate' ? (args.length >= 3 ? `\\int_{${args[1]}}^{${args[2]}}` : '\\int ') + `${args[0]}\\,d${letter}` : ''
   const isFunctionResult = (casOp === 'diff' || (casOp === 'integrate' && args.length < 3)) && /x/.test(r.text)
   const unitNote = calculusUnitNote(casOp, args[0] ?? '', deg)
-  // An indefinite integral carries its + C, as its working and every textbook do; SymPy leaves it
-  // off, so the bar said ∫x eˣ dx = (x − 1)eˣ while "Show the working" said (x − 1)eˣ + C.
-  // An integral SymPy could not do comes back still written as one, and gets no + C.
+  // An indefinite integral carries its + C, as its working and every textbook do; the engine leaves
+  // it off, so the bar said ∫x eˣ dx = (x − 1)eˣ while "Show the working" said (x − 1)eˣ + C.
+  // An integral the engine could not do comes back still written as one, and gets no + C.
   const plusC = casOp === 'integrate' && args.length < 3 && !/\\int/.test(r.latex) ? ' + C' : ''
-  // The answer stays SymPy's own; its steps are one tap away in the Working panel (spec decision 3:
+  // The answer stays the engine's own; its steps are one tap away in the Working panel (spec decision 3:
   // no calculus words for the step engine, which runs first and would take diff/integrate over).
   const steps = calculusJobFor(casOp, args)
   s.updateLog(id, {
     kind: 'result',
     text: undefined,
     tex: `${label ? label + ' = ' : ''}${r.latex}${plusC}${numeric && !/^-?\d+$/.test(r.text) ? numeric : ''}${unitNote ? `\\quad\\text{(${unitNote})}` : ''}`,
-    visualize: isFunctionResult ? () => void visualizeGraph(`y = ${r.text}`, [r.text.replace(/\*\*/g, '^')], 'explicit', { reuse: true }) : undefined,
+    visualize: isFunctionResult ? () => void visualizeGraph(`y = ${r.text}`, [r.text], 'explicit', { reuse: true }) : undefined,
     working: steps
       ? () => {
           usePure.getState().run(steps.job, steps.input, linearToLatex(steps.input))
@@ -1624,17 +1625,17 @@ async function tryCas(input: string): Promise<boolean> {
  */
 const fmtNumeric = (n: { re: number; im?: number }, p: Precision) => formatComplex(n.re, n.im ?? 0, (v) => texAt(v, p), 'tex')
 
-/** One value of a SymPy solve() row, as the CAS worker sends it (CasValue in math/cas.ts). */
+/** One value of an engine's solve row (EngineValue in math/engine/types.ts). */
 type SolveValue = { latex: string; text: string; numeric: { re: number; im?: number } | null }
 
 /** A decimal beside a value that is already whole says nothing: x = 3, x = −2 + 3i. */
 const isWholeValue = (v: SolveValue): boolean => /^-?\d+$/.test(v.text) || (!!v.numeric && Number.isInteger(v.numeric.re) && Number.isInteger(v.numeric.im ?? 0))
 
 /**
- * The bar's answer line for SymPy's solve() rows: each letter with its exact value, and the
- * decimal beside a value that is not whole. SymPy lists roots in an order of its own (−2i before 2i),
+ * The bar's answer line for the engine's solve rows: each letter with its exact value, and the
+ * decimal beside a value that is not whole. The engine lists roots in an order of its own (−2i before 2i),
  * so the roots of one unknown are put in the order every other route uses: real roots smallest
- * first, then each conjugate pair with the +i root first. (A quadratic reaches SymPy only when the
+ * first, then each conjugate pair with the +i root first. (A quadratic reaches the engine only when the
  * Solve job refuses it; the Solve job's own answers keep their formula order.) Pure, so the line can
  * be compared with the other routes that answer the same equation (x = ?, Equations mode, the Solve job).
  */
@@ -1643,7 +1644,7 @@ export function solveRowsTex(rows: Record<string, SolveValue>[], p: Precision): 
     const n = Object.values(row)[0].numeric
     return n ? { re: n.re, im: n.im ?? 0 } : null
   }
-  // A system's solution (x and y in one row) has no single root to order by: SymPy's order stays.
+  // A system's solution (x and y in one row) has no single root to order by: the engine's order stays.
   const ordered = rows.every((row) => Object.keys(row).length === 1) ? orderRoots(rows, valueOf) : rows
   return ordered
     .map((row) => Object.entries(row).map(([k, v]) => `${k} = ${v.latex}${v.numeric && !isWholeValue(v) ? ` \\approx ${fmtNumeric(v.numeric, p)}` : ''}`).join(',\\ '))
@@ -1690,7 +1691,7 @@ function evaluatePlain(expr: string, shown = expr) {
   const text = typeof value === 'number' ? fmtPrecise(value, s.settings) : isUnit(value) ? `${fmtPrecise(plainNumber(value), s.settings)} ${value.formatUnits()}` : math.format(value, { precision: 10 })
   const id = s.pushLog({ input, kind: 'result', text: `= ${text}`, solution: solution ?? undefined })
   if (typeof value === 'number' && !Number.isInteger(value) && Number.isFinite(value) && isConstant(node)) {
-    cas('exact', { expr: preprocess(expr), deg: casInDegrees(s.settings.angleUnit) }).then((r) => {
+    ask('exact', { expr: preprocess(expr), deg: casInDegrees(s.settings.angleUnit) }).then((r) => {
       if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text) {
         s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${texPrecise(value, s.settings)}` })
       }

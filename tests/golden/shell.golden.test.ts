@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, beforeEach, vi } from 'vitest'
 
-vi.mock('../../src/renderer/src/math/cas', () => ({
+vi.mock('../../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async () => ({ latex: '', text: '', numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {}, subscribe: () => () => {} },
   CAS_OPS: []

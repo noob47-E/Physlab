@@ -12,12 +12,12 @@ import { texToPlain } from '../src/renderer/src/math/pure/work'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { scene } from '../src/renderer/src/core/store'
 import { usePure } from '../src/renderer/src/math/pure/store'
-import { cas } from '../src/renderer/src/math/cas'
+import { cas } from '../src/renderer/src/math/engine/sympy/worker'
 import { resetGlobals } from './helpers/globals'
 
 // The command-bar tests below run real lines through runCommand; SymPy cannot start here, so it
 // records what it is asked (a proof must never ask it anything), and the stylesheet is not loaded.
-vi.mock('../src/renderer/src/math/cas', () => ({
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async (op: string) => ({ latex: `\\text{${op}}`, text: `${op}(x)`, numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} },
   CAS_OPS: []

@@ -39,7 +39,7 @@ export interface EvalResult {
   error?: ErrorSentence
   /** The linear text the engine ran, for the history and the algebra engine. */
   src: string
-  /** True when SymPy is worth asking for an exact form this engine could not see. */
+  /** True when the algebra engine is worth asking for an exact form this engine could not see. */
   askExact?: boolean
   /** True when the input was an equation and its root should become x. */
   solved?: boolean

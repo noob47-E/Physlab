@@ -1739,7 +1739,7 @@ const ordinal = (n: number): string => `${n}${n % 10 === 1 && n !== 11 ? 'st' : 
 /**
  * True when the text is a trig identity: it reads as one and its two sides agree. Auto uses this
  * to pick the proof over Solve; an equation such as sin x = 0.5 fails the agreement and stays with
- * Solve, whose SymPy fallback still answers it.
+ * Solve, whose algebra-engine fallback still answers it.
  */
 export function isTrigIdentity(text: string): boolean {
   if (!/=/.test(text) || !/\b(sin|cos|tan|cot|sec|csc|cosec)\b/i.test(text.replace(/[^A-Za-z]+/g, ' '))) return false

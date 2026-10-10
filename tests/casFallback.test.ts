@@ -4,7 +4,7 @@
 // what it cannot do in time either — and whenever the other way fails, the panel ends with one plain sentence.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../src/renderer/src/math/cas', () => ({
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async () => ({ error: 'This took too long.' })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {}, subscribe: () => () => {} },
   CAS_OPS: []
@@ -16,7 +16,7 @@ vi.mock('../src/renderer/src/app/theme', () => ({
   useTheme: { getState: () => ({ theme: 'dark' }) }
 }))
 
-import { cas } from '../src/renderer/src/math/cas'
+import { cas } from '../src/renderer/src/math/engine/sympy/worker'
 import { OTHER_WAY_FAILED, usePure } from '../src/renderer/src/math/pure/store'
 import { resetGlobals } from './helpers/globals'
 

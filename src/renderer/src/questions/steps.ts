@@ -77,7 +77,7 @@ const LONE_CHIP = /^\s*\{[A-Za-z][A-Za-z0-9_]*\}\s*$/
 
 /**
  * Chips in an engine's plain-maths input fill with the value itself, never the student's
- * rounding: a pure or SymPy step must work the exact drawn number. A negative value goes in
+ * rounding: a pure or algebra-engine step must work the exact drawn number. A negative value goes in
  * brackets, so `{k}^2` reads (−3)², not −(3²) — but not a chip that is the whole argument: a
  * vector solver reads a lone `(-3)` as a vector with one component, and "multiply A by {k}" said
  * it could not work the step out.
@@ -343,16 +343,16 @@ export function readSolverArg(text: string, values: Record<string, number>): unk
   return t
 }
 
-/** What an engine step worked by SymPy shows until `resolveAutoSteps` has its reply. */
+/** What an engine step worked by the algebra engine shows until `resolveAutoSteps` has its reply. */
 export const WORKING_IT_OUT_STEP = 'Working it out…'
 
-/** Where a SymPy-worked step's reply is kept: its job and its line with this variant's numbers in. */
+/** Where an engine-worked step's reply is kept: its job and its line with this variant's numbers in. */
 const casStepKey = (job: string, input: string): string => `${job}\u0000${input}`
 
-/** Integrate or Differentiate one line through SymPy (the app passes math/pure/store.ts `workSteps`). */
+/** Integrate or Differentiate one line through the algebra engine (the app passes math/pure/store.ts `workSteps`). */
 type StepWorker = (job: JobId, input: string) => Promise<Working>
 
-/** A SymPy-worked step's reply as moves: its steps, or its answer alone with the reason, never nothing. */
+/** An engine-worked step's reply as moves: its steps, or its answer alone with the reason, never nothing. */
 function casMoves(done: Working, cannot: (why?: string) => StepMove[]): StepMove[] {
   if (done.error) return cannot(done.error)
   if (done.moves.length) return done.moves.map((m) => ({ ...m, blank: false }))
@@ -362,7 +362,7 @@ function casMoves(done: Working, cannot: (why?: string) => StepMove[]): StepMove
 }
 
 /**
- * The moves an engine step contributes, or the one move that says it could not. A job SymPy
+ * The moves an engine step contributes, or the one move that says it could not. A job the engine
  * works (Integrate, Differentiate) cannot answer synchronously: it shows "Working it out…" until
  * its reply is in `resolved`.
  */
@@ -503,7 +503,7 @@ export function stepsToWorking(
 }
 
 /**
- * The SymPy replies a question's Integrate and Differentiate steps need, keyed by `casStepKey` for
+ * The engine replies a question's Integrate and Differentiate steps need, keyed by `casStepKey` for
  * `stepsToWorking`: `work` is asked once per distinct line, and a line it could not answer gets a
  * reply that says so, never a step left "Working it out…". Null when there is no such step. The
  * player (`resolveAutoSteps`) uses it.
@@ -539,7 +539,7 @@ export async function workCasSteps(
 }
 
 /**
- * A played question with its SymPy-worked steps filled in. `playQuestion` has to answer at once,
+ * A played question with its engine-worked steps filled in. `playQuestion` has to answer at once,
  * so an Integrate or Differentiate step is drawn as "Working it out…"; this asks `work` for each
  * such step (once per distinct line), then sets the working, the full solution and the problem's
  * steps out again from the same numbers. A question with no such step comes back unchanged (the

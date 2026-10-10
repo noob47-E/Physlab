@@ -10,7 +10,7 @@ import { BAR_COMMANDS, COMMAS } from './inputs/bar'
 import { runCommand } from '../../src/renderer/src/lang/commands'
 import { scene } from '../../src/renderer/src/core/store'
 
-vi.mock('../../src/renderer/src/math/cas', () => ({
+vi.mock('../../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async (op: string) => ({ latex: `\\text{${op}}`, text: `${op}(x)`, numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} },
   CAS_OPS: []
@@ -43,6 +43,8 @@ const runLine = async (line: string): Promise<string> => {
   
   try {
     await runCommand(line)
+    // A follow-up answer the engine sends a moment later (the exact form beside a decimal) lands first.
+    await new Promise((r) => setTimeout(r, 0))
   } catch (e) {
     return `THROWS ${e instanceof Error ? e.message : String(e)}`
   }

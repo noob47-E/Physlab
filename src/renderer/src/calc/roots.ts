@@ -2,7 +2,7 @@
 //
 // The same equation used to come back four ways (polish item P7). For x² + 4 = 0 the x = ? key said
 // "No solution I can find near 0", Equations mode listed "0 − 2i, 0 + 2i" (−2i first), the Solve job
-// "2i, −2i", and the command bar's SymPy line "≈ 0 + 2i" in SymPy's own order. What every screen
+// "2i, −2i", and the command bar's algebra-engine line "≈ 0 + 2i" in the engine's own order. What every screen
 // follows now, decided here and in calc/engine.ts:
 //
 //   ORDER  A quadratic is listed in the PhysLab Calculator's order, as the formula reads: x₁ = (−b + √Δ)/2a, then

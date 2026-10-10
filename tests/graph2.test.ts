@@ -2,7 +2,7 @@
 // that were lost, invented or a few billionths off, a tangent near a pole, Vector(A, B), and 2·x in a graph.
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../src/renderer/src/math/cas', () => ({ cas: vi.fn(async () => ({})), useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} }, CAS_OPS: [] }))
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({ cas: vi.fn(async () => ({})), useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} }, CAS_OPS: [] }))
 vi.mock('../src/renderer/src/app/theme', () => ({ themeColor: (_n: string, f = '#888') => f, seriesColor: () => '#888', SERIES_COUNT: 6, useTheme: { getState: () => ({ theme: 'dark' }) } }))
 
 import { solutionsInX } from '../src/renderer/src/core/visualize'

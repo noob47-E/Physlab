@@ -60,6 +60,9 @@ for (const l of lines) {
 }
 const seen = new Set(lines.map((l) => l.mode).filter(Boolean))
 for (const m of Object.keys(EXPECT)) if (!seen.has(m)) faults.push(`${m}: never reached (the run stopped early or crashed)`)
+const engineLine = lines.find((l) => l.step === 'engine')
+if (!engineLine) faults.push('the algebra engine was never asked (the run stopped early)')
+else if (engineLine.engine !== 'ready') faults.push(`the algebra engine: ${engineLine.engine} (asked to factor x^2 - 4)`)
 if (!lines.some((l) => l.step === 'start')) faults.push(`the app never finished loading${r.error ? `: ${r.error.message}` : ''}`)
 
 for (const l of lines) if (l.mode) console.log(`smoke: ${l.mode.padEnd(13)} ${l.active === l.mode ? 'opened' : 'NOT OPENED'}, ${l.acted}, ${l.errors.length} errors`)
@@ -72,4 +75,4 @@ if (faults.length) {
   console.log(`smoke: FAILED\n  ${faults.join('\n  ')}`)
   process.exit(1)
 }
-console.log(`smoke: every mode opened, acted and logged no error (${seen.size} modes)`)
+console.log(`smoke: every mode opened, acted and logged no error (${seen.size} modes); the algebra engine loaded and took a question`)

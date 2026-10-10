@@ -72,8 +72,8 @@ interface JobDef {
   /** True when this job takes a list: "12, 18". */
   list?: boolean
   /**
-   * 'cas': the working comes from the SymPy worker (math/pure/store.ts askSteps), so it arrives a
-   * moment later and `runPure` cannot give it. Calculus needs SymPy's own rule tree to name every
+   * 'cas': the working comes from the algebra engine (math/pure/store.ts askSteps), so it arrives a
+   * moment later and `runPure` cannot give it. Calculus needs the engine's own rule tree to name every
    * step; a TypeScript copy of integration would be a second, weaker algebra system.
    */
   engine?: 'cas'

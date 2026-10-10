@@ -3,7 +3,7 @@ import { Calculator, CornerDownLeft } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { runCommand } from '../lang/commands'
 import { scene, useScene } from '../core/store'
-import { cancelCas, useCasStatus, warmupCasWhenIdle } from '../math/cas'
+import { cancelEngine, useEngineStatus, warmupEngineWhenIdle } from '../math/engine'
 import { describeCasStatus } from '../ui/casStatus'
 import { decideKey, recall } from './commandBarKeys'
 import { AnswerLine } from './AnswerLine'
@@ -93,14 +93,14 @@ export function CommandBar() {
     chosen.current = false
   }
   const names = useScene(useShallow((s) => s.order.map((id) => s.objects[id]?.name).filter(Boolean)))
-  const casStatus = useCasStatus((s) => s.status)
-  const casBusy = useCasStatus((s) => s.busy)
-  const casMessage = useCasStatus((s) => s.message)
-  const casStage = useCasStatus((s) => s.stage)
+  const casStatus = useEngineStatus((s) => s.status)
+  const casBusy = useEngineStatus((s) => s.busy)
+  const casMessage = useEngineStatus((s) => s.message)
+  const casStage = useEngineStatus((s) => s.stage)
   const cas = describeCasStatus(casStatus, casBusy, casMessage, casStage)
   // The bar is on screen in every mode and any line typed here can reach the algebra engine, so
   // its first load starts once the app has painted and gone idle, not on the first question.
-  useEffect(() => warmupCasWhenIdle(), [])
+  useEffect(() => warmupEngineWhenIdle(), [])
 
   useEffect(() => {
     // Search and other panels can prefill the command bar.
@@ -221,7 +221,7 @@ export function CommandBar() {
             title="Stop working on this question"
             onClick={(e) => {
               e.stopPropagation()
-              cancelCas()
+              cancelEngine()
             }}
           >
             Stop

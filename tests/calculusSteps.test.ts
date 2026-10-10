@@ -1,4 +1,4 @@
-// QCa: calculus working from SymPy's rule trees (math/pure/calculusSteps.ts).
+// QCa: calculus working from SymPy's rule trees (math/engine/sympy/calculusSteps.ts).
 //
 // The fixtures in tests/fixtures/calculus are the worker's own replies: they were recorded by
 // running the Python PRELUDE of workers/cas.worker.ts (SymPy 1.14, the version bundled in
@@ -22,9 +22,9 @@ import {
   integralWorking,
   type DerivTree,
   type IntegralTree
-} from '../src/renderer/src/math/pure/calculusSteps'
+} from '../src/renderer/src/math/engine/sympy/calculusSteps'
 import type { Working } from '../src/renderer/src/math/pure/work'
-import { CAS_OPS } from '../src/renderer/src/math/cas'
+import { CAS_OPS } from '../src/renderer/src/math/engine/sympy/worker'
 import { readSource, repoPath } from './helpers/repo'
 import { resetGlobals } from './helpers/globals'
 

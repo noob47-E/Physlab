@@ -71,7 +71,7 @@ def _eq(s, deg):
     return sp.Eq(P(s, deg), 0)
 
 # ---- Calculus steps (integral_steps, diff_steps) ---------------------------------------------
-# The step engine sends back a tree; math/pure/calculusSteps.ts turns it into textbook working.
+# The step engine sends back a tree; math/engine/sympy/calculusSteps.ts turns it into textbook working.
 # The expressions in it are printed the way a textbook prints them — sin x, ln|x − 1|, ½ ln x —
 # because the TypeScript side only arranges them and never re-prints SymPy's maths.
 import dataclasses as _dc
@@ -524,7 +524,7 @@ let py: Py | null = null
 let loading: Promise<Py> | null = null
 
 // Each stage is reported so the client can say how far the first load has got (P17): the whole
-// load once read as a freeze. The stage numbers match CAS_BOOT_STAGES in ui/casStatus.ts.
+// load once read as a freeze. The stage numbers match BOOT_STAGES in math/engine/sympy/stages.ts.
 async function boot(): Promise<Py> {
   postMessage({ status: 'loading', stage: 1 })
   const base = new URL('/pyodide/', self.location.href).href

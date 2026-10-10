@@ -17,7 +17,7 @@ import { runPure, type JobId } from '../src/renderer/src/math/pure/run'
 import { texToPlain, type Working } from '../src/renderer/src/math/pure/work'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { writeTimes } from '../src/renderer/src/math/pure/mono'
-import { derivativeWorking, integralWorking, type DerivTree, type IntegralTree } from '../src/renderer/src/math/pure/calculusSteps'
+import { derivativeWorking, integralWorking, type DerivTree, type IntegralTree } from '../src/renderer/src/math/engine/sympy/calculusSteps'
 import { readFileSync, readdirSync } from 'node:fs'
 import { repoPath } from './helpers/repo'
 

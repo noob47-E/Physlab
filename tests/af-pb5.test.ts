@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FunctionNode, MathNode } from 'mathjs'
 
-vi.mock('../src/renderer/src/math/cas', () => ({
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async (op: string) => ({ latex: `\\text{${op}}`, text: `${op}(x)`, numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} },
   CAS_OPS: []
@@ -17,7 +17,7 @@ import { math, preprocess } from '../src/renderer/src/math/expr'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { scene, type LogEntry } from '../src/renderer/src/core/store'
 import type { SceneObject } from '../src/renderer/src/core/types'
-import { cas } from '../src/renderer/src/math/cas'
+import { cas } from '../src/renderer/src/math/engine/sympy/worker'
 import { checkAnswer } from '../src/renderer/src/math/checkAnswer'
 import { resetGlobals } from './helpers/globals'
 

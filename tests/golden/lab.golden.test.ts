@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../src/renderer/src/math/cas', () => ({
+vi.mock('../../src/renderer/src/math/engine/sympy/worker', () => ({
   tryCas: () => null,
   runCas: () => null
 }))

@@ -4,6 +4,8 @@
 // like a calculator. A student needs to know only whether the algebra is ready, still starting,
 // busy on their question, or not available — in plain words, and nothing at all when all is well.
 
+import { ENGINE_BOOT_STAGES, ENGINE_STAGE_WORDS } from '../math/engine'
+
 type CasState = 'idle' | 'loading' | 'ready' | 'error'
 type CasTone = 'good' | 'warn' | 'bad' | 'faint'
 
@@ -16,14 +18,9 @@ interface CasStatusText {
   tip: string
 }
 
-/** How many load stages the worker reports (workers/cas.worker.ts `boot`). */
-export const CAS_BOOT_STAGES = 3
-
-const STAGE_WORDS: Record<number, string> = {
-  1: 'loading Python',
-  2: 'loading the algebra library',
-  3: 'getting it ready'
-}
+/** How many load stages the engine reports, and the words for each: the engine's own (math/engine). */
+const CAS_BOOT_STAGES = ENGINE_BOOT_STAGES
+const STAGE_WORDS = ENGINE_STAGE_WORDS
 
 /**
  * The one sentence every place that waits on the algebra engine shows while it starts: the bar's
@@ -51,7 +48,7 @@ type CasStatusStore = {
 /**
  * Hand each load-stage sentence to a line that waits on an answer (the bar's "Solving…", the
  * Working panel), and let go once the load is over — ready, failed, cancelled or timed out.
- * math/cas.ts always changes the status before it delivers a waiting answer, so the line is never
+ * The engine always changes the status before it delivers a waiting answer, so the line is never
  * written after its answer has replaced it.
  */
 export function followCasStart(store: CasStatusStore, onSentence: (text: string) => void): void {
@@ -78,7 +75,7 @@ export function describeCasStatus(status: CasState, busy: number, message?: stri
       return { tone: 'good', words: '', tip: 'Algebra: ready. Everything runs on this computer.' }
     case 'error':
       // 'error' is set both when the engine never started and when it crashed mid-question, and
-      // math/cas.ts restarts it on the next command either way, so the words cover both.
+      // the engine restarts on the next command either way, so the words cover both.
       return { tone: 'bad', words: 'Algebra unavailable', tip: `The algebra engine stopped${message ? `: ${message}` : ''}. It starts again with the next command.` }
     default:
       return { tone: 'faint', words: '', tip: message ? `Algebra: ${message}.` : 'Algebra starts the first time it is needed.' }

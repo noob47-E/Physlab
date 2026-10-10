@@ -199,7 +199,7 @@ function createWindow(): void {
       const d = details as unknown as { level: string | number; message: string }
       if (d.level === 'warning' || d.level === 'error' || (typeof d.level === 'number' && d.level >= 2)) {
         console.log(`[renderer ${d.level}] ${d.message.slice(0, 400)}`)
-      } else if (/PHYSLAB_CHECK|Loaded mpmath/.test(d.message)) {
+      } else if (/PHYSLAB_CHECK|^Loaded \w/.test(d.message)) {
         console.log(`[renderer] ${d.message}`)
       }
     })

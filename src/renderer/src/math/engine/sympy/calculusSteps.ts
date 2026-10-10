@@ -11,9 +11,9 @@
 // SymPy 1.14, dataclass rules), not a copy of SymPy Gamma's formatter; and calculus is worked in
 // radians even in DEG mode, with one sentence saying so.
 
-import { Steps, type Answer, type Working } from './work'
-import { rEq, rMul, rSub, rTex, rat, R1, type Rat } from './rat'
-import { texPrecise, type DigitSettings } from '../format'
+import { Steps, type Answer, type Working } from '../../pure/work'
+import { rEq, rMul, rSub, rTex, rat, R1, type Rat } from '../../pure/rat'
+import { texPrecise, type DigitSettings } from '../../format'
 
 /** One expression as the worker prints it: LaTeX to show, SymPy text to read back. */
 interface TexText {

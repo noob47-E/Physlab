@@ -8,7 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import katex from 'katex'
 
-vi.mock('../src/renderer/src/math/cas', () => ({
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async (op: string) => ({ latex: `\\text{${op}}`, text: `${op}(x)`, numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} },
   CAS_OPS: []
@@ -24,7 +24,7 @@ import { HELP, runCommand } from '../src/renderer/src/lang/commands'
 import { QUICK_EXAMPLES } from '../src/renderer/src/ui/quickExamples'
 import { scene, type LogEntry } from '../src/renderer/src/core/store'
 import type { GraphObj, SceneObject, VectorObj } from '../src/renderer/src/core/types'
-import { cas } from '../src/renderer/src/math/cas'
+import { cas } from '../src/renderer/src/math/engine/sympy/worker'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { parseNormalQuery } from '../src/renderer/src/math/pure/zscore'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
@@ -820,9 +820,12 @@ describe('Pure Math from the command bar', () => {
     expect((await run('divide(2e3, 4)')).text).toBe('= 500')
     expect(casCalls()).toHaveLength(0)
     // Nor is pi, which the calculator answers at once and then offers exactly (the stand-in
-    // algebra engine answers before the line is even logged, so the exact form is already there).
+    // algebra engine answers at once, and its exact form replaces the line a moment later).
     // The decimal beside it is in the student's precision (polish H16), no longer ten places.
-    expect((await run('divide(pi, 2)')).tex).toMatch(/\\approx 1\.57$/)
+    await run('divide(pi, 2)')
+    // The exact form is a follow-up the engine sends a moment later: let it land.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(scene().log.at(-1)!.tex).toMatch(/\\approx 1\.57$/)
     expect(casCalls()).toEqual([['exact', { expr: '(pi)/(2)', deg: true }]])
   })
 

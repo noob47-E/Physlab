@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // The command bar reaches the SymPy worker and the stylesheet; neither exists here.
-vi.mock('../src/renderer/src/math/cas', () => ({
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async () => ({ latex: '', text: '', numeric: null, error: 'no algebra engine in tests' })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} },
   CAS_OPS: []

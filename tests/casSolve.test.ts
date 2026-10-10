@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sent = vi.hoisted(() => ({ calls: [] as { op: string; payload: Record<string, unknown> }[] }))
 
-vi.mock('../src/renderer/src/math/cas', async (orig) => {
-  const real = await orig<typeof import('../src/renderer/src/math/cas')>()
+vi.mock('../src/renderer/src/math/engine/sympy/worker', async (orig) => {
+  const real = await orig<typeof import('../src/renderer/src/math/engine/sympy/worker')>()
   return {
     ...real,
     cas: vi.fn(async (op: string, payload: Record<string, unknown> = {}) => {

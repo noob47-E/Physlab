@@ -2,7 +2,8 @@
 // more on a slow machine) and reports each load stage, which every waiting place shows.
 
 import { create } from 'zustand'
-import { CAS_BOOT_STAGES, casWaitNote as waitNote, followCasStart as followStart } from '../ui/casStatus'
+import type { EngineStatus } from '../types'
+import { BOOT_STAGES } from './stages'
 
 interface CasValue {
   latex: string
@@ -31,7 +32,7 @@ export const CAS_OPS = [
   'limit',
   'series',
   'solve',
-  // Answer + rule tree for the step engine (math/pure/calculusSteps.ts formats it).
+  // Answer + rule tree for the step engine (./calculusSteps.ts formats it).
   'integral_steps',
   'diff_steps',
   'warmup'
@@ -45,10 +46,10 @@ export type CasResult = CasValue & {
 }
 
 /**
- * `stage` is the worker's last reported load stage (1 … CAS_BOOT_STAGES while loading, 0 before
+ * `stage` is the worker's last reported load stage (1 … BOOT_STAGES while loading, 0 before
  * the first report), so each waiting place can say how far the first load has got.
  */
-export const useCasStatus = create<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string; busy: number; stage: number }>(() => ({
+export const useCasStatus = create<EngineStatus>(() => ({
   status: 'idle',
   busy: 0,
   stage: 0
@@ -137,7 +138,7 @@ type FromWorker = { id?: number; result?: CasResult; status?: 'loading' | 'ready
 
 function getWorker(): Worker {
   if (worker) return worker
-  const w = new Worker(new URL('../workers/cas.worker.ts', import.meta.url), { type: 'module' })
+  const w = new Worker(new URL('../../../workers/cas.worker.ts', import.meta.url), { type: 'module' })
   worker = w
   ready = false
   useCasStatus.setState({ status: 'loading', message: undefined, stage: 0 })
@@ -157,7 +158,7 @@ function getWorker(): Worker {
         ready = true
         if (bootTimer) clearTimeout(bootTimer)
         bootTimer = null
-        useCasStatus.setState({ status: 'ready', message: undefined, stage: CAS_BOOT_STAGES })
+        useCasStatus.setState({ status: 'ready', message: undefined, stage: BOOT_STAGES })
         console.info('PHYSLAB_CHECK cas=ready')
         startRunning()
       }
@@ -220,9 +221,3 @@ export function warmupCasWhenIdle(): void {
   if (idle) idle(() => warmupCas(), { timeout: 3000 })
   else setTimeout(warmupCas, 1500)
 }
-
-/** ui/casStatus.ts `casWaitNote` for this engine's status. */
-export const casWaitNote = (): string => waitNote(useCasStatus.getState())
-
-/** ui/casStatus.ts `followCasStart` on this engine's status. */
-export const followCasStart = (onSentence: (text: string) => void): void => followStart(useCasStatus, onSentence)

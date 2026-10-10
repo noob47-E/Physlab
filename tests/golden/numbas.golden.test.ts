@@ -10,7 +10,7 @@ import { bundledSets, loadBundled } from '../../src/renderer/src/questions/bank'
 import { resetGlobals } from '../helpers/globals'
 import { expectGolden, goldenLine, seenOf } from './harness'
 
-vi.mock('../../src/renderer/src/math/cas', () => ({
+vi.mock('../../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async () => ({ latex: '', text: '', numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {}, subscribe: () => () => {} },
   CAS_OPS: []

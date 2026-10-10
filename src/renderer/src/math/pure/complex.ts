@@ -412,7 +412,7 @@ function finishComplex(title: string, input: string, s: Steps, z: Cx, src: strin
 // ---------------------------------------------------------------- with square roots
 //
 // The reader above holds fractions only, so 1/(√2 − √5i) was refused with a sentence about
-// factorising, and the student got no answer at all: Complex has no SymPy to fall back on (P22).
+// factorising, and the student got no answer at all: Complex has no algebra engine to fall back on (P22).
 // Every line that reader refuses comes here. i is still a letter until the i² step, but each power
 // of i carries a surd from cxpoly.ts (q + r√n), so √2, √8 = 2√2 and √−3 = √3·i stay exact. What
 // one surd per part cannot hold — two different roots in one part, π, a sine — still gets its

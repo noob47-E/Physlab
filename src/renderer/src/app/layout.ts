@@ -11,7 +11,7 @@ import { spaceOf } from '../core/visibility'
 import { resetTool } from '../render/tools'
 import { QUALITY, qualityNow } from '../render/renderer'
 import { useParticleLab } from '../render/GpuParticles'
-import { warmupCas } from '../math/cas'
+import { warmupEngine } from '../math/engine'
 import { MODES, modeById, useApp, type ModeId } from './modes'
 import { hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, regroupWithViewport, showPanel } from './panels'
 import { LAYOUT_VERSION, columns, needsLayoutRebuild, panelHome, panelsForMode, type LayoutStamp } from './layoutMath'
@@ -49,11 +49,11 @@ export function enterMode(id: ModeId) {
   if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
   if (m.panel) s.requestFocus(m.panel)
   if (!m.ready) s.pushLog({ input: m.label, kind: 'info', text: `${m.label} is coming in the next build stages: ${m.description}` })
-  // Pyodide takes several seconds to wake. Starting it the moment the calculator opens means the
-  // first question SymPy is asked gets its answer sooner; it used to start only when first asked.
+  // The algebra engine takes several seconds to wake. Starting it the moment the calculator opens
+  // means the first question it is asked gets its answer sooner; it used to start only when first asked.
   if (id === 'calculator' && !casWarmed) {
     casWarmed = true
-    warmupCas()
+    warmupEngine()
   }
 }
 

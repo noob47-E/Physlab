@@ -1,7 +1,7 @@
 // P-FIX-PURE checker follow-ups for U14 and U15, built on the worker's own recorded replies.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { derivativeWorking, integralWorking, type DerivTree, type IntegralTree } from '../src/renderer/src/math/pure/calculusSteps'
+import { derivativeWorking, integralWorking, type DerivTree, type IntegralTree } from '../src/renderer/src/math/engine/sympy/calculusSteps'
 
 const fixture = <T>(name: string): T =>
   JSON.parse(readFileSync(`${__dirname}/fixtures/calculus/${name}.json`, 'utf8')).result as T

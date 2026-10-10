@@ -1,4 +1,4 @@
-// P17: the first use of the algebra engine, at the client/worker boundary (math/cas.ts).
+// P17: the first use of the algebra engine, at the client/worker boundary (math/engine/sympy/worker.ts).
 //
 // The real worker loads Python, then the algebra library, which can take well over 30 seconds on a
 // slow first launch. The client used to start each request's 30 s timer the moment it was sent, so
@@ -39,7 +39,7 @@ class FakeWorker {
   }
 }
 
-let mod: typeof import('../src/renderer/src/math/cas')
+let mod: typeof import('../src/renderer/src/math/engine/sympy/worker')
 let words: typeof import('../src/renderer/src/ui/casStatus')
 
 const last = (): FakeWorker => FakeWorker.all[FakeWorker.all.length - 1]
@@ -65,7 +65,7 @@ beforeEach(async () => {
   FakeWorker.all = []
   vi.stubGlobal('Worker', FakeWorker)
   vi.resetModules()
-  mod = await import('../src/renderer/src/math/cas')
+  mod = await import('../src/renderer/src/math/engine/sympy/worker')
   words = await import('../src/renderer/src/ui/casStatus')
 })
 
@@ -153,7 +153,7 @@ describe('P17: the load stages reach every place that waits', () => {
 
   it('followCasStart hands each stage sentence to a waiting line and stops at ready', async () => {
     const seen: string[] = []
-    mod.followCasStart((t) => seen.push(t))
+    words.followCasStart(mod.useCasStatus, (t) => seen.push(t))
     void mod.cas('eval', { expr: '1' })
     const w = last()
     w.emit({ status: 'loading', stage: 1 })

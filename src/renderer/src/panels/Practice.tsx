@@ -271,7 +271,7 @@ export function Practice() {
     () => (item?.kind === 'question' ? playQuestion(item.question, item.seed, settings, session.questionLevel ?? undefined) : null),
     [item, settings, session.questionLevel]
   )
-  // An Integrate or Differentiate step is worked by SymPy, which answers after the question is
+  // An Integrate or Differentiate step is worked by the algebra engine, which answers after the question is
   // drawn: its step shows "Working it out…" until then, then the working swaps in. Nothing asked
   // for it, so the step said "Working it out…" for good. A reply for an earlier question or other
   // settings is kept only with the copy it was worked for, so it never lands on the next question.

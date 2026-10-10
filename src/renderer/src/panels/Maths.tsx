@@ -23,7 +23,7 @@ import { groupsForMode, type KeyDef, type KeyGroup, type KeyGroupId } from '../c
 import { math } from '../math/expr'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
 import { fieldHasText, type StepPref } from '../math/pure/reveal'
-import { cas, useCasStatus } from '../math/cas'
+import { ask, useEngineStatus } from '../math/engine'
 import { casStartingSentence } from '../ui/casStatus'
 import { usePure, type PureEntry } from '../math/pure/store'
 import { JOBS, jobById, type JobId } from '../math/pure/run'
@@ -246,10 +246,10 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
         history: [{ input: s.input, result: r.main, mode }, ...s.history].slice(0, 100)
       })
       if (r.askExact) {
-        cas('exact', { expr: keypadToMath(r.src), deg: casInDegrees(angleUnit) }).then((res) => {
+        ask('exact', { expr: keypadToMath(r.src), deg: casInDegrees(angleUnit) }).then((res) => {
           if (!res.error && res.latex && !/\./.test(res.text) && res.text.length < 60) {
             // The exact form amends the answer it was asked for, and only while that answer is
-            // still the one held. SymPy can take seconds on a cold start, and an answer worked
+            // still the one held. The algebra engine can take seconds on a cold start, and an answer worked
             // out in another mode meanwhile must stay: an amendment to an answer no longer held
             // used to clear whatever had replaced it.
             setAnswered((a) => (a && a.mode === mode && a.input === s.input && a.result.value === r.value ? { ...a, result: { ...a.result, exact: res.latex } } : a))
@@ -1009,7 +1009,7 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
   const inputLatex = usePure((s) => s.inputLatex)
   const run = usePure((s) => s.run)
   // The first-load stage, as a sentence (empty once the engine is ready): P17.
-  const casNote = useCasStatus((s) => (s.status === 'loading' ? casStartingSentence(s.stage) : ''))
+  const casNote = useEngineStatus((s) => (s.status === 'loading' ? casStartingSentence(s.stage) : ''))
   const [pref, setPref] = useState<StepPref>(readStepPref)
   const [showExamples, setShowExamples] = useState(false)
   const setPreference = (p: StepPref): void => {

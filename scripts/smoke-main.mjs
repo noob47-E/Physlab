@@ -111,8 +111,10 @@ app.on('browser-window-created', (_e, win) => {
   const wc = win.webContents
   wc.setBackgroundThrottling(false)
   const errors = []
+  const engineLog = []
   wc.on('console-message', (details) => {
     if (details.level === 'error' || details.level === 3) errors.push(String(details.message).slice(0, 300))
+    if (/PHYSLAB_CHECK cas=/.test(details.message)) engineLog.push(String(details.message))
   })
   wc.on('render-process-gone', (_ev, info) => errors.push(`renderer gone: ${info.reason}`))
   wc.on('preload-error', (_ev, _path, err) => errors.push(`preload error: ${err.message}`))
@@ -132,7 +134,20 @@ app.on('browser-window-created', (_e, win) => {
         await wait(2000)
         out({ mode: m.label, opened, active, acted, errors: errors.splice(0) })
       }
-      // Anything logged while the last mode settled.
+      // The algebra engine in the build: a line on the bar only the engine answers, waited for
+      // through the first load. The worker logs PHYSLAB_CHECK cas=ready once the engine's files
+      // have loaded (cas=error … when they did not); its answers themselves are checked by the
+      // conformance suite (tests/engine/).
+      await wc.executeJavaScript(act({ bar: 'factor(x^2 - 4)' }))
+      let engine = 'not ready within 90 s'
+      for (let t = 0; t < 90 && engine.startsWith('not'); t++) {
+        await wait(1000)
+        if (engineLog.some((m) => /cas=ready/.test(m))) engine = 'ready'
+        const failed = engineLog.find((m) => /cas=(error|request-error)/.test(m))
+        if (failed) engine = failed
+      }
+      out({ step: 'engine', engine, errors: errors.splice(0) })
+      // Anything logged while the last step settled.
       await wait(1000)
       out({ step: 'end', errors: errors.splice(0) })
     } catch (err) {

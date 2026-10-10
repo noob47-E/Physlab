@@ -67,7 +67,7 @@ function closingBracket(text: string, open: number): number {
  * — so the number and the mark leave as one number whatever the power looks like, and 1 ÷ 2 ×10ˣ 3 divides by
  * 2000, never by 2 and then multiplies by 1000:
  *   - a power of a sign and digits joins it as a plain e-number, 1.6 + mark + (-19) is 1.6e-19, which the
- *     calculator, the working and SymPy all read alike;
+ *     calculator, the working and the algebra engine all read alike;
  *   - any other power (a bracket, a sum: 2 ×10ˣ (-3), 2 ×10ˣ 1+2) goes in a bracket of its own, 2*10^((-3)),
  *     because without it a ÷ in front takes only the 2: 1 ÷ 2 ×10ˣ (-3) read 0.0005 and 6 ÷ 2 ×10ˣ (-2)
  *     read 0.03 where the numbers the student built are 1 ÷ 0.002 = 500 and 6 ÷ 0.02 = 300.
@@ -588,7 +588,7 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
    * count: a number in front (3sqrt(2)), a closing bracket (the (x+1) of (x+1)√2) and another root
    * are products mathjs already reads, and a letter before "(" is a call, f(2), so it gets no sign.
    * The sign is "*", which mathjs and the calculus route read alike (2x*cos(x^(2)), as
-   * math/pure/store.ts hands it to SymPy); never ×, because in vector mode × is the cross product.
+   * math/pure/store.ts hands it to the algebra engine); never ×, because in vector mode × is the cross product.
    * The one exception is the imaginary unit, which gets a space: the Complex working reads "i√5" as
    * the implicit product it is, splits "isqrt(5)" that way itself (math/pure/mono.ts writeTimes) and
    * takes a typed sign for a product to multiply out — with a "*", 1/(√2 − i√5) opened with a step

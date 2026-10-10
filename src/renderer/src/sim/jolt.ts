@@ -40,7 +40,7 @@ export function loadJolt(): Promise<Jolt> {
   if (!loading) {
     setState('loading')
     loading = (async () => {
-      // In the app the .wasm sits in public/jolt/ (like the SymPy files); under Node (tests)
+      // In the app the .wasm sits in public/jolt/ (like the algebra engine's files); under Node (tests)
       // the loader finds it next to the package itself.
       const inBrowser = typeof window !== 'undefined' && !!window.location
       const base = inBrowser ? new URL('/jolt/', window.location.href).href : ''

@@ -10,8 +10,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import katex from 'katex'
-import type { CasResult } from '../src/renderer/src/math/cas'
-import type { DerivTree, IntegralTree } from '../src/renderer/src/math/pure/calculusSteps'
+import type { CasResult } from '../src/renderer/src/math/engine/sympy/worker'
+import type { DerivTree, IntegralTree } from '../src/renderer/src/math/engine/sympy/calculusSteps'
 import { math } from '../src/renderer/src/math/expr'
 import { repoPath } from './helpers/repo'
 import { resetGlobals } from './helpers/globals'
@@ -77,8 +77,8 @@ const PLAIN: Record<string, CasResult> = {
   'integrate e^(x^3)': { latex: '\\int e^{x^{3}}\\, dx', text: 'Integral(exp(x**3), x)', numeric: null }
 }
 
-vi.mock('../src/renderer/src/math/cas', async (orig) => {
-  const real = await orig<typeof import('../src/renderer/src/math/cas')>()
+vi.mock('../src/renderer/src/math/engine/sympy/worker', async (orig) => {
+  const real = await orig<typeof import('../src/renderer/src/math/engine/sympy/worker')>()
   return {
     ...real,
     cas: vi.fn(async (op: string, payload: Record<string, unknown> = {}) => {
@@ -97,23 +97,21 @@ vi.mock('../src/renderer/src/app/theme', () => ({
   useTheme: { getState: () => ({ theme: 'dark' }) }
 }))
 
-import { cas } from '../src/renderer/src/math/cas'
+import { cas } from '../src/renderer/src/math/engine/sympy/worker'
 import { scene } from '../src/renderer/src/core/store'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { JOBS, jobById } from '../src/renderer/src/math/pure/run'
-import { NO_STEPS, RADIANS_NOTE } from '../src/renderer/src/math/pure/calculusSteps'
+import { NO_STEPS, RADIANS_NOTE } from '../src/renderer/src/math/engine/sympy/calculusSteps'
 import {
   WORKING_IT_OUT,
   calculusVariable,
   casAnswerIsCurrent,
   calculusJobFor,
-  casRequestFor,
-  forSymPy,
   gluedFunctionsApart,
-  stepsWorkingFor,
   usePure,
   workSteps
 } from '../src/renderer/src/math/pure/store'
+import { casRequestFor, forSymPy, stepsWorkingFor } from './helpers/sympyRequests'
 import type { Working } from '../src/renderer/src/math/pure/work'
 import type { MeasureSettings } from '../src/renderer/src/math/format'
 import type { PQQuestion } from '../src/renderer/src/questions/pqjson'

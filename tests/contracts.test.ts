@@ -12,15 +12,15 @@ import katex from 'katex'
 import { isFieldSafeLatex, linearSyntaxIn } from '../src/renderer/src/ui/latexSafety'
 import { isActivatable, isTyping } from '../src/renderer/src/app/keyTargets'
 import { JOBS, linearToLatex, runPure } from '../src/renderer/src/math/pure/run'
-import { casAnswerIsCurrent, casRequestFor, usePure } from '../src/renderer/src/math/pure/store'
-import { CAS_OPS } from '../src/renderer/src/math/cas'
+import { casAnswerIsCurrent, usePure } from '../src/renderer/src/math/pure/store'
+import { casRequestFor, forSymPy } from './helpers/sympyRequests'
+import { CAS_OPS } from '../src/renderer/src/math/engine/sympy/worker'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { evalDisplayedSum, splitDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
 import { rStr, rat } from '../src/renderer/src/math/pure/rat'
 import { exprTex, parseExpr, parseFraction } from '../src/renderer/src/math/pure/mono'
 import type { MathNode } from 'mathjs'
 import { math, preprocess } from '../src/renderer/src/math/expr'
-import { forSymPy } from '../src/renderer/src/math/pure/store'
 
 /**
  * What an input means, independent of how it was spelled.
@@ -212,7 +212,7 @@ describe('the contract with the Python worker', () => {
   it('a warm-up is not a question: it carries no id, so nothing waits, counts as busy or times out', () => {
     // Sent through cas() it was a request like any other: the strip said "Working…" with a Stop
     // button while SymPy loaded, and a slow first launch hit the 30 s timer and killed the worker.
-    const client = readSource('src/renderer/src/math/cas.ts')
+    const client = readSource('src/renderer/src/math/engine/sympy/worker.ts')
     // P17: a second warm-up while a worker exists does nothing (tests/casBoot.test.ts drives it).
     expect(client).toMatch(/warmupCas = \(\): void => \{\s*if \(worker\) return\s*getWorker\(\)\.postMessage\(\{ op: 'warmup'/)
     expect(client).not.toMatch(/warmupCas = \(\) => cas\(/)

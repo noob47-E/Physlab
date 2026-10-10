@@ -8,7 +8,7 @@ import { resetGlobals } from '../helpers/globals'
 import { expectGolden, goldenLine, seenOf, freezeClock } from './harness'
 import { BENCH, TABLE_JOBS, COMMAS, HUGE_EXPAND } from './inputs/pure'
 
-vi.mock('../../src/renderer/src/math/cas', () => ({
+vi.mock('../../src/renderer/src/math/engine/sympy/worker', () => ({
   tryCas: vi.fn()
 }))
 

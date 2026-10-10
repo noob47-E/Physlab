@@ -4,8 +4,8 @@ import {
   integralWorking,
   type DerivTree,
   type IntegralTree
-} from '../src/renderer/src/math/pure/calculusSteps'
-import { casRequestFor } from '../src/renderer/src/math/pure/store'
+} from '../src/renderer/src/math/engine/sympy/calculusSteps'
+import { casRequestFor } from './helpers/sympyRequests'
 
 describe('U12: complex sums inside product/quotient are explained before the product line', () => {
   it('explains a chain inside a sum factor before naming the factors', () => {

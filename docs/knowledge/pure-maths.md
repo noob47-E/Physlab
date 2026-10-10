@@ -24,13 +24,12 @@ has been checked.
 | `divide.ts` | Algebraic long division with the running commentary. |
 | `partial.ts` | Partial fractions (cover-up and comparing coefficients). |
 | `latexCheck.ts` | Reads a displayed answer back (`splitDisplayedSum`) so the check looks at what is shown. |
-| `calculusSteps.ts` | Turns the CAS worker's `integral_steps`/`diff_steps` rule trees into working; rule chips; `definiteAnswers`. |
 | `trigIdentity.ts` | Trig-identity proofs by a two-ended search over allowed rewrites. |
 | `normal.ts` | Φ(z), its tail and inverse. |
 | `table.ts` | The printed four-place Φ table as a student reads it (`toPlaces`, cell values). |
 | `zscore.ts` | Normal-distribution questions worked with the table. |
 | `zscoreDistractors.ts` | Wrong answers for choice questions, one misconception each (follows the questions part). |
-| `store.ts` | Working-panel state and history; `casRequestFor`/`stepsRequest` build the CAS worker payloads. |
+| `store.ts` | Working-panel state and history; `engineRequestFor`/`stepsRequest` build the algebra engine's requests (math/engine). The rule-tree reader for Integrate and Differentiate lives with the SymPy adapter (math/engine/sympy/calculusSteps.ts). |
 | `reveal.ts` | Panel decisions kept testable without a browser. |
 
 ## Data flow
@@ -40,8 +39,8 @@ has been checked.
    `math/format.ts`, never `toFixed`.
 3. The answer is shown only after a check (expand back, multiply back, or `latexCheck` reading the
    displayed sum); a failed check says so in words.
-4. Calculus goes through the CAS worker: `stepsRequest` (store.ts) → worker → rule tree →
-   `calculusSteps.ts`.
+4. Calculus goes through the algebra engine: `stepsRequest` (store.ts) → `workSteps` (math/engine)
+   → the SymPy adapter → worker → rule tree → `math/engine/sympy/calculusSteps.ts` → working.
 
 ## Invariants
 - Exact: no float ever enters an `Expr`. mathjs reads every typed number as a double, so
@@ -59,13 +58,13 @@ has been checked.
 - `ab` was one variable named "ab" — `writeTimes` now splits letter runs, but keeps mathjs names
   (sin, sqrt, pi, e, Infinity) and Greek names whole, also `theta` inside a run (2aθ → 2·a·θ).
   `tests/af-ub.test.ts`, `tests/commands.test.ts` (θ² = 4).
-- ∞ from the Maths field is the mathjs word `Infinity`; the worker only knows `oo`/`inf`, and split
-  it into I·n·f·i·n·i·t·y. `stepsRequest` sends `oo`, but never inside `forSymPy`, because
-  `calculusVariable` would read `oo` as the letter o. `tests/af-ue.test.ts` (U16).
+- ∞ from the Maths field is the mathjs word `Infinity`; SymPy split it into I·n·f·i·n·i·t·y. The
+  request keeps ∞ / `Infinity` (PhysLab spelling) and the SymPy adapter spells it `oo`, never
+  `spelledOut`, because `calculusVariable` would read `oo` as the letter o. `tests/af-ue.test.ts` (U16).
 - `commonFactor` is a hub (Factorise, grouping, Partial Fractions): changing its sign rule put a
   false line "x-1(x + 1)" in Factorise working. Partial Fractions moves a single-term factor's
   number (−x, −2x) into its constant itself instead (U11). `tests/af-ub.test.ts` U11 follow-up.
-- Chip letters come from `chipLetter`/`sumPair`/`chainChip` in calculusSteps.ts, never written in
+- Chip letters come from `chipLetter`/`sumPair`/`chainChip` in math/engine/sympy/calculusSteps.ts, never written in
   literally (U15). `tests/af-ue.test.ts`, `af-ue2.test.ts`.
 - Long division used to stop at 65 terms and call the rest a remainder (U4). `tests/af-uc.test.ts`.
 - `latexCheck` must split a displayed answer exactly as the producer wrote it (`\dfrac` pieces,

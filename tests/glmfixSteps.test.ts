@@ -20,8 +20,8 @@ import { readSource, repoPath } from './helpers/repo'
 /** The worker's cas_run, loaded once in beforeAll below. */
 const live = vi.hoisted(() => ({ run: null as null | ((op: string, payload: string) => string) }))
 
-vi.mock('../src/renderer/src/math/cas', async (orig) => {
-  const real = await orig<typeof import('../src/renderer/src/math/cas')>()
+vi.mock('../src/renderer/src/math/engine/sympy/worker', async (orig) => {
+  const real = await orig<typeof import('../src/renderer/src/math/engine/sympy/worker')>()
   return {
     ...real,
     cas: vi.fn(async (op: string, payload: Record<string, unknown> = {}) => {
@@ -39,7 +39,8 @@ vi.mock('../src/renderer/src/app/theme', () => ({
 
 import { scene } from '../src/renderer/src/core/store'
 import { runCommand } from '../src/renderer/src/lang/commands'
-import { WORKING_IT_OUT, casRequestFor, usePure } from '../src/renderer/src/math/pure/store'
+import { WORKING_IT_OUT, usePure } from '../src/renderer/src/math/pure/store'
+import { casRequestFor } from './helpers/sympyRequests'
 import type { Working } from '../src/renderer/src/math/pure/work'
 
 beforeEach(() => resetGlobals())

@@ -30,7 +30,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MathNode } from 'mathjs'
 
 // The SymPy worker cannot start here, and the stylesheet is not loaded (as in commands.test.ts).
-vi.mock('../src/renderer/src/math/cas', () => ({
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async (op: string) => ({ latex: `\\text{${op}}`, text: `${op}(x)`, numeric: null })),
   useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {} },
   CAS_OPS: []
