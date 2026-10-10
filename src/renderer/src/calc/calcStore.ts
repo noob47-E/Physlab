@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { usePure } from '../math/pure/store'
+import { storedList } from '../core/schema'
 
 /** History outlives the session: a student closing the app mid-homework should not lose it. */
 const HISTORY_KEY = 'physlab.calc.history'
@@ -7,9 +8,7 @@ const HISTORY_CAP = 100
 
 function loadHistory(): HistoryItem[] {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
-    return Array.isArray(parsed) ? (parsed.slice(0, HISTORY_CAP) as HistoryItem[]) : []
+    return storedList(localStorage.getItem(HISTORY_KEY), HISTORY_CAP) as HistoryItem[]
   } catch {
     return []
   }

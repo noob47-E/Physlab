@@ -32,13 +32,10 @@ import { directDependents } from './evaluate'
 import { OLD_ARROW_COLOURS, PALETTE, vectorToken } from './naming'
 import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
 import type { Space } from './visibility'
+import { checkLab, checkObjects, checkSandbox, isRecord, type Raw } from './schema'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
 export const FILE_VERSION: SceneFile['version'] = 7
-
-type Raw = Record<string, unknown>
-
-const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 /**
  * Turns the text of a .phys file into a scene in the current format, or throws an Error whose
@@ -100,64 +97,6 @@ function checkShape(raw: unknown): Raw {
   if (raw.lab !== undefined) checkLab(raw.lab)
   if (raw.sandbox !== undefined) checkSandbox(raw.sandbox)
   return { ...raw }
-}
-
-const isV3 = (v: unknown): boolean => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number')
-
-// The block checks look one level down, at what the panels read on their first render: a table
-// with no columns or a body with no position used to load without a word and then crash the Lab
-// panel or the Sandbox viewport, after the old scene was already gone.
-
-/** Lab tables have had id, title, columns, rows and plot since they arrived in 0.3.3. */
-function checkLab(lab: unknown): void {
-  if (!Array.isArray(lab)) throw new Error('The lab tables in this file are damaged.')
-  lab.forEach((t, i) => {
-    const ok =
-      isRecord(t) &&
-      typeof t.id === 'string' &&
-      typeof t.title === 'string' &&
-      Array.isArray(t.columns) &&
-      t.columns.every((c) => isRecord(c) && typeof c.id === 'string' && typeof c.name === 'string' && (c.label === undefined || typeof c.label === 'string')) &&
-      Array.isArray(t.rows) &&
-      t.rows.every((r) => Array.isArray(r)) &&
-      isRecord(t.plot)
-    if (!ok) throw new Error(`Lab table ${i + 1} in this file is damaged.`)
-  })
-}
-
-/** The sandbox has had the same shape since 0.3.5; `world` and `sideView` may be left out. */
-function checkSandbox(sb: unknown): void {
-  if (!isRecord(sb) || !Array.isArray(sb.bodies)) throw new Error('The sandbox in this file is damaged.')
-  sb.bodies.forEach((b, i) => {
-    if (!isRecord(b) || typeof b.id !== 'string' || typeof b.shape !== 'string' || !isV3(b.size) || !isV3(b.position)) {
-      throw new Error(`Body ${i + 1} in the sandbox is damaged.`)
-    }
-  })
-  if (sb.links !== undefined) {
-    if (!Array.isArray(sb.links)) throw new Error('The connections in the sandbox are damaged.')
-    sb.links.forEach((l, i) => {
-      if (!isRecord(l) || typeof l.id !== 'string' || typeof l.kind !== 'string' || typeof l.a !== 'string' || typeof l.b !== 'string') {
-        throw new Error(`Connection ${i + 1} in the sandbox is damaged.`)
-      }
-    })
-  }
-  if (sb.world !== undefined && !isRecord(sb.world)) throw new Error('The world settings in the sandbox are damaged.')
-  if (sb.sideView !== undefined && typeof sb.sideView !== 'boolean') throw new Error('The sandbox view setting in this file is damaged.')
-}
-
-/** Each object must at least be something the evaluator can name and look up. */
-function checkObjects(file: Raw): void {
-  const objects = file.objects as unknown[]
-  objects.forEach((o, i) => {
-    if (!isRecord(o) || typeof o.id !== 'string' || typeof o.type !== 'string' || typeof o.name !== 'string') {
-      throw new Error(`Object ${i + 1} in this file is damaged: it has no id, type or name.`)
-    }
-  })
-  const seen = new Set<string>()
-  for (const o of objects as Raw[]) {
-    if (seen.has(o.id as string)) throw new Error(`This file lists the object "${o.name}" twice.`)
-    seen.add(o.id as string)
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -7,13 +7,8 @@
 
 import { math } from '../math/expr'
 import type { FadingLevel, MotionSegment, PQMotion, PQPicture } from './pqjson'
+import { isFiniteNumber as isNum, isRecord, isStr, isStrings, type Raw } from '../core/schema'
 
-type Raw = Record<string, unknown>
-
-const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v)
-const isStr = (v: unknown): v is string => typeof v === 'string'
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
-const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr)
 /** An optional field: absent, or of its type. A hand-edited `xMin: 0` is not a formula. */
 const opt = (v: unknown, ok: (v: unknown) => boolean): boolean => v === undefined || ok(v)
 /** A list of records, each passing `ok`. */

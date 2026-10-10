@@ -4,6 +4,7 @@
 
 import { fmtPrecise } from '../math/format'
 import { hasRightOption, isPictureKind, mathOwnsName, motionOk, optionOk, pictureOk, sandboxOk, stepItemsOk, stepLevelOk, trapsOk } from './shapeChecks'
+import { isFiniteNumber as isNum, isRecord as isObj, isStr, isStrings } from '../core/schema'
 
 export type LicenseId = 'CC BY 4.0' | 'CC BY-SA 4.0' | 'CC0 1.0'
 
@@ -381,9 +382,6 @@ const num = (v: number): string => fmtPrecise(v, SENTENCE_PRECISION)
 
 const NOT_A_FILE = 'This is not a PhysLab question file.'
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
-const isStr = (v: unknown): v is string => typeof v === 'string'
 const isUnit = (v: unknown): v is UnitId => isStr(v) && (UNIT_IDS as readonly string[]).includes(v)
 
 /**
@@ -556,7 +554,6 @@ function checkVariable(v: unknown, who: string, seen: Set<string>): void {
   }
 }
 
-const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr)
 const isWhole = (v: unknown): v is number => isNum(v) && Number.isInteger(v)
 /** A checking range: two numbers, the smaller first. The letters are sampled across it, so a single point marks x³ right for x². */
 const isRange = (r: unknown): boolean => Array.isArray(r) && r.length === 2 && isNum(r[0]) && isNum(r[1]) && r[0] < r[1]

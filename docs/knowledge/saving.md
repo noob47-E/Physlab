@@ -13,6 +13,7 @@ start, on the strip under the top bar ("PhysLab closed with unsaved work… Rest
 | `src/renderer/src/app/files.ts` | Save, Save As, Open, `saveTextFile` (CSV and other text exports), file-open routing by kind. |
 | `src/renderer/src/core/fileErrors.ts` | The plain-English sentences for files that cannot be opened. |
 | `src/renderer/src/core/migrate.ts` | Brings an older `.phys` up to `FILE_VERSION`; one step per version, an old step is never edited. |
+| `src/renderer/src/core/schema.ts` | The checkers every door shares (`isRecord`, `isStr`, `isFiniteNumber`), a project's block checks (`checkLab`, `checkSandbox`, `checkObjects`), and the readers of settings kept in storage (`storedJson`, `storedRecord`, `storedList`). A door accepts what it did before they were shared; a stricter check is an owner's decision (OWNER-APPROVALS.md CW5-n). `tests/schema.test.ts` feeds each door 500 damaged copies of real files. |
 | `src/renderer/src/core/store.ts` | `serialize`, `loadScene`, `dirty` (not owned here). |
 | `src/main/index.ts` ~371–410 | The desktop slot: `userData/autosave/latest.phys`, written beside and renamed over (`autosave:write`, `autosave:writeSync` on close, `autosave:read`, `autosave:clear`). |
 

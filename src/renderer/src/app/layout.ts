@@ -15,6 +15,7 @@ import { warmupEngine } from '../math/engine'
 import { MODES, modeById, useApp, type ModeId } from './modes'
 import { hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, regroupWithViewport, showPanel } from './panels'
 import { LAYOUT_VERSION, columns, needsLayoutRebuild, panelHome, panelsForMode, type LayoutStamp } from './layoutMath'
+import { storedRecord } from '../core/schema'
 
 export const LAYOUT_KEY = 'physlab.layout'
 
@@ -64,8 +65,7 @@ interface SavedLayout extends Partial<LayoutStamp> {
 
 const readSaved = (): SavedLayout | null => {
   try {
-    const raw = localStorage.getItem(LAYOUT_KEY)
-    return raw ? (JSON.parse(raw) as SavedLayout) : null
+    return storedRecord(localStorage.getItem(LAYOUT_KEY)) as SavedLayout | null
   } catch {
     return null
   }

@@ -34,6 +34,7 @@ import {
 } from './pqjson'
 import { unitInPrompt } from './units'
 import { RANDOM_RANGE } from './variables'
+import { isRecord as isObj } from '../core/schema'
 
 // ===========================================================================
 // JME → mathjs
@@ -558,7 +559,6 @@ class Skip extends Error {
 }
 
 type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 /**
  * Exact case first, then all-lowercase: Numbas's own rule for reading a part, because files

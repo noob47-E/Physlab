@@ -14,6 +14,7 @@ import { formatMeasure } from '../math/format'
 import { flipPiece as flipCorners, fusePlan, legoParts, legoStatus, ONE_PIECE_SENTENCE, signatureOf, snapToCorners, snapTolerance, tintPiece, turnPiece as turnCorners } from '../math/lego'
 import type { V3 } from '../math/vec'
 import { classifyPolygon } from '../math/shapes'
+import { storedJson } from './schema'
 import { doomedBy } from './doomed'
 import { consumeShapes, cornersOf, dropPieceCorners, isPiece, legoNewColor, makePolygon, movedPieces, type Piece } from './legoScene'
 
@@ -151,8 +152,7 @@ const PREFS_KEY = 'physlab.labelPrefs'
 
 function loadLabelPrefs(): Partial<SceneSettings> {
   try {
-    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<SceneSettings>
-    return migrateLabelSettings(saved)
+    return migrateLabelSettings((storedJson(localStorage.getItem(PREFS_KEY)) ?? {}) as Partial<SceneSettings>)
   } catch {
     return {}
   }
