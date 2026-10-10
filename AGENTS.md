@@ -372,6 +372,10 @@ neighbour is open.
   Never write an engine's own syntax (`oo`, `**`, `lamda`, op names) outside its adapter in `math/engine/<name>/`:
   `tests/guards/engineSocket.test.ts` fails on an engine's name outside the socket. A new engine passes
   `tests/engine/conformance.ts` first (docs/knowledge/cas.md says how).
+- **A new window key goes into `shortcutKeyDown` in `app/shortcuts.ts`, never into a second keydown listener**, and it
+  gets a row in `tests/shortcutKeys.test.ts`. `useShortcuts` only adds and removes that one handler, so a key wired
+  anywhere else escapes the test that drives the real stores. The file may not call `enterMode(` or `.setMode(` at all.
+  Guards: `tests/shortcutKeys.test.ts`, `tests/hiddenModes.test.ts`.
 
 ## Code knowledge
 

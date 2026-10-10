@@ -23,6 +23,129 @@ const isTyping = (e: KeyboardEvent) => typingIn(e.target as HTMLElement)
  */
 export const VIEW_KEY = '3'
 
+/**
+ * The window's keydown handler. It sits at module level so tests/shortcutKeys.test.ts can drive it
+ * with the real stores; useShortcuts only adds it to the window and takes it away again.
+ */
+export function shortcutKeyDown(e: KeyboardEvent): void {
+  const s = scene()
+  const ctrl = e.ctrlKey || e.metaKey
+  if (ctrl && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    useApp.getState().setSearchOpen(true)
+    return
+  }
+  if (ctrl && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    saveProject(e.shiftKey)
+    return
+  }
+  if (ctrl && e.key.toLowerCase() === 'o') {
+    e.preventDefault()
+    openProject()
+    return
+  }
+  if (ctrl && e.key.toLowerCase() === 'n') {
+    e.preventDefault()
+    newProject()
+    return
+  }
+  if (isTyping(e)) return
+  // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y reach the history of the mode in front (the Sandbox and Lab
+  // Data each keep their own); undoRoute decides, for the Edit menu too.
+  if (ctrl && runHistory(useApp.getState().mode, { key: e.key, shift: e.shiftKey })) {
+    e.preventDefault()
+    return
+  }
+  if (ctrl && e.key.toLowerCase() === 'a') {
+    e.preventDefault()
+    s.select(visibleOrder(s.order, s.objects, s.activeSpace))
+    return
+  }
+  if (ctrl) return
+  // The arrow keys turn a 3-D drawing (Shift for a small step); everywhere else they are left
+  // alone, and the tour keeps ← and → for its own Back and Next. A key the right-click menu
+  // already took (it calls preventDefault in the capture phase) is its, and a drawing that is
+  // not on screen (the Calculator's Maths tab in front) is not turned behind the student's back.
+  const turn = turnForKey(e.key, e.shiftKey, {
+    drawing: isDrawingMode(useApp.getState().mode),
+    viewMode: s.viewMode,
+    tourOpen: useTour.getState().step !== null,
+    typing: false,
+    viewShown: isViewShown(),
+    claimed: e.defaultPrevented
+  })
+  if (turn) {
+    // Without this the arrow keys also scroll whichever panel holds the page.
+    e.preventDefault()
+    turnView(turn.dir, turn.fine)
+    return
+  }
+  // Tab is the keyboard's way from one control to the next, so it is never taken here; the
+  // 2D/3D switch lives on its own key (VIEW_KEY) instead.
+  if (e.key === 'Tab') return
+  // The Sandbox has its own objects and its own camera: Delete removes the selected body, Esc
+  // drops the selection, and the drawing tools and the 2D view do not apply.
+  if (useApp.getState().mode === 'sandbox') {
+    const sb = useSandbox.getState()
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (sb.selection) sb.removeBody(sb.selection)
+      return
+    }
+    if (e.key === 'Escape') {
+      sb.select(null)
+      return
+    }
+    if (e.key === 'Home') {
+      resetCamera()
+      return
+    }
+    if (e.key !== ' ') return
+  }
+  switch (e.key) {
+    case 'Escape':
+      // First Esc throws away the unfinished drawing, a second one goes back to Move.
+      if (cancelTool()) return
+      resetTool()
+      s.setTool('select')
+      s.select([])
+      return
+    case 'Delete':
+      if (s.selection.length) s.removeObjects(s.selection)
+      return
+    case 'Backspace':
+      if (undoLastPick()) return
+      if (s.selection.length) s.removeObjects(s.selection)
+      return
+    case VIEW_KEY:
+      // The GPU Lab hides the 2D/3D switch, so the key must not flip what no button can undo.
+      if (!isDrawingMode(useApp.getState().mode)) return
+      s.setViewMode(s.viewMode === '2d' ? '3d' : '2d')
+      return
+    case 'Home':
+      resetCamera()
+      return
+    case ' ':
+      // Space on a focused button is that button's click, not play/pause.
+      if (isActivatable(e.target as HTMLElement)) return
+      e.preventDefault()
+      // Held for a pan or released for play/pause: the key-up decides.
+      pressSpace()
+      return
+    case '/':
+    case 'Enter':
+      // The same for Enter on a focused button, link or menu item.
+      if (e.key === 'Enter' && isActivatable(e.target as HTMLElement)) return
+      e.preventDefault()
+      // While drawing, Enter finishes the shape instead of jumping to the command bar.
+      if (e.key === 'Enter' && useTool.getState().picks.length && finishTool()) return
+      document.getElementById('command-input')?.focus()
+      return
+  }
+  const tool = toolForKey(e.key, modeById(useApp.getState().mode).tools)
+  if (tool) s.setTool(tool)
+}
+
 export function useShortcuts() {
   useEffect(() => {
     // Space plays or pauses on the way up, unless it was held to pan the drawing (see panKey.ts).
@@ -34,129 +157,11 @@ export function useShortcuts() {
       }
     }
     const onBlur = () => resetSpace()
-    const onKey = (e: KeyboardEvent) => {
-      const s = scene()
-      const ctrl = e.ctrlKey || e.metaKey
-      if (ctrl && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        useApp.getState().setSearchOpen(true)
-        return
-      }
-      if (ctrl && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        saveProject(e.shiftKey)
-        return
-      }
-      if (ctrl && e.key.toLowerCase() === 'o') {
-        e.preventDefault()
-        openProject()
-        return
-      }
-      if (ctrl && e.key.toLowerCase() === 'n') {
-        e.preventDefault()
-        newProject()
-        return
-      }
-      if (isTyping(e)) return
-      // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y reach the history of the mode in front (the Sandbox and Lab
-      // Data each keep their own); undoRoute decides, for the Edit menu too.
-      if (ctrl && runHistory(useApp.getState().mode, { key: e.key, shift: e.shiftKey })) {
-        e.preventDefault()
-        return
-      }
-      if (ctrl && e.key.toLowerCase() === 'a') {
-        e.preventDefault()
-        s.select(visibleOrder(s.order, s.objects, s.activeSpace))
-        return
-      }
-      if (ctrl) return
-      // The arrow keys turn a 3-D drawing (Shift for a small step); everywhere else they are left
-      // alone, and the tour keeps ← and → for its own Back and Next. A key the right-click menu
-      // already took (it calls preventDefault in the capture phase) is its, and a drawing that is
-      // not on screen (the Calculator's Maths tab in front) is not turned behind the student's back.
-      const turn = turnForKey(e.key, e.shiftKey, {
-        drawing: isDrawingMode(useApp.getState().mode),
-        viewMode: s.viewMode,
-        tourOpen: useTour.getState().step !== null,
-        typing: false,
-        viewShown: isViewShown(),
-        claimed: e.defaultPrevented
-      })
-      if (turn) {
-        // Without this the arrow keys also scroll whichever panel holds the page.
-        e.preventDefault()
-        turnView(turn.dir, turn.fine)
-        return
-      }
-      // Tab is the keyboard's way from one control to the next, so it is never taken here; the
-      // 2D/3D switch lives on its own key (VIEW_KEY) instead.
-      if (e.key === 'Tab') return
-      // The Sandbox has its own objects and its own camera: Delete removes the selected body, Esc
-      // drops the selection, and the drawing tools and the 2D view do not apply.
-      if (useApp.getState().mode === 'sandbox') {
-        const sb = useSandbox.getState()
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          if (sb.selection) sb.removeBody(sb.selection)
-          return
-        }
-        if (e.key === 'Escape') {
-          sb.select(null)
-          return
-        }
-        if (e.key === 'Home') {
-          resetCamera()
-          return
-        }
-        if (e.key !== ' ') return
-      }
-      switch (e.key) {
-        case 'Escape':
-          // First Esc throws away the unfinished drawing, a second one goes back to Move.
-          if (cancelTool()) return
-          resetTool()
-          s.setTool('select')
-          s.select([])
-          return
-        case 'Delete':
-          if (s.selection.length) s.removeObjects(s.selection)
-          return
-        case 'Backspace':
-          if (undoLastPick()) return
-          if (s.selection.length) s.removeObjects(s.selection)
-          return
-        case VIEW_KEY:
-          // The GPU Lab hides the 2D/3D switch, so the key must not flip what no button can undo.
-          if (!isDrawingMode(useApp.getState().mode)) return
-          s.setViewMode(s.viewMode === '2d' ? '3d' : '2d')
-          return
-        case 'Home':
-          resetCamera()
-          return
-        case ' ':
-          // Space on a focused button is that button's click, not play/pause.
-          if (isActivatable(e.target as HTMLElement)) return
-          e.preventDefault()
-          // Held for a pan or released for play/pause: the key-up decides.
-          pressSpace()
-          return
-        case '/':
-        case 'Enter':
-          // The same for Enter on a focused button, link or menu item.
-          if (e.key === 'Enter' && isActivatable(e.target as HTMLElement)) return
-          e.preventDefault()
-          // While drawing, Enter finishes the shape instead of jumping to the command bar.
-          if (e.key === 'Enter' && useTool.getState().picks.length && finishTool()) return
-          document.getElementById('command-input')?.focus()
-          return
-      }
-      const tool = toolForKey(e.key, modeById(useApp.getState().mode).tools)
-      if (tool) s.setTool(tool)
-    }
-    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', shortcutKeyDown)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     return () => {
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', shortcutKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
     }
