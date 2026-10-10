@@ -2,9 +2,16 @@
 // dialog that can see .pqjson and .exam — it used to share the .phys one, and a teacher in the
 // packaged app could not see a single question file to pick.
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openDialogOptions, PROJECT_FILTERS } from '../src/main/openDialog'
 import { readSource } from './helpers/repo'
+
+/** app/files.ts reads window.physlab once, at load: give it a window with a spy, in a fresh module graph. */
+async function loadFilesWithBridge(openFile: (...args: unknown[]) => Promise<null>) {
+  vi.stubGlobal('window', { physlab: { isDesktop: true, openFile, saveFile: vi.fn() } })
+  vi.resetModules()
+  return import('../src/renderer/src/app/files')
+}
 
 describe('the Open dialog', () => {
   it('keeps the .phys project dialog when nothing is asked for', () => {
@@ -24,12 +31,23 @@ describe('the Open dialog', () => {
     }
   })
 
-  it('is what the question file picker and the bridge actually use', () => {
-    const files = readSource('src/renderer/src/app/files.ts')
-    expect(files).toMatch(/extensions: \['pqjson', 'exam'\]/)
-    expect(files).toMatch(/bridge\.openFile\(QUESTION_FILE_FILTERS/)
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('the question picker asks for .pqjson and .exam, and Open project asks for nothing', async () => {
+    const openFile = vi.fn(async () => null)
+    const files = await loadFilesWithBridge(openFile)
+    expect(await files.openQuestionFile()).toBeNull()
+    expect(openFile).toHaveBeenLastCalledWith([{ name: 'Question file', extensions: ['pqjson', 'exam'] }], 'Open a question file')
+    await files.openProject()
+    expect(openFile).toHaveBeenCalledTimes(2)
     // Open project still asks for nothing, so it keeps the .phys dialog.
-    expect(files).toMatch(/const r = await bridge\.openFile\(\)/)
+    expect(openFile.mock.calls[1]).toHaveLength(0)
+    // The fresh module graph behind app/files.ts takes more than the default 5 s to load on a cold or busy machine.
+  }, 60_000)
+
+  it('the bridge and the main process pass the picker’s filters and title on', () => {
     expect(readSource('src/preload/index.ts')).toMatch(/ipcRenderer\.invoke\('file:open', filters, title\)/)
     expect(readSource('src/main/index.ts')).toMatch(/openDialogOptions\(filters, title\)/)
   })

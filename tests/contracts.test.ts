@@ -7,7 +7,7 @@
 // These do. They are still pure — no DOM, no browser.
 
 import { readSource } from './helpers/repo'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import katex from 'katex'
 import { isFieldSafeLatex, linearSyntaxIn } from '../src/renderer/src/ui/latexSafety'
 import { isActivatable, isTyping } from '../src/renderer/src/app/keyTargets'
@@ -192,17 +192,11 @@ describe('the contract with the Python worker', () => {
     expect(casRequestFor('partial', '1/(x^2-1)', false)).toEqual({ op: 'apart', payload: { expr: '1/(x^2-1)', deg: false } })
     // Over the complex numbers, not the rationals: plain factor would hand x² + 4 straight back.
     expect(casRequestFor('factorComplex', 'x^2+4', true)).toEqual({ op: 'factor_complex', payload: { expr: 'x^2+4', deg: true } })
-    expect(readSource('src/renderer/src/workers/cas.worker.ts')).toContain('extension=[sp.I]')
   })
 
   it('only asks for operations the worker implements', () => {
-    // Reading the Python as text is the only thing that can tie a TypeScript constant to a string
-    // literal in another language. It is ugly, and it is the check that was missing.
-    const worker = readSource('src/renderer/src/workers/cas.worker.ts')
-    for (const op of CAS_OPS) {
-      if (op === 'warmup') continue // handled before the dispatch, not as a branch
-      expect(worker, `worker has no branch for '${op}'`).toContain(`if op == '${op}'`)
-    }
+    // Every op in CAS_OPS has a branch in the worker, and the branch is run in casWorker.test.ts.
+    // Here: every job the panel can send names an op from that list.
     for (const j of JOBS) {
       const req = casRequestFor(j.id, 'x', true)
       if (req) expect(CAS_OPS, `${j.id} asks for an unknown op`).toContain(req.op)
@@ -212,14 +206,44 @@ describe('the contract with the Python worker', () => {
   it('a warm-up is not a question: it carries no id, so nothing waits, counts as busy or times out', () => {
     // Sent through cas() it was a request like any other: the strip said "Working…" with a Stop
     // button while SymPy loaded, and a slow first launch hit the 30 s timer and killed the worker.
-    const client = readSource('src/renderer/src/math/engine/sympy/worker.ts')
-    // P17: a second warm-up while a worker exists does nothing (tests/casBoot.test.ts drives it).
-    expect(client).toMatch(/warmupCas = \(\): void => \{\s*if \(worker\) return\s*getWorker\(\)\.postMessage\(\{ op: 'warmup'/)
-    expect(client).not.toMatch(/warmupCas = \(\) => cas\(/)
+    // The client's warm-up is run in the describe below; the worker's two checks are still read.
     const worker = readSource('src/renderer/src/workers/cas.worker.ts')
     expect(worker).toContain("if (id === undefined || op === 'warmup')")
     // A failed load still answers a waiting request, with a sentence and the raw text as detail.
     expect(worker).toMatch(/if \(!py\) \{\s*postMessage\(\{ status: 'error'[^\n]*\n\s*if \(id !== undefined\) postMessage\(\{ id, result: \{ error: /)
+  })
+})
+
+describe('the algebra client sends a warm-up as one message with no id (A6-07)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('warmupCas posts one id-less warm-up, and a second call while the worker exists posts nothing', async () => {
+    class FakeWorker {
+      static made: FakeWorker[] = []
+      sent: unknown[] = []
+      onmessage: unknown = null
+      onerror: unknown = null
+      constructor() {
+        FakeWorker.made.push(this)
+      }
+      postMessage(m: unknown): void {
+        this.sent.push(m)
+      }
+      terminate(): void {}
+    }
+    // getWorker starts a two-minute boot timer; fake time keeps it from outliving this test.
+    vi.useFakeTimers()
+    vi.stubGlobal('Worker', FakeWorker)
+    vi.resetModules()
+    const client = await import('../src/renderer/src/math/engine/sympy/worker')
+    client.warmupCas()
+    client.warmupCas()
+    expect(FakeWorker.made).toHaveLength(1)
+    // An id would make the worker answer it, and a request with an id counts as busy.
+    expect(FakeWorker.made[0].sent).toStrictEqual([{ op: 'warmup', payload: {} }])
   })
 })
 

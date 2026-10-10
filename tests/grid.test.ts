@@ -1,7 +1,7 @@
 // The grid used to be built from a canvas that had no size yet: zero-length lines, cached as done,
 // leaving the viewport black on the first open until something else asked for a new frame.
 
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   circleSegments,
   clipLine,
@@ -30,6 +30,7 @@ import { axisTitle, ringLabels, tickDecimals, tickText } from '../src/renderer/s
 import type { MeasureSettings } from '../src/renderer/src/math/format'
 import { labelPoints } from '../src/renderer/src/math/graphs'
 import type { V3 } from '../src/renderer/src/math/vec'
+import { SpanPool } from '../src/renderer/src/render/overlay'
 
 const area = (xMin: number, xMax: number, yMin: number, yMax: number) => ({ xMin, xMax, yMin, yMax })
 
@@ -151,6 +152,16 @@ describe('numbering the axes', () => {
 })
 
 describe('grid styles', () => {
+  // The menu and the search box are read by calling them, so they load once here with a set-up's allowance.
+  let useScene: typeof import('../src/renderer/src/core/store').useScene
+  let menuForBackground: typeof import('../src/renderer/src/app/contextActions').menuForBackground
+  let buildItems: typeof import('../src/renderer/src/app/SearchPalette').buildItems
+  beforeAll(async () => {
+    ;({ useScene } = await import('../src/renderer/src/core/store'))
+    ;({ menuForBackground } = await import('../src/renderer/src/app/contextActions'))
+    ;({ buildItems } = await import('../src/renderer/src/app/SearchPalette'))
+  }, 60_000)
+
   // A 4 × 3 area with a major line every 1 and a minor line every 0.25.
   const box = area(0, 4, 0, 3)
   const lines = (flat: number[]) => flat.length / 6
@@ -205,9 +216,28 @@ describe('grid styles', () => {
     }
     // The View menu, the right-click menu and the search box all map the same list, so a new
     // style appears in every one of them without a second list to keep in step.
-    for (const f of ['src/renderer/src/app/TopBar.tsx', 'src/renderer/src/app/contextActions.ts', 'src/renderer/src/app/SearchPalette.tsx', 'src/renderer/src/render/Viewport.tsx']) {
+    for (const f of ['src/renderer/src/app/TopBar.tsx', 'src/renderer/src/render/Viewport.tsx']) {
       expect(readSource(f), f).toContain('GRID_STYLES.map(')
     }
+  })
+
+  it('the right-click menu and the search box list the same seven styles, and each one sets its style', () => {
+    const grid = menuForBackground(null).find((g) => g.title === 'Grid')
+    const styleItems = grid?.items.slice(0, GRID_STYLES.length) ?? []
+    expect(styleItems.map((i) => i.label)).toEqual(GRID_STYLES.map((g) => g.label))
+    styleItems.forEach((item, k) => {
+      item.run()
+      expect(useScene.getState().settings.gridStyle).toBe(GRID_STYLES[k].id)
+      expect(useScene.getState().settings.showGrid).toBe(true)
+    })
+    const rows = buildItems()
+    for (const g of GRID_STYLES) {
+      const row = rows.find((i) => i.title === `Grid: ${g.label.toLowerCase()}`)
+      expect(row, g.id).toBeDefined()
+      row?.run()
+      expect(useScene.getState().settings.gridStyle).toBe(g.id)
+    }
+    useScene.getState().setSettings({ gridStyle: 'lines' })
   })
 
   it('reads a saved style back, and draws lines for one it has never heard of', () => {
@@ -232,7 +262,15 @@ describe('grid styles', () => {
     // menu and the right-click menu must read the same value or they show nothing selected.
     expect(readSource('src/renderer/src/render/Viewport.tsx')).toMatch(/useScene\(\(s\) => normaliseGridStyle\(s\.settings\.gridStyle\)\)/)
     expect(readSource('src/renderer/src/app/TopBar.tsx')).toMatch(/useScene\(\(s\) => normaliseGridStyle\(s\.settings\.gridStyle\)\)/)
-    expect(readSource('src/renderer/src/app/contextActions.ts')).toMatch(/normaliseGridStyle\(st\.settings\.gridStyle\)/)
+  })
+
+  it('the right-click menu ticks Lines for a saved style it has never heard of', () => {
+    // A saved file can name a style this build lacks; the menu must tick the lines that are drawn.
+    useScene.getState().setSettings({ showGrid: true, gridStyle: 'nonsense' as never })
+    const grid = menuForBackground(null).find((g) => g.title === 'Grid')
+    expect(grid?.items.find((i) => i.label === 'Lines')?.checked).toBe(true)
+    expect(grid?.items.find((i) => i.label === 'Dots')?.checked).toBe(false)
+    useScene.getState().setSettings({ gridStyle: 'lines' })
   })
 
   it('the View menu ticks the grid that is showing, the way it ticks the theme', () => {
@@ -304,9 +342,16 @@ describe('the axes switch', () => {
   // failed once under the full suite and never alone. The import is set-up, so it happens here
   // with a set-up's time allowance, and the test times only the switch itself.
   let useScene: typeof import('../src/renderer/src/core/store').useScene
+  let menuForBackground: typeof import('../src/renderer/src/app/contextActions').menuForBackground
+  let buildItems: typeof import('../src/renderer/src/app/SearchPalette').buildItems
   beforeAll(async () => {
     ;({ useScene } = await import('../src/renderer/src/core/store'))
+    ;({ menuForBackground } = await import('../src/renderer/src/app/contextActions'))
+    ;({ buildItems } = await import('../src/renderer/src/app/SearchPalette'))
   }, 60_000)
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
 
   // `showAxes` was drawn correctly from the start but reachable only as a View menu row; a
   // student looking at the grid picker, the right-click menu or the search box never found it.
@@ -350,7 +395,30 @@ describe('the axes switch', () => {
       expect(f).toContain("axisTitle('x', settings)")
       expect(f).toContain("axisTitle('y', settings)")
     }
-    expect(readSource('src/renderer/src/render/overlay.ts')).toMatch(/end\(\) \{\s*for \(let i = this\.used; i < this\.spans\.length; i\+\+\) this\.spans\[i\]\.style\.display = 'none'/)
+  })
+
+  it('hides the tick numbers that no place() reached in the frame', () => {
+    // SpanPool places real spans only through `document`; a stand-in span records what end() does to each.
+    const made: { textContent: string; style: { display: string } }[] = []
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const el = { className: '', textContent: '', style: { display: '', transform: '', color: '' } }
+        made.push(el)
+        return el
+      }
+    })
+    const host = { appendChild: () => undefined } as unknown as HTMLDivElement
+    const pool = new SpanPool(() => host, 'tick')
+    pool.begin()
+    pool.place('0', 0, 0)
+    pool.place('1', 10, 0)
+    pool.place('2', 20, 0)
+    pool.begin()
+    pool.place('1', 10, 0)
+    pool.end()
+    // The first span is the one placed this frame; the two past it are hidden on the same frame.
+    expect(made.map((s) => s.style.display)).toEqual(['', 'none', 'none'])
+    expect(made[0].textContent).toBe('1')
   })
 
   it('is offered wherever the grid style is, with the same word and a tick', () => {
@@ -358,22 +426,39 @@ describe('the axes switch', () => {
     expect(picker).toMatch(/aria-pressed=\{showAxes\}/)
     expect(picker).toMatch(/\{showAxes \? '✓ Axes' : 'Axes'\}/)
     expect(picker).toMatch(/setSettings\(\{ showAxes: !showAxes \}\)/)
-    const menu = readSource('src/renderer/src/app/contextActions.ts').match(/title: 'Grid',[\s\S]*?\]\s*\}/)?.[0] ?? ''
-    expect(menu).toMatch(/label: 'Axes', hint: [^,]+, checked: showAxes, run: \(\) => st\.setSettings\(\{ showAxes: !showAxes \}\)/)
-    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
-    expect(palette).toMatch(/title: 'Axes: show'.*setSettings\(\{ showAxes: true \}\)/)
-    expect(palette).toMatch(/title: 'Axes: hide'.*setSettings\(\{ showAxes: false \}\)/)
     const view = readSource('src/renderer/src/app/TopBar.tsx').match(/label="View"[\s\S]*?label="Help"/)?.[0] ?? ''
     expect(view).toMatch(/label: 'Axes', sc: showAxes \? '✓' : undefined, on: showAxes/)
   })
 
+  it('the right-click menu offers Axes in the Grid group, ticked while it shows, and its run() flips it', () => {
+    const axes = () => menuForBackground(null).find((g) => g.title === 'Grid')?.items.find((i) => i.label === 'Axes')
+    useScene.getState().setSettings({ showAxes: true })
+    expect(axes()?.hint).toBeTruthy()
+    expect(axes()?.checked).toBe(true)
+    axes()?.run()
+    expect(useScene.getState().settings.showAxes).toBe(false)
+    expect(axes()?.checked).toBe(false)
+    axes()?.run()
+    expect(useScene.getState().settings.showAxes).toBe(true)
+  })
+
+  it('the search box has Axes: show and Axes: hide rows that set showAxes', () => {
+    const row = (title: string) => buildItems().find((i) => i.title === title)
+    expect(row('Axes: hide')).toBeDefined()
+    expect(row('Axes: show')).toBeDefined()
+    useScene.getState().setSettings({ showAxes: true })
+    row('Axes: hide')?.run()
+    expect(useScene.getState().settings.showAxes).toBe(false)
+    row('Axes: show')?.run()
+    expect(useScene.getState().settings.showAxes).toBe(true)
+  })
+
   it('is found in the search box by the singular a student types', async () => {
     // `score` matches the title and the hint; the titles say "Axes", so "axis", "hide axis" and
-    // "x axis" once found only the angle marks. The hints carry the singular. The rows are read
-    // from the source and scored by the real scorer.
+    // "x axis" once found only the angle marks. The hints carry the singular. The rows come from
+    // buildItems() and are scored by the real scorer.
     const { score } = await import('../src/renderer/src/app/SearchPalette')
-    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
-    const rows = [...palette.matchAll(/title: '(Axes: \w+)', hint: '([^']+)'/g)].map((m) => ({ group: 'Settings', title: m[1], hint: m[2], run: () => {} }))
+    const rows = buildItems().filter((i) => i.title.startsWith('Axes: '))
     expect(rows.map((r) => r.title)).toEqual(['Axes: show', 'Axes: hide'])
     for (const q of ['axes', 'axis', 'x axis', 'hide axis', 'show axis']) {
       const hit = rows.filter((r) => score(r, q) > 0).map((r) => r.title)

@@ -15,7 +15,7 @@ import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { keypadToMath, evaluateBaseN, evaluateComp } from '../src/renderer/src/calc/engine'
 import { constantScope } from '../src/renderer/src/calc/constants'
 import { math } from '../src/renderer/src/math/expr'
-import { MODE_LABELS } from '../src/renderer/src/calc/calcStore'
+import { MODE_HINTS, MODE_LABELS } from '../src/renderer/src/calc/calcStore'
 
 beforeEach(resetGlobals)
 
@@ -375,10 +375,19 @@ describe('nothing that looks like a handheld calculator survives', () => {
     expect(MODE_LABELS['BASE-N']).toBe('Bases')
     // Ctrl+K offered "Calculator CMPLX" from the raw ids after every label on the screen had
     // gone through MODE_LABELS.
-    const palette = readFileSource('app/SearchPalette.tsx')
-    expect(palette).toMatch(/title: `Calculator: \$\{MODE_LABELS\[cm\]\}`/)
-    expect(palette).toMatch(/hint: MODE_HINTS\[cm\]/)
   })
+
+  it('offers one Ctrl+K row per calculator mode, titled with its label and hinted with its line', async () => {
+    const { buildItems } = await import('../src/renderer/src/app/SearchPalette')
+    const rows = buildItems().filter((r) => r.group === 'Calculator')
+    const modes = Object.keys(MODE_LABELS) as Array<keyof typeof MODE_LABELS>
+    expect(rows.length).toBe(modes.length)
+    for (const cm of modes) {
+      const row = rows.find((r) => r.title === `Calculator: ${MODE_LABELS[cm]}`)
+      expect(row, cm).toBeDefined()
+      expect(row?.hint, cm).toBe(MODE_HINTS[cm])
+    }
+  }, 30000)
 
   it('lets a key’s relatives hang below the last row without being clipped', () => {
     // A group with overflow-y: auto clips the relatives row of its last keys (polar → x, y;

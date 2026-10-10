@@ -24,6 +24,7 @@ vi.stubGlobal('localStorage', {
 
 import { AFTER_SANDBOX, MISSIONS, resetMissionBaseline, TOUR } from '../src/renderer/src/app/tour/steps'
 import { ALL_DONE_MESSAGE, formatMissionHint, readDone, showWorkingExample, useTour, watchMissions } from '../src/renderer/src/app/tour/Tour'
+import { buildItems } from '../src/renderer/src/app/SearchPalette'
 import { MODES, readyModes } from '../src/renderer/src/app/modes'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { scene } from '../src/renderer/src/core/store'
@@ -205,7 +206,17 @@ describe('every mission ticks by exactly the action its hint names', () => {
   it('5 Reset without having played does not tick, and nothing about a run is stored', () => {
     useSandbox.getState().resetRun()
     expect(mission('sandbox').done()).toBe(false)
-    expect(readSource('src/renderer/src/app/tour/steps.ts')).not.toMatch(/localStorage/)
+    // A played run, then Reset: the mission ticks from memory, and the store is written for nothing.
+    store.clear()
+    useSandbox.setState({ engineTime: 1.5 })
+    expect(mission('sandbox').done()).toBe(false) // records the run as played
+    useSandbox.getState().resetRun()
+    expect(mission('sandbox').done()).toBe(true)
+    expect([...store.keys()]).toEqual([])
+    // Nor does anything else in the tour's steps: every mission is asked, and the baseline is reset.
+    for (const m of MISSIONS) m.done()
+    resetMissionBaseline()
+    expect([...store.keys()]).toEqual([])
   })
 
   it('6 Answer a question: checking an answer marks it; a proof-only question ticks when its model proof is shown', () => {
@@ -250,7 +261,12 @@ describe('the words', () => {
 
   it('never name the removed modes, nor the old Help line', () => {
     for (const w of [...words, ...TOUR.flatMap((s) => [s.title, s.body])]) expect(w).not.toMatch(/Question Author|Class Results|Practice tasks/)
-    expect(readSource('src/renderer/src/app/SearchPalette.tsx')).not.toMatch(/'Practice tasks'/)
+    const rows = buildItems()
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) {
+      expect(r.title, `${r.group}: ${r.title}`).not.toMatch(/Practice tasks/)
+      expect(r.hint, `${r.group}: ${r.title}`).not.toMatch(/Practice tasks/)
+    }
     expect(readSource('src/renderer/src/app/TopBar.tsx')).not.toMatch(/'Practice tasks'/)
   })
 
@@ -377,9 +393,7 @@ describe('af-tb2 — the Start here chip, card and exact words', () => {
 
   describe('the Start here card', () => {
     it('shows the exact all-done sentence word for word', () => {
-      expect(tourSource()).toContain(
-        'All done. You have used every part of PhysLab you need to start. Help ▸ Start here brings this list back.'
-      )
+      expect(ALL_DONE_MESSAGE).toBe('All done. You have used every part of PhysLab you need to start. Help ▸ Start here brings this list back.')
     })
 
     it('has Hide, Start over and Show me controls', () => {

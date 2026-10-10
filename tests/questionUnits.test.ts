@@ -7,7 +7,7 @@ import type { LengthUnit } from '../src/renderer/src/core/types'
 import { UNIT_IDS } from '../src/renderer/src/questions/pqjson'
 import { readSource } from './helpers/repo'
 import { substitute } from '../src/renderer/src/questions/variables'
-import { texQuantity } from '../src/renderer/src/questions/units'
+import { texQuantity, texUnit, unitInPrompt } from '../src/renderer/src/questions/units'
 
 const PRECISION = { decimals: 2, precisionMode: 'dp' as const }
 
@@ -126,13 +126,28 @@ describe('unitFromTail', () => {
 
 describe('one home for unit formatting', () => {
   it('keeps the LaTeX units and the prompt-unit reader in units.ts, not copied into steps or numbas', () => {
-    const units = readSource('src/renderer/src/questions/units.ts')
     for (const fn of ['texUnit', 'texQuantity', 'unitInPrompt']) {
-      expect(units, fn).toContain(`export function ${fn}(`)
       expect(readSource('src/renderer/src/questions/steps.ts'), fn).not.toContain(`function ${fn}(`)
       expect(readSource('src/renderer/src/questions/numbas.ts'), fn).not.toContain(`function ${fn}(`)
     }
     expect(readSource('src/renderer/src/questions/variables.ts')).not.toContain('function chipNumber(')
+  })
+
+  it('texUnit, texQuantity and unitInPrompt give their answers on real samples', () => {
+    const at2 = { decimals: 2, precisionMode: 'dp' as const }
+    expect(texUnit('m/s²')).toBe('\\mathrm{m/s^{2}}')
+    expect(texUnit('°')).toBe('^{\\circ}')
+    expect(texUnit('A')).toBe('\\mathrm{A}')
+    expect(texUnit('none')).toBe('')
+    expect(texUnit(undefined)).toBe('')
+    expect(texQuantity(0.0024, 'A', at2)).toMatch(/10\^\{-3\}\\,\\mathrm\{A\}$/)
+    expect(texQuantity(3, undefined, at2)).not.toContain('mathrm')
+    expect(unitInPrompt('Find the speed in m/s.')).toBe('m/s')
+    expect(unitInPrompt('Find the speed in \\(\\mathrm{m/s}\\)')).toBe('m/s')
+    expect(unitInPrompt('Give the answer in metres per second')).toBe('m/s')
+    expect(unitInPrompt('Work out the angle in degrees')).toBe('°')
+    expect(unitInPrompt('Find the temperature in degrees celsius')).toBe('°C')
+    expect(unitInPrompt('Find the value.')).toBe('none')
   })
 })
 

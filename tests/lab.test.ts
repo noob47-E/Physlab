@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { addColumn, addRow, addUncertainty, DEFAULT_TABLE_TITLE, emptyTable, removeColumn, setCell, setColumn, uniqueTitle, useLab } from '../src/renderer/src/lab/labStore'
 import { rowsFor, tableFrom } from '../src/renderer/src/sim/recording'
+import { blankSceneFile } from '../src/renderer/src/core/store'
 import { readSource } from './helpers/repo'
 import { headerOf, isUsableName, plotPairs, plotSeries, ratioUnit, resolveValues } from '../src/renderer/src/lab/values'
 import { betterFit, fitOf, gradientRange, pmText, rankFits } from '../src/renderer/src/lab/fit'
@@ -433,7 +434,13 @@ describe('sending a Sandbox recording to Lab Data', () => {
 
   it('a fresh session and File ▸ New start from the same table, so an untouched launch is not work', () => {
     expect(emptyTable().title).toBe(DEFAULT_TABLE_TITLE)
-    expect(readSource('src/renderer/src/core/store.ts')).toMatch(/lab: \[emptyTable\(\)\]/)
+    // blankSceneFile is what a fresh session and File ▸ New start from. Its ids differ from
+    // emptyTable()'s (each call takes new ones), so the table is compared by title and columns.
+    const lab = blankSceneFile().lab ?? []
+    expect(lab).toHaveLength(1)
+    const [blank] = lab
+    expect(blank.title).toBe(emptyTable().title)
+    expect(blank.columns.map((c) => [c.name, c.unit])).toEqual(emptyTable().columns.map((c) => [c.name, c.unit]))
   })
 
   it('the Send button goes through appendTable and Lab Data can reach every table', () => {

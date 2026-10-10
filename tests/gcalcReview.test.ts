@@ -11,9 +11,10 @@ vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   CAS_OPS: []
 }))
 
-import { EXAMPLES } from '../src/renderer/src/panels/Examples'
+import { EXAMPLES, runExample } from '../src/renderer/src/panels/Examples'
 import { EXPRESSION_WORDS, rangeEdit, rangeOf } from '../src/renderer/src/panels/expressionRows'
 import { regroupWithViewport, setDockApi } from '../src/renderer/src/app/panels'
+import { buildLayout, enterMode } from '../src/renderer/src/app/layout'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { replaceGraphEquation } from '../src/renderer/src/lang/graphEdit'
 import { scene } from '../src/renderer/src/core/store'
@@ -29,9 +30,15 @@ beforeEach(() => {
 })
 
 describe('picture lessons open Graphing first', () => {
-  it('every Graphs & functions lesson and the projectile graph say mode: graphing, and runExample opens it before the commands', () => {
+  it('every Graphs & functions lesson and the projectile graph say mode: graphing, and runExample opens it before the commands', async () => {
     for (const ex of EXAMPLES.filter((e) => e.area === 'Graphs & functions' || e.title === 'Projectile path graph')) expect(ex.mode, ex.title).toBe('graphing')
-    expect(readSource('src/renderer/src/panels/Examples.tsx')).toMatch(/if \(ex\.mode\) enterMode\(ex\.mode\)\s*\n\s*for \(const c of ex\.commands\) await runCommand\(c\)/)
+    // A command stamps what it makes with the drawing active at that moment. Had runExample entered
+    // Graphing after its commands, the lesson's objects would carry the Vectors drawing set here.
+    scene().setActiveSpace('vectors')
+    await runExample(EXAMPLES.find((e) => e.title === 'Waves that move')!)
+    const made = Object.values(scene().objects)
+    expect(made.length).toBeGreaterThan(0)
+    expect([...new Set(made.map((o) => o.space))]).toEqual(['graphing'])
   })
 
   it('the Geometry lessons with commands open Geometry first too (their shapes were left in the Vectors drawing)', () => {
@@ -76,13 +83,63 @@ describe('the Maths screen and Expressions do not follow the student into other 
   })
 
   it('enterMode does it for every mode without a centre panel, and closes Expressions outside Graphing', () => {
-    const src = readSource('src/renderer/src/app/layout.ts')
-    expect(src).toMatch(/else if \(isPanelOpen\('maths'\)\) \{[\s\S]{0,300}regroupWithViewport\('maths'\)/)
-    expect(src).toContain("if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')")
+    // A fresh fake dock for each case: the drawing, Maths split off into its own group, and Expressions open beside it.
+    interface FakePanel {
+      id: string
+      api: { group: { id: string }; setActive: () => void; moveTo: (o: { group: { id: string } }) => void }
+    }
+    const dock = () => {
+      const centre = { id: 'centre' }
+      const own = { id: 'own' }
+      const panels: FakePanel[] = []
+      const add = (id: string, group: { id: string }) => {
+        const p: FakePanel = { id, api: { group, setActive: () => {}, moveTo: (o) => (p.api.group = o.group) } }
+        panels.push(p)
+      }
+      add('viewport', centre)
+      add('maths', own)
+      add('expressions', own)
+      setDockApi({
+        width: 1600,
+        height: 900,
+        panels,
+        getPanel: (id: string) => panels.find((p) => p.id === id),
+        removePanel: (p: FakePanel) => void panels.splice(panels.indexOf(p), 1)
+      } as never)
+      return { centre, panels, group: (id: string) => panels.find((p) => p.id === id)!.api.group }
+    }
+    // Graphing has no centre panel: Maths goes back behind the drawing, and its own Expressions stays (Graphing's list).
+    const g = dock()
+    enterMode('graphing')
+    expect(g.group('maths')).toBe(g.centre)
+    expect(g.panels.map((p) => p.id)).toContain('expressions')
+    // Geometry has no centre panel either: Maths goes back behind the drawing, and Expressions is closed.
+    const s = dock()
+    enterMode('shapes')
+    expect(s.group('maths')).toBe(s.centre)
+    expect(s.panels.map((p) => p.id)).not.toContain('expressions')
   })
 
   it('a second left panel is a tab beside the first, not a second column', () => {
-    expect(readSource('src/renderer/src/app/layout.ts')).toContain("else if (home === 'left' && leftDone) api.addPanel({ ...base, position: { referencePanel: leftDone, direction: 'within' } })")
+    interface Added {
+      id: string
+      position?: { referencePanel?: string; direction?: string }
+    }
+    const added: Added[] = []
+    buildLayout(
+      {
+        width: 1600,
+        height: 900,
+        clear: () => {},
+        addPanel: (o: Added) => void added.push(o),
+        getPanel: () => ({ api: { setActive: () => {} } })
+      } as never,
+      'graphing'
+    )
+    expect(added.map((a) => a.id)).toEqual(['viewport', 'examples', 'expressions'])
+    // Examples is the first left panel; Expressions joins it as a tab, so only one panel opens to the left.
+    expect(added.filter((a) => a.position?.direction === 'left')).toHaveLength(1)
+    expect(added[2].position).toEqual({ referencePanel: 'examples', direction: 'within' })
   })
 })
 

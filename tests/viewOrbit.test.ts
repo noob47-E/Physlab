@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
@@ -21,8 +21,17 @@ import { TOOLS as TOOLS_LIST } from '../src/renderer/src/render/tools'
 import { isViewShown, onTurnRequested, pendingTurn, turnView } from '../src/renderer/src/render/viewState'
 import { readSource } from './helpers/repo'
 
-// shortcuts.ts pulls in the whole app; its one exported constant is copied here and checked against the source below.
-const VIEW_KEY = '3'
+// shortcuts.ts pulls in the whole app, so it is loaded only by the two tests that need its VIEW_KEY.
+// app/files.ts reads the desktop bridge off `window` as it loads; a node test has none, so it gets an empty one
+// for the import (the same stand-in hiddenModes.test.ts uses).
+async function shortcuts(): Promise<typeof import('../src/renderer/src/app/shortcuts')> {
+  vi.stubGlobal('window', globalThis)
+  try {
+    return await import('../src/renderer/src/app/shortcuts')
+  } finally {
+    vi.unstubAllGlobals()
+  }
+}
 
 // Fix 3: the 3-D view could not be turned. These pin the maths every way of turning shares.
 
@@ -302,14 +311,16 @@ describe('the arrow keys turn the 3-D drawing (turnForKey)', () => {
     expect(pendingTurn.az).toBe(0)
   })
 
-  it('no turn key is already a tool key, the 2D/3D key or Home', () => {
+  it('no turn key is already a tool key, the 2D/3D key or Home', async () => {
+    const { VIEW_KEY } = await shortcuts()
     const taken = new Set([...TOOLS_LIST.map((t) => t.key.toLowerCase()).filter(Boolean), VIEW_KEY.toLowerCase(), 'home', ' ', 'escape', 'delete', 'backspace', 'enter', '/', 'tab'])
     for (const k of Object.keys(TURN_KEYS)) expect(taken.has(k.toLowerCase())).toBe(false)
-  })
+  }, 120_000)
 
-  it('the window shortcuts ask turnForKey before anything else takes an arrow key', () => {
+  it('the window shortcuts ask turnForKey before anything else takes an arrow key', async () => {
+    const { VIEW_KEY } = await shortcuts()
+    expect(VIEW_KEY).toBe('3') // the 2D/3D switch: V is the Move tool and Tab must reach the controls
     const src = readSource('src/renderer/src/app/shortcuts.ts')
-    expect(src).toContain(`export const VIEW_KEY = '${VIEW_KEY}'`)
     expect(src).toMatch(/turnForKey\(e\.key, e\.shiftKey/)
-  })
+  }, 120_000)
 })

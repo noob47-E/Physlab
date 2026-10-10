@@ -125,10 +125,21 @@ describe('fills meet their edges (Fix 20)', () => {
   })
 
   it('DecomposedParts cuts each fill to fillOutline and keeps no gap', () => {
+    // Comments are removed first, so a note that says "inset" is not a gap. The two bans cover the
+    // whole file, as before; the outline checks cover DecomposedParts' own text.
     const src = readSource('src/renderer/src/render/ObjectViews.tsx')
-    expect(src).toMatch(/new THREE\.Shape\(fillOutline\(part\.pts\)\.map\(\(\[x, y\]\) => new THREE\.Vector2\(x, y\)\)\)/)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+    const start = src.indexOf('function DecomposedParts(')
+    const end = src.indexOf('\nfunction signedArea', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const body = src.slice(start, end)
+    expect(body).toMatch(/new THREE\.Shape\(fillOutline\(part\.pts\)\.map\(\(\[x, y\]\) => new THREE\.Vector2\(x, y\)\)\)/)
+    // Every outline a part is drawn from is fillOutline's own, with nothing done to it first.
+    expect(body.match(/new THREE\.Shape\((?!fillOutline\()/g) ?? []).toHaveLength(0)
     expect(src).not.toMatch(/const gap = /)
-    expect(src).not.toMatch(/inset/)
+    expect(src).not.toMatch(/inset/i)
   })
 
   it('a rectangle and a triangle cut from a right trapezium share the cut to the last digit, so their fills meet on it', () => {

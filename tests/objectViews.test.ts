@@ -9,6 +9,13 @@ import { RESULT_HEAD_GAP_PX, isResultArrow, mixParents } from '../src/renderer/s
 import { PALETTE, RESULT_COLOUR } from '../src/renderer/src/core/naming'
 import { cssColor, tokenOf } from '../src/renderer/src/app/theme'
 import { SWATCHES } from '../src/renderer/src/ui/swatches'
+import * as THREE from 'three/webgpu'
+import { placeArrow } from '../src/renderer/src/render/ObjectViews'
+import { evaluateScene } from '../src/renderer/src/core/evaluate'
+import { DEFAULT_SETTINGS } from '../src/renderer/src/core/store'
+import type { SceneObject } from '../src/renderer/src/core/types'
+import { pickAll, type PickContext } from '../src/renderer/src/render/picking'
+import type { V3 } from '../src/renderer/src/math/vec'
 
 describe('flat arrow heads', () => {
   it('are 12 px long with a 25° half-angle at any zoom', () => {
@@ -43,14 +50,40 @@ describe('flat arrow heads', () => {
     expect(src).toMatch(/geometry=\{is3D \? coneGeo : flatHeadGeo\}/)
     // A triangle with its base on the x axis and its apex at +y: three vertices, no more.
     expect(src).toMatch(/flatHeadGeo = new THREE\.BufferGeometry\(\)\.setAttribute\('position', new THREE\.Float32BufferAttribute\(\[-1, 0, 0, 1, 0, 0, 0, 1, 0\], 3\)\)/)
-    expect(src).toMatch(/arrowHead\(L, wpp, headPx \?\? \(is3D \? 15 : HEAD_PX\)\)/)
     // The head and the shaft share one material and one render order, so they never disagree.
     expect(src).toMatch(/<mesh ref=\{shaft\} geometry=\{cylGeo\} material=\{mat\} renderOrder=\{renderOrder\} \/>\n\s*<mesh ref=\{head\} geometry=\{is3D \? coneGeo : flatHeadGeo\} material=\{mat\} renderOrder=\{renderOrder\} \/>/)
   })
 
+  it('place a 2-D head 12 px long and a 3-D cone 15 px long, measured from the drawn length', () => {
+    const wpp = 0.1
+    const comp: V3 = [30, 40, 0] // 50 units long
+    const shaft = new THREE.Mesh()
+    const head = new THREE.Mesh()
+    placeArrow(shaft, head, [0, 0, 0], comp, wpp, 1.7, false)
+    expect(head.scale.y).toBeCloseTo(arrowHead(50, wpp, HEAD_PX).headLen, 12)
+    placeArrow(shaft, head, [0, 0, 0], comp, wpp, 1.7, true)
+    expect(head.scale.y).toBeCloseTo(arrowHead(50, wpp, 15).headLen, 12)
+    // The two lengths differ, so the check tells them apart.
+    expect(arrowHead(50, wpp, 15).headLen).not.toBeCloseTo(arrowHead(50, wpp, HEAD_PX).headLen, 6)
+  })
+
   it('are laid out from the projected direction in 2-D, so a vector with a z part keeps a square head', () => {
-    const src = readSource('src/renderer/src/render/ObjectViews.tsx')
-    expect(src).toMatch(/const flat: V3 = is3D \? comp : \[comp\[0\], comp\[1\], 0\]/)
+    // Seen from above, (3, 4, 5) is (3, 4): the head points along that and lies in the screen plane.
+    const shaft = new THREE.Mesh()
+    const head = new THREE.Mesh()
+    placeArrow(shaft, head, [0, 0, 0], [3, 4, 5], 1, 1.7, false)
+    const dir = new THREE.Vector3(0, 1, 0).applyQuaternion(head.quaternion)
+    expect(dir.x).toBeCloseTo(0.6, 9)
+    expect(dir.y).toBeCloseTo(0.8, 9)
+    expect(dir.z).toBeCloseTo(0, 9)
+    // The head is sized from the projected length 5, not from 5√2.
+    expect(head.scale.x).toBeCloseTo(arrowHead(5, 1, HEAD_PX).halfWidth, 9)
+    // In 3-D nothing is flattened: the head points along (3, 4, 5) itself.
+    placeArrow(shaft, head, [0, 0, 0], [3, 4, 5], 1, 1.7, true)
+    const dir3 = new THREE.Vector3(0, 1, 0).applyQuaternion(head.quaternion)
+    expect(dir3.x).toBeCloseTo(3 / Math.sqrt(50), 9)
+    expect(dir3.y).toBeCloseTo(4 / Math.sqrt(50), 9)
+    expect(dir3.z).toBeCloseTo(5 / Math.sqrt(50), 9)
   })
 
   it('give the selection halo an outline of one width all round, head included', () => {
@@ -59,7 +92,15 @@ describe('flat arrow heads', () => {
     expect(HALO_TIP_PX).toBeCloseTo(2.6, 1)
     const src = readSource('src/renderer/src/render/ObjectViews.tsx')
     expect(src).toMatch(/thick=\{thick \+ 2\.2\} renderOrder=\{11\} headPx=\{15\} headRadPx=\{8\.5\} tipPx=\{HALO_TIP_PX\}/)
-    expect(src).toMatch(/const L = L0 \+ tipPx \* wpp/)
+  })
+
+  it('measure the halo head from the tip pushed out by HALO_TIP_PX, so the outline is one width all round', () => {
+    const shaft = new THREE.Mesh()
+    const head = new THREE.Mesh()
+    placeArrow(shaft, head, [0, 0, 0], [0, 10, 0], 1, 2.4, false, 15, 8.5, HALO_TIP_PX)
+    expect(head.scale.y).toBeCloseTo(arrowHead(10 + HALO_TIP_PX, 1, 15).headLen, 9)
+    // Without the push the head would be the shorter one: the check tells the two apart.
+    expect(arrowHead(10, 1, 15).headLen).not.toBeCloseTo(head.scale.y, 6)
   })
 })
 
@@ -141,11 +182,32 @@ describe('smaller points', () => {
 
   it('are picked from a 44 px target, whatever size the dot is drawn at', () => {
     expect(POINT_REACH_PX * 2).toBeGreaterThanOrEqual(44)
-    const picking = readSource('src/renderer/src/render/picking.ts')
-    // A point still wins over a line (priority 0), from the shared reach and not a literal.
-    expect(picking).toMatch(/case 'point': \{\n\s*const s = scr\(c\.p\)\n\s*if \(s\.visible\) offer\(\{ id, part: 'body', dist: Math\.hypot\(s\.x - sx, s\.y - sy\), priority: 0 \}, POINT_REACH_PX\)/)
     // Snapping a new point onto an old one keeps its own, tighter radius.
     expect(readSource('src/renderer/src/render/Interaction.tsx')).toMatch(/const SNAP_POINT_PX = 12/)
+  })
+
+  it('a point beside a segment at the same spot is picked first, within POINT_REACH_PX', () => {
+    // A 1000 × 800 canvas looking straight down, 50 px to the unit. P at (4, 0) sits on the segment A–B.
+    const camera = new THREE.OrthographicCamera(-500, 500, 400, -400, 0.1, 1000)
+    camera.position.set(0, 0, 100)
+    camera.zoom = 50
+    camera.updateProjectionMatrix()
+    camera.updateMatrixWorld()
+    const base = (id: string, name: string) => ({ id, name, visible: true, locked: false, color: '#000', showLabel: true })
+    const point = (id: string, name: string, p: V3): SceneObject => ({ ...base(id, name), type: 'point', def: { kind: 'free', p } })
+    const list: SceneObject[] = [point('pA', 'A', [0, 0, 0]), point('pP', 'P', [4, 0, 0]), point('pB', 'B', [8, 0, 0]), { ...base('sAB', 'AB'), type: 'segment', a: 'pA', b: 'pB' }]
+    const objects = Object.fromEntries(list.map((o) => [o.id, o]))
+    const order = list.map((o) => o.id)
+    const ctx: PickContext = { camera, size: { width: 1000, height: 800 }, objects, order, ev: evaluateScene(objects, order, DEFAULT_SETTINGS, 0) }
+    const xP = 500 + 4 * 50
+    // Just inside the reach to the left of P, on the segment too: the point's body wins.
+    const near = pickAll(ctx, xP - (POINT_REACH_PX - 0.5), 400)
+    expect(near[0]).toMatchObject({ id: 'pP', part: 'body' })
+    expect(near.map((h) => h.id)).toContain('sAB')
+    // Just past the reach the point is not offered, and the segment is what is picked.
+    const far = pickAll(ctx, xP - (POINT_REACH_PX + 0.5), 400)
+    expect(far.map((h) => h.id)).not.toContain('pP')
+    expect(far[0]?.id).toBe('sAB')
   })
 
   it('are drawn through the pure helpers', () => {

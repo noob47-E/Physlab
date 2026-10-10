@@ -2,14 +2,15 @@
 // old sample vectors back, and a vector selected on the drawing is the panel's business only
 // when it is one the student drew.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScene } from '../src/renderer/src/core/store'
 import type { EvalResult, SceneObject, SceneSettings, TextObj, VectorObj } from '../src/renderer/src/core/types'
 import { componentTexts } from '../src/renderer/src/core/naming'
 import { add, layoutVectors, type V3 } from '../src/renderer/src/math/vec'
 import * as VS from '../src/renderer/src/math/vectorSolver'
 import { isResultArrow, showsComponents } from '../src/renderer/src/render/colourMix'
-import { CARDS_KEY, OLD_CARDS_KEY, NOTHING_PICKED, NO_ARROWS, PlainError, addVectorFromScene, answerOnGraph, canDraw, cardValues, planSync, drawAnswer, evaluateVectorLine, isCalcAnswer, namesIn, resultOnlyOn, setResultOnly, answerHint, cardValue, evalNumber, explainVectorError, nextStepHint, removeCard, renameCard, setEntry, solveOperation, staleSentence, startCardSync, unknownNameSentence, unknownNames, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
+import { isDrawnAnswer, visualizeSolution } from '../src/renderer/src/core/visualize'
+import { CARDS_KEY, OLD_CARDS_KEY, NOTHING_PICKED, NO_ARROWS, PlainError, addVectorFromScene, answerOnGraph, canDraw, cardValues, planSync, drawAnswer, evaluateVectorLine, exprSolution, isCalcAnswer, namesIn, resultOnlyOn, setResultOnly, answerHint, cardValue, evalNumber, explainVectorError, nextStepHint, removeCard, renameCard, runOperation, setEntry, solveOperation, staleSentence, startCardSync, unknownNameSentence, unknownNames, cardForSelection, cardToReuse, cardsFromStorage, ijkLatex, isBlankCard, linkCardToScene, loadCardsFrom, newCardName, useVC, type Card, type CardStorage } from '../src/renderer/src/panels/vectorCalcStore'
 import { readSource } from './helpers/repo'
 import { inDegrees, math, toV3 } from '../src/renderer/src/math/expr'
 import { texIJK } from '../src/renderer/src/math/format'
@@ -119,12 +120,21 @@ describe('one way in', () => {
     expect(src).not.toContain('Type the vector, e.g.')
     // The field's placeholder carries the example, once.
     expect(src).toContain('placeholder="3i + 4j  or  10∠30°"')
-    // An operation that reads the empty card still says so, in plain words.
-    const store = readSource('src/renderer/src/panels/vectorCalcStore.ts')
-    expect(store).toContain("NOTHING_TYPED = 'nothing typed yet'")
-    expect(store).toContain('return NOTHING_TYPED')
-    // The operations' picking moved into the store with runOperation (H9, tests/vectorPolish.test.ts runs it).
-    expect(store).toMatch(/Card \$\{c\.name\} cannot be read: \$\{v\}/)
+  })
+
+  it('a blank card reads as “nothing typed yet” in the store, not as an error', () => {
+    // The card's line under the boxes shows this words for an empty field (cardValue, store line 746).
+    const ev = { values: new Map() } as unknown as EvalResult
+    const blank = card(1, 'A')
+    expect(cardValue(blank, [blank], ev)).toBe('nothing typed yet')
+  })
+
+  it('an operation reads the empty or broken card first and names it in its sentence, and works nothing out', () => {
+    // "Add all" with a half-typed A: the sentence says which card, and the answer is not drawn.
+    useVC.setState({ cards: [card(1, 'A', { latex: '3\\hat{i}+' })], result: null })
+    expect(runOperation('sum')).toMatch(/^Card A cannot be read: .*stops short.*Finish it/)
+    expect(useVC.getState().result).toBeNull()
+    useVC.setState({ cards: [] })
   })
 
   it('shows all four drawing styles under the answer, two by two', () => {
@@ -159,6 +169,9 @@ describe('one way in', () => {
 })
 
 describe('a vector selected on the drawing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
   const base = (id: string, name: string) => ({ id, name, visible: true, locked: false, color: '#4dabf7', showLabel: true })
   const vec = (id: string, name: string, extra: Partial<SceneObject> = {}): SceneObject => ({ ...base(id, name), type: 'vector', def: { kind: 'free', tail: [0, 0, 0], comp: [3, 4, 0] }, ...extra } as SceneObject)
   const objects: Record<string, SceneObject> = {
@@ -245,8 +258,19 @@ describe('a vector selected on the drawing', () => {
     // Remove takes the card's arrow off the drawing too (Fix 25); deleting an object drops it
     // from the selection, so a later click on the vector re-selects it.
     expect(src).toMatch(/onClick=\{\(\) => removeCard\(card\.id\)\}/)
-    // The drawn answers are told apart by the scene bridge that drew them.
-    expect(readSource('src/renderer/src/core/visualize.ts')).toMatch(/export const isDrawnAnswer/)
+  })
+
+  it('the scene bridge tells its own drawn answer apart from every other object', () => {
+    // The drawn answers are told apart by the scene bridge that drew them (isDrawnAnswer, core/visualize.ts).
+    // Drawing reads the theme's colours from the page; there is no page in node, so a bare one stands in.
+    vi.stubGlobal('document', { documentElement: {} })
+    vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '' }))
+    useScene.getState().newScene()
+    visualizeSolution(VS.solveAddition([{ name: 'A', v: [3, 1, 0] }, { name: 'B', v: [1, 2, 0] }]))
+    const R = Object.values(useScene.getState().objects).find((o) => o.type === 'vector' && o.name === 'R')!
+    expect(R).toBeDefined()
+    expect(isDrawnAnswer(R.id)).toBe(true)
+    expect(isDrawnAnswer('nope')).toBe(false)
   })
 })
 
@@ -1037,8 +1061,17 @@ describe('an answer and its picture follow their cards (V1, H2, V3, V4, H1)', ()
     }
     // exprSolution moved from the panel into the store (H6): the names are read off its parse tree there.
     const src = readSource('src/renderer/src/panels/vectorCalcStore.ts')
-    expect(src).toMatch(/namesIn\(src\)/)
     expect(src).not.toMatch(/\\\\b\$\{/)
+  })
+
+  it('the store’s exprSolution uses every card its line names, 2B included, in either order (R1)', () => {
+    // A word-boundary search finds no B in "2B" and no A in "2A", so only the parse tree gets both.
+    const cards = [{ name: 'A', v: [3, 4, 0] as V3 }, { name: 'B', v: [0, 5, 0] as V3 }]
+    const settings = useScene.getState().settings
+    expect(exprSolution('\\vec{A}+2\\vec{B}', cards, settings).used).toEqual(['A', 'B'])
+    expect(exprSolution('2\\vec{A}+\\vec{B}', cards, settings).used).toEqual(['A', 'B'])
+    // A card the line does not name is not used, even one whose name begins like a named card's ("AB" beside A).
+    expect(exprSolution('\\vec{B}+\\vec{A}', [{ name: 'A', v: [3, 4, 0] }, { name: 'AB', v: [1, 1, 0] }, { name: 'B', v: [0, 5, 0] }], settings).used).toEqual(['A', 'B'])
   })
 
   it('typing A through "3i+" to "3i+1j" keeps the Add all picture, then lays it out again in place, with no undo step (R2)', () => {
@@ -1465,11 +1498,10 @@ describe('fixb-f9-vector-space — the Vector card keeps typed spaces', () => {
     })
 
     it('MathInput.tsx configures mathModeSpace so MathLive inserts space on spacebar', () => {
-      const target = process.env.TEST_PATCHED_MATHINPUT
-        ? path.resolve(__dirname, '../patch2/MathInput.tsx')
-        : path.resolve(__dirname, '../src/renderer/src/ui/MathInput.tsx')
-      const code = fs.readFileSync(target, 'utf8')
-      expect(code).toContain('mathModeSpace')
+      const code = fs.readFileSync(path.resolve(__dirname, '../src/renderer/src/ui/MathInput.tsx'), 'utf8')
+      // The option must be SET to the space command on a live line: a comment that names it does not count.
+      const live = code.split('\n').filter((line) => !/^\s*(\/\/|\/?\*)/.test(line)).join('\n')
+      expect(live).toMatch(/\bmf\.mathModeSpace = '\\\\;'/)
     })
   })
 })

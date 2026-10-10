@@ -415,9 +415,7 @@ describe('fixb-f5-units-screen — the Units screen writes powers with superscri
     })
 
     it('Units screen in calcModes.tsx wraps output in superscriptPowers', () => {
-      const target = process.env.TEST_PATCHED_CALCMODES
-        ? path.resolve(__dirname, '../patch2/calcModes.tsx')
-        : path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
+      const target = path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
       const code = fs.readFileSync(target, 'utf8')
       expect(code).toContain('superscriptPowers(result.text)')
     })
@@ -440,11 +438,10 @@ describe('fixb-f7-poly-roots-agreed — Equations > Polynomial agrees with the N
     })
 
     it('calcModes.tsx Equations > Polynomial uses beyondTheReals to show the sentence rather than only separate rows', () => {
-      const target = process.env.TEST_PATCHED_CALCMODES
-        ? path.resolve(__dirname, '../patch2/calcModes.tsx')
-        : path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
+      const target = path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
       const code = fs.readFileSync(target, 'utf8')
-      expect(code).toContain('beyondTheReals')
+      // The name followed by a bracket: the call itself. The import line has the bare name, never a bracket after it.
+      expect(code).toMatch(/\bbeyondTheReals\(/)
     })
   })
 })

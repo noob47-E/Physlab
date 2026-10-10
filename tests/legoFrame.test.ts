@@ -11,6 +11,7 @@ import type { V3 } from '../src/renderer/src/math/vec'
 import { displayName } from '../src/renderer/src/render/Labels'
 import { fuseChoice, fusePlan, GAP_SENTENCE, namedByLetters, ONE_PIECE_SENTENCE, pieceLettered, signatureOf } from '../src/renderer/src/math/lego'
 import { trianglesToCompare } from '../src/renderer/src/math/congruence'
+import { menuForObject } from '../src/renderer/src/app/contextActions'
 import { readSource } from './helpers/repo'
 
 const sc = () => useScene.getState()
@@ -230,11 +231,25 @@ describe('which shapes a Fuse button joins', () => {
     expect(fuseChoice(['gone', 'p2'], null, objects)).toEqual(['p2'])
   })
 
-  it('the Measure card, the right-click menu and the palette all ask fuseChoice', () => {
+  it('the Measure card asks fuseChoice (the right-click menu and the palette are run, below and in lego.test.ts)', () => {
     expect(readSource('src/renderer/src/panels/ShapeInfo.tsx')).toMatch(/fuseChoice\(selection, id, objects\)/)
-    const ctx = readSource('src/renderer/src/app/contextActions.ts')
-    expect(ctx).toMatch(/const chosen = fuseChoice\(s\(\)\.selection, o\.id, s\(\)\.objects\)/)
-    expect(ctx).toMatch(/st\.fusePieces\(fuseChoice\(st\.selection, null, st\.objects\)\)/)
+  })
+
+  it('the right-click menu offers Fuse exactly when fuseChoice finds two or more shapes', () => {
+    sc().newScene()
+    sc().addObjects(segmentRectangle())
+    sc().breakApart('rect')
+    const [p0, p1] = pieces()
+    const offersFuse = (id: string) => menuForObject(id).flatMap((g) => g.items).some((i) => i.label === 'Fuse')
+    sc().select([p0.id, p1.id])
+    expect(fuseChoice(sc().selection, p0.id, sc().objects).length).toBe(2)
+    expect(offersFuse(p0.id)).toBe(true)
+    // The right-clicked shape counts even when it is not selected: one other selected piece is enough.
+    sc().select([p1.id])
+    expect(offersFuse(p0.id)).toBe(true)
+    sc().select([])
+    expect(fuseChoice(sc().selection, p0.id, sc().objects).length).toBe(1)
+    expect(offersFuse(p0.id)).toBe(false)
   })
 })
 

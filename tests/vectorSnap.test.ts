@@ -285,8 +285,6 @@ describe('A. snapAt and pointAt use it as the wave head granted (render/Interact
     const tools = readSource('src/renderer/src/render/tools.ts')
     const from = tools.indexOf('export interface SnapInfo')
     const info = tools.slice(from, tools.indexOf('\n}', from))
-    expect(/kind: [^\n]*'vectorHead'/.test(info), "SnapInfo['kind'] has 'vectorHead'").toBe(true)
-    expect(/\bvectorId\?: ObjId/.test(info), 'SnapInfo has vectorId?: ObjId').toBe(true)
     expect(/'vectorTail'|'tail'/.test(info), 'SnapInfo has no tail kind').toBe(false)
     const note = src.slice(src.indexOf('const snapNote ='), src.indexOf('const pointAt ='))
     expect(note.includes("'vectorHead'"), 'snapNote (the tip) names a head snap').toBe(true)

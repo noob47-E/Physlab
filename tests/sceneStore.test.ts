@@ -2,13 +2,13 @@
 // from them (names, values, who depends on whom) and the order they are drawn in; renaming an
 // object must reach every formula that mentioned it.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { dependentsOf } from '../src/renderer/src/core/evaluate'
 import { blankSceneFile, doomedBy, LABEL_PREFS, sidesOf, useScene } from '../src/renderer/src/core/store'
+import { Builder } from '../src/renderer/src/core/factory'
+import { confirmClearDrawing } from '../src/renderer/src/app/contextActions'
 import type { SceneObject } from '../src/renderer/src/core/types'
 import { readSource } from './helpers/repo'
-import fs from 'fs'
-import path from 'path'
 import { toDeg, heading } from '../src/renderer/src/math/vec'
 import { fmt } from '../src/renderer/src/math/format'
 import { committedValue } from '../src/renderer/src/ui/fields'
@@ -248,12 +248,20 @@ describe('angle marks: a viewer preference, not part of the file', () => {
   it('no vector carries its own dead switch any more', () => {
     // `VectorObj.showAngle` was set on every vector and read by nothing.
     expect(readSource('src/renderer/src/core/types.ts')).not.toMatch(/showAngle\?: boolean/)
-    expect(readSource('src/renderer/src/core/factory.ts')).not.toContain('showAngle:')
+    // A vector made through the Builder, and one added to the store, has no showAngle key at all.
+    const b = new Builder()
+    const v = b.vector({ kind: 'expr', expr: 'i + 2*j' })
+    expect(Object.keys(v)).not.toContain('showAngle')
+    scene().addObjects(b.created)
+    expect(Object.keys(scene().objects[v.id])).not.toContain('showAngle')
   })
 })
 
 describe('clearDrawing: delete everything on this drawing', () => {
   const stamped = (o: SceneObject, space: 'shapes' | 'vectors'): SceneObject => ({ ...o, space })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
 
   it('removes what is on the drawing being looked at and leaves the other drawings alone', () => {
     scene().setActiveSpace('shapes')
@@ -304,16 +312,28 @@ describe('clearDrawing: delete everything on this drawing', () => {
     expect(scene().past.length).toBe(past)
     // The menu row is greyed on the same rule, and the palette says so instead of staying silent.
     expect(readSource('src/renderer/src/app/TopBar.tsx')).toMatch(/Delete everything on this drawing…', disabled: spaceOf\(mode\) === null/)
-    const actions = readSource('src/renderer/src/app/contextActions.ts')
-    expect(actions).toMatch(/if \(!s\(\)\.activeSpace\) \{\s*alert\(NO_DRAWING_TO_CLEAR\)/)
+    // The palette's command says the sentence and changes nothing.
+    const alertSpy = vi.fn()
+    vi.stubGlobal('alert', alertSpy)
+    confirmClearDrawing()
+    expect(alertSpy).toHaveBeenCalledTimes(1)
+    expect(alertSpy).toHaveBeenCalledWith('No drawing is open here. Go to Vectors, Geometry, Graphing or Lab Data: each has a drawing of its own.')
+    expect(scene().order).toEqual(['pA', 'nV', 'nE'])
+    expect(scene().past.length).toBe(past)
   })
 
   it('is what the Edit menu, the background menu and the palette call, with a question first', () => {
     for (const f of ['src/renderer/src/app/TopBar.tsx', 'src/renderer/src/app/contextActions.ts', 'src/renderer/src/app/SearchPalette.tsx']) {
       expect(readSource(f)).toContain('confirmClearDrawing')
     }
-    const actions = readSource('src/renderer/src/app/contextActions.ts')
-    expect(actions).toMatch(/confirm\('Delete every object on this drawing\? Undo brings them back\.'\)/)
+    // With a drawing open, the question is asked first, and a "no" leaves every object where it was.
+    scene().setActiveSpace('shapes')
+    scene().addObjects([stamped(point('pA', 'A', [1, 2, 0]), 'shapes'), stamped(number('nV', 'v', '7'), 'vectors')])
+    const askSpy = vi.fn(() => false)
+    vi.stubGlobal('confirm', askSpy)
+    confirmClearDrawing()
+    expect(askSpy).toHaveBeenCalledWith('Delete every object on this drawing? Undo brings them back.')
+    expect(scene().order).toEqual(['pA', 'nV'])
   })
 })
 
@@ -509,12 +529,13 @@ describe('fixb-f6-angle-precision — the Properties Angle and Magnitude boxes s
     })
 
     it('Properties component passes decimals setting to NumField for Angle and Magnitude', () => {
-      // Check if the loaded/target Properties.tsx passes decimals to NumField
-      const target = process.env.TEST_PATCHED_PROPERTIES 
-        ? path.resolve(__dirname, '../patch2/Properties.tsx')
-        : path.resolve(__dirname, '../src/renderer/src/panels/Properties.tsx')
-      const code = fs.readFileSync(target, 'utf8')
-      expect(code).toContain('decimals={decimals}')
+      const code = readSource('src/renderer/src/panels/Properties.tsx')
+      // Each box is checked inside its own row: the Magnitude row runs up to the Angle row, and the
+      // Angle row up to Tail at. A match over the whole file would be satisfied by the other box.
+      const magnitude = code.slice(code.indexOf('<label>Magnitude</label>'), code.indexOf('Angle θ'))
+      const angle = code.slice(code.indexOf('Angle θ'), code.indexOf('<label>Tail at</label>'))
+      expect(magnitude).toContain('decimals={decimals}')
+      expect(angle).toContain('decimals={decimals}')
     })
   })
 })

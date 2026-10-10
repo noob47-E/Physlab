@@ -4,7 +4,7 @@
 // the student named; a head-to-tail picture never leaves an arrow it cannot move standing apart;
 // and a graph card says why it has nothing to offer.
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScene, blankSceneFile } from '../src/renderer/src/core/store'
 import type { SceneObject, SceneSettings, VectorObj } from '../src/renderer/src/core/types'
 import { add, type V3 } from '../src/renderer/src/math/vec'
@@ -12,6 +12,7 @@ import * as VS from '../src/renderer/src/math/vectorSolver'
 import { math, preprocess, toV3 } from '../src/renderer/src/math/expr'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { ALL_ARROWS_TAKEN, NO_ARROWS, drawAnswer, evaluateVectorLine, graphCardPrompt, ijkLatex, setResultOnly, startCardSync, useVC, type Card } from '../src/renderer/src/panels/vectorCalcStore'
+import { EXAMPLES, runExample } from '../src/renderer/src/panels/Examples'
 import { readSource } from './helpers/repo'
 
 const scene = () => useScene.getState()
@@ -32,6 +33,10 @@ beforeEach(() => {
   useVC.setState({ cards: [], result: null, highlight: 0 })
   scene().newScene()
   startCardSync()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 // ---------------------------------------------------------------------------
@@ -95,13 +100,15 @@ describe('#3: File ▸ New, File ▸ Open, an Example and "clear" keep every Vec
 
   it('an Example (a new drawing, then its commands) keeps them beside the example’s own vectors', async () => {
     typeAandB()
-    // runExample in panels/Examples.tsx: newScene, then each of the example's commands. The
-    // "two forces at 120°" example, whose names are its own.
-    scene().newScene()
-    for (const c of ['k = 120', 'F1 = <5, 0>', 'F2 = 5 ∠ k°', 'R = F1 + F2']) await runCommand(c)
+    // The lesson is opened from 3D, so the 2D reset runExample makes is what the view is checked against.
+    scene().setViewMode('3d')
+    // runExample asks before it replaces a changed drawing; the cards just typed make it changed.
+    vi.stubGlobal('confirm', () => true)
+    // "Two equal forces at an angle": the Examples list's own entry, whose names are its own.
+    await runExample(EXAMPLES.find((e) => e.title === 'Two equal forces at an angle')!)
     expectKeptAndDrawn()
     expect(['F1', 'F2', 'R'].every((n) => byName(n))).toBe(true)
-    expect(readSource('src/renderer/src/panels/Examples.tsx')).toMatch(/s\.newScene\(\)\s*\n\s*s\.setViewMode/)
+    expect(scene().viewMode).toBe('2d')
   })
 
   it('a graph card whose arrow left with the old drawing becomes a typed card holding its vector', () => {

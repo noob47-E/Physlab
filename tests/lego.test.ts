@@ -687,9 +687,6 @@ describe('Break apart and Fuse from the search palette', () => {
 
   it('has rows that act on the selection and say why when there is nothing to act on', async () => {
     const { breakApartSelection, fuseSelection, BREAK_APART_NEEDS_SHAPE } = await import('../src/renderer/src/app/contextActions')
-    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
-    expect(palette).toMatch(/title: 'Break apart the selected shape'[^\n]*run: \(\) => breakApartSelection\(\)/)
-    expect(palette).toMatch(/title: 'Fuse the selected pieces'[^\n]*run: \(\) => fuseSelection\(\)/)
     sc().addObjects(ellScene())
     sc().select([])
     breakApartSelection()
@@ -714,10 +711,6 @@ describe('Break apart and Fuse from the search palette', () => {
 
   it('turns and flips the selected pieces from the palette, and says so when none is selected', async () => {
     const { turnSelection, flipSelection, TURN_NEEDS_PIECE } = await import('../src/renderer/src/app/contextActions')
-    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
-    expect(palette).toMatch(/title: 'Turn the selected pieces 90°'[^\n]*run: \(\) => turnSelection\(90\)/)
-    expect(palette).toMatch(/title: 'Turn the selected pieces 15°'[^\n]*run: \(\) => turnSelection\(15\)/)
-    expect(palette).toMatch(/title: 'Flip the selected pieces'[^\n]*run: \(\) => flipSelection\(\)/)
     sc().addObjects(ellScene())
     sc().breakApart('poly')
     sc().select([])
@@ -733,7 +726,64 @@ describe('Break apart and Fuse from the search palette', () => {
     flipSelection()
     expect(cornersOf(piece.id)).not.toEqual(after)
   })
+
+  it('the palette rows Break apart and Fuse act on the selection as the buttons do', async () => {
+    const { buildItems } = await import('../src/renderer/src/app/SearchPalette')
+    const { BREAK_APART_NEEDS_SHAPE } = await import('../src/renderer/src/app/contextActions')
+    const rows = buildItems()
+    sc().addObjects(ellScene())
+    sc().select([])
+    paletteRow(rows, 'Break apart the selected shape').run()
+    expect(sc().log.at(-1)?.text).toBe(BREAK_APART_NEEDS_SHAPE)
+    expect(pieces()).toEqual([])
+    sc().select(['poly'])
+    paletteRow(rows, 'Break apart the selected shape').run()
+    const n = pieces().length
+    expect(n).toBeGreaterThanOrEqual(2)
+    sc().select([pieces()[0].id])
+    paletteRow(rows, 'Fuse the selected pieces').run()
+    expect(sc().log.at(-1)?.text).toBe(ONE_PIECE_SENTENCE)
+    expect(pieces().length).toBe(n)
+    sc().select(pieces().map((p) => p.id))
+    paletteRow(rows, 'Fuse the selected pieces').run()
+    expect(sc().log.at(-1)?.text).toBe('Back to the original shape.')
+    expect(pieces()).toEqual([])
+  }, 30000)
+
+  it('the palette rows turn the selected piece 90° and 15°, then flip it, as the corners say', async () => {
+    const { buildItems } = await import('../src/renderer/src/app/SearchPalette')
+    const rows = buildItems()
+    sc().addObjects(ellScene())
+    sc().breakApart('poly')
+    const piece = pieces()[0]
+    const start = cornersOf(piece.id)
+    sc().select([piece.id])
+    paletteRow(rows, 'Turn the selected pieces 90°').run()
+    const quarter = cornersOf(piece.id)
+    expectCorners(quarter, turnPiece(start, 90))
+    paletteRow(rows, 'Turn the selected pieces 15°').run()
+    const fifteen = cornersOf(piece.id)
+    expectCorners(fifteen, turnPiece(quarter, 15))
+    paletteRow(rows, 'Flip the selected pieces').run()
+    expectCorners(cornersOf(piece.id), flipPiece(fifteen))
+  }, 30000)
 })
+
+/** The palette row with this title; a missing row fails with its name. */
+function paletteRow<R extends { title: string }>(rows: R[], title: string): R {
+  const row = rows.find((r) => r.title === title)
+  if (!row) throw new Error(`no palette row titled "${title}"`)
+  return row
+}
+
+/** Two corner lists the same to nine decimal places, corner by corner. */
+function expectCorners(got: V3[], want: V3[]): void {
+  expect(got.length).toBe(want.length)
+  got.forEach((p, i) => {
+    expect(p[0]).toBeCloseTo(want[i][0], 9)
+    expect(p[1]).toBeCloseTo(want[i][1], 9)
+  })
+}
 
 describe('fusing into a different shape', () => {
   beforeEach(() => sc().newScene())

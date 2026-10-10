@@ -1,8 +1,11 @@
 // P-GCALC GC2: Visualize opens the drawing BESIDE the Maths screen. It used to bring the drawing
 // forward as a tab in the Maths screen's own group, so the picture hid the working it was drawing.
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { setDockApi, showBeside } from '../src/renderer/src/app/panels'
+import { useApp } from '../src/renderer/src/app/modes'
+import { scene } from '../src/renderer/src/core/store'
+import { runCommand } from '../src/renderer/src/lang/commands'
 import { readSource } from './helpers/repo'
 
 interface FakeGroup {
@@ -82,6 +85,8 @@ describe('showBeside', () => {
 })
 
 describe('who calls it', () => {
+  afterEach(() => useApp.setState({ mode: 'vectors' }))
+
   it('both Visualize routes of the Maths screen open the drawing beside it, and Open in Graphing follows a drawing', () => {
     const src = readSource('src/renderer/src/panels/Maths.tsx')
     expect(src.match(/showBeside\('viewport', 'maths'\)/g)?.length).toBe(2)
@@ -90,7 +95,23 @@ describe('who calls it', () => {
     expect(src).toContain('Open in Graphing')
   })
 
-  it('a graph typed in the bar while in the Calculator opens the drawing beside the Maths screen', () => {
-    expect(readSource('src/renderer/src/lang/commands.ts')).toContain("if (useApp.getState().mode === 'calculator') showBeside('viewport', 'maths')")
+  it('a graph typed in the bar while in the Calculator opens the drawing beside the Maths screen', async () => {
+    scene().newScene()
+    scene().setActiveSpace('graphing')
+    useApp.setState({ mode: 'calculator' })
+    const d = fakeDock(1600, { maths: 'centre', viewport: 'centre' })
+    await runCommand('y = x^2')
+    expect(d.moves).toEqual([{ id: 'viewport', beside: 'centre', position: 'right' }])
+    expect(d.groupOf('maths')).toBe('centre')
+  })
+
+  it('the same line typed in another mode leaves the drawing where it is', async () => {
+    scene().newScene()
+    scene().setActiveSpace('graphing')
+    useApp.setState({ mode: 'graphing' })
+    const d = fakeDock(1600, { maths: 'centre', viewport: 'centre' })
+    await runCommand('y = x^2')
+    expect(d.moves).toEqual([])
+    expect(d.groupOf('viewport')).toBe('centre')
   })
 })

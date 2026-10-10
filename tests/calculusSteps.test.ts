@@ -647,11 +647,10 @@ describe('every fixture', () => {
 })
 
 describe('the join with the worker', () => {
-  it('both ops are in CAS_OPS and have a branch in the worker', () => {
-    const worker = readSource('src/renderer/src/workers/cas.worker.ts')
+  it('both ops are in CAS_OPS (their branches in the worker are run in casWorker.test.ts)', () => {
+    // The branch is run, not read, in casWorker.test.ts (one Pyodide load for the whole suite).
     for (const op of ['integral_steps', 'diff_steps'] as const) {
       expect(CAS_OPS).toContain(op)
-      expect(worker).toContain(`if op == '${op}'`)
     }
   })
 
@@ -678,10 +677,7 @@ describe('the join with the worker', () => {
       const def = (f.result as IntegralTree).definite
       if (def) expect(def.numeric === null || Number.isFinite(def.numeric.re), name).toBe(true)
     }
-    const worker = readSource('src/renderer/src/workers/cas.worker.ts')
-    // The guard alone decides: is_finite is None for values such as Si(1), which have a decimal.
-    expect(worker).not.toContain('_num(exact) if exact.is_finite else None')
-    expect(worker).toContain('all(_math.isfinite(q) for q in numeric.values())')
+    // The worker's own guard is run in casWorker.test.ts, on an infinite and a nan integral.
   })
 })
 

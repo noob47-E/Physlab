@@ -505,7 +505,34 @@ describe('describeWork (what the recovery strip names)', () => {
 })
 
 describe('what the console says when a file cannot be opened or saved', () => {
-  it('names the file and the reason, never the parser', () => {
+  // app/files.ts reads window.physlab once, at load. It is loaded here without resetting the module
+  // registry, so it shares this file's store; its bridge forwards to `desktop`, which a test may
+  // replace. (Resetting the registry would give files.ts a second store, and the F2 tests below
+  // read the first one.)
+  const noSave = (_content: string, _path: string | null): Promise<string | null> => Promise.resolve(null)
+  let saveImpl = noSave
+
+  async function importFiles(): Promise<typeof import('../src/renderer/src/app/files')> {
+    vi.stubGlobal('window', {
+      physlab: {
+        isDesktop: true,
+        openFile: () => Promise.resolve(null),
+        saveFile: (content: string, path: string | null) => saveImpl(content, path)
+      }
+    })
+    try {
+      return await import('../src/renderer/src/app/files')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  }
+
+  afterEach(() => {
+    saveImpl = noSave
+    vi.unstubAllGlobals()
+  })
+
+  it('names the file and the reason, never the parser', async () => {
     // File ▸ Open used to do its own JSON.parse and report "Could not open: SyntaxError:
     // Unexpected end of JSON input" for a half-copied .phys.
     const halfCopied = (() => {
@@ -519,19 +546,37 @@ describe('what the console says when a file cannot be opened or saved', () => {
     expect(openFailureText('/home/s/notes.phys', new Error('This file was not saved by PhysLab.'))).toBe('Could not open notes.phys: This file was not saved by PhysLab.')
     // The app goes through parseProjectText (the half-copied sentence) and loadScene's own migrate
     // (the foreign-file sentence), which is where those sentences live (F2 kept the raw file for loadScene).
+    // The same path run for real: loadProjectText is what both Open routes call.
+    const mod = await importFiles()
+    mod.loadProjectText('{"app": "PhysLab", "vers', String.raw`C:\work\bounce.phys`)
+    const last = scene().log.at(-1)
+    expect(last?.input).toBe('open')
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toBe('Could not open bounce.phys: This file cannot be read: it is not complete, or it is not a PhysLab project.')
     const files = readSource('src/renderer/src/app/files.ts')
-    expect(files).toContain('scene().loadScene(parseProjectText(content), path)')
     expect(files).not.toContain('JSON.parse')
   })
 
-  it('a failed save is reported, with the sentence from the main process and not the IPC wrapper', () => {
+  it('a failed save is reported, with the sentence from the main process and not the IPC wrapper', async () => {
     // Electron wraps a rejection as "Error invoking remote method 'file:save': Error: …".
     const e = new Error("Error invoking remote method 'file:save': Error: PhysLab is not allowed to write in that folder.")
     expect(saveFailureText(e)).toBe('Could not save: PhysLab is not allowed to write in that folder. Your work is still here — try Save As to another folder.')
     expect(saveFailureText('disk full')).toBe('Could not save: disk full Your work is still here — try Save As to another folder.')
     // saveProject has to catch the rejection: it used to be unhandled, and the title kept its
-    // unsaved mark while the student believed Ctrl+S had worked.
-    expect(readSource('src/renderer/src/app/files.ts')).toMatch(/try \{\s*path = await bridge\.saveFile\([^)]*\)\s*\} catch \(e\) \{\s*s\.pushLog\(\{ input: 'save', kind: 'error', text: saveFailureText\(e\) \}\)/)
+    // unsaved mark while the student believed Ctrl+S had worked. Run for real: the save is refused,
+    // the console gets the sentence and the scene stays dirty.
+    const refused = new Error("Error invoking remote method 'file:save': Error: PhysLab is not allowed to write in that folder.")
+    saveImpl = async () => {
+      throw refused
+    }
+    const mod = await importFiles()
+    useScene.setState({ dirty: true })
+    await expect(mod.saveProject()).resolves.toBeUndefined()
+    const last = scene().log.at(-1)
+    expect(last?.input).toBe('save')
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toBe('Could not save: PhysLab is not allowed to write in that folder. Your work is still here — try Save As to another folder.')
+    expect(scene().dirty).toBe(true)
     // And the main process turns Node's EACCES/ENOSPC into a sentence before it rethrows.
     const main = readSource('src/main/index.ts')
     expect(main).toContain('throw new Error(writeFailureText(e)')

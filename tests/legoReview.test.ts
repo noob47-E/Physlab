@@ -7,7 +7,7 @@ import type { PolygonObj, SceneObject } from '../src/renderer/src/core/types'
 import type { V3 } from '../src/renderer/src/math/vec'
 import { rowsFor } from '../src/renderer/src/panels/Measurements'
 import { runCommand } from '../src/renderer/src/lang/commands'
-import { PIECE_LETTER_PX, pieceLetterDirections } from '../src/renderer/src/render/pieceLabels'
+import { PIECE_LETTER_PX, pieceLetterDirections, sharedCornerLabels } from '../src/renderer/src/render/pieceLabels'
 import { LABEL_BOX } from '../src/renderer/src/render/viewMath'
 import { readSource } from './helpers/repo'
 
@@ -176,9 +176,39 @@ describe('the letters at the ends of the cut (Fix 17)', () => {
     expect(pieceLetterDirections([{ points: ['a', 'b', 'c'], pts: tri }, { points: ['d', 'e', 'f'], pts: far }]).size).toBe(0)
   })
 
+  it('a merged corner label points along the sum of its letters\' directions', () => {
+    // Two triangles meeting at one corner (4, 3). Each letter points away from its own triangle,
+    // so the two directions differ and their sum is a real direction for the one "C, D" label.
+    const t1: V3[] = [
+      [0, 0, 0],
+      [4, 0, 0],
+      [4, 3, 0]
+    ]
+    const t2: V3[] = [
+      [4, 3, 0],
+      [4, 6, 0],
+      [0, 6, 0]
+    ]
+    const ps = [
+      { points: ['a', 'b', 'c'], pts: t1 },
+      { points: ['d', 'e', 'f'], pts: t2 }
+    ]
+    const dirs = pieceLetterDirections(ps)
+    const merged = sharedCornerLabels(ps, (id) => id.toUpperCase())
+    const label = merged.get('c')
+    expect(label?.text).toBe('C, D')
+    expect(merged.get('d')).toBeNull()
+    const [c, d] = [dirs.get('c')!, dirs.get('d')!]
+    const sx = c[0] + d[0]
+    const sy = c[1] + d[1]
+    const l = Math.hypot(sx, sy)
+    expect(l).toBeGreaterThan(1e-3)
+    expect(label!.dir[0]).toBeCloseTo(sx / l, 9)
+    expect(label!.dir[1]).toBeCloseTo(sy / l, 9)
+  })
+
   it('the label projector places shared corners by these directions (as one merged label since INT-Wave1)', () => {
     // sharedCornerLabels sums each letter's pieceLetterDirections direction for the one "G, K" label.
-    expect(readSource('src/renderer/src/render/pieceLabels.ts')).toMatch(/const dirs = pieceLetterDirections\(pieces, eps\)/)
     const src = readSource('src/renderer/src/render/Labels.tsx')
     expect(src).toMatch(/sharedCornerLabels\(pieces/)
     expect(src).toMatch(/const dir = shared\?\.get\(id\)\?\.dir/)

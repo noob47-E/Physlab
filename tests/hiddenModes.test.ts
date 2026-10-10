@@ -224,6 +224,24 @@ describe('a student cannot reach Question Author or Class Results', () => {
         const first = readyModes().find((m) => m.tools.includes(t.id))
         if (first) expect(HIDDEN_MODE_IDS, `${t.label} would open ${first.label}`).not.toContain(first.id)
       }
+      // The same pick, run: from every mode, each tool gives null (the mode already shows it, or no ready
+      // mode does) or a ready mode with no centre panel, not hidden, that shows the tool.
+      for (const from of MODES.map((m) => m.id)) {
+        for (const t of TOOLS) {
+          const got = palette.modeForTool(t.id, from)
+          if (got === null) {
+            const here = modeById(from)
+            const hereShows = !here.centre && (here.tools as string[]).includes(t.id)
+            const anyShows = readyModes().some((m) => !m.centre && (m.tools as string[]).includes(t.id))
+            expect(hereShows || !anyShows, `${t.label} from ${from}: null though a mode shows it`).toBe(true)
+            continue
+          }
+          expect(readyModes().map((m) => m.id), `${t.label} from ${from}: ${got}`).toContain(got)
+          expect(isModeHidden(got), `${t.label} from ${from}: ${got}`).toBe(false)
+          expect(modeById(got).centre, `${t.label} from ${from}: ${got} has a centre panel`).toBeUndefined()
+          expect(modeById(got).tools as string[], `${t.label} from ${from}: ${got}`).toContain(t.id)
+        }
+      }
     })
 
     it('never sends a Tools row to a hidden mode when it is pressed', () => {
@@ -271,14 +289,28 @@ describe('a student cannot reach Question Author or Class Results', () => {
 
   // M1f
   describe('from the welcome screen and the tour', () => {
+    let steps: typeof import('../src/renderer/src/app/tour/steps')
+
+    beforeAll(async () => {
+      steps = await import('../src/renderer/src/app/tour/steps')
+    }, 120_000)
+
     it('only goes to modes a student can open', () => {
-      for (const file of ['src/renderer/src/app/tour/Tour.tsx', 'src/renderer/src/app/tour/steps.ts']) {
-        const literals = [...readSource(file).matchAll(/\bmode:\s*'(\w+)'/g)].map((m) => m[1])
-        expect(literals.length, file).toBeGreaterThan(0)
-        for (const id of literals) {
-          expect(MODES.some((m) => m.id === id), `${file}: ${id}`).toBe(true)
-          expect(HIDDEN_MODE_IDS, `${file}: ${id}`).not.toContain(id)
-        }
+      // Tour.tsx's own mode literals (the Welcome tiles) stay a text check.
+      const file = 'src/renderer/src/app/tour/Tour.tsx'
+      const literals = [...readSource(file).matchAll(/\bmode:\s*'(\w+)'/g)].map((m) => m[1])
+      expect(literals.length, file).toBeGreaterThan(0)
+      for (const id of literals) {
+        expect(MODES.some((m) => m.id === id), `${file}: ${id}`).toBe(true)
+        expect(HIDDEN_MODE_IDS, `${file}: ${id}`).not.toContain(id)
+      }
+      // steps.ts: every `mode:` literal in it sits in TOUR (two steps) or MISSIONS (six), so these are all of them.
+      const carried = [...steps.TOUR, ...steps.MISSIONS].map((s) => s.mode).filter((m): m is ModeId => m !== undefined)
+      expect(carried.length).toBeGreaterThan(0)
+      for (const id of carried) {
+        expect(readyModes().map((m) => m.id), `steps.ts: ${id}`).toContain(id)
+        expect(isModeHidden(id), `steps.ts: ${id}`).toBe(false)
+        expect(HIDDEN_MODE_IDS, `steps.ts: ${id}`).not.toContain(id)
       }
     })
   })
