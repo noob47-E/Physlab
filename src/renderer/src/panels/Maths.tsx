@@ -26,6 +26,7 @@ import { fieldHasText, type StepPref } from '../math/pure/reveal'
 import { ask, useEngineStatus } from '../math/engine'
 import { casStartingSentence } from '../ui/casStatus'
 import { usePure, type PureEntry } from '../math/pure/store'
+import { treatAs, workingIsFor } from './treatAs'
 import { JOBS, jobById, type JobId } from '../math/pure/run'
 import { parseExpr, varsOf } from '../math/pure/mono'
 import { useScene } from '../core/store'
@@ -1007,6 +1008,9 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
   const job = usePure((s) => s.job)
   const input = usePure((s) => s.input)
   const inputLatex = usePure((s) => s.inputLatex)
+  // The line in the field: Treat as works on it, and the working says when it is for an earlier line.
+  const field = useCalc((s) => s.input)
+  const calcMode = useCalc((s) => s.mode)
   const run = usePure((s) => s.run)
   // The first-load stage, as a sentence (empty once the engine is ready): P17.
   const casNote = useEngineStatus((s) => (s.status === 'loading' ? casStartingSentence(s.stage) : ''))
@@ -1056,7 +1060,7 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
             className="field w-auto"
             value={job}
             title="What to do with what you typed: the same line, worked out as a different kind of question"
-            onChange={(e) => run(e.target.value as JobId, input, inputLatex)}
+            onChange={(e) => treatAs(e.target.value as JobId)}
           >
             {JOBS.map((j) => (
               <option key={j.id} value={j.id}>
@@ -1067,13 +1071,16 @@ function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; sett
         </label>
         <span className="text-[color:var(--text-faint)]">{jobById(job).about}</span>
       </div>
+      {!workingIsFor(field, inputLatex, input, calcMode) && (
+        <div className="px-3 pt-1 text-[color:var(--text-faint)]">This working is for an earlier line. Choose under Treat as, or press Work it out, to work the line in the field.</div>
+      )}
       <WorkingView
         doc={working}
         pref={pref}
         invited={invited}
         settled={settled}
         onPref={setPreference}
-        onOffer={(j) => run(j, input, inputLatex)}
+        onOffer={(j) => treatAs(j)}
         onTry={onTry}
       />
       {asking && (
