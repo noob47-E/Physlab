@@ -133,7 +133,7 @@ export function toV3(x: AnyVal): V3 {
   if (arr && typeof arr === 'object' && typeof (arr as { toArray?: unknown }).toArray === 'function') {
     arr = (arr as { toArray: () => unknown }).toArray()
   }
-  // The Vectors panel turns this text into a sentence (panels/vectorCalcStore.ts) but the bar shows it as
+  // The Vectors panel turns this text into a sentence (panels/vectorLine.ts) but the bar shows it as
   // it is, after distance(3, 4) or unit(5): a sentence for the bar is parked for the owner (CW6a-1).
   if (!Array.isArray(arr)) throw new Error('Expected a vector or point')
   const flat = (arr as unknown[]).flat(2).map((v) => plainNumber(v))

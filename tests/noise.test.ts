@@ -99,7 +99,7 @@ describe('noise rules', () => {
 
   // The two Vectors rules CW9 will move onto math/noise.ts, copied here as they stand (both are
   // private): the solver's, for A·B and A×B (math/vectorSolver.ts isNoise), and the panel's, for a
-  // typed line (panels/vectorCalcStore.ts withoutNoise, the floor taken from the line's scale and
+  // typed line (panels/vectorLine.ts withoutNoise, the floor taken from the line's scale and
   // every number the line gives). Both call noise anything within 10⁻¹² of the scale, where isNoise
   // and noiseFloor stop at 10⁻¹⁵: they disagree on a value between the two, and nowhere else, as long
   // as a product is judged dividing first, isNoise(p / |A|, |B|) — |A||B| overflows for vectors of

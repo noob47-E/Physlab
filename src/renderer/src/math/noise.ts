@@ -5,7 +5,7 @@
 //
 // isNoise is noiseFloor's ZERO rule (math/format.ts, noiseFloor(0, largest)): noise is within 10⁻¹⁵
 // of the largest size involved (10⁻⁹ of a millionth). The Vectors rules — the solver's product test
-// (math/vectorSolver.ts isNoise) and the panel's withoutNoise (panels/vectorCalcStore.ts) — reach
+// (math/vectorSolver.ts isNoise) and the panel's withoutNoise (panels/vectorLine.ts) — reach
 // 10⁻¹², so they also call noise what lies between the two; tests/noise.test.ts measures that band.
 // A product A·B is judged dividing first, isNoise(p / |A|, |B|): |A||B| overflows at 10¹⁵⁵.
 //

@@ -10,7 +10,9 @@ the cards' own arrows (head-to-tail, parallelogram, from origin).
 | File | One line |
 |---|---|
 | `src/renderer/src/panels/VectorCalc.tsx` | The panel: cards, operation buttons, result card, layout chips, expression box. Holds no state of its own beyond an error line. |
-| `src/renderer/src/panels/vectorCalcStore.ts` | All panel state (`useVC`), the card ↔ arrow sync (`planSync`/`syncCards`), the result recipe, and Draw on graph (`drawAnswer`/`drawPicture`, `followAnswer`/`keepAnswerTrue`, `layOutAgain`, `switchLayout`, `takePictureOff`), the operations (`OPERATIONS`: the one table of vector operations — name, what it reads, its button's maths and help, its solver — which the Vector Calculator, the Vector Solver and the Calculator's VECTOR screen all work from; `solveOperation`, `runOperation`, `exprSolution`) and the card line (`cardLineTex`). A module of its own so the right-click menu can add a card without loading MathLive. |
+| `src/renderer/src/panels/vectorCalcStore.ts` | All panel state (`useVC`), the card ↔ arrow sync (`planSync`/`syncCards`), the result recipe, and Draw on graph (`drawAnswer`/`drawPicture`, `followAnswer`/`keepAnswerTrue`, `layOutAgain`, `switchLayout`, `takePictureOff`), the operations (`OPERATIONS`: the one table of vector operations — name, what it reads, its button's maths and help, its solver — which the Vector Calculator, the Vector Solver and the Calculator's VECTOR screen all work from; `solveOperation`, `runOperation`, `exprSolution`). A module of its own so the right-click menu can add a card without loading MathLive. |
+| `src/renderer/src/panels/vectorLine.ts` | What a card holds (split out of the store in CW10c): reading a card's line into a vector or a sentence — `evaluateVectorLine`, `cardValues`/`cardValue`, `namesIn`, `unknownNames`, `droppedUnits`, `explainVectorError`, `PlainError`. The store re-exports what it exported before. |
+| `src/renderer/src/panels/cardLine.ts` | What a card shows (CW10c): `cardLineTex` (its line under the boxes, in one number form), `tooBigToDraw`, `nextStepHint`. |
 | `src/renderer/src/math/vectorSolver.ts` | Pure solvers: one `Solution` (title, steps, answers, optional `visual`) per operation. Every LaTeX string uses double backslashes; every number goes through `math/format.ts`. |
 | `src/renderer/src/math/vec.ts` | Vector maths and `layoutVectors` (where each arrow of a picture goes). Not owned by the vectors part, read-only here. |
 | `src/renderer/src/render/ObjectViews.tsx` (`VectorView`) | Draws an arrow; when `showComponents` (or selected) it also draws Ax along x, Ay along y, dashed guides and the "Ax = …" labels (`componentTexts`, core/naming.ts). |
@@ -92,7 +94,7 @@ the cards' own arrows (head-to-tail, parallelogram, from origin).
 
 ## Typed units are dropped, and said to be (P-VEC2)
 - A card's text goes latexToMath → preprocess → mathjs; only the numbers are kept, so `<3 m, 4 m>`
-  has size 5. `droppedUnits(text, cardNames)` (panels/vectorCalcStore.ts) lists the units that were
+  has size 5. `droppedUnits(text, cardNames)` (panels/vectorLine.ts) lists the units that were
   typed (not i/j/k, deg/rad or other cards' names) and the card and the expression box show one
   plain line under the value. Guarded by `tests/vectorUnits.test.ts`.
 - The `sizeBeforeAngle` workaround stays until P-PARSE's `preprocess` fix lands (R2-3).

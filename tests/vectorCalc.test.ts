@@ -88,7 +88,8 @@ describe('the panel opens empty', () => {
     // A 44 px target for a finger, in pixels: the app's 13 px root font makes min-h-11 only 36 px.
     expect(src).toMatch(/className="btn min-h-\[44px\][^"]*" onClick=\{addCard\}/)
     // No card is ever seeded by the panel itself.
-    expect(readSource('src/renderer/src/panels/vectorCalcStore.ts')).not.toMatch(/DEFAULT_CARDS/)
+    // The store and the parts split out of it (CW10c).
+    for (const f of ['vectorCalcStore.ts', 'vectorLine.ts', 'cardLine.ts']) expect(readSource(`src/renderer/src/panels/${f}`), f).not.toMatch(/DEFAULT_CARDS/)
   })
 })
 
@@ -1060,8 +1061,8 @@ describe('an answer and its picture follow their cards (V1, H2, V3, V4, H1)', ()
       expect(scene().objects[r]).toBeUndefined()
     }
     // exprSolution moved from the panel into the store (H6): the names are read off its parse tree there.
-    const src = readSource('src/renderer/src/panels/vectorCalcStore.ts')
-    expect(src).not.toMatch(/\\\\b\$\{/)
+    // The store and the parts split out of it (CW10c).
+    for (const f of ['vectorCalcStore.ts', 'vectorLine.ts', 'cardLine.ts']) expect(readSource(`src/renderer/src/panels/${f}`), f).not.toMatch(/\\\\b\$\{/)
   })
 
   it('the store’s exprSolution uses every card its line names, 2B included, in either order (R1)', () => {
