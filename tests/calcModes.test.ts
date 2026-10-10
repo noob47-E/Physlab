@@ -395,10 +395,13 @@ describe('H17 — the Variables box, the Matrix error line and Vectors mode foll
   })
 
   it('every Vectors-mode solution is written with the student settings', () => {
+    // Since CW16 every one comes from the Vector Calculator's table of operations, through one call
+    // that hands it the student's settings; no solver is called straight from here.
     const vectors = block(modes, 'function VectorMode(')
-    const calls = [...vectors.matchAll(/VS\.solve\w+\(([^\n]*)\) \}/g)].map((m) => m[1])
-    expect(calls.length).toBeGreaterThan(5)
-    for (const c of calls) expect(c, c).toMatch(/settings\)?$/)
+    expect(vectors).toMatch(/OPERATIONS\[id\]\.solve\(\[nv\(a\), nv\(b\)\], settings\)/)
+    expect(vectors).not.toMatch(/VS\.solve\w+\(/)
+    expect([...vectors.matchAll(/sol: two\('/g)]).toHaveLength(7)
+    expect(vectors.match(/\.solve\(/g)).toHaveLength(1)
   })
 })
 

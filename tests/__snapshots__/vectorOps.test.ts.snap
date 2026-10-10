@@ -1,0 +1,1106 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CW16: the vector operations > each works out the same answer as before the table 1`] = `
+{
+  "angle": {
+    "answers": [
+      {
+        "label": "θ",
+        "tex": "109.47^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{B} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k}",
+        "text": "Given:",
+      },
+      {
+        "tex": "\\vec{A}\\cdot\\vec{B} = A_{x}B_{x} + A_{y}B_{y} + A_{z}B_{z}",
+        "text": "Scalar product in terms of rectangular components:",
+      },
+      {
+        "tex": "= (3)(1) + (4)(-2) + (0)(2) = -5",
+      },
+      {
+        "tex": "A = 5,\\quad B = 3",
+        "text": "Magnitudes:",
+      },
+      {
+        "tex": "\\cos\\theta = \\frac{\\vec{A}\\cdot\\vec{B}}{A\\,B} = \\frac{-5}{5\\times3} = -0.3333",
+        "text": "Angle between them:",
+      },
+      {
+        "tex": "\\theta = \\cos^{-1}(-0.3333) = 109.47^\\circ",
+      },
+    ],
+    "title": "Angle between A and B",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+      ],
+    },
+  },
+  "cross": {
+    "answers": [
+      {
+        "label": "A×B",
+        "tex": "8\\hat{i} - 6\\hat{j} - 10\\hat{k}",
+      },
+      {
+        "label": "|A×B|",
+        "tex": "14.14",
+      },
+      {
+        "label": "θ",
+        "tex": "109.47^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{B} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k}",
+        "text": "Given:",
+      },
+      {
+        "tex": "\\vec{A}\\times\\vec{B} = \\begin{vmatrix} \\hat{i} & \\hat{j} & \\hat{k} \\\\ 3 & 4 & 0 \\\\ 1 & -2 & 2 \\end{vmatrix}",
+        "text": "Write the cross product as a determinant:",
+      },
+      {
+        "tex": "= \\hat{i}\\,[(4)(2) - (0)(-2)] - \\hat{j}\\,[(3)(2) - (0)(1)] + \\hat{k}\\,[(3)(-2) - (4)(1)]",
+        "text": "Expand along the first row:",
+      },
+      {
+        "tex": "\\vec{C} = 8\\hat{i} - 6\\hat{j} - 10\\hat{k}",
+      },
+      {
+        "tex": "\\left|\\vec{C}\\right| = \\sqrt{8^2 + (-6)^2 + (-10)^2} = \\sqrt{200} = 14.14",
+        "text": "Magnitude:",
+      },
+      {
+        "tex": "5\\times3\\times\\sin 109.47^\\circ = 14.14",
+        "text": "Check with |A×B| = AB sin θ:",
+      },
+      {
+        "tex": "\\text{Area} = 14.14",
+        "text": "|A×B| is also the area of the parallelogram with sides A and B.",
+      },
+      {
+        "tex": "\\vec{B}\\times\\vec{A} = -\\vec{A}\\times\\vec{B} = -8\\hat{i} + 6\\hat{j} + 10\\hat{k}",
+        "text": "The direction is perpendicular to the plane of A and B (right-hand rule). The order matters:",
+      },
+    ],
+    "title": "Vector product A×B",
+    "visual": {
+      "mode": "parallelogram",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "C",
+          "role": "result",
+          "v": [
+            8,
+            -6,
+            -10,
+          ],
+        },
+      ],
+    },
+  },
+  "dot": {
+    "answers": [
+      {
+        "label": "A·B",
+        "tex": "-5",
+      },
+      {
+        "label": "θ",
+        "tex": "109.47^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{B} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k}",
+        "text": "Given:",
+      },
+      {
+        "tex": "\\vec{A}\\cdot\\vec{B} = A_{x}B_{x} + A_{y}B_{y} + A_{z}B_{z}",
+        "text": "Scalar product in terms of rectangular components:",
+      },
+      {
+        "tex": "= (3)(1) + (4)(-2) + (0)(2) = -5",
+      },
+      {
+        "tex": "A = 5,\\quad B = 3",
+        "text": "Magnitudes:",
+      },
+      {
+        "tex": "\\cos\\theta = \\frac{\\vec{A}\\cdot\\vec{B}}{A\\,B} = \\frac{-5}{5\\times3} = -0.3333",
+        "text": "Angle between them:",
+      },
+      {
+        "tex": "\\theta = \\cos^{-1}(-0.3333) = 109.47^\\circ",
+      },
+      {
+        "tex": "B\\cos\\theta = 3\\cos 109.47^\\circ = -1",
+        "text": "Meaning: A·B = |A| × (projection of B on A).",
+      },
+    ],
+    "title": "Scalar product A·B",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+      ],
+    },
+  },
+  "equil": {
+    "answers": [
+      {
+        "label": "E",
+        "tex": "-3\\hat{i} - 2.5\\hat{j} - 2\\hat{k}",
+      },
+      {
+        "label": "|E|",
+        "tex": "4.39",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{B} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k},\\quad \\vec{C} = -1\\hat{i} + 0.5\\hat{j}",
+        "text": "Write every vector in component form:",
+      },
+      {
+        "text": "Add the x-components together, the y-components together and the z-components together.",
+      },
+      {
+        "tex": "R_{x} = A_{x} + B_{x} + C_{x} = 3 + 1 + (-1) = 3",
+      },
+      {
+        "tex": "R_{y} = A_{y} + B_{y} + C_{y} = 4 + (-2) + 0.5 = 2.5",
+      },
+      {
+        "tex": "R_{z} = A_{z} + B_{z} + C_{z} = 0 + 2 + 0 = 2",
+      },
+      {
+        "tex": "\\vec{R} = 3\\hat{i} + 2.5\\hat{j} + 2\\hat{k}",
+        "text": "Resultant vector:",
+      },
+      {
+        "tex": "R = \\sqrt{R_{x}^2 + R_{y}^2 + R_{z}^2} = \\sqrt{3^2 + 2.5^2 + 2^2} = \\sqrt{19.25} = 4.39",
+        "text": "Magnitude (Pythagorean theorem in 3D):",
+      },
+      {
+        "tex": "\\alpha = \\cos^{-1}\\left(\\frac{R_{x}}{R}\\right) = \\cos^{-1}\\left(\\frac{3}{4.387}\\right) = 46.86^\\circ",
+        "text": "Angle with the x-axis (direction cosine):",
+      },
+      {
+        "tex": "\\beta = \\cos^{-1}\\left(\\frac{R_{y}}{R}\\right) = \\cos^{-1}\\left(\\frac{2.5}{4.387}\\right) = 55.26^\\circ",
+        "text": "Angle with the y-axis (direction cosine):",
+      },
+      {
+        "tex": "\\gamma = \\cos^{-1}\\left(\\frac{R_{z}}{R}\\right) = \\cos^{-1}\\left(\\frac{2}{4.387}\\right) = 62.88^\\circ",
+        "text": "Angle with the z-axis (direction cosine):",
+      },
+      {
+        "tex": "\\vec{E} = -\\vec{R} = -3\\hat{i} - 2.5\\hat{j} - 2\\hat{k}",
+        "text": "For equilibrium the net force must be zero, so the balancing force (equilibrant) is equal and opposite to R:",
+      },
+      {
+        "tex": "\\left|\\vec{E}\\right| = 4.39",
+      },
+    ],
+    "title": "Force needed for equilibrium",
+    "visual": {
+      "mode": "head-to-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "C",
+          "role": "input",
+          "v": [
+            -1,
+            0.5,
+            0,
+          ],
+        },
+        {
+          "name": "E",
+          "role": "result",
+          "v": [
+            -3,
+            -2.5,
+            -2,
+          ],
+        },
+      ],
+    },
+  },
+  "lorentz": {
+    "answers": [
+      {
+        "label": "F",
+        "tex": "\\left(1.28\\hat{i} - 0.96\\hat{j} - 1.6\\hat{k}\\right)\\times 10^{-18}\\,\\text{N}",
+      },
+      {
+        "label": "|F|",
+        "tex": "2.26\\times 10^{-18}\\,\\text{N}",
+      },
+    ],
+    "steps": [
+      {
+        "text": "The force on a moving charge is F = q(v × B). First find v × B.",
+      },
+      {
+        "tex": "\\vec{v} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{B} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k}",
+        "text": "Given:",
+      },
+      {
+        "tex": "\\vec{v}\\times\\vec{B} = \\begin{vmatrix} \\hat{i} & \\hat{j} & \\hat{k} \\\\ 3 & 4 & 0 \\\\ 1 & -2 & 2 \\end{vmatrix}",
+        "text": "Write the cross product as a determinant:",
+      },
+      {
+        "tex": "= \\hat{i}\\,[(4)(2) - (0)(-2)] - \\hat{j}\\,[(3)(2) - (0)(1)] + \\hat{k}\\,[(3)(-2) - (4)(1)]",
+        "text": "Expand along the first row:",
+      },
+      {
+        "tex": "\\vec{v×B} = 8\\hat{i} - 6\\hat{j} - 10\\hat{k}",
+      },
+      {
+        "tex": "\\left|\\vec{v×B}\\right| = \\sqrt{8^2 + (-6)^2 + (-10)^2} = \\sqrt{200} = 14.14",
+        "text": "Magnitude:",
+      },
+      {
+        "tex": "\\vec{F} = 1.6\\times 10^{-19}\\,(8\\hat{i} - 6\\hat{j} - 10\\hat{k}) = \\left(1.28\\hat{i} - 0.96\\hat{j} - 1.6\\hat{k}\\right)\\times 10^{-18}\\,\\text{N}",
+        "text": "Multiply by the charge q = 1.6 × 10⁻¹⁹ C:",
+      },
+      {
+        "tex": "\\left|\\vec{F}\\right| = 2.26\\times 10^{-18}\\,\\text{N}",
+      },
+    ],
+    "title": "Magnetic force F = q(v × B)",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "v",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "drawn": [
+            2.82842712474619,
+            -2.1213203435596424,
+            -3.5355339059327378,
+          ],
+          "name": "F",
+          "note": "|F| = 2.26 × 10⁻¹⁸ N — arrow not to scale",
+          "role": "result",
+          "v": [
+            1.28e-18,
+            -9.599999999999999e-19,
+            -1.6e-18,
+          ],
+        },
+      ],
+    },
+  },
+  "mag": {
+    "answers": [
+      {
+        "label": "|A|",
+        "tex": "5",
+      },
+      {
+        "label": "θ",
+        "tex": "53.13^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j}",
+        "text": "Given components:",
+      },
+      {
+        "tex": "A = \\sqrt{A_{x}^2 + A_{y}^2} = \\sqrt{3^2 + 4^2} = \\sqrt{25} = 5",
+        "text": "Magnitude:",
+      },
+      {
+        "tex": "\\theta_{ref} = \\tan^{-1}\\left(\\frac{|A_{y}|}{|A_{x}|}\\right) = \\tan^{-1}\\left(\\frac{4}{3}\\right) = 53.13^\\circ",
+        "text": "Direction. First the reference angle, ignoring the signs:",
+      },
+      {
+        "tex": "\\theta = \\theta_{ref} = 53.13^\\circ",
+        "text": "Ax is + and Ay is +, so the vector is in the 1st quadrant.",
+      },
+    ],
+    "title": "Magnitude and direction of A",
+    "visual": {
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+      ],
+    },
+  },
+  "proj": {
+    "answers": [
+      {
+        "label": "B cos θ",
+        "tex": "-1",
+      },
+      {
+        "label": "proj of B on A",
+        "tex": "-0.6\\hat{i} - 0.8\\hat{j}",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "B\\cos\\theta = \\frac{\\vec{A}\\cdot\\vec{B}}{A} = \\frac{-5}{5} = -1",
+        "text": "Scalar projection of B on A (B cos θ):",
+      },
+      {
+        "tex": "\\text{proj}_{A}\\vec{B} = \\frac{\\vec{A}\\cdot\\vec{B}}{A^2}\\,\\vec{A} = \\frac{-5}{25}(3\\hat{i} + 4\\hat{j}) = -0.6\\hat{i} - 0.8\\hat{j}",
+        "text": "Vector projection (the shadow of B along A):",
+      },
+    ],
+    "title": "Projection of B on A",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "proj",
+          "role": "result",
+          "v": [
+            -0.6000000000000001,
+            -0.8,
+            0,
+          ],
+        },
+      ],
+    },
+  },
+  "relvel": {
+    "answers": [
+      {
+        "label": "v_AB",
+        "tex": "2\\hat{i} + 6\\hat{j} - 2\\hat{k}",
+      },
+      {
+        "label": "|v_AB|",
+        "tex": "6.63",
+      },
+      {
+        "label": "α, β, γ",
+        "tex": "72.45^\\circ,\\ 25.24^\\circ,\\ 107.55^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{v_{A}} - \\vec{v_{B}} = \\vec{v_{A}} + (-\\vec{v_{B}})",
+        "text": "Subtracting a vector means adding its negative (same magnitude, opposite direction):",
+      },
+      {
+        "tex": "-\\vec{v_{B}} = -1\\hat{i} + 2\\hat{j} - 2\\hat{k}",
+      },
+      {
+        "text": "Add the x-components together, the y-components together and the z-components together.",
+      },
+      {
+        "tex": "v_{AB,x} = v_{A,x} + (-v_{B})_{x} = 3 + (-1) = 2",
+      },
+      {
+        "tex": "v_{AB,y} = v_{A,y} + (-v_{B})_{y} = 4 + 2 = 6",
+      },
+      {
+        "tex": "v_{AB,z} = v_{A,z} + (-v_{B})_{z} = 0 + (-2) = -2",
+      },
+      {
+        "tex": "\\vec{v_{AB}} = 2\\hat{i} + 6\\hat{j} - 2\\hat{k}",
+        "text": "Resultant vector:",
+      },
+      {
+        "tex": "v_{AB} = \\sqrt{v_{AB,x}^2 + v_{AB,y}^2 + v_{AB,z}^2} = \\sqrt{2^2 + 6^2 + (-2)^2} = \\sqrt{44} = 6.63",
+        "text": "Magnitude (Pythagorean theorem in 3D):",
+      },
+      {
+        "tex": "\\alpha = \\cos^{-1}\\left(\\frac{v_{AB,x}}{v_{AB}}\\right) = \\cos^{-1}\\left(\\frac{2}{6.633}\\right) = 72.45^\\circ",
+        "text": "Angle with the x-axis (direction cosine):",
+      },
+      {
+        "tex": "\\beta = \\cos^{-1}\\left(\\frac{v_{AB,y}}{v_{AB}}\\right) = \\cos^{-1}\\left(\\frac{6}{6.6332}\\right) = 25.24^\\circ",
+        "text": "Angle with the y-axis (direction cosine):",
+      },
+      {
+        "tex": "\\gamma = \\cos^{-1}\\left(\\frac{v_{AB,z}}{v_{AB}}\\right) = \\cos^{-1}\\left(\\frac{-2}{6.633}\\right) = 107.55^\\circ",
+        "text": "Angle with the z-axis (direction cosine):",
+      },
+    ],
+    "title": "Velocity of A relative to B",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "v_{A}",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "v_{B}",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "−v_{B}",
+          "role": "helper",
+          "tail": [
+            3,
+            4,
+            0,
+          ],
+          "v": [
+            -1,
+            2,
+            -2,
+          ],
+        },
+        {
+          "name": "v_{AB}",
+          "role": "result",
+          "v": [
+            2,
+            6,
+            -2,
+          ],
+        },
+      ],
+    },
+  },
+  "resolve": {
+    "answers": [
+      {
+        "label": "Ax",
+        "tex": "3",
+      },
+      {
+        "label": "Ay",
+        "tex": "4",
+      },
+    ],
+    "steps": [
+      {
+        "text": "Given: magnitude A = 5 at θ = 53.13° with the +x axis.",
+      },
+      {
+        "tex": "A_{x} = A\\cos\\theta = 5\\cos 53.13^\\circ = 5\\times 0.6 = 3",
+        "text": "x-component:",
+      },
+      {
+        "tex": "A_{y} = A\\sin\\theta = 5\\sin 53.13^\\circ = 5\\times 0.8 = 4",
+        "text": "y-component:",
+      },
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j}",
+        "text": "Written with unit vectors:",
+      },
+    ],
+    "title": "Resolve A into rectangular components",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "Ax",
+          "role": "helper",
+          "v": [
+            3,
+            0,
+            0,
+          ],
+        },
+        {
+          "name": "Ay",
+          "role": "helper",
+          "tail": [
+            3,
+            0,
+            0,
+          ],
+          "v": [
+            0,
+            4,
+            0,
+          ],
+        },
+      ],
+    },
+  },
+  "scale": {
+    "answers": [
+      {
+        "label": "R",
+        "tex": "7.5\\hat{i} + 10\\hat{j}",
+      },
+      {
+        "label": "|R|",
+        "tex": "12.5",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "2.5\\,\\vec{A} = 2.5(3\\hat{i} + 4\\hat{j}) = 7.5\\hat{i} + 10\\hat{j}",
+        "text": "Multiply every component by the scalar:",
+      },
+      {
+        "tex": "\\left|2.5\\,\\vec{A}\\right| = |2.5|\\times 5 = 12.5",
+        "text": "The magnitude is multiplied by |k|:",
+      },
+      {
+        "text": "k is positive, so the direction does not change.",
+      },
+    ],
+    "title": "R = 2.5A",
+    "visual": {
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "R",
+          "role": "result",
+          "v": [
+            7.5,
+            10,
+            0,
+          ],
+        },
+      ],
+    },
+  },
+  "sub": {
+    "answers": [
+      {
+        "label": "R",
+        "tex": "2\\hat{i} + 6\\hat{j} - 2\\hat{k}",
+      },
+      {
+        "label": "|R|",
+        "tex": "6.63",
+      },
+      {
+        "label": "α, β, γ",
+        "tex": "72.45^\\circ,\\ 25.24^\\circ,\\ 107.55^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} - \\vec{B} = \\vec{A} + (-\\vec{B})",
+        "text": "Subtracting a vector means adding its negative (same magnitude, opposite direction):",
+      },
+      {
+        "tex": "-\\vec{B} = -1\\hat{i} + 2\\hat{j} - 2\\hat{k}",
+      },
+      {
+        "text": "Add the x-components together, the y-components together and the z-components together.",
+      },
+      {
+        "tex": "R_{x} = A_{x} + (-B)_{x} = 3 + (-1) = 2",
+      },
+      {
+        "tex": "R_{y} = A_{y} + (-B)_{y} = 4 + 2 = 6",
+      },
+      {
+        "tex": "R_{z} = A_{z} + (-B)_{z} = 0 + (-2) = -2",
+      },
+      {
+        "tex": "\\vec{R} = 2\\hat{i} + 6\\hat{j} - 2\\hat{k}",
+        "text": "Resultant vector:",
+      },
+      {
+        "tex": "R = \\sqrt{R_{x}^2 + R_{y}^2 + R_{z}^2} = \\sqrt{2^2 + 6^2 + (-2)^2} = \\sqrt{44} = 6.63",
+        "text": "Magnitude (Pythagorean theorem in 3D):",
+      },
+      {
+        "tex": "\\alpha = \\cos^{-1}\\left(\\frac{R_{x}}{R}\\right) = \\cos^{-1}\\left(\\frac{2}{6.633}\\right) = 72.45^\\circ",
+        "text": "Angle with the x-axis (direction cosine):",
+      },
+      {
+        "tex": "\\beta = \\cos^{-1}\\left(\\frac{R_{y}}{R}\\right) = \\cos^{-1}\\left(\\frac{6}{6.6332}\\right) = 25.24^\\circ",
+        "text": "Angle with the y-axis (direction cosine):",
+      },
+      {
+        "tex": "\\gamma = \\cos^{-1}\\left(\\frac{R_{z}}{R}\\right) = \\cos^{-1}\\left(\\frac{-2}{6.633}\\right) = 107.55^\\circ",
+        "text": "Angle with the z-axis (direction cosine):",
+      },
+    ],
+    "title": "R = A − B",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "−B",
+          "role": "helper",
+          "tail": [
+            3,
+            4,
+            0,
+          ],
+          "v": [
+            -1,
+            2,
+            -2,
+          ],
+        },
+        {
+          "name": "R",
+          "role": "result",
+          "v": [
+            2,
+            6,
+            -2,
+          ],
+        },
+      ],
+    },
+  },
+  "sum": {
+    "answers": [
+      {
+        "label": "R",
+        "tex": "3\\hat{i} + 2.5\\hat{j} + 2\\hat{k}",
+      },
+      {
+        "label": "|R|",
+        "tex": "4.39",
+      },
+      {
+        "label": "α, β, γ",
+        "tex": "46.86^\\circ,\\ 55.26^\\circ,\\ 62.88^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{A} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{B} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k},\\quad \\vec{C} = -1\\hat{i} + 0.5\\hat{j}",
+        "text": "Write every vector in component form:",
+      },
+      {
+        "text": "Add the x-components together, the y-components together and the z-components together.",
+      },
+      {
+        "tex": "R_{x} = A_{x} + B_{x} + C_{x} = 3 + 1 + (-1) = 3",
+      },
+      {
+        "tex": "R_{y} = A_{y} + B_{y} + C_{y} = 4 + (-2) + 0.5 = 2.5",
+      },
+      {
+        "tex": "R_{z} = A_{z} + B_{z} + C_{z} = 0 + 2 + 0 = 2",
+      },
+      {
+        "tex": "\\vec{R} = 3\\hat{i} + 2.5\\hat{j} + 2\\hat{k}",
+        "text": "Resultant vector:",
+      },
+      {
+        "tex": "R = \\sqrt{R_{x}^2 + R_{y}^2 + R_{z}^2} = \\sqrt{3^2 + 2.5^2 + 2^2} = \\sqrt{19.25} = 4.39",
+        "text": "Magnitude (Pythagorean theorem in 3D):",
+      },
+      {
+        "tex": "\\alpha = \\cos^{-1}\\left(\\frac{R_{x}}{R}\\right) = \\cos^{-1}\\left(\\frac{3}{4.387}\\right) = 46.86^\\circ",
+        "text": "Angle with the x-axis (direction cosine):",
+      },
+      {
+        "tex": "\\beta = \\cos^{-1}\\left(\\frac{R_{y}}{R}\\right) = \\cos^{-1}\\left(\\frac{2.5}{4.387}\\right) = 55.26^\\circ",
+        "text": "Angle with the y-axis (direction cosine):",
+      },
+      {
+        "tex": "\\gamma = \\cos^{-1}\\left(\\frac{R_{z}}{R}\\right) = \\cos^{-1}\\left(\\frac{2}{4.387}\\right) = 62.88^\\circ",
+        "text": "Angle with the z-axis (direction cosine):",
+      },
+    ],
+    "title": "Resultant R = A + B + C",
+    "visual": {
+      "mode": "head-to-tail",
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "B",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "C",
+          "role": "input",
+          "v": [
+            -1,
+            0.5,
+            0,
+          ],
+        },
+        {
+          "name": "R",
+          "role": "result",
+          "v": [
+            3,
+            2.5,
+            2,
+          ],
+        },
+      ],
+    },
+  },
+  "torque": {
+    "answers": [
+      {
+        "label": "τ",
+        "tex": "8\\hat{i} - 6\\hat{j} - 10\\hat{k}\\,\\text{N m}",
+      },
+      {
+        "label": "|τ|",
+        "tex": "14.14\\,\\text{N m}",
+      },
+      {
+        "label": "θ",
+        "tex": "109.47^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\vec{\\tau} = \\vec{r}\\times\\vec{F}",
+        "text": "Torque is the vector product of the position vector r and the force F.",
+      },
+      {
+        "tex": "\\vec{r} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{F} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k}",
+        "text": "Given:",
+      },
+      {
+        "tex": "\\vec{r}\\times\\vec{F} = \\begin{vmatrix} \\hat{i} & \\hat{j} & \\hat{k} \\\\ 3 & 4 & 0 \\\\ 1 & -2 & 2 \\end{vmatrix}",
+        "text": "Write the cross product as a determinant:",
+      },
+      {
+        "tex": "= \\hat{i}\\,[(4)(2) - (0)(-2)] - \\hat{j}\\,[(3)(2) - (0)(1)] + \\hat{k}\\,[(3)(-2) - (4)(1)]",
+        "text": "Expand along the first row:",
+      },
+      {
+        "tex": "\\vec{τ} = 8\\hat{i} - 6\\hat{j} - 10\\hat{k}",
+      },
+      {
+        "tex": "\\left|\\vec{τ}\\right| = \\sqrt{8^2 + (-6)^2 + (-10)^2} = \\sqrt{200} = 14.14",
+        "text": "Magnitude:",
+      },
+      {
+        "tex": "5\\times3\\times\\sin 109.47^\\circ = 14.14",
+        "text": "Check with |r×F| = rF sin θ:",
+      },
+      {
+        "tex": "\\text{Area} = 14.14",
+        "text": "|r×F| is also the area of the parallelogram with sides r and F.",
+      },
+      {
+        "tex": "\\vec{F}\\times\\vec{r} = -\\vec{r}\\times\\vec{F} = -8\\hat{i} + 6\\hat{j} + 10\\hat{k}",
+        "text": "The direction is perpendicular to the plane of r and F (right-hand rule). The order matters:",
+      },
+    ],
+    "title": "Torque τ = r × F",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "r",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "F",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+        {
+          "name": "τ",
+          "role": "result",
+          "v": [
+            8,
+            -6,
+            -10,
+          ],
+        },
+      ],
+    },
+  },
+  "unit": {
+    "answers": [
+      {
+        "label": "unit vector",
+        "tex": "0.6\\hat{i} + 0.8\\hat{j}",
+      },
+    ],
+    "steps": [
+      {
+        "tex": "\\hat{a} = \\frac{\\vec{A}}{A}",
+        "text": "A unit vector has magnitude 1 and points the same way as the vector.",
+      },
+      {
+        "tex": "A = 5",
+      },
+      {
+        "tex": "\\hat{a} = \\frac{3\\hat{i} + 4\\hat{j}}{5} = 0.6\\hat{i} + 0.8\\hat{j}",
+      },
+      {
+        "tex": "\\sqrt{0.6^2 + 0.8^2} = 1",
+        "text": "Check: its magnitude is",
+      },
+    ],
+    "title": "Unit vector along A",
+    "visual": {
+      "vectors": [
+        {
+          "name": "A",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "â",
+          "role": "result",
+          "v": [
+            0.6000000000000001,
+            0.8,
+            0,
+          ],
+        },
+      ],
+    },
+  },
+  "work": {
+    "answers": [
+      {
+        "label": "W",
+        "tex": "-5\\,\\text{J}",
+      },
+      {
+        "label": "θ",
+        "tex": "109.47^\\circ",
+      },
+    ],
+    "steps": [
+      {
+        "text": "Work is the scalar product of force and displacement: W = F·d = Fd cos θ.",
+      },
+      {
+        "tex": "\\vec{F} = 3\\hat{i} + 4\\hat{j},\\quad \\vec{d} = 1\\hat{i} - 2\\hat{j} + 2\\hat{k}",
+        "text": "Given:",
+      },
+      {
+        "tex": "\\vec{F}\\cdot\\vec{d} = F_{x}d_{x} + F_{y}d_{y} + F_{z}d_{z}",
+        "text": "Scalar product in terms of rectangular components:",
+      },
+      {
+        "tex": "= (3)(1) + (4)(-2) + (0)(2) = -5",
+      },
+      {
+        "tex": "F = 5,\\quad d = 3",
+        "text": "Magnitudes:",
+      },
+      {
+        "tex": "\\cos\\theta = \\frac{\\vec{F}\\cdot\\vec{d}}{F\\,d} = \\frac{-5}{5\\times3} = -0.3333",
+        "text": "Angle between them:",
+      },
+      {
+        "tex": "\\theta = \\cos^{-1}(-0.3333) = 109.47^\\circ",
+      },
+      {
+        "tex": "W = -5\\,\\text{J}",
+      },
+    ],
+    "title": "Work done W = F · d",
+    "visual": {
+      "mode": "common-tail",
+      "vectors": [
+        {
+          "name": "F",
+          "role": "input",
+          "v": [
+            3,
+            4,
+            0,
+          ],
+        },
+        {
+          "name": "d",
+          "role": "input",
+          "v": [
+            1,
+            -2,
+            2,
+          ],
+        },
+      ],
+    },
+  },
+}
+`;

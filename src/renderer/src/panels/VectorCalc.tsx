@@ -14,39 +14,20 @@ import { len, type V3 } from '../math/vec'
 import { useView } from '../render/viewState'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, droppedUnits, droppedUnitsSentence, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type OperationRule } from './vectorCalcStore'
+import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, droppedUnits, droppedUnitsSentence, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type VectorOperation } from './vectorCalcStore'
 
-/** An operation's button: what it reads and is called (the store's OPERATIONS) with how it is drawn. */
-interface Op extends OperationRule {
+/** An operation's button: the store's table entry (what it reads, is called, shows and works out) with its id. */
+interface Op extends VectorOperation {
   id: string
-  tex: string
-  help: string
 }
 
-const op = (id: string, tex: string, help: string): Op => ({ id, ...OPERATIONS[id], tex, help })
+const op = (id: string): Op => ({ id, ...OPERATIONS[id] })
 
 /** The six operations a student reaches for most, always visible. */
-const COMMON_OPS: Op[] = [
-  op('sum', '\\vec{A}+\\vec{B}+\\dots', 'Resultant by rectangular components'),
-  op('sub', '\\vec{A}-\\vec{B}', 'A + (−B)'),
-  op('dot', '\\vec{A}\\cdot\\vec{B}', 'Scalar product and angle between'),
-  op('cross', '\\vec{A}\\times\\vec{B}', 'Vector product and parallelogram area'),
-  op('mag', '|\\vec{A}|,\\ \\theta', 'Magnitude and direction'),
-  op('resolve', 'A_x,\\ A_y', 'Aₓ = A cos θ, A_y = A sin θ')
-]
+const COMMON_OPS: Op[] = ['sum', 'sub', 'dot', 'cross', 'mag', 'resolve'].map(op)
 
 /** The rest, behind "More". */
-const MORE_OPS: Op[] = [
-  op('scale', 'k\\vec{A}', 'Multiply by k'),
-  op('unit', '\\hat{A}', 'Direction with length 1'),
-  op('angle', '\\theta_{AB}', 'cos θ = A·B / AB'),
-  op('proj', '\\mathrm{proj}_{A}\\vec{B}', 'Shadow of B on A'),
-  op('equil', '\\vec{E}=-\\sum\\vec{F}', 'Force that balances all'),
-  op('torque', '\\vec{\\tau}=\\vec{r}\\times\\vec{F}', 'First card = r, second = F'),
-  op('work', 'W=\\vec{F}\\cdot\\vec{d}', 'First card = F, second = d'),
-  op('lorentz', 'q(\\vec{v}\\times\\vec{B})', 'First card = v, second = B, charge q'),
-  op('relvel', '\\vec{v}_{AB}=\\vec{v}_A-\\vec{v}_B', 'Velocity of A as seen from B')
-]
+const MORE_OPS: Op[] = ['scale', 'unit', 'angle', 'proj', 'equil', 'torque', 'work', 'lorentz', 'relvel'].map(op)
 
 /**
  * The operation buttons, in as many columns as keep every label whole (V2). Three fixed columns left

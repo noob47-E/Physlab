@@ -38,6 +38,7 @@ import type { V3 } from '../math/vec'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
 import { roundSig, sciNotation, superscriptPowers } from '../math/format'
+import { OPERATIONS } from './vectorCalcStore'
 
 export function ModePanel({ mode }: { mode: CalcMode }) {
   switch (mode) {
@@ -216,14 +217,16 @@ function VectorMode() {
   const [b, setB] = useState('VctB')
   const v3 = (n: string): V3 => [vectors[n][0] ?? 0, vectors[n][1] ?? 0, vectors[n][2] ?? 0]
   const nv = (n: string) => ({ name: n.replace('Vct', ''), v: v3(n) })
+  // Worked out by the Vector Calculator's own table of operations (vectorCalcStore.ts OPERATIONS).
+  const two = (id: string) => (): VS.Solution => OPERATIONS[id].solve([nv(a), nv(b)], settings)
   const ops: { label: string; sol: () => VS.Solution }[] = [
-    { label: `${a} + ${b}`, sol: () => VS.solveAddition([nv(a), nv(b)], 'R', settings) },
-    { label: `${a} − ${b}`, sol: () => VS.solveSubtraction(nv(a), nv(b), 'R', settings) },
-    { label: `${a} · ${b}`, sol: () => VS.solveDot(nv(a), nv(b), settings) },
-    { label: `${a} × ${b}`, sol: () => VS.solveCross(nv(a), nv(b), 'C', settings) },
-    { label: `|${a}|`, sol: () => VS.solveMagnitudeDirection(nv(a), settings) },
-    { label: `unit ${a}`, sol: () => VS.solveUnitVector(nv(a), settings) },
-    { label: `proj ${b} on ${a}`, sol: () => VS.solveProjection(nv(b), nv(a), settings) }
+    { label: `${a} + ${b}`, sol: two('sum') },
+    { label: `${a} − ${b}`, sol: two('sub') },
+    { label: `${a} · ${b}`, sol: two('dot') },
+    { label: `${a} × ${b}`, sol: two('cross') },
+    { label: `|${a}|`, sol: two('mag') },
+    { label: `unit ${a}`, sol: two('unit') },
+    { label: `proj ${b} on ${a}`, sol: two('proj') }
   ]
   const [sol, setSol] = useState<VS.Solution | null>(null)
   return (

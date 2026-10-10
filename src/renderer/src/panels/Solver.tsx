@@ -7,6 +7,7 @@ import * as VS from '../math/vectorSolver'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
 import { newVec, vectorsOnChoose, vectorsToSolve, type VecInput } from './solverState'
+import { OPERATIONS } from './vectorCalcStore'
 
 const PROBLEMS = [
   { id: 'components', label: 'Resolve a vector into components (Ax = A cos θ)' },
@@ -197,7 +198,7 @@ export function Solver() {
           sol = VS.solveComponents('F', nums.F, nums.theta, '', settings)
           break
         case 'magdir':
-          sol = VS.solveMagnitudeDirection(vs[0], settings)
+          sol = OPERATIONS.mag.solve(vs, settings)
           break
         case 'add':
           sol =
@@ -205,40 +206,40 @@ export function Solver() {
               ? VS.solveAdditionCosineLaw(vs[0], vs[1], 'R', settings)
               : method === 'graphical'
                 ? VS.solveAdditionGraphical(vs, 'R', settings)
-                : VS.solveAddition(vs, 'R', settings)
+                : OPERATIONS.sum.solve(vs, settings)
           break
         case 'subtract':
-          sol = VS.solveSubtraction(vs[0], vs[1], 'R', settings)
+          sol = OPERATIONS.sub.solve(vs, settings)
           break
         case 'scale':
-          sol = VS.solveScalarMultiply(nums.k, vs[0], 'R', settings)
+          sol = OPERATIONS.scale.solve(vs, settings, nums.k)
           break
         case 'unit':
-          sol = VS.solveUnitVector(vs[0], settings)
+          sol = OPERATIONS.unit.solve(vs, settings)
           break
         case 'dot':
-          sol = VS.solveDot(vs[0], vs[1], settings)
+          sol = OPERATIONS.dot.solve(vs, settings)
           break
         case 'cross':
-          sol = VS.solveCross(vs[0], vs[1], 'C', settings)
+          sol = OPERATIONS.cross.solve(vs, settings)
           break
         case 'projection':
-          sol = VS.solveProjection(vs[1], vs[0], settings)
+          sol = OPERATIONS.proj.solve(vs, settings)
           break
         case 'twoforces':
           sol = VS.solveTwoForces(nums.F1, nums.F2, nums.angle, 'N', settings)
           break
         case 'equilibrium':
-          sol = VS.solveEquilibrium(vs, settings)
+          sol = OPERATIONS.equil.solve(vs, settings)
           break
         case 'torque':
-          sol = VS.solveTorque(vs[0].v, vs[1].v, settings)
+          sol = OPERATIONS.torque.solve(vs, settings)
           break
         case 'work':
-          sol = VS.solveWork(vs[0].v, vs[1].v, settings)
+          sol = OPERATIONS.work.solve(vs, settings)
           break
         case 'magforce':
-          sol = VS.solveMagneticForce(nums.q, vs[0].v, vs[1].v, settings)
+          sol = OPERATIONS.lorentz.solve(vs, settings, 0, nums.q)
           break
       }
       showSolution(sol)

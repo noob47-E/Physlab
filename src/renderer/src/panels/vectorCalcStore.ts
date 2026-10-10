@@ -864,43 +864,51 @@ export function nextStepHint(names: string[], index: number): string {
 // Working an answer out (the panel's buttons, and again when a drawn answer's vectors change)
 // ---------------------------------------------------------------------------
 
-/** An operation's answer from the vectors it reads, in order; throws a PlainError or a parser error. */
+/**
+ * One vector operation: its button's name, how many cards from the top it reads ('all' takes every
+ * card), the box (k or q) it also reads, the maths and the help its button shows, and how its answer
+ * is worked out from the vectors it reads, in order. The Vector Calculator's buttons, the Vector
+ * Solver and the Calculator's VECTOR screen all work an operation out from this one table, so the
+ * names a student sees, the ones an error sentence uses and the answers cannot differ (CW16).
+ */
+export interface VectorOperation {
+  label: string
+  need: number | 'all'
+  field?: 'k' | 'q'
+  tex: string
+  help: string
+  /** Throws a PlainError or a parser error. `k` and `q` are the boxes' numbers, where the operation reads one. */
+  solve: (vs: VS.NamedVec[], settings: SceneSettings, k?: number, q?: number) => VS.Solution
+}
+
+export const OPERATIONS: Record<string, VectorOperation> = {
+  sum: { label: 'Add all', need: 'all', tex: '\\vec{A}+\\vec{B}+\\dots', help: 'Resultant by rectangular components', solve: (vs, s) => VS.solveAddition(vs, 'R', s) },
+  sub: { label: 'Subtract', need: 2, tex: '\\vec{A}-\\vec{B}', help: 'A + (−B)', solve: ([A, B], s) => VS.solveSubtraction(A, B, 'R', s) },
+  dot: { label: 'Dot', need: 2, tex: '\\vec{A}\\cdot\\vec{B}', help: 'Scalar product and angle between', solve: ([A, B], s) => VS.solveDot(A, B, s) },
+  cross: { label: 'Cross', need: 2, tex: '\\vec{A}\\times\\vec{B}', help: 'Vector product and parallelogram area', solve: ([A, B], s) => VS.solveCross(A, B, 'C', s) },
+  mag: { label: 'Size & angle', need: 1, tex: '|\\vec{A}|,\\ \\theta', help: 'Magnitude and direction', solve: ([A], s) => VS.solveMagnitudeDirection(A, s) },
+  resolve: { label: 'Components', need: 1, tex: 'A_x,\\ A_y', help: 'Aₓ = A cos θ, A_y = A sin θ', solve: ([A], s) => VS.solveResolve(A, s) },
+  scale: { label: 'Scalar ×', need: 1, field: 'k', tex: 'k\\vec{A}', help: 'Multiply by k', solve: ([A], s, k = 0) => VS.solveScalarMultiply(k, A, 'R', s) },
+  unit: { label: 'Unit vector', need: 1, tex: '\\hat{A}', help: 'Direction with length 1', solve: ([A], s) => VS.solveUnitVector(A, s) },
+  angle: { label: 'Angle between', need: 2, tex: '\\theta_{AB}', help: 'cos θ = A·B / AB', solve: ([A, B], s) => VS.solveAngleBetween(A, B, s) },
+  proj: { label: 'Projection', need: 2, tex: '\\mathrm{proj}_{A}\\vec{B}', help: 'Shadow of B on A', solve: ([A, B], s) => VS.solveProjection(B, A, s) },
+  equil: { label: 'Equilibrium', need: 'all', tex: '\\vec{E}=-\\sum\\vec{F}', help: 'Force that balances all', solve: (vs, s) => VS.solveEquilibrium(vs, s) },
+  torque: { label: 'Torque', need: 2, tex: '\\vec{\\tau}=\\vec{r}\\times\\vec{F}', help: 'First card = r, second = F', solve: ([A, B], s) => VS.solveTorque(A.v, B.v, s) },
+  work: { label: 'Work', need: 2, tex: 'W=\\vec{F}\\cdot\\vec{d}', help: 'First card = F, second = d', solve: ([A, B], s) => VS.solveWork(A.v, B.v, s) },
+  lorentz: {
+    label: 'Magnetic force',
+    need: 2,
+    field: 'q',
+    tex: 'q(\\vec{v}\\times\\vec{B})',
+    help: 'First card = v, second = B, charge q',
+    solve: ([A, B], s, _k, q = 0) => VS.solveMagneticForce(q, A.v, B.v, s)
+  },
+  relvel: { label: 'Relative velocity', need: 2, tex: '\\vec{v}_{AB}=\\vec{v}_A-\\vec{v}_B', help: 'Velocity of A as seen from B', solve: ([A, B], s) => VS.solveRelativeVelocity(A, B, s) }
+}
+
+/** An operation's answer from the vectors it reads, in order; null for a name that is not one. Throws a PlainError or a parser error. */
 export function solveOperation(op: string, vs: VS.NamedVec[], settings: SceneSettings, k = 0, q = 0): VS.Solution | null {
-  const [A, B] = vs
-  switch (op) {
-    case 'sum':
-      return VS.solveAddition(vs, 'R', settings)
-    case 'sub':
-      return VS.solveSubtraction(A, B, 'R', settings)
-    case 'scale':
-      return VS.solveScalarMultiply(k, A, 'R', settings)
-    case 'dot':
-      return VS.solveDot(A, B, settings)
-    case 'angle':
-      return VS.solveAngleBetween(A, B, settings)
-    case 'cross':
-      return VS.solveCross(A, B, 'C', settings)
-    case 'mag':
-      return VS.solveMagnitudeDirection(A, settings)
-    case 'unit':
-      return VS.solveUnitVector(A, settings)
-    case 'proj':
-      return VS.solveProjection(B, A, settings)
-    case 'resolve':
-      return VS.solveResolve(A, settings)
-    case 'equil':
-      return VS.solveEquilibrium(vs, settings)
-    case 'torque':
-      return VS.solveTorque(A.v, B.v, settings)
-    case 'work':
-      return VS.solveWork(A.v, B.v, settings)
-    case 'lorentz':
-      return VS.solveMagneticForce(q, A.v, B.v, settings)
-    case 'relvel':
-      return VS.solveRelativeVelocity(A, B, settings)
-    default:
-      return null
-  }
+  return Object.hasOwn(OPERATIONS, op) ? OPERATIONS[op].solve(vs, settings, k, q) : null
 }
 
 /** An answer worked out again from its recipe and the cards as they are now; null when it cannot be. */
@@ -916,35 +924,6 @@ function solveAgain(from: Recipe, cards: Card[], values: (V3 | string)[], settin
   } catch {
     return null
   }
-}
-
-/**
- * What each operation of the panel reads: its button's name, how many cards from the top it takes
- * ('all' takes every card) and the box (k or q) it also reads. The panel's buttons are made from
- * this, so the names a student sees and the ones an error sentence uses cannot differ.
- */
-export interface OperationRule {
-  label: string
-  need: number | 'all'
-  field?: 'k' | 'q'
-}
-
-export const OPERATIONS: Record<string, OperationRule> = {
-  sum: { label: 'Add all', need: 'all' },
-  sub: { label: 'Subtract', need: 2 },
-  dot: { label: 'Dot', need: 2 },
-  cross: { label: 'Cross', need: 2 },
-  mag: { label: 'Size & angle', need: 1 },
-  resolve: { label: 'Components', need: 1 },
-  scale: { label: 'Scalar ×', need: 1, field: 'k' },
-  unit: { label: 'Unit vector', need: 1 },
-  angle: { label: 'Angle between', need: 2 },
-  proj: { label: 'Projection', need: 2 },
-  equil: { label: 'Equilibrium', need: 'all' },
-  torque: { label: 'Torque', need: 2 },
-  work: { label: 'Work', need: 2 },
-  lorentz: { label: 'Magnetic force', need: 2, field: 'q' },
-  relvel: { label: 'Relative velocity', need: 2 }
 }
 
 /**
