@@ -38,6 +38,12 @@ it is still read.
 - "Restore it" never throws away work: it swaps it to the strip.
 - `hasWork` compares with File ▸ New block by block (ids ignored), so a future panel's work counts.
 - The strip never names a hidden mode (`HIDDEN_MODES`).
+- Two signals answer "is there work?", on purpose: `dirty` (the store; the • in the title, the close prompt, the
+  minute copy) says something changed since the last save or open, and `hasWork` (the strip, Restore) says a
+  file differs from File ▸ New. They cannot simply be one: deleting everything from an opened file is a change
+  with no work left. Where they disagree today is listed for the owner (OWNER-APPROVALS.md CW8b-2 and CW8b-4,
+  pinned in `tests/cw8b-store.test.ts`): a units, precision or grid setting change leaves `dirty` off although the file
+  holds it, and a new project's edit undone leaves `dirty` on with nothing to save.
 
 ## Traps (each guarded by a test in `tests/persistence.test.ts`, its af-sv block)
 - The minute autosave used to replace the one crash copy the strip was offering (S1).

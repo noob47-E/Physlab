@@ -20,6 +20,8 @@ two triangles (**Congruence**).
 | `src/renderer/src/panels/Congruence.tsx` | The congruence card and "Draw a triangle from its sides" (`sidesInWorld`). |
 | `src/renderer/src/render/ObjectViews.tsx` (`DecomposedParts`) | Draws Decompose's parts, cut lines and numerals. |
 | `src/renderer/src/core/store.ts` (`breakApart`, `fusePieces`) | The scene side of Lego; one undo step each. |
+| `src/renderer/src/core/legoScene.ts` | The helpers those actions use: `makePolygon` (a piece or fused shape with its corners and sides), `consumeShapes` (what goes with a broken or fused shape), `movedPieces`, `dropPieceCorners`. |
+| `src/renderer/src/core/doomed.ts` | `sidesOf` (a shape's own sides) and `doomedBy` (what a delete takes); the store re-exports both. |
 
 ## Invariants
 - **Shapes off the page are measured in their own plane.** `polygonPlane` gives the plane (Newell
