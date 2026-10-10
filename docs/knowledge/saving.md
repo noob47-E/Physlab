@@ -39,7 +39,7 @@ it is still read.
 - `hasWork` compares with File ▸ New block by block (ids ignored), so a future panel's work counts.
 - The strip never names a hidden mode (`HIDDEN_MODES`).
 
-## Traps (each guarded by a test in `tests/af-sv.test.ts`)
+## Traps (each guarded by a test in `tests/persistence.test.ts`, its af-sv block)
 - The minute autosave used to replace the one crash copy the strip was offering (S1).
 - A second close with the strip still ignored dropped one of the two copies (S1 follow-up).
 - "Restore it" replaced the work done since start-up without asking (R1).
@@ -47,5 +47,5 @@ it is still read.
 - `URL.revokeObjectURL` right after `a.click()` can cancel a browser download; it is revoked a tick later.
 
 ## Tests
-`tests/af-sv.test.ts` (the slot, both the localStorage and the desktop-bridge paths),
-`tests/persistence.test.ts` (files, migrate, `hasWork`).
+`tests/persistence.test.ts`: its af-sv block (the slot, both the localStorage and the desktop-bridge paths),
+and the rest of the file (files, migrate, `hasWork`).

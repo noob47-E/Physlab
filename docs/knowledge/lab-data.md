@@ -46,11 +46,11 @@ into a new table.
 - Pasting "1,2" into a cell replaced the whole table — `labUndo`.
 - A straight line kept on curved data with only "try another shape" — `labFit`.
 - The gradient ± for a falling line with sideways bars was a third of its true size — `labFit`.
-- r² read 1 for tiny readings, and for readings with a large offset — `af-lb`, `labFollowups`.
+- r² read 1 for tiny readings, and for readings with a large offset — `lab` (its `af-lb` block), `labFollowups`.
 - A CSV caption with escaped quotes lost characters — `labFollowups`.
 - A NaN or ±∞ reading gave a fit with r² NaN (rankFits sorted on NaN) and a gradient range of NaN; both are
   refused. The slope error used an absolute sxx > 1e-12 and vanished for x near 10⁻⁷ (now relative to the x
   readings' size), and `pmText` dropped a real ± under 1e-9 of the value (now 1e-12) — `fb2-lab-fit`.
 
 ## Tests
-`lab`, `labPrecision`, `labUndo`, `labNames`, `labFit`, `labFollowups`, `af-lb`, `chartData`, `persistence`, `fb2-lab-fit`.
+`lab`, `labPrecision`, `labUndo`, `labNames`, `labFit`, `labFollowups`, `chartData`, `persistence`, `fb2-lab-fit`.

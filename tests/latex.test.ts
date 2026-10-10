@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { latexToMath, tryLatexToMath } from '../src/renderer/src/math/latexToMath'
-import { evaluateComp } from '../src/renderer/src/calc/engine'
+import { evaluateComp, hasFreeX } from '../src/renderer/src/calc/engine'
 import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
 import { allKeys } from '../src/renderer/src/calc/keys'
 import { math, preprocess, setAngleMode, toV3 } from '../src/renderer/src/math/expr'
@@ -604,5 +604,167 @@ describe('G5 — a fraction straight after a function name is its argument (fiel
     expect(shown('\\ln\\sqrt{}')).toMatch(/^refused: /)
     // A name with nothing at all after it was always refused and still is.
     expect(shown('\\sin')).toMatch(/^refused: /)
+  })
+})
+
+describe('af-pl — latexToMath reads powers, functions, sums and subscripts as written', () => {
+  describe('P-PARSE PL: an unbraced sign in a power', () => {
+    it('reads 10^-3, 2^-12 and 10^+2 as one power', () => {
+      expect(latexToMath('10^-3')).toBe('10^(-3)')
+      expect(latexToMath('2^-12')).toBe('2^(-12)')
+      expect(latexToMath('10^+2')).toBe('10^(+2)')
+    })
+  })
+
+  describe('P-PARSE PL: a bare function takes Greek, degrees and factorial in its argument', () => {
+    it('reads \\sin\\mu, \\sin 30° and \\sin x! as complete arguments', () => {
+      expect(latexToMath('\\sin\\mu')).toBe('sin(μ)')
+      expect(latexToMath('\\sin 30°')).toBe('sin(30°)')
+      expect(latexToMath('\\sin x!')).toBe('sin(x!)')
+    })
+  })
+
+  describe('P-PARSE PL: d/dx takes the whole body', () => {
+    it('reads x^2 after d/dx as the body', () => {
+      expect(latexToMath('\\frac{d}{dx} x^2')).toBe('diff(x^(2), x)')
+    })
+  })
+
+  describe('P-PARSE PL: d/dθ reads a Greek denominator', () => {
+    it('reads d/dθ of a bracketed sine with respect to θ', () => {
+      expect(latexToMath('\\frac{d}{d\\theta}\\left(\\sin\\theta\\right)')).toBe('diff(sin(θ), θ)')
+    })
+  })
+
+  describe('P-PARSE PL: standalone angle brackets', () => {
+    it('reads \\langle and \\rangle as vector brackets', () => {
+      expect(latexToMath('\\langle 1, 2 \\rangle')).toBe('<1,2>')
+    })
+  })
+
+  describe('P-PARSE PL: sigma/prod stop at a relation and read an uppercase index', () => {
+    it('does not swallow the equals sign after a sum, and reads an uppercase limit variable', () => {
+      expect(latexToMath('\\sum_{x=1}^{n} f = 5')).toBe('sigma(f, 1, n)=5')
+      expect(latexToMath('\\sum_{N=1}^{3} 2')).toBe('sigma(2, 1, 3)')
+    })
+    it('does not swallow a comparison after a product', () => {
+      expect(latexToMath('\\prod_{n=1}^{3} 7 < 10')).toBe('product(7, 1, 3)<10')
+    })
+  })
+
+  describe('P-PARSE PL: a non-alphanumeric subscript keeps its brackets', () => {
+    it('reads a_{n+1} as one subscript', () => {
+      expect(latexToMath('a_{n+1}')).toBe('a_(n+1)')
+    })
+  })
+
+  describe('d/dx before a function name (part head check)', () => {
+    it('reads the function as the body, not as something after an empty diff', () => {
+      expect(latexToMath('\\frac{d}{dx}\\sin x')).toBe('diff(sin(x), x)')
+      expect(latexToMath('\\frac{d}{d\\theta}\\cos\\theta')).toBe('diff(cos(θ), θ)')
+    })
+  })
+})
+
+describe('fixb-f1-sumStatement — a typed sum with = is a statement to check, not an equation to solve', () => {
+  // F1 diagnostic (runs red on today's code, green after the fix in the findings note).
+  //
+  // The bug: on the Maths screen, typing with the keypad Σ for n = 1 to 5 of n² = 55 answers
+  // "x = 2 / L − R = 0" with no true mark. The sum's index letter is rewritten to x in linear form
+  // (latexToMath), so isEquationInX treats the line as "solve for x"; the residual is identically 0
+  // (the sum is a constant), so the numeric search returns its own starting guess — the stored x —
+  // as if it were a root. Expected: the statement is checked and marked true.
+  //
+  // Run with: npx vitest run --config _findings/vitest.findings.config.ts _findings/tests/f1-sumStatement.test.ts
+
+  const opts = (x: number) => ({ vars: { x }, ans: 0, angle: 'deg' as const })
+
+  describe('F1: a sum with = is a statement to check, not an equation to solve', () => {
+    it('the keypad form of Σ n² from 1 to 5 = 55 is marked true', () => {
+      const latex = '\\sum_{n=1}^{5}n^{2}=55'
+      expect(latexToMath(latex)).toBe('sigma(x^(2), 1, 5)=55')
+      const r = evaluateInput('COMP', latex, opts(2))!
+      expect(r.error).toBeUndefined()
+      expect(r.main).toBe('true')
+      expect(r.extra).toEqual(['L − R = 0'])
+      // Nothing numeric to keep: Ans and the stored x stay what they were.
+      expect(r.value).toBeUndefined()
+      expect(r.solved).toBe(false)
+    })
+
+    it('the linear form of the same line is marked true too', () => {
+      const r = evaluateInput('COMP', 'sigma(x^2,1,5)=55', opts(2))!
+      expect(r.error).toBeUndefined()
+      expect(r.main).toBe('true')
+    })
+
+    it('solving and refusals around it are untouched', () => {
+      // A statement that does not hold is marked false, with how far apart the sides are — not "give x a value".
+      const f = evaluateInput('COMP', '\\sum_{x=1}^{3}x=5', opts(0))!
+      expect(f.main).toBe('false')
+      expect(f.extra).toEqual(['L − R = 1'])
+      expect(f.solved).toBe(false)
+      // An x outside the sum is still solved for.
+      expect(evaluateInput('COMP', 'x+sigma(x,1,100)=5100', opts(0))!.main).toBe('x = 50')
+      // A constant statement with no x at all keeps its sentence.
+      expect(evaluateInput('COMP', '5=5', opts(0))!.error?.sentence).toBe('Equations are solved in Numbers mode: type both sides with = and press x = ?')
+    })
+
+    it('an x in the limits of a sum or an integral is the line\'s own x, still solved for (wave-head review)', () => {
+      expect(hasFreeX('sigma(x^2, 1, 5)')).toBe(false)
+      expect(hasFreeX('sigma(x^2, 1, x)')).toBe(true)
+      expect(hasFreeX('integrate(t, t, 0, x)')).toBe(true)
+      expect(hasFreeX('integrate(x, x, 0, 2)')).toBe(false)
+      expect(hasFreeX('integral(x^2, 0, x)')).toBe(true)
+    })
+
+    it('"holds" is relative to the size of the sides: a large true sum is still marked true (wave-head review)', () => {
+      // 1² + … + 100000² = 333338333350000; the float sum carries rounding far above 10⁻¹⁴.
+      const r = evaluateInput('COMP', 'sigma(x^2,1,100000)=333338333350000', opts(2))!
+      expect(r.main).toBe('true')
+      // Wrong by one part in a billion is wrong.
+      expect(evaluateInput('COMP', 'sigma(x^2,1,100000)=333338333000000', opts(2))!.main).not.toBe('true')
+      expect(evaluateInput('COMP', 'sigma(1/x^2,1,100000)=1.6449240668982262', opts(2))!.main).toBe('true')
+    })
+  })
+
+  describe('F1 review: no absolute floor on "holds"', () => {
+    it('tiny sides are compared by their own size', () => {
+      expect(evaluateInput('COMP', 'integral(1.6e-19*x,0,1)=1e-19', opts(0))!.main).toBe('false') // 8×10⁻²⁰ ≠ 10⁻¹⁹
+      expect(evaluateInput('COMP', 'sigma(1e-20*x,1,3)=5e-20', opts(0))!.main).toBe('false') // 6×10⁻²⁰ ≠ 5×10⁻²⁰
+      expect(evaluateInput('COMP', 'sigma(1e-20*x,1,3)=6e-20', opts(0))!.main).toBe('true')
+      expect(evaluateInput('COMP', 'sigma(0*x,1,3)=0', opts(0))!.main).toBe('true') // both exactly 0
+    })
+  })
+})
+
+describe('fixb-f9-space-after-function — a space after a function name reads as the function of what follows', () => {
+  // F9 review: the maths field now keeps a typed space as \; — after a function's name that space must
+  // still read as "the function of what follows" (sin 30 = 0.5), on the Maths screen and a vector card.
+
+  const opts = { vars: {}, ans: 0, angle: 'deg' as const }
+
+  describe('a space after a function name', () => {
+    it('reads as the function of what follows', () => {
+      expect(latexToMath('\\sin\\;30')).toBe(latexToMath('\\sin 30'))
+      expect(latexToMath('\\cos\\,60')).toBe(latexToMath('\\cos 60'))
+      expect(latexToMath('\\ln\\;\\;2')).toBe(latexToMath('\\ln 2'))
+      expect(latexToMath('\\sin^{2}\\;x')).toBe(latexToMath('\\sin^{2}x'))
+      // After a log's base, and before d/dx's body (second checker pass).
+      expect(latexToMath('\\log_{2}\\;8')).toBe(latexToMath('\\log_{2}8'))
+      expect(latexToMath('\\frac{d}{dx}\\;x^{2}')).toBe(latexToMath('\\frac{d}{dx}x^{2}'))
+    })
+
+    it('log₂ 8 = 3 with a typed space after the base', () => {
+      expect(evaluateInput('COMP', '\\log_{2}\\;8', opts)!.main).toBe('3')
+    })
+
+    it('gives the answer on the Maths screen: sin 30 = 0.5', () => {
+      expect(evaluateInput('COMP', '\\sin\\;30', opts)!.main).toBe('0.5')
+    })
+
+    it('keeps the spaces that separate words: 10 N m ∠ 30°', () => {
+      expect(latexToMath('10\\;N\\;m\\angle30^{\\circ}')).toMatch(/10 N m/)
+    })
   })
 })

@@ -1,4 +1,3 @@
 export src/preload/index.ts : PhysLabBridge
-export src/renderer/src/app/files.ts : loadProjectText
 export src/renderer/src/app/shortcuts.ts : VIEW_KEY
 export src/renderer/src/questions/pqjson.ts : FORMAT1_PART_TYPES

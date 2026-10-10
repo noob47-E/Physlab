@@ -13,6 +13,8 @@ import { CARDS_KEY, OLD_CARDS_KEY, NOTHING_PICKED, NO_ARROWS, PlainError, addVec
 import { readSource } from './helpers/repo'
 import { inDegrees, math, toV3 } from '../src/renderer/src/math/expr'
 import { texIJK } from '../src/renderer/src/math/format'
+import fs from 'fs'
+import path from 'path'
 
 const card = (id: number, name: string, extra: Partial<Card> = {}): Card => ({ id, name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '', ...extra })
 
@@ -1448,5 +1450,26 @@ describe('an answer and its picture follow their cards (V1, H2, V3, V4, H1)', ()
     expect(scene().objects[arrowOf('A')].visible).toBe(false)
     expect(resultOnlyOn(scene().objects)).toBe(true)
     expect(scene().past.length).toBe(steps)
+  })
+})
+
+describe('fixb-f9-vector-space — the Vector card keeps typed spaces', () => {
+  describe('F9: Vector card maths field dropped typed spaces', () => {
+    it('evaluateVectorLine fails on "10Nm\\angle30^{\\circ}" with missing vector Nm error', () => {
+      expect(() => evaluateVectorLine('10Nm\\angle30^{\\circ}', {})).toThrow(/Nm/)
+    })
+
+    it('evaluateVectorLine succeeds on "10\\;N\\;m\\angle30^{\\circ}" with magnitude 10 and angle 30°', () => {
+      const res = evaluateVectorLine('10\\;N\\;m\\angle30^{\\circ}', {})
+      expect(res.out).toEqual([expect.closeTo(8.66, 1), expect.closeTo(5, 1), 0])
+    })
+
+    it('MathInput.tsx configures mathModeSpace so MathLive inserts space on spacebar', () => {
+      const target = process.env.TEST_PATCHED_MATHINPUT
+        ? path.resolve(__dirname, '../patch2/MathInput.tsx')
+        : path.resolve(__dirname, '../src/renderer/src/ui/MathInput.tsx')
+      const code = fs.readFileSync(target, 'utf8')
+      expect(code).toContain('mathModeSpace')
+    })
   })
 })

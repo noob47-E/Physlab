@@ -23,6 +23,7 @@ import { MODES, useApp, type ModeId } from '../src/renderer/src/app/modes'
 import type { ObjId, SceneObject } from '../src/renderer/src/core/types'
 import { scene } from '../src/renderer/src/core/store'
 import { runCommand } from '../src/renderer/src/lang/commands'
+import { visualizeVector } from '../src/renderer/src/core/visualize'
 
 const SPACES: Space[] = ['vectors', 'shapes', 'graphing', 'lab']
 // One list each, used by both tests below: written twice, a new mode added to only one of them
@@ -177,5 +178,35 @@ describe('objects made through the command bar carry the drawing they were made 
     await runCommand('Segment(P, Q)')
     expect(scene().log.filter((l) => l.kind === 'error')).toEqual([])
     expect(scene().log.at(-1)?.tex).toContain('length } 5')
+  })
+})
+
+describe('af-gc1 — the Calculator reads the Graphing drawing', () => {
+  describe('GC1 — the Calculator looks at the Graphing drawing', () => {
+    beforeEach(() => {
+      scene().newScene()
+      scene().clearLog()
+    })
+
+    it('spaceOf calculator is graphing, and problems stays vectors', () => {
+      expect(spaceOf('calculator')).toBe('graphing')
+      expect(spaceOf('problems')).toBe('vectors')
+    })
+
+    it('with active space set to spaceOf calculator, a vector made by visualizeVector is stored in graphing and visible in both calculator and graphing space', () => {
+      scene().setActiveSpace(spaceOf('calculator'))
+      const res = (visualizeVector as (comp: unknown) => unknown)([3, 4, 0])
+      const vec: SceneObject | undefined =
+        res && typeof res === 'object' && 'space' in res
+          ? (res as SceneObject)
+          : typeof res === 'string' && scene().objects[res]
+            ? scene().objects[res]
+            : Object.values(scene().objects).find((o) => o.type === 'vector')
+
+      expect(vec).toBeDefined()
+      expect(vec!.space).toBe('graphing')
+      expect(visibleIn(vec, spaceOf('calculator'))).toBe(true)
+      expect(visibleIn(vec, spaceOf('graphing'))).toBe(true)
+    })
   })
 })

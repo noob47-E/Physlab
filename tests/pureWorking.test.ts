@@ -11,7 +11,7 @@ import { evalDisplayedSum } from '../src/renderer/src/math/pure/latexCheck'
 import { rStr, rat } from '../src/renderer/src/math/pure/rat'
 import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { usePure } from '../src/renderer/src/math/pure/store'
-import { writeTimes } from '../src/renderer/src/math/pure/mono'
+import { exprTex, parseExpr, writeTimes } from '../src/renderer/src/math/pure/mono'
 import { math, preprocess } from '../src/renderer/src/math/expr'
 import { texPrecise, type DigitSettings } from '../src/renderer/src/math/format'
 import { calcNum, setCalcPrecisionSource } from '../src/renderer/src/calc/format'
@@ -1902,5 +1902,196 @@ describe('H15 — a comma inside a bracket is never a list for the router', () =
     const w = workTyped('12,18')
     expect(usePure.getState().job).toBe('hcf')
     expect(w.answers[0]?.tex).toBe('6')
+  })
+})
+
+describe('af-ub — letters, refusals, partial-fraction signs and huge powers', () => {
+  const renders = (tex: string): void => {
+    expect(() => katex.renderToString(tex, { displayMode: true, throwOnError: true, strict: 'ignore' }), tex).not.toThrow()
+  }
+
+  describe('U3 side-by-side letters are separate variables', () => {
+    it('reads a run of letters as single-letter variables', () => {
+      expect(exprTex(parseExpr('ab'))).toBe('ab')
+      expect(exprTex(parseExpr('9ab^2'))).toBe('9ab^{2}')
+      expect(exprTex(parseExpr('6a^2b + 9ab^2'))).toBe('6a^{2}b + 9ab^{2}')
+    })
+
+    it('keeps a Greek letter whole: θ (typed or as the word theta) is one variable', () => {
+      expect(exprTex(parseExpr('θ^2 - 4'))).toBe('\\theta^{2} - 4')
+      expect(exprTex(parseExpr('theta^2 - 4'))).toBe('\\theta^{2} - 4')
+      expect(exprTex(parseExpr('2aθ'))).toBe('2a\\theta')
+    })
+
+    it('HCF and Factorise treat the letters separately', () => {
+      const hcf = runPure('hcf', '6a^2b, 9ab^2')
+      expect(hcf.error).toBeUndefined()
+      expect(hcf.answers[0].tex).toBe('3ab')
+      expect(hcf.checked).toBe('ok')
+
+      const factor = runPure('factor', 'x^2y + xy^2')
+      expect(factor.error).toBeUndefined()
+      expect(factor.answers[0].tex).toBe('xy\\left(x + y\\right)')
+      expect(factor.checked).toBe('ok')
+    })
+
+    it('Expand 2ab(a + b) works and renders', () => {
+      const w = runPure('expand', '2ab(a + b)')
+      expect(w.error).toBeUndefined()
+      expect(w.answers[0].tex).toBe('2a^{2}b + 2ab^{2}')
+      expect(w.checked).toBe('ok')
+      renders(w.answers[0].tex)
+      for (const m of w.moves) if (m.tex) renders(m.tex)
+    })
+  })
+
+  describe('U5 refusals do not pretend the job is factorise', () => {
+    it('divide and expand negative-power refusals do not mention factorise', () => {
+      const divide = runPure('divide', '(x^2 + x^-1)/x')
+      expect(divide.error).toMatch(/negative power/i)
+      expect(divide.error).not.toMatch(/factorise/i)
+
+      const expand = runPure('expand', '(x^-1 + 1)(x + 1)')
+      expect(expand.error).toMatch(/negative power/i)
+      expect(expand.error).not.toMatch(/factorise/i)
+    })
+  })
+
+  describe('U11 partial fractions take the sign out of a -x common factor', () => {
+    it('1/(-x^2 - x) gives -1/x + 1/(x + 1)', () => {
+      const w = runPure('partial', '1/(-x^2 - x)')
+      expect(w.error).toBeUndefined()
+      expect(w.answers[0].tex).toContain('-\\dfrac{1}{x}')
+      expect(w.answers[0].tex).not.toContain('\\dfrac{1}{-x}')
+      expect(w.answers[0].tex.replace(/\s+/g, '')).toBe('-\\dfrac{1}{x}+\\dfrac{1}{x+1}')
+      expect(w.checked).toBe('ok')
+      renders(w.answers[0].tex)
+    })
+  })
+
+  describe('H1 a huge power is refused in words instead of freezing the window', () => {
+    it('x^100000 in Expand and x^300000 + x in Factorise answer at once with a sentence about the power', () => {
+      for (const [job, src] of [['expand', 'x^100000'], ['factor', 'x^300000 + x'], ['expand', '(x + 1)^5000']] as const) {
+        const t = performance.now()
+        const w = runPure(job, src)
+        expect(performance.now() - t, src).toBeLessThan(1000)
+        expect(w.error, src).toMatch(/power/i)
+        expect(w.answers, src).toEqual([])
+      }
+    })
+
+    it('powers up to 1000 still work: x^1000 + x factorises, x^1000 expands', () => {
+      expect(runPure('factor', 'x^1000 + x').error).toBeUndefined()
+      expect(runPure('expand', 'x^1000').answers[0].tex).toBe('x^{1000}')
+    })
+
+    it('with several letters the number of terms is what counts: (x + y + z)^300 is refused at once, ^60 works', () => {
+      const t = performance.now()
+      const w = runPure('expand', '(x + y + z)^300')
+      expect(performance.now() - t).toBeLessThan(3000)
+      expect(w.error).toMatch(/terms/)
+      expect(runPure('expand', '(x + y + z)^60').error).toBeUndefined()
+    })
+
+    // The reader's own products (every tool but Expand, whose term-by-term table lives in run.ts:312
+    // and is listed for its owner under "Outside my files").
+    it('the limit holds for a product of powers too: (x + y + z)^30 (a + b + c)^30 is refused at once', () => {
+      for (const src of ['(x + y + z)^20 (a + b + c)^20', '(x + y + z)^30 (a + b + c)^30']) {
+        const t = performance.now()
+        expect(() => parseExpr(src), src).toThrow(/terms|too big to multiply out/)
+        expect(performance.now() - t, src).toBeLessThan(3000)
+      }
+      expect(parseExpr('(x + y)^10 (a + b)^10').length).toBe(121)
+    })
+  })
+
+  describe('U11 follow-up: the sign moves inside Partial Fractions only, never in Factorise working', () => {
+    it('Factorise −x² − x still takes out −x, with no "x-1(…)" line', () => {
+      for (const src of ['-x^2 - x', '-x^3 - x^2', '-x y - x']) {
+        const w = runPure('factor', src)
+        expect(w.error, src).toBeUndefined()
+        expect(w.checked, src).toBe('ok')
+        for (const m of w.moves) expect(m.tex ?? '', src).not.toMatch(/[a-z]-1(\\left)?\(/)
+      }
+      expect(runPure('factor', '-x^2 - x').answers[0].tex).toBe(String.raw`-x\left(x + 1\right)`)
+    })
+
+    it('1/(−2x² − 2x) gives −1/(2x) + 1/(2(x + 1)), with no minus left inside a bottom', () => {
+      const w = runPure('partial', '1/(-2x^2 - 2x)')
+      expect(w.error).toBeUndefined()
+      expect(w.checked).toBe('ok')
+      expect(w.answers[0].tex).not.toMatch(/\{-\d*x\}/)
+      renders(w.answers[0].tex)
+    })
+  })
+})
+
+describe('af-ud — partial fractions, substitution letters and read-back of displayed sums', () => {
+  describe('U6: zero numerator in partial fractions', () => {
+    it('answers 0 instead of an empty answer and failed check', () => {
+      const w = runPure('partial', '0/((x+1)(x+2))')
+      expect(w.error).toBeUndefined()
+      expect(w.answers).toHaveLength(1)
+      expect(w.answers[0].tex).toBe('0')
+      expect(w.checked).toBe('ok')
+      expect(w.check).toMatch(/0 on top is 0|nothing to split/)
+    })
+  })
+
+  describe('U7: repeated linear factor written as a power', () => {
+    it('splits x^3(x+1) into one fraction per power', () => {
+      const w = runPure('partial', '1/(x^3(x+1))')
+      expect(w.error).toBeUndefined()
+      expect(w.checked).toBe('ok')
+      expect(w.answers[0].tex).toBe(String.raw`\dfrac{1}{x} - \dfrac{1}{x^{2}} + \dfrac{1}{x^{3}} - \dfrac{1}{x + 1}`)
+    })
+
+    it('handles a numeric coefficient on the repeated power', () => {
+      const w = runPure('partial', '1/(4x^3)')
+      expect(w.error).toBeUndefined()
+      expect(w.checked).toBe('ok')
+      expect(w.answers[0].tex).toBe(String.raw`\dfrac{1}{4x^{3}}`)
+    })
+  })
+
+  describe('U8: substitution letter avoids the variable', () => {
+    it('uses a different letter when the variable is u', () => {
+      const w = runPure('factor', 'u^4 + 5u^2 + 4')
+      expect(w.error).toBeUndefined()
+      expect(w.answers[0].tex).toBe(String.raw`\left(u^{2} + 1\right)\left(u^{2} + 4\right)`)
+
+      const heads = w.moves.map((m) => texToPlain(m.head))
+      expect(heads.some((h) => h.includes('u = u²'))).toBe(false)
+      expect(heads[0]).toContain('v = u²')
+      expect(texToPlain(w.moves[0].subgoal ?? '')).toBe('Substitute for u²')
+    })
+
+    it('never reuses a letter already on screen: u(v⁴ + 5v² + 4) substitutes w, not u', () => {
+      const w = runPure('factor', 'u(v^4 + 5v^2 + 4)')
+      expect(w.error).toBeUndefined()
+      const heads = w.moves.map((m) => texToPlain(m.head))
+      expect(heads.some((h) => h.includes('u = v²'))).toBe(false)
+      expect(heads.some((h) => h.includes('w = v²'))).toBe(true)
+    })
+  })
+
+  describe('U9: leading -1 formats as a minus sign', () => {
+    it('shows −, not −1, in the factored denominator', () => {
+      const w = runPure('partial', '1/(1 - x^2)')
+      const step = w.moves.find((m) => m.subgoal === 'Break the bottom into factors')
+      expect(step?.tex).toBe(String.raw`-x^{2} + 1 = -\left(x - 1\right)\left(x + 1\right)`)
+    })
+  })
+
+  describe('U10: displayed partial-fraction answers are read back correctly', () => {
+    it('reads a whole part that starts with a minus', () => {
+      const answer = String.raw`-x + 3 + \dfrac{1}{x + 1} - \dfrac{8}{x + 2}`
+      expect(rStr(evalDisplayedSum(answer, 'x', rat(2n))!)).toBe('-2/3')
+    })
+
+    it('reads a whole part that has a fraction coefficient', () => {
+      const answer = String.raw`\frac{1}{2}x - \frac{3}{2} - \dfrac{1}{2\left(x + 1\right)} + \dfrac{4}{x + 2}`
+      expect(rStr(evalDisplayedSum(answer, 'x', rat(2n))!)).toBe('1/3')
+    })
   })
 })

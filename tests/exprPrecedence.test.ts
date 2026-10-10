@@ -37,12 +37,15 @@ vi.mock('../src/renderer/src/app/theme', async (importOriginal) => ({
   seriesColor: () => '#888888'
 }))
 
-import { inferKind, math, preprocess, toV3, type ValueKind } from '../src/renderer/src/math/expr'
+import { compileScalar, inferKind, math, preprocess, toV3, type ValueKind } from '../src/renderer/src/math/expr'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { scene, type LogEntry } from '../src/renderer/src/core/store'
-import type { EvalResult } from '../src/renderer/src/core/types'
+import type { EvalResult, SceneObject } from '../src/renderer/src/core/types'
 import { cardValue, type Card } from '../src/renderer/src/panels/vectorCalcStore'
 import { resetGlobals } from './helpers/globals'
+import type { FunctionNode, MathNode } from 'mathjs'
+import { cas } from '../src/renderer/src/math/engine/sympy/worker'
+import { checkAnswer } from '../src/renderer/src/math/checkAnswer'
 
 beforeEach(resetGlobals)
 
@@ -713,5 +716,124 @@ describe('M6: inferKind reads · as the product it is — a vector scaled is a v
     expect(kind('A + 2*A')).toBe('vector')
     expect(kind('A - B')).toBe('vector')
     expect(kind('2 + 3')).toBe('number')
+  })
+})
+
+describe('af-pb5 — 3 N × A operand, and a space before a bracket beside × or ·', () => {
+  function fresh(): void {
+    resetGlobals()
+    scene().newScene()
+    scene().clearLog()
+    scene().setActiveSpace('vectors')
+    scene().setViewMode('2d')
+    vi.mocked(cas).mockClear()
+  }
+  beforeEach(fresh)
+
+  const run = async (...lines: string[]): Promise<LogEntry> => {
+    for (const l of lines) await runCommand(l)
+    return scene().log.at(-1) ?? ({ id: 0, input: '', kind: 'info' } as LogEntry)
+  }
+  const errors = (): string[] => scene().log.filter((l) => l.kind === 'error').map((l) => `${l.input}: ${l.text}`)
+  const named = (name: string): SceneObject | undefined => {
+    const id = scene().ev.names.get(name)
+    return id ? scene().objects[id] : undefined
+  }
+  const computedOf = (name: string) => scene().ev.values.get(scene().ev.names.get(name) ?? '')
+  const numberNamed = (name: string, value: number) => {
+    expect(named(name)?.type, `${name} is a number`).toBe('number')
+    const c = computedOf(name)
+    expect(c?.type).toBe('number')
+    if (c?.type === 'number') expect(c.value).toBeCloseTo(value, 8)
+  }
+  const vectorNamed = (name: string, comp: [number, number, number]) => {
+    expect(named(name)?.type, `${name} is a vector`).toBe('vector')
+    const c = computedOf(name)
+    expect(c?.type).toBe('vector')
+    if (c?.type === 'vector') c.comp.forEach((x, i) => expect(x).toBeCloseTo(comp[i], 6))
+  }
+  const value = (typed: string, scope: Record<string, unknown> = {}): unknown => math.evaluate(preprocess(typed), { ...scope })
+  const answer = (typed: string, v: number) => checkAnswer(typed, { key: 'a', label: 'A', value: v, tol: 1e-6 })
+
+  describe('R4.8 3 N × A takes N alone as the left operand', () => {
+    it('takes the quantity 3 N as the left operand of ×', () => {
+      const node = math.parse(preprocess('3 N × A'))
+      const call = node.filter((n: MathNode) => n.type === 'FunctionNode' && (n as FunctionNode).fn.name === 'timesOrCross')[0] as FunctionNode | undefined
+      expect(call, 'the × was read').toBeDefined()
+      const left = call!.args[0].evaluate({}) as { toNumber: (u: string) => number }
+      expect(left.toNumber('N')).toBe(3)
+    })
+
+    it('the bar makes F = 3 N × A from A = <3, 4>', async () => {
+      await run('A = <3, 4>', 'F = 3 N × A')
+      expect(errors()).toEqual([])
+      vectorNamed('F', [9, 12, 0])
+    })
+
+    it('guard: ½mv² typed as 1/2 m × v^2 is still 9', async () => {
+      await run('m = 2', 'v = 3', 'E = 1/2 m × v^2')
+      expect(errors()).toEqual([])
+      numberNamed('E', 9)
+    })
+  })
+
+  describe('H5 a space before a call\'s bracket beside × or ·', () => {
+    it('reads 2 × sin (30), sin (30) × 2 and 2 · sqrt (4) with the call whole', () => {
+      expect(value('2 × sin (30)')).toBeCloseTo(1, 12)
+      expect(value('sin (30) × 2')).toBeCloseTo(1, 12)
+      expect(value('2 · sqrt (4)')).toBeCloseTo(4, 12)
+    })
+
+    it('the bar works out 2 × sin (30), and a typed answer 2 × sin (30) is marked right', async () => {
+      await run('h = 2 × sin (30)')
+      expect(errors()).toEqual([])
+      numberNamed('h', 1)
+      expect(answer('2 × sin (30)', 1).verdict).toBe('right')
+    })
+  })
+})
+
+describe('af-pb7 — x mod 3 compiled and drawn', () => {
+  // The SymPy worker cannot start here, and the stylesheet is not loaded (as in commands.test.ts).
+
+  function fresh(): void {
+    resetGlobals()
+    scene().newScene()
+    scene().clearLog()
+    scene().setActiveSpace('vectors')
+    scene().setViewMode('2d')
+    vi.mocked(cas).mockClear()
+  }
+  beforeEach(fresh)
+
+  const run = async (...lines: string[]): Promise<LogEntry> => {
+    for (const l of lines) await runCommand(l)
+    return scene().log.at(-1) ?? ({ id: 0, input: '', kind: 'info' } as LogEntry)
+  }
+  const errors = (): string[] => scene().log.filter((l) => l.kind === 'error').map((l) => `${l.input}: ${l.text}`)
+
+  /** The value of the graph the bar drew, at `at`: its stored line compiled as GraphView compiles it. */
+  const drawn = (vars: string[], at: Record<string, number>): number => {
+    const g = Object.values(scene().objects).find((o) => o.type === 'graph') as (SceneObject & { exprs: string[] }) | undefined
+    expect(g, 'a graph was drawn').toBeDefined()
+    return compileScalar(g!.exprs[0], vars, () => scene().ev.scope)(at)
+  }
+
+  describe('H3 mod in a drawn graph', () => {
+    it('compiles x mod 3 as the modulo, positive for a negative x', () => {
+      const f = compileScalar('x mod 3', ['x'], () => ({}))
+      expect(f({ x: -5 })).toBe(1)
+      expect(f({ x: -1 })).toBe(2)
+    })
+
+    it('guard: 5 mod 3 is still 2', () => {
+      expect(compileScalar('x mod 3', ['x'], () => ({}))({ x: 5 })).toBe(2)
+    })
+
+    it('the bar draws y = x mod 3 at 1 for x = −5', async () => {
+      await run('y = x mod 3')
+      expect(errors()).toEqual([])
+      expect(drawn(['x'], { x: -5 })).toBe(1)
+    })
   })
 })

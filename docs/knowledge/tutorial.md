@@ -15,7 +15,7 @@ P-TOUR (0.9), from the crew's draft and the hunters' notes, checked against the 
 - The anchors: `work-it-out` (panels/Maths.tsx), `command` (app/CommandBar.tsx), `tool-sketch` (app/TopBar.tsx `ToolButton`), `play`
   (panels/Sandbox.tsx), `start-practice` (panels/Practice.tsx); the tour's own: `modes`, `search`, `viewport`,
   `labels`, `measure`, `connect`.
-- `tests/tour.test.ts` — the "no errors" check; `tests/af-tb1.test.ts`, `tests/af-tb2.test.ts` — the crew's tests.
+- `tests/tour.test.ts` — the "no errors" check; its af-tb1 and af-tb2 blocks — the crew's tests.
 
 ## The missions
 Every mission ticks only for something the student DID after the missions started counting:

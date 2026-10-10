@@ -12,13 +12,20 @@
 // screen's unit: they worked in whatever the last Numbers line had left, until evaluateComp started putting the mode
 // back. Each now takes the screen's unit (calc/modeLines.ts) and runs in it.
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { statistics, type RegressionType } from '../src/renderer/src/calc/engine'
 import { matrixLine, sheetValues, tableRows, typedUnits } from '../src/renderer/src/calc/modeLines'
 import { evaluateSheet, SHEET_COLS, SHEET_ROWS } from '../src/renderer/src/calc/sheet'
 import { predictY } from '../src/renderer/src/calc/stats'
-import { compileScalar, getAngleMode, setAngleMode } from '../src/renderer/src/math/expr'
+import { compileScalar, getAngleMode, math, setAngleMode } from '../src/renderer/src/math/expr'
 import { readSource } from './helpers/repo'
+import { convertListed } from '../src/renderer/src/calc/units'
+import { superscriptPowers } from '../src/renderer/src/math/format'
+import fs from 'fs'
+import path from 'path'
+import { beyondTheReals } from '../src/renderer/src/calc/roots'
+import { setCalcPrecisionSource } from '../src/renderer/src/calc/format'
+import { errorSentence } from '../src/renderer/src/calc/errors'
 
 const X = [1, 2, 3, 4, 5, 6]
 const fit = (type: RegressionType, f: (x: number) => number, xs: number[] = X) => statistics(xs, xs.map(f), null, type)
@@ -392,5 +399,74 @@ describe('H17 — the Variables box, the Matrix error line and Vectors mode foll
     const calls = [...vectors.matchAll(/VS\.solve\w+\(([^\n]*)\) \}/g)].map((m) => m[1])
     expect(calls.length).toBeGreaterThan(5)
     for (const c of calls) expect(c, c).toMatch(/settings\)?$/)
+  })
+})
+
+describe('fixb-f5-units-screen — the Units screen writes powers with superscripts', () => {
+  describe('F5: Units screen superscript format', () => {
+    it('superscriptPowers formats lightyear output with superscripts instead of ^', () => {
+      // 1 lightyear to m is ~9.46×10^15 m
+      const raw = convertListed(1, 'lightyear', 'm').text
+      expect(raw).toContain('^')
+      const formatted = superscriptPowers(raw)
+      expect(formatted).not.toContain('^')
+      expect(formatted).toContain('¹⁵')
+      expect(formatted).toMatch(/9\.46073047\d*\u00a0×\u00a010¹⁵ m/)
+    })
+
+    it('Units screen in calcModes.tsx wraps output in superscriptPowers', () => {
+      const target = process.env.TEST_PATCHED_CALCMODES
+        ? path.resolve(__dirname, '../patch2/calcModes.tsx')
+        : path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
+      const code = fs.readFileSync(target, 'utf8')
+      expect(code).toContain('superscriptPowers(result.text)')
+    })
+  })
+})
+
+describe('fixb-f7-poly-roots-agreed — Equations > Polynomial agrees with the Numbers screen on complex roots', () => {
+  // Its own file set 2 dp at the top level; here that would load with the file and change every
+  // calcModes test, so it is held to this block and the calculator's default 10 s.f. put back after.
+  beforeAll(() => setCalcPrecisionSource(() => ({ decimals: 2, precisionMode: 'dp' })))
+  afterAll(() => setCalcPrecisionSource(() => ({ decimals: 10, precisionMode: 'sf' })))
+  describe('F7: Equations > Polynomial agrees with Numbers screen on complex roots', () => {
+    it('Numbers screen beyondTheReals gives "No real solution. In complex numbers: x = −0.5 ± 0.87i"', () => {
+      const res = beyondTheReals([1, 1, 1], 0)
+      expect(res).not.toBeNull()
+      expect('sentence' in res!).toBe(true)
+      if (res && 'sentence' in res) {
+        expect(res.sentence).toBe('No real solution. In complex numbers: x = −0.5 ± 0.87i')
+      }
+    })
+
+    it('calcModes.tsx Equations > Polynomial uses beyondTheReals to show the sentence rather than only separate rows', () => {
+      const target = process.env.TEST_PATCHED_CALCMODES
+        ? path.resolve(__dirname, '../patch2/calcModes.tsx')
+        : path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
+      const code = fs.readFileSync(target, 'utf8')
+      expect(code).toContain('beyondTheReals')
+    })
+  })
+})
+
+describe('fixb-f8-sin-matrix — sin of a matrix is refused in plain words', () => {
+  // F8 (browser check CALC-06): sin(MatA) on the Matrices screen said only "I can't work that out.";
+  // it must say why, in plain words.
+
+  describe('F8: sin(MatA) refusal message', () => {
+    it('says in plain words that the function takes a number, not a matrix', () => {
+      let caught: unknown = null
+      try {
+        math.evaluate('sin(MatA)', { MatA: math.matrix([[1, 0], [0, 1]]) })
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).not.toBeNull()
+      expect(errorSentence(caught).sentence).toBe('That function takes a number, not a matrix.')
+    })
+
+    it('leaves the other sentences as they were', () => {
+      expect(errorSentence(new Error('Unexpected end of expression')).sentence).toBe("I can't read that — check the brackets, and that every operator has a number on each side.")
+    })
   })
 })

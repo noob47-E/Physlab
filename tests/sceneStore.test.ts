@@ -7,6 +7,11 @@ import { dependentsOf } from '../src/renderer/src/core/evaluate'
 import { blankSceneFile, doomedBy, LABEL_PREFS, sidesOf, useScene } from '../src/renderer/src/core/store'
 import type { SceneObject } from '../src/renderer/src/core/types'
 import { readSource } from './helpers/repo'
+import fs from 'fs'
+import path from 'path'
+import { toDeg, heading } from '../src/renderer/src/math/vec'
+import { fmt } from '../src/renderer/src/math/format'
+import { committedValue } from '../src/renderer/src/ui/fields'
 
 const scene = () => useScene.getState()
 
@@ -492,5 +497,43 @@ describe('deleting a shape takes its sides', () => {
     const fatLine = readSource('src/renderer/src/render/FatLine.tsx')
     expect(fatLine).toMatch(/obj\.geometry\.dispose\(\)/)
     expect(fatLine).toMatch(/\(obj\.material as THREE\.Material\)\.dispose\(\)/)
+  })
+})
+
+describe('fixb-f6-angle-precision — the Properties Angle and Magnitude boxes show the screen decimals', () => {
+  describe('F6: Vector Properties Angle precision', () => {
+    it('heading([4, 3, 0]) in deg formats to 36.87 at 2 dp, but 36.8699 at default 4 dp', () => {
+      const deg = toDeg(heading([4, 3, 0]))
+      expect(fmt(deg, 4)).toBe('36.8699')
+      expect(fmt(deg, 2)).toBe('36.87')
+    })
+
+    it('Properties component passes decimals setting to NumField for Angle and Magnitude', () => {
+      // Check if the loaded/target Properties.tsx passes decimals to NumField
+      const target = process.env.TEST_PATCHED_PROPERTIES 
+        ? path.resolve(__dirname, '../patch2/Properties.tsx')
+        : path.resolve(__dirname, '../src/renderer/src/panels/Properties.tsx')
+      const code = fs.readFileSync(target, 'utf8')
+      expect(code).toContain('decimals={decimals}')
+    })
+  })
+})
+
+describe('fixb-f6-tab-through — tabbing through a Properties box writes nothing back', () => {
+  // F6 review: the Properties boxes show the screen's decimals now, so tabbing through a box must not
+  // write the rounded number back into the object.
+
+  describe('NumField commits only what the student edited', () => {
+    it('nothing for a box only tabbed through; the typed value for an edited one', () => {
+      expect(committedValue('1.23', false)).toBeNull() // shows 1.2345 rounded: must not become 1.23
+      expect(committedValue('1.23', true)).toBe(1.23)
+      expect(committedValue('2*3', true)).toBe(6)
+    })
+
+    it('the field marks itself edited only when its text changes', () => {
+      const src = readSource('src/renderer/src/ui/fields.tsx')
+      expect(src).toMatch(/onChange=\{\(e\) => \{\s*setText\(e\.target\.value\)\s*setEdited\(true\)/)
+      expect(src).toContain('const v = committedValue(text, edited)')
+    })
   })
 })

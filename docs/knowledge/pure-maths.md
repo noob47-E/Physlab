@@ -57,23 +57,23 @@ has been checked.
 ## Traps (each guarded by a test)
 - `ab` was one variable named "ab" — `writeTimes` now splits letter runs, but keeps mathjs names
   (sin, sqrt, pi, e, Infinity) and Greek names whole, also `theta` inside a run (2aθ → 2·a·θ).
-  `tests/af-ub.test.ts`, `tests/commands.test.ts` (θ² = 4).
+  `tests/pureWorking.test.ts` (af-ub block), `tests/commands.test.ts` (θ² = 4).
 - ∞ from the Maths field is the mathjs word `Infinity`; SymPy split it into I·n·f·i·n·i·t·y. The
   request keeps ∞ / `Infinity` (PhysLab spelling) and the SymPy adapter spells it `oo`, never
-  `spelledOut`, because `calculusVariable` would read `oo` as the letter o. `tests/af-ue.test.ts` (U16).
+  `spelledOut`, because `calculusVariable` would read `oo` as the letter o. `tests/calculusSteps.test.ts` (af-ue block, U16).
 - `commonFactor` is a hub (Factorise, grouping, Partial Fractions): changing its sign rule put a
   false line "x-1(x + 1)" in Factorise working. Partial Fractions moves a single-term factor's
-  number (−x, −2x) into its constant itself instead (U11). `tests/af-ub.test.ts` U11 follow-up.
+  number (−x, −2x) into its constant itself instead (U11). `tests/pureWorking.test.ts` (af-ub block) U11 follow-up.
 - Chip letters come from `chipLetter`/`sumPair`/`chainChip` in math/engine/sympy/calculusSteps.ts, never written in
-  literally (U15). `tests/af-ue.test.ts`, `af-ue2.test.ts`.
-- Long division used to stop at 65 terms and call the rest a remainder (U4). `tests/af-uc.test.ts`.
+  literally (U15). `tests/calculusSteps.test.ts` (af-ue and af-ue2 blocks).
+- Long division used to stop at 65 terms and call the rest a remainder (U4). `tests/pure.test.ts` (af-uc block).
 - `latexCheck` must split a displayed answer exactly as the producer wrote it (`\dfrac` pieces,
   `\frac` coefficients inside the whole part) or a correct answer is marked suspicious (U10).
-  `tests/af-ud.test.ts`.
+  `tests/pureWorking.test.ts` (af-ud block).
 - Rule chips must not use the student's own variable as their constant letter (U15).
 - Table rounding goes through `roundHalfAway` (math/format.ts), never `Math.round(v·10ⁿ)/10ⁿ` (U18).
 
 ## Tests
 `tests/pure.test.ts`, `pureWorking`, `pureRender`, `pureStore`, `complexFactor`, `stepTruth`,
-`calculusSteps`, `calculusWired`, `trigSteps`, `zscore`, `contracts`, and the batch files `af-ua` … `af-uf`, `af-ue2`.
+`calculusSteps`, `calculusWired`, `trigSteps`, `zscore`, `contracts`; the old batch files `af-ua` … `af-uf` and `af-ue2` now sit in these suites as blocks named after them.
 After any change to `rat.ts` or `mono.ts`, run all of them.

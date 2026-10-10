@@ -40,12 +40,12 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
    author's problem. A condition fails on NaN and on ±∞.
 9. **Reveal in KaTeX**: a choice is set in `\text{}`; the symbols KaTeX draws only in maths (∑ ∏ ∫ ≠ ∉ ∌) are set as
    maths inside it (`texText`).
-10. **Plain labels**: a prompt's maths is spoken by the importer's reader (`numbas.ts speakTex`) — `texToPlain`
+10. **Plain labels**: a prompt's maths is spoken by the one reader (`questions/speak.ts speakTex`) — `texToPlain`
     deletes unknown commands and lost ∩, ⊆, ∈ and escaped braces.
 11. **Show it** in Practice brings the tab it switched to forward (Sandbox, Lab Data: `panelToFront`).
 
 ## Traps
-- `texToPlain` (math/pure/work.ts) is for PhysLab's own generated text; foreign LaTeX goes through `speakTex`.
+- `texToPlain` (math/pure/work.ts) is for PhysLab's own generated text; any other LaTeX goes through `speakTex` (questions/speak.ts, CW4).
 - The bundled school-maths bank and the external Question Pack (`PhysLab-content\PhysLab Question Pack.pqjson`)
   must hold the same questions exactly (tests/content.test.ts): edit both, back the pack up first.
 - vitest has no DOM: a panel decision worth testing goes into a pure function (`solverState.ts`), plus a browser check.

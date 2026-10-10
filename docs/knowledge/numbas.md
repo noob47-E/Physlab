@@ -16,6 +16,7 @@ skipped whole, never half-imported, and the report says why in one plain sentenc
 - `htmlToLines`, `liftMaths` / `MATHS_START` / `restOfParagraph` / `closeOf`, `chipText` / `chipFor` / `chipLatex`,
   `spoken`, `ENTITIES` / `decodeEntities` — Numbas HTML → statement lines: maths spans are lifted FIRST, then
   `\var{…}` / plain-text `{…}` slots become chips, entities are decoded.
+- `speakTex` (LaTeX spoken as plain characters) lives in questions/speak.ts since CW4; `spoken` here calls it.
 - `readParts` / `readOnePart`, `readNumberAnswer`, `readMatrixPart`, `readChoicePart`, `readSteps` — PQ parts and
   worked steps; the tolerance comes from the min/max bounds and the precision settings.
 - `toExam`, `partToNumbas`, `numberEntry`, `gapfill`, `mathToJme` (with `dotsToProducts`), `textToHtml`, `jmeNumber` —

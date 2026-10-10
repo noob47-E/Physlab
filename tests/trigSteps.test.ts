@@ -459,3 +459,27 @@ describe('from the command bar', () => {
     expect(last?.kind).not.toBe('error')
   })
 })
+
+describe('af-uf — a zero angle prints as 0 in trig working', () => {
+  describe('U17: a zero angle prints as 0, not as empty brackets', () => {
+    it('cos(0) = 1 prints Prove cos 0 = 1 and no empty function brackets anywhere', () => {
+      const w = trigWorking('cos(0) = 1')
+      expect(w.title).toBe('Prove cos 0 = 1')
+      expect(w.input).toBe(String.raw`\cos 0 = 1`)
+      expect(w.moves[0]?.tex).toBe(String.raw`\cos 0`)
+      expect(w.moves.at(-1)?.tex).toBe('= 1')
+      for (const m of w.moves) {
+        expect(m.tex ?? '').not.toContain('()')
+      }
+    })
+
+    it('sin(0) = 0 prints Prove sin 0 = 0', () => {
+      const w = trigWorking('sin(0) = 0')
+      expect(w.title).toBe('Prove sin 0 = 0')
+      expect(w.input).toBe(String.raw`\sin 0 = 0`)
+      for (const m of w.moves) {
+        expect(m.tex ?? '').not.toContain('()')
+      }
+    })
+  })
+})

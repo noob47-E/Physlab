@@ -10,7 +10,7 @@ import { inDegrees, math, preprocess } from '../math/expr'
 import { toPrecisionHalfAway, type MeasureSettings } from '../math/format'
 import { JOBS, runPure, type JobId } from '../math/pure/run'
 import { type Answer, type Move, type Working } from '../math/pure/work'
-import { speakTex } from './numbas'
+import { speakTex } from './speak'
 import type { V3 } from '../math/vec'
 import {
   solveAddition,
@@ -176,7 +176,7 @@ const FILLED: ReadonlySet<string> = new Set()
 
 /**
  * Segments read as one plain sentence: the maths spoken, never raw LaTeX. Through the importer's
- * reader (numbas.ts speakTex), not texToPlain, which deletes every command it does not know: an
+ * reader (questions/speak.ts speakTex), not texToPlain, which deletes every command it does not know: an
  * imported set question's label read "Let A=\-1,-3,-9\ and … Then A B is" (∩, ⊆, braces lost).
  */
 export function spokenOf(segments: Segment[]): string {

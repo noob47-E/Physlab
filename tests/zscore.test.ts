@@ -591,3 +591,22 @@ describe('the four z-* rules in an authored choice part (questions/distractors.t
     expect(texts).toEqual(['0.9332', '0.0668', '0.5596', '1'])
   })
 })
+
+describe('af-uf — z-table rounding is half-away', () => {
+  describe('U18: table rounding uses half-away, not the binary double', () => {
+    it('positive exact ties round up', () => {
+      expect(toPlaces(73.225, 2)).toBe(73.23)
+      expect(toPlaces(68.225, 2)).toBe(68.23)
+    })
+
+    it('negative exact ties round away from zero', () => {
+      expect(toPlaces(-68.225, 2)).toBe(-68.23)
+    })
+
+    it('the Working answer for the top-5% question uses the half-away value', () => {
+      const w = zscoreWorking(parseNormalQuery('P(X > x) = 0.05, X ~ N(65, 5^2)')!)
+      expect(w.answers[0]?.tex).toBe('73.23')
+      expect(w.moves.some((m) => m.tex?.includes('73.23'))).toBe(true)
+    })
+  })
+})

@@ -34,6 +34,8 @@ import { usePracticeMission } from '../src/renderer/src/panels/practiceMission'
 import { bumpAction, pressAction } from '../src/renderer/src/core/actionSignals'
 import { resetGlobals } from './helpers/globals'
 import { readSource } from './helpers/repo'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const mission = (id: string) => {
   const m = MISSIONS.find((x) => x.id === id)
@@ -292,5 +294,114 @@ describe('the answers the missions promise', () => {
     await runCommand('A = <3, 4>')
     const a = scene().objects[scene().ev.names.get('A')!]
     expect(a.type === 'vector' && a.def.kind === 'free' ? a.def.comp.slice(0, 2) : null).toEqual([3, 4])
+  })
+})
+
+describe('af-tb1 — the six missions\' shape and words', () => {
+  // P-TOUR TB1 (crew-built, reviewed): the six missions' shape and words. What makes each mission
+  // tick — through the real routes, and never for something the student did not do — is in
+  // tests/tour.test.ts.
+
+  function filesUnder(dir: string): string[] {
+    const out: string[] = []
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name)
+      if (entry.isDirectory()) out.push(...filesUnder(p))
+      else if (p.endsWith('.ts') || p.endsWith('.tsx')) out.push(p)
+    }
+    return out
+  }
+
+  describe('Option B missions: shape and wording', () => {
+    it('every mission anchor is a data-tour name in the source (a literal or the tool shelf\'s tool-<id>)', () => {
+      const contents = filesUnder(join(__dirname, '../src/renderer/src'))
+        .map((f) => readFileSync(f, 'utf8'))
+        .join('\n')
+      for (const m of MISSIONS) {
+        if (/^tool-/.test(m.anchor)) expect(contents).toContain('data-tour={`tool-${id}`}')
+        else expect(contents).toContain(`data-tour="${m.anchor}"`)
+      }
+    })
+
+    it('every hint is plain English with no LaTeX and no code', () => {
+      for (const m of MISSIONS) {
+        expect(m.hint).toBe(m.hint.trim())
+        expect(m.hint).toMatch(/\.$/)
+        expect(m.hint).not.toMatch(/\\|\$|\{|}|=>|className=/)
+      }
+    })
+  })
+})
+
+describe('af-tb2 — the Start here chip, card and exact words', () => {
+  const tourSource = () => readSource('src/renderer/src/app/tour/Tour.tsx')
+  const topBarSource = () => readSource('src/renderer/src/app/TopBar.tsx')
+
+  describe('the Start here chip', () => {
+    beforeEach(() => {
+      useTour.getState().startOver()
+    })
+
+    it('keeps count of done missions and exposes its hidden state', () => {
+      const state = useTour.getState()
+      expect(state.done.length).toBe(0)
+      expect(state.chipHidden).toBe(false)
+
+      state.markDone(MISSIONS[0].id)
+      expect(useTour.getState().done.length).toBe(1)
+      expect(useTour.getState().done).toContain(MISSIONS[0].id)
+      expect(useTour.getState().chipHidden).toBe(false)
+    })
+
+    it('can be hidden and brought back', () => {
+      useTour.getState().setChipHidden(true)
+      expect(useTour.getState().chipHidden).toBe(true)
+
+      useTour.getState().setChipHidden(false)
+      expect(useTour.getState().chipHidden).toBe(false)
+
+      useTour.getState().hideChip()
+      expect(useTour.getState().chipHidden).toBe(true)
+
+      useTour.getState().startOver()
+      expect(useTour.getState().chipHidden).toBe(false)
+    })
+
+    it('disappears only when all missions are done or the student hides it', () => {
+      // The chip's own rule, in its source: hidden, or every mission counted.
+      expect(tourSource()).toContain('if (chipHidden || count >= MISSIONS.length) return null')
+      for (const m of MISSIONS) useTour.getState().markDone(m.id)
+      expect(MISSIONS.every((m) => useTour.getState().done.includes(m.id))).toBe(true)
+    })
+  })
+
+  describe('the Start here card', () => {
+    it('shows the exact all-done sentence word for word', () => {
+      expect(tourSource()).toContain(
+        'All done. You have used every part of PhysLab you need to start. Help ▸ Start here brings this list back.'
+      )
+    })
+
+    it('has Hide, Start over and Show me controls', () => {
+      const src = tourSource()
+      // The words as button text, not as a word in a comment.
+      expect(src).toMatch(/>\s*Hide\s*<\/button>/)
+      expect(src).toMatch(/>\s*Start over\s*<\/button>/)
+      expect(src).toMatch(/>\s*Show me\s*<\/button>/)
+    })
+  })
+
+  describe('exact words on the screens', () => {
+    it('Welcome screen has the third button "Start here (6 missions)"', () => {
+      expect(tourSource()).toContain('Start here (6 missions)')
+    })
+
+    it('Help menu has the "Start here" line', () => {
+      expect(topBarSource()).toMatch(/label:\s*'Start here'/)
+    })
+
+    it('top-bar chip says "Start here N of 6"', () => {
+      expect(tourSource()).toContain('Start here {count} of {MISSIONS.length}')
+    })
   })
 })

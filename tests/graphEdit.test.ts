@@ -4,7 +4,7 @@
 // Two things are mocked, as in commands.test.ts: the SymPy worker cannot start here, and the
 // stylesheet is not loaded, so colours fall back.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   cas: vi.fn(async (op: string) => ({ latex: `\\text{${op}}`, text: `${op}(x)`, numeric: null })),
@@ -448,3 +448,38 @@ describe('H21: the slider of a point on an object', () => {
   })
 })
 
+describe('fixb-f3-explicitGraph — editing an explicit graph with an expression', () => {
+  // The first test takes scene().order[0] as the graph it just drew; in its own file the store started
+  // empty, so start this block from an empty scene rather than from whatever the test above left.
+  beforeAll(() => scene().newScene())
+  beforeEach(resetGlobals)
+
+  describe('F3: editing an explicit graph with an expression', () => {
+    it('appends "y = " if the text has no equal sign', async () => {
+      // create a graph
+      await runCommand('y = x^2')
+      const id = scene().order[0]
+      expect(scene().objects[id].type).toBe('graph')
+      
+      // edit it with an expression
+      const res = await replaceGraphEquation(id, 'x^2 + 1')
+      expect(res.ok).toBe(true)
+      
+      // verify the graph updated its formula
+      const obj = scene().objects[id]
+      expect(obj.type).toBe('graph')
+      if (obj.type === 'graph') {
+        expect(obj.exprs[0]).toBe('x^2 + 1')
+      }
+    })
+
+    it('a line with its own relation sign keeps its meaning (no "y = " in front)', async () => {
+      await runCommand('y = x^2')
+      const id = scene().order[0]
+      const res = await replaceGraphEquation(id, 'y < x')
+      expect(res.ok).toBe(true)
+      const obj = scene().objects[id]
+      expect(obj.type === 'graph' ? obj.source : '').toBe('y < x')
+    })
+  })
+})

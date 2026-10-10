@@ -451,3 +451,126 @@ describe('sending a Sandbox recording to Lab Data', () => {
     expect(lab).toContain('onClick={() => setCurrent(t.id)}')
   })
 })
+
+describe('af-lb — typed precision, r², CSV quotes and column removal in Lab Data', () => {
+  const setCellText = setCell as unknown as (t: LabTable, row: number, col: number, value: number | null, text?: string | null) => LabTable
+
+  describe('typed precision is kept', () => {
+    it('stores the text a reading was typed with', () => {
+      const t = setCellText(emptyTable('Free fall'), 0, 0, 0.2, '0.200')
+      expect(t.reads?.[0][0]).toBe('0.200')
+      expect(t.rows[0][0]).toBe(0.2)
+    })
+
+    it('writes that text to CSV rather than shortest-form formatting', () => {
+      const t = setCellText(emptyTable('Free fall'), 0, 0, 0.2, '0.200')
+      const csv = toCsv(t, resolveValues(t))
+      expect(csv.split('\n')[1].split(',')[0]).toBe('0.200')
+    })
+
+    it('carries the recorded text through parseTable and applyPaste', () => {
+      const p = parseTable('0.200,1.2\n')
+      const t = applyPaste(emptyTable('Free fall'), p)
+      expect(t.rows).toEqual([[0.2, 1.2]])
+      expect(t.reads?.[0][0]).toBe('0.200')
+    })
+  })
+
+  describe('r² is relative to the readings', () => {
+    it('does not call a scattered set of tiny readings a perfect fit', () => {
+      const xs = [1, 2, 3]
+      const ys = [1e-7, 2e-7, 3.2e-7]
+      const fit = fitOf(xs, ys, 'linear')!
+      // Least-squares line through these three points: y ≈ -1.333e-8 + 1.1e-7 x.
+      // ssTot = 2.4266667e-14, ssRes = 6.6666667e-17, so r² = 0.9972527.
+      expect(fit.r2).toBeCloseTo(0.9972527472527473, 6)
+      expect(fit.r2).toBeLessThan(1)
+    })
+  })
+
+  describe('CSV parser respects quotes and BOM', () => {
+    it('keeps separators inside quotes rather than splitting them', () => {
+      const p = parseTable('"Time, t","Distance, d"\n1,2\n')
+      expect(p.header).toEqual([
+        { name: 'Time, t', unit: '' },
+        { name: 'Distance, d', unit: '' }
+      ])
+      expect(p.rows).toEqual([[1, 2]])
+    })
+
+    it('strips a UTF-8 BOM before reading the caption row', () => {
+      const p = parseTable('\uFEFFt / s,d / m\n1,2\n')
+      expect(p.header).toEqual([
+        { name: 't', unit: 's' },
+        { name: 'd', unit: 'm' }
+      ])
+      expect(p.rows).toEqual([[1, 2]])
+    })
+  })
+
+  describe('removing a column never leaves an empty table', () => {
+    it('keeps the last real column when its only companion is its uncertainty', () => {
+      const base = emptyTable('Free fall')
+      const one: LabTable = { ...base, columns: [base.columns[0]], rows: [[null]] }
+      const withUncertainty = addUncertainty(one, one.columns[0].id)
+      expect(withUncertainty.columns).toHaveLength(2)
+
+      const removed = removeColumn(withUncertainty, withUncertainty.columns[0].id)
+      expect(removed.columns.length).toBeGreaterThan(0)
+      expect(removed.columns[0].name).toBe(one.columns[0].name)
+    })
+  })
+
+  describe('captions with spaces become labels', () => {
+    it('keeps the caption as a display label and derives a formula-safe name', () => {
+      const p = parseTable('Drop height (m),Distance (m)\n1,2\n')
+      const t = applyPaste(emptyTable('Free fall'), p)
+
+      expect(t.columns.map((c) => c.label)).toEqual(['Drop height', undefined])
+      expect(t.columns.map((c) => c.name)).toEqual(['Drop_height', 'Distance'])
+      expect(t.columns[0].unit).toBe('m')
+      expect(headerOf(t.columns[0])).toBe('Drop height / m')
+      expect(t.rows).toEqual([[1, 2]])
+    })
+  })
+})
+
+describe('af-sm4 — Sandbox recordings keep every value a number and every plotted quantity', () => {
+  describe('P16 and P9: Sandbox captures', () => {
+    it('requests a quadratic fit for height against time, and populates reads with 5 sig figs', () => {
+      const samples = [
+        { t: 1.2, x: 0, y: 5, v: 0, ke: 0, pe: 49.05, p: 0 }
+      ]
+      const table = tableFrom('Test', samples)
+      
+      // P16: fit should be quadratic for height against time
+      expect(table.plot.fit).toBe('quadratic')
+      
+      // P9: reads should store the formatted string with trailing zeros
+      expect(table.reads![0][0]).toBe('1.2000') // 1.2 to 5 sig figs
+      expect(table.reads![0][2]).toBe('5.0000') // 5 to 5 sig figs
+      
+      // Rows should still contain the numeric values
+      expect(table.rows[0][0]).toBe(1.2)
+      expect(table.rows[0][2]).toBe(5)
+    })
+  })
+
+  describe('Sandbox captures keep every value a number (part head check)', () => {
+    it('a reading of 3 × 10⁻⁷ is a number in the row, and the text agrees with the row', () => {
+      const table = tableFrom('Test', [{ t: 0.1, x: 3e-7, y: 5.25, v: 1e-9, ke: 0, pe: 0, p: 0 }])
+      expect(table.rows[0][1]).toBe(3e-7)
+      expect(table.rows[0][3]).toBe(1e-9)
+      for (const [c, v] of table.rows[0].entries()) expect(Number(table.reads![0][c]), String(c)).toBe(v)
+    })
+  })
+
+  describe('Sandbox captures send every quantity the panel plots (H30)', () => {
+    it('has PE and momentum columns, filled from the reading', () => {
+      const table = tableFrom('Test', [{ t: 0.1, x: 1, y: 2, v: 3, ke: 4.5, pe: 19.62, p: 3 }])
+      expect(table.columns.map((c) => `${c.name} (${c.unit})`)).toEqual(['t (s)', 'x (m)', 'y (m)', 'v (m/s)', 'KE (J)', 'PE (J)', 'p (kg m/s)'])
+      expect(table.rows[0]).toEqual([0.1, 1, 2, 3, 4.5, 19.62, 3])
+      expect(table.reads![0].length).toBe(7)
+    })
+  })
+})
