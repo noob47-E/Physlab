@@ -194,6 +194,7 @@ function distinct(qs: Quantity[]): Quantity[] {
 const same = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b))
 
 /** Twelve significant figures, the way a number goes into a formula here (motion.ts writes them so too). */
+// eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-5): a formula's number, read back by motion.ts and the number line, but the roots curve's formula is also printed in the picture's note ("x − 0.333333333333")
 const lit = (v: number): string => String(Number(v.toPrecision(12)))
 
 // ---------------------------------------------------------------------------
@@ -367,6 +368,7 @@ export function solveSuvat(k: Suvat): Solved | null {
     }
   }
   const { u, v, a, t, s } = x
+  // eslint-disable-next-line no-restricted-syntax -- a time in seconds: a stretch of a picosecond or less is no motion to draw
   if (!ok(u) || !ok(v) || !ok(a) || !ok(t) || !ok(s) || !(t > 1e-12)) return null
   // Every equation must hold with the numbers as found, or four givens contradicted each other.
   const agree = same(v, u + a * t) && same(s, ((u + v) / 2) * t) && same(s, u * t + (a * t * t) / 2) && same(v * v, u * u + 2 * a * s)
@@ -375,6 +377,7 @@ export function solveSuvat(k: Suvat): Solved | null {
 
 /** The first moment after the start at which ut + ½at² = s, or undefined when there is none. */
 function firstTime(u: number, a: number, s: number): number | undefined {
+  // eslint-disable-next-line no-restricted-syntax -- an acceleration in m/s²: under 10⁻¹² m/s² the motion is steady, and the formula below would divide by it
   if (Math.abs(a) < 1e-12) return u !== 0 && s / u > 0 ? s / u : undefined
   const disc = u * u + 2 * a * s
   if (disc < 0) return undefined
@@ -485,6 +488,7 @@ function readingStep(total: number): number {
  * table holds all of that and the slope a between its rows.
  */
 function motionVisual(k: Solved, x0: number, answers: Answers, rule: 'suvat' | 'vertical', why: string, wait = 0): AutoVisual {
+  // eslint-disable-next-line no-restricted-syntax -- an acceleration in m/s²: under 10⁻¹² m/s² the stretch is drawn at steady speed, as firstTime solves it
   const seg: MotionSegment = Math.abs(k.a) < 1e-12 ? { kind: 'uniform', duration: lit(k.t), v: lit(k.u) } : { kind: 'accelerate', duration: lit(k.t), a: lit(k.a) }
   // `wait` is time standing still after a stretch that ends at rest (a car braked to a stop).
   const segments: MotionSegment[] = wait > 0 ? [seg, { kind: 'rest', duration: lit(wait) }] : [seg]
@@ -497,6 +501,7 @@ function motionVisual(k: Solved, x0: number, answers: Answers, rule: 'suvat' | '
   const vAt = (tau: number): number => (wait > 0 && tau > k.t ? 0 : k.u + k.a * tau)
   // A motion that turns (a ball at the top of its flight) marks the moment on both plots: the v–t
   // line crosses zero there and the x–t curve peaks at the top height, which is often what is asked.
+  // eslint-disable-next-line no-restricted-syntax -- an acceleration in m/s², the same steady-speed edge as the stretch above: no turn
   const turn = Math.abs(k.a) < 1e-12 ? NaN : -k.u / k.a
   const turns = turn > 1e-9 && turn <= k.t + 1e-9
   const turnAt = turns ? [turn] : []
@@ -884,6 +889,7 @@ function extremum(f: (x: number) => number, a: number, b: number, least: boolean
   const r = (Math.sqrt(5) - 1) / 2
   let lo = a
   let hi = b
+  // eslint-disable-next-line no-restricted-syntax -- not a noise test but where the search stops: a turn is compared with an answer by marksAs (its tolerance, or `same` at 10⁻⁶), far coarser, and 80 steps cap it
   for (let i = 0; i < 80 && hi - lo > 1e-12; i++) {
     const c = hi - r * (hi - lo)
     const d = lo + r * (hi - lo)
@@ -1187,6 +1193,7 @@ const TENS = [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6].map((k) => 10 ** k)
 // absolute test, so a given of +1×10⁻⁷ would otherwise still hide a drawn −1×10⁻⁷ (and a given
 // of 0 a drawn 1×10⁻⁷).
 const sameSign = (g: number, x: number): boolean => (g === 0 ? x === 0 : g > 0 === x > 0)
+// eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-4): absolute, so a picture of an answer under 10⁻¹² (1.6×10⁻¹⁹ C) is drawn before it is answered (tests/noiseFloors.test.ts)
 const fresh = (shown: number[], given: number[]): number[] => shown.filter((x) => Math.abs(x) > 1e-12 && !given.some((g) => sameSign(g, x) && same(g, x)))
 
 const holdsSizeOf = (shown: number[], answers: Answer[]): boolean => holdsSize(shown, answers)

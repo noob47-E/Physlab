@@ -80,8 +80,13 @@ describe('guard: the lint fences', () => {
   }, 60_000)
 
   it('an interim file keeps the fence it is not listed for', async () => {
-    // calc/engine.ts is listed for its 1e-12 floors only.
-    expect(await fenceErrors('export const a = (x: number) => x.toFixed(2)\n', 'src/renderer/src/calc/engine.ts')).toHaveLength(1)
+    // calc/roots.ts is listed for its 1e-12 floors only.
+    expect(await fenceErrors('export const a = (x: number) => x.toFixed(2)\n', 'src/renderer/src/calc/roots.ts')).toHaveLength(1)
+  }, 60_000)
+
+  it('a file that has left the interim list is fenced again: a new 1e-12 there needs its own reason (CW3b)', async () => {
+    expect(await fenceErrors('export const c = 1e-12\n', 'src/renderer/src/calc/engine.ts')).toHaveLength(1)
+    expect(await fenceErrors('export const a = (x: number) => x.toPrecision(12)\n', 'src/renderer/src/panels/vectorCalcStore.ts')).toHaveLength(1)
   }, 60_000)
 
   it('the allow-list only shrinks: no new file, no wider allowance', () => {

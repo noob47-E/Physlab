@@ -35,6 +35,7 @@ import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from
 import { factorsOf } from './factor'
 import { texAngle, type DigitSettings } from '../format'
 import { calcNum, formatComplex } from '../../calc/format'
+import { tidyComplex } from '../../calc/engine'
 import { labelTex, labelText } from '../../calc/labels'
 import { scene } from '../../core/store'
 import {
@@ -1041,11 +1042,9 @@ function decimalAnswer(title: string, input: string, node: MathNode, src: string
   const v = numericValue(src)
   if (!v) return failed(title, input, why)
   if (!Number.isFinite(v.re) || !Number.isFinite(v.im)) return failed(title, input, 'Worked out with decimals this does not come to a number, so there is no answer to give.')
-  // A part that is only round-off beside the other is 0, as on the calculator line
-  // (calc/engine.ts tidyComplex): e^(iπ) is −1, not −1 + 1.2×10⁻¹⁶i.
-  const eps = 1e-12 * Math.max(Math.abs(v.re), Math.abs(v.im))
-  const re = Math.abs(v.re) < eps ? 0 : v.re
-  const im = Math.abs(v.im) < eps ? 0 : v.im
+  // A part that is only round-off beside the other is 0, by the calculator line's own rule, so the
+  // two never disagree: e^(iπ) is −1, not −1 + 1.2×10⁻¹⁶i.
+  const { re, im } = tidyComplex(v)
   const typedI = node.filter((n) => n.type === 'SymbolNode' && (n as unknown as { name: string }).name === 'i').length > 0
   if (!typedI && im === 0 && !real) return failed(title, input, NO_I)
   return { title, input, moves: [], answers: [{ label: 'Answer', tex: `\\approx ${decimalTex(re, im, digits)}` }], noWorking: true, reason: why }

@@ -939,6 +939,7 @@ function touchesAt(F: Fxy, x: number, y: number, cell: number, [x0, x1, y0, y1]:
     y = next[1]
     best = Math.abs(F(x, y))
   }
+  // eslint-disable-next-line no-restricted-syntax -- relative already (|F| at the bottom against |F| around it); the number against isNoise's 10⁻¹⁵ is CW9's (P-CW2-REPORT class 1)
   return best <= 1e-12 * ring
 }
 
@@ -1236,9 +1237,9 @@ function exactSolutions(expr: string): { real: number[]; complex: XComplex[] } |
   // polyRoots is good to only about 10⁻⁸ beside a double root: it read two real solutions as a complex pair, and
   // (x − 1)² = 10⁻²⁰ as 0.999999995 and 1.000000003 (H29). A quadratic's discriminant is settled on its exact
   // coefficients, and when it is positive the pair is worked out from it. Two solutions closer than 10⁻¹² of
-  // their size are one to the last digit a sentence can add to tell them apart (lang/commands.ts
-  // MAX_EXTRA_DIGITS): (x − 1)(x − 1.0000000000001) = 0 is the one solution 1, 1 ± 10⁻¹⁰ are two.
+  // their size are taken as one (H26): (x − 1)(x − 1.0000000000001) = 0 is the one solution 1, 1 ± 10⁻¹⁰ are two.
   const pair = realPairOfQuadratic(prim)
+  // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-6): the pair is accurate, and the sentence's extra digits (MAX_EXTRA_DIGITS) could write 1 and 1.0000000000001 apart
   if (pair) return { real: distinct(pair, 1e-12, true), complex: [] }
   return { real: distinct(roots.filter((r) => r.im === 0).map((r) => r.re), 1e-9, true), complex: roots.filter((r) => r.im > 0).map(({ re, im }) => ({ re, im })) }
 }
@@ -1268,6 +1269,7 @@ function agreeAt(sides: [Fx, Fx], x: number): boolean | null {
   const a = sides[0](x)
   const b = sides[1](x)
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the larger side); the number against sameNumber's 10⁻¹⁵ is CW9's (P-CW2-REPORT class 1)
   return Math.abs(a - b) <= 1e-12 * Math.max(Math.abs(a), Math.abs(b))
 }
 

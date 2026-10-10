@@ -63,7 +63,8 @@ P-NUM (0.9). Every number a student sees goes through `math/format.ts`; never ca
 - A vector component that rounds to 0 kept its sign ("1i − 0j"). Guarded by format.test.ts › H4.
 
 ## Tests
-tests/format.test.ts · questionReveal · checkAnswer · answerKinds · ecf · content · practiceTolerance · exprPrecedence.
+tests/format.test.ts · questionReveal · checkAnswer · answerKinds · ecf · content · practiceTolerance · exprPrecedence ·
+noise · noiseFloors.
 
 ## The one writer (CLEANUP-PLAN.md CW3)
 Every number a student sees goes through math/format.ts (or calc/format.ts, built on it). A `toFixed`,
@@ -78,6 +79,39 @@ Traps met in CW3: the old way to get a number without its unit cut the last word
 unit of two words would lose only its last (the bar keeps only the first word of `10 N m` today:
 tests/cw3-found/vectorTwoWordUnit.test.ts); and TeX cut out of `answerTex` kept the space after `\approx`,
 harmless to KaTeX but not to a string comparison.
+
+## The 10⁻¹² floors that stay (CLEANUP-PLAN.md CW3b)
+math/noise.ts (`isNoise`, `sameNumber`) judges rounding noise against the sizes a number came from, at 10⁻¹⁵ of the
+largest. A literal 1e-12 outside it fails lint; in the eight big files (calc/engine, core/visualize, lang/commands,
+math/expr, math/pure/complex, math/pure/trigIdentity, panels/vectorCalcStore, questions/autoVisual) each one that stays
+says why in place, and tests/noiseFloors.test.ts pins it (most on both sides of the floor). The reasons that count:
+- **the writer's own display floor**: `fmt`, `tex`, `texIJK`, `texMeasure`, `fmtPoint` write |v| < 10⁻¹² as 0, so a
+  line that decides "is this written?" (the bar's third coordinate and θ, the Vectors panel's scientific-form switch)
+  uses the same 10⁻¹². Mind the edge: the writer drops a value strictly under 10⁻¹², so a test of `> 1e-12` disagrees
+  with it at exactly 10⁻¹² (A = <3, 4, 1e-12> is written with its z and still given θ — a found bug, it.fails);
+- **a fixed physical meaning**: a time in seconds, an acceleration in m/s² (motion pictures);
+- **not a noise test**: a search's stopping width, a sort key, a card field's own 12-figure text;
+- **relative already** (tidyComplex, touchesAt, agreeAt, the panel's withoutNoise, its component rule and ijkLatex,
+  which takes a drawn vector's noise as 10⁻¹² of a grid square or of its own size once it is longer): 10⁻¹² of the
+  sizes involved, where isNoise uses 10⁻¹⁵. Moving them changes answers in that band (2∠3690° leaves 6.4×10⁻¹⁵ of its
+  size); which number is CW9's choice (P-CW2-REPORT, class 1).
+A floor that gives a wrong answer today is marked "parked for the owner" with its OWNER-APPROVALS id (CW3b-1 … 6).
+
+`sinc` needs no floor but 0 itself (`isNoise(x)` with nothing beside it is x = 0): sin x is x to the last bit below
+10⁻⁸. Pure Maths' complex decimal uses the Calculator's `tidyComplex`, not a copy.
+
+Traps met in CW3b:
+- An absolute floor makes an answer depend on the units it is typed in: x³ − 10⁻³⁹ = 0 answers 0 (CW3b-1),
+  10⁻¹⁵x² − 10⁻¹⁵ ≤ 0 answers every x (CW3b-2), 10⁻¹³ sin x = 0 is "Proved" (CW3b-3), and a picture marking an answer of
+  1.6×10⁻¹⁹ C is shown before the answer (CW3b-4).
+- A number tidied "for a formula" can still be printed: the roots picture's note shows its formula, so 1/3 reads
+  0.333333333333 there (CW3b-5), and a trig identity's step writes a typed 0.1234567890123 as the tidied
+  0.123456789012 (CW3b-3). Check every route a "never shown" number can take before saying so.
+- A comment's reason can be false while its code is pinned: two solutions 10⁻¹³ apart are merged "because a sentence
+  cannot tell them apart", but at 2 d.p. it can (CW3b-6).
+- The bar writes a vector under 10⁻¹² as 0⃗, magnitude 0, with a plane angle (tests/noiseFloors.test.ts, it.fails):
+  the writer's floor, which the Vectors panel already steps round (H13).
+- The golden `questions` sweep does not print pictures: a change to questions/autoVisual.ts needs its own test.
 
 ## Not yet on the rule
 - the Calculator panel's keypad converter, which turns any "×10" into a power (calc/engine.ts:14; P-CALC)

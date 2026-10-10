@@ -384,6 +384,10 @@ neighbour is open.
   `thousands`, `unitTail`, `anyResult`). A Lab Data comma is read only by `commaAsPoint` (lab/values.ts). Never add a
   reader of your own. A changed reading is an answer change: tests/numberReader.test.ts reads 239 typed lines through
   every box and fails on any difference.
+- **An absolute 10⁻¹² makes an answer depend on its units.** x³ − 10⁻³⁹ = 0 answered 0, 10⁻¹⁵x² − 10⁻¹⁵ ≤ 0 gave every
+  x, and 10⁻¹³ sin x = 0 was "Proved". Judge rounding noise against the sizes it came from (math/noise.ts). A 10⁻¹² that
+  stays says in place what it means (the writer's own display floor, a time in seconds, a search width), and
+  tests/noiseFloors.test.ts pins it.
 - **The scene store's helpers never import the store.** `core/legoScene.ts` (Break apart and Fuse) and `core/doomed.ts`
   (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
   them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.

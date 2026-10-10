@@ -6,6 +6,7 @@
 
 import { all, create, type MathNode } from 'mathjs'
 import { angleBetween, cross as vcross, dot as vdot, len, normalize, project, type V3 } from './vec'
+import { isNoise } from './noise'
 
 export const math = create(all, { number: 'number', precision: 64 })
 // Points after Z are named A′, A″ (core/naming.ts); a prime straight after a letter or another prime is part of the name.
@@ -1091,7 +1092,9 @@ const F = {
   times: (a: number, b: number) => a * b,
   fact: (n: number) => math.gamma(n + 1),
   gamma: (n: number) => math.gamma(n),
-  sinc: (x: number) => (Math.abs(x) < 1e-12 ? 1 : Math.sin(x) / x),
+  // Only 0 itself needs the limit (isNoise with nothing beside it is exactly 0): sin x is x to the
+  // last bit below 10⁻⁸, so sin x / x is already exactly 1 everywhere a floor of 10⁻¹² once caught.
+  sinc: (x: number) => (isNoise(x) ? 1 : Math.sin(x) / x),
   step: (x: number) => (x < 0 ? 0 : 1),
   mean: (...a: number[]) => a.reduce((s, v) => s + v, 0) / a.length
 }

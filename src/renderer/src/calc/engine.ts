@@ -408,6 +408,7 @@ export const argOf = (z: unknown): number => {
  * the number's own size, never absolute — an answer of 1.6×10⁻¹⁹ on its own must survive.
  */
 export function tidyComplex(c: { re: number; im: number }): { re: number; im: number } {
+  // eslint-disable-next-line no-restricted-syntax -- relative already; isNoise's 10⁻¹⁵ would write 2∠3690°'s 6.4×10⁻¹⁵ of the size as a number, and the number is CW9's to choose (P-CW2-REPORT class 1)
   const eps = 1e-12 * Math.max(Math.abs(c.re), Math.abs(c.im))
   return { re: Math.abs(c.re) < eps ? 0 : c.re, im: Math.abs(c.im) < eps ? 0 : c.im }
 }
@@ -1036,6 +1037,7 @@ export function polyRoots(coeffs: number[]): Cx[] {
     if (maxStep < 1e-15) break
   }
   return roots
+    // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-1): absolute floors, so x³ − 10⁻³⁹ = 0 answers 0 (tests/noiseFloors.test.ts)
     .map((z) => ({ re: Math.abs(z.re) < 1e-12 ? 0 : z.re, im: Math.abs(z.im) < 1e-9 ? 0 : z.im }))
     .sort((a, b) => a.re - b.re || a.im - b.im)
 }
@@ -1055,6 +1057,7 @@ export function polyInequality(coeffs: number[], op: '<' | '<=' | '>' | '>='): {
     .filter((v, i, arr) => arr.findIndex((w) => Math.abs(w - v) < 1e-9) === i)
     .sort((a, b) => a - b)
   const p = (x: number) => coeffs.reduce((acc, c) => acc * x + c, 0)
+  // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-2): absolute on p's value, so 10⁻¹⁵x² − 10⁻¹⁵ ≤ 0 answers every x (tests/noiseFloors.test.ts)
   const ok = (v: number) => (op === '<' ? v < 0 : op === '<=' ? v <= 1e-12 : op === '>' ? v > 0 : v >= -1e-12)
   const edges = [-Infinity, ...real, Infinity]
   const out: { from: number; to: number; closedFrom: boolean; closedTo: boolean }[] = []

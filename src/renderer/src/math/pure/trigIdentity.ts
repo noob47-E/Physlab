@@ -68,7 +68,9 @@ interface Sum {
  * 1.000013824, which made a correct step look wrong), and a leftover below 1e-12 is 0.
  */
 const clean = (v: number): number => {
+  // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-3): an absolute floor, so 10⁻¹³ sin x = 0 is "Proved" (tests/noiseFloors.test.ts)
   if (Math.abs(v) < 1e-12) return 0
+  // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-3): 12 figures read 1 + 10⁻¹³ as 1, so that identity is "Proved", and a step writes a typed 0.1234567890123 as 0.123456789012
   return Number(v.toPrecision(12))
 }
 const linKey = (a: Lin): string => a.map(([v, c]) => `${c}${v}`).join('+')
@@ -83,6 +85,7 @@ const linAdd = (a: Lin, b: Lin): Lin => makeLin([...a, ...b])
 const linSub = (a: Lin, b: Lin): Lin => linAdd(a, linScale(b, -1))
 
 const negs = (a: Lin): number => a.filter(([, c]) => c < 0).length
+// eslint-disable-next-line no-restricted-syntax -- not shown: `sort` is a key that puts the factors in order
 const fnBase = (f: Fn, a: Lin): FnBase => ({ k: 'f', f, a, key: `${f}(${linKey(a)})`, sort: `0|${negs(a)}|${a.map(([v, c]) => `${v}:${(1000 - c).toFixed(3)}`).join(',')}|${FN_ORDER[f]}` })
 const sumBase = (s: Sum): SumBase => ({ k: 's', s, key: `[${s.key}]`, sort: `1|${s.key}` })
 const factorKey = (x: Factor): string => `${x.b.key}^${x.e}`

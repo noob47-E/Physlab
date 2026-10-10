@@ -12,7 +12,8 @@
 // sameNumber applies that zero rule to a − b, so it means "the same computed number" (a few
 // rounding steps). It is NOT the marking rule: a typed answer is marked equal within
 // tol + noiseFloor(answer), 10⁻⁹ of the answer — a million times wider. Do not use it to mark until
-// CW9, which moves every caller here, decides both numbers. Nothing calls this file yet.
+// CW9, which moves every caller here, decides both numbers. Callers so far (CW3b): math/expr.ts's sinc
+// floor uses isNoise; CW9 moves the rest.
 
 /**
  * Whether `value` is rounding noise beside the inputs it was worked out from: exactly 0, or within

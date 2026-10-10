@@ -55,6 +55,7 @@ export interface Card {
  * writes 10²¹ as "1e+21" and 1.6×10⁻¹⁹ as "1.6e-19", which a field would show as typed (H8).
  */
 const exactNumber = (x: number): string => {
+  // eslint-disable-next-line no-restricted-syntax -- not the student's precision: a card's own field text, at 12 figures so it reads back as the same vector (H8); math/format.ts has no writer for a field
   const text = String(Number(x.toPrecision(12)))
   const sci = /^(-?[\d.]+)e([+-]\d+)$/.exec(text)
   return sci ? `${sci[1]}\\times 10^{${Number(sci[2])}}` : text
@@ -73,6 +74,7 @@ const exactNumber = (x: number): string => {
  */
 export const ijkLatex = (v: V3, held = false): string => {
   const big = Math.max(...v.map(Math.abs))
+  // eslint-disable-next-line no-restricted-syntax -- drawn: a drag's noise, 10⁻¹² of a grid square or of the vector's own size once it is longer; held: 10⁻¹² of its own size; the panel's rule, its number CW9's (P-CW2-REPORT class 1)
   const floor = 1e-12 * (held ? big : Math.max(1, big))
   return (
     v
@@ -390,7 +392,7 @@ export function unknownNames(src: string, scope: Record<string, unknown>, cardNa
     if (n.type !== 'SymbolNode' || path === 'fn' || !n.name) return
     if (n.name in scope || KNOWN_NAMES.has(n.name) || out.includes(n.name)) return
     // 2A is twice card A even when card A cannot be read: a card's name is never a unit.
-    if (!cardNames.includes(n.name) && (isUnitAfterNumber(n.name, parent) || units.has(node))) return
+    if (isUnitName(n.name, cardNames) && (afterNumber(parent) || units.has(node))) return
     out.push(n.name)
   })
   return out
@@ -405,6 +407,16 @@ const isValuelessUnit = (name: string): boolean => {
     return false
   }
 }
+
+/**
+ * Which typed name is a unit, one rule for the reader (unknownNames) and the note (droppedUnits):
+ * a name mathjs knows as a unit that is not a card's name (mathjs reads B as the byte and N as the
+ * newton), a unit vector or a known name (deg and rad are units to mathjs). Where a unit may stand
+ * is the reader's own rule — straight after a number, or the line is refused — so on a component
+ * line that reads, the note names exactly the units the reader let through.
+ */
+const isUnitName = (name: string, cardNames: readonly string[]): boolean =>
+  !(name in UNIT_VECTORS) && !KNOWN_NAMES.has(name) && !cardNames.includes(name) && isValuelessUnit(name)
 
 /** A unit and nothing else: N, m/s, s^2, kg m. */
 const isUnitOnly = (n: UnitNode | undefined): boolean =>
@@ -424,7 +436,7 @@ const isMeasure = (n: UnitNode | undefined): boolean =>
 
 /**
  * The unit symbols of every number-with-units in a line — "10 kg m/s ∠ 30°", "10 N m at 30°". Only
- * the unit straight after the number was known (isUnitAfterNumber), so once a size could carry more
+ * the unit straight after the number was known (afterNumber), so once a size could carry more
  * than one unit word the second one, m, was refused as "There is no vector called m".
  */
 function unitsAfterNumbers(root: unknown): Set<unknown> {
@@ -460,14 +472,9 @@ export function namesIn(src: string): string[] {
 }
 
 /** "10 N at 30°": a unit written straight after a number is a unit, not a missing vector. */
-function isUnitAfterNumber(name: string, parent: unknown): boolean {
+function afterNumber(parent: unknown): boolean {
   const p = parent as { type?: string; implicit?: boolean; args?: { type: string }[] } | null
-  if (p?.type !== 'OperatorNode' || !p.implicit || p.args?.[0]?.type !== 'ConstantNode') return false
-  try {
-    return (math as unknown as { Unit: { isValuelessUnit: (s: string) => boolean } }).Unit.isValuelessUnit(name)
-  } catch {
-    return false
-  }
+  return p?.type === 'OperatorNode' && !!p.implicit && p.args?.[0]?.type === 'ConstantNode'
 }
 
 /** The sentence for a name nothing gives a value to, in a card or in the expression box. */
@@ -620,6 +627,7 @@ function withoutNoise(out: unknown, scale: number): unknown {
   const all = numbers(list)
   // A division by zero is the caller's to report, not noise.
   if (!all.length || !all.every(Number.isFinite)) return out
+  // eslint-disable-next-line no-restricted-syntax -- relative already; tests/noise.test.ts measures this rule against isNoise's 10⁻¹⁵, and the number is CW9's (P-CW2-REPORT class 1)
   const floor = 1e-12 * Math.max(scale, ...all.map(Math.abs))
   const clean = (x: unknown): unknown => (typeof x === 'number' ? (Math.abs(x) < floor ? 0 : x) : Array.isArray(x) ? x.map(clean) : x)
   return clean(list)
@@ -627,9 +635,10 @@ function withoutNoise(out: unknown, scale: number): unknown {
 
 /**
  * The units a typed vector line leaves out (R2-2). A vector holds plain numbers: "<3 m, 4 m>" is
- * worked as 3, 4 and its size 5 has no unit, which the student could not tell. Names of other cards
- * (`names`) are never units, though mathjs reads B as the byte and N as the newton; i, j, k, the
- * angle sign and degrees are not either. Null when nothing was dropped or the line cannot be read.
+ * worked as 3, 4 and its size 5 has no unit, which the student could not tell. Which names are
+ * units is isUnitName's rule, the reader's own; they are named wherever they stand, because the
+ * size box of a size ∠ angle card reads a unit anywhere (evalNumber). Null when nothing was dropped
+ * or the line cannot be read.
  */
 export function droppedUnits(text: string, names: string[] = []): string[] | null {
   if (!text.trim()) return null
@@ -638,9 +647,8 @@ export function droppedUnits(text: string, names: string[] = []): string[] | nul
   try {
     math.parse(preprocess(latexToMath(raised, { vectorOps: true }))).traverse((node, path) => {
       const n = node as unknown as { type: string; name?: string }
-      if (n.type !== 'SymbolNode' || path === 'fn' || !n.name) return
-      if (n.name in UNIT_VECTORS || KNOWN_NAMES.has(n.name) || names.includes(n.name) || found.includes(n.name)) return
-      if ((math.Unit as unknown as { isValuelessUnit: (s: string) => boolean }).isValuelessUnit(n.name)) found.push(n.name)
+      if (n.type !== 'SymbolNode' || path === 'fn' || !n.name || found.includes(n.name)) return
+      if (isUnitName(n.name, names)) found.push(n.name)
     })
   } catch {
     return null
@@ -775,6 +783,7 @@ export function tooBigToDraw(length: number, settings: SceneSettings, viewportPx
 }
 
 /** c × 10^by with no multiplication in it: the digits stay as they were and only the exponent moves. */
+// eslint-disable-next-line no-restricted-syntax -- not shown: the number's own shortest digits, so the shift is exact; texIJK writes the result
 const shiftTen = (c: number, by: number): number => Number(c.toExponential().replace(/e([+-]\d+)$/, (_, e: string) => `e${Number(e) + by}`))
 
 /**
@@ -783,6 +792,7 @@ const shiftTen = (c: number, by: number): number => Number(c.toExponential().rep
  * power of ten for the whole of it as the answers write it, instead (H13).
  */
 function texCardVector(v: V3, big: number, s: SceneSettings): string {
+  // eslint-disable-next-line no-restricted-syntax -- the number writer's own display floor: texIJK writes a component under 10⁻¹² as 0
   if (big === 0 || big >= 1e-12) return texIJK(v, s)
   const parts = v.filter((c) => c !== 0).length
   if (parts === 1 && notation().components === 'ijk') {
@@ -799,6 +809,7 @@ function texCardVector(v: V3, big: number, s: SceneSettings): string {
 /** A vector for an answer: texIJK, but one under its noise floor is written in scientific form, not as 0⃗ (H13, H17). */
 const texVector = (v: V3, s: SceneSettings): string => {
   const big = Math.max(...v.map(Math.abs))
+  // eslint-disable-next-line no-restricted-syntax -- the panel's relative rule (10⁻¹² of the vector's own size); the number is CW9's (P-CW2-REPORT class 1)
   return texCardVector(v.map((c) => (Math.abs(c) < 1e-12 * big ? 0 : c)) as V3, big, s)
 }
 
@@ -824,10 +835,12 @@ const WHOLE_NUMBER =
  */
 export function cardLineTex(name: string, v: V3, sizeKind: MeasureKind, settings: SceneSettings): string {
   const big = Math.max(...v.map(Math.abs))
+  // eslint-disable-next-line no-restricted-syntax -- the panel's relative rule (10⁻¹² of the vector's own size); the number is CW9's (P-CW2-REPORT class 1)
   const clean = v.map((c) => (Math.abs(c) < 1e-12 * big ? 0 : c)) as V3
   const size = len(clean)
   const shown = measureValue(size, sizeKind, settings)
   // texMeasure writes anything under 10⁻¹² as 0; the size of a tiny vector is a real number.
+  // eslint-disable-next-line no-restricted-syntax -- the number writer's own display floor (texMeasure), as the line above says
   const sizeTex = size !== 0 && Math.abs(shown) < 1e-12 ? `${texSci(shown, settings)}${texUnit(sizeKind, settings)}` : texMeasure(size, sizeKind, settings)
   const parts = [`\\vec{${name}} = ${texCardVector(clean, big, settings)}`, `|${name}| = ${sizeTex}`]
   // In the plane: the vector keeps no z of its own, so it has an angle (unless it is the zero vector).
@@ -993,6 +1006,7 @@ export function exprSolution(expr: string, cards: { name: string; v: V3 | string
     // Both strings are KaTeX: the plain-text form's "×10^-5" put only the minus in the superscript.
     // What is left of the noise of its arithmetic is exactly 0 by now (evaluateVectorLine), so a number
     // under texMeasure's floor is a real one, 1.6×10⁻¹⁹ from A·B of two tiny cards, and written as itself.
+    // eslint-disable-next-line no-restricted-syntax -- the number writer's own display floor (texMeasure), as the lines above say
     const shown = out !== 0 && Math.abs(out) < 1e-12 ? texSci(out, settings) : texMeasure(out, 'number', settings)
     return { used, sol: { title: 'Result', steps: [{ tex: `${expr} = ${shown}` }], answers: [{ label: 'value', tex: shown }] } }
   }

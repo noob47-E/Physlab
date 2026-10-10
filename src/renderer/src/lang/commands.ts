@@ -394,6 +394,7 @@ function isThreeD(node: Node): boolean {
   const call = node as MathNode & { fn?: { name?: string }; args?: MathNode[] }
   if (call.type === 'FunctionNode' && (call.fn?.name === 'pt' || call.fn?.name === 'vec') && call.args?.length === 3) return true
   try {
+    // eslint-disable-next-line no-restricted-syntax -- mirrors the number writer's display floor: a z that math/format.ts does not write (fmtPoint, texIJK: under 10⁻¹²) is no third coordinate; not at exactly 10⁻¹², which the writer shows (a found bug, tests/noiseFloors.test.ts)
     return Math.abs(toV3(evaluateNode(node))[2]) > 1e-12
   } catch {
     return false // a sum that cannot be worked out has no third coordinate to go by
@@ -797,6 +798,7 @@ function tryAssignment(input: string): boolean {
 function vectorExtras(v: V3): string {
   const s = scene().settings
   const m = texPrecise(len(v), s)
+  // eslint-disable-next-line no-restricted-syntax -- mirrors the number writer's display floor: θ is given while texIJK writes no z (under 10⁻¹²); a z of exactly 10⁻¹², and a vector wholly under the floor, are found bugs (tests/noiseFloors.test.ts)
   if (Math.abs(v[2]) > 1e-12) return `,\\quad \\text{magnitude } ${m}`
   return `,\\quad \\text{magnitude } ${m},\\ \\theta = ${texMeasure(heading(v), 'direction', s)}`
 }
