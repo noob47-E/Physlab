@@ -17,24 +17,7 @@ export const isReadError = (r: unknown): r is { error: string } =>
  * reader takes. Only in that shape: a number, the x, then 10 raised by ^ or a superscript; a lone x
  * ("x = 3"), "3x" and "3 x 10" are left as typed.
  */
-export const xAsTimes = (t: string): string => t.replace(/(\d\.?)\s*[xX]\s*(?=10\s*(?:\^|[⁺⁻⁰¹²³⁴⁵⁶⁷⁸⁹]))/g, '$1×')
-
-/**
- * One number from a short typed expression ("8.66", "5*sqrt(2)", "3/5", "−0.2"), in degrees like
- * every practice answer, or null. Only a real number counts: mathjs reads "3i" as a complex
- * number and "2 m" as a quantity, neither of which is what a student typing a vector component or
- * a root means, and both fail the `typeof` test below.
- */
-export function evalNumber(text: string): number | null {
-  const t = xAsTimes(text.trim())
-  if (t === '') return null
-  try {
-    const v = inDegrees(() => math.evaluate(preprocess(t)))
-    return typeof v === 'number' && Number.isFinite(v) ? v : null
-  } catch {
-    return null
-  }
-}
+const xAsTimes = (t: string): string => t.replace(/(\d\.?)\s*[xX]\s*(?=10\s*(?:\^|[⁺⁻⁰¹²³⁴⁵⁶⁷⁸⁹]))/g, '$1×')
 
 /** Unicode minus and the other dashes a keyboard or a paste gives, as the hyphen the reader works with. */
 const dashes = (s: string): string => s.replace(/[−–—]/g, '-')
@@ -60,8 +43,7 @@ const unraised = (s: string): string =>
  * "1.6*10^-19", "1.6 × 10⁻¹⁹") — or null for anything else, an expression or a bare 10^3 among
  * them. It exists so that a revealed answer typed back reads as exactly the number it shows: the
  * value is the double Number("1.6e-19") names, where mathjs works 1.6*10^-19 out as
- * 1.6000000000000002e-19 and preprocess misreads "12.5×10^3" as 2500, "2.5×10^+3" as 15625 and
- * "1.6×10⁻¹²" as 0.0256.
+ * 1.6000000000000002e-19 (preprocess makes one literal of the × · ⋅ forms, never of a *).
  */
 function readPlainNumber(text: string): number | null {
   const m = PLAIN_NUMBER.exec(dashes(text.trim()))
@@ -70,8 +52,64 @@ function readPlainNumber(text: string): number | null {
   const exponent = e ?? caret ?? bracketed ?? (raised === undefined ? '0' : unraised(raised))
   // Written out and read as one literal: mantissa × 10 ** exponent is not exact.
   const v = Number(`${mantissa}e${exponent}`)
-  // Like evalNumber, only a real number counts: 1×10^400 is no more an answer than "Infinity".
+  // As in readNumber, only a real number counts: 1×10^400 is no more an answer than "Infinity".
   return Number.isFinite(v) ? v : null
+}
+
+/**
+ * How one box reads a number. Every answer box reads through `readNumber`; these are the rules that
+ * still differ from box to box, each named, so that a difference is a choice and not a copy that
+ * drifted. Making them one rule would change what some box accepts, so that waits for the owner
+ * (OWNER-APPROVALS.md, CW6b-1 and CW6b-2).
+ */
+export interface NumberRules {
+  /**
+   * A number written out in full ("0.6", "1.5e-3", "1.6×10^-19", "1.6*10^-19", "1.6 × 10⁻¹⁹", with
+   * any dash for its minus) is read as exactly the literal it names before anything is worked out:
+   * 'first' then works out anything else, 'only' refuses it. Without it "1.6*10^-19" is worked out
+   * as a product, a last bit off 1.6e-19, and "—5" is refused.
+   */
+  asWritten?: 'first' | 'only'
+  /** "1,234" is 1234: commas between groups of three, in a box where a comma never separates two values. */
+  thousands?: boolean
+  /** A unit after the number, which is dropped (the answer box passes UNIT_TAIL, math/checkAnswer.ts). */
+  unitTail?: RegExp
+  /** Whatever Number() makes of the result counts, so true is 1, null is 0 and "5" is 5. Without it only a real number does. */
+  anyResult?: boolean
+}
+
+/**
+ * Only a thousands separator goes: "1,234" is 1234, but the comma in "sin(30,40)" or "1,5" is
+ * not, and stripping every comma turned those into different numbers instead of "unreadable".
+ * The leading group is one to three digits not starting with 0: "0,500" is a decimal written
+ * with a comma, and reading it as 500 told the student "wrong power of ten" for a right answer.
+ */
+const THOUSANDS = /(?<![\d.,])([1-9]\d{0,2})((?:,\d{3})+)(?![\d,])/g
+
+/**
+ * One number from what a student typed, or null. With no rules it works out a short expression
+ * ("8.66", "5*sqrt(2)", "3/5", "−0.2") and only a real number counts: mathjs reads "3i" as a
+ * complex number and "2 m" as a quantity, neither of which is what a student typing a vector
+ * component or a root means.
+ */
+export function readNumber(text: string, rules: NumberRules = {}): number | null {
+  if (rules.asWritten) {
+    const written = readPlainNumber(text)
+    if (written !== null || rules.asWritten === 'only') return written
+  }
+  let t = xAsTimes(text.trim())
+  if (rules.thousands) t = t.replace(THOUSANDS, (_, head: string, tail: string) => head + tail.replace(/,/g, ''))
+  if (rules.unitTail) t = t.replace(rules.unitTail, '')
+  if (!t.trim()) return null
+  // The practice questions are set in degrees whatever the calculator was last switched to:
+  // "sin(30)" typed as an answer must be 0.5 even after a session in radians.
+  try {
+    const v: unknown = inDegrees(() => math.evaluate(preprocess(t)))
+    const n = rules.anyResult ? Number(v) : typeof v === 'number' ? v : NaN
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -152,8 +190,8 @@ function readPolar(t: string): Read<{ v: number[]; unit: UnitId | null }> | null
     right = a.value
   }
   right = right.replace(/°\s*$/, '').trim()
-  const size = readPlainNumber(left) ?? evalNumber(left)
-  const angle = evalNumber(right)
+  const size = readNumber(left, { asWritten: 'first' })
+  const angle = readNumber(right)
   if (size === null) return { error: `PhysLab could not read the size "${left}". ${VECTOR_HELP}` }
   if (angle === null) return { error: `PhysLab could not read the angle "${right}". ${VECTOR_HELP}` }
   const th = radians ? angle : (angle * Math.PI) / 180
@@ -173,7 +211,7 @@ function readBracketed(t: string): Read<{ v: number[]; unit: UnitId | null }> | 
   if (items.length > 3) return { error: 'A vector has two or three components.' }
   const v: number[] = []
   for (const s of items) {
-    const x = readPlainNumber(s) ?? evalNumber(s)
+    const x = readNumber(s, { asWritten: 'first' })
     if (x === null) return { error: `PhysLab could not read the component "${s.trim()}". ${VECTOR_HELP}` }
     v.push(x)
   }
@@ -235,7 +273,7 @@ function readIJK(t: string): Read<{ v: number[]; unit: UnitId | null }> | null {
     const m = /^([+-]*)(.*?)\*?([ijk])$/.exec(term)
     if (!m) return { error: `PhysLab could not read "${raw.trim()}". Each part needs its i, j or k, like 3i or −4j.` }
     const [, signs, coef, axis] = m
-    const size = coef === '' ? 1 : (readPlainNumber(coef) ?? evalNumber(coef))
+    const size = coef === '' ? 1 : readNumber(coef, { asWritten: 'first' })
     if (size === null) return { error: `PhysLab could not read "${raw.trim()}". ${VECTOR_HELP}` }
     const negative = (signs.match(/-/g) ?? []).length % 2 === 1
     const k = 'ijk'.indexOf(axis)
@@ -318,11 +356,11 @@ function readSetValue(s: string, item: string, unit: UnitId | undefined): number
   let value: number | null
   const tail = unitFromTail(s)
   if (tail.unit !== null && unit !== undefined && unit !== 'none') {
-    const raw = evalNumber(tail.value)
+    const raw = readNumber(tail.value)
     value = raw === null ? null : tail.unit === unit ? raw : convertQuantity(raw, tail.unit, unit)
     if (raw !== null && value === null) return { error: `"${item}" is not in a unit this answer can be given in.` }
   } else {
-    value = evalNumber(s)
+    value = readNumber(s)
   }
   return value === null ? { error: `PhysLab could not read "${item}" as a number. ${SET_HELP}` } : value
 }
@@ -342,7 +380,7 @@ const FRACTION = /^([+-]?)\s*(\d+)\s*\/\s*([+-]?)\s*(\d+)$/
  */
 export function readMatrixCell(text: string, allowFractions: boolean): number | null {
   const t = dashes(text.trim()).replace(/\s+/g, ' ')
-  const x = readPlainNumber(t)
+  const x = readNumber(t, { asWritten: 'only' })
   if (x !== null) return x
   const f = FRACTION.exec(t)
   if (f && allowFractions) {
@@ -385,8 +423,8 @@ export function readStated(text: string): Read<{ x: number; u: number; unit: Uni
     // The power goes on each half as e-notation ("6.6261e-34", "0.0012e-34") and is read as one
     // literal, never multiplied in: the value is the double those digits name, and the uncertainty
     // exactly 1.2e-37. A half that is not a plain number (an expression, a power of its own) is refused.
-    const x = readPlainNumber(`${halves[0]}e${power}`)
-    const u = readPlainNumber(`${halves[1]}e${power}`)
+    const x = readNumber(`${halves[0]}e${power}`, { asWritten: 'only' })
+    const u = readNumber(`${halves[1]}e${power}`, { asWritten: 'only' })
     if (x === null) return { error: `PhysLab could not read the value "${halves[0]}".` }
     if (u === null) return { error: `PhysLab could not read the uncertainty "${halves[1]}".` }
     if (u < 0) return { error: 'An uncertainty is never negative: the ± already gives both sides.' }
@@ -408,7 +446,7 @@ export function readStated(text: string): Read<{ x: number; u: number; unit: Uni
 
   const halves = t.split('±')
   if (halves.length === 1) {
-    const x = evalNumber(t)
+    const x = readNumber(t)
     if (x === null) return { error: 'PhysLab could not read that. Type your value and its uncertainty, like 2.50 ± 0.05.' }
     return { error: `Give your uncertainty too, like ${t} ± ${lastDigit(t)}.` }
   }
@@ -430,8 +468,8 @@ export function readStated(text: string): Read<{ x: number; u: number; unit: Uni
     halves[0] = left.value
     halves[1] = right.value
   }
-  const x = evalNumber(halves[0])
-  const u = evalNumber(halves[1])
+  const x = readNumber(halves[0])
+  const u = readNumber(halves[1])
   if (x === null) return { error: `PhysLab could not read the value "${halves[0].trim()}".` }
   if (u === null) return { error: `PhysLab could not read the uncertainty "${halves[1].trim()}".` }
   if (u < 0) return { error: 'An uncertainty is never negative: the ± already gives both sides.' }

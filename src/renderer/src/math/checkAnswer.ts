@@ -4,12 +4,11 @@
 // (quadrant, sign, sin instead of cos, radians instead of degrees, a factor of ten) instead of
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
-import { inDegrees, math, preprocess } from './expr'
 import { fmtPrecise, fmtSci, noiseFloor, revealPrecision, superscriptPowers, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 import { UNITS } from '../questions/units'
-import { xAsTimes } from '../questions/answerText'
+import { readNumber, type NumberRules } from '../questions/answerText'
 
 type Verdict = 'right' | 'close' | 'wrong' | 'empty' | 'unreadable'
 
@@ -67,26 +66,16 @@ export const UNIT_TAIL = new RegExp(
   ].join('|')})\\s*$`
 )
 
-/** Reads "12.5", "5*sqrt(2)", "−3.4 N" or "37°" as a number. Returns null if it makes no sense. */
+/**
+ * The answer box's rules for the one number reader (questions/answerText.ts `readNumber`): a
+ * thousands separator and a unit after the number are read, and any result Number() can turn into
+ * a number counts (OWNER-APPROVALS.md CW6b-1: "true" and "null" are read as 1 and 0 today).
+ */
+const ANSWER_BOX: NumberRules = { thousands: true, unitTail: UNIT_TAIL, anyResult: true }
+
+/** Reads "12.5", "5*sqrt(2)", "−3.4 N", "1,234" or "37°" as a number. Returns null if it makes no sense. */
 export function parseAnswer(text: string): number | null {
-  // Only a thousands separator goes: "1,234" is 1234, but the comma in "sin(30,40)" or "1,5" is
-  // not, and stripping every comma turned those into different numbers instead of "unreadable".
-  // The leading group is one to three digits not starting with 0: "0,500" is a decimal written
-  // with a comma, and reading it as 500 told the student "wrong power of ten" for a right answer.
-  let t = xAsTimes(text.trim())
-    .replace(/−/g, '-')
-    .replace(/(?<![\d.,])([1-9]\d{0,2})((?:,\d{3})+)(?![\d,])/g, (_, head: string, tail: string) => head + tail.replace(/,/g, ''))
-  if (!t) return null
-  t = t.replace(UNIT_TAIL, '')
-  if (!t.trim()) return null
-  // The practice questions are set in degrees whatever the calculator was last switched to:
-  // "sin(30)" typed as an answer must be 0.5 even after a session in radians.
-  try {
-    const v = inDegrees(() => Number(math.evaluate(preprocess(t))))
-    return Number.isFinite(v) ? v : null
-  } catch {
-    return null
-  }
+  return readNumber(text, ANSWER_BOX)
 }
 
 /**

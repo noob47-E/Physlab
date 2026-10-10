@@ -7,13 +7,29 @@ import { compileScalar, math, preprocess } from '../math/expr'
 import type { LabColumn, LabTable } from './types'
 
 /**
+ * A decimal comma as the point it stands for. Only a Lab Data cell reads one (owner, 2026-10-08):
+ * the Calculator, the command bar, Pure Maths and the answer boxes read a comma as they always
+ * have. A typed cell and a pasted one still follow two rules, kept apart here until the owner
+ * picks one (OWNER-APPROVALS.md CW6b-3 lists every cell one rule would change):
+ * - 'typed', one reading typed into a cell: "1,2", as written in much of Europe, is 1.2, since
+ *   inside one cell a comma cannot be separating two readings. Exactly three digits after it
+ *   ("12,000") is a thousands separator just as often, so that stays unread rather than becoming 12.
+ * - 'pasted', a cell of a block or CSV file separated by tabs or semicolons, where the comma is not
+ *   separating the cells: its first comma is the point.
+ */
+function commaAsPoint(text: string, where: 'typed' | 'pasted'): string {
+  return where === 'typed' ? text.replace(/^(-?\d+),(\d{1,2}|\d{4,})$/, '$1.$2') : text.replace(',', '.')
+}
+
+/**
  * A plain written number ("0.200", "−1.50", "+3", "2.5e-3") as the text a reading is recorded
  * with, or null when the text is not one plain number. The typographic minus becomes "-" and a
  * leading "+" goes, so the text reads back with Number(); a trailing "." carries no figure and goes.
+ * `decimalComma`: the cell comes from a pasted block whose comma is a decimal point (lab/csv.ts).
  */
 export function readingText(raw: string, decimalComma = false): string | null {
   let s = raw.trim().replace(/[−–—]/g, '-').replace(/\s+/g, '')
-  if (decimalComma) s = s.replace(',', '.')
+  if (decimalComma) s = commaAsPoint(s, 'pasted')
   if (s.startsWith('+')) s = s.slice(1)
   if (!/^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return null
   s = s.replace(/\.(?=$|[eE])/, '')
@@ -26,10 +42,7 @@ export function readingText(raw: string, decimalComma = false): string | null {
  * own, and showing "2*0.1" back would be a formula, not a reading. null means it cannot be read.
  */
 export function readTyped(raw: string): { value: number | null; text: string | null } | null {
-  // One reading with a decimal comma ("1,2", as written in much of Europe) is 1.2: inside a single
-  // cell a comma cannot be separating two readings. Exactly three digits after it ("12,000") is a
-  // thousands separator just as often, so that stays unread rather than becoming 12.
-  const trimmed = raw.trim().replace(/^(-?\d+),(\d{1,2}|\d{4,})$/, '$1.$2')
+  const trimmed = commaAsPoint(raw.trim(), 'typed')
   if (!trimmed) return { value: null, text: null }
   const text = readingText(trimmed)
   if (text !== null) return { value: Number(text), text }

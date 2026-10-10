@@ -11,8 +11,8 @@ into a new table.
 |---|---|
 | `lab/types.ts` | `LabTable` (columns, rows, optional `reads` — the text each typed cell was recorded with — and plot) and `LabColumn` (formula-safe `name`, optional display `label`, unit, formula, uncertaintyFor). |
 | `lab/labStore.ts` | The store (`useLab`: tables, undo `past` and redo `future`) and every table edit as a pure function: addRow, removeRow, setCell, addColumn, removeColumn, setColumn, setRows, pasteRows, tidyReads. Every edit keeps `reads` in step with `rows`. |
-| `lab/values.ts` | Works out every cell (`resolveValues`), `readTyped` (what a typed cell means), `recordedText` (the safety net: a text is shown only when it reads back as exactly its cell's number), `formulaName`, `typedColumnName`, headers. |
-| `lab/csv.ts` | `parseTable` (tabs > semicolons > commas; quotes; BOM; decimal commas), `toCsv`, `applyPaste` / `pasteTarget` (where a paste goes). |
+| `lab/values.ts` | Works out every cell (`resolveValues`), `readTyped` (what a typed cell means), `readingText` (a plain written number as the text it is recorded with), `commaAsPoint` (the decimal comma, the one place it is read), `recordedText` (the safety net: a text is shown only when it reads back as exactly its cell's number), `formulaName`, `typedColumnName`, headers. |
+| `lab/csv.ts` | `parseTable` (tabs > semicolons > commas; quotes; BOM; decimal commas), `cellNumber` (the number of `readingText`'s text), `toCsv`, `applyPaste` / `pasteTarget` (where a paste goes). |
 | `lab/fit.ts` | `fitOf`, `rankFits`, `fitAdvice` / `adviceText` (which shape to suggest, in words), `gradientRange` (max/min gradient from error bars), `pmText`. |
 | `lab/chartData.ts` | What the chart draws (points, bars, the fitted curve). |
 | `panels/LabData.tsx` | The table panel: cells, name/unit boxes, paste, the paste banner, fit advice with Use it. |
@@ -22,8 +22,14 @@ into a new table.
 
 ## Data flow
 1. Typing a cell: `readTyped` → a number and, for a plain number, its text ("0.200") → `setCell`.
-   A typed sum keeps the number only. One reading with a decimal comma ("1,2") is 1.2; exactly
-   three digits after the comma ("12,000") is left unread (a thousands separator just as often).
+   A typed sum keeps the number only, worked out in the Calculator's angle mode (not the answer
+   boxes' degrees). One reading with a decimal comma ("1,2") is 1.2; exactly three digits after the
+   comma ("12,000") is left unread (a thousands separator just as often).
+   - The decimal comma is read in Lab Data cells only (owner, 2026-10-08), and only in
+     `commaAsPoint`. A typed cell and a pasted cell still follow two rules: 'typed' as above,
+     'pasted' (a tab or semicolon file) takes the first comma as the point, so "1,000" pasted is 1
+     but typed is unread. One rule is parked for the owner as CW6b-3, with every cell it changes
+     (tests/numberReader.test.ts).
 2. Paste: `pasteTarget` decides — a one-line value into an edited cell is plain text; a block
    lands at the focused cell (`pasteRows`, growing the table); only a paste onto the table itself
    or into an empty table replaces every reading.
@@ -35,6 +41,10 @@ into a new table.
 
 ## Invariants
 - A reading's text is never shown or exported unless it reads back as that cell's number.
+- A pasted cell's number is `Number(readingText(cell))` (`cellNumber`), so a cell's number and its
+  recorded figures can never be read by two rules.
+- Every reading of a typed or pasted cell is pinned over one corpus in tests/numberReader.test.ts
+  (tests/fixtures/numberReaders.txt); a change there is an [answer may change] item.
 - `reads` has the shape of `rows` after every edit.
 - One undo in Lab mode, reached the same way by keys and menu; Ctrl+Z inside a text box stays the box's own.
 - A Sandbox capture appends a table (`appendTable`), never replaces them (`setTables`).
@@ -53,4 +63,4 @@ into a new table.
   readings' size), and `pmText` dropped a real ± under 1e-9 of the value (now 1e-12) — `fb2-lab-fit`.
 
 ## Tests
-`lab`, `labPrecision`, `labUndo`, `labNames`, `labFit`, `labFollowups`, `chartData`, `persistence`, `fb2-lab-fit`.
+`lab`, `labPrecision`, `labUndo`, `labNames`, `labFit`, `labFollowups`, `chartData`, `persistence`, `fb2-lab-fit`, `numberReader` (every reader pinned over one corpus; the parked CW6b items as it.fails).

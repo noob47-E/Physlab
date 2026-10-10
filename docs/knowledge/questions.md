@@ -12,7 +12,8 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
   `checkPlayedPart` marks one part.
 - `questions/parts.ts` — number and expression parts (`checkNumberPart`, `checkExpressionPart`, `toAbsoluteTol`).
 - `questions/answerKinds.ts` — vector, roots, matrix and stated (± u, Eₙ) parts, and `format2AnswerTex`, their reveal.
-- `questions/answerText.ts` — the readers of typed vector, set, matrix and stated answers; `evalNumber`, `xAsTimes`.
+- `questions/answerText.ts` — the readers of typed vector, set, matrix and stated answers; `readNumber(text, rules)` (the
+  one number reader; math/checkAnswer.ts `parseAnswer` is `readNumber(text, ANSWER_BOX)`), `xAsTimes`.
 - `math/checkAnswer.ts` — `parseAnswer` and `checkAnswer` (number answers, traps, the power-of-ten hint).
 - `questions/ecf.ts` — error carried forward (`markWithECF`, `earlierIsRight`).
 - `questions/steps.ts` — worked steps into the Working panel (`stepsToWorking`), the revealed answers (`answerFor`),

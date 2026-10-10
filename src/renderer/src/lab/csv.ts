@@ -26,16 +26,12 @@ function separatorOf(lines: string[]): string {
 /**
  * One cell as a number, or null when it is empty or not a number. Copes with the typographic minus
  * a word processor inserts, a leading +, spaces inside a number, and a decimal comma when the
- * comma is not already doing the separating.
+ * comma is not already doing the separating. It is the number of the text the reading is recorded
+ * with (`readingText`), so the two can never read one cell differently.
  */
 export function cellNumber(cell: string, decimalComma = false): number | null {
-  let s = cell.trim().replace(/[−–—]/g, '-').replace(/\s+/g, '')
-  if (!s) return null
-  if (decimalComma) s = s.replace(',', '.')
-  if (s.startsWith('+')) s = s.slice(1)
-  if (!/^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return null
-  const v = Number(s)
-  return Number.isFinite(v) ? v : null
+  const text = readingText(cell, decimalComma)
+  return text === null ? null : Number(text)
 }
 
 /** "t / s", "t (s)" and "t" all give back a name and a unit. */

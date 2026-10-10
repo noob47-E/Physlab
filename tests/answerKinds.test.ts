@@ -29,7 +29,7 @@ import {
   format2AnswerTex,
   statedAnswerTex
 } from '../src/renderer/src/questions/answerKinds'
-import { evalNumber, isReadError, readMatrixCell, readSet, readStated, readVector } from '../src/renderer/src/questions/answerText'
+import { isReadError, readNumber, readMatrixCell, readSet, readStated, readVector } from '../src/renderer/src/questions/answerText'
 import { checkNumberPart } from '../src/renderer/src/questions/parts'
 import { parsePQFile, serializePQFile, type PQPart, type PQQuestion } from '../src/renderer/src/questions/pqjson'
 import { checkPlayedPart, countedParts, playQuestion } from '../src/renderer/src/questions/player'
@@ -158,12 +158,12 @@ describe('readStated', () => {
   })
 })
 
-describe('evalNumber', () => {
+describe('readNumber with no rules (was evalNumber)', () => {
   it('gives a real number only — never a complex number or a quantity', () => {
-    expect(evalNumber('5*sqrt(2)')).toBeCloseTo(7.0711, 4)
-    expect(evalNumber('sin(30)')).toBeCloseTo(0.5, 12)
-    expect(evalNumber('3i')).toBeNull()
-    expect(evalNumber('2 m')).toBeNull()
+    expect(readNumber('5*sqrt(2)')).toBeCloseTo(7.0711, 4)
+    expect(readNumber('sin(30)')).toBeCloseTo(0.5, 12)
+    expect(readNumber('3i')).toBeNull()
+    expect(readNumber('2 m')).toBeNull()
   })
 })
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { fmtLabel, superscriptPowers, type MeasureSettings } from '../src/renderer/src/math/format'
 import { tickText } from '../src/renderer/src/render/gridLabels'
 import { math, preprocess } from '../src/renderer/src/math/expr'
-import { evalNumber, readStated } from '../src/renderer/src/questions/answerText'
+import { readNumber, readStated } from '../src/renderer/src/questions/answerText'
 
 // What a student sees can be typed or pasted back (AGENTS.md: revealed answers are marked right), so
 // the no-break spaces must read exactly as ordinary ones do, in the command bar and in an answer box.
@@ -22,9 +22,9 @@ describe('W18 a shown raised power reads back with its no-break spaces', () => {
   })
   it('an answer box reads the same number', () => {
     for (const s of shown) {
-      const a = evalNumber(s)
+      const a = readNumber(s)
       expect(a, s).not.toBeNull()
-      expect(a, s).toBe(evalNumber(plain(s)))
+      expect(a, s).toBe(readNumber(plain(s)))
     }
   })
   it('a stated value with its uncertainty reads the same', () => {
