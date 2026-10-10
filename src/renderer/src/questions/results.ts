@@ -79,6 +79,22 @@ export function buildResultFile(args: { setId: string; setTitle: string; student
   return file
 }
 
+// The two marks of a result file, looked for in its text rather than parsed out of it: app/files.ts
+// keeps its own JSON parsing out (tests/persistence.test.ts), so no parser message can reach the
+// console, and a look at the text cannot throw. A project or a question file never has both as
+// keys: a quote inside one of its strings is escaped, so the same words typed in a label do not match.
+const RESULT_APP = /"app"\s*:\s*"PhysLab"/
+const RESULT_MARK = new RegExp(`"format"\\s*:\\s*"${RESULT_FORMAT}"`)
+
+/**
+ * Whether a file is a class-results file (a `.pqresult`, any letter case, or a renamed one with the
+ * two marks inside). The one check the opening paths share, so a result file is refused the same
+ * way wherever a student picks it. Only a name or a look at the text is needed, never a parse.
+ */
+export function isResultFileText(name: string, text: string): boolean {
+  return /\.pqresult$/i.test(name) || (RESULT_APP.test(text) && RESULT_MARK.test(text))
+}
+
 // ---------------------------------------------------------------------------
 // From a played question to its result parts
 // ---------------------------------------------------------------------------

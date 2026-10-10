@@ -4,6 +4,7 @@ import type * as THREE from 'three/webgpu'
 import { overlay } from './overlay'
 import { themeColor } from '../app/theme'
 import { PANEL_TITLES } from '../app/panels'
+import { downloadUrl } from '../app/download'
 
 interface Ctx {
   gl: THREE.WebGPURenderer
@@ -133,8 +134,6 @@ export async function exportPng(scale = 2): Promise<string | null> {
 // Handy while developing: lets the browser console grab a frame.
 if (import.meta.env?.DEV) (window as unknown as { __physlabExport?: typeof exportPng }).__physlabExport = exportPng
 
-type Bridge = { saveImage?: (dataUrl: string) => Promise<string | null> }
-
 /** Exports and saves; falls back to a normal browser download on the web build. */
 export async function saveViewportImage(scale = 2): Promise<string | null> {
   // Say why nothing is saved, rather than write an empty picture or do nothing at all. With no
@@ -148,11 +147,8 @@ export async function saveViewportImage(scale = 2): Promise<string | null> {
   }
   const url = await exportPng(scale)
   if (!url) return null
-  const bridge = (window as unknown as { physlab?: Bridge }).physlab
+  const bridge = window.physlab
   if (bridge?.saveImage) return bridge.saveImage(url)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'physlab.png'
-  a.click()
+  downloadUrl(url, 'physlab.png')
   return 'download'
 }

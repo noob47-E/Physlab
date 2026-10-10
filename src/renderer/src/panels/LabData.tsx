@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Download, Eye, Lightbulb, Plus, Sigma, Trash2, Undo2, Upload, X } from 'lucide-react'
 import { fmt, fmtPrecise, type Precision } from '../math/format'
 import { saveTextFile } from '../app/files'
+import { pickFile } from '../app/download'
 import { useScene } from '../core/store'
 import { visualizeReadings } from '../core/visualize'
 import { applyPaste, csvFileName, parseTable, pasteTarget, toCsv } from '../lab/csv'
@@ -218,7 +219,6 @@ export function LabData() {
   // keep a second copy of its own), and shows only while the paste is still the latest change.
   const [undo, setUndo] = useState<{ what: string; after: LabTable[] } | null>(null)
   const undoLab = useLab((s) => s.undo)
-  const fileInput = useRef<HTMLInputElement>(null)
 
   /** `at` is the focused cell; without it (the table itself, or a file) the readings are replaced. */
   const takeIn = (text: string, what: string, at?: { row: number; col: number }) => {
@@ -348,24 +348,20 @@ export function LabData() {
         <button className="btn" onClick={() => patch((t) => addColumn(t))}>
           <Plus size={13} /> Column
         </button>
-        <button className="btn" title="Read a .csv file of readings" onClick={() => fileInput.current?.click()}>
+        <button
+          className="btn"
+          title="Read a .csv file of readings"
+          onClick={async () => {
+            // pickFile opens a fresh picker each time, so the same file can be picked again after an undo.
+            const file = await pickFile('.csv,.txt,text/csv,text/plain')
+            if (file) takeIn(await file.text(), 'Imported')
+          }}
+        >
           <Upload size={13} /> Import
         </button>
         <button className="btn" title="Save these readings as a .csv file" onClick={() => void saveTextFile(toCsv(table, resolved), csvFileName(table.title))}>
           <Download size={13} /> Export
         </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".csv,.txt,text/csv,text/plain"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0]
-            // Clearing the value lets the same file be picked again after an undo.
-            e.target.value = ''
-            if (file) takeIn(await file.text(), 'Imported')
-          }}
-        />
       </div>
 
       <div className="mt-2 px-3 text-ink-faint">

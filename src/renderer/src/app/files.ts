@@ -1,15 +1,10 @@
 import { scene } from '../core/store'
 import { parseProjectText } from '../core/migrate'
 import { openFailureText, saveFailureText } from '../core/fileErrors'
-import { RESULT_FORMAT } from '../questions/results'
+import { isResultFileText } from '../questions/results'
+import { pickFile, saveBlob } from './download'
 
-type Bridge = {
-  isDesktop: boolean
-  openFile: (filters?: { name: string; extensions: string[] }[], title?: string) => Promise<{ path: string; content: string } | null>
-  saveFile: (content: string, path: string | null) => Promise<string | null>
-}
-
-const bridge = (window as unknown as { physlab?: Bridge }).physlab
+const bridge = window.physlab
 
 const QUESTION_FILE_FILTERS = [{ name: 'Question file', extensions: ['pqjson', 'exam'] }]
 
@@ -22,14 +17,8 @@ export async function openProject() {
     return
   }
   // Browser fallback.
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.phys,application/json'
-  input.onchange = async () => {
-    const f = input.files?.[0]
-    if (f) loadProjectText(await f.text(), f.name)
-  }
-  input.click()
+  const f = await pickFile('.phys,application/json')
+  if (f) loadProjectText(await f.text(), f.name)
 }
 
 /**
@@ -45,28 +34,11 @@ export async function openQuestionFile(): Promise<{ name: string; content: strin
     const r = await bridge.openFile(QUESTION_FILE_FILTERS, 'Open a question file')
     return r ? { name: r.path, content: r.content } : null
   }
-  return new Promise((resolve) => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.pqjson,.exam,application/json'
-    input.onchange = async () => {
-      const f = input.files?.[0]
-      resolve(f ? { name: f.name, content: await f.text() } : null)
-    }
-    // A cancelled picker fires no change in every browser; `cancel` is the one that says so.
-    input.addEventListener('cancel', () => resolve(null))
-    input.click()
-  })
+  const f = await pickFile('.pqjson,.exam,application/json')
+  return f ? { name: f.name, content: await f.text() } : null
 }
 
 const CLASS_RESULTS_NOT_HERE = 'Class results are not part of PhysLab.'
-
-// The two marks of a result file, looked for in its text rather than parsed out of it: this file
-// keeps its own JSON parsing out (tests/persistence.test.ts), so no parser message can reach the
-// console, and a look at the text cannot throw. A project or a question file never has both as
-// keys: a quote inside one of its strings is escaped, so the same words typed in a label do not match.
-const RESULT_APP = /"app"\s*:\s*"PhysLab"/
-const RESULT_MARK = new RegExp(`"format"\\s*:\\s*"${RESULT_FORMAT}"`)
 
 /**
  * A sentence for a class-results file (a `.pqresult`, which builds before 0.9 saved from Problem
@@ -75,8 +47,7 @@ const RESULT_MARK = new RegExp(`"format"\\s*:\\s*"${RESULT_FORMAT}"`)
  * renamed result file is still one, so what is inside counts as well as the name.
  */
 export function classResultsFileText(name: string, content: string): string | null {
-  if (/\.pqresult$/i.test(name) || (RESULT_APP.test(content) && RESULT_MARK.test(content))) return CLASS_RESULTS_NOT_HERE
-  return null
+  return isResultFileText(name, content) ? CLASS_RESULTS_NOT_HERE : null
 }
 
 /**
@@ -119,11 +90,7 @@ export async function saveProject(saveAs = false) {
     }
     return
   }
-  const blob = new Blob([content], { type: 'application/json' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = 'scene.phys'
-  a.click()
+  saveBlob(new Blob([content], { type: 'application/json' }), 'scene.phys')
   s.markSaved('scene.phys')
 }
 
@@ -132,27 +99,15 @@ export function newProject() {
   scene().newScene()
 }
 
-type TextBridge = { saveText?: (content: string, defaultName: string, filterName: string, ext: string) => Promise<string | null> }
-
 /**
  * Saves a piece of text the app has made — readings as CSV today, more later. On the desktop the
  * user picks where it goes; in the browser build it comes down as an ordinary download, which is
  * the same two branches saveViewportImage uses.
  */
 export async function saveTextFile(content: string, defaultName: string, filterName = 'CSV file', ext = 'csv'): Promise<string | null> {
-  const api = (window as unknown as { physlab?: TextBridge }).physlab
+  const api = window.physlab
   if (api?.saveText) return api.saveText(content, defaultName, filterName, ext)
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-  const a = document.createElement('a')
-  const href = URL.createObjectURL(blob)
-  a.href = href
-  a.download = defaultName
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  // Let the browser start the download before revoking the object URL: Safari can cancel the
-  // download when the URL is revoked in the same tick.
-  setTimeout(() => URL.revokeObjectURL(href), 0)
+  saveBlob(new Blob([content], { type: 'text/plain;charset=utf-8' }), defaultName)
   // The browser hands the file to the download folder, so there is no path to report back.
   return 'download'
 }

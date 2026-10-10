@@ -376,6 +376,10 @@ neighbour is open.
   gets a row in `tests/shortcutKeys.test.ts`. `useShortcuts` only adds and removes that one handler, so a key wired
   anywhere else escapes the test that drives the real stores. The file may not call `enterMode(` or `.setMode(` at all.
   Guards: `tests/shortcutKeys.test.ts`, `tests/hiddenModes.test.ts`.
+- **Read the desktop bridge only as `window.physlab?.…`, and open a file picker or start a download only through
+  `app/download.ts`.** The bridge is missing in the browser build. It is declared once (globals.d.ts, from the preload's
+  own type): a private cast once hid a missing field, and each hand-made picker or link had its own cancel and
+  URL-revoke rules. Guards: `tests/filesBridge.test.ts` (its cast list may only shrink), `tests/download.test.ts`.
 
 ## Code knowledge
 

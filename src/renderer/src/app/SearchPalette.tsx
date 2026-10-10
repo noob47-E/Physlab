@@ -27,7 +27,8 @@ function fillCommandBar(text: string) {
   window.dispatchEvent(new CustomEvent('physlab:command', { detail: text }))
 }
 
-const CALC_MODES: CalcMode[] = ['COMP', 'CMPLX', 'BASE-N', 'MATRIX', 'VECTOR', 'STAT', 'DIST', 'TABLE', 'EQUATION', 'INEQUALITY', 'RATIO', 'SHEET', 'UNITS', 'CONST', 'MEASURE']
+// The keys of MODE_LABELS in their own order: a new calculator mode gets its row here without a second list to keep.
+const CALC_MODES = Object.keys(MODE_LABELS) as CalcMode[]
 
 /**
  * The mode a drawing tool's row should open, or null to stay where the student is. A mode whose centre

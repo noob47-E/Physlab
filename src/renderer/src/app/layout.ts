@@ -123,14 +123,17 @@ export function restoreLayout(api: DockviewApi): boolean {
   return api.panels.length > 0
 }
 
-/** The mode the last session was in, if a usable one was saved. */
+/**
+ * The mode the last session was in, if a usable one was saved. Only a "coming soon" mode is turned
+ * away here (null: the session opens Vectors). Any other id is handed on as it was saved, and App
+ * opens `openableMode(savedMode() ?? 'vectors')`: openableMode is the one rule for which modes may
+ * open, and it turns a hidden mode, or one this build does not have (Question Author, Class
+ * Results), into Problem Sets. This function used to keep its own check of the mode list beside it.
+ */
 export function savedMode(): ModeId | null {
   const m = readSaved()?.mode
   if (!m) return null
-  // A mode this build does not have (Question Author, Class Results) is handed on as it was saved:
-  // openableMode turns it into Problem Sets.
-  if (!MODES.some((d) => d.id === m)) return m as ModeId
-  return MODES.some((d) => d.id === m && d.ready) ? m : null
+  return MODES.some((d) => d.id === m && !d.ready) ? null : m
 }
 
 let resetting = false
