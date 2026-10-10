@@ -25,6 +25,7 @@ has been checked.
 | `partial.ts` | Partial fractions (cover-up and comparing coefficients). |
 | `latexCheck.ts` | Reads a displayed answer back (`splitDisplayedSum`) so the check looks at what is shown. |
 | `trigIdentity.ts` | Trig-identity proofs by a two-ended search over allowed rewrites. |
+| `trig/canonical.ts`, `trig/write.ts`, `trig/read.ts`, `trig/rules.ts`, `trig/search.ts` | Its parts (CW10d): the canonical form and its arithmetic, printing, reading the student's text, the allowed rewrites, the search. `trigIdentity.ts` keeps the Working and re-exports what the tests use. |
 | `normal.ts` | Φ(z), its tail and inverse. |
 | `table.ts` | The printed four-place Φ table as a student reads it (`toPlaces`, cell values). |
 | `zscore.ts` | Normal-distribution questions worked with the table. |

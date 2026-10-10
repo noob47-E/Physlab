@@ -83,7 +83,7 @@ harmless to KaTeX but not to a string comparison.
 ## The 10⁻¹² floors that stay (CLEANUP-PLAN.md CW3b)
 math/noise.ts (`isNoise`, `sameNumber`) judges rounding noise against the sizes a number came from, at 10⁻¹⁵ of the
 largest. A literal 1e-12 outside it fails lint; in the eight big files (calc/engine, core/visualize, lang/commands,
-math/expr, math/pure/complex, math/pure/trigIdentity, panels/vectorCalcStore, questions/autoVisual) each one that stays
+math/expr, math/pure/complex, math/pure/trigIdentity (now math/pure/trig/canonical), panels/vectorCalcStore, questions/autoVisual) each one that stays
 says why in place, and tests/noiseFloors.test.ts pins it (most on both sides of the floor). The reasons that count:
 - **the writer's own display floor**: `fmt`, `tex`, `texIJK`, `texMeasure`, `fmtPoint` write |v| < 10⁻¹² as 0, so a
   line that decides "is this written?" (the bar's third coordinate and θ, the Vectors panel's scientific-form switch)
