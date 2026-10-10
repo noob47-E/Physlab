@@ -3,15 +3,12 @@
 // store's `renameObject` applies the result and records it as one undo step.
 
 import { exprRefs } from './evaluate'
-import { isValidName } from './naming'
+import { isValidName, NAME_PATTERN } from './naming'
 import type { ObjId, SceneObject } from './types'
 
-// The characters a name may start with and go on with. Copied from `isValidName`
-// (core/naming.ts), which owns them; keep the two in step. Ͱ-Ͽ is the Greek block.
-const NAME = "[A-Za-z\\u0370-\\u03FF][A-Za-z0-9_\\u0370-\\u03FF'′″‴⁗]*"
-// A number (3, 2.5, .5, 1e-3) or a name. Numbers are matched so that their digits and an
-// exponent's e are never read as the start of a name.
-const TOKEN = new RegExp(`(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?|${NAME}`, 'g')
+// A number (3, 2.5, .5, 1e-3) or a name, by the characters `isValidName` allows (core/naming.ts).
+// Numbers are matched so that their digits and an exponent's e are never read as the start of a name.
+const TOKEN = new RegExp(`(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?|${NAME_PATTERN}`, 'g')
 
 /** Why a name cannot be used, in a sentence for the student, or null when it can. */
 export function renameProblem(next: string, taken: Iterable<string>): string | null {

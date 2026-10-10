@@ -24,18 +24,19 @@
 //
 // tests/answerLabels.test.ts pins what each must do.
 
+import { GREEK_LETTERS } from '../math/names'
+
 /**
- * The Greek names the expression parser spells out (θ → theta), with the letter Copy writes for each.
- * lang/commands.ts keeps the same 22 names for the bar and does not export them, so this is a copy:
- * each name is also the KaTeX command (\theta), which is why pi (a constant) and omicron (no KaTeX
- * command) are not here. A Map, not an object, so an unknown named "constructor" is not read as a
- * property every object has.
+ * The Greek names an unknown can have, from the one list (math/names.ts), with the letter Copy writes
+ * for each; each name is also the KaTeX command (\theta). pi is not here because it is a number, never
+ * an unknown. omicron has never been here either, though KaTeX does have \omicron: adding it would
+ * change what Solve writes for an unknown spelt omicron (OWNER-APPROVALS.md CW6c-2). lang/commands.ts
+ * keeps its own copy of these 22 names for the bar. A Map, not an object, so an unknown named
+ * "constructor" is not read as a property every object has.
  */
-const GREEK = new Map<string, string>([
-  ['alpha', 'α'], ['beta', 'β'], ['gamma', 'γ'], ['delta', 'δ'], ['epsilon', 'ε'], ['zeta', 'ζ'], ['eta', 'η'], ['theta', 'θ'],
-  ['iota', 'ι'], ['kappa', 'κ'], ['lambda', 'λ'], ['mu', 'μ'], ['nu', 'ν'], ['xi', 'ξ'], ['rho', 'ρ'], ['sigma', 'σ'],
-  ['tau', 'τ'], ['upsilon', 'υ'], ['phi', 'φ'], ['chi', 'χ'], ['psi', 'ψ'], ['omega', 'ω']
-])
+const GREEK = new Map<string, string>(
+  GREEK_LETTERS.filter((g) => g.name !== 'pi' && g.name !== 'omicron').map((g) => [g.name, g.letter])
+)
 
 const SUBSCRIPT_DIGITS = '₀₁₂₃₄₅₆₇₈₉'
 

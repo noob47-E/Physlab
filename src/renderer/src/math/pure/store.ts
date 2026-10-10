@@ -16,6 +16,7 @@ import { casWaitNote, followCasStart } from '../../ui/casStatus'
 import { calculusUnitNote, casInDegrees } from '../../calc/angle'
 import { scene } from '../../core/store'
 import { math, preprocess, splitArgs } from '../expr'
+import { CONSTANT_NAMES, GREEK_LETTERS } from '../names'
 import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
@@ -276,9 +277,15 @@ export function gluedFunctionsApart(expr: string): string {
   })
 }
 
-const GREEK: Record<string, string> = {
-  θ: 'theta', α: 'alpha', β: 'beta', γ: 'gamma', φ: 'phi', ω: 'omega', λ: 'lambda', μ: 'mu', τ: 'tau', σ: 'sigma', ρ: 'rho', ψ: 'psi'
-}
+/**
+ * The Greek letters this route spells out for the engine and takes as one letter, from the one list
+ * (math/names.ts): the twelve it has spelt since it was built (Phase 0.9-QCb). The others are left as
+ * typed. Spelling them too would change what reaches the engine, so it waits for the engine's adapter.
+ */
+const WHOLE_NAMES: ReadonlySet<string> = new Set(['theta', 'alpha', 'beta', 'gamma', 'phi', 'omega', 'lambda', 'mu', 'tau', 'sigma', 'rho', 'psi'])
+const SPELT_LETTERS = GREEK_LETTERS.filter((g) => WHOLE_NAMES.has(g.name))
+const SPELLING: Record<string, string> = Object.fromEntries(SPELT_LETTERS.map((g) => [g.letter, g.name]))
+const SPELT_LETTER = new RegExp(`[${SPELT_LETTERS.map((g) => g.letter).join('')}]`, 'g')
 
 /**
  * The line with every name spelt plainly, as an engine's parser needs it: Greek letters spelt out
@@ -286,12 +293,11 @@ const GREEK: Record<string, string> = {
  * back as 0), then glued function names taken apart.
  */
 export function spelledOut(expr: string): string {
-  return gluedFunctionsApart(expr.replace(/[θαβγφωλμτσρψ]/g, (c) => GREEK[c]))
+  return gluedFunctionsApart(expr.replace(SPELT_LETTER, (c) => SPELLING[c]))
 }
 
-const NOT_VARIABLES = new Set(['e', 'E', 'pi', 'i', 'Infinity'])
-/** Names that are one letter to a student, though spelt with several. */
-const WHOLE_NAMES = new Set(['theta', 'alpha', 'beta', 'gamma', 'phi', 'omega', 'lambda', 'mu', 'tau', 'sigma', 'rho', 'psi'])
+/** The names that stand for a number: e, pi, i and the rest are never the letter to work by. */
+const NOT_VARIABLES = CONSTANT_NAMES
 
 /**
  * The letter to integrate or differentiate by when the student names none: x when it is there,

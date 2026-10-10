@@ -82,9 +82,18 @@ export function freeCapitals(used: Iterable<string>, count: number): string[] {
   return out
 }
 
+/**
+ * The characters a name starts with and goes on with, as a pattern: a Latin letter or any character
+ * of the Greek block Ͱ–Ͽ (its letters, and a few marks such as ; and · that share the block), then
+ * those, digits, _, ' and the primes. ′ ″ ‴ ⁗ are here because the app names
+ * points A′ and A″ after Z, and placed copies A′ itself. core/rename.ts finds a name inside a formula
+ * with this same pattern, so a name the app accepts is always a name a rename can find.
+ */
+export const NAME_PATTERN = "[A-Za-z\\u0370-\\u03FF][A-Za-z0-9_\\u0370-\\u03FF'′″‴⁗]*"
+const WHOLE_NAME = new RegExp(`^${NAME_PATTERN}$`)
+
 export function isValidName(name: string): boolean {
-  // ′ ″ ‴ ⁗ are here because the app names points A′ and A″ after Z, and placed copies A′ itself.
-  return /^[A-Za-zͰ-Ͽ][A-Za-z0-9_Ͱ-Ͽ'′″‴⁗]*$/.test(name) && !RESERVED.has(name)
+  return WHOLE_NAME.test(name) && !RESERVED.has(name)
 }
 
 let counter = 0

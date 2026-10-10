@@ -388,6 +388,10 @@ neighbour is open.
   x, and 10⁻¹³ sin x = 0 was "Proved". Judge rounding noise against the sizes it came from (math/noise.ts). A 10⁻¹² that
   stays says in place what it means (the writer's own display floor, a time in seconds, a search width), and
   tests/noiseFloors.test.ts pins it.
+- **Greek letters come from one list, `math/names.ts`** (`GREEK_LETTERS`, `CONSTANT_NAMES`). A place that needs fewer
+  letters filters that list where it uses it, and says why. Never write an alphabet of your own.
+  tests/nameList.test.ts reads 147 names through every reader and fails on any change. KaTeX draws `\epsilon` and
+  `\phi` as ϵ and ϕ.
 - **The scene store's helpers never import the store.** `core/legoScene.ts` (Break apart and Fuse) and `core/doomed.ts`
   (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
   them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.

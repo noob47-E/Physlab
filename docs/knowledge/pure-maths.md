@@ -53,6 +53,21 @@ has been checked.
   refused in words: powers are multiplied out on the renderer's thread (H1).
 - Pure Math variables are single letters; a Greek letter's name (`theta`, …) counts as one letter,
   and `varTex` prints a multi-letter name as `\name`.
+- Pure Maths' and the answer labels' Greek letters come from one list, `math/names.ts`
+  (`GREEK_LETTERS`: 24 spelt names with their letters; `CONSTANT_NAMES`: e, E, pi, i, Infinity). Each
+  place that uses it says which letters it reads:
+  - `writeTimes` (mono.ts) keeps all 24 whole.
+  - The calculus route (store.ts `spelledOut`, `calculusVariable`) spells and keeps only the twelve
+    it was built with (θ α β γ φ ω λ μ τ σ ρ ψ).
+  - The answer labels (calc/labels.ts) know 22 (not pi, a number, and not omicron, which is parked
+    as CW6c-2).
+  - Widening a subset changes what a student sees, so it is an [answer may change] item.
+- Copies outside this area that do not read the list yet:
+  - the bar's 22 names (lang/commands.ts:1357);
+  - the LaTeX readers' command maps (math/latexToMath.ts:128 and questions/speak.ts:28), which
+    disagree on `\vartheta`: θ in one, ϑ in the other;
+  - the HTML entities of the Numbas importer (questions/numbas.ts:609);
+  - the engine's own spellings (lamda, `SYMPY_GREEK`, math/engine/sympy/calculusSteps.ts).
 
 ## Traps (each guarded by a test)
 - `ab` was one variable named "ab" — `writeTimes` now splits letter runs, but keeps mathjs names
@@ -75,5 +90,6 @@ has been checked.
 
 ## Tests
 `tests/pure.test.ts`, `pureWorking`, `pureRender`, `pureStore`, `complexFactor`, `stepTruth`,
-`calculusSteps`, `calculusWired`, `trigSteps`, `zscore`, `contracts`; the old batch files `af-ua` … `af-uf` and `af-ue2` now sit in these suites as blocks named after them.
+`calculusSteps`, `calculusWired`, `trigSteps`, `zscore`, `contracts`, `nameList` (every name and Greek
+reader pinned over one corpus; the parked CW6c items as it.fails); the old batch files `af-ua` … `af-uf` and `af-ue2` now sit in these suites as blocks named after them.
 After any change to `rat.ts` or `mono.ts`, run all of them.

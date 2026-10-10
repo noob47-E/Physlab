@@ -6,6 +6,7 @@
 
 import { type MathNode } from 'mathjs'
 import { math, preprocess } from '../expr'
+import { CONSTANT_NAMES, GREEK_NAMES } from '../names'
 import { R0, R1, rAdd, rEq, rFromNumber, rGcd, rIsNeg, rIsOne, rMul, rNeg, rPow, rTex, rAbs, type Rat } from './rat'
 
 /** One term: a coefficient and the powers of each variable. Absent variable = power 0. */
@@ -276,11 +277,11 @@ const GLUED_PI = /(?<![A-Za-z_])pi(?=i(?![A-Za-z_]))/g
  * sqrt, pi, e, Infinity, …) are left alone so `sin(x)` still reaches the FunctionNode refusal and
  * `pi` is still refused instead of becoming p·i. A Greek letter's name is one letter too: preprocess
  * turns θ into `theta` and varTex prints it back as \theta, so it must never become t·h·e·t·a —
- * not even inside a longer run, where 2aθ arrives as `2atheta` and means 2·a·θ.
+ * not even inside a longer run, where 2aθ arrives as `2atheta` and means 2·a·θ. Every Greek name
+ * counts, from the one list (math/names.ts).
  */
-const GREEK = new Set(['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'omicron', 'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'])
 const knownMathName = (name: string): boolean =>
-  name === 'pi' || name === 'e' || name === 'Infinity' || GREEK.has(name) || (math as unknown as Record<string, unknown>)[name] !== undefined
+  CONSTANT_NAMES.has(name) || GREEK_NAMES.has(name) || (math as unknown as Record<string, unknown>)[name] !== undefined
 
 export const writeTimes = (text: string): string => {
   // The glued i and π are split off first: as one run "isqrt" or "ipi" would become i·s·q·r·t or i·p·i.
