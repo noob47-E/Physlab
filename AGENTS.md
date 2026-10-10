@@ -367,6 +367,11 @@ neighbour is open.
   `scripts/smoke-main.mjs` or the run fails. tsconfig has `noUnusedLocals` and `noUnusedParameters` on: an unused
   callback slot is written `_name`. Code a test reaches by reading source text, or through a module object, keeps its
   `export` (see `scripts/deadcode-baseline.txt` and reports/P-CW14-REPORT.md).
+- **Ask the algebra engine only through `math/engine`** (`ask`, `workSteps`, `useEngineStatus`). A request is in
+  PhysLab's spelling (`ln` natural, `log` base 10, ∞, Greek via `spelledOut`); an answer's `text` comes back in it too.
+  Never write an engine's own syntax (`oo`, `**`, `lamda`, op names) outside its adapter in `math/engine/<name>/`:
+  `tests/guards/engineSocket.test.ts` fails on an engine's name outside the socket. A new engine passes
+  `tests/engine/conformance.ts` first (docs/knowledge/cas.md says how).
 
 ## Code knowledge
 
