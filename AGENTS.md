@@ -417,6 +417,8 @@ neighbour is open.
 - **A generic fallback in `friendlyError` will swallow specific syntax messages.** When delegating unit errors to
   `unitRefusal` in `lang/commands.ts`, only match genuine unit errors (`/Units do not match|in function to\b|Unit "[^"]+" not found/`);
   calling it unconditionally on syntax errors routes through `errorSentence` and silently changes the `errors` golden sweep.
+- **questions/numbas.ts is a door** to questions/numbas/ (jme.ts, marking.ts, import.ts, export.ts). Keep sibling imports
+  one-way (jme ← marking ← import/export); never import the barrel facade from within numbas/.
 
 ## Code knowledge
 

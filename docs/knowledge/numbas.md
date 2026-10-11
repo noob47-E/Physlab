@@ -7,20 +7,11 @@ teacher's Open dialog in Problem Sets uses it, and so does the harvest of the pu
 skipped whole, never half-imported, and the report says why in one plain sentence. Written by polish part P-NUMBAS (0.9).
 
 ## File map
-- `tokenize`, `JmeParser`, `parseJme` — the JME tokenizer and recursive-descent parser; anything outside the accepted
-  subset throws `JmeRefusal` (a sentence, never a stack trace).
-- `jmeToMath`, `emit` / `emitBinary` / `emitCall`, `TrigMode` — JME → mathjs text: trig, log, rounding, `if`, and the
-  function-name differences.
-- `jmeToVariableDef` — a JME variable definition (`random(a..b#s)`, lists, `except`) → a `VariableDef` range, list or
-  formula; ranges whose ends are other variables become `randomRange`.
-- `htmlToLines`, `liftMaths` / `MATHS_START` / `restOfParagraph` / `closeOf`, `chipText` / `chipFor` / `chipLatex`,
-  `spoken`, `ENTITIES` / `decodeEntities` — Numbas HTML → statement lines: maths spans are lifted FIRST, then
-  `\var{…}` / plain-text `{…}` slots become chips, entities are decoded.
-- `speakTex` (LaTeX spoken as plain characters) lives in questions/speak.ts since CW4; `spoken` here calls it.
-- `readParts` / `readOnePart`, `readNumberAnswer`, `readMatrixPart`, `readChoicePart`, `readSteps` — PQ parts and
-  worked steps; the tolerance comes from the min/max bounds and the precision settings.
-- `toExam`, `partToNumbas`, `numberEntry`, `gapfill`, `mathToJme` (with `dotsToProducts`), `textToHtml`, `jmeNumber` —
-  PQ file → Numbas exam JSON.
+- `questions/numbas/jme.ts` — `tokenize`, `JmeParser`, `parseJme` (the JME tokenizer and recursive-descent parser; anything outside the accepted subset throws `JmeRefusal`), `jmeToMath`, `emit`, `jmeToVariableDef`, and `mathToJme` (with `dotsToProducts`).
+- `questions/numbas/marking.ts` — `statedPrecision`, `precisionBand`, `readNumberAnswer`, `readCarried`, `writeCarried`, and tolerance regexes (`REL_MIN`, `REL_MAX`, `ABS_MIN`, `ABS_MAX`).
+- `questions/numbas/import.ts` — `fromExam`, `htmlToLines`, `liftMaths`, `chipText` / `chipFor` / `chipLatex`, `spoken`, `ENTITIES` / `decodeEntities`, `readParts` / `readOnePart`, `readMatrixPart`, `readChoicePart`, `readSteps`.
+- `questions/numbas/export.ts` — `toExam`, `partToNumbas`, `numberEntry`, `gapfill`, `ascending`, `variableToJme`, `textToHtml`, `jmeNumber`.
+- `questions/numbas.ts` — re-export barrel facade maintaining backward compatibility for all importers (`fromExam`, `toExam`, `jmeToMath`, `jmeToVariableDef`, `mathToJme`, `JmeRefusal`).
 - Tests: `tests/numbas.test.ts` (import, export, round trips) and `tests/numbas2.test.ts`.
 
 ## Data flow

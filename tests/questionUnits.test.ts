@@ -128,7 +128,15 @@ describe('one home for unit formatting', () => {
   it('keeps the LaTeX units and the prompt-unit reader in units.ts, not copied into steps or numbas', () => {
     for (const fn of ['texUnit', 'texQuantity', 'unitInPrompt']) {
       expect(readSource('src/renderer/src/questions/steps.ts'), fn).not.toContain(`function ${fn}(`)
-      expect(readSource('src/renderer/src/questions/numbas.ts'), fn).not.toContain(`function ${fn}(`)
+      for (const file of [
+        'src/renderer/src/questions/numbas.ts',
+        'src/renderer/src/questions/numbas/import.ts',
+        'src/renderer/src/questions/numbas/export.ts',
+        'src/renderer/src/questions/numbas/jme.ts',
+        'src/renderer/src/questions/numbas/marking.ts'
+      ]) {
+        expect(readSource(file), fn).not.toContain(`function ${fn}(`)
+      }
     }
     expect(readSource('src/renderer/src/questions/variables.ts')).not.toContain('function chipNumber(')
   })

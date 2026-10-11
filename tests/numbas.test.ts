@@ -1965,3 +1965,23 @@ describe('a gap-fill whose gaps take no unit keeps its "Give your answer in" lin
     expect(gapfill([numberGap()], '<p>Find it [[0]]</p><p>Give your answer in furlongs.</p>').map((p) => p.prompt)).toEqual(['Find it ___\nGive your answer in furlongs.'])
   })
 })
+
+describe('split submodule exports (CW10a)', () => {
+  it('re-exports all public APIs from numbas submodules and executes without top-level side effects', async () => {
+    const barrel = await import('../src/renderer/src/questions/numbas')
+    const jme = await import('../src/renderer/src/questions/numbas/jme')
+    const imp = await import('../src/renderer/src/questions/numbas/import')
+    const exp = await import('../src/renderer/src/questions/numbas/export')
+    const marking = await import('../src/renderer/src/questions/numbas/marking')
+
+    expect(barrel.fromExam).toBe(imp.fromExam)
+    expect(barrel.toExam).toBe(exp.toExam)
+    expect(barrel.jmeToMath).toBe(jme.jmeToMath)
+    expect(barrel.jmeToVariableDef).toBe(jme.jmeToVariableDef)
+    expect(barrel.mathToJme).toBe(jme.mathToJme)
+    expect(barrel.JmeRefusal).toBe(jme.JmeRefusal)
+    expect(typeof marking.readCarried).toBe('function')
+    expect(typeof marking.writeCarried).toBe('function')
+  })
+})
+

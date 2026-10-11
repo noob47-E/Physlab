@@ -21,7 +21,7 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
 - `questions/autoVisual.ts` — the automatic picture of a question (SUVAT, projectile, free body, normal regions, curves).
 - `questions/units.ts` — units in answers (`unitFromTail`, `revealSettings`, `texQuantity`).
 - `questions/bank.ts` — the bundled sets (`loadBundled`, `bundledSets`: the six `bank/*.pqjson` files read into the
-  build as text) and a teacher's file (`loadTeacherFile`, a Numbas `.exam` through numbas.ts).
+  build as text) and a teacher's file (`loadTeacherFile`, a Numbas `.exam` through `numbas.ts` / `numbas/`).
 - `questions/bankLoad.ts` — how Problem Sets reaches bank.ts: `loadBank` (the dynamic import, its failure turned into
   `FAILED_LINE`), `loadBundledSets` (a `BankState`, never a rejection), `bankLine` (`LOADING_LINE` / `FAILED_LINE`)
   and `pickSet` (the set Start plays; while loading, never a teacher's set in place of a saved bundled one).
