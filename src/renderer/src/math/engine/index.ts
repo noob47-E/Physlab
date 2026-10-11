@@ -6,11 +6,12 @@
 import type { Working } from '../pure/work'
 import type { EngineJob, EngineRequest, EngineResult, MathEngine, StepsContext } from './types'
 import { sympyEngine } from './sympy/adapter'
+import { giacEngine } from './giac/adapter'
 import { BOOT_STAGES, STAGE_WORDS } from './sympy/stages'
 
 export type { EngineJob, EngineRequest } from './types'
 
-const ENGINES = { sympy: sympyEngine() } satisfies Record<string, MathEngine>
+const ENGINES = { sympy: sympyEngine(), giac: giacEngine() } satisfies Record<string, MathEngine>
 
 /** Which engine answers each job. One line per job, so moving one job to another engine is one edit. */
 export const ENGINE_FOR: Record<EngineJob, keyof typeof ENGINES> = {

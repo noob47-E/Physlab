@@ -2,8 +2,9 @@
 
 Giac is an offline computer algebra system (factorisation, polynomial roots, calculus, equation
 solving). PhysLab vendors its WebAssembly build so the engine can run inside a Web Worker with no
-network. This part (G0) only proves that the runtime loads and answers in the two builds. Nothing
-in `src/renderer/src/math/` calls it yet; that wiring is G1.
+network. This part (G0) only proves that the runtime loads and answers in the two builds. The
+adapter that wires it behind the engine socket is G1 (`docs/knowledge/giac-adapter.md`). It is
+registered, but `ENGINE_FOR` still sends every job to SymPy until G4 switches the classes that pass.
 
 Status on 2026-10-12: vendored, provenance checked, load proof passing on both targets
 (`node scripts/giac-smoke.mjs`). Open items are listed at the end.

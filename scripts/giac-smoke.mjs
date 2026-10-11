@@ -6,6 +6,9 @@
 //   (b) the offline web build (dist/web), served by an in-process HTTP server on 127.0.0.1
 // It also checks that the vendored, packaged and web copies of giacwasm.js are the same file, and
 // that neither server hands out a file from outside its own root.
+// The adapter check (part G1): on both targets the app's own Giac worker chunk (assets/giac.worker-*.js,
+// the one the app's renderer creates) answers real jobs through the adapter (math/engine/giac/), bundled
+// for the page from the same source: factor, a real odd root, and a solve with only complex roots.
 //
 // Usage:
 //   node scripts/giac-smoke.mjs              build targets, then test both
@@ -13,7 +16,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -26,6 +29,54 @@ const repoRoot = join(here, '..')
 // The SHA-256 of the vendored runtime (NOTICE and docs/knowledge/giac.md record the same value).
 const GIAC_SHA256 = '5de9cd24998290b3c4768413d2c198edea75d7bead98deab504f6309e789479a'
 const EXPECTED_RESULT = '(x-1)*(x+1)'
+
+// The adapter's bundle for the page, written next to each build's index.html and removed after the run.
+const ADAPTER_BUNDLE = 'giac-smoke-adapter.js'
+
+/**
+ * The build's own Giac worker chunk (assets/giac.worker-<hash>.js), as a path from the build's root,
+ * or a fault: there must be exactly one, and a renderer chunk must name it (the app creates it).
+ */
+function workerChunk(root) {
+  const assets = join(root, 'assets')
+  if (!existsSync(assets)) return { fault: `no assets folder in ${root}` }
+  const names = readdirSync(assets)
+  const chunks = names.filter((n) => /^giac\.worker-[\w-]+\.js$/.test(n))
+  if (chunks.length !== 1) return { fault: `expected one giac.worker-*.js in ${assets}, found ${chunks.length}` }
+  const named = names.filter((n) => n.endsWith('.js') && n !== chunks[0]).some((n) => readFileSync(join(assets, n), 'utf8').includes(chunks[0]))
+  if (!named) return { fault: `no renderer chunk names ${chunks[0]}: the app does not create this worker` }
+  return `assets/${chunks[0]}`
+}
+
+/** The adapter and its worker client, from the app's own source, as one ES module for the page. */
+async function bundleAdapter(outfiles) {
+  const { build } = await import('esbuild')
+  const result = await build({
+    stdin: {
+      contents: "export { giacEngine } from './src/renderer/src/math/engine/giac/adapter.ts'\nexport { giacClient } from './src/renderer/src/math/engine/giac/worker.ts'\n",
+      resolveDir: repoRoot,
+      loader: 'ts'
+    },
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    write: false,
+    logLevel: 'silent'
+  })
+  for (const f of outfiles) writeFileSync(f, result.outputFiles[0].text)
+}
+
+/** What is wrong with one target's adapter answers (empty when all is right). */
+function adapterFaults(label, a) {
+  if (!a || a.error) return [`${label}: the adapter did not answer (${a?.error ?? 'no result'})`]
+  const faults = []
+  if (a.factor?.text !== '(x - 1)*(x + 1)' || !a.factor?.latex) faults.push(`${label}: factor(x^2 - 1) answered ${JSON.stringify(a.factor)}`)
+  if (a.root?.numeric?.re !== -2 || a.root?.numeric?.im !== undefined) faults.push(`${label}: (-8)^(1/3) answered ${JSON.stringify(a.root)}, not the real root -2`)
+  const ims = (a.solve?.solutions ?? []).map((r) => r.x?.numeric?.im).sort()
+  if (JSON.stringify(ims) !== JSON.stringify([-1, 1])) faults.push(`${label}: x^2 + 1 = 0 answered ${JSON.stringify(a.solve)}`)
+  return faults
+}
 
 if (!process.versions.electron) {
   // ---- Node Driver Mode ----------------------------------------------------
@@ -94,19 +145,42 @@ if (!process.versions.electron) {
     process.exit(1)
   }
 
+  // The app's own Giac worker chunk in each build, which the app's renderer chunk must name.
+  const packagedWorker = workerChunk(join(repoRoot, 'out/renderer'))
+  const webWorker = workerChunk(webDir)
+  for (const [label, found] of [
+    ['packaged', packagedWorker],
+    ['offline web', webWorker]
+  ]) {
+    if (typeof found !== 'string') {
+      console.error(`giac-smoke: FAILED\n  ${label} build: ${found.fault}`)
+      process.exit(1)
+    }
+  }
+
   const userData = mkdtempSync(join(tmpdir(), 'physlab-giac-smoke-'))
+  const bundles = [join(repoRoot, 'out/renderer', ADAPTER_BUNDLE), join(webDir, ADAPTER_BUNDLE)]
   let runner
   try {
+    await bundleAdapter(bundles)
     console.log('giac-smoke: running Electron Web Worker smoke test...')
     runner = spawnSync('npx electron scripts/giac-smoke.mjs --electron-runner', {
       cwd: repoRoot,
       shell: true,
       encoding: 'utf8',
-      env: { ...process.env, PHYSLAB_GIAC_WEB_DIR: webDir, PHYSLAB_GIAC_USERDATA: userData },
-      timeout: 120_000
+      env: {
+        ...process.env,
+        PHYSLAB_GIAC_WEB_DIR: webDir,
+        PHYSLAB_GIAC_USERDATA: userData,
+        PHYSLAB_GIAC_WORKER_PACKAGED: packagedWorker,
+        PHYSLAB_GIAC_WORKER_WEB: webWorker
+      },
+      timeout: 180_000
     })
   } finally {
     rmSync(userData, { recursive: true, force: true })
+    // The page's copy of the adapter is the smoke's, never part of a build that ships.
+    for (const b of bundles) rmSync(b, { force: true })
   }
 
   const stdout = runner.stdout ?? ''
@@ -146,6 +220,13 @@ if (!process.versions.electron) {
   }
   // The app itself must have mounted on its start page (a renderer that crashed before the app
   // mounted would leave #root empty), so the proof cannot pass on a dead app.
+  // The adapter, through each build's own worker chunk.
+  for (const [label, target] of [
+    ['packaged', packaged],
+    ['offline web', web]
+  ]) {
+    faults.push(...adapterFaults(label, target.adapter))
+  }
   if (!(packaged.appMounted > 0)) faults.push('packaged app did not mount into #root')
   if (!(web.appMounted > 0)) faults.push('offline web app did not mount into #root')
   // The link probe: a link out of the served root must not be followed; a plain file must be served.
@@ -167,13 +248,22 @@ if (!process.versions.electron) {
   console.log(`giac-smoke: escape probes (expected: not 200) packaged ${JSON.stringify(packaged.probes.escapes)} web ${JSON.stringify(web.probes.escapes)}; control packaged ${packaged.probes.control}, web ${web.probes.control}`)
   console.log(`giac-smoke: link probe (expected: not 200) ${data.linkEscape.link}; control ${data.linkEscape.control}; app mounted: packaged ${packaged.appMounted} children, web ${web.appMounted} children`)
   console.log(`giac-smoke: SHA-256 of vendored, packaged and web copies all ${GIAC_SHA256}`)
+  for (const [label, target, chunk] of [
+    ['packaged-app', packaged, packagedWorker],
+    ['offline-web ', web, webWorker]
+  ]) {
+    const a = target.adapter ?? {}
+    console.log(
+      `giac-smoke: [${label}] adapter: factor(x^2 - 1) = ${a.factor?.text} | (-8)^(1/3) = ${a.root?.text} | x^2 + 1 = 0: x = ${(a.solve?.solutions ?? []).map((r) => r.x?.text).join(', ')} | worker ${chunk} | load ${a.bootMs} ms, first job (load + answer) ${a.firstMs} ms, next two jobs ${a.warmMs} ms, heap ${a.heapMb} MB`
+    )
+  }
 
   if (faults.length) {
     console.error(`giac-smoke: FAILED\n  ${faults.join('\n  ')}`)
     process.exit(1)
   }
 
-  console.log('giac-smoke: SUCCESS — both targets loaded Giac in a Web Worker and verified factor(x^2-1) == (x-1)*(x+1)')
+  console.log("giac-smoke: SUCCESS — both targets loaded Giac in a Web Worker, verified factor(x^2-1) == (x-1)*(x+1), and answered real jobs through the adapter and the app's own worker chunk")
   process.exit(0)
 } else {
   // ---- Electron Runner Mode ------------------------------------------------
@@ -312,6 +402,28 @@ if (!process.versions.electron) {
     })
   }
 
+  // Page code: real jobs through the adapter (the smoke's bundle of the app's source) and the build's
+  // own worker chunk. Resolves with the answers and the client's numbers, or with an error.
+  async function adapterJobs(bundleUrl, workerUrl) {
+    try {
+      const mod = await import(bundleUrl)
+      const client = mod.giacClient({ spawn: () => new Worker(workerUrl) })
+      const engine = mod.giacEngine(client.run)
+      const t0 = performance.now()
+      const factor = await engine.ask('factor', { expr: 'x^2 - 1', deg: false })
+      const firstMs = Math.round(performance.now() - t0)
+      const t1 = performance.now()
+      const root = await engine.ask('eval', { expr: '(-8)^(1/3)', deg: false })
+      const solve = await engine.ask('solve', { eqs: ['x^2 + 1 = 0'], vars: ['x'], deg: false })
+      const warmMs = Math.round(performance.now() - t1)
+      const stats = client.stats()
+      client.dispose()
+      return { factor, root, solve, firstMs, warmMs, bootMs: stats.bootMs, heapMb: stats.heapMb === null ? null : Math.round(stats.heapMb * 10) / 10 }
+    } catch (err) {
+      return { error: String((err && (err.stack || err.message)) || err) }
+    }
+  }
+
   // Page code: the status of each URL requested with fetch from the page's own origin.
   async function fetchStatuses(urls) {
     const statuses = {}
@@ -412,6 +524,9 @@ if (!process.versions.electron) {
         const packagedResult = await wc.executeJavaScript(`(${evalGiacInWorker.toString()})(${JSON.stringify('app://physlab/giac/giacwasm.js')})`)
         await settle(2000)
         const packagedMemMb = getRendererMemoryMb(wc)
+        const packagedAdapter = await wc.executeJavaScript(
+          `(${adapterJobs.toString()})(${JSON.stringify(`app://physlab/${ADAPTER_BUNDLE}`)}, ${JSON.stringify(`app://physlab/${process.env.PHYSLAB_GIAC_WORKER_PACKAGED}`)})`
+        )
         const packagedStatuses = await wc.executeJavaScript(`(${fetchStatuses.toString()})(${JSON.stringify(APP_ESCAPE_PATHS.concat(APP_CONTROL))})`)
         const packagedProbes = {
           escapes: Object.fromEntries(APP_ESCAPE_PATHS.map((u) => [u.slice('app://physlab'.length), packagedStatuses[u]])),
@@ -430,6 +545,10 @@ if (!process.versions.electron) {
         const webResult = await wc.executeJavaScript(`(${evalGiacInWorker.toString()})(${JSON.stringify(`http://127.0.0.1:${httpInfo.port}/giac/giacwasm.js`)})`)
         await settle(2000)
         const webMemMb = getRendererMemoryMb(wc)
+        const webBase = `http://127.0.0.1:${httpInfo.port}`
+        const webAdapter = await wc.executeJavaScript(
+          `(${adapterJobs.toString()})(${JSON.stringify(`${webBase}/${ADAPTER_BUNDLE}`)}, ${JSON.stringify(`${webBase}/${process.env.PHYSLAB_GIAC_WORKER_WEB}`)})`
+        )
         const webEscapes = await httpStatuses(httpInfo.port, ESCAPE_PATHS.concat(WEB_CONTROL))
         const linkEscape = await linkEscapeStatuses()
 
@@ -440,7 +559,8 @@ if (!process.versions.electron) {
             appMounted: packagedMounted,
             memBeforeMb: packagedMemBefore,
             memMb: packagedMemMb,
-            probes: packagedProbes
+            probes: packagedProbes,
+            adapter: packagedAdapter
           },
           web: {
             ...webResult,
@@ -448,6 +568,7 @@ if (!process.versions.electron) {
             appMounted: webMounted,
             memBeforeMb: webMemBefore,
             memMb: webMemMb,
+            adapter: webAdapter,
             probes: {
               escapes: Object.fromEntries(ESCAPE_PATHS.map((p) => [p, webEscapes[p]])),
               control: webEscapes[WEB_CONTROL]
