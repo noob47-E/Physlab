@@ -419,6 +419,8 @@ neighbour is open.
   calling it unconditionally on syntax errors routes through `errorSentence` and silently changes the `errors` golden sweep.
 - **questions/numbas.ts is a door** to questions/numbas/ (jme.ts, marking.ts, import.ts, export.ts). Keep sibling imports
   one-way (jme ← marking ← import/export); never import the barrel facade from within numbas/.
+- **core/visualize.ts is a door** to core/visualize/ (roots.ts, curves.ts, regions.ts). Keep sibling imports
+  one-way (roots ← curves ← regions); never import the barrel facade from within visualize/.
 
 ## Code knowledge
 

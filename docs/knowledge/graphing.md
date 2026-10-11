@@ -20,14 +20,10 @@ will really appear** — a refusal is a plain sentence and leaves nothing behind
     answer is written in the student's precision.
   - `tryGeometryCommand` / `trySolverCommand`: a missing, blank or extra input gives the command's own "Wrong inputs
     for …" sentence (`MOST_INPUTS`, `MOST_SOLVER_INPUTS`).
-- `core/visualize.ts` — the bridge to the scene:
-  - `drawability(spec, scope, digits, graphs?)`: pure; compiles, checks names and calls, samples a ladder of windows
-    from ±0.1 to ±10⁶ (then a coarse far look to 10¹²), probes sliders, has a 600 ms budget, and returns either
-    "drawable" (maybe with a note) or the sentence that says why not;
-  - `solutionsInX` / `inXAlone`: an x-only equation — exact roots of a polynomial (square-free part, `polyRoots`;
-    a quadratic through `realPairOfQuadratic`'s exact discriminant, so two very close roots are never called complex),
-    a closed form for a lone high power, otherwise a numeric scan;
-  - `visualizeGraph`, `visualizeBetween`, `visualizeTangentAt`, `visualizePiecewise` build the objects.
+- `core/visualize.ts` — re-export barrel facade to `core/visualize/`:
+  - `visualize/roots.ts`: analytical validation and root finding (`drawability`, `solutionsInX`, `inXAlone`, `plainParseError`, `NO_REAL_X`);
+  - `visualize/curves.ts`: curve, vector, point scene object creation and framing (`visualizeGraph`, `visualizeTangentAt`, `visualizePiecewise`, `visualizeCurves`, `visualizeSolution`, `visualizeVector`, `visualizePoint`, `visualizeReadings`, `graphBox`, `frameGraphs`, `isDrawnAnswer`);
+  - `visualize/regions.ts`: shaded area, normal distribution, and discrete array visualizers (`visualizeBetween`, `visualizeArea`, `visualizeNormal`, `visualizeDots`, `visualizeNumberLine`, `NORMAL_STRETCH`).
 - `math/graphs.ts` — pure sampling and key points: `sampleExplicit` (curves; breaks at poles, subdivides a step that
   bends hard), `keyPoints` (roots, turning points, y-intercept), `shownKeyPoints`, `keyPointLabel`, `spreadLabels`,
   `placeLabels`, `verticalLineXs` (sign changes, touching roots, roots at or just inside a domain edge, plus any
