@@ -438,6 +438,7 @@ neighbour is open.
   numbers, constants, global variables) belong to no drawing canvas; clearing the active drawing space must keep them,
   rather than dropping all objects in `visibleOrder` (Bug 22). Guard: `tests/g22-cleardrawing-spaceless.test.ts`.
 - **In `lang/commands/common.ts`, unit positions are strictly: target or source quantity in `to`, or following a numeric or chained unit quantity via implicit multiplication or division.** Outside `to`, `u` is never a unit (SUVAT initial velocity), and algebraic operations (`3 * ly`, `2 / ly`, `2 * x * ly`, `ly^2`, `x ly to m`) are variables, not units. Prototype keys (`valueOf`, `constructor`) use `Object.hasOwn` so JS properties never leak onto the screen.
+- **Engine semantics contract (G00)**: Default domain is strictly REAL for school work; odd roots of negatives on ℝ are real (e.g. (−8)^(1/3) = −2); rational simplification must explicitly report cancelled denominator factors (including real irrationals like ±√2 and complex conjugate pairs in complex mode); periodic solution standard form uses x = base + 2kπ, k ∈ ℤ (or 360°k); and cross-engine solution comparison normalizes by root value and total multiplicity.
 
 ## Code knowledge
 
