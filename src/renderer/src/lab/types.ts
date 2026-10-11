@@ -22,8 +22,8 @@ export const FIT_LABELS: Record<FitShape, string> = {
   linear: 'Straight line   y = a + bx',
   quadratic: 'Curve   y = a + bx + cx²',
   log: 'Logarithm   y = a + b ln x',
-  exp: 'Exponential   y = a e^(bx)',
-  power: 'Power   y = a x^b',
+  exp: 'Exponential   y = a eᵇˣ',
+  power: 'Power   y = a xᵇ',
   inverse: 'Inverse   y = a + b/x'
 }
 

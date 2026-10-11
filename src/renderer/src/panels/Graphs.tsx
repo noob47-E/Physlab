@@ -99,7 +99,7 @@ export function Graphs() {
           onKeyDown={(e) => {
             e.stopPropagation()
             if (e.key === 'Enter' && draft.trim()) {
-              setTracks([...tracks, draft.trim().replace(/^angle\(/, 'angleBetween(')])
+              setTracks([...tracks, draft.trim().replace(/^angle\s*\(/, 'angleBetween(')])
               setDraft('')
             }
           }}
@@ -107,7 +107,7 @@ export function Graphs() {
         <button
           className="btn h-6"
           onClick={() => {
-            if (draft.trim()) setTracks([...tracks, draft.trim().replace(/^angle\(/, 'angleBetween(')])
+            if (draft.trim()) setTracks([...tracks, draft.trim().replace(/^angle\s*\(/, 'angleBetween(')])
             setDraft('')
           }}
         >

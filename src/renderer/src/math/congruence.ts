@@ -158,6 +158,9 @@ export function compareTriangles(A: Tri, B: Tri, opts: CompareOptions = {}): Con
   if (congruent) {
     const by = test === 'SSS' ? 'three sides' : test === 'SAS' ? 'two sides and the angle between them' : test === 'ASA' ? 'two angles and the side between them' : test === 'AAS' ? 'two angles and a side' : 'the right angle, the hypotenuse and a side'
     reasons.push(`So △${nameA} ≅ △${matchedName} by ${test} (${by}).`)
+  } else if (ia.degenerate || ib.degenerate) {
+    const degen = ia.degenerate ? `△${nameA}` : `△${B.names.join('')}`
+    reasons.push(`${degen} is degenerate (its corners lie in a line), so the triangles are not congruent.`)
   } else {
     const wrong = sides.find((p) => !p.equal)
     if (wrong) reasons.push(`${wrong.a} = ${fl(wrong.valueA)} but ${wrong.b} = ${fl(wrong.valueB)}, so the triangles are not congruent.`)

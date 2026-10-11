@@ -9,7 +9,7 @@ import { startingScene, useSandbox } from '../sim/store'
 import { DEFAULT_WORLD } from '../sim/types'
 import { FILE_VERSION, migrate, migrateLabelSettings } from './migrate'
 import { renameInObjects, renameProblem } from './rename'
-import { visibleOrder, type Space } from './visibility'
+import type { Space } from './visibility'
 import { formatMeasure } from '../math/format'
 import { flipPiece as flipCorners, fusePlan, legoParts, legoStatus, ONE_PIECE_SENTENCE, signatureOf, snapToCorners, snapTolerance, tintPiece, turnPiece as turnCorners } from '../math/lego'
 import type { V3 } from '../math/vec'
@@ -443,7 +443,7 @@ export const useScene = create<SceneState>()((set, get) => {
       // was once every object in every drawing, and the command wiped all four from a mode where
       // none of them was even on screen — and where Ctrl+Z went to the sandbox's own history.
       if (!activeSpace) return
-      get().removeObjects(visibleOrder(order, objects, activeSpace))
+      get().removeObjects(order.filter((id) => objects[id]?.space === activeSpace))
     },
 
     beginGesture: () => {

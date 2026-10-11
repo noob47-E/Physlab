@@ -37,8 +37,8 @@ describe('CW8b: Clear this drawing', () => {
 
   // CW8b-1: an object with no drawing (a number typed in the Console while no drawing was open, or
   // anything from a file saved before drawings were separate) shows in every drawing, and Clear
-  // removes it from all of them.
-  it.fails('CW8b-1: leaves an object that belongs to no drawing alone', () => {
+  // removes it from all of them. Fixed in Bug 22.
+  it('CW8b-1: leaves an object that belongs to no drawing alone', () => {
     sc().addObjects([point('pV', 'A', [1, 0, 0], 'vectors'), { ...base('nK', 'k'), type: 'number', expr: '2' }], { record: false })
     sc().clearDrawing()
     expect(Object.keys(sc().objects)).toEqual(['nK'])

@@ -9,8 +9,8 @@ import { math, preprocess } from '../math/expr'
  * x^12); null for any other power. Only ², ³ and ⁻¹ were raised once, so a picture note or a
  * condition sentence read "x^4" — programming on screen (rule 2).
  */
-const RAISED: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' }
-const raised = (power: string): string | null => (/^-?\d+$/.test(power) ? [...power].map((c) => RAISED[c]).join('') : null)
+const RAISED: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻', '/': '/' }
+const raised = (power: string): string | null => (/^-?\d+(\/\d+)?$/.test(power) ? [...power].map((c) => RAISED[c] ?? c).join('') : null)
 
 type AstHandler = (node: MathNode, recurse: (n: MathNode) => string) => string | undefined
 
@@ -45,12 +45,21 @@ export function plainFormula(expr: string): string {
       const [base, exp] = op.args
       const inner = exp.type === 'ParenthesisNode' ? (exp as ParenthesisNode).content : exp
       const negated = inner.type === 'OperatorNode' && (inner as OperatorNode).fn === 'unaryMinus' ? (inner as OperatorNode).args[0] : null
-      const key =
+      let key =
         inner.type === 'ConstantNode'
           ? String((inner as ConstantNode).value)
           : negated?.type === 'ConstantNode'
             ? `-${String((negated as ConstantNode).value)}`
             : ''
+      if (!key && inner.type === 'OperatorNode' && (inner as OperatorNode).fn === 'divide') {
+        const [top, bot] = (inner as OperatorNode).args
+        const topNeg = top.type === 'OperatorNode' && (top as OperatorNode).fn === 'unaryMinus' ? (top as OperatorNode).args[0] : null
+        const topVal = top.type === 'ConstantNode' ? String((top as ConstantNode).value) : topNeg?.type === 'ConstantNode' ? `-${String((topNeg as ConstantNode).value)}` : null
+        const botVal = bot.type === 'ConstantNode' ? String((bot as ConstantNode).value) : null
+        if (topVal !== null && botVal !== null) {
+          key = `${topVal}/${botVal}`
+        }
+      }
       const up = raised(key)
       return up ? `${s(base)}${up}` : `${s(base)}^${s(exp)}`
     }

@@ -141,7 +141,7 @@
 "1e3"  lab text, comma file  =>  "1e3"
 "1e3"  set  =>  [1000]
 "1e3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1e3"  stated  =>  {"error":"Give your uncertainty too, like 1e3 ± 1."}
+"1e3"  stated  =>  {"error":"Give your uncertainty too, like 1e3 ± 1000."}
 "1E3"  answer  =>  1000
 "1E3"  worked  =>  1000
 "1E3"  written  =>  1000
@@ -153,7 +153,7 @@
 "1E3"  lab text, comma file  =>  "1E3"
 "1E3"  set  =>  [1000]
 "1E3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1E3"  stated  =>  {"error":"Give your uncertainty too, like 1E3 ± 1."}
+"1E3"  stated  =>  {"error":"Give your uncertainty too, like 1E3 ± 1000."}
 "1.5e-3"  answer  =>  0.0015
 "1.5e-3"  worked  =>  0.0015
 "1.5e-3"  written  =>  0.0015
@@ -165,7 +165,7 @@
 "1.5e-3"  lab text, comma file  =>  "1.5e-3"
 "1.5e-3"  set  =>  [0.0015]
 "1.5e-3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.5e-3"  stated  =>  {"error":"Give your uncertainty too, like 1.5e-3 ± 0.1."}
+"1.5e-3"  stated  =>  {"error":"Give your uncertainty too, like 1.5e-3 ± 0.0001."}
 "2.5e+3"  answer  =>  2500
 "2.5e+3"  worked  =>  2500
 "2.5e+3"  written  =>  2500
@@ -177,7 +177,7 @@
 "2.5e+3"  lab text, comma file  =>  "2.5e+3"
 "2.5e+3"  set  =>  [2500]
 "2.5e+3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"2.5e+3"  stated  =>  {"error":"Give your uncertainty too, like 2.5e+3 ± 0.1."}
+"2.5e+3"  stated  =>  {"error":"Give your uncertainty too, like 2.5e+3 ± 100."}
 "1.e3"  answer  =>  1000
 "1.e3"  worked  =>  1000
 "1.e3"  written  =>  1000
@@ -189,7 +189,7 @@
 "1.e3"  lab text, comma file  =>  "1e3"
 "1.e3"  set  =>  [1000]
 "1.e3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.e3"  stated  =>  {"error":"Give your uncertainty too, like 1.e3 ± 1."}
+"1.e3"  stated  =>  {"error":"Give your uncertainty too, like 1.e3 ± 1000."}
 "1e"  answer  =>  2.718281828459045
 "1e"  worked  =>  2.718281828459045
 "1e"  written  =>  null
@@ -261,7 +261,7 @@
 "1e-400"  lab text, comma file  =>  "1e-400"
 "1e-400"  set  =>  [0]
 "1e-400"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1e-400"  stated  =>  {"error":"Give your uncertainty too, like 1e-400 ± 1."}
+"1e-400"  stated  =>  {"error":"Give your uncertainty too, like 1e-400 ± 10⁻⁴⁰⁰."}
 "5e"  answer  =>  13.591409142295225
 "5e"  worked  =>  13.591409142295225
 "5e"  written  =>  null
@@ -297,7 +297,7 @@
 "2.5E4"  lab text, comma file  =>  "2.5E4"
 "2.5E4"  set  =>  [25000]
 "2.5E4"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"2.5E4"  stated  =>  {"error":"Give your uncertainty too, like 2.5E4 ± 0.1."}
+"2.5E4"  stated  =>  {"error":"Give your uncertainty too, like 2.5E4 ± 1000."}
 "+5"  answer  =>  5
 "+5"  worked  =>  5
 "+5"  written  =>  5
@@ -501,7 +501,7 @@
 "3x10^8"  lab text, comma file  =>  null
 "3x10^8"  set  =>  [300000000]
 "3x10^8"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"3x10^8"  stated  =>  {"error":"Give your uncertainty too, like 3x10^8 ± 1."}
+"3x10^8"  stated  =>  {"error":"Give your uncertainty too, like 3x10^8 ± 10⁸."}
 "3X10^8"  answer  =>  300000000
 "3X10^8"  worked  =>  300000000
 "3X10^8"  written  =>  null
@@ -525,7 +525,7 @@
 "1.6 x 10^-19"  lab text, comma file  =>  null
 "1.6 x 10^-19"  set  =>  [1.6e-19]
 "1.6 x 10^-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6 x 10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6 x 10^-19 ± 0.1."}
+"1.6 x 10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6 x 10^-19 ± 10⁻²⁰."}
 "-1.6x10^-19"  answer  =>  -1.6e-19
 "-1.6x10^-19"  worked  =>  -1.6e-19
 "-1.6x10^-19"  written  =>  -1.6e-19
@@ -537,7 +537,7 @@
 "-1.6x10^-19"  lab text, comma file  =>  null
 "-1.6x10^-19"  set  =>  [-1.6e-19]
 "-1.6x10^-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"-1.6x10^-19"  stated  =>  {"error":"Give your uncertainty too, like -1.6x10^-19 ± 0.1."}
+"-1.6x10^-19"  stated  =>  {"error":"Give your uncertainty too, like -1.6x10^-19 ± 10⁻²⁰."}
 "6.63x10⁻³⁴"  answer  =>  6.63e-34
 "6.63x10⁻³⁴"  worked  =>  6.63e-34
 "6.63x10⁻³⁴"  written  =>  6.63e-34
@@ -549,7 +549,7 @@
 "6.63x10⁻³⁴"  lab text, comma file  =>  null
 "6.63x10⁻³⁴"  set  =>  [6.63e-34]
 "6.63x10⁻³⁴"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"6.63x10⁻³⁴"  stated  =>  {"error":"Give your uncertainty too, like 6.63x10⁻³⁴ ± 0.01."}
+"6.63x10⁻³⁴"  stated  =>  {"error":"Give your uncertainty too, like 6.63x10⁻³⁴ ± 10⁻³⁶."}
 "1.6×10^-19"  answer  =>  1.6e-19
 "1.6×10^-19"  worked  =>  1.6e-19
 "1.6×10^-19"  written  =>  1.6e-19
@@ -561,7 +561,7 @@
 "1.6×10^-19"  lab text, comma file  =>  null
 "1.6×10^-19"  set  =>  [1.6e-19]
 "1.6×10^-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6×10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10^-19 ± 0.1."}
+"1.6×10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10^-19 ± 10⁻²⁰."}
 "1.6 × 10^-19"  answer  =>  1.6e-19
 "1.6 × 10^-19"  worked  =>  1.6e-19
 "1.6 × 10^-19"  written  =>  1.6e-19
@@ -573,7 +573,7 @@
 "1.6 × 10^-19"  lab text, comma file  =>  null
 "1.6 × 10^-19"  set  =>  [1.6e-19]
 "1.6 × 10^-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6 × 10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6 × 10^-19 ± 0.1."}
+"1.6 × 10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6 × 10^-19 ± 10⁻²⁰."}
 "1.6×10^(-19)"  answer  =>  1.6e-19
 "1.6×10^(-19)"  worked  =>  1.6e-19
 "1.6×10^(-19)"  written  =>  1.6e-19
@@ -585,7 +585,7 @@
 "1.6×10^(-19)"  lab text, comma file  =>  null
 "1.6×10^(-19)"  set  =>  [1.6e-19]
 "1.6×10^(-19)"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6×10^(-19)"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10^(-19) ± 0.1."}
+"1.6×10^(-19)"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10^(-19) ± 10⁻²⁰."}
 "1.6 x 10^(-19)"  answer  =>  1.6e-19
 "1.6 x 10^(-19)"  worked  =>  1.6e-19
 "1.6 x 10^(-19)"  written  =>  1.6e-19
@@ -597,7 +597,7 @@
 "1.6 x 10^(-19)"  lab text, comma file  =>  null
 "1.6 x 10^(-19)"  set  =>  [1.6e-19]
 "1.6 x 10^(-19)"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6 x 10^(-19)"  stated  =>  {"error":"Give your uncertainty too, like 1.6 x 10^(-19) ± 0.1."}
+"1.6 x 10^(-19)"  stated  =>  {"error":"Give your uncertainty too, like 1.6 x 10^(-19) ± 10⁻²⁰."}
 "1.6*10^-19"  answer  =>  1.6000000000000002e-19
 "1.6*10^-19"  worked  =>  1.6000000000000002e-19
 "1.6*10^-19"  written  =>  1.6e-19
@@ -609,7 +609,7 @@
 "1.6*10^-19"  lab text, comma file  =>  null
 "1.6*10^-19"  set  =>  [1.6000000000000002e-19]
 "1.6*10^-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6*10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6*10^-19 ± 0.1."}
+"1.6*10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6*10^-19 ± 10⁻²⁰."}
 "1.6 * 10^-19"  answer  =>  1.6000000000000002e-19
 "1.6 * 10^-19"  worked  =>  1.6000000000000002e-19
 "1.6 * 10^-19"  written  =>  1.6e-19
@@ -621,7 +621,7 @@
 "1.6 * 10^-19"  lab text, comma file  =>  null
 "1.6 * 10^-19"  set  =>  [1.6000000000000002e-19]
 "1.6 * 10^-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6 * 10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6 * 10^-19 ± 0.1."}
+"1.6 * 10^-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6 * 10^-19 ± 10⁻²⁰."}
 "1.6·10^-19"  answer  =>  1.6e-19
 "1.6·10^-19"  worked  =>  1.6e-19
 "1.6·10^-19"  written  =>  null
@@ -657,7 +657,7 @@
 "1.6×10⁻¹⁹"  lab text, comma file  =>  null
 "1.6×10⁻¹⁹"  set  =>  [1.6e-19]
 "1.6×10⁻¹⁹"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6×10⁻¹⁹"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10⁻¹⁹ ± 0.1."}
+"1.6×10⁻¹⁹"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10⁻¹⁹ ± 10⁻²⁰."}
 "1.6 × 10⁻¹⁹"  answer  =>  1.6e-19
 "1.6 × 10⁻¹⁹"  worked  =>  1.6e-19
 "1.6 × 10⁻¹⁹"  written  =>  1.6e-19
@@ -669,7 +669,7 @@
 "1.6 × 10⁻¹⁹"  lab text, comma file  =>  null
 "1.6 × 10⁻¹⁹"  set  =>  [1.6e-19]
 "1.6 × 10⁻¹⁹"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6 × 10⁻¹⁹"  stated  =>  {"error":"Give your uncertainty too, like 1.6 × 10⁻¹⁹ ± 0.1."}
+"1.6 × 10⁻¹⁹"  stated  =>  {"error":"Give your uncertainty too, like 1.6 × 10⁻¹⁹ ± 10⁻²⁰."}
 "12.5×10^3"  answer  =>  12500
 "12.5×10^3"  worked  =>  12500
 "12.5×10^3"  written  =>  12500
@@ -681,7 +681,7 @@
 "12.5×10^3"  lab text, comma file  =>  null
 "12.5×10^3"  set  =>  [12500]
 "12.5×10^3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"12.5×10^3"  stated  =>  {"error":"Give your uncertainty too, like 12.5×10^3 ± 0.1."}
+"12.5×10^3"  stated  =>  {"error":"Give your uncertainty too, like 12.5×10^3 ± 100."}
 "2.5×10^+3"  answer  =>  2500
 "2.5×10^+3"  worked  =>  2500
 "2.5×10^+3"  written  =>  2500
@@ -693,7 +693,7 @@
 "2.5×10^+3"  lab text, comma file  =>  null
 "2.5×10^+3"  set  =>  [2500]
 "2.5×10^+3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"2.5×10^+3"  stated  =>  {"error":"Give your uncertainty too, like 2.5×10^+3 ± 0.1."}
+"2.5×10^+3"  stated  =>  {"error":"Give your uncertainty too, like 2.5×10^+3 ± 100."}
 "2.5×10^3"  answer  =>  2500
 "2.5×10^3"  worked  =>  2500
 "2.5×10^3"  written  =>  2500
@@ -705,7 +705,7 @@
 "2.5×10^3"  lab text, comma file  =>  null
 "2.5×10^3"  set  =>  [2500]
 "2.5×10^3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"2.5×10^3"  stated  =>  {"error":"Give your uncertainty too, like 2.5×10^3 ± 0.1."}
+"2.5×10^3"  stated  =>  {"error":"Give your uncertainty too, like 2.5×10^3 ± 100."}
 "1.6×10⁻¹²"  answer  =>  1.6e-12
 "1.6×10⁻¹²"  worked  =>  1.6e-12
 "1.6×10⁻¹²"  written  =>  1.6e-12
@@ -717,7 +717,7 @@
 "1.6×10⁻¹²"  lab text, comma file  =>  null
 "1.6×10⁻¹²"  set  =>  [1.6e-12]
 "1.6×10⁻¹²"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6×10⁻¹²"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10⁻¹² ± 0.1."}
+"1.6×10⁻¹²"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10⁻¹² ± 10⁻¹³."}
 "2×10³"  answer  =>  2000
 "2×10³"  worked  =>  2000
 "2×10³"  written  =>  2000
@@ -729,7 +729,7 @@
 "2×10³"  lab text, comma file  =>  null
 "2×10³"  set  =>  [2000]
 "2×10³"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"2×10³"  stated  =>  {"error":"Give your uncertainty too, like 2×10³ ± 1."}
+"2×10³"  stated  =>  {"error":"Give your uncertainty too, like 2×10³ ± 1000."}
 "1×10^400"  answer  =>  null
 "1×10^400"  worked  =>  null
 "1×10^400"  written  =>  null
@@ -789,7 +789,7 @@
 "2.5 × 10^3"  lab text, comma file  =>  null
 "2.5 × 10^3"  set  =>  [2500]
 "2.5 × 10^3"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"2.5 × 10^3"  stated  =>  {"error":"Give your uncertainty too, like 2.5 × 10^3 ± 0.1."}
+"2.5 × 10^3"  stated  =>  {"error":"Give your uncertainty too, like 2.5 × 10^3 ± 100."}
 "6.63 × 10⁻³⁴"  answer  =>  6.63e-34
 "6.63 × 10⁻³⁴"  worked  =>  6.63e-34
 "6.63 × 10⁻³⁴"  written  =>  6.63e-34
@@ -801,7 +801,7 @@
 "6.63 × 10⁻³⁴"  lab text, comma file  =>  null
 "6.63 × 10⁻³⁴"  set  =>  [6.63e-34]
 "6.63 × 10⁻³⁴"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"6.63 × 10⁻³⁴"  stated  =>  {"error":"Give your uncertainty too, like 6.63 × 10⁻³⁴ ± 0.01."}
+"6.63 × 10⁻³⁴"  stated  =>  {"error":"Give your uncertainty too, like 6.63 × 10⁻³⁴ ± 10⁻³⁶."}
 "10^3"  answer  =>  1000
 "10^3"  worked  =>  1000
 "10^3"  written  =>  null
@@ -849,7 +849,7 @@
 "1.6e-19"  lab text, comma file  =>  "1.6e-19"
 "1.6e-19"  set  =>  [1.6e-19]
 "1.6e-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6e-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6e-19 ± 0.1."}
+"1.6e-19"  stated  =>  {"error":"Give your uncertainty too, like 1.6e-19 ± 10⁻²⁰."}
 "-1.6e-19"  answer  =>  -1.6e-19
 "-1.6e-19"  worked  =>  -1.6e-19
 "-1.6e-19"  written  =>  -1.6e-19
@@ -861,7 +861,7 @@
 "-1.6e-19"  lab text, comma file  =>  "-1.6e-19"
 "-1.6e-19"  set  =>  [-1.6e-19]
 "-1.6e-19"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"-1.6e-19"  stated  =>  {"error":"Give your uncertainty too, like -1.6e-19 ± 0.1."}
+"-1.6e-19"  stated  =>  {"error":"Give your uncertainty too, like -1.6e-19 ± 10⁻²⁰."}
 "(1.6±0.1)×10^-19"  answer  =>  null
 "(1.6±0.1)×10^-19"  worked  =>  null
 "(1.6±0.1)×10^-19"  written  =>  null
@@ -1761,7 +1761,7 @@
 "1.6×10^-19 C"  lab text, comma file  =>  null
 "1.6×10^-19 C"  set  =>  {"error":"PhysLab could not read \"1.6×10^-19 C\" as a number. Type the values with commas between them, like 2, −3."}
 "1.6×10^-19 C"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6×10^-19 C"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10^-19 ± 0.1."}
+"1.6×10^-19 C"  stated  =>  {"error":"Give your uncertainty too, like 1.6×10^-19 ± 10⁻²⁰."}
 "1.6 × 10⁻¹⁹ C"  answer  =>  1.6e-19
 "1.6 × 10⁻¹⁹ C"  worked  =>  null
 "1.6 × 10⁻¹⁹ C"  written  =>  null
@@ -1773,7 +1773,7 @@
 "1.6 × 10⁻¹⁹ C"  lab text, comma file  =>  null
 "1.6 × 10⁻¹⁹ C"  set  =>  {"error":"PhysLab could not read \"1.6 × 10⁻¹⁹ C\" as a number. Type the values with commas between them, like 2, −3."}
 "1.6 × 10⁻¹⁹ C"  vector  =>  {"error":"Type the vector as 3i + 4j, as <3, 4>, or as a size and an angle like 5∠53.13°."}
-"1.6 × 10⁻¹⁹ C"  stated  =>  {"error":"Give your uncertainty too, like 1.6 × 10⁻¹⁹ ± 0.1."}
+"1.6 × 10⁻¹⁹ C"  stated  =>  {"error":"Give your uncertainty too, like 1.6 × 10⁻¹⁹ ± 10⁻²⁰."}
 "3 cm"  answer  =>  3
 "3 cm"  worked  =>  null
 "3 cm"  written  =>  null

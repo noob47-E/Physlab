@@ -7,6 +7,7 @@ import { scene } from '../core/store'
 import type { Computed, EvalResult, ObjId, SceneObject, ToolId } from '../core/types'
 import { visibleOrder, type Space } from '../core/visibility'
 import { add, type V3 } from '../math/vec'
+import { themeColor } from '../app/theme'
 
 interface ToolInfo {
   id: ToolId
@@ -381,7 +382,7 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
     case 'distance':
       if (picks.length < 2) return false
       {
-        const seg = b.segment(picks[0], picks[1], { color: '#74c0fc' })
+        const seg = b.segment(picks[0], picks[1], { color: themeColor('--accent') })
         seg.labelMode = 'value'
       }
       return done()
@@ -415,7 +416,7 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
       return done()
     case 'angleBisector':
       if (picks.length < 3) return false
-      b.line({ kind: 'angleBisector', a: picks[0], vertex: picks[1], b: picks[2] }, { color: '#ffa94d' })
+      b.line({ kind: 'angleBisector', a: picks[0], vertex: picks[1], b: picks[2] }, { color: themeColor('--warn') })
       return done()
     case 'midpoint':
     case 'perpBisector': {
@@ -431,7 +432,7 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
       }
       if (!a || !bb) return false
       if (tool === 'midpoint') b.point({ kind: 'midpoint', a, b: bb })
-      else b.line({ kind: 'perpBisector', a, b: bb }, { color: '#ffa94d' })
+      else b.line({ kind: 'perpBisector', a, b: bb }, { color: themeColor('--warn') })
       return done()
     }
     case 'perpendicular':
@@ -440,7 +441,7 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
       const pi = vals.findIndex((c) => c?.type === 'point')
       const through = picks[pi]
       const line = picks[1 - pi]
-      b.line({ kind: tool, through, line } as never, { color: tool === 'perpendicular' ? '#e599f7' : '#66d9e8' })
+      b.line({ kind: tool, through, line } as never, { color: tool === 'perpendicular' ? themeColor('--series-5') : themeColor('--series-6') })
       return done()
     }
     case 'intersect': {

@@ -4,7 +4,7 @@ import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { circleEquation3DText, distanceToLineLike, footOfPerpendicular, lineEquation, lineEquation3DText, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
 import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, NO_DIRECTION as SHORTEST_DIRECTED, normalize, sub, type V3 } from '../math/vec'
-import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, superscriptPowers, unitSuffix, worldValue } from '../math/format'
+import { fmt, fmtIJK, fmtPoint, fmtPrecise, fmtSci, formatMeasure, measureValue, superscriptPowers, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
 import { isPieceCorner, namedByLetters, pieceLettered, pieceMeasures } from '../math/lego'
 import { classifyPolygon } from '../math/shapes'
@@ -271,7 +271,7 @@ export function pairRows(a: SceneObject, b: SceneObject, get: Get): { title: str
         { label: `|${a.name}+${b.name}|`, value: len(add(A, B)), kind: 'length' },
         { label: `|${a.name}−${b.name}|`, value: len(sub(A, B)), kind: 'length' },
         // Nothing projects onto a zero vector: this read 0 while the steps button said undefined.
-        { label: `Projection of ${b.name} on ${a.name}`, value: isZero(A) ? NO_DIRECTION : dot(A, B) / len(A), kind: isZero(A) ? 'text' : 'length' }
+        { label: `Projection of ${b.name} on ${a.name}`, value: isZero(A) ? `undefined — |${a.name}| = 0` : dot(A, B) / len(A), kind: isZero(A) ? 'text' : 'length' }
       ]
     }
   }
@@ -341,6 +341,13 @@ const kindOf = (row: Row) => (row.kind === 'angle' || row.kind === 'direction' |
  */
 function valueText(v: number | string, row: Row, settings: SceneSettings, k: ReturnType<typeof kindOf> = kindOf(row)): string {
   if (typeof v === 'string') return superscriptPowers(v)
+  // eslint-disable-next-line no-restricted-syntax -- sub-pico threshold for known values: formatMeasure floors at 10⁻¹² (Bug 7)
+  if (v !== 0 && Math.abs(v) < 1e-12) {
+    if (row.unit) return superscriptPowers(`${fmtSci(v, settings)} ${row.unit}`)
+    const mv = measureValue(v, k, settings)
+    // eslint-disable-next-line no-restricted-syntax -- sub-pico threshold for known values: formatMeasure floors at 10⁻¹² (Bug 7)
+    return superscriptPowers(`${mv !== 0 && Math.abs(mv) < 1e-12 ? fmtSci(mv, settings) : fmtPrecise(mv, settings)}${unitSuffix(k, settings)}`)
+  }
   return superscriptPowers(row.unit ? `${fmtPrecise(v, settings)} ${row.unit}` : formatMeasure(v, k, settings))
 }
 

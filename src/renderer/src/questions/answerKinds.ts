@@ -71,7 +71,7 @@ export function enTest(x: number, u: number, xref: number, uref: number): { en: 
   const gap = Math.abs(x - xref)
   const both = Math.hypot(u, uref)
   // A hair of slack for binary rounding, so a gap that is exactly the allowance is not lost to the 17th digit.
-  const ok = gap <= both * (1 + 1e-9) + 4 * Number.EPSILON * Math.max(Math.abs(x), Math.abs(xref))
+  const ok = both === 0 ? gap <= 4 * Number.EPSILON * Math.max(Math.abs(x), Math.abs(xref)) : gap <= both * (1 + 1e-9)
   // With no allowance at all, a gap inside that slack is the arithmetic's (0.3 against 0.1 + 0.2),
   // so Eₙ is 0 like the verdict says; it used to be ∞ beside "agrees, 1 or less agrees".
   const en = both === 0 ? (ok ? 0 : Infinity) : gap / both

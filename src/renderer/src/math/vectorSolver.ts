@@ -1399,8 +1399,8 @@ const CARD_RESERVED = new Set(['i', 'j', 'k', 'e', 'pi', 'x', 'y', 'z'])
  * "v__A" is a double subscript.
  */
 export function safeCardName(typed: string, current: string, others: string[]): string {
-  const cleaned = typed.replace(/[^A-Za-z0-9_]/g, '').slice(0, 4)
-  if (!/^[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)?$/.test(cleaned)) return current
+  const cleaned = typed.replace(/[^A-Za-z0-9_Ͱ-Ͽ]/g, '').slice(0, 4)
+  if (!/^[A-Za-zͰ-Ͽ][A-Za-z0-9Ͱ-Ͽ]*(_[A-Za-z0-9Ͱ-Ͽ]+)?$/.test(cleaned)) return current
   if (CARD_RESERVED.has(cleaned) || others.includes(cleaned)) return current
   return cleaned
 }

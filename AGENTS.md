@@ -424,6 +424,9 @@ neighbour is open.
 - **scanRoots skips wider windows once periodic roots and their repeat are found.** When `dRoots.length > count`
   and `periodOf` confirms periodicity within the scanned boundary, scanning windows of ±1,000 to ±10⁶ units only
   bisects thousands of redundant periodic cycles; `solveByScan` already has the nearest roots and the period.
+- **`clearDrawing` filters strictly by `activeSpace`, not `visibleOrder`.** Objects without a space (spaceless
+  numbers, constants, global variables) belong to no drawing canvas; clearing the active drawing space must keep them,
+  rather than dropping all objects in `visibleOrder` (Bug 22). Guard: `tests/g22-cleardrawing-spaceless.test.ts`.
 
 ## Code knowledge
 

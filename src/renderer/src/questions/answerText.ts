@@ -476,8 +476,26 @@ export function readStated(text: string): Read<{ x: number; u: number; unit: Uni
   return { x, u, unit }
 }
 
-/** "1" in the last decimal place the student wrote: 0.5591 → 0.0001, 12 → 1. For the example in a sentence only. */
+/** "1" in the last decimal place the student wrote: 0.5591 → 0.0001, 12 → 1, 1.5e3 → 100, 1.6e-19 → 10⁻²⁰. For the example in a sentence only. */
 function lastDigit(t: string): string {
-  const m = /\.(\d+)/.exec(t)
-  return m ? `0.${'0'.repeat(m[1].length - 1)}1` : '1'
+  const m = PLAIN_NUMBER.exec(dashes(t.trim()))
+  if (m) {
+    const [, mantissa, e, caret, bracketed, raised] = m
+    const expStr = e ?? caret ?? bracketed ?? (raised === undefined ? undefined : unraised(raised))
+    const dot = /\.(\d+)/.exec(mantissa)
+    const fracLen = dot ? dot[1].length : 0
+    if (expStr !== undefined) {
+      const p = Number(expStr) - fracLen
+      if (p >= 0 && p <= 6) return String(10 ** p)
+      if (p < 0 && p >= -4) return `0.${'0'.repeat(-p - 1)}1`
+      const sup = (n: number): string => {
+        const SUP: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' }
+        return String(n).replace(/[-0-9]/g, (c) => SUP[c] ?? c)
+      }
+      return `10${sup(p)}`
+    }
+    return dot ? `0.${'0'.repeat(fracLen - 1)}1` : '1'
+  }
+  const dot = /\.(\d+)/.exec(t)
+  return dot ? `0.${'0'.repeat(dot[1].length - 1)}1` : '1'
 }

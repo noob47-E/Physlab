@@ -929,7 +929,7 @@ function KindCard({ kind, onPick, children }: { kind: LinkKind; onPick?: () => v
 }
 
 /**
- * Launch at an angle. Working out vₓ = v cos θ and v_y = v sin θ by hand before you can even
+ * Launch at an angle. Working out vₓ = v cos θ and vᵧ = v sin θ by hand before you can even
  * start the simulation is exactly the arithmetic the simulator is supposed to do for you — and
  * the components are shown, so it is still a lesson rather than a black box.
  */
@@ -951,7 +951,7 @@ function Launcher({ id }: { id: string }) {
           <Rocket size={12} /> Set
         </button>
         <div className="w-full pt-0.5 text-small tabular-nums text-[color:var(--text-faint)]">
-          vₓ = {num(v[0], 'm/s')} · v_y = {num(v[1], 'm/s')}
+          vₓ = {num(v[0], 'm/s')} · vᵧ = {num(v[1], 'm/s')}
         </div>
       </div>
     </div>

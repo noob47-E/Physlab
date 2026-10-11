@@ -270,12 +270,12 @@ describe('clearDrawing: delete everything on this drawing', () => {
       stamped(point('pB', 'B', [4, 6, 0]), 'shapes'),
       stamped({ ...base('sAB', 'a'), type: 'segment', a: 'pA', b: 'pB' }, 'shapes'),
       stamped(number('nV', 'v', '7'), 'vectors'),
-      // Made where no drawing was active: shown everywhere, so it goes too.
+      // Made where no drawing was active: shown everywhere, but kept when clearing an active drawing.
       number('nE', 'e', '1')
     ])
     scene().select(['pA', 'nV'])
     scene().clearDrawing()
-    expect(scene().order).toEqual(['nV'])
+    expect(scene().order).toEqual(['nV', 'nE'])
     expect(scene().ev.scope.v).toBe(7)
     // The selection is trimmed to what is left, not cleared wholesale.
     expect(scene().selection).toEqual(['nV'])

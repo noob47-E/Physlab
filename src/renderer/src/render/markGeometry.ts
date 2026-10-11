@@ -38,7 +38,9 @@ export function cornerAngle(prev: V3, v: V3, next: V3, orientation: number, isTr
  */
 export function polygonCornerMark(prev: V3, v: V3, next: V3, orientation: number, isTriangle: boolean, r: number): V3[] {
   // Arms that project onto one line in x-y (an upright polygon) have no winding to read: use the true 3-D angle.
-  const flat = Math.abs((prev[0] - v[0]) * (next[1] - v[1]) - (prev[1] - v[1]) * (next[0] - v[0])) < 1e-9
+  const crossZ = (prev[0] - v[0]) * (next[1] - v[1]) - (prev[1] - v[1]) * (next[0] - v[0])
+  const armScale = Math.hypot(prev[0] - v[0], prev[1] - v[1]) * Math.hypot(next[0] - v[0], next[1] - v[1])
+  const flat = armScale === 0 || Math.abs(crossZ) < 1e-9 * armScale
   const ang = !isTriangle && flat ? angleAt(prev, v, next) : cornerAngle(prev, v, next, orientation, isTriangle)
   if (Math.abs(toDeg(ang) - 90) < 1e-6) {
     const u1 = scale(normalize(sub(prev, v)), r * 0.6)

@@ -174,7 +174,7 @@ describe('the Measure panel rows (H12–H16)', () => {
     expect(row(rows, /Unit vector/).value).toBe('undefined — a zero vector has no direction')
     const pair = pairRows(objNamed('Z'), objNamed('w'), (id) => sc().ev.values.get(id))!.rows
     expect(row(pair, /Angle between/).value).toBe('undefined — a zero vector has no direction')
-    expect(row(pair, /Projection of w on Z/).value).toBe('undefined — a zero vector has no direction')
+    expect(row(pair, /Projection of w on Z/).value).toBe('undefined — |Z| = 0')
     // The other way round is fine: the projection of the zero vector on w is 0.
     const back = pairRows(objNamed('w'), objNamed('Z'), (id) => sc().ev.values.get(id))!.rows
     expect(row(back, /Projection of Z on w/).value).toBe(0)

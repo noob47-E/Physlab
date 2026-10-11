@@ -38,6 +38,7 @@ import type { V3 } from '../math/vec'
 import { NumField } from '../ui/fields'
 import { Tex } from '../ui/Tex'
 import { roundSig, sciNotation, superscriptPowers } from '../math/format'
+import { parseAnswer } from '../math/checkAnswer'
 import { OPERATIONS } from './vectorCalcStore'
 
 export function ModePanel({ mode }: { mode: CalcMode }) {
@@ -331,9 +332,9 @@ function StatMode() {
         <option value="linear">y = a + bx</option>
         <option value="quadratic">y = a + bx + cx²</option>
         <option value="log">y = a + b·ln x</option>
-        <option value="exp">y = a·e^(bx)</option>
-        <option value="abExp">y = a·b^x</option>
-        <option value="power">y = a·x^b</option>
+        <option value="exp">y = a·eᵇˣ</option>
+        <option value="abExp">y = a·bˣ</option>
+        <option value="power">y = a·xᵇ</option>
         <option value="inverse">y = a + b/x</option>
       </select>
       <label className="flex items-center gap-2 text-[color:var(--text-dim)]">
@@ -982,7 +983,7 @@ function MeasureMode() {
   } catch (e) {
     sf = String(e instanceof Error ? e.message : e)
   }
-  const numVal = Number(num.replace(/[×x]\s*10\^?/i, 'e'))
+  const numVal = parseAnswer(num) ?? NaN
   const prop = propagate(op, a, op === '^' ? power : b)
   let dims: string
   try {

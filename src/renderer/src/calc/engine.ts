@@ -969,14 +969,22 @@ export function polyRoots(coeffs: number[]): Cx[] {
     if (maxStep < 1e-15) break
   }
   return roots
-    // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-1): absolute floors, so x³ − 10⁻³⁹ = 0 answers 0 (tests/noiseFloors.test.ts)
-    .map((z) => ({ re: Math.abs(z.re) < 1e-12 ? 0 : z.re, im: Math.abs(z.im) < 1e-9 ? 0 : z.im }))
+    .map((z) => {
+      const mag = Math.hypot(z.re, z.im)
+      const imNoise = mag === 0 || Math.abs(z.im) < 1e-9 * Math.max(Math.abs(z.re), mag * 1e-6)
+      return {
+        // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-1): absolute floors, so x³ − 10⁻³⁹ = 0 answers 0 (tests/noiseFloors.test.ts)
+        re: Math.abs(z.re) < 1e-12 ? 0 : z.re,
+        im: imNoise ? 0 : z.im
+      }
+    })
     .sort((a, b) => a.re - b.re || a.im - b.im)
 }
 
 export function solveLinearSystem(A: number[][], b: number[]): number[] {
   const det = Number(math.det(A))
-  if (Math.abs(det) < 1e-14) throw new Error('No unique solution (determinant is 0)')
+  const scale = A.reduce((acc, row) => acc * Math.hypot(...row), 1)
+  if (scale === 0 || Math.abs(det) < 1e-14 * scale) throw new Error('No unique solution (determinant is 0)')
   const x = math.lusolve(A, b) as number[][]
   return x.map((row) => row[0])
 }
