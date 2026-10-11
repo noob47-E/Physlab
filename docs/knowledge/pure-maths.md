@@ -20,7 +20,13 @@ has been checked.
 | `algebraHcf.ts` | HCF and LCM of algebraic expressions (factorise, then common factors). |
 | `factor.ts` | Factorise step by step, methods in the order taught (common factor, difference of squares, quadratics, substitution, factor theorem); `factorAll`. |
 | `cxpoly.ts` | Exact surd + i arithmetic for factorising over the complex numbers. |
-| `complex.ts` | Complex-number working (`i` parsed as a letter, i² replaced after expanding). Owned by the calculator part while it runs. |
+| `complex.ts` | The Complex job (`i` parsed as a letter, i² replaced after expanding), and the door to `complex/`: it re-exports the other jobs and the decimal check, so importers use `./complex` as before. A part never imports it. |
+| `complex/numbers.ts` | Exact complex numbers and their TeX, powers of i, numbers with square roots and i (`IPoly`, `Frac`), and the check against a decimal (`agreesNumerically`). |
+| `complex/parse.ts` | Reading a typed line exactly (`readFrac`, `readLine`, `scan`, rounded literals), and the sentences for what it cannot read (`CannotHold`). |
+| `complex/write.ts` | Writing: the decimal answer (`finishComplex`), a surd and a typed line in TeX (`typedTex`), the pieces of a real surd, and the steps that writing needs (`rootsMove`, `rationalise`). |
+| `complex/surds.ts` | The Complex job's working for a line with square roots (`surdComplexWorking`), and Simplify surds' entry for a line with no i (`isSurdLine`, `surdWorking`). |
+| `complex/real.ts` | Simplify surds for a line with no i: the `Pencil` that works it out step by step, and `realSteps`. |
+| `complex/solve.ts` | Solve (a linear or quadratic equation) and Factorise with i (`solveQuadraticWorking`, `factoriseComplexWorking`). |
 | `divide.ts` | Algebraic long division with the running commentary. |
 | `partial.ts` | Partial fractions (cover-up and comparing coefficients). |
 | `latexCheck.ts` | Reads a displayed answer back (`splitDisplayedSum`) so the check looks at what is shown. |
