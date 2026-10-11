@@ -1,16 +1,18 @@
 // The step router: chains methods, passes sub-problems, and validates all steps.
 //
-// Part of the PhysLab step engine (S0).
+// Part of the PhysLab step engine (S0), changed by P-FIX-S0SOUND.
 // Rule 0.2: One invalid or unknown step hides that method's steps.
-// A method that fails yields "I can't show the steps for this one yet".
+// A method whose working is hidden does not end the search: the next applicable method is tried, so a
+// method that can show its steps is still used. A hidden working is never returned as shown.
 
 import type { Problem, Working, Method, StepRouter, RouterOptions } from './types'
+import { CANT_SHOW_STEPS_REASON } from './types'
 import { validateWorking } from './validate'
 import { defaultCheckAdapter, type CheckAdapter } from './check-adapter'
 
+export { CANT_SHOW_STEPS_REASON }
 export const DEFAULT_MAX_DEPTH = 10
 export const DEFAULT_MAX_STEPS = 100
-export const CANT_SHOW_STEPS_REASON = "I can't show the steps for this one yet"
 
 /** Count all steps in a Working document including nested sub-workings. */
 export function countSteps(working: Working): number {
@@ -87,74 +89,61 @@ export class DefaultStepRouter implements StepRouter {
       }
     }
 
-    const primary = applicable.find((m) => !m.isAlternative) ?? applicable[0]
-    const alternatives = applicable.filter((m) => m !== primary)
+    // Sub-router passed to a method for sub-problem recursion
+    const subRouter: StepRouter = {
+      solve: (subProblem: Problem, subOpts?: RouterOptions) =>
+        this.solve(subProblem, {
+          ...options,
+          ...subOpts,
+          currentDepth: depth + 1,
+          stepCount: stepCount + 1
+        }),
+      registerMethod: (m) => this.registerMethod(m),
+      getMethods: () => this.getMethods()
+    }
 
-    try {
-      // Sub-router passed to method for sub-problem recursion
-      const subRouter: StepRouter = {
-        solve: (subProblem: Problem, subOpts?: RouterOptions) =>
-          this.solve(subProblem, {
-            ...options,
-            ...subOpts,
-            currentDepth: depth + 1,
-            stepCount: stepCount + 1
-          }),
-        registerMethod: (m) => this.registerMethod(m),
-        getMethods: () => this.getMethods()
+    // A method's working, or undefined when it throws or runs over the step budget.
+    const attempt = (method: Method): Working | undefined => {
+      try {
+        const w = method.solve(problem, subRouter)
+        return stepCount + countSteps(w) > maxSteps ? undefined : w
+      } catch {
+        return undefined
       }
+    }
 
-      const working = primary.solve(problem, subRouter)
-
-      // Check step budget after generation
-      const totalSteps = countSteps(working)
-      if (stepCount + totalSteps > maxSteps) {
-        return {
-          steps: [],
-          noWorking: true,
-          reason: CANT_SHOW_STEPS_REASON
-        }
+    // The first method (in order) whose working is shown is the primary. A hidden working is skipped,
+    // never returned: the next applicable method gets its turn.
+    let chosen: Working | undefined
+    let chosenIndex = -1
+    for (let i = 0; i < applicable.length; i++) {
+      const w = attempt(applicable[i])
+      if (w && !w.noWorking && validateWorking(w, this.adapter).valid) {
+        chosen = w
+        chosenIndex = i
+        break
       }
-
-      // Validate all generated steps (and sub-workings)
-      const validation = validateWorking(working, this.adapter)
-      if (!validation.valid) {
-        // One invalid or unknown step hides all steps of that method
-        return {
-          ...working,
-          steps: [],
-          subWorkings: undefined,
-          noWorking: true,
-          reason: CANT_SHOW_STEPS_REASON
-        }
-      }
-
-      // Try alternative methods ("Another way") if allowed
-      if (options?.includeAlternatives !== false && alternatives.length > 0) {
-        for (const alt of alternatives) {
-          try {
-            const altWorking = alt.solve(problem, subRouter)
-            if (countSteps(altWorking) <= maxSteps) {
-              const altValidation = validateWorking(altWorking, this.adapter)
-              if (altValidation.valid) {
-                working.anotherWay = altWorking
-                break
-              }
-            }
-          } catch {
-            // Alternative failure is ignored; primary remains valid
-          }
-        }
-      }
-
-      return working
-    } catch {
+    }
+    if (!chosen) {
       return {
         steps: [],
         noWorking: true,
         reason: CANT_SHOW_STEPS_REASON
       }
     }
+
+    // "Another way": the first later method whose working is shown, if alternatives are allowed.
+    if (options?.includeAlternatives !== false) {
+      for (const alt of applicable.slice(chosenIndex + 1)) {
+        const altWorking = attempt(alt)
+        if (altWorking && !altWorking.noWorking && validateWorking(altWorking, this.adapter).valid) {
+          chosen.anotherWay = altWorking
+          break
+        }
+      }
+    }
+
+    return chosen
   }
 }
 

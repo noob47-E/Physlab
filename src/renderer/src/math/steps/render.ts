@@ -7,6 +7,7 @@
 import type { Move, Answer, Working as PureWorkingDoc } from '../pure/work'
 import type { Working, Step, Problem, StepAnswer } from './types'
 import { validateWorking } from './validate'
+import { substitutionOf } from './sentences'
 import type { CheckAdapter } from './check-adapter'
 
 /** Helper to convert an expression or equation AST/string into LaTeX display math. */
@@ -101,7 +102,6 @@ export function renderWorkingToDoc(
       answers,
       noWorking: true,
       reason: working.reason,
-      check: working.check,
       checked: working.checked
     }
   }
@@ -111,15 +111,16 @@ export function renderWorkingToDoc(
   // moves are stripped and noWorking is set with the standard fallback reason.
   const validation = validateWorking(working, adapter)
   if (!validation.valid) {
+    // Nothing that failed validation reaches the page: no moves, and no answer either. An answer is
+    // shown only with the steps that check it (the review of a982a6a4, MUST 2).
     return {
       title,
       input,
       method: working.method,
       moves: [],
-      answers,
+      answers: [],
       noWorking: true,
       reason: "I can't show the steps for this one yet",
-      check: working.check,
       checked: working.checked
     }
   }
@@ -132,7 +133,7 @@ export function renderWorkingToDoc(
     method: working.method,
     moves,
     answers,
-    check: working.check,
+    check: substitutionOf(working)?.text,
     checked: working.checked,
     noWorking: working.noWorking,
     reason: working.reason

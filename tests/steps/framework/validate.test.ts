@@ -2,7 +2,7 @@
 //
 // Rule 0.2: Only 'valid' steps are ever shown.
 // Tests every step kind:
-// - A right step -> 'valid'
+// - A right step -> 'valid' (its sentence and rule are the ones the builder gives from its typed data)
 // - Planted wrong steps -> 'invalid' or 'unknown', NEVER 'valid' (at least 15 per kind)
 
 import { describe, it, expect } from 'vitest'
@@ -16,21 +16,25 @@ import {
   validateSubproblemReduction,
   validateWorking
 } from '../../../src/renderer/src/math/steps/validate'
-import type { Step, Working } from '../../../src/renderer/src/math/steps/types'
+import { finishStep } from '../../../src/renderer/src/math/steps/sentences'
+import type { EquationOp, Step, Working } from '../../../src/renderer/src/math/steps/types'
+
+/** A step with the sentence and rule its typed data gives (the builder, never typed here). */
+const built = (step: Omit<Step, 'sentence'> & { sentence?: string }): Step => finishStep({ sentence: '', ...step } as Step)
 
 describe('Step validation framework', () => {
   describe('ExprEq steps', () => {
     it('accepts mathematically equivalent expression steps as valid', () => {
       const validCases = [
-        { before: '2*x + 3*x', after: '5*x', sentence: 'Combine like terms' },
-        { before: 'x^2 - 1', after: '(x - 1)*(x + 1)', sentence: 'Factor difference of squares' },
-        { before: '(x + 2)^2', after: 'x^2 + 4*x + 4', sentence: 'Expand binomial square' },
-        { before: '3*(x + y)', after: '3*x + 3*y', sentence: 'Distribute 3' },
-        { before: '4*x - 2*x + 7', after: '2*x + 7', sentence: 'Combine x terms' }
+        { before: '2*x + 3*x', after: '5*x' },
+        { before: 'x^2 - 1', after: '(x - 1)*(x + 1)' },
+        { before: '(x + 2)^2', after: 'x^2 + 4*x + 4' },
+        { before: '3*(x + y)', after: '3*x + 3*y' },
+        { before: '4*x - 2*x + 7', after: '2*x + 7' }
       ]
 
       for (const c of validCases) {
-        const step: Step = { kind: 'ExprEq', ...c }
+        const step = built({ kind: 'ExprEq', ...c })
         expect(validateExprEq(step)).toBe('valid')
         expect(validateStep(step).verdict).toBe('valid')
       }
@@ -59,30 +63,31 @@ describe('Step validation framework', () => {
       expect(planted.length).toBeGreaterThanOrEqual(15)
 
       for (const p of planted) {
-        const step: Step = {
-          kind: 'ExprEq',
-          before: p.before,
-          after: p.after,
-          sentence: `Transformed ${p.before} to ${p.after}`
-        }
+        const step = built({ kind: 'ExprEq', before: p.before, after: p.after })
         const verdict = validateExprEq(step)
         expect(verdict, `Planted wrong step '${p.before} -> ${p.after}' must not be valid`).not.toBe('valid')
       }
+    })
+
+    it('a sentence that is not the builder\'s is invalid, even for a right step', () => {
+      const step = built({ kind: 'ExprEq', before: '2*x + 3*x', after: '5*x' })
+      expect(validateStep({ ...step, sentence: 'Combine like terms' }).verdict).toBe('invalid')
+      expect(validateStep({ ...step, rule: 'Combine like terms' }).verdict).toBe('invalid')
     })
   })
 
   describe('EquationEquiv steps', () => {
     it('accepts equivalent equations as valid', () => {
-      const validCases = [
-        { before: '2*x + 4 = 10', after: '2*x = 6', sentence: 'Subtract 4 from both sides' },
-        { before: '2*x = 6', after: 'x = 3', sentence: 'Divide both sides by 2' },
-        { before: '3*x - 5 = x + 1', after: '2*x - 5 = 1', sentence: 'Subtract x from both sides' },
-        { before: '2*x - 5 = 1', after: '2*x = 6', sentence: 'Add 5 to both sides' },
-        { before: '4*x = 8', after: 'x = 2', sentence: 'Divide both sides by 4' }
+      const validCases: { before: string; after: string; op: EquationOp }[] = [
+        { before: '2*x + 4 = 10', after: '2*x = 6', op: { kind: 'subtract-both', term: '4' } },
+        { before: '2*x = 6', after: 'x = 3', op: { kind: 'divide-both', k: '2' } },
+        { before: '3*x - 5 = x + 1', after: '2*x - 5 = 1', op: { kind: 'subtract-both', term: 'x' } },
+        { before: '2*x - 5 = 1', after: '2*x = 6', op: { kind: 'add-both', term: '5' } },
+        { before: '4*x = 8', after: 'x = 2', op: { kind: 'divide-both', k: '4' } }
       ]
 
       for (const c of validCases) {
-        const step: Step = { kind: 'EquationEquiv', ...c }
+        const step = built({ kind: 'EquationEquiv', ...c })
         expect(validateEquationEquiv(step)).toBe('valid')
         expect(validateStep(step).verdict).toBe('valid')
       }
@@ -111,18 +116,18 @@ describe('Step validation framework', () => {
       expect(planted.length).toBeGreaterThanOrEqual(15)
 
       for (const p of planted) {
-        const step: Step = {
+        const step = built({
           kind: 'EquationEquiv',
+          op: { kind: 'subtract-both', term: '1' },
           before: p.before,
-          after: p.after,
-          sentence: `Step from ${p.before} to ${p.after}`
-        }
+          after: p.after
+        })
         const verdict = validateEquationEquiv(step)
         expect(verdict, `Planted wrong equation move '${p.before} -> ${p.after}' must not be valid`).not.toBe('valid')
       }
     })
 
-    it('returns unknown for non-proportional higher-degree equations without root proof', () => {
+    it('returns unknown for a move with no declared op', () => {
       const step: Step = {
         kind: 'EquationEquiv',
         before: '(x - 1)^2 = 0',
@@ -136,17 +141,22 @@ describe('Step validation framework', () => {
   describe('Implication steps', () => {
     it('accepts sound forward deductions as valid', () => {
       const validCases = [
-        { before: 'x = 3', after: 'x^2 = 9', rule: 'square', data: { action: 'square' }, sentence: 'Square both sides' },
-        { before: 'x - 1 = 2', after: '(x - 1)^2 = 4', rule: 'square', data: { action: 'square' }, sentence: 'Square both sides' },
-        { before: 'x = 4', after: '2*x = 8', rule: 'multiply', data: { action: 'multiply', multiplier: '2' }, sentence: 'Multiply both sides by 2' },
-        { before: '2*x = 6', after: 'x = 3', sentence: 'Equivalent deduction' }
+        { before: 'x = 3', after: 'x^2 = 9', data: { action: 'square' } },
+        { before: 'x - 1 = 2', after: '(x - 1)^2 = 4', data: { action: 'square' } },
+        { before: 'x = 4', after: '2*x = 8', data: { action: 'multiply', multiplier: '2' } }
       ]
 
       for (const c of validCases) {
-        const step: Step = { kind: 'Implication', ...c }
+        const step = built({ kind: 'Implication', ...c })
         expect(validateImplication(step)).toBe('valid')
         expect(validateStep(step).verdict).toBe('valid')
       }
+    })
+
+    it('an equivalent deduction with no declared sentence is valid as a deduction, but shows no words', () => {
+      const step: Step = { kind: 'Implication', before: '2*x = 6', after: 'x = 3', sentence: 'Equivalent deduction' }
+      expect(validateImplication(step)).toBe('valid')
+      expect(validateStep(step).verdict).toBe('invalid')
     })
 
     it('rejects at least 15 planted wrong Implication steps (never valid)', () => {
@@ -189,14 +199,14 @@ describe('Step validation framework', () => {
   describe('CaseSplitComplete steps', () => {
     it('accepts complete domain coverings as valid', () => {
       const validCases = [
-        { before: 'real', after: 'x >= 0, x < 0', data: { cases: ['x >= 0', 'x < 0'] }, sentence: 'Split into positive and negative' },
-        { before: 'real', after: 'x > 2, x = 2, x < 2', data: { cases: ['x > 2', 'x = 2', 'x < 2'] }, sentence: 'Split around pivot 2' },
-        { before: 'integers', after: 'even, odd', data: { cases: ['even', 'odd'] }, sentence: 'Split by parity' },
-        { before: 'real', after: 'Delta > 0, Delta = 0, Delta < 0', data: { cases: ['Delta > 0', 'Delta = 0', 'Delta < 0'] }, sentence: 'Discriminant cases' }
+        { before: 'real', after: 'x >= 0, x < 0', data: { cases: ['x >= 0', 'x < 0'] } },
+        { before: 'real', after: 'x > 2, x = 2, x < 2', data: { cases: ['x > 2', 'x = 2', 'x < 2'] } },
+        { before: 'integers', after: 'even, odd', data: { cases: ['even', 'odd'] } },
+        { before: 'real', after: 'Delta > 0, Delta = 0, Delta < 0', data: { cases: ['Delta > 0', 'Delta = 0', 'Delta < 0'] } }
       ]
 
       for (const c of validCases) {
-        const step: Step = { kind: 'CaseSplitComplete', ...c }
+        const step = built({ kind: 'CaseSplitComplete', ...c })
         expect(validateCaseSplitComplete(step)).toBe('valid')
         expect(validateStep(step).verdict).toBe('valid')
       }
@@ -227,13 +237,12 @@ describe('Step validation framework', () => {
       expect(planted.length).toBeGreaterThanOrEqual(15)
 
       for (const p of planted) {
-        const step: Step = {
+        const step = built({
           kind: 'CaseSplitComplete',
           before: p.before,
           after: p.cases.join(', '),
-          data: { cases: p.cases },
-          sentence: `Split into ${p.cases.join(', ')}`
-        }
+          data: { cases: p.cases }
+        })
         const verdict = validateCaseSplitComplete(step)
         expect(verdict, `Planted incomplete cases ${JSON.stringify(p.cases)} must not be valid`).not.toBe('valid')
       }
@@ -243,15 +252,15 @@ describe('Step validation framework', () => {
   describe('SolutionSetEq steps', () => {
     it('accepts correct and complete solution sets as valid', () => {
       const validCases = [
-        { before: '2*x - 6 = 0', after: 'x = 3', data: { solutions: ['3'], variable: 'x' }, sentence: 'Solution is x = 3' },
-        { before: '3*x + 9 = 0', after: 'x = -3', data: { solutions: ['-3'], variable: 'x' }, sentence: 'Solution is x = -3' },
-        { before: '5*x = 10', after: 'x = 2', data: { solutions: ['2'], variable: 'x' }, sentence: 'Solution is x = 2' },
-        { before: 'x - 7 = 0', after: 'x = 7', data: { solutions: ['7'], variable: 'x' }, sentence: 'Solution is x = 7' },
-        { before: '2*x = 0', after: 'x = 0', data: { solutions: ['0'], variable: 'x' }, sentence: 'Solution is x = 0' }
+        { before: '2*x - 6 = 0', after: 'x = 3', data: { solutions: ['3'], variable: 'x' } },
+        { before: '3*x + 9 = 0', after: 'x = -3', data: { solutions: ['-3'], variable: 'x' } },
+        { before: '5*x = 10', after: 'x = 2', data: { solutions: ['2'], variable: 'x' } },
+        { before: 'x - 7 = 0', after: 'x = 7', data: { solutions: ['7'], variable: 'x' } },
+        { before: '2*x = 0', after: 'x = 0', data: { solutions: ['0'], variable: 'x' } }
       ]
 
       for (const c of validCases) {
-        const step: Step = { kind: 'SolutionSetEq', ...c }
+        const step = built({ kind: 'SolutionSetEq', ...c })
         expect(validateSolutionSetEq(step)).toBe('valid')
         expect(validateStep(step).verdict).toBe('valid')
       }
@@ -281,13 +290,12 @@ describe('Step validation framework', () => {
       expect(planted.length).toBeGreaterThanOrEqual(15)
 
       for (const p of planted) {
-        const step: Step = {
+        const step = built({
           kind: 'SolutionSetEq',
           before: p.eq,
           after: p.sols.join(', '),
-          data: { solutions: p.sols, variable: 'x' },
-          sentence: `Solution set is ${p.sols.join(', ')}`
-        }
+          data: { solutions: p.sols, variable: 'x' }
+        })
         const verdict = validateSolutionSetEq(step)
         expect(verdict, `Planted wrong solution set '${p.sols.join(', ')}' for '${p.eq}' must not be valid`).not.toBe('valid')
       }
@@ -295,47 +303,24 @@ describe('Step validation framework', () => {
   })
 
   describe('SubproblemReduction steps', () => {
-    it('accepts sound subproblem reductions as valid', () => {
-      const validCases = [
+    it('on its own a reduction is never valid: it needs the case split before it (see splits.test.ts)', () => {
+      const validShapes = [
         {
-          before: '2*x, 3',
-          after: '2*x + 3',
-          data: { subAnswers: ['2*x', '3'], parentAnswer: '2*x + 3' },
-          sentence: 'Combine derivative terms'
-        },
-        {
-          before: 'x = 2, x = -3',
-          after: 'x in {2, -3}',
+          before: 'x = 1 \\text{ or } x = 2',
+          after: 'x in {1, 2}',
           data: {
-            subAnswers: [{ solutions: ['2'] }, { solutions: ['-3'] }],
-            parentAnswer: { solutions: ['2', '-3'] }
-          },
-          sentence: 'Combine roots from both factors'
-        },
-        {
-          before: '3*x, 4*x',
-          after: '7*x',
-          data: { subAnswers: ['3*x', '4*x'], parentAnswer: '7*x' },
-          sentence: 'Combine like terms'
+            subProblems: ['x - 1 = 0', 'x - 2 = 0'],
+            subAnswers: [{ solutions: ['1'] }, { solutions: ['2'] }],
+            parentAnswer: { solutions: ['1', '2'] }
+          }
         }
       ]
 
-      for (const c of validCases) {
-        const step: Step = { kind: 'SubproblemReduction', ...c }
-        expect(validateSubproblemReduction(step)).toBe('valid')
-        expect(validateStep(step).verdict).toBe('valid')
+      for (const c of validShapes) {
+        const step = built({ kind: 'SubproblemReduction', ...c })
+        expect(validateSubproblemReduction(step)).toBe('invalid')
+        expect(validateStep(step).verdict).toBe('invalid')
       }
-    })
-
-    it('rejects unrelated single subproblem reductions as not valid', () => {
-      const step: Step = {
-        kind: 'SubproblemReduction',
-        before: 'x = 2',
-        after: 'y = 5',
-        data: { subAnswers: ['x = 2'], parentAnswer: 'y = 5' },
-        sentence: 'Unrelated reduction'
-      }
-      expect(validateSubproblemReduction(step)).not.toBe('valid')
     })
 
     it('rejects at least 15 planted wrong SubproblemReduction steps (never valid)', () => {
@@ -361,13 +346,12 @@ describe('Step validation framework', () => {
       expect(planted.length).toBeGreaterThanOrEqual(15)
 
       for (const p of planted) {
-        const step: Step = {
+        const step = built({
           kind: 'SubproblemReduction',
           before: JSON.stringify(p.sub),
           after: JSON.stringify(p.parent),
-          data: { subAnswers: p.sub, parentAnswer: p.parent },
-          sentence: 'Combine subproblems'
-        }
+          data: { subAnswers: p.sub, parentAnswer: p.parent }
+        })
         const verdict = validateSubproblemReduction(step)
         expect(verdict, `Planted wrong reduction '${JSON.stringify(p.sub)} -> ${JSON.stringify(p.parent)}' must not be valid`).not.toBe('valid')
       }
@@ -378,19 +362,20 @@ describe('Step validation framework', () => {
     it('accepts working where every step is valid', () => {
       const working: Working = {
         title: 'Solve 2x + 4 = 10',
+        input: '2*x + 4 = 10',
         steps: [
-          {
+          built({
             kind: 'EquationEquiv',
+            op: { kind: 'subtract-both', term: '4' },
             before: '2*x + 4 = 10',
-            after: '2*x = 6',
-            sentence: 'Subtract 4 from both sides'
-          },
-          {
+            after: '2*x = 6'
+          }),
+          built({
             kind: 'EquationEquiv',
+            op: { kind: 'divide-both', k: '2' },
             before: '2*x = 6',
-            after: 'x = 3',
-            sentence: 'Divide both sides by 2'
-          }
+            after: 'x = 3'
+          })
         ],
         answer: { label: 'x', tex: '3' }
       }
@@ -402,19 +387,20 @@ describe('Step validation framework', () => {
     it('rejects working containing even a single planted wrong step', () => {
       const working: Working = {
         title: 'Solve 2x + 4 = 10',
+        input: '2*x + 4 = 10',
         steps: [
-          {
+          built({
             kind: 'EquationEquiv',
+            op: { kind: 'subtract-both', term: '4' },
             before: '2*x + 4 = 10',
-            after: '2*x = 10', // Planted wrong move: forgot to subtract 4 from RHS
-            sentence: 'Subtract 4 from both sides'
-          },
-          {
+            after: '2*x = 10' // Planted wrong move: forgot to subtract 4 from RHS
+          }),
+          built({
             kind: 'EquationEquiv',
+            op: { kind: 'divide-both', k: '2' },
             before: '2*x = 10',
-            after: 'x = 5',
-            sentence: 'Divide both sides by 2'
-          }
+            after: 'x = 5'
+          })
         ],
         answer: { label: 'x', tex: '5' }
       }
@@ -427,24 +413,25 @@ describe('Step validation framework', () => {
     it('rejects working containing a wrong step in a nested sub-working', () => {
       const working: Working = {
         title: 'Parent Problem',
+        input: 'x = 2',
         steps: [
-          {
+          built({
             kind: 'EquationEquiv',
+            op: { kind: 'multiply-both', k: '2' },
             before: 'x = 2',
-            after: '2*x = 4',
-            sentence: 'Multiply by 2'
-          }
+            after: '2*x = 4'
+          })
         ],
         subWorkings: [
           {
             title: 'Subproblem',
+            input: 'x + 1',
             steps: [
-              {
+              built({
                 kind: 'ExprEq',
                 before: 'x + 1',
-                after: 'x + 5', // Planted wrong step inside subWorking
-                sentence: 'Simplify'
-              }
+                after: 'x + 5' // Planted wrong step inside subWorking
+              })
             ]
           }
         ]

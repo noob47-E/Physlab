@@ -10,6 +10,7 @@ import {
   collectMoves,
   formatAnswers
 } from '../../../src/renderer/src/math/steps'
+import { finishStep } from '../../../src/renderer/src/math/steps/sentences'
 import type { Working, Step, Problem } from '../../../src/renderer/src/math/steps'
 
 describe('WorkingView render bridge', () => {
@@ -101,22 +102,24 @@ describe('WorkingView render bridge', () => {
       steps: [
         {
           kind: 'EquationEquiv',
+          op: { kind: 'subtract-both', term: '4' },
           before: '2*x + 4 = 10',
           after: '2*x = 6',
           sentence: 'Subtract 4 from both sides'
         },
         {
           kind: 'EquationEquiv',
+          op: { kind: 'divide-both', k: '2' },
           before: '2*x = 6',
           after: 'x = 3',
           sentence: 'Divide both sides by 2'
         }
       ],
       answer: { label: 'x', tex: '3' },
-      check: 'Substitute 3: 2(3) + 4 = 10',
       checked: 'ok'
     }
 
+    for (const step of working.steps) finishStep(step)
     const doc = renderWorkingToDoc(working, problem)
     expect(doc.title).toBe('Solve 2x + 4 = 10')
     expect(doc.input).toBe('2x + 4 = 10')
@@ -125,7 +128,7 @@ describe('WorkingView render bridge', () => {
     expect(doc.moves[0].head).toBe('Subtract 4 from both sides')
     expect(doc.moves[1].head).toBe('Divide both sides by 2')
     expect(doc.answers).toEqual([{ label: 'x', tex: '3' }])
-    expect(doc.check).toBe('Substitute 3: 2(3) + 4 = 10')
+    expect(doc.check).toBe('Put x = 3 back: both sides give 10.')
     expect(doc.checked).toBe('ok')
     expect(doc.noWorking).toBeFalsy()
   })

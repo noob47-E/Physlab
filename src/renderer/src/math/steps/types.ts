@@ -8,6 +8,12 @@ import type { MathNode } from 'mathjs'
 export type Domain = 'real' | 'complex'
 
 /**
+ * The framework's explicit "can't show the steps" fallback. A working with no steps is accepted by the
+ * validators only when it is this fallback (noWorking with this reason); any other empty working is unknown.
+ */
+export const CANT_SHOW_STEPS_REASON = "I can't show the steps for this one yet"
+
+/**
  * A problem passed to the step router and methods.
  */
 export interface Problem {
@@ -38,11 +44,52 @@ export type StepKind =
   | 'SubproblemReduction'
 
 /**
+ * What a divide or multiply move is for. The sentence builder (sentences.ts) writes the words from it.
+ * Quadratic normalising: the leading term made positive or 1, or a common factor divided out.
+ */
+export type ScalePurpose = 'leading-positive' | 'leading-one' | 'common-factor'
+
+/**
+ * The move an EquationEquiv step claims. Every move is checked SIDE BY SIDE (check-adapter.ts,
+ * checkEquationOp): the new left side L2 and right side R2 are compared with the old L1 and R1, never
+ * only by their difference. Numbers are exact rational text ("-2", "1/2"); terms are polynomial text.
+ * - add-both / subtract-both {term}: L2 ≡ L1 ± term and R2 ≡ R1 ± term.
+ * - multiply-both {k} / divide-both {k}: L2 ≡ k·L1 and R2 ≡ k·R1 (k ≠ 0); divide: L1 ≡ k·L2 and R1 ≡ k·R2.
+ * - clear-decimals {k}: as multiply-both, but k must be a power of ten (≥ 10) and the before must contain a decimal.
+ * - clear-fractions {k}: as multiply-both, but k must be the LCD of the reduced denominators in the before.
+ * - move-to-left: L2 ≡ L1 − R1 and R2 ≡ 0.
+ * - expand-sides, collect-like-terms, work-out-right, factorise, complete-square, already-solved:
+ *   L2 ≡ L1 and R2 ≡ R1, AND each label's own structural check (check-adapter.ts, checkRewrite): a label
+ *   whose structure is not there is invalid even when the two sides are equal.
+ * - square-root-pm {shift, root}: a rewrite whose left side is (x − shift − root)(x − shift + root).
+ * - swap: L2 ≡ R1 and R2 ≡ L1.
+ */
+export type EquationOp =
+  | { kind: 'add-both'; term: string }
+  | { kind: 'subtract-both'; term: string }
+  | { kind: 'multiply-both'; k: string; purpose?: 'leading-positive' }
+  | { kind: 'divide-both'; k: string; purpose?: ScalePurpose }
+  | { kind: 'clear-decimals'; k: string }
+  | { kind: 'clear-fractions'; k: string }
+  | { kind: 'move-to-left' }
+  | { kind: 'expand-sides' }
+  | { kind: 'collect-like-terms' }
+  | { kind: 'work-out-right' }
+  | { kind: 'factorise' }
+  | { kind: 'complete-square' }
+  | { kind: 'square-root-pm'; shift: string; root: string }
+  | { kind: 'swap' }
+  | { kind: 'remove-brackets' }
+  | { kind: 'already-solved' }
+
+/**
  * One step of mathematical working.
  */
 export interface Step<T = unknown> {
   /** The mathematical step kind determining which validator checks it. */
   kind: StepKind
+  /** The declared move. An EquationEquiv without one is 'unknown' and is never shown. */
+  op?: EquationOp
   /** The state before this move (expression or equation as string or AST). */
   before: string | MathNode
   /** The state after this move (expression or equation as string or AST). */
@@ -103,10 +150,14 @@ export interface Working {
   /** Descriptive title for display: e.g. "Solve 2x + 4 = 10". */
   title?: string
   /** The input as LaTeX or formatted maths. */
+  /** The problem as typed (stringified). The first step's before must match it; steps must chain (P-FIX-S0SOUND). */
   input?: string
   /** Name of the method used: "Linear equation in one variable". */
   method?: string
-  /** A line that proves the answer, by substitution or verification. */
+  /**
+   * A method's own check line. Never shown as written: the validator builds the check from the validated
+   * answer substituted into the input (sentences.ts, substitutionOf). A different line makes the working invalid.
+   */
   check?: string
   /** Verdict of the answer check. */
   checked?: 'ok' | 'failed'

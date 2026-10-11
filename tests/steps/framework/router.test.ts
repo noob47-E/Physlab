@@ -1,7 +1,7 @@
 // Tests for the StepRouter (S0).
 //
 // Tests:
-// - Chaining sub-problems
+// - Chaining sub-problems (a real case split, whose sub-answers are the equation's roots; and the false version)
 // - The budget (depth and step limits)
 // - The failure path (invalid steps hide working, thrown errors caught safely)
 // - Alternative methods ("Another way")
@@ -11,7 +11,29 @@ import {
   createStepRouter,
   CANT_SHOW_STEPS_REASON
 } from '../../../src/renderer/src/math/steps/router'
-import type { Method, StepRouter } from '../../../src/renderer/src/math/steps/types'
+import { finishStep } from '../../../src/renderer/src/math/steps/sentences'
+import type { Method, StepRouter, Step } from '../../../src/renderer/src/math/steps/types'
+
+/** An EquationEquiv with its declared op; its sentence and rule are the builder's. */
+const move = (before: string, after: string, op: Step['op'] & object): Step =>
+  finishStep({ kind: 'EquationEquiv', op, before, after, sentence: '', data: { variable: 'x' } })
+
+/** The one-step working of a linear equation x - r = 0 (the sub-problem method used by the chain test). */
+const linearSub: Method = {
+  id: 'mock.linear',
+  name: 'Linear sub-problem',
+  appliesTo: (p) => p.job === 'linear',
+  solve: (p) => {
+    const m = /^x - (\d+) = 0$/.exec(String(p.input))
+    const r = m ? m[1] : '0'
+    return {
+      title: `Solve ${p.input}`,
+      input: String(p.input),
+      steps: [move(String(p.input), `x = ${r}`, { kind: 'add-both', term: r })],
+      answer: { label: 'x', tex: r }
+    }
+  }
+}
 
 describe('StepRouter', () => {
   it('selects and executes applicable primary method', () => {
@@ -22,16 +44,10 @@ describe('StepRouter', () => {
       name: 'Simple addition equation',
       order: 1,
       appliesTo: (p) => p.job === 'solve' && typeof p.input === 'string' && p.input.includes('+ 1 ='),
-      solve: (p) => ({
-        title: `Solve ${p.input}`,
-        steps: [
-          {
-            kind: 'EquationEquiv',
-            before: 'x + 1 = 3',
-            after: 'x = 2',
-            sentence: 'Subtract 1 from both sides'
-          }
-        ],
+      solve: () => ({
+        title: 'Solve x + 1 = 3',
+        input: 'x + 1 = 3',
+        steps: [move('x + 1 = 3', 'x = 2', { kind: 'subtract-both', term: '1' })],
         answer: { label: 'x', tex: '2' }
       })
     }
@@ -49,81 +65,109 @@ describe('StepRouter', () => {
     expect(working.answer).toEqual({ label: 'x', tex: '2' })
   })
 
-  it('chains sub-problems via the router', () => {
+  it('chains sub-problems via the router: a real case split of x^2 - 3x + 2 = 0 whose sub-answers are its roots', () => {
     const router = createStepRouter()
+    const case1 = 'x - 1 = 0'
+    const case2 = 'x - 2 = 0'
 
-    // Parent method splits problem into two sub-problems
-    const parentMethod: Method = {
-      id: 'mock.compound',
-      name: 'Compound problem',
-      order: 1,
-      appliesTo: (p) => p.job === 'compound',
+    // The parent factorises, splits the zero product, and reduces the two cases to their roots.
+    const parent: Method = {
+      id: 'mock.split',
+      name: 'Split by factors',
+      appliesTo: (p) => p.job === 'split',
       solve: (_p, subRouter: StepRouter) => {
-        const sub1 = subRouter.solve({ job: 'sub1', input: 'x = 1' })
-        const sub2 = subRouter.solve({ job: 'sub2', input: 'x = 2' })
-
+        const sub1 = subRouter.solve({ job: 'linear', input: case1, variable: 'x' })
+        const sub2 = subRouter.solve({ job: 'linear', input: case2, variable: 'x' })
+        const tex1 = (Array.isArray(sub1.answer) ? sub1.answer[0] : sub1.answer)?.tex ?? ''
+        const tex2 = (Array.isArray(sub2.answer) ? sub2.answer[0] : sub2.answer)?.tex ?? ''
         return {
-          title: 'Compound problem',
+          title: 'Solve x^2 - 3x + 2 = 0',
+          input: 'x^2 - 3x + 2 = 0',
+          method: 'Split by factors',
           steps: [
-            {
+            move('x^2 - 3x + 2 = 0', '(x - 1)(x - 2) = 0', { kind: 'factorise' }),
+            finishStep({
+              kind: 'CaseSplitComplete',
+              before: '(x - 1)(x - 2) = 0',
+              after: 'x = 1 \\text{ or } x = 2',
+              sentence: '',
+              data: { form: 'zero-product', c: '1', cases: [case1, case2], variable: 'x' }
+            }),
+            finishStep({
               kind: 'SubproblemReduction',
-              before: 'sub1 and sub2',
+              before: 'x = 1 \\text{ or } x = 2',
               after: 'x in {1, 2}',
+              sentence: '',
               data: {
-                subAnswers: [{ solutions: ['1'] }, { solutions: ['2'] }],
-                parentAnswer: { solutions: ['1', '2'] }
-              },
-              sentence: 'Combine subproblems'
-            }
+                variable: 'x',
+                subProblems: [case1, case2],
+                subAnswers: [{ solutions: [tex1] }, { solutions: [tex2] }],
+                parentAnswer: { solutions: [tex1, tex2] }
+              }
+            })
           ],
           subWorkings: [sub1, sub2],
-          answer: { label: 'x', tex: '1, 2' }
+          answer: [
+            { label: 'x', tex: tex1 },
+            { label: 'x', tex: tex2 }
+          ]
         }
       }
     }
 
-    const sub1Method: Method = {
-      id: 'mock.sub1',
-      name: 'Sub 1',
-      appliesTo: (p) => p.job === 'sub1',
-      solve: () => ({
-        steps: [
-          {
-            kind: 'EquationEquiv',
-            before: 'x = 1',
-            after: 'x = 1',
-            sentence: 'Trivial'
-          }
-        ],
-        answer: { label: 'x', tex: '1' }
-      })
-    }
+    router.registerMethod(parent)
+    router.registerMethod(linearSub)
 
-    const sub2Method: Method = {
-      id: 'mock.sub2',
-      name: 'Sub 2',
-      appliesTo: (p) => p.job === 'sub2',
-      solve: () => ({
-        steps: [
-          {
-            kind: 'EquationEquiv',
-            before: 'x = 2',
-            after: 'x = 2',
-            sentence: 'Trivial'
-          }
-        ],
-        answer: { label: 'x', tex: '2' }
-      })
-    }
-
-    router.registerMethod(parentMethod)
-    router.registerMethod(sub1Method)
-    router.registerMethod(sub2Method)
-
-    const working = router.solve({ job: 'compound', input: 'test' })
+    const working = router.solve({ job: 'split', input: 'x^2 - 3x + 2 = 0' })
     expect(working.noWorking).toBeFalsy()
-    expect(working.steps.length).toBe(1)
-    expect(working.subWorkings?.length).toBe(2)
+    expect(working.steps).toHaveLength(3)
+    expect(working.subWorkings).toHaveLength(2)
+    expect(working.answer).toEqual([
+      { label: 'x', tex: '1' },
+      { label: 'x', tex: '2' }
+    ])
+  })
+
+  it('the false version is hidden: a reduction with no case split before it, claiming x = 1 gives 1 and 2', () => {
+    const router = createStepRouter()
+    const falseMethod: Method = {
+      id: 'mock.false',
+      name: 'False split',
+      appliesTo: (p) => p.job === 'false',
+      solve: (_p, subRouter: StepRouter) => {
+        const sub1 = subRouter.solve({ job: 'linear', input: 'x - 1 = 0', variable: 'x' })
+        const sub2 = subRouter.solve({ job: 'linear', input: 'x - 2 = 0', variable: 'x' })
+        return {
+          title: 'Solve x = 1',
+          input: 'x = 1',
+          steps: [
+            finishStep({
+              kind: 'SubproblemReduction',
+              before: 'x = 1',
+              after: 'x in {1, 2}',
+              sentence: '',
+              data: {
+                subProblems: ['x - 1 = 0', 'x - 2 = 0'],
+                subAnswers: [{ solutions: ['1'] }, { solutions: ['2'] }],
+                parentAnswer: { solutions: ['1', '2'] }
+              }
+            })
+          ],
+          subWorkings: [sub1, sub2],
+          answer: [
+            { label: 'x', tex: '1' },
+            { label: 'x', tex: '2' }
+          ]
+        }
+      }
+    }
+    router.registerMethod(falseMethod)
+    router.registerMethod(linearSub)
+
+    const w = router.solve({ job: 'false', input: 'x = 1' })
+    expect(w.noWorking).toBe(true)
+    expect(w.steps).toHaveLength(0)
+    expect(w.answer).toBeUndefined()
   })
 
   it('stops when depth budget is exceeded and hides steps', () => {
@@ -192,14 +236,7 @@ describe('StepRouter', () => {
       name: 'Flawed method with planted wrong step',
       appliesTo: () => true,
       solve: () => ({
-        steps: [
-          {
-            kind: 'EquationEquiv',
-            before: '2*x + 4 = 10',
-            after: '2*x = 10', // Wrong move! Forgot to subtract 4 from RHS
-            sentence: 'Subtract 4 from both sides'
-          }
-        ],
+        steps: [move('2*x + 4 = 10', '2*x = 10', { kind: 'subtract-both', term: '4' })],
         answer: { label: 'x', tex: '5' }
       })
     }
@@ -243,46 +280,20 @@ describe('StepRouter', () => {
 
   it('includes alternative methods as Another way', () => {
     const router = createStepRouter()
-
-    const primaryMethod: Method = {
-      id: 'mock.primary',
-      name: 'Method 1 (Primary)',
-      order: 1,
-      isAlternative: false,
+    const solved = (before: string, method: string): Method => ({
+      id: `mock.${method}`,
+      name: method,
       appliesTo: () => true,
       solve: () => ({
-        method: 'Method 1 (Primary)',
-        steps: [
-          {
-            kind: 'EquationEquiv',
-            before: 'x = 1',
-            after: 'x = 1',
-            sentence: 'Primary step'
-          }
-        ],
+        method,
+        input: 'x = 1',
+        steps: [move(before, before, { kind: 'already-solved' })],
         answer: { label: 'x', tex: '1' }
       })
-    }
+    })
 
-    const altMethod: Method = {
-      id: 'mock.alt',
-      name: 'Method 2 (Another way)',
-      order: 2,
-      isAlternative: true,
-      appliesTo: () => true,
-      solve: () => ({
-        method: 'Method 2 (Another way)',
-        steps: [
-          {
-            kind: 'EquationEquiv',
-            before: 'x = 1',
-            after: 'x = 1',
-            sentence: 'Alternative step'
-          }
-        ],
-        answer: { label: 'x', tex: '1' }
-      })
-    }
+    const primaryMethod: Method = { ...solved('x = 1', 'Method 1 (Primary)'), order: 1, isAlternative: false }
+    const altMethod: Method = { ...solved('x = 1', 'Method 2 (Another way)'), order: 2, isAlternative: true }
 
     router.registerMethod(primaryMethod)
     router.registerMethod(altMethod)
