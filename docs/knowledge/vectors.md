@@ -97,7 +97,8 @@ the cards' own arrows (head-to-tail, parallelogram, from origin).
   has size 5. `droppedUnits(text, cardNames)` (panels/vectorLine.ts) lists the units that were
   typed (not i/j/k, deg/rad or other cards' names) and the card and the expression box show one
   plain line under the value. Guarded by `tests/vectorUnits.test.ts`.
-- The `sizeBeforeAngle` workaround stays until P-PARSE's `preprocess` fix lands (R2-3).
+- The size before ∠ is read by the one reader since P-HELD (`SIZE_AT_ANGLE`, math/expr.ts); the panel's own
+  workaround for it is gone (parsing.md).
 
 ## One angle, and a vector's direction (CLEANUP-PLAN.md CW9-N3)
 - **`angleOf(a, b)`** (math/vec.ts) is the angle between two vectors: atan2 of |a×b| and a·b, NaN only for a vector of

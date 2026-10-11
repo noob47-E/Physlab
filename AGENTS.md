@@ -421,6 +421,16 @@ neighbour is open.
   one-way (jme ← marking ← import/export); never import the barrel facade from within numbas/.
 - **core/visualize.ts is a door** to core/visualize/ (roots.ts, curves.ts, regions.ts). Keep sibling imports
   one-way (roots ← curves ← regions); never import the barrel facade from within visualize/.
+- **lang/commands.ts is a door** to lang/commands/ (common.ts, graph.ts, solve.ts, route.ts): a new kind of bar line
+  goes into the part that does that job and, if it is a new route, into `runCommand`'s order in route.ts. common.ts
+  imports none of the others; graph.ts and solve.ts import only common.ts; nothing in lang/commands/ imports the door.
+- **The other split files keep their doors the same way**: math/pure/trigIdentity.ts → math/pure/trig/ (canonical and
+  write import each other, harmlessly — nothing either runs at load needs the other; then read ← rules ← search), math/pure/complex.ts → math/pure/complex/, panels/vectorCalcStore.ts →
+  panels/vectorLine.ts and panels/cardLine.ts (they import at most a type from the store, never the store itself). New
+  code goes into the part; the door only re-exports what its importers used.
+- **A knowledge note names only files and helpers that exist** (tests/guards/docLinks.test.ts). When a function is
+  renamed, moved or deleted, fix the notes that name it in the same commit; write history ("it replaced …") in words,
+  not as a code name.
 - **scanRoots skips wider windows once periodic roots and their repeat are found.** When `dRoots.length > count`
   and `periodOf` confirms periodicity within the scanned boundary, scanning windows of ±1,000 to ±10⁶ units only
   bisects thousands of redundant periodic cycles; `solveByScan` already has the nearest roots and the period.

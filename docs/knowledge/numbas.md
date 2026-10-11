@@ -45,7 +45,7 @@ skipped whole, never half-imported, and the report says why in one plain sentenc
 ## Traps met (each guarded by a test in tests/numbas.test.ts)
 - LaTeX groups inside `$…$` were read as `{…}` value slots and became made-up variables "shown1", "shown2" shown to
   students (half the bank writes `$…$`) — "fromExam: maths written between dollar signs". The pool still holds internal
-  `shownN` names for REAL `{expr}` slots; that is fine — none reaches student text.
+  names shown1, shown2 … for REAL `{expr}` slots; that is fine — none reaches student text.
 - A harvest built without `--from=<this worktree>` bundles the 09-merge importer: rebuild only with
   `bundleImporter.mjs --from=…` (README in the scripts folder).
 - Equal bounds were ±2 % (101 right for an exact 100) — "a Numbas number box with equal bounds and no precision" and

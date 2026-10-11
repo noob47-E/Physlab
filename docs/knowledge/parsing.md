@@ -67,7 +67,7 @@ with it.fails for CW6a-1 … CW6a-4), golden/reader.golden.test.ts.
 ## Left for later (found in CW6a, not in its files)
 - More argument splitters that do not call splitArgs: math/pure/run.ts `commaOutsideBrackets`, panels/Maths.tsx
   `args` (round brackets only), questions/answerText.ts `splitTop`, questions/steps.ts (a plain split at commas).
-- ∞ for the engine: math/engine/sympy/spelling.ts is the rule (math/pure/store.ts `infinityForSymPy` is gone);
+- ∞ for the engine: math/engine/sympy/spelling.ts is the rule (the Pure Maths store's own copy of it is gone);
   workers/cas.worker.ts `P()` still turns a literal ∞ into oo itself, and its name table reads Infinity and inf.
 - Pure Maths' algebra-engine route reads latexToMath's text without preprocess (math/pure/store.ts).
 - latexToMath's size and shape (the audit's rows; the file is CW6a's, but this is a split, not a change of reader):

@@ -44,7 +44,7 @@ mission watcher (`watchMissions`, Tour.tsx) before the next line — moving it a
   loaded one, a drag from a retyped vector, Reset from a preset load, or show a tap on a shape that was already selected.
 - `done()` runs on every change of those stores, many times a second while the Sandbox plays: it must be cheap and must
   not write storage. Nothing about a mission is stored except the ticks themselves.
-- Progress is kept under `physlab.startHereDone`, not the old Practice tasks' `physlab.missionsDone`: the old ids calc,
+- Progress is kept under `physlab.startHereDone`, not the key the old Practice tasks used: the old ids calc,
   graph and vector meant other tasks.
 - The command bar is at the **top** of the window (App.tsx: TopBar, RecoveryBar, ToolShelf, CommandBar, then the dock).
 - Hints are written for a mouse; `formatMissionHint(hint, true)` turns "Press Esc, then click" into "Tap the Move tool,
