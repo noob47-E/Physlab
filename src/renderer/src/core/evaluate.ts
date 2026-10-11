@@ -15,6 +15,7 @@ import {
 } from '../math/geometry'
 import { asGLine, canIntersect, intersectionsOf } from '../math/intersections'
 import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode, setSceneNames, sceneNames, speltName } from '../math/expr'
+import { evaluateWithRealRoots } from '../calc/engine'
 import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
 import type { Computed, EvalResult, ObjId, SceneObject, SceneSettings } from './types'
 
@@ -25,7 +26,20 @@ interface ParsedExpr {
   node: MathNode
   compiled: { evaluate: (scope?: Record<string, unknown>) => unknown }
   symbols: string[]
+  /** A power whose exponent is not a whole-number literal, or a cube or n-th root: an odd root of a negative number may stand in it. */
+  mayHaveOddRoot: boolean
 }
+
+/** Whether a formula can hold an odd root at all; every other formula keeps its compiled form, which is evaluated on every drag. */
+const mayHaveOddRoot = (node: MathNode): boolean =>
+  node.filter((n) => {
+    const m = n as MathNode & { op?: string; args?: MathNode[]; fn?: { name?: string } }
+    if (n.type === 'OperatorNode' && m.op === '^' && m.args?.length === 2) {
+      const e = m.args[1] as MathNode & { value?: unknown }
+      return !(e.type === 'ConstantNode' && Number.isInteger(e.value))
+    }
+    return n.type === 'FunctionNode' && (m.fn?.name === 'cbrt' || m.fn?.name === 'nthRoot')
+  }).length > 0
 
 const exprCache = new Map<string, ParsedExpr>()
 
@@ -34,7 +48,7 @@ function parseExpr(src: string): ParsedExpr {
   if (!hit) {
     // A scene object's own line reads the scene's names: b = p(1 + r) multiplies by the slider p.
     const node = math.parse(preprocess(src, sceneNames()))
-    hit = { node, compiled: node.compile(), symbols: symbolsOf(node) }
+    hit = { node, compiled: node.compile(), symbols: symbolsOf(node), mayHaveOddRoot: mayHaveOddRoot(node) }
     if (exprCache.size > 2000) exprCache.clear()
     exprCache.set(src, hit)
   }
@@ -100,7 +114,9 @@ export function evaluateScene(
         throw new Pending()
       }
     }
-    return parsed.compiled.evaluate({ ...scope })
+    // An odd root of a negative number is the real root, (−8)^(1/3) = −2, as on the Calculator and
+    // the bar (owner, 2026-10-08): the principal value made a number such as n = (−8)^(1/3) "not a number".
+    return parsed.mayHaveOddRoot ? evaluateWithRealRoots(parsed.node, { ...scope }).value : parsed.compiled.evaluate({ ...scope })
   }
   const evalNumber = (src: string): number => {
     const r = evalExpr(src)

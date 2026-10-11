@@ -32,7 +32,7 @@ import {
 import { NotPolynomial, evalAt, exprTex, parseExpr, parseFraction, varsOf, writeTimes, type Expr } from './mono'
 import { math, preprocess } from '../expr'
 import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from './poly'
-import { factorsOf } from './factor'
+import { discriminant, factorsOf } from './factor'
 import { texAngle, type DigitSettings } from '../format'
 import { calcNum, formatComplex } from '../../calc/format'
 import { tidyComplex } from '../../calc/engine'
@@ -2101,7 +2101,7 @@ export function solveQuadraticWorking(src: string): Working {
     `a = ${rTex(a)},\\quad b = ${rTex(b)},\\quad c = ${rTex(c)}`,
     `a${nameTex}^2 + b${nameTex} + c = 0`
   )
-  const disc = rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
+  const disc = discriminant(a, b, c)
   s.goal('Work out the discriminant').add(
     'Square b and take away 4ac — the sign of this number decides what kind of roots come out.',
     `\\Delta = b^2 - 4ac = \\left(${rTex(b)}\\right)^2 - 4\\left(${rTex(a)}\\right)\\left(${rTex(c)}\\right) = ${rTex(disc)}`,

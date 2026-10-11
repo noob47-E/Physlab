@@ -199,8 +199,7 @@ function bySubstitution(e: Expr, ctx: Ctx, pending: Expr[]): { parts: Expr[]; na
   const [c, b, a] = [poly[0] ?? rat(0n), poly[k] ?? rat(0n), poly[deg]]
   if (rIsZero(b) || rIsZero(c)) return null
   if (a.d !== 1n || b.d !== 1n || c.d !== 1n) return null
-  const disc = rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
-  const root = rSqrt(disc)
+  const root = rSqrt(discriminant(a, b, c))
   if (!root) return null
   const twoA = rMul(rat(2n), a)
   const roots = [rDiv(rAdd(rNeg(b), root), twoA), rDiv(rSub(rNeg(b), root), twoA)]
@@ -672,10 +671,20 @@ export function wantsAllowI(parts: Expr[]): boolean {
   })
 }
 
+/**
+ * The discriminant b² − 4ac of ax² + bx + c, exactly, for fraction coefficients: Factorise, Solve, Partial
+ * Fractions and the bar's solutions in x (core/visualize.ts) each kept a copy of the formula. Coefficients with
+ * a surd in them have their own (cxpoly.ts quadraticRoots, complex.ts), and the Calculator works in decimals
+ * (calc/roots.ts).
+ */
+export function discriminant(a: Rat, b: Rat, c: Rat): Rat {
+  return rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
+}
+
 /** b² − 4ac < 0. */
 function hasNoRealRoots(poly: Poly): boolean {
   const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
-  return rIsNeg(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))
+  return rIsNeg(discriminant(a, b, c))
 }
 
 /**

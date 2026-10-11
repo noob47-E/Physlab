@@ -10,7 +10,8 @@ import { fmtLabel, type Precision } from '../math/format'
 import { betweenArea, curveBox, implicitSegments, inequalityMesh, slopeAt, surfaceGeometry, verticalLineXs, type Box, type Fx, type Fxy } from '../math/graphs'
 import { parseExpr, varsOf, writeTimes } from '../math/pure/mono'
 import { pDeg, pDivMod, pGcd, pPrimitive, pTrim, polyFromExpr, type Poly } from '../math/pure/poly'
-import { rMul, rNum, rSign, rSub, rat } from '../math/pure/rat'
+import { rMul, rNum, rSign, rat } from '../math/pure/rat'
+import { discriminant } from '../math/pure/factor'
 import { polyRoots } from '../calc/engine'
 import type { GraphKind, GraphObj, SceneObject } from './types'
 import { fitCamera } from '../render/viewState'
@@ -1255,7 +1256,7 @@ function exactSolutions(expr: string): { real: number[]; complex: XComplex[] } |
 function realPairOfQuadratic(p: Poly): number[] | null {
   if (p.length !== 3) return null
   const [c, b, a] = p
-  const disc = rSub(rMul(b, b), rMul(rat(4), rMul(a, c)))
+  const disc = discriminant(a, b, c)
   if (rSign(disc) <= 0) return null
   const root = Math.sqrt(rNum(disc))
   const [an, bn, cn] = [rNum(a), rNum(b), rNum(c)]

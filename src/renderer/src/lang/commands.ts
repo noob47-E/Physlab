@@ -22,6 +22,8 @@ import { normalRefusal, parseNormalQuery } from '../math/pure/zscore'
 import { calculusUnitNote, casInDegrees } from '../calc/angle'
 import { orderRoots } from '../calc/roots'
 import { calcNum, formatComplex, type CalcPrecision } from '../calc/format'
+import { evaluateWithRealRoots } from '../calc/engine'
+import { isNoise } from '../math/noise'
 import { calculusJobFor, engineRequestFor, spelledOut, usePure } from '../math/pure/store'
 import { showBeside, showPanel } from '../app/panels'
 import { enterMode } from '../app/layout'
@@ -106,7 +108,8 @@ function assertKnown(node: MathNode) {
   }
 }
 
-const evaluateNode = (node: MathNode) => node.compile().evaluate({ ...scene().ev.scope })
+// An odd root of a negative number is the real root, (−8)^(1/3) = −2, as on the Calculator (owner, 2026-10-08).
+const evaluateNode = (node: MathNode) => evaluateWithRealRoots(node, { ...scene().ev.scope }).value
 
 const isGeo = (node: MathNode) => {
   const k = inferKind(node, kindOfName)
@@ -1706,7 +1709,10 @@ function evaluatePlain(expr: string, shown = expr) {
   const id = s.pushLog({ input, kind: 'result', text: `= ${text}`, solution: solution ?? undefined })
   if (typeof value === 'number' && !Number.isInteger(value) && Number.isFinite(value) && isConstant(node)) {
     ask('exact', { expr: preprocess(expr), deg: casInDegrees(s.settings.angleUnit) }).then((r) => {
-      if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text) {
+      // An exact form is shown only when it is the number beside it: the engine takes an odd root of a negative
+      // number as its principal value, so it gave (−8)^(−1/3), which is −0.5 here, as 1/4 − (√3/4)i.
+      const complex = r.numeric?.im !== undefined && !isNoise(r.numeric.im, r.numeric.re)
+      if (!r.error && r.latex && !/\./.test(r.text) && r.text !== text && !complex) {
         s.updateLog(id, { text: undefined, tex: `= ${r.latex} \\approx ${texPrecise(value, s.settings)}` })
       }
     })

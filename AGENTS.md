@@ -388,6 +388,10 @@ neighbour is open.
   x, and 10⁻¹³ sin x = 0 was "Proved". Judge rounding noise against the sizes it came from (math/noise.ts). A 10⁻¹² that
   stays says in place what it means (the writer's own display floor, a time in seconds, a search width), and
   tests/noiseFloors.test.ts pins it.
+- **An odd root of a negative number is the real root** (calc/engine.ts `evaluateWithRealRoots`, the owner's choice),
+  on the Calculator, the bar's `evaluateNode` and a scene number; a graph's `compileScalar` follows in CW7b. The algebra
+  engine still answers with the principal value, so an exact form with an i part is never shown beside a real decimal
+  (lang/commands.ts `evaluatePlain`). Guard: tests/oddRoots.test.ts.
 - **The writer's floor and a noise rule are two things.** math/format.ts writes |v| < 10⁻¹² as 0: that is
   DISPLAY_FLOOR, a screen rule. Rounding noise is judged against the sizes it came from (math/noise.ts). A line asking
   "will this be written as 0?" names DISPLAY_FLOOR; a line asking "is this round-off?" asks the noise rule. Never use a

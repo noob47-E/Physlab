@@ -67,6 +67,12 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
   NaN, Infinity or "undefined" — and stay inside the view without overlapping.
 - A run of exact-zero samples is a stretch lying on the axis, not hundreds of roots.
 - `sampleExplicit` never joins the two branches of a pole and never drops a steep smooth curve.
+- An odd root of a negative number is the real root (owner): (−8)^(1/3) = −2 on the bar (lang/commands.ts
+  `evaluateNode`) and in the numbers it makes (core/evaluate.ts), as on the Calculator, all through calc/engine.ts
+  `evaluateWithRealRoots`. The bar's exact form beside a decimal is shown only when it has no i part, since the algebra
+  engine still answers with the principal value ((−8)^(−1/3) came back as 1/4 − (√3/4)i). A graph's x^(1/3) left of 0
+  still reads math/expr.ts `compileScalar` and waits for the next part that holds it (it.fails in
+  `tests/oddRoots.test.ts`).
 
 ## Traps met in 0.9 (and the test block that guards each)
 - A run-together line of several equations was taken as one inequality and "Shaded region created." printed for
@@ -106,7 +112,9 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
   - **The end of a domain is judged against the curve beside it, not a far sample**: 10⁶√x + 0.01 tends to 0.01 (H27),
     and the bar's scan trusts a finer window over a coarser one where both cover an x.
   - **A quadratic's real pair comes from its exact discriminant**, never polyRoots (1 ± 10⁻¹⁰; H29); solutions near 0
-    are told apart by their own size (±10⁻¹⁰; H30).
+    are told apart by their own size (±10⁻¹⁰; H30). The discriminant is `discriminant(a, b, c)` in
+    math/pure/factor.ts, the one b² − 4ac that Factorise, Solve and Partial Fractions use too (CW7a;
+    `tests/rootWriter.test.ts` pins every route that reads it over one corpus).
   - **A root is small beside both ends of its bracket**: a pole's jump (exp(1/x) − 2 at 0) is never one (H33).
   - **slopeAt keeps its step within a thousandth of the distance to 0** near 0 (H31).
   - **· between numbers is a product** on a graph (compileScalar `dot`); beside a written vector it is refused (H32).
@@ -117,6 +125,9 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
 - A curve with a cancellation-noise extremum, e.g. (1 − cos x)/x² at 0, gets no turning point there.
 - Step functions with a jump smaller than 1.5 view heights are drawn with a riser.
 - `x^14 + 1 = 0` gets no "In complex numbers" line: the exact route stops at degree 12.
+- A number raised past the 12th power (10^20, 2^40, 1/10^14) is taken for a high power of x and the line goes to the
+  rough high-power route: x² − 2x + 1 = 1/10²⁰ answers x = 1 (it has 1 ± 10⁻¹⁰), where the same number in digits is
+  solved exactly. Parked for the owner as CW7a-1 (it.fails in `tests/rootWriter.test.ts`).
 - A curve 10¹² times steeper than its offset at a domain's end (10¹²√x + 0.01) on a window a million wide is still
   marked with a root there: every point the edge check reaches is ~10⁶, and its 0.01 is within an edge's rounding.
 - Since P-PARSE (0.9) a letter against a bracket is a product and phi is the golden ratio, so `y = x(x + 1)` and

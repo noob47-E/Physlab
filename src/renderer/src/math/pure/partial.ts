@@ -26,7 +26,7 @@ import {
   polyFromExpr,
   type Poly
 } from './poly'
-import { factorsOf } from './factor'
+import { discriminant, factorsOf } from './factor'
 import { evalDisplayedSum } from './latexCheck'
 import { Steps, failed, texToPlain, type Working } from './work'
 
@@ -72,7 +72,7 @@ function solveLinear(M: Rat[][], rhs: Rat[]): Rat[] | null {
 function squaredLinear(poly: Poly): { base: Poly; k: Rat } | null {
   if (pDeg(poly) !== 2) return null
   const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
-  if (!rIsZero(rSub(rMul(b, b), rMul(rat(4n), rMul(a, c))))) return null
+  if (!rIsZero(discriminant(a, b, c))) return null
   const root = rDiv(rNeg(b), rMul(rat(2n), a))
   // A root p/q gives the whole-number bracket (qx − p); what is left over is a number.
   const base: Poly = pTrim([rNeg(rat(root.n)), rat(root.d)])

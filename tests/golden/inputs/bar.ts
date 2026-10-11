@@ -439,6 +439,23 @@ export const BAR_COMMANDS: string[] = [
   'y = x mod 3',
   'h = 2 × sin (30)',
   'g1 = atan2(10 m, 5 m)',
+  // Odd roots of negative numbers (CW7a): the owner's rule is (−8)^(1/3) = −2 everywhere. Recorded
+  // first with the answers the bar gave before the rule, so the commit that applies it shows each line
+  // change. An even root ((−8)^(1/2)) stays imaginary; x^(1/3) on a graph waits for math/expr.ts.
+  '(-8)^(1/3)',
+  '(-8)^(2/3)',
+  '(-32)^(1/5)',
+  '(-64)^(1/3)',
+  '(-27)^(1/3) + 1',
+  '2*(-8)^(1/3)',
+  '(-8)^(-1/3)',
+  '(-1)^(1/3)',
+  '(-8)^(1/2)',
+  '(-8)^(0.3333)',
+  'n = (-8)^(1/3)',
+  'w = <(-8)^(1/3), 2>',
+  'x^(1/3) = -2',
+  'y = x^(1/3)',
 ]
 
 export const COMMAS: string[] = ['3,5', '1,000', '2,5+1', 'f(1,2)', '\\left(1,2\\right)']
