@@ -9,6 +9,7 @@ import { R0, R1, rAbs, rAdd, rEq, rIsNeg, rMul, rSub, rTex, rat, type Rat } from
 import {
   NotPolynomial,
   eAdd,
+  eMul,
   eNeg,
   evalAt,
   exprTex,
@@ -298,47 +299,52 @@ function expandWorking(src: string): Working {
 
   // Each summand multiplied out on its own; a lone factor is already a sum and passes straight through.
   const pieces: Expr[] = []
-  summands.forEach((sm, n) => {
-    const { factors } = sm
-    if (factors.length < 2) {
-      pieces.push(sm.neg ? eNeg(factors[0]) : factors[0])
-      return
-    }
-    // `shown` is LaTeX as typed; the head is spoken, so it goes through texToPlain here.
-    const where = several ? `In ${texToPlain(shownOf(sm))}, m` : 'M'
-    let acc = factors[0]
-    for (let i = 1; i < factors.length; i++) {
-      const f = factors[i]
-      const products: Term[] = []
-      for (const a of acc) for (const b of f) products.push(mulTerm(a, b))
-      // One heading per piece, not one per bracket: (x + 1)⁵ is one stage of four multiplications,
-      // and a heading that repeats verbatim on each stops reading as "what we are doing now".
-      if (i === 1) s.goal(several ? `Multiply out the ${ordinal(n + 1)} piece` : 'Multiply the brackets out')
-      s.add(
-        `${i === 1 ? where : 'Then m'}ultiply every term of ${texToPlain(factorTex(acc))} by every term of ${texToPlain(factorTex(f))}.`,
-        distributionTable(acc, f),
-        '\\text{each} \\times \\text{each}'
-      )
-      // A line of a single product is the whole expression (Fix 4): the minus in front and the
-      // brackets not yet multiplied stay on it, so (x − 2)³ reads (x² − 2x − 2x + 4)(x − 2), not
-      // x² − 2x − 2x + 4, which is not what was asked.
-      const rest = factors.slice(i + 1)
-      const wrap = (t: string): string =>
-        !several && (sm.neg || rest.length) ? `${sm.neg ? '-' : ''}\\left(${t}\\right)${rest.map(factorTex).join('')}` : t
-      s.add('Write all the products out in a line.', wrap(rawSumTex(products)))
-      const collected = normalize(products)
-      if (collected.length < products.length) {
-        s.add('Collect the like terms, and write the highest power first.', `${wrap(groupedTex(products))} = ${wrap(exprTex(collected))}`, '\\text{like terms: same letters, same powers}')
-      } else {
-        s.add('No two terms are alike, so just write the highest power first.', wrap(exprTex(collected)))
+  try {
+    for (let n = 0; n < summands.length; n++) {
+      const sm = summands[n]
+      const { factors } = sm
+      if (factors.length < 2) {
+        pieces.push(sm.neg ? eNeg(factors[0]) : factors[0])
+        continue
       }
-      acc = collected
+      // `shown` is LaTeX as typed; the head is spoken, so it goes through texToPlain here.
+      const where = several ? `In ${texToPlain(shownOf(sm))}, m` : 'M'
+      let acc = factors[0]
+      for (let i = 1; i < factors.length; i++) {
+        const f = factors[i]
+        const collected = eMul(acc, f)
+        const products: Term[] = []
+        for (const a of acc) for (const b of f) products.push(mulTerm(a, b))
+        // One heading per piece, not one per bracket: (x + 1)⁵ is one stage of four multiplications,
+        // and a heading that repeats verbatim on each stops reading as "what we are doing now".
+        if (i === 1) s.goal(several ? `Multiply out the ${ordinal(n + 1)} piece` : 'Multiply the brackets out')
+        s.add(
+          `${i === 1 ? where : 'Then m'}ultiply every term of ${texToPlain(factorTex(acc))} by every term of ${texToPlain(factorTex(f))}.`,
+          distributionTable(acc, f),
+          '\\text{each} \\times \\text{each}'
+        )
+        // A line of a single product is the whole expression (Fix 4): the minus in front and the
+        // brackets not yet multiplied stay on it, so (x − 2)³ reads (x² − 2x − 2x + 4)(x − 2), not
+        // x² − 2x − 2x + 4, which is not what was asked.
+        const rest = factors.slice(i + 1)
+        const wrap = (t: string): string =>
+          !several && (sm.neg || rest.length) ? `${sm.neg ? '-' : ''}\\left(${t}\\right)${rest.map(factorTex).join('')}` : t
+        s.add('Write all the products out in a line.', wrap(rawSumTex(products)))
+        if (collected.length < products.length) {
+          s.add('Collect the like terms, and write the highest power first.', `${wrap(groupedTex(products))} = ${wrap(exprTex(collected))}`, '\\text{like terms: same letters, same powers}')
+        } else {
+          s.add('No two terms are alike, so just write the highest power first.', wrap(exprTex(collected)))
+        }
+        acc = collected
+      }
+      if (!several && sm.neg) {
+        s.add('Take the minus sign in front through the bracket: every sign inside changes.', `-\\left(${exprTex(acc)}\\right) = ${exprTex(eNeg(acc))}`, '-(a + b) = -a - b')
+      }
+      pieces.push(sm.neg ? eNeg(acc) : acc)
     }
-    if (!several && sm.neg) {
-      s.add('Take the minus sign in front through the bracket: every sign inside changes.', `-\\left(${exprTex(acc)}\\right) = ${exprTex(eNeg(acc))}`, '-(a + b) = -a - b')
-    }
-    pieces.push(sm.neg ? eNeg(acc) : acc)
-  })
+  } catch (err) {
+    return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
+  }
   const whole = pieces.reduce((a, b) => eAdd(a, b), [] as Expr)
   const out = exprTex(whole)
 

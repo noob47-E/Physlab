@@ -13,7 +13,8 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
 - `calc/roots.ts` — `quadraticRoots`, `orderRoots`, `polynomialRootRows`: THE root order. `calc/labels.ts` — x₁, θ₂ labels.
 - `calc/angle.ts` — `withAngle`: every evaluation runs in the SCREEN's unit and puts the shared mode back.
 - `calc/modeLines.ts` — Table, Matrix, Spreadsheet and Units lines (each inside `withAngle`); `calc/sheet.ts` (CIRC),
-  `calc/stats.ts` (`predictY` through the curve's own compiler), `calc/units.ts`, `calc/keys.ts`, `calc/errors.ts`.
+  `calc/stats.ts` (`predictY` through the curve's own compiler), `calc/units.ts` (unit conversion errors `unitRefusal` and `TYPE_INSTEAD` shared with the bar), `calc/keys.ts`,
+  `calc/errors.ts` (one table for unknown functions, unknown names, and engine loading sentences across the bar, calculator and pure math).
 - `panels/Maths.tsx`, `panels/calcModes.tsx`, `panels/WorkingView.tsx` — the screen.
 - `math/pure/run.ts` (job router, `suggestJob`), `math/pure/complex.ts` (complex numbers, surds, Solve,
   Factorise with i), `math/pure/store.ts` (Work it out; asks SymPy when this engine refuses), `math/latexToMath.ts`

@@ -414,6 +414,9 @@ neighbour is open.
 - **The scene store's helpers never import the store.** `core/legoScene.ts` (Break apart and Fuse) and `core/doomed.ts`
   (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
   them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.
+- **A generic fallback in `friendlyError` will swallow specific syntax messages.** When delegating unit errors to
+  `unitRefusal` in `lang/commands.ts`, only match genuine unit errors (`/Units do not match|in function to\b|Unit "[^"]+" not found/`);
+  calling it unconditionally on syntax errors routes through `errorSentence` and silently changes the `errors` golden sweep.
 
 ## Code knowledge
 

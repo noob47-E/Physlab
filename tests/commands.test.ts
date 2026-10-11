@@ -3378,3 +3378,27 @@ describe('fixb-f4-sin-at-30 — typing "sin at 30" on the bar', () => {
     })
   })
 })
+
+describe('CW7c: unit conversions and implicit curve undefined variable check', () => {
+  beforeEach(resetGlobals)
+
+  it('x = 2ly refuses undefined variable "ly" with a slider note rather than creating an implicit curve', async () => {
+    await runCommand('x = 2ly')
+    const lastLog = scene().log.at(-1)
+    expect(lastLog?.kind).toBe('error')
+    expect(lastLog?.text).toContain('Unknown name "ly" in the equation. Make a slider first, e.g. ly = 1')
+  })
+
+  it('converts units using "to" and handles incompatible units via calc/units.ts', async () => {
+    await runCommand('5 km to m')
+    const kmLog = scene().log.at(-1)
+    expect(kmLog?.kind).toBe('result')
+    expect(kmLog?.text).toContain('5000 m')
+
+    await runCommand('5 km to kg')
+    const kgLog = scene().log.at(-1)
+    expect(kgLog?.kind).toBe('error')
+    expect(kgLog?.text).toMatch(/measure different things/)
+  })
+})
+

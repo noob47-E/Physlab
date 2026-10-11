@@ -14,6 +14,38 @@ export interface ErrorSentence {
 /** The letters the calculator holds a value for: what the Variables drawer offers. */
 export const OWN_LETTERS = /^[A-FMxy]$/
 
+/** What to say of an unknown function name (without a trailing period, for embedders like cannotDraw). */
+export function unknownFunctionReason(name: string): string {
+  return `PhysLab does not know a function called "${name}"`
+}
+
+/** What to say of an unknown function name as a standalone sentence. */
+export function unknownFunctionSentence(name: string): string {
+  return `${unknownFunctionReason(name)}.`
+}
+
+/**
+ * What to say of a name that has no value. x, y and z are a graph's letters, never a name (the graph
+ * routes keep them, and `y = (1, 2)` is refused), so "create it first, e.g. y = (1, 2)" is no advice.
+ */
+export function unknownNameSentence(name: string, freeLetter = 'a'): string {
+  if (name === 'x' || name === 'y' || name === 'z') {
+    return `${name} is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. ${freeLetter} = 2.`
+  }
+  return `I don't know "${name}". Create it first, e.g. ${name} = (1, 2).`
+}
+
+/** The sentence for a name nothing gives a value to, in a vector card or in the expression box. */
+export function unknownVectorNameSentence(name: string, scope: Record<string, unknown>, below: string[] = [], unreadable: string[] = []): string {
+  if (below.includes(name)) return `${name} is a card further down. A card can only use the vectors above it, so type ${name}'s value here or use a card higher up.`
+  if (unreadable.includes(name)) return `Card ${name} cannot be read yet, so it cannot be used here. Put card ${name} right first.`
+  const parts = name.split('')
+  if (name.length > 1 && parts.every((p) => p in scope)) {
+    return `“${name}” is not one name. Put a sign between ${parts.join(' and ')}: ${parts.join(' × ')} for the cross product, ${parts.join(' · ')} for the dot product.`
+  }
+  return `There is no vector called ${name}. Use a card's name (the letter on its left), or the unit vectors i, j and k.`
+}
+
 /**
  * Whether the engine's words are worth showing under the sentence. "Undefined symbol k" tells a
  * student something; "Unexpected type of argument in function addScalar (expected: Unit, actual:

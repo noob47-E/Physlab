@@ -13,6 +13,7 @@ import { pDeg, pDivMod, pGcd, pPrimitive, pTrim, polyFromExpr, type Poly } from 
 import { rMul, rNum, rSign, rat } from '../math/pure/rat'
 import { discriminant } from '../math/pure/factor'
 import { polyRoots } from '../calc/engine'
+import { unknownFunctionReason } from '../calc/errors'
 import type { GraphKind, GraphObj, SceneObject } from './types'
 import { fitCamera } from '../render/viewState'
 import { POINT_PX } from '../render/viewMath'
@@ -841,7 +842,7 @@ function callProblem(node: MathNode, vars: Set<string>, scope: Record<string, un
     // vector written out beside it is never a number on a graph. (A vector by name is refused above: not a number.)
     else if (name === 'dot' && call.args.some((a) => a.type === 'FunctionNode' && ['vec', 'pt', 'polarVec'].includes((a as MathNode & { fn: { name?: string } }).fn.name ?? '')))
       said = cannotDraw(kind, `· beside a vector is the dot product of two vectors, which a graph cannot draw — to multiply numbers, type * or ·, e.g. ${inside.join('*')}`)
-    else if (!knownFunction(name, call.args.length)) said = cannotDraw(kind, `PhysLab does not know a function called "${name}"`)
+    else if (!knownFunction(name, call.args.length)) said = cannotDraw(kind, unknownFunctionReason(name))
   })
   return said
 }

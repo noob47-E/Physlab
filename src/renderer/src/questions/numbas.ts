@@ -33,6 +33,7 @@ import {
   type VariableDef
 } from './pqjson'
 import { unitInPrompt } from './units'
+import { printMathAst } from './plainFormula'
 import { RANDOM_RANGE } from './variables'
 import { isRecord as isObj } from '../core/schema'
 
@@ -1654,79 +1655,76 @@ function dotsToProducts(tree: Node): Node {
  * prints is JME already (`+ - * / ^`, `and or not`, the function names).
  */
 export function mathToJme(expr: string, trig: TrigMode = 'radians'): string {
-  const options = {
-    handler: (node: Node, o: unknown): string | undefined => {
-      const s = (n: Node): string => n.toString(o as Record<string, unknown>)
-      if (node.type === 'ConditionalNode') {
-        const c = node as ConditionalNode
-        return `if(${s(c.condition)}, ${s(c.trueExpr)}, ${s(c.falseExpr)})`
+  const root = dotsToProducts(math.parse(preprocess(expr)))
+  return printMathAst(root, (node, s) => {
+    if (node.type === 'ConditionalNode') {
+      const c = node as ConditionalNode
+      return `if(${s(c.condition)}, ${s(c.trueExpr)}, ${s(c.falseExpr)})`
+    }
+    if (node.type === 'FunctionNode') {
+      const f = node as FunctionNode
+      const name = f.fn.name
+      const args = f.args
+      if (name === 'round' && args.length === 2) return `precround(${s(args[0])}, ${s(args[1])})`
+      if (name === 'fix' && args.length === 1) return `trunc(${s(args[0])})`
+      if (name === 'log' && args.length === 2) return `log(${s(args[1])}, ${s(args[0])})`
+      if (name === 'number' && args.length === 1 && isFn(args[0], ['format']) && args[0].args.length === 2) {
+        return `siground(${s(args[0].args[0])}, ${s(args[0].args[1])})`
       }
-      if (node.type === 'FunctionNode') {
-        const f = node as FunctionNode
-        const name = f.fn.name
-        const args = f.args
-        if (name === 'round' && args.length === 2) return `precround(${s(args[0])}, ${s(args[1])})`
-        if (name === 'fix' && args.length === 1) return `trunc(${s(args[0])})`
-        if (name === 'log' && args.length === 2) return `log(${s(args[1])}, ${s(args[0])})`
-        if (name === 'number' && args.length === 1 && isFn(args[0], ['format']) && args[0].args.length === 2) {
-          return `siground(${s(args[0].args[0])}, ${s(args[0].args[1])})`
+      // A range with worked-out ends goes back to JME's own random(a..b#step); an end that is
+      // more than a name or a number is bracketed, so `..` cannot take part of it.
+      if (name === RANDOM_RANGE && (args.length === 2 || args.length === 3)) {
+        const end = (n: Node): string => {
+          const u = unparen(n)
+          return u.type === 'SymbolNode' || u.type === 'ConstantNode' ? s(u) : `(${s(u)})`
         }
-        // A range with worked-out ends goes back to JME's own random(a..b#step); an end that is
-        // more than a name or a number is bracketed, so `..` cannot take part of it.
-        if (name === RANDOM_RANGE && (args.length === 2 || args.length === 3)) {
-          const end = (n: Node): string => {
-            const u = unparen(n)
-            return u.type === 'SymbolNode' || u.type === 'ConstantNode' ? s(u) : `(${s(u)})`
-          }
-          const step = args.length === 3 && !isConst(unparen(args[2]), 1) ? `#${end(args[2])}` : ''
-          return `random(${end(args[0])}..${end(args[1])}${step})`
-        }
-        // `2 × 3` is the calculator's own spelling; JME has only *.
-        if (name === 'timesOrCross' && args.length === 2) return s(new math.OperatorNode('*', 'multiply', [args[0], args[1]]))
-        if ((name === 'sin' || name === 'cos' || name === 'tan') && args.length === 1) {
-          // `* 180 / pi` is the importer's own conversion in a number or a variable (trig 'radians'),
-          // so only there is it taken off. An expression part (trig 'same') is marked in radians
-          // and jmeToMath adds no factor to it: one met there is the author's, and sin(x * 180 / pi)
-          // is not sin(x). An explicit `x rad` is a unit the author wrote, in either mode.
-          const rad = (trig === 'radians' ? radianArgument(args[0]) : null) ?? unitTagged(args[0], 'rad')
-          if (rad) return `${name}(${s(unparen(rad))})`
-          const deg = unitTagged(args[0], 'deg')
-          if (deg) return `${name}(radians(${s(unparen(deg))}))`
-          return trig === 'radians' ? `${name}(radians(${s(unparen(args[0]))}))` : undefined
-        }
-        if (name in ARC && args.length === 1) {
-          const inner = `${ARC[name]}(${s(unparen(args[0]))})`
-          return trig === 'radians' ? `degrees(${inner})` : inner
-        }
-        return undefined
+        const step = args.length === 3 && !isConst(unparen(args[2]), 1) ? `#${end(args[2])}` : ''
+        return `random(${end(args[0])}..${end(args[1])}${step})`
       }
-      if (node.type === 'OperatorNode') {
-        const op = node as OperatorNode
-        if (op.op === '==') return `${s(op.args[0])} = ${s(op.args[1])}`
-        if (op.op === '!=') return `${s(op.args[0])} <> ${s(op.args[1])}`
-        // asin(x) * pi / 180 → arcsin(x) (number or variable only); x * pi / 180 → radians(x);
-        // x * 180 / pi → degrees(x).
-        if (op.op === '/' && op.args.length === 2 && isOp(op.args[0], '*') && op.args[0].args.length === 2) {
-          const [left, right] = op.args[0].args
-          if (isSymbol(right, 'pi') && isConst(op.args[1], 180)) {
-            // Like the sin case above: in an expression part (trig 'same') the `* pi / 180` after
-            // an asin is the author's own, so it is written radians(arcsin(x)), not arcsin(x).
-            if (trig === 'radians' && isFn(left, Object.keys(ARC)) && left.args.length === 1) return `${ARC[left.fn.name]}(${s(left.args[0])})`
-            return `radians(${s(left)})`
-          }
-          if (isConst(right, 180) && isSymbol(op.args[1], 'pi')) return `degrees(${s(left)})`
-        }
-        if (op.op === '*' && op.implicit) {
-          // x° reaches here as `x deg`, a unit Numbas does not have; radians(x) is the same angle.
-          if (op.args.length === 2 && isSymbol(op.args[1], 'deg')) return `radians(${s(unparen(op.args[0]))})`
-          return `${s(op.args[0])} * ${s(op.args[1])}`
-        }
-        return undefined
+      // `2 × 3` is the calculator's own spelling; JME has only *.
+      if (name === 'timesOrCross' && args.length === 2) return s(new math.OperatorNode('*', 'multiply', [args[0], args[1]]))
+      if ((name === 'sin' || name === 'cos' || name === 'tan') && args.length === 1) {
+        // `* 180 / pi` is the importer's own conversion in a number or a variable (trig 'radians'),
+        // so only there is it taken off. An expression part (trig 'same') is marked in radians
+        // and jmeToMath adds no factor to it: one met there is the author's, and sin(x * 180 / pi)
+        // is not sin(x). An explicit `x rad` is a unit the author wrote, in either mode.
+        const rad = (trig === 'radians' ? radianArgument(args[0]) : null) ?? unitTagged(args[0], 'rad')
+        if (rad) return `${name}(${s(unparen(rad))})`
+        const deg = unitTagged(args[0], 'deg')
+        if (deg) return `${name}(radians(${s(unparen(deg))}))`
+        return trig === 'radians' ? `${name}(radians(${s(unparen(args[0]))}))` : undefined
+      }
+      if (name in ARC && args.length === 1) {
+        const inner = `${ARC[name]}(${s(unparen(args[0]))})`
+        return trig === 'radians' ? `degrees(${inner})` : inner
       }
       return undefined
     }
-  }
-  return dotsToProducts(math.parse(preprocess(expr))).toString(options)
+    if (node.type === 'OperatorNode') {
+      const op = node as OperatorNode
+      if (op.op === '==') return `${s(op.args[0])} = ${s(op.args[1])}`
+      if (op.op === '!=') return `${s(op.args[0])} <> ${s(op.args[1])}`
+      // asin(x) * pi / 180 → arcsin(x) (number or variable only); x * pi / 180 → radians(x);
+      // x * 180 / pi → degrees(x).
+      if (op.op === '/' && op.args.length === 2 && isOp(op.args[0], '*') && op.args[0].args.length === 2) {
+        const [left, right] = op.args[0].args
+        if (isSymbol(right, 'pi') && isConst(op.args[1], 180)) {
+          // Like the sin case above: in an expression part (trig 'same') the `* pi / 180` after
+          // an asin is the author's own, so it is written radians(arcsin(x)), not arcsin(x).
+          if (trig === 'radians' && isFn(left, Object.keys(ARC)) && left.args.length === 1) return `${ARC[left.fn.name]}(${s(left.args[0])})`
+          return `radians(${s(left)})`
+        }
+        if (isConst(right, 180) && isSymbol(op.args[1], 'pi')) return `degrees(${s(left)})`
+      }
+      if (op.op === '*' && op.implicit) {
+        // x° reaches here as `x deg`, a unit Numbas does not have; radians(x) is the same angle.
+        if (op.args.length === 2 && isSymbol(op.args[1], 'deg')) return `radians(${s(unparen(op.args[0]))})`
+        return `${s(op.args[0])} * ${s(op.args[1])}`
+      }
+      return undefined
+    }
+    return undefined
+  })
 }
 
 // --- text ----------------------------------------------------------------------

@@ -23,6 +23,8 @@ import { calculusUnitNote, casInDegrees } from '../calc/angle'
 import { orderRoots } from '../calc/roots'
 import { calcNum, formatComplex, type CalcPrecision } from '../calc/format'
 import { evaluateWithRealRoots } from '../calc/engine'
+import { unknownFunctionSentence, unknownNameSentence } from '../calc/errors'
+import { TYPE_INSTEAD, unitRefusal, unknownUnit } from '../calc/units'
 import { isNoise } from '../math/noise'
 import { calculusJobFor, engineRequestFor, spelledOut, usePure } from '../math/pure/store'
 import { showBeside, showPanel } from '../app/panels'
@@ -94,7 +96,8 @@ function unknownSymbols(node: MathNode): string[] {
     if (fnName === 'polarVec' && path === 'args[0]' && typeof (math as unknown as Record<string, unknown>)[name] === 'function') return
     const afterNumber = p?.type === 'OperatorNode' && (p.fn === 'multiply' || p.fn === 'divide') && p.args?.some((a) => a.type === 'ConstantNode' || a.type === 'OperatorNode')
     const compoundUnit = p?.type === 'OperatorNode' && (p.fn === 'divide' || p.fn === 'pow') && isUnitName(name)
-    if (isUnitName(name) && (afterNumber || compoundUnit)) return
+    const inConversion = p?.type === 'OperatorNode' && p.fn === 'to'
+    if (isUnitName(name) && (afterNumber || compoundUnit || inConversion)) return
     out.add(name)
   })
   return [...out]
@@ -104,6 +107,7 @@ function assertKnown(node: MathNode) {
   const unknown = unknownSymbols(node)
   if (unknown.length) {
     const n = unknown[0]
+    if (n in TYPE_INSTEAD) throw new Error(unknownUnit(n, true))
     throw new Error(`"${n}" does not exist yet. Create it first, for example  ${n} = <1, 2>  or  ${n} = (1, 2)  or  ${n} = 5`)
   }
 }
@@ -217,23 +221,17 @@ export async function runCommand(raw: string): Promise<void> {
 /** The parser's own words, which a student is never shown: "Parenthesis ) expected (char 7)". */
 const PARSER_WORDS = /\(char \d+\)|Value expected|Parenthesis [)\]] expected|Unexpected operator|Syntax ?error|End of (matrix|string)/i
 
-/**
- * What to say of a name that has no value. x, y and z are a graph's letters, never a name (the graph
- * routes keep them, and `y = (1, 2)` is refused), so "create it first, e.g. y = (1, 2)" is no advice.
- */
-function unknownNameSentence(name: string): string {
-  if (name === 'x' || name === 'y' || name === 'z') return `${name} is the letter graphs use, so it has no value of its own here. Use another letter for a number, e.g. ${freeLetterFor('abcmn')} = 2.`
-  return `I don't know "${name}". Create it first, e.g. ${name} = (1, 2).`
-}
-
 function friendlyError(e: unknown, input = ''): string {
   const msg = e instanceof Error ? e.message : String(e)
   const unknown = msg.match(/Undefined symbol (\w+)/)?.[1]
-  if (unknown) return unknownNameSentence(unknown)
+  if (unknown) return unknownNameSentence(unknown, freeLetterFor('abcmn'))
   // f(2) after f(x) = x^2: the evaluator keeps no value for a graph, so it has no function f to call
   // and says "Undefined function f", which is neither a graph's nor a typo's way of putting it.
   const called = msg.match(/Undefined function (\S+)/)?.[1]
-  if (called) return Object.keys(namedGraphs()).includes(called) ? `${called} is a graph, so it cannot be used as a number in a formula yet.` : `PhysLab does not know a function called "${called}".`
+  if (called) return Object.keys(namedGraphs()).includes(called) ? `${called} is a graph, so it cannot be used as a number in a formula yet.` : unknownFunctionSentence(called)
+  if (/Units do not match|in function to\b|Unit "[^"]+" not found/.test(msg)) {
+    return unitRefusal(e, undefined, undefined, true)
+  }
   if (/Unexpected end/.test(msg)) return 'The expression is incomplete. Check your brackets.'
   // mathjs reads 2 + 3 = 5 as an assignment to 2, and said so in its own words.
   if (/Invalid left hand side/.test(msg)) return `Only a name can stand on the left of =, as in k = 2. To solve an equation, type it inside solve( ): solve(${input}).`

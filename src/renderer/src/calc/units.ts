@@ -45,7 +45,7 @@ export interface UnitAnswer {
  * Symbols math/expr.ts leaves undefined on purpose (each would swallow a letter typed elsewhere),
  * with the name that works and what it stands for.
  */
-const TYPE_INSTEAD: Record<string, { name: string; what: string }> = {
+export const TYPE_INSTEAD: Record<string, { name: string; what: string }> = {
   ly: { name: 'lightyear', what: 'the light-year' },
   pc: { name: 'parsec', what: 'the parsec' },
   AU: { name: 'au', what: 'the astronomical unit' },
@@ -55,17 +55,17 @@ const TYPE_INSTEAD: Record<string, { name: string; what: string }> = {
   kn: { name: 'knot', what: 'the knot' }
 }
 
-function unknownUnit(name: string): string {
+export function unknownUnit(name: string, onBar = false): string {
   const instead = TYPE_INSTEAD[name]
   if (instead) return `I don't know the unit "${name}". For ${instead.what}, type ${instead.name}.`
-  return `I don't know the unit "${name}". Check the spelling, or pick a unit from the lists above.`
+  return onBar ? `I don't know the unit "${name}". Check the spelling.` : `I don't know the unit "${name}". Check the spelling, or pick a unit from the lists above.`
 }
 
 /** The sentence for what mathjs threw. `from` and `to` name the units when a list asked. */
-function refusal(e: unknown, from?: string, to?: string): string {
+export function unitRefusal(e: unknown, from?: string, to?: string, onBar = false): string {
   const msg = e instanceof Error ? e.message : String(e)
   const unknown = /Unit "([^"]+)" not found/.exec(msg) ?? /Undefined symbol\s+(\S+)/.exec(msg)
-  if (unknown) return unknownUnit(unknown[1])
+  if (unknown) return unknownUnit(unknown[1], onBar)
   if (/Units do not match/.test(msg)) {
     const which = from && to ? `${unitLabel(from)} and ${unitLabel(to)}` : 'Those two units'
     return `${which} measure different things, so one cannot be changed into the other.`
@@ -81,7 +81,7 @@ export function convertListed(value: number, from: string, to: string): UnitAnsw
   try {
     return { text: `${calcNum(math.unit(value, from).toNumber(to))} ${unitLabel(to)}`, refused: false }
   } catch (e) {
-    return { text: refusal(e, from, to), refused: true }
+    return { text: unitRefusal(e, from, to), refused: true }
   }
 }
 
@@ -101,6 +101,6 @@ export function convertTyped(text: string): UnitAnswer {
     // A unit with no number ("km"), true or false, a list: nothing here to convert.
     return { text: 'Type a number with its unit, for example 5 N m to J.', refused: true }
   } catch (e) {
-    return { text: refusal(e), refused: true }
+    return { text: unitRefusal(e), refused: true }
   }
 }

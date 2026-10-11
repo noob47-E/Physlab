@@ -6,6 +6,7 @@ import type { EvalResult } from '../core/types'
 import { latexToMath } from '../math/latexToMath'
 import { inDegrees, isUnit, math, plainNumber, preprocess, toV3 } from '../math/expr'
 import { fromPolar, heading, len, toRad, type V3 } from '../math/vec'
+import { unknownVectorNameSentence } from '../calc/errors'
 import type { Card } from './vectorCalcStore'
 
 // ---------------------------------------------------------------------------
@@ -154,14 +155,7 @@ function afterNumber(parent: unknown): boolean {
 }
 
 /** The sentence for a name nothing gives a value to, in a card or in the expression box. */
-export function unknownNameSentence(name: string, scope: Record<string, unknown>, below: string[] = [], unreadable: string[] = []): string {
-  if (below.includes(name)) return `${name} is a card further down. A card can only use the vectors above it, so type ${name}'s value here or use a card higher up.`
-  if (unreadable.includes(name)) return `Card ${name} cannot be read yet, so it cannot be used here. Put card ${name} right first.`
-  // "AB" or "ij": two names written with no sign between them.
-  const parts = name.split('')
-  if (name.length > 1 && parts.every((p) => p in scope)) return `“${name}” is not one name. Put a sign between ${parts.join(' and ')}: ${parts.join(' × ')} for the cross product, ${parts.join(' · ')} for the dot product.`
-  return `There is no vector called ${name}. Use a card's name (the letter on its left), or the unit vectors i, j and k.`
-}
+export const unknownNameSentence = unknownVectorNameSentence
 
 /** A number added to or taken from a vector: said in one place, for the parser's own refusals and for evaluateVectorLine's (H11). */
 const NUMBER_AND_VECTOR = 'Something here mixes a number and a vector in a way that has no meaning, like adding 3 to a vector. Check each part is a vector, like 3i, or a named card.'
