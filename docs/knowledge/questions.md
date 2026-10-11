@@ -20,6 +20,11 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
   the plain label of a prompt (`spokenOf`), `texText`.
 - `questions/autoVisual.ts` — the automatic picture of a question (SUVAT, projectile, free body, normal regions, curves).
 - `questions/units.ts` — units in answers (`unitFromTail`, `revealSettings`, `texQuantity`).
+- `questions/bank.ts` — the bundled sets (`loadBundled`, `bundledSets`: the six `bank/*.pqjson` files read into the
+  build as text) and a teacher's file (`loadTeacherFile`, a Numbas `.exam` through numbas.ts).
+- `questions/bankLoad.ts` — how Problem Sets reaches bank.ts: `loadBank` (the dynamic import, its failure turned into
+  `FAILED_LINE`), `loadBundledSets` (a `BankState`, never a rejection), `bankLine` (`LOADING_LINE` / `FAILED_LINE`)
+  and `pickSet` (the set Start plays; while loading, never a teacher's set in place of a saved bundled one).
 - `panels/Practice.tsx` — Problem Sets; `panels/solverState.ts` — the vector solver's and Practice's pure decisions.
 
 ## The rules (invariants)
@@ -50,6 +55,12 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
 - The bundled school-maths bank and the external Question Pack (`PhysLab-content\PhysLab Question Pack.pqjson`)
   must hold the same questions exactly (tests/content.test.ts): edit both, back the pack up first.
 - vitest has no DOM: a panel decision worth testing goes into a pure function (`solverState.ts`), plus a browser check.
+- **The bank is its own chunk, loaded when Problem Sets opens (CW11).** Practice.tsx reaches `questions/bank.ts` only
+  through `bankLoad.ts`'s `import('./bank')`; one value import of bank.ts in any renderer module puts the
+  question text (263 kB in the built chunk) and numbas.ts back into the panel's own chunk with nothing else noticing. Until the sets
+  arrive the list reads "Loading the questions…"; a failed load (the chunk, or a bundled file failing its checks)
+  reads `FAILED_LINE`, never an empty list — tests/questionBankLoad.test.ts. bank.ts keeps its synchronous
+  `loadBundled()` for the tests.
 - An expression part's sampled check took anything under an absolute 10⁻¹² as zero, so "0" was right for 10⁻¹⁴·x.
   A side that is exactly 0 is now held to noise RELATIVE to the terms that cancelled and the formulas' size across
   the sample (`termScale`, `noiseFloor`) — tests/fb2-marking.test.ts.
@@ -65,4 +76,5 @@ revealed. Written by polish part P-FIX-QUESTIONS (0.9). Numbers and floors are i
 
 ## Guards
 tests/zeroAnswers.test.ts, tests/vectorAnswerReading.test.ts, tests/playerGuards.test.ts, tests/answerTimesSign.test.ts,
-tests/ecfUnits.test.ts, tests/questionSteps.test.ts, tests/solverState.test.ts, tests/content.test.ts, tests/fb2-*.test.ts.
+tests/ecfUnits.test.ts, tests/questionSteps.test.ts, tests/solverState.test.ts, tests/content.test.ts, tests/fb2-*.test.ts,
+tests/questionBankLoad.test.ts.

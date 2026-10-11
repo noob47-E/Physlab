@@ -10,7 +10,8 @@ import { classResultsFileText, openQuestionFile } from '../app/files'
 import { checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import type { FadingLevel, PQQuestion } from '../questions/pqjson'
-import { bundledSets, loadTeacherFile, type QuestionSet } from '../questions/bank'
+import type { QuestionSet } from '../questions/bank'
+import { bankLine, loadBank, loadBundledSets, pickSet, type BankState } from '../questions/bankLoad'
 import {
   countedParts,
   hasVisual,
@@ -246,15 +247,22 @@ export function Practice() {
   // the student chose, not a fixed four places.
   const settings = useScene((s) => s.settings)
 
-  const bundled = useMemo(() => {
-    try {
-      return bundledSets()
-    } catch {
-      return []
+  // The bundled sets load when Problem Sets opens, not with the panel's own code: until they
+  // arrive the list says so, and a failed load says so in a sentence instead of an empty list.
+  const [bank, setBank] = useState<BankState>({ status: 'loading' })
+  useEffect(() => {
+    let live = true
+    void loadBundledSets().then((next) => {
+      if (live) setBank(next)
+    })
+    return () => {
+      live = false
     }
   }, [])
+  const bundled = bank.status === 'ready' ? bank.sets : []
+  const bankNote = bankLine(bank)
   const allSets = [...bundled, ...teacher.sets]
-  const pickedSet = allSets.find((s) => s.id === setId) ?? allSets[0]
+  const pickedSet = pickSet(allSets, setId, bank)
   // The depth filter: a label to choose by, never a lock — "Every depth" is always there, and a
   // depth the picked set does not have falls back to it.
   const [depth, setDepth] = useState<number | null>(null)
@@ -331,6 +339,7 @@ export function Practice() {
     const refused = classResultsFileText(f.name, f.content)
     if (refused) return void useTeacherSets.setState({ error: refused, report: [] })
     try {
+      const { loadTeacherFile } = await loadBank()
       const set = loadTeacherFile(f.content, f.name)
       useTeacherSets.setState((s) => ({ sets: [...s.sets.filter((x) => x.id !== set.id), set], report: set.report, error: null }))
       setSetId(set.id)
@@ -494,7 +503,13 @@ export function Practice() {
           <>
             <div className="mt-3 px-3">
               <div className="mb-1 text-fine uppercase tracking-wide text-ink-faint">Sets that come with PhysLab</div>
-              <SetList sets={bundled} picked={pickedSet?.id} onPick={setSetId} />
+              {bankNote ? (
+                <div role="status" className={bank.status === 'failed' ? 'text-bad' : 'text-ink-faint'}>
+                  {bankNote}
+                </div>
+              ) : (
+                <SetList sets={bundled} picked={pickedSet?.id} onPick={setSetId} />
+              )}
               {teacher.sets.length > 0 && (
                 <>
                   <div className="mb-1 mt-3 text-fine uppercase tracking-wide text-ink-faint">Opened from a file</div>

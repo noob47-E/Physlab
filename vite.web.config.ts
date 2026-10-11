@@ -5,6 +5,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import pkg from './package.json'
+import { rendererChunk } from './electron.vite.config'
 
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
@@ -20,5 +21,5 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp'
     }
   },
-  build: { target: 'esnext' }
+  build: { target: 'esnext', rollupOptions: { output: { manualChunks: rendererChunk } } }
 })

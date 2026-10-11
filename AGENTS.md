@@ -396,6 +396,11 @@ neighbour is open.
   preprocess's vector rule, so B = k<1, 2> + <3, 4> was refused as "several equations" although preprocess read it
   fine. Ask the one reader (math/expr.ts angleVectors / splitArgs), or say in place why not.
   tests/golden/reader.golden.test.ts shows any change in what a line becomes.
+- **A lazy chunk is undone by one static import.** `React.lazy`, `import()` and `manualChunks` only move code when
+  nothing on the start path imports it by value. `questions/bank.ts` is reached only through `questions/bankLoad.ts`'s
+  `import('./bank')`, and tests/questionBankLoad.test.ts walks every renderer file for a value import of it or a second
+  loader. mathjs's chunk takes its CommonJS helpers with it (`rendererChunk` in electron.vite.config.ts), so the two
+  chunks never import each other.
 - **The scene store's helpers never import the store.** `core/legoScene.ts` (Break apart and Fuse) and `core/doomed.ts`
   (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
   them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.
