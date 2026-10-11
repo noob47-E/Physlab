@@ -6,7 +6,7 @@
 // precision). The digits now come from fmtPrecise; this file only adds what a calculator needs
 // on top — the error words, engineering notation, and never showing 0 for something that is not.
 
-import { fmtPrecise, toExponentialHalfAway, type MeasureSettings } from '../math/format'
+import { DISPLAY_FLOOR, fmtPrecise, toExponentialHalfAway, type MeasureSettings } from '../math/format'
 
 export type CalcPrecision = Pick<MeasureSettings, 'decimals' | 'precisionMode'>
 
@@ -40,7 +40,7 @@ export function calcNum(v: number, s: CalcPrecision = calcPrecision()): string {
   // fmtPrecise calls anything below 10⁻¹² zero, which is right for a length on the grid and
   // wrong for the charge on an electron. The digits still come from it; only the power of ten
   // is split off here.
-  if (Math.abs(v) < 1e-12) return exponentForm(v, s)
+  if (Math.abs(v) < DISPLAY_FLOOR) return exponentForm(v, s)
   const text = fmtPrecise(v, s)
   // Decimal places are a floor on the figures shown, not a ceiling on the information: at two
   // places the fine-structure constant is 0.0073, not 0.01, and 1/1000 is 0.0010, not 0.

@@ -18,19 +18,35 @@ export const len = (a: V3): number => Math.hypot(a[0], a[1], a[2])
 export const dist = (a: V3, b: V3): number => len(sub(a, b))
 const lerp = (a: V3, b: V3, t: number): V3 => add(a, scale(sub(b, a), t))
 export const mid = (a: V3, b: V3): V3 => lerp(a, b, 0.5)
+/**
+ * A vector shorter than this has no direction here: normalize gives the zero vector, angleBetween and
+ * directionAngles NaN. It is an absolute length, so 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ (a force on an electron) loses
+ * the direction it has; a floor of exactly 0 is parked for the owner (CW9-N3-2). project below has the
+ * same floor squared (10⁻²⁴). The Vectors solver
+ * steps round it (math/vectorSolver.ts uses angleOf, and divides by a size under it itself).
+ */
+// eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW9-N3-2): an absolute floor on a length (see above)
+export const NO_DIRECTION = 1e-12
 export const normalize = (a: V3): V3 => {
   const l = len(a)
-  return l < 1e-12 ? [0, 0, 0] : scale(a, 1 / l)
+  return l < NO_DIRECTION ? [0, 0, 0] : scale(a, 1 / l)
 }
 const equals = (a: V3, b: V3, eps = 1e-9): boolean => dist(a, b) < eps
 
-/** Angle between two vectors in radians, 0..π. */
+/**
+ * The angle between two vectors in radians, 0..π, NaN only when one has exactly zero length. atan2 of
+ * |a×b| and a·b is stable for tiny and near-π angles and does not depend on the vectors' size while
+ * their products fit a double (about 10⁻¹⁶² to 10¹⁵⁴). The
+ * one rule for it: angleBetween and the Vectors solver both ask it.
+ */
+export const angleOf = (a: V3, b: V3): number => (len(a) === 0 || len(b) === 0 ? NaN : Math.atan2(len(cross(a, b)), dot(a, b)))
+
+/** angleOf, NaN for a vector under NO_DIRECTION. */
 export const angleBetween = (a: V3, b: V3): number => {
   const la = len(a)
   const lb = len(b)
-  if (la < 1e-12 || lb < 1e-12) return NaN
-  // atan2 of |a×b| and a·b is numerically stable for tiny and near-π angles.
-  return Math.atan2(len(cross(a, b)), dot(a, b))
+  if (la < NO_DIRECTION || lb < NO_DIRECTION) return NaN
+  return angleOf(a, b)
 }
 
 /** Direction of a 2D vector measured counter-clockwise from +x, in radians 0..2π. */
@@ -47,7 +63,7 @@ export const safeAcos = (x: number): number => Math.acos(Math.max(-1, Math.min(1
 /** Direction cosines angles α, β, γ with the x, y, z axes (radians). */
 export const directionAngles = (a: V3): V3 => {
   const l = len(a)
-  if (l < 1e-12) return [NaN, NaN, NaN]
+  if (l < NO_DIRECTION) return [NaN, NaN, NaN]
   return [safeAcos(a[0] / l), safeAcos(a[1] / l), safeAcos(a[2] / l)]
 }
 

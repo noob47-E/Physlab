@@ -4,7 +4,7 @@
 // (quadrant, sign, sin instead of cos, radians instead of degrees, a factor of ten) instead of
 // just saying "no". Every rule is a plain comparison; nothing here guesses or asks a model.
 
-import { fmtPrecise, fmtSci, noiseFloor, revealPrecision, superscriptPowers, type MeasureSettings } from './format'
+import { fmtKnown, fmtPrecise, noiseFloor, revealPrecision, superscriptPowers, type MeasureSettings } from './format'
 import { toDeg, toRad } from './vec'
 import type { AnswerField } from './problems'
 import { UNITS } from '../questions/units'
@@ -158,12 +158,11 @@ export function checkAnswer(text: string, f: AnswerField, s: Pick<MeasureSetting
 
 /** The answer as PhysLab would write it, for the "show me" button — in the student's precision, or more figures when that precision would round it out of its own band. */
 export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals' | 'precisionMode'> = { decimals: 4, precisionMode: 'dp' }): string {
-  // fmtPrecise writes anything under 1e-12 as 0, which is right for a dragged point and wrong
-  // for a known answer: an electron's 1.6×10⁻¹⁹ N must never be revealed as "0 N".
+  // A known answer is written by fmtKnown, not fmtPrecise alone, which writes anything under the
+  // display floor as 0: an electron's 1.6×10⁻¹⁹ N must never be revealed as "0 N".
   const v = f.value
-  const show = (x: number, q: typeof s): string => (x !== 0 && Math.abs(x) < 1e-12 ? fmtSci(x, q) : fmtPrecise(x, q))
   // Enough figures that the answer shown, typed back, is marked right by this same field.
-  const n = show(v, revealPrecision(v, f.tol, s, show))
+  const n = fmtKnown(v, revealPrecision(v, f.tol, s))
   // A degree sign sits against its number, as formatMeasure writes it: "36.87°", not "36.87 °".
   const gap = f.unit === '°' ? '' : ' '
   // The power of ten raised, "1.6 × 10⁻¹⁹ N": the reveal once read "1.6×10^-19 N" (rule 2).

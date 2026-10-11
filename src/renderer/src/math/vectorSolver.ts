@@ -9,8 +9,8 @@
 // Numbers and angles go through texMeasure / formatMeasure with the student's own settings
 // (decimals, significant figures, degrees or radians), never a fixed 4 d.p.
 
-import { add, cross, dot, heading, len, neg, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
-import { angleTo, fmt, fmtSci, formatMeasure, sciExponent, shownValue, stepEq, stepPrecision, superscriptPowers, tex, texIJK, texMeasure, texSci, vecTex, type MeasureSettings } from './format'
+import { add, angleOf, cross, dot, heading, len, neg, NO_DIRECTION, normalize, safeAcos, scale, toDeg, toRad, type V3 } from './vec'
+import { angleTo, DISPLAY_FLOOR, fmt, fmtSci, formatMeasure, sciExponent, shownValue, stepEq, stepPrecision, superscriptPowers, tex, texIJK, texMeasure, texSci, vecTex, type MeasureSettings } from './format'
 
 export interface Step {
   /** Plain explanation sentence. */
@@ -99,15 +99,15 @@ function finish(sol: Solution): Solution {
 }
 
 
-/** Not zero, but under the 1e-12 noise floor below which fmt writes 0. */
-const tinyReal = (n: number): boolean => n !== 0 && Math.abs(n) < 1e-12
+/** Not zero, but under the writer's DISPLAY_FLOOR, below which fmt writes 0. */
+const tinyReal = (n: number): boolean => n !== 0 && Math.abs(n) < DISPLAY_FLOOR
 
 /**
  * A number ready to be substituted into a formula: bracketed when negative, so "− (−3)" never
  * reads "− −3", and when in scientific form, so its square is (3.16×10⁻⁷)², not the
  * "3.16\times 10^{-7}^2" KaTeX refuses as a double superscript.
  */
-const bracketed = (n: number, text: string): string => ((n < 0 && Math.abs(n) >= 1e-12) || /\\times/.test(text) ? `(${text})` : text)
+const bracketed = (n: number, text: string): string => ((n < 0 && Math.abs(n) >= DISPLAY_FLOOR) || /\\times/.test(text) ? `(${text})` : text)
 
 /**
  * A vector at precision q whose components may all sit below fmt's noise floor (k = 1.6×10⁻¹⁹
@@ -144,6 +144,7 @@ const mantissaFactor = (big: number, s: SolverSettings): number => (tinyReal(big
  */
 const isNoise = (product: number, mA: number, mB: number): boolean => {
   const p = Math.abs(product)
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts's 10⁻¹⁵ would write what is left of 5∠3630° + 5∠3810° as a vector: the number is parked for the owner (CW9-N3-1)
   return p === 0 || p / mA <= 1e-12 * mB
 }
 
@@ -152,7 +153,7 @@ const isNoise = (product: number, mA: number, mB: number): boolean => {
  * angleBetween gives NaN for any vector under 1e-12, so 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ had no angle with
  * anything; atan2 of |A×B| and A·B is scale-free, so the angle of a tiny pair is as exact as any.
  */
-const angleDeg = (a: V3, b: V3): number => (len(a) === 0 || len(b) === 0 ? NaN : toDeg(Math.atan2(len(cross(a, b)), dot(a, b))))
+const angleDeg = (a: V3, b: V3): number => toDeg(angleOf(a, b))
 
 /**
  * A×B as the working writes it: the null vector when the product is rounding noise beside the
@@ -176,7 +177,7 @@ function tidyTiny(v: V3, s: SolverSettings): V3 {
   const big = Math.max(...v.map(Math.abs))
   if (!tinyReal(big)) return v
   const per = mantissaFactor(big, s)
-  return v.map((c) => (Math.abs(c * per) < 1e-12 ? 0 : c)) as V3
+  return v.map((c) => (Math.abs(c * per) < DISPLAY_FLOOR ? 0 : c)) as V3
 }
 
 /**
@@ -190,6 +191,7 @@ function sumOf(vs: V3[], s: SolverSettings): V3 {
   const parts = vs.map((v) => tidyTiny(v, s))
   const raw = parts.reduce<V3>((acc, v) => add(acc, v), [0, 0, 0])
   const sizes = parts.reduce((acc, v) => acc + len(v), 0)
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts's 10⁻¹⁵ would write what is left of 5∠3630° + 5∠3810° as a vector: the number is parked for the owner (CW9-N3-1)
   return tidyTiny(Number.isFinite(sizes) && len(raw) <= 1e-12 * sizes ? [0, 0, 0] : raw, s)
 }
 
@@ -241,7 +243,7 @@ function writersAt(q: SolverSettings) {
 /** The number/angle writers for one solution, bound to the student's settings. */
 function writers(s: SolverSettings) {
   const num = (n: number) => texMeasure(n, 'number', s)
-  const tiny = (n: number) => n !== 0 && Math.abs(n) < 1e-12
+  const tiny = tinyReal
   return {
     /**
      * The writers for one working line's operands (Fix 4): the student's precision when the line
@@ -314,7 +316,7 @@ const asWritten = (w: ReturnType<typeof writers>, x: number, y: number): boolean
  * the noise floor, where is3D alone calls 1×10⁻¹⁹ î + 2×10⁻¹⁹ ĵ + 2×10⁻¹⁹ k̂ a plane vector. For
  * an ordinary vector this is is3D.
  */
-const hasZ = (v: V3, s: SolverSettings): boolean => Math.abs(v[2] * mantissaFactor(Math.max(...v.map(Math.abs)), s)) > 1e-12
+const hasZ = (v: V3, s: SolverSettings): boolean => Math.abs(v[2] * mantissaFactor(Math.max(...v.map(Math.abs)), s)) > DISPLAY_FLOOR
 
 /** Whether any of the vectors has a z part, each judged by hasZ beside its own size. */
 const is3D = (s: SolverSettings, ...vs: V3[]): boolean => vs.some((v) => hasZ(v, s))
@@ -345,7 +347,7 @@ function directionSteps(name: string, v: V3, steps: Step[], s: SolverSettings): 
   // component is zero beside the other is judged on the mantissas, as the scientific writers show
   // them; an ordinary vector (per = 1) is judged as written, as it always was.
   const per = mantissaFactor(Math.max(Math.abs(x), Math.abs(y)), s)
-  const negligible = (c: number): boolean => Math.abs(c * per) < 1e-12
+  const negligible = (c: number): boolean => Math.abs(c * per) < DISPLAY_FLOOR
   let theta: number
   if (x === 0 && y === 0) {
     steps.push({ text: 'Direction: the vector has zero length, so its direction is undefined.' })
@@ -406,7 +408,7 @@ export function solveComponents(name: string, magnitude: number, thetaDeg: numbe
   const big = Math.max(Math.abs(magnitude * Math.cos(t)), Math.abs(magnitude * Math.sin(t)))
   const tiny = tinyReal(magnitude) || tinyReal(big)
   const per = mantissaFactor(tinyReal(magnitude) ? magnitude : big, s)
-  const clean = (c: number): number => (tiny && Math.abs(c * per) < 1e-12 ? 0 : c)
+  const clean = (c: number): number => (tiny && Math.abs(c * per) < DISPLAY_FLOOR ? 0 : c)
   const x = clean(magnitude * Math.cos(t))
   const y = clean(magnitude * Math.sin(t))
   const put = (n: number): string => (tiny ? w.sci(n) : w.num(n))
@@ -823,7 +825,7 @@ export function solveScalarMultiply(k: number, A: NamedVec, resultName = 'R', s:
   // head still shows beyond it. Any other R keeps its true length, since the length is the lesson:
   // 25A drawn at A's length lay exactly on top of A. An A that is itself under the floor has
   // nothing to stand beside, so R stays as it is there.
-  const drawn: V3 = tinyReal(len(R)) && size >= 1e-12 ? scale(A.v, k > 0 ? 0.5 : -0.5) : R
+  const drawn: V3 = tinyReal(len(R)) && size >= DISPLAY_FLOOR ? scale(A.v, k > 0 ? 0.5 : -0.5) : R
   return finish({
     // "R = 1.6×10^-19A" would read as a power of −19A, so a scientific k is bracketed.
     title: `${resultName} = ${/×10\^/.test(kText) ? `(${kText})` : kText}${A.name}`,
@@ -870,7 +872,7 @@ export function solveUnitVector(A: NamedVec, s: SolverSettings = DEFAULT_SETTING
   }
   // normalize() hands back [0, 0, 0] under its 1e-12 floor, so a vector that small is divided by
   // its own size here; above the floor this is the unit vector normalize gives.
-  const u: V3 = m < 1e-12 ? [A.v[0] / m, A.v[1] / m, A.v[2] / m] : normalize(A.v)
+  const u: V3 = m < NO_DIRECTION ? [A.v[0] / m, A.v[1] / m, A.v[2] / m] : normalize(A.v)
   // (−0.55î …)/4.4 = −0.12î was false as written (a calculator gives −0.125): each component and
   // the size are written with the digits that make every division give the component shown. A
   // vector under the noise floor is written in scientific form, where num wrote it as \vec{0}.
@@ -1201,6 +1203,7 @@ export function solveTwoForces(F1: number, F2: number, thetaDeg: number, unit = 
   // judges a sum.
   const rawX = F1 + F2 * Math.cos(t)
   const rawY = F2 * Math.sin(t)
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts's 10⁻¹⁵ would write what is left of 5∠3630° + 5∠3810° as a vector: the number is parked for the owner (CW9-N3-1)
   const Rx = Math.abs(rawX) <= 1e-12 * (Math.abs(F1) + Math.abs(F2)) ? 0 : rawX
   const Ry = isNoise(rawY, Math.abs(F2), 1) ? 0 : rawY
   const R = Math.hypot(Rx, Ry)
@@ -1216,6 +1219,7 @@ export function solveTwoForces(F1: number, F2: number, thetaDeg: number, unit = 
   const gx = w.guard((o) => {
     const [f1, f2] = [o.readSci(F1), o.readSci(F2)]
     const x = f1 + f2 * cosD(o.readAng(thetaDeg))
+    // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts's 10⁻¹⁵ would write what is left of 5∠3630° + 5∠3810° as a vector: the number is parked for the owner (CW9-N3-1)
     return asWritten(w, Math.abs(x) <= 1e-12 * (Math.abs(f1) + Math.abs(f2)) ? 0 : x, Rx)
   })
   const gy = w.guard((o) => {
@@ -1233,6 +1237,7 @@ export function solveTwoForces(F1: number, F2: number, thetaDeg: number, unit = 
   const gc = w.guard((o) => {
     const [f1, f2] = [o.readSci(F1), o.readSci(F2)]
     const raw = f1 ** 2 + f2 ** 2 + 2 * f1 * f2 * cosD(o.readAng(thetaDeg))
+    // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts's 10⁻¹⁵ would write what is left of 5∠3630° + 5∠3810° as a vector: the number is parked for the owner (CW9-N3-1)
     const back = Math.abs(raw) <= 1e-12 * (f1 ** 2 + f2 ** 2) ? 0 : raw
     return asWritten(w, Math.sqrt(Math.max(back, 0)), R) && w.sameSci(back, sum, rSum.q)
   })
@@ -1475,6 +1480,7 @@ export interface DrawPlan {
 }
 
 /** Whether a vector is drawn at a stand-in length rather than its own. */
+// eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW9-N3-3): absolute, so 0.1 × <1e-12, 0, 0>, drawn at ½A within 10⁻¹² of R, is labelled and selected as R at its stand-in length
 const standIn = (v: VisualVector): boolean => v.drawn !== undefined && v.drawn.some((c, i) => Math.abs(c - v.v[i]) > 1e-12)
 
 /**

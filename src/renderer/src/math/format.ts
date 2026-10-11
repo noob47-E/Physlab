@@ -23,6 +23,15 @@ export const setNotation = (n: Partial<Notation>): void => {
   NOTATION = { ...NOTATION, ...n }
 }
 
+/**
+ * The writer's own floor: fmt, tex, fmtPrecise, fmtIJK, texIJK and fmtPoint write a value under it as
+ * 0, or leave the part out (a dragged point's last-bit noise). A line elsewhere that asks "will the
+ * writer show this as 0?" — and then writes it in scientific form, or drops a z — names it, so the two
+ * never drift apart. It is a screen rule, not a noise rule: rounding noise is judged against the sizes
+ * it came from by math/noise.ts, and a known value goes through fmtKnown or fmtSci, which have no floor.
+ */
+export const DISPLAY_FLOOR = 1e-12
+
 /** A vector's name in LaTeX, in the chosen style. */
 export function vecTex(name: string): string {
   if (NOTATION.vector === 'bold') return `\\mathbf{${name}}`
@@ -310,7 +319,7 @@ export function fmtPrecise(v: number, s: Pick<MeasureSettings, 'decimals' | 'pre
   if (!Number.isFinite(v)) return fmt(v)
   if (s.precisionMode === 'sf') {
     // The same noise floor as fmt: a point dragged onto the axis reads 0, not 3×10⁻¹⁷.
-    if (Math.abs(v) < 1e-12) return '0'
+    if (Math.abs(v) < DISPLAY_FLOOR) return '0'
     // Far outside [10⁻⁶, 10⁹) no rounding can bring a number back in: one at 10⁹ or over rounds to
     // 10⁹ or over, one under 5×10⁻⁷ to 5×10⁻⁷ at most. Those go straight to the scientific writer,
     // so a 1e300 is not first written out as 300 digits of plain zeros only to be thrown away.
@@ -337,6 +346,15 @@ export function fmtSci(v: number, s: Pick<MeasureSettings, 'decimals' | 'precisi
   if (v === 0) return '0'
   if (s.precisionMode === 'sf') return sci(v, Math.max(1, s.decimals) - 1, false)
   return sci(v, s.decimals, true)
+}
+
+/**
+ * A known value (an answer, a constant, a result) in the student's precision: as fmtPrecise writes it,
+ * but in scientific form under the DISPLAY_FLOOR, where fmtPrecise would write 0 — an electron's
+ * 1.6×10⁻¹⁹ N is never "0 N". revealPrecision, roundSig and the Practice reveal all write with it.
+ */
+export function fmtKnown(x: number, q: Pick<MeasureSettings, 'decimals' | 'precisionMode'>): string {
+  return x !== 0 && Math.abs(x) < DISPLAY_FLOOR ? fmtSci(x, q) : fmtPrecise(x, q)
 }
 
 /**
@@ -420,7 +438,7 @@ const inPowersOfTen = (n: number, decimals: number): boolean => {
 export function fmt(n: number, decimals = 4): string {
   if (Number.isNaN(n)) return 'undefined'
   if (!Number.isFinite(n)) return n > 0 ? '∞' : '−∞'
-  if (Math.abs(n) < 1e-12) return '0'
+  if (Math.abs(n) < DISPLAY_FLOOR) return '0'
   if (inPowersOfTen(n, decimals)) return sci(n, decimals, true)
   // toFixedHalfAway, not toFixed: 2.675 is 2.68 at 2 places, as the student's calculator says.
   // It also never signs a zero, so a small negative that rounds away reads 0, not "−0": a
@@ -467,7 +485,7 @@ function trimZeros(s: string): string {
 export function tex(n: number, decimals = 4): string {
   if (Number.isNaN(n)) return '\\text{undefined}'
   if (!Number.isFinite(n)) return n > 0 ? '\\infty' : '-\\infty'
-  if (Math.abs(n) < 1e-12) return '0'
+  if (Math.abs(n) < DISPLAY_FLOOR) return '0'
   // The same switch as fmt, on the same rounded value.
   if (inPowersOfTen(n, decimals)) {
     const [m, e] = toExponentialHalfAway(n, decimals).split('e')
@@ -513,7 +531,7 @@ export function texP(n: number, decimals = 4): string {
 }
 
 export const fmtPoint = (p: V3, decimals = 3): string =>
-  Math.abs(p[2]) < 1e-12 ? `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)})` : `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)}, ${fmt(p[2], decimals)})`
+  Math.abs(p[2]) < DISPLAY_FLOOR ? `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)})` : `(${fmt(p[0], decimals)}, ${fmt(p[1], decimals)}, ${fmt(p[2], decimals)})`
 
 /**
  * The direction in polar notation follows the student's angle unit and precision whenever the
@@ -537,10 +555,10 @@ function polarDirection(rad: number, p: Precision, forTex: boolean): string {
  */
 export function fmtIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'pair' || NOTATION.components === 'column') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => fmtAt(c, precision))
+    const nums = (Math.abs(v[2]) < DISPLAY_FLOOR ? v.slice(0, 2) : v).map((c) => fmtAt(c, precision))
     return NOTATION.components === 'pair' ? `(${nums.join(', ')})` : `[${nums.join('; ')}]`
   }
-  if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
+  if (NOTATION.components === 'polar' && Math.abs(v[2]) < DISPLAY_FLOOR) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
     return `${fmtAt(m, precision)} ∠ ${polarDirection(ang < 0 ? ang + 2 * Math.PI : ang, precision, false)}`
@@ -548,7 +566,7 @@ export function fmtIJK(v: V3, precision: Precision = 3): string {
   const parts: string[] = []
   const names = ['i', 'j', 'k']
   v.forEach((c, idx) => {
-    if (Math.abs(c) < 1e-12) return
+    if (Math.abs(c) < DISPLAY_FLOOR) return
     const mag = fmtAt(Math.abs(c), precision)
     // Left out like an exact zero: the sign of a size that shows as 0 is not information.
     if (mag === '0') return
@@ -560,14 +578,14 @@ export function fmtIJK(v: V3, precision: Precision = 3): string {
 
 export function texIJK(v: V3, precision: Precision = 3): string {
   if (NOTATION.components === 'pair') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
+    const nums = (Math.abs(v[2]) < DISPLAY_FLOOR ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
     return `\\left(${nums.join(',\\; ')}\\right)`
   }
   if (NOTATION.components === 'column') {
-    const nums = (Math.abs(v[2]) < 1e-12 ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
+    const nums = (Math.abs(v[2]) < DISPLAY_FLOOR ? v.slice(0, 2) : v).map((c) => texAt(c, precision))
     return `\\begin{pmatrix}${nums.join(' \\\\ ')}\\end{pmatrix}`
   }
-  if (NOTATION.components === 'polar' && Math.abs(v[2]) < 1e-12) {
+  if (NOTATION.components === 'polar' && Math.abs(v[2]) < DISPLAY_FLOOR) {
     const m = Math.hypot(v[0], v[1])
     const ang = Math.atan2(v[1], v[0])
     const a = ang < 0 ? ang + 2 * Math.PI : ang
@@ -576,7 +594,7 @@ export function texIJK(v: V3, precision: Precision = 3): string {
   const parts: string[] = []
   const names = ['\\hat{i}', '\\hat{j}', '\\hat{k}']
   v.forEach((c, idx) => {
-    if (Math.abs(c) < 1e-12) return
+    if (Math.abs(c) < DISPLAY_FLOOR) return
     const mag = texAt(Math.abs(c), precision)
     // As fmtIJK: a component that shows as 0 is left out.
     if (mag === '0') return
@@ -734,7 +752,7 @@ export function revealPrecision<S extends DigitSettings>(
   v: number,
   tol: number,
   s: S,
-  show: (x: number, q: S) => string = (x, q) => (x !== 0 && Math.abs(x) < 1e-12 ? fmtSci(x, q) : fmtPrecise(x, q))
+  show: (x: number, q: S) => string = fmtKnown
 ): S {
   if (!Number.isFinite(v)) return s
   const figures = (digits: number): S => ({ ...s, precisionMode: 'sf', decimals: digits })
@@ -787,7 +805,7 @@ export function roundSig(v: number, n: number): string {
   const s: DigitSettings = { decimals: n, precisionMode: 'sf' }
   // fmtPrecise calls anything under 10⁻¹² zero, right for a length dragged onto the axis and wrong
   // for the charge on an electron (calcNum splits it off for the same reason): fmtSci has no floor.
-  return superscriptPowers(Math.abs(v) < 1e-12 ? fmtSci(v, s) : fmtPrecise(v, s))
+  return superscriptPowers(fmtKnown(v, s))
 }
 
 /**

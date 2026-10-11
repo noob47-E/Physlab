@@ -113,6 +113,31 @@ Traps met in CW3b:
   the writer's floor, which the Vectors panel already steps round (H13).
 - The golden `questions` sweep does not print pictures: a change to questions/autoVisual.ts needs its own test.
 
+## One name for the writer's floor, and the noise rule in vectors and numbers (CLEANUP-PLAN.md CW9-N3)
+- **`DISPLAY_FLOOR`** (math/format.ts, 10⁻¹²) is the writer's own floor: fmt, tex, fmtPrecise, fmtIJK, texIJK and
+  fmtPoint write a value under it as 0 or leave the part out. A line elsewhere that asks "will the writer show this
+  as 0?" names it (calc/format.ts calcNum; the Vectors solver's tinyReal, bracketed, tidyTiny, hasZ, negligible,
+  the scaled-vector stand-in) instead of repeating 10⁻¹². It is a screen rule, not a noise rule. Mind the edge: the
+  writer drops a value strictly under it, so a `> DISPLAY_FLOOR` test (hasZ) differs from it at exactly 10⁻¹².
+  Copies still written as 1e-12 outside this batch: marked in place in lang/commands.ts (isThreeD, vectorExtras) and
+  panels/cardLine.ts / vectorLine.ts (from vectorCalcStore.ts); on the interim list, for CW9-N1 and N2, in
+  render/Labels.tsx (62, 69), panels/Properties.tsx (175), panels/Measurements.tsx (58, 77) and math/geometry.ts
+  (396, 402). (Properties.tsx:170 and Measurements.tsx:44 are direction floors, Labels.tsx:64 a relative one: not
+  copies of the writer's.)
+- **`fmtKnown(x, q)`** (math/format.ts) writes a known value: fmtPrecise, but in scientific form under the floor. It is
+  revealPrecision's default writer, roundSig's and the Practice reveal's (math/checkAnswer.ts expectedText) — they
+  were three copies of one line.
+- **The Vectors solver's noise rules** (isNoise for a product, sumOf, the resultant of two forces) stay at 10⁻¹² of
+  the sizes, where math/noise.ts says 10⁻¹⁵: 5∠3630° + 5∠3810° leaves 1.7×10⁻¹⁴ beside sizes of 10, which isNoise
+  calls a real vector. Which number is the owner's (OWNER-APPROVALS CW9-N3-1, CW2's class 1).
+- **CW2's classes in this batch:** 1, the number — parked (CW9-N3-1); 2, marking — unchanged: a typed answer is still
+  marked within tol + noiseFloor (checkAnswer `near`), and sameNumber is not used to mark; 3, a product divided
+  first — the solver's isNoise already does; 5, inclusive (≤) against strict (<) — the solver keeps ≤; 6, noiseFloor's
+  own edge (math/format.ts) — nothing to do; 4 is not in these files.
+- **Left on the allow-list, marked in place:** math/pure/table.ts readInverse (a probability against a 4-place table
+  cell, a fixed 0-to-1 scale), math/vec.ts `NO_DIRECTION` (parked, CW9-N3-2) and math/vectorSolver.ts standIn
+  (parked, CW9-N3-3: an arrow drawn at ½A within 10⁻¹² of a scaled R of about 10⁻¹³ is taken for R's own length).
+
 ## Not yet on the rule
 - the Calculator panel's keypad converter, which turns any "×10" into a power (calc/engine.ts:14; P-CALC)
 - a vector's full label still cuts the unit off its components' amounts (render/Labels.tsx): safe while units are

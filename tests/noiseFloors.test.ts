@@ -37,6 +37,14 @@ import { inferVisual, solveSuvat } from '../src/renderer/src/questions/autoVisua
 import { playQuestion, showVisual, visualPlanFor, visualState } from '../src/renderer/src/questions/player'
 import type { PQQuestion } from '../src/renderer/src/questions/pqjson'
 import type { V3 } from '../src/renderer/src/math/vec'
+import { add, angleBetween, directionAngles, len, normalize } from '../src/renderer/src/math/vec'
+import { fmt, fmtPrecise, roundSig, texIJK } from '../src/renderer/src/math/format'
+import { calcNum } from '../src/renderer/src/calc/format'
+import { expectedText } from '../src/renderer/src/math/checkAnswer'
+import type { AnswerField } from '../src/renderer/src/math/problems'
+import { readInverse } from '../src/renderer/src/math/pure/table'
+import { solveOperation } from '../src/renderer/src/panels/vectorCalcStore'
+import { planDrawing } from '../src/renderer/src/math/vectorSolver'
 import { resetGlobals } from './helpers/globals'
 
 beforeEach(() => {
@@ -310,5 +318,121 @@ describe('found in passing (outside this part’s lines): the bar at and under t
     const tex = (await bar('A = <2e-19, 1e-19, 3e-19>')).tex ?? ''
     expect(tex).not.toContain('\\vec{0}')
     expect(tex).not.toContain('\\theta')
+  })
+})
+
+// ---------------------------------------------------------------------------------------------------------------
+// CW9-N3 (vectors and numbers): the writer's display floor has one name (math/format.ts DISPLAY_FLOOR), the
+// Vectors solver's noise rules stay at 10⁻¹² of the sizes until the owner picks the number (CW9-N3-1), and
+// math/vec.ts's floor on a vector's length is parked (CW9-N3-2).
+// ---------------------------------------------------------------------------------------------------------------
+
+/** A vector of size r at d degrees, as a size ∠ angle card makes it. */
+const polar = (r: number, d: number): V3 => [r * Math.cos((d * Math.PI) / 180), r * Math.sin((d * Math.PI) / 180), 0]
+
+describe('the writer writes a value under 10⁻¹² as 0, and every line that asks "will it?" agrees (DISPLAY_FLOOR)', () => {
+  it('fmt, fmtPrecise and texIJK: 9.99×10⁻¹³ is 0 and left out, 10⁻¹² is written', () => {
+    const s = scene().settings
+    expect(fmt(9.99e-13)).toBe('0')
+    expect(fmt(1e-12)).toBe('1×10^-12')
+    expect(fmtPrecise(9.99e-13, s)).toBe('0')
+    expect(fmtPrecise(1e-12, s)).toBe('1×10^-12')
+    expect(texIJK([1, 2, 9.99e-13])).toBe('1\\hat{i} + 2\\hat{j}')
+    expect(texIJK([1, 2, 1e-12])).toBe('1\\hat{i} + 2\\hat{j} + 1\\times 10^{-12}\\hat{k}')
+  })
+
+  it('a known value under it is written in scientific form, never 0 (roundSig, calcNum, a revealed answer)', () => {
+    // The writer puts no-break spaces round ×; compared here as ordinary ones.
+    const plain = (t: string): string => t.replace(/\u00a0/g, ' ')
+    expect(plain(roundSig(9.99e-13, 3))).toBe('9.99 × 10⁻¹³')
+    expect(plain(roundSig(1e-12, 3))).toBe('1.00 × 10⁻¹²')
+    expect(roundSig(0, 3)).toBe('0')
+    expect(calcNum(9.99e-13, { decimals: 3, precisionMode: 'sf' })).toBe('9.99×10^-13')
+    expect(calcNum(1e-12, { decimals: 3, precisionMode: 'sf' })).toBe('1×10^-12')
+    const field = (value: number, tol: number, unit: string): AnswerField => ({ key: 'a', label: 'a', unit, value, tol })
+    expect(plain(expectedText(field(1.6e-19, 0.032e-19, 'N')))).toBe('1.6 × 10⁻¹⁹ N')
+    expect(expectedText(field(2.5, 0.05, 'm'))).toBe('2.5 m')
+  })
+
+  it('the Vectors solver writes a size under it in scientific form, and over it as it always did', () => {
+    const s = scene().settings
+    const size = (v: V3) => solveOperation('mag', [{ name: 'A', v }], s)?.answers
+    expect(size([9.99e-13, 0, 0])).toEqual([{ label: '|A|', tex: '9.99\\times 10^{-13}' }, { label: 'θ', tex: '0^\\circ' }])
+    expect(size([1e-12, 0, 0])).toEqual([{ label: '|A|', tex: '1\\times 10^{-12}' }, { label: 'θ', tex: '0^\\circ' }])
+    expect(size([3e-19, 4e-19, 0])).toEqual([{ label: '|A|', tex: '5\\times 10^{-19}' }, { label: 'θ', tex: '53.13^\\circ' }])
+  })
+})
+
+describe('the Vectors solver’s noise rules: 10⁻¹² of the sizes, where math/noise.ts says 10⁻¹⁵ (CW9-N3-1)', () => {
+  it('5∠3630° + 5∠3810° (opposite) is the zero vector, though isNoise calls what is left of it a real vector', () => {
+    const a = polar(5, 3630)
+    const b = polar(5, 3810)
+    // The sum leaves 1.7×10⁻¹⁴ beside sizes of 10: above isNoise's 10⁻¹⁵, under the solver's 10⁻¹².
+    expect(isNoise(len(add(a, b)), len(a) + len(b))).toBe(false)
+    expect(solveOperation('sum', [{ name: 'A', v: a }, { name: 'B', v: b }], scene().settings)?.answers[0]).toEqual({ label: 'R', tex: '\\vec{0}' })
+  })
+})
+
+describe('a drawn arrow is a stand-in when it differs from the vector by over 10⁻¹² (standIn; parked, CW9-N3-3)', () => {
+  it('10⁻²⁰ × <3, 4> is drawn at a stand-in length as a helper with its true size beside it; 2 × <3, 4> as itself', () => {
+    const s = scene().settings
+    const tiny = planDrawing(solveOperation('scale', [{ name: 'A', v: [3, 4, 0] }], s, 1e-20)!.visual!)
+    const r = tiny.items.find((i) => i.kind === 'arrow' && i.role === 'result')
+    expect(r).toMatchObject({ auxiliary: true, labelMode: 'name' })
+    expect(tiny.items.some((i) => i.kind === 'note')).toBe(true)
+    const big = planDrawing(solveOperation('scale', [{ name: 'A', v: [3, 4, 0] }], s, 2)!.visual!)
+    expect(big.items.find((i) => i.kind === 'arrow' && i.role === 'result')).toMatchObject({ auxiliary: false })
+    expect(big.items.some((i) => i.kind === 'note')).toBe(false)
+  })
+})
+
+describe('the angle between two vectors: one atan2 for both routes', () => {
+  it('is the same number on both routes, and NaN only where vec.ts’s floor says so (CW9-N3-2)', () => {
+    const s = scene().settings
+    expect(angleBetween([3, 4, 0], [1, 0, 0])).toBeCloseTo(0.9272952180016122, 15)
+    expect(solveOperation('angle', [{ name: 'A', v: [3, 4, 0] }, { name: 'B', v: [1, 0, 0] }], s)?.answers).toEqual([{ label: 'θ', tex: '53.13^\\circ' }])
+    expect(angleBetween([3e-19, 4e-19, 0], [1, 0, 0])).toBeNaN()
+    expect(solveOperation('angle', [{ name: 'A', v: [3e-19, 4e-19, 0] }, { name: 'B', v: [1, 0, 0] }], s)?.answers).toEqual([{ label: 'θ', tex: '53.13^\\circ' }])
+  })
+})
+
+describe('the normal table: a probability on a printed cell (readInverse, a fixed 0-to-1 scale)', () => {
+  it('p = 0.975 is the cell for z = 1.96; p = 0.9750001 lies between two cells', () => {
+    expect(readInverse(0.975)).toEqual({ z: 1.96, how: 'cell', lo: { z: 1.96, cell: 0.975 } })
+    expect(readInverse(0.9750001)).toEqual({ z: 1.96, how: 'between', lo: { z: 1.95, cell: 0.9744 }, hi: { z: 1.96, cell: 0.975 } })
+  })
+
+  it('the floor itself: 5×10⁻¹³ off the cell is on it, 2×10⁻¹² off is between two cells', () => {
+    expect(readInverse(0.975 + 5e-13).how).toBe('cell')
+    expect(readInverse(0.975 + 2e-12).how).toBe('between')
+  })
+})
+
+describe('[answer may change] CW9-N3 — waiting for the owner, not applied', () => {
+  it.fails('CW9-N3-2: a vector under 10⁻¹² has a direction: unit vector, angle and direction angles of 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ', () => {
+    // math/vec.ts normalize, angleBetween and directionAngles give 0⃗ / NaN for any length under an absolute 10⁻¹².
+    const tiny: V3 = [3e-19, 4e-19, 0]
+    expect(normalize(tiny)[0]).toBeCloseTo(0.6, 12)
+    expect(angleBetween(tiny, [1, 0, 0])).toBeCloseTo(0.9272952180016122, 12)
+    expect(directionAngles(tiny).every(Number.isFinite)).toBe(true)
+  })
+
+  it.fails('CW9-N3-2 on the bar: U = unitVec(A) holds the unit vector its own worked solution answers', async () => {
+    // Today the bar's line reads U = 0⃗ (vec.ts normalize) while the solution worked beside it answers 0.6î + 0.8ĵ.
+    await bar('A = <3e-19, 4e-19>')
+    await bar('U = unitVec(A)')
+    // The value the bar worked out for U, as tests/commands.test.ts reads one (computedOf).
+    const u = scene().ev.values.get(scene().ev.names.get('U') ?? '') as { type?: string; comp?: V3 } | undefined
+    expect(u?.type).toBe('vector')
+    expect(u?.comp?.[0]).toBeCloseTo(0.6, 12)
+  })
+})
+
+describe('[answer may change] CW9-N3-3 — waiting for the owner, not applied', () => {
+  it.fails('CW9-N3-3: 0.1 × <1e-12, 0, 0> is drawn at a stand-in length, so R goes down as a helper with its true size beside it', () => {
+    // R is 10⁻¹³ and is drawn at ½A = 5×10⁻¹³: within 10⁻¹² of R, so standIn calls it R's own length, and R is
+    // labelled, measured and selected at the stand-in length. sameNumber would see two different numbers.
+    const plan = planDrawing(solveOperation('scale', [{ name: 'A', v: [1e-12, 0, 0] }], scene().settings, 0.1)!.visual!)
+    expect(plan.items.find((i) => i.kind === 'arrow' && i.role === 'result')).toMatchObject({ auxiliary: true })
   })
 })

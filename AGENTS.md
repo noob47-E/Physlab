@@ -388,6 +388,10 @@ neighbour is open.
   x, and 10⁻¹³ sin x = 0 was "Proved". Judge rounding noise against the sizes it came from (math/noise.ts). A 10⁻¹² that
   stays says in place what it means (the writer's own display floor, a time in seconds, a search width), and
   tests/noiseFloors.test.ts pins it.
+- **The writer's floor and a noise rule are two things.** math/format.ts writes |v| < 10⁻¹² as 0: that is
+  DISPLAY_FLOOR, a screen rule. Rounding noise is judged against the sizes it came from (math/noise.ts). A line asking
+  "will this be written as 0?" names DISPLAY_FLOOR; a line asking "is this round-off?" asks the noise rule. Never use a
+  bare 1e-12.
 - **Greek letters come from one list, `math/names.ts`** (`GREEK_LETTERS`, `CONSTANT_NAMES`). A place that needs fewer
   letters filters that list where it uses it, and says why. Never write an alphabet of your own.
   tests/nameList.test.ts reads 147 names through every reader and fails on any change. KaTeX draws `\epsilon` and

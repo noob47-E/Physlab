@@ -98,3 +98,19 @@ the cards' own arrows (head-to-tail, parallelogram, from origin).
   typed (not i/j/k, deg/rad or other cards' names) and the card and the expression box show one
   plain line under the value. Guarded by `tests/vectorUnits.test.ts`.
 - The `sizeBeforeAngle` workaround stays until P-PARSE's `preprocess` fix lands (R2-3).
+
+## One angle, and a vector's direction (CLEANUP-PLAN.md CW9-N3)
+- **`angleOf(a, b)`** (math/vec.ts) is the angle between two vectors: atan2 of |a×b| and a·b, NaN only for a vector of
+  exactly zero length, so it does not depend on the vectors' size while their products fit a double (about 10⁻¹⁶²
+  to 10¹⁵⁴). `angleBetween` (the bar's and the drawing's) and
+  the solver's `angleDeg` both ask it; they gave the same number on 32,079 pairs and differ only where angleBetween
+  stops first.
+- **`NO_DIRECTION`** (math/vec.ts, an absolute 10⁻¹²): normalize, angleBetween and directionAngles give 0⃗ or NaN for
+  a vector shorter than it (project has the same floor squared), so A = <3e-19, 4e-19> loses its direction on those
+  routes — the bar's line for U = unitVec(A) reads U = 0⃗ while the solution worked beside it answers 0.6î + 0.8ĵ.
+  The solver steps round it (angleOf; it divides by a size under the floor itself). A floor of exactly 0 is parked
+  for the owner (CW9-N3-2).
+- A drawn arrow is a stand-in when it differs from the vector by over 10⁻¹² (`standIn`). For vectors of about 10⁻¹²
+  that misses one: 0.1 × <1e-12, 0, 0> is drawn at ½A (5×10⁻¹³), within 10⁻¹² of R (10⁻¹³), so R is labelled and
+  selected at the stand-in length. Judging it by sameNumber is parked for the owner (CW9-N3-3).
+- Guarded by tests/noiseFloors.test.ts (the CW9-N3 blocks).

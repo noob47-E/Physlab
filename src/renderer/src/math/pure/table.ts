@@ -78,6 +78,7 @@ export function readInverse(p: number): Inverse {
   const z = toPlaces(exact, 3)
   if (z > Z_MAX) return { z, how: 'beyond' }
   const h = Math.round(z * 1000)
+  // eslint-disable-next-line no-restricted-syntax -- a probability against a 4-place table cell, a fixed 0-to-1 scale: "on the cell" within 10⁻¹², far under the table's step of 10⁻⁴
   if (h % 10 === 0 && Math.abs(cell(h / 1000) - p) < 1e-12) return { z, how: 'cell', lo: { z, cell: cell(z) } }
   // Bracket the exact z, not the rounded one: 1.9596 rounds to 1.960 but lies below 1.96.
   const zlo = Math.floor(exact * 100 + 1e-9) / 100
