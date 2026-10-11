@@ -441,6 +441,7 @@ neighbour is open.
 - **Engine semantics contract (G00)**: Default domain is strictly REAL for school work; odd roots of negatives on ℝ are real (e.g. (−8)^(1/3) = −2); rational simplification must explicitly report cancelled denominator factors (including real irrationals like ±√2 and complex conjugate pairs in complex mode); periodic solution standard form uses x = base + 2kπ, k ∈ ℤ (or 360°k); and cross-engine solution comparison normalizes by root value and total multiplicity.
 - **A scoreboard key is only a key if a second, independent path re-derives it, in the promised form.** `tests/engine/scoreboard/corpora.test.ts` re-checks every key with exact BigInt arithmetic and rejects right answers written in the wrong form; the first draft's floats made false keys such as 3.5999999999999997e+25. Give every new form rule a plant in that test, or the rule can silently stop firing.
 - **Step validators must parse LaTeX fractions before polynomial conversion** — `parseExpr` reads linear syntax, so a raw LaTeX `\frac` inside an unparsed step string fails polynomial equivalence as unreadable.
+- **Dockview split cells default to `overflow: auto`** (`.dv-split-view-container .dv-view-container .dv-view`), which causes a second vertical scrollbar next to `.panel` under fractional DPI zoom or subpixel layout rounding. Always override with `overflow: hidden !important` so only `.panel` acts as the vertical scrollbar, ensuring exactly one vertical scroller per panel.
 
 ## Code knowledge
 

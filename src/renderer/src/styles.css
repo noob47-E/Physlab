@@ -420,6 +420,13 @@ input[type='range'] {
   --dv-tabs-and-actions-container-font-size: var(--text-small);
 }
 
+/* Dockview split-view cells must not scroll: the panel itself (.panel) is the one vertical scroller.
+   Without overflow: hidden !important, dockview's cell grows a second scrollbar beside the panel's
+   own whenever rounding or scaling leaves the panel a pixel taller than its cell. */
+.dv-split-view-container .dv-view-container .dv-view {
+  overflow: hidden !important;
+}
+
 /* Custom component classes live in a cascade layer so Tailwind utilities (w-12, h-auto…) can override them. */
 @layer components {
 /* ---------- Generic controls ---------- */
