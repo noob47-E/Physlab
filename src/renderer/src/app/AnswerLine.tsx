@@ -14,10 +14,11 @@ const showDrawing = (): void => (useApp.getState().mode === 'calculator' ? showB
 // 44 px on a touch screen, the app's usual compact height with a mouse.
 const BTN = 'btn h-6 shrink-0 px-2 text-fine pointer-coarse:min-h-[44px]'
 
-export function AnswerLine() {
+/** `editedSince`: the newest Console entry when the student last changed the bar (see answerLineOf). */
+export function AnswerLine({ editedSince = null }: { editedSince?: number | null }) {
   const log = useScene((s) => s.log)
   const showSolution = useScene((s) => s.showSolution)
-  const line = answerLineOf(log)
+  const line = answerLineOf(log, editedSince)
   if (!line) return null
   const last = log[log.length - 1]
   return (

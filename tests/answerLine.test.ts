@@ -50,7 +50,7 @@ describe('answerLineOf', () => {
 
 describe('where it is drawn', () => {
   it('sits directly under the command bar', () => {
-    expect(readSource('src/renderer/src/app/CommandBar.tsx')).toMatch(/<\/div>\s*\{\/\*[^*]*\*\/\}\s*<AnswerLine \/>/)
+    expect(readSource('src/renderer/src/app/CommandBar.tsx')).toMatch(/<\/div>\s*\{\/\*[^*]*\*\/\}\s*<AnswerLine( editedSince=\{editedSince\})? \/>/)
   })
 
   it('uses the Console entry\'s own button words, and opens the Console', () => {

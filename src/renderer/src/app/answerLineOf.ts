@@ -19,10 +19,27 @@ interface AnswerLineView {
   visualize: boolean
 }
 
-/** The newest entry of the Console's log, as the answer line shows it; null while nothing has been typed. */
-export function answerLineOf(log: readonly LogEntry[]): AnswerLineView | null {
+/**
+ * What the bar records when the student changes its line: the newest entry it has seen as an error.
+ * An entry still on its way (the engine's "Solving…", rewritten in place as an error seconds later,
+ * under the same id) is not one yet, so its error still shows when it lands.
+ */
+export function editMark(log: readonly LogEntry[]): number {
+  const last = log.at(-1)
+  if (!last) return 0
+  return last.kind === 'error' ? last.id : last.id - 1
+}
+
+/**
+ * The newest entry of the Console's log, as the answer line shows it; null while nothing has been typed.
+ * `editedSince` is `editMark` taken when the student last changed the bar's line (null if never): an
+ * error belongs to the line it was given for, so once the line is changed — emptied, or a correct line
+ * typed — the red line goes (owner, 2026-10-10). An answer stays as it always has.
+ */
+export function answerLineOf(log: readonly LogEntry[], editedSince: number | null = null): AnswerLineView | null {
   const last = log.at(-1)
   if (!last || (!last.text && !last.tex)) return null
+  if (last.kind === 'error' && editedSince !== null && editedSince >= last.id) return null
   return {
     text: last.text,
     tex: last.tex,

@@ -7,6 +7,7 @@ import { cancelEngine, useEngineStatus, warmupEngineWhenIdle } from '../math/eng
 import { describeCasStatus } from '../ui/casStatus'
 import { decideKey, recall } from './commandBarKeys'
 import { AnswerLine } from './AnswerLine'
+import { editMark } from './answerLineOf'
 import { bumpAction } from '../core/actionSignals'
 
 const graphCount = (): number => Object.values(scene().objects).filter((o) => o.type === 'graph').length
@@ -79,6 +80,13 @@ export const CATALOG: { insert: string; desc: string; group: string }[] = [
 
 export function CommandBar() {
   const [text, setText] = useState('')
+  // The newest Console entry when the student last changed the line: an error given before that goes (owner).
+  const [editedSince, setEditedSince] = useState<number | null>(null)
+  /** The student (or a panel filling the bar) changed the line; run's own clearing is not a change. */
+  const edit = (next: string): void => {
+    setText(next)
+    setEditedSince(editMark(scene().log))
+  }
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const history = useRef<string[]>([])
@@ -106,6 +114,7 @@ export function CommandBar() {
     // Search and other panels can prefill the command bar.
     const onFill = (e: Event) => {
       setText((e as CustomEvent<string>).detail)
+      setEditedSince(editMark(scene().log))
       setOpen(false)
       unpick()
       histIdx.current = -1
@@ -148,7 +157,7 @@ export function CommandBar() {
           spellCheck={false}
           placeholder={PLACEHOLDER}
           onChange={(e) => {
-            setText(e.target.value)
+            edit(e.target.value)
             setOpen(true)
             setActive(0)
             chosen.current = false
@@ -165,7 +174,7 @@ export function CommandBar() {
             e.preventDefault()
             if (a.kind === 'run') submit(text)
             else if (a.kind === 'take') {
-              setText(suggestions[a.index].insert)
+              edit(suggestions[a.index].insert)
               unpick()
               // The taken line is the one being typed now; a later history walk keeps it as the draft.
               histIdx.current = -1
@@ -176,7 +185,7 @@ export function CommandBar() {
               const r = recall(history.current, histIdx.current, a.histIdx, text, draft.current)
               draft.current = r.draft
               histIdx.current = a.histIdx
-              setText(r.text)
+              edit(r.text)
               unpick()
               if (e.key === 'ArrowUp') setOpen(false)
             } else if (a.kind === 'close') {
@@ -193,7 +202,7 @@ export function CommandBar() {
                 className={`group ${i === active ? 'active' : ''}`}
                 onMouseDown={(e) => {
                   e.preventDefault()
-                  setText(s.insert)
+                  edit(s.insert)
                   setActive(i)
                 }}
               >
@@ -230,7 +239,7 @@ export function CommandBar() {
       </span>
     </div>
     {/* The Console is closed by default, so the newest answer shows here (answers are mandatory). */}
-    <AnswerLine />
+    <AnswerLine editedSince={editedSince} />
     </>
   )
 }
