@@ -6,6 +6,7 @@
 import type { GridStyle } from '../core/types'
 import type { ViewSize } from './cameraUtils'
 import type { V3 } from '../math/vec'
+import { isNoise } from '../math/noise'
 
 export interface GridArea {
   xMin: number
@@ -363,7 +364,7 @@ export function snapToGrid(style: GridStyle, p: V3, major: number, minor: number
     const sector = (2 * Math.PI) / POLAR_RAYS
     const t = Math.round(Math.atan2(y, x) / sector) * sector
     // cos(π/2) is 6×10⁻¹⁷, not 0: a point snapped onto the y axis must sit on it exactly.
-    const clean = (v: number) => (Math.abs(v) < 1e-12 * r ? 0 : v)
+    const clean = (v: number) => (isNoise(v, r) ? 0 : v)
     return [clean(r * Math.cos(t)), clean(r * Math.sin(t)), z]
   }
   if (style === 'isometric') {

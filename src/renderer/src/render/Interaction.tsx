@@ -221,6 +221,7 @@ export function Interaction() {
         }
         if (c?.type === 'segment' || c?.type === 'ray' || c?.type === 'line') {
           const dd = dot(c.line.d, c.line.d)
+          // eslint-disable-next-line no-restricted-syntax -- a squared length in the drawing's own units (squares, a fixed scale): a line under 10⁻⁶ of a square cannot be drawn or picked
           let t = dd > 1e-12 ? dot(sub(w, c.line.p), c.line.d) / dd : 0
           if (c.type === 'segment') t = Math.max(0, Math.min(1, t))
           if (c.type === 'ray') t = Math.max(0, t)
@@ -571,6 +572,7 @@ export function Interaction() {
           t = ((a + 2 * Math.PI) / (2 * Math.PI)) % 1
         } else if (host2?.type === 'segment' || host2?.type === 'ray' || host2?.type === 'line') {
           const dd = dot(host2.line.d, host2.line.d)
+          // eslint-disable-next-line no-restricted-syntax -- a squared length in the drawing's own units (squares, a fixed scale): a line under 10⁻⁶ of a square cannot be drawn or picked
           t = dd > 1e-12 ? dot(sub(raw, host2.line.p), host2.line.d) / dd : 0
           if (host2.type === 'segment') t = Math.max(0, Math.min(1, t))
           if (host2.type === 'ray') t = Math.max(0, t)

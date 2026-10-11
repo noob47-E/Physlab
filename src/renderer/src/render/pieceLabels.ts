@@ -16,6 +16,7 @@ export const PIECE_LETTER_PX = 22
 
 const unit = (x: number, y: number): V2 | null => {
   const l = Math.hypot(x, y)
+  // eslint-disable-next-line no-restricted-syntax -- a length in the drawing's own units (squares, a fixed scale): an offset of no length has no direction
   return l > 1e-12 ? [x / l, y / l] : null
 }
 

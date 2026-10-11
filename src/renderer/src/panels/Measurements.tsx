@@ -3,7 +3,7 @@ import { ListOrdered } from 'lucide-react'
 import { scene, useScene } from '../core/store'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { circleEquation3DText, distanceToLineLike, footOfPerpendicular, lineEquation, lineEquation3DText, lineLineIntersection, polygonArea, triangleInfo } from '../math/geometry'
-import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, normalize, sub, type V3 } from '../math/vec'
+import { add, angleBetween, cross, directionAngles, dist, dot, heading, len, mid, NO_DIRECTION as SHORTEST_DIRECTED, normalize, sub, type V3 } from '../math/vec'
 import { fmt, fmtIJK, fmtPoint, fmtPrecise, formatMeasure, measureValue, superscriptPowers, unitSuffix, worldValue } from '../math/format'
 import { pointAtAngle, pointAtLength } from '../math/setMeasure'
 import { isPieceCorner, namedByLetters, pieceLettered, pieceMeasures } from '../math/lego'
@@ -41,7 +41,9 @@ type Get = (id: ObjId) => Computed | undefined
 
 /** What a direction row says for a zero vector, which has none: it used to read 0°, "0" or "undefined°". */
 const NO_DIRECTION = 'undefined — a zero vector has no direction'
-const isZero = (v: V3) => !(len(v) > 1e-12)
+// math/vec.ts's floor on a length (an absolute floor, parked for the owner as CW9-N1-1 with CW9-N3-2): a vector of
+// 10⁻¹⁹ is told it has no direction (tests/noiseFloorsN1.test.ts).
+const isZero = (v: V3) => !(len(v) > SHORTEST_DIRECTED)
 
 /** "circle, centre J" as a heading: "Circle, centre J". */
 const capitalised = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
@@ -55,6 +57,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
         { label: 'x', value: c.p[0], kind: 'length' },
         { label: 'y', value: c.p[1], kind: 'length' }
       ]
+      // eslint-disable-next-line no-restricted-syntax -- a coordinate in the drawing's own squares (a fixed scale), not the scaled value the writer floors: decided for the owner as CW9-N1-6 (tests/noiseFloorsN1.test.ts)
       const threeD = Math.abs(c.p[2]) > 1e-12
       if (threeD) rows.push({ label: 'z', value: c.p[2], kind: 'length' })
       rows.push({ label: 'Distance from origin', value: len(c.p), kind: 'length' })
@@ -74,6 +77,7 @@ export function rowsFor(o: SceneObject, get: Get, objects: Record<ObjId, SceneOb
         { label: `${o.name}x (x-component)`, value: v[0], kind: 'length', unit },
         { label: `${o.name}y (y-component)`, value: v[1], kind: 'length', unit }
       ]
+      // eslint-disable-next-line no-restricted-syntax -- a coordinate in the drawing's own squares (a fixed scale), not the scaled value the writer floors: decided for the owner as CW9-N1-6 (tests/noiseFloorsN1.test.ts)
       const threeD = Math.abs(v[2]) > 1e-12
       if (threeD) rows.push({ label: `${o.name}z (z-component)`, value: v[2], kind: 'length', unit })
       rows.push({ label: `|${o.name}| magnitude`, value: len(v), kind: 'length', accent: true, unit })

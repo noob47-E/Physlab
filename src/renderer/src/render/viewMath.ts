@@ -228,7 +228,9 @@ export function stepTurn(
   const before = orbitOf(position, target)
   const next = turnOrbit(position, target, az, el)
   const gotEl = orbitOf(next, target).elevation - before.elevation
-  const stopped = Math.abs(el) > 1e-12 && Math.abs(gotEl - el) > 1e-9
+  // Stopped by the elevation limit: the turn came out short. (A guard `|el| > 10⁻¹²` stood here; a step that
+  // small can never come out 10⁻⁹ short, so it decided nothing — CW9-N1, tests/noiseFloorsN1.test.ts.)
+  const stopped = Math.abs(gotEl - el) > 1e-9
   return { position: next, pending: { az: pending.az - az, el: stopped ? 0 : pending.el - el } }
 }
 

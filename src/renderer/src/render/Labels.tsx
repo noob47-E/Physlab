@@ -7,7 +7,7 @@ import { useScene } from '../core/store'
 import { displayName, vectorAmount } from '../core/naming'
 import { cssColor } from '../app/theme'
 import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
-import { fmtSci, formatMeasure, measureNumber, measureValue, superscriptPowers, unitSuffix } from '../math/format'
+import { DISPLAY_FLOOR, fmtSci, formatMeasure, measureNumber, measureValue, superscriptPowers, unitSuffix } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
 import { duplicateSides, PIECE_LETTER_PX, settleLabel, sharedCornerLabels, type LabelBox, type MergedCorner } from './pieceLabels'
@@ -59,13 +59,15 @@ function measureTextAsFormatted(o: SceneObject, c: Computed | undefined, s: Scen
       const unit = o.type === 'vector' ? o.unit : undefined
       const shown = (v: number): number => (unit ? v : measureValue(v, 'length', s))
       const size = len(c.comp)
-      const tiny = size !== 0 && Math.abs(shown(size)) < 1e-12
+      const tiny = size !== 0 && Math.abs(shown(size)) < DISPLAY_FLOOR
       const big = tiny ? Math.max(...c.comp.map(Math.abs)) : 0
+      // eslint-disable-next-line no-restricted-syntax -- the card line's rule: a component under 10⁻¹² of the vector's size is noise (panels/vectorLine.ts withoutNoise; the Vectors rule is parked as CW9-N3-1)
       const comp: V3 = tiny ? (c.comp.map((v) => (Math.abs(v) < 1e-12 * big ? 0 : v)) as V3) : c.comp
       // A question's force arrow is measured in N, not in grid squares.
       const amount = (v: number): string =>
         tiny ? `${fmtSci(shown(v), s)}${unit ? ` ${unit}` : unitSuffix('length', s)}` : o.type === 'vector' ? vectorAmount(v, o, s) : formatMeasure(v, 'length', s)
       const m = amount(len(comp))
+      // eslint-disable-next-line no-restricted-syntax -- a z in the drawing's own squares (a fixed scale), not the scaled value the writer floors: decided for the owner as CW9-N1-6
       const planar = tiny ? comp[2] === 0 : Math.abs(comp[2]) < 1e-12
       // The zero vector has no direction: heading(0) is atan2(0, 0) = 0, which wrote "0 cm ∠ 0°" where
       // its card line says "no direction" (H7). Only an exactly zero vector is one; a tiny one has an angle.

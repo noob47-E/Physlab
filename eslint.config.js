@@ -43,14 +43,7 @@ export const FENCE_ALLOWED = [
   { files: ['src/renderer/src/math/graphs.ts'], allow: 'noise' }, // 3 × 1e-12 — CW9
   { files: ['src/renderer/src/math/lego.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
   { files: ['src/renderer/src/math/shapes.ts'], allow: 'noise' }, // 5 × 1e-12 — CW9
-  { files: ['src/renderer/src/panels/Measurements.tsx'], allow: 'noise' }, // 3 × 1e-12 — CW9
-  { files: ['src/renderer/src/panels/Properties.tsx'], allow: 'noise' }, // 2 × 1e-12 — CW9
   { files: ['src/renderer/src/questions/legoPart.ts'], allow: 'noise' }, // 2 × 1e-12 — CW9
-  { files: ['src/renderer/src/render/Interaction.tsx'], allow: 'noise' }, // 2 × 1e-12 — CW9
-  { files: ['src/renderer/src/render/Labels.tsx'], allow: 'noise' }, // 3 × 1e-12 — CW9
-  { files: ['src/renderer/src/render/gridMath.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
-  { files: ['src/renderer/src/render/pieceLabels.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
-  { files: ['src/renderer/src/render/viewMath.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
 ]
 
 export default tseslint.config(

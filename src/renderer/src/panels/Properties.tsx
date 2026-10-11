@@ -3,7 +3,7 @@ import { ListOrdered, Trash2 } from 'lucide-react'
 import { useScene, scene } from '../core/store'
 import { isFree } from '../core/evaluate'
 import type { SceneObject } from '../core/types'
-import { heading, len, toDeg, toRad, type V3 } from '../math/vec'
+import { heading, len, NO_DIRECTION, toDeg, toRad, type V3 } from '../math/vec'
 import { fmt } from '../math/format'
 import * as VS from '../math/vectorSolver'
 import { Check, ColorField, NumField, TextField } from '../ui/fields'
@@ -167,11 +167,13 @@ export function Properties() {
                     set((d) => {
                       if (d.type !== 'vector' || d.def.kind !== 'free') return
                       const l = len(d.def.comp)
-                      d.def.comp = l < 1e-12 ? [m, 0, 0] : (d.def.comp.map((x) => (x * m) / l) as V3)
+                      // math/vec.ts's floor on a length (parked as CW9-N1-2): a vector of 10⁻¹⁹ given a new size loses its direction.
+                      d.def.comp = l < NO_DIRECTION ? [m, 0, 0] : (d.def.comp.map((x) => (x * m) / l) as V3)
                     })
                   }
                 />
               </div>
+              {/* eslint-disable-next-line no-restricted-syntax -- the writer's display floor: math/format.ts writes |v| < 10⁻¹² as 0, so a vector whose z reads 0 lies in the page and has an angle θ */}
               {Math.abs(c.comp[2]) < 1e-12 && (
                 <div className="prop-row">
                   <label>Angle θ ({angleUnit === 'deg' ? '°' : 'rad'})</label>
