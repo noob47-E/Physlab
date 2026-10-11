@@ -176,5 +176,7 @@ export const REFUSALS: string[] = [
   '2*P(Z > 1.96)',
   'invnorm(0.9)+3',
   'P(X < 65)',
-  'P(Z < 1), X ~ N(50, 10^2)'
+  'P(Z < 1), X ~ N(50, 10^2)',
+  'u + 1',
+  'valueOf + 1'
 ]

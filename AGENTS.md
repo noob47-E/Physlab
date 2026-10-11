@@ -437,6 +437,7 @@ neighbour is open.
 - **`clearDrawing` filters strictly by `activeSpace`, not `visibleOrder`.** Objects without a space (spaceless
   numbers, constants, global variables) belong to no drawing canvas; clearing the active drawing space must keep them,
   rather than dropping all objects in `visibleOrder` (Bug 22). Guard: `tests/g22-cleardrawing-spaceless.test.ts`.
+- **In `lang/commands/common.ts`, unit positions are strictly: target or source quantity in `to`, or following a numeric or chained unit quantity via implicit multiplication or division.** Outside `to`, `u` is never a unit (SUVAT initial velocity), and algebraic operations (`3 * ly`, `2 / ly`, `2 * x * ly`, `ly^2`, `x ly to m`) are variables, not units. Prototype keys (`valueOf`, `constructor`) use `Object.hasOwn` so JS properties never leak onto the screen.
 
 ## Code knowledge
 

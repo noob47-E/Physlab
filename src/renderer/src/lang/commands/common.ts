@@ -56,6 +56,112 @@ export function isUnitName(s: string): boolean {
 
 const KNOWN_SYMBOLS = new Set(['pi', 'e', 'i', 'j', 'k', 't', 'x', 'y', 'z', 'deg', 'rad', 'theta', 'Infinity', 'phi', 'tau'])
 
+function isLiteralNumber(node: MathNode | undefined): boolean {
+  if (!node) return false
+  if (node.type === 'ConstantNode') return true
+  if (node.type === 'OperatorNode') {
+    const op = node as (MathNode & { fn?: string; args?: MathNode[] })
+    if (op.fn === 'unaryMinus') return isLiteralNumber(op.args?.[0])
+    if (op.fn === 'divide' || op.fn === 'multiply' || op.fn === 'pow') {
+      return isLiteralNumber(op.args?.[0]) && isLiteralNumber(op.args?.[1])
+    }
+  }
+  return false
+}
+
+function isUnitLeaf(node: MathNode | undefined): boolean {
+  if (!node) return false
+  if (node.type === 'SymbolNode') {
+    const sName = (node as unknown as { name: string }).name
+    return isUnitName(sName) && sName !== 'u'
+  }
+  if (node.type === 'OperatorNode') {
+    const op = node as (MathNode & { fn?: string; args?: MathNode[]; implicit?: boolean })
+    if (op.fn === 'pow') {
+      const base = op.args?.[0]
+      if (base?.type === 'SymbolNode') {
+        const sName = (base as unknown as { name: string }).name
+        return isUnitName(sName) && sName !== 'u' && isLiteralNumber(op.args?.[1])
+      }
+    }
+    if (op.fn === 'multiply' && op.implicit === true) {
+      return isUnitLeaf(op.args?.[0]) && isUnitLeaf(op.args?.[1])
+    }
+  }
+  return false
+}
+
+function isNumberOrUnitQuantity(node: MathNode | undefined): boolean {
+  if (!node) return false
+  if (isLiteralNumber(node)) return true
+  if (node.type === 'OperatorNode') {
+    const op = node as (MathNode & { fn?: string; args?: MathNode[]; implicit?: boolean })
+    if (op.fn === 'multiply' && op.implicit === true) {
+      return isNumberOrUnitQuantity(op.args?.[0]) && isUnitLeaf(op.args?.[1])
+    }
+    if (op.fn === 'divide') {
+      return isNumberOrUnitQuantity(op.args?.[0]) && isUnitLeaf(op.args?.[1])
+    }
+  }
+  return false
+}
+
+function isNodeInUnitPosition(curr: MathNode, parents: { node: MathNode; path?: string }[]): boolean {
+  const name = (curr as unknown as { name: string }).name
+  const toAncestor = parents.find((p) => {
+    const op = p.node as (MathNode & { fn?: string })
+    return op.type === 'OperatorNode' && op.fn === 'to'
+  })
+  if (toAncestor) {
+    const toNode = toAncestor.node as (MathNode & { args?: MathNode[] })
+    const inTarget = parents.some((p) => p.node === toNode && p.path === 'args[1]')
+    if (inTarget) return true
+    const inSource = parents.some((p) => p.node === toNode && p.path === 'args[0]')
+    if (inSource) {
+      if (toNode.args?.[0] === curr) return true
+      const immediateParent = parents[parents.length - 1]
+      if (immediateParent) {
+        const p = immediateParent.node as (MathNode & { fn?: string; args?: MathNode[]; implicit?: boolean })
+        if (p.type === 'OperatorNode' && p.fn === 'multiply' && immediateParent.path === 'args[1]' && p.implicit === true && isNumberOrUnitQuantity(p.args?.[0])) {
+          return true
+        }
+      }
+    }
+  }
+  if (name === 'u') return false
+
+  const immediateParent = parents[parents.length - 1]
+  if (immediateParent) {
+    const p = immediateParent.node as (MathNode & { fn?: string; args?: MathNode[]; implicit?: boolean })
+    if (p.type === 'OperatorNode' && p.fn === 'multiply' && immediateParent.path === 'args[1]' && p.implicit === true && isNumberOrUnitQuantity(p.args?.[0])) {
+      return true
+    }
+  }
+
+  if (isUnitName(name) && immediateParent) {
+    const p = immediateParent.node as (MathNode & { fn?: string; args?: MathNode[] })
+    if (p.type === 'OperatorNode' && p.fn === 'divide' && immediateParent.path === 'args[1]') {
+      if (isNumberOrUnitQuantity(p.args?.[0])) {
+        return true
+      }
+    }
+    if (p.type === 'OperatorNode' && p.fn === 'pow' && immediateParent.path === 'args[0]') {
+      const grandParent = parents[parents.length - 2]
+      if (grandParent) {
+        const gp = grandParent.node as (MathNode & { fn?: string; args?: MathNode[]; implicit?: boolean })
+        if (gp.type === 'OperatorNode' && gp.fn === 'multiply' && grandParent.path === 'args[1]' && gp.implicit === true && isNumberOrUnitQuantity(gp.args?.[0])) {
+          return true
+        }
+        if (gp.type === 'OperatorNode' && gp.fn === 'divide' && grandParent.path === 'args[1]' && isNumberOrUnitQuantity(gp.args?.[0])) {
+          return true
+        }
+      }
+    }
+  }
+
+  return false
+}
+
 /**
  * Names that are neither scene objects nor constants. Physical units (N, m/s…) are only
  * accepted right after a number ("10 N"), so an undefined vector B is not mistaken for "byte".
@@ -63,34 +169,66 @@ const KNOWN_SYMBOLS = new Set(['pi', 'e', 'i', 'j', 'k', 't', 'x', 'y', 'z', 'de
 export function unknownSymbols(node: MathNode): string[] {
   const names = scene().ev.names
   const out = new Set<string>()
-  node.traverse((child, path, parent) => {
-    if (child.type !== 'SymbolNode') return
-    if (parent?.type === 'FunctionNode' && path === 'fn') return
-    const name = (child as unknown as { name: string }).name
-    // A θ slider is in the scope as theta too (core/evaluate.ts publish, P-PARSE W2).
-    if (names.has(name) || Object.prototype.hasOwnProperty.call(scene().ev.scope, name) || KNOWN_SYMBOLS.has(name)) return
-    const p = parent as (MathNode & { fn?: string | { name?: string }; implicit?: boolean; args?: MathNode[] }) | null
-    // A function's name as the size before ∠ ("sin at 30"): polarVec says the size must be a number,
-    // which is the sentence that helps (browser check BAR-16, F4). Only there: elsewhere a function
-    // name typed as a value (a = gamma, 5 * distance) keeps "does not exist yet" (it is not a value).
-    const fnName = p?.type === 'FunctionNode' && typeof p.fn === 'object' ? p.fn?.name : undefined
-    if (fnName === 'polarVec' && path === 'args[0]' && typeof (math as unknown as Record<string, unknown>)[name] === 'function') return
-    const afterNumber = p?.type === 'OperatorNode' && (p.fn === 'multiply' || p.fn === 'divide') && p.args?.some((a) => a.type === 'ConstantNode' || a.type === 'OperatorNode')
-    const compoundUnit = p?.type === 'OperatorNode' && (p.fn === 'divide' || p.fn === 'pow') && isUnitName(name)
-    const inConversion = p?.type === 'OperatorNode' && p.fn === 'to'
-    if (isUnitName(name) && (afterNumber || compoundUnit || inConversion)) return
-    out.add(name)
-  })
+
+  function walk(curr: MathNode, parents: { node: MathNode; path?: string }[]) {
+    if (curr.type === 'SymbolNode') {
+      const immediateParent = parents[parents.length - 1]
+      if (immediateParent?.node.type === 'FunctionNode' && immediateParent.path === 'fn') return
+      const name = (curr as unknown as { name: string }).name
+      // A θ slider is in the scope as theta too (core/evaluate.ts publish, P-PARSE W2).
+      if (names.has(name) || Object.prototype.hasOwnProperty.call(scene().ev.scope, name) || KNOWN_SYMBOLS.has(name)) return
+      const p = immediateParent?.node as (MathNode & { fn?: string | { name?: string }; implicit?: boolean; args?: MathNode[] }) | undefined
+      // A function's name as the size before ∠ ("sin at 30"): polarVec says the size must be a number,
+      // which is the sentence that helps (browser check BAR-16, F4). Only there: elsewhere a function
+      // name typed as a value (a = gamma, 5 * distance) keeps "does not exist yet" (it is not a value).
+      const fnName = p?.type === 'FunctionNode' && typeof p.fn === 'object' ? p.fn?.name : undefined
+      if (fnName === 'polarVec' && immediateParent?.path === 'args[0]' && typeof (math as unknown as Record<string, unknown>)[name] === 'function') return
+      if (isUnitName(name) && isNodeInUnitPosition(curr, parents)) return
+      out.add(name)
+      return
+    }
+    curr.forEach((child, path) => {
+      walk(child, [...parents, { node: curr, path }])
+    })
+  }
+
+  walk(node, [])
   return [...out]
 }
 
 export function assertKnown(node: MathNode) {
-  const unknown = unknownSymbols(node)
-  if (unknown.length) {
-    const n = unknown[0]
-    if (n in TYPE_INSTEAD) throw new Error(unknownUnit(n, true))
-    throw new Error(`"${n}" does not exist yet. Create it first, for example  ${n} = <1, 2>  or  ${n} = (1, 2)  or  ${n} = 5`)
+  const names = scene().ev.names
+  let firstUnknownError: Error | undefined
+
+  function walk(curr: MathNode, parents: { node: MathNode; path?: string }[]) {
+    if (firstUnknownError) return
+    if (curr.type === 'SymbolNode') {
+      const immediateParent = parents[parents.length - 1]
+      if (immediateParent?.node.type === 'FunctionNode' && immediateParent.path === 'fn') return
+      const name = (curr as unknown as { name: string }).name
+      if (names.has(name) || Object.prototype.hasOwnProperty.call(scene().ev.scope, name) || KNOWN_SYMBOLS.has(name)) return
+
+      const p = immediateParent?.node as (MathNode & { fn?: string | { name?: string }; implicit?: boolean; args?: MathNode[] }) | undefined
+      const fnName = p?.type === 'FunctionNode' && typeof p.fn === 'object' ? p.fn?.name : undefined
+      if (fnName === 'polarVec' && immediateParent?.path === 'args[0]' && typeof (math as unknown as Record<string, unknown>)[name] === 'function') return
+
+      if (isUnitName(name) && isNodeInUnitPosition(curr, parents)) return
+
+      if (Object.hasOwn(TYPE_INSTEAD, name) && isNodeInUnitPosition(curr, parents)) {
+        firstUnknownError = new Error(unknownUnit(name, true))
+      } else {
+        firstUnknownError = new Error(`"${name}" does not exist yet. Create it first, for example  ${name} = <1, 2>  or  ${name} = (1, 2)  or  ${name} = 5`)
+      }
+      return
+    }
+
+    curr.forEach((child, path) => {
+      walk(child, [...parents, { node: curr, path }])
+    })
   }
+
+  walk(node, [])
+  if (firstUnknownError) throw firstUnknownError
 }
 
 // An odd root of a negative number is the real root, (−8)^(1/3) = −2, as on the Calculator (owner, 2026-10-08).

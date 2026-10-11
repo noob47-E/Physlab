@@ -26,8 +26,8 @@ const NOT_A_SCREEN: Record<string, string> = {
   reader: 'the text each route hands mathjs before anything is worked out (CW6a), which no student reads'
 }
 
-/** A piece that is data inside a judged sweep: a Numbas author's own formula (name = "…"), as the bank holds it. */
-const isAuthorFormula = (sweep: string, piece: string): boolean => sweep === 'numbas' && piece.includes(' = "')
+/** A piece that is data inside a judged sweep: a Numbas author's own formula (name = "…"), as the bank holds it, or exported JME part JSON. */
+const isAuthorFormula = (sweep: string, piece: string): boolean => sweep === 'numbas' && (piece.includes(' = "') || piece.startsWith('{"type":'))
 
 // A field name must end at a colon or a space: "text: x^2" is plain text, not a tex field.
 const isTex = (piece: string): boolean => /\\[a-zA-Z]|\^\{|^\s*(tex|TEX|ANS|exact|RULE)(:|\s)/.test(piece)

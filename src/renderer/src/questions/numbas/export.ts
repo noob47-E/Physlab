@@ -219,7 +219,11 @@ function partToNumbas(p: PQPart): Obj | null {
         vsetRangePoints: 5,
         vsetRange: p.sampleRange ?? [1, 2],
         checkVariableNames: false,
-        showPrecisionHint: false
+        singleLetterVariables: false,
+        allowUnknownFunctions: true,
+        implicitFunctionComposition: false,
+        caseSensitive: false,
+        valueGenerators: []
       }
     case 'choice': {
       // A choice part whose choices are made by rules has nothing Numbas can list.

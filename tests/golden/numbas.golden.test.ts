@@ -46,6 +46,33 @@ function sweep(): string[] {
       )
     )
   }
+
+  lines.push(
+    goldenLine(
+      'EXPORT expression part',
+      seenOf(() => {
+        const exprQ = file.questions.find((q) => q.parts.some((p) => p.type === 'expression'))!
+        const exam = toExam({ ...file, questions: [exprQ] }, 'Expr export')
+        const json = JSON.parse(exam.replace(/^\/\/[^\n]*\n/, ''))
+        const part = json.question_groups[0].questions[0].parts.find((p: { type: string }) => p.type === 'jme')
+        return JSON.stringify(part)
+      })
+    )
+  )
+
+  lines.push(
+    goldenLine(
+      'IMPORT huge numeric entity',
+      seenOf(() => {
+        const q = file.questions[0]
+        const exam = toExam({ ...file, questions: [q] }, 'Entity test')
+        const rawExam = exam.replace(/<p>[^<]*<\/p>/, '<p>Entity test &#99999999; and &#x110000;</p>')
+        const res = fromExam(rawExam)
+        return res.file.questions.map((qu) => `${qu.title}: ${qu.statement}`).join('; ')
+      })
+    )
+  )
+
   return lines
 }
 

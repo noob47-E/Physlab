@@ -56,7 +56,7 @@ export const TYPE_INSTEAD: Record<string, { name: string; what: string }> = {
 }
 
 export function unknownUnit(name: string, onBar = false): string {
-  const instead = TYPE_INSTEAD[name]
+  const instead = Object.hasOwn(TYPE_INSTEAD, name) ? TYPE_INSTEAD[name] : undefined
   if (instead) return `I don't know the unit "${name}". For ${instead.what}, type ${instead.name}.`
   return onBar ? `I don't know the unit "${name}". Check the spelling.` : `I don't know the unit "${name}". Check the spelling, or pick a unit from the lists above.`
 }

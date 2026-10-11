@@ -3402,3 +3402,138 @@ describe('CW7c: unit conversions and implicit curve undefined variable check', (
   })
 })
 
+describe('P-FIX-REVIEWS CW7c M1 and M2: variable names vs units and prototype keys', () => {
+  beforeEach(resetGlobals)
+
+  it('plain names u, pc, kn, Da, AU, amu, ly are not mistaken for units', async () => {
+    const plainCases: [string, string][] = [
+      ['u + 1', 'u'],
+      ['2u', 'u'],
+      ['v = u + 2', 'u'],
+      ['s = u * 3 + a', 'u'],
+      ['u + (5 kg to g)', 'u'],
+      ['ly + 1', 'ly'],
+      ['ly * 3 + a', 'ly'],
+      ['pc + 1', 'pc'],
+      ['kn + 1', 'kn'],
+      ['Da + 1', 'Da'],
+      ['AU + 1', 'AU'],
+      ['amu + 1', 'amu']
+    ]
+    for (const [expr, sym] of plainCases) {
+      await runCommand(expr)
+      const last = scene().log.at(-1)
+      expect(last?.kind).toBe('error')
+      expect(last?.text).toContain(`"${sym}" does not exist yet. Create it first`)
+      expect(last?.text).not.toContain("I don't know the unit")
+    }
+  })
+
+  it('unit positions for TYPE_INSTEAD trigger helpful unit advice', async () => {
+    const unitCases: [string, string][] = [
+      ['2 ly', 'lightyear'],
+      ['5 ly to m', 'lightyear'],
+      ['5 m to ly', 'lightyear'],
+      ['3 amu', 'dalton'],
+      ['5 pc to m', 'parsec'],
+      ['5 u to kg', 'dalton'],
+      ['5 kg to u', 'dalton'],
+      ['5 kn to m/s', 'knot'],
+      ['2 Da', 'dalton'],
+      ['2 AU', 'au']
+    ]
+    for (const [expr, advice] of unitCases) {
+      await runCommand(expr)
+      const last = scene().log.at(-1)
+      expect(last?.kind).toBe('error')
+      expect(last?.text).toContain("I don't know the unit")
+      expect(last?.text).toContain(advice)
+    }
+  })
+
+  it('mixed expressions inspect specific symbol node occurrence in traversal order', async () => {
+    // Plain variable occurrence first -> "does not exist yet"
+    await runCommand('u + (5 kg to u)')
+    let last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain('"u" does not exist yet')
+    expect(last?.text).not.toContain("I don't know the unit")
+
+    await runCommand('ly + (5 m to ly)')
+    last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain('"ly" does not exist yet')
+    expect(last?.text).not.toContain("I don't know the unit")
+
+    // Unit position occurrence first -> unit advice
+    await runCommand('(5 kg to u) + z')
+    last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain("I don't know the unit \"u\"")
+
+    await runCommand('(5 m to ly) + x')
+    last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain("I don't know the unit \"ly\"")
+  })
+
+  it('non-numeric left operand before unit name does not trigger unit advice', async () => {
+    await runCommand('(u + 1) AU')
+    let last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain('"u" does not exist yet')
+    expect(last?.text).not.toContain("I don't know the unit")
+
+    await runCommand('(x / y) pc')
+    last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain('"pc" does not exist yet')
+    expect(last?.text).not.toContain("I don't know the unit")
+
+    await runCommand('a = 5')
+    await runCommand('(a + 1) ly')
+    last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain('"ly" does not exist yet')
+    expect(last?.text).not.toContain("I don't know the unit")
+
+    for (const [expr, sym] of [
+      ['ly^2', 'ly'],
+      ['x / ly', 'ly'],
+      ['pc / s', 'pc'],
+      ['3 * ly', 'ly'],
+      ['2 / ly', 'ly'],
+      ['2 * x * ly', 'ly'],
+      ['2 ^ ly', 'ly'],
+      ['3 * pc + 1', 'pc'],
+      ['x ly to m', 'ly'],
+      ['(a+1) AU to m', 'AU']
+    ] as const) {
+      await runCommand(expr)
+      last = scene().log.at(-1)
+      expect(last?.kind).toBe('error')
+      expect(last?.text).toContain(`"${sym}" does not exist yet`)
+      expect(last?.text).not.toContain("I don't know the unit")
+    }
+
+    await runCommand('a = 5')
+    await runCommand('(a+1) AU to m')
+    last = scene().log.at(-1)
+    expect(last?.kind).toBe('error')
+    expect(last?.text).toContain('"AU" does not exist yet')
+    expect(last?.text).not.toContain("I don't know the unit")
+  })
+
+  it('prototype keys do not hit TYPE_INSTEAD unit advice or show JS words', async () => {
+    for (const expr of ['valueOf + 1', 'toString', 'constructor + 1', '2 constructor']) {
+      await runCommand(expr)
+      const last = scene().log.at(-1)
+      expect(last?.kind).toBe('error')
+      expect(last?.text).not.toContain('undefined')
+      expect(last?.text).not.toContain('Object')
+      expect(last?.text).not.toContain('I don\'t know the unit')
+      expect(last?.text).toMatch(/does not exist yet|not a function|cannot read/i)
+    }
+  })
+})
+

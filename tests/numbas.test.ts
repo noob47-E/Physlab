@@ -1985,3 +1985,39 @@ describe('split submodule exports (CW10a)', () => {
   })
 })
 
+describe('P-FIX-REVIEWS CW10a fixes (M1, M2, S1, S2)', () => {
+  it('CW10a M1: an .exam with a large numeric entity imports without throwing RangeError', () => {
+    const file = loadBundled()
+    const q = file.questions[0]
+    const exam = toExam({ ...file, questions: [q] }, 'Entity test')
+    const rawExam = exam.replace(/<p>[^<]*<\/p>/, '<p>Entity test &#99999999; and &#x110000;</p>')
+    expect(() => fromExam(rawExam)).not.toThrow()
+    const imported = fromExam(rawExam)
+    expect(imported.file.questions.length).toBeGreaterThan(0)
+  })
+
+  it('CW10a M2: expression part exports the exact 5 JME options and no showPrecisionHint', () => {
+    const file = loadBundled()
+    const exprQ = file.questions.find((q) => q.parts.some((p) => p.type === 'expression'))!
+    const exam = toExam({ ...file, questions: [exprQ] }, 'Expr export test')
+    const json = JSON.parse(exam.replace(/^\/\/[^\n]*\n/, ''))
+    const part = json.question_groups[0].questions[0].parts.find((p: { type: string }) => p.type === 'jme')
+    expect(part.singleLetterVariables).toBe(false)
+    expect(part.allowUnknownFunctions).toBe(true)
+    expect(part.implicitFunctionComposition).toBe(false)
+    expect(part.caseSensitive).toBe(false)
+    expect(part.valueGenerators).toEqual([])
+    expect(part.showPrecisionHint).toBeUndefined()
+  })
+
+  it('CW10a S1/S2: decodes OElig, oelig, Scaron, scaron, Yuml, circ, tilde and old lang/rang', () => {
+    const file = loadBundled()
+    const q = file.questions[0]
+    const exam = toExam({ ...file, questions: [q] }, 'Entities test')
+    const rawExam = exam.replace(/<p>[^<]*<\/p>/, '<p>&OElig; &oelig; &Scaron; &scaron; &Yuml; &circ; &tilde; &lang; &rang;</p>')
+    const imported = fromExam(rawExam)
+    const stmt = imported.file.questions[0].statement
+    expect(stmt).toContain('Œ œ Š š Ÿ ˆ ˜ 〈 〉')
+  })
+})
+
