@@ -34,6 +34,7 @@ vi.mock('../src/renderer/src/app/theme', () => ({
 
 import { evaluateWithRealRoots } from '../src/renderer/src/calc/engine'
 import { compileScalar, math } from '../src/renderer/src/math/expr'
+import { keyPoints } from '../src/renderer/src/math/graphs'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { scene } from '../src/renderer/src/core/store'
 import { solutionsInX } from '../src/renderer/src/core/visualize'
@@ -97,17 +98,42 @@ describe('(−8)^(1/3) = −2 (owner): the bar and its numbers, since CW7a', () 
   })
 })
 
-// Waits for CW6a's merge (the wave head applies it in the next part that holds math/expr.ts; the owner
-// has already chosen the rule, so this is not a question for the owner). A graph's formula
-// (math/expr.ts compileScalar) and the bar's solutions in x read x^(1/3) as mathjs does, so
-// y = x^(1/3) has no curve left of 0 and x^(1/3) = −2 has no solution.
-describe('(−8)^(1/3) = −2 (owner): the graph route, after CW6a', () => {
-  it('evidence: x^(1/3) has no value at x = −8, and x^(1/3) = −2 is said to have no real x', () => {
-    expect(compileScalar('x^(1/3)', ['x'], () => ({}))({ x: -8 })).toBeNaN()
-    expect(solutionsInX('x^(1/3) + 2', ['x^(1/3)', '-2'], {})).toEqual({ kind: 'none', complex: [] })
-  })
-  it.fails('y = x^(1/3) is −2 at x = −8, and x^(1/3) = −2 is solved as x = −8', () => {
+// The graph route (CW7b; the owner chose the rule): a graph's formula (math/expr.ts compileScalar) takes an odd
+// root of a negative number as the real root, so y = x^(1/3) has its curve left of 0 and x^(1/3) = −2 is solved.
+// Before, Math.pow gave NaN there: no curve left of 0, and "No real x makes this true".
+describe('(−8)^(1/3) = −2 (owner): the graph route', () => {
+  it('y = x^(1/3) is −2 at x = −8, and x^(1/3) = −2 is solved as x = −8', () => {
     expect(compileScalar('x^(1/3)', ['x'], () => ({}))({ x: -8 })).toBeCloseTo(-2, 12)
-    expect(solutionsInX('x^(1/3) + 2', ['x^(1/3)', '-2'], {})).toEqual({ kind: 'real', xs: [-8] })
+    const solved = solutionsInX('x^(1/3) + 2', ['x^(1/3)', '-2'], {})
+    if (solved?.kind !== 'real') throw new Error(`not solved: ${JSON.stringify(solved)}`)
+    // The scan's root, refined to −8.000000000000004 (written x = −8).
+    expect(solved.xs).toHaveLength(1)
+    expect(solved.xs[0]).toBeCloseTo(-8, 12)
+  })
+
+  it('only a fixed exponent: (−2)^x and x^x stay undefined at a negative base, as on the Calculator', () => {
+    const f = (e: string, x: number) => compileScalar(e, ['x'], () => ({}))({ x })
+    expect(f('(-2)^x', 1 / 3)).toBeNaN()
+    expect(f('x^x', -1 / 3)).toBeNaN()
+    expect(f('(-2)^x', 3)).toBe(-8)
+  })
+
+  it('other powers of a negative number: an even root stays undefined, a whole power is as before, 2/3 is (∛x)²', () => {
+    const f = (e: string, x: number) => compileScalar(e, ['x'], () => ({}))({ x })
+    expect(f('x^(1/2)', -4)).toBeNaN()
+    expect(f('x^3', -2)).toBe(-8)
+    expect(f('x^(2/3)', -8)).toBeCloseTo(4, 12)
+    expect(f('x^(-1/3)', -8)).toBeCloseTo(-0.5, 12)
+    expect(f('x^0.5', 4)).toBe(2)
+  })
+})
+
+describe('the real odd root crosses 0, and the graph says so', () => {
+  it('y = x^(1/3) and y = x^(1/5) have their root at 0 on a window across it (keyPoints)', () => {
+    for (const e of ['x^(1/3)', 'x^(1/5)']) {
+      const f = compileScalar(e, ['x'], () => ({}))
+      const roots = keyPoints((x) => f({ x }), -9.91, 10.07, 800).filter((k) => k.kinds.includes('root'))
+      expect(roots.map((k) => k.x + 0), e).toEqual([0])
+    }
   })
 })

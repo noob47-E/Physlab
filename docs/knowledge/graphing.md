@@ -70,9 +70,15 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
 - An odd root of a negative number is the real root (owner): (−8)^(1/3) = −2 on the bar (lang/commands.ts
   `evaluateNode`) and in the numbers it makes (core/evaluate.ts), as on the Calculator, all through calc/engine.ts
   `evaluateWithRealRoots`. The bar's exact form beside a decimal is shown only when it has no i part, since the algebra
-  engine still answers with the principal value ((−8)^(−1/3) came back as 1/4 − (√3/4)i). A graph's x^(1/3) left of 0
-  still reads math/expr.ts `compileScalar` and waits for the next part that holds it (it.fails in
-  `tests/oddRoots.test.ts`).
+  engine still answers with the principal value ((−8)^(−1/3) came back as 1/4 − (√3/4)i). A graph follows the same
+  rule since CW7b: math/expr.ts `compileScalar` writes a power as `F.pow`, which takes the real root for a negative
+  base and an odd-root exponent (math/fraction.ts `oddRootExponent`, `rootOf`, shared with the Calculator), so
+  y = x^(1/3) has its curve left of 0 and x^(1/3) = −2 is solved as x = −8 (`tests/oddRoots.test.ts`).
+- Roots the same root: `distinct` (core/visualize.ts) merges at the accuracy of where they came from — the exact
+  quadratic pair at 10⁻¹² of their size, polyRoots' roots at 10⁻⁹ (it is good to about 10⁻⁸ beside a double root),
+  a scan's at 10⁻⁶. One sameNumber rule (10⁻¹⁵) would change only the H26 lines of the `bar` sweep and nothing in the
+  `roots` sweep's fuzz; that is the owner's decision (OWNER-APPROVALS.md CW3b-6, CW7b-1). The bar's
+  `solutionNumbers` does not merge roots: it writes roots that print alike with more digits until they differ.
 
 ## Traps met in 0.9 (and the test block that guards each)
 - A run-together line of several equations was taken as one inequality and "Shaded region created." printed for

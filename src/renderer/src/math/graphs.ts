@@ -322,10 +322,22 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
   const found: Found[] = []
   // The root between a and b, where f has opposite signs, if f goes through 0 there and not
   // through infinity; false for a pole, where |f| blows up instead.
+  // Whether |f| keeps shrinking toward r from both sides: a millionfold step closer at least halves it. An odd root
+  // crosses the axis that way however slowly it closes in (x^(1/5) is still 10⁻⁴ from it where bisection stops); a
+  // jump keeps its height there, and a pole grows.
+  const closesIn = (r: number, width: number): boolean =>
+    [-1, 1].every((side) => {
+      const h = side * width * 1e-4
+      const near = Math.abs(f(r + h))
+      const nearer = Math.abs(f(r + h * 1e-6))
+      return Number.isFinite(near) && Number.isFinite(nearer) && nearer < near / 2
+    })
   const rootBetween = (a: number, b: number): boolean => {
     const r = bisect(f, a, b, 60, offAt0)
     const fr = Math.abs(f(r))
-    if (!(fr < span * 1e-6 + 1e-9)) return false
+    // Since the real odd root (CW7b), x^(1/5) crosses 0 instead of ending there: a crossing that closes in counts too.
+    // Only looked at below the window's tallest sample, which a pole never is, so a pole costs nothing more.
+    if (!(fr < span * 1e-6 + 1e-9) && !(fr < span && closesIn(r, b - a))) return false
     // Small beside the curve at both ends of the bracket too: exp(1/x) − 2 jumps from −2 to +∞ at 0 and the halving
     // ends on its −2, which a window whose tallest sample is huge took for 0 (H33). A true root's |f| there is far
     // below both ends.

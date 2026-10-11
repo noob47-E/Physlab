@@ -7,6 +7,7 @@
 import { all, create, type MathNode } from 'mathjs'
 import { angleBetween, cross as vcross, dot as vdot, len, normalize, project, type V3 } from './vec'
 import { isNoise } from './noise'
+import { oddRootExponent, rootOf } from './fraction'
 
 export const math = create(all, { number: 'number', precision: 64 })
 // Points after Z are named A′, A″ (core/naming.ts); a prime straight after a letter or another prime is part of the name.
@@ -1085,7 +1086,21 @@ const JS_FUNCS: Record<string, string> = {
   dot: 'F.times'
 }
 
+/** The last exponent F.pow looked at, with its odd-root fraction (or null). */
+let lastExponent: { b: number; f: [number, number] | null } = { b: NaN, f: null }
+
 const F = {
+  // An odd root of a negative number is the real root, (−8)^(1/3) = −2, as on the Calculator and the command bar
+  // (owner, 2026-10-08): Math.pow gave NaN, so y = x^(1/3) had no curve left of 0 and x^(1/3) = −2 no solution.
+  pow: (a: number, b: number): number => {
+    if (a < 0 && !Number.isInteger(b)) {
+      // The exponent is fixed for a whole curve, so its fraction is worked out once, not at every sample.
+      if (b !== lastExponent.b) lastExponent = { b, f: oddRootExponent(b) }
+      const f = lastExponent.f
+      if (f) return Math.pow(-rootOf(-a, f[1]), f[0])
+    }
+    return Math.pow(a, b)
+  },
   log: (a: number, b?: number) => (b === undefined ? Math.log10(a) : Math.log(b) / Math.log(a)),
   sec: (x: number) => 1 / Math.cos(x),
   csc: (x: number) => 1 / Math.sin(x),
@@ -1122,6 +1137,7 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
   const vars = new Set(varNames)
   const read: SceneNames = { values: new Set([...names.values, ...varNames]), functions: new Set([...names.functions].filter((n) => !vars.has(n))) }
   const node = math.parse(preprocess(expr, read))
+  const usesVar = (nd: MathNode): boolean => nd.filter((m) => m.type === 'SymbolNode' && vars.has((m as MathNode & { name: string }).name)).length > 0
   const gen = (nd: MathNode): string => {
     const n = nd as MathNode & Record<string, unknown>
     switch (nd.type) {
@@ -1144,7 +1160,9 @@ export function compileScalar(expr: string, varNames: string[], scope: () => Rec
         const fn = n.fn as string
         if (fn === 'unaryMinus') return `(-${gen(args[0])})`
         if (fn === 'unaryPlus') return gen(args[0])
-        if (fn === 'pow') return `Math.pow(${gen(args[0])}, ${gen(args[1])})`
+        // The real odd root only for a fixed exponent, as on the Calculator (calc/engine.ts realPowOf): (−2)^x and x^x
+        // stay undefined at a negative base, rather than real at every x that happens to be a fraction with an odd bottom.
+        if (fn === 'pow') return `${usesVar(args[1]) ? 'Math.pow' : 'F.pow'}(${gen(args[0])}, ${gen(args[1])})`
         if (fn === 'factorial') return `F.fact(${gen(args[0])})`
         if (fn === 'not') return `(!${gen(args[0])} ? 1 : 0)`
         if (fn === 'mod') return `F.mod(${gen(args[0])}, ${gen(args[1])})`

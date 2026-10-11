@@ -442,7 +442,7 @@ g1 = atan2(10 m, 5 m)  =>  result | tex: g1 = 63.43
 (-8)^(0.3333)  =>  result | text: = 1.00011205 + 1.731826033i
 n = (-8)^(1/3)  =>  result | tex: n = -2 [Made: n: number]
 w = <(-8)^(1/3), 2>  =>  result | tex: w = -2\hat{i} + 2\hat{j},\quad \text{magnitude } 2.83,\ \theta = 135^\circ [Made: w: vector]
-x^(1/3) = -2  =>  error | text: No real x makes this true — it has no points on the graph.
+x^(1/3) = -2  =>  result | text: The solution is x = −8 — drawn as a vertical line. [Made: f1: graph]
 y = x^(1/3)  =>  result | text: Graph created. Roots and turning points are marked. [Made: f1: graph]
 3,5  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
 1,000  =>  error | text: A comma separates coordinates and inputs — type 1000 for a thousand, or 1.5 for a decimal.
