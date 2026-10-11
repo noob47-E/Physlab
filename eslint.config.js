@@ -32,18 +32,10 @@ const FENCE_NOISE = {
 export const FENCE_ALLOWED = [
   // Final: the number writer itself, and the noise rule's own constants.
   { files: ['src/renderer/src/math/format.ts', 'src/renderer/src/math/noise.ts'], allow: 'both' },
-  // Interim (2026-10-09: 29 files; 2026-10-10: 20, after CW3 and CW3b; 2026-10-11: 15, after CW9-N3). Only hand-picked 1e-12 floors
+  // Interim (2026-10-09: 29 files; 2026-10-10: 20, after CW3 and CW3b; 2026-10-11: 15, after CW9-N3; 0 after CW9-N1 and CW9-N2: the interim list is empty). Only hand-picked 1e-12 floors
   // are left here, moved to math/noise.ts by CW9: every toFixed/toPrecision outside the writer is
   // gone or marked. A line that stays is marked in place (eslint-disable-next-line … -- why) and is
   // part of the final list; so is a line parked for the owner, whose reason names its item.
-  { files: ['src/renderer/src/calc/roots.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
-  { files: ['src/renderer/src/core/evaluate.ts'], allow: 'noise' }, // 2 × 1e-12 — CW9
-  { files: ['src/renderer/src/lab/fit.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
-  { files: ['src/renderer/src/math/geometry.ts'], allow: 'noise' }, // 6 × 1e-12 — CW9
-  { files: ['src/renderer/src/math/graphs.ts'], allow: 'noise' }, // 3 × 1e-12 — CW9
-  { files: ['src/renderer/src/math/lego.ts'], allow: 'noise' }, // 1 × 1e-12 — CW9
-  { files: ['src/renderer/src/math/shapes.ts'], allow: 'noise' }, // 5 × 1e-12 — CW9
-  { files: ['src/renderer/src/questions/legoPart.ts'], allow: 'noise' }, // 2 × 1e-12 — CW9
 ]
 
 export default tseslint.config(

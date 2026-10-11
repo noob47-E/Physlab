@@ -282,6 +282,7 @@ export function polynomialInX(left: string, right: string, scope: Record<string,
   const d = polyAdd(l, polyScale(r, -1))
   const big = Math.max(...d.map(Math.abs))
   if (!(big > 0)) return null
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   while (d.length > 1 && Math.abs(d[d.length - 1]) <= 1e-12 * big) d.pop()
   return d.reverse()
 }

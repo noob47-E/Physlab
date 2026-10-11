@@ -1,5 +1,5 @@
 import { add, angleBetween, cross, dist, dot, len, mid, normalize, scale, sub, type V3 } from './vec'
-import { fmt } from './format'
+import { DISPLAY_FLOOR, fmt } from './format'
 
 type LineKind = 'line' | 'segment' | 'ray'
 
@@ -215,6 +215,7 @@ export function polygonPlane(pts: V3[], relTol = PLANAR_TOL): PolygonPlane | nul
   let n: V3 = [0, 0, 0]
   for (let i = 0; i < rel.length; i++) n = add(n, cross(rel[i], rel[(i + 1) % rel.length]))
   const size = rel.reduce((m, r) => Math.max(m, len(r)), 0)
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   if (!(len(n) > 1e-12 * size * size)) return null
   const normal = normalize(n)
   const planar = rel.every((r) => Math.abs(dot(r, normal)) <= relTol * size)
@@ -304,6 +305,7 @@ export function triangleInfo(A: V3, B: V3, C: V3): TriangleInfo {
     inradius: per > EPS ? (2 * area) / per : 0,
     orthocenter,
     heights: [a > EPS ? (2 * area) / a : 0, b > EPS ? (2 * area) / b : 0, c > EPS ? (2 * area) / c : 0],
+    // eslint-disable-next-line no-restricted-syntax -- an area in grid squares, the drawing's fixed scale: a triangle under 10⁻¹² square units is a line
     degenerate: area < 1e-12
   }
 }
@@ -327,6 +329,7 @@ export function lineEquation(p: V3, q: V3): LineEquation {
   const slope = Math.abs(b) < EPS ? Infinity : -a / b
   let inc = Math.atan2(q[1] - p[1], q[0] - p[0])
   if (inc < 0) inc += Math.PI
+  // eslint-disable-next-line no-restricted-syntax -- an angle in radians, a fixed scale: a level line drawn backwards (atan2 gives π) has inclination 0
   if (inc >= Math.PI - 1e-12) inc -= Math.PI
   return {
     a,
@@ -393,19 +396,20 @@ const point3 = (p: V3, digits: number) => `(${fmt(p[0], digits)}, ${fmt(p[1], di
 export function lineEquation3DText(p: V3, q: V3, digits = 3): string {
   if (p[2] !== q[2]) return `r = ${point3(p, digits)} + t${point3(sub(q, p), digits)}`
   const flat = lineEquationText(lineEquation(p, q), digits)
-  return Math.abs(p[2]) > 1e-12 ? `${flat}, z = ${fmt(p[2], digits)}` : flat
+  return Math.abs(p[2]) > DISPLAY_FLOOR ? `${flat}, z = ${fmt(p[2], digits)}` : flat
 }
 
 /** A circle's equation with its height when it is not on the page: "x² + y² = 4, z = 5". */
 export function circleEquation3DText(centre: V3, r: number, digits = 3): string {
   const flat = circleEquationText(centre, r, digits)
-  return Math.abs(centre[2]) > 1e-12 ? `${flat}, z = ${fmt(centre[2], digits)}` : flat
+  return Math.abs(centre[2]) > DISPLAY_FLOOR ? `${flat}, z = ${fmt(centre[2], digits)}` : flat
 }
 
 export function perpendicularBisector(a: V3, b: V3): GLine {
   const d = sub(b, a)
   // A segment straight up has no level direction across it; any level one is square to it.
   const across: V3 = [-d[1], d[0], 0]
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   return { kind: 'line', p: mid(a, b), d: len(across) > 1e-12 * len(d) ? across : [1, 0, 0] }
 }
 

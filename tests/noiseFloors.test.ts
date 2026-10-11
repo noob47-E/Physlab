@@ -45,6 +45,9 @@ import type { AnswerField } from '../src/renderer/src/math/problems'
 import { readInverse } from '../src/renderer/src/math/pure/table'
 import { solveOperation } from '../src/renderer/src/panels/vectorCalcStore'
 import { planDrawing } from '../src/renderer/src/math/vectorSolver'
+import { circleEquation3DText, lineEquation, lineEquation3DText, triangleInfo } from '../src/renderer/src/math/geometry'
+import { keyPoints } from '../src/renderer/src/math/graphs'
+import { polynomialInX } from '../src/renderer/src/calc/roots'
 import { resetGlobals } from './helpers/globals'
 
 beforeEach(() => {
@@ -434,5 +437,77 @@ describe('[answer may change] CW9-N3-3 — waiting for the owner, not applied', 
     // labelled, measured and selected at the stand-in length. sameNumber would see two different numbers.
     const plan = planDrawing(solveOperation('scale', [{ name: 'A', v: [1e-12, 0, 0] }], scene().settings, 0.1)!.visual!)
     expect(plan.items.find((i) => i.kind === 'arrow' && i.role === 'result')).toMatchObject({ auxiliary: true })
+  })
+})
+
+// ---------------------------------------------------------------------------------------------------------------
+// CW9-N2 (geometry and graphs): the z a line or circle writes asks the writer's DISPLAY_FLOOR, a segment too short to
+// have a direction asks vec.ts's NO_DIRECTION, the floors in grid squares and radians stay with their reason, the
+// relative floors wait for the owner's number (CW9-N3-1), and the graph's root test is parked (CW9-N2-2).
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('geometry: a height the writer shows, an area in grid squares, an angle in radians', () => {
+  it('a line or circle off the page says its z only over the writer’s floor (DISPLAY_FLOOR; at exactly 10⁻¹² it does not, as hasZ)', () => {
+    expect(lineEquation3DText([0, 0, 1e-12], [1, 1, 1e-12])).not.toContain('z =')
+    expect(lineEquation3DText([0, 0, 2e-12], [1, 1, 2e-12])).toContain('z =')
+    expect(circleEquation3DText([0, 0, 1e-12], 2)).not.toContain('z =')
+    expect(circleEquation3DText([0, 0, 2e-12], 2)).toContain('z =')
+  })
+
+  it('a triangle under 10⁻¹² square units of area is degenerate, one over it is not (triangleInfo)', () => {
+    expect(triangleInfo([0, 0, 0], [1, 0, 0], [0, 1e-12, 0]).degenerate).toBe(true)
+    expect(triangleInfo([0, 0, 0], [1, 0, 0], [0, 4e-12, 0]).degenerate).toBe(false)
+  })
+
+  it('a level line drawn right to left has inclination 0, not π (lineEquation)', () => {
+    expect(lineEquation([1, 0, 0], [0, 0, 0]).inclination).toBe(0)
+    expect(lineEquation([0, 0, 0], [1, 1, 0]).inclination).toBeCloseTo(Math.PI / 4, 15)
+  })
+})
+
+describe('[answer may change] CW9-N2 — waiting for the owner, not applied', () => {
+  it.fails('CW9-N2-2: exp(1/x) − 2 has the one root 1/ln 2 at any scale; scaled by 10⁻¹³ it gains a false root at 0', () => {
+    // keyPoints rejects a jump taken for a root when |f| there is not small beside the bracket's ends (H33), but its
+    // floor adds an absolute 10⁻¹²: at 10⁻¹³ the jump's −2×10⁻¹³ passes, and x ≈ −5×10⁻²¹ is listed as a root.
+    const roots = (f: (x: number) => number) => keyPoints(f, -5, 5).filter((k) => k.kinds.includes('root')).map((k) => k.x)
+    const one = (xs: number[]) => xs.length === 1 && Math.abs(xs[0] - 1 / Math.LN2) < 1e-9
+    expect(one(roots((x) => Math.exp(1 / x) - 2))).toBe(true)
+    expect(roots((x) => 1e-13 * (Math.exp(1 / x) - 2))).toHaveLength(1)
+  })
+})
+
+describe('CW9-N2: floors pinned at their edge', () => {
+  it('a level line falling by 10⁻¹³ is inclined −10⁻¹³ rad, not π (lineEquation; today’s value, a lead)', () => {
+    expect(lineEquation([1, 0, 0], [0, 1e-13, 0]).inclination).toBeCloseTo(-1e-13, 15)
+  })
+
+  it('the perpendicular to a line along z is level along x; to <3, 4> it is <−4, 3> (core/evaluate.ts perpendicular)', async () => {
+    const d = (name: string) => (scene().ev.values.get(scene().ev.names.get(name) ?? '') as { line?: { d?: V3 } } | undefined)?.line?.d
+    await bar('P = (1, 1)')
+    await bar('Z = <0, 0, 1>')
+    await bar('L = Perpendicular(P, Z)')
+    expect(d('L')).toEqual([1, 0, 0])
+    await bar('B = <3, 4>')
+    await bar('M = Perpendicular(P, B)')
+    expect(d('M')).toEqual([-4, 3, 0])
+  })
+
+  it('a typed polynomial loses a top coefficient under 10⁻¹² of its biggest: 10⁻¹³x² + x − 1 reads x − 1 (calc/roots.ts, CW9-N2-1)', () => {
+    expect(polynomialInX('1e-13x^2 + x - 1', '0', {})).toEqual([1, -1])
+    expect(polynomialInX('1e-11x^2 + x - 1', '0', {})).toEqual([1e-11, 1, -1])
+  })
+})
+
+describe('[answer may change] CW9-N2-3 — waiting for the owner, not applied', () => {
+  it.fails('CW9-N2-3: the perpendicular to a typed vector of 3×10⁻¹⁹ î + 4×10⁻¹⁹ ĵ is square to it, not level', async () => {
+    // evaluate.ts takes a direction with both level parts under an absolute 10⁻¹² for a line along z.
+    await bar('P = (1, 1)')
+    await bar('A = <3e-19, 4e-19>')
+    await bar('L = Perpendicular(P, A)')
+    const d = (scene().ev.values.get(scene().ev.names.get('L') ?? '') as { line?: { d?: V3 } } | undefined)?.line?.d
+    // Square to A means d · (3, 4) = 0, with a direction of its own.
+    expect(d).toBeDefined()
+    expect(Math.hypot(d![0], d![1])).toBeGreaterThan(0)
+    expect(Math.abs(d![0] * 3 + d![1] * 4)).toBeLessThan(1e-9 * Math.hypot(d![0], d![1]))
   })
 })

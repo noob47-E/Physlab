@@ -33,6 +33,7 @@ export type LegoPart = Extract<PQPart, { type: 'lego' }>
 /** Do the sides a–b and c–d cross at a point inside both? Shared ends do not count. */
 function crosses(a: V3, b: V3, c: V3, d: V3): boolean {
   const side = (p: V3, q: V3, r: V3): number => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+  // eslint-disable-next-line no-restricted-syntax -- an orientation (a cross product of sides) in grid squares², the shape's fixed scale
   const eps = 1e-12
   const d1 = side(c, d, a)
   const d2 = side(c, d, b)
@@ -88,6 +89,7 @@ function convex(pts: V3[]): boolean {
     const b = pts[(i + 1) % n]
     const c = pts[(i + 2) % n]
     const z = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+    // eslint-disable-next-line no-restricted-syntax -- an orientation in grid squares²: a corner in line with its neighbours turns neither way
     if (Math.abs(z) < 1e-12) continue
     if (sign === 0) sign = Math.sign(z)
     else if (Math.sign(z) !== sign) return false

@@ -316,6 +316,7 @@ export function fuseResult(pieces: V3[][], original: Original): FuseResult {
   if (status.kind === 'apart') return { ok: false, sentence: GAP_SENTENCE }
   const area = polygonArea(status.outline)
   const total = pieces.reduce((s, pc) => s + polygonArea(pc), 0)
+  // eslint-disable-next-line no-restricted-syntax -- guards a relative area test against a total of 0, in grid squares
   if (Math.abs(area - total) > 0.005 * Math.max(total, 1e-12)) return { ok: false, sentence: OVERLAP_SENTENCE }
   const name = status.kind === 'different' ? status.name : classifyPolygon(status.outline).name
   return { ok: true, kind: status.kind, outline: status.outline, name, area, perimeter: perimeter(status.outline) }

@@ -79,9 +79,11 @@ describe('guard: the lint fences', () => {
     expect(await fenceErrors('export const c = 1e-12\n', 'src/renderer/src/math/noise.ts')).toEqual([])
   }, 60_000)
 
-  it('an interim file keeps the fence it is not listed for', async () => {
-    // calc/roots.ts is listed for its 1e-12 floors only.
+  it('the interim list is empty after CW9: a former interim file is fenced for both again', async () => {
+    // calc/roots.ts was listed for its 1e-12 floors until CW9-N2; render/Labels.tsx until CW9-N1.
     expect(await fenceErrors('export const a = (x: number) => x.toFixed(2)\n', 'src/renderer/src/calc/roots.ts')).toHaveLength(1)
+    expect(await fenceErrors('export const c = 1e-12\n', 'src/renderer/src/calc/roots.ts')).toHaveLength(1)
+    expect(await fenceErrors('export const c = 1e-12\n', 'src/renderer/src/render/Labels.tsx')).toHaveLength(1)
   }, 60_000)
 
   it('a file that has left the interim list is fenced again: a new 1e-12 there needs its own reason (CW3b)', async () => {

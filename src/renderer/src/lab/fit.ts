@@ -216,6 +216,7 @@ export function pmText(value: number, error: number | undefined): string {
   // The cut is a millionth of a millionth of the value, far above that noise and far below any real
   // uncertainty: at 1e-9 a gradient of 1 × 10⁹ ± 0.5 lost its ±.
   // Rounding goes through math/format.ts: the built-ins round the binary double, so 2.675 read 2.67.
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   if (error === undefined || !Number.isFinite(error) || error <= 0 || error < Math.abs(value) * 1e-12) {
     return Number.isFinite(value) ? sixFigures(value) : '—'
   }

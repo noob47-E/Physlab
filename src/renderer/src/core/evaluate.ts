@@ -218,6 +218,7 @@ export function evaluateScene(
           case 'perpendicular': {
             const l = needLine(d.line)
             // A line along z has no perpendicular in the xy-plane; any horizontal direction is one.
+            // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW9-N2-3): absolute, and a typed vector reaches it, so the perpendicular to <3e-19, 4e-19> comes out level
             const flat = Math.abs(l.d[0]) > 1e-12 || Math.abs(l.d[1]) > 1e-12
             return { type: 'line', line: { kind: 'line', p: needPoint(d.through), d: flat ? [-l.d[1], l.d[0], 0] : [1, 0, 0] } }
           }

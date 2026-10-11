@@ -208,6 +208,7 @@ function settledAt(f: Fx, x: number, step: number): number {
   const all = Number.isNaN(y) ? [...left, ...right] : [y, ...left, ...right]
   if (!all.every(Number.isFinite)) return NaN
   // Changes this small are the rounding of values this size, not the curve.
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   const noise = 1e-12 * Math.max(...all.map(Math.abs))
   const l = closingIn(left, noise)
   const r = closingIn(right, noise)
@@ -260,6 +261,7 @@ function edgeLimit(f: Fx, edge: number, dir: number, look: number): { to: number
   // `nearest` is the curve's size at the point nearest the edge, which the limit is judged against: a steep
   // curve is far larger a step away, and 1e6√x + 0.01 (1000 at 10⁻⁶, 1.01 at 10⁻¹²) tending to 0.01 was
   // within a ten-thousandth of 1000 and its edge taken for a root (H27).
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   return { to: closingIn(v, 1e-12 * size).to, size, nearest: Math.abs(v[2]) }
 }
 
@@ -328,6 +330,7 @@ export function keyPoints(f: Fx, xMin: number, xMax: number, n = 800): KeyPoint[
     // ends on its −2, which a window whose tallest sample is huge took for 0 (H33). A true root's |f| there is far
     // below both ends.
     const ends = [f(a), f(b)].map(Math.abs).filter(Number.isFinite)
+    // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW9-N2-2): an absolute floor on a curve's height, so exp(1/x) − 2 scaled by 10⁻¹³ gains a false root at 0 (tests/noiseFloors.test.ts)
     if (ends.length && fr > 1e-3 * Math.min(...ends) + 1e-12) return false
     found.push({ x: snapRoot(r), y: 0, kinds: ['root'] })
     return true

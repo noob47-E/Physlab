@@ -136,6 +136,7 @@ export function cleanPolygon(pts: V3[], eps = 1e-9): V3[] {
   return out
 }
 
+// eslint-disable-next-line no-restricted-syntax -- a size floor in grid squares, the drawing's fixed scale: it joins two sides both under 10⁻¹², which a cleaned polygon (corners 10⁻⁹ apart joined) never has
 const near = (a: number, b: number, rel: number) => Math.abs(a - b) <= rel * Math.max(Math.abs(a), Math.abs(b), 1e-12)
 
 function parallel(d1: V3, d2: V3, tolRad: number): boolean {
@@ -156,6 +157,7 @@ const IN_LINE = 'All its corners lie on one straight line, so it encloses nothin
 function sidesCross(pts: V3[]): boolean {
   const n = pts.length
   const size = pts.reduce((m, p) => Math.max(m, Math.abs(p[0] - pts[0][0]), Math.abs(p[1] - pts[0][1])), 0)
+  // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
   const tiny = 1e-12 * size * size
   const side = (a: V3, b: V3, c: V3) => {
     const o = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
@@ -286,6 +288,7 @@ function rdp(points: V3[], eps: number): V3[] {
   let maxD = -1
   let idx = 0
   for (let i = 1; i < points.length - 1; i++) {
+    // eslint-disable-next-line no-restricted-syntax -- a closed loop's chord is exactly 0, so the distance is from its end; grid squares (not NO_DIRECTION, which is parked to become exactly 0)
     const d = abLen < 1e-12 ? dist(points[i], a) : Math.abs(cross(ab, sub(points[i], a))[2]) / abLen
     if (d > maxD) {
       maxD = d
@@ -351,6 +354,7 @@ export function recognizeStroke(raw: V3[], opts: RecognizeOptions): Recognized {
 
   if (!closed) {
     const chord = dist(pts[0], pts[pts.length - 1])
+    // eslint-disable-next-line no-restricted-syntax -- a guard that never acts: an open stroke's chord is at least 8% of its length, and a stroke under 10⁻⁶ is already too short
     const dev = Math.max(...pts.map((p) => Math.abs(cross(sub(pts[pts.length - 1], pts[0]), sub(p, pts[0]))[2]) / Math.max(chord, 1e-12)))
     if (dev < 0.08 * chord) return { kind: 'segment', a: snapP(pts[0]), b: snapP(pts[pts.length - 1]) }
     return { kind: 'none', reason: 'Open curve: close the shape (end where you started) or draw a straight line.' }
@@ -408,6 +412,7 @@ function meanDistanceToPolygon(points: V3[], poly: V3[]): number {
       const a = poly[i]
       const b = poly[(i + 1) % poly.length]
       const ab = sub(b, a)
+      // eslint-disable-next-line no-restricted-syntax -- guards a division by a side under 10⁻⁶ squares long (its squared length under 10⁻¹²), in grid squares
       const t = Math.max(0, Math.min(1, dot(sub(p, a), ab) / Math.max(dot(ab, ab), 1e-12)))
       best = Math.min(best, dist(p, add(a, scale(ab, t))))
     }

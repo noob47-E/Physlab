@@ -64,3 +64,19 @@ two triangles (**Congruence**).
   drawn in the plane.
 - `PLANAR_TOL` is 1/1000 of the shape's size: a small tilted shape typed to two decimals can read
   "skew", because its typed corners really are off one plane.
+
+## The 10⁻¹² floors in geometry and graphs (CLEANUP-PLAN.md CW9-N2)
+- **The z a line or a circle writes** (lineEquation3DText, circleEquation3DText) asks the writer's `DISPLAY_FLOOR`
+  (math/format.ts), keeping its `>`: at exactly 10⁻¹² no z is written, one step over it is.
+- **shapes.ts rdp** keeps its own 10⁻¹²: a closed loop's chord is exactly 0, and vec.ts's NO_DIRECTION is parked to
+  become exactly 0 (CW9-N3-2), which would break shape recognition for every freehand loop.
+- **Floors with a fixed scale, kept with their reason in place:** a triangle's area in grid squares (triangleInfo
+  degenerate), a line's inclination in radians (lineEquation), a size floor and two division guards in a sketch
+  (shapes.ts near, recognizeStroke — a guard that never acts —, meanDistanceToPolygon), a Lego total of 0 (lego.ts
+  fuseResult), the orientation of a shape's corners (questions/legoPart.ts).
+- **Relative floors (10⁻¹² of the sizes)** in polygonPlane, perpendicularBisector, sidesCross, graphs.ts settledAt and
+  the edge limit, calc/roots.ts and lab/fit.ts pmText wait for the owner's one number (CW9-N2-1, with CW9-N3-1).
+- **Parked:** core/evaluate.ts perpendicular takes a direction with both level parts under 10⁻¹² for a line along z, and
+  a typed vector reaches it: the perpendicular to <3e-19, 4e-19> is level (CW9-N2-3). graphs.ts keyPoints adds an absolute 10⁻¹² to its jump-is-not-a-root check, so exp(1/x) − 2 scaled by
+  10⁻¹³ gains a false root at x ≈ 0 (CW9-N2-2).
+- Guarded by tests/noiseFloors.test.ts (the CW9-N2 blocks) and the geometry, roots, presets and lab sweeps.
