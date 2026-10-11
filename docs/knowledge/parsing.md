@@ -34,7 +34,7 @@ P-PARSE (0.9). Numbers, ×10 literals and rounding are in `numbers.md`; LaTeX fr
   <…> and (in vector mode) × and · to preprocess. It still writes \div as / and \le \ge \ne as <= >= != itself,
   because some callers read its text without preprocess: Pure Maths' job finder and algebra-engine route
   (math/pure/store.ts) and the Maths screen's "is there an = yet?" test (panels/Maths.tsx).
-- **The vector rule has two copies in the bar**: lang/commands.ts `VECTOR_LITERAL`, used by `relationsIn` (counting
+- **The vector rule has two copies in the bar**: lang/commands/common.ts `VECTOR_LITERAL`, used by `relationsIn` (lang/commands/graph.ts) (counting
   relation signs) and `splitInputs` (a command's inputs). They are regex copies of preprocess's `angleVectors`, not
   calls to it, and they differ on some lines. B = k<1, 2> + <3, 4> is one assignment to preprocess and "several
   equations" to relationsIn; angle(x < 3, y > 1) is two arguments to splitArgs and one input to splitInputs (the bar
@@ -48,7 +48,7 @@ P-PARSE (0.9). Numbers, ×10 literals and rounding are in `numbers.md`; LaTeX fr
   it never reaches either reader.
 
 ## Traps
-- The bar's relation count (lang/commands.ts relationsIn) masks a vector literal with its own copy of rule 6 (see
+- The bar's relation count (lang/commands/graph.ts relationsIn) masks a vector literal with its own copy of rule 6 (see
   "One reader"): without the mask `B = k<1, 2>` is "several equations", and where the copy differs from preprocess a
   vector line still is (CW6a-2).
 - A raw error text from the reader reaches the bar: "Expected a vector or point" (math/expr.ts toV3) after

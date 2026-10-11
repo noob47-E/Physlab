@@ -393,7 +393,7 @@ neighbour is open.
   A power whose exponent holds the variable ((−2)^x, x^x) keeps Math.pow (undefined at negative bases). A slow crossing
   like x^(1/5) crosses 0 gradually, so `keyPoints`' `rootBetween` recognizes a crossing whose |f| keeps shrinking toward
   the point from both sides (`closesIn`). The algebra engine still answers with the principal value, so an exact form
-  with an i part is never shown beside a real decimal (lang/commands.ts `evaluatePlain`). Guard: tests/oddRoots.test.ts.
+  with an i part is never shown beside a real decimal (lang/commands/solve.ts `evaluatePlain`). Guard: tests/oddRoots.test.ts.
 - **The writer's floor and a noise rule are two things.** math/format.ts writes |v| < 10⁻¹² as 0: that is
   DISPLAY_FLOOR, a screen rule. Rounding noise is judged against the sizes it came from (math/noise.ts). A line asking
   "will this be written as 0?" names DISPLAY_FLOOR; a line asking "is this round-off?" asks the noise rule. Never use a
@@ -415,7 +415,7 @@ neighbour is open.
   (`sidesOf`, `doomedBy`) are imported BY `core/store.ts`, which re-exports the last two; one `import … from './store'` in
   them makes a cycle that loads the store half-built. A helper that needs the state takes it as an argument.
 - **A generic fallback in `friendlyError` will swallow specific syntax messages.** When delegating unit errors to
-  `unitRefusal` in `lang/commands.ts`, only match genuine unit errors (`/Units do not match|in function to\b|Unit "[^"]+" not found/`);
+  `unitRefusal` in `lang/commands/route.ts`, only match genuine unit errors (`/Units do not match|in function to\b|Unit "[^"]+" not found/`);
   calling it unconditionally on syntax errors routes through `errorSentence` and silently changes the `errors` golden sweep.
 - **questions/numbas.ts is a door** to questions/numbas/ (jme.ts, marking.ts, import.ts, export.ts). Keep sibling imports
   one-way (jme ← marking ← import/export); never import the barrel facade from within numbas/.

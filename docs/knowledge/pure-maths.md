@@ -70,7 +70,7 @@ has been checked.
     as CW6c-2).
   - Widening a subset changes what a student sees, so it is an [answer may change] item.
 - Copies outside this area that do not read the list yet:
-  - the bar's 22 names (lang/commands.ts:1357);
+  - the bar's 22 names (lang/commands/solve.ts `PURE_WORDS`);
   - the LaTeX readers' command maps (math/latexToMath.ts:128 and questions/speak.ts:28), which
     disagree on `\vartheta`: θ in one, ϑ in the other;
   - the HTML entities of the Numbas importer (questions/numbas.ts:609);

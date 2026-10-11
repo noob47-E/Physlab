@@ -119,7 +119,7 @@ Traps met in CW3b:
   as 0?" names it (calc/format.ts calcNum; the Vectors solver's tinyReal, bracketed, tidyTiny, hasZ, negligible,
   the scaled-vector stand-in) instead of repeating 10⁻¹². It is a screen rule, not a noise rule. Mind the edge: the
   writer drops a value strictly under it, so a `> DISPLAY_FLOOR` test (hasZ) differs from it at exactly 10⁻¹².
-  Copies still written as 1e-12 outside this batch: marked in place in lang/commands.ts (isThreeD, vectorExtras) and
+  Copies still written as 1e-12 outside this batch: marked in place in lang/commands/graph.ts (isThreeD) and lang/commands/common.ts (vectorExtras) and
   panels/cardLine.ts / vectorLine.ts (from vectorCalcStore.ts); on the interim list, for CW9-N1 and N2, in
   render/Labels.tsx (62, 69), panels/Properties.tsx (175), panels/Measurements.tsx (58, 77) and math/geometry.ts
   (396, 402). (Properties.tsx:170 and Measurements.tsx:44 are direction floors, Labels.tsx:64 a relative one: not

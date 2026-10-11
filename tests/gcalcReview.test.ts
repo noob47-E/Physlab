@@ -227,13 +227,13 @@ describe('Visualize on a line that is already drawn shows that graph instead of 
 
   it('the answer line\'s solve Visualize marks the roots only when it drew the graph, so a second press adds nothing', () => {
     // solve() answers through the algebra engine, which these tests mock, so the wiring is read from the source.
-    expect(readSource('src/renderer/src/lang/commands.ts')).toMatch(/if \(visualizeGraph\(`y = \$\{l\} - \(\$\{rr\}\)`, \[`\(\$\{l\}\) - \(\$\{rr\}\)`\], 'explicit', \{ reuse: true \}\)\) roots\.forEach/)
+    expect(readSource('src/renderer/src/lang/commands/solve.ts')).toMatch(/if \(visualizeGraph\(`y = \$\{l\} - \(\$\{rr\}\)`, \[`\(\$\{l\}\) - \(\$\{rr\}\)`\], 'explicit', \{ reuse: true \}\)\) roots\.forEach/)
   })
 
   it('every Visualize button of the Calculator asks for it, and the selected graph\'s Expressions row is marked', () => {
     const reuse = /visualizeGraph\([^\n]*\{ reuse: true \}\)/g
     expect(readSource('src/renderer/src/panels/Maths.tsx').match(reuse)).toHaveLength(3)
-    expect(readSource('src/renderer/src/lang/commands.ts').match(reuse)).toHaveLength(2)
+    expect(readSource('src/renderer/src/lang/commands/solve.ts').match(reuse)).toHaveLength(2)
     expect(readSource('src/renderer/src/panels/calcModes.tsx').match(reuse)).toHaveLength(1)
     expect(readSource('src/renderer/src/panels/Expressions.tsx')).toMatch(/const selected = useScene\(\(s\) => s\.selection\.includes\(row\.id\)\)/)
   })

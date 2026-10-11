@@ -17,7 +17,7 @@ online. The first load takes seconds, so the client shows where it is and never 
 | `src/renderer/src/workers/cas.worker.ts` | The worker: the Python `PRELUDE` (`cas_run(op, payload)`, the name table `_names`, `_plain_error`, the step engines `integral_steps_op` / `diff_steps_op`) and the JS loader that boots Pyodide and posts load stages. |
 | `src/renderer/src/ui/casStatus.ts` | Every sentence about the engine's state: `describeCasStatus` (the bar's dot and words), `casStartingSentence`, `casWaitNote`, `followCasStart` (keeps a waiting line in step with the stage). |
 | `src/renderer/src/app/CommandBar.tsx` | The bar: input, suggestions, history, the engine status and Stop; keys decided by `app/commandBarKeys.ts` (`decideKey`, `recall`). |
-| `src/renderer/src/lang/commands.ts` `tryCas` | Turns a typed `solve(…)`, `diff(…)`, `integrate(…)`… into an `EngineRequest` and `ask`s; the background `ask('exact')`. |
+| `src/renderer/src/lang/commands/solve.ts` `tryCas` | Turns a typed `solve(…)`, `diff(…)`, `integrate(…)`… into an `EngineRequest` and `ask`s; the background `ask('exact')`. |
 | `src/renderer/src/math/pure/store.ts` | The Working panel's engine requests (`engineRequestFor`, `stepsRequest`, `spelledOut`) and its waiting sentence. |
 | `src/renderer/src/panels/Maths.tsx` (~1020–1035) | The Maths screen's engine status. |
 

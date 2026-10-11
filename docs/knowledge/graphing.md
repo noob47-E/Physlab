@@ -5,8 +5,10 @@ part P-GRAPH (0.9). The rule this area keeps above all: **nothing is announced a
 will really appear** — a refusal is a plain sentence and leaves nothing behind.
 
 ## File map
-- `lang/commands.ts` — `runCommand` tries Pure Math, the CAS, `tryGraph`, assignments, geometry, the vector solvers,
-  then plain evaluation. In `tryGraph`:
+- `lang/commands.ts` (a barrel since CW10e; the code is in `lang/commands/`: `route.ts` with `runCommand`, assignments
+  and geometry; `graph.ts` with `tryGraph`; `solve.ts` with the vector solvers, the CAS, Pure Math and plain
+  evaluation; `common.ts` the shared pieces) — `runCommand` tries Pure Math, the CAS, `tryGraph`, assignments,
+  geometry, the vector solvers, then plain evaluation. In `tryGraph`:
   - `relationsIn` / `withoutQuotedText` count the relation signs of a line (quoted text and `<a, b>` vectors excepted);
     two or more are refused before any route runs; ≤ ≥ are read as <= >=;
   - the routes: `y =`, `f(x) =` (never a mathjs function name: `sin(x) = 2` is an equation), `z =` surface,
@@ -63,7 +65,7 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
   NaN, Infinity or "undefined" — and stay inside the view without overlapping.
 - A run of exact-zero samples is a stretch lying on the axis, not hundreds of roots.
 - `sampleExplicit` never joins the two branches of a pole and never drops a steep smooth curve.
-- An odd root of a negative number is the real root (owner): (−8)^(1/3) = −2 on the bar (lang/commands.ts
+- An odd root of a negative number is the real root (owner): (−8)^(1/3) = −2 on the bar (lang/commands/common.ts
   `evaluateNode`) and in the numbers it makes (core/evaluate.ts), as on the Calculator, all through calc/engine.ts
   `evaluateWithRealRoots`. The bar's exact form beside a decimal is shown only when it has no i part, since the algebra
   engine still answers with the principal value ((−8)^(−1/3) came back as 1/4 − (√3/4)i). A graph follows the same
