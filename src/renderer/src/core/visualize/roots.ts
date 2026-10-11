@@ -808,6 +808,23 @@ function scanRoots(g: Fx, spans: number[], quick: boolean): number[] {
     found.push(...roots.filter((r) => !scanned.some((w) => w.step < step && r >= w.x0 && r <= w.x1 && !w.roots.some((q) => Math.abs(q - r) <= tolerance(r)))))
     scanned.push({ x0, x1, step, roots: roots.filter(seen) })
     if (quick && found.length) break
+
+    // Past h >= 10, if the function is periodic and we have roots beyond nearest strictly inside
+    // the scanned window boundary, wider windows are redundant (CW12).
+    const dRoots = distinct(found, 1e-6)
+    if (dRoots.length > MAX_LISTED && h >= 10) {
+      const byDist = [...dRoots].sort((a, b) => Math.abs(a) - Math.abs(b))
+      let count = MAX_LISTED
+      while (count < byDist.length && Math.abs(Math.abs(byDist[count]) - Math.abs(byDist[count - 1])) <= 1e-6 * Math.max(1, Math.abs(byDist[count]))) count++
+      if (dRoots.length > count) {
+        const period = periodOf(g, dRoots)
+        if (period !== null) {
+          const maxDist = Math.abs(byDist[count - 1])
+          const boundary = Math.min(Math.abs(x0), Math.abs(x1))
+          if (maxDist < boundary) break
+        }
+      }
+    }
   }
   return distinct(found, 1e-6)
 }

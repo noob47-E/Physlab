@@ -122,6 +122,9 @@ x = −2 ± 3i" (the Calculator's own `polyRoots` and `calcNum`).
   - **· between numbers is a product** on a graph (compileScalar `dot`); beside a written vector it is refused (H32).
   - **An x-only equation's lines are solved only when its formula or a value it reads changes** (P4perf: 18.5 ms a
     solve of sin(x) = a ran on every drag frame).
+  - **Periodic equation scan width (CW12)**: `scanRoots` stops scanning wider windows once periodic repetitions and
+    all nearest roots lie strictly within the scanned boundary, cutting solve time for `sin(x) = a` and `tan(x) = a`
+    from ~20 ms to < 4 ms.
 
 ## Known limits (not bugs to chase blindly)
 - A curve with a cancellation-noise extremum, e.g. (1 − cos x)/x² at 0, gets no turning point there.

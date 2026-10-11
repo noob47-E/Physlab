@@ -421,6 +421,9 @@ neighbour is open.
   one-way (jme ← marking ← import/export); never import the barrel facade from within numbas/.
 - **core/visualize.ts is a door** to core/visualize/ (roots.ts, curves.ts, regions.ts). Keep sibling imports
   one-way (roots ← curves ← regions); never import the barrel facade from within visualize/.
+- **scanRoots skips wider windows once periodic roots and their repeat are found.** When `dRoots.length > count`
+  and `periodOf` confirms periodicity within the scanned boundary, scanning windows of ±1,000 to ±10⁶ units only
+  bisects thousands of redundant periodic cycles; `solveByScan` already has the nearest roots and the period.
 
 ## Code knowledge
 
