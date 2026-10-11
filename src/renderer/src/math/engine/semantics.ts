@@ -1,6 +1,56 @@
 import { isNoise, sameNumber } from '../noise'
-import { bgcd, blcm, Rat, rat, rAdd, rFromNumber, rIsNeg, rIsZero, rMul, rNeg, rSub } from '../pure/rat'
+import { bgcd, blcm, Rat, rat, rAbs, rAdd, rCmp, rFromNumber, rIsNeg, rIsZero, rMul, rNeg, rSub } from '../pure/rat'
 import { pDeg, pDivMod, pEval, pGcd, pIsZero, pLead, pNeg, pTrim } from '../pure/poly'
+
+/**
+ * A coefficient list (low degree first) without its trailing zeros. A coefficient that was given is zero only when
+ * it is 0: 10⁻¹⁵·x² + x − 1 is a quadratic, and every coefficient of a 10⁻¹³-scale polynomial is real (P-FIX-G00FENCE).
+ * The polynomials verifyCancelledFactorsExact divides down count as given: synthetic and long division keep the leading
+ * coefficient a true number (the dividend's, over the divisor's), so round-off never sits at the top.
+ */
+function trimExact(poly: number[]): number[] {
+  let end = poly.length - 1
+  while (end >= 0 && poly[end] === 0) end--
+  return poly.slice(0, end + 1)
+}
+/** The same for a remainder this code worked out: a trailing coefficient is round-off when it is noise beside the largest. */
+function trimNoise(poly: number[], ...sizes: number[]): number[] {
+  const largest = Math.max(0, ...poly.map(Math.abs), ...sizes.map(Math.abs))
+  let end = poly.length - 1
+  while (end >= 0 && isNoise(poly[end], largest)) end--
+  return poly.slice(0, end + 1)
+}
+/**
+ * b² − 4ac and its sign. Worked out exactly, each coefficient read as the decimal it prints as, so the sign is never
+ * the round-off of this sum: 10¹⁴·(x − 1)² has disc 0, and 10⁻²⁰(x² + 1) has a negative one. A coefficient carries a
+ * double's precision, though (10¹⁴/9 is not a ninth of 10¹⁴), so a disc that is noise beside b² and 4ac is 0: the double
+ * root such coefficients meant. Noise is math/noise.ts's rule (within 10⁻¹⁵ of the largest), applied to the rationals:
+ * b² of 10⁻²⁰⁰·x² is no double at all. `sqrt` is √disc when it is positive.
+ */
+function discriminant(a: number, b: number, c: number): { sign: -1 | 0 | 1; sqrt: number } {
+  const A = rFromNumber(a)
+  const B = rFromNumber(b)
+  const C = rFromNumber(c)
+  const bb = rMul(B, B)
+  const fourAC = rMul(rat(4n), rMul(A, C))
+  const exact = rSub(bb, fourAC)
+  const largest = rCmp(bb, rAbs(fourAC)) >= 0 ? bb : rAbs(fourAC)
+  if (rCmp(rMul(rAbs(exact), rat(10n ** 15n)), largest) <= 0) return { sign: 0, sqrt: 0 }
+  return rIsNeg(exact) ? { sign: -1, sqrt: NaN } : { sign: 1, sqrt: sqrtRat(exact) }
+}
+const bitLength = (x: bigint): number => (x === 0n ? 0 : x.toString(2).length)
+/** x·2^k without overflowing on the way when k is large. */
+function times2ToThe(x: number, k: number): number {
+  for (; k > 1000; k -= 1000) x *= 2 ** 1000
+  for (; k < -1000; k += 1000) x *= 2 ** -1000
+  return x * 2 ** k
+}
+/** √r of a positive rational at any size: r·4^s is an integer near 2¹⁰⁶, so its double and its root are full precision. */
+function sqrtRat(r: Rat): number {
+  const s = Math.ceil((106 - (bitLength(r.n) - bitLength(r.d))) / 2)
+  const q = s >= 0 ? (r.n << BigInt(2 * s)) / r.d : r.n / (r.d << BigInt(-2 * s))
+  return times2ToThe(Math.sqrt(Number(q)), -s)
+}
 
 export type DomainMode = 'real' | 'complex'
 
@@ -34,7 +84,7 @@ export function isOddInteger(n: number): boolean {
  * Convert a floating-point number into an exact rational number (numerator and denominator)
  * via continued fraction expansion up to maxDenominator (default 10000).
  */
-export function floatToRational(
+function floatToRational(
   val: number,
   maxDen = 10000,
   tol = 1e-9
@@ -215,11 +265,11 @@ export function formatCancelledFactorRestriction(
         sortKey = trimmed
       }
     } else if ('re' in v && 'im' in v) {
-      if (Math.abs(v.im) < 1e-12) {
+      if (isNoise(v.im, v.re)) {
         textVal = String(v.re)
         texVal = String(v.re)
         sortKey = v.re
-      } else if (Math.abs(v.re) < 1e-12) {
+      } else if (isNoise(v.re, v.im)) {
         if (sameNumber(v.im, 1)) {
           textVal = 'i'
           texVal = 'i'
@@ -453,7 +503,7 @@ const babs = (a: bigint): bigint => (a < 0n ? -a : a)
 /**
  * Evaluate a univariate polynomial over ℚ at point x in ℚ using exact Rat arithmetic.
  */
-export function evaluatePolynomialRat(poly: Rat[], x: Rat): Rat {
+function evaluatePolynomialRat(poly: Rat[], x: Rat): Rat {
   let acc = rat(0n)
   let xPow = rat(1n)
   for (const coeff of poly) {
@@ -527,29 +577,27 @@ export function findRationalRootsRat(poly: Rat[]): Rat[] {
  * Find real roots of a numeric polynomial (degrees 1, 2, or higher via rational root fallback).
  */
 export function findRootsNumeric(poly: number[]): number[] {
-  let end = poly.length - 1
-  while (end >= 0 && Math.abs(poly[end]) < 1e-12) end--
-  const trimmed = poly.slice(0, end + 1)
+  const trimmed = trimExact(poly)
   if (trimmed.length < 2) return []
 
   if (trimmed.length === 2) {
     const [c0, c1] = trimmed
-    if (Math.abs(c1) < 1e-12) return []
     return [-c0 / c1]
   }
 
   if (trimmed.length === 3) {
     const [c0, c1, c2] = trimmed
-    if (Math.abs(c2) < 1e-12) {
-      if (Math.abs(c1) < 1e-12) return []
-      return [-c0 / c1]
-    }
-    const disc = c1 * c1 - 4 * c2 * c0
-    if (disc < -1e-12) return []
-    const d = disc > 0 ? Math.sqrt(disc) : 0
-    const r1 = (-c1 - d) / (2 * c2)
-    const r2 = (-c1 + d) / (2 * c2)
-    return Math.abs(r1 - r2) < 1e-9 ? [r1] : [r1, r2].sort((a, b) => a - b)
+    // The discriminant's sign decides how many roots (exactly, see `discriminant`): 10¹⁴·(x − 1/3)² has one, though
+    // b² − 4ac in doubles came out negative.
+    const disc = discriminant(c2, c1, c0)
+    if (disc.sign < 0) return []
+    if (disc.sign === 0) return [-c1 / (2 * c2)]
+    // Two roots, by the stable pair: q = −(b + sign(b)·√disc)/2, roots q/a and c/q.
+    const sq = disc.sqrt
+    const q = -(c1 + (c1 < 0 ? -sq : sq)) / 2
+    const r1 = q / c2
+    const r2 = c0 / q
+    return [r1, r2].sort((a, b) => a - b)
   }
 
   const ratPoly: Rat[] = []
@@ -621,9 +669,7 @@ export function hasRealRootsPoly(poly: Rat[]): boolean {
 }
 
 export function syntheticDivide(poly: number[], r: number): number[] {
-  let end = poly.length - 1
-  while (end >= 0 && Math.abs(poly[end]) < 1e-12) end--
-  const trimmed = poly.slice(0, end + 1)
+  const trimmed = trimExact(poly)
   if (trimmed.length < 2) return [0]
   const n = trimmed.length - 1
   const q = new Array(n).fill(0)
@@ -634,33 +680,29 @@ export function syntheticDivide(poly: number[], r: number): number[] {
   return q
 }
 
-export function numToRat(x: number): Rat {
+function numToRat(x: number): Rat {
   const rf = floatToRational(x)
   if (rf) return rat(BigInt(rf.num), BigInt(rf.den))
   return rFromNumber(x)
 }
 
+/** Whether a worked-out polynomial (what is left after the cancelled factors are divided out) has a real root. */
 export function hasRealRootsNumeric(poly: number[]): boolean {
-  let end = poly.length - 1
-  while (end >= 0 && Math.abs(poly[end]) < 1e-12) end--
-  const trimmed = poly.slice(0, end + 1)
+  const trimmed = trimExact(poly)
   const d = trimmed.length - 1
   if (d <= 0) return false
   if (d % 2 === 1) return true
   if (d === 2) {
     const [c, b, a] = [trimmed[0], trimmed[1], trimmed[2]]
-    const disc = b * b - 4 * a * c
-    return disc >= -1e-12
+    return discriminant(a, b, c).sign >= 0
   }
   const ratPoly = trimmed.map(numToRat)
   return hasRealRootsPoly(ratPoly)
 }
 
 export function polyDivModNum(poly: number[], divisor: number[]): { q: number[]; r: number[] } {
-  let p = [...poly]
-  let d = [...divisor]
-  while (p.length > 0 && Math.abs(p[p.length - 1]) < 1e-12) p.pop()
-  while (d.length > 0 && Math.abs(d[d.length - 1]) < 1e-12) d.pop()
+  const p = trimExact(poly)
+  const d = trimExact(divisor)
   if (d.length === 0) throw new Error('division by zero')
   if (p.length < d.length) return { q: [0], r: p }
   const degP = p.length - 1
@@ -674,8 +716,9 @@ export function polyDivModNum(poly: number[], divisor: number[]): { q: number[];
       p[i + j] -= coeff * d[j]
     }
   }
-  while (p.length > 0 && Math.abs(p[p.length - 1]) < 1e-12) p.pop()
-  return { q, r: p.length === 0 ? [0] : p }
+  // What is left of the dividend is round-off when it is noise beside the dividend itself.
+  const rest = trimNoise(p, ...poly)
+  return { q, r: rest.length === 0 ? [0] : rest }
 }
 
 export type RationalExcludedPoint = Rat | number | { re: number; im: number }
@@ -687,10 +730,10 @@ function compareExclPoints(a: RationalExcludedPoint, b: RationalExcludedPoint): 
   }
   const ca = typeof a === 'number' ? { re: a, im: 0 } : 're' in a ? a : { re: Number(a.n) / Number(a.d), im: 0 }
   const cb = typeof b === 'number' ? { re: b, im: 0 } : 're' in b ? b : { re: Number(b.n) / Number(b.d), im: 0 }
-  if (Math.abs(ca.re - cb.re) > 1e-12) {
+  if (!sameNumber(ca.re, cb.re)) {
     return ca.re < cb.re ? -1 : 1
   }
-  if (Math.abs(ca.im - cb.im) > 1e-12) {
+  if (!sameNumber(ca.im, cb.im)) {
     return ca.im < cb.im ? -1 : 1
   }
   return 0
@@ -750,7 +793,7 @@ export function verifyCancelledFactorsExact(
       .map((c) => ({ ...c }))
 
     for (let i = complexList.length - 1; i >= 0; i--) {
-      if (Math.abs(complexList[i].im) < 1e-12) {
+      if (isNoise(complexList[i].im, complexList[i].re)) {
         let val = numRem.reduce((sum, c, idx) => sum + c * Math.pow(complexList[i].re, idx), 0)
         while (Math.abs(val) < 1e-9 && numRem.length > 1) {
           numRem = syntheticDivide(numRem, complexList[i].re)
@@ -778,11 +821,7 @@ export function verifyCancelledFactorsExact(
       }
     }
 
-    if (domain === 'complex') {
-      let end = numRem.length - 1
-      while (end >= 0 && Math.abs(numRem[end]) < 1e-12) end--
-      return end <= 0
-    }
+    if (domain === 'complex') return trimExact(numRem).length <= 1
     return !hasRealRootsNumeric(numRem)
   }
 
