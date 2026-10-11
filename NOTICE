@@ -2,6 +2,31 @@
 
 Third-party content bundled with PhysLab, and the terms it is used under.
 
+## Computer algebra system
+
+### Giac — src/renderer/public/giac/giacwasm.js
+
+- Version: giac 1.9.0-xx, (c) B. Parisse and R. De Graeve, Institut Fourier, Universite Grenoble Alpes. Optimization, signalprocessing, graph theory (c) Luka Marohnić (as reported by the runtime's own version() call, scripts/giac-smoke.mjs)
+- Copyright: (c) B. Parisse and R. De Graeve, Institut Fourier, Université Grenoble Alpes; (c) Luka Marohnić
+- Licence: GNU General Public License version 3 (GPL-3.0). Licence text: https://www.gnu.org/licenses/gpl-3.0.html. PhysLab is itself GPL-3.0 (see LICENSE).
+- Source: the official download https://www-fourier.univ-grenoble-alpes.fr/~parisse/giac/xcashtml.zip (entry xcasoffline/giacwasm.js; zip SHA-256 a244755d91653520cd1682171a7f81eb3e55bdef9e279a5c0a74116b47183545). The upstream source mirror is https://github.com/geogebra/giac. The exact source version this build came from is an open item in docs/knowledge/giac.md.
+- Corresponding source (GPL-3, section 6): PhysLab will provide the Giac source for this runtime to anyone who asks, for at least three years after each release that ships it. Until the exact upstream version is confirmed (docs/knowledge/giac.md, open item 1), the sources to start from are the upstream mirror and site above.
+- File: src/renderer/public/giac/giacwasm.js
+- SHA-256: 5de9cd24998290b3c4768413d2c198edea75d7bead98deab504f6309e789479a
+- Size: 18,996,539 bytes
+- Description: WebAssembly compilation of the Giac computer algebra system engine. The WebAssembly module is embedded in the file as base64, so no other file is needed. Runs single-threaded.
+
+### Third-party code inside the Giac runtime
+
+Found by reading the strings in the embedded WebAssembly module (see docs/knowledge/giac.md). This is evidence, not a build manifest: each licence is to be confirmed against the upstream source.
+
+- GNU MP 6.0.0 (path strings /home/parisse/emgiac/gmp-6.0.0/…) — GNU Lesser General Public License version 3 or later, or GNU General Public License version 2 or later. https://gmplib.org/
+- GNU MPFR (version not stated in the binary) — GNU Lesser General Public License version 3 or later. https://www.mpfr.org/
+- GLPK, the GNU Linear Programming Kit (version not stated in the binary) — GNU General Public License version 3 or later. https://www.gnu.org/software/glpk/
+- QuickJS, Copyright (c) 2017-2020 Fabrice Bellard — MIT licence. Its licence notice is in the runtime.
+- Emscripten runtime (the JavaScript glue in giacwasm.js) — MIT licence.
+- musl libc (probable; the string MUSL_LOCPATH is in the binary) — MIT licence.
+
 ## Questions
 
 PhysLab ships a small set of openly licensed practice questions from the Numbas open question bank
