@@ -34,6 +34,8 @@ export default defineConfig({
         'Cross-Origin-Embedder-Policy': 'require-corp'
       }
     },
-    build: { target: 'esnext', rollupOptions: { output: { manualChunks: rendererChunk } } }
+    // Minified (CW11b): electron-vite leaves the renderer as plain source unless asked. Nothing at run time reads a
+    // function's own name (mathjs functions are registered by key, formula names are parsed identifiers).
+    build: { target: 'esnext', minify: 'esbuild', rollupOptions: { output: { manualChunks: rendererChunk } } }
   }
 })

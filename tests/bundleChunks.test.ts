@@ -32,3 +32,11 @@ describe('the mathjs chunk (CW11)', () => {
     for (const f of others) expect(rendererChunk(f), f).toBeUndefined()
   })
 })
+
+describe('the renderer build is minified (CW11b)', () => {
+  // electron-vite leaves the renderer unminified unless asked: index was 8.3 MB of plain source in the installer.
+  it('asks for esbuild minification of the renderer', async () => {
+    const config = (await import('../electron.vite.config')).default as { renderer?: { build?: { minify?: unknown } } }
+    expect(config.renderer?.build?.minify).toBe('esbuild')
+  })
+})
