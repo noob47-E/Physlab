@@ -64,16 +64,28 @@ Before G3b-1 both engines were judged on the real roots only, with any complex r
 | polynomial equations (every root) | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
 | linear systems | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
 | rational simplification | 99.5 % (0 / 0 / 1) | 100.0 % (0 / 0 / 0) |
-| derivatives | 51.0 % (0 / 0 / 98) | 51.0 % (0 / 1 / 97) |
+| derivatives (G2B's exact atoms; G4b re-run) | 100.0 % (0 / 0 / 0) | 93.5 % (0 / 1 / 12) |
 | partial fractions | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
 
 The GENERATOR corpus (300 per class) gives the same picture:
 - 100 % for both engines in every class except two;
 - rational simplification: SymPy 99.3 % (2 unverified), Giac 100 %;
-- derivatives: 50.0 % for both (SymPy 150 unverified; Giac 149 unverified and 1 can't).
+- derivatives (G2B, G4b re-run): SymPy 100 %, Giac 90.3 % (28 unverified, 1 can't).
 
-G3c's external holdout (`tests/engine/scoreboard/external/`) has not merged, so it is not scored yet. G4's rule asks
-for it too.
+**The external holdout (G4b, 12 Oct 2026; G3c's OpenStax items; results/giac-external.json and results/sympy-external.json).**
+G3c is partial: it has items in four classes only. Both engines score the same, with 0 WRONG:
+
+| Class | Items | Giac | SymPy |
+|---|---|---|---|
+| expand | 33 | 100.0 % | 100.0 % |
+| factor over Q | 31 | 93.5 % (2 unverified) | 93.5 % (2 unverified) |
+| partial fractions | 36 | 100.0 % | 100.0 % |
+| rational simplification | 16 | 81.3 % (3 unverified) | 81.3 % (3 unverified) |
+
+Every unverified item has several letters (x(b² − a) + 6(b² − a), 144b² − 25c², (x/y − y/x)/y). The checkers
+decide irreducibility and lowest terms in one letter only. Both engines' answers there are right, and the switch never
+sends a request in several letters to Giac. Polynomial equations, linear systems and derivatives have no external
+items yet.
 
 **Every WRONG.** The final runs have none. The first run had 55 per engine, all in factor over Q's extreme-content
 stratum, and they were the judge's error, not the engines'. Both engines wrote the key's factorisation with its
@@ -88,19 +100,22 @@ were in the content stratum, and the judge's error again: the form check read a 
 key itself, and with the bracket read as one factor (`judge.test.ts` pins it) all were right.
 
 **What is not right is unverified or can't, never wrong:**
-- **Derivatives**: every answer with sin, cos or exp is unverified for both engines (G2's rule: numbers never prove
-  equal; docs/knowledge/check.md). The polynomial and quotient strata are all proved right. Giac also writes some
-  answers in an odd form, the product rule in tan half-angle form; that is right, but unpleasant to read.
+- **Derivatives**: until G2B, every answer with sin, cos or exp was unverified (numbers never prove equal;
+  docs/knowledge/check.md). G2B's exact atoms now prove them: SymPy's are all proved. Giac's unverified ones are in tan
+  half-angle form (the product rule as (4x/2·tan(x/2 − 2) + …)/(tan(x/2 − 2)² + 1)), which is right but unpleasant to read.
 - **Giac can't**: two compositions, exp(cos(−4x² − 3x + 6)) and exp(sin(−5x − 3)), hit its time limit.
 - **SymPy unverified**: rational simplification answers written as a sum, −6x + 1 − 6/x, which is not one fraction. They
   are proved equal, but "lowest terms" does not apply to a sum.
 - **Excluded points**: neither engine reports them with a simplification (G00-1 is still the owner's), so the judge
   does not ask for them.
 
-G4's rule is ≥ 92 % right and 0 WRONG on the gating corpus AND on the external holdout, and only the gating half can be
-scored today. On it, Giac meets the rule in expand, factor over Q, polynomial equations, linear systems, rational
-simplification and partial fractions (polynomial equations judged on every root). The external holdout is still owed
-(G3c); nothing else holds polynomial equations back. Derivatives does not meet the rule: 51 %, for want of a checker that can prove a trigonometric answer.
+G4's rule is ≥ 92 % right and 0 WRONG on the gating corpus AND on the external holdout. With both halves scored, Giac
+meets it in expand, factor over Q and partial fractions, and those three moved to Giac (G4b). Rational simplification
+meets it on gating but not on the external half as written (81.3 %, every miss in several letters); it stays on SymPy,
+and the question is the wave head's. Polynomial equations and linear systems meet it on gating and wait for external
+items. Derivatives: since G2B's exact atoms, Giac scores 93.5 % on gating (90.3 % generator, 0 WRONG; its unverified
+answers are in tan half-angle form), and it waits for external items too. SymPy now proves every derivative (100 % on both
+corpora).
 
 **Not judged.** Solve is judged as the set of distinct roots: both engines list a repeated root once, as the screen shows
 it, and the set is the true solution set; the multiplicity is the checkers' to count (§6.3), not a row of the answer.
@@ -141,11 +156,16 @@ routes through it:
 - `tests/engine/switch.test.ts` refuses any class set to Giac unless `results/giac.json` (gating) and
   the external holdout's Giac results (G3c; the file switch.test.ts reads next to giac.json) both show ≥ 92 % right and 0 WRONG.
 
-**Status (12 Oct 2026): every class is still on SymPy.** On the gating corpus Giac meets the rule in six classes, but
-the external holdout has not merged, so none can switch yet. Once it merges:
-1. score Giac on it into the external results file switch.test.ts names (corpora.external);
-2. set the passing classes to `'giac'`;
-3. run the golden comparison: the golden inputs of each switched class through the routed ask, against SymPy's lines.
+**Status (G4b, 12 Oct 2026): expand, factor over Q and partial fractions are on Giac**, each proved by `verify.ts`
+before it is shown, with SymPy behind it. Every other class stays on SymPy, with its reason beside it in switch.ts.
 
-A visible change goes in its own `[answer may change]` commit, with an owner row. Polynomial equations no longer waits for
-the owner: G3b-1 is decided (every root), and both engines answer so.
+When a class gets external items:
+1. score both engines: `run.ts --engine giac --class all --corpus external` writes results/giac-external.json;
+2. set the passing classes to `'giac'`;
+3. run the golden comparison `npx tsx scripts/engine-switch-compare.ts "<class>"`, which puts the class's golden CAS
+   inputs through the routed ask and prints the lines shown differently.
+
+Each flipped class gets its own `[answer may change]` commit, listing those lines before → after. At G4b, expand (2
+inputs) and factor (3 inputs) showed nothing different. Partial fractions showed the same terms in another order on all
+3 of its inputs. Polynomial equations no longer waits for the owner: G3b-1 is decided (every root), and both engines
+answer so.

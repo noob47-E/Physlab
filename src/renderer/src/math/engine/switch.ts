@@ -15,17 +15,17 @@ export type { EngineClass } from './verify'
 export const GATE = { minRight: 0.92, maxWrong: 0 }
 
 /**
- * The engine for each class, and why (Giac's gating scores from tests/engine/scoreboard/results/giac.json). All SymPy
- * until the external holdout is scored (G3c): the rule asks for both halves.
+ * The engine for each class, and why: Giac's scores on the gating corpus (results/giac.json) and on G3c's external
+ * holdout (results/giac-external.json). A class moves to Giac only when both halves meet GATE.
  */
 export const ENGINE_FOR_CLASS: Record<EngineClass, 'sympy' | 'giac'> = {
-  expand: 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
-  'factor over Q': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
-  'polynomial equations': 'sympy', // passes gating judged on every root (100 %, 0 WRONG; the owner's G3b-1); waits for G3c
-  'linear systems': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
-  'rational simplification': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
-  derivatives: 'sympy', // fails gating (51 %: trigonometric answers cannot be proved); stays on SymPy
-  'partial fractions': 'sympy' // passes gating (100 %, 0 WRONG); waits for G3c
+  expand: 'giac', // gating 100 %, external 100 % (33/33), 0 WRONG (G4b)
+  'factor over Q': 'giac', // gating 100 %, external 93.5 % (29/31; the 2 unverified are in several letters), 0 WRONG (G4b)
+  'polynomial equations': 'sympy', // gating 100 %, 0 WRONG (every root); no external items yet (G3c), and the owner's G3b-1
+  'linear systems': 'sympy', // gating 100 %, 0 WRONG; no external items yet (G3c)
+  'rational simplification': 'sympy', // gating 100 %; external 81.3 % (13/16, 0 WRONG): the 3 unverified are in several letters, which never go to Giac; asked of the wave head
+  derivatives: 'sympy', // gating 93.5 % with G2B's exact atoms (SymPy 100 %), 0 WRONG; no external items yet (G3c)
+  'partial fractions': 'giac' // gating 100 %, external 100 % (36/36), 0 WRONG (G4b); the same terms, sometimes in another order
 }
 
 /** The expression read exactly, or null: π, sin, √2, |x| and anything else not a quotient of polynomials over ℚ. */

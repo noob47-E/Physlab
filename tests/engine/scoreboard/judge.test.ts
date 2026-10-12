@@ -81,6 +81,10 @@ describe('factor over Q', () => {
     expect(mark('factor over Q', '-18*x - 30', '-6 * (3*x + 5)', text('-6*(3*x + 5)'))).toBe('right')
     expect(mark('factor over Q', '2*x - 8', '2 * (x - 4)', text('2*(x - 4)'))).toBe('right')
   })
+  it('a factor in several letters has no leading term to judge: SymPy’s −(a − b²)(x + 6) is not WRONG (G4b)', () => {
+    expect(mark('factor over Q', 'x((b)^(2)-a)+6((b)^(2)-a)', '', text('-(a - b^2)*(x + 6)'))).not.toBe('wrong')
+    expect(mark('factor over Q', 'x((b)^(2)-a)+6((b)^(2)-a)', '', text('-(a - b^2)*(x + 7)'))).toBe('wrong')
+  })
   it('wrong: a factor that factorises further, and a wrong factor', () => {
     expect(mark('factor over Q', 'x^3 - x', '', text('x*(x^2 - 1)'))).toBe('wrong')
     expect(mark('factor over Q', 'x^2 + 9*x + 20', '', text('(x + 4)*(x + 6)'))).toBe('wrong')

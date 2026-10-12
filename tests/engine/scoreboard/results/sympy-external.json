@@ -1,0 +1,97 @@
+{
+  "engine": "sympy",
+  "corpora": {
+    "external": {
+      "expand": {
+        "total": 33,
+        "right": 33,
+        "wrong": 0,
+        "cant": 0,
+        "unverified": 0,
+        "msPerItem": 75.2,
+        "wrongList": [],
+        "unverifiedReasons": {},
+        "unverifiedExamples": []
+      },
+      "factor over Q": {
+        "total": 31,
+        "right": 29,
+        "wrong": 0,
+        "cant": 0,
+        "unverified": 2,
+        "msPerItem": 71.1,
+        "wrongList": [],
+        "unverifiedReasons": {
+          "a factor’s irreducibility is not decided": 2
+        },
+        "unverifiedExamples": [
+          {
+            "id": "ti_01_05_01",
+            "stratum": "external",
+            "question": "x((b)^(2)-a)+6((b)^(2)-a)",
+            "engine": "-(a - b^2)*(x + 6)",
+            "key": "((b)^(2)-a)(x+6)",
+            "why": "a factor’s irreducibility is not decided"
+          },
+          {
+            "id": "fs-id1167339273782",
+            "stratum": "external",
+            "question": "144(b)^(2)-25(c)^(2)",
+            "engine": "(12*b - 5*c)*(12*b + 5*c)",
+            "key": "(12b+5c)(12b-5c)",
+            "why": "a factor’s irreducibility is not decided"
+          }
+        ]
+      },
+      "partial fractions": {
+        "total": 36,
+        "right": 36,
+        "wrong": 0,
+        "cant": 0,
+        "unverified": 0,
+        "msPerItem": 156.9,
+        "wrongList": [],
+        "unverifiedReasons": {},
+        "unverifiedExamples": []
+      },
+      "rational simplification": {
+        "total": 16,
+        "right": 13,
+        "wrong": 0,
+        "cant": 0,
+        "unverified": 3,
+        "msPerItem": 229.9,
+        "wrongList": [],
+        "unverifiedReasons": {
+          "equal, but its lowest terms cannot be read": 3
+        },
+        "unverifiedExamples": [
+          {
+            "id": "ti_01_06_05",
+            "stratum": "external",
+            "question": "((((x)/(y))-((y)/(x)))/(y))",
+            "engine": "x/y^2 - 1/x",
+            "key": "(((x)^(2)-(y)^(2))/(x(y)^(2)))",
+            "why": "equal, but its lowest terms cannot be read"
+          },
+          {
+            "id": "fs-id1167339239420",
+            "stratum": "external",
+            "question": "((((2)/(a))+((7)/(b)))/(b))",
+            "engine": "7/b^2 + 2/(a*b)",
+            "key": "((2b+7a)/(a(b)^(2)))",
+            "why": "equal, but its lowest terms cannot be read"
+          },
+          {
+            "id": "fs-id1167339343617",
+            "stratum": "external",
+            "question": "((((a)/(2b))-((2b)/(9a)))/(((3a-2b)/(6a))))",
+            "engine": "a/b + 2/3",
+            "key": "((3a+2b)/(3b))",
+            "why": "equal, but its lowest terms cannot be read"
+          }
+        ]
+      }
+    }
+  }
+}

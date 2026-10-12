@@ -1,9 +1,10 @@
 // The scoreboard runner (G3a; engines and judge plugged in by G3b):
-//   npx tsx tests/engine/scoreboard/run.ts --engine sympy|giac --class <class>|all --corpus gating|generator|all
+//   npx tsx tests/engine/scoreboard/run.ts --engine sympy|giac --class <class>|all --corpus gating|generator|all|external
 // asks the engine headless (SymPy in Pyodide, as tests/engine/conformance.ts does; Giac in a Node worker thread through
 // tests/engine/giacHeadless.ts), marks each answer with judge.ts on G2's checkers, and reports right, WRONG (each
 // listed with why), can't (no answer), unverified (no checker could decide) and the time per item. With --class all
-// --corpus all it also writes tests/engine/scoreboard/results/<engine>.json. It exits 1 when anything is WRONG.
+// --corpus all it also writes tests/engine/scoreboard/results/<engine>.json, and with --corpus external (G3c's holdout)
+// results/<engine>-external.json. It exits 1 when anything is WRONG.
 
 import fs from 'fs'
 import path from 'path'
@@ -29,6 +30,33 @@ const engineName = values.engine || 'sympy'
 const className = values.class || 'all'
 const corpusArg = values.corpus || 'gating'
 const corpusNames = corpusArg === 'all' ? ['generator', 'gating'] : [corpusArg]
+
+/** G3c's class names, as the scoreboard spells them. */
+const EXTERNAL_CLASS: Record<string, string> = {
+  expand: 'expand',
+  'factor over ℚ': 'factor over Q',
+  'polynomial equations': 'polynomial equations',
+  '2x2 and 3x3 linear systems': 'linear systems',
+  'rational-expression simplification': 'rational simplification',
+  derivatives: 'derivatives',
+  'partial fractions': 'partial fractions'
+}
+
+/** The external holdout (G3c, tests/engine/scoreboard/external): every class file, its items in the scoreboard's shape. */
+function externalCorpus(): CorpusItem[] {
+  const dir = path.join(__dirname, 'external')
+  const out: CorpusItem[] = []
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'rejected.json')) {
+    const items = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')) as { id: string; class: string; question: string; answer: string }[]
+    for (const i of items) {
+      const cls = EXTERNAL_CLASS[i.class]
+      // An item whose class is not known would be left out silently, and the score would be of fewer items (review).
+      if (!cls) throw new Error(`external item ${i.id}: unknown class ${i.class}`)
+      out.push({ id: i.id, class: cls, stratum: 'external', question: i.question, answer: i.answer, notes: '' } as unknown as CorpusItem)
+    }
+  }
+  return out
+}
 
 async function headlessSend(): Promise<(op: string, payload: Record<string, unknown>) => Promise<CasResult>> {
   const src = readSource('src/renderer/src/workers/cas.worker.ts')
@@ -76,7 +104,7 @@ const shown = (r: EngineResult): string =>
   r.solutions ? (r.solutions.length ? r.solutions.map((s) => Object.entries(s).map(([k, v]) => `${k} = ${v.text}`).join(', ')).join('; ') : '(no solution)') : r.text
 
 async function scoreCorpus(engine: MathEngine, corpusName: string): Promise<Record<string, ClassStats>> {
-  const corpus: CorpusItem[] = JSON.parse(fs.readFileSync(path.join(__dirname, `${corpusName}.json`), 'utf8'))
+  const corpus: CorpusItem[] = corpusName === 'external' ? externalCorpus() : JSON.parse(fs.readFileSync(path.join(__dirname, `${corpusName}.json`), 'utf8'))
   const items = className === 'all' ? corpus : corpus.filter((c) => c.class === className)
   const out: Record<string, ClassStats> = {}
   const times: Record<string, number[]> = {}
@@ -138,11 +166,12 @@ async function run(): Promise<void> {
       for (const w of s.wrongList) console.log(`    WRONG ${w.id} [${w.stratum}] ${w.question}\n      engine: ${w.engine}\n      key:    ${w.key}\n      why:    ${w.why}`)
     }
   }
-  if (className === 'all' && corpusArg === 'all') {
+  if (className === 'all' && (corpusArg === 'all' || corpusArg === 'external')) {
     const dir = path.join(__dirname, 'results')
+    const name = corpusArg === 'external' ? `${engineName}-external` : engineName
     fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, `${engineName}.json`), JSON.stringify({ engine: engineName, corpora: results }, null, 2) + '\n')
-    console.log(`\nwrote tests/engine/scoreboard/results/${engineName}.json`)
+    fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify({ engine: engineName, corpora: results }, null, 2) + '\n')
+    console.log(`\nwrote tests/engine/scoreboard/results/${name}.json`)
   }
   dispose()
   process.exit(wrong ? 1 : 0)

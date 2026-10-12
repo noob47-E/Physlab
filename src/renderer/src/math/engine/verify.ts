@@ -93,7 +93,9 @@ function primitiveFactors(factors: string): boolean {
       const g = f.reduce((acc, t) => gcd(acc, t.c.n < 0n ? -t.c.n : t.c.n), 0n)
       const degree = (t: (typeof f)[number]): number => Object.values(t.v).reduce((a, b) => a + b, 0)
       const lead = f.reduce((best, t) => (degree(t) > degree(best) ? t : best), f[0])
-      return g === 1n && lead.c.n > 0n
+      // A factor in several letters has no one leading term (−(a − b²) or (b² − a)?): only its content is judged there.
+      const letters = new Set(f.flatMap((t) => Object.keys(t.v).filter((n) => t.v[n] !== 0)))
+      return g === 1n && (letters.size > 1 || lead.c.n > 0n)
     })
   } catch {
     return false

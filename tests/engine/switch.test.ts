@@ -18,6 +18,7 @@ describe('classOf: which scoreboard class a request is', () => {
     ['expand', { expr: 'sin(x)*(x + 1)' }, null],
     ['factor', { expr: 'x^2 - 1' }, 'factor over Q'],
     ['factor', { expr: 'x^2 - y^2' }, null],
+    ['factor', { expr: 'x((b)^(2)-a)+6((b)^(2)-a)' }, null], // the external item in several letters never reaches Giac (G4b review)
     ['factor', { expr: 'x^2 - 2*sqrt(2)' }, null],
     ['solve', { eqs: ['x^2 - 3*x + 2 = 0'], vars: ['x'] }, 'polynomial equations'],
     ['solve', { eqs: ['x^3 = x'] }, 'polynomial equations'],
