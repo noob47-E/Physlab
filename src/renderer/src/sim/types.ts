@@ -43,6 +43,16 @@ export interface BodyDef {
   lock?: 'free' | 'x' | 'y'
 }
 
+/**
+ * How many engine steps the Sandbox takes per simulated second. Each step is ONE Jolt step with
+ * PhysLab's own forces worked out before it, so the error a student can see is the step's alone:
+ * a free fall loses ½g²Δt per kg each second, a launch lands v₀ₓΔt short (Idea #39 §2.3).
+ */
+export type StepRate = 60 | 120 | 240 | 600
+export const STEP_RATES: readonly StepRate[] = [60, 120, 240, 600]
+/** Owner decision D3 (12 Oct): 240, half the step error of the old default for almost no cost. */
+export const DEFAULT_STEP_RATE: StepRate = 240
+
 export interface WorldSettings {
   /** Downward acceleration, m/s². 9.81 on Earth, 1.62 on the Moon, 0 in free space. */
   gravity: number
@@ -51,23 +61,115 @@ export interface WorldSettings {
   /** Air density kg/m³ (1.225 at sea level). 0 is a vacuum. */
   airDensity: number
   wind: V3
-  /** Collision steps per 1/60 s step: more is more accurate and slower. */
-  collisionSteps: number
+  /** Engine steps per simulated second: more is more accurate and slower. Read it through `rateOf`. */
+  stepRate: StepRate
+  /**
+   * The old "Accuracy" figure: collision sub-steps per 1/60 s. Nothing writes it any more; a preset
+   * not yet rewritten may still say it, and `rateOf` reads it as the step rate it amounted to.
+   */
+  collisionSteps?: number
   allowSleeping: boolean
   /** Slow motion: 1 = real time, 0.1 = ten times slower. */
   timeScale: number
+}
+
+const isStepRate = (v: unknown): v is StepRate => STEP_RATES.includes(v as StepRate)
+
+/** The step rate an old collisionSteps n amounted to: 60·n steps a second, rounded UP to a rate PhysLab runs. */
+function legacyRate(n: number | undefined): StepRate | null {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 1) return null
+  return STEP_RATES.find((r) => r >= 60 * n) ?? 600
+}
+
+/**
+ * The step rate a world runs at: its `stepRate` when it is one PhysLab runs; else an old
+ * `collisionSteps` n as 60·n rounded up (1 → 60, 2 → 120, 3–4 → 240, 5–10 → 600); else the default.
+ *
+ * When a world says both, the finer of the two wins. A preset that still asks for collisionSteps 8
+ * (Newton's cradle, until its rate is written as a stepRate) is spread over DEFAULT_WORLD, which
+ * always carries a stepRate, so "stepRate first" alone would quietly run the cradle at 240 instead
+ * of the 600 its 8 sub-steps amounted to, and its balls would hit as one lump again. The "Steps a
+ * second" row clears collisionSteps when the student picks a rate, so their choice is never
+ * overruled.
+ */
+export function rateOf(w: Partial<WorldSettings>): StepRate {
+  const own = isStepRate(w.stepRate) ? w.stepRate : null
+  const old = legacyRate(w.collisionSteps)
+  if (own !== null && old !== null) return Math.max(own, old) as StepRate
+  return own ?? old ?? DEFAULT_STEP_RATE
+}
+
+/**
+ * The work PhysLab's own forces did ON the bodies during one engine step, in joules, signed:
+ * F·(x after − x before) with the force PhysLab applied and the step Jolt took. Drag, rolling and
+ * damper take energy out (≤ 0); a damper's step at a turning point can read a hair above 0 (the
+ * force is set by the speed at the start of the step, the motion by the speed at its end), never
+ * over a swing. A spring's Hooke force is conservative and is NOT here — its energy is ½kx², which
+ * the readout counts; only its damper spends energy.
+ */
+export interface StepWork {
+  drag: number
+  rolling: number
+  push: number
+  hand: number
+  damper: number
 }
 
 /** One collision, recorded while the engine solves it and read afterwards. */
 export interface ContactEvent {
   a: BodyId
   b: BodyId
-  /** Simulated time when it happened (s). */
+  /** Simulated time when it happened (s): the clock at the end of the step it was found in, as `step`. */
   t: number
   /** How fast the two bodies were approaching along the contact normal (m/s). */
   approachSpeed: number
   normal: V3
   point: V3
+  /** The step count at the END of the step during which the engine found it. */
+  step: number
+  /** Each body's velocity as the engine found the contact, before it was solved (m/s). */
+  vBeforeA: V3
+  vBeforeB: V3
+  /** Each body's velocity once that step was over (m/s). */
+  vAfterA: V3
+  vAfterB: V3
+  /** The restitution and friction the engine combined for the pair: max(e₁, e₂) and √(μ₁μ₂). */
+  eUsed: number
+  muUsed: number
+}
+
+/** Every contact in a step, new or continuing, with the engine's own normal (from a to b) and first point. */
+export interface Touch {
+  a: BodyId
+  b: BodyId
+  normal: V3
+  point: V3
+  /** True for a contact the engine found this step; false for one that carried on from the last. */
+  added: boolean
+}
+
+/** What the after-step hook is handed after every engine step. */
+export interface AfterStep {
+  /** The step count once this step is done. */
+  step: number
+  /** The clock once this step is done (s). */
+  time: number
+  /** The step's length, 1/rate (s). */
+  dt: number
+  work: StepWork
+  /** The collisions the engine found during this step. */
+  contacts: ContactEvent[]
+  /** Every contact in this step; filled only while an after-step listener exists. */
+  touches: Touch[]
+}
+
+/** The forces (and the rolling torque) PhysLab applied to one body in the last step, in N and N m. */
+export interface OwnForces {
+  drag: V3
+  push: V3
+  hand: V3
+  spring: V3
+  rollingTorque: V3
 }
 
 /** Live values of one body, read out for the panels and labels. */
@@ -104,7 +206,7 @@ export const DEFAULT_WORLD: WorldSettings = {
   twoD: true,
   airDensity: 1.225,
   wind: [0, 0, 0],
-  collisionSteps: 2,
+  stepRate: DEFAULT_STEP_RATE,
   allowSleeping: true,
   timeScale: 1
 }

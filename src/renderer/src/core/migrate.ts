@@ -27,15 +27,21 @@
 //      error carried forward, a part shown only under a condition, a rung and a "Go deeper" link.
 //      A format-5 PhysLab would call such a question damaged; format 6 makes it say "saved by a
 //      newer PhysLab" instead. A format-5 file comes through as it was.
+//   7  from 0.9: a Lab Data cell may keep the text it was typed with, and a column a caption.
+//   8  from 0.9 (Sandbox wave, SB0): the Sandbox world says how many engine steps it takes a second
+//      (`stepRate`: 60, 120, 240 or 600) instead of the old Accuracy figure, `collisionSteps` (sub-steps
+//      per 1/60 s). A format-7 world is given the rate its figure amounted to (2, the old default, is
+//      120), so an old file runs exactly as fast and as finely as it did.
 
 import { directDependents } from './evaluate'
 import { OLD_ARROW_COLOURS, PALETTE, vectorToken } from './naming'
 import type { ObjId, ObjType, SceneFile, SceneObject, SceneSettings } from './types'
 import type { Space } from './visibility'
 import { checkLab, checkObjects, checkSandbox, isRecord, type Raw } from './schema'
+import { rateOf, STEP_RATES, type StepRate } from '../sim/types'
 
 /** The format `serialize` writes. Bump it when the file's shape changes and add the step below. */
-export const FILE_VERSION: SceneFile['version'] = 7
+export const FILE_VERSION: SceneFile['version'] = 8
 
 /**
  * Turns the text of a .phys file into a scene in the current format, or throws an Error whose
@@ -95,7 +101,7 @@ function checkShape(raw: unknown): Raw {
   if (!Array.isArray(raw.objects)) throw new Error('This is not a PhysLab project: it has no objects in it.')
   if (raw.settings !== undefined && !isRecord(raw.settings)) throw new Error('The settings in this file are damaged.')
   if (raw.lab !== undefined) checkLab(raw.lab)
-  if (raw.sandbox !== undefined) checkSandbox(raw.sandbox)
+  if (raw.sandbox !== undefined) checkSandbox(raw.sandbox, v as number)
   return { ...raw }
 }
 
@@ -109,7 +115,8 @@ const STEPS: Record<number, (file: Raw) => Raw> = {
   3: v3ToV4,
   4: v4ToV5,
   5: v5ToV6,
-  6: v6ToV7
+  6: v6ToV7,
+  7: v7ToV8
 }
 
 function v1ToV2(file: Raw): Raw {
@@ -192,6 +199,27 @@ function v5ToV6(file: Raw): Raw {
  */
 function v6ToV7(file: Raw): Raw {
   return { ...file, version: 7 }
+}
+
+/**
+ * Format 8 replaces the Sandbox's Accuracy figure with a step rate. Up to format 7 the engine took
+ * Step(1/60, collisionSteps), and n sub-steps of 1/60 s are 60·n steps a second: the default 2 is
+ * 120, and a figure between rates rounds up to the next one PhysLab runs (`rateOf`). A world with
+ * no figure ran at the default, so it gets 120 too; a sandbox with no world block at all gets one
+ * saying so, or it would open at today's 240 and every number it showed would move. The old figure
+ * itself goes.
+ */
+function v7ToV8(file: Raw): Raw {
+  if (!isRecord(file.sandbox)) return { ...file, version: 8 }
+  const world: Raw = isRecord(file.sandbox.world) ? { ...file.sandbox.world } : {}
+  const figure = typeof world.collisionSteps === 'number' ? world.collisionSteps : undefined
+  delete world.collisionSteps
+  // A rate already there (only a hand-made file can have one) is read the way `rateOf` reads a world
+  // that says both: the finer of the two wins. A rate with no figure beside it is kept as it is: the
+  // default figure 2 is for a world that says neither, or a rate of 60 would open at 120.
+  const own = STEP_RATES.includes(world.stepRate as never) ? (world.stepRate as StepRate) : undefined
+  world.stepRate = rateOf({ stepRate: own, collisionSteps: figure ?? (own === undefined ? 2 : undefined) })
+  return { ...file, version: 8, sandbox: { ...file.sandbox, world } }
 }
 
 /**

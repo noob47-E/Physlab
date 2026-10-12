@@ -78,8 +78,9 @@ describe('files: format 7, and a damaged caption is caught', () => {
   it('a format-6 file opens and is brought up to format 7 unchanged', () => {
     const t = emptyTable()
     const out = parseSceneFile(JSON.stringify({ app: 'PhysLab', version: 6, objects: [], lab: [t] }))
-    expect(FILE_VERSION).toBe(7)
-    expect(out.version).toBe(7)
+    // Format 8 (SB0, the Sandbox's step rate) came after; the lab texts of format 7 come through it untouched.
+    expect(FILE_VERSION).toBe(8)
+    expect(out.version).toBe(8)
     expect(out.lab?.[0].rows).toEqual(t.rows)
   })
 

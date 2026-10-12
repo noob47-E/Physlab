@@ -114,7 +114,8 @@ describe('serialize → loadScene', () => {
     const { gridStyle: _g, ...older } = fullFile().settings
     scene().loadScene({ ...fullFile(), version: 2, settings: older })
     expect(scene().settings.gridStyle).toBe('lines')
-    expect(FILE_VERSION).toBe(7)
+    // 8 since SB0: the Sandbox world's step rate.
+    expect(FILE_VERSION).toBe(8)
   })
 
   it('keeps the label preferences of whoever is opening the file', () => {
@@ -315,7 +316,8 @@ describe('migrate', () => {
     const P = { id: 'mP', name: 'P', visible: true, locked: false, color: '#000', showLabel: true, type: 'point', def: { kind: 'free', p: [1, 2, 0] } }
     const v5 = { app: 'PhysLab', version: 5, objects: [P], settings: { unit: 'cm', unitPerSquare: 2 }, questions: [plain] }
     const out = migrate(v5)
-    expect(FILE_VERSION).toBe(7)
+    // 8 since SB0: the Sandbox world's step rate.
+    expect(FILE_VERSION).toBe(8)
     expect('questions' in out).toBe(false)
     const { questions: _q, ...rest } = v5
     expect({ ...out, version: 5 }).toEqual(rest)

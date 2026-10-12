@@ -6,7 +6,8 @@
 import { useSandbox, engine } from './store'
 import { sampleOf, type Sample } from './recording'
 import { groundTopOf } from './energy'
-import type { BodyDef, BodyState } from './types'
+import type { BodyDef, BodyState, StepRate } from './types'
+import { fmtLabel } from '../math/format'
 import type { SimSample } from './world'
 
 /** How far below the floor a body may fall before it is put back where it started. */
@@ -33,10 +34,10 @@ export function recordReadings(readings: SimSample[], bodies: BodyDef[], gravity
 }
 
 /**
- * The Step button: one fixed step of 1/60 s of simulated time, whatever the slow-motion setting,
- * recorded and published like a played frame. It used to call step(1/60) and drop what came back,
- * so a step at t = 0 used up the run's t = 0 reading, the panel's numbers stood still, and in slow
- * motion the step was a tenth of a step and nothing moved.
+ * The Step button: one engine step (1/rate s of simulated time, 1/240 s at the default rate),
+ * whatever the slow-motion setting, recorded and published like a played frame. It used to call
+ * step(1/60) and drop what came back, so a step at t = 0 used up the run's t = 0 reading, the
+ * panel's numbers stood still, and in slow motion the step was a tenth of a step and nothing moved.
  */
 export function stepOneFrame(): void {
   const w = engine.world
@@ -53,3 +54,23 @@ export function stepOneFrame(): void {
   }
   useSandbox.setState({ live, engineTime: w.time })
 }
+
+/**
+ * What the "Steps a second" row says about one rate, as its button's title: the error the step itself
+ * makes, in plain words, and that choosing a rate starts the run again (a run is one rate from t = 0;
+ * changing it part-way would mix two runs in one recording). The free fall loses ½g²Δt per kg each
+ * second; a 14 m/s throw at 30° back to its launch height lands v₀ₓΔt short.
+ */
+export function stepRateTitle(rate: StepRate, gravity: number): string {
+  const dt = 1 / rate
+  const fall = 0.5 * gravity * gravity * dt
+  const short = 100 * 14 * Math.cos(Math.PI / 6) * dt
+  const error =
+    gravity > 0
+      ? `At ${fmtLabel(rate, 0)} steps a second, a free fall loses ${fmtLabel(fall, 2)} J for every kg each second to the step, not to physics, and a 14 m/s throw at 30° lands ${fmtLabel(short, 1)} cm short.`
+      : `At ${fmtLabel(rate, 0)} steps a second, each step is 1/${fmtLabel(rate, 0)} s.`
+  return `${error} Choosing it pauses the run and starts it again from t = 0.`
+}
+
+/** The Step button's title: one engine step, at the rate in force (its number written by the panel's writer). */
+export const stepButtonTitle = (rateText: string): string => `Step one engine step (1/${rateText} s)`

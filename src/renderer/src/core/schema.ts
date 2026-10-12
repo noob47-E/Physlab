@@ -9,6 +9,9 @@
 // A door accepts exactly what it accepted before these were shared; a stricter check changes which
 // files open and waits for the owner (OWNER-APPROVALS.md, CW5-n).
 
+import { STEP_RATES } from '../sim/types'
+import { fmtLabel } from '../math/format'
+
 export type Raw = Record<string, unknown>
 
 /** A JSON object: not null, not a list. */
@@ -71,8 +74,12 @@ export function checkLab(lab: unknown): void {
   })
 }
 
-/** The sandbox has had the same shape since 0.3.5; `world` and `sideView` may be left out. */
-export function checkSandbox(sb: unknown): void {
+/**
+ * The sandbox has had the same shape since 0.3.5; `world` and `sideView` may be left out. From format
+ * 8 a world's `stepRate`, when it has one, must be a rate PhysLab runs: anything else would quietly
+ * run at the default and every number the file's experiment showed would move.
+ */
+export function checkSandbox(sb: unknown, version = 0): void {
   if (!isRecord(sb) || !Array.isArray(sb.bodies)) throw new Error('The sandbox in this file is damaged.')
   sb.bodies.forEach((b, i) => {
     if (!isRecord(b) || typeof b.id !== 'string' || typeof b.shape !== 'string' || !isV3(b.size) || !isV3(b.position)) {
@@ -88,6 +95,15 @@ export function checkSandbox(sb: unknown): void {
     })
   }
   if (sb.world !== undefined && !isRecord(sb.world)) throw new Error('The world settings in the sandbox are damaged.')
+  const rate = isRecord(sb.world) ? sb.world.stepRate : undefined
+  if (version >= 8 && rate !== undefined && !STEP_RATES.includes(rate as never)) {
+    // A number is quoted as the app writes numbers; anything else (text, nothing) is not a rate at all.
+    throw new Error(
+      typeof rate === 'number' && Number.isFinite(rate)
+        ? `This project asks for ${fmtLabel(rate)} steps a second; PhysLab runs 60, 120, 240 or 600.`
+        : 'This project asks for a step rate PhysLab cannot read; PhysLab runs 60, 120, 240 or 600 steps a second.'
+    )
+  }
   if (sb.sideView !== undefined && typeof sb.sideView !== 'boolean') throw new Error('The sandbox view setting in this file is damaged.')
 }
 

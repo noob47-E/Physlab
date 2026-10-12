@@ -4,7 +4,7 @@
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
-import { DEFAULT_WORLD, type BodyDef } from '../src/renderer/src/sim/types'
+import { DEFAULT_STEP_RATE, DEFAULT_WORLD, type BodyDef } from '../src/renderer/src/sim/types'
 import { engine, useSandbox } from '../src/renderer/src/sim/store'
 import { stepOneFrame } from '../src/renderer/src/sim/stepping'
 
@@ -52,16 +52,19 @@ describe('Step one frame (H25)', () => {
     engine.world = null
   })
 
-  it('records the t = 0 reading, moves exactly one 1/60 s step, and publishes the live values', async () => {
+  // SB0: a step is one engine step of 1/rate s (1/240 at the default rate), no longer 1/60 s.
+  const STEP = 1 / DEFAULT_STEP_RATE
+
+  it('records the t = 0 reading, moves exactly one engine step, and publishes the live values', async () => {
     const world = await ready()
     stepOneFrame()
-    expect(world.time).toBeCloseTo(1 / 60, 12)
+    expect(world.time).toBeCloseTo(STEP, 12)
     const rec = useSandbox.getState().recording.ball ?? []
     expect(rec.map((s) => s.t)).toEqual([0])
-    expect(useSandbox.getState().engineTime).toBeCloseTo(1 / 60, 12)
+    expect(useSandbox.getState().engineTime).toBeCloseTo(STEP, 12)
     expect(useSandbox.getState().live.ball?.position[1]).toBeLessThan(5)
-    // Five more steps reach t = 0.1, the next reading on the grid.
-    for (let i = 0; i < 5; i++) stepOneFrame()
+    // rate/10 − 1 more steps reach t = 0.1, the next reading on the grid.
+    for (let i = 0; i < DEFAULT_STEP_RATE / 10 - 1; i++) stepOneFrame()
     expect((useSandbox.getState().recording.ball ?? []).map((s) => s.t)).toEqual([0, 0.1])
     world.destroy()
   })
@@ -69,7 +72,7 @@ describe('Step one frame (H25)', () => {
   it('moves one step in slow motion too', async () => {
     const world = await ready(0.1)
     stepOneFrame()
-    expect(world.time).toBeCloseTo(1 / 60, 12)
+    expect(world.time).toBeCloseTo(STEP, 12)
     world.destroy()
   })
 })

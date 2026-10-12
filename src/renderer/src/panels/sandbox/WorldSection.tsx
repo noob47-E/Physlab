@@ -1,16 +1,22 @@
 // The Sandbox panel’s WorldSection section (moved word for word from panels/Sandbox.tsx, SB2).
 
 import { useSandbox } from '../../sim/store'
-import { GRAVITY_PRESETS } from '../../sim/types'
+import { GRAVITY_PRESETS, rateOf, STEP_RATES } from '../../sim/types'
+import { stepRateTitle } from '../../sim/stepping'
+import { useScene } from '../../core/store'
 import { NumField } from '../../ui/fields'
-import { Vec3Row, Fold } from './common'
+import { Vec3Row, Fold, useNum } from './common'
 
-/** Gravity, air and the view; the exact-accuracy and sleeping controls fold away. */
+/** Gravity, air and the view; the step rate and sleeping controls fold away. */
 export function WorldSection() {
   const world = useSandbox((s) => s.world)
   const setWorld = useSandbox((s) => s.setWorld)
   const sideView = useSandbox((s) => s.sideView)
   const setSideView = useSandbox((s) => s.setSideView)
+  const resetRun = useSandbox((s) => s.resetRun)
+  const setPlaying = useScene((s) => s.setPlaying)
+  const num = useNum()
+  const rate = rateOf(world)
   return (
     <>
       <div className="section-title mt-2">World</div>
@@ -80,16 +86,23 @@ export function WorldSection() {
           <input type="checkbox" checked={world.allowSleeping} onChange={(e) => setWorld({ allowSleeping: e.target.checked })} />
         </div>
         <div className="prop-row">
-          <label>Accuracy</label>
+          <label title="How many times a second the engine works the world out: more steps, a truer run, and more work for the computer">Steps a second</label>
           <div className="seg">
-            {[
-              [1, 'fast'],
-              [2, 'normal'],
-              [4, 'careful'],
-              [8, 'exact']
-            ].map(([v, l]) => (
-              <button key={l as string} className={world.collisionSteps === v ? 'on' : ''} onClick={() => setWorld({ collisionSteps: v as number })}>
-                {l as string}
+            {STEP_RATES.map((r) => (
+              <button
+                key={r}
+                className={`min-h-[44px] ${rate === r ? 'on' : ''}`}
+                title={stepRateTitle(r, world.gravity)}
+                onClick={() => {
+                  if (r === rate) return
+                  // A run is one rate from t = 0: a change part-way would mix two runs in one recording.
+                  // The old Accuracy figure goes with it, or a preset's leftover 8 would overrule the choice.
+                  setPlaying(false)
+                  setWorld({ stepRate: r, collisionSteps: undefined })
+                  resetRun()
+                }}
+              >
+                {num(r)}
               </button>
             ))}
           </div>

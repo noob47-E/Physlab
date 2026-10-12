@@ -8,24 +8,18 @@ import type { V3 } from '../../math/vec'
 import { energyOf, groundTopOf, springStretch, startStateOf } from '../energy'
 import { dragCoefficient, frontalAreaTurned } from '../materials'
 import { halfHeight, massOf } from '../store'
+import { rateOf } from '../types'
 import type { BodyDef, BodyState, Link, WorldSettings } from '../types'
 import type { BodyGet, BodyReading, LinkGet, LinkReading, Reading, Source } from './types'
 
-const RATES = [60, 120, 240, 600]
-const DEFAULT_RATE = 240
 
 /**
- * The engine's steps a second, as I-1's rateOf reads it: a valid `stepRate`; else today's
- * `collisionSteps` n as 60·n rounded up to the next rate (1 → 60, 2 → 120, 3–4 → 240, 5 and more
- * → 600); else the default. sim/types.ts has no rateOf until SB0 merges: at that merge this
- * becomes a call to it (REPORT.md, notes for the merger), so the rule is not kept twice.
+ * The engine's steps a second: I-1's rateOf itself (sim/types.ts), so a card reads the rate the
+ * engine runs at and the rule is kept once (a valid stepRate, or an old collisionSteps n as 60·n
+ * rounded up; with both, the finer wins, as the cradle needs).
  */
 export function stepRateOf(w: WorldSettings): number {
-  const rate = (w as WorldSettings & { stepRate?: unknown }).stepRate
-  if (typeof rate === 'number' && RATES.includes(rate)) return rate
-  const n = w.collisionSteps
-  if (typeof n === 'number' && Number.isFinite(n) && n >= 1) return RATES.find((r) => r >= 60 * Math.ceil(n)) ?? 600
-  return DEFAULT_RATE
+  return rateOf(w)
 }
 
 const distance = (a: V3, b: V3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])

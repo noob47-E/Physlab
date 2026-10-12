@@ -9,6 +9,10 @@ const fresh = () => useSandbox.getState().loadSandbox()
 const state = () => useSandbox.getState()
 const moving = (): BodyDef[] => state().bodies.filter((b) => b.motion === 'dynamic')
 
+// SB0 gave a collision its step, the speeds before and after and the coefficients the engine used;
+// these store tests only need the old fields, so the new ones are filled with nothing in particular.
+const SB0_CONTACT = { step: 1, vBeforeA: [0, 0, 0] as [number, number, number], vBeforeB: [0, 0, 0] as [number, number, number], vAfterA: [0, 0, 0] as [number, number, number], vAfterB: [0, 0, 0] as [number, number, number], eUsed: 0, muUsed: 0 }
+
 describe('the sandbox store', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -169,7 +173,7 @@ describe('the sandbox store', () => {
     const ball = moving()[0]
     state().updateBody(ball.id, { mass: 3 })
     const nonce = state().runNonce
-    useSandbox.setState({ engineTime: 7, live: { x: {} as never }, recording: { x: [] }, contacts: [{ a: 'x', b: 'y', t: 1, approachSpeed: 1, normal: [0, 1, 0], point: [0, 0, 0] }] })
+    useSandbox.setState({ engineTime: 7, live: { x: {} as never }, recording: { x: [] }, contacts: [{ a: 'x', b: 'y', t: 1, approachSpeed: 1, normal: [0, 1, 0], point: [0, 0, 0], ...SB0_CONTACT }] })
     state().resetRun()
     expect(state().runNonce).toBe(nonce + 1)
     expect(state().engineTime).toBe(0)
@@ -191,7 +195,7 @@ describe('the sandbox store', () => {
   })
 
   it('collisions arrive newest first and never pile past sixty', () => {
-    const hit = (t: number) => ({ a: 'x', b: 'y', t, approachSpeed: 1, normal: [0, 1, 0] as [number, number, number], point: [0, 0, 0] as [number, number, number] })
+    const hit = (t: number) => ({ a: 'x', b: 'y', t, approachSpeed: 1, normal: [0, 1, 0] as [number, number, number], point: [0, 0, 0] as [number, number, number], ...SB0_CONTACT })
     state().pushContacts([hit(1), hit(2)])
     expect(state().contacts[0].t).toBe(2)
     state().pushContacts(Array.from({ length: 80 }, (_, i) => hit(10 + i)))

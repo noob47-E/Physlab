@@ -8,7 +8,7 @@ import { makeBody, halfHeight, massOf } from '../src/renderer/src/sim/store'
 import { groundTopOf, startStateOf, energyOf } from '../src/renderer/src/sim/energy'
 import { dragCoefficient, frontalAreaTurned } from '../src/renderer/src/sim/materials'
 import { presetById } from '../src/renderer/src/sim/presets'
-import { DEFAULT_WORLD, type BodyDef, type BodyState, type Link } from '../src/renderer/src/sim/types'
+import { DEFAULT_WORLD, rateOf, type BodyDef, type BodyState, type Link } from '../src/renderer/src/sim/types'
 import type { CardSpec, LedgerReading, Reading } from '../src/renderer/src/sim/cards/types'
 import { Q_TOKEN } from '../src/renderer/src/sim/cards/types'
 import { CARDS, cardById, evaluateCard, mergeCards, readingOf } from '../src/renderer/src/sim/cards'
@@ -189,11 +189,20 @@ describe('readingOf: roles by body name', () => {
   })
 
   it('reads the step rate from the world settings', () => {
-    expect(stepRateOf({ ...DEFAULT_WORLD, collisionSteps: 2 })).toBe(120)
-    expect(stepRateOf({ ...DEFAULT_WORLD, collisionSteps: 1 })).toBe(60)
-    expect(stepRateOf({ ...DEFAULT_WORLD, collisionSteps: 3 })).toBe(240)
-    expect(stepRateOf({ ...DEFAULT_WORLD, collisionSteps: 8 })).toBe(600)
+    // A world from before SB0 has only the old figure; since SB0 DEFAULT_WORLD carries a stepRate
+    // (240), so such a world is written here without it.
+    const old = (n: number) => ({ ...DEFAULT_WORLD, stepRate: undefined, collisionSteps: n }) as unknown as typeof DEFAULT_WORLD
+    expect(stepRateOf(old(2))).toBe(120)
+    expect(stepRateOf(old(1))).toBe(60)
+    expect(stepRateOf(old(3))).toBe(240)
+    expect(stepRateOf(old(8))).toBe(600)
     expect(stepRateOf({ ...DEFAULT_WORLD, stepRate: 240 } as typeof DEFAULT_WORLD)).toBe(240)
+  })
+
+  it('reads the rate the engine runs at: the cradle (stepRate 240 and collisionSteps 8) is 600 on a card too', () => {
+    const cradle = { ...DEFAULT_WORLD, ...presetById('cradle')!.build().world }
+    expect(rateOf(cradle)).toBe(600)
+    expect(stepRateOf(cradle)).toBe(rateOf(cradle))
   })
 })
 

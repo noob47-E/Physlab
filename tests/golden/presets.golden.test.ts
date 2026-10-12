@@ -32,11 +32,14 @@ async function sweep(): Promise<string[]> {
     }
 
     recordAt('0s')
-    for (let i = 1; i <= 600; i++) {
+    // One engine step is 1/rate s (SB0: 240 by default, a preset may ask for another), no longer
+    // 1/60 s: the readings stay at 1, 5 and 10 s of simulated time.
+    const rate = world.stepRate
+    for (let i = 1; i <= 10 * rate; i++) {
       world.stepOnce()
-      if (i === 60) recordAt('1s')
-      if (i === 300) recordAt('5s')
-      if (i === 600) recordAt('10s')
+      if (i === rate) recordAt('1s')
+      if (i === 5 * rate) recordAt('5s')
+      if (i === 10 * rate) recordAt('10s')
     }
     
     world.destroy()

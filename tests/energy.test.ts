@@ -354,7 +354,8 @@ describe('the Energy readout counts the spring (Spring on ice)', () => {
 
 describe('Spring on ice in the real engine', () => {
   // The readout's total as the Sandbox view feeds it: the engine's state of every body, static ones
-  // too, every 0.1 s of simulated time from t = 0 to 5 s, at the preset's own world settings.
+  // too, every 0.1 s of simulated time from t = 0 to 5 s, at the preset's own world settings and the
+  // default step rate (240 steps a second since SB0; the frames below are 1/60 s of real time each).
   const totals: number[] = []
   const bodiesOnly: number[] = []
 
@@ -392,25 +393,25 @@ describe('Spring on ice in the real engine', () => {
     expect(totals[0]).toBeCloseTo(13.905, 4)
     // Without the spring the readings run 4.9 J → 13.3 J → 7.8 J …: the block's motion alone.
     expect(biggestJump(bodiesOnly)).toBeGreaterThan(0.2)
-    // With it the only movement is the engine's own slow loss (below): 1.3 % per 0.1 s at most.
+    // With it the only movement is the step's own band (below), well under 3 % per 0.1 s.
     expect(biggestJump(totals)).toBeLessThan(0.03)
   })
 
-  it('never rises above where it started: a readout that gains energy is counting something twice', () => {
-    expect(Math.max(...totals)).toBeLessThan(totals[0] * 1.005)
+  // SB0: the spring is PhysLab's own Hooke force now, worked out before every step, and Jolt's step
+  // (v first, then x) keeps the swinging energy in a band of ±ωΔt/2 about where it started — above
+  // as well as below — with no drift. At 240 steps a second, ω = 5 rad/s: ±1.04 % of the 9 J that
+  // swings, ±0.67 % of the 13.905 J total. Anything past that band is counted twice or pumped in.
+  const band = ((5 / 240) / 2) * 9
+
+  it('never rises above where it started by more than the step’s own band: a readout that gains more is counting something twice', () => {
+    expect(Math.max(...totals)).toBeLessThan(totals[0] + band * 1.05)
   })
 
-  // ACCEPTANCE AS WRITTEN, NOT MET BY THE ENGINE: the total falls 41.9 % in the 5 s (12.2 % in the
-  // first second) with nothing rubbing: the block's friction is 0 (and ice × 0 = 0 under Jolt's
-  // sqrt(μ1 μ2)), damping is 0, and the world is a vacuum. The cause is Jolt's soft distance limit,
-  // which it integrates implicitly (backward Euler) at each collision sub-step, h = 1/60 s ÷
-  // collisionSteps = 1/120 s: with ω = √(k/m) = 5 rad/s that multiplies the amplitude by
-  // 1/√(1 + (ωh)²) every step. The recurrence  v ← (v − hω²x)/(1 + h²ω²), x ← x + hv  reproduces
-  // this readout's total to 0.0001 % (so the readout and the formula ½k(d − L)² are exact), and the
-  // loss halves each time collisionSteps doubles (1 → 56.6 %, 2 → 41.9 %, 4 → 26.3 %, 8 → 14.8 %,
-  // 32 → 4.1 % over 5 s), so no accuracy setting reaches 1 %. A symplectic or velocity-Verlet spring
-  // would keep it flat; remove `.fails` when the engine integrates springs without that damping.
-  it.fails('stays within 1 % of the start for the whole 5 s', () => {
+  // This was an expected failure until SB0: Jolt's soft distance limit, integrated implicitly
+  // (backward Euler) at each collision sub-step, lost 41.9 % of the total in these 5 s with nothing
+  // rubbing (ω = 5 rad/s, h = 1/120 s: the amplitude times 1/√(1 + (ωh)²) every step). PhysLab's own
+  // spring keeps it inside the band above: the worst reading is about 0.67 % of 13.905 J.
+  it('stays within 1 % of the start for the whole 5 s', () => {
     const worst = Math.max(...totals.map((t) => Math.abs(t - totals[0]))) / totals[0]
     expect(worst, `the total wandered ${Math.round(worst * 10000) / 100} % from ${totals[0]} J`).toBeLessThan(0.01)
   })

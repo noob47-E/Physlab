@@ -4,7 +4,9 @@ import { Eraser, Pause, Play, Redo2, RotateCcw, SkipForward, Undo2 } from 'lucid
 import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
 import { clockText, widestClockText } from '../../sim/transport'
-import { stepOneFrame } from '../../sim/stepping'
+import { useNum } from './common'
+import { stepButtonTitle, stepOneFrame } from '../../sim/stepping'
+import { rateOf } from '../../sim/types'
 
 /**
  * Play, Reset, undo and the clock, pinned to the top so they are never below three screens of
@@ -23,6 +25,8 @@ export function Transport() {
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
   const settings = useScene((s) => s.settings)
+  const world = useSandbox((s) => s.world)
+  const num = useNum()
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-[color:var(--line)] bg-[var(--bg-1)] px-3 py-2">
       <button className="btn primary" data-tour="play" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
@@ -51,7 +55,7 @@ export function Transport() {
           setPlaying(false)
           stepOneFrame()
         }}
-        title="Step one frame (1/60 s)"
+        title={stepButtonTitle(num(rateOf(world)))}
       >
         <SkipForward size={13} />
       </button>
