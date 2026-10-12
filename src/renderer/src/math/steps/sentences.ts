@@ -5,15 +5,18 @@
 // validate.ts requires a step's sentence and rule to equal these, and the page shows the check this module
 // builds from the validated answer substituted into the problem as typed.
 
-import type { EquationOp, ExprOp, Step, StepAnswer, Working } from './types'
+import type { EquationOp, ExprOp, Step, StepAnswer, SystemOp, Working } from './types'
 import {
   equationSides,
   expandTerms,
   groupSumText,
   isExprOp,
+  isSystemOp,
   normalizeDisplayed,
   parseExactRat,
   productText,
+  ratOfText,
+  ratText,
   solutionProofOf,
   sumText,
   type SetProof
@@ -233,7 +236,7 @@ function implicationRule(step: Step): string | null {
 export function sentenceFor(step: Step): string | null {
   switch (step.kind) {
     case 'EquationEquiv':
-      return step.op && !isExprOp(step.op) ? equationSentence(step.op, step, variableOf(step)) : null
+      return step.op && !isExprOp(step.op) && !isSystemOp(step.op) ? equationSentence(step.op, step, variableOf(step)) : null
     case 'CaseSplitComplete':
       return caseSentence(step)
     case 'Implication':
@@ -244,6 +247,8 @@ export function sentenceFor(step: Step): string | null {
       return 'Put the answers of the cases together.'
     case 'ExprEq':
       return step.op && isExprOp(step.op) ? productSentence(step, step.op) : exprSentence(step)
+    case 'SystemEq':
+      return systemSentence(step)
     default:
       return null
   }
@@ -253,7 +258,7 @@ export function sentenceFor(step: Step): string | null {
 export function ruleFor(step: Step): string | null {
   switch (step.kind) {
     case 'EquationEquiv':
-      return step.op && !isExprOp(step.op) ? equationRule(step.op) : null
+      return step.op && !isExprOp(step.op) && !isSystemOp(step.op) ? equationRule(step.op) : null
     case 'CaseSplitComplete':
       if (dataOf(step).form !== 'zero-product') return 'Cases'
       return isZeroProductSquare(step) ? 'Zero square' : 'Zero product'
@@ -266,6 +271,8 @@ export function ruleFor(step: Step): string | null {
     case 'ExprEq':
       if (step.op && isExprOp(step.op)) return productRule(step.op)
       return dataOf(step).role === 'discriminant' ? 'Discriminant' : 'Same value'
+    case 'SystemEq':
+      return systemRule(step)
     default:
       return null
   }
@@ -414,5 +421,103 @@ function productRule(op: ExprOp): string {
       return 'Factor theorem'
     case 'irreducible':
       return 'Cannot be factorised'
+  }
+}
+
+// ---- S1d: the sentences and rules of the system steps (simultaneous linear equations) ----
+
+/** How many letters a system has, from the step's typed data (its letter list). */
+function systemLetterCount(step: Step): number {
+  const vars = (step.data as { vars?: unknown } | undefined)?.vars
+  return Array.isArray(vars) ? vars.length : 0
+}
+
+/** The word for the solutions of a system in n letters: a pair for two, a triple for three. */
+function solutionWord(n: number): string {
+  return n === 2 ? 'pair' : n === 3 ? 'triple' : 'set'
+}
+
+/**
+ * The words of an ending, the same wherever they are shown: none ("the equations have no common solution"), or every
+ * solution on the line (or lines) given. Null for an op that is not an ending.
+ */
+export function systemEndingAnswer(op: SystemOp, nVars: number): string | null {
+  if (op.kind === 'no-common-solution') return 'the equations have no common solution'
+  if (op.kind === 'infinitely-many') {
+    const clause = op.texts.length === 1 ? `on the line ${op.texts[0]}` : `that satisfies ${op.texts.join(' and ')}`
+    return `every ${solutionWord(nVars)} of values ${clause} works`
+  }
+  return null
+}
+
+/** A rational of a scale step, as the sentence says it: "by 3", "by 2/3", "by -1". */
+function scaleByText(k: Rat): string {
+  return ratText(k).replace(/^-/, MINUS)
+}
+
+/** True when a scale step divides (k is 1/d or −1/d, d above one). */
+function isDivideStep(k: Rat): boolean {
+  return k.d !== 1n && (k.n === 1n || k.n === -1n)
+}
+
+function systemSentence(step: Step): string | null {
+  const op = step.op
+  if (!isSystemOp(op)) return null
+  const eqn = (i: number): string => String(i + 1)
+  const n = systemLetterCount(step)
+  switch (op.kind) {
+    case 'scale-equation': {
+      const k = ratOfText(op.k)
+      if (!k) return null
+      if (k.d !== 1n && k.n === 1n) return `Divide equation ${eqn(op.i)} by ${k.d}`
+      if (k.d !== 1n && k.n === -1n) return `Divide equation ${eqn(op.i)} by -${k.d}`
+      return `Multiply equation ${eqn(op.i)} by ${scaleByText(k)}`
+    }
+    case 'add-equations':
+      return `Add equation ${eqn(op.j)} to equation ${eqn(op.i)}`
+    case 'subtract-equations':
+      return `Subtract equation ${eqn(op.j)} from equation ${eqn(op.i)}`
+    case 'make-subject':
+      return `Make ${op.v} the subject of equation ${eqn(op.i)}`
+    case 'substitute':
+    case 'back-substitute':
+      return `Put ${op.v} = ${op.expr} from equation ${eqn(op.i)} into equation ${eqn(op.j)}`
+    case 'no-common-solution': {
+      const answer = systemEndingAnswer(op, n)
+      return answer === null ? null : `Equation ${eqn(op.i)} reads ${op.row}, which cannot be true, so ${answer}.`
+    }
+    case 'infinitely-many': {
+      const answer = systemEndingAnswer(op, n)
+      return answer === null ? null : `${answer.charAt(0).toUpperCase()}${answer.slice(1)}, so the equations have infinitely many solutions.`
+    }
+    default:
+      return null
+  }
+}
+
+function systemRule(step: Step): string | null {
+  const op = step.op
+  if (!isSystemOp(op)) return null
+  switch (op.kind) {
+    case 'scale-equation': {
+      const k = ratOfText(op.k)
+      if (!k) return null
+      return isDivideStep(k) ? 'Divide both sides' : 'Multiply both sides'
+    }
+    case 'add-equations':
+      return 'Add the equations'
+    case 'subtract-equations':
+      return 'Subtract the equations'
+    case 'make-subject':
+      return 'Make the subject'
+    case 'substitute':
+    case 'back-substitute':
+      return 'Substitute'
+    case 'no-common-solution':
+      return 'Contradiction'
+    case 'infinitely-many':
+      return 'Infinitely many solutions'
+    default:
+      return null
   }
 }

@@ -42,6 +42,7 @@ export type StepKind =
   | 'CaseSplitComplete'
   | 'SolutionSetEq'
   | 'SubproblemReduction'
+  | 'SystemEq'
 
 /**
  * What a divide or multiply move is for. The sentence builder (sentences.ts) writes the words from it.
@@ -108,13 +109,36 @@ export type ExprOp =
   | { kind: 'irreducible' }
 
 /**
+ * The move a SystemEq step claims (S1d: simultaneous linear equations). A system is a list of equations, each
+ * side a linear form in the letters. Indices are positions in the list, from 0. Each op is checked exactly by
+ * check-adapter.ts (checkSystemOp); the texts the sentence names (expr, row, texts) are checked too.
+ * - scale-equation {i, k}: equation i times k on both sides (k a non-zero, non-one rational).
+ * - add-equations {i, j}: equation i becomes Eᵢ + Eⱼ side by side; subtract-equations {i, j}: Eᵢ − Eⱼ.
+ * - make-subject {i, v}: equation i rearranged to v = P (the same equation: v − P is a multiple of it).
+ * - substitute {i, j, v, expr}: equation j with v put as P (equation i is v = P, expr its text); the result is in
+ *   the form (letters on the left, a number on the right). back-substitute: as substitute, P a number only.
+ * - no-common-solution {i, row}: equation i reads 0 = c with c not zero (row is its text).
+ * - infinitely-many {rows, texts}: independent equations whose lines (texts) are all the solutions, and every
+ *   other equation reads 0 = 0; there are fewer of them than letters.
+ */
+export type SystemOp =
+  | { kind: 'scale-equation'; i: number; k: string }
+  | { kind: 'add-equations'; i: number; j: number }
+  | { kind: 'subtract-equations'; i: number; j: number }
+  | { kind: 'make-subject'; i: number; v: string }
+  | { kind: 'substitute'; i: number; j: number; v: string; expr: string }
+  | { kind: 'back-substitute'; i: number; j: number; v: string; expr: string }
+  | { kind: 'no-common-solution'; i: number; row: string }
+  | { kind: 'infinitely-many'; rows: number[]; texts: string[] }
+
+/**
  * One step of mathematical working.
  */
 export interface Step<T = unknown> {
   /** The mathematical step kind determining which validator checks it. */
   kind: StepKind
   /** The declared move. An EquationEquiv without one is 'unknown' and is never shown. */
-  op?: EquationOp | ExprOp
+  op?: EquationOp | ExprOp | SystemOp
   /** The state before this move (expression or equation as string or AST). */
   before: string | MathNode
   /** The state after this move (expression or equation as string or AST). */

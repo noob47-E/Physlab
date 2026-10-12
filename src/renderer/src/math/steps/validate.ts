@@ -16,13 +16,14 @@
 import {
   CANT_SHOW_STEPS_REASON,
   type ExprOp,
+  type SystemOp,
   type Step,
   type StepValidationResult,
   type ValidationVerdict,
   type Working,
   type WorkingValidationResult
 } from './types'
-import { rStr, type Rat } from '../pure/rat'
+import { rEq, rStr, type Rat } from '../pure/rat'
 import {
   checkEquationOp,
   checkProductStep,
@@ -37,9 +38,18 @@ import {
   solutionProofOf,
   startsFromTypedProduct,
   variableOfInput,
-  type CheckAdapter
+  checkSystemOp,
+  evalForm,
+  isSystemOp,
+  lettersOfSystem,
+  ratOfText,
+  readSystem,
+  sameSystem,
+  solvedValues,
+  type CheckAdapter,
+  type LinEq
 } from './check-adapter'
-import { ruleFor, sentenceFor, substitutionOf } from './sentences'
+import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
@@ -92,7 +102,7 @@ export function validateExprEq(step: Step, adapter: CheckAdapter = defaultCheckA
  */
 export function validateEquationEquiv(step: Step, _adapter: CheckAdapter = defaultCheckAdapter): ValidationVerdict {
   if (step.kind !== 'EquationEquiv') return 'invalid'
-  if (!step.op || isExprOp(step.op)) return 'unknown'
+  if (!step.op || isExprOp(step.op) || isSystemOp(step.op)) return 'unknown'
   return checkEquationOp(step.before, step.after, step.op, variableOfStep(step))
 }
 
@@ -293,6 +303,9 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
     case 'SubproblemReduction':
       verdict = validateSubproblemReduction(step, adapter)
       break
+    case 'SystemEq':
+      verdict = validateSystemEq(step)
+      break
     default:
       verdict = 'invalid'
   }
@@ -379,6 +392,9 @@ export function validateWorking(working: Working, adapter: CheckAdapter = defaul
     return { valid: true }
   }
 
+  // A system (two or more equations) is validated on its own path: its own chain, its own answer and check.
+  if (isSystemInput(working.input ?? '')) return validateSystemWorking(working, adapter)
+
   if (typeof working.input !== 'string') {
     return {
       valid: false,
@@ -450,5 +466,146 @@ export function validateWorking(working: Working, adapter: CheckAdapter = defaul
     return { valid: false, verdict: 'invalid', reason: 'The check line is not the one its answer gives' }
   }
 
+  return { valid: true }
+}
+
+// ---- S1d: systems of simultaneous linear equations ----
+
+/** True for an input that is a system: two or more equations, each a linear form read exactly. */
+function isSystemInput(text: string): boolean {
+  const eqs = readSystem(text)
+  return eqs !== null && eqs.length >= 2
+}
+
+/** True for an ending step (no solution, or infinitely many): its after is a sentence, and it is the last step. */
+function isEndingStep(step: Step): boolean {
+  return (
+    step.kind === 'SystemEq' &&
+    isSystemOp(step.op) &&
+    (step.op.kind === 'no-common-solution' || step.op.kind === 'infinitely-many')
+  )
+}
+
+/** The letter list a SystemEq step carries in its data, or null when it carries none. */
+function systemVarsOfStep(step: Step): string[] | null {
+  const vars = (step.data as { vars?: unknown } | undefined)?.vars
+  return Array.isArray(vars) && vars.every((v) => typeof v === 'string') ? (vars as string[]) : null
+}
+
+/** One SystemEq step on its own: its op checked against the system it starts from and the one it ends with. */
+export function validateSystemEq(step: Step): ValidationVerdict {
+  if (step.kind !== 'SystemEq' || !isSystemOp(step.op)) return 'invalid'
+  const vars = systemVarsOfStep(step)
+  if (!vars) return 'invalid'
+  // The letters a step uses are among the letters it claims: a claimed list cannot hide a letter the system has.
+  const before = readSystem(String(step.before))
+  if (!before || !lettersWithin(before, vars)) return 'invalid'
+  if (isEndingStep(step)) return checkSystemOp(step.op, before, null, vars)
+  const after = readSystem(String(step.after))
+  if (!after || !lettersWithin(after, vars)) return 'invalid'
+  return checkSystemOp(step.op, before, after, vars)
+}
+
+/** True when every letter a system uses is one of the letters given. */
+function lettersWithin(eqs: LinEq[], vars: string[]): boolean {
+  return lettersOfSystem(eqs).every((n) => vars.includes(n))
+}
+
+/**
+ * A working of a system: the first step starts from the system as typed, each step starts where the one before ends,
+ * every step is valid on its own, an ending is the last step, and the answer is what the last step gives. For a
+ * solution the answer's values must state every letter alone in the last system and satisfy every typed equation
+ * exactly (the check: each typed equation, with the values put in, has equal sides).
+ */
+function validateSystemWorking(working: Working, adapter: CheckAdapter): WorkingValidationResult {
+  const fail = (index: number | undefined, reason: string): WorkingValidationResult => ({
+    valid: false,
+    verdict: 'invalid',
+    failedStepIndex: index,
+    failedStep: index === undefined ? undefined : working.steps[index],
+    reason
+  })
+  if (working.checked === 'failed') return fail(undefined, "The answer's check failed")
+  const typed = readSystem(working.input ?? '')
+  if (!typed) return fail(undefined, 'The system as typed is not read exactly')
+  const vars = lettersOfSystem(typed)
+  if (vars.length === 0) return fail(undefined, 'The system has no letters to solve for')
+  const steps = working.steps
+  for (let i = 0; i < steps.length; i++) {
+    const named = systemVarsOfStep(steps[i])
+    if (!named || named.join(',') !== vars.join(',')) return fail(i, 'A step names other letters than the system as typed')
+  }
+  if (steps.length === 0) return fail(undefined, 'The working has no steps to check')
+  const first = readSystem(String(steps[0].before))
+  if (!first || !sameSystem(first, typed)) return fail(0, 'The first step does not start from the system as typed')
+  let current: LinEq[] = typed
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i]
+    if (isEndingStep(step) && i !== steps.length - 1) return fail(i, 'An ending must be the last step')
+    if (i > 0) {
+      const before = readSystem(String(step.before))
+      if (!before || !sameSystem(before, current)) return fail(i, `Step ${i + 1} does not start where step ${i} ends`)
+    }
+    const res = validateStep(step, adapter)
+    if (res.verdict !== 'valid') {
+      return {
+        valid: false,
+        failedStepIndex: i,
+        failedStep: step,
+        verdict: res.verdict,
+        reason: res.reason ?? `Step ${i + 1} is not valid (${res.verdict})`
+      }
+    }
+    if (!isEndingStep(step)) {
+      const next = readSystem(String(step.after))
+      if (!next) return fail(i, 'A step does not end in a system')
+      current = next
+    }
+  }
+
+  const last = steps[steps.length - 1]
+  const answers = working.answer === undefined ? [] : Array.isArray(working.answer) ? working.answer : [working.answer]
+  if (isEndingStep(last)) {
+    const words = systemEndingAnswer(last.op as SystemOp, vars.length)
+    const said = normalizeDisplayed(String(last.after))
+    // An ending's answer has no letter: its label is empty, and its text is the ending's words.
+    if (answers.length !== 1 || answers[0].label !== '' || words === null || normalizeDisplayed(answers[0].tex) !== said || said !== normalizeDisplayed(words)) {
+      return fail(steps.length - 1, 'The answer is not the ending the last step gives')
+    }
+  } else {
+    const values = solvedValues(current, vars)
+    if (!values) return fail(steps.length - 1, 'The last step does not state every letter alone')
+    if (answers.length !== vars.length || new Set(answers.map((a) => a.label)).size !== vars.length) {
+      return fail(undefined, 'The answer does not list each letter once')
+    }
+    for (const a of answers) {
+      const r = ratOfText(a.tex)
+      if (!vars.includes(a.label) || !r || !rEq(r, values[a.label])) {
+        return fail(undefined, `The answer ${a.label} = ${a.tex} is not the value the last step gives`)
+      }
+    }
+    // The check: every equation as typed holds with the answer's values put in, both sides equal, exactly.
+    for (let k = 0; k < typed.length; k++) {
+      const left = evalForm(typed[k].L, values)
+      const right = evalForm(typed[k].R, values)
+      if (!left || !right || !rEq(left, right)) return fail(undefined, `The answer does not satisfy equation ${k + 1}`)
+    }
+  }
+
+  // Another way is shown with the same answer: it is checked like a working, and it must agree with this one.
+  if (working.anotherWay) {
+    const alt = validateWorking(working.anotherWay, adapter)
+    if (!alt.valid) return { valid: false, verdict: alt.verdict, reason: `Another way failed: ${alt.reason}` }
+    // The two ways agree when they reach the same answer, or the same ending (which line names the solutions may differ).
+    const key = (w: Working): string => {
+      const end = w.steps[w.steps.length - 1]
+      if (end && isEndingStep(end)) return `ending:${String((end.op as { kind?: unknown }).kind)}`
+      return (Array.isArray(w.answer) ? w.answer : w.answer ? [w.answer] : [])
+        .map((a) => `${a.label}=${normalizeDisplayed(a.tex)}`)
+        .sort()
+        .join(';')
+    }
+    if (key(working.anotherWay) !== key(working)) return fail(undefined, 'Another way gives a different answer')
+  }
   return { valid: true }
 }

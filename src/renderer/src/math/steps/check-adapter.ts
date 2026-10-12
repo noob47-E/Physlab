@@ -27,7 +27,7 @@ import {
 import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R1, type Rat } from '../pure/rat'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
-import type { EquationOp, ExprOp, ValidationVerdict } from './types'
+import type { EquationOp, ExprOp, SystemOp, ValidationVerdict } from './types'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -2046,4 +2046,418 @@ export function productFactorsOf(input: string): string[] | null {
     sign = ''
   }
   return out.length > 0 ? out : null
+}
+
+// ============================================================================
+// S1d: simultaneous linear equations. A system is a list of equations; each side is a linear form in the letters
+// with exact rational coefficients. Each op is checked exactly here (checkSystemOp): the sides side by side, or the
+// declared substitution, and the two endings by an exact rank proof from the displayed rows.
+// ============================================================================
+
+/** A linear form: the coefficient of each letter, and the number term. Exact rationals; zero entries are left out. */
+export interface LinForm {
+  v: Record<string, Rat>
+  c: Rat
+}
+
+/** One equation of a system: its left and right sides, as they stand (side by side). */
+export interface LinEq {
+  L: LinForm
+  R: LinForm
+}
+
+const ZERO = (): Rat => rat(0n)
+
+function cleanForm(v: Record<string, Rat>, c: Rat): LinForm {
+  const out: Record<string, Rat> = {}
+  for (const n of Object.keys(v)) if (!rIsZero(v[n])) out[n] = v[n]
+  return { v: out, c }
+}
+
+/** Splits at the commas that are not inside brackets. */
+function splitTopCommas(text: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of text) {
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    if (ch === ',' && depth === 0) {
+      parts.push(cur)
+      cur = ''
+    } else cur += ch
+  }
+  parts.push(cur)
+  return parts
+}
+
+function formOfTerms(terms: Term[]): LinForm | null {
+  const v: Record<string, Rat> = {}
+  let c = ZERO()
+  for (const t of terms) {
+    const names = Object.keys(t.v).filter((n) => t.v[n] !== 0)
+    if (names.length === 0) {
+      c = rAdd(c, t.c)
+      continue
+    }
+    if (names.length !== 1 || t.v[names[0]] !== 1) return null
+    const n = names[0]
+    v[n] = rAdd(v[n] ?? ZERO(), t.c)
+  }
+  return cleanForm(v, c)
+}
+
+/**
+ * A system as typed or as a step states it: one equation per comma-separated part. Null when a part is not one
+ * equation, or a side is not a linear form read exactly (expandTerms reads brackets, fractions and tiny powers of ten).
+ */
+export function readSystem(text: string | MathNode): LinEq[] | null {
+  const s = stringifyNodeOrText(text).trim()
+  if (s === '') return null
+  const eqs: LinEq[] = []
+  for (const part of splitTopCommas(s)) {
+    const sides = part.split('=')
+    if (sides.length !== 2) return null
+    const L = expandTerms(sides[0])
+    const R = expandTerms(sides[1])
+    if (!L || !R) return null
+    const lf = formOfTerms(L)
+    const rf = formOfTerms(R)
+    if (!lf || !rf) return null
+    eqs.push({ L: lf, R: rf })
+  }
+  return eqs
+}
+
+/** The letters a system uses (with a non-zero coefficient somewhere), sorted. */
+export function lettersOfSystem(eqs: LinEq[]): string[] {
+  const names = new Set<string>()
+  for (const e of eqs) for (const f of [e.L, e.R]) for (const n of Object.keys(f.v)) names.add(n)
+  return [...names].sort()
+}
+
+/** A non-negative rational as student text: "3", or "(3/4)" for a fraction (the brackets keep it one number). */
+function ratMagText(r: Rat): string {
+  return r.d === 1n ? r.n.toString() : `(${r.n}/${r.d})`
+}
+
+/** A rational as plain text, for an answer or a step: "3", "-5", "3/4", "-3/4". */
+export function ratText(r: Rat): string {
+  return r.d === 1n ? r.n.toString() : `${r.n}/${r.d}`
+}
+
+/** The exact rational of a plain text ("-3", "3/4"), or null. */
+export function ratOfText(text: string): Rat | null {
+  const m = /^(-?)(\d+)(?:\/(\d+))?$/.exec(text.trim())
+  if (!m) return null
+  const d = m[3] === undefined ? 1n : BigInt(m[3])
+  if (d === 0n) return null
+  const n = BigInt(m[2]) * (m[1] === '-' ? -1n : 1n)
+  return rat(n, d)
+}
+
+/** A linear form as student text in the given letter order: "-6x - 5y + 2", "x", "(-3/2)" and so on. */
+export function linFormText(f: LinForm, vars: string[]): string {
+  const parts: Array<{ neg: boolean; body: string }> = []
+  for (const n of vars) {
+    const c = f.v[n]
+    if (!c || rIsZero(c)) continue
+    const neg = rIsNeg(c)
+    const mag = neg ? rNeg(c) : c
+    parts.push({ neg, body: (rEq(mag, rat(1n)) ? '' : ratMagText(mag)) + n })
+  }
+  if (!rIsZero(f.c) || parts.length === 0) {
+    const neg = rIsNeg(f.c)
+    const mag = neg ? rNeg(f.c) : f.c
+    parts.push({ neg, body: mag.d === 1n ? mag.n.toString() : `${mag.n}/${mag.d}` })
+  }
+  return parts.map((p, i) => (i === 0 ? (p.neg ? '-' : '') + p.body : (p.neg ? ' - ' : ' + ') + p.body)).join('')
+}
+
+/** One equation as student text: "-6x - 5y = 41". */
+export function eqText(e: LinEq, vars: string[]): string {
+  return `${linFormText(e.L, vars)} = ${linFormText(e.R, vars)}`
+}
+
+/** A whole system as student text, one equation per comma-separated part. */
+export function systemText(eqs: LinEq[], vars: string[]): string {
+  return eqs.map((e) => eqText(e, vars)).join(', ')
+}
+
+/** True when two forms are the same linear form (letters and number alike). */
+export function sameForm(a: LinForm, b: LinForm): boolean {
+  const names = new Set([...Object.keys(a.v), ...Object.keys(b.v)])
+  for (const n of names) if (!rEq(a.v[n] ?? ZERO(), b.v[n] ?? ZERO())) return false
+  return rEq(a.c, b.c)
+}
+
+/** True when two equations are the same, side by side. */
+export function sameEq(a: LinEq, b: LinEq): boolean {
+  return sameForm(a.L, b.L) && sameForm(a.R, b.R)
+}
+
+/** True when two systems are the same, equation by equation and side by side. */
+export function sameSystem(a: LinEq[], b: LinEq[]): boolean {
+  return a.length === b.length && a.every((e, i) => sameEq(e, b[i]))
+}
+
+function fScale(f: LinForm, k: Rat): LinForm {
+  const v: Record<string, Rat> = {}
+  for (const n of Object.keys(f.v)) v[n] = rMul(f.v[n], k)
+  return cleanForm(v, rMul(f.c, k))
+}
+
+/** a + b, or a − b when sign is −1, letter by letter and in the number term. */
+function fAdd(a: LinForm, b: LinForm, sign: 1 | -1): LinForm {
+  const names = new Set([...Object.keys(a.v), ...Object.keys(b.v)])
+  const v: Record<string, Rat> = {}
+  for (const n of names) {
+    const x = a.v[n] ?? ZERO()
+    const y = b.v[n] ?? ZERO()
+    v[n] = sign === 1 ? rAdd(x, y) : rSub(x, y)
+  }
+  return cleanForm(v, sign === 1 ? rAdd(a.c, b.c) : rSub(a.c, b.c))
+}
+
+/** The left side minus the right side of an equation. */
+function diffOf(e: LinEq): LinForm {
+  return fAdd(e.L, e.R, -1)
+}
+
+function coefOf(f: LinForm, v: string): Rat {
+  return f.v[v] ?? ZERO()
+}
+
+function isZeroRow(e: LinEq): boolean {
+  const d = diffOf(e)
+  return Object.keys(d.v).length === 0 && rIsZero(d.c)
+}
+
+/** The rank of a matrix of rationals, by exact elimination. */
+function rankOf(rows: Rat[][]): number {
+  const m = rows.map((r) => r.slice())
+  const cols = m.length === 0 ? 0 : m[0].length
+  let rank = 0
+  for (let c = 0; c < cols && rank < m.length; c++) {
+    let piv = -1
+    for (let r = rank; r < m.length; r++) {
+      if (!rIsZero(m[r][c])) {
+        piv = r
+        break
+      }
+    }
+    if (piv < 0) continue
+    ;[m[rank], m[piv]] = [m[piv], m[rank]]
+    for (let r = 0; r < m.length; r++) {
+      if (r === rank || rIsZero(m[r][c])) continue
+      const f = rDiv(m[r][c], m[rank][c])
+      for (let k = c; k < cols; k++) m[r][k] = rSub(m[r][k], rMul(f, m[rank][k]))
+    }
+    rank++
+  }
+  return rank
+}
+
+/** The text of one equation's row, as the sentences of the endings name it. */
+export function rowText(e: LinEq, vars: string[]): string {
+  return eqText(e, vars)
+}
+
+/**
+ * The value of each letter when the system states every letter alone as "letter = number" (in its own equation).
+ * Null when some letter is not stated so.
+ */
+export function solvedValues(eqs: LinEq[], vars: string[]): Record<string, Rat> | null {
+  const out: Record<string, Rat> = {}
+  for (const n of vars) {
+    const row = eqs.find(
+      (e) =>
+        Object.keys(e.L.v).length === 1 &&
+        rEq(coefOf(e.L, n), rat(1n)) &&
+        rIsZero(e.L.c) &&
+        Object.keys(e.R.v).length === 0
+    )
+    if (!row) return null
+    out[n] = row.R.c
+  }
+  return out
+}
+
+/** A form at the given values, or null when a letter has no value. */
+export function evalForm(f: LinForm, vals: Record<string, Rat>): Rat | null {
+  let acc = f.c
+  for (const n of Object.keys(f.v)) {
+    const x = vals[n]
+    if (x === undefined) return null
+    acc = rAdd(acc, rMul(f.v[n], x))
+  }
+  return acc
+}
+
+/**
+ * The verdict of one SystemEq op. `before` is the system the step starts from; `after` the system it ends with (null for
+ * the two endings, whose text is a sentence); `vars` the letters of the typed system. Every op is refused when it changes
+ * nothing. Exact rationals throughout.
+ */
+export function checkSystemOp(op: SystemOp, before: LinEq[], after: LinEq[] | null, vars: string[]): ValidationVerdict {
+  const ok = (b: boolean): ValidationVerdict => (b ? 'valid' : 'invalid')
+  const inRange = (i: number): boolean => Number.isInteger(i) && i >= 0 && i < before.length
+  // Every equation except the listed ones is the same as before.
+  const sameExcept = (skip: number[]): boolean => {
+    if (!after || after.length !== before.length) return false
+    return before.every((e, k) => skip.includes(k) || sameEq(e, after[k]))
+  }
+  switch (op.kind) {
+    case 'scale-equation': {
+      const k = ratOfText(op.k)
+      if (!after || !k || rIsZero(k) || rEq(k, rat(1n)) || !inRange(op.i)) return 'invalid'
+      if (!sameExcept([op.i]) || sameEq(before[op.i], after[op.i])) return 'invalid'
+      return ok(sameEq(after[op.i], { L: fScale(before[op.i].L, k), R: fScale(before[op.i].R, k) }))
+    }
+    case 'add-equations':
+    case 'subtract-equations': {
+      if (!after || !inRange(op.i) || !inRange(op.j) || op.i === op.j) return 'invalid'
+      const sign: 1 | -1 = op.kind === 'add-equations' ? 1 : -1
+      const want: LinEq = {
+        L: fAdd(before[op.i].L, before[op.j].L, sign),
+        R: fAdd(before[op.i].R, before[op.j].R, sign)
+      }
+      if (!sameExcept([op.i]) || sameEq(before[op.i], after[op.i])) return 'invalid'
+      return ok(sameEq(after[op.i], want))
+    }
+    case 'make-subject': {
+      if (!after || !inRange(op.i) || !vars.includes(op.v) || sameEq(before[op.i], after[op.i])) return 'invalid'
+      const D = diffOf(before[op.i])
+      const a = coefOf(D, op.v)
+      if (rIsZero(a)) return 'invalid'
+      // v = P with P free of v: then v − P is D/a, the same equation divided by a.
+      const scaled = fScale(D, rNeg(rDiv(rat(1n), a)))
+      const pv: Record<string, Rat> = { ...scaled.v }
+      delete pv[op.v]
+      const want: LinEq = { L: cleanForm({ [op.v]: rat(1n) }, ZERO()), R: cleanForm(pv, scaled.c) }
+      return ok(sameExcept([op.i]) && sameEq(after[op.i], want))
+    }
+    case 'substitute':
+    case 'back-substitute': {
+      if (!after || !inRange(op.i) || !inRange(op.j) || op.i === op.j) return 'invalid'
+      const subject = before[op.i]
+      const isSubject =
+        Object.keys(subject.L.v).length === 1 &&
+        rEq(coefOf(subject.L, op.v), rat(1n)) &&
+        rIsZero(subject.L.c) &&
+        rIsZero(coefOf(subject.R, op.v))
+      if (!isSubject) return 'invalid'
+      if (op.kind === 'back-substitute' && Object.keys(subject.R.v).length > 0) return 'invalid'
+      const P = subject.R
+      if (linFormText(P, vars) !== op.expr) return 'invalid'
+      const target = before[op.j]
+      if (rIsZero(coefOf(diffOf(target), op.v))) return 'invalid'
+      // Put v = P into one side: v goes out, the letters of P come in with the same coefficient.
+      const putIn = (f: LinForm): LinForm => {
+        const rest: Record<string, Rat> = { ...f.v }
+        delete rest[op.v]
+        return fAdd(cleanForm(rest, f.c), fScale(P, coefOf(f, op.v)), 1)
+      }
+      const D = fAdd(putIn(target.L), putIn(target.R), -1)
+      // The result: letters on the left, a number on the right.
+      const want: LinEq = { L: cleanForm(D.v, ZERO()), R: cleanForm({}, rNeg(D.c)) }
+      if (!sameExcept([op.j]) || !sameEq(before[op.i], after[op.i])) return 'invalid'
+      return ok(sameEq(after[op.j], want))
+    }
+    case 'no-common-solution': {
+      if (!inRange(op.i) || after) return 'invalid'
+      const D = diffOf(before[op.i])
+      if (Object.keys(D.v).length > 0 || rIsZero(D.c)) return 'invalid'
+      return ok(op.row === rowText(before[op.i], vars))
+    }
+    case 'infinitely-many': {
+      if (after) return 'invalid'
+      const rows = op.rows
+      if (rows.length < 1 || rows.length >= vars.length) return 'invalid'
+      if (new Set(rows).size !== rows.length || !rows.every(inRange)) return 'invalid'
+      if (rows.some((r) => Object.keys(diffOf(before[r]).v).length === 0)) return 'invalid'
+      const matrix = rows.map((r) => vars.map((n) => coefOf(diffOf(before[r]), n)))
+      if (rankOf(matrix) !== rows.length) return 'invalid'
+      if (before.some((e, k) => !rows.includes(k) && !isZeroRow(e))) return 'invalid'
+      if (op.texts.length !== rows.length || rows.some((r, idx) => op.texts[idx] !== rowText(before[r], vars))) {
+        return 'invalid'
+      }
+      return 'valid'
+    }
+    default:
+      return 'invalid'
+  }
+}
+
+const SYSTEM_OP_KINDS = new Set([
+  'scale-equation',
+  'add-equations',
+  'subtract-equations',
+  'make-subject',
+  'substitute',
+  'back-substitute',
+  'no-common-solution',
+  'infinitely-many'
+])
+
+/** True for a SystemEq op (S1d), by its kind. */
+export function isSystemOp(op: unknown): op is SystemOp {
+  return typeof op === 'object' && op !== null && SYSTEM_OP_KINDS.has(String((op as { kind?: unknown }).kind))
+}
+
+/** The equation times k on both sides. */
+export function scaleEq(e: LinEq, k: Rat): LinEq {
+  return { L: fScale(e.L, k), R: fScale(e.R, k) }
+}
+
+/** Eᵢ + Eⱼ (sign 1) or Eᵢ − Eⱼ (sign −1), side by side. */
+export function addEq(a: LinEq, b: LinEq, sign: 1 | -1): LinEq {
+  return { L: fAdd(a.L, b.L, sign), R: fAdd(a.R, b.R, sign) }
+}
+
+/** The letter's coefficient in the left side minus the right side. */
+export function systemCoefficient(e: LinEq, v: string): Rat {
+  return coefOf(diffOf(e), v)
+}
+
+/** True when the equation is "v = P" with P free of v (the subject form of v). */
+export function isSubjectOf(e: LinEq, v: string): boolean {
+  return (
+    Object.keys(e.L.v).length === 1 &&
+    rEq(coefOf(e.L, v), rat(1n)) &&
+    rIsZero(e.L.c) &&
+    rIsZero(coefOf(e.R, v))
+  )
+}
+
+/** True when the equation has letters on its left only, and a number on its right. */
+export function isNormalEq(e: LinEq): boolean {
+  return Object.keys(e.R.v).length === 0 && rIsZero(e.L.c)
+}
+
+/** The equation rearranged to v = P (P free of v), or null when v has no coefficient in it. */
+export function makeSubjectEq(e: LinEq, v: string): LinEq | null {
+  const D = diffOf(e)
+  const a = coefOf(D, v)
+  if (rIsZero(a)) return null
+  const scaled = fScale(D, rNeg(rDiv(rat(1n), a)))
+  const pv: Record<string, Rat> = { ...scaled.v }
+  delete pv[v]
+  return { L: cleanForm({ [v]: rat(1n) }, ZERO()), R: cleanForm(pv, scaled.c) }
+}
+
+/**
+ * The equation with v put as P (the subject's right side) on both sides: v goes out, P comes in with the same
+ * coefficient. The result has letters on the left and a number on the right. Null when the subject is not "v = P".
+ */
+export function substituteEq(target: LinEq, subject: LinEq, v: string): LinEq | null {
+  if (!isSubjectOf(subject, v)) return null
+  const P = subject.R
+  const putIn = (f: LinForm): LinForm => {
+    const rest: Record<string, Rat> = { ...f.v }
+    delete rest[v]
+    return fAdd(cleanForm(rest, f.c), fScale(P, coefOf(f, v)), 1)
+  }
+  const D = fAdd(putIn(target.L), putIn(target.R), -1)
+  return { L: cleanForm(D.v, ZERO()), R: cleanForm({}, rNeg(D.c)) }
 }
