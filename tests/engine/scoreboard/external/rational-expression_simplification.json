@@ -1,0 +1,226 @@
+[
+  {
+    "id": "ti_01_06_01",
+    "class": "rational-expression simplification",
+    "question": "((x-6)/((x)^(2)-36))",
+    "answer": "((1)/(x+6))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "ti_01_06_01",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_06_04",
+    "class": "rational-expression simplification",
+    "question": "((3)/(x+5))-((1)/(x-3))",
+    "answer": "((2(x-7))/((x+5)(x-3)))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "ti_01_06_04",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_06_05",
+    "class": "rational-expression simplification",
+    "question": "((((x)/(y))-((y)/(x)))/(y))",
+    "answer": "(((x)^(2)-(y)^(2))/(x(y)^(2)))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "ti_01_06_05",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339199459",
+    "class": "rational-expression simplification",
+    "question": "(((y)^(2)+10y+25)/((y)^(2)+11y+30))",
+    "answer": "((y+5)/(y+6))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339199459",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339220266",
+    "class": "rational-expression simplification",
+    "question": "((9(b)^(2)+18b+9)/(3b+3))",
+    "answer": "3b+3",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339220266",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339428487",
+    "class": "rational-expression simplification",
+    "question": "((2(x)^(2)+7x-4)/(4(x)^(2)+2x-2))",
+    "answer": "((x+4)/(2x+2))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339428487",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339226352",
+    "class": "rational-expression simplification",
+    "question": "(((a)^(2)+9a+18)/((a)^(2)+3a-18))",
+    "answer": "((a+3)/(a-3))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339226352",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339196522",
+    "class": "rational-expression simplification",
+    "question": "((12(n)^(2)-29n-8)/(28(n)^(2)-5n-3))",
+    "answer": "((3n-8)/(7n-3))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339196522",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339317719",
+    "class": "rational-expression simplification",
+    "question": "((4)/(a+1))+((5)/(a-3))",
+    "answer": "((9a-7)/((a)^(2)-2a-3))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339317719",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339317863",
+    "class": "rational-expression simplification",
+    "question": "((y+3)/(y-2))+((y-3)/(y+1))",
+    "answer": "((2(y)^(2)-y+9)/((y)^(2)-y-2))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339317863",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339315838",
+    "class": "rational-expression simplification",
+    "question": "((3z)/(z+1))+((2z+5)/(z-2))",
+    "answer": "((5(z)^(2)+z+5)/((z)^(2)-z-2))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339315838",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339239420",
+    "class": "rational-expression simplification",
+    "question": "((((2)/(a))+((7)/(b)))/(b))",
+    "answer": "((2b+7a)/(a(b)^(2)))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339239420",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339240980",
+    "class": "rational-expression simplification",
+    "question": "((((2c)/(c+2))+((c-1)/(c+1)))/(((2c+1)/(c+1))))",
+    "answer": "((3(c)^(2)+3c-2)/(2(c)^(2)+5c+2))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339240980",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339433919",
+    "class": "rational-expression simplification",
+    "question": "(((x)^(2)-x-12)/((x)^(2)-8x+16))",
+    "answer": "((x+3)/(x-4))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339433919",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339342381",
+    "class": "rational-expression simplification",
+    "question": "((8(x)^(3))/(((2x))^(2)))",
+    "answer": "2x",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339342381",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339343617",
+    "class": "rational-expression simplification",
+    "question": "((((a)/(2b))-((2b)/(9a)))/(((3a-2b)/(6a))))",
+    "answer": "((3a+2b)/(3b))",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339343617",
+      "url": "https://openstax.org"
+    }
+  }
+]

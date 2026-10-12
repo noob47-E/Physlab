@@ -73,3 +73,4 @@ non-English items). It ships as a separate file beside the installer, with its o
 every question and every change, and is never bundled inside the app. It is a selection, not
 every question the harvest found: of the 222 licence-cleared questions, 92 carry a broken Numbas
 placeholder and most of the rest are duplicate copies or Numbas's own demonstration items.
+OpenStax textbook exercises (College Algebra 2e and Calculus Volume 1, CC BY 4.0, https://creativecommons.org/licenses/by/4.0/) are used for testing only, in tests/engine/scoreboard/external/; they are never shipped in the app (see docs/knowledge/scoreboard-external.md).

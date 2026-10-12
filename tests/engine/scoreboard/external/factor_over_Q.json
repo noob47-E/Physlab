@@ -1,0 +1,436 @@
+[
+  {
+    "id": "ti_01_05_01",
+    "class": "factor over ℚ",
+    "question": "x((b)^(2)-a)+6((b)^(2)-a)",
+    "answer": "((b)^(2)-a)(x+6)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "ti_01_05_01",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339139078",
+    "class": "factor over ℚ",
+    "question": "(x)^(2)+2x-15",
+    "answer": "(x-3)(x+5)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339139078",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_05_02",
+    "class": "factor over ℚ",
+    "question": "(x)^(2)-7x+6",
+    "answer": "(x-6)(x-1)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "ti_01_05_02",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339140179",
+    "class": "factor over ℚ",
+    "question": "25(x)^(2)+20x+4",
+    "answer": "((5x+2))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339140179",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_05_04",
+    "class": "factor over ℚ",
+    "question": "49(x)^(2)-14x+1",
+    "answer": "((7x-1))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "ti_01_05_04",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339296405",
+    "class": "factor over ℚ",
+    "question": "9(x)^(2)-25",
+    "answer": "(3x+5)(3x-5)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339296405",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_05_05",
+    "class": "factor over ℚ",
+    "question": "81(y)^(2)-100",
+    "answer": "(9y+10)(9y-10)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "ti_01_05_05",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339240349",
+    "class": "factor over ℚ",
+    "question": "(x)^(3)+512",
+    "answer": "(x+8)((x)^(2)-8x+64)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339240349",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339281618",
+    "class": "factor over ℚ",
+    "question": "8(x)^(3)-125",
+    "answer": "(2x-5)(4(x)^(2)+10x+25)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339281618",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339196521",
+    "class": "factor over ℚ",
+    "question": "2(a)^(2)+9a-18",
+    "answer": "(2a-3)(a+6)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339196521",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339260458",
+    "class": "factor over ℚ",
+    "question": "6(n)^(2)-19n-11",
+    "answer": "(3n-11)(2n+1)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339260458",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339303598",
+    "class": "factor over ℚ",
+    "question": "2(p)^(2)-5p-7",
+    "answer": "(p+1)(2p-7)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339303598",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339303716",
+    "class": "factor over ℚ",
+    "question": "10(h)^(2)-9h-9",
+    "answer": "(5h+3)(2h-3)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339303716",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339239128",
+    "class": "factor over ℚ",
+    "question": "9(d)^(2)-73d+8",
+    "answer": "(9d-1)(d-8)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339239128",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339321405",
+    "class": "factor over ℚ",
+    "question": "12(t)^(2)+t-13",
+    "answer": "(12t+13)(t-1)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339321405",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339344423",
+    "class": "factor over ℚ",
+    "question": "16(x)^(2)-100",
+    "answer": "(4x+10)(4x-10)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339344423",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339344528",
+    "class": "factor over ℚ",
+    "question": "121(p)^(2)-169",
+    "answer": "(11p+13)(11p-13)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339344528",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339138845",
+    "class": "factor over ℚ",
+    "question": "361(d)^(2)-81",
+    "answer": "(19d+9)(19d-9)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339138845",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339273782",
+    "class": "factor over ℚ",
+    "question": "144(b)^(2)-25(c)^(2)",
+    "answer": "(12b+5c)(12b-5c)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339273782",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339273905",
+    "class": "factor over ℚ",
+    "question": "49(n)^(2)+168n+144",
+    "answer": "((7n+12))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339273905",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339227728",
+    "class": "factor over ℚ",
+    "question": "225(y)^(2)+120y+16",
+    "answer": "((15y+4))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339227728",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339213934",
+    "class": "factor over ℚ",
+    "question": "25(p)^(2)-120p+144",
+    "answer": "((5p-12))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339213934",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339214045",
+    "class": "factor over ℚ",
+    "question": "(x)^(3)+216",
+    "answer": "(x+6)((x)^(2)-6x+36)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339214045",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339222883",
+    "class": "factor over ℚ",
+    "question": "125(a)^(3)+343",
+    "answer": "(5a+7)(25(a)^(2)-35a+49)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339222883",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339223008",
+    "class": "factor over ℚ",
+    "question": "64(x)^(3)-125",
+    "answer": "(4x-5)(16(x)^(2)+20x+25)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339223008",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339239371",
+    "class": "factor over ℚ",
+    "question": "16(x)^(4)-200(x)^(2)+625",
+    "answer": "((2x+5))^(2)((2x-5))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Factoring Polynomials",
+      "exercise number": "fs-id1167339239371",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339308848",
+    "class": "factor over ℚ",
+    "question": "8(a)^(2)+30a-27",
+    "answer": "(4a-3)(2a+9)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339308848",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339308963",
+    "class": "factor over ℚ",
+    "question": "(x)^(2)+10x+25",
+    "answer": "((x+5))^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339308963",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339309179",
+    "class": "factor over ℚ",
+    "question": "(p)^(3)+216",
+    "answer": "(p+6)((p)^(2)-6p+36)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339309179",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339343137",
+    "class": "factor over ℚ",
+    "question": "16(x)^(2)-81",
+    "answer": "(4x+9)(4x-9)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339343137",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339343246",
+    "class": "factor over ℚ",
+    "question": "27(c)^(3)-1331",
+    "answer": "(3c-11)(9(c)^(2)+33c+121)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339343246",
+      "url": "https://openstax.org"
+    }
+  }
+]

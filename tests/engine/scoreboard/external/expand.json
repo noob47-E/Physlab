@@ -1,0 +1,464 @@
+[
+  {
+    "id": "ti_01_04_02",
+    "class": "expand",
+    "question": "(2(x)^(3)+5(x)^(2)-x+1)+(2(x)^(2)-3x-4)",
+    "answer": "2(x)^(3)+7(x)^(2)-4x-3",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "ti_01_04_02",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_04_03",
+    "class": "expand",
+    "question": "(-7(x)^(3)-7(x)^(2)+6x-2)-(4(x)^(3)-6(x)^(2)-x+7)",
+    "answer": "-11(x)^(3)-(x)^(2)+7x-9",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "ti_01_04_03",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_04_04",
+    "class": "expand",
+    "question": "(3x+2)((x)^(3)-4(x)^(2)+7)",
+    "answer": "3(x)^(4)-10(x)^(3)-8(x)^(2)+21x+14",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "ti_01_04_04",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_04_05",
+    "class": "expand",
+    "question": "(x+7)(3x-5)",
+    "answer": "3(x)^(2)+16x-35",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "ti_01_04_05",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339273765",
+    "class": "expand",
+    "question": "((3x-8))^(2)",
+    "answer": "9(x)^(2)-48x+64",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339273765",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_04_06",
+    "class": "expand",
+    "question": "((4x-1))^(2)",
+    "answer": "16(x)^(2)-8x+1",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "ti_01_04_06",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339315486",
+    "class": "expand",
+    "question": "(9x+4)(9x-4)",
+    "answer": "81(x)^(2)-16",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339315486",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "ti_01_04_07",
+    "class": "expand",
+    "question": "(2x+7)(2x-7)",
+    "answer": "4(x)^(2)-49",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "ti_01_04_07",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339432587",
+    "class": "expand",
+    "question": "(12(x)^(2)+3x)-(8(x)^(2)-19)",
+    "answer": "4(x)^(2)+3x+19",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339432587",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339262640",
+    "class": "expand",
+    "question": "(11(b)^(4)-6(b)^(3)+18(b)^(2)-4b+8)-(3(b)^(3)+6(b)^(2)+3b)",
+    "answer": "11(b)^(4)-9(b)^(3)+12(b)^(2)-7b+8",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339262640",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339196745",
+    "class": "expand",
+    "question": "(4x+2)(6x-4)",
+    "answer": "24(x)^(2)-4x-8",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339196745",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339223391",
+    "class": "expand",
+    "question": "(6(b)^(2)-6)(4(b)^(2)-4)",
+    "answer": "24(b)^(4)-48(b)^(2)+24",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339223391",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339306553",
+    "class": "expand",
+    "question": "(9v-11)(11v-9)",
+    "answer": "99(v)^(2)-202v+99",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339306553",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339286513",
+    "class": "expand",
+    "question": "(8n-4)((n)^(2)+9)",
+    "answer": "8(n)^(3)-4(n)^(2)+72n-36",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339286513",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339199508",
+    "class": "expand",
+    "question": "((3y-7))^(2)",
+    "answer": "9(y)^(2)-42y+49",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339199508",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339220271",
+    "class": "expand",
+    "question": "((4p+9))^(2)",
+    "answer": "16(p)^(2)+72p+81",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339220271",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339226325",
+    "class": "expand",
+    "question": "((3y-6))^(2)",
+    "answer": "9(y)^(2)-36y+36",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339226325",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339196448",
+    "class": "expand",
+    "question": "(4c+1)(4c-1)",
+    "answer": "16(c)^(2)-1",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339196448",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339196575",
+    "class": "expand",
+    "question": "(15n-6)(15n+6)",
+    "answer": "225(n)^(2)-36",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339196575",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339260524",
+    "class": "expand",
+    "question": "(4+4m)(4-4m)",
+    "answer": "-16(m)^(2)+16",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339260524",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339239119",
+    "class": "expand",
+    "question": "(11q-10)(11q+10)",
+    "answer": "121(q)^(2)-100",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339239119",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339321425",
+    "class": "expand",
+    "question": "(4(t)^(2)+t-7)(4(t)^(2)-1)",
+    "answer": "16(t)^(4)+4(t)^(3)-32(t)^(2)-t+7",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339321425",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339138896",
+    "class": "expand",
+    "question": "(y-2)((y)^(2)-4y-9)",
+    "answer": "(y)^(3)-6(y)^(2)-y+18",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339138896",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339273894",
+    "class": "expand",
+    "question": "(3(p)^(2)+2p-10)(p-1)",
+    "answer": "3(p)^(3)-(p)^(2)-12p+10",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339273894",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339344516",
+    "class": "expand",
+    "question": "(a+b)(a-b)",
+    "answer": "(a)^(2)-(b)^(2)",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339344516",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339225730",
+    "class": "expand",
+    "question": "(4x+1)(8x-3)",
+    "answer": "32(x)^(2)-4x-3",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339225730",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339243067",
+    "class": "expand",
+    "question": "((4t-7))^(2)(2t+1)-(4(t)^(2)+2t+11)",
+    "answer": "32(t)^(3)-100(t)^(2)+40t+38",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Polynomials",
+      "exercise number": "fs-id1167339243067",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339206677",
+    "class": "expand",
+    "question": "(3(x)^(3)+2x-1)+(4(x)^(2)-2x+7)",
+    "answer": "3(x)^(3)+4(x)^(2)+6",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339206677",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339206863",
+    "class": "expand",
+    "question": "(2(x)^(2)+3x-6)+(3(x)^(2)-4x+9)",
+    "answer": "5(x)^(2)-x+3",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339206863",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339297850",
+    "class": "expand",
+    "question": "(k+3)(k-6)",
+    "answer": "(k)^(2)-3k-18",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339297850",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339297977",
+    "class": "expand",
+    "question": "(x+1)((x)^(2)+1)",
+    "answer": "(x)^(3)+(x)^(2)+x+1",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339297977",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339342776",
+    "class": "expand",
+    "question": "(13(q)^(3)+2(q)^(2)-3)-(6(q)^(2)+5q-3)",
+    "answer": "13(q)^(3)-4(q)^(2)-5q",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339342776",
+      "url": "https://openstax.org"
+    }
+  },
+  {
+    "id": "fs-id1167339342980",
+    "class": "expand",
+    "question": "(n-2)((n)^(2)-4n+4)",
+    "answer": "(n)^(3)-6(n)^(2)+12n-8",
+    "source": {
+      "book": "College Algebra 2e",
+      "edition": "2e",
+      "chapter": "",
+      "section": "Rational Expressions",
+      "exercise number": "fs-id1167339342980",
+      "url": "https://openstax.org"
+    }
+  }
+]

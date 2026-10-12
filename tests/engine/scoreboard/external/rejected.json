@@ -1,0 +1,27 @@
+[
+  {
+    "id": "fs-id1167339331333",
+    "class": "rational-expression simplification",
+    "reason": "not a rational expression: arithmetic on one letter (3m(4+7)-m)"
+  },
+  {
+    "id": "fs-id1167339432187",
+    "class": "rational-expression simplification",
+    "reason": "not a rational expression: numbers only (4^5 over 4^3)"
+  },
+  {
+    "id": "fs-id1167339206496",
+    "class": "rational-expression simplification",
+    "reason": "not a rational expression: square roots (4sqrt(3)+6sqrt(3)); the exact check cannot read a square root in this class"
+  },
+  {
+    "id": "fs-id1165135681072",
+    "class": "derivatives",
+    "reason": "not a derivative: the question s(0) asks for a value and the answer x=0 is an equation; the extractor took it because it had one formula, not because it was a derivative exercise"
+  },
+  {
+    "id": "fs-id1165135681147",
+    "class": "derivatives",
+    "reason": "not a derivative: the question s'(2) asks for a value and the answer t=2 is an equation; the same extractor fault"
+  }
+]
