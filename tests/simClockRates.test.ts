@@ -150,17 +150,21 @@ describe('the clock is the step count over the rate', () => {
     for (let i = 0; i < 590; i++) t.push(...w.stepOnce().samples.map((s) => s.t))
     expect(w.time).toBe(1)
     expect(t).toEqual(Array.from({ length: 11 }, (_, k) => k / 10))
-    // And from a place the new rate cannot land on the grid from (1/240 s, then 60 a second): a
-    // reading on the first step past each 0.1 s, still ten a second.
+    // And from a place the new rate cannot land on the grid from (1/240 s, then 60 a second): 240
+    // carries on to 1/60 s, the first tick 60's steps go on from, so every reading is still k/10
+    // exactly (SB9, decision a; before, they read 0.1042, 0.2042 …).
     const v = await world({ stepRate: 240 })
     v.addBody(body())
     const u: number[] = []
     u.push(...v.stepOnce().samples.map((s) => s.t))
     v.setWorldSettings({ stepRate: 60 })
-    for (let i = 0; i < 60; i++) u.push(...v.stepOnce().samples.map((s) => s.t))
-    expect(u).toHaveLength(11)
-    u.slice(1).forEach((x, k) => expect(x - (k + 1) / 10).toBeGreaterThanOrEqual(0))
-    u.slice(1).forEach((x, k) => expect(x - (k + 1) / 10).toBeLessThan(1 / 60))
+    expect(v.stepRate).toBe(240)
+    for (let i = 0; i < 3; i++) u.push(...v.stepOnce().samples.map((s) => s.t))
+    expect(v.time).toBe(1 / 60)
+    expect(v.stepRate).toBe(60)
+    for (let i = 0; i < 59; i++) u.push(...v.stepOnce().samples.map((s) => s.t))
+    expect(v.time).toBe(1)
+    expect(u).toEqual(Array.from({ length: 11 }, (_, k) => k / 10))
     v.destroy()
     w.destroy()
   })

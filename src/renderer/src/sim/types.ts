@@ -172,6 +172,18 @@ export interface OwnForces {
   rollingTorque: V3
 }
 
+/**
+ * A saved moment of a run (SB9, I-4): the step it was saved at, the clock then, and the build of the
+ * world it belongs to (`SimWorld.rebuildSerial`). Everything else — the engine's own state and
+ * PhysLab's — stays private to the world that saved it. It holds an engine object until
+ * `freeKeyframe`; a rebuild frees it too, since it can never be restored after one.
+ */
+export interface Keyframe {
+  readonly step: number
+  readonly time: number
+  readonly rebuild: number
+}
+
 /** Live values of one body, read out for the panels and labels. */
 export interface BodyState {
   position: V3

@@ -10,8 +10,9 @@ import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalAreaTurned, materialById, shapeVolume } from './materials'
 import { pulleyPartnerMove, pulleyRim, reachAlong, ropeLayout, ropeLinkMass, ropeSegments, toLocal } from './links'
 import { eulerToQuat } from './rotate'
-import type { Actuator, AfterStep, BodyDef, BodyId, BodyState, ContactEvent, Link, OwnForces, StepRate, StepWork, Touch, WorldSettings } from './types'
+import type { Actuator, AfterStep, BodyDef, BodyId, BodyState, ContactEvent, Keyframe, Link, OwnForces, StepRate, StepWork, Touch, WorldSettings } from './types'
 import { DEFAULT_STEP_RATE, DEFAULT_WORLD, rateOf } from './types'
+import { REC_FLOATS, type RecordLayout } from './tape'
 import type { V3 } from '../math/vec'
 
 /** Object layers: things that never move, and things that do. */
@@ -183,6 +184,52 @@ interface Applied {
 
 type AfterStepListener = (w: SimWorld, s: AfterStep) => void
 
+/**
+ * What a keyframe holds besides its step, time and build (SB9): Jolt's own state (bodies, the
+ * contact cache that warm-starts the next step, the joints' impulses, gravity and the last Δt) in a
+ * recorder, and every piece of PhysLab's own state a step reads — the clock, the rate (and one still
+ * waiting for the grid), the settings, who touches whom (rolling resistance), the hand, the last own
+ * forces, the pushes, the own springs in their order, and each body's definition (its bounce,
+ * friction and damping live in Jolt but are not part of Jolt's saved state).
+ */
+interface Saved {
+  rec: InstanceType<Jolt['StateRecorderImpl']>
+  rebuild: number
+  steps: number
+  ticks: number
+  startRead: boolean
+  rate: StepRate
+  pendingRate: StepRate | null
+  settings: WorldSettings
+  touching: Map<BodyId, BodyId>
+  grabbed: { id: BodyId; target: V3 } | null
+  applied: { id: BodyId; before: V3; f: OwnForces; damper: V3 }[]
+  actuators: Map<BodyId, Actuator[]>
+  ownSprings: OwnSpring[]
+  defs: BodyDef[]
+}
+
+const copyForces = (f: OwnForces): OwnForces => ({
+  drag: [...f.drag],
+  push: [...f.push],
+  hand: [...f.hand],
+  spring: [...f.spring],
+  rollingTorque: [...f.rollingTorque]
+})
+
+/** Whether two values of a definition or a settings object are the same (arrays number by number). */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+  return a.every((v, i) => v === b[i])
+}
+
+/** Whether `patch` says anything `into` does not already say. */
+function changes(into: object, patch: object): boolean {
+  const was = into as Record<string, unknown>
+  return Object.entries(patch).some(([key, v]) => !sameValue(was[key], v))
+}
+
 type AnyJolt = Record<string, never>
 
 export class SimWorld {
@@ -257,6 +304,22 @@ export class SimWorld {
   private ticks = 0
   /** Whether this run's t = 0 reading has been handed out (see `step`). Reset with the step count. */
   private startRead = false
+  /**
+   * A rate asked for part-way through a run that the clock cannot yet land on the 0.1 s grid with:
+   * the rate in force carries on until a step ends on the new rate's own grid (at most 1/60 s), so
+   * every reading stays on k/10. One step at 600 and then 240 used to read at 122/1200 s.
+   */
+  private pendingRate: StepRate | null = null
+  /** +1 on every change from outside the run (I-4): the recorder takes a keyframe after each one. */
+  private inputs = 0
+  /** +1 whenever the engine's bodies or joints are built again: a keyframe from before can never come back. */
+  private rebuilds = 0
+  /** The keyframes alive, with what each holds besides its step, time and build. */
+  private keyframes = new Map<Keyframe, Saved>()
+  /** The bodies a step record reads, in layout order (bodies, then rope links); made again after a rebuild. */
+  private recBodies: Body[] | null = null
+  /** True while the after-step listeners run: a keyframe may be saved then, never restored. */
+  private inHook = false
 
   /** Simulated time in seconds since the last reset: the ticks over 1200, the nearest number to it. */
   get time(): number {
@@ -271,6 +334,37 @@ export class SimWorld {
   /** Engine steps taken since the last reset. */
   get stepIndex(): number {
     return this.steps
+  }
+
+  /**
+   * Raised by every change made from outside the run (I-4): grab, moveGrab, release_, placeBody,
+   * setVelocity, setPosition, setRotation, setAngularVelocity, an updateBody that changed something,
+   * setWorldSettings that changed something other than slow motion, setActuators, setLinks, wakeAll,
+   * addBody and removeBody. Stepping, reading and restoring a keyframe never raise it.
+   */
+  get inputSerial(): number {
+    return this.inputs
+  }
+
+  /**
+   * Raised whenever the engine's bodies or joints are built again (I-4): rebuild and Reset (clear),
+   * and anything else that adds or removes an engine body or joint — addBody, removeBody, setLinks,
+   * and a spring a new rate moves between PhysLab's force and the engine's. A keyframe from an
+   * earlier build cannot be restored, so the step record's layout and the tape start again with it.
+   */
+  get rebuildSerial(): number {
+    return this.rebuilds
+  }
+
+  private input(): void {
+    this.inputs++
+  }
+
+  /** The engine's bodies or joints were built again: older keyframes are useless, so they are freed. */
+  private restructured(): void {
+    this.rebuilds++
+    this.recBodies = null
+    for (const k of [...this.keyframes.keys()]) this.freeKeyframe(k)
   }
 
   private constructor(jolt: Jolt) {
@@ -339,6 +433,9 @@ export class SimWorld {
     this.contacts = []
     this.applied = new Map()
     this.grabbed = null
+    // At t = 0 every rate lands on the grid: one still waiting starts with the new run.
+    if (this.pendingRate !== null) this.switchRate(this.pendingRate)
+    this.restructured()
   }
 
   // -------------------------------------------------------------------------
@@ -374,6 +471,8 @@ export class SimWorld {
 
   setWorldSettings(patch: Partial<WorldSettings>): void {
     const before = this.settings
+    // Slow motion is how the run is watched, not part of it (a keyframe leaves it as it is).
+    if (changes(before, { ...patch, timeScale: before.timeScale })) this.input()
     this.settings = { ...before, ...patch }
     const rateChanged = this.applyWorldSettings()
     // Switching 2D on or off changes what a body is allowed to do, so rebuild them — keeping
@@ -406,16 +505,36 @@ export class SimWorld {
   }
 
   /**
-   * Takes up the rate the settings ask for. Part-way through a run the clock carries on from where
-   * it is (it counts ticks, and only the ticks per step change), and the time gathered towards the
-   * next step stays the same length of time.
+   * Takes up the rate the settings ask for, and says whether it did. Part-way through a run the
+   * clock carries on from where it is (it counts ticks, and only the ticks per step change), and the
+   * time gathered towards the next step stays the same length of time. A rate whose steps cannot
+   * land on the 0.1 s grid from the clock's tick waits (`pendingRate`): the rate in force takes the
+   * few steps to the first tick the new rate can go on from, and `advance` switches there.
    */
   private applyRate(): boolean {
     const next = rateOf(this.settings)
+    this.pendingRate = null
     if (next === this.rate) return false
+    if (this.ticks % (TICKS_PER_SECOND / next) !== 0) {
+      this.pendingRate = next
+      return false
+    }
+    this.switchRate(next)
+    return true
+  }
+
+  private switchRate(next: StepRate): void {
     this.accumulator *= next / this.rate
     this.rate = next
-    return true
+    this.pendingRate = null
+  }
+
+  /** Starts a rate waiting for the grid once the clock is on a tick its steps go on from (see `applyRate`). */
+  private takeUpRate(): void {
+    if (this.pendingRate === null || this.ticks % (TICKS_PER_SECOND / this.pendingRate) !== 0) return
+    this.switchRate(this.pendingRate)
+    // Whether each spring is stable worked out by us depends on the step, as in setWorldSettings.
+    this.redecideSprings()
   }
 
   // -------------------------------------------------------------------------
@@ -479,6 +598,8 @@ export class SimWorld {
     this.release(rot)
     this.release(lv)
     this.release(av)
+    this.input()
+    this.restructured()
   }
 
   /**
@@ -502,6 +623,8 @@ export class SimWorld {
       was.mass !== def.mass ||
       was.lock !== def.lock
     if (structural) return false
+    // Any change at all is an input for the recorder (I-4); a definition handed back as it was is not.
+    if (changes(was, def) || changes(def, was)) this.input()
 
     const body = e.body
     if (was.restitution !== def.restitution) body.SetRestitution(def.restitution)
@@ -547,6 +670,8 @@ export class SimWorld {
       const entry = this.entries.get(bid)
       if (entry) entry.body.SetUserData(i + 1)
     })
+    this.input()
+    this.restructured()
   }
 
   // -------------------------------------------------------------------------
@@ -566,6 +691,8 @@ export class SimWorld {
    *    its energy; only a spring too stiff for the step is left to Jolt's soft limit.
    */
   setLinks(links: Link[]): void {
+    this.input()
+    this.restructured()
     this.linkDefs = links
     this.removeLinks()
     for (const link of links) {
@@ -611,30 +738,39 @@ export class SimWorld {
    * built as it always was: it loses energy, but it cannot blow up.
    */
   private addSpring(link: Link, a: Entry, b: Entry): void {
-    const k = Math.max(SPRING_FLOOR, link.stiffness)
-    const moving = [a, b].filter((e) => e.def.motion === 'dynamic')
-    const mu = moving.length === 2 ? (a.mass * b.mass) / (a.mass + b.mass) : moving.length === 1 ? moving[0].mass : Infinity
-    if (Math.sqrt(k / mu) / this.rate >= 1) {
+    if (this.springKindAt(link, a, b) === 'engine') {
       this.addDistance(link, a, b)
       this.springKinds.set(link.id, 'engine')
       return
     }
+    const k = Math.max(SPRING_FLOOR, link.stiffness)
     this.ownSprings.push({ link, a, b, k, c: Math.max(0, link.damping), L0: Math.max(SPRING_FLOOR, link.length) })
     this.springKinds.set(link.id, 'own')
+  }
+
+  /** Which way a spring is built at the rate in force: ours while ω/rate < 1, the engine's beyond. */
+  private springKindAt(link: Link, a: Entry, b: Entry): 'own' | 'engine' {
+    const k = Math.max(SPRING_FLOOR, link.stiffness)
+    const moving = [a, b].filter((e) => e.def.motion === 'dynamic')
+    const mu = moving.length === 2 ? (a.mass * b.mass) / (a.mass + b.mass) : moving.length === 1 ? moving[0].mass : Infinity
+    return Math.sqrt(k / mu) / this.rate >= 1 ? 'engine' : 'own'
   }
 
   /**
    * After a change of rate: each spring built the other way from what the new rate calls for is
    * built again, and nothing else is touched. A full `setLinks` would lay every rope again
-   * straight from its ends, part-way through the run.
+   * straight from its ends, part-way through the run. A spring that stays as it was is left
+   * exactly where it is — its own force in its place in the order, its engine joint unbuilt — so a
+   * rate change that moves no spring changes nothing a keyframe holds (SB9).
    */
   private redecideSprings(): void {
+    let rebuilt = false
     for (const link of this.linkDefs) {
       const was = this.springKinds.get(link.id)
       if (link.kind !== 'spring' || !was) continue
       const a = this.entries.get(link.a)
       const b = this.entries.get(link.b)
-      if (!a || !b) continue
+      if (!a || !b || this.springKindAt(link, a, b) === was) continue
       if (was === 'engine') {
         const c = this.links.get(link.id)
         if (c) this.physics.RemoveConstraint(c)
@@ -642,7 +778,10 @@ export class SimWorld {
       } else this.ownSprings = this.ownSprings.filter((s) => s.link.id !== link.id)
       this.springKinds.delete(link.id)
       this.addSpring(link, a, b)
+      rebuilt = true
     }
+    // An engine joint came or went: keyframes from before cannot be restored over it.
+    if (rebuilt) this.restructured()
   }
 
   private removeLinks(): void {
@@ -673,8 +812,10 @@ export class SimWorld {
     // leaves the constraint holding whatever positions the bodies happened to have when it was
     // made, which pinned them where they stood — a slack string held a ball in mid-air.
     settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-    settings.set_mPoint1(this.rv3([0, 0, 0]))
-    settings.set_mPoint2(this.rv3([0, 0, 0]))
+    const p1 = this.rv3([0, 0, 0])
+    const p2 = this.rv3([0, 0, 0])
+    settings.set_mPoint1(p1)
+    settings.set_mPoint2(p2)
     const L = Math.max(0.01, link.length)
     // A string may go slack — that is the whole difference between a string and a rod.
     settings.set_mMinDistance(link.kind === 'string' ? 0 : L)
@@ -686,15 +827,25 @@ export class SimWorld {
       spring.set_mDamping(Math.max(0, link.damping))
       settings.set_mLimitsSpringSettings(spring)
     }
-    // The settings and the points they hold are NOT released: Jolt's constraint keeps referring
-    // to them, exactly as a ShapeSettings owns the shape it built — free them and the constraint
-    // pins both bodies rigidly in place instead of joining them.
     this.addConstraint(link.id, settings.Create(a.body, b.body))
+    this.made(settings, p1, p2)
   }
 
   private addConstraint(id: string, c: Constraint): void {
     this.physics.AddConstraint(c)
     this.links.set(id, c)
+  }
+
+  /**
+   * Frees a joint's settings, and the vectors put into them, once the joint is made. A Jolt joint
+   * copies what it needs from its settings when it is created (Jolt's own samples build them on the
+   * stack), and the setters copy each vector in. They used to be kept for good, in the belief that
+   * the joint went on reading them: every setLinks — a rope end dragged, a length typed — left them
+   * behind, 61 engine objects for one each of rod, string, hinge, weld, stiff spring, pulley and an
+   * 8-link rope (SB9). A rod, a string, a hinge and a pulley still swing exactly as before (goldens).
+   */
+  private made(...objs: unknown[]): void {
+    for (const o of objs) this.release(o)
   }
 
   /** Two bodies glued together exactly as they stand. */
@@ -704,6 +855,7 @@ export class SimWorld {
     settings.set_mSpace(J.EConstraintSpace_WorldSpace)
     settings.set_mAutoDetectPoint(true)
     this.addConstraint(link.id, settings.Create(a.body, b.body))
+    this.made(settings)
   }
 
   /** A pin through both bodies, turning about the z axis — a seesaw on its stand, a door on its post. */
@@ -711,13 +863,15 @@ export class SimWorld {
     const J = this.jolt as unknown as AnyJolt & Jolt
     const settings = this.track(new J.HingeConstraintSettings())
     settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-    settings.set_mPoint1(this.rv3(link.pivotA ?? [0, 0, 0]))
-    settings.set_mPoint2(this.rv3(link.pivotB ?? [0, 0, 0]))
-    settings.set_mHingeAxis1(this.v3([0, 0, 1]))
-    settings.set_mHingeAxis2(this.v3([0, 0, 1]))
-    settings.set_mNormalAxis1(this.v3([1, 0, 0]))
-    settings.set_mNormalAxis2(this.v3([1, 0, 0]))
+    const vs = [this.rv3(link.pivotA ?? [0, 0, 0]), this.rv3(link.pivotB ?? [0, 0, 0]), this.v3([0, 0, 1]), this.v3([0, 0, 1]), this.v3([1, 0, 0]), this.v3([1, 0, 0])] as const
+    settings.set_mPoint1(vs[0])
+    settings.set_mPoint2(vs[1])
+    settings.set_mHingeAxis1(vs[2])
+    settings.set_mHingeAxis2(vs[3])
+    settings.set_mNormalAxis1(vs[4])
+    settings.set_mNormalAxis2(vs[5])
     this.addConstraint(link.id, settings.Create(a.body, b.body))
+    this.made(settings, ...vs)
   }
 
   /**
@@ -732,15 +886,17 @@ export class SimWorld {
     const { p1, p2 } = pulleyRim({ ...wheel.def, position: this.positionOf(wheel) }, this.positionOf(a), this.positionOf(b))
     const settings = this.track(new J.PulleyConstraintSettings())
     settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-    settings.set_mBodyPoint1(this.rv3([0, 0, 0]))
-    settings.set_mBodyPoint2(this.rv3([0, 0, 0]))
     // The fixed points are always in world space, whatever mSpace says.
-    settings.set_mFixedPoint1(this.rv3(p1))
-    settings.set_mFixedPoint2(this.rv3(p2))
+    const vs = [this.rv3([0, 0, 0]), this.rv3([0, 0, 0]), this.rv3(p1), this.rv3(p2)] as const
+    settings.set_mBodyPoint1(vs[0])
+    settings.set_mBodyPoint2(vs[1])
+    settings.set_mFixedPoint1(vs[2])
+    settings.set_mFixedPoint2(vs[3])
     settings.set_mRatio(1)
     settings.set_mMinLength(0)
     settings.set_mMaxLength(Math.max(0.05, link.length))
     this.addConstraint(link.id, settings.Create(a.body, b.body))
+    this.made(settings, ...vs)
   }
 
   /**
@@ -776,7 +932,9 @@ export class SimWorld {
     // load about.
     const loads = [a, b].filter((e) => e.def.motion === 'dynamic').map((e) => e.mass)
     const perLink = ropeLinkMass(loads, n)
-    const filter = this.track(new J.GroupFilterTable(n))
+    // Not tracked: the filter is reference counted, held by each link's collision group, and Jolt
+    // frees it with the last link (SB9). Destroying it by hand as well would free it twice.
+    const filter = new J.GroupFilterTable(n)
     for (let i = 0; i + 1 < n; i++) filter.DisableCollision(i, i + 1)
     const group = this.ropeCount++
     const rope: Rope = { bodies: [], constraints: [] }
@@ -801,7 +959,8 @@ export class SimWorld {
       settings.mAngularDamping = 0.3
       settings.mFriction = 0.6
       if (this.settings.twoD) settings.mAllowedDOFs = J.EAllowedDOFs_Plane2D
-      settings.set_mCollisionGroup(this.track(new J.CollisionGroup(filter, group, i)))
+      const collisionGroup = this.track(new J.CollisionGroup(filter, group, i))
+      settings.set_mCollisionGroup(collisionGroup)
       // A chain is solved link by link, so it needs more solver passes than a lone box.
       settings.set_mNumPositionStepsOverride(10)
       settings.set_mNumVelocityStepsOverride(20)
@@ -813,16 +972,21 @@ export class SimWorld {
       this.release(settings)
       this.release(pos)
       this.release(rot)
+      // The body holds its own copy of the group (and with it a hold on the filter) now.
+      this.release(collisionGroup)
     }
 
     const pin = (b1: Body, p1: V3, b2: Body, p2: V3) => {
       const s = this.track(new J.PointConstraintSettings())
       s.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-      s.set_mPoint1(this.rv3(p1))
-      s.set_mPoint2(this.rv3(p2))
+      const v1 = this.rv3(p1)
+      const v2 = this.rv3(p2)
+      s.set_mPoint1(v1)
+      s.set_mPoint2(v2)
       const c = s.Create(b1, b2)
       this.physics.AddConstraint(c)
       rope.constraints.push(c)
+      this.made(s, v1, v2)
     }
     pin(a.body, [localA[0] * reachA, localA[1] * reachA, localA[2] * reachA], rope.bodies[0], [0, -half, 0])
     for (const link of rope.bodies) for (const end of [a.body, b.body]) this.ropeTies.add(pairKey(J.getPointer(end), J.getPointer(link)))
@@ -836,13 +1000,16 @@ export class SimWorld {
     // something, and takes the load the moment the rope is straight.
     const cap = this.track(new J.DistanceConstraintSettings())
     cap.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-    cap.set_mPoint1(this.rv3([0, 0, 0]))
-    cap.set_mPoint2(this.rv3([0, 0, 0]))
+    const c1 = this.rv3([0, 0, 0])
+    const c2 = this.rv3([0, 0, 0])
+    cap.set_mPoint1(c1)
+    cap.set_mPoint2(c2)
     cap.set_mMinDistance(0)
     cap.set_mMaxDistance(length + reachA + reachB)
     const straight = cap.Create(a.body, b.body)
     this.physics.AddConstraint(straight)
     rope.constraints.push(straight)
+    this.made(cap, c1, c2)
     this.ropes.set(link.id, rope)
   }
 
@@ -918,6 +1085,9 @@ export class SimWorld {
     const startRead = this.startRead
     // The time gathered towards the next step too: dropped, every mid-run edit lost up to a step.
     const accumulator = this.accumulator
+    // And the rate the run is at, with one still waiting for the grid (clear() would take it up at t = 0).
+    const rate = this.rate
+    const pendingRate = this.pendingRate
     if (preserve) {
       for (const id of this.order) {
         const e = this.entries.get(id)
@@ -936,6 +1106,8 @@ export class SimWorld {
       this.ticks = ticks
       this.startRead = startRead
       this.accumulator = accumulator
+      this.rate = rate
+      this.pendingRate = pendingRate
     }
     // Constraints are built after the bodies, because each one needs both of them to exist.
     this.linkDefs = joins
@@ -1058,6 +1230,8 @@ export class SimWorld {
    * Through step() a frame of 1/60 s in slow motion was a tenth of a step, and nothing moved.
    */
   stepOnce(): { transforms: Float32Array; contacts: ContactEvent[]; samples: SimSample[] } {
+    // Before the one step is gathered, so that step is taken at the rate it starts (see `advance`).
+    this.takeUpRate()
     this.accumulator = 1
     const out = this.advance(true)
     // Nothing gathered towards a next step: the pose drawn is the one the step reached.
@@ -1104,6 +1278,9 @@ export class SimWorld {
       this.prevPose.set(this.curPose)
     }
     let stepped = false
+    // A rate still waiting although the clock is on its grid (a keyframe saved from the after-step
+    // hook on the very step it could start) starts before the next step, as it did in the run saved.
+    this.takeUpRate()
     while (this.accumulator >= 1 - STEP_SLACK) {
       const dt = 1 / this.rate
       // PhysLab's own forces, worked out from where everything is now, before EVERY engine step:
@@ -1124,9 +1301,10 @@ export class SimWorld {
       this.steps += 1
       this.ticks += TICKS_PER_SECOND / this.rate
       this.afterStep(dt)
-      // On the step that reaches the next 0.1 s: exactly on it whenever the steps can land there,
-      // which they always do at one rate and after almost every change of it.
+      // On the step that reaches the next 0.1 s, which is exactly on it: the steps land there at one
+      // rate, and a change of rate waits until its steps can (`applyRate`).
       if (Math.floor(this.ticks / READING_TICKS) > Math.floor(before / READING_TICKS)) samples.push(this.snapshot())
+      this.takeUpRate()
     }
     // A step can be taken a millionth early (STEP_SLACK); what it overdrew is not owed to the next.
     if (this.accumulator < 0) this.accumulator = 0
@@ -1168,7 +1346,12 @@ export class SimWorld {
       }
     }
     const s: AfterStep = { step: this.steps, time: this.time, dt, work, contacts: this.stepContacts, touches: this.stepTouches }
-    for (const fn of this.listeners) fn(this, s)
+    this.inHook = true
+    try {
+      for (const fn of this.listeners) fn(this, s)
+    } finally {
+      this.inHook = false
+    }
   }
 
   private velocityOf(id: BodyId): V3 {
@@ -1198,6 +1381,7 @@ export class SimWorld {
    * and a Reset that rebuilds the bodies finds the same pushes waiting.
    */
   setActuators(list: Actuator[]): void {
+    this.input()
     this.actuators.clear()
     for (const a of list) {
       const mine = this.actuators.get(a.bodyId)
@@ -1454,6 +1638,7 @@ export class SimWorld {
   setVelocity(id: BodyId, velocity: V3): void {
     const e = this.entries.get(id)
     if (!e) return
+    this.input()
     const v = this.v3(velocity)
     this.bodies.SetLinearVelocity(e.body.GetID(), v)
     this.bodies.ActivateBody(e.body.GetID())
@@ -1463,6 +1648,7 @@ export class SimWorld {
   setPosition(id: BodyId, position: V3): void {
     const e = this.entries.get(id)
     if (!e) return
+    this.input()
     const J = this.jolt as unknown as AnyJolt & Jolt
     const p = this.rv3(position)
     const q = e.body.GetRotation()
@@ -1473,6 +1659,7 @@ export class SimWorld {
   grab(id: BodyId, target: V3): void {
     const e = this.entries.get(id)
     if (!e || e.def.motion !== 'dynamic') return
+    this.input()
     this.grabbed = { id, target }
     this.bodies.ActivateBody(e.body.GetID())
   }
@@ -1485,6 +1672,7 @@ export class SimWorld {
   placeBody(id: BodyId, position: V3): void {
     const e = this.entries.get(id)
     if (!e) return
+    this.input()
     const from = this.positionOf(e)
     this.put(e, position)
     if (e.def.motion !== 'dynamic') this.wakeAll()
@@ -1521,6 +1709,7 @@ export class SimWorld {
   setRotation(id: BodyId, degrees: V3): void {
     const e = this.entries.get(id)
     if (!e) return
+    this.input()
     const J = this.jolt as unknown as AnyJolt & Jolt
     const q = this.quatFromEuler(degrees)
     this.bodies.SetPositionAndRotation(e.body.GetID(), e.body.GetPosition(), q, e.def.motion === 'dynamic' ? J.EActivation_Activate : J.EActivation_DontActivate)
@@ -1531,6 +1720,7 @@ export class SimWorld {
   setAngularVelocity(id: BodyId, w: V3): void {
     const e = this.entries.get(id)
     if (!e || e.def.motion !== 'dynamic') return
+    this.input()
     const v = this.v3(w)
     this.bodies.SetAngularVelocity(e.body.GetID(), v)
     this.bodies.ActivateBody(e.body.GetID())
@@ -1539,19 +1729,172 @@ export class SimWorld {
 
   /** Wake every moving body, after something they may be resting on has moved. */
   wakeAll(): void {
+    this.input()
     for (const e of this.entries.values()) if (e.def.motion === 'dynamic') this.bodies.ActivateBody(e.body.GetID())
   }
 
   moveGrab(target: V3): void {
-    if (this.grabbed) this.grabbed.target = target
+    if (!this.grabbed) return
+    this.input()
+    this.grabbed.target = target
   }
 
   release_(): void {
+    if (this.grabbed) this.input()
     this.grabbed = null
   }
 
   get grabbedId(): BodyId | null {
     return this.grabbed?.id ?? null
+  }
+
+  // -------------------------------------------------------------------------
+  // Step records and keyframes (SB9, I-4): what the tape is made of
+  // -------------------------------------------------------------------------
+
+  /** What a step record holds, in order: the bodies as `bodyOrder`, then each rope's links, rope by rope (I-3). */
+  recordLayout(): RecordLayout {
+    return { bodies: [...this.order], ropes: [...this.ropes].map(([linkId, rope]) => ({ linkId, count: rope.bodies.length })) }
+  }
+
+  /**
+   * This step's record into `out` (I-4): REC_FLOATS float32 numbers for each body of
+   * `recordLayout()` — position, rotation quaternion (x, y, z, w), velocity, angular velocity, as the
+   * engine holds them. It makes no new objects, so the recorder can call it after every engine step.
+   * A buffer too short for the layout is refused rather than half filled.
+   */
+  readRecord(out: Float32Array): void {
+    const list = this.recordBodies()
+    const need = list.length * REC_FLOATS
+    if (out.length < need) throw new RangeError(`A step record needs ${need} numbers and this buffer holds ${out.length}.`)
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i]
+      const o = i * REC_FLOATS
+      // Each read off before the next getter: the binding shares one vector per getter (see `xyz`).
+      const p = b.GetPosition()
+      out[o] = p.GetX()
+      out[o + 1] = p.GetY()
+      out[o + 2] = p.GetZ()
+      const q = b.GetRotation()
+      out[o + 3] = q.GetX()
+      out[o + 4] = q.GetY()
+      out[o + 5] = q.GetZ()
+      out[o + 6] = q.GetW()
+      const v = b.GetLinearVelocity()
+      out[o + 7] = v.GetX()
+      out[o + 8] = v.GetY()
+      out[o + 9] = v.GetZ()
+      const w = b.GetAngularVelocity()
+      out[o + 10] = w.GetX()
+      out[o + 11] = w.GetY()
+      out[o + 12] = w.GetZ()
+    }
+  }
+
+  /** The engine bodies of `recordLayout()`, in its order; made once per build of the world. */
+  private recordBodies(): Body[] {
+    if (!this.recBodies) {
+      const list = this.order.map((id) => this.entries.get(id)!.body)
+      for (const rope of this.ropes.values()) list.push(...rope.bodies)
+      this.recBodies = list
+    }
+    return this.recBodies
+  }
+
+  /**
+   * Saves this moment of the run (I-4): Jolt's whole state (`SaveState`, every part of it: bodies,
+   * the contact cache, the joints' impulses, gravity, the last Δt) and PhysLab's own (see `Saved`).
+   * Restoring it and stepping on gives the very same numbers, step for step. It holds an engine
+   * object until `freeKeyframe` (or a rebuild, after which it is useless).
+   */
+  saveKeyframe(): Keyframe {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const rec = this.track(new J.StateRecorderImpl())
+    this.physics.SaveState(rec, J.EStateRecorderState_All)
+    const k: Keyframe = Object.freeze({ step: this.steps, time: this.time, rebuild: this.rebuilds })
+    this.keyframes.set(k, {
+      rec,
+      rebuild: this.rebuilds,
+      steps: this.steps,
+      ticks: this.ticks,
+      startRead: this.startRead,
+      rate: this.rate,
+      pendingRate: this.pendingRate,
+      settings: { ...this.settings, wind: [...this.settings.wind] },
+      touching: new Map(this.touching),
+      grabbed: this.grabbed ? { id: this.grabbed.id, target: [...this.grabbed.target] } : null,
+      applied: [...this.applied].map(([id, a]) => ({ id, before: [...a.before], f: copyForces(a.f), damper: [...a.damper] })),
+      actuators: new Map(this.actuators),
+      ownSprings: [...this.ownSprings],
+      defs: this.order.map((id) => this.entries.get(id)!.def)
+    })
+    return k
+  }
+
+  /**
+   * Puts the run back to a keyframe (I-4) and says whether it could. A keyframe from another build
+   * of the world (`rebuildSerial` moved on), or one already freed, is refused and nothing changes.
+   * Everything a step reads comes back: the engine, the clock and rate, the settings (all but the
+   * slow-motion setting, which is the student's way of watching, not the run), who touches whom,
+   * the hand, the pushes, the own springs, each body's definition. Time gathered towards a next step
+   * is dropped and the drawn pose is the restored one, so nothing is blended across the jump.
+   * Neither serial moves: a restore is not an input. Refused from inside the after-step hook, where
+   * it would put the world back under the step loop that is running.
+   */
+  restoreKeyframe(k: Keyframe): boolean {
+    const s = this.keyframes.get(k)
+    if (!s || s.rebuild !== this.rebuilds || this.inHook) return false
+    s.rec.Rewind()
+    if (!this.physics.RestoreState(s.rec)) return false
+    this.steps = s.steps
+    this.ticks = s.ticks
+    this.startRead = s.startRead
+    this.rate = s.rate
+    this.pendingRate = s.pendingRate
+    this.settings = { ...s.settings, wind: [...s.settings.wind], timeScale: this.settings.timeScale }
+    this.touching = new Map(s.touching)
+    this.grabbed = s.grabbed ? { id: s.grabbed.id, target: [...s.grabbed.target] } : null
+    this.applied = new Map()
+    for (const a of s.applied) {
+      const e = this.entries.get(a.id)
+      if (e) this.applied.set(a.id, { e, before: [...a.before], f: copyForces(a.f), damper: [...a.damper] })
+    }
+    this.actuators = new Map(s.actuators)
+    this.ownSprings = [...s.ownSprings]
+    s.defs.forEach((def, i) => {
+      const e = this.entries.get(this.order[i])
+      if (!e || e.def === def) return
+      // Bounce, friction and damping live in the engine's bodies but not in its saved state.
+      e.body.SetRestitution(def.restitution)
+      e.body.SetFriction(def.friction)
+      if (def.motion === 'dynamic') {
+        const mp = e.body.GetMotionProperties()
+        mp.SetLinearDamping(def.linearDamping)
+        mp.SetAngularDamping(def.angularDamping)
+      }
+      e.def = def
+    })
+    this.accumulator = 0
+    this.contacts = []
+    this.stepContacts = []
+    this.stepTouches = []
+    const size = this.order.length * STRIDE
+    if (this.curPose.length !== size) {
+      this.curPose = new Float32Array(size)
+      this.prevPose = new Float32Array(size)
+    }
+    this.readPoses(this.curPose)
+    this.prevPose.set(this.curPose)
+    this.transforms.set(this.curPose)
+    return true
+  }
+
+  /** Lets a keyframe go, with the engine object it holds. Freeing one twice, or a stale one, is harmless. */
+  freeKeyframe(k: Keyframe): void {
+    const s = this.keyframes.get(k)
+    if (!s) return
+    this.keyframes.delete(k)
+    this.release(s.rec)
   }
 
   // -------------------------------------------------------------------------
