@@ -50,7 +50,7 @@ describe('linear method: 300 seeded equations built from a known answer', () => 
       expect(answer?.tex, item.input).toBe(rTex(item.x0))
       expect(w.checked, item.input).toBe('ok')
     }
-  })
+  }, 120_000) // 300 seeded workings, every step validated: about 6 s alone, 20 s under a full run
 
   it('finishes each item on the line v = answer, the key line of every working', () => {
     let finished = 0
@@ -193,5 +193,5 @@ describe('linear method: planted wrong steps are never shown', () => {
     expect(total).toBeGreaterThanOrEqual(15)
     expect(accepted).toBe(0)
     for (const kind of ['bump', 'sign', 'chainBreak', 'noOp', 'mislabel', 'sentence', 'rule', 'check', 'answerValue']) expect(kinds.has(kind), kind).toBe(true)
-  })
+  }, 120_000) // 634 planted mutants, each rendered: about 10 s alone, 20 s under a full run
 })
