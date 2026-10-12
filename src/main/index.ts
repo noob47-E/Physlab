@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell } from 'electron'
-import { extname, join, normalize, relative, sep } from 'node:path'
+import { extname, join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { resolveAppPath } from './appPath'
 import { openDialogOptions } from './openDialog'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
@@ -52,18 +53,19 @@ const ISOLATION_HEADERS = {
 function registerAppProtocol(): void {
   const root = normalize(join(__dirname, '../renderer'))
   protocol.handle('app', async (request) => {
-    const url = new URL(request.url)
-    let pathname = decodeURIComponent(url.pathname)
-    if (pathname === '/' || pathname === '') pathname = '/index.html'
-    const file = normalize(join(root, pathname))
-    // relative() handles Windows drive-letter case, where startsWith can wrongly refuse every file.
-    const rel = relative(root, file)
-    if (!rel || rel.startsWith('..') || rel.includes(`..${sep}`)) return new Response('Forbidden', { status: 403 })
-    const res = await net.fetch(pathToFileURL(file).toString())
-    const headers = new Headers(res.headers)
-    headers.set('Content-Type', MIME[extname(file).toLowerCase()] ?? 'application/octet-stream')
-    for (const [k, v] of Object.entries(ISOLATION_HEADERS)) headers.set(k, v)
-    return new Response(res.body, { status: res.status, headers })
+    // Every request gets an answer, never an exception: 400 for an unreadable path, 403 out of the root (appPath.ts).
+    const target = resolveAppPath(root, request.url)
+    if ('status' in target) return new Response(target.status === 400 ? 'Bad Request' : 'Forbidden', { status: target.status })
+    const { file } = target
+    try {
+      const res = await net.fetch(pathToFileURL(file).toString())
+      const headers = new Headers(res.headers)
+      headers.set('Content-Type', MIME[extname(file).toLowerCase()] ?? 'application/octet-stream')
+      for (const [k, v] of Object.entries(ISOLATION_HEADERS)) headers.set(k, v)
+      return new Response(res.body, { status: res.status, headers })
+    } catch {
+      return new Response('Internal Server Error', { status: 500 })
+    }
   })
 }
 
