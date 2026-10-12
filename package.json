@@ -13,6 +13,7 @@
     "predist": "node scripts/gate.mjs full",
     "dist": "electron-vite build && electron-builder --win",
     "test": "vitest run",
+    "test:rubi-full": "node -e \"const r = require('node:child_process').spawnSync('npx vitest run tests/engine/integration', { stdio: 'inherit', shell: true, env: { ...process.env, PHYSLAB_RUBI_FULL: '1' } }); process.exit(r.status ?? 1)\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . && node scripts/deadcode.mjs --check",
     "smoke": "node scripts/smoke.mjs",

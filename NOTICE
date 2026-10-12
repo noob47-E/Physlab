@@ -74,3 +74,5 @@ every question and every change, and is never bundled inside the app. It is a se
 every question the harvest found: of the 222 licence-cleared questions, 92 carry a broken Numbas
 placeholder and most of the rest are duplicate copies or Numbas's own demonstration items.
 OpenStax textbook exercises (College Algebra 2e and Calculus Volume 1, CC BY 4.0, https://creativecommons.org/licenses/by/4.0/) are used for testing only, in tests/engine/scoreboard/external/; they are never shipped in the app (see docs/knowledge/scoreboard-external.md).
+
+PhysLab's integration test data (tests/engine/integration/) is converted from the Mathematica Syntax Test Suite. Copyright (c) 2018 Rule-based Integration. MIT License: https://github.com/RuleBasedIntegration/MathematicaSyntaxTestSuite (the licence text is in docs/knowledge/integration-corpus.md).
