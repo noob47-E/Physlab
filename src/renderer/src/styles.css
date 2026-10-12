@@ -129,6 +129,35 @@
   --vec-result: #ff87bd;
   --vec-x: #ff7b72;
   --vec-y: #58c4ff;
+  /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
+  --q-pos: #5fd39a;
+  --q-vel: #5aa9ff;
+  --q-acc: #e27bc0;
+  --q-force: #ff7a4d;
+  --q-weight: #f2b84b;
+  --q-normal: #4fd1d9;
+  --q-friction: #d2a679;
+  --q-tension: #b59cff;
+  --q-spring: #b5d65a;
+  --q-mom: #e8dc5a;
+  --q-heat: #ff6b6b;
+  --q-work: #9fb3c8;
+  --tape-track: #2a2c31;
+  --tape-fill: #3d5a80;
+  --tape-head: #ffffff;
+  --tape-key: #adb5bd;
+  --tape-mark: #ff8787;
+  --tape-branch: #b197fc;
+  --sim-v-in: #6ea8ff;
+  --sim-v-out: #4dabf7;
+  --sim-impulse: #ffc94d;
+  --sim-ghost: #adb5bd;
+  --sim-floor: #24262b;
+  --sim-floor-line: #34373e;
+  --sim-floor-major: #4a4e57;
+  --sim-key-light: #fff4e6;
+  --sim-fill-light: #8fa3c4;
+  --sim-sky-light: #c8d6f0;
 }
 
 /* Light theme for bright rooms and classroom projectors. */
@@ -203,6 +232,35 @@
   --vec-result: #7619a3;
   --vec-x: #c0392b;
   --vec-y: #1565c0;
+  /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
+  --q-pos: #1d7a4a;
+  --q-vel: #1f5fc4;
+  --q-acc: #a3367d;
+  --q-force: #c03a10;
+  --q-weight: #7d5000;
+  --q-normal: #00707a;
+  --q-friction: #7a4e26;
+  --q-tension: #5b3cc4;
+  --q-spring: #556f00;
+  --q-mom: #6e6400;
+  --q-heat: #c92a2a;
+  --q-work: #445566;
+  --tape-track: #d5dce8;
+  --tape-fill: #a9c1e6;
+  --tape-head: #111111;
+  --tape-key: #495057;
+  --tape-mark: #c92a2a;
+  --tape-branch: #6741d9;
+  --sim-v-in: #1c5fd4;
+  --sim-v-out: #1864ab;
+  --sim-impulse: #b07800;
+  --sim-ghost: #6b7480;
+  --sim-floor: #d2dbe6;
+  --sim-floor-line: #c8d0dc;
+  --sim-floor-major: #a9b4c4;
+  --sim-key-light: #ffffff;
+  --sim-fill-light: #c9d6ea;
+  --sim-sky-light: #eef3fb;
 }
 
 /* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
@@ -276,6 +334,35 @@
   --vec-result: #cf79ff;
   --vec-x: #ff8b94;
   --vec-y: #6cc8ff;
+  /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
+  --q-pos: #7fe3b4;
+  --q-vel: #8fb8ff;
+  --q-acc: #f29ad2;
+  --q-force: #ff9472;
+  --q-weight: #f7c66b;
+  --q-normal: #6fe0e8;
+  --q-friction: #ddb892;
+  --q-tension: #c7b4ff;
+  --q-spring: #bfe07a;
+  --q-mom: #f0e67a;
+  --q-heat: #ff8b94;
+  --q-work: #b4c4dc;
+  --tape-track: #1e2750;
+  --tape-fill: #3b4c8c;
+  --tape-head: #f0f2ff;
+  --tape-key: #c1c8d4;
+  --tape-mark: #ff8b94;
+  --tape-branch: #c0b3ff;
+  --sim-v-in: #8fb8ff;
+  --sim-v-out: #74c0fc;
+  --sim-impulse: #f7d06b;
+  --sim-ghost: #9aa6c8;
+  --sim-floor: #1b244a;
+  --sim-floor-line: #263063;
+  --sim-floor-major: #36428a;
+  --sim-key-light: #dfe6ff;
+  --sim-fill-light: #6e7fc0;
+  --sim-sky-light: #9aa8e8;
 }
 
 /* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
@@ -355,6 +442,35 @@
   --vec-result: #eb51ff;
   --vec-x: #f28474;
   --vec-y: #6fb8e8;
+  /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
+  --q-pos: #8fd6a0;
+  --q-vel: #8ec2f2;
+  --q-acc: #e69ac6;
+  --q-force: #f68a5e;
+  --q-weight: #eebc58;
+  --q-normal: #73d2d4;
+  --q-friction: #d9b08a;
+  --q-tension: #c6b0f0;
+  --q-spring: #b5d76c;
+  --q-mom: #e6d870;
+  --q-heat: #f28474;
+  --q-work: #b8b0a0;
+  --tape-track: #33281a;
+  --tape-fill: #5a4a2a;
+  --tape-head: #fff3d6;
+  --tape-key: #c8c0ad;
+  --tape-mark: #f28474;
+  --tape-branch: #c3aef5;
+  --sim-v-in: #9ec5ff;
+  --sim-v-out: #8cc8f5;
+  --sim-impulse: #f0b848;
+  --sim-ghost: #b0a690;
+  --sim-floor: #2d2216;
+  --sim-floor-line: #3a2e1e;
+  --sim-floor-major: #55442c;
+  --sim-key-light: #ffe9c4;
+  --sim-fill-light: #b8a07a;
+  --sim-sky-light: #e6d2b0;
 }
 
 html,
