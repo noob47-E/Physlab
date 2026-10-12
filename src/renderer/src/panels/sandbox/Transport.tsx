@@ -1,11 +1,14 @@
-// The Sandbox panel’s Transport section (moved word for word from panels/Sandbox.tsx, SB2).
+// The Sandbox panel’s Transport section (moved word for word from panels/Sandbox.tsx, SB2). Play and Step go through
+// sim/transportActions.ts (SB17), so in replay they play and step the recording, as the tape strip and the keys do.
 
 import { Eraser, Pause, Play, Redo2, RotateCcw, SkipForward, Undo2 } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
 import { clockText, widestClockText } from '../../sim/transport'
 import { useNum } from './common'
-import { stepButtonTitle, stepOneFrame } from '../../sim/stepping'
+import { replayRefusal } from '../../sim/recorder'
+import { shownTape, useTape } from '../../sim/tapeStore'
+import { stepForward, stepOnTitle, togglePlay, useTransportFlags } from '../../sim/transportActions'
 import { rateOf } from '../../sim/types'
 
 /**
@@ -22,14 +25,20 @@ export function Transport() {
   const resetRun = useSandbox((s) => s.resetRun)
   const clearTrails = useSandbox((s) => s.clearTrails)
   const anyTrail = useSandbox((s) => s.bodies.some((b) => b.trace))
-  const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
   const settings = useScene((s) => s.settings)
   const world = useSandbox((s) => s.world)
   const num = useNum()
+  // Live, Play and the clock are the engine's; in replay they are the recording's, and an edit is refused (D5).
+  const flags = useTransportFlags()
+  const playing = flags.playing
+  const mode = useTape((s) => s.mode)
+  const tape = shownTape()
+  const refusal = mode === 'live' ? null : replayRefusal()
+  const clock = mode !== 'live' && tape && flags.at !== null ? `${clockText(tape.timeOf(flags.at), settings)} · ${mode === 'fine' ? 'fine replay' : 'replay'}` : clockText(engineTime, settings)
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-[color:var(--line)] bg-[var(--bg-1)] px-3 py-2">
-      <button className="btn primary" data-tour="play" onClick={() => setPlaying(!playing)} title="Play / pause (Space)">
+      <button className="btn primary" data-tour="play" onClick={togglePlay} title={playing ? 'Pause (Space or K)' : 'Play (Space or L)'}>
         {playing ? <Pause size={13} /> : <Play size={13} />}
         {/* Both words share one cell and the other one is hidden, so the button is as wide as
             "Pause" either way: "Play" turning into the wider "Pause" was enough to push the row
@@ -51,18 +60,15 @@ export function Transport() {
       </button>
       <button
         className="icon-btn"
-        onClick={() => {
-          setPlaying(false)
-          stepOneFrame()
-        }}
-        title={stepButtonTitle(num(rateOf(world)))}
+        onClick={stepForward}
+        title={stepOnTitle(num(mode === 'live' || !tape ? rateOf(world) : tape.rate))}
       >
         <SkipForward size={13} />
       </button>
-      <button className="icon-btn" disabled={past.length === 0} onClick={undo} title="Undo the last change to the objects (Ctrl+Z)">
+      <button className="icon-btn" disabled={past.length === 0 || refusal !== null} onClick={undo} title={refusal ?? 'Undo the last change to the objects (Ctrl+Z)'}>
         <Undo2 size={13} />
       </button>
-      <button className="icon-btn" disabled={future.length === 0} onClick={redo} title="Redo (Ctrl+Y)">
+      <button className="icon-btn" disabled={future.length === 0 || refusal !== null} onClick={redo} title={refusal ?? 'Redo (Ctrl+Y)'}>
         <Redo2 size={13} />
       </button>
       <button className="icon-btn" disabled={!anyTrail} onClick={clearTrails} title="Clear every trail">
@@ -76,7 +82,7 @@ export function Transport() {
         <span className="invisible col-start-1 row-start-1" aria-hidden="true">
           {widestClockText(engineTime, settings)}
         </span>
-        <span className="col-start-1 row-start-1">{clockText(engineTime, settings)}</span>
+        <span className="col-start-1 row-start-1">{clock}</span>
       </span>
     </div>
   )

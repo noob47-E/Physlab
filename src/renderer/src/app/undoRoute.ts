@@ -5,6 +5,7 @@
 import { scene } from '../core/store'
 import { useLab } from '../lab/labStore'
 import { useSandbox } from '../sim/store'
+import { refuseEdit } from '../sim/transportActions'
 
 type HistoryStack = 'lab' | 'sandbox' | 'scene'
 type HistoryAction = 'undo' | 'redo'
@@ -36,6 +37,9 @@ const STACKS: Record<HistoryStack, () => { undo: () => void; redo: () => void }>
 export function runHistory(mode: string, input: HistoryInput): boolean {
   const route = routeHistory(mode, input)
   if (!route) return false
+  // Replay is read-only (D5): while a recording is shown the Sandbox's Undo and Redo are edits, so they are refused with the
+  // recorder's sentence (shown in the strip) until Branch from here or Back to live. The key is still taken: no other undo runs.
+  if (route.stack === 'sandbox' && refuseEdit()) return true
   STACKS[route.stack]()[route.action]()
   return true
 }

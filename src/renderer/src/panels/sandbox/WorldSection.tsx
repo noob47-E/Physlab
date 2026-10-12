@@ -6,6 +6,7 @@ import { stepRateTitle } from '../../sim/stepping'
 import { useScene } from '../../core/store'
 import { NumField } from '../../ui/fields'
 import { Vec3Row, Fold, useNum } from './common'
+import { ReplayLock } from './ReplayLock'
 
 /** Gravity, air and the view; the step rate and sleeping controls fold away. */
 export function WorldSection() {
@@ -20,41 +21,44 @@ export function WorldSection() {
   return (
     <>
       <div className="section-title mt-2">World</div>
-      <div className="prop-row">
-        <label>Gravity</label>
-        <div className="flex items-center gap-2">
-          <select
-            className="field"
-            value={GRAVITY_PRESETS.find((g) => Math.abs(g.value - world.gravity) < 1e-6)?.label ?? 'Custom'}
-            onChange={(e) => {
-              const preset = GRAVITY_PRESETS.find((g) => g.label === e.target.value)
-              if (preset) setWorld({ gravity: preset.value })
-            }}
-          >
-            {GRAVITY_PRESETS.map((g) => (
-              <option key={g.label}>{g.label}</option>
-            ))}
-            <option>Custom</option>
-          </select>
-          <NumField value={world.gravity} onChange={(gravity) => setWorld({ gravity })} />
-        </div>
-      </div>
-      <div className="prop-row">
-        <label>Air</label>
-        <div className="flex items-center gap-2">
-          <div className="seg">
-            <button className={world.airDensity > 0 ? 'on' : ''} onClick={() => setWorld({ airDensity: 1.225 })} title="Sea level: 1.225 kg/m³">
-              Air
-            </button>
-            <button className={world.airDensity === 0 ? 'on' : ''} onClick={() => setWorld({ airDensity: 0 })} title="No air resistance at all">
-              Vacuum
-            </button>
+      {/* Replay is read-only (D5): the edit rows are locked while a recording is shown; the View toggle only changes the camera. */}
+      <ReplayLock>
+        <div className="prop-row">
+          <label>Gravity</label>
+          <div className="flex items-center gap-2">
+            <select
+              className="field"
+              value={GRAVITY_PRESETS.find((g) => Math.abs(g.value - world.gravity) < 1e-6)?.label ?? 'Custom'}
+              onChange={(e) => {
+                const preset = GRAVITY_PRESETS.find((g) => g.label === e.target.value)
+                if (preset) setWorld({ gravity: preset.value })
+              }}
+            >
+              {GRAVITY_PRESETS.map((g) => (
+                <option key={g.label}>{g.label}</option>
+              ))}
+              <option>Custom</option>
+            </select>
+            <NumField value={world.gravity} onChange={(gravity) => setWorld({ gravity })} />
           </div>
-          {world.airDensity > 0 && <span className="tabular-nums text-[color:var(--text-dim)]">{world.airDensity} kg/m³</span>}
         </div>
-      </div>
-      {/* Wind has been in the drag calculation from the start, with nothing to set it. */}
-      {world.airDensity > 0 && <Vec3Row label="Wind" unit="m/s" value={world.wind} onChange={(wind) => setWorld({ wind })} />}
+        <div className="prop-row">
+          <label>Air</label>
+          <div className="flex items-center gap-2">
+            <div className="seg">
+              <button className={world.airDensity > 0 ? 'on' : ''} onClick={() => setWorld({ airDensity: 1.225 })} title="Sea level: 1.225 kg/m³">
+                Air
+              </button>
+              <button className={world.airDensity === 0 ? 'on' : ''} onClick={() => setWorld({ airDensity: 0 })} title="No air resistance at all">
+                Vacuum
+              </button>
+            </div>
+            {world.airDensity > 0 && <span className="tabular-nums text-[color:var(--text-dim)]">{world.airDensity} kg/m³</span>}
+          </div>
+        </div>
+        {/* Wind has been in the drag calculation from the start, with nothing to set it. */}
+        {world.airDensity > 0 && <Vec3Row label="Wind" unit="m/s" value={world.wind} onChange={(wind) => setWorld({ wind })} />}
+      </ReplayLock>
       <div className="prop-row">
         <label>View</label>
         <div className="seg">
@@ -66,16 +70,18 @@ export function WorldSection() {
           </button>
         </div>
       </div>
-      <div className="prop-row">
-        <label>Slow motion</label>
-        <div className="seg">
-          {[1, 0.5, 0.25, 0.1].map((t) => (
-            <button key={t} className={world.timeScale === t ? 'on' : ''} onClick={() => setWorld({ timeScale: t })}>
-              {t === 1 ? 'normal' : `×${t}`}
-            </button>
-          ))}
+      <ReplayLock>
+        <div className="prop-row">
+          <label>Slow motion</label>
+          <div className="seg">
+            {[1, 0.5, 0.25, 0.1].map((t) => (
+              <button key={t} className={world.timeScale === t ? 'on' : ''} onClick={() => setWorld({ timeScale: t })}>
+                {t === 1 ? 'normal' : `×${t}`}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </ReplayLock>
       <Fold id="world-more">
         <div className="prop-row">
           <label>2D mode</label>

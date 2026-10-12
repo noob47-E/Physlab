@@ -137,3 +137,74 @@ bytes a second of tape with the bodies' touches.
 the store synced; Fine replay of [0.5 s, 1.5 s], its stop at a change, the odd tick, refusals; the cap; new tapes;
 marks; costs), `tests/tapeStore.test.ts` (modes, replay, play, reverse, Back to live, bookmarks, loop, Branch and Fine
 replay through the store, the cap's note, a new tape, Reset).
+
+## The strip (SB17)
+
+The strip is the video editor's bar under the Sandbox drawing: transport buttons, speeds, a scrub bar over the recording, Fine replay,
+Branch from here and Back to live. Files: `render/sandbox/TapeStrip.tsx` (the strip, and `stripModel`, the pure part that says where
+everything sits), `render/sandbox/tapeStripMath.ts` (steps to pixels, ticks, hit tests, the time sentence), `sim/transportActions.ts`
+(what every button and key does). Tests: `tests/tapeStrip.test.ts`, `tests/transportActions.test.ts` (with the real recorder and engine at its end), `tests/replayLock.test.ts` (D5), the Sandbox rows at the end of
+`tests/shortcutKeys.test.ts`.
+
+**When it shows.** From the first step of a run (the shown tape has two records), and then always, in live, replay and fine. Before
+that it renders nothing (the HUD layer ignores the pointer, so nothing is in the way). The Timeline dock panel shows the same strip in
+its own page flow (`<TapeStrip inline />`): if that panel is open there are two strips, and both go through the same actions.
+
+**One place for "what does Play do".** Three modes (the tape store, I-5): LIVE (the engine runs, or waits at the end of the
+recording), REPLAY (the recording is shown, the engine waits) and FINE (a 1/600 s re-run of one second). The panel's Transport row,
+the strip and the keys all call `sim/transportActions.ts`:
+
+| Action | Live | Replay and fine |
+|---|---|---|
+| `togglePlay` / `play` / `pause` | the engine (`useScene.playing`) | the recording (`useTape.playing`); `play` after J turns the direction round first; at the end the store starts again from the start |
+| `stepBack` | enters replay one step before the end (the store pauses the engine) | one step back; nothing at the first step |
+| `stepForward` | one engine step (`stepOneFrame`), recorded as a played step is | one step on; stops at the last step (Back to live is the way on) |
+| `playBackwards` | enters replay, reversed, playing | plays reversed from here; nothing at the first step |
+| `toStart` / `toEnd` | start enters replay at the first step; end is greyed (live is at the end) | start / end of the shown tape |
+| `scrubTo(step)` | enters replay at that step | the playhead goes there, kept on the recording |
+| `branchFromHere` | refused with a reason (go to a moment first) | branches the run at the playhead; from a fine moment it branches the live run at that time |
+| `fineReplay` | refused with a reason | re-runs the second around the playhead at 1/600 s; refused in fine and on a recording that already steps at 1/600 s |
+
+Every refusal is a sentence in the button's title (`transportFlags` in `transportActions.ts` is the pure rule, tested).
+
+**Speeds.** ×1 · ½ · ¼ · 1/10 · 1/100. In live they are the Sandbox's slow motion (`world.timeScale`, the same as World > Slow motion);
+in replay and fine they are the recording's own `speed`. Entering replay from live copies a slow motion that is one of the five onto the
+recording's speed (so J at ×0.1 runs backwards at ×0.1); Back to live leaves the slow motion as it was. A slow motion that is not one
+of the five (the preset's 0.3, say) marks no button and is left alone.
+
+**The bar.** Its axis is the recording's first to last step, at least five seconds long (`MIN_SPAN_SECONDS`), so the first seconds of a
+run do not rescale at every step; the fast re-run is shown whole. Drawn: ticks on a 1-2-5 series (60 px apart at least), the recorded
+part (`--tape-fill` over `--tape-track`), keyframe diamonds (`--tape-key`), bounce marks (`--tape-mark`), bookmarks (flags in
+`--tape-key`), the branch point (`--tape-branch`, from `tapes.parent.step`), the loop A to B and the playhead (`--tape-head`).
+Bookmarks, the loop and the branch point belong to the live recording, so the fast re-run (another axis) does not draw them.
+A click lands on a mark or bookmark within 8 px of it (snapping), else on the nearest step; a drag never snaps; nothing goes past
+the last recorded step. The bar is a `role="slider"` you can Tab to: arrows step, Shift and arrows jump a second, Page Up and Page
+Down go to the previous and next mark or bookmark, Home and End to the ends (the bar stops those keys reaching the window shortcuts).
+
+**Keys** (`sandboxTransportKey` in `app/shortcuts.ts`; Sandbox only, never while a text box has the focus, no Ctrl or Alt):
+J play backwards, K pause, L play, comma step back, full stop step on, B branch from here, M bookmark, [ and ] the loop's start and
+end, Space plays and pauses (on the key-up, so a held Space can pan; `shortcutKeyUp`). Holding comma or full stop repeats; the others
+do not. Space on a focused button is that button's click.
+
+**The panel's Transport row** keeps its shape in replay: the clock shows the playhead's time and "· replay" (or "· fine replay"), and
+Undo and Redo are greyed with the replay sentence (`replayRefusal()`).
+
+**Replay is read-only (the owner's D5).** While a recording is shown (replay or fine) nothing in the Sandbox can be edited until
+Branch from here or Back to live. Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z and Edit > Undo/Redo in the Sandbox are refused in `app/undoRoute.ts`
+(`refuseEdit()` in `sim/transportActions.ts`): the key is taken, nothing is undone, and the recorder's sentence (`replayRefusal()`)
+shows in the strip's note line for four seconds (`useEditRefusal`). The Sandbox panel's edit controls sit in a `ReplayLock`
+(`panels/sandbox/ReplayLock.tsx`), a disabled `<fieldset>`: Add and Connect, Pushes, the selected object's rows and Put back, World
+(gravity, air, wind, slow motion), every fold's contents (the fold's arrow stays live), and the list's Delete. A `ReplayBanner` under the
+Transport row shows the sentence, two lines tall so nothing moves as the time runs. Not locked, on purpose: choosing an object, the
+Side/3D view, fold arrows, Send to Lab Data and the experiment list (loading an experiment starts a new run, as Reset does). A new
+edit control in the panel goes inside a `ReplayLock` (or reads `useReplayLocked()`); `tests/replayLock.test.ts` is the rule.
+
+**Traps.**
+- Nothing may change width as the numbers grow (Fix 22): the time sits in a grid cell with an invisible copy of the widest text
+  (`WIDEST_TIME_TEXT`), the note is one line that is always there (`min-h-[18px]`, truncated), and a speed or transport button keeps
+  its label.
+- A new key goes into `shortcutKeyDown` and gets a row in `tests/shortcutKeys.test.ts`; never a second window listener. The slider's
+  `onKeyDown` is on its own element.
+- A loop is never a single step: `[` at the last step and `]` at the first do nothing (`nextLoop`). A loop with one end missing takes
+  the recording's own end.
+- The strip's numbers go through `fmtLabel` (`timeText`), never `toFixed`; colours are the tape tokens, never hex.

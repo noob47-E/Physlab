@@ -9,6 +9,7 @@ import { launchVelocity } from '../../sim/presets'
 import { ALWAYS_SHOWN, BODY_FOLDS, CONTACT_HINT, controlsIn, showsMotionAids, type ControlKey } from '../../sim/inspector'
 import { NumField } from '../../ui/fields'
 import { useNum, Vec3Row, SizeRow, Slider, Fold } from './common'
+import { ReplayLock, useReplayLocked } from './ReplayLock'
 
 /** Shapes that roll, so only they are offered a rolling-resistance figure. */
 const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
@@ -16,6 +17,7 @@ const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
 export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null; update: (id: string, patch: Partial<BodyDef>) => void }) {
   const num = useNum()
   const moves = sel.motion === 'dynamic'
+  const locked = useReplayLocked()
   // One row per control, placed by the table in sim/inspector.ts rather than by hand here: the
   // five in ALWAYS_SHOWN come first, and each fold below draws the rows the table files under it.
   // A row that means nothing for this body (the mass of a fixed wall) renders nothing.
@@ -143,6 +145,7 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
         <span className="flex-1">{sel.name}</span>
         <button
           className="btn h-6"
+          disabled={locked}
           title="Put it back where its definition says, at rest"
           onClick={() => {
             engine.world?.placeBody(sel.id, sel.position)
@@ -154,7 +157,7 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
       {/* Five rows at first sight — the ones every mechanics question is about. The rest of the
           twenty-odd controls sit under folds below, where the student who wants them finds them
           and the one who does not never has to read past them. */}
-      {draw(ALWAYS_SHOWN)}
+      <ReplayLock>{draw(ALWAYS_SHOWN)}</ReplayLock>
 
       {moves && (
         <Fold id="launcher">

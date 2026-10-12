@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { massOf, useSandbox } from '../../sim/store'
 import { useNum } from './common'
+import { useReplayLocked } from './ReplayLock'
 
 /** The objects in the world, one row each: click to select, Shift+click to pair, hover to delete. */
 export function BodyList() {
@@ -18,6 +19,8 @@ export function BodyList() {
   const joinPick = useSandbox((s) => s.joinPick)
   const playing = useScene((s) => s.playing)
   const num = useNum()
+  // Replay is read-only (D5): choosing a row still works, deleting does not until Branch from here or Back to live.
+  const locked = useReplayLocked()
   return (
     <>
       {bodies.map((b) => {
@@ -47,8 +50,9 @@ export function BodyList() {
               {paired && <span className="text-[color:var(--accent)]"> · joining</span>}
             </span>
             <button
-              className="hidden text-[color:var(--text-dim)] hover:text-[color:var(--bad)] group-hover:block"
-              title="Delete"
+              className="hidden text-[color:var(--text-dim)] hover:text-[color:var(--bad)] disabled:opacity-40 disabled:hover:text-[color:var(--text-dim)] group-hover:block"
+              disabled={locked}
+              title={locked ? 'Replaying: Branch from here or Back to live to delete' : 'Delete'}
               onClick={(e) => {
                 e.stopPropagation()
                 remove(b.id)

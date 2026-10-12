@@ -8,6 +8,7 @@ import { useTour } from './tour/Tour'
 import { isDrawingMode, modeById, useApp } from './modes'
 import { toolForKey } from './toolKeys'
 import { useSandbox } from '../sim/store'
+import * as transport from '../sim/transportActions'
 import { runHistory } from './undoRoute'
 import { visibleOrder } from '../core/visibility'
 import { pressSpace, releaseSpace, resetSpace } from '../render/panKey'
@@ -22,6 +23,51 @@ const isTyping = (e: KeyboardEvent) => typingIn(e.target as HTMLElement)
  * the Move tool; 3 reads as "3D".
  */
 export const VIEW_KEY = '3'
+
+/**
+ * The Sandbox's transport keys (SB17), as a video editor has them: J plays the recording backwards, K pauses, L plays, comma steps back
+ * and full stop steps on, B branches the run from the moment on screen, M leaves a bookmark and [ and ] set the ends of a loop. Space plays and pauses too (shortcutKeyUp). What each does
+ * depends on the tape's mode (sim/transportActions.ts). Held keys repeat only for the two step keys, so a held comma scrubs back.
+ */
+function sandboxTransportKey(e: KeyboardEvent): boolean {
+  if (e.altKey) return false
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+  const steps = key === ',' || key === '.'
+  let action: (() => void) | null = null
+  switch (key) {
+    case 'j':
+      action = transport.playBackwards
+      break
+    case 'k':
+      action = transport.pause
+      break
+    case 'l':
+      action = transport.play
+      break
+    case ',':
+      action = transport.stepBack
+      break
+    case '.':
+      action = transport.stepForward
+      break
+    case 'b':
+      action = transport.branchFromHere
+      break
+    case 'm':
+      action = transport.bookmarkHere
+      break
+    case '[':
+      action = transport.loopStart
+      break
+    case ']':
+      action = transport.loopEnd
+      break
+  }
+  if (!action) return false
+  e.preventDefault()
+  if (!e.repeat || steps) action()
+  return true
+}
 
 /**
  * The window's keydown handler. It sits at module level so tests/shortcutKeys.test.ts can drive it
@@ -100,6 +146,7 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
       resetCamera()
       return
     }
+    if (sandboxTransportKey(e)) return
     if (e.key !== ' ') return
   }
   switch (e.key) {
@@ -146,16 +193,25 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
   if (tool) s.setTool(tool)
 }
 
+/**
+ * Space plays or pauses on the way up, unless it was held to pan the drawing (see panKey.ts). In the Sandbox it plays and pauses
+ * whatever is playing: the engine in live, the recording in replay. Module level so tests/shortcutKeys.test.ts can drive it.
+ */
+export function shortcutKeyUp(e: KeyboardEvent): void {
+  if (e.key !== ' ') return
+  if (releaseSpace() && !isTyping(e) && !isActivatable(e.target as HTMLElement)) {
+    if (useApp.getState().mode === 'sandbox') {
+      transport.togglePlay()
+      return
+    }
+    const s = scene()
+    s.setPlaying(!s.playing)
+  }
+}
+
 export function useShortcuts() {
   useEffect(() => {
-    // Space plays or pauses on the way up, unless it was held to pan the drawing (see panKey.ts).
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== ' ') return
-      if (releaseSpace() && !isTyping(e) && !isActivatable(e.target as HTMLElement)) {
-        const s = scene()
-        s.setPlaying(!s.playing)
-      }
-    }
+    const onKeyUp = shortcutKeyUp
     const onBlur = () => resetSpace()
     window.addEventListener('keydown', shortcutKeyDown)
     window.addEventListener('keyup', onKeyUp)

@@ -48,7 +48,9 @@ describe('Fix 22: the transport keeps its shape while a run plays', () => {
     const panel = readSource('src/renderer/src/panels/sandbox/Transport.tsx') + readSource('src/renderer/src/panels/sandbox/common.tsx')
     // The widest reading and the real one share a grid cell; only the real one is seen.
     expect(panel).toMatch(/<span className="invisible col-start-1 row-start-1" aria-hidden="true">\s*\{widestClockText\(engineTime, settings\)\}/)
-    expect(panel).toMatch(/<span className="col-start-1 row-start-1">\{clockText\(engineTime, settings\)\}<\/span>/)
+    // SB17: in replay the real clock is the playhead's time and the word replay (the `clock` constant); live it is clockText(engineTime, settings).
+    expect(panel).toMatch(/<span className="col-start-1 row-start-1">\{clock\}<\/span>/)
+    expect(panel).toMatch(/: clockText\(engineTime, settings\)/)
     // Both words are always laid out; only which one is visible changes.
     expect(panel).toMatch(/row-start-1 \$\{playing \? 'invisible' : ''\}`\}>Play</)
     expect(panel).toMatch(/row-start-1 \$\{playing \? '' : 'invisible'\}`\}>Pause</)

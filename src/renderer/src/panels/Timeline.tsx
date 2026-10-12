@@ -5,6 +5,9 @@ import { useApp } from '../app/modes'
 import { useSandbox } from '../sim/store'
 import { formatMeasure } from '../math/format'
 import { nextTimelineMax } from './shellLogic'
+import { TapeStrip } from '../render/sandbox/TapeStrip'
+import { shownTape, useTape } from '../sim/tapeStore'
+import { useTransportFlags } from '../sim/transportActions'
 
 export function Timeline() {
   const mode = useApp((s) => s.mode)
@@ -14,21 +17,36 @@ export function Timeline() {
 /**
  * In the Sandbox the clock belongs to the physics engine, not to the animated drawing. This
  * panel used to carry a second set of Play, Step and Reset buttons that disagreed with the ones
- * at the top of the Sandbox panel; now there is one set, there, and this is only the clock.
+ * at the top of the Sandbox panel; now there is one set, there, and this is the clock and the
+ * tape strip (the same strip as under the drawing, SB17, which goes through the same actions).
  */
 function SandboxTimeline() {
-  const time = useSandbox((s) => s.engineTime)
+  const engineTime = useSandbox((s) => s.engineTime)
   const timeScale = useSandbox((s) => s.world.timeScale)
-  const playing = useScene((s) => s.playing)
+  const replaySpeed = useTape((s) => s.speed)
   const settings = useScene((s) => s.settings)
+  // In replay the clock and "running" are the recording's: the playhead's time, and the tape playing.
+  const flags = useTransportFlags()
+  const mode = useTape((s) => s.mode)
+  const tape = shownTape()
+  const playing = flags.playing
+  const replaying = mode !== 'live' && tape !== null && flags.at !== null
+  const time = replaying ? tape.timeOf(flags.at!) : engineTime
+  // Slow motion is the engine's; in replay the speed is the recording's own, and the live slow motion is not shown as current.
+  const speed = replaying ? replaySpeed : timeScale
   return (
     <div className="panel flex flex-col gap-2 p-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-lead tabular-nums text-[color:var(--text-strong)]">t = {formatMeasure(time, 'number', settings)} s</span>
-        <span className="text-[color:var(--text-dim)]">{playing ? 'running' : 'paused'}</span>
-        {timeScale !== 1 && <span className="text-[color:var(--text-dim)]">slow motion ×{formatMeasure(timeScale, 'number', settings)}</span>}
+        <span className="text-[color:var(--text-dim)]">{replaying ? (mode === 'fine' ? 'fine replay' : 'replay') : playing ? 'running' : 'paused'}{replaying && playing ? ', playing' : ''}</span>
+        {speed !== 1 && (
+          <span className="text-[color:var(--text-dim)]">
+            {replaying ? 'replay speed' : 'slow motion'} ×{formatMeasure(speed, 'number', settings)}
+          </span>
+        )}
       </div>
-      <p className="text-[color:var(--text-dim)]">Play, Step and Reset are at the top of the Sandbox panel; slow motion is under World. Space plays and pauses.</p>
+      <TapeStrip inline />
+      <p className="text-[color:var(--text-dim)]">Play, Step and Reset are at the top of the Sandbox panel; slow motion is under World. Space plays and pauses; J plays backwards, K pauses, L plays, comma and full stop step.</p>
     </div>
   )
 }

@@ -16,6 +16,7 @@ import { EnergyReadout } from './sandbox/EnergyReadout'
 import { Recording } from './sandbox/Recording'
 import { WorldSection } from './sandbox/WorldSection'
 import { Collisions } from './sandbox/Collisions'
+import { ReplayBanner, ReplayLock } from './sandbox/ReplayLock'
 
 export function Sandbox() {
   const bodies = useSandbox((s) => s.bodies)
@@ -32,15 +33,22 @@ export function Sandbox() {
   return (
     <div className="panel pb-6">
       <Transport />
+      {/* Replay is read-only (D5): the edit controls below are locked while a recording is shown, and this says why. */}
+      <ReplayBanner />
       {loading && <div className="px-3 pt-3 text-[color:var(--text-dim)]">Starting the physics engine…</div>}
 
       <div className="section-title">Objects</div>
       <Presets />
-      <AddRow />
-      {joinMode && <JoinGuide />}
+      <ReplayLock>
+        <AddRow />
+        {joinMode && <JoinGuide />}
+      </ReplayLock>
+      {/* A row only chooses the object, which still works in replay; its Delete is locked inside the list. */}
       <BodyList />
 
-      <Pushes />
+      <ReplayLock>
+        <Pushes />
+      </ReplayLock>
 
       {sel && <Selected sel={sel} live={showsLive(playing, engineTime) ? (live[sel.id] ?? null) : null} update={update} />}
 

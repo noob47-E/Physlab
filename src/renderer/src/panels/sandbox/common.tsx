@@ -8,6 +8,7 @@ import { FOLD_TITLES, readFold, sizeFields, writeFold, type FoldId, type FoldSto
 import type { SceneSettings } from '../../core/types'
 import { NumField } from '../../ui/fields'
 import { formatMeasure } from '../../math/format'
+import { ReplayLock } from './ReplayLock'
 
 type V = [number, number, number]
 
@@ -117,7 +118,8 @@ export function Fold({ id, title, open: fallback = false, force = false, childre
       >
         {shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {title ?? FOLD_TITLES[id]}
       </button>
-      {shown && children}
+      {/* The arrow stays live while a recording is shown; what is inside is an edit control, so it is locked (D5). */}
+      {shown && <ReplayLock>{children}</ReplayLock>}
     </>
   )
 }
