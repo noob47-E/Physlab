@@ -9,6 +9,8 @@ online. The first load takes seconds, so the client shows where it is and never 
 | File | One line |
 |---|---|
 | `src/renderer/src/math/engine/index.ts` | **The socket.** `ENGINE_FOR` (which engine answers each job), `ask(job, req)`, `workSteps(job, req, ctx)`, `useEngineStatus`, `cancelEngine`, `warmupEngine(WhenIdle)`, the load-stage words. The only door to an engine. |
+| `src/renderer/src/math/engine/switch.ts` | **The class switch (G4).** `classOf(job, req)` (which scoreboard class a request is), `ENGINE_FOR_CLASS` (which engine answers each class; all SymPy until a class meets `GATE`), `routedAsk` (a Giac answer is shown only once verified; anything else falls back to SymPy). `ask` in index.ts is `routedAsk`. |
+| `src/renderer/src/math/engine/verify.ts` | `verifyAnswer(cls, req, result)`: an answer proved right for its class by G2's checkers and the class's form. The one place this is decided, shared by the app and the scoreboard's judge. |
 | `src/renderer/src/math/engine/types.ts` | `MathEngine`, the jobs (`ENGINE_JOBS`), `EngineRequest` (PhysLab spelling), `EngineResult` / `EngineValue` (PhysLab results), `StepsContext`, `EngineStatus`. |
 | `src/renderer/src/math/engine/sympy/adapter.ts` | The SymPy adapter: job → worker op and payload (`sympyRequest`), replies → results (`text` in PhysLab spelling), rule trees → working (`stepsFromReply`), refusals in PhysLab's words. |
 | `src/renderer/src/math/engine/sympy/worker.ts` | The worker client (it replaced the old CAS client in math/ when the engine socket came in): `cas(op, payload)` → Promise, the worker's life (boot, restart, `cancelCas`), timeouts, the request queue, `useCasStatus`, `warmupCas` / `warmupCasWhenIdle`. |

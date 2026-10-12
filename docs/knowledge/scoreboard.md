@@ -123,3 +123,25 @@ in derivatives always take an inside that is positive for every real x.
   every unknown must appear.
 - mathjs's `smaller` calls numbers within its tolerance equal (0 < 10⁻²⁰ is false): compare BigNumbers with `lte`.
 - A double's difference quotient of 6×10²⁴·cos(…) is noise of 10¹³: the derivative check runs at 60 digits.
+
+## The switch (G4)
+`math/engine/switch.ts` gives each scoreboard class its engine (`ENGINE_FOR_CLASS`), and `ask` (math/engine/index.ts)
+routes through it:
+- `classOf(job, req)` says which class a request is, or none. A class means one letter and rational coefficients
+  (linear systems: several letters, every equation linear); simplify and apart need a quotient, expand and factor a
+  polynomial, diff a first derivative with no point. A request outside every class goes where `ENGINE_FOR` sends its
+  job.
+- A class given to Giac is asked of Giac. The answer is shown only when `verify.ts` proves it, the same code as the
+  scoreboard's judge. An answer short of a proof, an error, a throw or a stopped worker falls back to SymPy, so a wrong
+  answer from Giac never reaches the screen.
+- `tests/engine/switch.test.ts` refuses any class set to Giac unless `results/giac.json` (gating) and
+  the external holdout's Giac results (G3c; the file switch.test.ts reads next to giac.json) both show ≥ 92 % right and 0 WRONG.
+
+**Status (12 Oct 2026): every class is still on SymPy.** On the gating corpus Giac meets the rule in six classes, but
+the external holdout has not merged, so none can switch yet. Once it merges:
+1. score Giac on it into the external results file switch.test.ts names (corpora.external);
+2. set the passing classes to `'giac'`;
+3. run the golden comparison: the golden inputs of each switched class through the routed ask, against SymPy's lines.
+
+A visible change goes in its own `[answer may change]` commit, with an owner row. Polynomial equations also waits for
+G3b-1.

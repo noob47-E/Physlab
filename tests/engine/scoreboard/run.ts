@@ -13,9 +13,9 @@ import { readSource, repoPath } from '../../helpers/repo'
 import { sympyEngine } from '../../../src/renderer/src/math/engine/sympy/adapter'
 import type { CasResult } from '../../../src/renderer/src/math/engine/sympy/worker'
 import { headlessGiacEngine } from '../giacHeadless'
-import { judgeAnswer, type Judgement } from './judge'
+import { JOB_FOR, judgeAnswer, requestFor, type Judgement } from './judge'
 import type { CorpusItem } from './buildCorpora'
-import type { EngineRequest, EngineResult, EngineJob, MathEngine } from '../../../src/renderer/src/math/engine/types'
+import type { EngineResult, EngineJob, MathEngine } from '../../../src/renderer/src/math/engine/types'
 import { setAngleMode } from '../../../src/renderer/src/math/expr'
 
 const options = {
@@ -29,25 +29,6 @@ const engineName = values.engine || 'sympy'
 const className = values.class || 'all'
 const corpusArg = values.corpus || 'gating'
 const corpusNames = corpusArg === 'all' ? ['generator', 'gating'] : [corpusArg]
-
-const classToJob: Record<string, EngineJob> = {
-  expand: 'expand',
-  'factor over Q': 'factor',
-  'polynomial equations': 'solve',
-  'linear systems': 'solve',
-  'rational simplification': 'simplify',
-  derivatives: 'diff',
-  'partial fractions': 'apart'
-}
-
-function buildRequest(item: CorpusItem, job: EngineJob): EngineRequest {
-  if (job === 'solve') {
-    if (item.class === 'linear systems') return { eqs: item.question.split(',').map((s) => s.trim()), vars: [], deg: false }
-    return { eqs: [item.question], vars: ['x'], deg: false }
-  }
-  if (job === 'diff') return { expr: item.question, var: 'x', order: 1, deg: false }
-  return { expr: item.question, deg: false }
-}
 
 async function headlessSend(): Promise<(op: string, payload: Record<string, unknown>) => Promise<CasResult>> {
   const src = readSource('src/renderer/src/workers/cas.worker.ts')
@@ -102,11 +83,11 @@ async function scoreCorpus(engine: MathEngine, corpusName: string): Promise<Reco
   for (const item of items) {
     const s = (out[item.class] ??= { total: 0, right: 0, wrong: 0, cant: 0, unverified: 0, msPerItem: 0, wrongList: [], unverifiedReasons: {}, unverifiedExamples: [] })
     s.total++
-    const job = classToJob[item.class]
+    const job = JOB_FOR[item.class as keyof typeof JOB_FOR]
     const start = performance.now()
     let result: EngineResult
     try {
-      result = await engine.ask(job as Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, buildRequest(item, job))
+      result = await engine.ask(job as Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, requestFor(item))
     } catch (e: unknown) {
       result = { latex: '', text: '', numeric: null, error: e instanceof Error ? e.message : 'Unknown error' }
     }

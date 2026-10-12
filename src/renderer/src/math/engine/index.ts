@@ -8,6 +8,7 @@ import type { EngineJob, EngineRequest, EngineResult, MathEngine, StepsContext }
 import { sympyEngine } from './sympy/adapter'
 import { giacEngine } from './giac/adapter'
 import { BOOT_STAGES, STAGE_WORDS } from './sympy/stages'
+import { ENGINE_FOR_CLASS, routedAsk } from './switch'
 
 export type { EngineJob, EngineRequest } from './types'
 
@@ -31,8 +32,16 @@ export const ENGINE_FOR: Record<EngineJob, keyof typeof ENGINES> = {
   diffSteps: 'sympy'
 }
 
-/** Ask the engine for a job's answer. */
-export const ask = (job: Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, req: EngineRequest): Promise<EngineResult> => ENGINES[ENGINE_FOR[job]].ask(job, req)
+/**
+ * Ask the engine for a job's answer. A request in one of the scoreboard's classes goes where switch.ts's
+ * ENGINE_FOR_CLASS says, and an answer from Giac is shown only once verify.ts proves it (SymPy answers otherwise);
+ * every other request goes where ENGINE_FOR says.
+ */
+export const ask: (job: Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, req: EngineRequest) => Promise<EngineResult> = routedAsk(
+  ENGINES,
+  ENGINE_FOR_CLASS,
+  ENGINE_FOR
+)
 
 /** The worked steps of an integral or a derivative; a refusal is a working with `error`. */
 export function workSteps(job: 'integralSteps' | 'diffSteps', req: EngineRequest, ctx: StepsContext): Promise<Working> {
