@@ -20,6 +20,7 @@ import { squarefree } from '../check/realroots'
 import { parseFraction, parseSummands } from '../pure/mono'
 import { pDeg, pGcd, polyFromExpr } from '../pure/poly'
 import { rStr } from '../pure/rat'
+import { POLYNOMIAL_EQUATION_ROOTS } from './semantics'
 import type { EngineRequest, EngineResult } from './types'
 
 /** The scoreboard's seven classes (tests/engine/scoreboard). */
@@ -156,12 +157,9 @@ function verifyRoots(req: EngineRequest, result: EngineResult): Judgement {
   const sols = result.solutions ?? []
   const given = sols.map((s) => s[x]?.text).filter((t): t is string => typeof t === 'string').map((t) => exactDigits(lowerI(t)))
   if (given.length !== sols.length) return { mark: 'unverified', why: `a solution has no ${x}` }
-  // The real roots, judged on the real line (G00 §6.3): exactly the distinct real roots.
-  const real = fromVerdict(polyRootsCheck(p, given.filter((g) => !hasI(g)).map((value) => ({ value, multiplicity: 1 })), 'real'), 'real roots')
-  if (real.mark !== 'right') return real
-  // Complex roots, where given (SymPy lists them; Giac only when there is no real root), must all be right too.
-  if (given.some(hasI)) return fromVerdict(polyRootsCheck(p, given.map((value) => ({ value, multiplicity: 1 })), 'complex'), 'real and complex roots')
-  return real
+  // Every root (G00 §6.3, the owner's G3b-1): exactly the distinct roots over ℂ of the squarefree polynomial, so the
+  // real roots alone, when there are complex ones too, are wrong. Each root counts once, as both engines list it.
+  return fromVerdict(polyRootsCheck(p, given.map((value) => ({ value, multiplicity: 1 })), POLYNOMIAL_EQUATION_ROOTS), given.some(hasI) ? 'real and complex roots' : 'roots')
 }
 
 function verifySystem(req: EngineRequest, result: EngineResult): Judgement {

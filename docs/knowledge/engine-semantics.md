@@ -16,7 +16,9 @@ For school maths, the default evaluation domain across all features is strictly 
 1. **School work is real by default**: Variables $x, y, z, \dots$ represent real numbers unless
    explicitly declared in Complex mode.
 2. **Complex mode**: Complex answers appear only when the user is explicitly in Complex mode
-   (`COMPLEX_MODE` in calculator settings).
+   (`COMPLEX_MODE` in calculator settings). One exception, the owner's (G3b-1, 12 Oct 2026): **a
+   polynomial equation is answered with every root**, complex ones too, because every root is the
+   correct answer (§6.3, `POLYNOMIAL_EQUATION_ROOTS`).
 3. **No real solution fallback**: When solving an equation in the real domain that has no real
    roots, PhysLab does not report raw complex roots as ordinary answers. Instead, it follows today's
    canonical sentence:
@@ -129,7 +131,22 @@ comparisons specified in `ENGINE_SEMANTICS_JOBS`:
    $\mathbb{Q}[x_1, \dots, x_n]$, verified via `compareRationalFunctions` / `compareRationalFunctionsExact`, alongside checking that excluded points match symmetrically and that all cancelled denominator roots (where $Q_1(r) = 0$ while $Q_2(r) \ne 0$ or vice versa) are explicitly listed in the domain restrictions (supporting exact rationals, irrationals, and complex conjugate pairs).
 3. **Equations (`solve`)**:
    Equality of the solution set with multiplicities:
-   $S = \{ (r_i, m_i) \}$. Representation is normalized across engines (grouped vs ungrouped repeated roots). In Complex mode (`COMPLEX_MODE`, $\mathbb{C}$), polynomial equations of degree $n$ must be complete by degree ($\sum m_i = n$ counted with algebraic multiplicity by the Fundamental Theorem of Algebra). In Real mode (the default), only real solutions are returned; if there are no real solutions, the engine returns `"No real solution."`, and the sum of real multiplicities $\le n$. Verified via `compareSolutionSets`.
+   $S = \{ (r_i, m_i) \}$. Representation is normalized across engines (grouped vs ungrouped repeated roots).
+   - **A polynomial equation shows every root** (the owner, G3b-1: "all roots, because all roots is the correct
+     answer"; `POLYNOMIAL_EQUATION_ROOTS` is `'complex'`). Its answer is compared in Complex mode: complete by degree
+     ($\sum m_i = n$, counted with algebraic multiplicity by the Fundamental Theorem of Algebra), in exact form.
+     The roots are shown real ones first, smallest first, then each complex pair $a + bi$, $a - bi$ in order of its
+     real part, then of the size of $b$ (`orderRoots` in calc/roots.ts, the one rule every route uses):
+     $x^3 = 1$ gives $x = 1$, $x = -\frac{1}{2} + \frac{\sqrt{3}}{2}i$, $x = -\frac{1}{2} - \frac{\sqrt{3}}{2}i$. A repeated
+     root is listed once, as both engines and the screen list it today ($(x - 2)^2 = 0$ shows $x = 2$); its
+     multiplicity is counted by the checkers, and the engine's rows carry no field for it.
+   - **When there is no real root at all**, the calculator's own solver keeps its sentence,
+     `"No real solution. In complex numbers: x = …"` (`COMPLEX_FALLBACK_PREFIX`, §1.3).
+   - **Any other equation** (trigonometric, exponential, with a root sign) keeps the real domain: its real solutions,
+     and the complex ones only when there is no real one; the sum of real multiplicities $\le n$.
+   - Both engines agree: SymPy has always listed every root of a polynomial; Giac's adapter asks `csolve` for one
+     (docs/knowledge/giac-adapter.md). Verified via `compareSolutionSets` and, for the engines' answers, by the
+     scoreboard's judge and G4's `verify.ts` (math/engine/verify.ts).
 4. **Linear systems (`linearSystems`)**:
    Classified via `classifyLinearSystem` into:
    - `'unique'`: unique solution vector.

@@ -70,10 +70,11 @@ complex principal value), an answer longer than 20,000 characters.
 | integrate | `integrate(E, x)`; definite `simplify(integrate(E, x, a, b))` | see below |
 | limit | `limit(E, x, a)`, one side `…, 1` or `…, -1` | a side where the function has no real value has no limit (√x from the left; Giac's complex answer is 0), sampled as a graph is drawn; a two-sided limit also asks both sides and they must agree (G00) |
 | series | `convert(series(E, x, a, n - 1), polynom)` | n terms as the other engine counts them |
-| solve | `solve(…)`; when it finds no real root, `csolve(…)` | every row is put back into every equation with `simplify(subst(…))` and must give 0; a letter equal to itself (y = y) is left out; a row with nothing left is "Every value of x makes that true." |
+| solve | one polynomial equation in its unknown: `csolve(…)`, every root; any other equation or a system: `solve(…)`, and `csolve(…)` when it finds no real root | every row is put back into every equation with `simplify(subst(…))` and must give 0; a letter equal to itself (y = y) is left out; a row with nothing left is "Every value of x makes that true."; one unknown's roots come back in `orderRoots`' order (real ones smallest first, then each pair a + bi, a − bi) |
 
 **The real domain.** A complex answer is shown only for factorComplex, for a request that itself
-writes i, and as solve's fallback when there is no real root. Any other answer with an i is refused:
+writes i, for every root of a polynomial equation (G00 §6.3, the owner's G3b-1), and as solve's fallback
+when any other equation has no real root. Any other answer with an i is refused:
 "That has no real value." when its number says so (eval √−4, ln(−1), asin 2), and `CANT_SHOW` when
 it has letters or Giac gives no number. An i that cancels (a real number Giac wrote with i) leaves an
 imaginary part that is round-off beside the value, and is dropped.
@@ -132,11 +133,12 @@ singularity such as x^(−1/3) grows too slowly to do it. Infinite bounds are no
 - **exact** is not a Giac job: Giac has no closed-form recogniser, and `exact(1.4142135623730951)`
   is 1607521/1136689. Answering would be a guess. The conformance suite skips it.
 - **integralSteps, diffSteps**: Giac returns no rule tree. The working is PhysLab's own methods (S1).
-- **Solve in the real domain.** A polynomial with real roots answers only those (x³ = 1 gives x = 1),
-  as G00 §6.3 says; with no real root it answers the complex ones (x² + 1 = 0 gives ±i), the
-  fallback G00 §1 names. The other engine answers every complex root, and the G3a corpus keys list
-  them for mixed polynomials: the scoreboard must judge in the real domain, and this is a true
-  difference for G4's owner row. `EngineRequest` has no Complex-mode flag yet.
+- **Every root of a polynomial equation** (the owner, G3b-1, 12 Oct 2026). A polynomial equation in
+  one unknown (sums, products and whole powers of it; any coefficients) is solved with `csolve`, so
+  x³ = 1 answers 1 and −1/2 ± (√3/2)i, as the other engine always has. An equation that is not
+  polynomial (e^x = 2, √x = x − 2, 2^x = 8) and a system keep the real domain, with the complex
+  solutions only when there is no real one. A repeated root comes back once, as from the other
+  engine. `EngineRequest` still has no Complex-mode flag.
 - **What a result cannot carry**: a cancelled factor's restriction (x ≠ 1) and a root's multiplicity
   are the checkers' (G2); `EngineResult` has no field for them.
 - **Periodic poles** beyond `singular`'s list are found only by sampling, on finite bounds.

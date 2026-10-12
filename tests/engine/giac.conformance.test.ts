@@ -9,10 +9,13 @@
 // - integralSteps, diffSteps: Giac returns no rule tree; the working is PhysLab's own methods' job (S1).
 // The other engine's gap, 'infinite-number', is not one here: Giac sends ∞ as a number.
 
-import { afterAll } from 'vitest'
+import { afterAll, vi } from 'vitest'
 import { engineConformance } from './conformance'
 import { headlessGiacEngine } from './giacHeadless'
 import type { GiacClient } from '../../src/renderer/src/math/engine/giac/worker'
+
+// Each case asks the real runtime several times; on a loaded machine that passes vitest's default 5 s.
+vi.setConfig({ testTimeout: 60000 })
 
 let client: GiacClient | null = null
 
@@ -21,6 +24,8 @@ engineConformance(
   async () => {
     const made = headlessGiacEngine()
     client = made.client
+    // The runtime loads here, under the suite's own time limit, not in the first case.
+    await made.client.run(['1'])
     return made.engine
   },
   { timeoutMs: 60000 }

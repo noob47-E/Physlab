@@ -8,6 +8,7 @@
 // (Giac gives the principal value, 0 for ∫₋₁¹ dx/x), a two-sided limit, a derivative at a corner of
 // |x|, and every root of a solve, which is put back into its equations.
 
+import { orderRoots } from '../../../calc/roots'
 import { compileScalar } from '../../expr'
 import type { EngineJob, EngineRequest, EngineResult, EngineValue, MathEngine } from '../types'
 import {
@@ -476,6 +477,29 @@ async function seriesJob(j: GiacJob, req: EngineRequest): Promise<EngineResult> 
   return single(j, out)
 }
 
+/**
+ * Whether a tree is a polynomial in the letter: sums, differences and products of it, whole powers of it, and anything
+ * else only where the letter is not inside (a coefficient, a divisor, a function of the other letters).
+ */
+function polynomialIn(t: Tree, x: string): boolean {
+  const holds = (u: Tree): boolean => lettersOf(u).includes(x)
+  switch (t.k) {
+    case 'int':
+    case 'sym':
+      return true
+    case 'const':
+      return t.c === 'pi' || t.c === 'e' || t.c === 'i'
+    case 'neg':
+      return polynomialIn(t.a, x)
+    case 'op':
+      if (t.op === '/') return polynomialIn(t.a, x) && !holds(t.b)
+      if (t.op === '^') return holds(t.a) ? polynomialIn(t.a, x) && t.b.k === 'int' : !holds(t.b)
+      return polynomialIn(t.a, x) && polynomialIn(t.b, x)
+    default:
+      return !holds(t)
+  }
+}
+
 async function solveJob(j: GiacJob, req: EngineRequest): Promise<EngineResult> {
   const eqs = (req.eqs ?? []).filter((s) => s.trim()).map(readEquation)
   if (eqs.some((e) => hasI(e.lhs) || hasI(e.rhs))) j.complexOk = true
@@ -486,11 +510,14 @@ async function solveJob(j: GiacJob, req: EngineRequest): Promise<EngineResult> {
   const system = sides.length > 1 || letters.length > 1
   const call = (fn: string): string =>
     system ? `${fn}([${sides.map((s) => `${s.l}=${s.r}`).join(',')}],[${letters.map((l) => l.giac).join(',')}])` : `${fn}(${sides[0].l}=${sides[0].r},${letters[0].giac})`
-  // The real domain (G00 §1): real roots, and the complex ones only when there is no real one.
-  let [out] = await j.exec([call('solve')])
+  // A polynomial equation answers every root over ℂ (G00 §6.3, the owner's G3b-1): x³ = 1 is 1 and −1/2 ± (√3/2)i.
+  // Any other equation keeps the real domain (G00 §1): its real solutions, and the complex ones only when there is none.
+  const allRoots = !system && polynomialIn(eqs[0].lhs, letters[0].name) && polynomialIn(eqs[0].rhs, letters[0].name)
+  if (allRoots) j.complexOk = true
+  let [out] = await j.exec([call(allRoots ? 'csolve' : 'solve')])
   let found = j.answer(out, false)
   if (found.k !== 'list') throw new Refusal(REFUSALS.generic)
-  if (!found.items.length) {
+  if (!found.items.length && !allRoots) {
     // No real root: the complex ones are the answer G00 §1 names ("No real solution. In complex numbers: …").
     j.complexOk = true
     ;[out] = await j.exec([call('csolve')])
@@ -518,7 +545,13 @@ async function solveJob(j: GiacJob, req: EngineRequest): Promise<EngineResult> {
   const shown = await j.values(flat.map((c) => c.value))
   let k = 0
   const solutions = kept.map((row) => Object.fromEntries(row.map((c) => [c.letter.name, shown[k++]])))
-  return { latex: '', text: '', numeric: null, solutions, vars: letters.map((l) => l.name) }
+  // One unknown: in the order every route shows roots (calc/roots.ts orderRoots), real ones smallest first, then each
+  // pair a + bi, a − bi; left as Giac gave them when a root has no number.
+  const ordered = system ? solutions : orderRoots(solutions, (row) => {
+    const n = row[letters[0].name]?.numeric
+    return n ? { re: n.re, im: n.im ?? 0 } : null
+  })
+  return { latex: '', text: '', numeric: null, solutions: ordered, vars: letters.map((l) => l.name) }
 }
 
 async function answer(run: GiacRun, job: EngineJob, req: EngineRequest): Promise<EngineResult> {

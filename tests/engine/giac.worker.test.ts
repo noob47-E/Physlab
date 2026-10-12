@@ -133,9 +133,11 @@ describe('loading', () => {
     const stages = seen.filter((s) => s.status === 'loading').map((s) => s.stage)
     expect(stages).toEqual([0, 1, 2])
     expect(seen.find((s) => s.status === 'ready')?.stage).toBe(BOOT_STAGES)
-    const t = Date.now()
+    // The first question finds the engine loaded: no load starts for it (a time limit here failed under load).
+    const before = seen.length
     expect(await client.run(['factor(v_x^2-1)'])).toEqual({ outs: ['(v_x-1)*(v_x+1)'] })
-    expect(Date.now() - t).toBeLessThan(500)
+    expect(seen.slice(before).some((s) => s.status === 'loading')).toBe(false)
+    expect(client.stats().spawned).toBe(1)
     expect(client.stats().bootMs).toBeGreaterThan(0)
   }, 60000)
 

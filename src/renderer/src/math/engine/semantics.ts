@@ -60,6 +60,14 @@ export const DEFAULT_DOMAIN: DomainMode = 'real'
 /** Identifier for complex mode in calculator state. */
 export const COMPLEX_MODE = 'comp'
 
+/**
+ * The roots a polynomial equation answers with: every one over ℂ, complete by degree (the owner, G3b-1: "all roots,
+ * because all roots is the correct answer"). x³ = 1 is x = 1, x = −1/2 + (√3/2)i, x = −1/2 − (√3/2)i. Shown real
+ * roots first, smallest first, then each conjugate pair a + bi, a − bi by its real part (calc/roots.ts orderRoots).
+ * Other equations keep the real domain: their complex solutions are shown only when there is no real one.
+ */
+export const POLYNOMIAL_EQUATION_ROOTS: DomainMode = 'complex'
+
 /** Prefix for complex solutions when an equation has no real solutions. */
 export const COMPLEX_FALLBACK_PREFIX = 'No real solution. In complex numbers: x = '
 
@@ -1094,7 +1102,8 @@ export function normalizeSolutionEntries(entries: SolutionEntry[]): SolutionEntr
  * Compares roots with multiplicities over ℝ or ℂ.
  * Normalizes representation across engines (e.g. grouped vs ungrouped repeated roots).
  * In Complex mode (COMPLEX_MODE, ℂ), polynomial equations of degree n must be complete
- * by degree (sum of algebraic multiplicities equals expectedDegree).
+ * by degree (sum of algebraic multiplicities equals expectedDegree): a polynomial equation's answer is compared in
+ * this mode (POLYNOMIAL_EQUATION_ROOTS).
  * In Real mode (the default), only real solutions are returned; sum of multiplicities <= expectedDegree.
  */
 export function compareSolutionSets(
@@ -1216,7 +1225,8 @@ export const ENGINE_SEMANTICS_JOBS: Record<string, JobSemanticsSpec> = {
     comparisonKind: 'solution_set_with_multiplicity',
     defaultDomain: 'real',
     oddRootsRule: true,
-    description: 'Solution set with multiplicities on real domain; periodic solutions in k ∈ ℤ'
+    description:
+      'A polynomial equation: every root over ℂ with its multiplicity, complete by degree (POLYNOMIAL_EQUATION_ROOTS); other equations: the real solutions, complex ones only when there is no real one; periodic solutions in k ∈ ℤ'
   },
   simplify: {
     job: 'simplify',

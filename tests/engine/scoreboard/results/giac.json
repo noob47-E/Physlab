@@ -8,7 +8,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 4.2,
+        "msPerItem": 3.7,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -19,7 +19,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 2.9,
+        "msPerItem": 3.6,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -30,7 +30,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 7.4,
+        "msPerItem": 6.6,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -41,7 +41,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 3.6,
+        "msPerItem": 10.4,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -52,7 +52,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 3.2,
+        "msPerItem": 4.5,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -63,7 +63,7 @@
         "wrong": 0,
         "cant": 1,
         "unverified": 149,
-        "msPerItem": 174.9,
+        "msPerItem": 212.9,
         "wrongList": [],
         "unverifiedReasons": {
           "derivative: unknown": 149
@@ -117,7 +117,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 0.9,
+        "msPerItem": 1.2,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -130,7 +130,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 4.2,
+        "msPerItem": 9.1,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -141,7 +141,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 0.5,
+        "msPerItem": 1,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -152,7 +152,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 6.7,
+        "msPerItem": 11.6,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -163,7 +163,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 5.2,
+        "msPerItem": 6.8,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -174,7 +174,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 5,
+        "msPerItem": 6.1,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []
@@ -185,7 +185,7 @@
         "wrong": 0,
         "cant": 1,
         "unverified": 97,
-        "msPerItem": 280.2,
+        "msPerItem": 324.4,
         "wrongList": [],
         "unverifiedReasons": {
           "derivative: unknown": 97
@@ -239,7 +239,7 @@
         "wrong": 0,
         "cant": 0,
         "unverified": 0,
-        "msPerItem": 0.7,
+        "msPerItem": 20.9,
         "wrongList": [],
         "unverifiedReasons": {},
         "unverifiedExamples": []

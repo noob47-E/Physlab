@@ -13,6 +13,7 @@ import {
   DEFAULT_DOMAIN,
   ENGINE_SEMANTICS_JOBS,
   INVERSE_TRIG_BRANCHES,
+  POLYNOMIAL_EQUATION_ROOTS,
   classifyLinearSystem,
   compareDerivativesOnDomain,
   compareIntegralsOnIntervals,
@@ -589,6 +590,17 @@ describe('Rule 6: Canonical comparison per job', () => {
       expect(ENGINE_SEMANTICS_JOBS[j].defaultDomain).toBe('real')
       expect(ENGINE_SEMANTICS_JOBS[j].comparisonKind).toBeDefined()
     }
+  })
+
+  it('a polynomial equation answers every root over ℂ, complete by degree (owner, G3b-1)', () => {
+    // x³ = 1 is x = 1, x = −1/2 + (√3/2)i, x = −1/2 − (√3/2)i: the real roots alone are not the answer.
+    expect(POLYNOMIAL_EQUATION_ROOTS).toBe('complex')
+    expect(ENGINE_SEMANTICS_JOBS.solve.description).toMatch(/every root/)
+    const all = [{ val: 1, mult: 1 }, { val: { re: -0.5, im: Math.sqrt(3) / 2 }, mult: 1 }, { val: { re: -0.5, im: -Math.sqrt(3) / 2 }, mult: 1 }]
+    expect(compareSolutionSets(all, all, 3, POLYNOMIAL_EQUATION_ROOTS)).toBe(true)
+    expect(compareSolutionSets(all, [{ val: 1, mult: 1 }], 3, POLYNOMIAL_EQUATION_ROOTS)).toBe(false)
+    // With no real root at all, the existing sentence still names the complex ones.
+    expect(formatComplexFallback(['i', '-i'])).toBe(`${COMPLEX_FALLBACK_PREFIX}i or x = -i`)
   })
 })
 

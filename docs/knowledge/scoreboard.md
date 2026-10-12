@@ -43,21 +43,25 @@ corpus, which nothing is tuned on.
   - `judge.test.ts` holds real SymPy and Giac answers from the gating corpus, a planted wrong answer per class, and
     answers no checker can prove.
 
-## The domain of solve (G3b)
-SymPy's solve lists every root of a polynomial, complex ones too. Giac's lists only the real roots, and complex ones only
-when there is no real root (the engine semantics contract, §6.3). Both engines are judged on the REAL roots: the real
-roots they give must be exactly the distinct real roots. Any complex roots an engine gives must then be right as well,
-checked in Complex mode. A switch of solve to Giac changes what a student sees for x³ = 1, so it waits for the owner
-(OWNER-APPROVALS.md, G3b-1); `EngineRequest` has no Complex-mode flag yet.
+## The domain of solve (the owner's G3b-1, 12 Oct 2026: every root)
+A polynomial equation is answered with EVERY root, complex ones too, "because all roots is the correct answer" (the
+engine semantics contract §6.3, `POLYNOMIAL_EQUATION_ROOTS`). Both engines are judged so (`verify.ts`, the same code G4
+uses before a Giac answer is shown): the roots given must be exactly the distinct roots over ℂ of the squarefree
+polynomial, in exact form. The real roots alone, when there are complex ones too, are WRONG: x³ = 1 answered x = 1 is
+wrong (`judge.test.ts` pins it). SymPy has always listed every root; Giac's adapter answered only the real ones until
+P-FIX-ALLROOTS, and now asks `csolve`. Under this judge, the old Giac answers would have been WRONG on the mixed items of
+the big-degree stratum (19 in gating, 38 in the generator corpus).
 
-## Results (G3b, 12 Oct 2026; phase-0.9 at a8ae8baa; results/sympy.json and results/giac.json)
+Before G3b-1 both engines were judged on the real roots only, with any complex roots they gave checked as well.
+
+## Results (G3b, 12 Oct 2026; phase-0.9 at a8ae8baa; polynomial equations re-run on every root by P-FIX-ALLROOTS, 12 Oct 2026 08:45; results/sympy.json and results/giac.json)
 % right on the GATING corpus (200 per class), with WRONG / can't / unverified:
 
 | Class | SymPy | Giac |
 |---|---|---|
 | expand | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
 | factor over Q | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
-| polynomial equations (real roots) | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
+| polynomial equations (every root) | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
 | linear systems | 100.0 % (0 / 0 / 0) | 100.0 % (0 / 0 / 0) |
 | rational simplification | 99.5 % (0 / 0 / 1) | 100.0 % (0 / 0 / 0) |
 | derivatives | 51.0 % (0 / 0 / 98) | 51.0 % (0 / 1 / 97) |
@@ -95,11 +99,11 @@ key itself, and with the bracket read as one factor (`judge.test.ts` pins it) al
 
 G4's rule is ≥ 92 % right and 0 WRONG on the gating corpus AND on the external holdout, and only the gating half can be
 scored today. On it, Giac meets the rule in expand, factor over Q, polynomial equations, linear systems, rational
-simplification and partial fractions. The external holdout is still owed (G3c), and polynomial equations also waits
-for G3b-1. Derivatives does not meet the rule: 51 %, for want of a checker that can prove a trigonometric answer.
+simplification and partial fractions (polynomial equations judged on every root). The external holdout is still owed
+(G3c); nothing else holds polynomial equations back. Derivatives does not meet the rule: 51 %, for want of a checker that can prove a trigonometric answer.
 
-**Not judged.** Solve is judged as a set of distinct roots: both engines list a repeated root once, and the set is the
-true solution set. Whether the app should show a multiplicity is a question for G4, not for this judge.
+**Not judged.** Solve is judged as the set of distinct roots: both engines list a repeated root once, as the screen shows
+it, and the set is the true solution set; the multiplicity is the checkers' to count (§6.3), not a row of the answer.
 
 ## Classes, strata and answer forms
 | Class | Strata | Answer |
@@ -143,5 +147,5 @@ the external holdout has not merged, so none can switch yet. Once it merges:
 2. set the passing classes to `'giac'`;
 3. run the golden comparison: the golden inputs of each switched class through the routed ask, against SymPy's lines.
 
-A visible change goes in its own `[answer may change]` commit, with an owner row. Polynomial equations also waits for
-G3b-1.
+A visible change goes in its own `[answer may change]` commit, with an owner row. Polynomial equations no longer waits for
+the owner: G3b-1 is decided (every root), and both engines answer so.

@@ -87,18 +87,23 @@ describe('factor over Q', () => {
   })
 })
 
-describe('polynomial equations, judged on the real roots', () => {
+describe('polynomial equations, judged on every root (owner, G3b-1: every root is the right answer)', () => {
   const big = 'x^6 + 37*x^4 - 36*x^3 - 3557*x^2 - 2916*x + 567 = 0'
-  it('right: Giac’s real roots alone, and SymPy’s full list with the complex ones', () => {
-    expect(mark('polynomial equations', big, '', roots('-sqrt(10) - 3', '-1', 'sqrt(10) - 3', '7'))).toBe('right')
+  it('right: the full list, real and complex roots, in any order', () => {
     expect(mark('polynomial equations', big, '', roots('-1', '7', '-9*i', '9*i', '-3 + sqrt(10)', '-sqrt(10) - 3'))).toBe('right')
+    expect(mark('polynomial equations', 'x^3 = 1', '', roots('1', '-1/2 + sqrt(3)/2*i', '-1/2 - sqrt(3)/2*i'))).toBe('right')
   })
   it('right: a double root listed once; complex roots when there is no real one', () => {
     expect(mark('polynomial equations', '9*x^2 + 42*x + 49 = 0', '', roots('-7/3'))).toBe('right')
     expect(mark('polynomial equations', 'x^2 + 6*x + 18 = 0', '', roots('-3 + 3*i', '-3 - 3*i'))).toBe('right')
   })
-  it('wrong: a real root missing, a wrong complex root, a wrong surd', () => {
+  it('wrong: the real roots alone (what Giac answered before), when there are complex ones too', () => {
+    expect(mark('polynomial equations', big, '', roots('-sqrt(10) - 3', '-1', 'sqrt(10) - 3', '7'))).toBe('wrong')
+    expect(mark('polynomial equations', 'x^3 = 1', '', roots('1'))).toBe('wrong')
+  })
+  it('wrong: a real root missing, a complex root missing, a wrong complex root, a wrong surd', () => {
     expect(mark('polynomial equations', big, '', roots('-1', '7'))).toBe('wrong')
+    expect(mark('polynomial equations', big, '', roots('-1', '7', '-9*i', '-3 + sqrt(10)', '-sqrt(10) - 3'))).toBe('wrong')
     expect(mark('polynomial equations', big, '', roots('-1', '7', '-9*i', '8*i', '-3 + sqrt(10)', '-sqrt(10) - 3'))).toBe('wrong')
     expect(mark('polynomial equations', 'x^2 + 24*x + 136 = 0', '', roots('-12 - 2*sqrt(3)', '-12 + 2*sqrt(3)'))).toBe('wrong')
   })

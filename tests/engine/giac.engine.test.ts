@@ -4,7 +4,7 @@
 // no Giac name on screen, and every spelling round trip through the engine itself.
 
 import katex from 'katex'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { headlessGiacClient, headlessGiacEngine } from './giacHeadless'
 import { MUST_COVER, ROUND_TRIPS } from './giacCases'
 import { GIAC_JOBS, giacNumber, REFUSALS } from '../../src/renderer/src/math/engine/giac/adapter'
@@ -13,6 +13,9 @@ import { GIAC_SETUP, type GiacClient } from '../../src/renderer/src/math/engine/
 import { ADVERSARIAL_CASES } from '../../src/renderer/src/math/engine/semantics'
 import type { EngineJob, EngineRequest, EngineResult, MathEngine } from '../../src/renderer/src/math/engine/types'
 import { math, setAngleMode } from '../../src/renderer/src/math/expr'
+
+// Every case asks the real runtime; on a loaded machine that passes vitest's default 5 s.
+vi.setConfig({ testTimeout: 30000 })
 
 let engine: MathEngine
 let client: GiacClient
@@ -157,12 +160,37 @@ describe('the real domain (G00 §1): a complex answer only when asked', () => {
     expect((await ask('limit', { expr: 'cbrt(x)', var: 'x', to: '0' })).numeric).toEqual({ re: 0 })
   })
 
-  it('solve: real roots when there are any (x³ = 1 is x = 1), the complex ones only when there are none', async () => {
-    expect((await ask('solve', { eqs: ['x^3 = 1'], vars: ['x'] })).solutions?.map((r) => r.x.text)).toEqual(['1'])
-    expect((await ask('solve', { eqs: ['x^2 + 2*x + 5 = 0'], vars: ['x'] })).solutions?.map((r) => r.x.numeric)).toEqual([
+  it('solve: every root of a polynomial equation, real ones first and smallest first, then each pair a + bi, a − bi (owner, G3b-1)', async () => {
+    const values = async (eq: string): Promise<Array<{ re: number; im?: number } | null>> =>
+      ((await ask('solve', { eqs: [eq], vars: ['x'] })).solutions ?? []).map((r) => r.x.numeric)
+    const s3 = Math.sqrt(3) / 2
+    const cube = await values('x^3 = 1')
+    expect(cube).toHaveLength(3)
+    expect(cube[0]).toEqual({ re: 1 })
+    expect(cube[1]?.re).toBeCloseTo(-0.5, 14)
+    expect(cube[1]?.im).toBeCloseTo(s3, 14)
+    expect(cube[2]?.re).toBeCloseTo(-0.5, 14)
+    expect(cube[2]?.im).toBeCloseTo(-s3, 14)
+    expect(await values('x^4 = 16')).toEqual([{ re: -2 }, { re: 2 }, { re: 0, im: 2 }, { re: 0, im: -2 }])
+    expect(await values('x^2 + 2*x + 5 = 0')).toEqual([
       { re: -1, im: 2 },
       { re: -1, im: -2 }
     ])
+    // A repeated root once, as the other engine lists it; x(x² + 1) has one real and two complex roots.
+    expect(await values('(x - 2)^2*(x^2 + 1) = 0')).toEqual([{ re: 2 }, { re: 0, im: 1 }, { re: 0, im: -1 }])
+    expect(await values('x^3 + x = 0')).toEqual([{ re: 0 }, { re: 0, im: 1 }, { re: 0, im: -1 }])
+  })
+
+  it('solve: an equation that is not polynomial keeps the real domain (its complex solutions only when there is no real one)', async () => {
+    const texts = async (eq: string): Promise<string[]> => ((await ask('solve', { eqs: [eq], vars: ['x'] })).solutions ?? []).map((r) => r.x.text)
+    expect(await texts('e^x = 2')).toEqual(['ln(2)'])
+    expect(await texts('sqrt(x) = x - 2')).toEqual(['4'])
+    expect(await texts('2^x = 8')).toEqual(['3'])
+    expect(await texts('e^x = -1')).toEqual(['i*pi'])
+    // A negative power of the unknown is not a polynomial (review, P-FIX-ALLROOTS): the real path, x = 1 alone.
+    expect(await texts('x^(-3) = 1')).toEqual(['1'])
+    expect(await texts('x^-3 = 1')).toEqual(['1'])
+    expect(await texts('1/x^3 = 1')).toEqual(['1'])
   })
 })
 
@@ -187,8 +215,13 @@ describe('real odd roots (G00 §2): (−8)^(1/3) = −2', () => {
   })
 
   it('in solve, simplify, diff and integrate the root of a negative is real', async () => {
+    // x³ = −8: the real root −2 first, then the complex pair 1 ± √3 i (every root of a polynomial equation, G3b-1).
     const s = await ask('solve', { eqs: ['x^3 = -8'], vars: ['x'] })
-    expect(s.solutions?.map((row) => row.x.text)).toEqual(['-2'])
+    expect(s.solutions?.[0].x).toMatchObject({ text: '-2', numeric: { re: -2 } })
+    expect(s.solutions?.slice(1).map((row) => [row.x.numeric?.re, Math.round((row.x.numeric?.im ?? 0) * 1e9) / 1e9])).toEqual([
+      [1, Math.round(Math.sqrt(3) * 1e9) / 1e9],
+      [1, -Math.round(Math.sqrt(3) * 1e9) / 1e9]
+    ])
     const simp = await ask('simplify', { expr: 'x^(1/3)' })
     expect(at(simp.text, -8)).toBeCloseTo(-2, 12)
     // d/dx x^(1/3) = 1/(3 x^(2/3)), which is 1/12 at x = −8 with the real root.

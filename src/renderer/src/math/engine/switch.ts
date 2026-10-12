@@ -21,7 +21,7 @@ export const GATE = { minRight: 0.92, maxWrong: 0 }
 export const ENGINE_FOR_CLASS: Record<EngineClass, 'sympy' | 'giac'> = {
   expand: 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
   'factor over Q': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
-  'polynomial equations': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c and the owner (G3b-1, the domain of solve)
+  'polynomial equations': 'sympy', // passes gating judged on every root (100 %, 0 WRONG; the owner's G3b-1); waits for G3c
   'linear systems': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
   'rational simplification': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
   derivatives: 'sympy', // fails gating (51 %: trigonometric answers cannot be proved); stays on SymPy
