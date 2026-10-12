@@ -52,7 +52,10 @@ describe('chains: the first step starts from the input, and each step starts whe
   it('validates sub-workings and the Another way too, each with its own chain', () => {
     const sub: Working = { title: 'sub', input: '2*x = 8', steps: [steps[1]] }
     const broken: Working = { title: 'alt', input: '2*x + 3 = 11', steps: [{ ...steps[0], after: '2*x = 9' }] }
-    expect(validateWorking({ title: 't', input: '2*x + 3 = 11', steps, subWorkings: [sub] }).valid).toBe(true)
+    // A sub-working must belong to its parent's own split or discriminant (P-FIX-S1SOUND2 MUST 8): this chain belongs to
+    // no case of the parent, so it is refused, however valid it is on its own.
+    expect(validateWorking({ title: 't', input: '2*x + 3 = 11', steps, subWorkings: [sub] }).valid).toBe(false)
+    expect(validateWorking(sub).valid).toBe(true)
     expect(validateWorking({ title: 't', input: '2*x + 3 = 11', steps, subWorkings: [{ ...sub, input: 'x' }] }).valid).toBe(false)
     expect(validateWorking({ title: 't', input: '2*x + 3 = 11', steps, anotherWay: broken }).valid).toBe(false)
   })

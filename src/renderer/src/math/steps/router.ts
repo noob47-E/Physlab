@@ -14,13 +14,31 @@ export { CANT_SHOW_STEPS_REASON }
 export const DEFAULT_MAX_DEPTH = 10
 export const DEFAULT_MAX_STEPS = 100
 
-/** Count all steps in a Working document including nested sub-workings. */
+/** The longest typed input the methods read, and the most brackets in it (P-FIX-S1SOUND2 SHOULD 1). */
+const MAX_INPUT_LENGTH = 400
+const MAX_BRACKETS = 60
+
+function countOf(text: string, ch: string): number {
+  let n = 0
+  for (const c of text) if (c === ch) n++
+  return n
+}
+
+/**
+ * Count all steps in a Working document including nested sub-workings. Iterative, and bounded: a tree with a cycle or too many
+ * workings counts as infinitely many steps, so it is never chosen (review of P-FIX-S1SOUND2, SHOULD H: no recursion without a guard).
+ */
 export function countSteps(working: Working): number {
-  let count = working.steps.length
-  if (working.subWorkings) {
-    for (const sub of working.subWorkings) {
-      count += countSteps(sub)
-    }
+  const MAX_VISITS = 400
+  let count = 0
+  let visits = 0
+  const stack: Working[] = [working]
+  while (stack.length > 0) {
+    const w = stack.pop() as Working
+    visits++
+    if (visits > MAX_VISITS) return Number.POSITIVE_INFINITY
+    count += w.steps.length
+    for (const sub of w.subWorkings ?? []) stack.push(sub)
   }
   return count
 }
@@ -63,6 +81,12 @@ export class DefaultStepRouter implements StepRouter {
       }
     }
 
+    // An input too long or too deeply bracketed to read in time is declined before any method reads it (P-FIX-S1SOUND2
+    // SHOULD 1: 3,000 nested brackets took seconds, every method rereading them).
+    if (typeof problem.input === 'string' && (problem.input.length > MAX_INPUT_LENGTH || countOf(problem.input, '(') > MAX_BRACKETS)) {
+      return { steps: [], noWorking: true, reason: CANT_SHOW_STEPS_REASON }
+    }
+
     // Filter applicable methods
     const applicable = this.methods
       .filter((m) => {
@@ -102,11 +126,14 @@ export class DefaultStepRouter implements StepRouter {
       getMethods: () => this.getMethods()
     }
 
-    // A method's working, or undefined when it throws or runs over the step budget.
+    // A method's working when it is shown: undefined when the method throws, runs over the step budget, declines, or
+    // its working does not validate. The validation is inside the try: a working that makes the validator throw is a
+    // working that is not shown (P-FIX-S1SOUND2 MUST 13).
     const attempt = (method: Method): Working | undefined => {
       try {
         const w = method.solve(problem, subRouter)
-        return stepCount + countSteps(w) > maxSteps ? undefined : w
+        if (stepCount + countSteps(w) > maxSteps || w.noWorking) return undefined
+        return validateWorking(w, this.adapter, problem.domain).valid ? w : undefined
       } catch {
         return undefined
       }
@@ -118,7 +145,7 @@ export class DefaultStepRouter implements StepRouter {
     let chosenIndex = -1
     for (let i = 0; i < applicable.length; i++) {
       const w = attempt(applicable[i])
-      if (w && !w.noWorking && validateWorking(w, this.adapter, problem.domain).valid) {
+      if (w) {
         chosen = w
         chosenIndex = i
         break
@@ -136,7 +163,7 @@ export class DefaultStepRouter implements StepRouter {
     if (options?.includeAlternatives !== false) {
       for (const alt of applicable.slice(chosenIndex + 1)) {
         const altWorking = attempt(alt)
-        if (altWorking && !altWorking.noWorking && validateWorking(altWorking, this.adapter, problem.domain).valid) {
+        if (altWorking) {
           chosen.anotherWay = altWorking
           break
         }

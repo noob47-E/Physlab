@@ -96,7 +96,7 @@ describe('StepRouter', () => {
             finishStep({
               kind: 'SubproblemReduction',
               before: 'x = 1 \\text{ or } x = 2',
-              after: 'x in {1, 2}',
+              after: 'x \\in \\{1, 2\\}',
               sentence: '',
               data: {
                 variable: 'x',
@@ -144,7 +144,7 @@ describe('StepRouter', () => {
             finishStep({
               kind: 'SubproblemReduction',
               before: 'x = 1',
-              after: 'x in {1, 2}',
+              after: 'x \\in \\{1, 2\\}',
               sentence: '',
               data: {
                 subProblems: ['x - 1 = 0', 'x - 2 = 0'],

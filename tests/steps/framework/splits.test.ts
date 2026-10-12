@@ -53,7 +53,7 @@ function genuineSplit(): Working {
       {
         kind: 'SubproblemReduction',
         before: 'x = 1 \\text{ or } x = 2',
-        after: 'x in {1, 2}',
+        after: 'x \\in \\{1, 2\\}',
         sentence: '',
         data: {
           variable: 'x',
@@ -80,7 +80,7 @@ describe('MUST 1: a sub-problem reduction is tied to the case split just before 
         finishStep({
           kind: 'SubproblemReduction',
           before: 'x = 1',
-          after: 'x in {1, 2}',
+          after: 'x \\in \\{1, 2\\}',
           sentence: '',
           data: { subAnswers: [{ solutions: ['1'] }, { solutions: ['2'] }] }
         })
@@ -139,7 +139,7 @@ describe('MUST 1: a sub-problem reduction is tied to the case split just before 
 
   it('a displayed union that is not the union of the sub-answers is hidden', () => {
     const w = genuineSplit()
-    w.steps[2].after = 'x in {1, 3}'
+    w.steps[2].after = 'x \\in \\{1, 3\\}'
     expect(validateWorking(w).valid).toBe(false)
   })
 })

@@ -10,7 +10,7 @@
 
 import type { Method, Problem, Step, StepAnswer, Working } from '../types'
 import { finishStep } from '../sentences'
-import { plainOfAlg, quadraticRootsHold, quadraticRootsOf, texOfAlg } from '../check-adapter'
+import { plainOfAlg, quadraticRootsHold, quadraticRootsOf, substitutedDiscriminantText, texOfAlg } from '../check-adapter'
 import { discriminantOf, noWorking, quadraticOf, type Quadratic } from './quadratic'
 
 const FORMULA_ID = 'quadratic.formula'
@@ -18,7 +18,7 @@ const METHOD_NAME = 'Quadratic formula'
 
 /** The discriminant with a, b and c put in, written for the validator: (-5)^2 - 4 \cdot 1 \cdot (6). */
 function substitutedDiscriminant(q: Quadratic): string {
-  return `(${q.b})^2 - 4 \\cdot ${q.a} \\cdot (${q.c})`
+  return substitutedDiscriminantText(String(q.a), String(q.b), String(q.c))
 }
 
 /** The discriminant as its own working: one ExprEq from the substituted expression to its value. */

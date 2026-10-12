@@ -24,7 +24,7 @@ import {
   type Working,
   type WorkingValidationResult
 } from './types'
-import { rEq, rStr, type Rat } from '../pure/rat'
+import { rEq, rIsZero, rStr, type Rat } from '../pure/rat'
 import {
   checkEquationOp,
   checkProductStep,
@@ -53,9 +53,16 @@ import {
   sameSystem,
   solvedValues,
   type CheckAdapter,
-  type LinEq
+  type LinEq,
+  arePolysProportional,
+  substitutedDiscriminantText,
+  tryEquationPoly,
+  tryParsePoly,
+  coefficientOf,
+  parseExactRat
 } from './check-adapter'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
+import { displaySafe, drawnTex } from './displaySafe'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
@@ -160,14 +167,19 @@ export function validateCaseSplitComplete(step: Step, adapter: CheckAdapter = de
     return sameList(shown, uniqueInOrder(roots as Rat[])) ? 'valid' : 'invalid'
   }
 
-  const cases = Array.isArray(payload.cases)
-    ? payload.cases
-    : typeof step.after === 'string'
-      ? step.after.split(/\s*(?:,\s*|;\s*|\bor\b|\band\b)\s*/i).filter(Boolean)
-      : []
-  const domain = payload.domain ?? step.before
+  // The other form: a covering of a domain (real, integers) by its cases. Its before names the domain and its after is the
+  // case list, so it claims nothing about an equation: x² − 4 = 0 cannot be "split" into a list that ends as x² + 4 = 0
+  // (P-FIX-S1SOUND2 MUST 1). Anything else in this form is unknown, never shown.
+  const cases = Array.isArray(payload.cases) && payload.cases.every((c) => typeof c === 'string') ? (payload.cases as string[]) : null
+  if (!cases || cases.length < 2) return 'unknown'
+  const domain = String(step.before).trim()
+  if (!COVERING_DOMAINS.has(domain)) return 'unknown'
+  if (normalizeDisplayed(String(step.after)) !== normalizeDisplayed(cases.join(', '))) return 'invalid'
   return adapter.checkCaseSplitComplete(domain, cases)
 }
+
+/** The domains a covering may name (the other form of CaseSplitComplete). */
+const COVERING_DOMAINS = new Set(['real', 'integers'])
 
 /** The value a proposed solution stands for: "x = 2" gives 2; a plain value stays as it is. */
 function valueText(s: unknown): string {
@@ -428,6 +440,124 @@ export function validateWorking(
   adapter: CheckAdapter = defaultCheckAdapter,
   problemDomain?: Domain
 ): WorkingValidationResult {
+  // P-FIX-S1SOUND2 MUST 13: nothing thrown while checking a working reaches the page or the router. A working the checks
+  // cannot read is a working that is not shown. The tree is measured once here, so a deep or cyclic one is refused fast.
+  if (!treeWithinLimits(working)) return { valid: false, verdict: 'invalid', reason: 'The working is too large to check' }
+  try {
+    return validateWorkingChecked(working, adapter, problemDomain)
+  } catch {
+    return { valid: false, verdict: 'invalid', reason: 'The working could not be checked' }
+  }
+}
+
+/** The longest text the checks read (P-FIX-S1SOUND2 SHOULD 1): a longer line is not checked, so not shown. */
+const MAX_CHECKED_TEXT = 400
+
+/** The most nested levels and the most workings a checked tree may have (P-FIX-S1SOUND2 MUST 13: no call runs away). */
+const MAX_WORKING_DEPTH = 30
+const MAX_WORKING_VISITS = 400
+
+/**
+ * The tree of a working (its sub-workings and its Another way) is small, shallow and acyclic. Counted by visits, so a cycle
+ * runs into the limit and is refused rather than looping.
+ */
+function treeWithinLimits(root: Working): boolean {
+  const stack: Array<{ w: Working; depth: number }> = [{ w: root, depth: 0 }]
+  let visits = 0
+  while (stack.length > 0) {
+    const { w, depth } = stack.pop() as { w: Working; depth: number }
+    visits++
+    if (visits > MAX_WORKING_VISITS || depth > MAX_WORKING_DEPTH) return false
+    if (!w || typeof w !== 'object') return false
+    const subs = Array.isArray(w.subWorkings) ? w.subWorkings : []
+    for (const s of subs) stack.push({ w: s, depth: depth + 1 })
+    if (w.anotherWay !== undefined) stack.push({ w: w.anotherWay, depth: depth + 1 })
+  }
+  return true
+}
+
+/** A working's maths is drawn only as it is read: the problem, every line and every answer must be displaySafe. */
+function shownAsRead(working: Working): string | null {
+  const lines: unknown[] = [working.input]
+  for (const s of working.steps) lines.push(s.before, s.after)
+  for (const a of Array.isArray(working.answer) ? working.answer : working.answer ? [working.answer] : []) {
+    // An answer is drawn from its text: one with no text is refused (a value alone is never drawn unchecked).
+    if (typeof a.tex !== 'string') return 'An answer has no text'
+    lines.push(a.tex)
+  }
+  for (const t of lines) {
+    if (t === undefined) continue
+    if (typeof t !== 'string') return 'A line is not text'
+    if (t.length > MAX_CHECKED_TEXT) return 'A line is too long to check'
+    if (!displaySafe(drawnTex(t))) return 'A line would be drawn differently from how it is read'
+  }
+  return null
+}
+
+/** The answer's labels and displayed texts, as one key: two ways agree when their keys agree. */
+function answerKey(w: Working): string {
+  return (Array.isArray(w.answer) ? w.answer : w.answer ? [w.answer] : [])
+    .map((a) => `${a.label}=${normalizeDisplayed(a.tex)}`)
+    .sort()
+    .join(';')
+}
+
+/**
+ * The sub-workings of a working belong to it (P-FIX-S1SOUND2 MUST 8): each is the discriminant of this equation, or the
+ * solution of one zero-product case of its own split, and every case has exactly one. Null when they belong.
+ */
+function subWorkingsBelong(working: Working): string | null {
+  const subs = working.subWorkings ?? []
+  const v = variableOfInput(working.input ?? '')
+  const split = working.steps.find((s) => s.kind === 'CaseSplitComplete' && dataOf(s).form === 'zero-product')
+  const cases = split && Array.isArray(dataOf(split).cases) ? (dataOf(split).cases as unknown[]).map((c) => String(c)) : null
+  const parent = working.input ? tryEquationPoly(working.input) : null
+  // A double root has two equal cases and one case to solve: the distinct case texts are what each sub-working belongs to.
+  const distinct = cases ? cases.filter((text, i) => cases.findIndex((other) => sameState(other, text)) === i) : null
+  const used = new Set<number>()
+  for (const sub of subs) {
+    const first = sub.steps[0]
+    const d = first ? dataOf(first) : {}
+    if (d.role === 'discriminant') {
+      const a = String(d.a)
+      const b = String(d.b)
+      const c = String(d.c)
+      const own = v && parent ? tryParsePoly(`(${a})*${v}^2 + (${b})*${v} + (${c})`) : null
+      // The parent must be a quadratic (its x² term non-zero) and the discriminant's a must be non-zero too: a linear equation
+      // has no discriminant to show (review of P-FIX-S1SOUND2, MUST C).
+      const lead = parseExactRat(a)
+      const parentLead = v && parent ? coefficientOf(parent, v, 2) : null
+      if (
+        !own ||
+        !parent ||
+        !lead ||
+        rIsZero(lead) ||
+        !parentLead ||
+        rIsZero(parentLead) ||
+        !arePolysProportional(parent, own) ||
+        sub.input !== substitutedDiscriminantText(a, b, c)
+      ) {
+        return 'A discriminant does not belong to its equation'
+      }
+      continue
+    }
+    const k = distinct ? distinct.findIndex((text) => sameState(sub.input ?? '', text)) : -1
+    if (!distinct || !v || k < 0) return 'A sub-working belongs to no case of its equation'
+    used.add(k)
+    const root = linearRootOf(distinct[k], v)
+    const answers = Array.isArray(sub.answer) ? sub.answer : sub.answer ? [sub.answer] : []
+    if (!root || answers.length !== 1 || normalizeDisplayed(answers[0].tex) !== rStr(root)) {
+      return 'A sub-working does not solve its case'
+    }
+  }
+  return null
+}
+
+function validateWorkingChecked(
+  working: Working,
+  adapter: CheckAdapter,
+  problemDomain?: Domain
+): WorkingValidationResult {
   // S1b: the domain is the problem's when the caller gives it (renderWorkingToDoc and the router do). The working's own
   // copy is then only a record that must agree with it: a working rewritten in both copies is refused against the problem.
   if (problemDomain !== undefined && working.domain !== undefined && working.domain !== problemDomain) {
@@ -443,11 +573,19 @@ export function validateWorking(
     if (working.answer !== undefined) {
       return { valid: false, verdict: 'invalid', reason: 'An answer without steps to check it against' }
     }
+    // The can't-show fallback has no sub-working to show either: a sub-working is checked against its parent's steps.
+    if ((working.subWorkings ?? []).length > 0) {
+      return { valid: false, verdict: 'invalid', reason: 'A sub-working without steps of its parent to belong to' }
+    }
     return { valid: true }
   }
 
+  // Every line the page would draw is checked as drawn (P-FIX-S1SOUND2 MUST 6), in both paths.
+  const drawn = shownAsRead(working)
+  if (drawn !== null) return { valid: false, verdict: 'invalid', reason: drawn }
+
   // A system (two or more equations) is validated on its own path: its own chain, its own answer and check.
-  if (isSystemInput(working.input ?? '')) return validateSystemWorking(working, adapter)
+  if (isSystemInput(working.input ?? '')) return validateSystemWorking(working, adapter, domain)
 
   if (typeof working.input !== 'string') {
     return {
@@ -489,7 +627,7 @@ export function validateWorking(
   if (working.subWorkings && working.subWorkings.length > 0) {
     for (let s = 0; s < working.subWorkings.length; s++) {
       const sub = working.subWorkings[s]
-      const subRes = validateWorking(sub, adapter, domain)
+      const subRes = validateWorkingChecked(sub, adapter, domain)
       if (!subRes.valid) {
         return {
           valid: false,
@@ -501,12 +639,33 @@ export function validateWorking(
     }
   }
 
-  // The Another way is part of what is shown, so it is checked like any other working.
+  // The sub-workings belong to this working's own equation and split (P-FIX-S1SOUND2 MUST 8).
+  const belong = subWorkingsBelong(working)
+  if (belong !== null) return { valid: false, verdict: 'invalid', reason: belong }
+
+  // The Another way is part of what is shown, so it is checked like any other working, and it answers this problem: the
+  // same input and the same answer (P-FIX-S1SOUND2 SHOULD 4).
   if (working.anotherWay) {
-    const alt = validateWorking(working.anotherWay, adapter, domain)
+    const alt = validateWorkingChecked(working.anotherWay, adapter, domain)
     if (!alt.valid) {
       return { valid: false, verdict: alt.verdict, reason: `Another way failed: ${alt.reason}` }
     }
+    if (!sameState(working.anotherWay.input ?? '', working.input ?? '') || answerKey(working.anotherWay) !== answerKey(working)) {
+      return { valid: false, verdict: 'invalid', reason: 'Another way is not a way to this answer' }
+    }
+  }
+
+  // A working with steps gives its answer: with none, the substitution below would be skipped, and a one-way step could
+  // show roots that are not roots (P-FIX-S1SOUND2 MUST 3).
+  // A working that moves one way (an implication), splits into cases, or ends in a solution set gives its answer, so the
+  // substitution below runs (P-FIX-S1SOUND2 MUST 3). A chain of equivalent equations, an expansion or a discriminant
+  // claims no root, so it needs none.
+  const last = working.steps[working.steps.length - 1]
+  const claimsRoots =
+    working.steps.some((s) => s.kind === 'Implication' || s.kind === 'CaseSplitComplete') || last.kind === 'SolutionSetEq'
+  // The rule follows the steps, not the input's text: a one-way step or a solution set claims roots whatever the input looks like.
+  if (claimsRoots && working.answer === undefined) {
+    return { valid: false, verdict: 'invalid', reason: 'A working with steps must give its answer' }
   }
 
   // The answer must be what the validated last step displays.
@@ -516,8 +675,24 @@ export function validateWorking(
   // The answer must satisfy the problem, and the check line is the one built from it.
   const sub = substitutionOf(working)
   if (sub && !sub.ok) return { valid: false, verdict: 'invalid', reason: sub.reason }
+
+  // After a one-way step (an Implication), the last equation can have more solutions than the problem (MUST 2, 3).
+  // "No solution" still follows (the problem's solutions are among the last equation's), "every real number" does not,
+  // and every root shown must be put back into the problem as typed and hold.
+  if (working.steps.some((s) => s.kind === 'Implication')) {
+    const last = working.steps[working.steps.length - 1]
+    const ld = dataOf(last)
+    const noSolution = last.kind === 'SolutionSetEq' && Array.isArray(ld.solutions) && ld.solutions.length === 0 && ld.allReals !== true
+    if (!noSolution && !(sub && sub.ok)) {
+      return { valid: false, verdict: 'invalid', reason: 'After a one-way step, every answer must be put back into the problem and hold' }
+    }
+  }
   if (working.check !== undefined && working.check !== sub?.text) {
     return { valid: false, verdict: 'invalid', reason: 'The check line is not the one its answer gives' }
+  }
+  // The check line is drawn as the validator read it: its maths (the words of the sentence aside) must be display-safe.
+  if (working.check !== undefined && !displaySafe(drawnTex(working.check.replace(/[A-Za-z]{2,}/g, ' ')))) {
+    return { valid: false, verdict: 'invalid', reason: 'The check line would be drawn differently from how it is read' }
   }
 
   return { valid: true }
@@ -571,7 +746,7 @@ function lettersWithin(eqs: LinEq[], vars: string[]): boolean {
  * solution the answer's values must state every letter alone in the last system and satisfy every typed equation
  * exactly (the check: each typed equation, with the values put in, has equal sides).
  */
-function validateSystemWorking(working: Working, adapter: CheckAdapter): WorkingValidationResult {
+function validateSystemWorking(working: Working, adapter: CheckAdapter, domain: Domain): WorkingValidationResult {
   const fail = (index: number | undefined, reason: string): WorkingValidationResult => ({
     valid: false,
     verdict: 'invalid',
@@ -580,6 +755,10 @@ function validateSystemWorking(working: Working, adapter: CheckAdapter): Working
     reason
   })
   if (working.checked === 'failed') return fail(undefined, "The answer's check failed")
+  // A system's sub-workings and check line are never built here: a sub-working or a check that is there is not checked,
+  // so it is not shown (P-FIX-S1SOUND2 MUST 7 and SHOULD 4).
+  if ((working.subWorkings ?? []).length > 0) return fail(undefined, 'A system has no sub-working to check')
+  if (working.check !== undefined) return fail(undefined, 'A system has no check line to check')
   const typed = readSystem(working.input ?? '')
   if (!typed) return fail(undefined, 'The system as typed is not read exactly')
   const vars = lettersOfSystem(typed)
@@ -623,7 +802,9 @@ function validateSystemWorking(working: Working, adapter: CheckAdapter): Working
     const words = systemEndingAnswer(last.op as SystemOp, vars.length)
     const said = normalizeDisplayed(String(last.after))
     // An ending's answer has no letter: its label is empty, and its text is the ending's words.
-    if (answers.length !== 1 || answers[0].label !== '' || words === null || normalizeDisplayed(answers[0].tex) !== said || said !== normalizeDisplayed(words)) {
+    // The words are drawn as text (\text{...}), so the ending's line and its answer are that text (P-FIX-S1SOUND2 SHOULD 2).
+    const want = words === null ? null : normalizeDisplayed(`\\text{${words}}`)
+    if (answers.length !== 1 || answers[0].label !== '' || want === null || normalizeDisplayed(answers[0].tex) !== want || said !== want) {
       return fail(steps.length - 1, 'The answer is not the ending the last step gives')
     }
   } else {
@@ -633,8 +814,10 @@ function validateSystemWorking(working: Working, adapter: CheckAdapter): Working
       return fail(undefined, 'The answer does not list each letter once')
     }
     for (const a of answers) {
+      // The value the answer carries, when it has one, is the same number as its displayed text (SHOULD 4).
       const r = ratOfText(a.tex)
-      if (!vars.includes(a.label) || !r || !rEq(r, values[a.label])) {
+      const carried = a.value === undefined ? r : ratOfText(a.value)
+      if (!vars.includes(a.label) || !r || !carried || !rEq(r, values[a.label]) || !rEq(carried, values[a.label])) {
         return fail(undefined, `The answer ${a.label} = ${a.tex} is not the value the last step gives`)
       }
     }
@@ -648,8 +831,9 @@ function validateSystemWorking(working: Working, adapter: CheckAdapter): Working
 
   // Another way is shown with the same answer: it is checked like a working, and it must agree with this one.
   if (working.anotherWay) {
-    const alt = validateWorking(working.anotherWay, adapter)
+    const alt = validateWorkingChecked(working.anotherWay, adapter, domain)
     if (!alt.valid) return { valid: false, verdict: alt.verdict, reason: `Another way failed: ${alt.reason}` }
+    if (!sameState(working.anotherWay.input ?? '', working.input ?? '')) return fail(undefined, 'Another way is for another system')
     // The two ways agree when they reach the same answer, or the same ending (which line names the solutions may differ).
     const key = (w: Working): string => {
       const end = w.steps[w.steps.length - 1]

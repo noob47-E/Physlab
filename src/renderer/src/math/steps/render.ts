@@ -10,6 +10,10 @@ import { validateWorking } from './validate'
 import { substitutionOf } from './sentences'
 import type { CheckAdapter } from './check-adapter'
 
+import { displaySafe, drawnTex } from './displaySafe'
+
+export { displaySafe, drawnTex } from './displaySafe'
+
 /** Helper to convert an expression or equation AST/string into LaTeX display math. */
 export function formatTex(val: unknown): string {
   if (typeof val === 'string') {
@@ -22,15 +26,40 @@ export function formatTex(val: unknown): string {
   return String(val ?? '')
 }
 
-/** Convert a Step to a Pure Math Move. */
+/**
+ * The method names the page shows. A working's method name is text it carries, so only these fixed names are drawn
+ * (P-FIX-S1SOUND2 MUST 8: no free text reaches the page).
+ */
+const SHOWN_METHOD_NAMES = new Set([
+  'Linear equation in one variable',
+  'Solve by elimination',
+  'Solve by substitution',
+  'Factorising',
+  'Quadratic formula',
+  'Discriminant',
+  'Completing the square'
+])
+
+/**
+ * The heading of a sub-working, built from its own data and never its free title: "Discriminant" for the discriminant, or
+ * "Solve <case>" for the case it solves (its typed input, which the validator has tied to the parent's case). A sub-working
+ * with no input to name is "Case n".
+ */
+export function subHeading(sub: Working, index: number): string {
+  const first = sub.steps[0]
+  const role = first && first.data && typeof first.data === 'object' ? (first.data as { role?: unknown }).role : undefined
+  if (role === 'discriminant') return 'Discriminant'
+  if (typeof sub.input === 'string' && sub.input !== '') return `Solve ${drawnTex(sub.input)}`
+  return `Case ${index + 1}`
+}
+
+/** Convert a Step to a Pure Math Move. The note and the subgoal are free text, so they are not drawn. */
 export function stepToMove(step: Step): Move {
-  const tex = step.after ? formatTex(step.after) : undefined
+  const tex = step.after ? drawnTex(formatTex(step.after)) : undefined
   return {
     head: step.sentence,
     rule: step.rule,
-    tex,
-    note: step.note,
-    subgoal: step.subgoal
+    tex
   }
 }
 
@@ -43,17 +72,14 @@ export function collectMoves(working: Working): Move[] {
   const moves: Move[] = working.steps.map(stepToMove)
 
   if (working.subWorkings && working.subWorkings.length > 0) {
-    for (const sub of working.subWorkings) {
+    working.subWorkings.forEach((sub, index) => {
       const subMoves = collectMoves(sub)
       if (subMoves.length > 0) {
-        // Tag the first move of the sub-working with a subgoal heading if not already tagged
-        const groupTitle = sub.title || sub.method || 'Sub-problem'
-        if (!subMoves[0].subgoal) {
-          subMoves[0] = { ...subMoves[0], subgoal: groupTitle }
-        }
+        // The first move of the sub-working carries its heading, built from its own data.
+        subMoves[0] = { ...subMoves[0], subgoal: subHeading(sub, index) }
         moves.push(...subMoves)
       }
-    }
+    })
   }
 
   return moves
@@ -65,7 +91,7 @@ export function formatAnswers(answer?: StepAnswer | StepAnswer[]): Answer[] {
   const list = Array.isArray(answer) ? answer : [answer]
   return list.map((a) => ({
     label: a.label,
-    tex: a.tex || a.value || ''
+    tex: drawnTex(a.tex || a.value || '')
   }))
 }
 
@@ -78,64 +104,73 @@ export function renderWorkingToDoc(
   problem?: Problem,
   adapter?: CheckAdapter
 ): PureWorkingDoc {
-  const title = working.title ?? (problem ? `${problem.job} ${typeof problem.input === 'string' ? problem.input : ''}`.trim() : 'Worked solution')
-  const input = working.input ?? (problem ? (typeof problem.input === 'string' ? problem.input : '') : '')
-
-  if (working.error) {
-    return {
-      title,
-      input,
-      moves: [],
-      answers: [],
-      error: working.error
-    }
+  // P-FIX-S1SOUND2 MUST 13: nothing thrown while rendering reaches the page; a working that cannot be rendered says so.
+  try {
+    return renderChecked(working, problem, adapter)
+  } catch {
+    return cantShow(working, problem)
   }
+}
 
-  const answers = formatAnswers(working.answer)
+const CANT_SHOW_TEXT = "I can't show the steps for this one yet"
 
-  if (working.noWorking) {
-    return {
-      title,
-      input,
-      method: working.method,
-      moves: [],
-      answers,
-      noWorking: true,
-      reason: working.reason,
-      checked: working.checked
-    }
+/**
+ * The title is the job and the typed input, built here, never the free title a working carries (MUST 8): "Solve 2x + 4 = 10".
+ */
+function titleOf(working: Working, problem: Problem | undefined): string {
+  if (!problem) return 'Worked solution'
+  const job = typeof problem.job === 'string' && problem.job !== '' ? problem.job.charAt(0).toUpperCase() + problem.job.slice(1) : 'Worked'
+  return `${job} ${inputOf(working, problem)}`.trim()
+}
+
+function inputOf(working: Working, problem: Problem | undefined): string {
+  const raw = typeof working.input === 'string' ? working.input : problem && typeof problem.input === 'string' ? problem.input : ''
+  // The typed problem is drawn only when it is safe to draw as it is read: a can't-show page can carry an unsafe input (x_1 = 2),
+  // and then it is not drawn (review of P-FIX-S1SOUND2, MUST A2).
+  return displaySafe(drawnTex(raw)) ? drawnTex(raw) : ''
+}
+
+function shownMethod(name: unknown): string | undefined {
+  return typeof name === 'string' && SHOWN_METHOD_NAMES.has(name) ? name : undefined
+}
+
+/**
+ * The can't-show page: no steps and no answer. An answer is drawn only with the steps that check it, so a working that is
+ * not shown has none (P-FIX-S1SOUND2 MUST 9): the answer a working carries with no steps is never drawn.
+ */
+function cantShow(working: Working, problem: Problem | undefined): PureWorkingDoc {
+  return {
+    title: titleOf(working, problem),
+    input: inputOf(working, problem),
+    method: shownMethod(working.method),
+    moves: [],
+    answers: [],
+    noWorking: true,
+    reason: CANT_SHOW_TEXT,
+    checked: working.checked
   }
+}
 
-  // Framework invariant (Rule 0.2): Only 'valid' steps are ever shown.
-  // Validate the steps before rendering moves. If any step is not 'valid',
-  // moves are stripped and noWorking is set with the standard fallback reason.
+function renderChecked(working: Working, problem: Problem | undefined, adapter: CheckAdapter | undefined): PureWorkingDoc {
+  if (working.error !== undefined || working.noWorking) return cantShow(working, problem)
+  // Framework invariant (Rule 0.2): Only 'valid' steps are ever shown. The working is validated against the problem's
+  // own domain; if anything is not valid, nothing reaches the page: no moves, and no answer either.
   const validation = validateWorking(working, adapter, problem?.domain)
-  if (!validation.valid) {
-    // Nothing that failed validation reaches the page: no moves, and no answer either. An answer is
-    // shown only with the steps that check it (the review of a982a6a4, MUST 2).
-    return {
-      title,
-      input,
-      method: working.method,
-      moves: [],
-      answers: [],
-      noWorking: true,
-      reason: "I can't show the steps for this one yet",
-      checked: working.checked
-    }
-  }
-
-  const moves = collectMoves(working)
+  if (!validation.valid) return cantShow(working, problem)
 
   return {
-    title,
-    input,
-    method: working.method,
-    moves,
-    answers,
-    check: substitutionOf(working)?.text,
-    checked: working.checked,
-    noWorking: working.noWorking,
-    reason: working.reason
+    title: titleOf(working, problem),
+    input: inputOf(working, problem),
+    method: shownMethod(working.method),
+    moves: collectMoves(working),
+    answers: formatAnswers(working.answer),
+    check: checkDrawn(working),
+    checked: working.checked
   }
+}
+
+/** The check line as the page draws it: the builder's text, with powers braced as the validator checked them. */
+function checkDrawn(working: Working): string | undefined {
+  const text = substitutionOf(working)?.text
+  return text === undefined ? undefined : drawnTex(text)
 }

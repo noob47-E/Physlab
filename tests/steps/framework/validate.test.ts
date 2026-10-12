@@ -307,7 +307,7 @@ describe('Step validation framework', () => {
       const validShapes = [
         {
           before: 'x = 1 \\text{ or } x = 2',
-          after: 'x in {1, 2}',
+          after: 'x \\in \\{1, 2\\}',
           data: {
             subProblems: ['x - 1 = 0', 'x - 2 = 0'],
             subAnswers: [{ solutions: ['1'] }, { solutions: ['2'] }],

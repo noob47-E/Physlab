@@ -111,7 +111,7 @@ export function textbookSystems(): TextbookSystem[] {
       lines: [
         '2x + 2y = 4, 2x + 2y = 4',
         '2x + 2y = 4, 0 = 0',
-        'every pair of values on the line 2x + 2y = 4 works'
+        '\\text{every pair of values on the line 2x + 2y = 4 works}'
       ],
       ending: 'infinitely-many'
     },
@@ -120,18 +120,18 @@ export function textbookSystems(): TextbookSystem[] {
       lines: [
         '2x + 4y = 6, 2x + 4y = 6',
         '2x + 4y = 6, 0 = 0',
-        'every pair of values on the line 2x + 4y = 6 works'
+        '\\text{every pair of values on the line 2x + 4y = 6 works}'
       ],
       ending: 'infinitely-many'
     },
     {
       input: 'x + y = 3, 2x + 2y = 7',
-      lines: ['2x + 2y = 6, 2x + 2y = 7', '2x + 2y = 6, 0 = 1', 'the equations have no common solution'],
+      lines: ['2x + 2y = 6, 2x + 2y = 7', '2x + 2y = 6, 0 = 1', '\\text{the equations have no common solution}'],
       ending: 'no-common-solution'
     },
     {
       input: '2x + y = 1, 4x + 2y = 5',
-      lines: ['4x + 2y = 2, 4x + 2y = 5', '4x + 2y = 2, 0 = 3', 'the equations have no common solution'],
+      lines: ['4x + 2y = 2, 4x + 2y = 5', '4x + 2y = 2, 0 = 3', '\\text{the equations have no common solution}'],
       ending: 'no-common-solution'
     },
     {
@@ -140,7 +140,7 @@ export function textbookSystems(): TextbookSystem[] {
         '2x - 6y = 4, -2x + 6y = 1',
         '2x - 6y = 4, 2x - 6y = -1',
         '2x - 6y = 4, 0 = -5',
-        'the equations have no common solution'
+        '\\text{the equations have no common solution}'
       ],
       ending: 'no-common-solution'
     },

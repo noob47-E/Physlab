@@ -472,7 +472,11 @@ function solutionWord(n: number): string {
 export function systemEndingAnswer(op: SystemOp, nVars: number): string | null {
   if (op.kind === 'no-common-solution') return 'the equations have no common solution'
   if (op.kind === 'infinitely-many') {
-    const clause = op.texts.length === 1 ? `on the line ${op.texts[0]}` : `that satisfies ${op.texts.join(' and ')}`
+    // One equation in two letters is a line; in three letters it is a plane (P-FIX-S1SOUND2 MUST 11). Other counts have
+    // no word for their solution set, so no ending is given.
+    const shape = nVars === 2 ? 'line' : nVars === 3 ? 'plane' : null
+    if (shape === null) return null
+    const clause = op.texts.length === 1 ? `on the ${shape} ${op.texts[0]}` : `that satisfies ${op.texts.join(' and ')}`
     return `every ${solutionWord(nVars)} of values ${clause} works`
   }
   return null

@@ -27,7 +27,7 @@ import {
 import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R0, R1, rTex, type Rat } from '../pure/rat'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
-import type { EquationOp, ExprOp, SystemOp, ValidationVerdict } from './types'
+import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } from './types'
 // S1b: the sound checkers of G2 (math/check) decide what the exact fallback above cannot: surds, complex roots, and
 // expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
 import { readAlg } from '../check/parse'
@@ -253,65 +253,31 @@ export const defaultCheckAdapter: CheckAdapter = {
   checkImplication(
     before: string | MathNode,
     after: string | MathNode,
-    rule?: string,
+    _rule?: string,
     data?: unknown
   ): ValidationVerdict {
-    // If they are actually equivalent, the implication trivially holds
-    const equiv = defaultCheckAdapter.checkEquationEquiv(before, after)
-    if (equiv === 'valid') return 'valid'
-
-    const sBefore = stringifyNodeOrText(before)
-    const sAfter = stringifyNodeOrText(after)
-    const eq1 = splitEquation(sBefore)
-    const eq2 = splitEquation(sAfter)
-
-    const payload = (data && typeof data === 'object') ? (data as Record<string, unknown>) : {}
-    const action = (typeof payload.action === 'string' ? payload.action : rule ?? '').toLowerCase()
-
-    if (eq1 && eq2) {
-      // Squaring both sides: L1^2 = R1^2
-      if (action.includes('square') || action.includes('squaring')) {
-        const l1 = tryParsePoly(eq1.left)
-        const r1 = tryParsePoly(eq1.right)
-        const l2 = tryParsePoly(eq2.left)
-        const r2 = tryParsePoly(eq2.right)
-
-        if (l1 && r1 && l2 && r2) {
-          const l1Sq = ePow(l1, 2)
-          const r1Sq = ePow(r1, 2)
-          if (eEq(l2, l1Sq) && eEq(r2, r1Sq)) {
-            return 'valid'
-          }
-          return 'invalid'
-        }
-      }
-
-      // Multiplying both sides by factor M
-      if (action.includes('multiply') || payload.multiplier) {
-        const mText = typeof payload.multiplier === 'string' ? payload.multiplier : ''
-        const mPoly = mText ? tryParsePoly(mText) : null
-        if (mPoly) {
-          const l1 = tryParsePoly(eq1.left)
-          const r1 = tryParsePoly(eq1.right)
-          const l2 = tryParsePoly(eq2.left)
-          const r2 = tryParsePoly(eq2.right)
-          if (l1 && r1 && l2 && r2) {
-            const expL2 = eMul(l1, mPoly)
-            const expR2 = eMul(r1, mPoly)
-            if (eEq(l2, expL2) && eEq(r2, expR2)) {
-              return 'valid'
-            }
-            return 'invalid'
-          }
-        }
-      }
+    // The move the step declares (data.action) is the move checked, and the only one: the words "Square both sides"
+    // are shown only when the after is the before squared, however equivalent the two equations are (P-FIX-S1SOUND2
+    // MUST 4). An action this cannot check (the quadratic formula among them) is unknown.
+    const eq1 = splitEquation(stringifyNodeOrText(before))
+    const eq2 = splitEquation(stringifyNodeOrText(after))
+    if (!eq1 || !eq2) return 'unknown'
+    const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+    const l1 = tryParsePoly(eq1.left)
+    const r1 = tryParsePoly(eq1.right)
+    const l2 = tryParsePoly(eq2.left)
+    const r2 = tryParsePoly(eq2.right)
+    if (!l1 || !r1 || !l2 || !r2) return 'unknown'
+    if (payload.action === 'square') return eEq(l2, ePow(l1, 2)) && eEq(r2, ePow(r1, 2)) ? 'valid' : 'invalid'
+    if (payload.action === 'multiply') {
+      const m = typeof payload.multiplier === 'string' ? tryParsePoly(payload.multiplier) : null
+      if (!m) return 'unknown'
+      // Times 0 every equation becomes 0 = 0, and "every real number" would follow (MUST 2).
+      if (m.length === 0) return 'invalid'
+      return eEq(l2, eMul(l1, m)) && eEq(r2, eMul(r1, m)) ? 'valid' : 'invalid'
     }
-
-    // If an invalid claim was made where counterexamples exist (e.g. invalid arithmetic)
-    if (action.includes('square') && eq1 && eq2) {
-      return 'invalid'
-    }
-
+    // No move is declared, so no words are claimed: a deduction that is an equivalence is still a true one.
+    if (payload.action === undefined) return defaultCheckAdapter.checkEquationEquiv(before, after)
     return 'unknown'
   },
 
@@ -321,7 +287,9 @@ export const defaultCheckAdapter: CheckAdapter = {
   checkCaseSplitComplete(_domainOrCondition: unknown, cases: unknown[]): ValidationVerdict {
     if (!Array.isArray(cases) || cases.length === 0) return 'invalid'
 
-    const strCases = cases.map((c) => (typeof c === 'string' ? c.trim() : JSON.stringify(c)))
+    // A case that is not text is no case: JSON.stringify threw on a BigInt (P-FIX-S1SOUND2 MUST 13).
+    if (cases.some((c) => typeof c !== 'string')) return 'invalid'
+    const strCases = cases.map((c) => (c as string).trim())
     if (strCases.length < 2) return 'invalid'
 
     const ineqs = strCases.map(parseIneq)
@@ -498,6 +466,44 @@ function linearIn(v: string, a: Rat, b: Rat): Expr {
 }
 
 /**
+ * The purpose a scaling move states, proved on the two equations (P-FIX-S1SOUND2 MUST 5). The x² term is the v²
+ * coefficient of L − R:
+ * - leading-positive: a quadratic whose v² term was negative and is now positive;
+ * - leading-one: a quadratic whose v² term is now 1;
+ * - common-factor: k a whole number (not ±1) dividing every coefficient of both sides, all whole.
+ */
+function purposeHolds(purpose: ScalePurpose, b: { L: Expr; R: Expr }, a: { L: Expr; R: Expr }, kText: string, v: string): boolean {
+  const before = eSub(b.L, b.R)
+  const after = eSub(a.L, a.R)
+  const lead = (P: Expr): Rat => coefficientOf(P, v, 2)
+  switch (purpose) {
+    case 'leading-positive':
+      return exprDegree(before) === 2 && exprDegree(after) === 2 && rIsNeg(lead(before)) && !rIsNeg(lead(after)) && !rIsZero(lead(after))
+    case 'leading-one':
+      return exprDegree(after) === 2 && rEq(lead(after), R1)
+    case 'common-factor': {
+      const k = parseExactRat(kText)
+      if (!k || k.d !== 1n || absBig(k.n) < 2n) return false
+      return [...b.L, ...b.R].every((t) => t.c.d === 1n && t.c.n % k.n === 0n)
+    }
+  }
+}
+
+/** The before of a square root with ±: (v − s)² + k = 0 written as a completed square, or v² + k = 0 when s is 0. */
+function isSquareRootForm(before: string | MathNode, v: string, s: Rat): boolean {
+  const fs = formSides(before)
+  if (!fs) return false
+  const right = tryParsePoly(fs.right)
+  if (!right || right.length !== 0) return false
+  if (isCompletedSquare(fs.left, v)) return true
+  if (!rIsZero(s)) return false
+  const left = tryParsePoly(fs.left)
+  if (!left) return false
+  const degreeOf = (t: Term): number => Object.values(t.v).reduce((x, y) => x + y, 0)
+  return left.some((t) => degreeOf(t) === 2) && left.every((t) => degreeOf(t) === 0 || (t.v[v] === 2 && rEq(t.c, R1)))
+}
+
+/**
  * The exact check of a declared EquationEquiv move, side by side (see EquationOp in types.ts). Every
  * polynomial in the move must use only the problem's variable v; a move that uses another letter is unknown.
  */
@@ -550,12 +556,15 @@ export function checkEquationOp(
     case 'subtract-both':
       return withTerm(op.term, (t) => same(a.L, eSub(b.L, t)) && same(a.R, eSub(b.R, t)))
     case 'multiply-both':
+      if (op.purpose && !purposeHolds(op.purpose, b, a, op.k, v)) return 'invalid'
       return withNumber(op.k, (k) => same(a.L, scalePoly(b.L, k)) && same(a.R, scalePoly(b.R, k)))
     case 'divide-both':
+      if (op.purpose && !purposeHolds(op.purpose, b, a, op.k, v)) return 'invalid'
       return withNumber(op.k, (k) => same(scalePoly(a.L, k), b.L) && same(scalePoly(a.R, k), b.R))
     case 'clear-decimals': {
-      // The multiplier is a power of ten (at least 10), and the before really has a decimal to clear.
-      if (!hasDecimalLiteral(rawText(before))) return 'invalid'
+      // The multiplier is a power of ten (at least 10), the before really has a decimal to clear, and the after has
+      // none left: "to clear the decimals" is then true (MUST 5).
+      if (!hasDecimalLiteral(rawText(before)) || hasDecimalLiteral(rawText(after))) return 'invalid'
       const k = parseExactRat(op.k)
       if (!k || k.d !== 1n || !/^10+$/.test(k.n.toString())) return 'invalid'
       return verdict(same(a.L, scalePoly(b.L, k)) && same(a.R, scalePoly(b.R, k)))
@@ -615,7 +624,9 @@ export function checkEquationOp(
       if (!bs || !as) return 'invalid'
       const leftChanged = bs.left !== as.left
       const rightChanged = bs.right !== as.right
-      if (!leftChanged && !rightChanged) return 'invalid'
+      // The sentence says "Factorise <left> as <left>": the left side is the one factorised, and the right side keeps its
+      // text ("Factorise 0 as 0" when only the right changed, MUST 5).
+      if (!leftChanged || rightChanged) return 'invalid'
       const factorised = (now: string, was: string): boolean => isFactorProduct(now, v) && !isFactorProduct(was, v)
       if (leftChanged && !factorised(as.left, bs.left)) return 'invalid'
       if (rightChanged && !factorised(as.right, bs.right)) return 'invalid'
@@ -630,6 +641,8 @@ export function checkEquationOp(
       const s = parseExactRat(op.shift)
       const r = parseExactRat(op.root)
       if (!s || !r) return 'invalid'
+      // "Take the square root of both sides" needs a square to take the root of (MUST 5).
+      if (!isSquareRootForm(before, v, s)) return 'invalid'
       const product = eMul(linearIn(v, R1, rNeg(rAdd(s, r))), linearIn(v, R1, rSub(rNeg(s), rNeg(r))))
       return verdict(equal && same(a.L, product))
     }
@@ -1692,10 +1705,14 @@ function absBig(n: bigint): bigint {
   return n < 0n ? -n : n
 }
 
-/** The positive divisors of |n| (n up to 10^12; null beyond, so no search runs away). */
+/** The largest coefficient the rational root test looks at, and the most candidates p/q it tries (P-FIX-S1SOUND2 MUST 12). */
+const MAX_ROOT_COEFFICIENT = 1000000000n
+const MAX_ROOT_CANDIDATES = 2000
+
+/** The positive divisors of |n| (n up to 10^9; null beyond, so no search runs away). */
 function divisorsOf(n: bigint): bigint[] | null {
   const a = absBig(n)
-  if (a > 1000000000000n) return null
+  if (a > MAX_ROOT_COEFFICIENT) return null
   const m = Number(a)
   const out: bigint[] = []
   for (let d = 1; d * d <= m; d++) {
@@ -1729,6 +1746,9 @@ export function rationalRootsOf(P: Expr, v: string): Rat[] | null {
   const ps = divisorsOf(a0)
   const qs = divisorsOf(an)
   if (ps === null || qs === null) return null
+  // A number with very many divisors at both ends (735134400 has 1,344) would mean millions of exact evaluations: the
+  // search refuses, and the method says it cannot show the steps, rather than freeze the window.
+  if (ps.length * qs.length > MAX_ROOT_CANDIDATES) return null
   const roots: Rat[] = []
   for (const q of qs) {
     for (const p of ps) {
@@ -1964,6 +1984,8 @@ function checkProductOp(op: ExprOp, target: string[], repl: string[], v: string)
       if (target.length !== 1 || repl.length !== 1 || nt(repl[0]) !== nt(target[0])) return 'invalid'
       const P = tryParsePoly(target[0])
       if (!P) return 'unknown'
+      // "cannot be factorised using rational numbers" is false of 2x² + 4 = 2(x² + 2): only a primitive factor is irreducible.
+      if (!isPrimitiveOver(P)) return 'invalid'
       const proof = irreducibleOver(P, v)
       if (proof === null) return 'unknown'
       return verdictOf(proof)
@@ -2126,6 +2148,14 @@ function formOfTerms(terms: Term[]): LinForm | null {
  * A system as typed or as a step states it: one equation per comma-separated part. Null when a part is not one
  * equation, or a side is not a linear form read exactly (expandTerms reads brackets, fractions and tiny powers of ten).
  */
+/** Names that mean a number in the maths (π, e, i and their spellings): a system with one of them is not read as unknowns. */
+const CONSTANT_NAMES = new Set(['π', 'pi', 'PI', 'e', 'E', 'i', 'Infinity', 'tau', 'phi'])
+
+/** The substitution a discriminant b² − 4ac is written as: the one template the formula method and the checks share. */
+export function substitutedDiscriminantText(a: string, b: string, c: string): string {
+  return `(${b})^2 - 4 \\cdot ${a} \\cdot (${c})`
+}
+
 export function readSystem(text: string | MathNode): LinEq[] | null {
   const s = stringifyNodeOrText(text).trim()
   if (s === '') return null
@@ -2141,6 +2171,12 @@ export function readSystem(text: string | MathNode): LinEq[] | null {
     if (!lf || !rf) return null
     eqs.push({ L: lf, R: rf })
   }
+  // Every letter the text names is an unknown with a non-zero coefficient somewhere (P-FIX-S1SOUND2 MUST 10 and SHOULD 3):
+  // a constant (π, e) is never solved for, and a letter that cancels out of every equation is not silently dropped.
+  const named = s.match(/[A-Za-zπ]+/g) ?? []
+  if (named.some((n) => CONSTANT_NAMES.has(n))) return null
+  const used = new Set(lettersOfSystem(eqs))
+  if (named.some((n) => !used.has(n))) return null
   return eqs
 }
 
@@ -2737,6 +2773,7 @@ function checkSurdSquareRootPm(before: string | MathNode, after: string | MathNo
   const s = parseExactRat(op.shift)
   const r = readSurd(op.root)
   if (!s || !r) return 'invalid'
+  if (!isSquareRootForm(before, v, s)) return 'invalid'
   const r2 = algMul(r, r)
   if (!algIsRational(r2)) return 'invalid'
   const b = equationSides(before)

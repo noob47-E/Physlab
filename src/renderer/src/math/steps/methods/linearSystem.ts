@@ -138,17 +138,19 @@ function contradictionRow(state: LinEq[], rows: number[], vars: string[]): numbe
 function endedWorking(input: string, method: string, steps: Step[], state: LinEq[], vars: string[], op: SystemOp): Working {
   if (steps.length === 0) return declined()
   const words = systemEndingAnswer(op, vars.length) ?? ''
+  // The words are drawn as text, never as maths: \text{...} (P-FIX-S1SOUND2 SHOULD 2).
+  const drawn = `\\text{${words}}`
   steps.push(
     finishStep({
       kind: 'SystemEq',
       op,
       before: systemText(state, vars),
-      after: words,
+      after: drawn,
       sentence: '',
       data: { vars }
     })
   )
-  return { title: `Solve ${input}`, input, method, steps, answer: { label: '', tex: words } }
+  return { title: `Solve ${input}`, input, method, steps, answer: { label: '', tex: drawn } }
 }
 
 /** The working that ends in a solution: the answer is each letter's value from its solved row. */

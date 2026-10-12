@@ -29,8 +29,9 @@ describe('WorkingView render bridge', () => {
     expect(move.head).toBe('Subtract 4 from both sides')
     expect(move.rule).toBe('Subtract from both sides')
     expect(move.tex).toBe('2*x = 6')
-    expect(move.note).toBe('Keep variable terms on left')
-    expect(move.subgoal).toBe('Collect constants')
+    // A note and a subgoal are free text a working carries: they are not drawn (P-FIX-S1SOUND2 MUST 8).
+    expect(move.note).toBeUndefined()
+    expect(move.subgoal).toBeUndefined()
   })
 
   it('collects moves and flattens nested sub-workings with subgoal headings', () => {
@@ -69,9 +70,9 @@ describe('WorkingView render bridge', () => {
     expect(moves[0].head).toBe('Step 1')
     expect(moves[0].subgoal).toBeUndefined()
 
-    // Sub-working's first move receives the title as a subgoal heading
+    // Sub-working's first move receives a heading built from its own data (its title is free text, not drawn)
     expect(moves[1].head).toBe('Substitute values')
-    expect(moves[1].subgoal).toBe('Find discriminant')
+    expect(moves[1].subgoal).toBe('Case 1')
     expect(moves[2].head).toBe('Evaluate')
     expect(moves[2].subgoal).toBeUndefined()
   })
@@ -147,10 +148,11 @@ describe('WorkingView render bridge', () => {
     expect(doc.noWorking).toBe(true)
     expect(doc.reason).toBe("I can't show the steps for this one yet")
     expect(doc.moves.length).toBe(0)
-    expect(doc.answers.length).toBe(1)
+    // No answer is drawn with the can't-show page: an answer is shown only with the steps that check it (MUST 9).
+    expect(doc.answers.length).toBe(0)
   })
 
-  it('renders error documents when error is set', () => {
+  it('renders error documents as can’t-show pages: a working error text is free text and is not drawn', () => {
     const working: Working = {
       title: 'Invalid',
       input: 'bad input',
@@ -159,7 +161,9 @@ describe('WorkingView render bridge', () => {
     }
 
     const doc = renderWorkingToDoc(working)
-    expect(doc.error).toBe('Cannot parse equation')
+    expect(doc.error).toBeUndefined()
+    expect(JSON.stringify(doc)).not.toMatch(/Cannot parse equation/)
+    expect(doc.noWorking).toBe(true)
     expect(doc.moves.length).toBe(0)
   })
 
