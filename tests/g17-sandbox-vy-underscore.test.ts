@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { readSource } from './helpers/repo'
 
-const SRC = readSource('src/renderer/src/panels/Sandbox.tsx')
+const SRC = readSource('src/renderer/src/panels/sandbox/Selected.tsx')
 
 describe('G17: the launch readout writes v_y with an underscore', () => {
   it('the readout uses the subscript form for both components', () => {

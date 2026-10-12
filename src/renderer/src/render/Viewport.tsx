@@ -22,9 +22,8 @@ import { normalizeRect } from './selectMath'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
 import { SandboxView } from './SandboxView'
+import { SandboxHud } from './sandbox/SandboxHud'
 import { MarksView } from './Marks'
-import { useSandbox } from '../sim/store'
-import { formatMeasure } from '../math/format'
 import { AngleMarksSwitch, LabelShowSwitch } from '../ui/LabelControls'
 import { themeColor, useTheme } from '../app/theme'
 import { saveViewportImage, setExportContext } from './exportImage'
@@ -223,7 +222,7 @@ export function Viewport() {
         }}
       />
 
-      {mode === 'sandbox' && <SandboxStrip />}
+      {mode === 'sandbox' && <SandboxHud />}
       {mode !== 'sandbox' && (
       <div className="absolute left-3 top-3 flex items-center gap-1">
         {drawing && (
@@ -297,11 +296,6 @@ export function Viewport() {
         </span>
       </div>
 
-      {mode === 'sandbox' && (
-        <div className="tool-hint">
-          <span>Drag an object to place it. Press Play, then drag to push or lift it and let go to throw. Right-drag turns the view, scroll zooms.</span>
-        </div>
-      )}
       {mode !== 'sandbox' && hint && (tool !== 'select' || (turning3D && turnOn)) && (
         // The hint is centred at the bottom; in 3-D the turn pad stands at the bottom right, so
         // the hint keeps clear of it on both sides.
@@ -383,24 +377,6 @@ function MarqueeBox() {
   if (!m) return null
   const r = normalizeRect(m)
   return <div className="marquee" style={{ left: r.left, top: r.top, width: r.right - r.left, height: r.bottom - r.top }} />
-}
-
-/**
- * The clock and a way to find the objects again, on the drawing itself. Play, Step and Reset
- * live in the Sandbox panel's bar: this strip used to carry its own Play and Reset, so a student
- * saw two of each with different tooltips. Space still plays and pauses with the panel closed.
- */
-function SandboxStrip() {
-  const settings = useScene((s) => s.settings)
-  const time = useSandbox((s) => s.engineTime)
-  return (
-    <div className="absolute left-3 top-3 flex items-center gap-1">
-      <button className="icon-btn" onClick={resetCamera} title="Find the objects (Home)">
-        <Home size={14} />
-      </button>
-      <span className="badge tabular-nums">t = {formatMeasure(time, 'number', settings)} s</span>
-    </div>
-  )
 }
 
 /**

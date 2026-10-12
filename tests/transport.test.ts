@@ -45,7 +45,7 @@ describe('Fix 22: the transport keeps its shape while a run plays', () => {
   })
 
   it('draws the reserved room, a Play button as wide as Pause, and live rows as tall as the boxes', () => {
-    const panel = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const panel = readSource('src/renderer/src/panels/sandbox/Transport.tsx') + readSource('src/renderer/src/panels/sandbox/common.tsx')
     // The widest reading and the real one share a grid cell; only the real one is seen.
     expect(panel).toMatch(/<span className="invisible col-start-1 row-start-1" aria-hidden="true">\s*\{widestClockText\(engineTime, settings\)\}/)
     expect(panel).toMatch(/<span className="col-start-1 row-start-1">\{clockText\(engineTime, settings\)\}<\/span>/)

@@ -49,7 +49,7 @@ const ANCHOR_HOME: Record<string, { file: string; mark: string }> = {
   'work-it-out': { file: 'src/renderer/src/panels/Maths.tsx', mark: 'data-tour="work-it-out"' },
   command: { file: 'src/renderer/src/app/CommandBar.tsx', mark: 'data-tour="command"' },
   'tool-sketch': { file: 'src/renderer/src/app/TopBar.tsx', mark: 'data-tour={`tool-${id}`}' },
-  play: { file: 'src/renderer/src/panels/Sandbox.tsx', mark: 'data-tour="play"' },
+  play: { file: 'src/renderer/src/panels/sandbox/Transport.tsx', mark: 'data-tour="play"' },
   'start-practice': { file: 'src/renderer/src/panels/Practice.tsx', mark: 'data-tour="start-practice"' }
 }
 
@@ -96,7 +96,7 @@ describe('the six missions point at real things', () => {
   })
 
   it('every anchor of the spotlight tour exists somewhere in the app', () => {
-    const files = ['app/CommandBar.tsx', 'app/TopBar.tsx', 'panels/Measurements.tsx', 'panels/Sandbox.tsx', 'render/Viewport.tsx'].map((f) => readSource(`src/renderer/src/${f}`)).join('\n')
+    const files = ['app/CommandBar.tsx', 'app/TopBar.tsx', 'panels/Measurements.tsx', 'panels/sandbox/Transport.tsx', 'panels/sandbox/AddRow.tsx', 'render/Viewport.tsx'].map((f) => readSource(`src/renderer/src/${f}`)).join('\n')
     for (const s of TOUR) if (s.anchor) expect(files, s.anchor).toContain(`data-tour="${s.anchor}"`)
   })
 })

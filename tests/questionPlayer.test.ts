@@ -546,7 +546,7 @@ describe('the bundled sample set', () => {
     expect(actuators[0].force(1)[0]).toBe(played.variant.values.F)
     // The Sandbox panel says what is pushing the crate, and the student can take it off.
     expect(actuators[0].label).toBe(`Push from the question: ${played.variant.values.F} N on Crate, 0–2 s`)
-    const panel = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const panel = readSource('src/renderer/src/panels/Sandbox.tsx') + readSource('src/renderer/src/panels/sandbox/Pushes.tsx')
     expect(panel).toMatch(/<Pushes \/>/)
     expect(panel).toMatch(/onClick=\{\(\) => removeActuator\(i\)\}/)
     expect(readSource('src/renderer/src/render/SandboxView.tsx')).toMatch(/\{ready && <PushArrows sim=\{sim\} \/>\}/)

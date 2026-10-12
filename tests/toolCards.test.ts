@@ -29,7 +29,7 @@ const css = readSource('src/renderer/src/styles.css')
 
 /** The shapes the Sandbox ADD buttons offer, read from the panel because the list is not exported. */
 function sandboxAddShapes(): string[] {
-  const src = readSource('src/renderer/src/panels/Sandbox.tsx')
+  const src = readSource('src/renderer/src/panels/sandbox/AddRow.tsx')
   const block = src.match(/const ADD:[^=]*=\s*\[([\s\S]*?)\n\]/)?.[1]
   expect(block, 'the ADD list in Sandbox.tsx').toBeDefined()
   return [...block!.matchAll(/shape:\s*'([a-z]+)'/g)].map((m) => m[1])
@@ -93,7 +93,7 @@ describe('a link card speaks to a pair already chosen', () => {
   // shows on the last step of Connect, under "Join A and B with…". A sentence that opened with
   // "Click one object, then another" was telling the student to do what they had just done.
   it('the Sandbox asks for the link cards from the Connect flow alone', () => {
-    const src = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const src = readSource('src/renderer/src/panels/sandbox/JoinGuide.tsx')
     expect(src.match(/useToolCard\(`link:/g)).toHaveLength(1)
     expect(src).toMatch(/function KindCard[\s\S]*?useToolCard\(`link:\$\{kind\}`\)/)
   })

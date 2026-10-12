@@ -447,7 +447,7 @@ describe('sending a Sandbox recording to Lab Data', () => {
     // The fix once lived in the store while the button kept its own copy, so the tests were green
     // and the app was not. Reading the panels as text is how sceneStore.test.ts caught the same
     // thing in Properties.
-    const sandbox = readSource('src/renderer/src/panels/Sandbox.tsx')
+    const sandbox = readSource('src/renderer/src/panels/sandbox/Recording.tsx')
     const button = sandbox.lastIndexOf('Send to Lab Data')
     const send = sandbox.slice(button - 900, button)
     expect(send).toContain('appendTable(tableFrom(watched.name, samples))')
