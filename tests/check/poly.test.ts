@@ -133,8 +133,12 @@ describe('rationalEqual: cross-multiplied, with the points where either is undef
     ['sqrt(x)^2', 'x']
   ]
   it.each(different)('%s ≠ %s', (a, b) => expect(rationalEqual(a, b).verdict).toBe('different'))
-  it('two answers numbers cannot tell apart stay unknown: e^x/e^x vs 1', () => {
-    expect(rationalEqual('e^x/e^x', '1').verdict).toBe('unknown')
+  it('an answer with a function is proved by atoms (G2B): e^x/e^x is 1, with no point excluded (e^x is never 0)', () => {
+    expect(rationalEqual('e^x/e^x', '1')).toEqual({ verdict: 'equal', excluded: [], excludedComplete: true })
+    // A cancelled factor keeps its point; a condition that is not a point (x ≥ 0) makes the list incomplete.
+    expect(rationalEqual('x*sin(x)/x', 'sin(x)')).toEqual({ verdict: 'equal', excluded: [{ value: 0, exact: '0' }], excludedComplete: true })
+    expect(rationalEqual('sqrt(4x)', '2*sqrt(x)')).toEqual({ verdict: 'equal', excluded: [], excludedComplete: false })
+    expect(rationalEqual('sin(x)^2 + cos(x)^2', '1').verdict).toBe('unknown')
   })
   it('seeded: a cancelled factor gives equal with its zero excluded; a changed numerator is different (40 cases)', () => {
     const rand = seeded(11)

@@ -19,8 +19,10 @@ describe('derivativeCheck', () => {
     ['x^2+3x', '2x+3', 'equal'],
     ['1/x', '-1/x^2', 'equal'],
     ['(x+1)/(x-1)', '-2/(x-1)^2', 'equal'],
-    ['|x|', '|x|/x', 'equal'],
-    ['sqrt(x^2)', 'x/|x|', 'equal'],
+    // G2B: the claimed answer may have no hole the derivative has not, and the checker cannot prove that |x| has no
+    // derivative at 0 (x·|x| has one), so these are unknown, not equal; never different.
+    ['|x|', '|x|/x', 'unknown'],
+    ['sqrt(x^2)', 'x/|x|', 'unknown'],
     ['ln(x)', '1/x', 'equal'],
     ['x^5/5 - x', 'x^4 - 1', 'equal'],
     ['(2x+1)^3', '6(2x+1)^2', 'equal'],
@@ -37,14 +39,16 @@ describe('derivativeCheck', () => {
     ['e^(2x)', 'e^(2x)', 'different'],
     ['1e-19 x^2', '2e-18 x', 'different'],
     ['|x|', 'x/x', 'different'],
-    ['sin(x)', 'cos(x)', 'unknown'],
-    ['log(x)', '1/(x*ln(10))', 'unknown'],
-    ['e^x', 'e^x', 'unknown'],
+    // G2B: sin, cos, e^x and ln are atoms now (atoms.ts), so these are proved; what needs sin² + cos² = 1 or a double
+    // angle (sec² x, sin 2x) is still unknown.
+    ['sin(x)', 'cos(x)', 'equal'],
+    ['log(x)', '1/(x*ln(10))', 'equal'],
+    ['e^x', 'e^x', 'equal'],
     ['tan(x)', 'sec(x)^2', 'unknown'],
-    ['tan(x)', '1+tan(x)^2', 'unknown'],
-    ['sin(x)^2', '2 sin(x) cos(x)', 'unknown'],
+    ['tan(x)', '1+tan(x)^2', 'equal'],
+    ['sin(x)^2', '2 sin(x) cos(x)', 'equal'],
     ['sin(x)^2', 'sin(2x)', 'unknown'],
-    ['x sin(x)', 'sin(x) + x cos(x)', 'unknown'],
+    ['x sin(x)', 'sin(x) + x cos(x)', 'equal'],
     ['x sin(x)', 'x cos(x)', 'different']
   ]
   it.each(cases)('d/dx %s = %s is %s', (f, d, v) => expect(derivativeCheck(f, 'x', d)).toBe(v))
@@ -72,8 +76,9 @@ describe('integralCheck: F′ = f, a constant of integration allowed', () => {
     ['cos(x)', '-sin(x)', 'different'],
     ['1/x', 'ln(x^2)', 'different'],
     ['x', 'x^2', 'different'],
-    ['cos(x)', 'sin(x)', 'unknown'],
-    ['e^x', 'e^x + 1', 'unknown']
+    ['cos(x)', 'sin(x)', 'equal'],
+    ['e^x', 'e^x + 1', 'equal'],
+    ['sin(2x)', 'sin(x)^2', 'unknown']
   ]
   it.each(cases)('∫ %s dx = %s is %s', (f, F, v) => expect(integralCheck(f, 'x', F)).toBe(v))
   it('seeded: polynomial antiderivatives; a wrong power is different (40 cases)', () => {
@@ -136,14 +141,15 @@ describe('expressionEqual and numericEqual: exact where it can be, numbers may o
     ['sqrt((x-1)^2)', 'x - 1', 'different'],
     ['sqrt(x^4)', 'x^2', 'equal'],
     ['cbrt(x^3)', 'x', 'equal'],
-    ['(x^(1/3))^3', 'x', 'unknown'],
+    // Real odd roots (G00): (∛x)³ = x for every x.
+    ['(x^(1/3))^3', 'x', 'equal'],
     ['x^(1/3)^3', 'x', 'different'],
     ['|x|/x', '1', 'different'],
     ['sin(x)^2 + cos(x)^2', '1', 'unknown'],
     ['sin(x)^2 + cos(x)^2', '1.0000001', 'different'],
     ['e^(ln(x))', 'x', 'different'],
     ['ln(e^x)', 'x', 'unknown'],
-    ['tan(x)', 'sin(x)/cos(x)', 'unknown'],
+    ['tan(x)', 'sin(x)/cos(x)', 'equal'],
     ['sqrt(x)^2', '|x|', 'different']
   ]
   it.each(cases)('%s vs %s is %s', (a, b, v) => expect(expressionEqual(a, b)).toBe(v))

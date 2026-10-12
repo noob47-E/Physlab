@@ -264,6 +264,30 @@ function callFn(name: string, argNodes: MathNode[], at: Point): Res {
       const v = x.v.tanh()
       return val(v, (1 - mag(v) ** 2) * x.err)
     }
+    // sech, csch, coth (mathjs writes d/dx tanh as sech²) and the inverse hyperbolic functions, so an exact proof with
+    // them (atoms.ts) can be confirmed by numbers.
+    case 'sech':
+    case 'csch':
+    case 'coth': {
+      if (ax > MAX_EXPONENT) return unsure
+      const c = val(x.v.cosh(), mag(x.v.sinh()) * x.err)
+      const s = val(x.v.sinh(), mag(x.v.cosh()) * x.err)
+      return name === 'sech' ? div(val(ONE, 0), c) : name === 'csch' ? div(val(ONE, 0), s) : div(c, s)
+    }
+    case 'asinh':
+      if (ax > 1e300) return unsure
+      return val(x.v.asinh(), x.err / Math.sqrt(1 + ax * ax))
+    case 'acosh': {
+      if (x.v.lt(ONE)) return pastBoundary(x, x.v.minus(ONE))
+      if (ax > 1e300) return unsure
+      const room = x.v.times(x.v).minus(ONE)
+      return val(x.v.acosh(), room.isZero() ? Math.sqrt(x.err) : x.err / Math.sqrt(room.toNumber()))
+    }
+    case 'atanh': {
+      const over = x.v.abs().minus(ONE)
+      if (!over.isNeg()) return pastBoundary(x, over.isZero() ? big(1e-300) : over)
+      return val(x.v.atanh(), x.err / ONE.minus(x.v.times(x.v)).toNumber())
+    }
   }
   throw new Unsupported(`function ${name}`)
 }

@@ -9,6 +9,7 @@ import type { DomainMode } from '../engine/semantics'
 import { findRationalRootDetailed, pDeg, pDivMod, pEq, pEval, pIsZero, pLead, pMul, pTrim, polyFromExpr, type Poly } from '../pure/poly'
 import { R0, R1, rDiv, rMul, rNeg, rSign, rSqrt, rSub, rat, type Rat } from '../pure/rat'
 import { varExpr, type Expr } from '../pure/mono'
+import { atomAntiderivative, atomDerivative, atomExpressionEqual, type CalculusProof } from './atoms'
 import { algEq, algIsReal, algOrbit, NotInField, orbitPolynomial, type Alg } from './field'
 import { fnName, isAtomName, lettersOf, plainVars, readAlg, readExact, readMaths, rfAdd, rfConst, rfDiv, rfMul, rfPow, rfSame, rfValue, rootText, type Atom, type Exact, type RF } from './parse'
 import { numericEqual, residualClearlyNonzero } from './numeric'
@@ -126,11 +127,26 @@ function byNumbers(a: string | MathNode, b: string | MathNode): Verdict {
   }
 }
 
+/**
+ * An exact atom proof is kept only when the numbers do not contradict it: no point where the two differ (a second,
+ * independent reading of both answers), and at least one point where both are defined and agree, so an answer defined
+ * nowhere is never 'equal'. It costs a numeric run, and guards the proof against a fault in the exact reading.
+ */
+function confirmed(a: MathNode, b: MathNode): boolean {
+  const r = numericEqual(a, b, lettersOf(a, b))
+  return r.verdict !== 'different' && r.agreed > 0
+}
+
+/** cand + 0·ref: cand, but undefined wherever ref is, so the numbers compare the two only on ref's domain. */
+const within = (cand: MathNode, ref: MathNode): MathNode =>
+  new math.OperatorNode('+', 'add', [cand, new math.OperatorNode('*', 'multiply', [new math.ConstantNode(0), new math.ParenthesisNode(ref)])])
+
 // ---------------------------------------------------------------- 7. any two expressions
 
 /**
- * Any two answers on the real line: exactly when both are quotients of polynomials (|…| and √(…²) included), otherwise
- * by numbers, which may only show them 'different'.
+ * Any two answers on the real line: exactly when both are quotients of polynomials (|…| and √(…²) included), then as
+ * quotients of polynomials in functions (atoms.ts, which can only prove them equal), otherwise by numbers, which may
+ * only show them 'different'.
  */
 function expressionEqualRaw(a: string, b: string): Verdict {
   try {
@@ -142,7 +158,39 @@ function expressionEqualRaw(a: string, b: string): Verdict {
   } catch (err) {
     if (!(err instanceof NotExact)) throw err
   }
-  return byNumbers(a, b)
+  return elementaryEqualRaw(a, b).verdict
+}
+
+export interface ElementaryResult {
+  verdict: Verdict
+  /** With 'equal': the real points where either answer is undefined (a condition f ≠ 0 in one letter). */
+  excluded: ExcludedPoint[]
+  /** With 'equal': every other condition it holds under, as text ("cos(x) ≠ 0", "x > 0", "1 - x^2 ≥ 0"). */
+  conditions: string[]
+}
+
+/**
+ * Two answers with elementary functions: 'equal' when their atom forms are identical and their domains are the same
+ * but at the points and conditions it carries (atoms.ts); otherwise the numbers' verdict, which is never 'equal'.
+ */
+function elementaryEqualRaw(a: string, b: string): ElementaryResult {
+  let na: MathNode
+  let nb: MathNode
+  try {
+    na = readMaths(a)
+    nb = readMaths(b)
+  } catch {
+    return { verdict: 'unknown', excluded: [], conditions: [] }
+  }
+  const proof = atomExpressionEqual(na, nb)
+  // A proof the numbers contradict is a fault somewhere: neither 'equal' nor the numbers' 'different' is safe. With
+  // several letters the numbers cannot tell a removable point (x·ln y / x at x = 0) from a difference, so they compare
+  // the values on the common domain only; the domains were compared exactly by the proof.
+  if (proof) {
+    const ok = lettersOf(na, nb).length <= 1 ? confirmed(na, nb) : confirmed(within(na, nb), within(nb, na))
+    return ok ? { verdict: 'equal', ...proof } : { verdict: 'unknown', excluded: [], conditions: [] }
+  }
+  return { verdict: byNumbers(na, nb), excluded: [], conditions: [] }
 }
 
 // ---------------------------------------------------------------- 1. polynomials
@@ -172,7 +220,11 @@ export interface RationalResult {
   excludedComplete: boolean
 }
 
-/** Equal as functions wherever both are defined, by cross-multiplying; and where they are not defined. */
+/**
+ * Equal as functions wherever both are defined, by cross-multiplying; and where they are not defined. Answers with
+ * functions are tried as atoms (G2B): their 'equal' lists its excluded points, and is complete only when it holds under
+ * no other condition, so a caller that cannot show a condition (a step of working) never takes it as plain equality.
+ */
 function rationalEqualRaw(a: string, b: string): RationalResult {
   try {
     const atoms: Atom[] = []
@@ -181,11 +233,18 @@ function rationalEqualRaw(a: string, b: string): RationalResult {
     const verdict = compareExact(ea, eb, atoms)
     const { excluded, complete } = excludedOf([ea, eb])
     if (verdict) return { verdict, excluded, excludedComplete: complete }
-    return { verdict: byNumbers(a, b), excluded, excludedComplete: complete }
+    return byAtoms(a, b)
   } catch (err) {
     if (!(err instanceof NotExact)) throw err
-    return { verdict: byNumbers(a, b), excluded: [], excludedComplete: false }
+    return byAtoms(a, b)
   }
+}
+
+/** The atom path's verdict as a RationalResult; otherwise the numbers', which is never 'equal'. */
+function byAtoms(a: string, b: string): RationalResult {
+  const e = elementaryEqualRaw(a, b)
+  if (e.verdict === 'equal') return { verdict: 'equal', excluded: e.excluded, excludedComplete: e.conditions.length === 0 }
+  return { verdict: e.verdict, excluded: [], excludedComplete: false }
 }
 
 // ---------------------------------------------------------------- 3. factorisation
@@ -452,29 +511,52 @@ function fromMathjsLogs(node: MathNode): MathNode {
   })
 }
 
-/** claimed is d/dx of f: mathjs differentiates f on its own, then the two are compared exactly, or by numbers. */
-function derivativeCheckRaw(f: string, x: string, claimed: string): Verdict {
+/**
+ * d/dx of fn against other: mathjs differentiates fn on its own and the two are compared exactly as quotients; then
+ * `atoms` (atoms.ts, its own exact differentiator) may prove them equal; otherwise numbers decide what they can. An
+ * 'equal' of either kind also needs the atoms' domain check: the claimed answer has no hole the reference has not.
+ */
+function againstDerivative(fn: string, x: string, other: string, atoms: (fn: MathNode, other: MathNode) => CalculusProof | null, onOthersDomain: boolean): Verdict {
+  let fNode: MathNode
   let expected: MathNode
   let given: MathNode
   try {
-    expected = fromMathjsLogs(derivative(toMathjsLogs(readMaths(f)), x, { simplify: false }))
-    given = readMaths(claimed)
+    fNode = readMaths(fn)
+    expected = fromMathjsLogs(derivative(toMathjsLogs(fNode), x, { simplify: false }))
+    given = readMaths(other)
   } catch {
     return 'unknown'
   }
   try {
-    const atoms: Atom[] = []
-    const v = compareExact(readExact(expected, atoms), readExact(given, atoms), atoms)
+    const found: Atom[] = []
+    const v = compareExact(readExact(expected, found), readExact(given, found), found)
+    // Equal where both are defined is not enough here: 2x(x − 1)/(x − 1) is not d/dx x² at 1.
+    if (v === 'equal') return atoms(fNode, given)?.covered ? 'equal' : 'unknown'
     if (v) return v
   } catch (err) {
     if (!(err instanceof NotExact)) throw err
   }
+  const proof = atoms(fNode, given)
+  // The proof is checked by numbers on the reference's domain only: for a derivative that is f′'s (the claimed one may be
+  // defined on more, as 1/(2x) is beside d/dx ln √x), for an antiderivative the integrand's. Contradicted: 'unknown'.
+  if (proof?.same && proof.covered) {
+    const ok = onOthersDomain ? confirmed(within(expected, given), given) : confirmed(expected, within(given, expected))
+    return ok ? 'equal' : 'unknown'
+  }
   return byNumbers(expected, given)
 }
 
-/** F is an antiderivative of f: F′ = f wherever both are defined (a constant of integration vanishes on its own). */
+/** claimed is d/dx of f, on f′'s domain (claimed may be defined on more: 1/x is d/dx ln x; never on less). */
+function derivativeCheckRaw(f: string, x: string, claimed: string): Verdict {
+  return againstDerivative(f, x, claimed, (fn, g) => atomDerivative(fn, x, g), false)
+}
+
+/**
+ * F is an antiderivative of f: F′ = f, and F is defined wherever f is (a constant of integration vanishes on its own).
+ * ln(sin x) is not ∫ cot x dx's answer, ln|sin x| is; and a hole f has not, as in x²/2·(x − 1)/(x − 1), is not allowed.
+ */
 function integralCheckRaw(f: string, x: string, F: string): Verdict {
-  return derivativeCheck(F, x, f)
+  return againstDerivative(F, x, f, (Fn, fn) => atomAntiderivative(fn, x, Fn), true)
 }
 
 // ---------------------------------------------------------------- 9. partial fractions
@@ -558,6 +640,7 @@ export { numericEqual } from './numeric'
 
 // Every checker, guarded: an exception is 'unknown', never a crash at the caller.
 export const expressionEqual = safely(expressionEqualRaw, (): Verdict => 'unknown')
+export const elementaryEqual = safely(elementaryEqualRaw, (): ElementaryResult => ({ verdict: 'unknown', excluded: [], conditions: [] }))
 export const polyEqual = safely(polyEqualRaw, (): Verdict => 'unknown')
 export const rationalEqual = safely(rationalEqualRaw, (): RationalResult => ({ verdict: 'unknown', excluded: [], excludedComplete: false }))
 export const factorCheck = safely(factorCheckRaw, (): FactorResult => ({ verdict: 'unknown', irreducibleOverQ: [] }))

@@ -149,8 +149,11 @@ describe('derivatives', () => {
     expect(mark('derivatives', '(3*x^2 + 5)^3', '', text('162*x^5 + 540*x^3 + 450*x'))).toBe('right')
     expect(mark('derivatives', '(-3*x - 5) / (x^2 + 2*x + 5)', '', text('(3*x^2 + 10*x - 5)/(x^4 + 4*x^3 + 14*x^2 + 20*x + 25)'))).toBe('right')
   })
-  it('unverified: a trigonometric answer agrees everywhere sampled, which proves nothing', () => {
-    expect(mark('derivatives', '(-x) * cos(-x + 4)', '', text('x*sin(x - 4) - cos(x - 4)'))).toBe('unverified')
+  it('right: a trigonometric answer is proved exactly since G2B (sin and cos as atoms)', () => {
+    expect(mark('derivatives', '(-x) * cos(-x + 4)', '', text('x*sin(x - 4) - cos(x - 4)'))).toBe('right')
+  })
+  it('unverified: an answer that needs an identity between functions (Giac’s tan half-angle form) proves nothing', () => {
+    expect(mark('derivatives', '(-x) * cos(-x + 4)', '', text('(4*x/2*tan(1/2*x - 2) + tan(1/2*x - 2)^2 - 1)/(tan(1/2*x - 2)^2 + 1)'))).toBe('unverified')
   })
   it('wrong: a sign slip, polynomial or trigonometric', () => {
     expect(mark('derivatives', '(3*x^2 + 5)^3', '', text('18*x*(3*x^2 - 5)^2'))).toBe('wrong')

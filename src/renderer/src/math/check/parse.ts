@@ -78,7 +78,7 @@ const FUNCTION_INSIDE = new RegExp(
     .join('|')
 )
 /** A name mathjs gives a meaning of its own (a function, or a constant such as E, PI, SQRT2): never a variable here. */
-const isMathName = (name: string): boolean => (math as unknown as Record<string, unknown>)[name] !== undefined
+export const isMathName = (name: string): boolean => (math as unknown as Record<string, unknown>)[name] !== undefined
 
 /** The end of something a bar or a root sign multiplies: a letter, a digit, a closing bracket, a factorial, %, °. */
 const OPERAND_END = /[\p{L}\p{N}_)\]!%°′]$/u
@@ -379,7 +379,7 @@ function root(base: RF, q: number, atoms: Atom[]): RF {
 }
 
 /** S with S^k = e (up to the real k-th root of e's constant), for e in one variable; null if there is none. */
-function perfectPower(e: Expr, k: number): Expr | null {
+export function perfectPower(e: Expr, k: number): Expr | null {
   if (isConstant(e)) {
     const v = e.length ? e[0].c : R0
     const r = rationalRoot(v, k)

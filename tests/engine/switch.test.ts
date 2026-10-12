@@ -88,7 +88,8 @@ describe('routedAsk: Giac only where switched, proved before shown, SymPy behind
   })
   it('an answer the checker cannot prove, an error, or a throw also falls back', async () => {
     const sympy = fake('sympy', () => text('3*x^2'))
-    for (const g of [() => text('3*x^2 + 0*sin(x)'), () => ({ ...text(''), error: 'stopped' }), () => new Error('worker died')]) {
+    // 3x² + 0·sin x is proved right since G2B; sin² x + cos² x − 1 needs an identity between functions, so it is not.
+    for (const g of [() => text('3*x^2 + sin(x)^2 + cos(x)^2 - 1'), () => ({ ...text(''), error: 'stopped' }), () => new Error('worker died')]) {
       const giac = fake('giac', g)
       const ask = routedAsk({ sympy, giac }, { derivatives: 'giac' })
       expect((await ask('diff', req({ expr: 'x^3', var: 'x', order: 1 }))).text).toBe('3*x^2')

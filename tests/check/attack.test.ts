@@ -106,8 +106,8 @@ describe('MUST 2: |…| right after a letter is |…|, not m·a·g', () => {
     expect(polyRootsCheck('x|x| = 4', [one(2)])).toBe('unknown')
   })
   it('bars pair as the shared reader pairs them, and an unpaired bar is not read', () => {
-    // |…| inside |…| is not exact; the numbers agree.
-    expect(expressionEqual('||x|-1|', '|1-|x||')).toBe('unknown')
+    // |…| inside |…| is not exact as a quotient; as atoms (G2B) |1 − |x|| is |−(|x| − 1)| = ||x| − 1|.
+    expect(expressionEqual('||x|-1|', '|1-|x||')).toBe('equal')
     expect(expressionEqual('|x||x+1|', '|x^2+x|')).toBe('equal')
     expect(expressionEqual('|x', 'x')).toBe('unknown')
     expect(expressionEqual('2|x|/x', '2x/|x|')).toBe('equal')
@@ -126,7 +126,8 @@ describe('MUST 3: √ and ∛ after a letter are roots, not s·q·r·t', () => {
   })
   it('right answers with a glued root', () => {
     expect(expressionEqual('x√9', '3x')).toBe('equal')
-    expect(expressionEqual('2x√2', 'x√8')).toBe('unknown')
+    // √8 = 2√2 (G2B: a constant root is an atom, its square factor taken out).
+    expect(expressionEqual('2x√2', 'x√8')).toBe('equal')
     expect(expressionEqual('x√2', '√2 x')).not.toBe('different')
     expect(derivativeCheck('x^2√4', 'x', '4x')).toBe('equal')
   })
@@ -161,14 +162,15 @@ describe('MUST 4: a function name without its bracket is never a variable', () =
     expect(numericEqual('sin 2x', '2 sin x').verdict).toBe('unknown')
     // With its bracket, a function still reads: 2 sin(x) is not sin(2x), by numbers.
     expect(expressionEqual('sin(2x)', '2 sin(x)')).toBe('different')
-    expect(expressionEqual('2sin(x)', '2*sin(x)')).toBe('unknown')
+    expect(expressionEqual('2sin(x)', '2*sin(x)')).toBe('equal')
   })
 })
 
 describe('MUST 5–8: every call answers within the budget', () => {
   it('sinh, cosh and exp past 10⁶ are skipped, not worked out for minutes', () => {
     expect(timed(() => numericEqual('cosh(x)^2 - sinh(x)^2', '1').verdict)).toBe('unknown')
-    expect(timed(() => derivativeCheck('sinh(x)', 'x', 'cosh(x)'))).toBe('unknown')
+    // Proved exactly since G2B (sinh and cosh as exponentials), and still inside the budget.
+    expect(timed(() => derivativeCheck('sinh(x)', 'x', 'cosh(x)'))).toBe('equal')
     expect(timed(() => numericEqual('sinh(x)', 'sinh(x) + 1').verdict)).toBe('different')
     expect(timed(() => numericEqual('exp(x^2)', 'exp(x^2) + 1').verdict)).toBe('different')
     expect(timed(() => numericEqual('x^(x+0.5)', 'x^(x+0.5)').verdict)).toBe('unknown')

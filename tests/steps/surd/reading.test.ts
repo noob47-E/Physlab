@@ -41,16 +41,19 @@ describe('2√3 reaches G2 exactly: the plain form is read, the LaTeX is not', (
 })
 
 describe('G2 gives a verdict only where it is exact (no guess from numbers)', () => {
-  it('sqrt(12) against 2*sqrt(3) is unknown, never valid: G2 decides by numbers only to show a difference', () => {
-    expect(expressionEqualG2('sqrt(12)', '2*sqrt(3)')).toBe('unknown')
+  it('sqrt(12) against 2*sqrt(3) is valid: G2B proves it exactly (a constant root is an atom, its square factor taken out)', () => {
+    expect(expressionEqualG2('sqrt(12)', '2*sqrt(3)')).toBe('valid')
   })
 
   it('sqrt(12) against 3*sqrt(2) is invalid: G2 shows exactly that they differ', () => {
     expect(expressionEqualG2('sqrt(12)', '3*sqrt(2)')).toBe('invalid')
   })
 
-  it('a function G2 cannot decide exactly is unknown even when the texts are identical', () => {
-    expect(expressionEqualG2('sin(x)', 'sin(x)')).toBe('unknown')
+  it('a function is decided exactly since G2B (sin x is an atom); an identity between functions is still unknown', () => {
+    expect(expressionEqualG2('sin(x)', 'sin(x)')).toBe('valid')
+    expect(expressionEqualG2('sin(x)^2 + cos(x)^2', '1')).toBe('unknown')
+    // A cancelled factor with a function beside it keeps its point: never valid as a step.
+    expect(expressionEqualG2('x*sin(x)/x', 'sin(x)')).toBe('unknown')
   })
 
   it('a wrong expression is invalid, and the right one with the same letters is valid', () => {
@@ -76,8 +79,8 @@ describe('G2 gives a verdict only where it is exact (no guess from numbers)', ()
     expect(expressionEqualG2('1e5*x', '100000*x')).not.toBe('invalid')
   })
 
-  it('a commuted surd product is unknown (the step is not refused, G2 does not decide it)', () => {
-    expect(expressionEqualG2('2*x*sqrt(3)', '2*sqrt(3)*x')).toBe('unknown')
+  it('a commuted surd product is valid (G2B: the same form)', () => {
+    expect(expressionEqualG2('2*x*sqrt(3)', '2*sqrt(3)*x')).toBe('valid')
   })
 
   it('a cancelled denominator is never valid: (x^2 - 1)/(x - 1) against x + 1 is unknown (x = 1 is excluded)', () => {
