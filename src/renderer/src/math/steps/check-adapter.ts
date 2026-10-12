@@ -19,12 +19,15 @@ import {
   normalize,
   constExpr,
   writeTimes,
-  type Expr
+  eNeg,
+  evalAt,
+  type Expr,
+  type Term
 } from '../pure/mono'
-import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, R1, type Rat } from '../pure/rat'
+import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R1, type Rat } from '../pure/rat'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
-import type { EquationOp, ValidationVerdict } from './types'
+import type { EquationOp, ExprOp, ValidationVerdict } from './types'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -1003,6 +1006,9 @@ const MAX_EXPANDED_TERMS = 2000
 /** The largest power a bracket is raised to in an expansion (a longer one is refused, not unrolled). */
 const MAX_UNROLLED_POWER = 8
 
+/** The largest power of a plain number worked out exactly in an expansion (10^24 and the like). */
+const MAX_CONSTANT_POWER = 60
+
 /**
  * The term-by-term expansion of one side, with NOTHING collected: each bracket is multiplied out factor by factor, so
  * 2(x + x) gives 2x and 2x, and (x + 1)(x + 2) gives x², 2x, x, 2. Zero terms are dropped. Null when the side is not a
@@ -1263,4 +1269,781 @@ export function hasRealProduct(side: string): boolean {
     if (after !== '' && /[\p{L}\d(*/]/u.test(after[0])) return true
   }
   return false
+}
+
+// ============================================================================
+// S1c (expanding and factorising): a product is a list of factor texts. A step replaces the factors
+// [index, index + width) of its before by the factors of its after. Each replacement is checked exactly here.
+// ============================================================================
+
+/** The data of a product step, as the validators read it from step.data. */
+export interface ProductData {
+  variable: string
+  factorsBefore: string[]
+  factorsAfter: string[]
+  index: number
+  width: number
+}
+
+/** True for the ops of this section (the ExprEq ops of ExprOp in types.ts). */
+export function isExprOp(op: unknown): op is ExprOp {
+  if (!op || typeof op !== 'object') return false
+  return EXPR_OP_KINDS.has((op as { kind: string }).kind)
+}
+
+const EXPR_OP_KINDS: ReadonlySet<string> = new Set([
+  'expand-factors',
+  'collect-factor',
+  'take-out-hcf',
+  'difference-of-squares',
+  'perfect-square',
+  'split-middle',
+  'group-pairs',
+  'common-binomial',
+  'cube-factor',
+  'linear-factor',
+  'irreducible'
+])
+
+/** Multiplies out lists of terms one after another, the first list outermost, term by term (nothing collected). */
+export function multiplyTermLists(lists: Term[][]): Term[] | null {
+  let acc: Term[] = [{ c: rat(1n), v: {} }]
+  for (const list of lists) {
+    const out: Term[] = []
+    for (const x of acc) {
+      for (const y of list) {
+        const v: Record<string, number> = { ...x.v }
+        for (const k of Object.keys(y.v)) v[k] = (v[k] ?? 0) + y.v[k]
+        out.push({ c: rMul(x.c, y.c), v })
+      }
+    }
+    if (out.length > MAX_EXPANDED_TERMS) return null
+    acc = out
+  }
+  return acc
+}
+
+/** The letters and powers of a term, as a key (zero powers left out). */
+export function powersKey(v: Record<string, number>): string {
+  return Object.keys(v)
+    .filter((n) => v[n] !== 0)
+    .sort()
+    .map((n) => `${n}^${v[n]}`)
+    .join('*')
+}
+
+/** A term as a key: its powers and its exact coefficient. */
+export function termKey(t: Term): string {
+  return `${powersKey(t.v)}|${t.c.n}/${t.c.d}`
+}
+
+/** True when two lists of terms are the same multiset (zero terms ignored, order ignored). */
+export function sameTerms(a: Term[], b: Term[]): boolean {
+  const left = a.filter((t) => !rIsZero(t.c))
+  const right = b.filter((t) => !rIsZero(t.c))
+  if (left.length !== right.length) return false
+  const count = new Map<string, number>()
+  for (const t of left) count.set(termKey(t), (count.get(termKey(t)) ?? 0) + 1)
+  for (const t of right) {
+    const n = count.get(termKey(t)) ?? 0
+    if (n === 0) return false
+    count.set(termKey(t), n - 1)
+  }
+  return true
+}
+
+function degreeOfTerm(t: Term): number {
+  return Object.keys(t.v).reduce((s, n) => s + (t.v[n] ?? 0), 0)
+}
+
+function compareTerms(a: Term, b: Term): number {
+  const d = degreeOfTerm(b) - degreeOfTerm(a)
+  if (d !== 0) return d
+  const ka = powersKey(a.v)
+  const kb = powersKey(b.v)
+  return ka < kb ? -1 : ka > kb ? 1 : 0
+}
+
+/** The collected form: like terms added, zeros dropped, highest degree first, then by letters. */
+export function collectTerms(terms: Term[]): Term[] {
+  const byPowers = new Map<string, Term>()
+  for (const t of terms) {
+    const key = powersKey(t.v)
+    const cur = byPowers.get(key)
+    const v: Record<string, number> = {}
+    for (const n of Object.keys(t.v)) if (t.v[n] !== 0) v[n] = t.v[n]
+    byPowers.set(key, { c: cur ? rAdd(cur.c, t.c) : t.c, v: cur ? cur.v : v })
+  }
+  return [...byPowers.values()].filter((t) => !rIsZero(t.c)).sort(compareTerms)
+}
+
+/** One term as text: 3x^2y, x, -x, 7, (1/2)x. The first term carries its sign; the others are joined with + or -. */
+export function termText(t: Term, first: boolean): string {
+  const names = Object.keys(t.v)
+    .filter((n) => t.v[n] !== 0)
+    .sort()
+  const neg = rIsNeg(t.c)
+  const abs = rAbs(t.c)
+  const unit = abs.n === 1n && abs.d === 1n
+  const coef = unit && names.length > 0 ? '' : abs.d === 1n ? abs.n.toString() : `(${abs.n}/${abs.d})`
+  const body = coef + names.map((n) => (t.v[n] === 1 ? n : `${n}^${t.v[n]}`)).join('')
+  if (first) return neg ? `-${body}` : body
+  return neg ? ` - ${body}` : ` + ${body}`
+}
+
+/** A list of terms as one sum, in the order given. "0" for no terms. */
+export function sumText(terms: Term[]): string {
+  const live = terms.filter((t) => !rIsZero(t.c))
+  if (live.length === 0) return '0'
+  return live.map((t, i) => termText(t, i === 0)).join('')
+}
+
+/** The coefficient in front of a grouped bracket: nothing for 1. */
+function coefText(m: string): string {
+  return m === '1' ? '' : m
+}
+
+/** The grouped form m1(common) ± m2(common): the first part's monomial in front, the second with its sign. */
+export function groupSumText(m1: string, common: string, m2: string, sign: '+' | '-'): string {
+  return `${coefText(m1)}(${common}) ${sign} ${coefText(m2)}(${common})`
+}
+
+/** The common binomial's first factor: m1 ± m2. */
+export function binomialSumText(m1: string, m2: string, sign: '+' | '-'): string {
+  return `${m1} ${sign} ${m2}`
+}
+
+/** Splits a factor written as (inner)^n into inner and n; null for any other text. */
+export function powerBase(f: string): { base: string; n: number } | null {
+  if (!f.startsWith('(')) return null
+  let depth = 0
+  for (let i = 0; i < f.length; i++) {
+    if (f[i] === '(') depth++
+    else if (f[i] === ')') {
+      depth--
+      if (depth === 0) {
+        const rest = /^\^(\d+)$/.exec(f.slice(i + 1))
+        return rest ? { base: f.slice(1, i), n: Number(rest[1]) } : null
+      }
+    }
+  }
+  return null
+}
+
+/** True when a factor has a top-level + or − (a sum), so it needs brackets inside a product. */
+function isMultiTerm(f: string): boolean {
+  let depth = 0
+  for (let i = 0; i < f.length; i++) {
+    const ch = f[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if ((ch === '+' || ch === '-') && depth === 0 && i > 0) return true
+  }
+  return false
+}
+
+/** The separator between two factors: nothing before a bracket, or between a number and a letter; * otherwise. */
+function joinSeparator(prev: string, next: string): string {
+  if (next.startsWith('(') || prev.endsWith(')')) return ''
+  if (/\d$/.test(prev) && /^[A-Za-z]/.test(next)) return ''
+  return '*'
+}
+
+/**
+ * The text of a product state: its factors in order, sums in brackets, a single factor as it stands. This is the
+ * text the step's before and after are, and the validators compare it with the typed factor lists.
+ */
+export function productText(factors: string[]): string {
+  if (factors.length === 0) return '1'
+  if (factors.length === 1) return factors[0]
+  let out = ''
+  factors.forEach((f, i) => {
+    const shown = powerBase(f) !== null ? f : isMultiTerm(f) ? `(${f})` : f
+    if (i > 0) out += joinSeparator(factors[i - 1], shown)
+    out += shown
+  })
+  return out
+}
+
+/** The product of the factor texts as a polynomial, exactly; null when a factor is not read. */
+export function productPoly(factors: string[]): Expr | null {
+  // Each factor is read by expandTerms, the exact reader (tryParsePoly takes a negative power of ten as a float).
+  const lists = factors.map((f) => expandTerms(f))
+  if (lists.some((l) => l === null)) return null
+  const product = multiplyTermLists(lists as Term[][])
+  return product ? normalize(product) : null
+}
+
+/**
+ * The first step of a product working starts from the problem as typed when its factors multiply out to the typed product.
+ * The text may be bracketed differently ("5x(2x - 3)" for "(5x)(2x - 3)"), which sameState reads as another tree.
+ */
+export function startsFromTypedProduct(factors: string[] | undefined, input: string): boolean {
+  if (!factors || factors.length === 0) return false
+  // The factors are the typed product's own factors (same texts, same order) and they multiply out to its value
+  // (exactly: expandTerms reads the typed text, tryParsePoly takes a negative power of ten as a float).
+  const typed = productFactorsOf(input)
+  if (!typed || typed.length !== factors.length) return false
+  if (!typed.every((f, i) => f.trim() === factors[i].trim())) return false
+  const product = productPoly(factors)
+  const value = expandTerms(input)
+  return !!product && !!value && eEq(product, normalize(value))
+}
+
+/** The value of a constant text read exactly (such as 2*10^18), or null when it has a letter or does not read. */
+function constantOf(text: string): Rat | null {
+  const p = tryParsePoly(text)
+  if (!p || p.some((t) => Object.keys(t.v).length > 0)) return null
+  return p.reduce<Rat>((acc, t) => rAdd(acc, t.c), rat(0n))
+}
+
+/** The uncollected term-by-term expansion of a text with brackets, products and integer powers; several letters. Null otherwise. */
+export function expandTerms(text: string): Term[] | null {
+  const s = rawText(text).replace(/²/g, '^2').replace(/³/g, '^3').replace(/\\cdot/g, '*').replace(/\\left|\\right/g, '')
+  let i = 0
+  const need = (ok: boolean): void => {
+    if (!ok) throw new NotExpandable()
+  }
+  const skip = (): void => {
+    while (i < s.length && /\s/.test(s[i])) i++
+  }
+  const at = (ch: string): boolean => s[i] === ch
+  const matchAt = (pattern: RegExp): string | null => {
+    const sticky = new RegExp(pattern.source, 'y')
+    sticky.lastIndex = i
+    const m = sticky.exec(s)
+    if (!m) return null
+    i += m[0].length
+    return m[0]
+  }
+  const exact = (digits: string): Rat => {
+    const r = parseExactRat(digits.startsWith('.') ? `0${digits}` : digits)
+    need(r !== null)
+    return r as Rat
+  }
+  const letterHere = (): string | null => {
+    const ch = s[i]
+    if (ch === undefined || !/\p{L}/u.test(ch)) return null
+    if (/[\p{L}\d]/u.test(s[i + 1] ?? '')) return null
+    i += 1
+    return ch
+  }
+  const letterAhead = (): boolean => {
+    const ch = s[i]
+    return ch !== undefined && /\p{L}/u.test(ch) && !/[\p{L}\d]/u.test(s[i + 1] ?? '')
+  }
+  const mul = (a: Term[], b: Term[]): Term[] => {
+    const out = multiplyTermLists([a, b])
+    need(out !== null)
+    return out as Term[]
+  }
+  const powTail = (base: Term[]): Term[] => {
+    if (!at('^')) return base
+    i++
+    let negativeExponent = false
+    let digits: string | null
+    if (at('(')) {
+      i++
+      if (at('-')) {
+        negativeExponent = true
+        i++
+      }
+      digits = matchAt(/\d+/)
+      need(digits !== null)
+      need(at(')'))
+      i++
+    } else {
+      digits = matchAt(/\d+/)
+      need(digits !== null)
+    }
+    const n = Number(digits)
+    need(n >= 1)
+    if (base.length === 1 && Object.keys(base[0].v).length === 0) {
+      // A number to a power is worked out exactly (10^24, 10^(-19)), as one number, not unrolled as a product of brackets.
+      need(n <= MAX_CONSTANT_POWER && !rIsZero(base[0].c))
+      const p = rPow(base[0].c, n)
+      return [{ c: negativeExponent ? rDiv(R1, p) : p, v: {} }]
+    }
+    need(!negativeExponent && n <= MAX_UNROLLED_POWER)
+    let out = base
+    for (let k = 1; k < n; k++) out = mul(out, base)
+    return out
+  }
+  function factor(): Term[] {
+    skip()
+    if (at('(')) {
+      i++
+      const inner = sum()
+      skip()
+      need(at(')'))
+      i++
+      return powTail(inner)
+    }
+    if (/[\d.]/.test(s[i] ?? '')) {
+      const digits = matchAt(/\d*\.\d+|\d+/)
+      need(digits !== null)
+      return powTail([{ c: exact(digits as string), v: {} }])
+    }
+    const letter = letterHere()
+    if (letter !== null) return powTail([{ c: rat(1n), v: { [letter]: 1 } }])
+    throw new NotExpandable()
+  }
+  function denominatorHere(): Rat {
+    skip()
+    if (at('(')) {
+      // A bracketed denominator is any exact constant, such as (2*10^18): read up to its closing bracket.
+      let depth = 0
+      let close = -1
+      for (let j = i; j < s.length && close < 0; j++) {
+        if (s[j] === '(') depth++
+        else if (s[j] === ')' && --depth === 0) close = j
+      }
+      need(close > i)
+      const c = constantOf(s.slice(i + 1, close))
+      need(c !== null && !rIsZero(c))
+      i = close + 1
+      return c as Rat
+    }
+    const negative = at('-')
+    if (negative) i++
+    const digits = matchAt(/\d*\.\d+|\d+/)
+    need(digits !== null)
+    const d = exact(digits as string)
+    need(!rIsZero(d))
+    return negative ? rNeg(d) : d
+  }
+  function term(): Term[] {
+    let acc = factor()
+    for (;;) {
+      skip()
+      if (at('*')) {
+        i++
+        acc = mul(acc, factor())
+      } else if (at('/')) {
+        i++
+        skip()
+        const d = denominatorHere()
+        acc = acc.map((t) => ({ c: rDiv(t.c, d), v: t.v }))
+      } else if (/[\d.(]/.test(s[i] ?? '') || letterAhead()) {
+        acc = mul(acc, factor())
+      } else {
+        break
+      }
+    }
+    return acc
+  }
+  function sum(): Term[] {
+    const out: Term[] = []
+    let negative = false
+    skip()
+    if (at('+')) i++
+    else if (at('-')) {
+      negative = true
+      i++
+    }
+    for (;;) {
+      for (const t of term()) out.push(negative ? { c: rNeg(t.c), v: t.v } : t)
+      skip()
+      if (at('+')) {
+        negative = false
+        i++
+      } else if (at('-')) {
+        negative = true
+        i++
+      } else {
+        break
+      }
+    }
+    return out
+  }
+  try {
+    const terms = sum()
+    skip()
+    need(i === s.length)
+    return terms.filter((t) => !rIsZero(t.c))
+  } catch {
+    return null
+  }
+}
+
+/** The coefficient of the power k of the letter v in a collected polynomial (zero when absent). */
+export function coefficientOf(P: Expr, v: string, k: number): Rat {
+  let out = rat(0n)
+  for (const t of P) if ((t.v[v] ?? 0) === k) out = rAdd(out, t.c)
+  return out
+}
+
+function absBig(n: bigint): bigint {
+  return n < 0n ? -n : n
+}
+
+/** The positive divisors of |n| (n up to 10^12; null beyond, so no search runs away). */
+function divisorsOf(n: bigint): bigint[] | null {
+  const a = absBig(n)
+  if (a > 1000000000000n) return null
+  const m = Number(a)
+  const out: bigint[] = []
+  for (let d = 1; d * d <= m; d++) {
+    if (m % d === 0) {
+      out.push(BigInt(d))
+      if (d * d !== m) out.push(BigInt(m / d))
+    }
+  }
+  return out.sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))
+}
+
+/**
+ * The rational roots of a polynomial in one letter v, found by the rational root test (candidates p/q with p dividing the
+ * constant term and q dividing the leading coefficient, after clearing denominators). Null when it cannot search (a
+ * constant term of 0 or a coefficient beyond 10^12, or another letter).
+ */
+export function rationalRootsOf(P: Expr, v: string): Rat[] | null {
+  if (varsOf(P).some((name) => name !== v)) return null
+  const deg = exprDegree(P)
+  if (deg < 1) return []
+  let den = 1n
+  for (const t of P) den = (den / bgcd(den, t.c.d)) * t.c.d
+  const coef = new Map<number, bigint>()
+  for (const t of P) {
+    const p = t.v[v] ?? 0
+    coef.set(p, (coef.get(p) ?? 0n) + t.c.n * (den / t.c.d))
+  }
+  const a0 = coef.get(0) ?? 0n
+  const an = coef.get(deg) ?? 0n
+  if (a0 === 0n) return null
+  const ps = divisorsOf(a0)
+  const qs = divisorsOf(an)
+  if (ps === null || qs === null) return null
+  const roots: Rat[] = []
+  for (const q of qs) {
+    for (const p of ps) {
+      for (const sgn of [1n, -1n]) {
+        const r = rat(sgn * p, q)
+        if (roots.some((x) => rEq(x, r))) continue
+        if (rIsZero(evalAt(P, { [v]: r }))) roots.push(r)
+      }
+    }
+  }
+  return roots
+}
+
+/**
+ * Whether a polynomial in one letter v cannot be factorised over the rationals, with its proof: true when it is
+ * (a quadratic with a non-square discriminant, or a cubic with no rational root), false when it can be, and null
+ * when this cannot decide (a higher degree, or another letter).
+ */
+export function irreducibleOver(P: Expr, v: string): boolean | null {
+  if (varsOf(P).some((name) => name !== v)) return null
+  const deg = exprDegree(P)
+  if (deg === 2) {
+    const a = coefficientOf(P, v, 2)
+    const b = coefficientOf(P, v, 1)
+    const c = coefficientOf(P, v, 0)
+    const disc = rSub(rMul(b, b), rMul(rat(4n), rMul(a, c)))
+    if (rIsNeg(disc)) return true
+    return rSqrt(disc) === null
+  }
+  if (deg === 3) {
+    const roots = rationalRootsOf(P, v)
+    if (roots === null) return null
+    return roots.length === 0
+  }
+  if (deg <= 1) return false
+  return null
+}
+
+/** The primitive test: integer coefficients with no common factor and no letter common to every term. */
+function isPrimitiveOver(P: Expr): boolean {
+  if (P.some((t) => t.c.d !== 1n)) return false
+  let g = 0n
+  for (const t of P) g = bgcd(g, absBig(t.c.n))
+  if (g !== 1n) return false
+  const names = new Set<string>()
+  for (const t of P) for (const n of Object.keys(t.v)) if (t.v[n] !== 0) names.add(n)
+  for (const n of names) if (P.every((t) => (t.v[n] ?? 0) >= 1)) return false
+  return true
+}
+
+function isOneTerm(t: Term): boolean {
+  return t.c.n === 1n && t.c.d === 1n && Object.keys(t.v).every((n) => t.v[n] === 0)
+}
+
+/** True when the text holds a bracket that is more than a coefficient such as (1/2): a bracketed sum or factor. */
+function hasBrackets(text: string): boolean {
+  return text.replace(/\((-?\d+\/\d+)\)/g, '').includes('(')
+}
+
+/**
+ * The exact check of a product step: the replaced factors and their replacement have the same product, the factor lists
+ * are the texts of the before and after, and the op's own structure holds (checkProductOp).
+ */
+export function checkProductStep(
+  before: string | MathNode,
+  after: string | MathNode,
+  op: ExprOp,
+  data: ProductData
+): ValidationVerdict {
+  const B = data.factorsBefore
+  const A = data.factorsAfter
+  if (!Array.isArray(B) || !Array.isArray(A)) return 'invalid'
+  const i = data.index
+  const w = data.width
+  if (!Number.isInteger(i) || !Number.isInteger(w) || i < 0 || w < 1 || i + w > B.length) return 'invalid'
+  const suffix = B.length - i - w
+  const replLen = A.length - i - suffix
+  if (replLen < 1 || i > A.length) return 'invalid'
+  for (let k = 0; k < i; k++) if (normalizeDisplayed(B[k]) !== normalizeDisplayed(A[k])) return 'invalid'
+  for (let k = 0; k < suffix; k++) {
+    if (normalizeDisplayed(B[i + w + k]) !== normalizeDisplayed(A[i + replLen + k])) return 'invalid'
+  }
+  if (!sameState(before, productText(B)) || !sameState(after, productText(A))) return 'invalid'
+  const target = B.slice(i, i + w)
+  const repl = A.slice(i, i + replLen)
+  const tp = productPoly(target)
+  const rp = productPoly(repl)
+  if (!tp || !rp) return 'unknown'
+  if (!eEq(tp, rp)) return 'invalid'
+  return checkProductOp(op, target, repl, data.variable)
+}
+
+function checkProductOp(op: ExprOp, target: string[], repl: string[], v: string): ValidationVerdict {
+  const verdictOf = (ok: boolean): ValidationVerdict => (ok ? 'valid' : 'invalid')
+  const nt = (s: string): string => normalizeDisplayed(s)
+  switch (op.kind) {
+    case 'expand-factors': {
+      const expandable = target.length >= 2 || (target.length === 1 && (powerBase(target[0])?.n ?? 0) >= 2)
+      if (!expandable || repl.length !== 1 || hasBrackets(repl[0])) return 'invalid'
+      const lists: Term[][] = []
+      for (const f of target) {
+        const t = expandTerms(f)
+        if (!t) return 'unknown'
+        lists.push(t)
+      }
+      const expected = multiplyTermLists(lists)
+      const got = expandTerms(repl[0])
+      if (!expected || !got) return 'unknown'
+      return verdictOf(sameTerms(expected, got))
+    }
+    case 'collect-factor': {
+      // A collect step combines like terms or puts them in order. A bracket input (a product or a power) is expanded, not collected.
+      if (target.length !== 1 || repl.length !== 1 || hasBrackets(repl[0]) || hasBrackets(target[0])) return 'invalid'
+      const t = expandTerms(target[0])
+      if (!t) return 'unknown'
+      const collected = sumText(collectTerms(t))
+      if (nt(repl[0]) !== nt(collected)) return 'invalid'
+      // Nothing to combine or reorder: the raw sum already reads as the collected one (x*x + 1 is a rewrite, not a collection).
+      return verdictOf(nt(sumText(t)) !== nt(collected))
+    }
+    case 'take-out-hcf': {
+      if (target.length !== 1 || repl.length !== 2) return 'invalid'
+      const h = tryParsePoly(repl[0])
+      const rest = tryParsePoly(repl[1])
+      if (!h || !rest || h.length !== 1 || isOneTerm(h[0])) return 'invalid'
+      if (rest.length < 2 || !isPrimitiveOver(rest)) return 'invalid'
+      const canonical = collectTerms(rest)
+      if (rIsNeg(canonical[0].c)) return 'invalid'
+      if (nt(repl[0]) !== nt(termText(h[0], true))) return 'invalid'
+      return verdictOf(nt(repl[1]) === nt(sumText(canonical)))
+    }
+    case 'difference-of-squares': {
+      if (target.length !== 1 || repl.length !== 2) return 'invalid'
+      const a = tryParsePoly(op.a)
+      const b = tryParsePoly(op.b)
+      const T = tryParsePoly(target[0])
+      if (!a || !b || !T) return 'unknown'
+      if (a.length !== 1 || b.length !== 1) return 'invalid'
+      if (!eEq(T, eSub(eMul(a, a), eMul(b, b)))) return 'invalid'
+      const r0 = tryParsePoly(repl[0])
+      const r1 = tryParsePoly(repl[1])
+      if (!r0 || !r1) return 'unknown'
+      const minus = eSub(a, b)
+      const plus = eAdd(a, b)
+      return verdictOf((eEq(r0, minus) && eEq(r1, plus)) || (eEq(r0, plus) && eEq(r1, minus)))
+    }
+    case 'perfect-square': {
+      if (target.length !== 1 || repl.length !== 1) return 'invalid'
+      const a = tryParsePoly(op.a)
+      const b = tryParsePoly(op.b)
+      const T = tryParsePoly(target[0])
+      if (!a || !b || !T) return 'unknown'
+      if (a.length !== 1 || b.length !== 1) return 'invalid'
+      const inner = op.sign === '-' ? eSub(a, b) : eAdd(a, b)
+      if (!eEq(eMul(inner, inner), T)) return 'invalid'
+      const base = powerBase(repl[0])
+      if (!base || base.n !== 2) return 'invalid'
+      const bp = tryParsePoly(base.base)
+      return verdictOf(!!bp && eEq(bp, inner))
+    }
+    case 'split-middle': {
+      if (target.length !== 1 || repl.length !== 1) return 'invalid'
+      const P = tryParsePoly(target[0])
+      if (!P) return 'unknown'
+      if (P.length !== 3 || P.some((t) => ![0, 1, 2].includes(t.v[v] ?? 0) || Object.keys(t.v).some((n) => n !== v && t.v[n] !== 0))) {
+        return 'invalid'
+      }
+      const a2 = coefficientOf(P, v, 2)
+      const a1 = coefficientOf(P, v, 1)
+      const a0 = coefficientOf(P, v, 0)
+      if (rIsZero(a2) || rIsZero(a1) || rIsZero(a0)) return 'invalid'
+      const p = parseExactRat(op.p)
+      const q = parseExactRat(op.q)
+      if (!p || !q || rIsZero(p) || rIsZero(q)) return 'invalid'
+      if (!rEq(rAdd(p, q), a1) || !rEq(rMul(p, q), rMul(a2, a0))) return 'invalid'
+      const expected: Term[] = [
+        { c: a2, v: { [v]: 2 } },
+        { c: p, v: { [v]: 1 } },
+        { c: q, v: { [v]: 1 } },
+        { c: a0, v: {} }
+      ]
+      return verdictOf(nt(repl[0]) === nt(sumText(expected)))
+    }
+    case 'group-pairs': {
+      if (target.length !== 1 || repl.length !== 1) return 'invalid'
+      // Grouping takes the four terms of a sum as it stands: a three-term trinomial or a product is not grouped.
+      const four = expandTerms(target[0])
+      if (!four || four.length !== 4 || hasBrackets(target[0])) return 'invalid'
+      const B = tryParsePoly(op.common)
+      const m1 = expandTerms(op.m1)
+      const m2 = expandTerms(op.m2)
+      if (!B || !m1 || !m2 || m1.length !== 1 || m2.length !== 1) return 'invalid'
+      if (B.length < 2 || varsOf(B).length === 0) return 'invalid'
+      return verdictOf(nt(repl[0]) === nt(groupSumText(op.m1, op.common, op.m2, op.sign)))
+    }
+    case 'common-binomial': {
+      if (target.length !== 1 || repl.length !== 2) return 'invalid'
+      if (nt(target[0]) !== nt(groupSumText(op.m1, op.common, op.m2, op.sign))) return 'invalid'
+      if (nt(repl[0]) !== nt(binomialSumText(op.m1, op.m2, op.sign))) return 'invalid'
+      return verdictOf(nt(repl[1]) === nt(op.common))
+    }
+    case 'cube-factor': {
+      if (target.length !== 1 || repl.length !== 2) return 'invalid'
+      const a = tryParsePoly(op.a)
+      const b = tryParsePoly(op.b)
+      const T = tryParsePoly(target[0])
+      const r0 = tryParsePoly(repl[0])
+      const r1 = tryParsePoly(repl[1])
+      if (!a || !b || !T || !r0 || !r1) return 'unknown'
+      if (a.length !== 1 || b.length !== 1) return 'invalid'
+      const sb = op.sign === '-' ? eNeg(b) : b
+      const cube = (p: Expr): Expr => eMul(eMul(p, p), p)
+      const sum3 = op.sign === '-' ? eSub(cube(a), cube(b)) : eAdd(cube(a), cube(b))
+      if (!eEq(T, sum3)) return 'invalid'
+      const f1 = eAdd(a, sb)
+      const f2 = eAdd(eSub(eMul(a, a), eMul(sb, a)), eMul(b, b))
+      return verdictOf(eEq(r0, f1) && eEq(r1, f2))
+    }
+    case 'linear-factor': {
+      if (target.length !== 1 || repl.length !== 2) return 'invalid'
+      const root = parseExactRat(op.root)
+      const T = tryParsePoly(target[0])
+      const r0 = tryParsePoly(repl[0])
+      if (!root || !T || !r0) return 'unknown'
+      if (varsOf(T).some((n) => n !== v) || varsOf(r0).some((n) => n !== v)) return 'invalid'
+      if (!rIsZero(evalAt(T, { [v]: root }))) return 'invalid'
+      if (exprDegree(r0) !== 1) return 'invalid'
+      const a = coefficientOf(r0, v, 1)
+      const b = coefficientOf(r0, v, 0)
+      return verdictOf(!rIsZero(a) && rEq(rDiv(rNeg(b), a), root))
+    }
+    case 'irreducible': {
+      if (target.length !== 1 || repl.length !== 1 || nt(repl[0]) !== nt(target[0])) return 'invalid'
+      const P = tryParsePoly(target[0])
+      if (!P) return 'unknown'
+      const proof = irreducibleOver(P, v)
+      if (proof === null) return 'unknown'
+      return verdictOf(proof)
+    }
+    default:
+      return 'unknown'
+  }
+}
+
+/** The square root of a rational, exact, or null. */
+export function ratSqrt(r: Rat): Rat | null {
+  if (rIsNeg(r)) return null
+  return rSqrt(r)
+}
+
+/** The exact cube root of a rational, or null when it has none. */
+export function ratCbrt(r: Rat): Rat | null {
+  const root = (n: bigint): bigint | null => {
+    if (n < 0n) return null
+    const guess = BigInt(Math.round(Math.cbrt(Number(n))))
+    for (const g of [guess - 1n, guess, guess + 1n]) {
+      if (g >= 0n && g * g * g === n) return g
+    }
+    return null
+  }
+  const num = root(absBig(r.n))
+  const den = root(r.d)
+  if (num === null || den === null) return null
+  return rat(r.n < 0n ? -num : num, den)
+}
+
+/** A typed product as its factors: "(4*x - 4) * (x^2 - x + 4)" gives "4x - 4" and "x^2 - x + 4"; a power keeps its power:
+ * "(x + 2)^3" gives "(x + 2)^3". A monomial between brackets is a factor of its own ("2(x + 1)" gives "2" and "x + 1").
+ * A sum with no brackets is one factor. Null when the text is not read this way (a sum outside the brackets, or a letter
+ * this does not expand). */
+export function productFactorsOf(input: string): string[] | null {
+  const s = stringifyNodeOrText(input).trim()
+  if (!s.includes('(')) return [s]
+  const out: string[] = []
+  let pos = 0
+  let sign = ''
+  const canonical = (text: string): string | null => {
+    const terms = expandTerms(text)
+    return terms ? sumText(terms) : null
+  }
+  while (pos < s.length) {
+    while (pos < s.length && (/\s/.test(s[pos]) || s[pos] === '*')) pos++
+    if (pos >= s.length) break
+    if (s[pos] === '(') {
+      let depth = 0
+      let close = -1
+      for (let j = pos; j < s.length; j++) {
+        if (s[j] === '(') depth++
+        else if (s[j] === ')') {
+          depth--
+          if (depth === 0) {
+            close = j
+            break
+          }
+        }
+      }
+      if (close < 0) return null
+      const inner = canonical(s.slice(pos + 1, close))
+      if (inner === null) return null
+      const after = s.slice(close + 1)
+      const power = /^\^\(?(\d+)\)?/.exec(after)
+      if (sign === '-') out.push('-1')
+      sign = ''
+      if (power && Number(power[1]) >= 2) {
+        out.push(`(${inner})^${power[1]}`)
+        pos = close + 1 + power[0].length
+      } else {
+        out.push(inner)
+        pos = close + 1
+      }
+      continue
+    }
+    // A run of text up to the next bracket or product sign: a monomial, a number, or a bare sign.
+    let end = pos
+    while (end < s.length && s[end] !== '(' && s[end] !== '*') end++
+    const piece = s.slice(pos, end).replace(/\s+/g, '')
+    pos = end
+    if (piece === '') continue
+    // A sign after a factor is a sum outside the brackets ("(x + 1) - 2"), not a product: this does not read as factors.
+    if (out.length > 0 && /^[+-]/.test(piece)) return null
+    if (piece === '-' || piece === '+') {
+      sign = piece === '-' ? '-' : ''
+      continue
+    }
+    if (/[+-]/.test(piece.slice(1))) return null
+    const term = canonical(piece)
+    if (term === null) return null
+    if (sign === '-') out.push(`-${term}`)
+    else out.push(term)
+    sign = ''
+  }
+  return out.length > 0 ? out : null
 }

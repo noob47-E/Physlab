@@ -15,6 +15,7 @@
 
 import {
   CANT_SHOW_STEPS_REASON,
+  type ExprOp,
   type Step,
   type StepValidationResult,
   type ValidationVerdict,
@@ -24,6 +25,9 @@ import {
 import { rStr, type Rat } from '../pure/rat'
 import {
   checkEquationOp,
+  checkProductStep,
+  isExprOp,
+  type ProductData,
   checkZeroProduct,
   defaultCheckAdapter,
   displayedValues,
@@ -31,6 +35,7 @@ import {
   normalizeDisplayed,
   sameState,
   solutionProofOf,
+  startsFromTypedProduct,
   variableOfInput,
   type CheckAdapter
 } from './check-adapter'
@@ -50,8 +55,26 @@ function variableOfStep(step: Step): string {
  * must also start from the substituted expression b² − 4ac that its data names.
  * Compares the UNSIMPLIFIED ASTs, never through an engine's auto-simplify.
  */
+/**
+ * An ExprEq that declares a product op (S1c): the factor lists in its data are checked exactly by checkProductStep.
+ */
+function validateProductStep(step: Step, op: ExprOp): ValidationVerdict {
+  const d = dataOf(step)
+  if (!Array.isArray(d.factorsBefore) || !Array.isArray(d.factorsAfter)) return 'invalid'
+  if (typeof d.index !== 'number' || typeof d.width !== 'number') return 'invalid'
+  const data: ProductData = {
+    variable: typeof d.variable === 'string' ? d.variable : 'x',
+    factorsBefore: d.factorsBefore.map((f) => String(f)),
+    factorsAfter: d.factorsAfter.map((f) => String(f)),
+    index: d.index,
+    width: d.width
+  }
+  return checkProductStep(step.before, step.after, op, data)
+}
+
 export function validateExprEq(step: Step, adapter: CheckAdapter = defaultCheckAdapter): ValidationVerdict {
   if (step.kind !== 'ExprEq') return 'invalid'
+  if (step.op && isExprOp(step.op)) return validateProductStep(step, step.op)
   const d = dataOf(step)
   if (d.role === 'discriminant') {
     const { a, b, c } = d
@@ -69,7 +92,7 @@ export function validateExprEq(step: Step, adapter: CheckAdapter = defaultCheckA
  */
 export function validateEquationEquiv(step: Step, _adapter: CheckAdapter = defaultCheckAdapter): ValidationVerdict {
   if (step.kind !== 'EquationEquiv') return 'invalid'
-  if (!step.op) return 'unknown'
+  if (!step.op || isExprOp(step.op)) return 'unknown'
   return checkEquationOp(step.before, step.after, step.op, variableOfStep(step))
 }
 
@@ -313,15 +336,20 @@ function answerProblem(working: Working): string | null {
   const answers = Array.isArray(working.answer) ? working.answer : [working.answer]
   const last = working.steps[working.steps.length - 1]
   const v = variableOfInput(working.input ?? '')
-  if (v === null) return 'the answer cannot be checked: the input has no single variable'
-  const expected = last.kind === 'SolutionSetEq'
+  // An expression ending (ExprEq) is compared as text and needs no variable; the reader may not take the typed input.
+  if (v === null && last.kind !== 'ExprEq') return 'the answer cannot be checked: the input has no single variable'
+  const expected = last.kind === 'SolutionSetEq' || last.kind === 'ExprEq'
     ? [normalizeDisplayed(String(last.after))]
-    : displayedValues(String(last.after), v)
+    : displayedValues(String(last.after), v ?? '')
   if (expected === null) return 'the last step does not display an answer to check against'
   if (answers.length !== expected.length) return 'the answer does not list the displayed solutions'
   for (let i = 0; i < answers.length; i++) {
     const a = answers[i]
-    if (a.label !== v) return `the answer is labelled ${a.label}, but the problem's variable is ${v}`
+    // An expression ending is labelled with the one letter of the typed input (a step's own recorded variable is not
+    // the problem's variable: a working could otherwise carry a label of its own choosing).
+    const typedLetters = [...new Set((working.input ?? '').match(/\p{L}/gu) ?? [])]
+    const variable = last.kind === 'ExprEq' ? (typedLetters.length === 1 ? typedLetters[0] : '') : v
+    if (a.label !== variable) return `the answer is labelled ${a.label}, but the problem's variable is ${variable}`
     if (normalizeDisplayed(a.tex) !== expected[i]) return `the answer ${a.tex} is not the displayed ${expected[i]}`
     if (a.value !== undefined && normalizeDisplayed(a.value) !== expected[i]) {
       return `the answer value ${a.value} is not the displayed ${expected[i]}`
@@ -360,7 +388,10 @@ export function validateWorking(working: Working, adapter: CheckAdapter = defaul
       reason: 'The working has steps but no input to start them from'
     }
   }
-  if (!sameState(working.steps[0].before, working.input)) {
+  const firstStep = working.steps[0]
+  const typedFactors =
+    firstStep.kind === 'ExprEq' && isExprOp(firstStep.op) ? (firstStep.data as unknown as ProductData).factorsBefore : undefined
+  if (!sameState(firstStep.before, working.input) && !startsFromTypedProduct(typedFactors, working.input)) {
     return chainBreak(working, 0, 'The first step does not start from the problem as typed')
   }
   for (let i = 1; i < working.steps.length; i++) {

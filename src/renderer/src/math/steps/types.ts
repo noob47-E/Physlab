@@ -83,13 +83,38 @@ export type EquationOp =
   | { kind: 'already-solved' }
 
 /**
+ * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors
+ * [index, index + width) of its product by new factors (its data holds the two factor lists, see methods/productState.ts).
+ * Each op is checked exactly by check-adapter.ts (checkProductStep):
+ * - expand-factors: the factors of the product multiplied out term by term, nothing collected.
+ * - collect-factor: one sum, collected and put in order.
+ * - take-out-hcf: a sum written as [highest common factor, rest], the rest primitive.
+ * - difference-of-squares / perfect-square / cube-factor: the standard identities, with the declared parts.
+ * - split-middle / group-pairs / common-binomial: the ac method, a sum split and grouped, then the common binomial.
+ * - linear-factor: a linear factor found by the rational root test; the rest is the exact quotient.
+ * - irreducible: a factor with no factorisation over the rationals, proved (a non-square discriminant, or no rational root for degree 3).
+ */
+export type ExprOp =
+  | { kind: 'expand-factors' }
+  | { kind: 'collect-factor' }
+  | { kind: 'take-out-hcf' }
+  | { kind: 'difference-of-squares'; a: string; b: string }
+  | { kind: 'perfect-square'; a: string; b: string; sign: '+' | '-' }
+  | { kind: 'split-middle'; p: string; q: string }
+  | { kind: 'group-pairs'; m1: string; m2: string; common: string; sign: '+' | '-' }
+  | { kind: 'common-binomial'; m1: string; m2: string; common: string; sign: '+' | '-' }
+  | { kind: 'cube-factor'; a: string; b: string; sign: '+' | '-' }
+  | { kind: 'linear-factor'; root: string }
+  | { kind: 'irreducible' }
+
+/**
  * One step of mathematical working.
  */
 export interface Step<T = unknown> {
   /** The mathematical step kind determining which validator checks it. */
   kind: StepKind
   /** The declared move. An EquationEquiv without one is 'unknown' and is never shown. */
-  op?: EquationOp
+  op?: EquationOp | ExprOp
   /** The state before this move (expression or equation as string or AST). */
   before: string | MathNode
   /** The state after this move (expression or equation as string or AST). */

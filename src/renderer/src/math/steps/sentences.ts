@@ -5,8 +5,19 @@
 // validate.ts requires a step's sentence and rule to equal these, and the page shows the check this module
 // builds from the validated answer substituted into the problem as typed.
 
-import type { EquationOp, Step, StepAnswer, Working } from './types'
-import { equationSides, normalizeDisplayed, parseExactRat, solutionProofOf, type SetProof } from './check-adapter'
+import type { EquationOp, ExprOp, Step, StepAnswer, Working } from './types'
+import {
+  equationSides,
+  expandTerms,
+  groupSumText,
+  isExprOp,
+  normalizeDisplayed,
+  parseExactRat,
+  productText,
+  solutionProofOf,
+  sumText,
+  type SetProof
+} from './check-adapter'
 import { MINUS, ratPlain, shiftPlain } from './methods/stepText'
 import { evalAt, varsOf } from '../pure/mono'
 import { rEq, type Rat } from '../pure/rat'
@@ -27,7 +38,8 @@ function plainTex(text: string): string {
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
     .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
-    .replace(/\^2/g, '²')
+    .replace(/\^(\d+)/g, (_all: string, ds: string) => [...ds].map((d) => SUPERSCRIPT[d]).join(''))
+    .replace(/\*/g, '')
     .replace(/ - /g, ` ${MINUS} `)
     .replace(/^-/, MINUS)
     .replace(/\s+/g, ' ')
@@ -221,7 +233,7 @@ function implicationRule(step: Step): string | null {
 export function sentenceFor(step: Step): string | null {
   switch (step.kind) {
     case 'EquationEquiv':
-      return step.op ? equationSentence(step.op, step, variableOf(step)) : null
+      return step.op && !isExprOp(step.op) ? equationSentence(step.op, step, variableOf(step)) : null
     case 'CaseSplitComplete':
       return caseSentence(step)
     case 'Implication':
@@ -231,7 +243,7 @@ export function sentenceFor(step: Step): string | null {
     case 'SubproblemReduction':
       return 'Put the answers of the cases together.'
     case 'ExprEq':
-      return exprSentence(step)
+      return step.op && isExprOp(step.op) ? productSentence(step, step.op) : exprSentence(step)
     default:
       return null
   }
@@ -241,7 +253,7 @@ export function sentenceFor(step: Step): string | null {
 export function ruleFor(step: Step): string | null {
   switch (step.kind) {
     case 'EquationEquiv':
-      return step.op ? equationRule(step.op) : null
+      return step.op && !isExprOp(step.op) ? equationRule(step.op) : null
     case 'CaseSplitComplete':
       if (dataOf(step).form !== 'zero-product') return 'Cases'
       return isZeroProductSquare(step) ? 'Zero square' : 'Zero product'
@@ -252,6 +264,7 @@ export function ruleFor(step: Step): string | null {
     case 'SubproblemReduction':
       return 'Combine the cases'
     case 'ExprEq':
+      if (step.op && isExprOp(step.op)) return productRule(step.op)
       return dataOf(step).role === 'discriminant' ? 'Discriminant' : 'Same value'
     default:
       return null
@@ -308,4 +321,98 @@ export function substitutionOf(working: Working): Substitution | null {
     sentences.push(`Put ${v} = ${ratPlain(r)} back: both sides give ${ratPlain(left)}.`)
   }
   return { ok: true, text: sentences.join(' ') }
+}
+
+// ---- S1c: the sentences and rules of the product steps (expanding and factorising) ----
+
+/** The superscript digits: x², x³. */
+const SUPERSCRIPT: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }
+
+/** The factor lists of a product step, and the variable (read from the typed data). */
+function productParts(step: Step): { target: string[]; repl: string[]; v: string } | null {
+  const d = dataOf(step)
+  const B = d.factorsBefore
+  const A = d.factorsAfter
+  if (!Array.isArray(B) || !Array.isArray(A) || typeof d.index !== 'number' || typeof d.width !== 'number') return null
+  const replLen = A.length - B.length + d.width
+  const target = B.slice(d.index, d.index + d.width).map((f) => String(f))
+  const repl = A.slice(d.index, d.index + replLen).map((f) => String(f))
+  return { target, repl, v: variableOf(step) }
+}
+
+/** A letter, a number or a bracket as it stands; any other term in brackets. */
+function wrapTerm(t: string): string {
+  return /^[A-Za-z]$/.test(t) || /^\d+$/.test(t) ? t : `(${t})`
+}
+
+/** A signed number as a student reads it: −3 for -3. */
+function signedPlain(text: string): string {
+  return text.replace(/^-/, MINUS)
+}
+
+/** The words for one product step, from its op and its typed factor lists. */
+function productSentence(step: Step, op: ExprOp): string | null {
+  const p = productParts(step)
+  if (!p) return null
+  const { target, repl, v } = p
+  switch (op.kind) {
+    case 'expand-factors':
+      return `Multiply out ${plainTex(productText(target))}, term by term`
+    case 'collect-factor':
+      return 'Collect like terms and put the terms in order'
+    case 'take-out-hcf':
+      return `Take out the highest common factor ${plainTex(repl[0])}`
+    case 'difference-of-squares':
+      return `Use the difference of two squares: ${plainTex(wrapTerm(op.a))}² − ${plainTex(wrapTerm(op.b))}² = (${plainTex(op.a)} − ${plainTex(op.b)})(${plainTex(op.a)} + ${plainTex(op.b)})`
+    case 'perfect-square':
+      return `Recognise a perfect square: (${plainTex(op.a)} ${op.sign === '-' ? MINUS : '+'} ${plainTex(op.b)})²`
+    case 'split-middle':
+      return `Split the middle term into ${signedPlain(op.p)}${v} and ${signedPlain(op.q)}${v}`
+    case 'group-pairs':
+      return `Group the terms in pairs: ${plainTex(groupSumText(op.m1, op.common, op.m2, op.sign))}`
+    case 'common-binomial':
+      return `Take out the common binomial factor ${plainTex(op.common)}`
+    case 'cube-factor': {
+      const sumSign = op.sign === '-' ? MINUS : '+'
+      const midSign = op.sign === '-' ? '+' : MINUS
+      const kind = op.sign === '-' ? 'difference' : 'sum'
+      // The middle term is the product a·b as one term (2x and 3 give 6x), never the two factors written side by side.
+      const ab = plainTex(sumText(expandTerms(`(${op.a})(${op.b})`) ?? []) || `${op.a}·${op.b}`)
+      return `Use the ${kind} of two cubes: ${plainTex(wrapTerm(op.a))}³ ${sumSign} ${plainTex(wrapTerm(op.b))}³ = (${plainTex(op.a)} ${sumSign} ${plainTex(op.b)})(${plainTex(wrapTerm(op.a))}² ${midSign} ${ab} + ${plainTex(wrapTerm(op.b))}²)`
+    }
+    case 'linear-factor':
+      return `${v} = ${signedPlain(op.root)} is a root, so ${plainTex(repl[0])} is a factor`
+    case 'irreducible':
+      return `${plainTex(target[0])} cannot be factorised using rational numbers`
+    default:
+      return null
+  }
+}
+
+/** The rule chip of one product step. */
+function productRule(op: ExprOp): string {
+  switch (op.kind) {
+    case 'expand-factors':
+      return 'Multiply out'
+    case 'collect-factor':
+      return 'Collect like terms'
+    case 'take-out-hcf':
+      return 'Common factor'
+    case 'difference-of-squares':
+      return 'Difference of two squares'
+    case 'perfect-square':
+      return 'Perfect square'
+    case 'split-middle':
+      return 'Split the middle term'
+    case 'group-pairs':
+      return 'Grouping'
+    case 'common-binomial':
+      return 'Common binomial factor'
+    case 'cube-factor':
+      return 'Sum or difference of cubes'
+    case 'linear-factor':
+      return 'Factor theorem'
+    case 'irreducible':
+      return 'Cannot be factorised'
+  }
 }
