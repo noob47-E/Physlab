@@ -3,7 +3,6 @@ export src/renderer/src/app/shortcuts.ts : VIEW_KEY
 export src/renderer/src/math/check/checkers.ts : ExcludedPoint
 export src/renderer/src/math/check/checkers.ts : FactorResult
 export src/renderer/src/math/check/checkers.ts : Irreducible
-export src/renderer/src/math/check/checkers.ts : LinearAnswer
 export src/renderer/src/math/check/checkers.ts : RationalResult
 export src/renderer/src/math/check/numeric.ts : NumericResult
 export src/renderer/src/math/engine/semantics.ts : AdversarialCase

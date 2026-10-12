@@ -1,3 +1,10 @@
+// The scoreboard runner (G3a; engines and judge plugged in by G3b):
+//   npx tsx tests/engine/scoreboard/run.ts --engine sympy|giac --class <class>|all --corpus gating|generator|all
+// asks the engine headless (SymPy in Pyodide, as tests/engine/conformance.ts does; Giac in a Node worker thread through
+// tests/engine/giacHeadless.ts), marks each answer with judge.ts on G2's checkers, and reports right, WRONG (each
+// listed with why), can't (no answer), unverified (no checker could decide) and the time per item. With --class all
+// --corpus all it also writes tests/engine/scoreboard/results/<engine>.json. It exits 1 when anything is WRONG.
+
 import fs from 'fs'
 import path from 'path'
 import { parseArgs } from 'util'
@@ -5,85 +12,41 @@ import { pathToFileURL } from 'node:url'
 import { readSource, repoPath } from '../../helpers/repo'
 import { sympyEngine } from '../../../src/renderer/src/math/engine/sympy/adapter'
 import type { CasResult } from '../../../src/renderer/src/math/engine/sympy/worker'
-import { judgeAnswer } from './judge'
+import { headlessGiacEngine } from '../giacHeadless'
+import { judgeAnswer, type Judgement } from './judge'
 import type { CorpusItem } from './buildCorpora'
-import type { EngineRequest, EngineResult, EngineJob } from '../../../src/renderer/src/math/engine/types'
+import type { EngineRequest, EngineResult, EngineJob, MathEngine } from '../../../src/renderer/src/math/engine/types'
 import { setAngleMode } from '../../../src/renderer/src/math/expr'
 
 const options = {
   engine: { type: 'string', short: 'e' },
   class: { type: 'string', short: 'c' },
-  corpus: { type: 'string', short: 'p' },
+  corpus: { type: 'string', short: 'p' }
 } as const
 
 const { values } = parseArgs({ options, args: process.argv.slice(2) })
-
 const engineName = values.engine || 'sympy'
 const className = values.class || 'all'
-const corpusName = values.corpus || 'gating'
-
-const corpusPath = path.join(__dirname, `${corpusName}.json`)
-if (!fs.existsSync(corpusPath)) {
-  console.error(`Corpus file not found: ${corpusPath}`)
-  process.exit(1)
-}
-
-const corpus: CorpusItem[] = JSON.parse(fs.readFileSync(corpusPath, 'utf8'))
-
-let filteredCorpus = corpus
-if (className !== 'all') {
-  filteredCorpus = corpus.filter(c => c.class === className)
-}
-
-if (filteredCorpus.length === 0) {
-  console.log(`No items found for class ${className}`)
-  process.exit(0)
-}
-
-interface RunStats {
-  total: number
-  right: number
-  wrong: number
-  cant: number
-  /** Answered, but not judged: the judge (G2) is not merged yet. */
-  unjudged: number
-  times: number[]
-  wrongList: { question: string, answer: string, expected: string, error?: string }[]
-}
-
-const stats: RunStats = {
-  total: filteredCorpus.length,
-  right: 0,
-  wrong: 0,
-  cant: 0,
-  unjudged: 0,
-  times: [],
-  wrongList: []
-}
+const corpusArg = values.corpus || 'gating'
+const corpusNames = corpusArg === 'all' ? ['generator', 'gating'] : [corpusArg]
 
 const classToJob: Record<string, EngineJob> = {
-  'expand': 'expand',
+  expand: 'expand',
   'factor over Q': 'factor',
   'polynomial equations': 'solve',
   'linear systems': 'solve',
   'rational simplification': 'simplify',
-  'derivatives': 'diff',
+  derivatives: 'diff',
   'partial fractions': 'apart'
 }
 
 function buildRequest(item: CorpusItem, job: EngineJob): EngineRequest {
   if (job === 'solve') {
-    if (item.class === 'linear systems') {
-      const eqs = item.question.split(',').map(s => s.trim())
-      return { eqs, vars: [], deg: false }
-    } else {
-      return { eqs: [item.question], vars: ['x'], deg: false }
-    }
-  } else if (job === 'diff') {
-    return { expr: item.question, var: 'x', order: 1, deg: false }
-  } else {
-    return { expr: item.question, deg: false }
+    if (item.class === 'linear systems') return { eqs: item.question.split(',').map((s) => s.trim()), vars: [], deg: false }
+    return { eqs: [item.question], vars: ['x'], deg: false }
   }
+  if (job === 'diff') return { expr: item.question, var: 'x', order: 1, deg: false }
+  return { expr: item.question, deg: false }
 }
 
 async function headlessSend(): Promise<(op: string, payload: Record<string, unknown>) => Promise<CasResult>> {
@@ -107,83 +70,104 @@ async function headlessSend(): Promise<(op: string, payload: Record<string, unkn
   }
 }
 
-async function run() {
-  setAngleMode('rad')
-  // Giac's adapter arrives with part G1, which plugs it in here; until then only SymPy can run.
-  if (engineName !== 'sympy') {
-    console.error(`The ${engineName} engine cannot run here yet: its adapter arrives with part G1. Only --engine sympy runs today.`)
-    process.exit(2)
-  }
-  const send = await headlessSend()
-  const engine = sympyEngine(send)
-  
-  for (const item of filteredCorpus) {
-    const job = classToJob[item.class]
-    if (!job) {
-      console.warn(`Unknown class: ${item.class}`)
-      stats.cant++
-      continue
-    }
+interface Listed {
+  id: string
+  stratum: string
+  question: string
+  engine: string
+  key: string
+  why: string
+}
+interface ClassStats {
+  total: number
+  right: number
+  wrong: number
+  cant: number
+  unverified: number
+  msPerItem: number
+  wrongList: Listed[]
+  unverifiedReasons: Record<string, number>
+  /** The first few unverified answers, to see what no checker could decide. */
+  unverifiedExamples: Listed[]
+}
 
-    const req = buildRequest(item, job)
-    
+const shown = (r: EngineResult): string =>
+  r.solutions ? (r.solutions.length ? r.solutions.map((s) => Object.entries(s).map(([k, v]) => `${k} = ${v.text}`).join(', ')).join('; ') : '(no solution)') : r.text
+
+async function scoreCorpus(engine: MathEngine, corpusName: string): Promise<Record<string, ClassStats>> {
+  const corpus: CorpusItem[] = JSON.parse(fs.readFileSync(path.join(__dirname, `${corpusName}.json`), 'utf8'))
+  const items = className === 'all' ? corpus : corpus.filter((c) => c.class === className)
+  const out: Record<string, ClassStats> = {}
+  const times: Record<string, number[]> = {}
+  for (const item of items) {
+    const s = (out[item.class] ??= { total: 0, right: 0, wrong: 0, cant: 0, unverified: 0, msPerItem: 0, wrongList: [], unverifiedReasons: {}, unverifiedExamples: [] })
+    s.total++
+    const job = classToJob[item.class]
     const start = performance.now()
     let result: EngineResult
     try {
-      if (engineName === 'sympy') {
-        result = await engine.ask(job as Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, req)
-      } else {
-        throw new Error(`Engine ${engineName} not implemented`)
-      }
+      result = await engine.ask(job as Exclude<EngineJob, 'integralSteps' | 'diffSteps'>, buildRequest(item, job))
     } catch (e: unknown) {
       result = { latex: '', text: '', numeric: null, error: e instanceof Error ? e.message : 'Unknown error' }
     }
-    const end = performance.now()
-    stats.times.push(end - start)
-
+    ;(times[item.class] ??= []).push(performance.now() - start)
     if (result.error && !result.solutions && !result.text) {
-      stats.cant++
+      s.cant++
       continue
     }
-
-    try {
-      const isRight = judgeAnswer(item.answer, result)
-      if (isRight) {
-        stats.right++
-      } else {
-        stats.wrong++
-        stats.wrongList.push({ question: item.question, answer: JSON.stringify(result), expected: item.answer })
-      }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message === "G2 not merged yet") {
-        stats.unjudged++
-      } else {
-        throw e
-      }
+    const j: Judgement = judgeAnswer(item, result)
+    if (j.mark === 'right') s.right++
+    else if (j.mark === 'unverified') {
+      s.unverified++
+      s.unverifiedReasons[j.why] = (s.unverifiedReasons[j.why] ?? 0) + 1
+      if (s.unverifiedExamples.length < 5) s.unverifiedExamples.push({ id: item.id, stratum: item.stratum, question: item.question, engine: shown(result), key: item.answer, why: j.why })
+    } else {
+      s.wrong++
+      s.wrongList.push({ id: item.id, stratum: item.stratum, question: item.question, engine: shown(result), key: item.answer, why: j.why })
     }
   }
-  
-  const avgTime = stats.times.reduce((a, b) => a + b, 0) / (stats.times.length || 1)
-  console.log(`\nReport for engine=${engineName}, class=${className}, corpus=${corpusName}`)
-  console.log(`Total: ${stats.total}`)
-  console.log(`Right: ${stats.right} (${(stats.right / stats.total * 100).toFixed(1)}%)`)
-  console.log(`Wrong: ${stats.wrong}`)
-  console.log(`Can't answer: ${stats.cant}`)
-  if (stats.unjudged) console.log(`Unjudged (judge missing): ${stats.unjudged} — the G2 checkers are not merged yet, so nothing was marked right or wrong`)
-  console.log(`Time per item: ${avgTime.toFixed(2)} ms\n`)
-
-  if (stats.wrong > 0) {
-    console.log("WRONG answers:")
-    for (const w of stats.wrongList) {
-      console.log(` Q: ${w.question}\n Expected: ${w.expected}\n Engine: ${w.answer}\n`)
-    }
-    process.exit(1)
-  } else {
-    process.exit(0)
-  }
+  for (const [cls, ts] of Object.entries(times)) out[cls].msPerItem = Math.round((ts.reduce((a, b) => a + b, 0) / ts.length) * 10) / 10
+  return out
 }
 
-run().catch(e => {
+const pct = (n: number, d: number): string => `${((100 * n) / (d || 1)).toFixed(1)} %`
+
+async function run(): Promise<void> {
+  setAngleMode('rad')
+  let engine: MathEngine
+  let dispose = (): void => {}
+  if (engineName === 'sympy') engine = sympyEngine(await headlessSend())
+  else if (engineName === 'giac') {
+    const g = headlessGiacEngine()
+    engine = g.engine
+    dispose = () => g.client.dispose()
+  } else {
+    console.error(`Unknown engine ${engineName}: use sympy or giac.`)
+    process.exit(2)
+  }
+  const results: Record<string, Record<string, ClassStats>> = {}
+  let wrong = 0
+  for (const corpusName of corpusNames) {
+    const byClass = await scoreCorpus(engine, corpusName)
+    results[corpusName] = byClass
+    console.log(`\nengine=${engineName} corpus=${corpusName}`)
+    for (const [cls, s] of Object.entries(byClass)) {
+      wrong += s.wrong
+      console.log(`  ${cls}: ${s.right}/${s.total} right (${pct(s.right, s.total)}), WRONG ${s.wrong}, can't ${s.cant}, unverified ${s.unverified}, ${s.msPerItem} ms/item`)
+      for (const w of s.wrongList) console.log(`    WRONG ${w.id} [${w.stratum}] ${w.question}\n      engine: ${w.engine}\n      key:    ${w.key}\n      why:    ${w.why}`)
+    }
+  }
+  if (className === 'all' && corpusArg === 'all') {
+    const dir = path.join(__dirname, 'results')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, `${engineName}.json`), JSON.stringify({ engine: engineName, corpora: results }, null, 2) + '\n')
+    console.log(`\nwrote tests/engine/scoreboard/results/${engineName}.json`)
+  }
+  dispose()
+  process.exit(wrong ? 1 : 0)
+}
+
+run().catch((e) => {
   console.error(e)
   process.exit(1)
 })
