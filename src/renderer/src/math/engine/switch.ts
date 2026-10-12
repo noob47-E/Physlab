@@ -15,17 +15,17 @@ export type { EngineClass } from './verify'
 export const GATE = { minRight: 0.92, maxWrong: 0 }
 
 /**
- * The engine for each class. All SymPy until the external holdout is scored (G3c): Giac meets the rule on the gating
- * corpus in six classes, but the rule asks for both halves.
+ * The engine for each class, and why (Giac's gating scores from tests/engine/scoreboard/results/giac.json). All SymPy
+ * until the external holdout is scored (G3c): the rule asks for both halves.
  */
 export const ENGINE_FOR_CLASS: Record<EngineClass, 'sympy' | 'giac'> = {
-  expand: 'sympy',
-  'factor over Q': 'sympy',
-  'polynomial equations': 'sympy',
-  'linear systems': 'sympy',
-  'rational simplification': 'sympy',
-  derivatives: 'sympy',
-  'partial fractions': 'sympy'
+  expand: 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
+  'factor over Q': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
+  'polynomial equations': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c and the owner (G3b-1, the domain of solve)
+  'linear systems': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
+  'rational simplification': 'sympy', // passes gating (100 %, 0 WRONG); waits for G3c
+  derivatives: 'sympy', // fails gating (51 %: trigonometric answers cannot be proved); stays on SymPy
+  'partial fractions': 'sympy' // passes gating (100 %, 0 WRONG); waits for G3c
 }
 
 /** The expression read exactly, or null: π, sin, √2, |x| and anything else not a quotient of polynomials over ℚ. */
