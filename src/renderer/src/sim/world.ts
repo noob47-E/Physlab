@@ -183,6 +183,7 @@ interface Applied {
 }
 
 type AfterStepListener = (w: SimWorld, s: AfterStep) => void
+type BeforeStepListener = (w: SimWorld) => void
 
 /**
  * What a keyframe holds besides its step, time and build (SB9): Jolt's own state (bodies, the
@@ -269,6 +270,8 @@ export class SimWorld {
   /** PhysLab's forces on each body in the step being taken (after it: the last step), by body. */
   private applied = new Map<BodyId, Applied>()
   private listeners = new Set<AfterStepListener>()
+  /** Called just before each engine step (`onBeforeStep`): where the tape (SB12) takes a run's first record. */
+  private beforeListeners = new Set<BeforeStepListener>()
   /** Ropes, by their id. */
   private ropes = new Map<string, Rope>()
   /**
@@ -318,7 +321,7 @@ export class SimWorld {
   private keyframes = new Map<Keyframe, Saved>()
   /** The bodies a step record reads, in layout order (bodies, then rope links); made again after a rebuild. */
   private recBodies: Body[] | null = null
-  /** True while the after-step listeners run: a keyframe may be saved then, never restored. */
+  /** True while the before- or after-step listeners run: a keyframe may be saved then, never restored. */
   private inHook = false
 
   /** Simulated time in seconds since the last reset: the ticks over 1200, the nearest number to it. */
@@ -415,6 +418,7 @@ export class SimWorld {
     // And nobody is listening to it yet: a listener belongs to the scene it was made for (Reset,
     // which is `clear()`, keeps them, as it keeps the pushes).
     world.listeners.clear()
+    world.beforeListeners.clear()
     world.settings = { ...DEFAULT_WORLD, ...settings }
     world.applyWorldSettings()
     return world
@@ -433,6 +437,9 @@ export class SimWorld {
     this.contacts = []
     this.applied = new Map()
     this.grabbed = null
+    // Who touched whom belongs to the run that just ended: kept, the first step after Reset gave
+    // a spinning ball in mid-air one step of rolling torque from the floor it rolled on before.
+    this.touching.clear()
     // At t = 0 every rate lands on the grid: one still waiting starts with the new run.
     if (this.pendingRate !== null) this.switchRate(this.pendingRate)
     this.restructured()
@@ -1252,6 +1259,30 @@ export class SimWorld {
     }
   }
 
+  /**
+   * Calls `fn` just before every engine step, with the world as that step will start from it
+   * (`stepIndex` and `time` not yet moved on), before PhysLab's own forces are worked out. The
+   * tape (SB12) takes a new recording's first record and keyframe here: a run's untouched start
+   * is only there before its first step, and Reset rebuilds the world where the tape cannot see
+   * it. Like the after-step hook it reads: a keyframe may be saved, a restore is refused. Hands
+   * back the way to stop.
+   */
+  onBeforeStep(fn: BeforeStepListener): () => void {
+    this.beforeListeners.add(fn)
+    return () => {
+      this.beforeListeners.delete(fn)
+    }
+  }
+
+  private beforeStepHook(): void {
+    this.inHook = true
+    try {
+      for (const fn of this.beforeListeners) fn(this)
+    } finally {
+      this.inHook = false
+    }
+  }
+
   /** PhysLab's forces on a body in the last step taken: zeros for one nothing pushed, null for no such body. */
   ownForces(id: BodyId): OwnForces | null {
     if (!this.entries.has(id)) return null
@@ -1282,6 +1313,8 @@ export class SimWorld {
     // hook on the very step it could start) starts before the next step, as it did in the run saved.
     this.takeUpRate()
     while (this.accumulator >= 1 - STEP_SLACK) {
+      // Before the own forces below: a keyframe saved here must not hold this step's forces too.
+      if (this.beforeListeners.size > 0) this.beforeStepHook()
       const dt = 1 / this.rate
       // PhysLab's own forces, worked out from where everything is now, before EVERY engine step:
       // held over Jolt's collision sub-steps (the old Step(1/60, n)) a stiff force pumped energy
@@ -1751,6 +1784,20 @@ export class SimWorld {
   // -------------------------------------------------------------------------
   // Step records and keyframes (SB9, I-4): what the tape is made of
   // -------------------------------------------------------------------------
+
+  /**
+   * Each body's definition as the world holds it now, in `bodyOrder`, the links and the pushes, as
+   * copies of the lists. A restored keyframe puts back the definitions it was saved with (bounce,
+   * friction, damping), the pushes and the settings, so after "Branch from here" the Sandbox's store
+   * takes them from here (SB12) rather than keep later edits the run no longer has.
+   */
+  definitions(): { bodies: BodyDef[]; links: Link[]; actuators: Actuator[] } {
+    return {
+      bodies: this.order.map((id) => this.entries.get(id)!.def),
+      links: [...this.linkDefs],
+      actuators: [...this.actuators.values()].flat()
+    }
+  }
 
   /** What a step record holds, in order: the bodies as `bodyOrder`, then each rope's links, rope by rope (I-3). */
   recordLayout(): RecordLayout {
