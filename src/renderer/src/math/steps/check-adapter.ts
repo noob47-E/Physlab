@@ -24,10 +24,15 @@ import {
   type Expr,
   type Term
 } from '../pure/mono'
-import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R1, type Rat } from '../pure/rat'
+import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R0, R1, rTex, type Rat } from '../pure/rat'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
 import type { EquationOp, ExprOp, SystemOp, ValidationVerdict } from './types'
+// S1b: the sound checkers of G2 (math/check) decide what the exact fallback above cannot: surds, complex roots, and
+// expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
+import { readAlg } from '../check/parse'
+import { algAdd, algEq, algIsRational, algMul, algRat, algSub, type Alg as G2Alg } from '../check/field'
+import { expressionEqual, polyRootsCheck, rationalEqual, type Verdict as G2Verdict } from '../check/checkers'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -44,7 +49,12 @@ export interface CheckAdapter {
   checkEquationEquiv: (before: string | MathNode, after: string | MathNode, variable?: string) => ValidationVerdict
   checkImplication: (before: string | MathNode, after: string | MathNode, rule?: string, data?: unknown) => ValidationVerdict
   checkCaseSplitComplete: (domainOrCondition: unknown, cases: unknown[]) => ValidationVerdict
-  checkSolutionSetEq: (equationOrSet: unknown, proposedSolutions: unknown[], variable?: string) => ValidationVerdict
+  checkSolutionSetEq: (
+    equationOrSet: unknown,
+    proposedSolutions: unknown[],
+    variable?: string,
+    domain?: 'real' | 'complex'
+  ) => ValidationVerdict
 }
 
 /** Convert a string or MathNode into a clean plain text formula string. */
@@ -180,8 +190,8 @@ export const defaultCheckAdapter: CheckAdapter = {
       return eEq(pBefore, pAfter) ? 'valid' : 'invalid'
     }
 
-    // Outside polynomial exact ring before G2 merges: return 'unknown'
-    return 'unknown'
+    // Outside the polynomial ring: G2 decides it when both sides are plain text it reads exactly (S1b).
+    return expressionEqualG2(sBefore, sAfter)
   },
 
   /**
@@ -373,7 +383,8 @@ export const defaultCheckAdapter: CheckAdapter = {
   checkSolutionSetEq(
     equationOrSet: unknown,
     proposedSolutions: unknown[],
-    variable = 'x'
+    variable = 'x',
+    domain: 'real' | 'complex' = 'real'
   ): ValidationVerdict {
     if (!Array.isArray(proposedSolutions) || proposedSolutions.length === 0) return 'unknown'
 
@@ -383,6 +394,8 @@ export const defaultCheckAdapter: CheckAdapter = {
 
     const vars = varsOf(pDiff)
     if (vars.some((name) => name !== variable)) return 'invalid'
+    // A quadratic's roots (surds, complex pairs, a double root) are checked by G2 in the domain (S1b).
+    if (exprDegree(pDiff) === 2) return checkRootSetG2(eqStr, proposedSolutions, domain)
     if (exprDegree(pDiff) !== 1) return 'unknown'
 
     // Linear equation: must have exactly 1 root
@@ -505,6 +518,8 @@ export function checkEquationOp(
   op: EquationOp,
   v: string
 ): ValidationVerdict {
+  // S1b: a square-root step with a surd root is checked by its own exact rule first (sqrt is a name, not a letter).
+  if (isSurdRootOp(op)) return checkSurdSquareRootPm(before, after, op as Extract<EquationOp, { kind: 'square-root-pm' }>, v)
   // A letter other than v anywhere in the states, even one that cancels, means no proof (review delta3, SHOULD 1).
   if (lettersOutside(before, v) || lettersOutside(after, v)) return 'unknown'
   const b = equationSides(before)
@@ -2460,4 +2475,368 @@ export function substituteEq(target: LinEq, subject: LinEq, v: string): LinEq | 
   }
   const D = fAdd(putIn(target.L), putIn(target.R), -1)
   return { L: cleanForm(D.v, ZERO()), R: cleanForm({}, rNeg(D.c)) }
+}
+
+// ============================================================================
+// S1b: surds and complex numbers. G2 (math/check) reads them exactly in ℚ(√d, i) and checks them; the steps show each
+// number in one canonical form, and a check that needs the number compares it through that form.
+// ============================================================================
+
+/** A number of ℚ(√d, i) read from a step's plain text by G2, or null when G2 does not read it exactly. */
+export function readSurd(text: string): G2Alg | null {
+  try {
+    return readAlg(text)
+  } catch {
+    return null
+  }
+}
+
+/** True for a surd or a complex number (not a rational). */
+export function isSurdText(text: string): boolean {
+  const x = readSurd(text)
+  return x !== null && !algIsRational(x)
+}
+
+/** The integer square root of n ≥ 0. */
+function isqrt(n: bigint): bigint {
+  if (n < 2n) return n
+  let x = BigInt(Math.floor(Math.sqrt(Number(n))))
+  while (x * x > n) x -= 1n
+  while ((x + 1n) * (x + 1n) <= n) x += 1n
+  return x
+}
+
+/**
+ * n = s²·d with d squarefree, for n ≥ 1. Null when the splitting would take more than a fixed number of divisions
+ * (a discriminant that large is declined, never guessed).
+ */
+export function squareFreeSplit(n: bigint): { s: bigint; d: bigint } | null {
+  let s = 1n
+  let d = n
+  let steps = 0
+  for (let p = 2n; p * p <= d; p++) {
+    if (++steps > 200000) return null
+    while (d % (p * p) === 0n) {
+      d /= p * p
+      s *= p
+    }
+  }
+  const r = isqrt(d)
+  if (r * r === d) {
+    s *= r
+    d = 1n
+  }
+  return { s, d }
+}
+
+function absN(n: bigint): bigint {
+  return n < 0n ? -n : n
+}
+
+function gcdN(a: bigint, b: bigint): bigint {
+  let x = absN(a)
+  let y = absN(b)
+  while (y !== 0n) [x, y] = [y, x % y]
+  return x
+}
+
+/**
+ * The shape of a number of ℚ(√d, i) that the steps show: value = p + q·Ω, where Ω is i (imaginary), √root (a surd) or
+ * nothing (a rational, root 1). Null for a shape the steps do not show (a real and an imaginary surd together).
+ */
+export function shapeOf(x: G2Alg): { p: Rat; q: Rat; root: bigint; imag: boolean } | null {
+  if (x.d === 1n) {
+    const re = rAdd(x.a, x.b)
+    const im = rAdd(x.c, x.e)
+    return rIsZero(im) ? { p: re, q: rat(0n), root: 1n, imag: false } : { p: re, q: im, root: 1n, imag: true }
+  }
+  if (rIsZero(x.c) && rIsZero(x.e)) return { p: x.a, q: x.b, root: x.d, imag: false }
+  if (rIsZero(x.a) && rIsZero(x.b) && rIsZero(x.c)) return { p: rat(0n), q: x.e, root: x.d, imag: true }
+  if (rIsZero(x.b) && rIsZero(x.c)) return { p: x.a, q: x.e, root: x.d, imag: true }
+  return null
+}
+
+/** The value as whole numbers over one denominator: P + Q·Ω over C, reduced, with C above zero. */
+function canonicalParts(x: G2Alg): { P: bigint; Q: bigint; C: bigint; root: bigint; imag: boolean } {
+  const sh = shapeOf(x)
+  if (!sh) throw new Error('number shape not shown')
+  let C = 1n
+  for (const r of [sh.p, sh.q]) C = (C / gcdN(C, r.d)) * r.d
+  const P = sh.p.n * (C / sh.p.d)
+  const Q = sh.q.n * (C / sh.q.d)
+  const g = gcdN(gcdN(P, Q), C) || 1n
+  return { P: P / g, Q: Q / g, C: C / g, root: sh.root, imag: sh.imag }
+}
+
+/** Ω in LaTeX: "\sqrt{2}", "i\sqrt{2}", "i". */
+function omegaTex(root: bigint, imag: boolean): string {
+  const sq = root === 1n ? '' : `\\sqrt{${root}}`
+  return imag ? `i${sq}` : sq
+}
+
+/** Ω in plain text, for G2: "sqrt(2)", "i*sqrt(2)", "i". */
+function omegaPlain(root: bigint, imag: boolean): string {
+  const sq = root === 1n ? '' : `sqrt(${root})`
+  return imag ? (sq === '' ? 'i' : `i*${sq}`) : sq
+}
+
+/** Ω for a sentence: "√2", "i√2", "i". */
+function omegaPretty(root: bigint, imag: boolean): string {
+  const sq = root === 1n ? '' : `√${root}`
+  return imag ? `i${sq}` : sq
+}
+
+/** The LaTeX of a number, as the answers and the steps write it, with no spaces: "3", "-\frac{3}{2}", "\frac{-3+3\sqrt{7}}{4}". */
+export function texOfAlg(x: G2Alg): string {
+  const { P, Q, C, root, imag } = canonicalParts(x)
+  if (root === 1n && !imag) return rTex(rat(P, C))
+  const term = `${Q === 1n || Q === -1n ? '' : absN(Q)}${omegaTex(root, imag)}`
+  const numer = P === 0n ? `${Q < 0n ? '-' : ''}${term}` : `${P}${Q < 0n ? '-' : '+'}${term}`
+  return C === 1n ? numer : `\\frac{${numer}}{${C}}`
+}
+
+/** The plain text G2 reads exactly: "(-3 + 3*sqrt(7))/4", "1 + sqrt(2)", "(1 + i)/3", "(5 + 2*i*sqrt(2))/2", "-3/4". */
+export function plainOfAlg(x: G2Alg): string {
+  const { P, Q, C, root, imag } = canonicalParts(x)
+  if (root === 1n && !imag) return C === 1n ? String(P) : `${P}/${C}`
+  const term = `${Q === 1n || Q === -1n ? '' : `${absN(Q)}*`}${omegaPlain(root, imag)}`
+  const numer = P === 0n ? `${Q < 0n ? '-' : ''}${term}` : `${P} ${Q < 0n ? '-' : '+'} ${term}`
+  return C === 1n ? numer : `(${numer})/${C}`
+}
+
+/** The same number for a sentence: minus signs and spaces, "(−3 + 3√7)/4", "1 + √2", "(5 + 2i√2)/2". */
+export function prettyOfAlg(x: G2Alg): string {
+  const { P, Q, C, root, imag } = canonicalParts(x)
+  if (root === 1n && !imag) {
+    const v = C === 1n ? String(P) : `${P}/${C}`
+    return v.replace(/^-/, '−')
+  }
+  const term = `${Q === 1n || Q === -1n ? '' : absN(Q)}${omegaPretty(root, imag)}`
+  const numer =
+    P === 0n
+      ? `${Q < 0n ? '−' : ''}${term}`
+      : `${P < 0n ? '−' : ''}${absN(P)} ${Q < 0n ? '−' : '+'} ${term}`
+  return C === 1n ? numer : `(${numer})/${C}`
+}
+
+/**
+ * The roots of a·x² + b·x + c (a > 0), exact and in simplest form: one root (rational) when the discriminant is zero,
+ * two real roots when it is above zero, a conjugate pair when it is below zero (the caller decides whether a complex
+ * domain shows them). Null when the discriminant is too large to split.
+ */
+export function quadraticRootsOf(a: bigint, b: bigint, c: bigint): G2Alg[] | null {
+  const D = b * b - 4n * a * c
+  const two = 2n * a
+  if (D === 0n) return [algRat(rat(-b, two))]
+  const split = squareFreeSplit(absN(D))
+  if (!split) return null
+  const { s, d } = split
+  const center = rat(-b, two)
+  const half = rat(s, two)
+  if (D > 0n) {
+    if (d === 1n) {
+      const lo = rat(-b - s, two)
+      const hi = rat(-b + s, two)
+      return [algRat(lo), algRat(hi)]
+    }
+    return [
+      { d, a: center, b: rNeg(half), c: R0, e: R0 },
+      { d, a: center, b: half, c: R0, e: R0 }
+    ]
+  }
+  if (d === 1n) {
+    return [
+      { d: 1n, a: center, b: R0, c: rNeg(half), e: R0 },
+      { d: 1n, a: center, b: R0, c: half, e: R0 }
+    ]
+  }
+  return [
+    { d, a: center, b: R0, c: R0, e: rNeg(half) },
+    { d, a: center, b: R0, c: R0, e: half }
+  ]
+}
+
+/**
+ * The factored form of (x − s)² − r² = 0 with r positive: "\left(x - 1 - \sqrt{2}\right)\left(x - 1 + \sqrt{2}\right) = 0".
+ * One function writes it for the square-root step and for the check that compares its text.
+ */
+export function surdFactoredTex(v: string, s: Rat, r: G2Alg): string {
+  const sTail = (x: Rat): string => (rIsZero(x) ? '' : rIsNeg(x) ? ` + ${rTex(rAbs(x))}` : ` - ${rTex(x)}`)
+  const rTexPos = texOfAlg(r)
+  return `\\left(${v}${sTail(s)} - ${rTexPos}\\right)\\left(${v}${sTail(s)} + ${rTexPos}\\right) = 0`
+}
+
+// ---- S1b: the G2 swap point. Each call takes the step's plain text; LaTeX or anything else is 'unknown' (never read). ----
+
+/** G2's verdict as a step's verdict: 'equal' is valid, 'different' is invalid, 'unknown' stays unknown. */
+function fromG2(v: G2Verdict): ValidationVerdict {
+  return v === 'equal' ? 'valid' : v === 'different' ? 'invalid' : 'unknown'
+}
+
+/**
+ * A text G2 may read: plain maths only. A LaTeX command, a brace or a backslash is not read (the reading layer's rule).
+ * A letter touching a digit (x2, e5) is refused too: G2 reads it as one name, a different expression from 2x or x^2
+ * (probe, S1b review round 1), so such a text is 'unknown' rather than 'invalid'.
+ */
+export function plainForG2(text: string): string | null {
+  // A number in exponent notation (1e5) is one literal, so its e is not a glued letter: it is taken out before the test.
+  const bare = text.replace(/(\d)[eE][+-]?\d+/g, '$1')
+  return /[\\{}]|[A-Za-z]\d/.test(bare) ? null : text
+}
+
+/** The text of a proposed solution: a plain value, "x = value", or a { value } object. */
+function solutionValueText(s: unknown): string {
+  if (typeof s === 'string') return (s.includes('=') ? s.split('=')[1] : s).trim()
+  if (s && typeof s === 'object' && 'value' in s) return String((s as { value: unknown }).value).trim()
+  return String(s).trim()
+}
+
+/**
+ * The roots of a polynomial equation, checked by G2 (polyRootsCheck): the proposed solutions must be every root in the
+ * domain, each with its multiplicity. A root that G2 cannot read exactly is 'unknown'. A root is listed once: a double
+ * root is one entry with multiplicity 2, so two entries with the same exact value are invalid (S1b review round 1).
+ */
+export function checkRootSetG2(eq: string, solutions: unknown[], domain: 'real' | 'complex'): ValidationVerdict {
+  const text = plainForG2(eq)
+  if (text === null) return 'unknown'
+  const roots: { value: string; multiplicity: number }[] = []
+  const exact: G2Alg[] = []
+  for (const s of solutions) {
+    const value = solutionValueText(s)
+    const x = plainForG2(value) === null ? null : readSurd(value)
+    if (x === null) return 'unknown'
+    if (exact.some((y) => algEq(x, y))) return 'invalid'
+    exact.push(x)
+    const m = s && typeof s === 'object' && 'multiplicity' in s ? Number((s as { multiplicity: unknown }).multiplicity) : 1
+    roots.push({ value, multiplicity: m })
+  }
+  return fromG2(polyRootsCheck(text, roots, domain))
+}
+
+/**
+ * Two expressions equal, decided by G2 when both are plain text it reads: 'equal' only from exact arithmetic (its numbers
+ * never give it). rationalEqual is asked first, because expressionEqual says 'equal' for a cancelled denominator without
+ * its excluded points (x(x − 1)/(x − 1) against x). A cancelled denominator, or a list of excluded points that G2 cannot
+ * complete, is 'unknown' here: an expression step has nowhere to show the excluded points, so only an exact equality
+ * with none is valid.
+ */
+export function expressionEqualG2(before: string, after: string): ValidationVerdict {
+  const a = plainForG2(before)
+  const b = plainForG2(after)
+  if (a === null || b === null) return 'unknown'
+  const quotient = rationalEqual(a, b)
+  if (quotient.verdict === 'equal') return quotient.excluded.length === 0 && quotient.excludedComplete ? 'valid' : 'unknown'
+  return fromG2(expressionEqual(a, b))
+}
+
+/**
+ * The square-root step with a surd root r (S1b): the before is the rational form (x − s)² − r² = 0, with r² a rational;
+ * the after is the factored form that surdFactoredTex writes for s and r. Exact: no float, no guess.
+ */
+function checkSurdSquareRootPm(before: string | MathNode, after: string | MathNode, op: { shift: string; root: string }, v: string): ValidationVerdict {
+  const s = parseExactRat(op.shift)
+  const r = readSurd(op.root)
+  if (!s || !r) return 'invalid'
+  const r2 = algMul(r, r)
+  if (!algIsRational(r2)) return 'invalid'
+  const b = equationSides(before)
+  if (!b || !eEq(b.R, constExpr(R0))) return 'invalid'
+  const value = shapeOf(r2)?.p
+  if (!value) return 'invalid'
+  const shift = linearIn(v, R1, rNeg(s))
+  const expected = eSub(eMul(shift, shift), constExpr(value))
+  if (!eEq(b.L, expected)) return 'invalid'
+  return normalizeDisplayed(String(after)) === normalizeDisplayed(surdFactoredTex(v, s, r)) ? 'valid' : 'invalid'
+}
+
+/** True when a square-root step's root is a surd (or i), not a rational: its own exact rule decides it. */
+export function isSurdRootOp(op: EquationOp): boolean {
+  return op.kind === 'square-root-pm' && isSurdText(op.root)
+}
+
+/** A display compared as one key: spaces out, a fraction with whole parts written a/b, so "\frac{3}{2}" and "3/2" agree. */
+export function displayKey(text: string): string {
+  return normalizeDisplayed(text)
+    .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
+    .replace(/^-\\frac\{(\d+)\}\{(\d+)\}$/, '-$1/$2')
+}
+
+/** The exact square root of a positive rational, in simplest form: s√d with d squarefree (a rational when d is 1). */
+export function surdSqrtOfRational(t: Rat): G2Alg | null {
+  if (t.n <= 0n) return null
+  const split = squareFreeSplit(t.n * t.d)
+  if (!split) return null
+  return { d: split.d, a: R0, b: rat(split.s, t.d), c: R0, e: R0 }
+}
+
+/**
+ * A quadratic's solution set (S1b): G2 checks that the proposed roots are all the roots of the equation in the domain
+ * (each with its multiplicity), and the displayed line names them in their exact display. Null when the equation is not a
+ * quadratic (the caller keeps its own rule for linear equations).
+ */
+export function checkQuadraticSolutionSet(
+  before: string,
+  solutions: unknown[],
+  after: string,
+  v: string,
+  domain: 'real' | 'complex'
+): ValidationVerdict | null {
+  const eq = tryEquationPoly(before)
+  if (!eq || exprDegree(eq) !== 2) return null
+  const verdict = checkRootSetG2(before, solutions, domain)
+  if (verdict !== 'valid') return verdict
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== solutions.length) return 'invalid'
+  for (let i = 0; i < solutions.length; i++) {
+    const x = readSurd(solutionValueText(solutions[i]))
+    if (!x) return 'unknown'
+    if (displayKey(shown[i]) !== displayKey(texOfAlg(x))) return 'invalid'
+  }
+  return 'valid'
+}
+
+/**
+ * The zero-product solution set of a surd square root (S1b): the before is the factored form that surdFactoredTex writes
+ * for the step's shift and root, and the two solutions are shift − root and shift + root, in that order.
+ */
+export function checkSurdZeroProduct(
+  before: string,
+  zp: { shift: string; root: string },
+  after: string,
+  v: string,
+  solutions: unknown[]
+): ValidationVerdict {
+  const s = parseExactRat(zp.shift)
+  const r = readSurd(zp.root)
+  if (!s || !r) return 'invalid'
+  if (normalizeDisplayed(before) !== normalizeDisplayed(surdFactoredTex(v, s, r))) return 'invalid'
+  const lo = algSub(algRat(s), r)
+  const hi = algAdd(algRat(s), r)
+  // The step's own solution data must be the same two roots (S1b review round 2): the sentence is built from it.
+  const given = solutions.map((x) => {
+    const t = solutionValueText(x)
+    return plainForG2(t) === null ? null : readSurd(t)
+  })
+  if (given.length !== 2 || given[0] === null || given[1] === null) return 'invalid'
+  const sameSet =
+    (algEq(given[0], lo) && algEq(given[1], hi)) || (algEq(given[0], hi) && algEq(given[1], lo))
+  if (!sameSet) return 'invalid'
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== 2) return 'invalid'
+  return displayKey(shown[0]) === displayKey(texOfAlg(lo)) && displayKey(shown[1]) === displayKey(texOfAlg(hi))
+    ? 'valid'
+    : 'invalid'
+}
+
+/** The value of a proposed solution's plain text, for the sentences and the methods (S1b). */
+export function solutionTextOf(s: unknown): string {
+  return solutionValueText(s)
+}
+
+/** True when every root (exact, in ℚ(√d, i)) makes a·x² + b·x + c equal to zero: the working's own check (S1b). */
+export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg[]): boolean {
+  return roots.every((r) => {
+    const value = algAdd(algAdd(algMul(algRat(rat(a)), algMul(r, r)), algMul(algRat(rat(b)), r)), algRat(rat(c)))
+    return algEq(value, algRat(R0))
+  })
 }

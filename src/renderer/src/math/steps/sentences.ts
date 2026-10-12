@@ -14,10 +14,14 @@ import {
   isSystemOp,
   normalizeDisplayed,
   parseExactRat,
+  isSurdText,
+  prettyOfAlg,
   productText,
   ratOfText,
   ratText,
+  readSurd,
   solutionProofOf,
+  solutionTextOf,
   sumText,
   type SetProof
 } from './check-adapter'
@@ -104,9 +108,10 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       return `Complete the square: ${plainTex(leftOf(before))} can be written as ${plainTex(leftOf(after))}`
     case 'square-root-pm': {
       const s = parseExactRat(op.shift)
-      const r = parseExactRat(op.root)
+      // A surd root is written in its simplest form (S1b); a rational one as before.
+      const r = readSurd(op.root)
       if (!s || !r) return null
-      return `Take the square root of both sides, with ±: ${shiftPlain(v, s)} = ±${ratPlain(r)}`
+      return `Take the square root of both sides, with ±: ${shiftPlain(v, s)} = ±${prettyOfAlg(r)}`
     }
     case 'swap':
       return 'Swap the two sides'
@@ -184,7 +189,29 @@ function setProofOf(step: Step): { proof: SetProof; v: string } | null {
   return proof ? { proof, v } : null
 }
 
+/**
+ * The sentence of a solution set that is surds or complex numbers (S1b): each root in its simplest form, named by the
+ * letter. Undefined when the step is not one of those (the rational and the empty sets keep their own sentences).
+ */
+function surdSolutionsSentence(step: Step): string | null | undefined {
+  const d = dataOf(step)
+  if (!Array.isArray(d.solutions) || d.solutions.length === 0) return undefined
+  const texts = d.solutions.map((s) => solutionTextOf(s))
+  const surdy = d.zeroProduct !== undefined || d.domain === 'complex' || texts.some((t) => isSurdText(t))
+  if (!surdy) return undefined
+  const v = variableOf(step)
+  const parts: string[] = []
+  for (const t of texts) {
+    const x = readSurd(t)
+    if (!x) return null
+    parts.push(`${v} = ${prettyOfAlg(x)}`)
+  }
+  return `The solutions are ${parts.join(' or ')}.`
+}
+
 function solutionSentence(step: Step): string | null {
+  const surd = surdSolutionsSentence(step)
+  if (surd !== undefined) return surd
   const p = setProofOf(step)
   if (!p) return null
   if (p.proof.kind === 'all') return 'Both sides are 0 for every value, so every real number is a solution.'
@@ -197,6 +224,7 @@ function solutionSentence(step: Step): string | null {
 }
 
 function solutionRule(step: Step): string | null {
+  if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   const p = setProofOf(step)
   if (!p) return null
   if (p.proof.kind === 'all') return 'Every real number is a solution'

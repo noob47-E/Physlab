@@ -118,7 +118,7 @@ export class DefaultStepRouter implements StepRouter {
     let chosenIndex = -1
     for (let i = 0; i < applicable.length; i++) {
       const w = attempt(applicable[i])
-      if (w && !w.noWorking && validateWorking(w, this.adapter).valid) {
+      if (w && !w.noWorking && validateWorking(w, this.adapter, problem.domain).valid) {
         chosen = w
         chosenIndex = i
         break
@@ -136,7 +136,7 @@ export class DefaultStepRouter implements StepRouter {
     if (options?.includeAlternatives !== false) {
       for (const alt of applicable.slice(chosenIndex + 1)) {
         const altWorking = attempt(alt)
-        if (altWorking && !altWorking.noWorking && validateWorking(altWorking, this.adapter).valid) {
+        if (altWorking && !altWorking.noWorking && validateWorking(altWorking, this.adapter, problem.domain).valid) {
           chosen.anotherWay = altWorking
           break
         }

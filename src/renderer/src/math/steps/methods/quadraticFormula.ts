@@ -1,17 +1,17 @@
-// Quadratics by the quadratic formula (S1a): primary when the roots are not rational; "Another way"
-// when factorising was primary.
+// Quadratics by the quadratic formula (S1a, with the surds and complex roots of S1b): primary when the roots are not
+// rational; "Another way" when factorising was primary.
 //
-// The discriminant b² − 4ac is its own sub-working (an expression, so its chain starts from the
-// expression, not from the equation). With a negative discriminant in the real domain the ending is a
-// SolutionSetEq: the quadratic has no real root, which the validator proves exactly from the displayed
-// equation. Every other case needs a square root of a number that is not a perfect square; that
-// square-root step is an Implication that no checker in this build proves yet, so the router hides it
-// (Rule 0.2), which is the safe result.
+// The discriminant b² − 4ac is its own sub-working (an expression, so its chain starts from the expression, not from
+// the equation). With a negative discriminant in the real domain the ending is a SolutionSetEq: the quadratic has no
+// real root, which the validator proves exactly from the displayed equation. Otherwise the roots are the solution set
+// itself, in simplest form (−b ± s√d)/(2a): one step (a SolutionSetEq) that the validator checks with G2's
+// polyRootsCheck in the domain, and whose displayed line is the exact display of each root. A complex pair is shown in
+// the complex domain only. The working's answer is each root, and its check substitutes each root exactly.
 
 import type { Method, Problem, Step, StepAnswer, Working } from '../types'
-import { rCmp, rStr, rTex, type Rat } from '../../pure/rat'
 import { finishStep } from '../sentences'
-import { discriminantOf, noWorking, quadraticOf, rationalRoots, rootsCheck, type Quadratic } from './quadratic'
+import { plainOfAlg, quadraticRootsHold, quadraticRootsOf, texOfAlg } from '../check-adapter'
+import { discriminantOf, noWorking, quadraticOf, type Quadratic } from './quadratic'
 
 const FORMULA_ID = 'quadratic.formula'
 const METHOD_NAME = 'Quadratic formula'
@@ -64,34 +64,40 @@ function solveFormula(problem: Problem): Working {
       method: METHOD_NAME,
       steps,
       subWorkings,
-      answer: { label: v, tex: '\\text{No real solution}' } satisfies StepAnswer
+      answer: { label: v, tex: '\\text{No real solution}' } satisfies StepAnswer,
+      domain: q.domain
     }
   }
 
-  // The roots need √(discriminant): an Implication that no checker proves yet, so the router hides it.
+  const roots = quadraticRootsOf(q.a, q.b, q.c)
+  if (!roots) return noWorking()
+  // A double root is said once; the solution set then has the root with multiplicity two.
+  const distinct = disc === 0n ? [roots[0]] : roots
+  const shownAfter = distinct.map((r) => `${v} = ${texOfAlg(r)}`).join(' \\text{ or } ')
   steps.push(
     finishStep({
-      kind: 'Implication',
+      kind: 'SolutionSetEq',
       before: q.text,
-      after: `${v} = \\frac{${String(-q.b)} \\pm \\sqrt{${disc}}}{${2n * q.a}}`,
+      after: shownAfter,
       sentence: '',
-      data: { action: 'quadratic-formula' }
+      data: {
+        variable: v,
+        solutions: distinct.map((r) => ({ value: plainOfAlg(r), multiplicity: disc === 0n ? 2 : 1 })),
+        domain: q.domain
+      }
     })
   )
-
-  // Only exact rational roots are given as an answer, and they are checked by substitution. A surd or
-  // complex answer would be unchecked text, so it is left out with the hidden working.
-  const roots = rationalRoots(q)
-  if (!roots) return noWorking()
-  const distinct: Rat[] = rCmp(roots.lo, roots.hi) === 0 ? [roots.lo] : [roots.lo, roots.hi]
+  // The roots are checked exactly: each one makes the quadratic zero in ℚ(√d, i).
+  const checked = quadraticRootsHold(q.a, q.b, q.c, distinct) ? 'ok' : 'failed'
   return {
     title: `Solve ${q.start}`,
     input: q.start,
     method: METHOD_NAME,
     steps,
     subWorkings,
-    answer: distinct.map((r) => ({ label: v, tex: rTex(r), value: rStr(r) })),
-    checked: rootsCheck(q, distinct)
+    answer: distinct.map((r) => ({ label: v, tex: texOfAlg(r), value: plainOfAlg(r) })),
+    checked,
+    domain: q.domain
   }
 }
 

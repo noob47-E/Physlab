@@ -15,6 +15,7 @@
 
 import {
   CANT_SHOW_STEPS_REASON,
+  type Domain,
   type ExprOp,
   type SystemOp,
   type Step,
@@ -39,6 +40,11 @@ import {
   startsFromTypedProduct,
   variableOfInput,
   checkSystemOp,
+  checkQuadraticSolutionSet,
+  checkSurdZeroProduct,
+  displayKey,
+  readSurd,
+  texOfAlg,
   evalForm,
   isSystemOp,
   lettersOfSystem,
@@ -185,11 +191,25 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
   if (step.kind !== 'SolutionSetEq') return 'invalid'
   const payload = dataOf(step)
   const v = typeof payload.variable === 'string' ? payload.variable : 'x'
+  // S1b: a surd square root's two solutions are the sides of the factored form the step names (exact, no proof needed).
+  if (payload.zeroProduct && typeof payload.zeroProduct === 'object') {
+    const zp = payload.zeroProduct as { shift: string; root: string }
+    if (!Array.isArray(payload.solutions) || payload.solutions.length !== 2) return 'invalid'
+    return checkSurdZeroProduct(String(step.before), zp, String(step.after), v, payload.solutions as unknown[])
+  }
+  const domain = payload.domain === 'complex' ? 'complex' : 'real'
+  if (Array.isArray(payload.solutions) && payload.solutions.length > 0) {
+    // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
+    const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+    if (quad !== null) return quad
+  }
   const proof = solutionProofOf(String(step.before), v)
   if (!proof) return 'unknown'
   if (!Array.isArray(payload.solutions)) return 'invalid'
   const solutions: unknown[] = payload.solutions
   const allReals = payload.allReals === true
+  // In the complex domain a quadratic always has its roots: "no solution" is never the answer there (S1b).
+  if (domain === 'complex' && solutions.length === 0) return 'invalid'
 
   if (solutions.length === 0) {
     if (proof.kind === 'roots') return 'invalid'
@@ -317,8 +337,17 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
 }
 
 /** A step checked in its working: a reduction needs the working around it, every other step is checked alone. */
-function validateStepIn(working: Working, index: number, adapter: CheckAdapter): StepValidationResult {
+function validateStepIn(working: Working, index: number, adapter: CheckAdapter, domain: Domain): StepValidationResult {
   const step = working.steps[index]
+  // S1b: a solution set is proved in the domain of the problem the working answers. A step that states another domain
+  // for itself is refused (a real problem with complex roots is never shown, whatever the step's data says). A step that
+  // states none is not a mismatch.
+  if (step.kind === 'SolutionSetEq') {
+    const stated = dataOf(step).domain
+    if (stated !== undefined && stated !== domain) {
+      return { verdict: 'invalid', reason: `The step's domain (${String(stated)}) is not the problem's (${domain})` }
+    }
+  }
   if (step.kind !== 'SubproblemReduction') return validateStep(step, adapter)
   const wording = wordingProblem(step)
   if (wording !== null) return { verdict: 'invalid', reason: wording }
@@ -344,6 +373,17 @@ function chainBreak(working: Working, index: number, reason: string): WorkingVal
  * problem's own variable. Returns the reason it does not, or null when it does (or there is no answer).
  * A solution-set ending is displayed as its text; a list of solutions as "x = 2 or x = 3" or "x in {2, 3}".
  */
+/** An answer's plain value is the displayed value: the same exact number, written the same way (S1b, through G2's reader). */
+function valueMatches(value: string, displayed: string): boolean {
+  const x = readSurd(value)
+  if (!x) return false
+  try {
+    return displayKey(texOfAlg(x)) === displayKey(displayed)
+  } catch {
+    return false
+  }
+}
+
 function answerProblem(working: Working): string | null {
   if (working.answer === undefined) return null
   const answers = Array.isArray(working.answer) ? working.answer : [working.answer]
@@ -351,7 +391,10 @@ function answerProblem(working: Working): string | null {
   const v = variableOfInput(working.input ?? '')
   // An expression ending (ExprEq) is compared as text and needs no variable; the reader may not take the typed input.
   if (v === null && last.kind !== 'ExprEq') return 'the answer cannot be checked: the input has no single variable'
-  const expected = last.kind === 'SolutionSetEq' || last.kind === 'ExprEq'
+  // A solution set with roots lists each root (S1b: a quadratic's two roots, or a double root once). A sentence ending
+  // ("No real solution") and an expression are compared as one text, as before.
+  const listsRoots = last.kind === 'SolutionSetEq' && Array.isArray(dataOf(last).solutions) && (dataOf(last).solutions as unknown[]).length > 0
+  const expected = (last.kind === 'SolutionSetEq' && !listsRoots) || last.kind === 'ExprEq'
     ? [normalizeDisplayed(String(last.after))]
     : displayedValues(String(last.after), v ?? '')
   if (expected === null) return 'the last step does not display an answer to check against'
@@ -364,7 +407,8 @@ function answerProblem(working: Working): string | null {
     const variable = last.kind === 'ExprEq' ? (typedLetters.length === 1 ? typedLetters[0] : '') : v
     if (a.label !== variable) return `the answer is labelled ${a.label}, but the problem's variable is ${variable}`
     if (normalizeDisplayed(a.tex) !== expected[i]) return `the answer ${a.tex} is not the displayed ${expected[i]}`
-    if (a.value !== undefined && normalizeDisplayed(a.value) !== expected[i]) {
+    // The value is the displayed text (as before S1b), or the same exact number written in another way (S1b).
+    if (a.value !== undefined && normalizeDisplayed(a.value) !== expected[i] && !valueMatches(a.value, expected[i])) {
       return `the answer value ${a.value} is not the displayed ${expected[i]}`
     }
   }
@@ -379,7 +423,17 @@ function answerProblem(working: Working): string | null {
  * An empty working is unknown, unless it is the explicit can't-show fallback (noWorking with that reason).
  * A working whose check failed is invalid. A check line the builder does not give is invalid.
  */
-export function validateWorking(working: Working, adapter: CheckAdapter = defaultCheckAdapter): WorkingValidationResult {
+export function validateWorking(
+  working: Working,
+  adapter: CheckAdapter = defaultCheckAdapter,
+  problemDomain?: Domain
+): WorkingValidationResult {
+  // S1b: the domain is the problem's when the caller gives it (renderWorkingToDoc and the router do). The working's own
+  // copy is then only a record that must agree with it: a working rewritten in both copies is refused against the problem.
+  if (problemDomain !== undefined && working.domain !== undefined && working.domain !== problemDomain) {
+    return { valid: false, verdict: 'invalid', reason: "The working's domain is not the problem's" }
+  }
+  const domain: Domain = problemDomain ?? working.domain ?? 'real'
   if (working.checked === 'failed') {
     return { valid: false, verdict: 'invalid', reason: "The answer's check failed" }
   }
@@ -419,7 +473,7 @@ export function validateWorking(working: Working, adapter: CheckAdapter = defaul
   // Check main steps
   for (let i = 0; i < working.steps.length; i++) {
     const step = working.steps[i]
-    const res = validateStepIn(working, i, adapter)
+    const res = validateStepIn(working, i, adapter, domain)
     if (res.verdict !== 'valid') {
       return {
         valid: false,
@@ -435,7 +489,7 @@ export function validateWorking(working: Working, adapter: CheckAdapter = defaul
   if (working.subWorkings && working.subWorkings.length > 0) {
     for (let s = 0; s < working.subWorkings.length; s++) {
       const sub = working.subWorkings[s]
-      const subRes = validateWorking(sub, adapter)
+      const subRes = validateWorking(sub, adapter, domain)
       if (!subRes.valid) {
         return {
           valid: false,
@@ -449,7 +503,7 @@ export function validateWorking(working: Working, adapter: CheckAdapter = defaul
 
   // The Another way is part of what is shown, so it is checked like any other working.
   if (working.anotherWay) {
-    const alt = validateWorking(working.anotherWay, adapter)
+    const alt = validateWorking(working.anotherWay, adapter, domain)
     if (!alt.valid) {
       return { valid: false, verdict: alt.verdict, reason: `Another way failed: ${alt.reason}` }
     }

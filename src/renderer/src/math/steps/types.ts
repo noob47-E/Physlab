@@ -210,6 +210,11 @@ export interface Working {
   check?: string
   /** Verdict of the answer check. */
   checked?: 'ok' | 'failed'
+  /**
+   * The problem's domain (S1b). Every SolutionSetEq step must claim this same domain (its data.domain, 'real' when
+   * absent): a step cannot change the domain of the problem it answers. Absent means real.
+   */
+  domain?: Domain
   /** Error sentence if the problem cannot be handled. */
   error?: string
   /** True when steps could not be verified or shown; the answer alone may still show. */

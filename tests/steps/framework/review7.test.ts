@@ -155,7 +155,9 @@ describe('MUST 4 (Gemini, verified): the completing-square working of x^2 + 2x -
     it(`${input}: the Another way (completing the square) is valid through validateWorking and shows its completing step`, () => {
       const w = router.solve({ job: 'solve', input, variable: 'x' })
       expect(w.noWorking).toBeFalsy()
-      const alt = w.anotherWay as Working
+      // The completing-the-square method on its own (the formula is the first Another way in order, S1b).
+      const squareOnly = createStepRouter(S1A_METHODS.filter((m) => m.name !== 'Quadratic formula'))
+      const alt = squareOnly.solve({ job: 'solve', input, variable: 'x' }).anotherWay as Working
       expect(alt, input).toBeDefined()
       expect(alt.method, input).toBe('Completing the square')
       // The claim under test: every completing step is judged invalid. It is not, for these inputs.

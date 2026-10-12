@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import { createStepRouter } from '../../../src/renderer/src/math/steps/router'
 import { S1A_METHODS } from '../../../src/renderer/src/math/steps/methods'
+import { quadraticFormulaMethod } from '../../../src/renderer/src/math/steps/methods/quadraticFormula'
 import { validateWorking } from '../../../src/renderer/src/math/steps/validate'
 import type { Working } from '../../../src/renderer/src/math/steps/types'
 
@@ -99,9 +100,14 @@ function answersOf(w: Working): string[] {
 }
 
 /** The problem's working: the primary one, or its Another way. */
+// The completing-the-square method on its own: the Another way these problems were written out for (the formula, S1b,
+// is the first Another way in order, so it is left out here).
+const squareRouter = createStepRouter(S1A_METHODS.filter((m) => m.id !== quadraticFormulaMethod.id))
+
 function workingOf(p: Problem, v: string): Working {
-  const top = router.solve({ job: 'solve', input: rename(p.input, v), variable: v })
-  return (p.via === 'another' ? top.anotherWay : top) as Working
+  const input = rename(p.input, v)
+  if (p.via === 'another') return squareRouter.solve({ job: 'solve', input, variable: v }).anotherWay as Working
+  return router.solve({ job: 'solve', input, variable: v })
 }
 
 describe('twenty textbook problems, with the working written out by hand', () => {

@@ -109,7 +109,7 @@ export function renderWorkingToDoc(
   // Framework invariant (Rule 0.2): Only 'valid' steps are ever shown.
   // Validate the steps before rendering moves. If any step is not 'valid',
   // moves are stripped and noWorking is set with the standard fallback reason.
-  const validation = validateWorking(working, adapter)
+  const validation = validateWorking(working, adapter, problem?.domain)
   if (!validation.valid) {
     // Nothing that failed validation reaches the page: no moves, and no answer either. An answer is
     // shown only with the steps that check it (the review of a982a6a4, MUST 2).

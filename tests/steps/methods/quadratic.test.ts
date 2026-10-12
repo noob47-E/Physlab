@@ -12,8 +12,16 @@ import type { Step, Working } from '../../../src/renderer/src/math/steps/types'
 import { rTex } from '../../../src/renderer/src/math/pure/rat'
 import { irrationalItem, mulberry32, negativeDiscItem, rationalQuadItem, type QuadItem } from './seeded'
 import { judge, plantMutants } from './planted'
+import { quadraticRootsHold, readSurd, texOfAlg } from '../../../src/renderer/src/math/steps/check-adapter'
 
 const router = createStepRouter(S1A_METHODS)
+
+// The completing-the-square method on its own: its "Another way" is the one the tests below name, since the formula (S1b)
+// comes first in order when both are alternatives.
+const squareRouter = createStepRouter(S1A_METHODS.filter((m) => m.id !== quadraticFormulaMethod.id))
+function squareSolve(input: string, domain?: 'real' | 'complex', v = 'x'): Working {
+  return squareRouter.solve({ job: 'solve', input, variable: v, domain })
+}
 
 // Each planted mutant is rendered twice; the seeded runs need more than vitest's default 5 seconds.
 vi.setConfig({ testTimeout: 180000 })
@@ -123,7 +131,7 @@ describe('factorising: 300 seeded quadratics with rational roots', () => {
 
   it('has "Another way" = completing the square, valid and with the same roots', () => {
     for (const item of items) {
-      const w = solve(item.input)
+      const w = squareSolve(item.input)
       expect(w.anotherWay?.method, item.input).toBe('Completing the square')
       expect(validateWorking(w.anotherWay as Working).valid, item.input).toBe(true)
       expect(answersOf(w.anotherWay as Working), item.input).toEqual(rootTexes(item))
@@ -151,7 +159,7 @@ describe('completing the square: the same roots, its own steps', () => {
 
   it('writes the completed square, takes the square root with ±, and gets the same roots', () => {
     for (const item of items) {
-      const w = solve(item.input).anotherWay as Working
+      const w = squareSolve(item.input).anotherWay as Working
       expect(w, item.input).toBeDefined()
       // The completing step is written only when there is an x-term to complete: with b = 0 the square is (x)^2 + k already.
       const [A, B, C, D] = item.factors
@@ -194,37 +202,54 @@ describe('quadratic formula: negative discriminant in the real domain', () => {
   })
 })
 
-describe('quadratic formula: irrational roots are never shown until a checker proves surds', () => {
+describe('quadratic formula: irrational roots are shown, each one exact (G2 checks the surds)', () => {
   const rng = mulberry32(0x5e9)
   const items = Array.from({ length: 100 }, () => irrationalItem(rng))
 
-  it('hides the whole working (Rule 0.2) and the bridge shows no moves', () => {
+  it('shows the working: valid, and each answer is a root of the equation (exact in ℚ(√d))', () => {
     for (const item of items) {
       const w = solve(item.input)
-      expect(w.noWorking, item.input).toBe(true)
-      const doc = renderWorkingToDoc(w)
-      expect(doc.noWorking, item.input).toBe(true)
-      expect(doc.moves, item.input).toHaveLength(0)
-      expect(w.anotherWay, item.input).toBeUndefined()
+      expect(w.noWorking, item.input).not.toBe(true)
+      expect(validateWorking(w).valid, `${item.input}: ${validateWorking(w).reason ?? ''}`).toBe(true)
+      const answers = w.answer as Array<{ value: string; tex: string }>
+      expect(answers, item.input).toHaveLength(2)
+      const roots = answers.map((a) => readSurd(a.value))
+      expect(roots.every((r) => r !== null), item.input).toBe(true)
+      expect(quadraticRootsHold(item.a, item.b, item.c, roots as NonNullable<(typeof roots)[number]>[]), item.input).toBe(true)
     }
   })
 
-  it('shows no unchecked surd answer either: the answer is left out with the hidden working', () => {
+  it('every answer is written in its simplest surd form (the same display as the exact number gives)', () => {
     for (const item of items) {
-      expect(solve(item.input).answer, item.input).toBeUndefined()
+      const answers = (solve(item.input).answer as Array<{ value: string; tex: string }>) ?? []
+      for (const a of answers) {
+        const x = readSurd(a.value)
+        expect(x !== null && texOfAlg(x) === a.tex, `${item.input}: ${a.tex}`).toBe(true)
+      }
     }
   })
 
-  it.todo('needs G2: the quadratic formula steps with √ (surd checks), so irrational roots can be shown')
-  it.todo('needs G2: the roots in simplest surd form, −b ± √d over 2a with √d simplified')
+  it('the quadratic formula steps with √ are checked: a SolutionSetEq of the two roots', () => {
+    const w = solve('x^2 - 2x - 1 = 0')
+    expect(w.method).toBe('Quadratic formula')
+    expect(validateWorking(w).valid).toBe(true)
+    expect(afters(w)).toEqual(['x = 1-\\sqrt{2} \\text{ or } x = 1+\\sqrt{2}'])
+  })
+
+  it('the roots are in simplest surd form, −b ± √d over 2a with √d simplified (√12 is written 2√3)', () => {
+    const w = solve('x^2 - 2x - 2 = 0')
+    expect(validateWorking(w).valid).toBe(true)
+    expect(answersOf(w)).toEqual(['1-\\sqrt{3}', '1+\\sqrt{3}'])
+    expect(answersOf(solve('16x^2 - 54 = 0'))).toEqual(['\\frac{-3\\sqrt{6}}{4}', '\\frac{3\\sqrt{6}}{4}'])
+  })
 })
 
 describe('endings in each domain', () => {
-  it('a double root is said once, both by factorising and by completing the square', () => {
+  it('a double root is said once, by factorising and by the formula (the first Another way in order)', () => {
     const w = solve('x^2 - 6x + 9 = 0')
     expect(w.method).toBe('Factorising')
     expect(answersOf(w)).toEqual(['3'])
-    expect(w.anotherWay?.method).toBe('Completing the square')
+    expect(w.anotherWay?.method).toBe('Quadratic formula')
     expect(answersOf(w.anotherWay as Working)).toEqual(['3'])
     expect(w.anotherWay?.subWorkings).toHaveLength(1)
   })
@@ -237,21 +262,54 @@ describe('endings in each domain', () => {
     expect(w.answer).toEqual({ label: 'x', tex: '\\text{No real solution}' })
   })
 
-  it('a negative discriminant in the complex domain is not shown as real roots (hidden until G2)', () => {
+  it('a negative discriminant in the complex domain gives the pair a ± b·i, shown and checked by G2', () => {
     const w = solve('x^2 + 2x + 5 = 0', 'complex')
-    expect(w.noWorking).toBe(true)
-    expect(renderWorkingToDoc(w).moves).toHaveLength(0)
+    expect(w.noWorking).not.toBe(true)
+    expect(validateWorking(w).valid).toBe(true)
+    expect(answersOf(w)).toEqual(['-1-2i', '-1+2i'])
+    expect(afters(w)).toEqual(['x = -1-2i \\text{ or } x = -1+2i'])
   })
 
-  it.todo('needs G2: the complex domain gives the pair a ± b·i for a negative discriminant, shown and checked')
-  it.todo('needs G2: the quadratic formula is the "Another way" for rational roots (its √ steps)')
-  it.todo('needs G2: the double root by the formula, with √0 written as 0')
-  it.todo('needs G2: completing the square for an irrational root gives the ± split with surds')
+  it('in the real domain the same quadratic is "No real solution", and the complex pair is not shown there', () => {
+    const w = solve('x^2 + 2x + 5 = 0')
+    expect(afters(w)).toEqual(['\\text{No real solution}'])
+    expect(JSON.stringify(w)).not.toMatch(/-1-2i|-1\+2i/)
+  })
 
-  it('"Another way" is present when the primary method is shown, and absent when the working is hidden', () => {
+  it('the quadratic formula is the "Another way" for rational roots: its discriminant is worked (D = 1) and its roots are shown', () => {
+    const w = solve('x^2 - 5x + 6 = 0')
+    expect(w.method).toBe('Factorising')
+    const formula = w.anotherWay as Working
+    expect(formula.method).toBe('Quadratic formula')
+    expect(validateWorking(formula).valid).toBe(true)
+    expect(String(formula.subWorkings?.[0].steps[0].after)).toBe('1')
+    expect(afters(formula)).toEqual(['x = 2 \\text{ or } x = 3'])
+    expect(answersOf(formula)).toEqual(['2', '3'])
+  })
+
+  it('a double root by the formula is said once, with √0 written as 0', () => {
+    const w = solve('x^2 - 6x + 9 = 0')
+    const formula = w.anotherWay as Working
+    expect(formula.method).toBe('Quadratic formula')
+    expect(validateWorking(formula).valid).toBe(true)
+    expect(answersOf(formula)).toEqual(['3'])
+    expect(afters(formula)).toEqual(['x = 3'])
+    expect(String(formula.subWorkings?.[0].steps[0].after)).toBe('0')
+  })
+
+  it('completing the square for an irrational root gives the ± split with surds, valid', () => {
+    const w = solve('x^2 - 2x - 1 = 0')
+    const square = w.anotherWay as Working
+    expect(square.method).toBe('Completing the square')
+    expect(validateWorking(square).valid).toBe(true)
+    expect(square.steps.some((s) => (s.op as { kind?: string; root?: string } | undefined)?.kind === 'square-root-pm' && (s.op as { root?: string }).root === 'sqrt(2)')).toBe(true)
+    expect(answersOf(square)).toEqual(['1-\\sqrt{2}', '1+\\sqrt{2}'])
+  })
+
+  it('"Another way" is present when the primary method is shown, for surd roots too', () => {
     expect(solve('x^2 - 5x + 6 = 0').anotherWay).toBeDefined()
     expect(solve('x^2 + 2x + 5 = 0').anotherWay).toBeDefined()
-    expect(solve('x^2 - 2x - 1 = 0').anotherWay).toBeUndefined()
+    expect(solve('x^2 - 2x - 1 = 0').anotherWay).toBeDefined()
   })
 })
 
@@ -337,7 +395,7 @@ describe('quadratic planted wrong steps are never shown', () => {
 
   // Named mistakes: each takes a real working and makes one thing wrong in a way a student meets.
   const factor = (): Working => solve('x^2 - 5x + 6 = 0')
-  const square = (): Working => solve('x^2 - 5x + 6 = 0').anotherWay as Working
+  const square = (): Working => squareSolve('x^2 - 5x + 6 = 0').anotherWay as Working
   const formula = (): Working => solve('x^2 - 2x + 5 = 0')
   const subOf = (w: Working, i: number): Working => w.subWorkings?.[i] as Working
 

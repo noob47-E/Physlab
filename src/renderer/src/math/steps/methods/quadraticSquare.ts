@@ -27,6 +27,14 @@ import { equationStep, sidesOf } from './equation'
 import { shiftAscii, shiftTex } from './stepText'
 import { finishStep } from '../sentences'
 import { noWorking, quadraticOf, rootAnswers, rootsCheck, type Quadratic } from './quadratic'
+import {
+  plainOfAlg,
+  quadraticRootsHold,
+  surdFactoredTex,
+  surdSqrtOfRational,
+  texOfAlg
+} from '../check-adapter'
+import { algAdd, algRat, algSub } from '../../check/field'
 import { CANT_SHOW_STEPS_REASON } from '../router'
 
 const SQUARE_ID = 'quadratic.completeSquare'
@@ -97,7 +105,8 @@ function solveSquare(problem: Problem, router: { solve: (p: Problem) => Working 
       steps,
       subWorkings: [sub],
       answer: rootAnswers(v, [s]),
-      checked: rootsCheck(q, [s])
+      checked: rootsCheck(q, [s]),
+      domain: q.domain
     }
   }
 
@@ -120,13 +129,15 @@ function solveSquare(problem: Problem, router: { solve: (p: Problem) => Working 
       input: q.start,
       method: METHOD_NAME,
       steps,
-      answer: { label: v, tex: '\\text{No real solution}' }
+      answer: { label: v, tex: '\\text{No real solution}' },
+      domain: q.domain
     }
   }
 
-  // Take the square root with ±. A surd root is not checkable yet, so the working stays hidden.
+  // Take the square root with ±. A rational root goes through the cases below; a surd root in simplest form is
+  // written as one step with its two solutions (S1b), checked exactly.
   const r = rSqrt(target)
-  if (!r) return noWorking()
+  if (!r) return surdSquare(q, v, s, target, steps, text)
 
   // (x − s − r)(x − s + r) = 0 is the same polynomial as (x − s)² − r², and r² = target = −k.
   const f1 = `${v}${signedTail(s)}${signedTail(r)}`
@@ -169,7 +180,45 @@ function solveSquare(problem: Problem, router: { solve: (p: Problem) => Working 
     steps,
     subWorkings,
     answer: rootAnswers(v, [lo, hi]),
-    checked: rootsCheck(q, [lo, hi])
+    checked: rootsCheck(q, [lo, hi]),
+    domain: q.domain
+  }
+}
+
+/**
+ * The ± step for a target that is a rational but not a square (S1b): the root is a surd in simplest form, s√d. One
+ * square-root step (checked exactly against the completed square), then one solution set: shift − root and shift + root,
+ * both checked against the factored form (no case split, since the surd cases are not rational sub-equations).
+ */
+function surdSquare(q: Quadratic, v: string, s: Rat, target: Rat, steps: Step[], text: string): Working {
+  const root = surdSqrtOfRational(target)
+  if (!root) return noWorking()
+  const factored = surdFactoredTex(v, s, root)
+  steps.push(equationStep(text, factored, { kind: 'square-root-pm', shift: rStr(s), root: plainOfAlg(root) }, v))
+  const lo = algSub(algRat(s), root)
+  const hi = algAdd(algRat(s), root)
+  steps.push(
+    finishStep({
+      kind: 'SolutionSetEq',
+      before: factored,
+      after: `${v} = ${texOfAlg(lo)} \\text{ or } ${v} = ${texOfAlg(hi)}`,
+      sentence: '',
+      data: {
+        variable: v,
+        solutions: [{ value: plainOfAlg(lo) }, { value: plainOfAlg(hi) }],
+        zeroProduct: { shift: rStr(s), root: plainOfAlg(root) },
+        domain: q.domain
+      }
+    })
+  )
+  return {
+    title: `Solve ${q.start}`,
+    input: q.start,
+    method: METHOD_NAME,
+    steps,
+    answer: [lo, hi].map((x) => ({ label: v, tex: texOfAlg(x), value: plainOfAlg(x) })),
+    checked: quadraticRootsHold(q.a, q.b, q.c, [lo, hi]) ? 'ok' : 'failed',
+    domain: q.domain
   }
 }
 
