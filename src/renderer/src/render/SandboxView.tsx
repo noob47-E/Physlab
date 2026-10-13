@@ -5,6 +5,9 @@
 // every body is one mesh with its outline or marking tinted in, every connection a mesh thick
 // enough to see at any zoom — a coil, a bar, a thread, a chain of links, a pin. Under WebGPU a
 // line is one device pixel whatever the camera does, which is why none of them is a line.
+//
+// The drawing itself is one file per job under render/sandbox/ (bodies, stage, links, trails,
+// arrows, labels, the join preview), and each reads the run from readoutRef, never the engine.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -13,29 +16,21 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { grabForceCap, SimWorld, STRIDE } from '../sim/world'
-import type { BodyDef, BodyId, BodyState, Link } from '../sim/types'
+import type { BodyDef, BodyId, BodyState } from '../sim/types'
 import type { V3 } from '../math/vec'
 import { energyOf, groundTopOf } from '../sim/energy'
 import { FALL_LIMIT, recordReadings } from '../sim/stepping'
 import { dragSetsStart, grabAction } from '../sim/inspector'
-import { comOffset } from '../sim/links'
-import { rotateByEuler } from '../sim/rotate'
-import { materialFinish } from '../sim/materials'
-import { drawnColour } from '../sim/palette'
-import { Arrow } from './ObjectViews'
-import { overlay, SpanPool } from './overlay'
-import { niceStep, toScreen, worldPerPixel } from './cameraUtils'
-import { formatMeasure } from '../math/format'
-import { themeColor, useTheme, useThemed } from '../app/theme'
-import { BEAD_SCALE, beadMatrices, hingePin, LINK_LOOK, linkPlacement, pulleyRopePath, ropeMatrices, springLook, visibleRadius, writeCoil, type LinkPlacement } from './sandboxLooks'
-import { bodyGeometry, coilGeometry, unitBall, unitCylinder } from './sandboxMeshes'
+import { toScreen } from './cameraUtils'
+import { readoutRef, type SimReadout } from './sandbox/readout'
+import { Stage } from './sandbox/Stage'
+import { Bodies } from './sandbox/Bodies'
+import { Arrows } from './sandbox/Arrows'
+import { Trails } from './sandbox/Trails'
+import { Links } from './sandbox/Links'
+import { JoinPreview, joinCursor } from './sandbox/JoinPreview'
+import { Labels } from './sandbox/Labels'
 
-/**
- * How strongly a connection catches the light: the steel of a spring, a rod and a pin shines a
- * little, a string and a rope do not. A grey, not a colour: it is the white of the lights, dimmed.
- */
-const METAL_SHINE = new THREE.Color().setScalar(0.45)
-const NO_SHINE = new THREE.Color().setScalar(0.04)
 
 // What the engine was last told to hold. These live outside the component so that leaving the
 // Sandbox for another mode and coming back does not throw the run away: the world is created
@@ -44,13 +39,8 @@ let applied: BodyDef[] = []
 let appliedNonce = -1
 /** Engine time the live values were last published at. */
 let published = 0
-/**
- * Where the cursor is while the second object of a connection is being chosen, in the world,
- * so the preview line from the first object can follow it. Written by the pointer handler and
- * read in a frame; the store never sees it, or every mouse move would re-render the panel.
- */
-const joinCursor: { p: V3 | null } = { p: null }
-
+/** The pose array the last step handed back: the readout's `transforms`, as SimWorld keeps its own private. */
+const posed: { transforms: Float32Array } = { transforms: new Float32Array(0) }
 
 type Drag = {
   id: BodyId
@@ -252,22 +242,17 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
 export function SandboxView() {
   const bodies = useSandbox((s) => s.bodies)
   const world = useSandbox((s) => s.world)
-  const selection = useSandbox((s) => s.selection)
-  const partner = useSandbox((s) => s.partner)
   const links = useSandbox((s) => s.links)
   const runNonce = useSandbox((s) => s.runNonce)
   const pushContacts = useSandbox((s) => s.pushContacts)
   const playing = useScene((s) => s.playing)
-  const settings = useScene((s) => s.settings)
   const mode = useApp((s) => s.mode)
   const sim = useRef<SimWorld | null>(null)
   const group = useRef<THREE.Group>(null)
   const [ready, setReady] = useState(false)
-  const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
   const { invalidate } = useThree()
   const check = useRef(location.hash.includes('sandbox') ? { last: -1, contacts: 0 } : null)
   useGrabAndThrow(sim, group)
-  const selectColour = useThemed(() => themeColor('--sel-glow'))
 
   // Start the engine the first time the sandbox is opened; afterwards pick the running one up
   // again, so switching modes and back does not restart the experiment.
@@ -275,6 +260,7 @@ export function SandboxView() {
     let alive = true
     if (engine.world) {
       sim.current = engine.world
+      readoutRef.current = liveReadout(engine.world)
       setReady(true)
       invalidate()
       return () => {
@@ -291,6 +277,7 @@ export function SandboxView() {
       appliedNonce = s.runNonce
       published = 0
       if (import.meta.env?.DEV) (window as unknown as { __sim?: SimWorld }).__sim = w
+      readoutRef.current = liveReadout(w)
       setReady(true)
       invalidate()
     })
@@ -341,30 +328,8 @@ export function SandboxView() {
     invalidate()
   }, [world, ready, invalidate])
 
-  useEffect(() => () => pool.dispose(), [pool])
-
   /** Heights are quoted above the floor, not above the world origin. */
   const groundTop = useMemo(() => groundTopOf(bodies), [bodies])
-
-  const meshes = useMemo(() => {
-    const geos = bodies.map(bodyGeometry)
-    return { geos }
-  }, [bodies])
-  useEffect(() => () => meshes.geos.forEach((g) => g.dispose()), [meshes])
-
-  // The colour each body is drawn in under this theme (a palette token read off the stylesheet,
-  // or the student's own colour), and how its material takes the light. The key carries both and
-  // the theme: WebGPU compiles a material's colour in, so a new colour needs a new material.
-  const theme = useTheme((t) => t.theme)
-  const looks = useMemo(
-    () =>
-      bodies.map((d) => {
-        const colour = drawnColour(d.color, themeColor)
-        const finish = materialFinish(d.material)
-        return { colour, specular: new THREE.Color().setScalar(finish.shine), gloss: finish.gloss, key: `${theme}|${colour}|${finish.shine}|${finish.gloss}` }
-      }),
-    [bodies, theme]
-  )
 
   // Priority −1: the world steps before anything else draws this frame. The links, arrows and
   // trails read the drawn poses in their own frame callbacks, which run in mount order — children
@@ -375,6 +340,7 @@ export function SandboxView() {
     if (!w || !g) return
     if (playing && mode === 'sandbox') {
       const { transforms, contacts, samples } = w.step(Math.min(dt, 0.1))
+      posed.transforms = transforms
       applyTransforms(g, transforms, w.bodyOrder)
       if (contacts.length) pushContacts(contacts)
       // The recording comes from the engine's own readings, not from the live publish below: that
@@ -419,183 +385,41 @@ export function SandboxView() {
       }
       if (check.current) check.current.contacts += contacts.length
     } else {
-      applyTransforms(g, w.step(0).transforms, w.bodyOrder)
+      posed.transforms = w.step(0).transforms
+      applyTransforms(g, posed.transforms, w.bodyOrder)
     }
-
-    // Live numbers next to each object, in the same chip style as the rest of PhysLab.
-    pool.begin()
-    if (settings.labelShow !== 'never') {
-      bodies.forEach((def) => {
-        if (def.motion === 'static') return
-        const st = w.drawn(def.id)
-        if (!st) return
-        const show = settings.labelShow === 'always' || selection === def.id
-        if (!show) return
-        const p = toScreen(state.camera, state.size, st.position)
-        if (!p.visible) return
-        // Speed and mass alone could not answer the question a mechanics practical asks. Height
-        // and kinetic energy are what a student needs to watch while something falls.
-        const speed = Math.hypot(st.velocity[0], st.velocity[1], st.velocity[2])
-        const e = energyOf(def, st, world.gravity, groundTop)
-        const num = (v: number) => formatMeasure(v, 'number', settings)
-        const text = `${def.name}  ${num(speed)} m/s  h ${num(st.position[1] - groundTop)} m  KE ${num(e.kinetic)} J`
-        // The chip's text is the body's colour; a theme colour is a CSS reference, read as it is.
-        pool.place(text, p.x, p.y - 26, 'center', def.color)
-      })
-    }
-    pool.end()
   }, -1)
 
   return (
     <group ref={group}>
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[6, 12, 8]} intensity={1.3} />
-      <directionalLight position={[-8, 5, -6]} intensity={0.35} />
-      {bodies.map((def, i) => (
-        <mesh key={def.id} geometry={meshes.geos[i]} userData={{ bodyId: def.id }}>
-          {/* A gold tint at a third strength was all but invisible on steel, concrete and lead —
-              the three darkest materials and the three most used. The selected object is lit
-              properly instead, so you can tell at a glance which one the panel is describing.
-              The geometry's own tint (outline, a ball's band, a wheel's groove) multiplies the
-              colour, and the material's finish sets the highlight. */}
-          <meshPhongMaterial
-            key={`${selectColour}|${looks[i].key}`}
-            vertexColors
-            color={looks[i].colour}
-            specular={looks[i].specular}
-            shininess={looks[i].gloss}
-            emissive={selectColour}
-            emissiveIntensity={selection === def.id ? 0.95 : partner === def.id ? 0.45 : 0}
-          />
-        </mesh>
-      ))}
-      <FloorGrid bodies={bodies} />
-      {ready && <VelocityArrows sim={sim} />}
-      {ready && <PushArrows sim={sim} />}
-      {ready && <Traces sim={sim} />}
-      {ready && <LinkLines sim={sim} />}
-      {ready && <JoinPreview sim={sim} />}
+      <Stage />
+      <Bodies />
+      {ready && <Arrows />}
+      {ready && <Trails />}
+      {ready && <Links />}
+      {ready && <JoinPreview />}
+      {/* After the frame loop above, at the same priority: the chips are placed once the world has stepped. */}
+      {ready && <Labels />}
     </group>
   )
 }
 
-/** How far out from the middle the floor's grid is drawn, in metres: the old floor's own edge. */
-const GRID_REACH = 100
-
-/**
- * Metre lines on the floor. Without them two balls three metres apart and two balls thirty
- * centimetres apart look the same, and every distance has to be read off the panel instead of
- * seen. Fine lines near the origin, coarser ones out to GRID_REACH; the grid follows the theme.
- */
-function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
-  // Read once per theme, not on every render: the grid re-renders whenever the bodies change.
-  const gridColour = useThemed(() => themeColor('--grid-major'))
-  const floor = bodies.find((b) => b.shape === 'ground')
-  // Only the floor's footprint and height shape the grid, so a change to anything else about the
-  // floor (its material, say) leaves the geometry alone.
-  const width = floor?.size[0]
-  const thickness = floor?.size[1]
-  const y = floor?.position[1]
-  const grid = useMemo(() => {
-    if (width === undefined || thickness === undefined || y === undefined) return null
-    // The grid is for reading distances near the experiment, so it stops at GRID_REACH however
-    // big the floor is: drawn out to a floor kilometres wide, its lines would crowd into a band
-    // of noise along the horizon.
-    const half = Math.min(GRID_REACH, Math.max(4, width / 2))
-    const top = y + thickness / 2 + 0.002
-    const fine = Math.min(20, half)
-    const coarse = niceStep(half / 10)
-    const pts: number[] = []
-    for (let x = -fine; x <= fine + 1e-9; x += 1) pts.push(x, top, -fine, x, top, fine)
-    for (let z = -fine; z <= fine + 1e-9; z += 1) pts.push(-fine, top, z, fine, top, z)
-    if (half > fine) {
-      for (let x = -half; x <= half + 1e-9; x += coarse) pts.push(x, top, -half, x, top, half)
-      for (let z = -half; z <= half + 1e-9; z += coarse) pts.push(-half, top, z, half, top, z)
-    }
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
-    return g
-  }, [width, thickness, y])
-  useEffect(() => () => grid?.dispose(), [grid])
-  if (!grid) return null
-  return (
-    <lineSegments geometry={grid} renderOrder={1}>
-      <lineBasicMaterial key={gridColour} color={gridColour} transparent opacity={0.85} />
-    </lineSegments>
-  )
-}
-
-/** How many segments a traced body remembers: about twenty seconds of flight. */
-const TRACE_POINTS = 600
-
-/**
- * The path a body has taken. Drawn into a buffer that is updated in place each frame: the old
- * version rebuilt a React tree per frame for every moving trail, which kept the whole canvas busy
- * even while paused.
- */
-function Traces({ sim }: { sim: React.RefObject<SimWorld | null> }) {
-  const bodies = useSandbox((s) => s.bodies)
-  const traced = bodies.filter((d) => d.trace && d.motion === 'dynamic')
-  return (
-    <>
-      {traced.map((def) => (
-        <TraceLine key={def.id} sim={sim} def={def} />
-      ))}
-    </>
-  )
-}
-
-function TraceLine({ sim, def }: { sim: React.RefObject<SimWorld | null>; def: BodyDef }) {
-  const playing = useScene((s) => s.playing)
-  // The body's colour as this theme draws it: a palette colour is a token three.js cannot read.
-  const theme = useTheme((t) => t.theme)
-  const colour = useMemo(() => ({ value: drawnColour(def.color, themeColor), key: `${theme}|${def.color}` }), [def.color, theme])
-  const runNonce = useSandbox((s) => s.runNonce)
-  const trailNonce = useSandbox((s) => s.trailNonce)
-  const geo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(TRACE_POINTS * 6), 3))
-    g.setDrawRange(0, 0)
-    return g
-  }, [])
-  useEffect(() => () => geo.dispose(), [geo])
-  const count = useRef(0)
-  const last = useRef<V3 | null>(null)
-  const line = useRef<THREE.LineSegments>(null)
-  // Reset, a new scene or "Clear trails": start the line again.
-  useEffect(() => {
-    count.current = 0
-    last.current = null
-    geo.setDrawRange(0, 0)
-    if (line.current) line.current.visible = false
-  }, [runNonce, trailNonce, geo])
-
-  useFrame(() => {
-    if (!playing) return
-    const st = sim.current?.state(def.id)
-    if (!st) return
-    const p = st.position
-    const l = last.current
-    // Only record when it has actually moved, or a body at rest fills the buffer with one point.
-    if (l && Math.hypot(l[0] - p[0], l[1] - p[1], l[2] - p[2]) < 0.01) return
-    if (l) {
-      const attr = geo.getAttribute('position') as THREE.BufferAttribute
-      const i = (count.current % TRACE_POINTS) * 6
-      attr.array.set([l[0], l[1], l[2], p[0], p[1], p[2]], i)
-      attr.needsUpdate = true
-      count.current++
-      geo.setDrawRange(0, Math.min(count.current, TRACE_POINTS) * 2)
-      // An empty geometry drawn every frame makes WebGPU warn every frame.
-      if (line.current) line.current.visible = true
-    }
-    last.current = [p[0], p[1], p[2]]
-  })
-
-  return (
-    <lineSegments ref={line} geometry={geo} renderOrder={13} frustumCulled={false} visible={false}>
-      <lineBasicMaterial key={colour.key} color={colour.value} transparent opacity={0.8} />
-    </lineSegments>
-  )
+/** The live world as the drawing reads it (I-6): the same calls, and the poses the last step gave. */
+function liveReadout(w: SimWorld): SimReadout {
+  return {
+    get time() {
+      return w.time
+    },
+    get bodyOrder() {
+      return w.bodyOrder
+    },
+    get transforms() {
+      return posed.transforms
+    },
+    state: (id) => w.state(id),
+    drawn: (id) => w.drawn(id),
+    linkPath: (link) => w.linkPath(link)
+  }
 }
 
 /** Meshes are matched to the engine by body id, not by their place in the list. */
@@ -613,365 +437,3 @@ function applyTransforms(group: THREE.Group, transforms: Float32Array, order: Bo
   }
 }
 
-/**
- * A velocity arrow on every moving object that asks for one. Each arrow reads its tail and
- * components from an array that is updated in place every frame, so no React work happens
- * while things move.
- */
-function VelocityArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
-  const bodies = useSandbox((s) => s.bodies)
-  const colour = useThemed(() => themeColor('--accent'))
-  const shown = bodies.filter((d) => d.showArrows && d.motion !== 'static')
-  // The slots are rebuilt only when the set of arrows changes, never on an edit to a body, or
-  // every arrow would jump back to zero for a frame each time a slider moved.
-  const key = shown.map((d) => d.id).join(',')
-  const slots = useMemo(() => new Map(key.split(',').filter(Boolean).map((id) => [id, { tail: [0, 0, 0] as V3, comp: [0, 0, 0] as V3 }])), [key])
-  useFrame(() => {
-    const w = sim.current
-    if (!w) return
-    for (const [id, slot] of slots) {
-      const st = w.drawn(id)
-      if (!st) continue
-      const speed = Math.hypot(st.velocity[0], st.velocity[1], st.velocity[2])
-      if (speed < 0.05) {
-        slot.comp[0] = slot.comp[1] = slot.comp[2] = 0
-        continue
-      }
-      // One metre of arrow for every two metres per second. At the old quarter-scale a ball
-      // doing 4 m/s grew an arrow shorter than the ramp it had just left.
-      const k = 0.5
-      slot.tail[0] = st.position[0]
-      slot.tail[1] = st.position[1]
-      slot.tail[2] = st.position[2]
-      slot.comp[0] = st.velocity[0] * k
-      slot.comp[1] = st.velocity[1] * k
-      slot.comp[2] = st.velocity[2] * k
-    }
-  })
-  return (
-    <>
-      {shown.map((def) => {
-        const s = slots.get(def.id)
-        if (!s) return null
-        return <Arrow key={def.id} tail={s.tail} comp={s.comp} color={colour} is3D thick={3.5} renderOrder={14} />
-      })}
-    </>
-  )
-}
-
-/**
- * The force arrow of a question's push, drawn from the body's centre while the push acts (and
- * before Play, when it is waiting at t = 0). The push used to be invisible: the crate sped up
- * from 6 to 8 m/s with nothing on screen to say a 25 N force was on it. A metre of arrow for
- * every 20 N, never longer than 3 m so a large force stays on screen.
- */
-function PushArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
-  const actuators = useSandbox((s) => s.actuators)
-  const colour = useThemed(() => themeColor('--warn'))
-  const slots = useMemo(() => actuators.map(() => ({ tail: [0, 0, 0] as V3, comp: [0, 0, 0] as V3 })), [actuators])
-  useFrame(() => {
-    const w = sim.current
-    if (!w) return
-    actuators.forEach((a, i) => {
-      const slot = slots[i]
-      const st = w.drawn(a.bodyId)
-      const t = w.time
-      const f = st && a.from <= t && t < a.until ? a.force(t) : null
-      const size = f ? Math.hypot(f[0], f[1], f[2]) : 0
-      if (!st || !f || !(size > 1e-9)) {
-        slot.comp[0] = slot.comp[1] = slot.comp[2] = 0
-        return
-      }
-      const k = Math.min(1 / 20, 3 / size)
-      for (let c = 0; c < 3; c++) {
-        slot.tail[c] = st.position[c]
-        slot.comp[c] = f[c] * k
-      }
-    })
-  })
-  return (
-    <>
-      {slots.map((s, i) => (
-        <Arrow key={i} tail={s.tail} comp={s.comp} color={colour} is3D thick={3.5} renderOrder={14} />
-      ))}
-    </>
-  )
-}
-
-
-/** Pixels per metre on screen at a point: what visibleRadius needs to keep a thin thing in sight. */
-function pixelsPerMetre(state: { camera: THREE.Camera; size: { width: number; height: number } }, at: ArrayLike<number>): number {
-  return 1 / worldPerPixel(state.camera, state.size, [at[0], at[1], at[2]])
-}
-
-/** A placement for a unit cylinder, filled in place each frame. */
-const newPlacement = (): LinkPlacement => ({ mid: [0, 0, 0], quat: [0, 0, 0, 1], length: 0 })
-
-/** Stands a unit cylinder (radius 1, height 1, along y) on a placement, `r` thick. */
-function placeCylinder(m: THREE.Object3D, place: LinkPlacement, r: number): void {
-  m.position.set(place.mid[0], place.mid[1], place.mid[2])
-  m.quaternion.set(place.quat[0], place.quat[1], place.quat[2], place.quat[3])
-  m.scale.set(r, Math.max(place.length, 1e-6), r)
-}
-
-/** The connections' colours in this theme, read once per theme. */
-interface LinkColours {
-  spring: string
-  rod: string
-  string: string
-  rope: string
-}
-
-/**
- * The rods, strings, springs, ropes and hinge pins themselves. A connection you cannot see is a
- * mystery force, so each one is drawn between the two bodies as they move, from buffers and
- * transforms updated in place every frame. Each kind has its own shape and its own colour
- * (LINK_LOOK): they were all one-pixel lines in one grey.
- */
-function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
-  const links = useSandbox((s) => s.links)
-  const bodies = useSandbox((s) => s.bodies)
-  const colours = useThemed<LinkColours>(() => ({
-    spring: themeColor(LINK_LOOK.spring.token),
-    rod: themeColor(LINK_LOOK.rod.token),
-    string: themeColor(LINK_LOOK.string.token),
-    rope: themeColor(LINK_LOOK.rope.token)
-  }))
-  return (
-    <>
-      {links.map((l) => (
-        <LinkView key={l.id} sim={sim} link={l} bodies={bodies} colours={colours} />
-      ))}
-    </>
-  )
-}
-
-function LinkView({ sim, link, bodies, colours }: { sim: React.RefObject<SimWorld | null>; link: Link; bodies: BodyDef[]; colours: LinkColours }) {
-  switch (link.kind) {
-    case 'spring':
-      return <SpringCoil sim={sim} link={link} colour={colours.spring} />
-    case 'rod':
-      return <Bar sim={sim} link={link} look={LINK_LOOK.rod} colour={colours.rod} shine={METAL_SHINE} gloss={50} />
-    case 'string':
-      return <Bar sim={sim} link={link} look={LINK_LOOK.string} colour={colours.string} shine={NO_SHINE} gloss={4} />
-    case 'rope':
-      // A chain of 20 cm links in the engine: drawn through their centres, a bead on every joint.
-      return <RopeTube sim={sim} pathOf={(w) => w.linkPath(link)} look={LINK_LOOK.rope} beadScale={BEAD_SCALE} beadTone={0.72} colour={colours.rope} />
-    case 'pulley': {
-      // One rope, no links: up to the rim, half way round the wheel, down to the other side.
-      const wheel = bodies.find((b) => b.id === link.over)
-      const axle: V3 = wheel ? rotateByEuler(wheel.rotation, [0, 1, 0]) : [0, 0, 1]
-      const pathOf = (w: SimWorld): V3[] => {
-        const p = w.linkPath(link)
-        return p.length === 4 ? pulleyRopePath(p[0], p[1], p[2], p[3], axle, 16) : p
-      }
-      return <RopeTube sim={sim} pathOf={pathOf} look={LINK_LOOK.pulley} beadScale={1} beadTone={1} colour={colours.rope} />
-    }
-    case 'hinge': {
-      const body = bodies.find((b) => b.id === link.a)
-      return body ? <HingePinView sim={sim} link={link} body={body} colour={colours.rod} /> : null
-    }
-    default:
-      // A weld is two bodies glued where they stand: there is nothing between them to draw.
-      return null
-  }
-}
-
-/**
- * A spring as a coil that stretches and squeezes with the link and keeps its turns (P28 L1): the
- * geometry is rewritten in place every frame for the length it has now, so the wire keeps its
- * thickness however far it is pulled. It was a 12-step zigzag one pixel wide.
- */
-function SpringCoil({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
-  const look = useMemo(() => springLook(link.length), [link.length])
-  const geo = useMemo(() => coilGeometry(look.shape), [look])
-  useEffect(() => () => geo.dispose(), [geo])
-  const mesh = useRef<THREE.Mesh>(null)
-  useFrame((state) => {
-    const m = mesh.current
-    const w = sim.current
-    if (!m || !w) return
-    const a = w.drawn(link.a)
-    const b = w.drawn(link.b)
-    if (!a || !b) {
-      m.visible = false
-      return
-    }
-    const mid: V3 = [(a.position[0] + b.position[0]) / 2, (a.position[1] + b.position[1]) / 2, (a.position[2] + b.position[2]) / 2]
-    const wire = visibleRadius(look.wireRadius, LINK_LOOK.spring.minPixels, pixelsPerMetre(state, mid))
-    const pos = geo.getAttribute('position') as THREE.BufferAttribute
-    const nor = geo.getAttribute('normal') as THREE.BufferAttribute
-    writeCoil(a.position, b.position, look.coilRadius, wire, pos.array as Float32Array, nor.array as Float32Array, look.shape)
-    pos.needsUpdate = true
-    nor.needsUpdate = true
-    m.visible = true
-  })
-  return (
-    <mesh ref={mesh} geometry={geo} frustumCulled={false} renderOrder={12} visible={false}>
-      <meshPhongMaterial key={colour} color={colour} specular={METAL_SHINE} shininess={60} />
-    </mesh>
-  )
-}
-
-/** A rod (a solid bar) or a string (a thin thread): one unit cylinder from centre to centre, never thinner on screen than its look allows. */
-function Bar({ sim, link, look, colour, shine, gloss }: { sim: React.RefObject<SimWorld | null>; link: Link; look: { radius: number; minPixels: number }; colour: string; shine: THREE.Color; gloss: number }) {
-  const geo = useMemo(() => unitCylinder(), [])
-  useEffect(() => () => geo.dispose(), [geo])
-  const mesh = useRef<THREE.Mesh>(null)
-  const place = useMemo(() => newPlacement(), [])
-  useFrame((state) => {
-    const m = mesh.current
-    const w = sim.current
-    if (!m || !w) return
-    const a = w.drawn(link.a)
-    const b = w.drawn(link.b)
-    if (!a || !b) {
-      m.visible = false
-      return
-    }
-    linkPlacement(a.position, b.position, place)
-    placeCylinder(m, place, visibleRadius(look.radius, look.minPixels, pixelsPerMetre(state, place.mid)))
-    m.visible = place.length > 1e-6
-  })
-  return (
-    <mesh ref={mesh} geometry={geo} frustumCulled={false} renderOrder={12} visible={false}>
-      <meshPhongMaterial key={colour} color={colour} specular={shine} shininess={gloss} />
-    </mesh>
-  )
-}
-
-/** Room for the longest rope (60 links) and its two ends, or a pulley rope's arc. */
-const ROPE_CAPACITY = 96
-
-/**
- * A rope drawn through the points `pathOf` gives each frame: unit cylinders end to end, one per
- * gap, and a bead on every joint (`beadScale` of the rope's width, `beadTone` of its colour), all
- * as two instanced meshes so a sixty-link rope is two draw calls.
- */
-function RopeTube({ sim, pathOf, look, beadScale, beadTone, colour }: { sim: React.RefObject<SimWorld | null>; pathOf: (w: SimWorld) => V3[]; look: { radius: number; minPixels: number }; beadScale: number; beadTone: number; colour: string }) {
-  const piece = useMemo(() => unitCylinder(), [])
-  const bead = useMemo(() => unitBall(), [])
-  useEffect(
-    () => () => {
-      piece.dispose()
-      bead.dispose()
-    },
-    [piece, bead]
-  )
-  const pieces = useRef<THREE.InstancedMesh>(null)
-  const beads = useRef<THREE.InstancedMesh>(null)
-  const beadColour = useMemo(() => '#' + new THREE.Color(colour).multiplyScalar(beadTone).getHexString(), [colour, beadTone])
-  useEffect(() => {
-    // Rewritten every frame: tell the GPU so.
-    pieces.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    beads.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-  }, [])
-  useFrame((state) => {
-    const w = sim.current
-    const p = pieces.current
-    const k = beads.current
-    if (!w || !p || !k) return
-    const path = pathOf(w)
-    const r = visibleRadius(look.radius, look.minPixels, pixelsPerMetre(state, path[Math.floor(path.length / 2)] ?? [0, 0, 0]))
-    const n = ropeMatrices(path, r, p.instanceMatrix.array as Float32Array)
-    p.count = n
-    p.instanceMatrix.needsUpdate = true
-    // An empty mesh drawn every frame makes WebGPU warn every frame.
-    p.visible = n > 0
-    const m = beadMatrices(path, r * beadScale, k.instanceMatrix.array as Float32Array)
-    k.count = m
-    k.instanceMatrix.needsUpdate = true
-    k.visible = m > 0
-  })
-  return (
-    <>
-      <instancedMesh ref={pieces} args={[piece, undefined, ROPE_CAPACITY]} frustumCulled={false} renderOrder={12} visible={false}>
-        <meshPhongMaterial key={colour} color={colour} specular={NO_SHINE} shininess={6} />
-      </instancedMesh>
-      <instancedMesh ref={beads} args={[bead, undefined, ROPE_CAPACITY]} frustumCulled={false} renderOrder={12} visible={false}>
-        <meshPhongMaterial key={beadColour} color={beadColour} specular={NO_SHINE} shininess={6} />
-      </instancedMesh>
-    </>
-  )
-}
-
-/** Half a hinge pin's length: through the body along its own z, and a little out of each side. */
-function pinHalfLength(b: BodyDef): number {
-  const [a, , c] = b.size.map(Math.abs)
-  const round = b.shape === 'sphere' || b.shape === 'cylinder' || b.shape === 'capsule' || b.shape === 'pulley'
-  return (round ? a : b.shape === 'cone' ? a / 2 : c / 2) + 0.03
-}
-
-/**
- * The pin a hinge turns about, through its pivot along the hinge axis, turning with the first
- * body. A hinge was drawn as nothing at all, so the seesaw's plank turned about a point no one
- * could see. The pivot is stored from the body's centre of mass and drawn from its position.
- */
-function HingePinView({ sim, link, body, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; body: BodyDef; colour: string }) {
-  const geo = useMemo(() => unitCylinder(), [])
-  useEffect(() => () => geo.dispose(), [geo])
-  const mesh = useRef<THREE.Mesh>(null)
-  const place = useMemo(() => newPlacement(), [])
-  const pivot = useMemo((): V3 => {
-    const c = comOffset(body)
-    const p = link.pivotA ?? [0, 0, 0]
-    return [c[0] + p[0], c[1] + p[1], c[2] + p[2]]
-  }, [body, link.pivotA])
-  const half = pinHalfLength(body)
-  useFrame((state) => {
-    const m = mesh.current
-    const w = sim.current
-    if (!m || !w) return
-    const st = w.drawn(link.a)
-    if (!st) {
-      m.visible = false
-      return
-    }
-    hingePin(st.position, st.rotation, pivot, half, place)
-    placeCylinder(m, place, visibleRadius(LINK_LOOK.hinge.radius, LINK_LOOK.hinge.minPixels, pixelsPerMetre(state, place.mid)))
-    m.visible = true
-  })
-  return (
-    <mesh ref={mesh} geometry={geo} frustumCulled={false} renderOrder={12} visible={false}>
-      <meshPhongMaterial key={colour} color={colour} specular={METAL_SHINE} shininess={60} />
-    </mesh>
-  )
-}
-
-/**
- * The connection being made: a thread from the first object to the cursor, until the second is
- * chosen. A mesh like the strings, so it shows at any zoom; it was a one-pixel line.
- */
-function JoinPreview({ sim }: { sim: React.RefObject<SimWorld | null> }) {
-  const joinMode = useSandbox((s) => s.joinMode)
-  const colour = useThemed(() => themeColor('--accent'))
-  const geo = useMemo(() => unitCylinder(), [])
-  useEffect(() => () => geo.dispose(), [geo])
-  const mesh = useRef<THREE.Mesh>(null)
-  const place = useMemo(() => newPlacement(), [])
-  const from = joinMode?.step === 'second' ? joinMode.a : undefined
-  // Leaving the second step drops the last cursor point, or the next Connect would start with a
-  // stale line before the mouse moved.
-  useEffect(() => {
-    if (!from) joinCursor.p = null
-  }, [from])
-  useFrame((state) => {
-    const m = mesh.current
-    const w = sim.current
-    if (!m) return
-    const st = from && w ? w.state(from) : null
-    const p = joinCursor.p
-    if (!st || !p) {
-      m.visible = false
-      return
-    }
-    linkPlacement(st.position, p, place)
-    placeCylinder(m, place, visibleRadius(LINK_LOOK.string.radius, LINK_LOOK.string.minPixels, pixelsPerMetre(state, place.mid)))
-    m.visible = place.length > 1e-6
-  })
-  return (
-    <mesh ref={mesh} geometry={geo} renderOrder={15} frustumCulled={false} visible={false}>
-      <meshBasicMaterial key={colour} color={colour} transparent opacity={0.9} />
-    </mesh>
-  )
-}
