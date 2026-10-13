@@ -41,7 +41,9 @@ import {
   type MeshData
 } from '../src/renderer/src/render/sandboxLooks'
 import { bodyGeometry, surfaceOf } from '../src/renderer/src/render/sandboxMeshes'
+import { apparatusGeometry, isMetreRule, getMetreRuleTexture } from '../src/renderer/src/render/sandbox/apparatusLooks'
 import { makeBody } from '../src/renderer/src/sim/store'
+import type { BodyDef } from '../src/renderer/src/sim/types'
 
 const TAU = Math.PI * 2
 
@@ -1088,6 +1090,56 @@ describe('every shape kind has a look of its own', () => {
       expect([...(g.getAttribute('color').array as Float32Array)], k).toEqual([...want.factors!])
       expect(g.getIndex()!.count, k).toBe(want.indices.length)
       g.dispose()
+    }
+  })
+})
+
+// G. Apparatus geometry (SB59)
+describe('apparatus geometry', () => {
+  it('detects metre rules by name, id or material', () => {
+    const beam = makeBody('box', 'Metre rule', [0, 0, 0])
+    expect(isMetreRule(beam)).toBe(true)
+
+    const rule = { ...makeBody('box', 'Vertical', [0, 0, 0]), id: 'atwood_rule' } as BodyDef
+    expect(isMetreRule(rule)).toBe(true)
+
+    const box = makeBody('box', 'Block', [0, 0, 0])
+    expect(isMetreRule(box)).toBe(false)
+  })
+
+  it('creates apparatus meshes or falls through to default rendering', () => {
+    const knife = { ...makeBody('box', 'Knife edge', [0, 0, 0]), id: 'pivot_wedge' } as BodyDef
+    const geo = apparatusGeometry(knife)
+    expect(geo).not.toBeNull()
+    expect(geo!.getAttribute('position').count).toBeGreaterThan(0)
+    geo!.dispose()
+
+    const hanger = { ...makeBody('cylinder', 'm₁', [0, 0, 0]), id: 'hanger_m1', mass: 0.5 } as BodyDef
+    const geo2 = apparatusGeometry(hanger)
+    expect(geo2).not.toBeNull()
+    geo2!.dispose()
+
+    const pulley = { ...makeBody('pulley', 'Pulley', [0, 0, 0]), id: 'atwood_pulley' } as BodyDef
+    const geo3 = apparatusGeometry(pulley)
+    expect(geo3).not.toBeNull()
+    geo3!.dispose()
+  })
+
+  it('returns null for non-apparatus bodies (falls through to default rendering)', () => {
+    const ball = makeBody('sphere', 'Ball', [0, 0, 0])
+    expect(apparatusGeometry(ball)).toBeNull()
+
+    const box = makeBody('box', 'Box', [0, 0, 0])
+    expect(apparatusGeometry(box)).toBeNull()
+  })
+
+  it('metre rule texture returns null in headless node, or a canvas texture in browser', () => {
+    const tex = getMetreRuleTexture('beam')
+    if (typeof document === 'undefined') {
+      expect(tex).toBeNull()
+    } else {
+      expect(tex).toBeInstanceOf(THREE.CanvasTexture)
+      tex?.dispose()
     }
   })
 })

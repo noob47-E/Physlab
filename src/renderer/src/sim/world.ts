@@ -839,8 +839,8 @@ export class SimWorld {
     // leaves the constraint holding whatever positions the bodies happened to have when it was
     // made, which pinned them where they stood — a slack string held a ball in mid-air.
     settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-    const p1 = this.rv3([0, 0, 0])
-    const p2 = this.rv3([0, 0, 0])
+    const p1 = this.rv3(link.pivotA ?? [0, 0, 0])
+    const p2 = this.rv3(link.pivotB ?? [0, 0, 0])
     settings.set_mPoint1(p1)
     settings.set_mPoint2(p2)
     const L = Math.max(0.01, link.length)

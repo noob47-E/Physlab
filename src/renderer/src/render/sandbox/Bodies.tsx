@@ -7,6 +7,7 @@ import { materialFinish } from '../../sim/materials'
 import { drawnColour } from '../../sim/palette'
 import { themeColor, useTheme, useThemed } from '../../app/theme'
 import { bodyGeometry } from '../sandboxMeshes'
+import { apparatusGeometry, getMetreRuleTexture, isMetreRule } from './apparatusLooks'
 
 /**
  * Every body's mesh. A fragment, not a group: the meshes stay direct children of SandboxView's group, where
@@ -19,7 +20,7 @@ export function Bodies() {
   const selectColour = useThemed(() => themeColor('--sel-glow'))
 
   const meshes = useMemo(() => {
-    const geos = bodies.map(bodyGeometry)
+    const geos = bodies.map((def) => apparatusGeometry(def) ?? bodyGeometry(def))
     return { geos }
   }, [bodies])
   useEffect(() => () => meshes.geos.forEach((g) => g.dispose()), [meshes])
@@ -31,9 +32,18 @@ export function Bodies() {
   const looks = useMemo(
     () =>
       bodies.map((d) => {
-        const colour = drawnColour(d.color, themeColor)
+        const isRule = isMetreRule(d)
+        const isVert = d.size[1] > d.size[0]
+        const map = isRule ? getMetreRuleTexture(isVert ? 'vertical' : 'beam') : null
+        const colour = isRule ? new THREE.Color(1, 1, 1) : drawnColour(d.color, themeColor)
         const finish = materialFinish(d.material)
-        return { colour, specular: new THREE.Color().setScalar(finish.shine), gloss: finish.gloss, key: `${theme}|${colour}|${finish.shine}|${finish.gloss}` }
+        return {
+          colour,
+          map,
+          specular: new THREE.Color().setScalar(finish.shine),
+          gloss: finish.gloss,
+          key: `${theme}|${isRule ? 'rule' : colour}|${finish.shine}|${finish.gloss}`
+        }
       }),
     [bodies, theme]
   )
@@ -49,7 +59,8 @@ export function Bodies() {
               colour, and the material's finish sets the highlight. */}
           <meshPhongMaterial
             key={`${selectColour}|${looks[i].key}`}
-            vertexColors
+            vertexColors={!looks[i].map}
+            map={looks[i].map ?? undefined}
             color={looks[i].colour}
             specular={looks[i].specular}
             shininess={looks[i].gloss}
@@ -61,3 +72,4 @@ export function Bodies() {
     </>
   )
 }
+

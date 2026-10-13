@@ -8,7 +8,7 @@ import type { BodyDef, BodyId } from './types'
 /** The rows a body always shows, in this order; everything else sits under a fold. */
 export const ALWAYS_SHOWN = ['name', 'material', 'mass', 'position', 'velocity'] as const
 
-export type FoldId = 'launcher' | 'pendulum' | 'connections' | 'appearance' | 'physics' | 'advanced' | 'world-more' | 'collisions'
+export type FoldId = 'launcher' | 'pendulum' | 'lever' | 'connections' | 'appearance' | 'physics' | 'advanced' | 'world-more' | 'collisions'
 
 /**
  * Which fold each of the other controls belongs to, in the order they appear. The panel renders
@@ -43,6 +43,7 @@ export const controlsIn = (fold: FoldId): FoldedKey[] => (Object.keys(FOLD_OF) a
 export const FOLD_TITLES: Record<FoldId, string> = {
   launcher: 'Launcher',
   pendulum: 'Pendulum',
+  lever: 'Lever & Moments',
   connections: 'Connections',
   appearance: 'Appearance',
   physics: 'Physics',

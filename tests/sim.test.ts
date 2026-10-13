@@ -993,30 +993,33 @@ describe('the presets do what their sentences say', () => {
     world.destroy()
   })
 
-  it('the seesaw tips to the heavy side, and balances at 3 kg × 1 m against 1 kg × 3 m', async () => {
-    const { world, by } = await open('seesaw')
-    run(world, 1)
-    // Heavy on the left going down is a turn anticlockwise about z: a positive angle.
-    expect(tilt(world.state(by('Plank').id)!)).toBeGreaterThan(5)
-    world.destroy()
-
-    const balanced = await open('seesaw', (bodies) => {
-      const light = bodies.find((b) => b.name === 'Light')!
-      light.position = [3, light.position[1], 0]
-    })
+  it('the lever balances at 2 kg × 0.3 m against 3 kg × 0.2 m, and tips to the 3 kg side when unbalanced', async () => {
+    const balanced = await open('seesaw')
     let worst = 0
-    watch(balanced.world, 3, () => (worst = Math.max(worst, Math.abs(tilt(balanced.world.state(balanced.by('Plank').id)!)))))
-    expect(worst).toBeLessThan(2)
+    watch(balanced.world, 3, () => (worst = Math.max(worst, Math.abs(tilt(balanced.world.state(balanced.by('Beam').id)!)))))
+    expect(worst).toBeLessThan(1)
     balanced.world.destroy()
+
+    const { world, by } = await open('seesaw', (bodies, links) => {
+      const right = bodies.find((b) => b.name === 'Right hanger')!
+      right.position = [0.3, right.position[1], 0]
+      const link = links.find((l) => l.b === right.id)!
+      link.pivotA = [0.3, 0, 0]
+    })
+    run(world, 1)
+    // 3 kg on the right going down is a clockwise turn: tilt is negative.
+    expect(tilt(world.state(by('Beam').id)!)).toBeLessThan(-5)
+    world.destroy()
   })
 
-  it('the Atwood machine drops its heavy mass 0.41 m in the first half second', async () => {
+  it('the Atwood machine accelerates slowly at 0.47 m/s²', async () => {
     const { world, by } = await open('atwood')
-    run(world, 0.5)
+    run(world, 1)
     const heavy = by('m₂')
-    const expected = 0.5 * (G / 3) * 0.25
+    const a = (0.05 * G) / 1.05
+    const expected = 0.5 * a * 1 // in 1 s
     const fell = heavy.position[1] - world.state(heavy.id)!.position[1]
-    expect(Math.abs(fell - expected) / expected).toBeLessThan(0.1)
+    expect(Math.abs(fell - expected) / expected).toBeLessThan(0.05)
     world.destroy()
   })
 

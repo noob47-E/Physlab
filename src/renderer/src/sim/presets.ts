@@ -7,9 +7,10 @@
 // happen and then check it.
 
 import { makeBody } from './store'
-import { localToCom, makeLink, ropeSegments } from './links'
+import { makeLink, ropeSegments } from './links'
 import { materialById } from './materials'
 import { paintBodies } from './palette'
+import { buildKnifeEdge, buildMetreRule, buildPulleyBracket, buildRetortStand, buildSlottedHanger, buildSpokedPulley } from './apparatus'
 import { type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
 
 export interface Preset {
@@ -49,17 +50,17 @@ const ofMaterial = (id: string): Pick<BodyDef, 'material' | 'friction' | 'restit
   return { material: m.id, friction: m.friction, restitution: m.restitution, color: m.color }
 }
 
-const floor = (material = 'concrete'): BodyDef => ({ ...makeBody('ground', 'Floor', [0, -0.2, 0]), ...ofMaterial(material) })
+export const floor = (material = 'concrete'): BodyDef => ({ ...makeBody('ground', 'Floor', [0, -0.2, 0]), ...ofMaterial(material) })
 
 /**
  * A body built and adjusted in one expression, so a preset reads like a setup, not a program. A
  * material named in `over` is applied first, so a friction or bounce typed beside it still wins.
  */
-function put(shape: Parameters<typeof makeBody>[0], name: string, at: [number, number, number], over: Partial<BodyDef> = {}): BodyDef {
+export function put(shape: Parameters<typeof makeBody>[0], name: string, at: [number, number, number], over: Partial<BodyDef> = {}): BodyDef {
   return { ...makeBody(shape, name, at), ...(over.material ? ofMaterial(over.material) : {}), ...over }
 }
 
-const ball = (name: string, at: [number, number, number], over: Partial<BodyDef> = {}) =>
+export const ball = (name: string, at: [number, number, number], over: Partial<BodyDef> = {}) =>
   put('sphere', name, at, { size: [0.2, 0.2, 0.2], massMode: 'mass', mass: 1, material: 'steel', trace: true, ...over })
 
 const VACUUM = { airDensity: 0 }
@@ -189,26 +190,19 @@ const EXPERIMENTS: Preset[] = [
   },
   {
     id: 'seesaw',
-    label: 'Seesaw',
+    label: 'Lever: the principle of moments',
     topic: 'Forces',
-    tags: ['balance', 'lever', 'moments', 'torque'],
-    about: 'A plank on a hinge. 3 kg at 1 m against 1 kg at 1.5 m: moments 3 against 1.5, so the heavy side goes down. Drag the light ball out to 3 m to balance it.',
+    tags: ['balance', 'lever', 'moments', 'torque', 'hanger', 'weights'],
+    about: 'A metre-rule beam on a knife-edge pivot with hanging slotted masses. 2 kg at 0.3 m left balances 3 kg at 0.2 m right. Slide a hanger along the beam to upset the balance, or change its mass.',
     build: () => {
-      // A fulcrum, not a crate: a fixed cone reads as the triangle under a lever from the side
-      // (P28 L4). It is as tall as the box it replaces, so its tip stays 3 cm under the plank —
-      // beyond the engine's reach for a contact — and the plank turns exactly as it did.
-      const stand = put('cone', 'Stand', [0, 0.35, 0], { size: [0.6, 0.7, 0.6], motion: 'static', material: 'steel' })
-      // Long enough for the instruction in `about`: a 4 m plank ended at 2 m, so a ball dragged
-      // out to 3 m fell off the end instead of balancing.
-      const plank = put('plank', 'Plank', [0, 0.78, 0], { size: [7, 0.1, 0.5], massMode: 'mass', mass: 2, material: 'wood' })
+      const beam = buildMetreRule('beam', 'Beam', [0, 0.6, 0])
+      const { base, wedge, hingeLink } = buildKnifeEdge('pivot', [0, 0, 0], 0.6)
+      const { hanger: leftHanger, stringLink: strLeft } = buildSlottedHanger('hanger_left', 'Left hanger', [-0.3, 0.6, 0], 2.0, 0.15)
+      const { hanger: rightHanger, stringLink: strRight } = buildSlottedHanger('hanger_right', 'Right hanger', [0.2, 0.6, 0], 3.0, 0.15)
       return {
-        bodies: [floor(), stand, plank, ball('Heavy', [-1, 1.03, 0], { mass: 3, material: 'lead' }), ball('Light', [1.5, 1.03, 0], { mass: 1, material: 'wood' })],
+        bodies: [floor(), base, wedge, beam, leftHanger, rightHanger],
         world: VACUUM,
-        // The hinge axis runs through the plank's own centre, at plank height. A hinge at the
-        // stand's centre put the axis 0.43 m below the plank's weight, which is a plank balanced
-        // on a point: it tipped over whatever sat on it, and no arrangement of balls could hold.
-        // On the stand's side it is measured from the cone's centre of mass, as the engine pins it.
-        links: [join('hinge', plank, stand, undefined, { pivotA: [0, 0, 0], pivotB: localToCom(stand, plank.position) })]
+        links: [hingeLink(beam), strLeft(beam), strRight(beam)]
       }
     }
   },
@@ -216,13 +210,24 @@ const EXPERIMENTS: Preset[] = [
     id: 'atwood',
     label: 'Atwood machine',
     topic: 'Forces',
-    tags: ['pulley', 'rope', 'mass', 'acceleration'],
-    about: '1 kg and 2 kg on a rope over a pulley. Both accelerate at (m₂ − m₁) g / (m₁ + m₂) = 3.27 m/s², a third of free fall. Watch m₂: it falls ½at² = 0.41 m in the first 0.5 s, and m₁ rises the same.',
+    tags: ['pulley', 'rope', 'mass', 'acceleration', 'retort'],
+    about: 'Two mass hangers on a string over a pulley on a retort stand. 0.50 kg against 0.55 kg accelerates slowly at 0.47 m/s². In 2 s the masses travel 0.93 m, read off the vertical metre rule behind m₁.',
     build: () => {
-      const wheel = put('pulley', 'Pulley', [0, 5, 0], { size: [0.3, 0.15, 0.3] })
-      const light = put('box', 'm₁', [-0.3, 2.5, 0], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 1, material: 'wood', trace: true })
-      const heavy = put('box', 'm₂', [0.3, 2.5, 0], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 2, material: 'steel', trace: true })
-      return { bodies: [floor(), wheel, light, heavy], world: VACUUM, links: [join('pulley', light, heavy, wheel)] }
+      const { base, rod, clamp, arm, armEnd } = buildRetortStand([0, 0, -0.18], 1.6)
+      const wheelPos: [number, number, number] = [0, 1.45, 0]
+      const wheel = buildSpokedPulley('pulley', 'Pulley', wheelPos)
+      const bracket = buildPulleyBracket(armEnd, wheelPos)
+      const rule = buildMetreRule('rule', 'Metre rule', [-0.1, 0.75, -0.08], { orientation: 'vertical', motion: 'static' })
+      const { hanger: m1 } = buildSlottedHanger('m1', 'm₁', [-0.1, 1.45, 0], 0.50, 1.20)
+      const { hanger: m2 } = buildSlottedHanger('m2', 'm₂', [0.1, 1.45, 0], 0.55, 0.20)
+      m1.trace = true
+      m2.trace = true
+      const stringLen = 1.20 + 0.20
+      return {
+        bodies: [floor(), base, rod, clamp, arm, bracket, rule, wheel, m1, m2],
+        world: VACUUM,
+        links: [join('pulley', m1, m2, wheel, { length: stringLen })]
+      }
     }
   },
   {

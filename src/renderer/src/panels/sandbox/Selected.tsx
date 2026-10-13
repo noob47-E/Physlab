@@ -14,6 +14,7 @@ import { themeColor, useTheme } from '../../app/theme'
 import { useNum, Vec3Row, SizeRow, Slider, Fold } from './common'
 import { ReplayLock, useReplayLocked } from './ReplayLock'
 import { PendulumFold } from './PendulumFold'
+import { LeverFold } from './LeverFold'
 import { NowBox } from './NowBox'
 
 /** Shapes that roll, so only they are offered a rolling-resistance figure. */
@@ -177,6 +178,9 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
 
       {/* Only for a body that hangs from a pivot by a string, a rod or a rope; keyed so a note about one bob is not shown under another. */}
       {moves && <PendulumFold key={sel.id} sel={sel} />}
+
+      {/* Lever moments and sliding hanger controls when a lever beam or hanger is selected */}
+      <LeverFold key={`lever-${sel.id}`} sel={sel} />
 
       {BODY_FOLDS.map((fold) => (
         <Fold key={fold} id={fold}>

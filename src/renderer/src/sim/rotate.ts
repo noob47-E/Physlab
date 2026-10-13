@@ -20,7 +20,7 @@ export function eulerToQuat(deg: V3): Quat {
 }
 
 /** `v` turned by `q`: the world position of a point given in the body's own frame. */
-function rotateVec(q: Quat, v: V3): V3 {
+export function rotateVec(q: Quat, v: V3): V3 {
   const [qx, qy, qz, qw] = q
   // v' = v + 2 q_v × (q_v × v + w v)
   const tx = 2 * (qy * v[2] - qz * v[1])

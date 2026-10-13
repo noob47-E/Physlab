@@ -164,36 +164,33 @@ const PRESET_CHECKS: {
   {
     id: 'seesaw',
     check: (built) => {
-      const heavy = built.bodies.find(b => b.name === 'Heavy')!
-      const light = built.bodies.find(b => b.name === 'Light')!
-      const d1 = Math.abs(heavy.position[0])
-      const d2 = Math.abs(light.position[0])
+      const left = built.bodies.find((b) => b.name === 'Left hanger')!
+      const right = built.bodies.find((b) => b.name === 'Right hanger')!
+      const dL = Math.abs(left.position[0])
+      const dR = Math.abs(right.position[0])
       return [
-        ['3', heavy.mass],
-        ['1', d1],
-        ['1', light.mass],
-        ['1.5', d2],
-        ['3', heavy.mass * d1],
-        ['1.5', light.mass * d2],
-        ['3', heavy.mass * d1 / light.mass]
+        ['2', left.mass],
+        ['0.3', dL],
+        ['3', right.mass],
+        ['0.2', dR]
       ]
     }
   },
   {
     id: 'atwood',
     check: (built) => {
-      const m1 = built.bodies.find(b => b.name === 'm₁')!.mass
-      const m2 = built.bodies.find(b => b.name === 'm₂')!.mass
+      const m1 = built.bodies.find((b) => b.name === 'm₁')!.mass
+      const m2 = built.bodies.find((b) => b.name === 'm₂')!.mass
       const g = built.world?.gravity ?? 9.81
-      const a = (m2 - m1) * g / (m1 + m2)
-      const t = 0.5
+      const a = ((m2 - m1) * g) / (m1 + m2)
+      const t = 2
       const d = 0.5 * a * t * t
       return [
-        ['1', m1],
-        ['2', m2],
-        ['3.27', a],
-        ['0.41', d],
-        ['0.5', t]
+        ['0.50', m1],
+        ['0.55', m2],
+        ['0.47', a],
+        ['0.93', d],
+        ['2', t]
       ]
     }
   },

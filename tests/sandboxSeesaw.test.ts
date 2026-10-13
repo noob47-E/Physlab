@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { SimWorld } from '../src/renderer/src/sim/world'
 import { DEFAULT_WORLD, type BodyDef, type BodyState, type Link } from '../src/renderer/src/sim/types'
-import { presetById } from '../src/renderer/src/sim/presets'
+import { floor, put, ball } from '../src/renderer/src/sim/presets'
 import { comOffset, localToCom } from '../src/renderer/src/sim/links'
 import { makeBody } from '../src/renderer/src/sim/store'
 import type { V3 } from '../src/renderer/src/math/vec'
@@ -17,20 +17,29 @@ import type { V3 } from '../src/renderer/src/math/vec'
 /** Roll angle of a body about z, in degrees, from its quaternion (as sim.test.ts reads it). */
 const tilt = (st: BodyState) => (2 * Math.asin(st.rotation[2]) * 180) / Math.PI
 
-/** The seesaw as it is now, or on the old box stand, with the light ball where asked. */
+/** The seesaw as it was on the cone fulcrum, or on the old box stand, with the light ball where asked. */
 function seesaw(stand: 'now' | 'old box', lightX?: number): { bodies: BodyDef[]; links: Link[]; world: Partial<typeof DEFAULT_WORLD> } {
-  const built = presetById('seesaw')!.build()
-  const bodies = built.bodies.map((b) => ({ ...b }))
-  const links = (built.links ?? []).map((l) => ({ ...l }))
-  if (lightX !== undefined) bodies.find((b) => b.name === 'Light')!.position = [lightX, 1.03, 0]
-  if (stand === 'old box') {
-    // The stand as it was until this change: a 0.2 × 0.7 × 0.4 steel box, its centre its centre of mass.
-    const s = bodies.find((b) => b.name === 'Stand')!
-    Object.assign(s, { shape: 'box', size: [0.2, 0.7, 0.4] })
-    const plank = bodies.find((b) => b.name === 'Plank')!
-    links[0].pivotB = [0, plank.position[1] - s.position[1], 0]
+  const standBody: BodyDef = stand === 'old box'
+    ? put('box', 'Stand', [0, 0.35, 0], { size: [0.2, 0.7, 0.4], motion: 'static', material: 'steel' })
+    : put('cone', 'Stand', [0, 0.35, 0], { size: [0.6, 0.7, 0.6], motion: 'static', material: 'steel' })
+  const plank = put('plank', 'Plank', [0, 0.78, 0], { size: [7, 0.1, 0.5], massMode: 'mass', mass: 2, material: 'wood' })
+  const heavy = ball('Heavy', [-1, 1.03, 0], { mass: 3, material: 'lead' })
+  const light = ball('Light', [lightX ?? 1.5, 1.03, 0], { mass: 1, material: 'wood' })
+  const pivotB = stand === 'old box'
+    ? [0, plank.position[1] - standBody.position[1], 0] as V3
+    : localToCom(standBody, plank.position)
+  const hinge: Link = {
+    id: 'l_hinge',
+    kind: 'hinge',
+    a: plank.id,
+    b: standBody.id,
+    length: 0.1,
+    stiffness: 0,
+    damping: 0,
+    pivotA: [0, 0, 0],
+    pivotB
   }
-  return { bodies, links, world: built.world ?? {} }
+  return { bodies: [floor(), standBody, plank, heavy, light], links: [hinge], world: { airDensity: 0 } }
 }
 
 /** Runs a seesaw for `steps` sixtieths of a second; the plank's tilt and centre after every step. */

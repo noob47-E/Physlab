@@ -153,10 +153,10 @@ describe('springs', () => {
 })
 
 describe('pulleys', () => {
-  it('atwood: 3.27 m/s², m₂ falls 0.41 m in 0.5 s; at 240 the 0.83 % is the step’s ½at²(1 + Δt/t)', async () => {
+  it('atwood (SB59: 0.50 kg against 0.55 kg on a retort stand): 0.467 m/s², m₂ falls 5.84 cm in 0.5 s; at 240 the 0.83 % is the step’s ½at²(1 + Δt/t)', async () => {
     const r = await run('atwood')
-    expect(r.pred('a').value).toBeCloseTo(3.27, 2)
-    expect(r.pred('drop').value).toBeCloseTo(0.41, 2)
+    expect(r.pred('a').value).toBeCloseTo((0.05 / 1.05) * 9.81, 6)
+    expect(r.pred('drop').value).toBeCloseTo(0.5 * (0.05 / 1.05) * 9.81 * 0.25, 6)
     expect(r.gap('drop').within).toBe(true)
     const s = await run('atwood', 240)
     expect(s.gap('drop').percent).toBeCloseTo(0.833, 1)
@@ -232,7 +232,7 @@ describe('predictions come from the built preset', () => {
   it('a heavier m₂, a faster projectile, a longer pendulum and a stiffer spring each move their prediction', () => {
     const at = presetById('atwood')!.build()
     const heavier = { ...at, bodies: at.bodies.map((b) => (b.name === 'm₂' ? { ...b, mass: 3 } : b)) }
-    expect(theoryFor('atwood')!.predict(heavier).find((p) => p.key === 'a')!.value).toBeCloseTo((2 / 4) * 9.81, 6)
+    expect(theoryFor('atwood')!.predict(heavier).find((p) => p.key === 'a')!.value).toBeCloseTo((2.5 / 3.5) * 9.81, 6)
     const pr = presetById('projectile')!.build()
     const faster = { ...pr, bodies: pr.bodies.map((b) => (b.name === 'P' ? { ...b, velocity: [b.velocity[0] * 2, b.velocity[1] * 2, 0] as [number, number, number] } : b)) }
     expect(theoryFor('projectile')!.predict(faster).find((p) => p.key === 'range')!.value).toBeCloseTo(4 * 17.3029, 2)

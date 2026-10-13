@@ -286,7 +286,8 @@ describe('the sandbox store', () => {
 })
 
 describe('classroom-scale masses', () => {
-  const inRange = (kg: number) => kg >= 0.5 && kg <= 10
+  // From a metre rule (SB59: the lever's beam is a real one, 0.15 kg) to a 10 kg crate: all things a student lifts.
+  const inRange = (kg: number) => kg >= 0.1 && kg <= 10
 
   it('a new ball weighs a kilogram, not half a tonne', () => {
     // Steel at r = 0.25 m is 514 kg — real, and alien to anyone who has lifted a ball. The size
