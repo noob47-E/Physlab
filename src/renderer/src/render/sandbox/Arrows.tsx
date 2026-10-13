@@ -8,8 +8,10 @@ import { Arrow } from '../ObjectViews'
 import { themeColor, useThemed } from '../../app/theme'
 import { readoutRef } from './readout'
 
-/** The velocity arrows, then the pushes' force arrows. */
+/** The velocity arrows, then the pushes' force arrows; none at all when the World section's Arrows switch says Hide. */
 export function Arrows() {
+  const shown = useSandbox((s) => s.arrowsShown)
+  if (!shown) return null
   return (
     <>
       <VelocityArrows />

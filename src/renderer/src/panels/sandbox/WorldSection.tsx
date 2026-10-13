@@ -14,6 +14,8 @@ export function WorldSection() {
   const setWorld = useSandbox((s) => s.setWorld)
   const sideView = useSandbox((s) => s.sideView)
   const setSideView = useSandbox((s) => s.setSideView)
+  const arrowsShown = useSandbox((s) => s.arrowsShown)
+  const setArrowsShown = useSandbox((s) => s.setArrowsShown)
   const resetRun = useSandbox((s) => s.resetRun)
   const setPlaying = useScene((s) => s.setPlaying)
   const num = useNum()
@@ -67,6 +69,18 @@ export function WorldSection() {
           </button>
           <button className={!sideView ? 'on' : ''} onClick={() => setSideView(false)} title="Look around in 3D">
             3D view
+          </button>
+        </div>
+      </div>
+      {/* The owner (13 Oct): one switch for every arrow on the scene; each object's own arrow setting still applies when shown. */}
+      <div className="prop-row">
+        <label>Arrows</label>
+        <div className="seg">
+          <button className={arrowsShown ? 'on' : ''} onClick={() => setArrowsShown(true)} title="Draw the velocity and force arrows on the objects">
+            Show
+          </button>
+          <button className={!arrowsShown ? 'on' : ''} onClick={() => setArrowsShown(false)} title="Hide every arrow, for a clean picture of the motion">
+            Hide
           </button>
         </div>
       </div>

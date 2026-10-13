@@ -4,7 +4,6 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three/webgpu'
 import { useSandbox } from '../../sim/store'
 import type { BodyDef } from '../../sim/types'
-import { niceStep } from '../cameraUtils'
 import { themeColor, useThemed } from '../../app/theme'
 
 /** The lights, and the floor's grid. */
@@ -20,8 +19,11 @@ export function Stage() {
   )
 }
 
-/** How far out from the middle the floor's grid is drawn, in metres: the old floor's own edge. */
-const GRID_REACH = 100
+/**
+ * How far out from the middle the floor's grid is drawn, in metres. It was 100 (the old floor's edge), but the owner saw the
+ * lines blink (13 Oct): far away a thin line is narrower than a pixel and shimmers, so the grid now stays near the experiment.
+ */
+const GRID_REACH = 40
 
 /**
  * Metre lines on the floor. Without them two balls three metres apart and two balls thirty
@@ -43,9 +45,11 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
     // big the floor is: drawn out to a floor kilometres wide, its lines would crowd into a band
     // of noise along the horizon.
     const half = Math.min(GRID_REACH, Math.max(4, width / 2))
-    const top = y + thickness / 2 + 0.002
-    const fine = Math.min(20, half)
-    const coarse = niceStep(half / 10)
+    // 1 cm above the floor, not 2 mm: at a distance 2 mm is finer than the depth buffer can tell apart, so the floor and its
+    // lines took turns in front and the grid blinked as the camera moved (z-fighting). 1 cm cannot be seen as a gap.
+    const top = y + thickness / 2 + 0.01
+    const fine = Math.min(15, half)
+    const coarse = 5
     const pts: number[] = []
     for (let x = -fine; x <= fine + 1e-9; x += 1) pts.push(x, top, -fine, x, top, fine)
     for (let z = -fine; z <= fine + 1e-9; z += 1) pts.push(-fine, top, z, fine, top, z)
@@ -61,7 +65,8 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
   if (!grid) return null
   return (
     <lineSegments geometry={grid} renderOrder={1}>
-      <lineBasicMaterial key={gridColour} color={gridColour} transparent opacity={0.85} />
+      {/* No depth written: the lines never hide each other or a body's shadow, and cannot fight the floor for the same depth. */}
+      <lineBasicMaterial key={gridColour} color={gridColour} transparent opacity={0.85} depthWrite={false} />
     </lineSegments>
   )
 }

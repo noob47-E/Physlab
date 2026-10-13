@@ -80,6 +80,8 @@ interface SandboxState {
   live: Record<BodyId, BodyState>
   /** Camera flattened to a straight-on side view, so a scene reads like a textbook figure. */
   sideView: boolean
+  /** Every arrow on the scene shown or hidden at once (the owner, 13 Oct): a view choice, never the physics. */
+  arrowsShown: boolean
   links: Link[]
   /** Readings taken while the run plays, per body: the raw material of a graph or a table. */
   recording: Record<BodyId, Sample[]>
@@ -123,6 +125,7 @@ interface SandboxState {
   record: (samples: Record<BodyId, Sample>) => void
   clearRecording: () => void
   setSideView: (on: boolean) => void
+  setArrowsShown: (on: boolean) => void
   /** Step back one edit. The sandbox had no history at all, so a wrong delete was final. */
   undo: () => void
   redo: () => void
@@ -303,6 +306,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   engineTime: 0,
   live: {},
   sideView: true,
+  arrowsShown: true,
   links: [],
   recording: {},
   past: [],
@@ -494,6 +498,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   },
   clearRecording: () => set({ recording: {} }),
   setSideView: (sideView) => set({ sideView }),
+  setArrowsShown: (arrowsShown) => set({ arrowsShown }),
 
   undo: () => {
     const { past, future, bodies, links, actuators, world } = get()
