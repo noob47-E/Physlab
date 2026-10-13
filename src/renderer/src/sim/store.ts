@@ -50,7 +50,7 @@ export const engine: { world: SimWorld | null } = {
 // to bring the body back without its push, so pressing Play showed it sitting still.
 // The world settings travel too (H3): undoing a preset, or a change of gravity, used to bring the
 // objects back under the other scene's gravity and air.
-type Snapshot = { bodies: BodyDef[]; links: Link[]; actuators: Actuator[]; world: WorldSettings }
+type Snapshot = { bodies: BodyDef[]; links: Link[]; actuators: Actuator[]; world: WorldSettings; presetId?: string | null }
 
 interface SandboxState {
   bodies: BodyDef[]
@@ -103,6 +103,8 @@ interface SandboxState {
    * drops them, and removing a body removes its pushes.
    */
   actuators: Actuator[]
+  /** The ready-made experiment on screen (SB15), or null for anything else: the cards, the theory and the Collision Lab key on it. */
+  presetId: string | null
 
   addBody: (shape: ShapeKind, at?: [number, number, number]) => BodyDef
   updateBody: (id: BodyId, patch: Partial<BodyDef>) => void
@@ -145,6 +147,11 @@ interface SandboxState {
    * calls `setActuators`.
    */
   loadPreset: (id: string) => boolean
+  /**
+   * Loads an experiment's build as loadPreset does and names it `presetId` (loadPreset is this with the preset's own
+   * build). `applyViewHint` is the experiment's wish for a 2D or 3D view (SB50); a lab slider rebuilding its scene passes false.
+   */
+  loadBuilt: (presetId: string, built: { bodies: BodyDef[]; world?: Partial<WorldSettings>; links?: Link[] }, opts?: { applyViewHint?: boolean }) => void
   /** Replaces the pushes on the loaded experiment; a running engine picks them up at once. */
   setActuators: (list: Actuator[]) => void
   /** Takes one push off (the panel's Remove), as a step Undo brings back. */
@@ -314,6 +321,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   runNonce: 0,
   actuators: [],
   trailNonce: 0,
+  presetId: null,
 
   addBody: (shape, at) => {
     remember(set, get, 'add')
@@ -413,16 +421,20 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       live: {},
       engineTime: 0,
       runNonce: get().runNonce + 1,
-      actuators: []
+      actuators: [],
+      presetId: null
     })
     engine.world?.setActuators([])
   },
   loadPreset: (id) => {
     const p = presetById(id)
     if (!p) return false
-    const built = p.build()
-    get().setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
+    get().loadBuilt(id, p.build(), { applyViewHint: true })
     return true
+  },
+  loadBuilt: (presetId, built, _opts) => {
+    get().setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
+    set({ presetId })
   },
   setActuators: (actuators) => {
     set({ actuators })
@@ -501,19 +513,19 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   setArrowsShown: (arrowsShown) => set({ arrowsShown }),
 
   undo: () => {
-    const { past, future, bodies, links, actuators, world } = get()
+    const { past, future, bodies, links, actuators, world, presetId } = get()
     const back = past[past.length - 1]
     if (!back) return
     endBurst()
-    set({ bodies: back.bodies, links: back.links, actuators: back.actuators, world: back.world, past: past.slice(0, -1), future: [...future, { bodies, links, actuators, world }], selection: null, partner: null })
+    set({ bodies: back.bodies, links: back.links, actuators: back.actuators, world: back.world, presetId: back.presetId ?? null, past: past.slice(0, -1), future: [...future, { bodies, links, actuators, world, presetId }], selection: null, partner: null })
     engine.world?.setActuators(back.actuators)
   },
   redo: () => {
-    const { past, future, bodies, links, actuators, world } = get()
+    const { past, future, bodies, links, actuators, world, presetId } = get()
     const next = future[future.length - 1]
     if (!next) return
     endBurst()
-    set({ bodies: next.bodies, links: next.links, actuators: next.actuators, world: next.world, future: future.slice(0, -1), past: [...past, { bodies, links, actuators, world }], selection: null, partner: null })
+    set({ bodies: next.bodies, links: next.links, actuators: next.actuators, world: next.world, presetId: next.presetId ?? null, future: future.slice(0, -1), past: [...past, { bodies, links, actuators, world, presetId }], selection: null, partner: null })
     engine.world?.setActuators(next.actuators)
   },
   canUndo: () => get().past.length > 0,
@@ -541,7 +553,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       past: [],
       future: [],
       runNonce: get().runNonce + 1,
-      actuators: []
+      actuators: [],
+      presetId: null
     })
     engine.world?.setActuators([])
   },
@@ -565,7 +578,7 @@ function remember(set: (p: Partial<SandboxState>) => void, get: () => SandboxSta
   lastRemembered = now
   lastTag = tag
   if (burst) return
-  set({ past: [...get().past, { bodies: get().bodies, links: get().links, actuators: get().actuators, world: get().world }].slice(-30), future: [] })
+  set({ past: [...get().past, { bodies: get().bodies, links: get().links, actuators: get().actuators, world: get().world, presetId: get().presetId }].slice(-30), future: [] })
 }
 
 /**

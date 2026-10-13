@@ -69,3 +69,49 @@ under them (SB15) and the graphs (SB19) add their own sections here.
 readingOf roles, "—", the sign, plainOf, duplicate ids); `tests/cardsCatalogue.test.ts` (the fifteen
 cards' structure, known answers, the shown-sum property with its planted wrong rounding, KaTeX on
 every line).
+
+## Theory (SB15)
+
+`src/renderer/src/sim/theory.ts` (I-8): `theoryFor(presetId)` gives a demo experiment's default `cards`, its `roles` (role →
+body name), `predict(built)`, `measure(tape, built, step?)` and `tolerance(rate)`; `gapOf(prediction, measured, rate,
+built)` gives `{ percent, reason, within }`. The store's `presetId` (set by `loadBuilt`, which `loadPreset` calls; null
+after any other scene change) says which experiment is on screen. Tests: `tests/theory.test.ts`, `tests/loadedPreset.test.ts`.
+
+- **Predictions come from the build**, through `sim/predict.ts`: masses (`SimWorld.massOf`), sizes, start speeds, links,
+  g and the floor's top. Nothing is copied from the preset's sentence; a test changes a mass, a speed, a stiffness and g.
+- **Measurements come from the tape.** A landing is found from the engine's own hit (the first contact closing faster
+  than 5 cm/s) and carried from the last free record to the touching height under gravity, so the stepped path's error
+  stays in and only the contact's handling is left out. Periods use `periodic`, stops `stopDistance`, bounce tops `peaks`
+  and contacts `bounces` (sim/measure.ts). The cliff is timed from the step the ball starts to fall, not from the edge:
+  the engine lets go a little before the centre passes it.
+- **The reason** is the limits the quantity meets (`limitsFor` on facts worked out from the build: air, sliding, bounces,
+  a rope, a swing over 5°, rolling), with a number when there is one ("a 15° swing is not small: … = 2.849 s"); with no
+  limit, the step's own error from `sim/stepError.ts` with its number ("it lands v₀ₓδ = 5.1 cm short", "δ = 2.1 ms early",
+  "the top is (v_y − gΔt/2)²/2g = 2.492 m", "½at²(1 + Δt/t), 0.83 % more").
+- **Within** = inside `tolerance(rate)` of the formula, or of the formula with the step's error worked in (`stepped`), or
+  no further off than the step can make it (`allowance`: a bounce top up to v Δt high).
+
+| Scene | Predicted | Measured 240 | Measured 600 |
+|---|---|---|---|
+| fall | 1.0096 s, 9.905 m/s | −0.21 % (2.1 ms early) | −0.08 % |
+| projectile | 17.303 m, 2.497 m, 1.427 s | range −0.29 %, top −0.58 % (= stepped top) | −0.12 %, −0.23 % (= stepped), −0.12 % |
+| cliff | 0.903 s, 2.709 m | −0.23 % | −0.09 % |
+| drop | 1.106 s both | −0.19 % | −0.08 % |
+| moon | 2.4845 s | −0.08 % | −0.03 % |
+| terminal | v_t 19.64 m/s; floor 18.62 m/s (94.8 % of v_t) | +0.02 % | 0.00 % |
+| ramp | 4.556 m/s | −1.75 % (rolling) | −1.76 % |
+| friction | 4.587 m | −0.28 % | −0.11 % |
+| atwood | 3.27 m/s², 0.409 m in 0.5 s | +0.83 % (= Δt/t) | +0.33 % |
+| lift | 1.401 m/s², 33.63 N | +0.84 %, +0.10 % | +0.34 %, +0.04 % |
+| crane | 29.43 N | 0 % | 0 % |
+| bounce | tops 1.920, 1.229, 0.786 m; hits 0.782, 2.033, 3.034 s | tops +0.25/+0.75/+1.5 % (≤ vΔt), hits −0.1 % | +0.23/+0.51/+0.69 %, −0.1 % |
+| collision | −2.125, +2.375 m/s | 0 % | 0 % |
+| sticky | 1.000 m/s | 0 % | 0 % |
+| recoil | ∓25 kg m/s | gun +0.26 % | +0.10 % |
+| cradle (600) | 1.921 m/s | — | −0.05 % |
+| pendulum | 2.837 s small, 2.849 s at 15° | +0.42 % / −0.01 % | +0.42 % / −0.01 % |
+| spring | 0.6283 s | −0.04 % | −0.02 % |
+| springice | 1.2566 s | 0.00 % | 0.00 % |
+
+Traps: the terminal-velocity preset's sentence says "95 % of that by the floor"; for 45 m the formula and the run both give
+94.8 %. The projectile's top cannot come within 0.15 % at 600: the step lowers it by exactly the stepped formula's 0.23 %.
