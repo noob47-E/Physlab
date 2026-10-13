@@ -12,7 +12,7 @@ import { BodyList } from './sandbox/BodyList'
 import { Pushes } from './sandbox/Pushes'
 import { Selected } from './sandbox/Selected'
 import { Connections } from './sandbox/Connections'
-import { EnergyReadout } from './sandbox/EnergyReadout'
+import { EnergyLedger } from './sandbox/EnergyLedger'
 import { Recording } from './sandbox/Recording'
 import { WorldSection } from './sandbox/WorldSection'
 import { Collisions } from './sandbox/Collisions'
@@ -53,7 +53,7 @@ export function Sandbox() {
       {sel && <Selected sel={sel} live={showsLive(playing, engineTime) ? (live[sel.id] ?? null) : null} update={update} />}
 
       <Connections selected={selection} partner={partner} />
-      <EnergyReadout />
+      <EnergyLedger />
       <Recording />
       <WorldSection />
       {/* Below World on purpose: the list starts at the first bounce and grows to six rows, and

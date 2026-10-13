@@ -319,8 +319,8 @@ describe('the Energy section', () => {
     // "p in the Energy section reads 11.6 kg m/s" (tug), "18 kg m/s" (stack), "5 kg m/s"
     // (collision): the section used to show p per body only, so a student looking for the
     // sentence's number found two lines to add up by hand.
-    const src = readSource('src/renderer/src/panels/sandbox/EnergyReadout.tsx')
-    const readout = src.slice(src.indexOf('function EnergyReadout'), src.indexOf('function Collisions'))
+    const src = readSource('src/renderer/src/panels/sandbox/EnergyLedger.tsx')
+    const readout = src.slice(src.indexOf('function EnergyLedger'), src.indexOf('function Collisions'))
     expect(readout).toContain('systemMomentum(')
     expect(readout).toMatch(/p \{num\(momentum, 'kg m\/s'\)\}/)
     for (const p of PRESETS) if (/Energy section/.test(p.about)) expect(p.about, p.id).toMatch(/p in the Energy section reads/)

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { readSource } from './helpers/repo'
 
-const SECTIONS = ['Transport', 'Presets', 'AddRow', 'JoinGuide', 'BodyList', 'Pushes', 'Selected', 'Connections', 'EnergyReadout', 'Recording', 'WorldSection', 'Collisions']
+const SECTIONS = ['Transport', 'Presets', 'AddRow', 'JoinGuide', 'BodyList', 'Pushes', 'Selected', 'Connections', 'EnergyLedger', 'Recording', 'WorldSection', 'Collisions']
 
 describe('panels/Sandbox.tsx mounts one file per section, in today’s order', () => {
   const panel = readSource('src/renderer/src/panels/Sandbox.tsx')
