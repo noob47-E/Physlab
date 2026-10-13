@@ -1,5 +1,10 @@
 // Draws the sandbox world and drives the engine: one step per frame while the timeline plays.
 // The engine hands back a plain array of positions, so nothing here touches Jolt itself.
+//
+// How things look (P28) is worked out in render/sandboxLooks.ts and built in sandboxMeshes.ts:
+// every body is one mesh with its outline or marking tinted in, every connection a mesh thick
+// enough to see at any zoom — a coil, a bar, a thread, a chain of links, a pin. Under WebGPU a
+// line is one device pixel whatever the camera does, which is why none of them is a line.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -8,64 +13,29 @@ import { useScene } from '../core/store'
 import { useApp } from '../app/modes'
 import { engine, massOf, useSandbox } from '../sim/store'
 import { grabForceCap, SimWorld, STRIDE } from '../sim/world'
-import type { BodyDef, BodyId, BodyState, Link, LinkKind } from '../sim/types'
+import type { BodyDef, BodyId, BodyState, Link } from '../sim/types'
 import type { V3 } from '../math/vec'
 import { energyOf, groundTopOf } from '../sim/energy'
 import { FALL_LIMIT, recordReadings } from '../sim/stepping'
-import { dragSetsStart } from '../sim/inspector'
+import { dragSetsStart, grabAction } from '../sim/inspector'
+import { comOffset } from '../sim/links'
+import { rotateByEuler } from '../sim/rotate'
+import { materialFinish } from '../sim/materials'
+import { drawnColour } from '../sim/palette'
 import { Arrow } from './ObjectViews'
 import { overlay, SpanPool } from './overlay'
-import { niceStep, toScreen } from './cameraUtils'
+import { niceStep, toScreen, worldPerPixel } from './cameraUtils'
 import { formatMeasure } from '../math/format'
-import { themeColor, useThemed } from '../app/theme'
+import { themeColor, useTheme, useThemed } from '../app/theme'
+import { BEAD_SCALE, beadMatrices, hingePin, LINK_LOOK, linkPlacement, pulleyRopePath, ropeMatrices, springLook, visibleRadius, writeCoil, type LinkPlacement } from './sandboxLooks'
+import { bodyGeometry, coilGeometry, unitBall, unitCylinder } from './sandboxMeshes'
 
-/** Geometry for each shape, in metres. */
-function geometryFor(def: BodyDef): THREE.BufferGeometry {
-  const [a, b, c] = def.size
-  switch (def.shape) {
-    case 'sphere':
-      return new THREE.SphereGeometry(a, 32, 16)
-    case 'cylinder':
-    case 'pulley':
-      return new THREE.CylinderGeometry(a, a, b, 28)
-    case 'capsule':
-      return new THREE.CapsuleGeometry(a, b, 8, 20)
-    case 'cone':
-      return new THREE.ConeGeometry(a / 2, b, 28)
-    case 'ramp': {
-      // A wedge with the right angle at the bottom left, matching the collision shape.
-      const hx = a / 2
-      const hy = b / 2
-      const hz = c / 2
-      const g = new THREE.BufferGeometry()
-      const v = [
-        [-hx, -hy, -hz],
-        [hx, -hy, -hz],
-        [-hx, hy, -hz],
-        [-hx, -hy, hz],
-        [hx, -hy, hz],
-        [-hx, hy, hz]
-      ]
-      const tri = [
-        [0, 1, 2],
-        [3, 5, 4],
-        [0, 2, 5],
-        [0, 5, 3],
-        [1, 4, 5],
-        [1, 5, 2],
-        [0, 3, 4],
-        [0, 4, 1]
-      ]
-      const pos: number[] = []
-      for (const [i, j, k] of tri) pos.push(...v[i], ...v[j], ...v[k])
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-      g.computeVertexNormals()
-      return g
-    }
-    default:
-      return new THREE.BoxGeometry(a, b, c)
-  }
-}
+/**
+ * How strongly a connection catches the light: the steel of a spring, a rod and a pin shines a
+ * little, a string and a rope do not. A grey, not a colour: it is the white of the lights, dimmed.
+ */
+const METAL_SHINE = new THREE.Color().setScalar(0.45)
+const NO_SHINE = new THREE.Color().setScalar(0.04)
 
 // What the engine was last told to hold. These live outside the component so that leaving the
 // Sandbox for another mode and coming back does not throw the run away: the world is created
@@ -145,21 +115,24 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         if (hit) joinPick(hit.id)
         return
       }
-      if (!w || !hit) {
+      const def = hit ? defOf(hit.id) : undefined
+      const action = def ? grabAction(def, useScene.getState().playing) : 'none'
+      // A press on the floor is a press on empty space (owner, 2026-10-09): it used to arrange the
+      // floor like any fixed body, so dragging across the ground to turn the view slid the whole
+      // floor out from under the experiment. Left alone, the drag turns the view instead.
+      if (!w || !hit || !def || action === 'none') {
         if (!e.shiftKey) select(null)
         return
       }
       // Shift-click on a second body chooses it as the partner to join to, and does not drag;
-      // a second shift-click lets it go, the same as in the list. The store refuses the floor.
+      // a second shift-click lets it go, the same as in the list.
       const chosen = useSandbox.getState().selection
       if (e.shiftKey && chosen && chosen !== hit.id) {
         setPartner(useSandbox.getState().partner === hit.id ? null : hit.id)
         return
       }
       select(hit.id)
-      const def = defOf(hit.id)
-      if (!def) return
-      const place = !useScene.getState().playing || def.motion !== 'dynamic'
+      const place = action === 'place'
       // In 2D everything lives in one flat plane; in 3D drag in the plane facing the camera.
       const plane = twoD
         ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -def.position[2])
@@ -197,9 +170,10 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
           el.style.cursor = hit ? 'crosshair' : ''
           return
         }
-        // Say what a click would do: arrange, or pull.
-        const playing = useScene.getState().playing
-        el.style.cursor = hit ? (playing && defOf(hit.id)?.motion === 'dynamic' ? 'grab' : 'move') : ''
+        // Say what a click would do: arrange, pull, or (on the floor) nothing.
+        const over = hit ? defOf(hit.id) : undefined
+        const action = over ? grabAction(over, useScene.getState().playing) : 'none'
+        el.style.cursor = action === 'pull' ? 'grab' : action === 'place' ? 'move' : ''
         return
       }
       const p = onPlane(e, d.plane)
@@ -373,11 +347,28 @@ export function SandboxView() {
   const groundTop = useMemo(() => groundTopOf(bodies), [bodies])
 
   const meshes = useMemo(() => {
-    const geos = bodies.map(geometryFor)
+    const geos = bodies.map(bodyGeometry)
     return { geos }
   }, [bodies])
   useEffect(() => () => meshes.geos.forEach((g) => g.dispose()), [meshes])
 
+  // The colour each body is drawn in under this theme (a palette token read off the stylesheet,
+  // or the student's own colour), and how its material takes the light. The key carries both and
+  // the theme: WebGPU compiles a material's colour in, so a new colour needs a new material.
+  const theme = useTheme((t) => t.theme)
+  const looks = useMemo(
+    () =>
+      bodies.map((d) => {
+        const colour = drawnColour(d.color, themeColor)
+        const finish = materialFinish(d.material)
+        return { colour, specular: new THREE.Color().setScalar(finish.shine), gloss: finish.gloss, key: `${theme}|${colour}|${finish.shine}|${finish.gloss}` }
+      }),
+    [bodies, theme]
+  )
+
+  // Priority −1: the world steps before anything else draws this frame. The links, arrows and
+  // trails read the drawn poses in their own frame callbacks, which run in mount order — children
+  // first — so at priority 0 they drew last frame's poses, a frame behind the bodies they join.
   useFrame((state, dt) => {
     const w = sim.current
     const g = group.current
@@ -448,11 +439,12 @@ export function SandboxView() {
         const e = energyOf(def, st, world.gravity, groundTop)
         const num = (v: number) => formatMeasure(v, 'number', settings)
         const text = `${def.name}  ${num(speed)} m/s  h ${num(st.position[1] - groundTop)} m  KE ${num(e.kinetic)} J`
+        // The chip's text is the body's colour; a theme colour is a CSS reference, read as it is.
         pool.place(text, p.x, p.y - 26, 'center', def.color)
       })
     }
     pool.end()
-  })
+  }, -1)
 
   return (
     <group ref={group}>
@@ -463,8 +455,18 @@ export function SandboxView() {
         <mesh key={def.id} geometry={meshes.geos[i]} userData={{ bodyId: def.id }}>
           {/* A gold tint at a third strength was all but invisible on steel, concrete and lead —
               the three darkest materials and the three most used. The selected object is lit
-              properly instead, so you can tell at a glance which one the panel is describing. */}
-          <meshLambertMaterial key={selectColour} color={def.color} emissive={selectColour} emissiveIntensity={selection === def.id ? 0.95 : partner === def.id ? 0.45 : 0} />
+              properly instead, so you can tell at a glance which one the panel is describing.
+              The geometry's own tint (outline, a ball's band, a wheel's groove) multiplies the
+              colour, and the material's finish sets the highlight. */}
+          <meshPhongMaterial
+            key={`${selectColour}|${looks[i].key}`}
+            vertexColors
+            color={looks[i].colour}
+            specular={looks[i].specular}
+            shininess={looks[i].gloss}
+            emissive={selectColour}
+            emissiveIntensity={selection === def.id ? 0.95 : partner === def.id ? 0.45 : 0}
+          />
         </mesh>
       ))}
       <FloorGrid bodies={bodies} />
@@ -477,10 +479,13 @@ export function SandboxView() {
   )
 }
 
+/** How far out from the middle the floor's grid is drawn, in metres: the old floor's own edge. */
+const GRID_REACH = 100
+
 /**
  * Metre lines on the floor. Without them two balls three metres apart and two balls thirty
  * centimetres apart look the same, and every distance has to be read off the panel instead of
- * seen. Fine lines near the origin, coarser ones out to the edge; the grid follows the theme.
+ * seen. Fine lines near the origin, coarser ones out to GRID_REACH; the grid follows the theme.
  */
 function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
   // Read once per theme, not on every render: the grid re-renders whenever the bodies change.
@@ -493,7 +498,10 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
   const y = floor?.position[1]
   const grid = useMemo(() => {
     if (width === undefined || thickness === undefined || y === undefined) return null
-    const half = Math.max(4, width / 2)
+    // The grid is for reading distances near the experiment, so it stops at GRID_REACH however
+    // big the floor is: drawn out to a floor kilometres wide, its lines would crowd into a band
+    // of noise along the horizon.
+    const half = Math.min(GRID_REACH, Math.max(4, width / 2))
     const top = y + thickness / 2 + 0.002
     const fine = Math.min(20, half)
     const coarse = niceStep(half / 10)
@@ -539,6 +547,9 @@ function Traces({ sim }: { sim: React.RefObject<SimWorld | null> }) {
 
 function TraceLine({ sim, def }: { sim: React.RefObject<SimWorld | null>; def: BodyDef }) {
   const playing = useScene((s) => s.playing)
+  // The body's colour as this theme draws it: a palette colour is a token three.js cannot read.
+  const theme = useTheme((t) => t.theme)
+  const colour = useMemo(() => ({ value: drawnColour(def.color, themeColor), key: `${theme}|${def.color}` }), [def.color, theme])
   const runNonce = useSandbox((s) => s.runNonce)
   const trailNonce = useSandbox((s) => s.trailNonce)
   const geo = useMemo(() => {
@@ -582,7 +593,7 @@ function TraceLine({ sim, def }: { sim: React.RefObject<SimWorld | null>; def: B
 
   return (
     <lineSegments ref={line} geometry={geo} renderOrder={13} frustumCulled={false} visible={false}>
-      <lineBasicMaterial color={def.color} transparent opacity={0.8} />
+      <lineBasicMaterial key={colour.key} color={colour.value} transparent opacity={0.8} />
     </lineSegments>
   )
 }
@@ -688,145 +699,279 @@ function PushArrows({ sim }: { sim: React.RefObject<SimWorld | null> }) {
 }
 
 
-/** The points of a connection between two positions: a straight line, or a zigzag for a spring. */
-function linkSegments(kind: LinkKind, from: V3, to: V3): number[] {
-  if (kind !== 'spring') return [...from, ...to]
-  // A zigzag along the line, so it is obviously a spring: the number of coils stays the same
-  // while it stretches, which is how a drawn spring behaves in a textbook.
-  const coils = 12
-  const dx = to[0] - from[0]
-  const dy = to[1] - from[1]
-  const dz = to[2] - from[2]
-  const len = Math.hypot(dx, dy, dz) || 1
-  // A unit vector across the spring, to zigzag along.
-  const side = Math.abs(dy / len) < 0.9 ? [0, 1, 0] : [1, 0, 0]
-  const nx = (dy / len) * side[2] - (dz / len) * side[1]
-  const ny = (dz / len) * side[0] - (dx / len) * side[2]
-  const nz = (dx / len) * side[1] - (dy / len) * side[0]
-  const nl = Math.hypot(nx, ny, nz) || 1
-  const amp = Math.min(0.12, len / 12)
-  const pt = (t: number, s: number): V3 => [from[0] + dx * t + (nx / nl) * amp * s, from[1] + dy * t + (ny / nl) * amp * s, from[2] + dz * t + (nz / nl) * amp * s]
-  const pts: number[] = []
-  let prev = pt(0, 0)
-  for (let i = 1; i <= coils; i++) {
-    const next = pt(i / coils, i === coils ? 0 : i % 2 === 0 ? 1 : -1)
-    pts.push(...prev, ...next)
-    prev = next
-  }
-  return pts
+/** Pixels per metre on screen at a point: what visibleRadius needs to keep a thin thing in sight. */
+function pixelsPerMetre(state: { camera: THREE.Camera; size: { width: number; height: number } }, at: ArrayLike<number>): number {
+  return 1 / worldPerPixel(state.camera, state.size, [at[0], at[1], at[2]])
+}
+
+/** A placement for a unit cylinder, filled in place each frame. */
+const newPlacement = (): LinkPlacement => ({ mid: [0, 0, 0], quat: [0, 0, 0, 1], length: 0 })
+
+/** Stands a unit cylinder (radius 1, height 1, along y) on a placement, `r` thick. */
+function placeCylinder(m: THREE.Object3D, place: LinkPlacement, r: number): void {
+  m.position.set(place.mid[0], place.mid[1], place.mid[2])
+  m.quaternion.set(place.quat[0], place.quat[1], place.quat[2], place.quat[3])
+  m.scale.set(r, Math.max(place.length, 1e-6), r)
+}
+
+/** The connections' colours in this theme, read once per theme. */
+interface LinkColours {
+  spring: string
+  rod: string
+  string: string
+  rope: string
 }
 
 /**
- * The rods, strings and springs themselves. A connection you cannot see is a mystery force, so
- * each one is drawn between the two bodies as they move, into a buffer updated in place.
+ * The rods, strings, springs, ropes and hinge pins themselves. A connection you cannot see is a
+ * mystery force, so each one is drawn between the two bodies as they move, from buffers and
+ * transforms updated in place every frame. Each kind has its own shape and its own colour
+ * (LINK_LOOK): they were all one-pixel lines in one grey.
  */
 function LinkLines({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   const links = useSandbox((s) => s.links)
-  const colour = useThemed(() => themeColor('--tick-text'))
+  const bodies = useSandbox((s) => s.bodies)
+  const colours = useThemed<LinkColours>(() => ({
+    spring: themeColor(LINK_LOOK.spring.token),
+    rod: themeColor(LINK_LOOK.rod.token),
+    string: themeColor(LINK_LOOK.string.token),
+    rope: themeColor(LINK_LOOK.rope.token)
+  }))
   return (
     <>
       {links.map((l) => (
-        <LinkLine key={l.id} sim={sim} link={l} colour={colour} />
+        <LinkView key={l.id} sim={sim} link={l} bodies={bodies} colours={colours} />
       ))}
     </>
   )
 }
 
+function LinkView({ sim, link, bodies, colours }: { sim: React.RefObject<SimWorld | null>; link: Link; bodies: BodyDef[]; colours: LinkColours }) {
+  switch (link.kind) {
+    case 'spring':
+      return <SpringCoil sim={sim} link={link} colour={colours.spring} />
+    case 'rod':
+      return <Bar sim={sim} link={link} look={LINK_LOOK.rod} colour={colours.rod} shine={METAL_SHINE} gloss={50} />
+    case 'string':
+      return <Bar sim={sim} link={link} look={LINK_LOOK.string} colour={colours.string} shine={NO_SHINE} gloss={4} />
+    case 'rope':
+      // A chain of 20 cm links in the engine: drawn through their centres, a bead on every joint.
+      return <RopeTube sim={sim} pathOf={(w) => w.linkPath(link)} look={LINK_LOOK.rope} beadScale={BEAD_SCALE} beadTone={0.72} colour={colours.rope} />
+    case 'pulley': {
+      // One rope, no links: up to the rim, half way round the wheel, down to the other side.
+      const wheel = bodies.find((b) => b.id === link.over)
+      const axle: V3 = wheel ? rotateByEuler(wheel.rotation, [0, 1, 0]) : [0, 0, 1]
+      const pathOf = (w: SimWorld): V3[] => {
+        const p = w.linkPath(link)
+        return p.length === 4 ? pulleyRopePath(p[0], p[1], p[2], p[3], axle, 16) : p
+      }
+      return <RopeTube sim={sim} pathOf={pathOf} look={LINK_LOOK.pulley} beadScale={1} beadTone={1} colour={colours.rope} />
+    }
+    case 'hinge': {
+      const body = bodies.find((b) => b.id === link.a)
+      return body ? <HingePinView sim={sim} link={link} body={body} colour={colours.rod} /> : null
+    }
+    default:
+      // A weld is two bodies glued where they stand: there is nothing between them to draw.
+      return null
+  }
+}
+
 /**
- * The connection being made: a line from the first object to the cursor, until the second is
- * chosen. Drawn into a buffer the frame updates, like the links themselves.
+ * A spring as a coil that stretches and squeezes with the link and keeps its turns (P28 L1): the
+ * geometry is rewritten in place every frame for the length it has now, so the wire keeps its
+ * thickness however far it is pulled. It was a 12-step zigzag one pixel wide.
+ */
+function SpringCoil({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
+  const look = useMemo(() => springLook(link.length), [link.length])
+  const geo = useMemo(() => coilGeometry(look.shape), [look])
+  useEffect(() => () => geo.dispose(), [geo])
+  const mesh = useRef<THREE.Mesh>(null)
+  useFrame((state) => {
+    const m = mesh.current
+    const w = sim.current
+    if (!m || !w) return
+    const a = w.drawn(link.a)
+    const b = w.drawn(link.b)
+    if (!a || !b) {
+      m.visible = false
+      return
+    }
+    const mid: V3 = [(a.position[0] + b.position[0]) / 2, (a.position[1] + b.position[1]) / 2, (a.position[2] + b.position[2]) / 2]
+    const wire = visibleRadius(look.wireRadius, LINK_LOOK.spring.minPixels, pixelsPerMetre(state, mid))
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute
+    const nor = geo.getAttribute('normal') as THREE.BufferAttribute
+    writeCoil(a.position, b.position, look.coilRadius, wire, pos.array as Float32Array, nor.array as Float32Array, look.shape)
+    pos.needsUpdate = true
+    nor.needsUpdate = true
+    m.visible = true
+  })
+  return (
+    <mesh ref={mesh} geometry={geo} frustumCulled={false} renderOrder={12} visible={false}>
+      <meshPhongMaterial key={colour} color={colour} specular={METAL_SHINE} shininess={60} />
+    </mesh>
+  )
+}
+
+/** A rod (a solid bar) or a string (a thin thread): one unit cylinder from centre to centre, never thinner on screen than its look allows. */
+function Bar({ sim, link, look, colour, shine, gloss }: { sim: React.RefObject<SimWorld | null>; link: Link; look: { radius: number; minPixels: number }; colour: string; shine: THREE.Color; gloss: number }) {
+  const geo = useMemo(() => unitCylinder(), [])
+  useEffect(() => () => geo.dispose(), [geo])
+  const mesh = useRef<THREE.Mesh>(null)
+  const place = useMemo(() => newPlacement(), [])
+  useFrame((state) => {
+    const m = mesh.current
+    const w = sim.current
+    if (!m || !w) return
+    const a = w.drawn(link.a)
+    const b = w.drawn(link.b)
+    if (!a || !b) {
+      m.visible = false
+      return
+    }
+    linkPlacement(a.position, b.position, place)
+    placeCylinder(m, place, visibleRadius(look.radius, look.minPixels, pixelsPerMetre(state, place.mid)))
+    m.visible = place.length > 1e-6
+  })
+  return (
+    <mesh ref={mesh} geometry={geo} frustumCulled={false} renderOrder={12} visible={false}>
+      <meshPhongMaterial key={colour} color={colour} specular={shine} shininess={gloss} />
+    </mesh>
+  )
+}
+
+/** Room for the longest rope (60 links) and its two ends, or a pulley rope's arc. */
+const ROPE_CAPACITY = 96
+
+/**
+ * A rope drawn through the points `pathOf` gives each frame: unit cylinders end to end, one per
+ * gap, and a bead on every joint (`beadScale` of the rope's width, `beadTone` of its colour), all
+ * as two instanced meshes so a sixty-link rope is two draw calls.
+ */
+function RopeTube({ sim, pathOf, look, beadScale, beadTone, colour }: { sim: React.RefObject<SimWorld | null>; pathOf: (w: SimWorld) => V3[]; look: { radius: number; minPixels: number }; beadScale: number; beadTone: number; colour: string }) {
+  const piece = useMemo(() => unitCylinder(), [])
+  const bead = useMemo(() => unitBall(), [])
+  useEffect(
+    () => () => {
+      piece.dispose()
+      bead.dispose()
+    },
+    [piece, bead]
+  )
+  const pieces = useRef<THREE.InstancedMesh>(null)
+  const beads = useRef<THREE.InstancedMesh>(null)
+  const beadColour = useMemo(() => '#' + new THREE.Color(colour).multiplyScalar(beadTone).getHexString(), [colour, beadTone])
+  useEffect(() => {
+    // Rewritten every frame: tell the GPU so.
+    pieces.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    beads.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+  }, [])
+  useFrame((state) => {
+    const w = sim.current
+    const p = pieces.current
+    const k = beads.current
+    if (!w || !p || !k) return
+    const path = pathOf(w)
+    const r = visibleRadius(look.radius, look.minPixels, pixelsPerMetre(state, path[Math.floor(path.length / 2)] ?? [0, 0, 0]))
+    const n = ropeMatrices(path, r, p.instanceMatrix.array as Float32Array)
+    p.count = n
+    p.instanceMatrix.needsUpdate = true
+    // An empty mesh drawn every frame makes WebGPU warn every frame.
+    p.visible = n > 0
+    const m = beadMatrices(path, r * beadScale, k.instanceMatrix.array as Float32Array)
+    k.count = m
+    k.instanceMatrix.needsUpdate = true
+    k.visible = m > 0
+  })
+  return (
+    <>
+      <instancedMesh ref={pieces} args={[piece, undefined, ROPE_CAPACITY]} frustumCulled={false} renderOrder={12} visible={false}>
+        <meshPhongMaterial key={colour} color={colour} specular={NO_SHINE} shininess={6} />
+      </instancedMesh>
+      <instancedMesh ref={beads} args={[bead, undefined, ROPE_CAPACITY]} frustumCulled={false} renderOrder={12} visible={false}>
+        <meshPhongMaterial key={beadColour} color={beadColour} specular={NO_SHINE} shininess={6} />
+      </instancedMesh>
+    </>
+  )
+}
+
+/** Half a hinge pin's length: through the body along its own z, and a little out of each side. */
+function pinHalfLength(b: BodyDef): number {
+  const [a, , c] = b.size.map(Math.abs)
+  const round = b.shape === 'sphere' || b.shape === 'cylinder' || b.shape === 'capsule' || b.shape === 'pulley'
+  return (round ? a : b.shape === 'cone' ? a / 2 : c / 2) + 0.03
+}
+
+/**
+ * The pin a hinge turns about, through its pivot along the hinge axis, turning with the first
+ * body. A hinge was drawn as nothing at all, so the seesaw's plank turned about a point no one
+ * could see. The pivot is stored from the body's centre of mass and drawn from its position.
+ */
+function HingePinView({ sim, link, body, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; body: BodyDef; colour: string }) {
+  const geo = useMemo(() => unitCylinder(), [])
+  useEffect(() => () => geo.dispose(), [geo])
+  const mesh = useRef<THREE.Mesh>(null)
+  const place = useMemo(() => newPlacement(), [])
+  const pivot = useMemo((): V3 => {
+    const c = comOffset(body)
+    const p = link.pivotA ?? [0, 0, 0]
+    return [c[0] + p[0], c[1] + p[1], c[2] + p[2]]
+  }, [body, link.pivotA])
+  const half = pinHalfLength(body)
+  useFrame((state) => {
+    const m = mesh.current
+    const w = sim.current
+    if (!m || !w) return
+    const st = w.drawn(link.a)
+    if (!st) {
+      m.visible = false
+      return
+    }
+    hingePin(st.position, st.rotation, pivot, half, place)
+    placeCylinder(m, place, visibleRadius(LINK_LOOK.hinge.radius, LINK_LOOK.hinge.minPixels, pixelsPerMetre(state, place.mid)))
+    m.visible = true
+  })
+  return (
+    <mesh ref={mesh} geometry={geo} frustumCulled={false} renderOrder={12} visible={false}>
+      <meshPhongMaterial key={colour} color={colour} specular={METAL_SHINE} shininess={60} />
+    </mesh>
+  )
+}
+
+/**
+ * The connection being made: a thread from the first object to the cursor, until the second is
+ * chosen. A mesh like the strings, so it shows at any zoom; it was a one-pixel line.
  */
 function JoinPreview({ sim }: { sim: React.RefObject<SimWorld | null> }) {
   const joinMode = useSandbox((s) => s.joinMode)
   const colour = useThemed(() => themeColor('--accent'))
-  const geo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3))
-    return g
-  }, [])
+  const geo = useMemo(() => unitCylinder(), [])
   useEffect(() => () => geo.dispose(), [geo])
-  const line = useRef<THREE.LineSegments>(null)
+  const mesh = useRef<THREE.Mesh>(null)
+  const place = useMemo(() => newPlacement(), [])
   const from = joinMode?.step === 'second' ? joinMode.a : undefined
   // Leaving the second step drops the last cursor point, or the next Connect would start with a
   // stale line before the mouse moved.
   useEffect(() => {
     if (!from) joinCursor.p = null
   }, [from])
-  useFrame(() => {
+  useFrame((state) => {
+    const m = mesh.current
     const w = sim.current
+    if (!m) return
     const st = from && w ? w.state(from) : null
     const p = joinCursor.p
-    const show = !!st && !!p
-    if (line.current) line.current.visible = show
-    if (!st || !p) return
-    const attr = geo.getAttribute('position') as THREE.BufferAttribute
-    attr.array.set([...st.position, ...p])
-    attr.needsUpdate = true
+    if (!st || !p) {
+      m.visible = false
+      return
+    }
+    linkPlacement(st.position, p, place)
+    placeCylinder(m, place, visibleRadius(LINK_LOOK.string.radius, LINK_LOOK.string.minPixels, pixelsPerMetre(state, place.mid)))
+    m.visible = place.length > 1e-6
   })
   return (
-    <lineSegments ref={line} geometry={geo} renderOrder={15} frustumCulled={false} visible={false}>
-      <lineBasicMaterial key={colour} color={colour} transparent opacity={0.9} />
-    </lineSegments>
-  )
-}
-
-/** A rope, drawn through the centres of its links; a pulley rope as two straight runs. */
-function RopeLine({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
-  // Room for the longest rope (60 links) plus the two ends.
-  const capacity = 96
-  const geo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(capacity * 6), 3))
-    g.setDrawRange(0, 0)
-    return g
-  }, [])
-  useEffect(() => () => geo.dispose(), [geo])
-  const line = useRef<THREE.LineSegments>(null)
-  useFrame(() => {
-    const w = sim.current
-    if (!w) return
-    const pts = w.linkPath(link)
-    const attr = geo.getAttribute('position') as THREE.BufferAttribute
-    const n = Math.min(capacity, pts.length - 1)
-    for (let i = 0; i < n; i++) attr.array.set([...pts[i], ...pts[i + 1]], i * 6)
-    attr.needsUpdate = true
-    geo.setDrawRange(0, Math.max(0, n) * 2)
-    if (line.current) line.current.visible = n > 0
-  })
-  return (
-    <lineSegments ref={line} geometry={geo} renderOrder={12} frustumCulled={false} visible={false}>
-      <lineBasicMaterial key={colour} color={colour} />
-    </lineSegments>
-  )
-}
-
-function LinkLine({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
-  if (link.kind === 'rope' || link.kind === 'pulley') return <RopeLine sim={sim} link={link} colour={colour} />
-  if (link.kind === 'hinge' || link.kind === 'weld') return null
-  return <StraightLink sim={sim} link={link} colour={colour} />
-}
-
-function StraightLink({ sim, link, colour }: { sim: React.RefObject<SimWorld | null>; link: Link; colour: string }) {
-  const segments = link.kind === 'spring' ? 12 : 1
-  const geo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(segments * 6), 3))
-    return g
-  }, [segments])
-  useEffect(() => () => geo.dispose(), [geo])
-  useFrame(() => {
-    const w = sim.current
-    if (!w) return
-    const a = w.drawn(link.a)
-    const b = w.drawn(link.b)
-    if (!a || !b) return
-    const attr = geo.getAttribute('position') as THREE.BufferAttribute
-    attr.array.set(linkSegments(link.kind, a.position, b.position))
-    attr.needsUpdate = true
-  })
-  return (
-    <lineSegments geometry={geo} renderOrder={12} frustumCulled={false}>
-      <lineBasicMaterial key={colour} color={colour} transparent opacity={link.kind === 'string' ? 0.7 : 1} />
-    </lineSegments>
+    <mesh ref={mesh} geometry={geo} renderOrder={15} frustumCulled={false} visible={false}>
+      <meshBasicMaterial key={colour} color={colour} transparent opacity={0.9} />
+    </mesh>
   )
 }

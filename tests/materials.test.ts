@@ -2,7 +2,7 @@
 // mass a student reads off the panel; the area decides how hard the air pushes back.
 
 import { describe, expect, it } from 'vitest'
-import { dragCoefficient, frontalArea, materialById, MATERIALS, shapeVolume } from '../src/renderer/src/sim/materials'
+import { dragCoefficient, frontalArea, materialById, materialFinish, MATERIALS, shapeVolume } from '../src/renderer/src/sim/materials'
 
 type Size = [number, number, number]
 
@@ -140,5 +140,32 @@ describe('frontalArea', () => {
     }
     expect(dragCoefficient('sphere')).toBeCloseTo(0.47)
     expect(dragCoefficient('box')).toBeCloseTo(1.05)
+  })
+})
+
+// P28 L5: a body's colour now comes from the theme's palette, so the material shows in its finish:
+// metal, glass, ice and plastic catch the light, rubber, foam, cork, wood and concrete do not.
+describe('materialFinish', () => {
+  it('gives every material a finish: a highlight strength from 0 to 1 and a sharpness', () => {
+    for (const m of MATERIALS) {
+      const f = materialFinish(m.id)
+      expect(f.shine, m.id).toBeGreaterThanOrEqual(0)
+      expect(f.shine, m.id).toBeLessThanOrEqual(1)
+      expect(f.gloss, m.id).toBeGreaterThanOrEqual(1)
+      expect(f.gloss, m.id).toBeLessThanOrEqual(200)
+    }
+    // An unknown material is finished like the material it falls back to.
+    expect(materialFinish('nonsense')).toEqual(materialFinish(MATERIALS[0].id))
+  })
+
+  it('makes the shiny materials shine and the dull ones dull', () => {
+    const shiny = ['steel', 'aluminium', 'glass', 'ice', 'plastic', 'lead']
+    const dull = ['rubber', 'foam', 'cork', 'wood', 'concrete']
+    const least = Math.min(...shiny.map((id) => materialFinish(id).shine))
+    const most = Math.max(...dull.map((id) => materialFinish(id).shine))
+    expect(least).toBeGreaterThan(most)
+    // A dull one has a broad, soft highlight at most; a shiny one a small, sharp one.
+    expect(Math.min(...shiny.map((id) => materialFinish(id).gloss))).toBeGreaterThan(Math.max(...dull.map((id) => materialFinish(id).gloss)))
+    expect(shiny.length + dull.length).toBe(MATERIALS.length)
   })
 })

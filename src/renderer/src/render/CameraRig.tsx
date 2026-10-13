@@ -11,6 +11,7 @@ import { engine, useSandbox } from '../sim/store'
 import { visibleIn } from '../core/visibility'
 import { graphBox } from '../core/visualize'
 import { themeColor, useThemed } from '../app/theme'
+import { SANDBOX_FAR, SANDBOX_FOV, SANDBOX_START_VIEW, sandboxHomeView } from './sandboxCamera'
 
 /** Bounding box of all visible geometry (graphs only where they have ends). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -121,11 +122,11 @@ export function CameraRig() {
   useEffect(() => {
     if (mode !== 'sandbox' || viewMode !== '3d') return
     const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
+    const start = sideView ? SANDBOX_START_VIEW.side : SANDBOX_START_VIEW.turned
     camera.up.set(0, 1, 0)
-    if (sideView) camera.position.set(0, 2.5, 16)
-    else camera.position.set(9, 6, 13)
-    c?.target.set(0, 1.2, 0)
-    camera.lookAt(0, 1.2, 0)
+    camera.position.set(...start.position)
+    c?.target.set(...start.target)
+    camera.lookAt(...start.target)
     c?.update()
     return () => {
       // Put the maths view back the way it was when leaving the sandbox.
@@ -142,37 +143,11 @@ export function CameraRig() {
       // The maths presets below put the camera 12 m under the floor. Frame the objects instead,
       // where they are now rather than where they started.
       const { bodies, sideView } = useSandbox.getState()
-      const min = [Infinity, Infinity, Infinity]
-      const max = [-Infinity, -Infinity, -Infinity]
-      for (const b of bodies) {
-        if (b.shape === 'ground') continue
-        const p = engine.world?.state(b.id)?.position ?? b.position
-        const r = Math.max(...b.size) / 2
-        for (let k = 0; k < 3; k++) {
-          min[k] = Math.min(min[k], p[k] - r)
-          max[k] = Math.max(max[k], p[k] + r)
-        }
-      }
-      const floor = bodies.find((b) => b.shape === 'ground')
-      const top = floor ? floor.position[1] + floor.size[1] / 2 : 0
-      if (!Number.isFinite(min[0])) {
-        min[0] = -4
-        max[0] = 4
-        min[1] = top
-        max[1] = top + 3
-        min[2] = -1
-        max[2] = 1
-      }
-      min[1] = Math.min(min[1], top)
-      const cx = (min[0] + max[0]) / 2
-      const cy = (min[1] + max[1]) / 2
-      const cz = (min[2] + max[2]) / 2
-      const r = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 3)
+      const home = sandboxHomeView(bodies, (b) => engine.world?.state(b.id)?.position ?? b.position, sideView)
       camera.up.set(0, 1, 0)
-      if (sideView) camera.position.set(cx, cy + r * 0.25, cz + r * 1.6)
-      else camera.position.set(cx + r * 0.9, cy + r * 0.7, cz + r * 1.2)
-      c?.target.set(cx, cy, cz)
-      camera.lookAt(cx, cy, cz)
+      camera.position.set(...home.position)
+      c?.target.set(...home.target)
+      camera.lookAt(...home.target)
       c?.update()
       return
     }
@@ -285,7 +260,7 @@ export function CameraRig() {
   }
   return (
     <>
-      <PerspectiveCamera makeDefault position={[...HOME_3D.position]} fov={45} near={0.01} far={5000} up={[0, 0, 1]} />
+      <PerspectiveCamera makeDefault position={[...HOME_3D.position]} fov={SANDBOX_FOV} near={0.01} far={SANDBOX_FAR} up={[0, 0, 1]} />
       <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={mouseButtons} />
       <ambientLight intensity={0.55} />
       <directionalLight position={[6, -8, 14]} intensity={2.2} />

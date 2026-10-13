@@ -83,7 +83,7 @@ describe('grabbing and lifting', () => {
     world.destroy()
   })
 
-  it('placing puts any body exactly there, at rest — the floor too', async () => {
+  it('placing puts any body exactly there, at rest — a fixed wall too, but never the floor', async () => {
     const world = await makeWorld({ airDensity: 0 })
     const floor = ground()
     world.addBody(floor)
@@ -95,8 +95,15 @@ describe('grabbing and lifting', () => {
     expect(s.position[0]).toBeCloseTo(2, 5)
     expect(s.position[1]).toBeCloseTo(5, 5)
     expect(Math.hypot(...s.velocity)).toBe(0)
+    // A fixed body is arranged the same way…
+    const wall = ground({ shape: 'wall', size: [0.3, 2, 3], position: [5, 1, 0] })
+    world.addBody(wall)
+    world.placeBody(wall.id, [6, 1, 0])
+    expect(world.state(wall.id)!.position[0]).toBeCloseTo(6, 5)
+    // …but the floor stays where it is (owner, 2026-10-09): it used to be placed like any fixed
+    // body, so a drag across the ground slid it out from under the experiment.
     world.placeBody(floor.id, [3, -0.5, 0])
-    expect(world.state(floor.id)!.position[0]).toBeCloseTo(3, 5)
+    expect(world.state(floor.id)!.position[0]).toBeCloseTo(0, 5)
     world.destroy()
   })
 

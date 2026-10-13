@@ -129,6 +129,22 @@
   --vec-result: #ff87bd;
   --vec-x: #ff7b72;
   --vec-y: #58c4ff;
+  /* The Sandbox (P28): the eight colours its moving bodies are painted in, in the order they are
+     handed out (sim/palette.ts), and the colours of a spring, a rod, a string and a rope. Each at
+     least 3:1 on this canvas and 4.5:1 as a body label, the first five apart for every kind of
+     colour vision (tests/sandboxPalette.test.ts). */
+  --sim-c1: #419bd4;
+  --sim-c2: #ea9602;
+  --sim-c3: #7ccd8e;
+  --sim-c4: #efcc36;
+  --sim-c5: #c27895;
+  --sim-c6: #c8b7ff;
+  --sim-c7: #5cc8d0;
+  --sim-c8: #f4b1a6;
+  --sim-spring: #c3cad6;
+  --sim-rod: #7d8796;
+  --sim-string: #efe6cf;
+  --sim-rope: #c9a26b;
   /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
   --q-pos: #5fd39a;
   --q-vel: #5aa9ff;
@@ -232,6 +248,19 @@
   --vec-result: #7619a3;
   --vec-x: #c0392b;
   --vec-y: #1565c0;
+  /* Deep inks on the pale canvas: a mid-tone colour that reads on the dark themes is lost here. */
+  --sim-c1: #1a41be;
+  --sim-c2: #662703;
+  --sim-c3: #308059;
+  --sim-c4: #7b5600;
+  --sim-c5: #a02a83;
+  --sim-c6: #4b286f;
+  --sim-c7: #004b59;
+  --sim-c8: #c91f3a;
+  --sim-spring: #4c6a8a;
+  --sim-rod: #3a3f47;
+  --sim-string: #262626;
+  --sim-rope: #8a5a2b;
   /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
   --q-pos: #1d7a4a;
   --q-vel: #1f5fc4;
@@ -334,6 +363,18 @@
   --vec-result: #cf79ff;
   --vec-x: #ff8b94;
   --vec-y: #6cc8ff;
+  --sim-c1: #419bd4;
+  --sim-c2: #ea9602;
+  --sim-c3: #7ccd8e;
+  --sim-c4: #efcc36;
+  --sim-c5: #c27895;
+  --sim-c6: #c8b7ff;
+  --sim-c7: #5cc8d0;
+  --sim-c8: #f4b1a6;
+  --sim-spring: #c3cad6;
+  --sim-rod: #7d8796;
+  --sim-string: #efe6cf;
+  --sim-rope: #c9a26b;
   /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
   --q-pos: #7fe3b4;
   --q-vel: #8fb8ff;
@@ -442,6 +483,18 @@
   --vec-result: #eb51ff;
   --vec-x: #f28474;
   --vec-y: #6fb8e8;
+  --sim-c1: #419bd4;
+  --sim-c2: #ea9602;
+  --sim-c3: #7ccd8e;
+  --sim-c4: #efcc36;
+  --sim-c5: #c27895;
+  --sim-c6: #c8b7ff;
+  --sim-c7: #5cc8d0;
+  --sim-c8: #f4b1a6;
+  --sim-spring: #c3cad6;
+  --sim-rod: #7d8796;
+  --sim-string: #efe6cf;
+  --sim-rope: #c9a26b;
   /* Sandbox wave: quantities, tape, overlays, stage (SB1) */
   --q-pos: #8fd6a0;
   --q-vel: #8ec2f2;

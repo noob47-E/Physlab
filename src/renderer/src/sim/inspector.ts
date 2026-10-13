@@ -150,5 +150,19 @@ export const showsLive = (playing: boolean, engineTime: number): boolean => play
  */
 export const dragSetsStart = (engineTime: number, def: BodyDef): boolean => engineTime === 0 || def.motion !== 'dynamic'
 
+/**
+ * What pressing on a body in the drawing does: nothing to the body, arrange it (put it where the
+ * cursor goes), or pull it with the hand while the run plays.
+ *
+ * The floor is never moved (owner, 2026-10-09): every fixed body was arranged by a drag, the floor
+ * included, so turning the view by dragging across the ground slid the whole floor out from under
+ * the experiment. A press on the floor is a press on empty space. Other fixed bodies — a wall, a
+ * ramp, a post — are still arranged, which is how a student builds an experiment.
+ */
+export function grabAction(def: BodyDef, playing: boolean): 'none' | 'place' | 'pull' {
+  if (def.shape === 'ground') return 'none'
+  return playing && def.motion === 'dynamic' ? 'pull' : 'place'
+}
+
 /** How two surfaces in contact combine what each says (H29), under the friction and bounce sliders. */
 export const CONTACT_HINT = 'Where two objects touch, friction is √(μ₁ × μ₂) of the two and the bounce is the larger e.'

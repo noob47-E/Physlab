@@ -44,6 +44,22 @@ const ROLLING_SHAPES = new Set(['sphere', 'cylinder', 'capsule'])
 /** A rope link's radius in metres. */
 const ROPE_RADIUS = 0.02
 
+/**
+ * How wide a floor must be, in both directions, to be the ground itself: an exact plane that runs
+ * on for ever, not a slab with edges. The Sandbox draws its floor kilometres wide so it meets the
+ * horizon, and as a box that size the engine worked out every contact against corners 5 km from
+ * the origin in 32-bit numbers: a ball dropped straight down drifted a centimetre sideways. A plane
+ * has no corners to be far from. A narrower floor is a box of the size typed, with an edge a ball
+ * can roll off, exactly as before.
+ */
+export const PLANE_FLOOR_FROM = 1000
+
+/** How far a plane floor reaches for the engine's broad phase, in metres each way: the drawn floor's own half-width. */
+const PLANE_FLOOR_HALF_EXTENT = 5000
+
+/** Whether this body is built as an engine plane: the fixed floor, wide enough to be the ground. */
+export const isPlaneFloor = (def: BodyDef): boolean => def.shape === 'ground' && def.motion === 'static' && Math.min(def.size[0], def.size[2]) >= PLANE_FLOOR_FROM
+
 /** The one empty list handed back for a body nothing is pushing. */
 const NO_ACTUATORS: Actuator[] = []
 
@@ -648,6 +664,10 @@ export class SimWorld {
     const startOnly = this.steps > 0 && def.motion === 'dynamic'
     const moved = !startOnly && was.position.some((v, i) => v !== def.position[i])
     if (moved) this.setPosition(def.id, def.position)
+    // A fixed body moved by a typed number is the floor's only way to move now that a drag cannot
+    // (owner, 2026-10-09): a ball asleep on it would hang where the floor had been, as placeBody
+    // already knows.
+    if (moved && def.motion !== 'dynamic') this.wakeAll()
     if (!startOnly && was.velocity.some((v, i) => v !== def.velocity[i])) this.setVelocity(def.id, def.velocity)
     // Rotation and spin were neither structural nor applied, so typing them did nothing at all.
     const turned = was.rotation.some((v, i) => v !== def.rotation[i])
@@ -1150,6 +1170,21 @@ export class SimWorld {
     // Shapes are reference counted by Jolt and freed with the body that uses them,
     // so they are deliberately not tracked here.
     const cast = (shape: unknown) => shape as InstanceType<Jolt['Shape']>
+    if (isPlaneFloor(def)) {
+      // The floor's top face, where the box's top was: the slab's centre is the body's position, so
+      // its top is half the thickness above it in the body's own frame. The plane's solid side is
+      // the one the normal points away from, so the normal is up and the constant is minus that height.
+      const up = this.v3([0, 1, 0])
+      const plane = this.track(new J.Plane(up, -min(b / 2)))
+      const half = Math.max(PLANE_FLOOR_HALF_EXTENT, Math.max(a, c) / 2)
+      // The material is passed as null, not left out: the binding reads an omitted argument as "use the
+      // defaults" and drops the half-extent after it, which left the floor 1 km wide and a ball
+      // 1 km from the origin fell through it.
+      const shape = new J.PlaneShape(plane, null as unknown as undefined, half)
+      this.release(plane)
+      this.release(up)
+      return { shape: cast(shape), settings: null }
+    }
     switch (def.shape) {
       case 'sphere':
         return { shape: cast(new J.SphereShape(min(a))), settings: null }
@@ -1699,12 +1734,14 @@ export class SimWorld {
 
   /**
    * Put a body somewhere, at rest, whatever it was doing: arranging the scene while paused. A
-   * static body (wall, ramp, floor) is moved the same way, and everything else is woken so a
-   * ball asleep on a floor that has just moved notices.
+   * static body (wall, ramp) is moved the same way, and everything else is woken so a ball asleep
+   * on something that has just moved notices. The floor is never moved this way (owner,
+   * 2026-10-09): a drag across it slid the ground out from under the experiment. A typed position
+   * still moves it, through updateBody, because that is a choice and not a slip of the mouse.
    */
   placeBody(id: BodyId, position: V3): void {
     const e = this.entries.get(id)
-    if (!e) return
+    if (!e || e.def.shape === 'ground') return
     this.input()
     const from = this.positionOf(e)
     this.put(e, position)

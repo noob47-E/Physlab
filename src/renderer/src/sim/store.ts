@@ -12,6 +12,7 @@ import type { SandboxFile } from '../core/types'
 import { makeLink, pulleyPartnerMove, ropeSegments } from './links'
 import type { V3 } from '../math/vec'
 import { joinPick, linkRefusal, START_JOIN, type JoinMode } from './join'
+import { nextPaletteColour, paintBodies } from './palette'
 // presets.ts imports makeBody from this file, so this is a circular import. It is safe only
 // because neither side reads the other at load time: presets builds its bodies inside build(),
 // and presetById is called from loadPreset, never while the module is evaluating.
@@ -160,7 +161,14 @@ export const DEFAULT_SIZE: Record<ShapeKind, [number, number, number]> = {
   // A wheel: radius, thickness. It stands with its axis along z, facing the side view.
   pulley: [0.3, 0.15, 0.3],
   // Forty metres looked generous and was not: a ball on ice left it in seconds and fell for ever.
-  ground: [200, 0.4, 200]
+  // Two hundred was not enough either (owner, 2026-10-09): from the Home view of a tall experiment
+  // the camera saw past its edges, and the floor showed as a grey tile in empty space. Ten
+  // kilometres runs to the far plane of every view an experiment opens in, so its far edge is the
+  // horizon (tests/sandboxFloor.test.ts). Only the width and depth grew: the top is still at 0 and
+  // the thickness 0.4 m, so every height, energy and contact an experiment quotes is unchanged.
+  // This is what is DRAWN: a floor this wide is built by the engine as an exact plane, because a
+  // 10 km box pushed a ball dropped straight down a centimetre sideways (world.ts, isPlaneFloor).
+  ground: [10000, 0.4, 10000]
 }
 
 /**
@@ -272,7 +280,9 @@ export function startingScene(): BodyDef[] {
   const ball = makeBody('sphere', 'A', [-1.5, 3, 0])
   ball.velocity = [2, 0, 0]
   const crate = makeBody('box', 'B', [1.5, 0.3, 0])
-  return [ground, ball, crate]
+  // In the palette's colours, like every experiment: a grey ball beside a brown crate was the
+  // first thing anyone saw of the Sandbox.
+  return paintBodies([ground, ball, crate])
 }
 
 /** Drop the readings and live values of objects that no longer exist. */
@@ -306,7 +316,10 @@ export const useSandbox = create<SandboxState>((set, get) => ({
     const bodies = get().bodies
     const used = new Set(bodies.map((b) => b.name))
     const letter = LETTERS.find((l) => !used.has(l)) ?? `X${bodies.length}`
-    const def = makeBody(shape, shape === 'ground' ? 'Floor' : letter, at ?? spawnAt(shape, bodies))
+    const made = makeBody(shape, shape === 'ground' ? 'Floor' : letter, at ?? spawnAt(shape, bodies))
+    // A new moving body takes the next palette colour nobody has, so it stands apart from the
+    // rest; a fixed one keeps the colour of its material, as the experiments' fixed bodies do.
+    const def = made.motion === 'dynamic' ? { ...made, color: nextPaletteColour(bodies) } : made
     // The new object is the one chosen; a Shift-click pair from before is over (H6).
     set({ bodies: [...bodies, def], selection: def.id, partner: null })
     return def

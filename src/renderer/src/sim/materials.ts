@@ -31,6 +31,34 @@ export const MATERIALS: Material[] = [
 
 export const materialById = (id: string): Material => MATERIALS.find((m) => m.id === id) ?? MATERIALS[0]
 
+/**
+ * How a material takes the light in the drawing: `shine` (0–1) is how bright its highlight is and
+ * `gloss` how small and sharp it is (the Phong exponent). A moving body is painted from the
+ * theme's palette now (sim/palette.ts), so this is where its material still shows at a glance:
+ * steel, glass and ice catch the light, rubber, wood and foam do not.
+ */
+interface Finish {
+  shine: number
+  gloss: number
+}
+
+const FINISHES: Record<string, Finish> = {
+  steel: { shine: 0.55, gloss: 70 },
+  aluminium: { shine: 0.5, gloss: 50 },
+  lead: { shine: 0.3, gloss: 30 },
+  glass: { shine: 0.7, gloss: 110 },
+  ice: { shine: 0.6, gloss: 90 },
+  plastic: { shine: 0.35, gloss: 40 },
+  wood: { shine: 0.08, gloss: 10 },
+  rubber: { shine: 0.06, gloss: 8 },
+  concrete: { shine: 0.03, gloss: 5 },
+  cork: { shine: 0.04, gloss: 6 },
+  foam: { shine: 0.02, gloss: 4 }
+}
+
+/** The finish of a material; one this build does not know is finished as its fallback, steel. */
+export const materialFinish = (id: string): Finish => FINISHES[materialById(id).id] ?? FINISHES.steel
+
 /** Volume of a shape in m³, so density can give a mass the student can check. */
 export function shapeVolume(shape: string, size: [number, number, number]): number {
   // A size is a length whichever way it was typed: a negative one from an old file gave a

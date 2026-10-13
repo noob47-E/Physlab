@@ -8,6 +8,8 @@ import { type BodyDef, type BodyState, type ShapeKind } from '../../sim/types'
 import { launchVelocity } from '../../sim/presets'
 import { ALWAYS_SHOWN, BODY_FOLDS, CONTACT_HINT, controlsIn, showsMotionAids, type ControlKey } from '../../sim/inspector'
 import { NumField } from '../../ui/fields'
+import { colourNote, pickerColour } from '../../sim/palette'
+import { themeColor, useTheme } from '../../app/theme'
 import { useNum, Vec3Row, SizeRow, Slider, Fold } from './common'
 import { ReplayLock, useReplayLocked } from './ReplayLock'
 
@@ -16,6 +18,8 @@ const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
 
 export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null; update: (id: string, patch: Partial<BodyDef>) => void }) {
   const num = useNum()
+  // A theme colour reads differently in each theme, so the colour row is drawn again on a switch.
+  useTheme((t) => t.theme)
   const moves = sel.motion === 'dynamic'
   const locked = useReplayLocked()
   // One row per control, placed by the table in sim/inspector.ts rather than by hand here: the
@@ -64,8 +68,9 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
       <div className="prop-row">
         <label>Colour</label>
         <div className="flex items-center gap-2">
-          <input type="color" className="h-6 w-10 cursor-pointer rounded border border-[color:var(--line-2)] bg-transparent" value={sel.color} onChange={(e) => update(sel.id, { color: e.target.value })} title="Its own colour; choosing a material sets it back" />
-          <span className="text-small text-[color:var(--text-faint)]">{materialById(sel.material).color === sel.color ? `the colour of ${materialById(sel.material).label.toLowerCase()}` : 'custom'}</span>
+          {/* The picker takes six hex digits and nothing else: handed a theme colour it showed black. */}
+          <input type="color" className="h-6 w-10 cursor-pointer rounded border border-[color:var(--line-2)] bg-transparent" value={pickerColour(sel.color, themeColor)} onChange={(e) => update(sel.id, { color: e.target.value })} title="Its own colour; choosing a material sets it back" />
+          <span className="text-small text-[color:var(--text-faint)]">{colourNote(sel)}</span>
         </div>
       </div>
     ),

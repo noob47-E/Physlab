@@ -8,6 +8,30 @@ import { eulerToQuat, rotateByEuler } from './rotate'
 
 export const LINK_KINDS: LinkKind[] = ['string', 'rod', 'spring', 'rope', 'pulley', 'hinge', 'weld']
 
+/**
+ * Where a body's centre of mass sits in its own frame, measured from its position. For most shapes
+ * that is the position itself; a hull is different. A cone's hull is a pyramid, whose centre of
+ * mass is a quarter of its height above its base (a/2 wide, b tall, base at −b/2), and a ramp's is
+ * its right triangle's centroid, a third of the way in from the right angle at (−a/2, −b/2).
+ *
+ * It matters because a constraint is pinned in LocalToBodyCOM: a hinge point measured from a
+ * cone's middle sat b/4 too low, and the hinge yanked whatever it held down by that much on the
+ * first step (0.175 m for the seesaw's 0.7 m fulcrum).
+ */
+export function comOffset(b: BodyDef): V3 {
+  const [a, h] = b.size.map(Math.abs)
+  if (b.shape === 'cone') return [0, -h / 4, 0]
+  if (b.shape === 'ramp') return [-a / 6, -h / 6, 0]
+  return [0, 0, 0]
+}
+
+/** A world point in a body's own frame, measured from its centre of mass: what a hinge's pivot is. */
+export function localToCom(b: BodyDef, world: V3): V3 {
+  const local = toLocal(b.rotation, [world[0] - b.position[0], world[1] - b.position[1], world[2] - b.position[2]])
+  const com = comOffset(b)
+  return [local[0] - com[0], local[1] - com[1], local[2] - com[2]]
+}
+
 /** Rotates a world-space vector into a body's local frame (the frame Jolt's local-point settings use). */
 export function toLocal(rotation: V3, v: V3): V3 {
   const [x, y, z, w] = eulerToQuat(rotation)

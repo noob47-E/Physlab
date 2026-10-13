@@ -46,7 +46,9 @@ const read = (): Theme => {
  * repeat a hex value next to every token name (tests/colours.test.ts keeps hex out of the .tsx files).
  */
 export function themeColor(name: string, fallback = '#888888'): string {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  // No page to ask (a server render, a test with no DOM): the fallback, as for a stylesheet not loaded.
+  if (typeof document === 'undefined' || typeof getComputedStyle === 'undefined') return fallback
+  const v =getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return v || fallback
 }
 

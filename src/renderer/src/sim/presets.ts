@@ -7,8 +7,9 @@
 // happen and then check it.
 
 import { makeBody } from './store'
-import { makeLink, ropeSegments } from './links'
+import { localToCom, makeLink, ropeSegments } from './links'
 import { materialById } from './materials'
+import { paintBodies } from './palette'
 import { type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
 
 export interface Preset {
@@ -69,7 +70,7 @@ const VACUUM = { airDensity: 0 }
  */
 export const START_PRESET_ID = 'fall'
 
-export const PRESETS: Preset[] = [
+const EXPERIMENTS: Preset[] = [
   // ---------------------------------------------------------------- motion
   {
     id: START_PRESET_ID,
@@ -193,7 +194,10 @@ export const PRESETS: Preset[] = [
     tags: ['balance', 'lever', 'moments', 'torque'],
     about: 'A plank on a hinge. 3 kg at 1 m against 1 kg at 1.5 m: moments 3 against 1.5, so the heavy side goes down. Drag the light ball out to 3 m to balance it.',
     build: () => {
-      const stand = put('box', 'Stand', [0, 0.35, 0], { size: [0.2, 0.7, 0.4], motion: 'static', material: 'steel' })
+      // A fulcrum, not a crate: a fixed cone reads as the triangle under a lever from the side
+      // (P28 L4). It is as tall as the box it replaces, so its tip stays 3 cm under the plank —
+      // beyond the engine's reach for a contact — and the plank turns exactly as it did.
+      const stand = put('cone', 'Stand', [0, 0.35, 0], { size: [0.6, 0.7, 0.6], motion: 'static', material: 'steel' })
       // Long enough for the instruction in `about`: a 4 m plank ended at 2 m, so a ball dragged
       // out to 3 m fell off the end instead of balancing.
       const plank = put('plank', 'Plank', [0, 0.78, 0], { size: [7, 0.1, 0.5], massMode: 'mass', mass: 2, material: 'wood' })
@@ -203,7 +207,8 @@ export const PRESETS: Preset[] = [
         // The hinge axis runs through the plank's own centre, at plank height. A hinge at the
         // stand's centre put the axis 0.43 m below the plank's weight, which is a plank balanced
         // on a point: it tipped over whatever sat on it, and no arrangement of balls could hold.
-        links: [join('hinge', plank, stand, undefined, { pivotA: [0, 0, 0], pivotB: [0, plank.position[1] - stand.position[1], 0] })]
+        // On the stand's side it is measured from the cone's centre of mass, as the engine pins it.
+        links: [join('hinge', plank, stand, undefined, { pivotA: [0, 0, 0], pivotB: localToCom(stand, plank.position) })]
       }
     }
   },
@@ -500,6 +505,20 @@ export const PRESETS: Preset[] = [
     }
   }
 ]
+
+/**
+ * Every experiment, with the bodies that move painted from the theme's palette (P28 L5): three
+ * balls of steel, lead and wood were three grey discs. Painted here, after the material has set
+ * the friction and the bounce, so only the colour changes; the fixed bodies keep the colour of
+ * what they are made of, and the material still shows in the panel and in each body's finish.
+ */
+export const PRESETS: Preset[] = EXPERIMENTS.map((p) => ({
+  ...p,
+  build: () => {
+    const built = p.build()
+    return { ...built, bodies: paintBodies(built.bodies) }
+  }
+}))
 
 export const presetById = (id: string): Preset | undefined => PRESETS.find((p) => p.id === id)
 

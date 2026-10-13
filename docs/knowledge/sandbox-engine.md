@@ -79,6 +79,25 @@ The overview of the whole Sandbox is `sandbox.md`; this note is the engine under
 - `touches`: every contact of the step (new and continuing, Jolt's normal from a to b and first point), collected
   only while an after-step listener exists.
 
+## The floor (SB3fix)
+- The ground body is drawn from its own size (10 km by default, so the camera meets the horizon), but the engine
+  does not build that box. `isPlaneFloor(def)` in `world.ts`: a **static** ground whose width and depth are both at
+  least `PLANE_FLOOR_FROM` (1 km) becomes Jolt's `PlaneShape` — normal up, constant `−size[1]/2` in the body's own
+  frame, so the top is exactly where the box's top face was; broad-phase half-extent `max(5 km, half the width)`.
+  Everything else (a floor typed smaller, a file saved with the old 200 m floor, a kinematic or dynamic "ground") is
+  still the box of the size it states, with its edge, exactly as before; `FILE_VERSION` did not change.
+- Why: as a 10 km box every contact was worked out against corners 5 km away in 32-bit numbers. A ball dropped at
+  x = −1 ended 1 cm sideways, the moon ball 2 mm, the foam ball had 0.012 m/s sideways, a landed ball sat 3 mm
+  low. A plane's normal is exactly up and it has no corners: a ball dropped straight down moves 0 sideways.
+- Even a 50 m box leaves 5·10⁻⁵ m of sideways drift in 10 s, a 200 m box 2·10⁻⁴ m (GJK tolerance); only the plane
+  is exact. That is why the golden shows contact-noise numbers (×10⁻⁹) going to 0 and a few last digits moving.
+- **A body far from the floor's origin still loses digits.** Jolt keeps positions in 32 bits (61 µm apart at
+  1 km), so a ball rolling 1 km out ends up to 0.4 mm from where the same ball ends at the origin. The 10 km box was
+  21 mm off. Do not promise 0.1 mm at a kilometre.
+- **`new J.PlaneShape(plane, undefined, half)` drops `half`.** The binding reads an undefined argument as "use the
+  defaults for the rest", so the floor was 1 km wide and a ball at x = 1000 fell through. Pass `null` for the material.
+- The plane and the vector it was built from are tracked and released like any handle; the shape belongs to the body.
+
 ## The hook
 `onAfterStep(fn)` → `fn(world, { step, time, dt, work, contacts, touches })` after every engine step; returns the
 unsubscribe. A listener reads only; it must never move or change a body (a listened world steps exactly as an
@@ -152,7 +171,9 @@ which always carries a stepRate, and must still run at 600.
 
 ## Tests
 `tests/simKeyframes.test.ts` (SB9: the six scenes bit for bit, keyframes from the hook, refusal, leaks, records
-into a Tape, serials, the rate grid), `tests/simHonest.test.ts` (free fall ½g²Δt, launch v₀ₓ(2v₀ᵧ/g − Δt), own spring band, no drift, period,
+into a Tape, serials, the rate grid), `tests/sandboxPlaneFloor.test.ts` (the plane floor: no sideways drift, same motion 100 m and 1 km out, rest height,
+reach to 4.9 km, tilt, typed position, a narrow floor keeps its edge, no leaked handles; the "box" cases must fail
+on the old 10 km box), `tests/simHonest.test.ts` (free fall ½g²Δt, launch v₀ₓ(2v₀ᵧ/g − Δt), own spring band, no drift, period,
 stability rule, push, drag, rod pendulum, contacts at 600, determinism, handle count, the Crane's rope, damper and
 rolling work), `tests/simClockRates.test.ts` (`rateOf`, the clock at every rate, readings, clamp, rate change,
 Reset, the hook, touches, `ownForces`), `tests/sandboxFile8.test.ts` (format 8), the Spring-on-ice block of
