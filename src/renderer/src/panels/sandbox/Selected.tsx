@@ -3,9 +3,10 @@
 import { Rocket } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { dragCoefficient, materialById, MATERIALS } from '../../sim/materials'
-import { engine, massOf, useSandbox } from '../../sim/store'
+import { engine, massOf } from '../../sim/store'
 import { type BodyDef, type BodyState, type ShapeKind } from '../../sim/types'
 import { launchVelocity } from '../../sim/presets'
+import { launch, launchNote } from '../../sim/launch'
 import { ALWAYS_SHOWN, BODY_FOLDS, CONTACT_HINT, controlsIn, showsMotionAids, type ControlKey } from '../../sim/inspector'
 import { NumField } from '../../ui/fields'
 import { colourNote, pickerColour } from '../../sim/palette'
@@ -189,22 +190,23 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
  * the components are shown, so it is still a lesson rather than a black box.
  */
 function Launcher({ id }: { id: string }) {
-  const update = useSandbox((s) => s.updateBody)
   const num = useNum()
   const [speed, setSpeed] = useState(12)
   const [angle, setAngle] = useState(45)
+  const [note, setNote] = useState<string | null>(null)
   const v = launchVelocity(speed, angle)
   return (
     <div className="prop-row">
-      <label title="Set the velocity from a speed and an angle">Launch</label>
+      <label title="Before Play this is the start; part-way through a run it throws the object now">Launch</label>
       <div className="flex flex-wrap items-center gap-1">
         <NumField value={speed} onChange={setSpeed} />
         <span className="text-[color:var(--text-faint)]">m/s at</span>
         <NumField value={angle} onChange={setAngle} />
         <span className="text-[color:var(--text-faint)]">°</span>
-        <button className="btn" onClick={() => update(id, { velocity: v })}>
+        <button className="btn" onClick={() => setNote(launchNote(launch(id, v)))}>
           <Rocket size={12} /> Set
         </button>
+        {note && <div className="w-full pt-0.5 text-small text-[color:var(--text-dim)]">{note}</div>}
         <div className="w-full pt-0.5 text-small tabular-nums text-[color:var(--text-faint)]">
           vₓ = {num(v[0], 'm/s')} · vᵧ = {num(v[1], 'm/s')}
         </div>
