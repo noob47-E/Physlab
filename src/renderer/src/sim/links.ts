@@ -4,7 +4,7 @@
 
 import type { BodyDef, Link, LinkKind } from './types'
 import type { V3 } from '../math/vec'
-import { eulerToQuat, rotateByEuler } from './rotate'
+import { eulerToQuat, rotateByEuler, rotateVec } from './rotate'
 
 export const LINK_KINDS: LinkKind[] = ['string', 'rod', 'spring', 'rope', 'pulley', 'hinge', 'weld']
 
@@ -271,4 +271,97 @@ export function makeLink(id: string, kind: LinkKind, a: BodyDef, b: BodyDef, opt
     default:
       return base
   }
+}
+
+/** Which kinds of link hold a body at a point of its own (SB61): the rest (rope, pulley, hinge, weld) have their own ways. */
+const TIED: LinkKind[] = ['rod', 'string', 'spring']
+/** The shortest a link may be between its tie points (m); shorter, it is held at the centres. */
+const MIN_TIED = 0.05
+
+/**
+ * How many links each body is from a fixed one (SB61): 0 for a fixed (static or kinematic) body, 1 for a body joined
+ * straight to one, and so on; Infinity where no chain of links leads to a fixed body. A link's PARENT is its end nearer
+ * a fixed body: a bob's string hangs from the pivot, not the other way round.
+ */
+export function linkDepths(bodies: BodyDef[], links: Link[]): Map<string, number> {
+  const depth = new Map<string, number>(bodies.map((b) => [b.id, b.motion === 'dynamic' ? Infinity : 0]))
+  const edges: [string, string][] = []
+  for (const l of links) {
+    edges.push([l.a, l.b])
+    if (l.over) edges.push([l.a, l.over], [l.b, l.over])
+  }
+  // Breadth first from every fixed body at once: a few links at most, so the plain loop is plenty.
+  for (let changed = true; changed; ) {
+    changed = false
+    for (const [x, y] of edges) {
+      const dx = depth.get(x) ?? Infinity
+      const dy = depth.get(y) ?? Infinity
+      if (dx + 1 < dy) {
+        depth.set(y, dx + 1)
+        changed = true
+      } else if (dy + 1 < dx) {
+        depth.set(x, dy + 1)
+        changed = true
+      }
+    }
+  }
+  return depth
+}
+
+/**
+ * Where a rod, string or spring holds each of its ends (SB61), as an offset from that body's position in its own frame
+ * (null: at its centre). The parent end (nearer a fixed body) is held at its centre; the other end at the point of its
+ * surface that faces the parent, so it hangs from that point and turns with the link. With no parent (two free bodies,
+ * or two equally far from a fixed one) both ends are held at their surfaces. `length` is the distance the joint keeps
+ * between the two hold points: the link's centre-to-centre length less the reaches, so the starting geometry and every
+ * length a preset, a card or a formula quotes keep their meaning. Worked out from the definitions, so the engine and the
+ * drawing agree.
+ */
+export function linkTies(link: Link, a: BodyDef, b: BodyDef, depths: Map<string, number>): { a: V3 | null; b: V3 | null; parent: 'a' | 'b' | null; length: number } {
+  const L = Math.max(0.01, link.length)
+  if (!TIED.includes(link.kind)) return { a: null, b: null, parent: null, length: L }
+  // A link that names its own attachment points (SB59's lever and Atwood: pivotA / pivotB, from each centre of mass) keeps
+  // them exactly, and its length is the distance between them.
+  if (link.pivotA || link.pivotB) {
+    const at = (d: BodyDef, p: V3 | undefined): V3 | null => {
+      if (!p) return null
+      const c = comOffset(d)
+      return [p[0] + c[0], p[1] + c[1], p[2] + c[2]]
+    }
+    return { a: at(a, link.pivotA), b: at(b, link.pivotB), parent: null, length: L }
+  }
+  const da = depths.get(a.id) ?? Infinity
+  const db = depths.get(b.id) ?? Infinity
+  const parent = da < db ? 'a' : db < da ? 'b' : null
+  let dir: V3 = [b.position[0] - a.position[0], b.position[1] - a.position[1], b.position[2] - a.position[2]]
+  const span = Math.hypot(...dir)
+  dir = span > 1e-9 ? [dir[0] / span, dir[1] / span, dir[2] / span] : [0, -1, 0]
+  const back: V3 = [-dir[0], -dir[1], -dir[2]]
+  const tie = (d: BodyDef, toward: V3): V3 => {
+    const r = reachAlong(d, toward)
+    const local = toLocal(d.rotation, toward)
+    return [local[0] * r, local[1] * r, local[2] * r]
+  }
+  const ta = parent === 'a' || a.motion !== 'dynamic' ? null : tie(a, dir)
+  const tb = parent === 'b' || b.motion !== 'dynamic' ? null : tie(b, back)
+  const reach = (t: V3 | null) => (t ? Math.hypot(...t) : 0)
+  // A link shorter than its reaches (bodies drawn into each other, a spring squeezed past them) keeps its centres, as
+  // every link did before: shortened to its 1 cm floor it would start stretched by most of its length.
+  if (L - reach(ta) - reach(tb) < MIN_TIED) return { a: null, b: null, parent, length: L }
+  return { a: ta, b: tb, parent, length: L - reach(ta) - reach(tb) }
+}
+
+/**
+ * The two points a rod, string or spring is drawn between (SB61): each end's hold point in the world, from the body's
+ * pose now (position and rotation quaternion x, y, z, w).
+ */
+export function linkEnds(link: Link, a: BodyDef, b: BodyDef, depths: Map<string, number>, poseA: { position: V3; rotation: readonly number[] }, poseB: { position: V3; rotation: readonly number[] }): [V3, V3] {
+  const t = linkTies(link, a, b, depths)
+  const at = (pose: { position: V3; rotation: readonly number[] }, off: V3 | null): V3 => {
+    if (!off) return pose.position
+    const q = pose.rotation
+    const w = rotateVec([q[0], q[1], q[2], q[3]], off)
+    return [pose.position[0] + w[0], pose.position[1] + w[1], pose.position[2] + w[2]]
+  }
+  return [at(poseA, t.a), at(poseB, t.b)]
 }

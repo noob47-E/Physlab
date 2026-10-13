@@ -59,7 +59,7 @@ const SOURCES = [
   { text: 'a stiff spring the engine works itself', engine: true },
   { text: 'a rope’s links (their own energy is not counted)', engine: true },
   { text: 'rolling resistance', engine: false },
-  { text: 'spring dampers', engine: false }
+  { text: 'dampers (a spring’s, or where a body is tied)', engine: false }
 ] as const
 type Source = (typeof SOURCES)[number]['text']
 
@@ -189,7 +189,7 @@ function extend(book: Book, step: number, scene: LedgerScene): void {
       const work = tape.work(k)
       if (work && work[0] !== 0) seen('air resistance', k)
       if (work && work[1] !== 0) seen('rolling resistance', k)
-      if (work && work[4] !== 0) seen('spring dampers', k)
+      if (work && work[4] !== 0) seen('dampers (a spring’s, or where a body is tied)', k)
       for (const e of tape.events(k)) {
         if (!isContact(e)) continue
         const c = e as ContactEvent

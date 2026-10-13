@@ -147,6 +147,43 @@ left to Jolt's reference count (each link's collision group holds it; freeing it
 twice). Before, every `setLinks` left 61 engine objects for one each of rod, string, hinge, weld, stiff spring,
 pulley and an 8-link rope; the presets' goldens are byte-identical after the change.
 
+## A joined body turns with its link (SB61)
+The owner: "a body connected to a rope or rigid string or rod should not rotate at all; if it wants to rotate or spin, it
+should also spin the rope." Every link used to hold both bodies at their centres: no torque, so a hanging bob kept facing
+one way while its string swung (it looked as if it turned), and the Rope swing's bob spun on its ball-jointed tie at up
+to 4.5 rad/s. Now (pure parts in `sim/links.ts`, used by the engine AND the drawing so they agree):
+- `linkDepths(bodies, links)`: each body's distance in links from a fixed one. A link's **parent** is its end nearer a
+  fixed body; the other end hangs from it.
+- `linkTies(link, a, b, depths)`: a rod, string or spring holds its parent at the centre and the hanging end at the point of
+  its surface that faces the parent (both surfaces when neither end is nearer a fixed body: two trolleys and a rod). The
+  joint keeps the link's centre-to-centre length less the reaches, so every preset's starting geometry and every length a
+  card or formula quotes keep their meaning. A link with SB59's own `pivotA` / `pivotB` keeps those points and its length.
+- A **rod** with a parent is a ball joint (Jolt's point constraint) at the parent's centre, held by the child at the point of its
+  frame a rod length towards the parent: the child turns exactly with the rod. Without a parent it is a distance between
+  the two surface ties (never a weld: the trolleys stay two trolleys).
+- A **string** and a stiff (engine) **spring** are today's distance joint, attached at the ties. An **own spring** works
+  out its Hooke and damper force between the tie points and pushes there (Jolt's AddForce at a point), so it turns its end; the
+  damper's turning work (r × F)·ω·dt is booked with the damper's.
+- A **rope** fixes a moving end to its end link (Jolt's fixed constraint) when the rope hangs that end from something fixed (the
+  Rope swing, the crane): the bob turns with the rope. A rope between two free bodies (the tug) keeps its ball joints:
+  fixed ends made its slack snap 12 % harder.
+- **The knot** (`knotDampers`): a body hung from a point of its surface is a small second pendulum. A torque
+  −20·0.4 m r²·(ω − ω_link) (ω_link = r × v_rel / |r|²) takes out only its spin AGAINST its link, above 1 mrad/s (below,
+  float noise: no torque, no work for the ledger to name). Its work goes to the step's damper work. Without it the Pendulum
+  wobbled 0.9° about its tie and the mass on a spring swung round its tie at 4.5 rad/s after a drag. Only a body hung by
+  ONE link gets it, and only from a parent (its reaction goes to a moving parent): a body held at two ties (the swing
+  bridge's V) has no wobble of its own, and a knot per string fought the other (0.8 % of its energy in 10 s).
+- **A placement** (`placeBody`, a paused drag) turns a hanging body so its tie faces what it hangs from again
+  (`faceTies`): moved and left turned as it was, a bob pulled back from 15° to 30° whipped round its tie.
+- The links are drawn between their tie points (`linkEnds`, from the drawn poses).
+- Measured (`tests/turnWithLink.test.ts`, 240 and 600): the Pendulum's bob keeps its face to the pivot within 1° and turns
+  against its string by under 0.05 rad/s; the Rope swing and a ball on a rod the same; the mass on a spring stays upright
+  within 2°; the Pendulum's period grows by √(1 + 0.4r²/L²) = 0.11 % (a physical pendulum now: 2.8526 s at 15°, SB15's
+  theory knows it); its energy (spin included) stays inside DS-2's band.
+- Traps: a link built part-way (an edit, a rope end moved) takes its ties from the DEFINITIONS (positions, rotations), as
+  the drawing does; a body turned far from its definition then hangs from a tie that is not where its string is, and
+  swings to it. The keyframes save the knot torque with the other applied forces (bit-identical restores).
+
 ## File format 8
 `sandbox.world.stepRate` replaces `collisionSteps`. A format-7 world gets `rateOf({ collisionSteps: n })`: n sub-steps
 of 1/60 s are 60·n steps a second, rounded up to a rate PhysLab runs; no figure (the old default 2) and no world at

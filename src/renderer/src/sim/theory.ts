@@ -44,7 +44,8 @@ export interface Prediction {
   step: { kind: 'flight' | 'fall' | 'spring'; values: number[] } | null
   /** A number to go with the limit's sentence ("a 15° swing is not small: … = 2.849 s"). */
   note?: string
-  /** The same formula with the step's own error worked in (sim/stepError.ts): a run that matches it agrees. */
+  /** The same formula with its computed corrections worked in (the step's own error from sim/stepError.ts, or what the
+   *  formula leaves out, such as a bob's turning): a run that matches it agrees. */
   stepped?: (rate: number) => number
   /** The step's error as a sentence with its number, when gapSentence has no form for this quantity. */
   stepNote?: (rate: number) => string
@@ -521,11 +522,15 @@ const THEORIES: Record<string, Entry> = {
       const L = Math.hypot(dx, dy)
       const amp = Math.atan2(Math.abs(dx), dy) / DEG
       const small = P.pendulumSmall(L, g)
-      const large = P.pendulumExact(L, g, amp)
-      const note = `a ${num(amp, 0)}° swing is not small: 2π√(L/g)(1 + θ₀²/16) = ${num(P.pendulumSeries(L, g, amp))} s`
+      // The bob turns with its string (SB61), so it is a physical pendulum: I = mL² + I_bob about the pivot, and every
+      // period grows by √(1 + I_bob / mL²); a ball's own I_bob is 0.4 m r² (√(1 + 0.4 r²/L²), 0.11 % for this bob).
+      const r = bob.shape === 'sphere' ? bob.size[0] : 0
+      const turning = Math.sqrt(1 + (0.4 * r * r) / (L * L))
+      const large = P.pendulumExact(L, g, amp) * turning
+      const note = `a ${num(amp, 0)}° swing is not small: 2π√(L/g)(1 + θ₀²/16) = ${num(P.pendulumSeries(L, g, amp))} s, and the bob turns with its string, √(1 + 0.4r²/L²) = ${num(turning, 4)} longer: ${num(large)} s`
       return [
-        { scene: 'pendulum', key: 'Tsmall', label: 'period, small-swing formula', value: small, unit: 's', formula: `2π√(L/g) = 2π√(${num(L)} / ${num(g)})`, facts: facts({ pendulumAmplitudeDeg: amp }), step: null, note },
-        { scene: 'pendulum', key: 'T', label: `period for a ${num(amp, 0)}° swing`, value: large, unit: 's', formula: `2π√(L/g) × (the exact series for ${num(amp, 0)}°)`, facts: facts(), step: null }
+        { scene: 'pendulum', key: 'Tsmall', label: 'period, small-swing formula', value: small, unit: 's', formula: `2π√(L/g) = 2π√(${num(L)} / ${num(g)})`, facts: facts({ pendulumAmplitudeDeg: amp }), step: null, note, stepped: () => large },
+        { scene: 'pendulum', key: 'T', label: `period for a ${num(amp, 0)}° swing`, value: large, unit: 's', formula: `2π√(L/g) × (the exact series for ${num(amp, 0)}°) × √(1 + 0.4r²/L²)`, facts: facts(), step: null }
       ]
     },
     measure: (tape, b, step) => {

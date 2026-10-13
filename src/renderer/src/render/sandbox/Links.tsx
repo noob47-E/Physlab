@@ -6,7 +6,7 @@ import * as THREE from 'three/webgpu'
 import { useSandbox } from '../../sim/store'
 import type { BodyDef, Link } from '../../sim/types'
 import type { V3 } from '../../math/vec'
-import { comOffset } from '../../sim/links'
+import { comOffset, linkDepths, linkEnds } from '../../sim/links'
 import { rotateByEuler } from '../../sim/rotate'
 import { worldPerPixel } from '../cameraUtils'
 import { themeColor, useThemed } from '../../app/theme'
@@ -53,6 +53,8 @@ interface LinkColours {
 export function Links() {
   const links = useSandbox((s) => s.links)
   const bodies = useSandbox((s) => s.bodies)
+  // Who hangs from whom (SB61): a link is drawn to the point it holds each end at, as the engine holds it.
+  const depths = useMemo(() => linkDepths(bodies, links), [bodies, links])
   const colours = useThemed<LinkColours>(() => ({
     spring: themeColor(LINK_LOOK.spring.token),
     rod: themeColor(LINK_LOOK.rod.token),
@@ -62,20 +64,29 @@ export function Links() {
   return (
     <>
       {links.map((l) => (
-        <LinkView key={l.id} link={l} bodies={bodies} colours={colours} />
+        <LinkView key={l.id} link={l} bodies={bodies} depths={depths} colours={colours} />
       ))}
     </>
   )
 }
 
-function LinkView({ link, bodies, colours }: { link: Link; bodies: BodyDef[]; colours: LinkColours }) {
+function LinkView({ link, bodies, depths, colours }: { link: Link; bodies: BodyDef[]; depths: Map<string, number>; colours: LinkColours }) {
+  // The two points a rod, string or spring runs between now: each end's hold point (links.ts linkEnds), from the drawn poses.
+  const a = bodies.find((b) => b.id === link.a)
+  const b = bodies.find((b) => b.id === link.b)
+  const ends = (w: SimReadout): [V3, V3] | null => {
+    const sa = w.drawn(link.a)
+    const sb = w.drawn(link.b)
+    if (!sa || !sb || !a || !b) return null
+    return linkEnds(link, a, b, depths, sa, sb)
+  }
   switch (link.kind) {
     case 'spring':
-      return <SpringCoil link={link} colour={colours.spring} />
+      return <SpringCoil link={link} ends={ends} colour={colours.spring} />
     case 'rod':
-      return <Bar link={link} look={LINK_LOOK.rod} colour={colours.rod} shine={METAL_SHINE} gloss={50} />
+      return <Bar ends={ends} look={LINK_LOOK.rod} colour={colours.rod} shine={METAL_SHINE} gloss={50} />
     case 'string':
-      return <Bar link={link} look={LINK_LOOK.string} colour={colours.string} shine={NO_SHINE} gloss={4} />
+      return <Bar ends={ends} look={LINK_LOOK.string} colour={colours.string} shine={NO_SHINE} gloss={4} />
     case 'rope':
       // A chain of 20 cm links in the engine: drawn through their centres, a bead on every joint.
       return <RopeTube pathOf={(w) => w.linkPath(link)} look={LINK_LOOK.rope} beadScale={BEAD_SCALE} beadTone={0.72} colour={colours.rope} />
@@ -104,7 +115,7 @@ function LinkView({ link, bodies, colours }: { link: Link; bodies: BodyDef[]; co
  * geometry is rewritten in place every frame for the length it has now, so the wire keeps its
  * thickness however far it is pulled. It was a 12-step zigzag one pixel wide.
  */
-function SpringCoil({ link, colour }: { link: Link; colour: string }) {
+function SpringCoil({ link, ends, colour }: { link: Link; ends: (w: SimReadout) => [V3, V3] | null; colour: string }) {
   const look = useMemo(() => springLook(link.length), [link.length])
   const geo = useMemo(() => coilGeometry(look.shape), [look])
   useEffect(() => () => geo.dispose(), [geo])
@@ -113,17 +124,17 @@ function SpringCoil({ link, colour }: { link: Link; colour: string }) {
     const m = mesh.current
     const w = readoutRef.current
     if (!m || !w) return
-    const a = w.drawn(link.a)
-    const b = w.drawn(link.b)
-    if (!a || !b) {
+    const e = ends(w)
+    if (!e) {
       m.visible = false
       return
     }
-    const mid: V3 = [(a.position[0] + b.position[0]) / 2, (a.position[1] + b.position[1]) / 2, (a.position[2] + b.position[2]) / 2]
+    const [a, b] = e
+    const mid: V3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
     const wire = visibleRadius(look.wireRadius, LINK_LOOK.spring.minPixels, pixelsPerMetre(state, mid))
     const pos = geo.getAttribute('position') as THREE.BufferAttribute
     const nor = geo.getAttribute('normal') as THREE.BufferAttribute
-    writeCoil(a.position, b.position, look.coilRadius, wire, pos.array as Float32Array, nor.array as Float32Array, look.shape)
+    writeCoil(a, b, look.coilRadius, wire, pos.array as Float32Array, nor.array as Float32Array, look.shape)
     pos.needsUpdate = true
     nor.needsUpdate = true
     m.visible = true
@@ -135,8 +146,8 @@ function SpringCoil({ link, colour }: { link: Link; colour: string }) {
   )
 }
 
-/** A rod (a solid bar) or a string (a thin thread): one unit cylinder from centre to centre, never thinner on screen than its look allows. */
-function Bar({ link, look, colour, shine, gloss }: { link: Link; look: { radius: number; minPixels: number }; colour: string; shine: THREE.Color; gloss: number }) {
+/** A rod (a solid bar) or a string (a thin thread): one unit cylinder between its hold points, never thinner on screen than its look allows. */
+function Bar({ ends, look, colour, shine, gloss }: { ends: (w: SimReadout) => [V3, V3] | null; look: { radius: number; minPixels: number }; colour: string; shine: THREE.Color; gloss: number }) {
   const geo = useMemo(() => unitCylinder(), [])
   useEffect(() => () => geo.dispose(), [geo])
   const mesh = useRef<THREE.Mesh>(null)
@@ -145,13 +156,12 @@ function Bar({ link, look, colour, shine, gloss }: { link: Link; look: { radius:
     const m = mesh.current
     const w = readoutRef.current
     if (!m || !w) return
-    const a = w.drawn(link.a)
-    const b = w.drawn(link.b)
-    if (!a || !b) {
+    const e = ends(w)
+    if (!e) {
       m.visible = false
       return
     }
-    linkPlacement(a.position, b.position, place)
+    linkPlacement(e[0], e[1], place)
     placeCylinder(m, place, visibleRadius(look.radius, look.minPixels, pixelsPerMetre(state, place.mid)))
     m.visible = place.length > 1e-6
   })

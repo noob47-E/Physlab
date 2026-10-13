@@ -8,8 +8,8 @@
 
 import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalAreaTurned, materialById, shapeVolume } from './materials'
-import { pulleyPartnerMove, pulleyRim, reachAlong, ropeLayout, ropeLinkMass, ropeSegments, toLocal } from './links'
-import { eulerToQuat } from './rotate'
+import { comOffset, linkDepths, linkTies, pulleyPartnerMove, pulleyRim, reachAlong, ropeLayout, ropeLinkMass, ropeSegments, toLocal } from './links'
+import { eulerToQuat, rotateVec } from './rotate'
 import type { Actuator, AfterStep, BodyDef, BodyId, BodyState, ContactEvent, Keyframe, Link, OwnForces, StepRate, StepWork, Touch, WorldSettings } from './types'
 import { DEFAULT_STEP_RATE, DEFAULT_WORLD, rateOf } from './types'
 import { REC_FLOATS, type RecordLayout } from './tape'
@@ -162,6 +162,52 @@ export interface SimSample {
   states: Record<BodyId, BodyState>
 }
 
+/** How fast the knot damps a tied body's spin against its link, per second (SB61: about a twentieth of a second). */
+const KNOT_DAMPING = 20
+/** Below this spin against its link (rad/s) a tied body is taken to turn with it: float noise, not a wobble. */
+const KNOT_DEAD_ZONE = 1e-3
+
+/** The product a·b of two quaternions (x, y, z, w): b first, then a. */
+function quatMul(a: [number, number, number, number], b: [number, number, number, number]): [number, number, number, number] {
+  const [ax, ay, az, aw] = a
+  const [bx, by, bz, bw] = b
+  return [aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx, aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz]
+}
+
+/** The shortest turn (a unit quaternion) that takes the unit vector `from` onto the unit vector `to`. */
+function shortestArc(from: V3, to: V3): [number, number, number, number] {
+  const c: V3 = [from[1] * to[2] - from[2] * to[1], from[2] * to[0] - from[0] * to[2], from[0] * to[1] - from[1] * to[0]]
+  const w = 1 + from[0] * to[0] + from[1] * to[1] + from[2] * to[2]
+  // Opposite ways: half a turn about any axis square to `from`.
+  if (w < 1e-9) return Math.abs(from[0]) < 0.9 ? [0, -from[2], from[1], 0] : [from[1], -from[0], 0, 0]
+  const l = Math.hypot(c[0], c[1], c[2], w)
+  return [c[0] / l, c[1] / l, c[2] / l, w / l]
+}
+
+/** A hold point as Jolt's LocalToBodyCOM wants it: from the body's centre of mass (null: at the centre). */
+function fromCom(def: BodyDef, offset: V3 | null): V3 {
+  const c = comOffset(def)
+  return offset ? [offset[0] - c[0], offset[1] - c[1], offset[2] - c[2]] : [0, 0, 0]
+}
+
+/** Where a body's tie point is now (its centre when there is none). Numbers copied out at once (see `xyz`). */
+function tiePoint(body: InstanceType<Jolt['Body']>, tie: V3 | null): V3 {
+  const p = xyz(body.GetPosition())
+  if (!tie) return p
+  const q = body.GetRotation()
+  const w = rotateVec([q.GetX(), q.GetY(), q.GetZ(), q.GetW()], tie)
+  return [p[0] + w[0], p[1] + w[1], p[2] + w[2]]
+}
+
+/** The speed of a body's material point at `at`: v + ω × (at − position). */
+function pointVelocity(body: InstanceType<Jolt['Body']>, at: V3): V3 {
+  const v = xyz(body.GetLinearVelocity())
+  const w = xyz(body.GetAngularVelocity())
+  const p = xyz(body.GetPosition())
+  const r: V3 = [at[0] - p[0], at[1] - p[1], at[2] - p[2]]
+  return [v[0] + w[1] * r[2] - w[2] * r[1], v[1] + w[2] * r[0] - w[0] * r[2], v[2] + w[0] * r[1] - w[1] * r[0]]
+}
+
 interface Entry {
   def: BodyDef
   /** The Jolt Body itself: a stable pointer. A BodyID returned by value is a temporary
@@ -187,6 +233,9 @@ interface OwnSpring {
   k: number
   c: number
   L0: number
+  /** Where the spring holds each end (SB61): an offset from the body's position in its own frame, or null for its centre. */
+  tieA: V3 | null
+  tieB: V3 | null
 }
 
 /** What PhysLab pushed one body with during the step being taken, and where the body was before it. */
@@ -196,6 +245,8 @@ interface Applied {
   f: OwnForces
   /** The damper's share of `f.spring`: the only part of a spring that does work (its Hooke part is ½kx²). */
   damper: V3
+  /** The knot's damping torque (SB61): it takes out only a tied body's spin against its link; its work is the damper's. */
+  knot: V3
 }
 
 type AfterStepListener = (w: SimWorld, s: AfterStep) => void
@@ -220,7 +271,7 @@ interface Saved {
   settings: WorldSettings
   touching: Map<BodyId, BodyId>
   grabbed: { id: BodyId; target: V3 } | null
-  applied: { id: BodyId; before: V3; f: OwnForces; damper: V3 }[]
+  applied: { id: BodyId; before: V3; f: OwnForces; damper: V3; knot: V3 }[]
   actuators: Map<BodyId, Actuator[]>
   ownSprings: OwnSpring[]
   defs: BodyDef[]
@@ -302,6 +353,8 @@ export class SimWorld {
   private ropeCount = 0
   /** The definitions behind them, so a rebuild can put them back. */
   private linkDefs: Link[] = []
+  /** Each body's distance in links from a fixed one (links.ts linkDepths): who a rod, string or spring hangs from. */
+  private depths = new Map<string, number>()
   /**
    * Forces a question drives bodies with, by body. They belong to the experiment, not to one
    * run: a Reset rebuilds the bodies and must find the same push waiting at t = 0.
@@ -722,6 +775,7 @@ export class SimWorld {
     this.restructured()
     this.linkDefs = links
     this.removeLinks()
+    this.depths = linkDepths([...this.entries.values()].map((e) => e.def), links)
     for (const link of links) {
       const a = this.entries.get(link.a)
       const b = this.entries.get(link.b)
@@ -771,7 +825,10 @@ export class SimWorld {
       return
     }
     const k = Math.max(SPRING_FLOOR, link.stiffness)
-    this.ownSprings.push({ link, a, b, k, c: Math.max(0, link.damping), L0: Math.max(SPRING_FLOOR, link.length) })
+    // Held at its tie points (SB61): the hanging end at the surface that faces the other, so it hangs from there and turns
+    // with the spring. The rest length is the hold points' distance at the spring's natural length.
+    const ties = linkTies(link, a.def, b.def, this.depths)
+    this.ownSprings.push({ link, a, b, k, c: Math.max(0, link.damping), L0: Math.max(SPRING_FLOOR, ties.length), tieA: ties.a, tieB: ties.b })
     this.springKinds.set(link.id, 'own')
   }
 
@@ -838,12 +895,21 @@ export class SimWorld {
     // Attached at each body's own centre, in its own frame. Giving world-space points instead
     // leaves the constraint holding whatever positions the bodies happened to have when it was
     // made, which pinned them where they stood — a slack string held a ball in mid-air.
+    // SB61: a rod with a fixed end to hang from is a ball joint there, so its other end turns with it (addRodPin). A
+    // string, a rod between two free bodies and a stiff spring hold the hanging end at its surface tie point (links.ts
+    // linkTies): it hangs from there and turns with the link, where held at its centre it kept facing one way.
+    const ties = linkTies(link, a.def, b.def, this.depths)
+    if (link.kind === 'rod' && ties.parent) {
+      this.release(settings)
+      this.addRodPin(link, ties.parent === 'a' ? a : b, ties.parent === 'a' ? b : a)
+      return
+    }
     settings.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
-    const p1 = this.rv3(link.pivotA ?? [0, 0, 0])
-    const p2 = this.rv3(link.pivotB ?? [0, 0, 0])
+    const p1 = this.rv3(fromCom(a.def, ties.a))
+    const p2 = this.rv3(fromCom(b.def, ties.b))
     settings.set_mPoint1(p1)
     settings.set_mPoint2(p2)
-    const L = Math.max(0.01, link.length)
+    const L = ties.length
     // A string may go slack — that is the whole difference between a string and a rod.
     settings.set_mMinDistance(link.kind === 'string' ? 0 : L)
     settings.set_mMaxDistance(L)
@@ -861,6 +927,30 @@ export class SimWorld {
   private addConstraint(id: string, c: Constraint): void {
     this.physics.AddConstraint(c)
     this.links.set(id, c)
+  }
+
+  /**
+   * A rod hanging from `parent` (SB61): a ball joint at the parent's centre, held by the child at the point of its own frame
+   * that lies the rod's length towards the parent. The two centres stay the rod's length apart, as before, and the child
+   * turns exactly with the rod, like a bob on a real rod.
+   */
+  private addRodPin(link: Link, parent: Entry, child: Entry): void {
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    const pp = parent.def.position
+    const pc = child.def.position
+    let dir: V3 = [pp[0] - pc[0], pp[1] - pc[1], pp[2] - pc[2]]
+    const span = Math.hypot(...dir)
+    dir = span > 1e-9 ? [dir[0] / span, dir[1] / span, dir[2] / span] : [0, 1, 0]
+    const L = Math.max(0.01, link.length)
+    const local = toLocal(child.def.rotation, dir)
+    const s = this.track(new J.PointConstraintSettings())
+    s.set_mSpace(J.EConstraintSpace_LocalToBodyCOM)
+    const v1 = this.rv3(fromCom(parent.def, null))
+    const v2 = this.rv3(fromCom(child.def, [local[0] * L, local[1] * L, local[2] * L]))
+    s.set_mPoint1(v1)
+    s.set_mPoint2(v2)
+    this.addConstraint(link.id, s.Create(parent.body, child.body))
+    this.made(s, v1, v2)
   }
 
   /**
@@ -1015,10 +1105,26 @@ export class SimWorld {
       rope.constraints.push(c)
       this.made(s, v1, v2)
     }
-    pin(a.body, [localA[0] * reachA, localA[1] * reachA, localA[2] * reachA], rope.bodies[0], [0, -half, 0])
+    // A moving end is FIXED to its end link (SB61): it turns with the rope. On a ball joint the Rope swing's bob spun on
+    // its tie at up to 4.5 rad/s. A fixed end (a beam) keeps the ball joint, so the rope hangs from it freely.
+    const fix = (body: Body, bead: Body) => {
+      const s = this.track(new J.FixedConstraintSettings())
+      s.set_mSpace(J.EConstraintSpace_WorldSpace)
+      s.set_mAutoDetectPoint(true)
+      const c = s.Create(body, bead)
+      this.physics.AddConstraint(c)
+      rope.constraints.push(c)
+      this.made(s)
+    }
+    // Only a body the rope HANGS from something fixed by: a rope between two free bodies (the tug's crates) keeps its ball
+    // joints, so it pulls exactly as before (fixed ends made its slack snap 12 % harder).
+    const hangs = (e: Entry) => e.def.motion === 'dynamic' && Number.isFinite(this.depths.get(e.def.id) ?? Infinity)
+    if (hangs(a)) fix(a.body, rope.bodies[0])
+    else pin(a.body, [localA[0] * reachA, localA[1] * reachA, localA[2] * reachA], rope.bodies[0], [0, -half, 0])
     for (const link of rope.bodies) for (const end of [a.body, b.body]) this.ropeTies.add(pairKey(J.getPointer(end), J.getPointer(link)))
     for (let i = 0; i + 1 < n; i++) pin(rope.bodies[i], [0, half, 0], rope.bodies[i + 1], [0, -half, 0])
-    pin(rope.bodies[n - 1], [0, half, 0], b.body, [localB[0] * reachB, localB[1] * reachB, localB[2] * reachB])
+    if (hangs(b)) fix(b.body, rope.bodies[n - 1])
+    else pin(rope.bodies[n - 1], [0, half, 0], b.body, [localB[0] * reachB, localB[1] * reachB, localB[2] * reachB])
     // The joints are solved one at a time, and against a load a hundred times heavier than a
     // link each pass moves the link and hardly the load: a hanging load stretched the chain a
     // few centimetres, and a chain shorter than the gap could not reel its load in at all, so
@@ -1412,6 +1518,11 @@ export class SimWorld {
         const w = a.e.body.GetAngularVelocity()
         work.rolling += (t[0] * w.GetX() + t[1] * w.GetY() + t[2] * w.GetZ()) * dt
       }
+      const k = a.knot
+      if (k[0] !== 0 || k[1] !== 0 || k[2] !== 0) {
+        const w = a.e.body.GetAngularVelocity()
+        work.damper += (k[0] * w.GetX() + k[1] * w.GetY() + k[2] * w.GetZ()) * dt
+      }
     }
     const s: AfterStep = { step: this.steps, time: this.time, dt, work, contacts: this.stepContacts, touches: this.stepTouches }
     this.inHook = true
@@ -1479,7 +1590,7 @@ export class SimWorld {
     let a = this.applied.get(id)
     if (!a) {
       const p = e.body.GetPosition()
-      a = { e, before: [p.GetX(), p.GetY(), p.GetZ()], f: zeroForces(), damper: [0, 0, 0] }
+      a = { e, before: [p.GetX(), p.GetY(), p.GetZ()], f: zeroForces(), damper: [0, 0, 0], knot: [0, 0, 0] }
       this.applied.set(id, a)
     }
     return a
@@ -1490,6 +1601,15 @@ export class SimWorld {
     const force = this.v3(f)
     body.AddForce(force)
     this.release(force)
+  }
+
+  /** A force at a world point: it turns the body as well as moving it (a spring held at its tie, SB61). */
+  private pushAt(body: Body, f: V3, at: V3): void {
+    const force = this.v3(f)
+    const point = this.rv3(at)
+    body.AddForce(force, point)
+    this.release(force)
+    this.release(point)
   }
 
   /**
@@ -1602,6 +1722,7 @@ export class SimWorld {
       }
     }
     this.springForces()
+    this.knotDampers()
   }
 
   /**
@@ -1622,31 +1743,107 @@ export class SimWorld {
       const bAwake = bGoes && s.b.body.IsActive()
       if (!aAwake && !bAwake) continue
       // Copied out at once: the binding hands back ONE shared vector per getter (see `xyz`).
-      const pa = xyz(s.a.body.GetPosition())
-      const pb = xyz(s.b.body.GetPosition())
+      // Between the tie points (SB61), and pushed there: a spring held at a surface turns its end with it.
+      const pa = tiePoint(s.a.body, s.tieA)
+      const pb = tiePoint(s.b.body, s.tieB)
       const d: V3 = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
       const L = Math.hypot(d[0], d[1], d[2])
       // Two centres in one place give the spring no direction to pull in.
       if (!(L > 0)) continue
       const n: V3 = [d[0] / L, d[1] / L, d[2] / L]
-      const vA: V3 = aGoes ? xyz(s.a.body.GetLinearVelocity()) : [0, 0, 0]
-      const vB: V3 = bGoes ? xyz(s.b.body.GetLinearVelocity()) : [0, 0, 0]
+      const vA: V3 = aGoes ? pointVelocity(s.a.body, pa) : [0, 0, 0]
+      const vB: V3 = bGoes ? pointVelocity(s.b.body, pb) : [0, 0, 0]
       const hooke = s.k * (L - s.L0)
       const damp = s.c * (dot(vB, n) - dot(vA, n))
       const total: V3 = [(hooke + damp) * n[0], (hooke + damp) * n[1], (hooke + damp) * n[2]]
       const damper: V3 = [damp * n[0], damp * n[1], damp * n[2]]
-      const ends: [Entry, boolean, number][] = [
-        [s.a, aMoves, 1],
-        [s.b, bMoves, -1]
+      const ends: [Entry, boolean, number, V3, V3 | null][] = [
+        [s.a, aMoves, 1, pa, s.tieA],
+        [s.b, bMoves, -1, pb, s.tieB]
       ]
-      for (const [e, moves, sign] of ends) {
+      for (const [e, moves, sign, at, tie] of ends) {
         if (!moves) continue
         if (!e.body.IsActive()) this.bodies.ActivateBody(e.body.GetID())
         const rec = this.appliedTo(e.def.id, e)
         const f: V3 = [sign * total[0], sign * total[1], sign * total[2]]
-        this.push(e.body, f)
+        if (tie) this.pushAt(e.body, f, at)
+        else this.push(e.body, f)
         addInto(rec.f.spring, f)
-        addInto(rec.damper, [sign * damper[0], sign * damper[1], sign * damper[2]])
+        const dF: V3 = [sign * damper[0], sign * damper[1], sign * damper[2]]
+        addInto(rec.damper, dF)
+        // Pushed at its tie, the damper also turns the body: that torque r × F works too, and goes with the damper's work.
+        if (tie) {
+          const c = xyz(e.body.GetPosition())
+          const r: V3 = [at[0] - c[0], at[1] - c[1], at[2] - c[2]]
+          addInto(rec.knot, [r[1] * dF[2] - r[2] * dF[1], r[2] * dF[0] - r[0] * dF[2], r[0] * dF[1] - r[1] * dF[0]])
+        }
+      }
+    }
+  }
+
+  /**
+   * The knot (SB61): a body hung from a string or a spring by a point of its surface is a small second pendulum, and
+   * after a drag it swung round that point at up to 4.5 rad/s. A real knot, and the air, damp that: a torque
+   * −c·I·(ω − ω_link) takes out the body's spin AGAINST its link (ω_link = r × v_rel / |r|²) and nothing else, so it
+   * turns with the link and stops wobbling. c = KNOT_DAMPING; I is taken as 0.4 m r² (r the tie's reach). Its work goes
+   * to the step's damper work, so the energy ledger counts it. A rod is pinned and needs none.
+   */
+  private knotDampers(): void {
+    // A body hung by two or more tied links (the swing bridge's V) is held at two points: it has no wobble of its own to
+    // damp, and a knot on each link fought the other (0.8 % of its energy in 10 s).
+    const hung = new Map<string, number>()
+    for (const l of this.linkDefs) {
+      if (l.kind !== 'string' && l.kind !== 'spring' && l.kind !== 'rod') continue
+      const la = this.entries.get(l.a)
+      const lb = this.entries.get(l.b)
+      if (!la || !lb) continue
+      const t = linkTies(l, la.def, lb.def, this.depths)
+      if (t.parent) {
+        const id = t.parent === 'a' ? l.b : l.a
+        hung.set(id, (hung.get(id) ?? 0) + 1)
+      }
+    }
+    for (const link of this.linkDefs) {
+      if (link.kind !== 'string' && link.kind !== 'spring') continue
+      const a = this.entries.get(link.a)
+      const b = this.entries.get(link.b)
+      if (!a || !b) continue
+      const ties = linkTies(link, a.def, b.def, this.depths)
+      // Only a body that HANGS from its link's other end (ties.parent): between two free bodies the knot would be a torque
+      // from nowhere and the pair would lose angular momentum.
+      if (!ties.parent) continue
+      const [child, parent, tie] = ties.parent === 'a' ? [b, a, ties.b] : [a, b, ties.a]
+      {
+        if (!tie || child.def.motion !== 'dynamic' || !child.body.IsActive() || (hung.get(child.def.id) ?? 0) > 1) continue
+        const pc = xyz(child.body.GetPosition())
+        const pp = xyz(parent.body.GetPosition())
+        const vc = xyz(child.body.GetLinearVelocity())
+        const vp: V3 = parent.def.motion === 'static' ? [0, 0, 0] : xyz(parent.body.GetLinearVelocity())
+        const r: V3 = [pp[0] - pc[0], pp[1] - pc[1], pp[2] - pc[2]]
+        const r2 = r[0] * r[0] + r[1] * r[1] + r[2] * r[2]
+        // Centres within a millimetre give the link no direction to turn by.
+        if (!(r2 > 1e-6)) continue
+        const v: V3 = [vp[0] - vc[0], vp[1] - vc[1], vp[2] - vc[2]]
+        const wl: V3 = [(r[1] * v[2] - r[2] * v[1]) / r2, (r[2] * v[0] - r[0] * v[2]) / r2, (r[0] * v[1] - r[1] * v[0]) / r2]
+        const w = xyz(child.body.GetAngularVelocity())
+        const reach2 = tie[0] * tie[0] + tie[1] * tie[1] + tie[2] * tie[2]
+        const c = KNOT_DAMPING * 0.4 * child.mass * reach2
+        const dw: V3 = [w[0] - wl[0], w[1] - wl[1], w[2] - wl[2]]
+        // A body turning with its link (float noise aside) is left alone: no torque, no work, nothing for the ledger to name.
+        if (Math.hypot(dw[0], dw[1], dw[2]) < KNOT_DEAD_ZONE) continue
+        const tq: V3 = [-c * dw[0], -c * dw[1], -c * dw[2]]
+        const torque = this.v3(tq)
+        child.body.AddTorque(torque)
+        this.release(torque)
+        addInto(this.appliedTo(child.def.id, child).knot, tq)
+        // The reaction goes to a moving parent, so the pair keeps its angular momentum (a fixed one takes it into the world).
+        if (parent.def.motion === 'dynamic') {
+          const back: V3 = [-tq[0], -tq[1], -tq[2]]
+          const counter = this.v3(back)
+          parent.body.AddTorque(counter)
+          this.release(counter)
+          addInto(this.appliedTo(parent.def.id, parent).knot, back)
+        }
       }
     }
   }
@@ -1745,6 +1942,7 @@ export class SimWorld {
     this.input()
     const from = this.positionOf(e)
     this.put(e, position)
+    this.faceTies(e)
     if (e.def.motion !== 'dynamic') this.wakeAll()
     // A mass on a pulley takes its partner the other way, so the rope stays its length while it
     // is dragged and nothing jumps on Play. `put`, not `placeBody`, for the partner: placing it
@@ -1761,6 +1959,47 @@ export class SimWorld {
     if (this.linkDefs.some((l) => l.over === id || ((l.kind === 'pulley' || l.kind === 'rope') && (l.a === id || l.b === id)))) {
       this.setLinks(this.linkDefs)
     }
+  }
+
+  /**
+   * After a placement (SB61): a body that hangs from a rod, string or spring by a tie on its surface is turned so the tie
+   * faces what it hangs from again. Moved and left turned as it was, a bob pulled back from 15° to 30° hung from a tie
+   * 15° off its string and whipped round it at 4.5 rad/s.
+   */
+  private faceTies(e: Entry): void {
+    if (e.def.motion !== 'dynamic') return
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    for (const link of this.linkDefs) {
+      const mineIsA = link.a === e.def.id
+      if (!mineIsA && link.b !== e.def.id) continue
+      const other = this.entries.get(mineIsA ? link.b : link.a)
+      if (!other) continue
+      const ties = mineIsA ? linkTies(link, e.def, other.def, this.depths) : linkTies(link, other.def, e.def, this.depths)
+      const tie = mineIsA ? ties.a : ties.b
+      if (!tie || ties.parent !== (mineIsA ? 'b' : 'a')) continue
+      const r = this.rotationOf(e)
+      const span = Math.hypot(...tie)
+      const now = rotateVec(r, [tie[0] / span, tie[1] / span, tie[2] / span])
+      const pe = this.positionOf(e)
+      const po = this.positionOf(other)
+      const d: V3 = [po[0] - pe[0], po[1] - pe[1], po[2] - pe[2]]
+      const dl = Math.hypot(...d)
+      if (!(dl > 1e-9)) return
+      const turned = quatMul(shortestArc(now, [d[0] / dl, d[1] / dl, d[2] / dl]), r)
+      const q = new J.Quat(turned[0], turned[1], turned[2], turned[3])
+      const zero = this.v3([0, 0, 0])
+      this.bodies.SetPositionRotationAndVelocity(e.body.GetID(), e.body.GetPosition(), q, zero, zero)
+      this.release(q)
+      this.release(zero)
+      // One link decides: the first a body hangs from.
+      return
+    }
+  }
+
+  /** A body's rotation now, x, y, z, w (copied out at once: the binding hands back one shared quaternion). */
+  private rotationOf(e: Entry): [number, number, number, number] {
+    const q = e.body.GetRotation()
+    return [q.GetX(), q.GetY(), q.GetZ(), q.GetW()]
   }
 
   /** Sets a body down at `position`, at rest, keeping the way it is turned. */
@@ -1907,7 +2146,7 @@ export class SimWorld {
       settings: { ...this.settings, wind: [...this.settings.wind] },
       touching: new Map(this.touching),
       grabbed: this.grabbed ? { id: this.grabbed.id, target: [...this.grabbed.target] } : null,
-      applied: [...this.applied].map(([id, a]) => ({ id, before: [...a.before], f: copyForces(a.f), damper: [...a.damper] })),
+      applied: [...this.applied].map(([id, a]) => ({ id, before: [...a.before], f: copyForces(a.f), damper: [...a.damper], knot: [...a.knot] })),
       actuators: new Map(this.actuators),
       ownSprings: [...this.ownSprings],
       defs: this.order.map((id) => this.entries.get(id)!.def)
@@ -1941,7 +2180,7 @@ export class SimWorld {
     this.applied = new Map()
     for (const a of s.applied) {
       const e = this.entries.get(a.id)
-      if (e) this.applied.set(a.id, { e, before: [...a.before], f: copyForces(a.f), damper: [...a.damper] })
+      if (e) this.applied.set(a.id, { e, before: [...a.before], f: copyForces(a.f), damper: [...a.damper], knot: [...a.knot] })
     }
     this.actuators = new Map(s.actuators)
     this.ownSprings = [...s.ownSprings]

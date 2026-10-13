@@ -129,14 +129,16 @@ describe('drops', () => {
 })
 
 describe('pendulum (2 m, 15°)', () => {
-  it('small-swing 2.837 s, large-swing 2.849 s; measured within 0.5 %; the small-swing gap names the swing size', async () => {
+  it('small-swing 2.837 s, large-swing 2.849 s (2.853 s turning with the string); measured within 0.5 %; the small-swing gap names the swing size and the turning', async () => {
     const r = await run('pendulum')
     expect(r.pred('Tsmall').value).toBeCloseTo(2.837, 3)
-    expect(r.pred('T').value).toBeCloseTo(2.849, 3)
+    // SB61: the bob turns with its string, a physical pendulum: 2.8494 s × √(1 + 0.4r²/L²) = 2.8526 s.
+    expect(r.pred('T').value).toBeCloseTo(2.8526, 3)
     expect(pct(r.got('T'), r.pred('T').value)).toBeLessThan(0.5)
     const g = r.gap('Tsmall')
     expect(g.within).toBe(true)
     expect(g.reason).toContain('a 15° swing is not small: 2π√(L/g)(1 + θ₀²/16) = 2.849 s')
+    expect(g.reason).toContain('the bob turns with its string, √(1 + 0.4r²/L²) = 1.0011 longer')
   })
 })
 
