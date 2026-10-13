@@ -42,7 +42,7 @@ export const controlsIn = (fold: FoldId): FoldedKey[] => (Object.keys(FOLD_OF) a
 
 export const FOLD_TITLES: Record<FoldId, string> = {
   launcher: 'Launcher',
-  pendulum: 'Pendulum',
+  pendulum: 'Angle',
   lever: 'Lever & Moments',
   connections: 'Connections',
   appearance: 'Appearance',
