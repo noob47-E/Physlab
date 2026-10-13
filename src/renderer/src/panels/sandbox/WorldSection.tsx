@@ -18,6 +18,9 @@ export function WorldSection() {
   const setArrowsShown = useSandbox((s) => s.setArrowsShown)
   const resetRun = useSandbox((s) => s.resetRun)
   const setPlaying = useScene((s) => s.setPlaying)
+  // The number chips riding on the objects follow the app's label setting; Hide keeps them in the panel only.
+  const numbersOnObjects = useScene((s) => s.settings.labelShow !== 'never')
+  const setSettings = useScene((s) => s.setSettings)
   const num = useNum()
   const rate = rateOf(world)
   return (
@@ -81,6 +84,18 @@ export function WorldSection() {
           </button>
           <button className={!arrowsShown ? 'on' : ''} onClick={() => setArrowsShown(false)} title="Hide every arrow, for a clean picture of the motion">
             Hide
+          </button>
+        </div>
+      </div>
+      {/* The owner (13 Oct): the speed written on a fast ball cannot be read; the selected object's numbers stand still in its panel. */}
+      <div className="prop-row">
+        <label title="The speed, height and energy written next to a moving object">Numbers</label>
+        <div className="seg">
+          <button className={numbersOnObjects ? 'on' : ''} onClick={() => setSettings({ labelShow: 'hover' })} title="Write the numbers next to the selected object as well as in its panel">
+            On the object
+          </button>
+          <button className={!numbersOnObjects ? 'on' : ''} onClick={() => setSettings({ labelShow: 'never' })} title="Only in the panel, where they stand still">
+            Panel only
           </button>
         </div>
       </div>

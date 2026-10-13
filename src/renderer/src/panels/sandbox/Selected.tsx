@@ -14,6 +14,7 @@ import { themeColor, useTheme } from '../../app/theme'
 import { useNum, Vec3Row, SizeRow, Slider, Fold } from './common'
 import { ReplayLock, useReplayLocked } from './ReplayLock'
 import { PendulumFold } from './PendulumFold'
+import { NowBox } from './NowBox'
 
 /** Shapes that roll, so only they are offered a rolling-resistance figure. */
 const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
@@ -164,6 +165,8 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
       {/* Five rows at first sight — the ones every mechanics question is about. The rest of the
           twenty-odd controls sit under folds below, where the student who wants them finds them
           and the one who does not never has to read past them. */}
+      {/* The object's numbers, standing still and large: a speed written on a fast ball cannot be read (the owner, 13 Oct). */}
+      {moves && <NowBox sel={sel} live={live} />}
       <ReplayLock>{draw(ALWAYS_SHOWN)}</ReplayLock>
 
       {moves && (
