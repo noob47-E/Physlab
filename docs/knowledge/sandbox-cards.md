@@ -70,6 +70,25 @@ readingOf roles, "—", the sign, plainOf, duplicate ids); `tests/cardsCatalogue
 cards' structure, known answers, the shown-sum property with its planted wrong rounding, KaTeX on
 every line).
 
+## Graphs (SB19)
+
+`src/renderer/src/render/sandbox/GraphDock.tsx` is the graph on the Sandbox drawing (top right, under where the cards
+go): Energy, Position or Velocity against time, from the recording. The pure part is in `src/renderer/src/sim/graphSeries.ts`
+(`GRAPH_CHOICES`, `graphLines`, `sampleSteps`, `nearestStep`, `graphBody`); tests in `tests/graphDock.test.ts`.
+
+- **Energy** is the ledger at each drawn step (`ledgerAt`, SB10): kinetic `--q-vel` (spin included), height `--q-pos`,
+  spring `--q-spring`, their total `--text-strong`, heat `--q-heat`; the graph and the Energy card agree. **Position** is
+  x (solid) and y (dashed) in `--q-pos`, **Velocity** vₓ and vᵧ in `--q-vel`, of the selected body when it moves, else
+  the first that moves. At most 600 points, evenly spread, always ending at the tape's last step.
+- The playhead line (`--tape-head`) is drawn by a uPlot draw hook from a ref: moving it is a redraw, never a rebuild.
+  Live it sits at the tape's end; in replay and fine replay at the playhead. A click or a drag on the plot seeks there
+  (`useTape.scrubTo(nearestStep(...))`, which enters replay).
+- The lines are memoised on the tape's change signals (the panel's live values while live, the store's revision
+  otherwise), the choice, the body and the scene; never on the theme (the Graphs trap in AGENTS.md). A theme switch
+  rebuilds the plot from the same data. The box keeps its height (Fix 22): before the first step it says "Press Play and
+  the graph draws itself". Open or folded, and the choice, are remembered (`physlab.graphDock`, per viewer).
+- Until SB16 starts the recorder in the app there is no tape, so the dock shows its hint; a browser check starts the
+  recorder by hand (`startRecorder(window.__sim)`).
 ## Theory (SB15)
 
 `src/renderer/src/sim/theory.ts` (I-8): `theoryFor(presetId)` gives a demo experiment's default `cards`, its `roles` (role →
