@@ -15,6 +15,8 @@ hinge, weld), plays it, reads energy and momentum, records a run and sends it to
 | `src/renderer/src/sim/recording.ts` | Samples, the Lab Data table a recording becomes (`tableFrom`: t, x, y, v, KE, PE, p; five-figure texts). |
 | `src/renderer/src/sim/inspector.ts` | Pure decisions for the panel: folds, size boxes (`sizeFields`), live vs typed values, what a drag rewrites, what a press on a body does (`grabAction`). |
 | `src/renderer/src/sim/palette.ts` | The eight theme colours moving bodies are painted in (`paintBodies`, `nextPaletteColour`), and reading a stored colour (`drawnColour`, `pickerColour`, `colourNote`). |
+| `src/renderer/src/sim/pendulum.ts` | The pendulum angle, pure (SB58): `pivotOf`, `anglesOf`, `placeAtAngle`, `planPullBack`, the dial, the lines under the controls, `tapePositionOf` for a replay. |
+| `src/renderer/src/panels/sandbox/PendulumFold.tsx` | The Pendulum fold: the angle on every axis, a protractor, and Pull back like the Launcher. |
 | `src/renderer/src/sim/presets.ts` | The experiments, each with a sentence whose numbers the run must produce. |
 | `src/renderer/src/render/SandboxView.tsx` | The viewport: meshes, the frame loop, drag, labels, arrows, the connections (coil, bar, thread, rope, pin). |
 | `src/renderer/src/render/sandboxLooks.ts` | Pure geometry of the looks (P28): the spring coil (`writeCoil`, `springLook`), rope pieces and beads, the pulley's rope arc, hinge pins, outlines (`edgeCage`), a ball's marking, the pulley wheel, a body's whole look (`bodyLook`). |
@@ -69,6 +71,22 @@ hinge, weld), plays it, reads energy and momentum, records a run and sends it to
   ramp starts out of place (left as found: a physics change outside P28).
 - (P28) The old ramp mesh was wound inside out; `rampSurface` winds it outward from the same corners
   as the collision hull.
+
+## The Pendulum fold (SB58, an owner item)
+Shown only for a dynamic body joined by a string, a rod or a rope to a pivot (`pivotOf`): one fixed pivot, or one moving body
+it starts below. A bob on two fixed pivots, two crates on a level rod and the floor give no fold.
+- **The angles** (degrees, y up): θ = atan2(√(rₓ² + r_z²), −r_y); θ_xy = atan2(rₓ, −r_y), + toward +x; θ_zy = atan2(r_z, −r_y), + toward +z;
+  φ = atan2(r_z, rₓ) from +x. A flat world (2D mode) reads only θ_xy. A bob above the pivot's level reads 180° in the plane that
+  sees the arm end-on (straight up), by the formula. A sideways offset within the float's grain of the sizes is 0 (positions are 32-bit).
+- **A rope's arm is centre to centre**: the rope's length plus the two reaches (`reachAlong`), which depend on the direction. A rope
+  bows when it swings (0.97 of its length at 60°, 0.95 at 85°, measured), so it is called slack only a tenth short; a string a
+  fiftieth. A slack rope shows its sentence instead of the angles; Set still works and pulls it taut.
+- **Pull back (Set)** is `placeBody` (at rest, rope laid again) plus, while the clock is at 0, the definition's start (`dragSetsStart`);
+  paused part-way only the body moves. The panel reads `live`, which the viewport publishes only while playing, so Set publishes the
+  placed body itself and nudges `bodies` so the demand-driven canvas draws it. In a replay the controls are locked (`replayRefusal`)
+  and the readout reads the tape at the playhead (`tapePositionOf`).
+- Measured on the engine (240 steps a second, tests/pendulumAngle.test.ts): Set 30° swings to −29.95° on the other side, and the
+  period is within 0.05 % of `pendulumExact`; at 60° it is 0.7 % short, at 89° 2.8 % (a string is no pendulum past 90°).
 
 ## Known limits
 - Jolt's soft spring loses energy (tests/energy.test.ts keeps the 1 % target as an expected fail).

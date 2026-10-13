@@ -99,8 +99,10 @@ const foldStore = (): FoldStore | null => (typeof localStorage === 'undefined' ?
  * A section a student can fold away. Whether it is open is remembered between sessions, so a
  * student who always wants the launcher never has to open it twice. `force` holds it open and
  * lit, for the moment it is the thing they need (Connections, once two objects are chosen).
+ * `lock` is whether a recording on screen locks what is inside (it does, unless the fold says it
+ * locks its own controls and leaves its readout live).
  */
-export function Fold({ id, title, open: fallback = false, force = false, children }: { id: FoldId; title?: string; open?: boolean; force?: boolean; children: React.ReactNode }) {
+export function Fold({ id, title, open: fallback = false, force = false, lock = true, children }: { id: FoldId; title?: string; open?: boolean; force?: boolean; lock?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(() => readFold(id, fallback, foldStore()))
   const shown = force || open
   return (
@@ -118,8 +120,9 @@ export function Fold({ id, title, open: fallback = false, force = false, childre
       >
         {shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {title ?? FOLD_TITLES[id]}
       </button>
-      {/* The arrow stays live while a recording is shown; what is inside is an edit control, so it is locked (D5). */}
-      {shown && <ReplayLock>{children}</ReplayLock>}
+      {/* The arrow stays live while a recording is shown; what is inside is an edit control, so it is locked (D5).
+          A fold that is mostly a readout (the Pendulum's angles) passes lock={false} and locks its own controls. */}
+      {shown && (lock ? <ReplayLock>{children}</ReplayLock> : children)}
     </>
   )
 }

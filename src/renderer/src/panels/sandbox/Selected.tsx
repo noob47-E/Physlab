@@ -12,6 +12,7 @@ import { colourNote, pickerColour } from '../../sim/palette'
 import { themeColor, useTheme } from '../../app/theme'
 import { useNum, Vec3Row, SizeRow, Slider, Fold } from './common'
 import { ReplayLock, useReplayLocked } from './ReplayLock'
+import { PendulumFold } from './PendulumFold'
 
 /** Shapes that roll, so only they are offered a rolling-resistance figure. */
 const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
@@ -169,6 +170,9 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
           <Launcher id={sel.id} />
         </Fold>
       )}
+
+      {/* Only for a body that hangs from a pivot by a string, a rod or a rope; keyed so a note about one bob is not shown under another. */}
+      {moves && <PendulumFold key={sel.id} sel={sel} />}
 
       {BODY_FOLDS.map((fold) => (
         <Fold key={fold} id={fold}>
