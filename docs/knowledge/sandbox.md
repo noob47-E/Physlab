@@ -22,7 +22,9 @@ hinge, weld), plays it, reads energy and momentum, records a run and sends it to
 | `src/renderer/src/render/sandboxLooks.ts` | Pure geometry of the looks (P28): the spring coil (`writeCoil`, `springLook`), rope pieces and beads, the pulley's rope arc, hinge pins, outlines (`edgeCage`), a ball's marking, the pulley wheel, a body's whole look (`bodyLook`). |
 | `src/renderer/src/render/sandboxMeshes.ts` | The Three side: a body's plain surface (`surfaceOf`), its geometry (`bodyGeometry`), a coil's buffers. |
 | `src/renderer/src/render/sandboxCamera.ts` | The opening views and Home's framing as numbers (`SANDBOX_START_VIEW`, `sandboxHomeView`), for CameraRig and the floor test. |
-| `src/renderer/src/panels/Sandbox.tsx` | The panel: transport (Play, Reset, Step), body list, inspector, energy readout, recording, world. |
+| `src/renderer/src/panels/Sandbox.tsx` | The panel, in two views (SB63): the simple one (`panels/sandbox/SimplePanel.tsx`) or the full one — transport (Play, Reset, Step), body list, inspector, energy readout, recording, world. |
+| `src/renderer/src/sim/sandboxView.ts` | Which view the student sees (`useSandboxView`, Simple by default), remembered in localStorage (`readSandboxView`, `writeSandboxView`). |
+| `src/renderer/src/sim/simpleHint.ts` | The one hint under the drawing in the simple view, chosen from the state (`hintMoment`, `simpleHint`). |
 
 ## Invariants
 - **Time is the step count.** `time = steps / 60` exactly; a reading is taken every 6th step and the
@@ -87,6 +89,26 @@ it starts below. A bob on two fixed pivots, two crates on a level rod and the fl
   and the readout reads the tape at the playhead (`tapePositionOf`).
 - Measured on the engine (240 steps a second, tests/pendulumAngle.test.ts): Set 30° swings to −29.95° on the other side, and the
   period is within 0.05 % of `pendulumExact`; at 60° it is 0.7 % short, at 89° 2.8 % (a string is no pendulum past 90°).
+
+## The simple view (SB63, an owner item)
+The owner (13 Oct 2026): "everything looks complex and a person using it the first time will get confused." The panel opens
+SIMPLE for everyone, an old profile included: Play and Reset with the clock (`Transport` with `simple`), six picture tiles of
+experiments (`panels/sandbox/ExperimentTiles.tsx`, inline SVG in theme tokens, the loaded one lit by `presetId`) and a quiet
+"More experiments" that opens the full list (`PresetList` in `panels/sandbox/Presets.tsx`, the one list), three add buttons
+(`SimpleAddRow`: Ball, Box, Ramp, each with its tool card), the selected object's name, Now box, mass row (`MassRow`, the
+inspector's own) and Delete (`panels/sandbox/SimpleSelected.tsx`), the Energy bar and total line (`SimpleEnergy`), and
+"All tools", which is the full panel with a "Simple view" button at its top.
+- **One path to an experiment**: `loadExperiment` in `sim/transportActions.ts` pauses the run, then `loadPreset`. A tile, a
+  list row, Start here and a question's "Show it" cannot drift apart.
+- **One hint at a time** (`sim/simpleHint.ts`): fresh → "Pick an experiment, then press Play"; loaded or built → "Press Play to
+  start"; running → "Click an object to see its speed"; paused → "Press Play to go on, or Reset to start again". All tools
+  keeps today's four-part hint (`render/sandbox/Hint.tsx`).
+- **Examples is lent, not removed**: `enterMode` (`app/layout.ts`) closes the side lessons when the Sandbox opens simple, on
+  a real change of mode only (never a restored session or a repeat), and the next mode with lessons gets it back.
+- **The tour** borrows All tools for the Connect step (`sandboxView` on the step, `app/tour/Tour.tsx`) and gives the choice back.
+- The floor is never the "selected object" here: a press on it is a press on empty space, and a first-timer who deleted it
+  would have no Floor button to put it back in the simple view.
+- Guard: tests/simpleSandbox.test.ts (rendered with react-dom/server, the stores driven by hand).
 
 ## Known limits
 - Jolt's soft spring loses energy (tests/energy.test.ts keeps the 1 % target as an expected fail).

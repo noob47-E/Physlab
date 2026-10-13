@@ -13,9 +13,10 @@ import { QUALITY, qualityNow } from '../render/renderer'
 import { useParticleLab } from '../render/GpuParticles'
 import { warmupEngine } from '../math/engine'
 import { MODES, modeById, useApp, type ModeId } from './modes'
-import { hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, regroupWithViewport, showPanel } from './panels'
+import { getDockApi, hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, regroupWithViewport, showPanel } from './panels'
 import { LAYOUT_VERSION, columns, needsLayoutRebuild, panelHome, panelsForMode, type LayoutStamp } from './layoutMath'
 import { storedRecord } from '../core/schema'
+import { useSandboxView } from '../sim/sandboxView'
 
 export const LAYOUT_KEY = 'physlab.layout'
 
@@ -23,9 +24,20 @@ const appVersion = (): string => (typeof __APP_VERSION__ === 'string' ? __APP_VE
 
 let casWarmed = false
 
-/** Switch mode: tool shelf, view and the panel that belongs to the mode. */
-export function enterMode(id: ModeId) {
+/** Examples was closed by the simple Sandbox (enterMode below) and is owed back to the next mode that has lessons. */
+let examplesLentBySandbox = false
+
+/** Vector Calculator and Maths panels were closed by the simple Sandbox and are owed back to their modes. */
+let vectorcalcLentBySandbox = false
+let mathsLentBySandbox = false
+
+/**
+ * Switch mode: tool shelf, view and the panel that belongs to the mode. `restored` is the start-up call on a layout put
+ * back from the last session, which is left as the student had it.
+ */
+export function enterMode(id: ModeId, opts: { restored?: boolean } = {}) {
   const m = modeById(id)
+  const from = useApp.getState().mode
   useApp.getState().setMode(id)
   const s = scene()
   s.setActiveSpace(spaceOf(id))
@@ -48,7 +60,81 @@ export function enterMode(id: ModeId) {
   // Graphing's own list does not follow the student into other modes (the Console did, and the
   // owner saw it under Geometry).
   if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
+  // The simple Sandbox opens with the side lessons closed (SB63): a first-time student sees the drawing and one calm panel.
+  // Only on a real change of mode — never on a restored session or a repeat, so a student who reopened Examples in the
+  // Sandbox keeps it — and the panel is owed back: the next mode with lessons gets it, or Geometry would silently lose
+  // its Examples to a Sandbox visit. The one dock layout is shared by every mode, which is why this is a loan, not a removal.
+  if (id === 'sandbox') {
+    if (from !== id && !opts.restored && useSandboxView.getState().view === 'simple') {
+      if (isPanelOpen('examples')) {
+        hidePanel('examples')
+        if (!isPanelOpen('examples')) {
+          examplesLentBySandbox = true
+        }
+      }
+      // Also hide Vector Calculator and Maths panels in simple Sandbox.
+      if (isPanelOpen('vectorcalc')) {
+        hidePanel('vectorcalc')
+        if (!isPanelOpen('vectorcalc')) {
+          vectorcalcLentBySandbox = true
+        }
+      }
+      if (isPanelOpen('maths')) {
+        hidePanel('maths')
+        if (!isPanelOpen('maths')) {
+          mathsLentBySandbox = true
+        }
+      }
+    }
+  } else {
+    // Restore Examples and other panels to their modes.
+    if (m.examples) {
+      // Clear the loan flag when entering any mode with lessons, whether or not Examples was closed.
+      if (examplesLentBySandbox && !isPanelOpen('examples')) {
+        showPanel('examples')
+        // Restore the Examples panel group to its normal width.
+        const api = getDockApi()
+        const examples = api?.getPanel('examples')
+        if (api && examples?.api.group?.api?.setSize) {
+          const c = columns(api.width, api.height)
+          examples.api.group.api.setSize({ width: c.examples })
+        }
+      }
+      examplesLentBySandbox = false
+    }
+    // Restore Vector Calculator when entering Vectors mode.
+    if (id === 'vectors') {
+      if (vectorcalcLentBySandbox && !isPanelOpen('vectorcalc')) {
+        showPanel('vectorcalc')
+      }
+      vectorcalcLentBySandbox = false
+    }
+    // Restore Maths when entering Calculator mode.
+    if (id === 'calculator') {
+      if (mathsLentBySandbox && !isPanelOpen('maths')) {
+        showPanel('maths')
+      }
+      mathsLentBySandbox = false
+    }
+  }
   if (m.panel) s.requestFocus(m.panel)
+  // After requestFocus opens the panel, constrain the side panel group back to its normal width
+  // (SB63, T310: the sandbox panel doesn't exist until requestFocus is called).
+  if (id === 'sandbox' && from !== id && !opts.restored && useSandboxView.getState().view === 'simple') {
+    setTimeout(() => {
+      const api = getDockApi()
+      const sandbox = api?.getPanel('sandbox')
+      if (api && sandbox?.api.group?.api?.setSize) {
+        const c = columns(api.width, api.height)
+        const targetWidth = c.side
+        const currentWidth = sandbox.api.group.width
+        // Only resize if the current width is significantly larger than the target (allow 40 px tolerance).
+        if (currentWidth && currentWidth > targetWidth + 40) {
+          sandbox.api.group.api.setSize({ width: targetWidth })
+        }
+      }
+    }, 0)
+  }
   if (!m.ready) s.pushLog({ input: m.label, kind: 'info', text: `${m.label} is coming in the next build stages: ${m.description}` })
   // The algebra engine takes several seconds to wake. Starting it the moment the calculator opens
   // means the first question it is asked gets its answer sooner; it used to start only when first asked.

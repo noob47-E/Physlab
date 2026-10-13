@@ -31,6 +31,11 @@ interface TourStep {
   body: string
   /** Switch to this mode before showing the step. */
   mode?: ModeId
+  /**
+   * The Sandbox view the anchor lives in, where it is not in both (SB63): the Sandbox opens simple, and Connect is in All
+   * tools only, so the tour borrows that view for the step and gives the student's own choice back after it.
+   */
+  sandboxView?: 'all'
 }
 
 export const TOUR: TourStep[] = [
@@ -78,7 +83,8 @@ export const TOUR: TourStep[] = [
     anchor: 'connect',
     title: 'Join things together',
     body: 'In the Sandbox, press Connect two objects: click one, click the other, then pick a string, rod, spring, real rope, hinge, weld, or a rope over a pulley. Lengthen a rope in Connections and it sags; shorten it and it lifts.',
-    mode: 'sandbox'
+    mode: 'sandbox',
+    sandboxView: 'all'
   },
   {
     title: 'That is the tour',

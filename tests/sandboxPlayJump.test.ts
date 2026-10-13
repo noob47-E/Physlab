@@ -14,6 +14,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Sandbox } from '../src/renderer/src/panels/Sandbox'
 import { useSandbox, massOf } from '../src/renderer/src/sim/store'
 import { useScene } from '../src/renderer/src/core/store'
+import { useSandboxView } from '../src/renderer/src/sim/sandboxView'
 import { energyOf, readoutStates, startStateOf } from '../src/renderer/src/sim/energy'
 import type { BodyState } from '../src/renderer/src/sim/types'
 import type { Sample } from '../src/renderer/src/sim/recording'
@@ -21,6 +22,18 @@ import type { Sample } from '../src/renderer/src/sim/recording'
 // The engine's load state is a useSyncExternalStore with no server snapshot; the panel's shape is
 // what is under test, not the engine, so it reads as loaded.
 vi.mock('../src/renderer/src/sim/jolt', async (importOriginal) => ({ ...(await importOriginal<object>()), useJoltState: () => 'ready' }))
+
+// The Energy details and the Recording box sit under folds since SB22b, closed until the student opens them; this is the
+// panel of a student who has (the folds remember themselves in localStorage, sim/inspector.ts), so every reading is on screen.
+const folds = new Map<string, string>([
+  ['physlab.sandbox.fold.energyDetails', '1'],
+  ['physlab.sandbox.fold.recording', '1']
+])
+vi.stubGlobal('localStorage', {
+  getItem: (k: string) => folds.get(k) ?? null,
+  setItem: (k: string, v: string) => void folds.set(k, v),
+  removeItem: (k: string) => void folds.delete(k)
+})
 
 // A server render reads every zustand store's *initial* state (its getServerSnapshot), so the
 // stores are built here with hooks that read the current state: the test drives the stores and
@@ -37,9 +50,9 @@ vi.mock('zustand', async (importOriginal) => {
 
 const render = () => renderToStaticMarkup(createElement(Sandbox))
 
-/** The part of the panel above the World heading, as its tags and classes with the text left out. */
+/** The part of the panel above the World heading (a fold's button since SB22b), as its tags and classes with the text left out. */
 function shapeAboveWorld(html: string): string {
-  const at = html.indexOf('>World<')
+  const at = html.indexOf('> World</button>')
   expect(at).toBeGreaterThan(0)
   return html
     .slice(0, at)
@@ -57,6 +70,8 @@ function shapeAboveWorld(html: string): string {
 }
 
 beforeEach(() => {
+  // The full panel is what is under test here: the World heading and the Energy details live in All tools (SB63 opens simple).
+  useSandboxView.setState({ view: 'all' })
   useScene.getState().setPlaying(false)
   useSandbox.getState().resetRun()
 })

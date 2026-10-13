@@ -15,8 +15,11 @@ import { rateOf } from '../../sim/types'
  * Play, Reset, undo and the clock, pinned to the top so they are never below three screens of
  * settings. The row keeps its shape while a run plays (Fix 22, sim/transport.ts); its 4 px gaps
  * keep it, with room for a 888.89 s clock, on one line in the 372 px panel of a 1366 px window.
+ *
+ * `simple` is the simple panel's row (SB63): a big Play and Reset and the clock, nothing else — Step, undo, redo and
+ * the trail eraser stay in All tools. Same component, so the tour's `play` anchor and the keys are the same button.
  */
-export function Transport() {
+export function Transport({ simple = false }: { simple?: boolean }) {
   const engineTime = useSandbox((s) => s.engineTime)
   const past = useSandbox((s) => s.past)
   const future = useSandbox((s) => s.future)
@@ -38,8 +41,9 @@ export function Transport() {
   const clock = mode !== 'live' && tape && flags.at !== null ? `${clockText(tape.timeOf(flags.at), settings)} · ${mode === 'fine' ? 'fine replay' : 'replay'}` : clockText(engineTime, settings)
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b border-[color:var(--line)] bg-[var(--bg-1)] px-3 py-2">
-      <button className="btn primary" data-tour="play" onClick={togglePlay} title={playing ? 'Pause (Space or K)' : 'Play (Space or L)'}>
-        {playing ? <Pause size={13} /> : <Play size={13} />}
+      {/* In the simple panel Play is the one big button (44 px, a touch target as well): the first thing to press. */}
+      <button className={simple ? 'btn primary min-h-[44px] px-4' : 'btn primary'} data-tour="play" onClick={togglePlay} title={playing ? 'Pause (Space or K)' : 'Play (Space or L)'}>
+        {playing ? <Pause size={simple ? 16 : 13} /> : <Play size={simple ? 16 : 13} />}
         {/* Both words share one cell and the other one is hidden, so the button is as wide as
             "Pause" either way: "Play" turning into the wider "Pause" was enough to push the row
             onto a second line on a narrow panel and jolt everything below it (Fix 22). */}
@@ -49,7 +53,7 @@ export function Transport() {
         </span>
       </button>
       <button
-        className="btn"
+        className={simple ? 'btn min-h-[44px] px-3' : 'btn'}
         onClick={() => {
           setPlaying(false)
           resetRun()
@@ -58,22 +62,26 @@ export function Transport() {
       >
         <RotateCcw size={13} /> Reset
       </button>
-      <button
-        className="icon-btn"
-        onClick={stepForward}
-        title={stepOnTitle(num(mode === 'live' || !tape ? rateOf(world) : tape.rate))}
-      >
-        <SkipForward size={13} />
-      </button>
-      <button className="icon-btn" disabled={past.length === 0 || refusal !== null} onClick={undo} title={refusal ?? 'Undo the last change to the objects (Ctrl+Z)'}>
-        <Undo2 size={13} />
-      </button>
-      <button className="icon-btn" disabled={future.length === 0 || refusal !== null} onClick={redo} title={refusal ?? 'Redo (Ctrl+Y)'}>
-        <Redo2 size={13} />
-      </button>
-      <button className="icon-btn" disabled={!anyTrail} onClick={clearTrails} title="Clear every trail">
-        <Eraser size={13} />
-      </button>
+      {!simple && (
+        <>
+          <button
+            className="icon-btn"
+            onClick={stepForward}
+            title={stepOnTitle(num(mode === 'live' || !tape ? rateOf(world) : tape.rate))}
+          >
+            <SkipForward size={13} />
+          </button>
+          <button className="icon-btn" disabled={past.length === 0 || refusal !== null} onClick={undo} title={refusal ?? 'Undo the last change to the objects (Ctrl+Z)'}>
+            <Undo2 size={13} />
+          </button>
+          <button className="icon-btn" disabled={future.length === 0 || refusal !== null} onClick={redo} title={refusal ?? 'Redo (Ctrl+Y)'}>
+            <Redo2 size={13} />
+          </button>
+          <button className="icon-btn" disabled={!anyTrail} onClick={clearTrails} title="Clear every trail">
+            <Eraser size={13} />
+          </button>
+        </>
+      )}
       {/* The clock is the number every kinematics question needs; it used to be the hardest
           thing on the panel to read. */}
       {/* Room kept for the widest time a run shows, so the row wraps (or not) by the panel's

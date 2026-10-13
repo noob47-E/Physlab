@@ -8,7 +8,7 @@ import { shownTape, useTape } from '../../sim/tapeStore'
 import { useScene } from '../../core/store'
 import type { SceneSettings } from '../../core/types'
 import { formatMeasure } from '../../math/format'
-import { useNum } from './common'
+import { useNum, Fold } from './common'
 
 /** What the ledger's fixed lines say. Each is always there (Fix 22): before a run they read the start, and nothing lost. */
 export function ledgerText(r: LedgerReading | null, now: number, rate: number, settings: SceneSettings, warmest: { name: string; deltaT: number } | null): { start: string; pushed: string; lost: string; heat: string } {
@@ -34,6 +34,15 @@ export function ledgerText(r: LedgerReading | null, now: number, rate: number, s
  * the one question every mechanics practical is really asking.
  */
 export function EnergyLedger() {
+  return <Ledger simple={false} />
+}
+
+/** The simple panel's Energy (SB63): the bar and the total line, and no Details fold. */
+export function SimpleEnergy() {
+  return <Ledger simple />
+}
+
+function Ledger({ simple }: { simple: boolean }) {
   const bodies = useSandbox((s) => s.bodies)
   const links = useSandbox((s) => s.links)
   const live = useSandbox((s) => s.live)
@@ -92,81 +101,94 @@ export function EnergyLedger() {
         </div>
         {/* Fixed lines, never wrapped and never cut short: a reading that grows a digit mid-run and wraps pushes every
             control below it down (Fix 22), and a number cut to "3.48×10^-1…" reads as a different number. */}
-        <div className="mt-1 flex justify-between gap-2 whitespace-nowrap text-small">
-          <span className="shrink-0 tabular-nums text-[color:var(--q-vel)]" title="Kinetic energy: ½mv² and ½Iω² of every moving body">
-            KE {num(kinetic, 'J')}
-          </span>
-          <span className="shrink-0 tabular-nums text-[color:var(--q-pos)]" title="Potential energy: mgh, height measured from the top of the floor">
-            PE {num(height, 'J')}
-          </span>
-        </div>
-        {springy && (
-          <div className="mt-0.5 whitespace-nowrap text-small">
-            <span className="tabular-nums text-[color:var(--q-spring)]" title="What the springs hold: ½kx²">
-              Spring {num(spring, 'J')}
-            </span>
-          </div>
-        )}
         <div className="mt-0.5 flex justify-between gap-2 whitespace-nowrap text-small">
           <span className="shrink-0 tabular-nums font-semibold text-[color:var(--text-strong)]" title="Kinetic, potential and spring energy together, now">
             total {num(now, 'J')}
           </span>
-          <span className="shrink-0 tabular-nums text-[color:var(--text)]" title="Momentum of everything together: the size of the vector sum of every mass × velocity">
-            p {num(momentum, 'kg m/s')}
-          </span>
-        </div>
-        <div className="mt-0.5 flex justify-between gap-2 whitespace-nowrap text-small text-[color:var(--text)]">
-          <span className="shrink-0 tabular-nums" title="The total when the recording began">
-            {text.start}
-          </span>
-          <span className="shrink-0 tabular-nums text-[color:var(--q-work)]" title="Energy put in since the recording began: by pushes, by your hand while dragging, and by any object moved or typed part-way">
-            {text.pushed}
-          </span>
-        </div>
-        <div className="mt-0.5 whitespace-nowrap text-small tabular-nums text-[color:var(--q-work)]" title="Energy PhysLab's own forces took out: air resistance, rolling resistance and springs' dampers">
-          {text.lost}
-        </div>
-        <div
-          className="mt-0.5 whitespace-nowrap text-small tabular-nums text-[color:var(--q-heat)]"
-          title={reading?.sources.length ? `Lost to: ${reading.sources.join(', ')}.` : 'Nothing in the scene takes energy out, so what is left over is the step’s own error.'}
-        >
-          {text.heat}
+          {!simple && (
+            <span className="shrink-0 tabular-nums text-[color:var(--text)]" title="Momentum of everything together: the size of the vector sum of every mass × velocity">
+              p {num(momentum, 'kg m/s')}
+            </span>
+          )}
         </div>
       </div>
-      {/* Every body gets the same two lines before Play and during the run: its name and momentum,
-          then its KE and PE. Only the name may be cut short; a number never is. */}
-      {known.map(({ def, state, energy }) => (
-        <div key={def.id} className="px-3 pb-0.5 text-small text-[color:var(--text-dim)]">
-          <div className="flex justify-between gap-2 whitespace-nowrap">
-            <span className="min-w-0 truncate text-[color:var(--text)]">{def.name}</span>
-            <span className="shrink-0 tabular-nums" title="Momentum, mass × velocity">
-              p {num(momentumSize(state), 'kg m/s')}
+      {!simple && (
+      <Fold id="energyDetails" open={false} lock={false}>
+        <div className="px-3 pb-2">
+          {/* Fixed lines, never wrapped and never cut short: a reading that grows a digit mid-run and wraps pushes every
+              control below it down (Fix 22), and a number cut to "3.48×10^-1…" reads as a different number. */}
+          <div className="flex justify-between gap-2 whitespace-nowrap text-small text-[color:var(--text)]">
+            <span className="shrink-0 tabular-nums" title="The total when the recording began">
+              {text.start}
             </span>
           </div>
-          <div className="flex justify-between gap-2 whitespace-nowrap">
-            <span className="shrink-0 tabular-nums">KE {num(energy.kinetic)}</span>
-            <span className="shrink-0 tabular-nums">PE {num(energy.potential)}</span>
+          <div className="mt-0.5 whitespace-nowrap text-small tabular-nums text-[color:var(--q-heat)]"
+            title={reading?.sources.length ? `Lost to: ${reading.sources.join(', ')}.` : 'Nothing in the scene takes energy out, so what is left over is the step\'s own error.'}
+          >
+            {text.heat}
           </div>
-        </div>
-      ))}
-      {/* A spring gets the same two lines: what it joins and what it holds, then how far it is
-          pulled out or squeezed, which is the x in the ½kx² it is holding. */}
-      {springs.map(({ link, a, b, stretch, energy }) => (
-        <div key={link.id} className="px-3 pb-0.5 text-small text-[color:var(--text-dim)]">
-          <div className="flex justify-between gap-2 whitespace-nowrap">
-            <span className="min-w-0 truncate text-[color:var(--text)]">
-              {a.name} to {b.name} spring
+          {/* Fixed lines, never wrapped and never cut short: a reading that grows a digit mid-run and wraps pushes every
+              control below it down (Fix 22), and a number cut to "3.48×10^-1…" reads as a different number. */}
+          <div className="mt-1 flex justify-between gap-2 whitespace-nowrap text-small">
+            <span className="shrink-0 tabular-nums text-[color:var(--q-vel)]" title="Kinetic energy: ½mv² and ½Iω² of every moving body">
+              KE {num(kinetic, 'J')}
             </span>
-            <span className="shrink-0 tabular-nums">holds {num(energy.elastic, 'J')}</span>
+            <span className="shrink-0 tabular-nums text-[color:var(--q-pos)]" title="Potential energy: mgh, height measured from the top of the floor">
+              PE {num(height, 'J')}
+            </span>
           </div>
-          <div className="whitespace-nowrap">
-            <span className="tabular-nums">{Math.abs(stretch) < 1e-9 ? 'at its natural length' : `${stretch > 0 ? 'stretched' : 'squeezed'} ${num(Math.abs(stretch), 'm')}`}</span>
+          {springy && (
+            <div className="mt-0.5 whitespace-nowrap text-small">
+              <span className="tabular-nums text-[color:var(--q-spring)]" title="What the springs hold: ½kx²">
+                Spring {num(spring, 'J')}
+              </span>
+            </div>
+          )}
+          <div className="mt-0.5 whitespace-nowrap text-small text-[color:var(--text)]">
+            <span className="shrink-0 tabular-nums text-[color:var(--q-work)]" title="Energy put in since the recording began: by pushes, by your hand while dragging, and by any object moved or typed part-way">
+              {text.pushed}
+            </span>
+          </div>
+          <div className="mt-0.5 whitespace-nowrap text-small tabular-nums text-[color:var(--q-work)]" title="Energy PhysLab's own forces took out: air resistance, rolling resistance and springs' dampers">
+            {text.lost}
+          </div>
+          {/* Every body gets the same two lines before Play and during the run: its name and momentum,
+              then its KE and PE. Only the name may be cut short; a number never is. */}
+          {known.map(({ def, state, energy }) => (
+            <div key={def.id} className="px-0 pb-0.5 text-small text-[color:var(--text-dim)]">
+              <div className="flex justify-between gap-2 whitespace-nowrap">
+                <span className="min-w-0 truncate text-[color:var(--text)]">{def.name}</span>
+                <span className="shrink-0 tabular-nums" title="Momentum, mass × velocity">
+                  p {num(momentumSize(state), 'kg m/s')}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2 whitespace-nowrap">
+                <span className="shrink-0 tabular-nums">KE {num(energy.kinetic)}</span>
+                <span className="shrink-0 tabular-nums">PE {num(energy.potential)}</span>
+              </div>
+            </div>
+          ))}
+          {/* A spring gets the same two lines: what it joins and what it holds, then how far it is
+              pulled out or squeezed, which is the x in the ½kx² it is holding. */}
+          {springs.map(({ link, a, b, stretch, energy }) => (
+            <div key={link.id} className="px-0 pb-0.5 text-small text-[color:var(--text-dim)]">
+              <div className="flex justify-between gap-2 whitespace-nowrap">
+                <span className="min-w-0 truncate text-[color:var(--text)]">
+                  {a.name} to {b.name} spring
+                </span>
+                <span className="shrink-0 tabular-nums">holds {num(energy.elastic, 'J')}</span>
+              </div>
+              <div className="whitespace-nowrap">
+                <span className="tabular-nums">{Math.abs(stretch) < 1e-9 ? 'at its natural length' : `${stretch > 0 ? 'stretched' : 'squeezed'} ${num(Math.abs(stretch), 'm')}`}</span>
+              </div>
+            </div>
+          ))}
+          <div className="px-0 pt-1 text-fine text-[color:var(--text-faint)]">
+            {floorOf(bodies) ? 'Heights are measured from the top of the floor.' : 'There is no floor, so heights are measured from zero.'} Simplified: all the heat stays in the bodies that rubbed or hit.
           </div>
         </div>
-      ))}
-      <div className="px-3 pt-1 text-fine text-[color:var(--text-faint)]">
-        {floorOf(bodies) ? 'Heights are measured from the top of the floor.' : 'There is no floor, so heights are measured from zero.'} Simplified: all the heat stays in the bodies that rubbed or hit.
-      </div>
+      </Fold>
+      )}
     </>
   )
 }

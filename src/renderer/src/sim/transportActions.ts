@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import { useScene } from '../core/store'
 import { useSandbox } from './store'
+import { presetById, type Preset } from './presets'
 import { stepOneFrame, stepButtonTitle } from './stepping'
 import { replayRefusal } from './recorder'
 import { shownTape, useTape, type ReplaySpeed, type TapeMode } from './tapeStore'
@@ -111,6 +112,18 @@ function carrySlowMotion(): void {
   if (useTape.getState().mode !== 'live') return
   const ts = useSandbox.getState().world.timeScale
   if (isSpeed(ts) && ts !== useTape.getState().speed) useTape.getState().setSpeed(ts)
+}
+
+/**
+ * Opens a ready-made experiment the one way every door takes (a tile, a list row, Start here; a question's "Show it" makes
+ * the same two calls): the run is paused first, or a running simulation carried its speed into the new scene before the
+ * student pressed the Play the experiment asks for. An unknown id changes nothing and says so with false.
+ */
+export function loadExperiment(id: Preset['id']): boolean {
+  if (useTape.getState().mode !== 'live') return false
+  if (!presetById(id)) return false
+  useScene.getState().setPlaying(false)
+  return useSandbox.getState().loadPreset(id)
 }
 
 /** Space, and the play button: pause what is playing, else play forwards. */

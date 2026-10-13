@@ -67,6 +67,8 @@ export const setDockApi = (api: DockviewApi | null): void => {
   refreshOpenPanels()
 }
 
+export const getDockApi = (): DockviewApi | null => dockApi
+
 /** True while the panel is open somewhere in the layout. */
 export const isPanelOpen = (id: string): boolean => !!dockApi?.getPanel(id)
 

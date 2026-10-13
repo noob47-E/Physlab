@@ -32,6 +32,11 @@ export const useView = create<ViewInfo>(() => ({
 /** A box on the drawing to frame, lowest corner and highest corner. */
 type FitBox = { min: [number, number, number]; max: [number, number, number] }
 export const useCameraCommand = create<{ nonce: number; kind: 'home' | 'fit'; box?: FitBox }>(() => ({ nonce: 0, kind: 'home' }))
+/** Determines if the camera should reset when the preset changes. */
+export function shouldResetCameraOnPresetChange(previousPresetId: string | null, currentPresetId: string | null): boolean {
+  return previousPresetId !== currentPresetId && currentPresetId !== null
+}
+
 export const resetCamera = () => {
   // Home means home: a turn still easing in would carry the view off again.
   pendingTurn.az = 0

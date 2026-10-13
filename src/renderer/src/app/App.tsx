@@ -119,8 +119,9 @@ export function App() {
               const restored = !bench && restoreLayout(e.api) && dropHiddenPanels()
               if (!restored) buildLayout(e.api, mode)
               // enterMode, not setMode: the mode needs its view, tool shelf and drawing too, and
-              // a restored Sandbox used to come back in 2D with the wrong shelf.
-              enterMode(mode)
+              // a restored Sandbox used to come back in 2D with the wrong shelf. A restored layout is
+              // the student's own arrangement, so the simple Sandbox does not close its Examples (SB63).
+              enterMode(mode, { restored })
               unwatch.current?.()
               unwatch.current = watchLayout(e.api)
               refreshOpenPanels()

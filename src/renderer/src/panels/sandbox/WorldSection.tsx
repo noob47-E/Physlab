@@ -24,9 +24,11 @@ export function WorldSection() {
   const num = useNum()
   const rate = rateOf(world)
   return (
-    <>
-      <div className="section-title mt-2">World</div>
-      {/* Replay is read-only (D5): the edit rows are locked while a recording is shown; the View toggle only changes the camera. */}
+    <Fold id="world" open={true} lock={false}>
+      {/* No section-title needed; Fold renders the title */}
+      {/* Replay is read-only (D5): the edit rows are locked while a recording is shown; the View toggle only changes the camera,
+          so the fold itself locks nothing (lock={false}) and the edit rows lock themselves below — a fold that locked all of
+          it greyed the camera switch in replay (tests/replayLock.test.ts). */}
       <ReplayLock>
         <div className="prop-row">
           <label>Gravity</label>
@@ -58,7 +60,7 @@ export function WorldSection() {
                 Vacuum
               </button>
             </div>
-            {world.airDensity > 0 && <span className="tabular-nums text-[color:var(--text-dim)]">{world.airDensity} kg/m³</span>}
+            {world.airDensity > 0 && <span className="tabular-nums text-[color:var(--text-dim)]">{num(world.airDensity)} kg/m³</span>}
           </div>
         </div>
         {/* Wind has been in the drag calculation from the start, with nothing to set it. */}
@@ -143,6 +145,6 @@ export function WorldSection() {
           </div>
         </div>
       </Fold>
-    </>
+    </Fold>
   )
 }

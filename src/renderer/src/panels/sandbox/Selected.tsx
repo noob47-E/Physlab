@@ -21,7 +21,6 @@ import { NowBox } from './NowBox'
 const ROLLING_SHAPES = new Set<ShapeKind>(['sphere', 'cylinder', 'capsule'])
 
 export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState | null; update: (id: string, patch: Partial<BodyDef>) => void }) {
-  const num = useNum()
   // A theme colour reads differently in each theme, so the colour row is drawn again on a switch.
   useTheme((t) => t.theme)
   const moves = sel.motion === 'dynamic'
@@ -48,24 +47,7 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
         </select>
       </div>
     ),
-    mass: () =>
-      moves && (
-        <div className="prop-row">
-          <label>Mass</label>
-          <div className="flex items-center gap-2">
-            <div className="seg">
-              <button className={sel.massMode === 'density' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'density' })} title="Work the mass out from the material and the size">
-                from density
-              </button>
-              {/* "set it" left you asking "set what?" */}
-              <button className={sel.massMode === 'mass' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'mass' })} title="Type the mass yourself">
-                type it
-              </button>
-            </div>
-            {sel.massMode === 'mass' ? <NumField value={sel.mass} onChange={(mass) => update(sel.id, { mass: Math.max(0.001, mass) })} /> : <span className="tabular-nums text-[color:var(--text)]">{num(massOf(sel), 'kg')}</span>}
-          </div>
-        </div>
-      ),
+    mass: () => <MassRow sel={sel} update={update} />,
     position: () => <Vec3Row label="Position" unit="m" value={sel.position} live={live?.position ?? null} onChange={(position) => update(sel.id, { position })} />,
     velocity: () => moves && <Vec3Row label="Velocity" unit="m/s" value={sel.velocity} live={live?.velocity ?? null} onChange={(velocity) => update(sel.id, { velocity })} />,
     color: () => (
@@ -188,6 +170,33 @@ export function Selected({ sel, live, update }: { sel: BodyDef; live: BodyState 
         </Fold>
       ))}
     </>
+  )
+}
+
+/**
+ * The mass row: worked out from the material and the size, or typed. Its own component (SB63) because the simple panel
+ * shows this one row of the inspector too, and one control must not become two.
+ */
+export function MassRow({ sel, update }: { sel: BodyDef; update: (id: string, patch: Partial<BodyDef>) => void }) {
+  const num = useNum()
+  // A fixed wall's mass means nothing.
+  if (sel.motion !== 'dynamic') return null
+  return (
+    <div className="prop-row">
+      <label>Mass</label>
+      <div className="flex items-center gap-2">
+        <div className="seg">
+          <button className={sel.massMode === 'density' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'density' })} title="Work the mass out from the material and the size">
+            from density
+          </button>
+          {/* "set it" left you asking "set what?" */}
+          <button className={sel.massMode === 'mass' ? 'on' : ''} onClick={() => update(sel.id, { massMode: 'mass' })} title="Type the mass yourself">
+            type it
+          </button>
+        </div>
+        {sel.massMode === 'mass' ? <NumField value={sel.mass} onChange={(mass) => update(sel.id, { mass: Math.max(0.001, mass) })} /> : <span className="tabular-nums text-[color:var(--text)]">{num(massOf(sel), 'kg')}</span>}
+      </div>
+    </div>
   )
 }
 

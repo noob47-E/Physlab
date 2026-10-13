@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { Check, Keyboard, X } from 'lucide-react'
 import { enterMode } from '../layout'
 import { showPanel } from '../panels'
+import { useSandboxView } from '../../sim/sandboxView'
 import { usePure } from '../../math/pure/store'
 import { JOBS } from '../../math/pure/run'
 import { AFTER_SANDBOX, MISSION_STORES, MISSIONS, resetMissionBaseline, runAsPhysLab, SHORTCUTS, TOUR, WELCOME_JOB, WELCOME_PROMISE } from './steps'
@@ -264,6 +265,16 @@ export function Tour() {
   const current = step === null ? null : TOUR[step]
   const rect = useAnchorRect(current?.anchor, step)
   useMissionWatcher()
+
+  // A step whose anchor lives in the Sandbox's All tools (Connect) borrows that view for the step and gives the student's
+  // own choice back when the step is left (SB63). Declared before the mode effect, so enterMode sees the view the step wants.
+  useEffect(() => {
+    if (!current?.sandboxView) return
+    const before = useSandboxView.getState().view
+    if (before === current.sandboxView) return
+    useSandboxView.getState().setView(current.sandboxView, { remember: false })
+    return () => useSandboxView.getState().setView(before, { remember: false })
+  }, [current])
 
   useEffect(() => {
     if (current?.mode) enterMode(current.mode)

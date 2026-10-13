@@ -55,7 +55,9 @@ export function sandboxHomeView(bodies: BodyDef[], positionOf: (b: BodyDef) => V
   const cx = (min[0] + max[0]) / 2
   const cy = (min[1] + max[1]) / 2
   const cz = (min[2] + max[2]) / 2
-  const r = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 3)
+  // At least 1.5 m across: a 1 m lever or a pendulum then fills the view when it is loaded (SB63), where
+  // the old 3 m floor left a metre-rule lever small in the middle of a wide floor.
+  const r = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 1.5)
   return {
     position: sideView ? [cx, cy + r * 0.25, cz + r * 1.6] : [cx + r * 0.9, cy + r * 0.7, cz + r * 1.2],
     target: [cx, cy, cz]

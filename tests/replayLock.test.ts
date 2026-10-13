@@ -10,6 +10,7 @@ import { REC_FLOATS, Tape } from '../src/renderer/src/sim/tape'
 import { shownTape, useTape } from '../src/renderer/src/sim/tapeStore'
 import { replayRefusal, tapes } from '../src/renderer/src/sim/recorder'
 import { useSandbox } from '../src/renderer/src/sim/store'
+import { useSandboxView } from '../src/renderer/src/sim/sandboxView'
 import { useLab } from '../src/renderer/src/lab/labStore'
 import { REFUSAL_MS, backToLive, refuseEdit, scrubTo, useEditRefusal } from '../src/renderer/src/sim/transportActions'
 import { runHistory } from '../src/renderer/src/app/undoRoute'
@@ -58,6 +59,8 @@ function freshRun() {
 }
 
 beforeEach(() => {
+  // Add, Connect, the experiment list and the View toggle are the full panel's (SB63 opens simple): render All tools.
+  useSandboxView.setState({ view: 'all' })
   vi.useFakeTimers()
   undoSpy.mockClear()
   redoSpy.mockClear()

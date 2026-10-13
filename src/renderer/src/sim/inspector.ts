@@ -8,7 +8,7 @@ import type { BodyDef, BodyId } from './types'
 /** The rows a body always shows, in this order; everything else sits under a fold. */
 export const ALWAYS_SHOWN = ['name', 'material', 'mass', 'position', 'velocity'] as const
 
-export type FoldId = 'launcher' | 'pendulum' | 'lever' | 'connections' | 'appearance' | 'physics' | 'advanced' | 'world-more' | 'collisions'
+export type FoldId = 'launcher' | 'pendulum' | 'lever' | 'connections' | 'appearance' | 'physics' | 'advanced' | 'world-more' | 'collisions' | 'energyDetails' | 'recording' | 'world'
 
 /**
  * Which fold each of the other controls belongs to, in the order they appear. The panel renders
@@ -49,7 +49,10 @@ export const FOLD_TITLES: Record<FoldId, string> = {
   physics: 'Physics',
   advanced: 'Advanced',
   'world-more': 'More about the world',
-  collisions: 'Collisions'
+  collisions: 'Collisions',
+  energyDetails: 'Details',
+  recording: 'Recording',
+  world: 'World'
 }
 
 /** The smallest thing that can stand in for localStorage, so the rule can be tested without a browser. */

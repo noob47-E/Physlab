@@ -8,6 +8,7 @@ import { themeColor, useTheme } from '../../app/theme'
 import { massOf, useSandbox } from '../../sim/store'
 import { shownTape, useTape } from '../../sim/tapeStore'
 import { useScene } from '../../core/store'
+import { useSandboxView } from '../../sim/sandboxView'
 import { GRAPH_CHOICES, graphBody, graphLines, nearestStep, tickText, type GraphChoice } from '../../sim/graphSeries'
 
 /** What the dock remembers between sessions: open or folded, and the graph chosen. */
@@ -34,6 +35,7 @@ function writePref(p: { open: boolean; choice: GraphChoice }): void {
 }
 
 export function GraphDock() {
+  const view = useSandboxView((s) => s.view)
   const [open, setOpen] = useState(() => readPref().open)
   const [choice, setChoice] = useState<GraphChoice>(() => readPref().choice)
   useEffect(() => writePref({ open, choice }), [open, choice])
@@ -142,6 +144,14 @@ export function GraphDock() {
     head.current = !tape || !data ? null : mode === 'live' ? data.t[data.t.length - 1] : tape.timeOf(playhead)
     plot.current?.redraw(false)
   }, [tape, mode, playhead, data])
+
+  if (view === 'simple') {
+    return (
+      <button className="pointer-events-auto absolute right-3 top-3 h-6 rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] px-2 text-small" onClick={() => setOpen((v) => !v)} title={open ? 'Fold the graph away' : 'Show the graph'} aria-expanded={open}>
+        Graph
+      </button>
+    )
+  }
 
   return (
     <div className="pointer-events-auto absolute right-3 top-3 w-[360px] rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] text-small shadow-md">

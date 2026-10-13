@@ -7,6 +7,7 @@ import { QUANTITIES, quantity, tableFrom, type QuantityKey } from '../../sim/rec
 import { useLab } from '../../lab/labStore'
 import { LabChart } from '../LabChart'
 import { enterMode } from '../../app/layout'
+import { Fold } from './common'
 
 /**
  * The run, as a graph and then as readings.
@@ -32,10 +33,12 @@ export function Recording() {
 
   if (!watched) return null
   return (
-    <>
-      <div className="section-title mt-2 flex items-center">
-        <span className="min-w-0 flex-1 truncate">Recording · {watched.name}</span>
-        <span className="shrink-0 whitespace-nowrap normal-case tabular-nums tracking-normal text-[color:var(--text-faint)]">{samples.length} readings</span>
+    <Fold id="recording" open={false} title="Recording">
+      {/* The count the heading used to carry (SB22b folded the section): always one line, tabular, so a growing count
+          never moves the chart below it (Fix 22). */}
+      <div className="flex items-center gap-2 whitespace-nowrap px-3 text-small text-[color:var(--text-faint)]">
+        <span className="min-w-0 flex-1 truncate">{watched.name}</span>
+        <span className="shrink-0 tabular-nums">{samples.length} readings</span>
       </div>
       <div className="flex flex-wrap items-center gap-2 px-3">
         <select className="field w-auto" value={key} onChange={(e) => setKey(e.target.value as QuantityKey)}>
@@ -75,6 +78,6 @@ export function Recording() {
           Clear readings
         </button>
       </div>
-    </>
+    </Fold>
   )
 }
