@@ -9,6 +9,7 @@ import { groundTopOf } from './energy'
 import type { BodyDef, BodyState, StepRate } from './types'
 import { fmtLabel } from '../math/format'
 import type { SimSample } from './world'
+import { useTape } from './tapeStore'
 
 /** How far below the floor a body may fall before it is put back where it started. */
 export const FALL_LIMIT = 10
@@ -38,8 +39,17 @@ export function recordReadings(readings: SimSample[], bodies: BodyDef[], gravity
  * whatever the slow-motion setting, recorded and published like a played frame. It used to call
  * step(1/60) and drop what came back, so a step at t = 0 used up the run's t = 0 reading, the
  * panel's numbers stood still, and in slow motion the step was a tenth of a step and nothing moved.
+ *
+ * While a recording is shown (replay or fine replay) the engine waits: the Step button moves the playhead one step
+ * on instead, and stops at the last step (SB16). The view draws that moment and the panels follow it.
  */
 export function stepOneFrame(): void {
+  const tape = useTape.getState()
+  if (tape.mode !== 'live') {
+    tape.pause()
+    useTape.getState().stepBy(1)
+    return
+  }
   const w = engine.world
   if (!w) return
   const { bodies, world } = useSandbox.getState()

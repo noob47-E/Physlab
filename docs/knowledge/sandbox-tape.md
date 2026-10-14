@@ -138,6 +138,73 @@ the store synced; Fine replay of [0.5 s, 1.5 s], its stop at a change, the odd t
 marks; costs), `tests/tapeStore.test.ts` (modes, replay, play, reverse, Back to live, bookmarks, loop, Branch and Fine
 replay through the store, the cap's note, a new tape, Reset).
 
+## Drawing from the tape (SB16)
+
+What it does: while a recording is shown ('replay' or 'fine') the Sandbox draws the TAPE, never the engine. Bodies,
+ropes, springs, arrows, labels and trails show the moment the playhead is on — replayed, reversed, slowed or
+fine-replayed — and the panels (the Selected box, the ledger, the cards) show it too. The engine is neither stepped nor
+read meanwhile, so Back to live carries on from the end bit for bit as if nothing had been replayed.
+
+Files: `render/sandbox/playback.ts` (pure but for `replayFrame`, which reads the tape store), `render/SandboxView.tsx`
+(the frame loop, the readout switch, the panels, the recorder's start, no drag in replay), `render/sandbox/Trails.tsx`,
+`sim/stepping.ts` (`stepOneFrame` in replay). Test: `tests/playback.test.ts` (real engine and recorder in Node).
+
+- **The recorder starts once, where the engine is made** (`startRecorder(w)` right after `engine.world = w` in
+  SandboxView's first mount). A remount picks the running world up and does not start it again; nothing ever stops it
+  (its stop frees the tape). A source test holds this.
+- **The readout (I-6).** Live, `readoutRef.current` is the world (`liveOf`, one object for the one engine). Replay and
+  fine: `replayFrame(realDt, bodies)` moves the playhead while `useTape.playing` (`advancePlayhead`: realDt × speed ×
+  rate steps, either way; an end stops it; a loop A–B goes round, a playhead outside the loop starts at A, or at B
+  playing backwards) and returns `tapeReadout(shownTape(), playhead)`:
+  - `state(id)` is the record at ⌊playhead⌋, exactly the engine's numbers at that step (velocities and spins included;
+    the mass is the definition's, as the engine's is; `asleep` is false — the tape does not record sleep);
+  - `drawn(id)` and `transforms` are `blendRecord` between ⌊playhead⌋ and ⌈playhead⌉ (positions and speeds in a straight
+    line, the turn the short way round and unit length);
+  - `linkPath`: a rope through its links' blended records (the layout's rope order), a pulley rope over `pulleyRim` of
+    the wheel at its recorded place, anything else end to end;
+  - `time` is `timeOf(playhead)`, fractional.
+- **Playing backwards** (J), the readout's velocities and spins are reversed while it plays: what is seen moves the
+  other way, so a fall played backwards rises at the same speeds (Idea #39 F18). Paused, a moment is shown as recorded.
+- **Smooth slow motion.** Every frame's playhead is its own picture: `framePlan(0.1, 60, 240)` and
+  `framePlan(0.01, 60, 240)` are 60 pictures a second, as ×1 is (four records a frame, none shown twice); shown whole,
+  ×0.1 would land on a new record in only 24 frames of 60. While the recording plays the frame loop keeps asking for
+  frames; a scrub, a step, Play, Pause or Back to live asks for one through a `useTape` subscription (live steps and a
+  recording that plays on ask for their own).
+- **The view's frame** is `replayViewFrame(view, dt, bodies, now)` (SandboxView keeps one `newReplayView()`): a frame
+  that starts the recording playing, or follows a scrub, a step or a turn round, moves it no time, so that moment is
+  shown first (a demand-drawn canvas's first `dt` is the time since it last drew: Play would jump); the frame after a
+  pause settles a playhead left between two steps on the nearer one, so a paused picture is a recorded moment and the
+  picture, the numbers and both clocks agree (a moment the store put there itself, Fine replay's chosen one, stays).
+- **The panels follow the playhead.** `live` and `engineTime` are the record at ⌊playhead⌋ and THAT record's time (the
+  numbers and the clock of one moment). `panelsDue`: never the same moment twice; at most ten times a second while it
+  plays on by itself; at once when paused, scrubbed, stepped, turned round, wrapped round a loop or on another tape.
+  Back to live publishes the world once, where the run waits.
+- **Step** (`stepOneFrame`) in replay and fine pauses the recording and moves the playhead one whole step on (stopping
+  at the last); in live it steps the engine as before.
+- **No drag in replay (D5).** A press on an object still chooses it, holds the view still, and once the pointer moves
+  more than 4 px says the replay sentence (`refuseEdit()`: the strip's note, four seconds); the cursor over an object is
+  `not-allowed`; a Connect pick is refused the same way, and no Connect line follows the cursor. A drag in progress when a
+  recording comes on screen (a step back by key while the button is held) lets go with no throw and writes nothing, on
+  the next move or on the release.
+- **Trails** are the shown tape's positions from `trailStart` (its first step, or the first step at or after the moment
+  "Clear trails" was pressed, kept as a time so it holds on the fine tape too) up to the playhead: a point every
+  `trailStride` steps (the smallest power of two keeping at most 600 segments, one of them the piece to the drawn body),
+  so the line does not shimmer as it grows. `fillTrail` reads only the points the trail grows past and fills the buffer
+  again only when the tape, the start, the stride or `tapes.parent` (a branch) changes; rewinding draws fewer. Reset and
+  a new scene clear it with the tape; a mid-run rebuild (a body added, a link made) starts a new tape and so a new trail.
+
+Traps:
+- **Never step or read the world while a recording is shown**, not even `step(0)`: that is what makes Back to live
+  bit-identical (tested from a keyframe).
+- **The playhead's frame time is the frame's own, clamped to 0.1 s**, and 0 on the frame the recording starts playing
+  or was scrubbed, stepped or turned round.
+- **A replayed mass is the definition's.** That is right because a change of mass (or size, shape, material, motion)
+  rebuilds the body and so starts a new tape: no tape holds two masses for one body (tested).
+- **`replayFrame` writes the playhead straight into the store**, not through `scrubTo`: `scrubTo`'s "an end stops" would
+  also stop a loop whose B is the last step.
+- **`Tape.record(step)` takes a whole step** (a fraction makes a typed-array view on an odd byte offset); blend between
+  two records instead.
+
 ## The strip (SB17)
 
 The strip is the video editor's bar under the Sandbox drawing: transport buttons, speeds, a scrub bar over the recording, Fine replay,

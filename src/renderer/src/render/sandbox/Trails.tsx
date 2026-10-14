@@ -1,27 +1,44 @@
-// The paths the traced bodies have taken.
+// The paths the traced bodies have taken, drawn from the tape (SB16): a trail is the shown recording's positions from
+// its start (or from the moment "Clear trails" was pressed) up to the playhead, so it shrinks when the run is rewound
+// and grows as it plays, live or replayed; in fine replay it is the fine re-run's own path. Reset and a new scene start
+// a new recording, and with it a new trail.
 
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
-import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
 import type { BodyDef } from '../../sim/types'
-import type { V3 } from '../../math/vec'
 import { drawnColour } from '../../sim/palette'
 import { themeColor, useTheme } from '../../app/theme'
+import { tapes } from '../../sim/recorder'
+import { shownTape, useTape } from '../../sim/tapeStore'
+import { fillTrail, newTrailBuffer, trailStart } from './playback'
 import { readoutRef } from './readout'
 
-/** How many segments a traced body remembers: about twenty seconds of flight. */
-const TRACE_POINTS = 600
+/** The moment (s) "Clear trails" was last pressed in this run, or null: the trails start there. */
+let clearedAt: number | null = null
 
-/**
- * The path a body has taken. Drawn into a buffer that is updated in place each frame: the old
- * version rebuilt a React tree per frame for every moving trail, which kept the whole canvas busy
- * even while paused.
- */
+/** The moment on screen: the end of a live run, else the playhead's. */
+function shownMoment(): number | null {
+  const tape = shownTape()
+  if (!tape || tape.last < tape.first) return null
+  const s = useTape.getState()
+  return tape.timeOf(s.mode === 'live' ? tape.last : Math.min(tape.last, Math.max(tape.first, s.playhead)))
+}
+
+useSandbox.subscribe((now, before) => {
+  if (now.runNonce !== before.runNonce) clearedAt = null
+  else if (now.trailNonce !== before.trailNonce) clearedAt = shownMoment()
+})
+
+/** The traced bodies' trails. */
 export function Trails() {
   const bodies = useSandbox((s) => s.bodies)
   const traced = bodies.filter((d) => d.trace && d.motion === 'dynamic')
+  // "Clear trails" while paused changes nothing the canvas watches: ask for the frame that shows it.
+  const trailNonce = useSandbox((s) => s.trailNonce)
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => invalidate(), [trailNonce, invalidate])
   return (
     <>
       {traced.map((def) => (
@@ -31,50 +48,33 @@ export function Trails() {
   )
 }
 
+/** One body's trail: its points from the tape up to the playhead (`fillTrail`), uploaded only when they change. */
 function TraceLine({ def }: { def: BodyDef }) {
-  const playing = useScene((s) => s.playing)
   // The body's colour as this theme draws it: a palette colour is a token three.js cannot read.
   const theme = useTheme((t) => t.theme)
   const colour = useMemo(() => ({ value: drawnColour(def.color, themeColor), key: `${theme}|${def.color}` }), [def.color, theme])
-  const runNonce = useSandbox((s) => s.runNonce)
-  const trailNonce = useSandbox((s) => s.trailNonce)
+  const buf = useMemo(() => newTrailBuffer(), [])
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(TRACE_POINTS * 6), 3))
+    // The trail's own array, not a copy: fillTrail writes straight into what is drawn.
+    g.setAttribute('position', new THREE.BufferAttribute(buf.out, 3))
     g.setDrawRange(0, 0)
     return g
-  }, [])
+  }, [buf])
   useEffect(() => () => geo.dispose(), [geo])
-  const count = useRef(0)
-  const last = useRef<V3 | null>(null)
   const line = useRef<THREE.LineSegments>(null)
-  // Reset, a new scene or "Clear trails": start the line again.
-  useEffect(() => {
-    count.current = 0
-    last.current = null
-    geo.setDrawRange(0, 0)
-    if (line.current) line.current.visible = false
-  }, [runNonce, trailNonce, geo])
 
   useFrame(() => {
-    if (!playing) return
-    const st = readoutRef.current?.state(def.id)
-    if (!st) return
-    const p = st.position
-    const l = last.current
-    // Only record when it has actually moved, or a body at rest fills the buffer with one point.
-    if (l && Math.hypot(l[0] - p[0], l[1] - p[1], l[2] - p[2]) < 0.01) return
-    if (l) {
-      const attr = geo.getAttribute('position') as THREE.BufferAttribute
-      const i = (count.current % TRACE_POINTS) * 6
-      attr.array.set([l[0], l[1], l[2], p[0], p[1], p[2]], i)
-      attr.needsUpdate = true
-      count.current++
-      geo.setDrawRange(0, Math.min(count.current, TRACE_POINTS) * 2)
-      // An empty geometry drawn every frame makes WebGPU warn every frame.
-      if (line.current) line.current.visible = true
-    }
-    last.current = [p[0], p[1], p[2]]
+    const tape = shownTape()
+    const s = useTape.getState()
+    const head = tape ? (s.mode === 'live' ? tape.last : s.playhead) : 0
+    // The last piece ends where the body is drawn this frame (the readout: the live world, or the tape at the playhead).
+    const tip = readoutRef.current?.drawn(def.id)?.position ?? null
+    const { segments, changed } = tape ? fillTrail(buf, tape, def.id, trailStart(tape, clearedAt), head, tapes.parent, tip) : { segments: 0, changed: false }
+    if (changed) geo.getAttribute('position').needsUpdate = true
+    if (geo.drawRange.count !== segments * 2) geo.setDrawRange(0, segments * 2)
+    // An empty geometry drawn every frame makes WebGPU warn every frame.
+    if (line.current) line.current.visible = segments > 0
   })
 
   return (

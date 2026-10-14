@@ -102,14 +102,20 @@ interface Book {
   given: Map<string, number[]>
   /** Energy put in by edits (a body placed or typed part-way), added up to each step (index step − first). */
   edits: number[]
+  /** PhysLab's own work (drag, rolling, push, hand, damper) added up from the tape's second step to each step
+   *  (index step − first): a reading at any step is then one lookup, where summing the tape every time cost the
+   *  Pendulum's frame rate a little more each second of the run. */
+  work: Float64Array[]
+  /** Each body's place in a record (the tape's layout), worked out once. */
+  at: Map<string, number>
 }
 
 const books = new WeakMap<RunTape, Book>()
 
 /** The parts of the energy at one step. */
-function partsAt(tape: RunTape, rec: Float32Array, scene: LedgerScene): { kinetic: number; height: number; spring: number } {
+function partsAt(tape: RunTape, rec: Float32Array, scene: LedgerScene, index?: Map<string, number>): { kinetic: number; height: number; spring: number } {
   const datum = groundTopOf(scene.bodies)
-  const at = new Map(tape.layout.bodies.map((id, i) => [id, i]))
+  const at = index ?? new Map(tape.layout.bodies.map((id, i) => [id, i]))
   let kinetic = 0
   let height = 0
   for (const def of scene.bodies) {
@@ -146,7 +152,7 @@ function engineSpring(link: Link, scene: LedgerScene, rate: number): boolean {
 }
 
 function newBook(tape: RunTape, scene: LedgerScene): Book {
-  const book: Book = { tape, bodies: scene.bodies, links: scene.links, gravity: scene.world.gravity, first: tape.first, upTo: tape.first - 1, energy: [], since: new Map(), given: new Map(), edits: [] }
+  const book: Book = { tape, bodies: scene.bodies, links: scene.links, gravity: scene.world.gravity, first: tape.first, upTo: tape.first - 1, energy: [], since: new Map(), given: new Map(), edits: [], work: [], at: new Map(tape.layout.bodies.map((id, i) => [id, i])) }
   const moving = scene.bodies.filter((b) => b.motion === 'dynamic' && tape.layout.bodies.includes(b.id))
   for (const b of moving) book.given.set(b.id, [])
   // Present from the start, whatever the bodies do.
@@ -176,7 +182,7 @@ function extend(book: Book, step: number, scene: LedgerScene): void {
   for (let k = book.upTo + 1; k <= step; k++) {
     const rec = tape.record(k)
     if (!rec) break
-    const parts = partsAt(tape, rec, scene)
+    const parts = partsAt(tape, rec, scene, book.at)
     book.energy.push(parts.kinetic + parts.height + parts.spring)
     const state = (id: string): BodyState | null => {
       const i = at.get(id)
@@ -234,6 +240,11 @@ function extend(book: Book, step: number, scene: LedgerScene): void {
     const left = i === 0 ? 0 : book.energy[i - 1] - book.energy[i] + workOf(tape.work(k))
     const byHand = edited.has(k) ? -left : 0
     book.edits.push((book.edits[i - 1] ?? 0) + byHand)
+    const sum = new Float64Array(5)
+    const was = book.work[i - 1]
+    const wk = i === 0 ? null : tape.work(k)
+    for (let c = 0; c < 5; c++) sum[c] = (was ? was[c] : 0) + (wk ? wk[c] : 0)
+    book.work.push(sum)
     const dq = edited.has(k) ? 0 : left
     const share = new Map<string, number>()
     const give = (id: string, q: number) => {
@@ -280,8 +291,8 @@ export function ledgerAt(tape: RunTape, step: number, scene: LedgerScene): Ledge
   const s = stepOf(tape, step)
   if (s > book.upTo) extend(book, s, scene)
   const rec = tape.record(s)
-  const parts = rec ? partsAt(tape, rec, scene) : { kinetic: 0, height: 0, spring: 0 }
-  const w = tape.workSum(tape.first + 1, s)
+  const parts = rec ? partsAt(tape, rec, scene, book.at) : { kinetic: 0, height: 0, spring: 0 }
+  const w = book.work[s - book.first] ?? tape.workSum(tape.first + 1, s)
   const edits = book.edits[s - book.first] ?? 0
   const own = w[0] + w[1] + w[2] + w[3] + w[4] + edits
   const e0 = book.energy[0] ?? 0

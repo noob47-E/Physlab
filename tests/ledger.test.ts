@@ -345,3 +345,23 @@ describe('review fixes (gpt-5.4 high adversarial r1)', () => {
     expect(r.at(k + 1 - 1e-12)).toEqual(r.at(k + 1))
   })
 })
+
+describe('the ledger reads the work from running totals (SB16 speed)', () => {
+  it('pushed in, drag, rolling and dampers at any step equal the tape summed from its start', async () => {
+    const box = body({ name: 'Pushed', shape: 'box', size: [0.2, 0.2, 0.2], position: [0, 3, 0], mass: 1 })
+    const r = await run([box], [], { gravity: 9.81, airDensity: 1.225 })
+    r.w.setActuators([{ bodyId: box.id, from: 0, until: 1, force: () => [2, 0, 0], label: 'push' }])
+    r.steps(2 * 240)
+    const t = r.tape()
+    for (const s of [t.first + 1, t.first + 100, t.first + 240, t.last]) {
+      const L = ledgerAt(t, s, r.scene)
+      const w = t.workSum(t.first + 1, s)
+      expect(L.pushedIn).toBeCloseTo(w[2], 4)
+      expect(L.drag).toBeCloseTo(-w[0], 4)
+      expect(L.rolling).toBeCloseTo(-w[1], 4)
+      expect(L.damper).toBeCloseTo(-w[4], 4)
+    }
+    // Read backwards (a scrub back) and again: the same numbers, from the same totals.
+    expect(ledgerAt(t, t.first + 100, r.scene)).toEqual(ledgerAt(t, t.first + 100, r.scene))
+  })
+})

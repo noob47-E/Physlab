@@ -23,6 +23,7 @@ import { FALL_LIMIT, recordReadings } from '../sim/stepping'
 import { dragSetsStart, grabAction } from '../sim/inspector'
 import { toScreen } from './cameraUtils'
 import { readoutRef, type SimReadout } from './sandbox/readout'
+import { newReplayView, panelStates, replayViewFrame } from './sandbox/playback'
 import { Stage } from './sandbox/Stage'
 import { Bodies } from './sandbox/Bodies'
 import { Arrows } from './sandbox/Arrows'
@@ -30,6 +31,9 @@ import { Trails } from './sandbox/Trails'
 import { Links } from './sandbox/Links'
 import { JoinPreview, joinCursor } from './sandbox/JoinPreview'
 import { Labels } from './sandbox/Labels'
+import { replayRefusal, startRecorder } from '../sim/recorder'
+import { useTape } from '../sim/tapeStore'
+import { refuseEdit } from '../sim/transportActions'
 
 
 // What the engine was last told to hold. These live outside the component so that leaving the
@@ -41,6 +45,16 @@ let appliedNonce = -1
 let published = 0
 /** The pose array the last step handed back: the readout's `transforms`, as SimWorld keeps its own private. */
 const posed: { transforms: Float32Array } = { transforms: new Float32Array(0) }
+/** The live world as the drawing reads it, made once for the one engine (it outlives the view, as the engine does). */
+let liveRO: { world: SimWorld; readout: SimReadout } | null = null
+/** What the frame loop keeps between frames of a shown recording (SB16), the panels' moment with it. */
+const replayView = newReplayView()
+
+/** A press on an object while a recording is shown: no drag, and the replay sentence once the pointer moves. */
+type Refused = { x: number; y: number; said: boolean }
+
+/** How far (in CSS pixels) the pointer moves before a press on an object counts as a drag. */
+const DRAG_SLOP = 4
 
 type Drag = {
   id: BodyId
@@ -57,6 +71,9 @@ type Drag = {
  * straight to where the cursor puts it and the scene definition follows, so Reset, undo and the
  * save file all know. Playing, dragging is a hand: a spring to the cursor that can push other
  * things on the way and keeps the hand's speed on release.
+ *
+ * While a recording is shown (replay or fine replay) nothing is moved (D5): a click still chooses an object, but
+ * a drag says the replay sentence (`replayRefusal()`, in the strip's note) instead, and the cursor says no.
  */
 function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.RefObject<THREE.Group | null>) {
   const { gl, camera, size, controls, invalidate } = useThree()
@@ -65,6 +82,7 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
   const joinPick = useSandbox((s) => s.joinPick)
   const twoD = useSandbox((s) => s.world.twoD)
   const drag = useRef<Drag | null>(null)
+  const refused = useRef<Refused | null>(null)
 
   useEffect(() => {
     const el = gl.domElement
@@ -102,7 +120,8 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       // Connecting: a click on an object is a pick, and a click on nothing is nothing — it must
       // not clear the first choice, or the student who missed the ball has to start again.
       if (useSandbox.getState().joinMode) {
-        if (hit) joinPick(hit.id)
+        // Joining is an edit: on a shown recording the click says why nothing happens.
+        if (hit && !refuseEdit()) joinPick(hit.id)
         return
       }
       const def = hit ? defOf(hit.id) : undefined
@@ -122,6 +141,14 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         return
       }
       select(hit.id)
+      // A shown recording is read-only: the object is chosen, nothing is grabbed or placed, and the view holds still
+      // under the press, so the drag that follows can only say why.
+      if (replayRefusal() !== null) {
+        refused.current = { x: e.clientX, y: e.clientY, said: false }
+        setControls(false)
+        el.setPointerCapture(e.pointerId)
+        return
+      }
       const place = action === 'place'
       // In 2D everything lives in one flat plane; in 3D drag in the plane facing the camera.
       const plane = twoD
@@ -140,13 +167,37 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
     }
 
     const onMove = (e: PointerEvent) => {
+      const no = refused.current
+      if (no) {
+        if (!no.said && Math.hypot(e.clientX - no.x, e.clientY - no.y) > DRAG_SLOP) {
+          no.said = true
+          refuseEdit()
+        }
+        return
+      }
       const d = drag.current
       const w = sim.current
       if (!w) return
+      // A recording came on screen part-way through a drag (a step back by key): let go at once, with no throw,
+      // and say why the object stopped following.
+      if (d && replayRefusal() !== null) {
+        finish(e, false)
+        refuseEdit()
+        return
+      }
       if (!d) {
         if (useApp.getState().mode !== 'sandbox') return
         const hit = pick(e)
         const join = useSandbox.getState().joinMode
+        if (join && replayRefusal() !== null) {
+          // A recording on screen: no connecting (a click says why), so no line follows the cursor either.
+          if (joinCursor.p) {
+            joinCursor.p = null
+            invalidate()
+          }
+          el.style.cursor = hit ? 'not-allowed' : ''
+          return
+        }
         if (join) {
           // The line from the first object follows the cursor, in the plane the object is in,
           // until the second is chosen. The canvas draws on demand, so ask for the frame.
@@ -160,10 +211,11 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
           el.style.cursor = hit ? 'crosshair' : ''
           return
         }
-        // Say what a click would do: arrange, pull, or (on the floor) nothing.
+        // Say what a click would do: arrange, pull, or (on the floor) nothing; on a shown recording, that it cannot.
         const over = hit ? defOf(hit.id) : undefined
         const action = over ? grabAction(over, useScene.getState().playing) : 'none'
-        el.style.cursor = action === 'pull' ? 'grab' : action === 'place' ? 'move' : ''
+        if (action !== 'none' && replayRefusal() !== null) el.style.cursor = 'not-allowed'
+        else el.style.cursor = action === 'pull' ? 'grab' : action === 'place' ? 'move' : ''
         return
       }
       const p = onPlane(e, d.plane)
@@ -179,6 +231,22 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
     }
 
     const onUp = (e: PointerEvent) => {
+      if (refused.current) {
+        refused.current = null
+        setControls(true)
+        el.style.cursor = ''
+        if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+        return
+      }
+      // Let go on a shown recording (a step back by key while the button was held): no throw, nothing written.
+      finish(e, replayRefusal() === null)
+    }
+
+    /**
+     * The end of a drag. With `act`, an arranged body's definition follows it and a pulled one is thrown with the hand's
+     * speed; without (a recording came on screen meanwhile), the hand just lets go and nothing is written.
+     */
+    function finish(e: PointerEvent, act: boolean): void {
       const d = drag.current
       const w = sim.current
       drag.current = null
@@ -192,11 +260,12 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         // start stays where the run began (H18).
         const st = w.state(d.id)
         const def = defOf(d.id)
-        if (st && def && dragSetsStart(w.time, def)) useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
+        if (act && st && def && dragSetsStart(w.time, def)) useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
         invalidate()
         return
       }
       w.release_()
+      if (!act) return
       // Throw: the speed of the hand over the last few samples. A hand that could barely move the
       // object cannot fling it either, so the speed is bounded by what the grab force could give
       // it in a moment — a two-tonne block no longer leaves at 25 m/s from a flick.
@@ -228,6 +297,11 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       el.removeEventListener('pointercancel', onUp)
       el.removeEventListener('lostpointercapture', onUp)
       // Unmounting mid-drag (a mode switch) must not leave the hand closed and the camera locked.
+      if (refused.current) {
+        refused.current = null
+        setControls(true)
+        el.style.cursor = ''
+      }
       if (drag.current) {
         drag.current = null
         // eslint-disable-next-line react-hooks/exhaustive-deps -- `sim` holds the physics world, not a DOM node: it is the same object for the life of the view, so reading it at cleanup is exactly what is wanted
@@ -260,7 +334,7 @@ export function SandboxView() {
     let alive = true
     if (engine.world) {
       sim.current = engine.world
-      readoutRef.current = liveReadout(engine.world)
+      readoutRef.current = liveOf(engine.world)
       setReady(true)
       invalidate()
       return () => {
@@ -270,6 +344,9 @@ export function SandboxView() {
     SimWorld.create(useSandbox.getState().world).then((w) => {
       if (!alive) return
       engine.world = w
+      // The tape (SB12) records every step of this world from now on. Once, here, with the engine: the engine
+      // outlives the view, and the recorder's stop would free the tape, so no view's unmount ever stops it.
+      startRecorder(w)
       sim.current = w
       const s = useSandbox.getState()
       w.rebuild(s.bodies, s.links)
@@ -277,7 +354,7 @@ export function SandboxView() {
       appliedNonce = s.runNonce
       published = 0
       if (import.meta.env?.DEV) (window as unknown as { __sim?: SimWorld }).__sim = w
-      readoutRef.current = liveReadout(w)
+      readoutRef.current = liveOf(w)
       setReady(true)
       invalidate()
     })
@@ -328,16 +405,47 @@ export function SandboxView() {
     invalidate()
   }, [world, ready, invalidate])
 
+  // A shown recording is drawn on demand too: a scrub, a step, Play, Pause or Back to live asks for the frame that
+  // shows it. A live run's steps, and a recording that plays on, ask for their own frames, so they are left out.
+  useEffect(
+    () =>
+      useTape.subscribe((now, before) => {
+        if (now.mode === 'live' && before.mode === 'live') return
+        if (now.playing && before.playing && now.mode === before.mode) return
+        if (now.mode !== before.mode || now.playhead !== before.playhead || now.playing !== before.playing || now.direction !== before.direction || now.revision !== before.revision) invalidate()
+      }),
+    [invalidate]
+  )
+
   /** Heights are quoted above the floor, not above the world origin. */
   const groundTop = useMemo(() => groundTopOf(bodies), [bodies])
 
   // Priority −1: the world steps before anything else draws this frame. The links, arrows and
   // trails read the drawn poses in their own frame callbacks, which run in mount order — children
   // first — so at priority 0 they drew last frame's poses, a frame behind the bodies they join.
+  //
+  // While a recording is shown ('replay' or 'fine', SB16) the engine is neither stepped nor read: the readout is the
+  // tape at the playhead, which moves on while the recording plays, and the panels follow it.
   useFrame((state, dt) => {
     const w = sim.current
     const g = group.current
     if (!w || !g) return
+    const shown = replayViewFrame(replayView, dt, bodies, performance.now())
+    if (shown) {
+      readoutRef.current = shown.readout
+      applyTransforms(g, shown.readout.transforms, shown.readout.bodyOrder)
+      // The panels follow the playhead: the Selected and Now boxes, the ledger and the cards read `live` and `engineTime`.
+      if (shown.panels) useSandbox.setState(shown.panels)
+      if (shown.more) state.invalidate()
+      return
+    }
+    readoutRef.current = liveOf(w)
+    if (replayView.panels) {
+      // Back from a recording: the panels show the world again, where the run waits.
+      replayView.panels = null
+      published = w.time
+      useSandbox.setState({ live: panelStates(liveOf(w), bodies), engineTime: w.time })
+    }
     if (playing && mode === 'sandbox') {
       const { transforms, contacts, samples } = w.step(Math.min(dt, 0.1))
       posed.transforms = transforms
@@ -420,6 +528,12 @@ function liveReadout(w: SimWorld): SimReadout {
     drawn: (id) => w.drawn(id),
     linkPath: (link) => w.linkPath(link)
   }
+}
+
+/** The one live readout of the engine (made again only for another world, which the app never has). */
+function liveOf(w: SimWorld): SimReadout {
+  if (liveRO?.world !== w) liveRO = { world: w, readout: liveReadout(w) }
+  return liveRO.readout
 }
 
 /** Meshes are matched to the engine by body id, not by their place in the list. */
