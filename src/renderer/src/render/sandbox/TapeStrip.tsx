@@ -292,6 +292,9 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
   const settings = useScene((s) => s.settings)
   const world = useSandbox((s) => s.world)
   const [width, setWidth] = useState(640)
+  // The simple Sandbox keeps the drawing clear (owner, 14 Oct: "so massive and looks bad"): its replay bar is under
+  // All tools until the slim, hideable bar (SB66) lands.
+  if (isSimple && !inline) return null
   const tape = shownTape()
   if (!tape || !flags.hasRun) {
     return inline ? <p className="text-[color:var(--text-dim)]">The recording appears here once a run has started. Press Play.</p> : null

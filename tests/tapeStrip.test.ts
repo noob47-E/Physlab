@@ -605,35 +605,21 @@ describe("Simple view shows only the essential controls (SB65)", () => {
     expect(html).toContain("Branch from here")
   })
 
-  it("Simple view shows only essential controls", () => {
+  // The owner, 14 Oct: the bar over the drawing is "so massive and looks bad" - the simple view keeps the drawing clear
+  // and the replay bar lives in All tools until the slim, hideable bar (SB66) lands.
+  it("Simple view draws no replay bar over the drawing", () => {
     useSandboxView.setState({ view: "simple" })
     const html = render()
-    const labels = ariaLabels(html)
-    expect(labels).toContain("To the start")
-    expect(labels).toContain("Step back")
-    expect(labels).toContain("Play")
-    expect(labels).toContain("Step on")
-    expect(labels).toContain("To the end")
-    expect(labels).not.toContain("Play backwards")
-    expect(labels).not.toContain("Play forwards")
-    expect(labels).not.toContain("Bookmark")
-    expect(labels).not.toContain("Loop start")
-    expect(labels).not.toContain("Loop end")
-    expect(html).toContain("×1<")
-    expect(html).toContain("×½<")
-    expect(html).toContain("×¼<")
-    expect(html).not.toContain("×1/10<")
-    expect(html).not.toContain("×1/100<")
-    expect(html).not.toContain("Fine replay 1/600 s")
-    expect(html).not.toContain("Branch from here")
+    expect(ariaLabels(html)).toEqual([])
+    expect(html).not.toContain("data-tape-strip")
   })
 
-  it("Simple view shows time without step number", () => {
+  it("Simple view draws no replay bar in a replay either", () => {
     useSandboxView.setState({ view: "simple" })
     useTape.setState({ mode: "replay", playhead: 188 })
     const html = render()
-    expect(html).toContain(">t = 0.783 s<")
-    expect(html).not.toContain("t = 0.783 s · step 188")
+    expect(html).not.toContain("data-tape-strip")
+    expect(html).not.toContain("t = 0.783 s")
   })
 
   it("All tools view shows time with step number", () => {
