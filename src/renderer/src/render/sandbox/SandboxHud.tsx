@@ -17,8 +17,12 @@ export function SandboxHud() {
     <div className="pointer-events-none absolute inset-0">
       <HudTop />
       <Rail />
-      <CardsDock />
-      <GraphDock />
+      {/* Top right, one column: the formula cards above the graph (SB19's lead), so neither covers the other. The
+          column stops above the tape strip, and the cards scroll inside it when they are long. */}
+      <div className="absolute right-3 top-3 bottom-[260px] flex flex-col items-end gap-2">
+        <CardsDock />
+        <GraphDock />
+      </div>
       <TapeStrip />
       <Hint />
     </div>

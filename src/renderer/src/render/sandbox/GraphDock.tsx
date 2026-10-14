@@ -153,14 +153,14 @@ export function GraphDock() {
 
   if (view === 'simple' && !open) {
     return (
-      <button className="pointer-events-auto absolute right-3 top-3 h-6 rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] px-2 text-small" onClick={() => setOpen((v) => !v)} title={open ? 'Fold the graph away' : 'Show the graph'} aria-expanded={open}>
+      <button className="pointer-events-auto h-6 shrink-0 rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] px-2 text-small" onClick={() => setOpen((v) => !v)} title={open ? 'Fold the graph away' : 'Show the graph'} aria-expanded={open}>
         Graph
       </button>
     )
   }
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 w-[360px] rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] text-small shadow-md">
+    <div className="pointer-events-auto w-[360px] shrink-0 rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] text-small shadow-md">
       <div className="flex h-[30px] items-center gap-1 px-2">
         <button className="btn h-6 px-1" onClick={() => setOpen((v) => !v)} title={open ? 'Fold the graph away' : 'Show the graph'} aria-expanded={open}>
           {open ? '▾' : '▸'}

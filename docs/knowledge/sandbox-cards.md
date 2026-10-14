@@ -17,6 +17,9 @@ under them (SB15) and the graphs (SB19) add their own sections here.
 | `src/renderer/src/sim/cards/evaluate.ts` | `evaluateSpec` → the three lines (LaTeX and plain); `cardNumbers` (the numbers behind them); `plainOf`. |
 | `src/renderer/src/sim/cards/digits.ts` | Rounding honesty: `honestDigits`, `isGivenValue`, `GIVEN_FIGURES`. |
 | `src/renderer/src/sim/cards/units.ts` | The units check by scaling: `unitsCheck`, `unitFactor`, `naturalUnit`; units for KaTeX and sentences. |
+| `src/renderer/src/render/sandbox/CardsDock.tsx` | The dock on the viewport HUD: folding pill, Big mode for projectors, card folding, live evaluation. |
+| `src/renderer/src/render/sandbox/CardTex.tsx` | KaTeX renderer with trust filter for `\htmlData{q=...}` quantity colour-linking. |
+| `src/renderer/src/sim/cardLink.ts` | Active highlighted quantity symbol state for cross-component linking. |
 
 ## Writing a card
 - `formulaTex` is the right-hand side in LaTeX, with `@{key}` for a symbol and `*` for a
@@ -68,7 +71,37 @@ under them (SB15) and the graphs (SB19) add their own sections here.
 `tests/cardsEngine.test.ts` (the owner's 3.132 m/s → 9.81 J case, digits, units, every Source kind,
 readingOf roles, "—", the sign, plainOf, duplicate ids); `tests/cardsCatalogue.test.ts` (the fifteen
 cards' structure, known answers, the shown-sum property with its planted wrong rounding, KaTeX on
-every line).
+every line); `tests/cardsDock.test.ts` (dock rendering, CardTex trust sanitation, cardLink store,
+folding and Big mode preferences).
+
+## The dock (SB18)
+
+The formula cards dock renders in the top-right HUD slot of the Sandbox viewport (`CardsDock.tsx`).
+
+### Layout & Controls
+- **Dock folding**: The entire dock can be collapsed into a compact header pill (`◰ Cards`) with a single click, freeing viewport space. Dock collapse state is persisted across reloads in `localStorage` under `physlab.cardsDock.folded` wrapped in `try/catch`.
+- **Projector Big mode**: A dedicated "Big" toggle switch scales typography to at least twice the standard size, adds thick 2 px borders, and increases hit padding for high-visibility display on 1080p and 768p classroom projectors. The setting is stored in `localStorage` under `physlab.cardsDock.big`.
+- **Per-card folding**: Each card can be folded to its title line or expanded. The title line features the card name, a fold chevron indicator, and a green `units ✓` badge when dimensional analysis confirms unit consistency.
+
+### Card Content
+When expanded, each card presents three distinct math lines plus an optional prediction row:
+1. **Formula line**: The symbolic law with colour-tagged symbols (e.g. $\mathrm{KE} = \frac{1}{2} m v^2$).
+2. **Substituted line**: The numerical values with units substituted into the formula (e.g. $= \frac{1}{2} \times 2.0\text{ kg} \times (3.132\text{ m/s})^2$).
+3. **Result line**: The evaluated result with units (e.g. $= 9.81\text{ J}$).
+4. **Theory gap row**: When a scene theory provides an analytical prediction and measured outcome, the gap row reports the comparison and numerical reason (e.g. `Range: formula 17.30 m · measured 17.25 m · gap −0.29 %: the 1/240 s step (it lands v₀ₓΔt = 5.1 cm short)`).
+
+### Quantity Colour-Linking (`cardLink`)
+- Symbols are wrapped in `\htmlData{q=<QKey>}{...}`.
+- `CardTex.tsx` renders KaTeX with a strict trust sanitization filter: only `\htmlData` with the key `'q'` is allowed; all other HTML/URL attributes and commands are refused.
+- Each symbol quantity is coloured by its theme token (`--q-pos`, `--q-vel`, `--q-acc`, `--q-force`, `--q-weight`, `--q-normal`, `--q-friction`, `--q-tension`, `--q-spring`, `--q-mom`, `--q-heat`, `--q-work`). The colours adapt across Moonlight, Moonlight Gold, Dark, and Light themes.
+- Letters remain visible: physical meaning is never conveyed by colour alone.
+- Tapping or pressing Enter/Space on a symbol toggles the active highlight in the `cardLink` store (`sim/cardLink.ts`).
+- When highlighted, the symbol displays a focused ring (`currentColor`), and matching vector arrows (SB20) and graph series (SB19) glow synchronously. Tapping again clears the highlight.
+
+### Update Cadence
+- **Live playback**: Re-evaluation is throttled to ~10 Hz (every 100 ms) to preserve rendering performance on demand-driven WebGPU canvases.
+- **Scrubbing & stepping**: Card values update immediately whenever the playhead scrubs or steps while paused.
+
 
 ## Graphs (SB19)
 

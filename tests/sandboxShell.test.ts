@@ -43,7 +43,7 @@ describe('render/Viewport.tsx has one sandbox HUD', () => {
     for (const slot of ['HudTop', 'Rail', 'CardsDock', 'GraphDock', 'TapeStrip', 'Hint']) expect(hud, slot).toMatch(new RegExp(`<${slot} />`))
     expect(hud).toMatch(/pointer-events-none/)
   })
-  it.each(['Rail', 'CardsDock'])('%s is a stub that shows nothing yet', (slot) => {
+  it.each(['Rail'])('%s is a stub that shows nothing yet', (slot) => {
     expect(readSource(`src/renderer/src/render/sandbox/${slot}.tsx`)).toMatch(new RegExp(`export function ${slot}\\([^)]*\\)[^{]*\\{\\s*return null\\s*\\}`))
   })
   it('HudTop and Hint hold today’s clock badge, Home and hint, moved', () => {
