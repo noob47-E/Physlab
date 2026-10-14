@@ -8,6 +8,7 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEven
 import { Bookmark, FastForward, GitBranch, Microscope, Pause, Play, Radio, Rewind, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
+import { useSandboxView } from '../../sim/sandboxView'
 import { tapes } from '../../sim/recorder'
 import { shownTape, useTape, type TapeMode } from '../../sim/tapeStore'
 import { rateOf } from '../../sim/types'
@@ -177,7 +178,7 @@ function TextBtn({ title, onClick, disabled, children }: { title: string; onClic
 }
 
 /** The bar: ticks, the recorded part, keyframes, marks, bookmarks, branch, loop, playhead. Click or drag to seek. */
-function ScrubBar({ model, onWidth }: { model: StripModel; onWidth: (w: number) => void }) {
+function ScrubBar({ model, onWidth, isSimple }: { model: StripModel; onWidth: (w: number) => void; isSimple?: boolean }) {
   const [box, setBox] = useState<HTMLDivElement | null>(null)
   const dragging = useRef(false)
   const modelRef = useRef(model)
@@ -205,6 +206,7 @@ function ScrubBar({ model, onWidth }: { model: StripModel; onWidth: (w: number) 
   }
   const { view } = model
   const H = 46
+  const ariaText = isSimple ? model.text.split(' · ')[0] : model.text
   return (
     <div
       ref={setBox}
@@ -214,7 +216,7 @@ function ScrubBar({ model, onWidth }: { model: StripModel; onWidth: (w: number) 
       aria-valuemin={view.first}
       aria-valuemax={model.end}
       aria-valuenow={Math.floor(model.head + 1e-9)}
-      aria-valuetext={model.text}
+      aria-valuetext={ariaText}
       title="Click or drag to move through the recording. Arrow keys step, Shift and arrows jump a second, Page Up and Page Down go to the previous or next bounce or bookmark, Home and End go to the ends."
       className="relative h-[46px] w-full cursor-pointer touch-none select-none rounded outline-offset-2"
       onPointerDown={(e) => {
@@ -274,6 +276,8 @@ function ScrubBar({ model, onWidth }: { model: StripModel; onWidth: (w: number) 
  * Timeline dock panel) instead of over the bottom of the drawing.
  */
 export function TapeStrip({ inline = false }: { inline?: boolean }) {
+  const view = useSandboxView((s) => s.view)
+  const isSimple = view === 'simple'
   const flags = useTransportFlags()
   const mode = useTape((s) => s.mode)
   const playhead = useTape((s) => s.playhead)
@@ -296,19 +300,23 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
   // Live, the speeds are the Sandbox's slow motion; in replay they are the recording's own speed.
   const speedShown = mode === 'live' ? world.timeScale : speed
   const stepTitle = stepOnTitle(formatMeasure(mode === 'live' ? rateOf(world) : tape.rate, 'number', settings))
+  // In simple view, hide the step number from the time text
+  const timeText = isSimple ? model.text.split(' · ')[0] : model.text
   const frame = inline
     ? 'flex flex-col gap-1'
     : 'pointer-events-auto absolute bottom-[72px] left-14 right-3 flex flex-col gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-3 py-1 text-[color:var(--text)]'
   return (
     <div className={frame} data-tape-strip="">
-      <ScrubBar model={model} onWidth={setWidth} />
+      <ScrubBar model={model} onWidth={setWidth} isSimple={isSimple} />
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
         <Btn name="To the start" title="Jump to the start of the recording" onClick={toStart} disabled={!flags.canStart}>
           <SkipBack size={15} />
         </Btn>
-        <Btn name="Play backwards" title="Play backwards (J)" onClick={playBackwards} disabled={!flags.canBack}>
-          <Rewind size={15} />
-        </Btn>
+        {!isSimple && (
+          <Btn name="Play backwards" title="Play backwards (J)" onClick={playBackwards} disabled={!flags.canBack}>
+            <Rewind size={15} />
+          </Btn>
+        )}
         <Btn name="Step back" title="Step back one step (comma key)" onClick={stepBack} disabled={!flags.canBack}>
           <StepBack size={15} />
         </Btn>
@@ -318,14 +326,17 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
         <Btn name="Step on" title={stepTitle} onClick={stepForward}>
           <StepForward size={15} />
         </Btn>
-        <Btn name="Play forwards" title="Play forwards (L)" onClick={play}>
-          <FastForward size={15} />
-        </Btn>
+        {!isSimple && (
+          <Btn name="Play forwards" title="Play forwards (L)" onClick={play}>
+            <FastForward size={15} />
+          </Btn>
+        )}
         <Btn name="To the end" title="Jump to the end of the recording" onClick={toEnd} disabled={!flags.canEnd}>
           <SkipForward size={15} />
         </Btn>
         <div className="seg ml-2" role="group" aria-label="Speed">
-          {SPEEDS.map((s) => (
+          {SPEEDS.map((s) =>
+            isSimple && (s === 0.1 || s === 0.01) ? null : (
             <button
               key={s}
               type="button"
@@ -336,38 +347,43 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
             >
               {SPEED_LABEL[s]}
             </button>
-          ))}
+            )
+          )}
         </div>
-        <Btn name="Bookmark" title="Leave a bookmark at this moment (M)" onClick={bookmarkHere} disabled={mode === 'fine'}>
-          <Bookmark size={15} />
-        </Btn>
-        <Btn name="Loop start" title="The loop starts here ([ key)" onClick={loopStart} disabled={mode === 'fine'}>
-          <span className="font-semibold">A</span>
-        </Btn>
-        <Btn name="Loop end" title="The loop ends here (] key)" onClick={loopEnd} disabled={mode === 'fine'}>
-          <span className="font-semibold">B</span>
-        </Btn>
-        {loop && mode !== 'fine' && (
-          <TextBtn title="Stop looping: clear the start and end" onClick={clearLoop}>
-            Clear loop
-          </TextBtn>
-        )}
-        <TextBtn title={flags.fineWhy ?? 'Run the second around this moment again at 1/600 s, to see what falls between two ordinary pictures, such as the contact of a bounce'} onClick={fineReplay} disabled={flags.fineWhy !== null}>
-          <Microscope size={15} /> Fine replay 1/600 s
-        </TextBtn>
-        <TextBtn title={flags.branchWhy ?? 'Continue the run from this moment, so something can be changed (B)'} onClick={branchFromHere} disabled={flags.branchWhy !== null}>
-          <GitBranch size={15} /> Branch from here
-        </TextBtn>
-        {mode !== 'live' && (
-          <TextBtn title="Back to the end of the recording, where the run goes on" onClick={backToLive}>
-            <Radio size={15} /> Back to live
-          </TextBtn>
+        {!isSimple && (
+          <>
+            <Btn name="Bookmark" title="Leave a bookmark at this moment (M)" onClick={bookmarkHere} disabled={mode === 'fine'}>
+              <Bookmark size={15} />
+            </Btn>
+            <Btn name="Loop start" title="The loop starts here ([ key)" onClick={loopStart} disabled={mode === 'fine'}>
+              <span className="font-semibold">A</span>
+            </Btn>
+            <Btn name="Loop end" title="The loop ends here (] key)" onClick={loopEnd} disabled={mode === 'fine'}>
+              <span className="font-semibold">B</span>
+            </Btn>
+            {loop && mode !== 'fine' && (
+              <TextBtn title="Stop looping: clear the start and end" onClick={clearLoop}>
+                Clear loop
+              </TextBtn>
+            )}
+            <TextBtn title={flags.fineWhy ?? 'Run the second around this moment again at 1/600 s, to see what falls between two ordinary pictures, such as the contact of a bounce'} onClick={fineReplay} disabled={flags.fineWhy !== null}>
+              <Microscope size={15} /> Fine replay 1/600 s
+            </TextBtn>
+            <TextBtn title={flags.branchWhy ?? 'Continue the run from this moment, so something can be changed (B)'} onClick={branchFromHere} disabled={flags.branchWhy !== null}>
+              <GitBranch size={15} /> Branch from here
+            </TextBtn>
+            {mode !== 'live' && (
+              <TextBtn title="Back to the end of the recording, where the run goes on" onClick={backToLive}>
+                <Radio size={15} /> Back to live
+              </TextBtn>
+            )}
+          </>
         )}
         <span className="ml-auto grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]">
           <span className="invisible col-start-1 row-start-1" aria-hidden="true">
             {WIDEST_TIME_TEXT}
           </span>
-          <span className="col-start-1 row-start-1">{model.text}</span>
+          <span className="col-start-1 row-start-1">{timeText}</span>
         </span>
       </div>
       {/* One line, always there, so a note arriving never moves the strip (Fix 22). */}

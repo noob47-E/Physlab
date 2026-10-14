@@ -31,6 +31,17 @@ import { useApp } from '../src/renderer/src/app/modes'
 // The engine's load state is a useSyncExternalStore with no server snapshot; the panel's shape is under test, not the engine.
 vi.mock('../src/renderer/src/sim/jolt', async (importOriginal) => ({ ...(await importOriginal<object>()), useJoltState: () => 'ready' }))
 
+// Mock localStorage for tests
+const mockStorage = new Map<string, string>()
+global.localStorage = {
+  getItem: (key: string) => mockStorage.get(key) ?? null,
+  setItem: (key: string, value: string) => mockStorage.set(key, value),
+  removeItem: (key: string) => mockStorage.delete(key),
+  clear: () => mockStorage.clear(),
+  key: (index: number) => [...mockStorage.keys()][index] ?? null,
+  length: mockStorage.size
+} as Storage
+
 // A server render reads every zustand store's initial state, so the stores are built with hooks that read the current one.
 vi.mock('zustand', async (importOriginal) => {
   const z = await importOriginal<typeof import('zustand')>()
@@ -63,6 +74,7 @@ beforeEach(() => {
   useSandboxView.setState({ view: 'simple' })
   useScene.getState().setPlaying(false)
   useSandbox.getState().loadSandbox()
+  mockStorage.clear()
 })
 
 describe('Simple is the default', () => {
@@ -538,19 +550,43 @@ describe('Energy line in Simple view', () => {
 })
 
 describe('the graph dock (SB19)', () => {
-  it('in Simple view shows only a small "Graph" button, not the full dock', () => {
+  it('in Simple view the graph starts closed: only the Graph button is shown', () => {
     useSandboxView.getState().setView('simple')
+    localStorage.clear()
     const html = render(GraphDock)
     expect(html).toContain('>Graph<')
-    expect(html).toContain('aria-expanded')
-    // The full dock is not shown: no choice buttons (Energy, Position, Velocity).
+    expect(html).toContain('aria-expanded="false"')
+    // The full dock is not shown when closed: no choice buttons (Energy, Position, Velocity).
     expect(html).not.toContain('>Energy<')
     expect(html).not.toContain('>Position<')
     expect(html).not.toContain('>Velocity<')
   })
 
+  it('in Simple view when the graph is open, the dock shows its tabs', () => {
+    useSandboxView.getState().setView('simple')
+    localStorage.setItem('physlab.graphDock', JSON.stringify({ open: true, choice: 'energy' }))
+    const html = render(GraphDock)
+    // The dock should be shown with choice buttons
+    expect(html).toContain('>Graph<')
+    expect(html).toContain('>Energy<')
+    expect(html).toContain('>Position<')
+    expect(html).toContain('>Velocity<')
+    expect(html).toContain('aria-expanded="true"')
+  })
+
+  it('in Simple view when the graph is closed, it shows only the button', () => {
+    useSandboxView.getState().setView('simple')
+    localStorage.setItem('physlab.graphDock', JSON.stringify({ open: false, choice: 'energy' }))
+    const html = render(GraphDock)
+    expect(html).toContain('>Graph<')
+    expect(html).toContain('aria-expanded="false"')
+    expect(html).not.toContain('>Energy<')
+    expect(html).not.toContain('>Position<')
+  })
+
   it('in All tools shows the full dock with all choices, as SB19 made it', () => {
     useSandboxView.getState().setView('all')
+    localStorage.setItem('physlab.graphDock', JSON.stringify({ open: true, choice: 'energy' }))
     const html = render(GraphDock)
     expect(html).toContain('>Graph<')
     expect(html).toContain('>Energy<')

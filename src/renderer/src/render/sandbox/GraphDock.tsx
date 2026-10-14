@@ -16,13 +16,15 @@ const PREF_KEY = 'physlab.graphDock'
 /** The plot's own height: the box never grows or shrinks while a run plays (Fix 22). */
 const PLOT_HEIGHT = 184
 
-function readPref(): { open: boolean; choice: GraphChoice } {
+function readPref(defaultOpen: boolean = true): { open: boolean; choice: GraphChoice } {
   try {
-    const p = JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') as { open?: boolean; choice?: string }
+    const stored = localStorage.getItem(PREF_KEY)
+    if (!stored) return { open: defaultOpen, choice: 'energy' }
+    const p = JSON.parse(stored) as { open?: boolean; choice?: string }
     const choice = GRAPH_CHOICES.find((c) => c.id === p.choice)?.id ?? 'energy'
     return { open: p.open !== false, choice }
   } catch {
-    return { open: true, choice: 'energy' }
+    return { open: defaultOpen, choice: 'energy' }
   }
 }
 
@@ -36,7 +38,7 @@ function writePref(p: { open: boolean; choice: GraphChoice }): void {
 
 export function GraphDock() {
   const view = useSandboxView((s) => s.view)
-  const [open, setOpen] = useState(() => readPref().open)
+  const [open, setOpen] = useState(() => readPref(view === 'simple' ? false : true).open)
   const [picked, setChoice] = useState<GraphChoice>(() => readPref().choice)
   useEffect(() => writePref({ open, choice: picked }), [open, picked])
 
@@ -149,7 +151,7 @@ export function GraphDock() {
     plot.current?.redraw(false)
   }, [tape, mode, playhead, data])
 
-  if (view === 'simple') {
+  if (view === 'simple' && !open) {
     return (
       <button className="pointer-events-auto absolute right-3 top-3 h-6 rounded-md border border-[color:var(--line-2)] bg-[var(--bg-2)] px-2 text-small" onClick={() => setOpen((v) => !v)} title={open ? 'Fold the graph away' : 'Show the graph'} aria-expanded={open}>
         Graph

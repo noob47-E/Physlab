@@ -8,6 +8,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { REC_FLOATS, Tape } from '../src/renderer/src/sim/tape'
 import { useTape } from '../src/renderer/src/sim/tapeStore'
+import { useSandboxView } from '../src/renderer/src/sim/sandboxView'
 import { tapes } from '../src/renderer/src/sim/recorder'
 import { useScene } from '../src/renderer/src/core/store'
 import { useSandbox } from '../src/renderer/src/sim/store'
@@ -277,6 +278,7 @@ beforeEach(() => {
   setLive(1200)
   useScene.getState().setPlaying(false)
   useSandbox.setState({ world: { ...useSandbox.getState().world, timeScale: 1 } })
+  useSandboxView.setState({ view: 'all' })
 })
 
 describe('the strip is hidden until the first step of a run, then always there', () => {
@@ -559,18 +561,85 @@ describe('the Timeline panel in the Sandbox follows the same tape', () => {
     expect(panel()).toContain('running')
   })
 
-  it('in replay shows the playhead’s time and says replay, and the recording’s speed rather than the live slow motion', () => {
+  it("in replay shows the playhead time and says replay, and the recording speed rather than the live slow motion", () => {
     useSandbox.setState({ world: { ...useSandbox.getState().world, timeScale: 0.5 } })
-    expect(panel()).toContain('slow motion ×0.5')
-    useTape.setState({ mode: 'replay', playhead: 188.9, speed: 0.1 })
+    expect(panel()).toContain("slow motion")
+    useTape.setState({ mode: "replay", playhead: 188.9, speed: 0.1 })
     const html = panel()
-    expect(html).toContain('t = 0.79 s')
-    expect(html).toContain('>replay<')
-    expect(html).toContain('replay speed ×0.1')
-    expect(html).not.toContain('slow motion ×0.5')
+    expect(html).toContain("t = 0.79 s")
+    expect(html).toContain(">replay<")
+    expect(html).toContain("replay speed ×0.1")
     useTape.setState({ speed: 1, playing: true })
     const full = panel()
-    expect(full).toContain('replay, playing')
-    expect(full).not.toContain('replay speed')
+    expect(full).toContain("replay, playing")
+    expect(full).not.toContain("replay speed")
+  })
+})
+
+describe("Simple view shows only the essential controls (SB65)", () => {
+  const ariaLabels = (html: string): string[] => {
+    const matches = [...html.matchAll(/aria-label="([^"]*)"/g)]
+    return matches.map((m) => m[1])
+  }
+
+  it("All tools non-simple renders all controls", () => {
+    useSandboxView.setState({ view: "all" })
+    const html = render()
+    const labels = ariaLabels(html)
+    expect(labels).toContain("To the start")
+    expect(labels).toContain("Play backwards")
+    expect(labels).toContain("Step back")
+    expect(labels).toContain("Play")
+    expect(labels).toContain("Step on")
+    expect(labels).toContain("Play forwards")
+    expect(labels).toContain("To the end")
+    expect(labels).toContain("Bookmark")
+    expect(labels).toContain("Loop start")
+    expect(labels).toContain("Loop end")
+    expect(html).toContain("×1<")
+    expect(html).toContain("×½<")
+    expect(html).toContain("×¼<")
+    expect(html).toContain("×1/10<")
+    expect(html).toContain("×1/100<")
+    expect(html).toContain("Fine replay 1/600 s")
+    expect(html).toContain("Branch from here")
+  })
+
+  it("Simple view shows only essential controls", () => {
+    useSandboxView.setState({ view: "simple" })
+    const html = render()
+    const labels = ariaLabels(html)
+    expect(labels).toContain("To the start")
+    expect(labels).toContain("Step back")
+    expect(labels).toContain("Play")
+    expect(labels).toContain("Step on")
+    expect(labels).toContain("To the end")
+    expect(labels).not.toContain("Play backwards")
+    expect(labels).not.toContain("Play forwards")
+    expect(labels).not.toContain("Bookmark")
+    expect(labels).not.toContain("Loop start")
+    expect(labels).not.toContain("Loop end")
+    expect(html).toContain("×1<")
+    expect(html).toContain("×½<")
+    expect(html).toContain("×¼<")
+    expect(html).not.toContain("×1/10<")
+    expect(html).not.toContain("×1/100<")
+    expect(html).not.toContain("Fine replay 1/600 s")
+    expect(html).not.toContain("Branch from here")
+  })
+
+  it("Simple view shows time without step number", () => {
+    useSandboxView.setState({ view: "simple" })
+    useTape.setState({ mode: "replay", playhead: 188 })
+    const html = render()
+    expect(html).toContain(">t = 0.783 s<")
+    expect(html).not.toContain("t = 0.783 s · step 188")
+  })
+
+  it("All tools view shows time with step number", () => {
+    useSandboxView.setState({ view: "all" })
+    useTape.setState({ mode: "replay", playhead: 188 })
+    const html = render()
+    expect(html).toContain("t = 0.783 s · step 188")
   })
 })
