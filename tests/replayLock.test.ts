@@ -21,6 +21,7 @@ import { WorldSection } from '../src/renderer/src/panels/sandbox/WorldSection'
 import { Selected } from '../src/renderer/src/panels/sandbox/Selected'
 import { Sandbox } from '../src/renderer/src/panels/Sandbox'
 import { TapeStrip } from '../src/renderer/src/render/sandbox/TapeStrip'
+import { useTapeBar } from '../src/renderer/src/sim/tapeBar'
 
 // A server render reads every zustand store's initial state; the test drives the stores and renders again, so the hooks read the current one.
 vi.mock('zustand', async (importOriginal) => {
@@ -59,6 +60,8 @@ function freshRun() {
 }
 
 beforeEach(() => {
+  // The strip's note line is the bar's (SB66 hides the bar by default; with it hidden the pill says the refusal).
+  useTapeBar.setState({ shown: true })
   // Add, Connect, the experiment list and the View toggle are the full panel's (SB63 opens simple): render All tools.
   useSandboxView.setState({ view: 'all' })
   vi.useFakeTimers()

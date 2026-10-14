@@ -5,10 +5,11 @@
 // Colours are the tape tokens in styles.css; every number goes through the app's writer; a control is 44 px tall.
 
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { Bookmark, FastForward, GitBranch, Microscope, Pause, Play, Radio, Rewind, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-react'
+import { Bookmark, ChevronDown, FastForward, GitBranch, Microscope, Pause, Play, Radio, Rewind, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
 import { useSandboxView } from '../../sim/sandboxView'
+import { nextSimpleSpeed, useTapeBar } from '../../sim/tapeBar'
 import { tapes } from '../../sim/recorder'
 import { shownTape, useTape, type TapeMode } from '../../sim/tapeStore'
 import { rateOf } from '../../sim/types'
@@ -160,6 +161,9 @@ const SPEED_TITLE: Record<number, string> = {
   0.01: 'A hundredth of the speed, to see a bounce closely'
 }
 
+/** What the simple view's one speed button goes to next, in words for its title. */
+const NEXT_WORDS: Record<number, string> = { 1: 'normal speed', 0.5: 'half speed', 0.25: 'a quarter of the speed' }
+
 /** One button with a short name (read aloud), a title saying what it does and its key, and a 44 px target. */
 function Btn({ name, title, onClick, disabled, on, children }: { name: string; title: string; onClick: () => void; disabled?: boolean; on?: boolean; children: ReactNode }) {
   return (
@@ -178,7 +182,7 @@ function TextBtn({ title, onClick, disabled, children }: { title: string; onClic
 }
 
 /** The bar: ticks, the recorded part, keyframes, marks, bookmarks, branch, loop, playhead. Click or drag to seek. */
-function ScrubBar({ model, onWidth, isSimple }: { model: StripModel; onWidth: (w: number) => void; isSimple?: boolean }) {
+function ScrubBar({ model, onWidth, isSimple, slim = false }: { model: StripModel; onWidth: (w: number) => void; isSimple?: boolean; slim?: boolean }) {
   const [box, setBox] = useState<HTMLDivElement | null>(null)
   const dragging = useRef(false)
   const modelRef = useRef(model)
@@ -205,7 +209,9 @@ function ScrubBar({ model, onWidth, isSimple }: { model: StripModel; onWidth: (w
     scrubTo(to)
   }
   const { view } = model
-  const H = 46
+  // The slim bar (SB66, simple view): the track and the head without the tick labels, 28 px high in the row.
+  const H = slim ? 28 : 46
+  const lift = slim ? -12 : 0
   const ariaText = isSimple ? model.text.split(' · ')[0] : model.text
   return (
     <div
@@ -218,7 +224,7 @@ function ScrubBar({ model, onWidth, isSimple }: { model: StripModel; onWidth: (w
       aria-valuenow={Math.floor(model.head + 1e-9)}
       aria-valuetext={ariaText}
       title="Click or drag to move through the recording. Arrow keys step, Shift and arrows jump a second, Page Up and Page Down go to the previous or next bounce or bookmark, Home and End go to the ends."
-      className="relative h-[46px] w-full cursor-pointer touch-none select-none rounded outline-offset-2"
+      className={`relative ${slim ? 'h-[28px] min-w-0 flex-1' : 'h-[46px] w-full'} cursor-pointer touch-none select-none rounded outline-offset-2`}
       onPointerDown={(e) => {
         if (e.button !== 0) return
         dragging.current = true
@@ -238,7 +244,8 @@ function ScrubBar({ model, onWidth, isSimple }: { model: StripModel; onWidth: (w
       onKeyDown={onKey}
     >
       <svg width={view.width} height={H} viewBox={`0 0 ${view.width} ${H}`} className="absolute inset-0 overflow-visible" aria-hidden="true">
-        {model.ticks.map((t) => (
+        <g transform={`translate(0 ${lift})`}>
+        {!slim && model.ticks.map((t) => (
           <g key={t.step}>
             <line x1={t.x} x2={t.x} y1={14} y2={20} strokeWidth={1} style={{ stroke: 'var(--tape-key)' }} />
             <text x={t.x} y={11} fontSize={10} textAnchor={t.x < 14 ? 'start' : t.x > view.width - 14 ? 'end' : 'middle'} style={{ fill: 'var(--text-dim)' }}>
@@ -266,6 +273,7 @@ function ScrubBar({ model, onWidth, isSimple }: { model: StripModel; onWidth: (w
         {model.branchX !== null && <line x1={model.branchX} x2={model.branchX} y1={16} y2={40} strokeWidth={2} strokeDasharray="3 2" style={{ stroke: 'var(--tape-branch)' }} />}
         <line x1={model.headX} x2={model.headX} y1={14} y2={44} strokeWidth={2} style={{ stroke: 'var(--tape-head)' }} />
         <polygon points={`${model.headX - 5},12 ${model.headX + 5},12 ${model.headX},19`} style={{ fill: 'var(--tape-head)' }} />
+        </g>
       </svg>
     </div>
   )
@@ -292,12 +300,24 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
   const settings = useScene((s) => s.settings)
   const world = useSandbox((s) => s.world)
   const [width, setWidth] = useState(640)
-  // The simple Sandbox keeps the drawing clear (owner, 14 Oct: "so massive and looks bad"): its replay bar is under
-  // All tools until the slim, hideable bar (SB66) lands.
-  if (isSimple && !inline) return null
+  const barShown = useTapeBar((s) => s.shown)
+  const setBarShown = useTapeBar((s) => s.setShown)
   const tape = shownTape()
   if (!tape || !flags.hasRun) {
     return inline ? <p className="text-[color:var(--text-dim)]">The recording appears here once a run has started. Press Play.</p> : null
+  }
+  const shownBar = inline || barShown
+  if (!shownBar) {
+    // SB66: hidden (the default): a small pill at the bottom left of the drawing brings the bar back.
+    return (
+      <>
+      {refusal && <p className="pointer-events-none absolute bottom-[52px] left-3 max-w-[60%] rounded bg-[var(--label-bg)] px-2 py-1 text-[color:var(--text)] shadow" role="status">{refusal}</p>}
+      <button type="button" data-tape-pill="" className="pointer-events-auto absolute bottom-3 left-3 flex min-h-[32px] items-center gap-1.5 rounded-full border border-[color:var(--line-2)] bg-[var(--label-bg)] px-3 text-small text-[color:var(--text)] shadow" title="Show the replay bar" onClick={() => setBarShown(true)}>
+        <Rewind size={14} aria-hidden="true" />
+        <span>Replay</span>
+      </button>
+      </>
+    )
   }
   const model = stripModel({ tape, mode, playhead, marks, bookmarks, loop, branchStep: tapes.parent?.step ?? null, width: Math.max(120, width) })
   // Live, the speeds are the Sandbox's slow motion; in replay they are the recording's own speed.
@@ -305,6 +325,47 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
   const stepTitle = stepOnTitle(formatMeasure(mode === 'live' ? rateOf(world) : tape.rate, 'number', settings))
   // In simple view, hide the step number from the time text
   const timeText = isSimple ? model.text.split(' · ')[0] : model.text
+  const hide = inline ? null : (
+    <Btn name="Hide the replay bar" title="Hide the replay bar (the Replay button brings it back)" onClick={() => setBarShown(false)}>
+      <ChevronDown size={15} />
+    </Btn>
+  )
+  if (isSimple && !inline) {
+    // SB66: the simple view's bar is ONE slim row, like a video player: start, step back, play, step on, the timeline, the
+    // time (two decimals, the app's writer), one speed button and Hide. A refused edit says why just above it.
+    const shownStep = Math.floor(model.head + 1e-9)
+    const seconds = formatMeasure(tape.timeOf(shownStep), 'number', { ...settings, decimals: 2, precisionMode: 'dp' })
+    const label = SPEED_LABEL[speedShown] ?? '×1'
+    return (
+      <div className="pointer-events-auto absolute bottom-[64px] left-14 right-3 flex items-center gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-2 text-[color:var(--text)]" data-tape-strip="" data-tape-row="slim">
+        {note && <p className="absolute -top-6 left-2 max-w-full truncate rounded bg-[var(--label-bg)] px-2 text-[color:var(--text-dim)]" title={note}>{note}</p>}
+        <Btn name="To the start" title="Jump to the start of the recording" onClick={toStart} disabled={!flags.canStart}>
+          <SkipBack size={15} />
+        </Btn>
+        <Btn name="Step back" title="Step back one step (comma key)" onClick={stepBack} disabled={!flags.canBack}>
+          <StepBack size={15} />
+        </Btn>
+        <Btn name={flags.playing ? 'Pause' : 'Play'} title={flags.playing ? 'Pause (Space or K)' : 'Play (Space or L)'} onClick={togglePlay} on>
+          {flags.playing ? <Pause size={15} /> : <Play size={15} />}
+        </Btn>
+        <Btn name="Step on" title={stepTitle} onClick={stepForward}>
+          <StepForward size={15} />
+        </Btn>
+        <ScrubBar model={model} onWidth={setWidth} isSimple slim />
+        <span className="ml-1 font-mono tabular-nums text-[color:var(--text-strong)]">t = {seconds} s</span>
+        <button
+          type="button"
+          className="btn min-h-[44px] min-w-[52px] justify-center"
+          aria-label="Speed"
+          title={`${SPEED_TITLE[speedShown] ?? SPEED_TITLE[1]}: press for ${NEXT_WORDS[nextSimpleSpeed(speedShown)]}${mode === 'live' ? ' (the same as slow motion)' : ''}`}
+          onClick={() => chooseSpeed(nextSimpleSpeed(speedShown))}
+        >
+          {label}
+        </button>
+        {hide}
+      </div>
+    )
+  }
   const frame = inline
     ? 'flex flex-col gap-1'
     : 'pointer-events-auto absolute bottom-[72px] left-14 right-3 flex flex-col gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-3 py-1 text-[color:var(--text)]'
@@ -388,6 +449,7 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
           </span>
           <span className="col-start-1 row-start-1">{timeText}</span>
         </span>
+        {hide}
       </div>
       {/* One line, always there, so a note arriving never moves the strip (Fix 22). */}
       <p className="min-h-[18px] truncate text-[color:var(--text-dim)]" title={note ?? undefined}>

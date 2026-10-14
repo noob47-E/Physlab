@@ -9,6 +9,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { REC_FLOATS, Tape } from '../src/renderer/src/sim/tape'
 import { useTape } from '../src/renderer/src/sim/tapeStore'
 import { useSandboxView } from '../src/renderer/src/sim/sandboxView'
+import { nextSimpleSpeed, readTapeBarShown, TAPE_BAR_KEY, useTapeBar, writeTapeBarShown } from '../src/renderer/src/sim/tapeBar'
+import { refuseEdit, useEditRefusal } from '../src/renderer/src/sim/transportActions'
 import { tapes } from '../src/renderer/src/sim/recorder'
 import { useScene } from '../src/renderer/src/core/store'
 import { useSandbox } from '../src/renderer/src/sim/store'
@@ -279,6 +281,8 @@ beforeEach(() => {
   useScene.getState().setPlaying(false)
   useSandbox.setState({ world: { ...useSandbox.getState().world, timeScale: 1 } })
   useSandboxView.setState({ view: 'all' })
+  // These tests are about the bar itself: shown (SB66 hides it by default; its own tests below).
+  useTapeBar.setState({ shown: true })
 })
 
 describe('the strip is hidden until the first step of a run, then always there', () => {
@@ -313,7 +317,8 @@ describe('every control: a name, a title, a 44 px target', () => {
   it('has the seven transport buttons, five speeds, Bookmark and the two loop ends, Fine replay and Branch from here in live; no Back to live', () => {
     const html = render()
     const bs = buttons(html)
-    expect(bs).toHaveLength(7 + 5 + 3 + 2)
+    // SB66: and Hide (icon).
+    expect(bs).toHaveLength(7 + 5 + 3 + 2 + 1)
     for (const tag of bs) {
       expect(tag, tag).toMatch(/min-h-\[44px\]/)
       expect(tag, tag).toMatch(/ title="[^"]+"/)
@@ -325,7 +330,7 @@ describe('every control: a name, a title, a 44 px target', () => {
 
   it('every icon button has a name read aloud and a 44 px square', () => {
     const icons = buttons(render()).filter((t) => /icon-btn/.test(t))
-    expect(icons).toHaveLength(7 + 3)
+    expect(icons).toHaveLength(7 + 3 + 1)
     for (const tag of icons) {
       expect(tag).toMatch(/aria-label="[^"]+"/)
       expect(tag).toMatch(/min-w-\[44px\]/)
@@ -361,7 +366,7 @@ describe('every control: a name, a title, a 44 px target', () => {
     useTape.setState({ mode: 'replay', playhead: 100 })
     const replay = render()
     expect(replay).toContain('Back to live')
-    expect(buttons(replay)).toHaveLength(7 + 5 + 3 + 3)
+    expect(buttons(replay)).toHaveLength(7 + 5 + 3 + 3 + 1)
     tapes.fine = makeTape(600, 600, 300)
     useTape.setState({ mode: 'fine', playhead: 400 })
     expect(render()).toContain('Back to live')
@@ -605,21 +610,37 @@ describe("Simple view shows only the essential controls (SB65)", () => {
     expect(html).toContain("Branch from here")
   })
 
-  // The owner, 14 Oct: the bar over the drawing is "so massive and looks bad" - the simple view keeps the drawing clear
-  // and the replay bar lives in All tools until the slim, hideable bar (SB66) lands.
-  it("Simple view draws no replay bar over the drawing", () => {
+  it("Simple view shows only essential controls", () => {
     useSandboxView.setState({ view: "simple" })
     const html = render()
-    expect(ariaLabels(html)).toEqual([])
-    expect(html).not.toContain("data-tape-strip")
+    const labels = ariaLabels(html)
+    expect(labels).toContain("To the start")
+    expect(labels).toContain("Step back")
+    expect(labels).toContain("Play")
+    expect(labels).toContain("Step on")
+    // SB66: one slim row, no To the end, one speed button.
+    expect(labels).not.toContain("To the end")
+    expect(labels).not.toContain("Play backwards")
+    expect(labels).not.toContain("Play forwards")
+    expect(labels).not.toContain("Bookmark")
+    expect(labels).not.toContain("Loop start")
+    expect(labels).not.toContain("Loop end")
+    expect(html).toContain("×1<")
+    expect(html).not.toContain("×½<")
+    expect(html).not.toContain("×¼<")
+    expect(html).not.toContain("×1/10<")
+    expect(html).not.toContain("×1/100<")
+    expect(html).not.toContain("Fine replay 1/600 s")
+    expect(html).not.toContain("Branch from here")
   })
 
-  it("Simple view draws no replay bar in a replay either", () => {
+  it("Simple view shows time without step number", () => {
     useSandboxView.setState({ view: "simple" })
     useTape.setState({ mode: "replay", playhead: 188 })
     const html = render()
-    expect(html).not.toContain("data-tape-strip")
-    expect(html).not.toContain("t = 0.783 s")
+    // SB66: two decimals, the app's number writer.
+    expect(html).toContain(">t = 0.78 s<")
+    expect(html).not.toContain("t = 0.783 s · step 188")
   })
 
   it("All tools view shows time with step number", () => {
@@ -627,5 +648,93 @@ describe("Simple view shows only the essential controls (SB65)", () => {
     useTape.setState({ mode: "replay", playhead: 188 })
     const html = render()
     expect(html).toContain("t = 0.783 s · step 188")
+  })
+})
+
+// ---------------------------------------------------------------- SB66: the friendly replay bar (owner, Wed 14 Oct)
+describe('SB66: the replay bar is hidden by default, a Replay pill opens it, Hide folds it, remembered', () => {
+  const store = () => {
+    const m = new Map<string, string>()
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m }
+  }
+  it('hidden unless the word shown is remembered; a broken storage means hidden', () => {
+    const s = store()
+    expect(readTapeBarShown(null)).toBe(false)
+    expect(readTapeBarShown(s)).toBe(false)
+    writeTapeBarShown(true, s)
+    expect(s.m.get(TAPE_BAR_KEY)).toBe('shown')
+    expect(readTapeBarShown(s)).toBe(true)
+    writeTapeBarShown(false, s)
+    expect(readTapeBarShown(s)).toBe(false)
+    s.m.set(TAPE_BAR_KEY, 'garbled')
+    expect(readTapeBarShown(s)).toBe(false)
+    const broken = { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } }
+    expect(readTapeBarShown(broken)).toBe(false)
+    expect(() => writeTapeBarShown(true, broken)).not.toThrow()
+  })
+
+  it.each(['simple', 'all'] as const)('in %s view, hidden: only the pill, with its title; no bar', (view) => {
+    useSandboxView.setState({ view })
+    useTapeBar.setState({ shown: false })
+    const html = render()
+    expect(html).not.toContain('data-tape-strip')
+    expect(html).toContain('data-tape-pill')
+    expect(html).toContain('title="Show the replay bar"')
+    expect(html).toContain('>Replay<')
+  })
+
+  it('hidden, a refused edit (a drag in a replay) still says why, beside the pill', () => {
+    useTapeBar.setState({ shown: false })
+    useTape.setState({ mode: 'replay', playhead: 100 })
+    refuseEdit()
+    const html = render()
+    expect(html).toContain('data-tape-pill')
+    expect(html).toContain('Branch from here to change something')
+    useEditRefusal.setState({ sentence: null })
+  })
+
+  it('no pill and no bar before the first step of a run (nothing to replay yet)', () => {
+    useTapeBar.setState({ shown: false })
+    tapes.live = makeTape(1)
+    expect(render()).toBe('')
+  })
+
+  it.each(['simple', 'all'] as const)('in %s view, shown: the bar has a Hide button', (view) => {
+    useSandboxView.setState({ view })
+    const html = render()
+    expect(html).toContain('data-tape-strip')
+    expect(html).toContain('aria-label="Hide the replay bar"')
+    expect(html).not.toContain('data-tape-pill')
+  })
+
+  it('the simple bar is one slim row: start, step back, play, step on, the timeline, the time, one speed, Hide', () => {
+    useSandboxView.setState({ view: 'simple' })
+    const html = render()
+    expect(html).toContain('data-tape-row="slim"')
+    const order = ['To the start', 'Step back', 'Play', 'Step on', 'Position in the recording', 'Speed', 'Hide the replay bar']
+    const at = order.map((name) => html.indexOf(`aria-label="${name}"`))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect([...at].sort((a, b) => a - b)).toEqual(at)
+    // No note line and no second row in the slim bar.
+    expect(html).not.toContain('min-h-[18px]')
+  })
+
+  it('the one speed button cycles ×1 → ×½ → ×¼ → ×1, and says the next', () => {
+    expect(nextSimpleSpeed(1)).toBe(0.5)
+    expect(nextSimpleSpeed(0.5)).toBe(0.25)
+    expect(nextSimpleSpeed(0.25)).toBe(1)
+    expect(nextSimpleSpeed(0.1)).toBe(1)
+    useSandboxView.setState({ view: 'simple' })
+    useTape.setState({ mode: 'replay', playhead: 100, speed: 0.5 })
+    const html = render()
+    expect(html).toContain('>×½<')
+    expect(html).toMatch(/title="Half speed: press for a quarter of the speed"/)
+  })
+
+  it('All tools keeps every control as before', () => {
+    useSandboxView.setState({ view: 'all' })
+    const html = render()
+    for (const label of ['Play backwards', 'Play forwards', 'To the end', 'Bookmark', 'Loop start']) expect(html).toContain(`aria-label="${label}"`)
+    expect(html).toContain('Fine replay 1/600 s')
   })
 })
