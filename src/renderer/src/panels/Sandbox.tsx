@@ -25,6 +25,7 @@ import { WorldSection } from './sandbox/WorldSection'
 import { Collisions } from './sandbox/Collisions'
 import { ReplayBanner, ReplayLock } from './sandbox/ReplayLock'
 import { SimplePanel } from './sandbox/SimplePanel'
+import { ChaosTwinsReadout } from './sandbox/ChaosTwinsReadout'
 
 export function Sandbox() {
   const view = useSandboxView((s) => s.view)
@@ -60,6 +61,7 @@ function FullPanel() {
 
       <div className="section-title">Objects</div>
       <Presets />
+      <ChaosTwinsReadout />
       <ReplayLock>
         <AddRow />
         {joinMode && <JoinGuide />}

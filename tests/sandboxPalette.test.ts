@@ -146,10 +146,12 @@ describe('who gets which colour', () => {
     for (const p of PRESETS) {
       const { bodies } = p.build()
       const moving = bodies.filter((b) => b.motion === 'dynamic')
+      // The chaos twins (SB60) are kinematic, moved along their path, and coloured by twin: their own test checks them.
+      const driven = bodies.filter((b) => b.motion === 'kinematic')
       expect(moving.map((b) => b.color), p.id).toEqual(moving.map((_, i) => paletteColour(i)))
-      for (const b of bodies.filter((x) => x.motion !== 'dynamic')) expect(b.color, `${p.id} ${b.name}`).toBe(materialById(b.material).color)
+      for (const b of bodies.filter((x) => x.motion === 'static')) expect(b.color, `${p.id} ${b.name}`).toBe(materialById(b.material).color)
       // No experiment moves more bodies than there are colours.
-      expect(moving.length, p.id).toBeLessThanOrEqual(SIM_PALETTE.length)
+      expect(moving.length + driven.length / 2, p.id).toBeLessThanOrEqual(SIM_PALETTE.length)
     }
   })
 

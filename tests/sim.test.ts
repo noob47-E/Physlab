@@ -649,7 +649,8 @@ describe('setting up an experiment', () => {
     for (const p of PRESETS) {
       const { bodies } = p.build()
       expect(bodies.some((b) => b.shape === 'ground')).toBe(true)
-      expect(bodies.some((b) => b.motion === 'dynamic')).toBe(true)
+      // Moved by forces, or (SB60's chaos twins) along a known path.
+      expect(bodies.some((b) => b.motion !== 'static'), p.id).toBe(true)
       expect(new Set(bodies.map((b) => b.id)).size).toBe(bodies.length)
       expect(new Set(bodies.map((b) => b.name)).size).toBe(bodies.length)
     }

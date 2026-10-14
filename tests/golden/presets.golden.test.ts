@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, it } from 'vitest'
 import { SimWorld } from '../../src/renderer/src/sim/world'
 import { PRESETS } from '../../src/renderer/src/sim/presets'
+import { chaosDrivers } from '../../src/renderer/src/sim/chaosTwins'
 import { DEFAULT_WORLD } from '../../src/renderer/src/sim/types'
 import { fmt } from '../../src/renderer/src/math/format'
 import { resetGlobals } from '../helpers/globals'
@@ -15,6 +16,8 @@ async function sweep(): Promise<string[]> {
     const built = p.build()
     const world = await SimWorld.create({ ...DEFAULT_WORLD, ...(built.world ?? {}) })
     world.rebuild(built.bodies, built.links ?? [])
+    // SB60: the chaos twins follow their exact path, as the Sandbox view drives them; no other preset has a driver.
+    world.setDrivers(chaosDrivers(built.bodies, built.links ?? [], built.world?.gravity ?? DEFAULT_WORLD.gravity))
 
     const recordAt = (tLabel: string) => {
       // A body by its name and place in the preset: its id is made fresh (random) on every build.

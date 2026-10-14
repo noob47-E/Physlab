@@ -33,9 +33,9 @@ async function recorded(id: string, seconds: number): Promise<{ tape: RunTape; s
 }
 
 describe('what each choice draws', () => {
-  it('Energy · Position · Velocity, with their axes', () => {
-    expect(GRAPH_CHOICES.map((c) => c.label)).toEqual(['Energy', 'Position', 'Velocity'])
-    expect(GRAPH_CHOICES.map((c) => c.axis)).toEqual(['E / J', 'x, y / m', 'vₓ, vᵧ / m s⁻¹'])
+  it('Energy · Position · Velocity, with their axes (and SB60’s Gap, offered only beside the chaos twins)', () => {
+    expect(GRAPH_CHOICES.map((c) => c.label)).toEqual(['Energy', 'Position', 'Velocity', 'Gap'])
+    expect(GRAPH_CHOICES.map((c) => c.axis)).toEqual(['E / J', 'x, y / m', 'vₓ, vᵧ / m s⁻¹', 'gap / m'])
   })
 
   it('Position and Velocity are the tape’s own numbers at their steps, at most 600 points, ending at the last step', async () => {

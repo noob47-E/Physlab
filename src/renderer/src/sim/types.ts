@@ -213,6 +213,16 @@ export interface Actuator {
   label?: string
 }
 
+/**
+ * A kinematic body moved along a known path instead of by forces (SB60: the chaos twins follow the exact solution of
+ * the double pendulum). `at(t)` is where the body is, how fast it moves and, if given, how it is turned (a quaternion
+ * x, y, z, w) at clock reading t; the world steers the body onto it at the end of every step.
+ */
+export interface Driver {
+  bodyId: BodyId
+  at: (t: number) => { position: V3; velocity: V3; rotation?: [number, number, number, number] }
+}
+
 export const DEFAULT_WORLD: WorldSettings = {
   gravity: 9.81,
   twoD: true,

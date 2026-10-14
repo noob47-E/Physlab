@@ -10,7 +10,7 @@ import { loadJolt, type Jolt } from './jolt'
 import { dragCoefficient, frontalAreaTurned, materialById, shapeVolume } from './materials'
 import { comOffset, linkDepths, linkTies, pulleyPartnerMove, pulleyRim, reachAlong, ropeLayout, ropeLinkMass, ropeSegments, toLocal } from './links'
 import { eulerToQuat, rotateVec } from './rotate'
-import type { Actuator, AfterStep, BodyDef, BodyId, BodyState, ContactEvent, Keyframe, Link, OwnForces, StepRate, StepWork, Touch, WorldSettings } from './types'
+import type { Actuator, AfterStep, Driver, BodyDef, BodyId, BodyState, ContactEvent, Keyframe, Link, OwnForces, StepRate, StepWork, Touch, WorldSettings } from './types'
 import { DEFAULT_STEP_RATE, DEFAULT_WORLD, rateOf } from './types'
 import { REC_FLOATS, type RecordLayout } from './tape'
 import type { V3 } from '../math/vec'
@@ -360,6 +360,8 @@ export class SimWorld {
    * run: a Reset rebuilds the bodies and must find the same push waiting at t = 0.
    */
   private actuators = new Map<BodyId, Actuator[]>()
+  /** Kinematic bodies moved along a known path (SB60), by body id; set and cleared like the actuators. */
+  private drivers = new Map<BodyId, Driver>()
   /**
    * Engine steps taken since the last reset. The clock is this count, not a running sum of 1/60:
    * six steps added up read 0.09999999999999999, so "is it past 0.1 s yet?" was false at step 6
@@ -484,6 +486,7 @@ export class SimWorld {
     // A new scene starts with nothing pushing it; `clear()` alone keeps the actuators because
     // Reset goes through it too and must not lose them.
     world.actuators.clear()
+    world.drivers.clear()
     // And nobody is listening to it yet: a listener belongs to the scene it was made for (Reset,
     // which is `clear()`, keeps them, as it keeps the pushes).
     world.listeners.clear()
@@ -780,6 +783,9 @@ export class SimWorld {
       const a = this.entries.get(link.a)
       const b = this.entries.get(link.b)
       if (!a || !b || a === b) continue
+      // Between two ends that nothing pushes (fixed, or moved along a path: SB60's twins) a link has nothing to hold;
+      // it is drawn, and Jolt is not asked to solve a joint it could only fight.
+      if (a.def.motion !== 'dynamic' && b.def.motion !== 'dynamic') continue
       switch (link.kind) {
         case 'rope':
           this.addRope(link, a, b)
@@ -1474,6 +1480,7 @@ export class SimWorld {
       const before = this.ticks
       this.steps += 1
       this.ticks += TICKS_PER_SECOND / this.rate
+      this.landDrivers()
       this.afterStep(dt)
       // On the step that reaches the next 0.1 s, which is exactly on it: the steps land there at one
       // rate, and a change of rate waits until its steps can (`applyRate`).
@@ -1569,6 +1576,47 @@ export class SimWorld {
     }
   }
 
+  /**
+   * Kinematic bodies that follow a known path (SB60), replacing whatever was set before. Kept by body id like the
+   * actuators, so a Reset finds them waiting; a body named that is not in the scene, or is not kinematic, is left alone.
+   */
+  setDrivers(list: Driver[]): void {
+    this.input()
+    this.drivers.clear()
+    for (const d of list) this.drivers.set(d.bodyId, d)
+  }
+
+  /** The driven bodies steered towards where their path has them at the end of the coming step. */
+  private steerDrivers(dt: number): void {
+    if (this.drivers.size === 0) return
+    const t = (this.ticks + TICKS_PER_SECOND / this.rate) / TICKS_PER_SECOND
+    for (const [id, d] of this.drivers) {
+      const e = this.entries.get(id)
+      if (!e || e.def.motion !== 'kinematic') continue
+      const goal = d.at(t)
+      const q = goal.rotation ?? (() => { const r = e.body.GetRotation(); return [r.GetX(), r.GetY(), r.GetZ(), r.GetW()] as [number, number, number, number] })()
+      const J = this.jolt as unknown as AnyJolt & Jolt
+      this.bodies.MoveKinematic(e.body.GetID(), this.rv3(goal.position), this.track(new J.Quat(q[0], q[1], q[2], q[3])), dt)
+    }
+  }
+
+  /**
+   * After the step: each driven body put exactly on its path, with the path's own velocity. Jolt's move leaves it at the
+   * chord's average speed and a rounding off the point; the readings (energy, the gap between the twins) want the path.
+   */
+  private landDrivers(): void {
+    if (this.drivers.size === 0) return
+    const J = this.jolt as unknown as AnyJolt & Jolt
+    for (const [id, d] of this.drivers) {
+      const e = this.entries.get(id)
+      if (!e || e.def.motion !== 'kinematic') continue
+      const goal = d.at(this.time)
+      const q = goal.rotation ? this.track(new J.Quat(goal.rotation[0], goal.rotation[1], goal.rotation[2], goal.rotation[3])) : e.body.GetRotation()
+      this.bodies.SetPositionAndRotation(e.body.GetID(), this.rv3(goal.position), q, J.EActivation_DontActivate)
+      this.bodies.SetLinearVelocity(e.body.GetID(), this.v3(goal.velocity))
+    }
+  }
+
   /** The pushes on one body that are switched on during the step that starts now and lasts dt. */
   private activeActuators(id: BodyId, dt: number): Actuator[] {
     const mine = this.actuators.get(id)
@@ -1619,6 +1667,7 @@ export class SimWorld {
    */
   private beforeStep(dt: number) {
     this.applied = new Map()
+    this.steerDrivers(dt)
     const rho = this.settings.airDensity
     for (const id of this.order) {
       const e = this.entries.get(id)!

@@ -34,7 +34,7 @@ useSandbox.subscribe((now, before) => {
 /** The traced bodies' trails. */
 export function Trails() {
   const bodies = useSandbox((s) => s.bodies)
-  const traced = bodies.filter((d) => d.trace && d.motion === 'dynamic')
+  const traced = bodies.filter((d) => d.trace && d.motion !== 'static')
   // "Clear trails" while paused changes nothing the canvas watches: ask for the frame that shows it.
   const trailNonce = useSandbox((s) => s.trailNonce)
   const invalidate = useThree((s) => s.invalidate)

@@ -2,6 +2,7 @@ import type { BodyDef } from './types';
 import type { RunTape } from './recorder';
 import { ledgerAt, type LedgerScene } from './ledger';
 import { fmtLabel } from '../math/format';
+import { chaosPairs } from './chaosTwins';
 
 export interface TapeLike {
   first: number;
@@ -185,14 +186,23 @@ export function playheadX(time: number, t0: number, t1: number, width: number): 
 /** The steps a series is drawn at: every step up to `maxPoints`, else evenly spread, always ending at `upTo`. */
 export const sampleSteps = (first: number, upTo: number, maxPoints: number): number[] => getSteps(first, upTo, maxPoints);
 
-export type GraphChoice = 'energy' | 'position' | 'velocity';
+export type GraphChoice = 'energy' | 'position' | 'velocity' | 'gap';
 
 /** The dock's three graphs, in the chooser's order, with the y axis each draws. */
 export const GRAPH_CHOICES: readonly { id: GraphChoice; label: string; axis: string }[] = [
   { id: 'energy', label: 'Energy', axis: 'E / J' },
   { id: 'position', label: 'Position', axis: 'x, y / m' },
-  { id: 'velocity', label: 'Velocity', axis: 'vₓ, vᵧ / m s⁻¹' }
+  { id: 'velocity', label: 'Velocity', axis: 'vₓ, vᵧ / m s⁻¹' },
+  // SB60: the chaos twins' gap. Offered only in a scene that has them (graphChoices), in place of Energy: the twins
+  // move along their exact path, and the energy ledger counts only bodies that forces move.
+  { id: 'gap', label: 'Gap', axis: 'gap / m' }
 ];
+
+/** The graphs a scene offers: Gap instead of Energy where there are chaos twins, else the first three. */
+export function graphChoices(scene: Pick<LedgerScene, 'bodies' | 'links'>): typeof GRAPH_CHOICES {
+  const twins = chaosPairs(scene.bodies, scene.links).length >= 2;
+  return GRAPH_CHOICES.filter((c) => (twins ? c.id !== 'energy' : c.id !== 'gap'));
+}
 
 /** One line of a graph: its values at the series' times, the colour token it is drawn in, and whether it is dashed. */
 interface GraphLine {
@@ -225,6 +235,18 @@ export function graphLines(tape: RunTape, choice: GraphChoice, scene: LedgerScen
       ]
     };
   }
+  if (choice === 'gap') {
+    // The distance between the lower bobs of the first two twins, as the readout under the experiment list gives it.
+    const [one, two] = chaosPairs(scene.bodies, scene.links);
+    const ia = one ? tape.layout.bodies.indexOf(one.lower.id) : -1;
+    const ib = two ? tape.layout.bodies.indexOf(two.lower.id) : -1;
+    const values = steps.map((s) => {
+      const r = tape.record(s);
+      if (!r || ia < 0 || ib < 0) return NaN;
+      return Math.hypot(r[ia * 13] - r[ib * 13], r[ia * 13 + 1] - r[ib * 13 + 1], r[ia * 13 + 2] - r[ib * 13 + 2]);
+    });
+    return { t, lines: [{ key: 'gap', label: one && two ? `gap ${one.k}–${two.k}` : 'gap', token: '--q-pos', dash: false, values }] };
+  }
   const i = bodyId === null ? -1 : tape.layout.bodies.indexOf(bodyId);
   const col = (k: number) => steps.map((s) => (i < 0 ? NaN : (tape.record(s)?.[i * 13 + k] ?? NaN)));
   const token = choice === 'position' ? '--q-pos' : '--q-vel';
@@ -247,7 +269,8 @@ export function nearestStep(tape: TapeLike, time: number): number {
 
 /** The body a position or velocity graph follows: the selected one when it moves, else the first that moves. */
 export function graphBody(bodies: BodyDef[], selection: string | null): BodyDef | undefined {
-  const moving = bodies.filter((b) => b.motion === 'dynamic');
+  // Moved by forces or along a path (SB60's twins): anything that is not fixed has a position and a velocity to draw.
+  const moving = bodies.filter((b) => b.motion !== 'static');
   return moving.find((b) => b.id === selection) ?? moving[0];
 }
 

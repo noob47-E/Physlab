@@ -9,7 +9,7 @@ import { massOf, useSandbox } from '../../sim/store'
 import { shownTape, useTape } from '../../sim/tapeStore'
 import { useScene } from '../../core/store'
 import { useSandboxView } from '../../sim/sandboxView'
-import { GRAPH_CHOICES, graphBody, graphLines, nearestStep, tickText, type GraphChoice } from '../../sim/graphSeries'
+import { GRAPH_CHOICES, graphBody, graphChoices, graphLines, nearestStep, tickText, type GraphChoice } from '../../sim/graphSeries'
 
 /** What the dock remembers between sessions: open or folded, and the graph chosen. */
 const PREF_KEY = 'physlab.graphDock'
@@ -37,13 +37,17 @@ function writePref(p: { open: boolean; choice: GraphChoice }): void {
 export function GraphDock() {
   const view = useSandboxView((s) => s.view)
   const [open, setOpen] = useState(() => readPref().open)
-  const [choice, setChoice] = useState<GraphChoice>(() => readPref().choice)
-  useEffect(() => writePref({ open, choice }), [open, choice])
+  const [picked, setChoice] = useState<GraphChoice>(() => readPref().choice)
+  useEffect(() => writePref({ open, choice: picked }), [open, picked])
 
   const bodies = useSandbox((s) => s.bodies)
   const links = useSandbox((s) => s.links)
   const world = useSandbox((s) => s.world)
   const selection = useSandbox((s) => s.selection)
+  // The graphs this scene offers (SB60: Gap in place of Energy beside the chaos twins); a choice it does not offer
+  // shows its first, and the student's own choice comes back in the next scene that has it.
+  const offered = graphChoices({ bodies, links })
+  const choice: GraphChoice = offered.some((c) => c.id === picked) ? picked : offered[0].id
   // Live, the lines follow the panel's live values (ten times a second), not every recorded step; in replay the tape
   // does not grow, and its revision says when it changed (a branch, a fine replay).
   const live = useSandbox((s) => s.live)
@@ -159,8 +163,8 @@ export function GraphDock() {
         <button className="btn h-6 px-1" onClick={() => setOpen((v) => !v)} title={open ? 'Fold the graph away' : 'Show the graph'} aria-expanded={open}>
           {open ? '▾' : '▸'}
         </button>
-        <span className="mr-auto font-semibold text-[color:var(--text-strong)]">Graph{body && choice !== 'energy' ? ` · ${body.name}` : ''}</span>
-        {GRAPH_CHOICES.map((c) => (
+        <span className="mr-auto font-semibold text-[color:var(--text-strong)]">Graph{body && (choice === 'position' || choice === 'velocity') ? ` · ${body.name}` : ''}</span>
+        {offered.map((c) => (
           <button key={c.id} className={`btn h-6 px-2 ${c.id === choice ? 'primary' : ''}`} onClick={() => setChoice(c.id)} title={`${c.label} against time (${c.axis})`} aria-pressed={c.id === choice}>
             {c.label}
           </button>

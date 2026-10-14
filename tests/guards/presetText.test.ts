@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest'
 import { PRESETS } from '../../src/renderer/src/sim/presets'
 import { dragCoefficient } from '../../src/renderer/src/sim/materials'
+import { gapPasses } from '../../src/renderer/src/sim/chaosTwins'
 
 type BuiltPreset = ReturnType<typeof PRESETS[0]['build']>
 
@@ -466,6 +467,18 @@ const PRESET_CHECKS: {
         ['3.17', TL],
         ['2.5', L],
       ]
+    }
+  },
+  {
+    id: 'chaosTwins',
+    check: (built) => {
+      // How far apart the upper arms of twins 1 and 2 start, from where the bobs are put.
+      const pivot = built.bodies.find(b => b.name === 'Pivot')!
+      const arm = (k: number) => {
+        const up = built.bodies.find(b => b.name === `Upper ${k}`)!
+        return (Math.atan2(up.position[0] - pivot.position[0], pivot.position[1] - up.position[1]) * 180) / Math.PI
+      }
+      return [['0.1', arm(2) - arm(1)], ['2.8', gapPasses(0.01)!], ['6.2', gapPasses(0.5)!], ['0.5', 0.5]]
     }
   },
   {

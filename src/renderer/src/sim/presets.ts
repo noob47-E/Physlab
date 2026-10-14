@@ -9,6 +9,7 @@
 import { makeBody } from './store'
 import { makeLink, ropeSegments } from './links'
 import { materialById } from './materials'
+import { CHAOS, buildChaos } from './chaosTwins'
 import { paintBodies } from './palette'
 import { buildKnifeEdge, buildMetreRule, buildPulleyBracket, buildRetortStand, buildSlottedHanger, buildSpokedPulley } from './apparatus'
 import { type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
@@ -480,6 +481,18 @@ const EXPERIMENTS: Preset[] = [
       const right = put('box', 'Beam 2', [0, 5, 1.5], { size: [0.15, 0.15, 0.15], motion: 'static', material: 'steel' })
       const bob = ball('Bob', [0, 3, 0], { size: [0.15, 0.15, 0.15], material: 'lead', velocity: [1.5, 0, 0], angularDamping: 0 })
       return { bodies: [floor(), left, right, bob], world: { ...VACUUM, twoD: false }, links: [join('string', left, bob, undefined, { length: 2.5 }), join('string', right, bob, undefined, { length: 2.5 })] }
+    }
+  },
+  {
+    id: 'chaosTwins',
+    label: 'Double pendulum: chaos',
+    topic: 'Oscillation',
+    tags: ['chaos', 'double pendulum', 'butterfly effect', 'sensitive', 'prediction'],
+    about: 'Chaos: the same rules, almost the same start, a completely different path. Three double pendulums let go 0.1° apart swing as one for 2.8 s and are 0.5 m apart by 6.2 s. A tiny difference grows until the twins share nothing.',
+    // SB60: the bobs follow the exact solution of the double pendulum (chaosTwins.ts), at 600 steps a second.
+    build: () => {
+      const twins = buildChaos([[CHAOS.upper, CHAOS.lower], [CHAOS.upper + CHAOS.apart, CHAOS.lower], [CHAOS.upper + 2 * CHAOS.apart, CHAOS.lower]])
+      return { bodies: [floor(), ...twins.bodies], links: twins.links, world: { ...VACUUM, stepRate: 600 } }
     }
   },
   {

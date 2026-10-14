@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { groupedPresets, presetBadges, PRESET_TOPICS, presetById, PRESETS } from '../src/renderer/src/sim/presets'
 import { dragCoefficient, frontalArea } from '../src/renderer/src/sim/materials'
 import { LINK_KINDS, ropeLinkMass, ropeSegments } from '../src/renderer/src/sim/links'
+import { gapPasses } from '../src/renderer/src/sim/chaosTwins'
 
 const G = 9.81
 const TAU = 2 * Math.PI
@@ -69,6 +70,8 @@ const EXPECTED: Record<string, [number, string][]> = {
   tug: [[4, 'kg'], [3, 'm/s'], [2, 'kg'], [12, 'kg m/s'], [6, 'kg'], [12 / 6, 'm/s'], [tugRope, 'kg'], [tugRope * 2, 'kg m/s'], [12 - tugRope * 2, 'kg m/s']],
   pendulum: [[2, 'm'], [TAU * Math.sqrt(2 / G), 's'], [pendulumPeriod(2, (53 * Math.PI) / 180), 's']],
   ropeswing: [[2, 'kg']],
+  // The gap between the first two twins' lower bobs passes 1 cm, then 0.5 m (the exact paths, read at 600 steps a second).
+  chaosTwins: [[0.1, '°'], [gapPasses(0.01)!, 's'], [gapPasses(0.5)!, 's'], [0.5, 'm']],
   swingbridge: [[2.5, 'm'], [2, 'm'], [TAU * Math.sqrt(2 / G), 's'], [TAU * Math.sqrt(2.5 / G), 's']],
   spring: [[TAU * Math.sqrt(2 / 200), 's'], [2, 'kg'], [200, 'N/m']],
   springice: [[2, 'kg'], [50, 'N/m'], [0.6, 'm'], [TAU * Math.sqrt(2 / 50), 's']]
@@ -164,7 +167,7 @@ describe('what the presets promise', () => {
     expect(presetById('balance')?.topic).toBe('Forces')
     expect(presetById('tug')?.topic).toBe('Momentum')
     expect(presetById('swingbridge')?.topic).toBe('Oscillation')
-    expect(PRESETS).toHaveLength(29)
+    expect(PRESETS).toHaveLength(30)
   })
 })
 

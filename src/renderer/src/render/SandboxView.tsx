@@ -19,6 +19,7 @@ import { grabForceCap, SimWorld, STRIDE } from '../sim/world'
 import type { BodyDef, BodyId, BodyState } from '../sim/types'
 import type { V3 } from '../math/vec'
 import { energyOf, groundTopOf } from '../sim/energy'
+import { chaosDrivers } from '../sim/chaosTwins'
 import { FALL_LIMIT, recordReadings } from '../sim/stepping'
 import { dragSetsStart, grabAction } from '../sim/inspector'
 import { toScreen } from './cameraUtils'
@@ -377,6 +378,14 @@ export function SandboxView() {
     applied = bodies
     invalidate()
   }, [bodies, links, ready, invalidate])
+
+  // SB60: bodies that follow a known path (the chaos twins on the exact double-pendulum solution) are driven from their
+  // definitions, so the paths follow an edited start or gravity, and a scene without them drives nothing.
+  useEffect(() => {
+    const w = sim.current
+    if (!w || !ready) return
+    w.setDrivers(chaosDrivers(bodies, links, world.gravity))
+  }, [bodies, links, world.gravity, ready])
 
   // Reset: everything back to its definition, clock at zero. This is the only path that rebuilds
   // without preserving; it is keyed on a counter because comparing the objects proved nothing.
