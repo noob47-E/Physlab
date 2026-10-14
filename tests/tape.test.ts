@@ -15,6 +15,24 @@ describe('Tape', () => {
     ropes: []
   }
 
+  // 14 Oct: a slowed or scrubbed replay's playhead is a fraction; reading the tape there threw "start offset of
+  // Float32Array should be a multiple of 4" and crashed the Sandbox panel. A fraction reads the step at or before it.
+  it('a fractional step reads the step at or before it, and never throws', () => {
+    const tape = new Tape(layout, 240, 0, 0)
+    const rec = new Float32Array(REC_FLOATS * 2)
+    for (let step = 0; step < 300; step++) {
+      rec[0] = step
+      tape.push(step, rec)
+    }
+    for (const at of [10.5, 239.25, 240.75, 112.5, 0.001]) {
+      expect(() => tape.record(at)).not.toThrow()
+      expect(() => tape.work(at)).not.toThrow()
+      expect(tape.record(at)?.[0]).toBe(Math.floor(at))
+    }
+    expect(tape.record(299.9)?.[0]).toBe(299)
+    expect(tape.record(-0.5)).toBeNull()
+  })
+
   it('push 3 seconds at rate 240 for 2 bodies', () => {
     const tape = new Tape(layout, 240, 0, 0)
     expect(tape.bodyCount).toBe(2)

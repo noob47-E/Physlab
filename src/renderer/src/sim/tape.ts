@@ -118,6 +118,10 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   record(step: number): Float32Array | null {
+    // A playhead between two steps (a slowed or scrubbed replay) is a fraction: the record shown is the step at or before
+    // it. Unfloored, the view started part-way into a float and threw "start offset of Float32Array should be a multiple
+    // of 4", which crashed the Sandbox panel (the Angle fold read the tape at the raw playhead, 14 Oct).
+    step = Math.floor(step)
     if (step < this._first || step > this._last || this.chunks.length === 0) return null
     for (const chunk of this.chunks) {
       if (step >= chunk.startStep && step < chunk.startStep + this.rate) {
@@ -130,6 +134,7 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   work(step: number): Float32Array | null {
+    step = Math.floor(step) // as in record(): a fractional playhead reads the step at or before it
     if (step < this._first || step > this._last || this.chunks.length === 0) return null
     for (const chunk of this.chunks) {
       if (step >= chunk.startStep && step < chunk.startStep + this.rate) {
