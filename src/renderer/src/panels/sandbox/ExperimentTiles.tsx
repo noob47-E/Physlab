@@ -1,5 +1,5 @@
-// Six picture tiles of experiments (SB63, the simple panel): a pendulum, a mass on a spring, a bouncing ball, a collision, a
-// projectile and a lever, each a small drawing and a short word. A first-time student picks one and presses Play; the
+// Eight picture tiles of experiments (SB63, the simple panel): a pendulum, a mass on a spring, a bouncing ball, a collision, a
+// projectile, a lever, an Atwood machine and chaos twins, each a small drawing and a short word. A first-time student picks one and presses Play; the
 // twenty-nine-experiment list with its search stays behind "More experiments". A tile loads its experiment by the one path
 // the list takes (loadExperiment), and the loaded one is lit, so the panel always says which experiment is on the drawing.
 //
@@ -11,7 +11,7 @@ import { useSandbox } from '../../sim/store'
 import { loadExperiment } from '../../sim/transportActions'
 
 /**
- * The six tiles, in order: the preset's id (sim/presets.ts) and the word on the tile. Four are the preset's own label;
+ * The eight tiles, in order: the preset's id (sim/presets.ts) and the word on the tile. Four are the preset's own label;
  * "Head-on collision" is shortened for a tile, and Seesaw is named for the physics it teaches, the owner's word (Lever).
  * tests/simpleSandbox.test.ts holds every id to a real preset and the four plain labels to the presets' own.
  */
@@ -21,7 +21,9 @@ export const EXPERIMENT_TILES: { id: string; label: string }[] = [
   { id: 'bounce', label: 'Bouncing ball' },
   { id: 'collision', label: 'Collision' },
   { id: 'projectile', label: 'Projectile' },
-  { id: 'seesaw', label: 'Lever' }
+  { id: 'seesaw', label: 'Lever' },
+  { id: 'atwood', label: 'Atwood machine' },
+  { id: 'chaosTwins', label: 'Chaos twins' }
 ]
 
 /** The accent-coloured body of a drawing: the thing that moves. */
@@ -84,6 +86,31 @@ const PICTURES: Record<string, () => React.ReactNode> = {
       <line x1="5" y1="29" x2="43" y2="13" />
       <rect x="6.45" y="18.36" width="8" height="8" rx="1" transform="rotate(-22.8 10.45 22.36)" className={BODY} />
       <circle cx="35.45" cy="11.8" r="4" />
+    </Picture>
+  ),
+  atwood: () => (
+    <Picture>
+      <line x1="16" y1="2" x2="32" y2="2" />
+      <line x1="24" y1="2" x2="24" y2="6" />
+      <circle cx="24" cy="10" r="4" />
+      <line x1="20.5" y1="14" x2="20.5" y2="26" />
+      <line x1="27.5" y1="14" x2="27.5" y2="30" />
+      <circle cx="20.5" cy="28" r="4" className={BODY} />
+      <circle cx="27.5" cy="32" r="5.5" className={BODY} />
+    </Picture>
+  ),
+  chaosTwins: () => (
+    <Picture>
+      <line x1="16" y1="4" x2="32" y2="4" />
+      <line x1="16" y1="4" x2="18" y2="16" />
+      <line x1="18" y1="16" x2="20" y2="28" />
+      <circle cx="20" cy="30" r="3" className={BODY} />
+      <line x1="32" y1="4" x2="30" y2="16" strokeDasharray="2 3" className={GUIDE} />
+      <line x1="30" y1="16" x2="27" y2="29" strokeDasharray="2 3" className={GUIDE} />
+      <circle cx="27" cy="31" r="3" />
+      <line x1="24" y1="4" x2="26" y2="18" />
+      <line x1="26" y1="18" x2="28" y2="30" />
+      <circle cx="28" cy="32" r="3" className={BODY} />
     </Picture>
   )
 }

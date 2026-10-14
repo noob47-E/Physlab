@@ -102,20 +102,20 @@ describe('Simple is the default', () => {
   })
 })
 
-describe('the six tiles', () => {
-  it('are the six experiments of the contract, each a real preset with a label and a drawing', () => {
-    expect(EXPERIMENT_TILES.map((t) => t.id)).toEqual(['pendulum', 'spring', 'bounce', 'collision', 'projectile', 'seesaw'])
+describe('the eight tiles', () => {
+  it('are the eight experiments of the contract, each a real preset with a label and a drawing', () => {
+    expect(EXPERIMENT_TILES.map((t) => t.id)).toEqual(['pendulum', 'spring', 'bounce', 'collision', 'projectile', 'seesaw', 'atwood', 'chaosTwins'])
     for (const t of EXPERIMENT_TILES) expect(presetById(t.id), t.id).toBeDefined()
-    // The tile's word is the preset's own, except the two the contract shortens or renames (Collision; Lever for the seesaw).
-    for (const t of EXPERIMENT_TILES) if (t.id !== 'collision' && t.id !== 'seesaw') expect(t.label, t.id).toBe(presetById(t.id)!.label)
+    // The tile's word is the preset's own, except for tiles the contract shortens or renames (Collision; Lever for the seesaw; Chaos twins for the double pendulum).
+    for (const t of EXPERIMENT_TILES) if (t.id !== 'collision' && t.id !== 'seesaw' && t.id !== 'chaosTwins') expect(t.label, t.id).toBe(presetById(t.id)!.label)
     expect(presetById('collision')!.label).toContain('collision')
     const html = render(ExperimentTiles)
     for (const t of EXPERIMENT_TILES) {
       expect(html).toContain(`data-experiment="${t.id}"`)
       expect(html).toContain(`>${t.label}<`)
     }
-    // Six drawings: inline SVG, strokes through currentColor and theme tokens, no hex and no image files.
-    expect(html.match(/<svg\b/g)?.length).toBe(6)
+    // Eight drawings: inline SVG, strokes through currentColor and theme tokens, no hex and no image files.
+    expect(html.match(/<svg\b/g)?.length).toBe(8)
     expect(html).toMatch(/stroke="currentColor"/)
     expect(html).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
     expect(html).not.toMatch(/<img\b/)
@@ -130,7 +130,7 @@ describe('the six tiles', () => {
       expect(useSandbox.getState().bodies.map((b) => b.name)).toEqual(presetById(t.id)!.build().bodies.map((b) => b.name))
       const html = render(ExperimentTiles)
       const tiles = buttons(html).filter((b) => attr(b.attrs, 'data-experiment'))
-      expect(tiles).toHaveLength(6)
+      expect(tiles).toHaveLength(8)
       for (const tile of tiles) expect(attr(tile.attrs, 'aria-pressed'), attr(tile.attrs, 'data-experiment')!).toBe(attr(tile.attrs, 'data-experiment') === t.id ? 'true' : 'false')
       const lit = tiles.find((b) => attr(b.attrs, 'data-experiment') === t.id)!
       expect(attr(lit.attrs, 'class')).toContain('var(--accent)')
