@@ -3,7 +3,7 @@
 // top. Measure and Angle pick objects into the selection. Pure: render/Interaction.tsx drags, render/Solid3DViews.tsx draws.
 
 import type { Computed, ObjId, SceneObject } from '../core/types'
-import { sizesOf, type SolidShape } from '../math/solidShape'
+import { isFromShape, sizesOf, type SolidShape } from '../math/solidShape'
 import type { V3 } from '../math/vec'
 
 export type HandlePart = 'lift' | 'size' | 'height'
@@ -28,7 +28,7 @@ export function handlesOf(o: SceneObject, c: Computed, wpp: number): Handle[] {
     return [{ part: 'lift', at: [c.p[0], c.p[1], r3(c.p[2] + LIFT_PX * wpp)], from: c.p }]
   }
   if (o.type === 'solid' && c.type === 'solid') {
-    const out: Handle[] = [{ part: 'size', at: c.shape.sizeHandle }]
+    const out: Handle[] = isFromShape(o.kind) ? [] : [{ part: 'size', at: c.shape.sizeHandle }]
     if (sizesOf(o.kind).some((s) => s.height)) out.push({ part: 'height', at: c.shape.top })
     return out
   }

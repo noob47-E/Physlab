@@ -21,9 +21,13 @@ import {
 } from './solids3d'
 import { cross, len, sub, type V3 } from './vec'
 import { isNoise } from './noise'
+import { extrudeOutline, pyramidOver, hullFromCorners, type Poly3 } from './polyhedron'
 
 export const SOLID_KINDS = ['cube', 'cuboid', 'prism', 'pyramid', 'sphere', 'cylinder', 'cone', 'tetrahedron', 'octahedron', 'dodecahedron', 'icosahedron', 'frustum', 'hemisphere'] as const
-export type SolidKind = (typeof SOLID_KINDS)[number]
+/** T974: the solids made from a shape (Extrude, Apex, From corners); not tiles of the gallery. */
+const FROM_SHAPE_KINDS = ['extrusion', 'apex', 'corners'] as const
+export type SolidKind = (typeof SOLID_KINDS)[number] | (typeof FROM_SHAPE_KINDS)[number]
+export const isFromShape = (k: SolidKind): boolean => (FROM_SHAPE_KINDS as readonly string[]).includes(k)
 
 /** The seven of the 3D shapes row; the rest are in the Shapes gallery. */
 export const BASIC_SOLIDS: readonly SolidKind[] = ['cube', 'cuboid', 'prism', 'pyramid', 'sphere', 'cylinder', 'cone']
@@ -42,7 +46,10 @@ export const SOLID_NAMES: Record<SolidKind, string> = {
   dodecahedron: 'Dodecahedron',
   icosahedron: 'Icosahedron',
   frustum: 'Frustum of a cone',
-  hemisphere: 'Hemisphere'
+  hemisphere: 'Hemisphere',
+  extrusion: 'Prism',
+  apex: 'Pyramid',
+  corners: 'Polyhedron'
 }
 
 interface SolidSize {
@@ -69,7 +76,10 @@ const SIZES: Record<SolidKind, SolidSize[]> = {
   dodecahedron: [S('a', 'edge a', 2.5)],
   icosahedron: [S('a', 'edge a', 3.5)],
   frustum: [S('R', 'base radius R', 3.5), S('r', 'top radius r', 1.5), S('h', 'height h', 4, true)],
-  hemisphere: [S('r', 'radius r', 3)]
+  hemisphere: [S('r', 'radius r', 3)],
+  extrusion: [S('h', 'height h', 4, true)],
+  apex: [],
+  corners: []
 }
 
 /** A kind's sizes, in order, each with its default. */
@@ -89,6 +99,14 @@ export interface SolidShape {
   top: V3
   /** Where the size handle sits: the base's farthest point along +x. */
   sizeHandle: V3
+  /** T974: a solid made from a shape also keeps its true faces (the `faces` above are triangles), edges and face areas. */
+  poly?: { polys: number[][]; edges: [number, number][]; faceAreas: number[] }
+}
+
+/** T974: the outline or corners (and apex) of a solid made from a shape, each relative to the solid's `at`. */
+interface ShapeSource {
+  pts: V3[]
+  apex?: V3
 }
 
 function build(kind: SolidKind, v: Record<string, number>): Polyhedron {
@@ -119,6 +137,8 @@ function build(kind: SolidKind, v: Record<string, number>): Polyhedron {
       return createFrustum(v.R, v.r, v.h)
     case 'hemisphere':
       return createHemisphere(v.r)
+    default:
+      throw new Error('a solid made from a shape is built from its outline')
   }
 }
 
@@ -165,17 +185,43 @@ function featureEdges(faces: number[][], pts: V3[]): [number, number][] {
   return out
 }
 
+function fromShape(kind: SolidKind, v: Record<string, number>, at: V3, from?: ShapeSource): SolidShape {
+  if (!from || from.pts.length < 3) throw new Error('this solid has lost its outline')
+  const abs = (p: V3): V3 => [p[0] + at[0], p[1] + at[1], p[2] + at[2]]
+  const base = from.pts.map(abs)
+  let poly: Poly3
+  if (kind === 'extrusion') poly = extrudeOutline(base, v.h)
+  else if (kind === 'apex') poly = pyramidOver(base, abs(from.apex ?? [0, 0, 1]))
+  else poly = hullFromCorners(base)
+  const zs = poly.vertices.map((p) => p[2])
+  const zLow = Math.min(...zs)
+  const height = Math.max(...zs) - zLow
+  return {
+    vertices: poly.vertices,
+    faces: poly.faces,
+    edges: poly.edges.map(([a, b]) => [poly.vertices[a], poly.vertices[b]]),
+    volume: poly.volume,
+    area: poly.area,
+    height,
+    base: [at[0], at[1], zLow],
+    top: [at[0], at[1], Math.max(...zs)],
+    sizeHandle: [...at],
+    poly: { polys: poly.polys, edges: poly.edges, faceAreas: poly.faceAreas }
+  }
+}
+
 /**
  * A kind's solid with the given sizes (any left out take their default), standing on the floor at `at`. A size that is not
  * a number above 0 is refused in words ("the side a must be more than 0").
  */
-export function solidShape(kind: SolidKind, size: Record<string, number>, at: V3): SolidShape {
+export function solidShape(kind: SolidKind, size: Record<string, number>, at: V3, from?: ShapeSource): SolidShape {
   const v: Record<string, number> = {}
   for (const s of SIZES[kind]) {
     const x = size[s.key] ?? s.value
     if (!(x > 0)) throw new Error(`the ${s.label} must be more than 0`)
     v[s.key] = x
   }
+  if (isFromShape(kind)) return fromShape(kind, v, at, from)
   const poly = build(kind, v)
   const raw: V3[] = poly.vertices.map((p: Vector3) => [p.x, p.y, p.z])
   const xs = raw.map((p) => p[0])
@@ -190,7 +236,8 @@ export function solidShape(kind: SolidKind, size: Record<string, number>, at: V3
     const first = 1 + 7 * ring
     pairs = Array.from({ length: ring }, (_, i): [number, number] => [first + i, first + ((i + 1) % ring)])
   }
-  const height = Math.max(...zs) - Math.min(...zs)
+  const zLow = Math.min(...zs)
+  const height = Math.max(...zs) - zLow
   return {
     vertices,
     faces: poly.faces,

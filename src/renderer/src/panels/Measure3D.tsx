@@ -13,6 +13,7 @@ import { SOLID_KINDS, SOLID_NAMES, sizesOf } from '../math/solidShape'
 import { Tex } from '../ui/Tex'
 import { NumField } from '../ui/fields'
 import { itemOf, objectList } from './measure3dItems'
+import { apexOverPolygon, extrudePolygon } from './shapeSolids'
 import { addSolid } from './solids3d'
 import { TheoremTiles } from './TheoremTiles'
 
@@ -72,6 +73,36 @@ function SolidSizes({ id }: { id: ObjId }) {
   )
 }
 
+/** A selected shape (a polygon in 3-D): Extrude pushes it up into a prism, Apex lifts a point over it into a pyramid. */
+function ShapeActions({ id }: { id: ObjId }) {
+  const [h, setH] = useState('4')
+  const [apex, setApex] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  return (
+    <div className="flex flex-col gap-1 py-1" data-shape-actions="">
+      <div className="flex flex-wrap items-center gap-1">
+        <label className="flex items-center gap-1 text-small">
+          <span className="text-ink-faint">height h</span>
+          <input className="field w-16 pointer-coarse:min-h-[44px]" aria-label="Extrude height" value={h} onChange={(e) => setH(e.target.value)} />
+        </label>
+        <button type="button" className="btn px-2 text-small pointer-coarse:min-h-[44px]" title="Push the shape straight up into a prism" onClick={() => setErr(extrudePolygon(id, h))}>
+          Extrude
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <label className="flex items-center gap-1 text-small">
+          <span className="text-ink-faint">apex</span>
+          <input className="field w-28 pointer-coarse:min-h-[44px]" aria-label="Apex point" placeholder="(1, 1, 3)" value={apex} onChange={(e) => setApex(e.target.value)} />
+        </label>
+        <button type="button" className="btn px-2 text-small pointer-coarse:min-h-[44px]" title="Make a pyramid up to the apex (empty: 3 above the middle)" onClick={() => setErr(apexOverPolygon(id, apex))}>
+          Apex
+        </button>
+      </div>
+      {err && <p className="text-small text-[color:var(--bad)]">{err}</p>}
+    </div>
+  )
+}
+
 /** A free point's x, y, z, typed. */
 function PointBoxes({ id }: { id: ObjId }) {
   const o = useScene((s) => s.objects[id])
@@ -106,6 +137,7 @@ export function Measure3DPanel() {
   const m = items.every(Boolean) ? measure3D(items as NonNullable<(typeof items)[number]>[], settings) : null
   const solid = sel.length === 1 && sel[0].type === 'solid' ? sel[0] : null
   const point = sel.length === 1 && sel[0].type === 'point' ? sel[0] : null
+  const shape = sel.length === 1 && sel[0].type === 'polygon' && ev.values.get(sel[0].id)?.type === 'polygon' ? sel[0] : null
   const list = objectList(order.filter((id) => objects[id]?.space === space), objects, ev, settings)
   return (
     <div className="panel pb-6" data-measure3d="">
@@ -114,6 +146,7 @@ export function Measure3DPanel() {
           <div className="text-small font-semibold text-ink-strong">{m?.title ?? sel.map((o) => displayName(o, objects, ev.values.get(o.id))).join(' and ')}</div>
           {point && <PointBoxes id={point.id} />}
           {solid && <SolidSizes id={solid.id} />}
+          {shape && <ShapeActions key={shape.id} id={shape.id} />}
           {m && m.rows.length > 1 && (
             <div className="mt-1 flex gap-1" role="tablist">
               {m.rows.map((r, i) => (

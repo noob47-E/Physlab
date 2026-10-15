@@ -55,6 +55,7 @@ export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCard
   'tool:delete': { title: 'Delete', shortcut: 'X', sentence: 'Click an object to remove it; Undo brings it back.', Animation: Delete },
   // 3D-3B: Geometry's 3-D row.
   'tool:plane': { title: 'Plane', sentence: 'Click three points, or the floor three times, for the flat sheet through all three.', Animation: Plane3D },
+  'tool:shape': { title: 'Shape', sentence: 'Click grid points for each corner, then click the first point (or press Enter) to close the shape.', Animation: Polygon },
   'tool:solids': { title: '3D shapes', sentence: 'Pick a shape in the row under the tools and it stands on the floor, ready to measure.', Animation: Solids3D },
   'tool:measure3d': { title: 'Measure', sentence: 'Click a solid, a segment, two points, or a point and a plane, and the panel works it out.', Animation: Measure3D },
   'tool:angle3d': { title: 'Angle', sentence: 'Click two lines, a line and a plane, or two planes, and the panel works out the angle.', Animation: Angle3D }

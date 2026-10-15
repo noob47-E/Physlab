@@ -21,7 +21,7 @@ beforeEach(() => {
 describe('the 3-D tool row', () => {
   it('Geometry in 3-D: Move, Point, Segment, Line, Plane, 3D shapes, Measure, Angle, Delete', () => {
     const row = toolsFor(modeById('shapes'), '3d').filter((t) => t !== '|')
-    expect(row.map((id) => TOOLS.find((t) => t.id === id)!.label)).toEqual(['Move', 'Point', 'Segment', 'Line', 'Plane', '3D shapes', 'Measure', 'Angle', 'Delete'])
+    expect(row.map((id) => TOOLS.find((t) => t.id === id)!.label)).toEqual(['Move', 'Point', 'Segment', 'Line', 'Plane', 'Shape', '3D shapes', 'Measure', 'Angle', 'Delete'])
   })
   it('Geometry in 2-D keeps its row; another mode keeps its row in 3-D', () => {
     expect(toolsFor(modeById('shapes'), '2d')).toEqual(modeById('shapes').tools)
@@ -47,6 +47,33 @@ describe('Plane', () => {
     expect(advanceTool('plane', ids)).toBe(true)
     expect(Object.values(scene().objects).filter((o) => o.type === 'plane')).toHaveLength(1)
     expect(useTool.getState().picks).toEqual([])
+  })
+})
+
+describe('Shape', () => {
+  const corners = (pts: [number, number, number][]) => {
+    const b = new Builder()
+    const ids = pts.map((p) => b.point(p).id)
+    b.commit()
+    return ids
+  }
+  it('closes on the first point into a real polygon on the working plane, then selects it', () => {
+    expect(createsPointsOnEmpty('shape')).toBe(true)
+    const ids = corners([[0, 0, 3], [4, 0, 3], [4, 3, 3]])
+    expect(advanceTool('shape', ids)).toBe(false)
+    expect(advanceTool('shape', [...ids, ids[0]])).toBe(true)
+    const polys = Object.values(scene().objects).filter((o) => o.type === 'polygon')
+    expect(polys).toHaveLength(1)
+    expect(scene().selection).toEqual([polys[0].id])
+    expect(useTool.getState().picks).toEqual([])
+  })
+  it('refuses a self-crossing outline in words and keeps the corners, minus the closing click', () => {
+    const ids = corners([[0, 0, 0], [4, 4, 0], [4, 0, 0], [0, 4, 0]])
+    useTool.setState({ picks: [...ids, ids[0]] })
+    expect(advanceTool('shape', [...ids, ids[0]])).toBe(true)
+    expect(Object.values(scene().objects).some((o) => o.type === 'polygon')).toBe(false)
+    expect(useTool.getState().notice).toMatch(/crosses itself/)
+    expect(useTool.getState().picks).toEqual(ids)
   })
 })
 

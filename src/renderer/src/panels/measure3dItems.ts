@@ -56,7 +56,7 @@ export function itemOf(o: SceneObject, c: Computed | undefined, objects: Record<
       return { type: 'plane', name, a: n[0], b: n[1], c: n[2], d: n[0] * c.pts[0][0] + n[1] * c.pts[0][1] + n[2] * c.pts[0][2] }
     }
     case 'solid':
-      return o.type === 'solid' ? { type: 'solid', name, kind: o.kind, size: c.size, volume: c.shape.volume, area: c.shape.area } : null
+      return o.type === 'solid' ? { type: 'solid', name, kind: o.kind, size: c.size, volume: c.shape.volume, area: c.shape.area, poly: c.shape.poly ? { ...c.shape.poly, vertices: c.shape.vertices } : undefined } : null
     default:
       return null
   }

@@ -73,6 +73,7 @@ const ICONS: Record<ToolId, React.ReactNode> = {
   text: <Type size={16} />,
   delete: <Eraser size={16} />,
   plane: <Layers size={16} />,
+  shape: <Pentagon size={16} />,
   solids: <Box size={16} />,
   measure3d: <Ruler size={16} />,
   angle3d: <SquareDashedBottom size={16} />

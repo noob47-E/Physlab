@@ -1796,3 +1796,15 @@ math-field.math-input::part(menu-toggle) {
   overflow-y: hidden;
   padding: 2px 0;
 }
+/* Graphing's docked keypad: under the lines, never over the graph; 44 px keys on touch. */
+.graph-keypad .keys {
+  gap: 3px;
+}
+.graph-keypad .key {
+  height: 32px;
+}
+@media (pointer: coarse) {
+  .graph-keypad .key {
+    height: 44px;
+  }
+}

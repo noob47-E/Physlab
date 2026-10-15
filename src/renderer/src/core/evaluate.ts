@@ -290,7 +290,7 @@ export function evaluateScene(
         // 3D-3B: each size is a formula (a typed 4, a slider); math/solidShape.ts refuses one that is not above 0, in words.
         const size: Record<string, number> = {}
         for (const [k, src] of Object.entries(o.size)) size[k] = evalNumber(src)
-        return { type: 'solid', kind: o.kind, shape: solidShape(o.kind, size, o.at), size }
+        return { type: 'solid', kind: o.kind, shape: solidShape(o.kind, size, o.at, o.pts ? { pts: o.pts, apex: o.apex } : undefined), size }
       }
       case 'plane': {
         const pts: [V3, V3, V3] = [needPoint(o.def.a), needPoint(o.def.b), needPoint(o.def.c)]

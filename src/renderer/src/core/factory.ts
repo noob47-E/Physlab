@@ -105,9 +105,9 @@ export class Builder {
   }
 
   /** 3D-3B: a solid standing on the floor at `at`; a size left out takes its default. */
-  solid(kind: SolidKind, size: Record<string, string>, at: V3, opts: Common = {}): SolidObj {
+  solid(kind: SolidKind, size: Record<string, string>, at: V3, opts: Common = {}, from?: { pts: V3[]; apex?: V3 }): SolidObj {
     const full = Object.fromEntries(sizesOf(kind).map((s) => [s.key, size[s.key] ?? String(s.value)]))
-    return this.push({ ...this.base('solid', opts), type: 'solid', kind, at, size: full, themed: '--solid-edge' })
+    return this.push({ ...this.base('solid', opts), type: 'solid', kind, at, size: full, ...(from ? { pts: from.pts, apex: from.apex } : {}), themed: '--solid-edge' })
   }
 
   /** 3D-3B: the plane through three points. */

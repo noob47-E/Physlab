@@ -1,9 +1,9 @@
-// Graphing's own panel: a list of the lines on the drawing, each one typed and changed in place.
+﻿// Graphing's own panel: a list of the lines on the drawing, each one typed and changed in place.
 // Every row is a graph in the scene store, so the command bar, the Outliner and Undo all see the
 // same thing (P-GCALC GC4; the rules are in expressionRows.ts).
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, Keyboard, Plus, X } from 'lucide-react'
 import { scene, useScene } from '../core/store'
 import { replaceGraphEquation } from '../lang/graphEdit'
 import { runCommand } from '../lang/commands'
@@ -12,7 +12,11 @@ import { cssColor } from '../app/theme'
 import { EXPRESSION_WORDS as W, expressionRows, moveRow, rangeEdit, rangeOf, type ExpressionRow } from './expressionRows'
 import { fmt } from '../math/format'
 import { bumpAction } from '../core/actionSignals'
+import { Tex } from '../ui/Tex'
+import { graphLineToTeX } from './expressionTex'
 import { TryOne3D } from './TryOne3D'
+import { GraphKeypad } from './GraphKeys'
+import { readKeypadOn, writeKeypadOn } from './graphKeypad'
 
 const graphCount = (): number => Object.values(scene().objects).filter((o) => o.type === 'graph').length
 
@@ -28,6 +32,7 @@ export function Expressions() {
   const is3D = useScene((s) => s.viewMode === '3d')
   const [problem, setProblem] = useState<{ id: string; text: string } | null>(null)
   const [draft, setDraft] = useState('')
+  const [keypad, setKeypad] = useState(readKeypadOn)
 
   const move = (id: string, dir: -1 | 1) => {
     scene().setOrder(moveRow(scene().order, rows.map((r) => r.id), id, dir))
@@ -48,6 +53,19 @@ export function Expressions() {
       <div className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-1">
         <span className="font-semibold text-[var(--text-strong)]">{W.heading}</span>
         <span className="flex-1" />
+        <button
+          className={`${ICON} ${keypad ? 'text-[var(--accent)]' : ''}`}
+          title="Keypad"
+          aria-label="Keypad"
+          aria-pressed={keypad}
+          data-keypad-toggle
+          onClick={() => {
+            writeKeypadOn(!keypad)
+            setKeypad(!keypad)
+          }}
+        >
+          <Keyboard size={14} />
+        </button>
         <button className={ICON} title={W.add} aria-label={W.add} onClick={() => document.getElementById('expressions-new')?.focus()}>
           <Plus size={14} />
         </button>
@@ -67,7 +85,7 @@ export function Expressions() {
             onMove={(dir) => move(r.id, dir)}
           />
         ))}
-        <div className="px-3 py-2">
+        <div className="px-3 py-2" data-graph-line>
           <input
             id="expressions-new"
             className="field w-full"
@@ -82,6 +100,7 @@ export function Expressions() {
           />
         </div>
       </div>
+      {keypad && <GraphKeypad />}
     </div>
   )
 }
@@ -109,6 +128,9 @@ function Row({
   const range = rangeOf(obj)
   const [from, setFrom] = useState(range ? fmt(range.from, 10) : '')
   const [to, setTo] = useState(range ? fmt(range.to, 10) : '')
+  // A line not being edited is shown typeset; clicking it opens the text box with a live preview.
+  const [editing, setEditing] = useState(false)
+  const [live, setLive] = useState(row.source)
   // The boxes follow the line: a range typed into the equation, an edit that drops it, Undo or Redo
   // must not leave old ends that a blur would quietly apply again (or quietly clear).
   useEffect(() => {
@@ -142,8 +164,25 @@ function Row({
       <div className="flex items-center gap-2">
         {/* The theme-matched colour, so the dot reads on Light as well as on the dark themes. */}
         <span className="h-3 w-3 shrink-0 rounded-full border border-[var(--line-2)]" style={{ background: obj ? cssColor(obj) : row.color, opacity: row.visible ? 1 : 0.3 }} />
-        <div className="min-w-0 flex-1">
-          <TextField mono value={row.source} onCommit={(v) => void commit(v)} />
+        <div className="min-w-0 flex-1" data-graph-line>
+          {editing ? (
+            <>
+              <TextField mono autoFocus value={row.source} onCommit={(v) => void commit(v)} onText={setLive} onLeave={() => setEditing(false)} />
+              <LineTex text={live} />
+            </>
+          ) : (
+            <button
+              type="button"
+              className="field min-h-[44px] w-full overflow-x-auto text-left"
+              aria-label={`Edit ${row.source}`}
+              onClick={() => {
+                setLive(row.source)
+                setEditing(true)
+              }}
+            >
+              {problem ? <span className="font-mono">{row.source}</span> : <LineTex text={row.source} plain />}
+            </button>
+          )}
         </div>
         <button
           className={ICON}
@@ -203,4 +242,11 @@ function Row({
       {rangeNote && <div className="mt-0.5 text-fine text-[var(--text-faint)]">{rangeNote}</div>}
     </div>
   )
+}
+
+/** A graph line typeset; one that does not read shows its plain text (the row's own problem line carries the error words). */
+function LineTex({ text, plain = false }: { text: string; plain?: boolean }) {
+  const r = useMemo(() => graphLineToTeX(text), [text])
+  if (!r.ok) return plain || text.trim() ? <span className="font-mono">{text}</span> : null
+  return <Tex tex={r.tex} className={plain ? '' : 'mt-0.5 block text-small text-[var(--text-dim)]'} />
 }

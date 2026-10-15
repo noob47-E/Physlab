@@ -404,7 +404,7 @@ describe('nothing that looks like a handheld calculator survives', () => {
 
   it('keeps the keypad from ever taking the focus, and MathLive’s own keyboard off', () => {
     const maths = readFileSource('panels/Maths.tsx')
-    const keypad = maths.slice(maths.indexOf('const KeypadPopover'), maths.indexOf('function Answer('))
+    const keypad = maths.slice(maths.indexOf('const KeypadPopover'), maths.indexOf('function Answer(')) + readFileSource('ui/Keypad.tsx')
     // Every button in the popover, and the popover itself, cancels mousedown, so the field keeps
     // the caret and physical typing carries on while the keypad is open.
     const buttons = keypad.match(/<button(?:=>|[^>])*>/g) ?? []

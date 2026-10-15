@@ -18,6 +18,7 @@ import type { TurnDirection } from './viewMath'
 import { GpuParticles, useParticleLab } from './GpuParticles'
 import { cancelTool, finishTool, TOOLS, undoLastPick, useTool } from './tools'
 import { GRID_STYLES, normaliseGridStyle } from './gridMath'
+import { clampWorkZ, GRID3D_MODES, normaliseGrid3D } from '../math/workingPlane'
 import { normalizeRect } from './selectMath'
 import { useScene } from '../core/store'
 import { SliderDock } from '../panels/SliderDock'
@@ -184,7 +185,8 @@ export function Viewport() {
   const turning3D = drawing && viewMode === '3d'
   // In 3-D the tool's hint also says how to turn, which nothing on screen used to (Fix 3); with
   // the Turn switch on, the left button is not the tool's at all and the hint says so.
-  const toolHint = info ? info.hint[Math.min(picks, info.hint.length - 1)] : ''
+  const notice = useTool((t) => t.notice)
+  const toolHint = notice ?? (info ? info.hint[Math.min(picks, info.hint.length - 1)] : '')
   const hint =
     turning3D && turnOn
       ? 'Turn is on: drag (or use one finger) to turn the view. Click Turn again, or choose a tool, to draw.'
@@ -244,6 +246,7 @@ export function Viewport() {
               <Grid3x3 size={14} />
             </button>
             <GridStylePicker />
+            {viewMode === '3d' && <Grid3DControls />}
             <button className={`icon-btn ${settings.snap ? 'on' : ''}`} onClick={() => setSettings({ snap: !settings.snap })} title="Snap to grid">
               <Magnet size={14} />
             </button>
@@ -255,7 +258,7 @@ export function Viewport() {
       </div>
       )}
       {drawing && (
-      <div data-tour="labels" className="absolute left-3 top-11 flex items-center gap-1.5">
+      <div data-tour="labels" className={`absolute left-3 flex items-center gap-1.5 ${viewMode === '3d' ? 'top-[68px]' : 'top-11'}`}>
         <span className="text-fine text-[var(--text-faint)]">Labels</span>
         <LabelShowSwitch />
         <AngleMarksSwitch />
@@ -367,6 +370,41 @@ function GridStylePicker() {
       >
         {showAxes ? '✓ Axes' : 'Axes'}
       </button>
+    </>
+  )
+}
+
+/** The 3-D grid switch (Floor / Floor + walls / Off) and the Height of the working plane that clicks land on. */
+function Grid3DControls() {
+  const mode = useScene((s) => normaliseGrid3D(s.settings.grid3d))
+  const workZ = useScene((s) => clampWorkZ(s.settings.workZ ?? 0))
+  const setSettings = useScene((s) => s.setSettings)
+  return (
+    <>
+      <select
+        className="badge pointer-events-auto cursor-pointer outline-none"
+        title="The 3-D grid: the floor, the floor with the walls behind it, or none"
+        value={mode}
+        onChange={(e) => {
+          setSettings({ grid3d: normaliseGrid3D(e.target.value) })
+          e.currentTarget.blur()
+        }}
+      >
+        {GRID3D_MODES.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.label}
+          </option>
+        ))}
+      </select>
+      <span className="badge pointer-events-auto flex items-center gap-1" title="Height: clicks land on the level plane at this z">
+        <button type="button" className="min-h-[44px] min-w-[44px] cursor-pointer outline-none" aria-label="Lower the drawing plane" onClick={(e) => (setSettings({ workZ: clampWorkZ(workZ - 1) }), e.currentTarget.blur())}>
+          −
+        </button>
+        <span>Height z = {workZ}</span>
+        <button type="button" className="min-h-[44px] min-w-[44px] cursor-pointer outline-none" aria-label="Raise the drawing plane" onClick={(e) => (setSettings({ workZ: clampWorkZ(workZ + 1) }), e.currentTarget.blur())}>
+          +
+        </button>
+      </span>
     </>
   )
 }

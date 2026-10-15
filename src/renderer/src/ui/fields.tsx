@@ -59,7 +59,25 @@ export function NumField({ value, onChange, decimals = 4, className = '' }: { va
   )
 }
 
-export function TextField({ value, onCommit, className = '', mono = false }: { value: string; onCommit: (v: string) => void; className?: string; mono?: boolean }) {
+export function TextField({
+  value,
+  onCommit,
+  className = '',
+  mono = false,
+  autoFocus = false,
+  onText,
+  onLeave
+}: {
+  value: string
+  onCommit: (v: string) => void
+  className?: string
+  mono?: boolean
+  autoFocus?: boolean
+  /** Told the text as it is typed (a live preview), and the saved text again on Escape. */
+  onText?: (v: string) => void
+  /** Told when the field loses focus, after any commit. */
+  onLeave?: () => void
+}) {
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
   return (
@@ -67,11 +85,21 @@ export function TextField({ value, onCommit, className = '', mono = false }: { v
       className={`field ${mono ? 'font-mono' : ''} ${className}`}
       value={text}
       spellCheck={false}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => text !== value && onCommit(text)}
+      autoFocus={autoFocus}
+      onChange={(e) => {
+        setText(e.target.value)
+        onText?.(e.target.value)
+      }}
+      onBlur={() => {
+        if (text !== value) onCommit(text)
+        onLeave?.()
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-        if (e.key === 'Escape') setText(value)
+        if (e.key === 'Escape') {
+          setText(value)
+          onText?.(value)
+        }
         e.stopPropagation()
       }}
     />

@@ -22,7 +22,8 @@ import {
   triangularPrismSurfaceArea,
   triangularPrismVolume
 } from './geometry3d'
-import { measureValue, texPrecise, type MeasureKind, type MeasureSettings } from './format'
+import { faceNormal } from './polyhedron'
+import { measureValue, texMeasure, texPrecise, type MeasureKind, type MeasureSettings } from './format'
 import { answerTex } from './shapeFormulas'
 import { sizesOf, type SolidKind } from './solidShape'
 import type { V3 } from './vec'
@@ -34,7 +35,15 @@ export type Item3D =
   | { type: 'line'; name: string; p: V3; d: V3; ends?: [V3, V3] }
   /** ax + by + cz = d. */
   | { type: 'plane'; name: string; a: number; b: number; c: number; d: number }
-  | { type: 'solid'; name: string; kind: SolidKind; size: Record<string, number>; volume: number; area: number }
+  | { type: 'solid'; name: string; kind: SolidKind; size: Record<string, number>; volume: number; area: number; poly?: ShapePoly }
+
+/** T974: what a solid made from a shape adds to Measure: its true faces, edges and face areas. */
+interface ShapePoly {
+  polys: number[][]
+  edges: [number, number][]
+  faceAreas: number[]
+  vertices: V3[]
+}
 
 export interface Row3D {
   title: string
@@ -155,6 +164,9 @@ function solidFormulas(kind: SolidKind, v: Record<string, number>, s: MeasureSet
       ]
     case 'hemisphere':
       return ['V = \\frac{2}{3}\\pi r^3', `V = \\frac{2}{3}\\pi \\times ${r}^3`, 'A = 3\\pi r^2', `A = 3\\pi \\times ${r}^2`]
+    default:
+      // A solid made from a shape is worked by solidFromShapeRows.
+      return ['', '', '', '']
   }
 }
 
@@ -183,7 +195,78 @@ function solidValues(kind: SolidKind, v: Record<string, number>, fallback: { vol
 /** Round solids are written with π: 36π u³ ≈ 113.1 u³. */
 const ROUND: ReadonlySet<SolidKind> = new Set(['sphere', 'cylinder', 'cone', 'frustum', 'hemisphere'])
 
+/** A corner's letter: A, B, ... Z, then A', B', ... (as naming.ts does for a copy). */
+const cornerName = (i: number): string => String.fromCharCode(65 + (i % 26)) + "'".repeat(Math.floor(i / 26))
+
+/** The rows of a prism, a pyramid or a polyhedron made from a shape: volume, surface area, face areas, edge lengths, angles. */
+function shapeRows(it: Extract<Item3D, { type: 'solid' }>, poly: ShapePoly, s: MeasureSettings): Row3D[] {
+  const A = (x: number) => numberIn(x, s, 'area')
+  const sum = (xs: number[]) => xs.reduce((t, x) => t + x, 0)
+  const base = poly.faceAreas[0]
+  let volume: Row3D
+  if (it.kind === 'corners') {
+    volume = { title: 'Volume', general: 'V = \\sum_f \\frac{1}{3} A_f d_f', substitution: '\\text{each face is the base of a pyramid up to the centre, of height } d_f', answer: `V = ${answerTex(it.volume, 'volume', s)}`, value: it.volume, kind: 'volume' }
+  } else {
+    const h = it.kind === 'extrusion' ? (it.size.h ?? 0) : (3 * it.volume) / base
+    const third = it.kind === 'apex'
+    volume = {
+      title: 'Volume',
+      general: third ? 'V = \\frac{1}{3} B h' : 'V = B h',
+      substitution: `V = ${third ? '\\frac{1}{3} \\times ' : ''}${A(base)} \\times ${numberIn(h, s, 'length')}`,
+      answer: `V = ${answerTex(it.volume, 'volume', s)}`,
+      value: it.volume,
+      kind: 'volume'
+    }
+  }
+  const area: Row3D = { title: 'Surface area', general: 'A = A_1 + A_2 + \\dots', substitution: `A = ${poly.faceAreas.map(A).join(' + ')}`, answer: `A = ${answerTex(it.area, 'area', s)}`, value: it.area, kind: 'area' }
+  const faces: Row3D = {
+    title: 'Face areas',
+    general: 'A_f = \\text{area of the face}',
+    substitution: poly.polys.map((p, i) => `F_{${i + 1}} (${p.map(cornerName).join('')}) = ${A(poly.faceAreas[i])}`).join(',\\; '),
+    answer: `${poly.faceAreas.length} \\text{ faces}`,
+    value: Number.NaN,
+    kind: 'number'
+  }
+  const lengths = poly.edges.map(([a, b]) => pointDistance(poly.vertices[a], poly.vertices[b]).value)
+  const edges: Row3D = {
+    title: 'Edge lengths',
+    general: '|PQ| = \\sqrt{(x_Q - x_P)^2 + (y_Q - y_P)^2 + (z_Q - z_P)^2}',
+    substitution: poly.edges.map(([a, b], i) => `|${cornerName(a)}${cornerName(b)}| = ${numberIn(lengths[i], s, 'length')}`).join(',\\; '),
+    answer: `${poly.edges.length} \\text{ edges, total } ${answerTex(sum(lengths), 'length', s)}`,
+    value: Number.NaN,
+    kind: 'number'
+  }
+  // The angle inside the solid between the two faces that meet at each edge: 180° less the turn between their outward normals.
+  const normals = poly.polys.map((p) => faceNormal(p, poly.vertices))
+  const owner = new Map<string, number[]>()
+  poly.polys.forEach((p, fi) =>
+    p.forEach((a, i) => {
+      const b = p[(i + 1) % p.length]
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`
+      owner.set(key, [...(owner.get(key) ?? []), fi])
+    })
+  )
+  const angles: string[] = []
+  for (const [a, b] of poly.edges) {
+    const fs = owner.get(a < b ? `${a}:${b}` : `${b}:${a}`) ?? []
+    if (fs.length !== 2) continue
+    const [n1, n2] = [normals[fs[0]], normals[fs[1]]]
+    const dot = Math.max(-1, Math.min(1, n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2]))
+    angles.push(`${cornerName(a)}${cornerName(b)}: ${texMeasure(Math.PI - Math.acos(dot), 'angle', s)}`)
+  }
+  const dihedral: Row3D = {
+    title: 'Angles between faces',
+    general: '\\theta = 180^\\circ - \\text{(angle between the outward normals)}',
+    substitution: angles.join(',\\; '),
+    answer: `${angles.length} \\text{ edges}`,
+    value: Number.NaN,
+    kind: 'number'
+  }
+  return [volume, area, faces, edges, dihedral]
+}
+
 function solidRows(it: Extract<Item3D, { type: 'solid' }>, s: MeasureSettings): Row3D[] {
+  if (it.poly) return shapeRows(it, it.poly, s)
   const v: Record<string, number> = {}
   for (const z of sizesOf(it.kind)) v[z.key] = it.size[z.key] ?? z.value
   const [vg, vs, ag, as] = solidFormulas(it.kind, v, s)

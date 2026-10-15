@@ -7,6 +7,7 @@ import { scene } from '../core/store'
 import type { Computed, EvalResult, ObjId, SceneObject, ToolId } from '../core/types'
 import { visibleOrder, type Space } from '../core/visibility'
 import { add, type V3 } from '../math/vec'
+import { outlineRefusal } from '../math/shape3d'
 import { themeColor } from '../app/theme'
 
 interface ToolInfo {
@@ -39,6 +40,7 @@ export const TOOLS: ToolInfo[] = [
   { id: 'delete', label: 'Delete', key: 'X', hint: ['Click an object to delete it.'] },
   // 3D-3B: Geometry's 3-D row (app/modes.ts tools3d).
   { id: 'plane', label: 'Plane', key: '', hint: ['Click the first point, or the floor.', 'Click the second point.', 'Click the third point: the plane goes through all three.'] },
+  { id: 'shape', label: 'Shape', key: '', hint: ['Click a grid point to start the outline.', 'Click the next corner.', 'Click the next corner. Click the first point or press Enter to close; Esc cancels.'] },
   { id: 'solids', label: '3D shapes', key: '', hint: ['Pick a shape in the row under the tools: it stands on the floor, ready to measure.'] },
   { id: 'measure3d', label: 'Measure', key: '', hint: ['Click a solid, a segment, two points, or a point and a plane: the Measure panel works it out.'] },
   { id: 'angle3d', label: 'Angle', key: '', hint: ['Click two lines, a line and a plane, or two planes: the Measure panel works out the angle.'] }
@@ -191,13 +193,15 @@ interface ToolRuntime {
   sides: ObjId[]
   /** The selection box being dragged on empty space with the Move tool, or null. */
   marquee: Marquee | null
+  /** Why a shape could not be closed, in words, until the next click. */
+  notice: string | null
 }
 
-export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [], created: [], sides: [], marquee: null }))
+export const useTool = create<ToolRuntime>(() => ({ picks: [], cursor: null, dragStart: null, firstTail: null, snap: null, stroke: [], created: [], sides: [], marquee: null, notice: null }))
 
 // The snap marker goes too: a tool that has finished, or been swapped for another, has nothing to
 // point at, and the ring used to stay on the last crossing until the mouse moved again.
-export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [], sides: [], marquee: null, snap: null })
+export const resetTool = () => useTool.setState({ picks: [], dragStart: null, firstTail: null, stroke: [], created: [], sides: [], marquee: null, snap: null, notice: null })
 
 /**
  * Delete the picked points that this drawing made itself (`created`) and nothing ended up using.
@@ -217,6 +221,32 @@ function dropUnusedPicks(picks: ObjId[], created: readonly ObjId[]): void {
 }
 
 /**
+ * Close the Shape tool's outline: a real polygon on the working plane. An outline that cannot be
+ * closed (under three corners, on one line, crossing itself) is refused in words and stays open,
+ * so a corner can be taken back with Backspace.
+ */
+function closeShape(picks: ObjId[]): boolean {
+  const s = scene()
+  const pts: V3[] = []
+  for (const id of picks) {
+    const v = s.ev.values.get(id)
+    if (v?.type === 'point') pts.push(v.p)
+  }
+  const why = outlineRefusal(pts)
+  if (why) {
+    useTool.setState({ notice: why })
+    return true
+  }
+  const b = new Builder()
+  const poly = b.polygon(picks, { withSides: true })
+  b.commit()
+  resetTool()
+  s.select([poly.id])
+  s.requestFocus('measure')
+  return true
+}
+
+/**
  * Finish the drawing in progress: a polygon with at least three corners is built,
  * anything else simply stops. Bound to right-click, Enter and double-click.
  */
@@ -224,6 +254,7 @@ export function finishTool(): boolean {
   const s = scene()
   const { picks, created } = useTool.getState()
   if (!picks.length) return false
+  if (s.tool === 'shape') return closeShape(picks)
   if (s.tool === 'polygon' && picks.length >= 3) {
     const b = new Builder()
     const poly = b.polygon(picks, { withSides: true })
@@ -421,6 +452,14 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
         return done()
       }
       return false
+    }
+    case 'shape': {
+      if (picks.length < 4 || picks[picks.length - 1] !== picks[0]) return false
+      const ring = picks.slice(0, -1)
+      // The first corner was clicked again to close: a refused outline keeps its corners, minus that click.
+      if (!closeShape(ring)) return false
+      if (useTool.getState().notice) useTool.setState({ picks: ring })
+      return true
     }
     case 'angle':
       if (picks.length < 3) return false

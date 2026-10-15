@@ -15,6 +15,7 @@ import type { V3 } from '../math/vec'
 import type { GridStyle } from '../core/types'
 import type { MeasureSettings } from '../math/format'
 import { useReleaseLater } from './releaseLater'
+import { normaliseGrid3D } from '../math/workingPlane'
 
 // Grid colours come from the stylesheet so they follow the light/dark theme.
 const MINOR = () => themeColor('--grid-minor')
@@ -309,6 +310,8 @@ export function Grid3D() {
   const { camera, size, invalidate } = useThree()
   const lines = useGridLines()
   const showGrid = useScene((s) => s.settings.showGrid)
+  const mode3 = useScene((s) => normaliseGrid3D(s.settings.grid3d))
+  const workZ = useScene((s) => s.settings.workZ ?? 0)
   // The floor knows only the square styles: circles and lattices are drawing paper, so it draws lines for them.
   const gridStyle = useScene((s) => styleFor3D(normaliseGridStyle(s.settings.gridStyle)))
   const showAxes = useScene((s) => s.settings.showAxes)
@@ -323,7 +326,7 @@ export function Grid3D() {
     const step = niceStep(dist / 12)
     const half = step * 10
     if (step !== extent.step) setExtent({ size: half, step })
-    showGridLines(lines, showGrid)
+    showGridLines(lines, showGrid && mode3 !== 'off')
     ticks.begin()
     if (showAxes) {
       // Each axis named once, at the farthest point of it that is on screen (3D-2: the names used to sit past the end, off screen).
@@ -344,7 +347,7 @@ export function Grid3D() {
     const wpp = worldPerPixel(camera, size)
     fillGrid(lines, gridStyle, { xMin: -half, xMax: half, yMin: -half, yMax: half }, step * 2, step / 2, DOT_HALF_PX * wpp, wpp)
     // The parts a style uses changed with the vertex lists; the canvas draws on demand.
-    showGridLines(lines, useScene.getState().settings.showGrid)
+    showGridLines(lines, useScene.getState().settings.showGrid && normaliseGrid3D(useScene.getState().settings.grid3d) !== 'off')
     invalidate()
   }, [extent, lines, gridStyle, camera, size, invalidate])
 
@@ -354,6 +357,8 @@ export function Grid3D() {
       {lines.map((l) => (
         <primitive key={l.uuid} object={l} />
       ))}
+      {showGrid && mode3 === 'walls' && <WallGrids half={h} step={extent.step} />}
+      {showGrid && mode3 !== 'off' && workZ !== 0 && <WorkingPlaneFrame half={h} z={workZ} />}
       {showAxes && (
         <>
           <FatLine points={[[-h, 0, 0], [h, 0, 0]]} color={AXIS_COLORS.x} width={2} renderOrder={-4} depthTest />
@@ -363,4 +368,33 @@ export function Grid3D() {
       )}
     </>
   )
+}
+
+/** The xz and yz walls behind the floor (y = -half and x = -half), lines each step. */
+function WallGrids({ half, step }: { half: number; step: number }) {
+  const wall = useMemo(() => {
+    const pos: number[] = []
+    for (let v = -half; v <= half + step / 2; v += step) {
+      pos.push(v, -half, -half, v, -half, half, -half, -half, v, half, -half, v) // xz wall: vertical and horizontal
+      pos.push(-half, v, -half, -half, v, half, -half, -half, v, -half, half, v) // yz wall
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: MINOR(), depthTest: false, depthWrite: false }))
+    l.frustumCulled = false
+    l.renderOrder = -11
+    return l
+  }, [half, step])
+  const theme = useTheme((t) => t.theme)
+  useEffect(() => {
+    ;(wall.material as THREE.LineBasicMaterial).color.set(MINOR())
+    ;(wall.material as THREE.LineBasicMaterial).needsUpdate = true
+  }, [theme, wall])
+  useReleaseLater(wall, (l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose()))
+  return <primitive object={wall} />
+}
+
+/** The working plane z = h drawn as a frame in the z colour, so a click's height is seen. */
+function WorkingPlaneFrame({ half, z }: { half: number; z: number }) {
+  return <FatLine points={[[-half, -half, z], [half, -half, z], [half, half, z], [-half, half, z], [-half, -half, z]]} color={AXIS_COLORS.z} width={1.5} renderOrder={-4} depthTest />
 }

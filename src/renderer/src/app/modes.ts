@@ -75,7 +75,7 @@ export const MODES: ModeDef[] = [
     description: 'Sketch or click shapes: automatic recognition, area formulas, decomposition, constructions.',
     ready: true,
     tools: ['select', '|', 'sketch', 'segment', 'triangle', 'polygon', 'circle', '|', 'point', 'line', 'ray', 'vector', '|', 'midpoint', 'perpendicular', 'parallel', 'perpBisector', 'angleBisector', 'intersect', '|', 'angle', 'distance', 'text', '|', 'delete'],
-    tools3d: ['select', '|', 'point', 'segment', 'line', 'plane', '|', 'solids', '|', 'measure3d', 'angle3d', '|', 'delete'],
+    tools3d: ['select', '|', 'point', 'segment', 'line', 'plane', 'shape', '|', 'solids', '|', 'measure3d', 'angle3d', '|', 'delete'],
     panel: 'measure',
     view: '2d',
     examples: true

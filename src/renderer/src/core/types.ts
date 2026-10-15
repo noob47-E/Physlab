@@ -214,6 +214,9 @@ export interface SolidObj extends ObjectBase {
   kind: SolidKind
   at: V3
   size: Record<string, string>
+  /** T974: a solid made from a shape - its outline or corners, and a pyramid's apex, each relative to `at`. */
+  pts?: V3[]
+  apex?: V3
 }
 
 /** 3D-3B: a plane through three points (a plane typed as an equation is a graph, GraphKind 'plane'). */
@@ -291,6 +294,7 @@ export type ToolId =
   | 'delete'
   // 3D-3B: Geometry's 3-D row.
   | 'plane'
+  | 'shape'
   | 'solids'
   | 'measure3d'
   | 'angle3d'
@@ -319,6 +323,10 @@ export interface SceneSettings {
   /** Saved with the drawing, like the unit. A file from before this setting existed draws lines. */
   gridStyle: GridStyle
   showAxes: boolean
+  /** The 3-D grid: the floor, the floor with walls, or nothing. Saved with the drawing. */
+  grid3d?: 'floor' | 'walls' | 'off'
+  /** The height z of the 3-D working plane that clicks land on (whole units). */
+  workZ?: number
   snap: boolean
   /** Digits: decimal places ('dp') or significant figures ('sf'). */
   decimals: number

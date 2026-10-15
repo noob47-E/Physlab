@@ -10,6 +10,7 @@ import { drawingClickHit, joinsPointWithSnapOff, marqueeStarted, mergeSelection,
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { drag3D } from './viewMath'
+import { clampWorkZ } from '../math/workingPlane'
 import { canDrag, collectFreePoints, dragFrom, handlePlane, selectionAfterClick, tipAngle, tipLength, tipNumber } from './pointerMath'
 import { heightFromHandle, measurePicks, sizeFromHandle } from './handles3d'
 import { sizesOf } from '../math/solidShape'
@@ -168,10 +169,12 @@ export function Interaction() {
      * when the cursor is close to it on screen; otherwise the position stays where the mouse is. Alt
      * turns snapping off.
      */
-    const snapAt = (x: number, y: number, plane: THREE.Plane, alt: boolean, exclude?: Set<ObjId>): SnapInfo | null => {
+    const snapAt = (x: number, y: number, planeIn: THREE.Plane, alt: boolean, exclude?: Set<ObjId>): SnapInfo | null => {
+      const s = scene()
+      // In 3-D a click lands on the working plane z = workZ, not on the floor.
+      const plane = planeIn === XY_PLANE && s.viewMode === '3d' ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -clampWorkZ(s.settings.workZ ?? 0)) : planeIn
       const w = worldOn(x, y, plane)
       if (!w) return null
-      const s = scene()
       const step = gridStep()
       const tidy = (v: number) => Math.round(v / (step / 20)) * (step / 20)
       // A drag also leaves out what moves with it without being built on it (stillInDrag): the
@@ -436,7 +439,7 @@ export function Interaction() {
         exclude,
         startAt: o.type === 'solid' ? o.at : undefined,
         startReach: c.type === 'solid' ? c.shape.sizeHandle[0] - c.shape.base[0] : undefined,
-        startSize: o.type === 'solid' && c.type === 'solid' ? c.size[sizesOf(o.kind)[0].key] : undefined
+        startSize: o.type === 'solid' && c.type === 'solid' ? c.size[sizesOf(o.kind)[0]?.key ?? ''] : undefined
       }
     }
 
@@ -864,7 +867,7 @@ export function Interaction() {
       }
       if (!id) return
       const next = [...picks, id]
-      useTool.setState({ picks: next })
+      useTool.setState({ picks: next, notice: null })
       advanceTool(tool, next)
     }
 
