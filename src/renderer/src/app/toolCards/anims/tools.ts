@@ -27,6 +27,10 @@ import { AngleBisector } from './AngleBisector'
 import { Intersect } from './Intersect'
 import { Text } from './Text'
 import { Delete } from './Delete'
+import { Plane3D } from './Plane3D'
+import { Solids3D } from './Solids3D'
+import { Measure3D } from './Measure3D'
+import { Angle3D } from './Angle3D'
 
 export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCardDef> = {
   'tool:select': { title: 'Move', shortcut: 'V', sentence: 'Click to select, drag a box round several objects, drag points or vector heads, or hold Space and drag to pan.', Animation: Move },
@@ -48,5 +52,10 @@ export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCard
   'tool:angleBisector': { title: 'Angle bisector', sentence: 'Click a point on one arm, the vertex, then the other arm, for the line that halves the angle.', Animation: AngleBisector },
   'tool:intersect': { title: 'Intersect', shortcut: 'I', sentence: 'Click two lines or circles to mark where they cross.', Animation: Intersect },
   'tool:text': { title: 'Text', sentence: 'Click where the note should go, then type.', Animation: Text },
-  'tool:delete': { title: 'Delete', shortcut: 'X', sentence: 'Click an object to remove it; Undo brings it back.', Animation: Delete }
+  'tool:delete': { title: 'Delete', shortcut: 'X', sentence: 'Click an object to remove it; Undo brings it back.', Animation: Delete },
+  // 3D-3B: Geometry's 3-D row.
+  'tool:plane': { title: 'Plane', sentence: 'Click three points, or the floor three times, for the flat sheet through all three.', Animation: Plane3D },
+  'tool:solids': { title: '3D shapes', sentence: 'Pick a shape in the row under the tools and it stands on the floor, ready to measure.', Animation: Solids3D },
+  'tool:measure3d': { title: 'Measure', sentence: 'Click a solid, a segment, two points, or a point and a plane, and the panel works it out.', Animation: Measure3D },
+  'tool:angle3d': { title: 'Angle', sentence: 'Click two lines, a line and a plane, or two planes, and the panel works out the angle.', Animation: Angle3D }
 }

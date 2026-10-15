@@ -9,6 +9,7 @@ import { CardsDock } from './CardsDock'
 import { GraphDock } from './GraphDock'
 import { Hint } from './Hint'
 import { HudTop } from './HudTop'
+import { LabPanel } from './LabPanel'
 import { Rail } from './Rail'
 import { TapeStrip } from './TapeStrip'
 import { useTapeBar } from '../../sim/tapeBar'
@@ -22,6 +23,8 @@ export function SandboxHud() {
   return (
     <div className="pointer-events-none absolute inset-0">
       <HudTop />
+      {/* SB51: the Collision Lab's sliders, under the clock, while a lab experiment is loaded. */}
+      <LabPanel />
       <Rail />
       {/* Top right, one column: the formula cards above the graph (SB19's lead), so neither covers the other. The
           column stops above the tape strip, and the cards scroll inside it when they are long. */}

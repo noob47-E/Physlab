@@ -18,6 +18,7 @@ import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode, setSceneN
 import { evaluateWithRealRoots } from '../calc/engine'
 import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
 import type { Computed, EvalResult, ObjId, SceneObject, SceneSettings } from './types'
+import { planeThrough, solidShape } from '../math/solidShape'
 
 // The viewport's snapping reads a line the same way the evaluator does; one definition keeps them agreeing.
 export { asGLine }
@@ -285,6 +286,18 @@ export function evaluateScene(
         return { type: 'graph' }
       case 'text':
         return { type: 'text', p: o.p }
+      case 'solid': {
+        // 3D-3B: each size is a formula (a typed 4, a slider); math/solidShape.ts refuses one that is not above 0, in words.
+        const size: Record<string, number> = {}
+        for (const [k, src] of Object.entries(o.size)) size[k] = evalNumber(src)
+        return { type: 'solid', kind: o.kind, shape: solidShape(o.kind, size, o.at), size }
+      }
+      case 'plane': {
+        const pts: [V3, V3, V3] = [needPoint(o.def.a), needPoint(o.def.b), needPoint(o.def.c)]
+        const p = planeThrough(...pts)
+        if (!p) throw new Error('the three points lie on one line: they make no plane')
+        return { type: 'plane', n: p.n, d: p.d, pts }
+      }
     }
     throw new Error('unknown definition')
   }
@@ -443,6 +456,8 @@ export function parentRefs(o: SceneObject): ObjId[] {
       return o.points
     case 'angle':
       return [o.a, o.vertex, o.b]
+    case 'plane':
+      return [o.def.a, o.def.b, o.def.c]
     default:
       return []
   }
@@ -454,6 +469,7 @@ export function exprRefs(o: SceneObject): string[] {
   if (o.type === 'circle' && o.def.kind === 'centerRadius') return [o.def.r]
   if (o.type === 'number') return [o.expr]
   if (o.type === 'graph') return o.exprs
+  if (o.type === 'solid') return Object.values(o.size)
   return []
 }
 

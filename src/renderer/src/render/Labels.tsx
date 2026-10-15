@@ -89,6 +89,9 @@ function measureTextAsFormatted(o: SceneObject, c: Computed | undefined, s: Scen
       return `r = ${formatMeasure(c.circle.r, 'length', s)}`
     case 'polygon':
       return `Area ${formatMeasure(polygonArea(c.pts), 'area', s)}`
+    // 3D-3B: one summary on a solid ("Square pyramid · V = 32 u³"), never every edge's length.
+    case 'solid':
+      return `V = ${formatMeasure(c.shape.volume, 'volume', s)}`
     case 'point':
       return full ? `(${c.p.slice(0, Math.abs(c.p[2]) > 1e-9 ? 3 : 2).map((v) => measureNumber(v, 'length', s)).join(', ')})` : ''
     default:

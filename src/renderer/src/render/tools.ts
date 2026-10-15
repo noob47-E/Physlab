@@ -36,7 +36,12 @@ export const TOOLS: ToolInfo[] = [
   { id: 'angleBisector', label: 'Angle bisector', key: '', hint: ['Click a point on arm 1.', 'Click the vertex.', 'Click a point on arm 2.'] },
   { id: 'intersect', label: 'Intersect', key: 'I', hint: ['Click the first line or circle.', 'Click the second line or circle.'] },
   { id: 'text', label: 'Text', key: '', hint: ['Click where the text should go.'] },
-  { id: 'delete', label: 'Delete', key: 'X', hint: ['Click an object to delete it.'] }
+  { id: 'delete', label: 'Delete', key: 'X', hint: ['Click an object to delete it.'] },
+  // 3D-3B: Geometry's 3-D row (app/modes.ts tools3d).
+  { id: 'plane', label: 'Plane', key: '', hint: ['Click the first point, or the floor.', 'Click the second point.', 'Click the third point: the plane goes through all three.'] },
+  { id: 'solids', label: '3D shapes', key: '', hint: ['Pick a shape in the row under the tools: it stands on the floor, ready to measure.'] },
+  { id: 'measure3d', label: 'Measure', key: '', hint: ['Click a solid, a segment, two points, or a point and a plane: the Measure panel works it out.'] },
+  { id: 'angle3d', label: 'Angle', key: '', hint: ['Click two lines, a line and a plane, or two planes: the Measure panel works out the angle.'] }
 ]
 
 /**
@@ -274,6 +279,8 @@ export function undoLastPick(): boolean {
 
 const isLineLike = (c?: Computed) => !!c && (c.type === 'line' || c.type === 'segment' || c.type === 'ray' || c.type === 'vector')
 const isCurve = (c?: Computed) => isLineLike(c) || c?.type === 'circle'
+/** A plane typed as an equation (3D-2), which Measure and Angle read as a plane. */
+const isPlaneGraph = (o: SceneObject) => o.type === 'graph' && o.kind === 'plane'
 
 /** Which kinds of object the tool accepts for its next click. */
 export function acceptsFor(tool: ToolId, picks: ObjId[]): (o: SceneObject, c: Computed) => boolean {
@@ -289,6 +296,11 @@ export function acceptsFor(tool: ToolId, picks: ObjId[]): (o: SceneObject, c: Co
       if (pickTypes.some((c) => c?.type === 'point')) return (_o, c) => isLineLike(c)
       if (pickTypes.some(isLineLike)) return (_o, c) => c.type === 'point'
       return (_o, c) => c.type === 'point' || isLineLike(c)
+    // 3D-3B: Measure takes anything it can measure, Angle what has a direction (a line or a plane).
+    case 'measure3d':
+      return (_o, c) => c.type === 'point' || isLineLike(c) || c.type === 'plane' || c.type === 'solid' || isPlaneGraph(_o)
+    case 'angle3d':
+      return (_o, c) => (isLineLike(c) && c.type !== 'vector') || c.type === 'plane' || isPlaneGraph(_o)
     case 'midpoint':
     case 'perpBisector':
       return picks.length === 0 ? (_o, c) => c.type === 'point' || c.type === 'segment' : (_o, c) => c.type === 'point'
@@ -299,7 +311,7 @@ export function acceptsFor(tool: ToolId, picks: ObjId[]): (o: SceneObject, c: Co
 
 /** Point tools create a free point when clicking empty space. */
 export function createsPointsOnEmpty(tool: ToolId): boolean {
-  return !['select', 'delete', 'intersect', 'perpendicular', 'parallel', 'text', 'vector', 'sketch'].includes(tool)
+  return !['select', 'delete', 'intersect', 'perpendicular', 'parallel', 'text', 'vector', 'sketch', 'solids', 'measure3d', 'angle3d'].includes(tool)
 }
 
 /**
@@ -413,6 +425,10 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
     case 'angle':
       if (picks.length < 3) return false
       b.angle(picks[0], picks[1], picks[2])
+      return done()
+    case 'plane':
+      if (picks.length < 3) return false
+      b.plane(picks[0], picks[1], picks[2])
       return done()
     case 'angleBisector':
       if (picks.length < 3) return false

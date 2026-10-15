@@ -61,6 +61,13 @@ describe('Fix 7: tool labels never overlap', () => {
     const css = readSource('src/renderer/src/app/shell.css')
     expect(css).toMatch(/\.toolshelf \.tool \{\s*flex-shrink: 0;\s*\}/)
     expect(css).toMatch(/\.toolshelf \.tool span \{\s*white-space: nowrap;/)
-    expect(readSource('src/renderer/src/app/TopBar.tsx')).toMatch(/shelfMode\(width, def\.tools, shelfFitLabel\)/)
+    // 3D-3B: the shelf is the mode's row for the view it is in (Geometry's 3-D row in 3-D).
+    const bar = readSource('src/renderer/src/app/TopBar.tsx')
+    expect(bar).toMatch(/const tools = toolsFor\(def, view\)/)
+    expect(bar).toMatch(/shelfMode\(width, tools, shelfFitLabel\)/)
+  })
+
+  it('3D-3B: Geometry’s 3-D row fits with its labels at 1366', () => {
+    expect(shelfMode(1366, geometry.tools3d!, shelfFitLabel)).toBe('full')
   })
 })

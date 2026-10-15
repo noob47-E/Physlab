@@ -74,7 +74,11 @@ const EXPECTED: Record<string, [number, string][]> = {
   chaosTwins: [[0.1, '°'], [gapPasses(0.01)!, 's'], [gapPasses(0.5)!, 's'], [0.5, 'm']],
   swingbridge: [[2.5, 'm'], [2, 'm'], [TAU * Math.sqrt(2 / G), 's'], [TAU * Math.sqrt(2.5 / G), 's']],
   spring: [[TAU * Math.sqrt(2 / 200), 's'], [2, 'kg'], [200, 'N/m']],
-  springice: [[2, 'kg'], [50, 'N/m'], [0.6, 'm'], [TAU * Math.sqrt(2 / 50), 's']]
+  springice: [[2, 'kg'], [50, 'N/m'], [0.6, 'm'], [TAU * Math.sqrt(2 / 50), 's']],
+  // SB51: the Collision Lab (1 kg at 3 m/s into 2 kg: p = 3, KE lost 0 to 3 J; pucks 1.5 and 2.6 m/s at 90°; the cradle 2 m/s).
+  lab1d: [[1, 'kg'], [3, 'm/s'], [2, 'kg'], [3, 'kg m/s'], [0, 'J'], [3, 'J']],
+  lab2d: [[1, 'kg'], [3, 'm/s'], [1.5, 'm/s'], [Math.hypot(2.25, 1.5 * Math.sqrt(3) / 2), 'm/s']],
+  labcradle: [[1, 'kg'], [2, 'm/s']]
 }
 
 /** Every number with a unit in a sentence, with the digits it was written to. */
@@ -167,7 +171,8 @@ describe('what the presets promise', () => {
     expect(presetById('balance')?.topic).toBe('Forces')
     expect(presetById('tug')?.topic).toBe('Momentum')
     expect(presetById('swingbridge')?.topic).toBe('Oscillation')
-    expect(PRESETS).toHaveLength(30)
+    // SB51 adds the Collision Lab's three.
+    expect(PRESETS).toHaveLength(33)
   })
 })
 

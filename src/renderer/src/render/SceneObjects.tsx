@@ -2,6 +2,7 @@ import { useScene } from '../core/store'
 import { useView } from './viewState'
 import { AngleView, CircleView, LineLikeView, PointView, PolygonView, TextView, VectorView } from './ObjectViews'
 import { GraphView } from './GraphView'
+import { Handles3D, PlaneObjView, SolidView } from './Solid3DViews'
 import type { Computed } from '../core/types'
 import { visibleIn } from '../core/visibility'
 
@@ -46,10 +47,16 @@ export function SceneObjects() {
             return <AngleView key={id} obj={o} c={c as C<'angle'>} {...common} />
           case 'text':
             return <TextView key={id} obj={o} c={c as C<'text'>} {...common} />
+          // 3D-3B: solids and planes through three points live in space: drawn in the 3-D view only.
+          case 'solid':
+            return is3D ? <SolidView key={id} obj={o} c={c as C<'solid'>} selected={sel} hovered={hov} /> : null
+          case 'plane':
+            return is3D ? <PlaneObjView key={id} obj={o} c={c as C<'plane'>} selected={sel} hovered={hov} /> : null
           default:
             return null
         }
       })}
+      {is3D && <Handles3D objects={objects} values={ev.values} selection={selection} />}
     </>
   )
 }

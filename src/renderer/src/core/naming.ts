@@ -1,5 +1,6 @@
 import type { Computed, ObjId, ObjType, SceneObject, VectorObj } from './types'
 import { classifyPolygon } from '../math/shapes'
+import { SOLID_NAMES } from '../math/solidShape'
 import { fmtPoint, fmtPrecise, formatMeasure, type MeasureSettings } from '../math/format'
 
 const GREEK = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'φ', 'ψ', 'ω']
@@ -31,7 +32,9 @@ const PREFERRED: Record<ObjType, string[]> = {
   angle: GREEK,
   number: ['k', 'm', 'n', 'p', 'q', 's'],
   graph: ['f', 'g', 'h', 'p', 'q'],
-  text: ['text1']
+  text: ['text1'],
+  solid: ['solid1'],
+  plane: ['plane1']
 }
 
 const RESERVED = new Set(['i', 'j', 'x', 'y', 'z', 't', 'e', 'pi', 'theta'])
@@ -115,7 +118,10 @@ export const PALETTE = {
   angle: ['#ffa94d'],
   number: ['#e9ecef'],
   graph: ['#4dabf7', '#ff6b6b', '#51cf66', '#fcc419', '#cc5de8', '#22b8cf'],
-  text: ['#e9ecef']
+  text: ['#e9ecef'],
+  // 3D-3B: Moonlight's --solid-edge and --plane-fill (styles.css); a solid and a plane are drawn in their token's colour.
+  solid: ['#74c0fc'],
+  plane: ['#b197fc']
 } satisfies Record<ObjType, string[]>
 
 /**
@@ -217,6 +223,12 @@ export function displayName(o: SceneObject, objects: Record<ObjId, SceneObject>,
     return `${c?.type === 'polygon' && c.pts.length >= 3 ? classifyPolygon(c.pts).name : 'Polygon'} ${letters}`
   }
   if (o.label) return o.label
+  // 3D-3B: a solid is what it is ("Square pyramid"); a plane its three points' letters.
+  if (o.type === 'solid') return SOLID_NAMES[o.kind]
+  if (o.type === 'plane') {
+    const letters = [o.def.a, o.def.b, o.def.c].map((id) => lettered(id, objects))
+    if (letters.every(Boolean)) return `plane ${letters.join('')}`
+  }
   if (o.type === 'segment') {
     const [a, b] = [lettered(o.a, objects), lettered(o.b, objects)]
     if (a && b) return `${a}${b}`

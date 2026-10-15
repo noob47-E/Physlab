@@ -4,6 +4,7 @@
 import { CORE_CARDS } from './catalogue'
 import { evaluateSpec } from './evaluate'
 import { SCENE_CARDS } from './sceneCards'
+import { COLLISION_CARDS } from './collisionCards'
 import type { CardSpec, CardView, Reading } from './types'
 import type { DigitSettings } from '../../math/format'
 
@@ -26,7 +27,7 @@ export function mergeCards(...lists: CardSpec[][]): CardSpec[] {
   return out
 }
 
-export const CARDS: readonly CardSpec[] = mergeCards(CORE_CARDS, SCENE_CARDS)
+export const CARDS: readonly CardSpec[] = mergeCards(CORE_CARDS, SCENE_CARDS, COLLISION_CARDS)
 
 const BY_ID = new Map(CARDS.map((c) => [c.id, c]))
 

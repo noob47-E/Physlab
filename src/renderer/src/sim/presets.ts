@@ -13,6 +13,7 @@ import { CHAOS, buildChaos } from './chaosTwins'
 import { paintBodies } from './palette'
 import { buildKnifeEdge, buildMetreRule, buildPulleyBracket, buildRetortStand, buildSlottedHanger, buildSpokedPulley } from './apparatus'
 import { type BodyDef, type Link, type LinkKind, type WorldSettings } from './types'
+import { labPresets } from './labScenes'
 
 export interface Preset {
   id: string
@@ -521,7 +522,9 @@ const EXPERIMENTS: Preset[] = [
       const block = put('box', 'M', [0.6, 0.25, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 2, material: 'steel', friction: 0, trace: true })
       return { bodies: [floor('ice'), post, block], world: VACUUM, links: [join('spring', post, block, undefined, { length: 3, stiffness: 50, damping: 0 })] }
     }
-  }
+  },
+  // SB51: the Collision Lab's three experiments (sim/labScenes.ts).
+  ...labPresets()
 ]
 
 /**

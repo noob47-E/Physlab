@@ -50,6 +50,13 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
       case 'polygon':
         c.pts.forEach(add)
         break
+      // 3D-3B: Home frames a solid whole and a plane by its three points.
+      case 'solid':
+        c.shape.vertices.forEach(add)
+        break
+      case 'plane':
+        c.pts.forEach(add)
+        break
       case 'graph': {
         // A graph with ends (a piecewise curve, a shaded region) has a box; one that runs for
         // ever does not, and is left out as before.

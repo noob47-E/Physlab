@@ -3,6 +3,7 @@ import type { GCircle, GLine } from '../math/geometry'
 import type { LabTable } from '../lab/types'
 import type { BodyDef, Link, WorldSettings } from '../sim/types'
 import type { Space } from './visibility'
+import type { SolidKind, SolidShape } from '../math/solidShape'
 
 /** The Sandbox as saved: what the student built, never the live run. */
 export interface SandboxFile {
@@ -204,6 +205,23 @@ export interface TextObj extends ObjectBase {
   owner?: ObjId
 }
 
+/**
+ * 3D-3B: a solid on the Geometry 3-D view's floor - its kind (math/solidShape.ts), the centre of its base, and each of its
+ * sizes as a formula (a typed 4, a slider r, what a handle writes), so a slider can grow it.
+ */
+export interface SolidObj extends ObjectBase {
+  type: 'solid'
+  kind: SolidKind
+  at: V3
+  size: Record<string, string>
+}
+
+/** 3D-3B: a plane through three points (a plane typed as an equation is a graph, GraphKind 'plane'). */
+export interface PlaneObj extends ObjectBase {
+  type: 'plane'
+  def: { kind: 'threePoints'; a: ObjId; b: ObjId; c: ObjId }
+}
+
 export type SceneObject =
   | PointObj
   | VectorObj
@@ -216,6 +234,8 @@ export type SceneObject =
   | NumberObj
   | GraphObj
   | TextObj
+  | SolidObj
+  | PlaneObj
 
 export type ObjType = SceneObject['type']
 
@@ -232,6 +252,10 @@ export type Computed =
   | { type: 'number'; value: number }
   | { type: 'graph' }
   | { type: 'text'; p: V3 }
+  /** `size`: each size's value now (its formula worked out). */
+  | { type: 'solid'; kind: SolidKind; shape: SolidShape; size: Record<string, number> }
+  /** n · x = d, n a unit vector; `pts` the three points it was made through. */
+  | { type: 'plane'; n: V3; d: number; pts: [V3, V3, V3] }
 
 export interface EvalResult {
   values: Map<ObjId, Computed>
@@ -265,6 +289,11 @@ export type ToolId =
   | 'text'
   | 'sketch'
   | 'delete'
+  // 3D-3B: Geometry's 3-D row.
+  | 'plane'
+  | 'solids'
+  | 'measure3d'
+  | 'angle3d'
 
 export interface SceneFile {
   app: 'PhysLab'

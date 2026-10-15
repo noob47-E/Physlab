@@ -44,3 +44,7 @@ TOOL angleBisector  =>  label Angle_bisector | points on empty space true
 TOOL intersect  =>  label Intersect | points on empty space false
 TOOL text  =>  label Text | points on empty space false
 TOOL delete  =>  label Delete | points on empty space false
+TOOL plane  =>  label Plane | points on empty space true
+TOOL solids  =>  label 3D_shapes | points on empty space false
+TOOL measure3d  =>  label Measure | points on empty space false
+TOOL angle3d  =>  label Angle | points on empty space false

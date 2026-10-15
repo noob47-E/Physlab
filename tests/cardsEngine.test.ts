@@ -18,6 +18,7 @@ import { naturalUnit, unitFactor, unitsCheck, unitPlain, unitTex } from '../src/
 import { isConstantSource, sourceValue, stepRateOf } from '../src/renderer/src/sim/cards/reading'
 import { SCENE_CARDS } from '../src/renderer/src/sim/cards/sceneCards'
 import { CORE_CARDS } from '../src/renderer/src/sim/cards/catalogue'
+import { COLLISION_CARDS } from '../src/renderer/src/sim/cards/collisionCards'
 import type { V3 } from '../src/renderer/src/math/vec'
 
 const SF3 = { decimals: 3, precisionMode: 'sf' as const }
@@ -361,7 +362,8 @@ describe('the sign of a "down is positive" symbol', () => {
 
 describe('index.ts: one list of cards', () => {
   it('merges the core and scene cards and finds each by id', () => {
-    expect(CARDS.length).toBe(CORE_CARDS.length + SCENE_CARDS.length)
+    expect(CORE_CARDS.length).toBe(15)
+    expect(CARDS.length).toBe(CORE_CARDS.length + SCENE_CARDS.length + COLLISION_CARDS.length)
     for (const c of CARDS) expect(cardById(c.id)).toBe(c)
     expect(cardById('no-such-card')).toBeUndefined()
     const { bodies, states } = ownerExample()

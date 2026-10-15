@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { PRESETS } from '../../src/renderer/src/sim/presets'
 import { dragCoefficient } from '../../src/renderer/src/sim/materials'
 import { gapPasses } from '../../src/renderer/src/sim/chaosTwins'
+import { LAB_TEXT_ROWS } from './presetTextLab'
 
 type BuiltPreset = ReturnType<typeof PRESETS[0]['build']>
 
@@ -513,7 +514,9 @@ const PRESET_CHECKS: {
         ['1.26', T]
       ]
     }
-  }
+  },
+  // SB51: the Collision Lab's three sentences.
+  ...LAB_TEXT_ROWS
 ]
 
 describe('Preset text numbers', () => {

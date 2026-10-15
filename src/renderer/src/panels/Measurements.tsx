@@ -11,6 +11,7 @@ import { classifyPolygon } from '../math/shapes'
 import * as VS from '../math/vectorSolver'
 import { visualizeSolution } from '../core/visualize'
 import { ShapeInfo } from './ShapeInfo'
+import { Measure3DPanel } from './Measure3D'
 import { measureText } from '../render/Labels'
 import { PinLabelButton } from '../ui/LabelControls'
 import { menuForObject } from '../app/contextActions'
@@ -470,6 +471,12 @@ function AllMeasurements() {
 }
 
 export function Measurements() {
+  // 3D-3B: Geometry in the 3-D view has its own card: solids, planes, distances and angles in space, with worked steps.
+  const geometry3d = useScene((s) => s.viewMode === '3d' && s.activeSpace === 'shapes')
+  return geometry3d ? <Measure3DPanel /> : <Measurements2D />
+}
+
+function Measurements2D() {
   const selection = useScene((s) => s.selection)
   const objects = useScene((s) => s.objects)
   const ev = useScene((s) => s.ev)

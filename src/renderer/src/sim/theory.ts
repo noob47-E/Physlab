@@ -20,6 +20,7 @@ import { flightTimeShortfall, flightTop, gapSentence } from './stepError'
 import { LIMITS, limitsFor, type SceneFacts } from './limits'
 import { simulateChain1D } from './collisionMath'
 import { fmtLabel } from '../math/format'
+import { LAB_THEORY } from './labTheory'
 
 /** An experiment as its preset builds it. */
 export interface Built {
@@ -221,6 +222,8 @@ function dropTheory(scene: string, names: string[]): Entry {
 }
 
 const THEORIES: Record<string, Entry> = {
+  // SB51: the Collision Lab (sim/labTheory.ts).
+  ...LAB_THEORY,
   fall: dropTheory('fall', ['A']),
   moon: dropTheory('moon', ['A']),
   drop: dropTheory('drop', ['Heavy', 'Light']),

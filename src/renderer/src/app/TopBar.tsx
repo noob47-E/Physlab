@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
   ArrowRight,
+  Box,
   ChevronDown,
   Circle,
   Crosshair,
@@ -8,6 +9,7 @@ import {
   Dot,
   Eraser,
   GitCommitHorizontal,
+  Layers,
   Minus,
   MousePointer2,
   MoveUpRight,
@@ -25,7 +27,7 @@ import {
 } from 'lucide-react'
 import { newProject, openProject, saveProject } from './files'
 import { clampPrecision, scaleFromText } from './topBarInputs'
-import { comingSoonModes, isDrawingMode, modeById, readyModes, useApp } from './modes'
+import { comingSoonModes, isDrawingMode, modeById, readyModes, toolsFor, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
 import { shelfFitLabel, TOOLS } from '../render/tools'
@@ -36,6 +38,7 @@ import { enterMode, resetLayout } from './layout'
 import { PANEL_LIST, togglePanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { ToolCardHost } from '../ui/ToolCard'
+import { SolidsRow } from '../panels/SolidsRow'
 import { useToolCard } from '../ui/useToolCard'
 import { resetCamera } from '../render/viewState'
 import { useSandbox } from '../sim/store'
@@ -68,7 +71,11 @@ const ICONS: Record<ToolId, React.ReactNode> = {
   angleBisector: <Waypoints size={16} />,
   intersect: <Crosshair size={16} />,
   text: <Type size={16} />,
-  delete: <Eraser size={16} />
+  delete: <Eraser size={16} />,
+  plane: <Layers size={16} />,
+  solids: <Box size={16} />,
+  measure3d: <Ruler size={16} />,
+  angle3d: <SquareDashedBottom size={16} />
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +631,13 @@ export function ToolShelf() {
   const setTool = useScene((s) => s.setTool)
   const [ref, width] = useContainerWidth()
   const def = modeById(mode)
-  const shelf = shelfMode(width, def.tools, shelfFitLabel)
+  const view = useScene((s) => s.viewMode)
+  const tools = toolsFor(def, view)
+  const shelf = shelfMode(width, tools, shelfFitLabel)
+  // 3D-3B: a tool the shelf no longer shows (Plane, after switching to 2-D) gives way to Move.
+  useEffect(() => {
+    if (!tools.includes(tool)) setTool('select')
+  }, [tools, tool, setTool])
   // A mode whose only tool is Move (Sandbox, GPU Lab, Lab Data) has nothing to offer here, and
   // the empty strip was 40 px taken from the drawing on a small screen. The card host stays: it
   // draws through a portal, takes no room, and the Sandbox's own buttons will ask it for cards.
@@ -633,13 +646,15 @@ export function ToolShelf() {
     <>
       <ToolCardHost />
       <div ref={ref} data-tour="tools" className={`toolshelf ${shelf === 'icons' ? 'icons' : ''}`}>
-        {def.tools.map((id, i) => {
+        {tools.map((id, i) => {
           if (id === '|') return <div key={i} className="tool-sep" />
           return <ToolButton key={id} id={id} on={tool === id} label={shelf === 'full'} onClick={() => setTool(id)} />
         })}
         <div className="flex-1" />
         {shelf === 'full' && <span className="hidden truncate pr-2 text-fine text-[var(--text-faint)] xl:inline">{def.description}</span>}
       </div>
+      {/* 3D-3B: the 3D shapes tool's row of solids, under the shelf while the tool is on. */}
+      {tool === 'solids' && view === '3d' && <SolidsRow />}
     </>
   )
 }

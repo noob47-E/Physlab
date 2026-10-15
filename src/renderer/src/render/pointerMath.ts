@@ -38,6 +38,8 @@ export function collectFreePoints(o: SceneObject, objects: Record<ObjId, SceneOb
 export function canDrag(o: SceneObject, objects: Record<ObjId, SceneObject>): boolean {
   if (o.locked) return false
   if (isFree(o)) return true
+  // 3D-3B: a solid slides across the floor by its base.
+  if (o.type === 'solid') return true
   // Points that live on a side slide along it.
   if (o.type === 'point' && o.def.kind === 'onObject') return true
   const m = new Map<ObjId, V3>()
@@ -61,6 +63,20 @@ export function dragFrom(camera: THREE.Camera, size: ViewSize, x: number, y: num
     if (Math.abs(view.z) < 0.15) plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(view.x, view.y, 0).normalize(), new THREE.Vector3(...anchor))
   }
   return { plane, startWorld: screenToPlane(camera, size, x, y, plane) ?? anchor }
+}
+
+/**
+ * 3D-3B: the plane a handle is dragged on - upright through `anchor` and facing the camera for the lift and height handles
+ * (straight up and down), level at the anchor's height for the size handle and a solid slid across the floor.
+ */
+export function handlePlane(camera: THREE.Camera, anchor: V3, upright: boolean): THREE.Plane {
+  if (!upright) return new THREE.Plane(new THREE.Vector3(0, 0, 1), -anchor[2])
+  const view = new THREE.Vector3()
+  camera.getWorldDirection(view)
+  const n = new THREE.Vector3(view.x, view.y, 0)
+  // Looking straight down there is no upright plane facing the camera: one along x does.
+  if (n.lengthSq() < 1e-6) n.set(0, 1, 0)
+  return new THREE.Plane().setFromNormalAndCoplanarPoint(n.normalize(), new THREE.Vector3(...anchor))
 }
 
 /**

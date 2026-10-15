@@ -58,31 +58,62 @@ function randomReading(rand: () => number): Reading {
   const typedOr = (v: number, places: number) => (rand() < 0.5 ? Math.round(v * 10 ** places) / 10 ** places || 10 ** -places : v)
   const floor = makeBody('ground', 'Floor', [0, -0.2, 0])
   const post = { ...makeBody('box', 'Post', [0, 30, 0]), motion: 'static' as const }
-  const a = { ...makeBody('sphere', 'A', [0, 1, 0]), mass: typedOr(between(0.1, 10), 2) }
-  const b = { ...makeBody('sphere', 'B', [5, 1, 0]), mass: typedOr(between(0.1, 10), 2) }
+
   const moving = (m: number): BodyState => {
     const speed = between(0, 30)
     const angle = between(5, 85) * deg * (rand() < 0.5 ? 1 : -1) + (rand() < 0.5 ? 0 : Math.PI)
     return state([between(-10, 10), between(0, 20), 0], [speed * Math.cos(angle), speed * Math.sin(angle), 0], m)
   }
-  const L0 = typedOr(between(0.5, 3), 1)
-  const stretch = between(-0.4, 1)
-  const swing = between(5, 85) * deg
-  const len = L0 + stretch
-  const aNow = moving(a.mass)
-  aNow.position = [len * Math.sin(swing), 30 - len * Math.cos(swing), 0]
+
+  // Find all body roles needed by any card
+  const requiredRoles = new Set<string>();
+  for (const c of CARDS) {
+    for (const sym of c.symbols) {
+      if ('body' in sym.from) requiredRoles.add(sym.from.body);
+      if ('start' in sym.from) requiredRoles.add(sym.from.start);
+      if ('pair' in sym.from) {
+        requiredRoles.add(sym.from.pair[0]);
+        requiredRoles.add(sym.from.pair[1]);
+      }
+    }
+  }
+
+  const generatedBodies: BodyDef[] = [floor, post];
+  const generatedStates: Record<string, BodyState> = {};
+  const generatedStarts: Record<string, BodyState> = {};
+  const generatedRoles: Record<string, string> = { S: 'A' }; // keep S for spring tests
+
+  for (const role of requiredRoles) {
+    const b = { ...makeBody('sphere', role, [between(0, 10), 1, 0]), mass: typedOr(between(0.1, 10), 2) };
+    generatedBodies.push(b);
+    generatedStates[b.id] = moving(b.mass);
+    generatedStarts[b.id] = moving(b.mass);
+    generatedRoles[role] = role;
+
+    // For 'A' we do the spring attachment
+    if (role === 'A') {
+      const L0 = typedOr(between(0.5, 3), 1)
+      const stretch = between(-0.4, 1)
+      const swing = between(5, 85) * deg
+      const len = L0 + stretch
+      generatedStates[b.id].position = [len * Math.sin(swing), 30 - len * Math.cos(swing), 0]
+      const startSwing = between(5, 85) * deg
+      generatedStarts[b.id].position = [L0 * Math.sin(startSwing), 30 - L0 * Math.cos(startSwing), 0]
+    }
+  }
+
+  const a = generatedBodies.find((b) => b.name === 'A')!;
+  const L0 = typedOr(between(0.5, 3), 1); // just need a link
   const spring: Link = { id: 'S1', kind: 'spring', a: post.id, b: a.id, length: L0, stiffness: typedOr(between(1, 500), 0), damping: 0 }
-  const startSwing = between(5, 85) * deg
-  const aStart = moving(a.mass)
-  aStart.position = [L0 * Math.sin(startSwing), 30 - L0 * Math.cos(startSwing), 0]
+
   return readingOf({
-    bodies: [floor, post, a, b],
-    states: { [a.id]: aNow, [b.id]: moving(b.mass) },
-    starts: { [a.id]: aStart, [b.id]: moving(b.mass) },
+    bodies: generatedBodies,
+    states: generatedStates,
+    starts: generatedStarts,
     links: [spring],
     world: { ...DEFAULT_WORLD, gravity: rand() < 0.5 ? 9.81 : between(1, 25), airDensity: 0 },
     t: rand() < 0.3 ? Math.round(between(0, 5) * 10) / 10 : between(0, 5),
-    roles: { A: 'A', B: 'B', S: 'A' }
+    roles: generatedRoles
   })
 }
 
@@ -327,7 +358,9 @@ describe('every line draws in KaTeX, and the plain lines are plain', () => {
     for (const c of CARDS) {
       const used = new Set<QKey>([...c.symbols.map((s) => s.q), c.result.q].filter((q): q is QKey => q !== null))
       const r = randomReading(seeded(3))
-      expect(new Set(evaluateCard(c.id, r, SF3)?.quantities ?? []), c.id).toEqual(used)
+      const v = evaluateCard(c.id, r, SF3)
+      expect(v, c.id).toBeDefined()
+      expect(new Set(v?.quantities), c.id).toEqual(used)
     }
   })
 

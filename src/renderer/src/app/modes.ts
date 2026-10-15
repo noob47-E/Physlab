@@ -34,6 +34,8 @@ interface ModeDef {
   ready: boolean
   /** Tool shelf for this mode ('|' = separator). */
   tools: (ToolId | '|')[]
+  /** 3D-3B: the shelf in the 3-D view, when it is not the same (Geometry's solids, planes and 3-D measures). */
+  tools3d?: (ToolId | '|')[]
   /** Panel to bring forward when the mode opens. */
   panel?: string
   /** A panel for the big centre area, shown instead of the viewport while this mode is open. */
@@ -73,6 +75,7 @@ export const MODES: ModeDef[] = [
     description: 'Sketch or click shapes: automatic recognition, area formulas, decomposition, constructions.',
     ready: true,
     tools: ['select', '|', 'sketch', 'segment', 'triangle', 'polygon', 'circle', '|', 'point', 'line', 'ray', 'vector', '|', 'midpoint', 'perpendicular', 'parallel', 'perpBisector', 'angleBisector', 'intersect', '|', 'angle', 'distance', 'text', '|', 'delete'],
+    tools3d: ['select', '|', 'point', 'segment', 'line', 'plane', '|', 'solids', '|', 'measure3d', 'angle3d', '|', 'delete'],
     panel: 'measure',
     view: '2d',
     examples: true
@@ -155,6 +158,9 @@ export const hiddenPanels = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): string
  * The mode a saved session may open in. A hidden mode, or one this build does not have (a session
  * last left in Question Author or Class Results), opens Problem Sets, the mode nearest to both.
  */
+/** The tool shelf a mode shows in a view: its 3-D row in the 3-D view when it has one, else its row. */
+export const toolsFor = (def: ModeDef, view: '2d' | '3d'): (ToolId | '|')[] => (view === '3d' && def.tools3d ? def.tools3d : def.tools)
+
 export const openableMode = (id: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeId =>
   hidden.has(id as ModeId) || !MODES.some((m) => m.id === id) ? 'problems' : (id as ModeId)
 

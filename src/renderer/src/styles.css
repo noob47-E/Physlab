@@ -134,6 +134,13 @@
   --surface-mid: #22b88a;
   --surface-high: #f2c14e;
   --surface-mesh: #10131a;
+  /* 3D-3B: Geometry's solids (their edges and soft fill), a plane through three points, and the two handles of a solid:
+     its size (on the base) and its height (on top). */
+  --solid-edge: #74c0fc;
+  --solid-fill: #4dabf7;
+  --plane-fill: #b197fc;
+  --handle-size: #ff922b;
+  --handle-height: #3bc9db;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #ffe066;
   /* The Sandbox (P28): the eight colours its moving bodies are painted in, in the order they are
@@ -260,6 +267,11 @@
   --surface-mid: #15a07c;
   --surface-high: #e3a21a;
   --surface-mesh: #2b3445;
+  --solid-edge: #1d5fb4;
+  --solid-fill: #4f8fd6;
+  --plane-fill: #6f42c1;
+  --handle-size: #c2410c;
+  --handle-height: #0b7285;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #4a148c;
   /* Deep inks on the pale canvas: a mid-tone colour that reads on the dark themes is lost here. */
@@ -382,6 +394,11 @@
   --surface-mid: #34c3b0;
   --surface-high: #ffd36b;
   --surface-mesh: #0c1230;
+  --solid-edge: #8ab4ff;
+  --solid-fill: #6c8cff;
+  --plane-fill: #c3a6ff;
+  --handle-size: #ffa94d;
+  --handle-height: #3bc9db;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #ffe066;
   --sim-c1: #419bd4;
@@ -509,6 +526,11 @@
   --surface-mid: #c9953f;
   --surface-high: #ffe7a3;
   --surface-mesh: #1c150e;
+  --solid-edge: #f0c674;
+  --solid-fill: #c9953f;
+  --plane-fill: #b49cff;
+  --handle-size: #ff8c42;
+  --handle-height: #66d9e8;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #f4f469;
   --sim-c1: #419bd4;

@@ -13,16 +13,19 @@ import type {
   ObjId,
   ObjType,
   PointDef,
+  PlaneObj,
   PointObj,
   PolygonObj,
   RayObj,
   SceneObject,
   SegmentObj,
+  SolidObj,
   TextObj,
   VectorDef,
   VectorObj
 } from './types'
 import type { V3 } from '../math/vec'
+import { sizesOf, type SolidKind } from '../math/solidShape'
 
 type Common = { name?: string; color?: string; auxiliary?: boolean; visible?: boolean; showLabel?: boolean }
 
@@ -99,6 +102,17 @@ export class Builder {
 
   text(p: V3, text: string, opts: Common = {}): TextObj {
     return this.push({ ...this.base('text', opts), type: 'text', p, text })
+  }
+
+  /** 3D-3B: a solid standing on the floor at `at`; a size left out takes its default. */
+  solid(kind: SolidKind, size: Record<string, string>, at: V3, opts: Common = {}): SolidObj {
+    const full = Object.fromEntries(sizesOf(kind).map((s) => [s.key, size[s.key] ?? String(s.value)]))
+    return this.push({ ...this.base('solid', opts), type: 'solid', kind, at, size: full, themed: '--solid-edge' })
+  }
+
+  /** 3D-3B: the plane through three points. */
+  plane(a: ObjId, b: ObjId, c: ObjId, opts: Common = {}): PlaneObj {
+    return this.push({ ...this.base('plane', opts), type: 'plane', def: { kind: 'threePoints', a, b, c }, themed: '--plane-fill' })
   }
 
   commit(select = true): SceneObject[] {

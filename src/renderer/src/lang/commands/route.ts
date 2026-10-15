@@ -11,6 +11,7 @@ import { plainParseError } from '../../core/visualize'
 import { inferKind, math, preprocess, splitArgs, toV3 } from '../../math/expr'
 import { type V3 } from '../../math/vec'
 import { isPieceCorner } from '../../math/lego'
+import { sizesOf, type SolidKind } from '../../math/solidShape'
 import { unknownFunctionSentence, unknownNameSentence } from '../../calc/errors'
 import { unitRefusal } from '../../calc/units'
 import { evaluatePlain, HELP, solutionFor, tryCas, tryPureMath, trySolverCommand } from './solve'
@@ -49,6 +50,7 @@ export async function runCommand(raw: string): Promise<void> {
   }
 
   try {
+    if (tryPointInSpace(input)) return
     if (tryPureMath(input)) return
     if (await tryCas(input)) return
     if (tryGraph(input)) return
@@ -287,14 +289,53 @@ const GEO_ALIASES: Record<string, string> = {
   midpoint: 'Midpoint', perpendicular: 'Perpendicular', parallel: 'Parallel', perpendicularbisector: 'PerpendicularBisector',
   perpbisector: 'PerpendicularBisector', anglebisector: 'AngleBisector', intersect: 'Intersect', intersection: 'Intersect',
   angle: 'Angle', vector: 'Vector', slider: 'Slider', tangent: 'Tangent', centroid: 'Centroid', circumcenter: 'Circumcenter',
-  incenter: 'Incenter', orthocenter: 'Orthocenter', text: 'Text', square: 'Square', regularpolygon: 'RegularPolygon'
+  incenter: 'Incenter', orthocenter: 'Orthocenter', text: 'Text', square: 'Square', regularpolygon: 'RegularPolygon',
+  // 3D-3B: a plane through three points, and the solids by their sizes.
+  plane: 'Plane', cube: 'Cube', cuboid: 'Cuboid', prism: 'Prism', pyramid: 'Pyramid', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone'
+}
+
+/** 3D-3B: each solid command's kind, its sizes in order, and how a sentence asks for them. */
+const SOLID_COMMANDS: Record<string, { kind: SolidKind; words: string; example: string }> = {
+  Cube: { kind: 'cube', words: 'its side', example: 'Cube(4)' },
+  Cuboid: { kind: 'cuboid', words: 'its length, width and height', example: 'Cuboid(5, 3, 4)' },
+  Prism: { kind: 'prism', words: 'the side of its triangle and its height', example: 'Prism(4, 6)' },
+  Pyramid: { kind: 'pyramid', words: 'the side of its square base and its height', example: 'Pyramid(4, 6)' },
+  Sphere: { kind: 'sphere', words: 'its radius', example: 'Sphere(3)' },
+  Cylinder: { kind: 'cylinder', words: 'its radius and height', example: 'Cylinder(2.5, 5)' },
+  Cone: { kind: 'cone', words: 'its radius and height', example: 'Cone(3, 4)' }
+}
+
+/**
+ * 3D-3B: in Geometry, P(1, 2, 3) is the point P = (1, 2, 3), as GeoGebra writes a point; Q(1, 2) one on the floor. Only a
+ * capital name that is no command and no function the scene has, and two or three numbers: C(5, 2) elsewhere may be a
+ * choice, and f(2) is the function.
+ */
+function tryPointInSpace(input: string): boolean {
+  if (scene().activeSpace !== 'shapes') return false
+  const m = input.match(/^\s*([A-Z][A-Za-z0-9_'′″‴⁗]*)\s*\((.*)\)\s*$/)
+  if (!m) return false
+  const [, name, inside] = m
+  if (GEO_ALIASES[name.toLowerCase()]) return false
+  const id = scene().ev.names.get(name)
+  if (id && scene().objects[id]?.type !== 'point') return false
+  const args = splitArgs(inside).map((x) => x.trim())
+  if (args.length < 2 || args.length > 3) return false
+  const constant = (x: string) => {
+    try {
+      return x !== '' && isConstant(parseNode(x))
+    } catch {
+      return false
+    }
+  }
+  if (!args.every(constant)) return false
+  return tryAssignment(`${name} = (${args.join(', ')})`)
 }
 
 /**
  * The most inputs a command reads, where it reads fewer than it was given without saying so:
  * Square(P, (1, 0), 3) dropped the 3 and built a square. The others refuse a wrong count already.
  */
-const MOST_INPUTS: Partial<Record<string, number>> = { Square: 2, RegularPolygon: 3, Triangle: 3, Intersect: 3, Slider: 4, Text: 2 }
+const MOST_INPUTS: Partial<Record<string, number>> = { Square: 2, RegularPolygon: 3, Triangle: 3, Intersect: 3, Slider: 4, Text: 2, Plane: 3 }
 
 /** Whether an input stands for a vector: a vector's name, or what it is made of (<1, 0>, 2A, A + B). */
 function isVectorInput(text: string): boolean {
@@ -354,7 +395,19 @@ function tryGeometryCommand(src: string, name: string | undefined, fullInput = s
   let primary: SceneObject | undefined
   const a = rawArgs
 
+  const solid = SOLID_COMMANDS[cmd]
+  if (solid) {
+    const sizes = sizesOf(solid.kind)
+    const given = a.map((x) => x.trim()).filter((x) => x !== '')
+    if (given.length !== sizes.length) throw new Error(`${cmd} needs ${solid.words}, e.g. ${solid.example}.`)
+    primary = b.solid(solid.kind, Object.fromEntries(sizes.map((s, i) => [s.key, given[i]])), [0, 0, 0], opts)
+  }
+
   switch (cmd) {
+    case 'Plane':
+      if (a.length !== 3) throw new Error('Plane needs three points, e.g. Plane(A, B, C).')
+      primary = b.plane(ref(a[0]), ref(a[1]), ref(a[2]), opts)
+      break
     case 'Point':
       primary = a.length >= 2 ? b.point(toV3(math.evaluate(preprocess(`pt(${a.join(',')})`), { ...scene().ev.scope })), opts) : undefined
       break

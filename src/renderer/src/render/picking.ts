@@ -1,12 +1,14 @@
 // Screen-space picking against evaluated geometry (works identically in 2D and 3D).
 
 import type * as THREE from 'three/webgpu'
-import { toScreen, type ViewSize } from './cameraUtils'
+import { toScreen, worldPerPixel, type ViewSize } from './cameraUtils'
 import type { Computed, EvalResult, ObjId, SceneObject } from '../core/types'
 import { add, normalize, scale, type V3 } from '../math/vec'
 import { POINT_REACH_PX } from './viewMath'
+import { handlesOf, type HandlePart } from './handles3d'
+import { planeSheet } from '../math/solidShape'
 
-type HitPart = 'body' | 'head' | 'tail'
+type HitPart = 'body' | 'head' | 'tail' | HandlePart
 
 export interface Hit {
   id: ObjId
@@ -63,7 +65,13 @@ export interface PickContext {
   objects: Record<ObjId, SceneObject>
   order: ObjId[]
   ev: EvalResult
+  /** 3D-3B: in the 3-D view the selected objects' handles (render/handles3d.ts) can be grabbed, before anything else. */
+  selection?: readonly ObjId[]
+  handles3d?: boolean
 }
+
+/** How near a handle the cursor must be, in pixels. */
+const HANDLE_REACH_PX = 12
 
 /** The one object under the cursor: the first of `pickAll`, so the two never disagree. */
 export function pickAt(ctx: PickContext, sx: number, sy: number, accept?: (o: SceneObject, c: Computed) => boolean): Hit | null {
@@ -94,6 +102,15 @@ export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: S
     const c = ev.values.get(id)
     if (!o || !c || !o.visible) continue
     if (accept && !accept(o, c)) continue
+    if (ctx.handles3d && ctx.selection?.includes(id)) {
+      const anchor = c.type === 'point' ? c.p : c.type === 'solid' ? c.shape.base : null
+      if (anchor) {
+        for (const h of handlesOf(o, c, worldPerPixel(camera, size, anchor))) {
+          const s = scr(h.at)
+          if (s.visible) offer({ id, part: h.part, dist: Math.hypot(s.x - sx, s.y - sy), priority: -1 }, HANDLE_REACH_PX)
+        }
+      }
+    }
     switch (c.type) {
       case 'point': {
         const s = scr(c.p)
@@ -164,6 +181,17 @@ export function pickAll(ctx: PickContext, sx: number, sy: number, accept?: (o: S
       case 'polygon': {
         const pts = c.pts.map(scr)
         if (pts.length >= 3 && insidePolygon(P, pts)) offer({ id, part: 'body', dist: 0, priority: 8 }, 1)
+        break
+      }
+      // 3D-3B: a solid is taken anywhere over one of its faces, a plane anywhere over its sheet; after points and lines.
+      case 'solid': {
+        const pts = c.shape.vertices.map(scr)
+        if (c.shape.faces.some((f) => f.length >= 3 && insidePolygon(P, f.map((k) => pts[k])))) offer({ id, part: 'body', dist: 0, priority: 8 }, 1)
+        break
+      }
+      case 'plane': {
+        const sheet = planeSheet(...c.pts).map(scr)
+        if (sheet.length >= 3 && insidePolygon(P, sheet)) offer({ id, part: 'body', dist: 0, priority: 9 }, 1)
         break
       }
     }

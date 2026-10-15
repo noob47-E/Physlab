@@ -10,7 +10,9 @@ import { drawingClickHit, joinsPointWithSnapOff, marqueeStarted, mergeSelection,
 import { menuForBackground, menuForObject } from '../app/contextActions'
 import { isSpaceHeld, markSpaceUsed } from './panKey'
 import { drag3D } from './viewMath'
-import { canDrag, collectFreePoints, dragFrom, selectionAfterClick, tipAngle, tipLength, tipNumber } from './pointerMath'
+import { canDrag, collectFreePoints, dragFrom, handlePlane, selectionAfterClick, tipAngle, tipLength, tipNumber } from './pointerMath'
+import { heightFromHandle, measurePicks, sizeFromHandle } from './handles3d'
+import { sizesOf } from '../math/solidShape'
 import { useTurnMode } from './viewState'
 import { showContextMenu } from '../ui/ContextMenu'
 import { Arrow } from './ObjectViews'
@@ -48,6 +50,10 @@ interface DragState {
   moved: boolean
   /** Objects that must not be snapped onto (the dragged object and its parents). */
   exclude: Set<ObjId>
+  /** 3D-3B: a solid's base centre, how far out its size handle was, and its first size, when the drag began. */
+  startAt?: V3
+  startReach?: number
+  startSize?: number
 }
 
 const SNAP_POINT_PX = 12
@@ -87,6 +93,10 @@ function keyPoints(id: ObjId, c: Computed): V3[] {
     }
     case 'number':
       return []
+    case 'solid':
+      return c.shape.vertices
+    case 'plane':
+      return c.pts
   }
 }
 
@@ -127,7 +137,7 @@ export function Interaction() {
     const pickCtx = () => {
       const s = scene()
       // Only what is on screen can be picked: the other drawings are not there.
-      return { camera: ctxRef.current.camera, size: ctxRef.current.size, objects: s.objects, order: visibleOrder(s.order, s.objects, s.activeSpace), ev: s.ev }
+      return { camera: ctxRef.current.camera, size: ctxRef.current.size, objects: s.objects, order: visibleOrder(s.order, s.objects, s.activeSpace), ev: s.ev, selection: s.selection, handles3d: s.viewMode === '3d' && s.tool === 'select' }
     }
     const setControls = (enabled: boolean) => {
       const c = ctxRef.current.controls as unknown as { enabled: boolean } | null
@@ -394,9 +404,20 @@ export function Interaction() {
       let anchor: V3 = [0, 0, 0]
       if (c.type === 'point' || c.type === 'text') anchor = c.p
       else if (c.type === 'vector') anchor = hit.part === 'head' ? add(c.tail, c.comp) : c.tail
+      else if (c.type === 'solid') anchor = hit.part === 'size' ? c.shape.sizeHandle : hit.part === 'height' ? c.shape.top : c.shape.base
       // The start is the grabbed spot on the drag plane itself, not on the floor (W4).
       const at = down.current
-      const { plane, startWorld } = at ? dragFrom(ctxRef.current.camera, ctxRef.current.size, at.x, at.y, s.viewMode, anchor) : { plane: XY_PLANE, startWorld: anchor }
+      // 3D-3B: a handle runs on its own plane: up and down for the lift and height handles, level for the size handle and a
+      // solid slid across the floor.
+      const own = hit.part === 'lift' || hit.part === 'size' || hit.part === 'height' || c.type === 'solid'
+      const { plane, startWorld } = own
+        ? (() => {
+            const pl = handlePlane(ctxRef.current.camera, anchor, hit.part === 'lift' || hit.part === 'height')
+            return { plane: pl, startWorld: (at && screenToPlane(ctxRef.current.camera, ctxRef.current.size, at.x, at.y, pl)) || anchor }
+          })()
+        : at
+          ? dragFrom(ctxRef.current.camera, ctxRef.current.size, at.x, at.y, s.viewMode, anchor)
+          : { plane: XY_PLANE, startWorld: anchor }
       const starts = new Map<ObjId, V3>()
       collectFreePoints(o, s.objects, starts)
       // Nothing that moves with the drag may be snapped onto: the object, the points it is
@@ -412,7 +433,10 @@ export function Interaction() {
         startComp: c.type === 'vector' ? c.comp : undefined,
         startTail: c.type === 'vector' ? c.tail : undefined,
         moved: false,
-        exclude
+        exclude,
+        startAt: o.type === 'solid' ? o.at : undefined,
+        startReach: c.type === 'solid' ? c.shape.sizeHandle[0] - c.shape.base[0] : undefined,
+        startSize: o.type === 'solid' && c.type === 'solid' ? c.size[sizesOf(o.kind)[0].key] : undefined
       }
     }
 
@@ -526,6 +550,43 @@ export function Interaction() {
       const s = scene()
       const o = s.objects[d.hit.id]
       if (!o) return
+      // 3D-3B: the handles and a solid read the pointer on their own plane, before any snapping to points.
+      if ((d.hit.part === 'lift' && o.type === 'point' && o.def.kind === 'free') || o.type === 'solid') {
+        const raw = worldOn(x, y, d.plane)
+        if (!raw) return
+        host.style.cursor = 'grabbing'
+        if (o.type === 'point' && o.def.kind === 'free') {
+          const step = gridStep()
+          const z = e.altKey || !(step > 0) ? raw[2] : Math.round(raw[2] / step) * step
+          const p: V3 = [o.def.p[0], o.def.p[1], z]
+          s.updateObject(o.id, (dr) => {
+            if (dr.type === 'point' && dr.def.kind === 'free') dr.def.p = p
+          }, false)
+          showTip(`${o.name} ${coordText(p)}   z = ${fmtL(z)}`, x, y)
+          return
+        }
+        if (o.type !== 'solid') return
+        const sizes = sizesOf(o.kind)
+        const start = d.startAt ?? o.at
+        if (d.hit.part === 'size' || d.hit.part === 'height') {
+          const which = d.hit.part === 'size' ? sizes[0] : sizes.find((z) => z.height)
+          if (!which) return
+          const v = d.hit.part === 'size' ? sizeFromHandle(d.startSize ?? which.value, d.startReach ?? 1, Math.hypot(raw[0] - start[0], raw[1] - start[1])) : heightFromHandle(start[2], raw[2])
+          s.updateObject(o.id, (dr) => {
+            if (dr.type === 'solid') dr.size[which.key] = String(v)
+          }, false)
+          showTip(`${which.label} = ${fmtL(v)}`, x, y)
+          return
+        }
+        const moved = add(start, [raw[0] - d.startWorld[0], raw[1] - d.startWorld[1], 0])
+        const t = snapNear(moved, e.altKey, d.exclude)
+        const at: V3 = [t.p[0], t.p[1], start[2]]
+        s.updateObject(o.id, (dr) => {
+          if (dr.type === 'solid') dr.at = at
+        }, false)
+        showTip(`base at ${coordText(at)}`, x, y)
+        return
+      }
       const sn = snapAt(x, y, d.plane, e.altKey, d.exclude)
       if (!sn) return
       const w = sn.p
@@ -767,6 +828,12 @@ export function Interaction() {
       if (!clickLike) return
       if (tool === 'delete') {
         if (dn.hit) s.removeObjects([dn.hit.id])
+        return
+      }
+      // 3D-3B: Measure and Angle pick objects into the selection; the Measure panel works out what they make.
+      if (tool === 'measure3d' || tool === 'angle3d') {
+        s.select(measurePicks(s.selection, dn.hit?.id ?? null))
+        if (dn.hit) s.requestFocus('measure')
         return
       }
       if (tool === 'text') {

@@ -9,6 +9,7 @@ import { inferKind, math, preprocess, sceneNames, splitArgs, symbolsOf, type Val
 import { tex, texIJK, texMeasure, texPrecise, type Precision } from '../../math/format'
 import { heading, len, type V3 } from '../../math/vec'
 import { polygonArea } from '../../math/geometry'
+import { SOLID_NAMES } from '../../math/solidShape'
 import { evaluateWithRealRoots } from '../../calc/engine'
 import { TYPE_INSTEAD, unknownUnit } from '../../calc/units'
 
@@ -281,13 +282,20 @@ export function describeComputed(c: Computed | undefined, decimals: Precision = 
       return `\\text{length } ${texAt(len(c.line.d), decimals)}`
     case 'ray':
     case 'line':
-      return `\\text{line through } (${c.line.p.slice(0, 2).map((v) => texAt(v, decimals)).join(', ')})`
+      // 3D-3B: a line off the floor names its point with z (Argon: "line through (1, 1)" for one through (1, 1, 0) and (3, 4, 5)).
+      return `\\text{line through } (${c.line.p.slice(0, c.line.p[2] !== 0 || c.line.d[2] !== 0 ? 3 : 2).map((v) => texAt(v, decimals)).join(', ')})`
     case 'circle':
       return `\\text{circle, } r = ${texAt(c.circle.r, decimals)}`
     case 'polygon':
       return `\\text{${c.pts.length === 3 ? 'triangle' : 'polygon'}, area } ${texAt(polygonArea(c.pts), decimals)}`
     case 'angle':
       return texMeasure(c.value, 'angle', scene().settings)
+    case 'solid':
+      // 3D-3B: what it is and what a student made it for first, its volume, as a polygon says its area ("T = cylinder,
+      // volume 169.65 u³"; "T = V = 169.65 u³" read as two equations, Argon).
+      return `\\text{${SOLID_NAMES[c.kind].toLowerCase()}, volume } ${texMeasure(c.shape.volume, 'volume', scene().settings)}`
+    case 'plane':
+      return '\\text{plane through three points}'
     default:
       return ''
   }
