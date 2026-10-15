@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
@@ -8,7 +8,7 @@ import { useScene } from '../core/store'
 import type { AngleObj, CircleObj, Computed, ObjId, PointObj, PolygonObj, SceneObject, TextObj, VectorObj } from '../core/types'
 import { isFree } from '../core/evaluate'
 import { visibleIn } from '../core/visibility'
-import { componentTexts, freeCapitals } from '../core/naming'
+import { componentTexts, componentTexts3D, freeCapitals } from '../core/naming'
 import { centroid, polygonPlane } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure, superscriptPowers } from '../math/format'
@@ -21,6 +21,7 @@ import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadiu
 import { pieceNameAnchor } from './pieceLabels'
 import { BatchedArrow, useArrowBatched } from './ArrowBatch'
 import { arcBetween, cornerAngle, polygonCornerMark } from './markGeometry'
+import { arrowHead3D } from './arrow3dMath'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -67,6 +68,7 @@ function useDrawingColors() {
       // deuteranope in Moonlight Gold (Fix 2).
       xComp: themeColor('--vec-x'),
       yComp: themeColor('--vec-y'),
+      zComp: themeColor('--vec-z'),
       result: themeColor('--vec-result'),
       arc: themeColor('--warn'),
       dashed: themeColor('--text-faint'),
@@ -204,7 +206,7 @@ export function placeArrow(shaft: THREE.Mesh, head: THREE.Mesh, tail: V3, comp: 
   }
 }
 
-type ArrowProps = { tail: V3; comp: V3; color: string; is3D: boolean; thick?: number; renderOrder?: number; headPx?: number; headRadPx?: number; tipPx?: number }
+type ArrowProps = { tail: V3; comp: V3; color: string; is3D: boolean; thick?: number; renderOrder?: number; headPx?: number; headRadPx?: number; tipPx?: number; slim?: boolean }
 
 /**
  * One arrow. From ARROW_BATCH_MIN 2-D arrows on screen it is drawn by the instanced batch
@@ -214,6 +216,12 @@ type ArrowProps = { tail: V3; comp: V3; color: string; is3D: boolean; thick?: nu
  * builds mesh arrows only to swap them for the batch.
  */
 export function Arrow(props: ArrowProps) {
+  // 3D-1: a vector in the 3-D view is the slim arrow (a pixel-wide shaft, a head sized at its own tip).
+  if (props.is3D && props.slim) return <SlimArrow3D {...props} />
+  return <AnyArrow {...props} />
+}
+
+function AnyArrow(props: ArrowProps) {
   const batched = useArrowBatched(props.is3D)
   if (batched === null) return null
   return batched ? <BatchedArrow {...props} /> : <MeshArrow {...props} />
@@ -231,6 +239,50 @@ function MeshArrow({ tail, comp, color, is3D, thick = 1.7, renderOrder = 12, hea
     <>
       <mesh ref={shaft} geometry={cylGeo} material={mat} renderOrder={renderOrder} />
       <mesh ref={head} geometry={is3D ? coneGeo : flatHeadGeo} material={mat} renderOrder={renderOrder} />
+    </>
+  )
+}
+
+/**
+ * The slim 3-D arrow (3D-1, owner: "the vector becomes so much bigger and bulky"). The shaft is a constant-pixel line, so
+ * it is `thick` px wide all along however far its parts are from the camera (a cylinder in perspective cannot be: the old
+ * one was scaled at the midpoint and was fat near the camera); the cone is sized every frame from the world-per-pixel at
+ * its own tip (arrowHead3D: `headPx` long, `headRadPx` wide on screen). The shaft is depth-tested, so it ends inside the
+ * cone and the drawing in front of it covers it.
+ */
+function SlimArrow3D({ tail, comp, color, thick = 1.7, renderOrder = 12, headPx = 12, headRadPx = 4, tipPx = 0 }: ArrowProps) {
+  const head = useRef<THREE.Mesh>(null)
+  const mat = useArrowMaterials(color, true)
+  const { camera, size } = useThree()
+  const L = len(comp)
+  const visible = L > 1e-9
+  const tip = add(tail, comp)
+  // Where the shaft stops: half a head back from the tip, inside the cone. The cone is resized every frame; the shaft's end
+  // follows it when the zoom has moved the head's size by a fifth (so the end stays between 0.4 and 0.63 of a head back,
+  // always inside the cone, never a gap before its base), without drawing the line again every frame.
+  const [shaftWpp, setShaftWpp] = useState(() => worldPerPixel(camera, size, tip))
+  const back = visible ? arrowHead3D(L, shaftWpp, headPx, headRadPx).headLen * 0.5 : 0
+  const end = visible ? add(tail, scale(comp, Math.max(0, (L - back) / L))) : tail
+  useFrame(({ camera: cam, size: sz }) => {
+    const h = head.current
+    if (!h) return
+    h.visible = visible
+    if (!visible) return
+    const dir = new THREE.Vector3(comp[0] / L, comp[1] / L, comp[2] / L)
+    const wpp = worldPerPixel(cam, sz, tip)
+    const ratio = wpp / shaftWpp
+    if (ratio < 0.8 || ratio > 1.25) setShaftWpp(wpp)
+    const at = L + tipPx * wpp
+    const { headLen, radius } = arrowHead3D(L, wpp, headPx, headRadPx)
+    // The cone is centred on its own origin, so it sits half a head back from the tip.
+    h.quaternion.setFromUnitVectors(UP, dir)
+    h.position.set(tail[0] + dir.x * (at - headLen / 2), tail[1] + dir.y * (at - headLen / 2), tail[2] + dir.z * (at - headLen / 2))
+    h.scale.set(radius, headLen, radius)
+  })
+  return (
+    <>
+      <FatLine points={[tail, end]} color={color} width={thick} depthTest renderOrder={renderOrder} visible={visible} />
+      <mesh ref={head} geometry={coneGeo} material={mat} renderOrder={renderOrder} />
     </>
   )
 }
@@ -274,6 +326,8 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
   // a 300° sweep with the label stranded on the far side.
   const arc = headingArc(theta)
   const planar = Math.abs(comp[2]) < 1e-9 && Math.abs(tail[2]) < 1e-9
+  /** Below the head on the tail's x-y plane: where the z part stands. */
+  const foot: V3 = [tail[0] + comp[0], tail[1] + comp[1], tail[2]]
 
   useFrame(({ camera: cam, size: sz }) => {
     const a = toScreen(cam, sz, tail)
@@ -299,6 +353,15 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
         const parts = [`Δθ = ${sign < 0 ? '−' : '+'}${formatMeasure(dTheta, 'angle', settings)}`, `ΔL = ${formatMeasure(L - len(base.comp), 'length', settings)}`]
         pool.place(superscriptPowers(parts.join('   ')), b.x + 16, b.y + 22, 'left')
       }
+      if (showComps && !planar && L > 1e-9) {
+        const [xText, yText, zText] = componentTexts3D(obj, comp, settings)
+        const ax = toScreen(cam, sz, [tail[0] + comp[0] / 2, tail[1], tail[2]])
+        const ay = toScreen(cam, sz, [tail[0], tail[1] + comp[1] / 2, tail[2]])
+        const az = toScreen(cam, sz, [foot[0], foot[1], foot[2] + comp[2] / 2])
+        if (ax.visible) pool.place(superscriptPowers(xText), ax.x, ax.y + 14, 'center', colors.xComp)
+        if (ay.visible) pool.place(superscriptPowers(yText), ay.x - 10, ay.y, 'right', colors.yComp)
+        if (az.visible) pool.place(superscriptPowers(zText), az.x + 10, az.y, 'left', colors.zComp)
+      }
       if (showComps && planar) {
         const ax = toScreen(cam, sz, [tail[0] + comp[0], tail[1], tail[2]])
         const ay = toScreen(cam, sz, [tail[0], tail[1] + comp[1], tail[2]])
@@ -320,21 +383,29 @@ export const VectorView = memo(function VectorView({ obj, c, selected, hovered, 
     <>
       {/* The halo's head shares the arrow head's 25° edges, so it is pushed past the tip by enough
           for its outline to be as wide along those edges as it is beside the shaft. */}
-      {selected && <Arrow tail={tail} comp={comp} color={colors.select} is3D={is3D} thick={thick + 2.2} renderOrder={11} headPx={15} headRadPx={8.5} tipPx={HALO_TIP_PX} />}
-      <Arrow tail={tail} comp={comp} color={color} is3D={is3D} thick={thick} />
+      {selected && <Arrow tail={tail} comp={comp} color={colors.select} is3D={is3D} slim thick={thick + 2.2} renderOrder={11} headPx={15} headRadPx={is3D ? 6.5 : 8.5} tipPx={HALO_TIP_PX} />}
+      <Arrow tail={tail} comp={comp} color={color} is3D={is3D} slim thick={thick} />
       {/* The resultant's second head, one head length and a gap back from the tip: a mark that
           does not depend on seeing its colour. Left off an arrow too short to carry two. */}
-      {result && L / wpp > 4 * RESULT_HEAD_GAP_PX && <Arrow tail={tail} comp={comp} color={color} is3D={is3D} thick={thick} tipPx={-RESULT_HEAD_GAP_PX} />}
+      {result && L / wpp > 4 * RESULT_HEAD_GAP_PX && <Arrow tail={tail} comp={comp} color={color} is3D={is3D} slim thick={thick} tipPx={-RESULT_HEAD_GAP_PX} />}
       {showComps && planar && L > 1e-9 && (
         <>
-          <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
-          <Arrow tail={tail} comp={[0, comp[1], 0]} color={colors.yComp} is3D={is3D} thick={1.2} renderOrder={8} headPx={10} headRadPx={4.5} />
+          <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D={is3D} slim thick={1.2} renderOrder={8} headPx={10} headRadPx={3.5} />
+          <Arrow tail={tail} comp={[0, comp[1], 0]} color={colors.yComp} is3D={is3D} slim thick={1.2} renderOrder={8} headPx={10} headRadPx={3.5} />
           <FatLine points={[[tail[0] + comp[0], tail[1], tail[2]], head, [tail[0], tail[1] + comp[1], tail[2]]]} color={colors.dashed} width={1.2} dashed dashSize={6 * wpp} gapSize={4 * wpp} renderOrder={7} />
           {showArc && <FatLine points={arcPoints(tail, 30 * wpp, arc.from, arc.to)} color={colors.arc} width={1.6} renderOrder={9} />}
         </>
       )}
       {showComps && !planar && L > 1e-9 && (
-        <FatLine points={[head, [head[0], head[1], tail[2]], tail]} color={colors.dashed} width={1.2} dashed dashSize={0.12} gapSize={0.08} renderOrder={7} />
+        // 3D-1: a vector off the x-y plane. Dashed from its head down to the plane, and from that foot to the two axes;
+        // its x and y parts along the axes and its z part up from the foot, each labelled (Ax, Ay, Az, in useFrame).
+        <>
+          <FatLine points={[head, foot, [tail[0] + comp[0], tail[1], tail[2]]]} color={colors.dashed} width={1.2} dashed dashSize={6 * wpp} gapSize={4 * wpp} renderOrder={7} />
+          <FatLine points={[foot, [tail[0], tail[1] + comp[1], tail[2]]]} color={colors.dashed} width={1.2} dashed dashSize={6 * wpp} gapSize={4 * wpp} renderOrder={7} />
+          <Arrow tail={tail} comp={[comp[0], 0, 0]} color={colors.xComp} is3D slim thick={1.2} renderOrder={8} headPx={10} headRadPx={3.5} />
+          <Arrow tail={tail} comp={[0, comp[1], 0]} color={colors.yComp} is3D slim thick={1.2} renderOrder={8} headPx={10} headRadPx={3.5} />
+          <Arrow tail={foot} comp={[0, 0, comp[2]]} color={colors.zComp} is3D slim thick={1.2} renderOrder={8} headPx={10} headRadPx={3.5} />
+        </>
       )}
     </>
   )

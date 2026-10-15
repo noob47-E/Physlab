@@ -15,7 +15,7 @@ import { inDegrees, toV3 } from '../math/expr'
 import { texMeasure, texPrecise, texSci } from '../math/format'
 import { ZERO, add, heading, layoutVectors, len, neg, toDeg, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
-import { cardValues, cardWalk, DIVIDED_BY_ZERO, evalNumber, evaluateVectorLine, explainVectorError, namesIn, NOTHING_PICKED, PlainError, UNIT_VECTORS } from './vectorLine'
+import { cardValues, cardWalk, DIVIDED_BY_ZERO, evalNumber, evaluateVectorLine, explainVectorError, flatName, namesIn, NOTHING_PICKED, PlainError, putInScope, UNIT_VECTORS } from './vectorLine'
 import { texVector } from './cardLine'
 export { ALL_ARROWS_TAKEN, cardValue, cardValues, droppedUnits, droppedUnitsSentence, evalNumber, evaluateVectorLine, explainVectorError, graphCardPrompt, namesIn, NO_ARROWS, NOTHING_PICKED, PlainError, unknownNames, unknownNameSentence } from './vectorLine'
 export { cardLineTex, MIN_ZOOM_2D, nextStepHint, tooBigToDraw } from './cardLine'
@@ -50,13 +50,18 @@ export interface Card {
    * editing either box makes what is typed rule again (V6).
    */
   exact?: { v: V3; mag: string; angle: string }
+  /**
+   * 3D-1: a typed card entered as three boxes, x, y and z (the 3-D view's "x, y, z" switch). The boxes' own texts; the card's
+   * line is their tuple (panels/vectorParts.ts partsLatex), so the vector is read as any typed line is.
+   */
+  parts?: [string, string, string]
 }
 
 /**
  * A number for a maths field at twelve significant digits and in no programming notation: String
  * writes 10²¹ as "1e+21" and 1.6×10⁻¹⁹ as "1.6e-19", which a field would show as typed (H8).
  */
-const exactNumber = (x: number): string => {
+export const exactNumber = (x: number): string => {
   // eslint-disable-next-line no-restricted-syntax -- not the student's precision: a card's own field text, at 12 figures so it reads back as the same vector (H8); math/format.ts has no writer for a field
   const text = String(Number(x.toPrecision(12)))
   const sci = /^(-?[\d.]+)e([+-]\d+)$/.exec(text)
@@ -445,13 +450,14 @@ export function runOperation(opId: string): string | null {
  */
 export function exprSolution(expr: string, cards: { name: string; v: V3 | string }[], settings: SceneSettings): { sol: VS.Solution; used: string[] } {
   const scope: Record<string, unknown> = { ...UNIT_VECTORS }
+  const names = cards.map((c) => c.name)
   cards.forEach((c) => {
-    if (typeof c.v !== 'string') scope[c.name] = c.v
+    if (typeof c.v !== 'string') putInScope(scope, c.name, c.v, names)
   })
   const unreadable = cards.filter((c) => typeof c.v === 'string').map((c) => c.name)
   const { src, out } = inDegrees(() => evaluateVectorLine(expr, scope, [], unreadable))
   const named = namesIn(src)
-  const inputs = cards.filter((x): x is { name: string; v: V3 } => typeof x.v !== 'string' && named.includes(x.name))
+  const inputs = cards.filter((x): x is { name: string; v: V3 } => typeof x.v !== 'string' && (named.includes(x.name) || named.includes(flatName(x.name))))
   const used = inputs.map((x) => x.name)
   if (typeof out === 'number') {
     // 1/0 answered ∞ and 0/0 "undefined" (H6).

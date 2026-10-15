@@ -340,6 +340,19 @@ export function droppedUnitsSentence(units: string[]): string {
  * value to (see unknownNames) with a sentence rather than a unit, and a number added to a vector.
  * What it gives is free of the noise its own arithmetic left (see lineScale).
  */
+/**
+ * The name a line reads for a card named with a subscript: the maths reader writes v_{A} and v_A as vA, so a card v_A (a
+ * name the panel allows, and the 'Try one' tiles use: F_1, v_A) is also in the scope as vA, unless a card has that name.
+ */
+export const flatName = (name: string): string => name.replace('_', '')
+
+/** Puts a card's vector in a line's scope under its name, and under its subscript-free name where no card has that one. */
+export function putInScope(scope: Record<string, unknown>, name: string, v: unknown, names: readonly string[]): void {
+  scope[name] = v
+  const flat = flatName(name)
+  if (flat !== name && !names.includes(flat)) scope[flat] = v
+}
+
 export function evaluateVectorLine(latex: string, scope: Record<string, unknown>, below: string[] = [], unreadable: string[] = []): { src: string; out: unknown } {
   const src = preprocess(latexToMath(latex, { vectorOps: true }))
   const unknown = unknownNames(src, scope, [...below, ...unreadable])
@@ -373,7 +386,7 @@ export function cardWalk(cards: Card[], ev: EvalResult) {
       }
     },
     keep: (name: string, v: V3 | string): void => {
-      if (typeof v !== 'string') scope[name] = v
+      if (typeof v !== 'string') putInScope(scope, name, v, names)
       else unreadable.push(name)
       at++
     }

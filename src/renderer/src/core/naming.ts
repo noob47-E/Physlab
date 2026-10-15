@@ -184,6 +184,12 @@ export function vectorAmount(v: number, o: VectorObj, s: MeasureSettings): strin
  * The component labels drawn beside a selected vector, "m₂gx = 0 N" and "m₂gy = −9.81 N": its
  * display name (the author's m₂g, never the scene's sanitised mg1) and its own unit.
  */
+/** The three component labels of a vector off the x-y plane (3D-1): Ax, Ay and Az. */
+export function componentTexts3D(o: VectorObj, comp: readonly number[], s: MeasureSettings): [string, string, string] {
+  const name = o.label ?? o.name
+  return [...componentTexts(o, comp, s), `${name}z = ${vectorAmount(comp[2], o, s)}`] as [string, string, string]
+}
+
 export function componentTexts(o: VectorObj, comp: readonly number[], s: MeasureSettings): [string, string] {
   const name = o.label ?? o.name
   return [`${name}x = ${vectorAmount(comp[0], o, s)}`, `${name}y = ${vectorAmount(comp[1], o, s)}`]

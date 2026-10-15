@@ -91,7 +91,8 @@ describe('flat arrow heads', () => {
     expect(HALO_TIP_PX).toBeCloseTo(1.1 / Math.sin((25 * Math.PI) / 180), 9)
     expect(HALO_TIP_PX).toBeCloseTo(2.6, 1)
     const src = readSource('src/renderer/src/render/ObjectViews.tsx')
-    expect(src).toMatch(/thick=\{thick \+ 2\.2\} renderOrder=\{11\} headPx=\{15\} headRadPx=\{8\.5\} tipPx=\{HALO_TIP_PX\}/)
+    // 3D-1: the slim 3-D arrow's halo cone is 6.5 px wide on screen; the 2-D halo keeps 8.5.
+    expect(src).toMatch(/slim thick=\{thick \+ 2\.2\} renderOrder=\{11\} headPx=\{15\} headRadPx=\{is3D \? 6\.5 : 8\.5\} tipPx=\{HALO_TIP_PX\}/)
   })
 
   it('measure the halo head from the tip pushed out by HALO_TIP_PX, so the outline is one width all round', () => {
@@ -148,7 +149,7 @@ describe('the resultant reads as clearly as its parents, not heavier (Fix 2)', (
     expect(view).toMatch(/result \? colors\.result : shownColor\(obj\)/)
     // One thickness for every arrow; only selection or hover changes it.
     expect(view).toMatch(/const thick = selected \? 2\.4 : hovered \? 2\.1 : 1\.7\n/)
-    expect(view).toMatch(/\{result && L \/ wpp > 4 \* RESULT_HEAD_GAP_PX && <Arrow tail=\{tail\} comp=\{comp\} color=\{color\} is3D=\{is3D\} thick=\{thick\} tipPx=\{-RESULT_HEAD_GAP_PX\} \/>\}/)
+    expect(view).toMatch(/\{result && L \/ wpp > 4 \* RESULT_HEAD_GAP_PX && <Arrow tail=\{tail\} comp=\{comp\} color=\{color\} is3D=\{is3D\} slim thick=\{thick\} tipPx=\{-RESULT_HEAD_GAP_PX\} \/>\}/)
     // The second head sits clear of the first: a whole 12 px head and a gap back.
     expect(RESULT_HEAD_GAP_PX).toBeGreaterThan(HEAD_PX)
     // The components have their own pair of tokens.

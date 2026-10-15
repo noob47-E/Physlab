@@ -109,7 +109,7 @@ describe('arrow colours (Fix 2)', () => {
     for (const [theme, selector] of Object.entries(BLOCKS)) {
       const block = themeBlock(css, selector)
       const canvas = tokenValue(block, '--canvas-bg')!
-      for (const t of [...ARROWS, '--vec-result', '--vec-x', '--vec-y']) {
+      for (const t of [...ARROWS, '--vec-result', '--vec-x', '--vec-y', '--vec-z']) {
         const v = tokenValue(block, t)
         expect(v, `${theme} ${t}`).toBeDefined()
         expect(contrast(v!, canvas), `${theme} ${t} ${v} on ${canvas}`).toBeGreaterThanOrEqual(3)
@@ -138,6 +138,9 @@ describe('arrow colours (Fix 2)', () => {
       const block = themeBlock(css, selector)
       for (const vision of VISIONS) {
         expect(colourDistance(tokenValue(block, '--vec-x')!, tokenValue(block, '--vec-y')!, vision), `${theme} ${vision}`).toBeGreaterThanOrEqual(APART)
+        // 3D-1: the z part, apart from both.
+        expect(colourDistance(tokenValue(block, '--vec-z')!, tokenValue(block, '--vec-x')!, vision), `${theme} ${vision} z-x`).toBeGreaterThanOrEqual(APART)
+        expect(colourDistance(tokenValue(block, '--vec-z')!, tokenValue(block, '--vec-y')!, vision), `${theme} ${vision} z-y`).toBeGreaterThanOrEqual(APART)
       }
     }
   })

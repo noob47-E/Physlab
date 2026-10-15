@@ -696,7 +696,8 @@ describe('V2 (rest) — the operation buttons and the entry switch fit the panel
     if (!/<div className=\{`[^`]*\$\{OP_GRID\}`\}>\{COMMON_OPS\.map\(opButton\)\}<\/div>/.test(src)) out.push('the common operations are not laid out by OP_GRID')
     if (!/<div className=\{OP_GRID\}>\s*\{MORE_OPS\.map\(/.test(src)) out.push('the More operations are not laid out by OP_GRID')
     if (/\bcol-span-\d+\b/.test(between(src, 'op.field ? (', ') : ('))) out.push('the k and q rows span a fixed number of columns')
-    const seg = /<div className="(seg[^"]*)">\s*\{\(\s*\[\s*\['comp'/.exec(src)?.[1]
+    // 3D-1: the 3-D view has its own list (typed | x, y, z | graph) before the 2-D one; one switch for both.
+    const seg = /<div className="(seg[^"]*)">\s*\{\(\s*(?:\(is3D\s*\?\s*)?\[\s*\['comp'/.exec(src)?.[1]
     if (seg === undefined) out.push('the typed / size ∠ angle / graph switch was not found')
     else {
       if (!/\bflex-wrap\b/.test(seg)) out.push(`the entry switch cannot wrap: ${seg}`)
@@ -1209,7 +1210,8 @@ describe('V6 (plain text) — the drawing’s labels write a power of ten raised
     // The VectorView's labels: the drag change and the two components. The "θ" beside the arc has no number.
     const block = between(src, 'The name/size/angle chip comes from the label layer', 'pool.end()')
     const placed = block.match(/pool\.place\([^\n]*\)/g) ?? []
-    expect(placed.length, 'the drag label, the x and y component labels and θ').toBe(4)
+    // 3D-1: and Ax, Ay, Az for a vector off the x-y plane.
+    expect(placed.length, 'the drag label, the x and y component labels, θ, and the three 3-D component labels').toBe(7)
     for (const call of placed.filter((c) => !c.includes('`θ`'))) expect(call, 'a label with a number in it').toMatch(/^pool\.place\(superscriptPowers\(/)
     expect(src, 'imported from math/format').toMatch(/import \{[^}]*\bsuperscriptPowers\b[^}]*\} from '..\/math\/format'/)
   })

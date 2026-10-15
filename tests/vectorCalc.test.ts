@@ -120,7 +120,8 @@ describe('one way in', () => {
     expect(src).toContain('Type a vector above, like 3i + 4j or 10∠30°. It is drawn on the graph as you type.')
     expect(src).not.toContain('Type the vector, e.g.')
     // The field's placeholder carries the example, once.
-    expect(src).toContain('placeholder="3i + 4j  or  10∠30°"')
+    // 3D-1: the 3-D view's example names k and the tuple.
+    expect(src).toContain("placeholder={is3D ? '3i + 4j + 5k  or  (3, 4, 5)' : '3i + 4j  or  10∠30°'}")
   })
 
   it('a blank card reads as “nothing typed yet” in the store, not as an error', () => {

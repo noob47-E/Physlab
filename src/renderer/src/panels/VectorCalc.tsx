@@ -12,9 +12,11 @@ import { useScene } from '../core/store'
 import { isDrawnAnswer, type DrawStyle } from '../core/visualize'
 import { len, type V3 } from '../math/vec'
 import { useView } from '../render/viewState'
+import { partsLatex, partsOf } from './vectorParts'
 import { MathInput, type MathInputHandle } from '../ui/MathInput'
 import { Tex } from '../ui/Tex'
-import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, droppedUnits, droppedUnitsSentence, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type VectorOperation } from './vectorCalcStore'
+import { VectorTryOne3D } from './VectorTryOne3D'
+import { graphCardPrompt, answerHint, answerOnGraph, canDraw, drawAnswer, isCalcAnswer, resultOnlyOn, setResultOnly, addVectorFromScene, cardForSelection, explainVectorError, exprSolution, cardLineTex, cardValues, ijkLatex, droppedUnits, droppedUnitsSentence, isBlankCard, linkCardToScene, newCardName, nextCardId, nextStepHint, OPERATIONS, peekCardId, pickArrow, removeCard, renameCard, runOperation, setEntry, staleSentence, startCardSync, tooBigToDraw, useVC, type Card, type Entry, type VectorOperation } from './vectorCalcStore'
 
 /** An operation's button: the store's table entry (what it reads, is called, shows and works out) with its id. */
 interface Op extends VectorOperation {
@@ -51,6 +53,8 @@ export function VectorCalc() {
   const objects = useScene((s) => s.objects)
   const ev = useScene((s) => s.ev)
   const selection = useScene((s) => s.selection)
+  // 3D-1: in the 3-D view a card is typed or entered as x, y and z; size ∠ angle is a way of writing a plane vector.
+  const is3D = useScene((s) => s.viewMode === '3d')
   // The drawing's width in pixels, subscribed to: the size limit in "Too big to draw…" is a number of
   // grid squares across it, and read from the store at render time it stayed that of the last render
   // after a window or panel resize, until a retype (G4b).
@@ -110,6 +114,32 @@ export function VectorCalc() {
 
   const updateCard = (id: number, patch: Partial<Card>) => set({ cards: st.cards.map((c) => (c.id === id ? { ...c, ...patch } : c)) })
 
+  /** The x, y, z boxes (3D-1): filled from the card's vector as it is now, so switching keeps the value. */
+  const toBoxes = (card: Card, v: V3 | string) => {
+    // A line that cannot be read is not swapped for an older vector: it says what is wrong and stays. A blank card (or
+    // a graph card with nothing picked) opens empty boxes.
+    const blank = isBlankCard(card) || (card.entry === 'scene' && !card.sceneId)
+    if (typeof v === 'string' && !blank) {
+      setError(`Put ${card.name} right first, then it can be split into x, y and z: ${v}`)
+      return
+    }
+    setError('')
+    if (card.entry !== 'comp') setEntry(card.id, 'comp')
+    const parts: [string, string, string] = typeof v === 'string' ? ['', '', ''] : partsOf(v)
+    const now = useVC.getState().cards
+    set({ cards: now.map((c) => (c.id === card.id ? { ...c, entry: 'comp', parts, latex: partsLatex(parts) } : c)) })
+  }
+  /** Back to one typed line: the vector written with i, j and k. */
+  const toTyped = (card: Card, v: V3 | string) => {
+    if (card.entry === 'comp' && card.parts) updateCard(card.id, { parts: undefined, latex: typeof v === 'string' ? card.latex : ijkLatex(v, true) })
+    else setEntry(card.id, 'comp')
+  }
+  const setPart = (card: Card, i: number, text: string) => {
+    const parts = [...(card.parts ?? ['', '', ''])] as [string, string, string]
+    parts[i] = text
+    updateCard(card.id, { parts, latex: partsLatex(parts) })
+  }
+
   /** An operation button: the store works it out and says why when it cannot (H9). */
   const run = (opId: string) => setError(runOperation(opId) ?? '')
 
@@ -139,7 +169,7 @@ export function VectorCalc() {
     <button key={op.id} className="btn h-auto min-h-[44px] min-w-0 flex-col items-start gap-0 whitespace-normal px-1.5 py-1 text-left" title={op.help} onClick={() => run(op.id)}>
       <span className="break-words text-small text-[color:var(--text-strong)]">{op.label}</span>
       <span className="text-fine text-[color:var(--text-dim)]">
-        <Tex tex={op.tex} />
+        <Tex tex={is3D && op.id === 'resolve' ? String.raw`A_x,\ A_y,\ A_z` : op.tex} />
       </span>
     </button>
   )
@@ -150,8 +180,10 @@ export function VectorCalc() {
         <Sigma size={16} className="text-[color:var(--accent)]" />
         <div className="font-semibold text-[color:var(--text-strong)]">Vector Calculator</div>
         <div className="flex-1" />
-        <span className="text-fine text-[color:var(--text-faint)]">Type like a textbook: 3i + 4j, 10∠30°, ½A</span>
+        <span className="text-fine text-[color:var(--text-faint)]">{is3D ? 'Type like a textbook: 3i + 4j + 5k, (3, 4, 5)' : 'Type like a textbook: 3i + 4j, 10∠30°, ½A'}</span>
       </div>
+
+      {is3D && <VectorTryOne3D onProblem={setError} />}
 
       {st.cards.length === 0 && <div className="px-3 py-2 text-[color:var(--text-dim)]">Add a vector, or draw one on the graph.</div>}
 
@@ -175,7 +207,9 @@ export function VectorCalc() {
                 labels once pushed the Remove button out of the card, with no way to remove it. */}
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <input
-                className="field w-11 text-center text-lead font-math font-semibold italic"
+                className="field text-center text-lead font-math font-semibold italic"
+                // As wide as the name: F_1 or v_A read whole (a fixed 2.75 rem showed "F_.").
+                style={{ width: `${Math.max(2.75, card.name.length * 0.8 + 1.2)}rem` }}
                 value={card.name}
                 title="Letters and digits, not i, j or k (those are the unit vectors)"
                 // The card and its arrow share one name; the drawing refuses a name it already uses.
@@ -188,16 +222,29 @@ export function VectorCalc() {
                   scrolled inside itself and "graph" was out of sight; now it wraps to a second line. */}
               <div className="seg min-w-0 shrink flex-wrap">
                 {(
-                  [
-                    ['comp', 'typed', 'Type it, like 3i + 4j or 10∠30°'],
-                    ['polar', 'size ∠ angle', 'Size and angle in two boxes'],
-                    ['scene', 'graph', 'Read it off a vector on the graph']
-                  ] as [Entry, string, string][]
-                ).map(([k, l, tip]) => (
-                  <button key={k} className={`min-h-[44px] ${card.entry === k ? 'on' : ''}`} title={tip} onClick={() => setEntry(card.id, k)}>
-                    {l}
-                  </button>
-                ))}
+                  (is3D
+                    ? [
+                        ['comp', 'typed', 'Type it, like 3i + 4j + 5k or (3, 4, 5)'],
+                        ['xyz', 'x, y, z', 'Its x, y and z parts in three boxes'],
+                        // A card already in size ∠ angle keeps its switch: a plane vector's way of writing.
+                        ...(card.entry === 'polar' ? [['polar', 'size ∠ angle', 'Size and angle in two boxes (a vector in the x-y plane)']] : []),
+                        ['scene', 'graph', 'Read it off a vector on the graph']
+                      ]
+                    : [
+                        ['comp', 'typed', 'Type it, like 3i + 4j or 10∠30°'],
+                        ['polar', 'size ∠ angle', 'Size and angle in two boxes'],
+                        ['scene', 'graph', 'Read it off a vector on the graph']
+                      ]) as [Entry | 'xyz', string, string][]
+                ).map(([k, l, tip]) => {
+                  const boxes = card.entry === 'comp' && !!card.parts && is3D
+                  const on = k === 'xyz' ? boxes : k === 'comp' ? card.entry === 'comp' && !boxes : card.entry === k
+                  const pick = () => (k === 'xyz' ? toBoxes(card, v) : k === 'comp' ? toTyped(card, v) : setEntry(card.id, k))
+                  return (
+                    <button key={k} className={`min-h-[44px] ${on ? 'on' : ''}`} title={tip} onClick={pick}>
+                      {l}
+                    </button>
+                  )
+                })}
               </div>
               {/* ml-auto rather than a spacer: a zero-width spacer stays on the first line when
                   the button alone wraps, which left the wrapped button hanging at the left. */}
@@ -210,7 +257,18 @@ export function VectorCalc() {
                 <Trash2 size={14} className="mx-auto" />
               </button>
             </div>
-            {card.entry === 'comp' && <MathInput value={card.latex} onChange={(l) => updateCard(card.id, { latex: l })} onEnter={() => run('sum')} placeholder="3i + 4j  or  10∠30°" />}
+            {card.entry === 'comp' && !(is3D && card.parts) && <MathInput value={card.latex} onChange={(l) => updateCard(card.id, { latex: l, parts: undefined })} onEnter={() => run('sum')} placeholder={is3D ? '3i + 4j + 5k  or  (3, 4, 5)' : '3i + 4j  or  10∠30°'} />}
+            {card.entry === 'comp' && is3D && card.parts && (
+              // 3D-1: three boxes; each track may shrink (minmax(0, 1fr)) so a long number scrolls in its own box.
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
+                {(['x', 'y', 'z'] as const).map((axis, i) => (
+                  <span key={axis} className="contents">
+                    <span className="font-math italic text-[color:var(--text-dim)]">{axis}</span>
+                    <MathInput size="sm" value={card.parts![i]} onChange={(l) => setPart(card, i, l)} onEnter={() => run('sum')} placeholder="0" />
+                  </span>
+                ))}
+              </div>
+            )}
             {card.entry === 'polar' && (
               // minmax(0, 1fr), not a bare 1fr: a bare 1fr track cannot be narrower than what its field
               // holds, so a long size or angle widened the row past the panel's edge. Now each field
@@ -265,7 +323,7 @@ export function VectorCalc() {
       {error && <div className="mx-3 mt-2 rounded px-2 py-1 text-[color:var(--bad)]" style={{ background: 'color-mix(in srgb, var(--bad) 12%, transparent)' }}>{error}</div>}
 
       {st.result && (
-        <div className="card mt-2 border-[color:var(--warn)]" style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
+        <div className="card mt-2 border-[color:var(--warn)]" data-vc-result style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
           <div className="flex items-center gap-2 border-b border-[color:var(--warn)] px-2 py-1.5">
             <span className="flex-1 font-semibold text-[color:var(--warn)]">{st.result.sol.title}</span>
           </div>
