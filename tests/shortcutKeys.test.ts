@@ -310,9 +310,18 @@ describe('SB17: the Sandbox transport keys', () => {
 
   it('L after J plays forwards again', () => {
     press('j')
+    // J played the recording backwards for a moment (the view's frame loop moves the playhead).
+    useTape.setState({ playhead: 100 })
     press('l')
     expect(tape().direction).toBe(1)
     expect(tape().playing).toBe(true)
+  })
+
+  it('BUGREC: L after J with the playhead still at the end carries on the live run', () => {
+    press('j')
+    press('l')
+    expect(tape().mode).toBe('live')
+    expect(playing()).toBe(true)
   })
 
   it('comma steps back one step, from a live run into replay, and stops at the start', () => {

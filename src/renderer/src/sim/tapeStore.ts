@@ -83,6 +83,27 @@ const fresh = () => ({
   note: null
 })
 
+/**
+ * Whether a loop goes round on a tape, as the frame loop reads it (render/sandbox/playback.ts `advancePlayhead`): A and B on
+ * one step, or a loop wholly off the tape, does not loop (the BUGREC review: it stopped Play at the end handing over).
+ */
+const loops = (loop: { a: number; b: number } | null, t: { first: number; last: number }): boolean =>
+  !!loop && Math.min(t.last, loop.b) > Math.max(t.first, loop.a)
+
+/**
+ * BUGREC: a replay played forward into the end of the recording (no loop) hands over to the live run, which goes on from that
+ * moment; the replay used to stop there, and Play started it from the beginning, so the run never went past the old end.
+ * True when it handed over. The view's frame loop calls it when the playhead stops at the end (render/sandbox/playback.ts).
+ */
+export function handOverAtEnd(): boolean {
+  const s = useTape.getState()
+  const t = tapes.live
+  if (s.mode !== 'replay' || s.direction !== 1 || !t || loops(s.loop, t) || s.playhead < t.last) return false
+  s.backToLive()
+  useScene.getState().setPlaying(true)
+  return true
+}
+
 export const useTape = create<TapeState>((set, get) => {
   /** From live, replay starts at the end of the run and the engine stops. */
   const replayFrom = (): { mode: TapeMode; playhead: number } => {
@@ -107,6 +128,14 @@ export const useTape = create<TapeState>((set, get) => {
       const t = shownTape()
       if (!t) return
       let p = s.playhead
+      // BUGREC (owner: "if we pause and then play, it does not go beyond the pausing point unless we reset"): Play at the end of
+      // the recording carries on the live run from there, which is exactly where the engine stopped; it used to start the
+      // recording again from its start. A fine re-run has no live run after it and still starts again.
+      if (s.mode === 'replay' && s.direction === 1 && p >= t.last && !loops(s.loop, tapes.live ?? t)) {
+        get().backToLive()
+        useScene.getState().setPlaying(true)
+        return
+      }
       if (s.direction === 1 && p >= t.last) p = t.first
       if (s.direction === -1 && p <= t.first) p = t.last
       set({ playing: true, playhead: p })

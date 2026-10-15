@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import { engine, useSandbox } from '../../sim/store'
-import { replayRefusal } from '../../sim/recorder'
+import { replayRefusal, stepAtOrBefore, tapes } from '../../sim/recorder'
 import { shownTape, useTape } from '../../sim/tapeStore'
 import { NumField } from '../../ui/fields'
 import {
@@ -26,7 +26,7 @@ import {
   type Row,
   type Where
 } from '../../sim/pendulum'
-import { angleDifference, angularSpeedDegrees, largestAngleSoFar } from '../../sim/angles'
+import { angleDifference, angularSpeedDegrees, largestAngleSoFar, turnAt } from '../../sim/angles'
 import { eulerToQuat } from '../../sim/rotate'
 import type { BodyDef, BodyId } from '../../sim/types'
 import type { V3 } from '../../math/vec'
@@ -77,9 +77,12 @@ export function PendulumFold({ sel }: { sel: BodyDef }) {
   const live = useSandbox((s) => s.live)
   const world = useSandbox((s) => s.world)
   const num = useNum()
-  // A recording on screen: the readout follows the shown step, not the engine.
+  // A recording on screen: the readout follows the shown step, not the engine. The step is the panels' moment (the
+  // recorded step their clock reads, published about ten times a second while it plays, at once on a pause, scrub or
+  // step), as every other panel shows it; following the playhead itself re-drew the fold every frame (0j2).
   const mode = useTape((s) => s.mode)
-  const playhead = useTape((s) => (s.mode === 'live' ? 0 : s.playhead))
+  const engineTime = useSandbox((s) => s.engineTime)
+  const backwards = useTape((s) => s.mode !== 'live' && s.playing && s.direction === -1)
   useTape((s) => (s.mode === 'live' ? 0 : s.revision))
   const [angle, setAngle] = useState(30)
   const [plane, setPlane] = useState<Plane>('side')
@@ -87,29 +90,21 @@ export function PendulumFold({ sel }: { sel: BodyDef }) {
 
   const replaying = mode !== 'live'
   const tape = replaying ? shownTape() : null
+  const playhead = replaying && tape ? stepAtOrBefore(tape, engineTime) : 0
   // Where each body is: the shown step of a recording; else the engine's reading while a run has
   // published one; else where its definition puts it.
   const where = whereFor({ replaying, tape, playhead, live })
   const pivot = pivotOf(sel.id, links, bodies, where)
 
-  // Get the 3-axis angle readings: follow the tape in replay, else use live
-  let rotState: readonly [number, number, number, number] = live[sel.id]?.rotation ?? (eulerToQuat(sel.rotation) as readonly [number, number, number, number])
-  if (replaying && tape) {
-    const rec = tape.record(playhead)
-    if (rec) {
-      const bodyIndex = tape.layout.bodies.indexOf(sel.id)
-      if (bodyIndex >= 0) {
-        const o = bodyIndex * 13
-        rotState = [rec[o + 3], rec[o + 4], rec[o + 5], rec[o + 6]]
-      }
-    }
-  }
+  // Get the 3-axis angle readings: follow the tape in replay (its turn and spin at the step), else use live
+  const recorded = replaying && tape ? turnAt(tape, playhead, sel.id, backwards) : null
+  const rotState: readonly [number, number, number, number] = recorded?.rotation ?? live[sel.id]?.rotation ?? (eulerToQuat(sel.rotation) as readonly [number, number, number, number])
   const axisAngles = angleDifference(rotState, sel.rotation)
-  const axisSpeeds = replaying ? [0, 0, 0] : angularSpeedDegrees(live[sel.id]?.angularVelocity ?? [0, 0, 0])
+  const axisSpeeds = angularSpeedDegrees(recorded?.angularVelocity ?? (replaying ? [0, 0, 0] : (live[sel.id]?.angularVelocity ?? [0, 0, 0])))
 
   // In replay, calculate the largest angle per axis from the start to the playhead
   const largestAngles = replaying && tape
-    ? largestAngleSoFar(tape, playhead, sel.id, sel.rotation)
+    ? largestAngleSoFar(tape, playhead, sel.id, sel.rotation, tapes.parent)
     : null
 
   const twoD = world.twoD

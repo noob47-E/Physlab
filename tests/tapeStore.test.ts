@@ -141,12 +141,71 @@ describe('replay', () => {
     st().scrubTo(240)
     expect(st().playing).toBe(false)
     expect(st().playhead).toBe(240)
-    // Play at the end starts from the beginning again.
+    // BUGREC (owner, Wed 14 Oct 22:32: 'if we pause and then play, it does not go beyond the pausing point unless we reset'):
+    // Play at the end of the recording carries on the LIVE run; it used to start the recording again from its start.
     st().play()
-    expect(st().playhead).toBe(0)
-    expect(st().playing).toBe(true)
-    st().pause()
-    expect(st().playing).toBe(false)
+    expect(st().mode).toBe('live')
+    expect(useScene.getState().playing).toBe(true)
+    useScene.getState().setPlaying(false)
+    w.destroy()
+  })
+
+  it('BUGREC: Play at the end carries on the live run, and the engine goes past the old end', async () => {
+    const { w } = await bounce()
+    record(w)
+    steps(w, 240)
+    const end = tape().last
+    st().stepBy(-1)
+    st().toEnd()
+    expect(st().mode).toBe('replay')
+    st().play()
+    expect(st().mode).toBe('live')
+    expect(useScene.getState().playing).toBe(true)
+    // The engine is the run again: its next steps go on from the old end.
+    steps(w, 120)
+    expect(tape().last).toBe(end + 120)
+    useScene.getState().setPlaying(false)
+    w.destroy()
+  })
+
+  it('BUGREC: a replay played into its end hands over to the live run (no loop), a fine replay does not', async () => {
+    const { handOverAtEnd } = await import('../src/renderer/src/sim/tapeStore')
+    const { w } = await bounce()
+    record(w)
+    steps(w, 240)
+    st().scrubTo(100)
+    st().play()
+    // The view's frame loop moved the playhead into the end, which stopped it there.
+    useTape.setState({ playhead: tape().last, playing: false })
+    expect(handOverAtEnd()).toBe(true)
+    expect(st().mode).toBe('live')
+    expect(useScene.getState().playing).toBe(true)
+    useScene.getState().setPlaying(false)
+    // With a loop the replay goes round again; it never hands over.
+    st().scrubTo(100)
+    st().setLoop(50, 150)
+    expect(handOverAtEnd()).toBe(false)
+    expect(st().mode).toBe('replay')
+    w.destroy()
+  })
+
+  it('BUGREC review: a loop with A and B on one step does not loop, so it does not stop Play at the end handing over', async () => {
+    const { handOverAtEnd } = await import('../src/renderer/src/sim/tapeStore')
+    const { w } = await bounce()
+    record(w)
+    steps(w, 240)
+    st().scrubTo(100)
+    st().setLoop(120, 120)
+    st().toEnd()
+    st().play()
+    expect(st().mode).toBe('live')
+    useScene.getState().setPlaying(false)
+    st().scrubTo(100)
+    st().setLoop(120, 120)
+    st().play()
+    useTape.setState({ playhead: tape().last, playing: false })
+    expect(handOverAtEnd()).toBe(true)
+    useScene.getState().setPlaying(false)
     w.destroy()
   })
 

@@ -272,6 +272,19 @@ function extend(book: Book, step: number, scene: LedgerScene): void {
  */
 const stepOf = (tape: RunTape, step: number): number => Math.max(tape.first, Math.min(tape.last, Math.floor(step + 1e-9)))
 
+/**
+ * Each moving body's part of the heat at index `i` of the book: its running total over the totals of all, a total below
+ * zero (a body that gained energy on its steps) counting as none; equal parts while nothing has been given. 0j2: the sum
+ * took the negative totals in, so with −2 and +3 one body took three times the whole.
+ */
+export function heatShares(given: ReadonlyMap<string, readonly number[]>, i: number): Map<string, number> {
+  let total = 0
+  for (const list of given.values()) total += Math.max(0, list[i] ?? 0)
+  const parts = new Map<string, number>()
+  for (const [id, list] of given) parts.set(id, total > 0 ? Math.max(0, list[i] ?? 0) / total : 1 / given.size)
+  return parts
+}
+
 /** The work PhysLab's own forces did in a step, signed (drag, rolling, push, hand, damper). */
 function workOf(w: Float32Array | null): number {
   return w ? w[0] + w[1] + w[2] + w[3] + w[4] : 0
@@ -303,12 +316,8 @@ export function ledgerAt(tape: RunTape, step: number, scene: LedgerScene): Ledge
   const heat = engine ? leftover : 0
   const i = s - book.first
   const deltaT: Record<string, number> = {}
-  let given = 0
-  for (const list of book.given.values()) given += list[i] ?? 0
-  const count = book.given.size
-  for (const [id, list] of book.given) {
+  for (const [id, part] of heatShares(book.given, i)) {
     const def = scene.bodies.find((b) => b.id === id)!
-    const part = given > 0 ? Math.max(0, list[i] ?? 0) / given : 1 / count
     deltaT[id] = heat > 0 ? temperatureRise(heat * part, scene.massOf(def), def.material) : 0
   }
   return {

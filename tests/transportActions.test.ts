@@ -123,9 +123,17 @@ describe('Play and Pause go to whatever is playing now', () => {
     expect(tape().playing).toBe(false)
   })
 
-  it('Play at the end of a replay asks the recording to play (the tape store starts it again from the start), and the engine stays paused', () => {
+  it('BUGREC: Play at the end of a replay carries on the live run (it used to start the recording again from its start)', () => {
     scrubTo(599)
     expect(tape().mode).toBe('replay')
+    togglePlay()
+    expect(tape().mode).toBe('live')
+    expect(scene().playing).toBe(true)
+    scene().setPlaying(false)
+  })
+
+  it('Play from earlier in a replay plays the recording, and the engine stays paused until the end hands over', () => {
+    scrubTo(300)
     togglePlay()
     expect(tape().mode).toBe('replay')
     expect(tape().playing).toBe(true)
@@ -413,6 +421,15 @@ describe('transportFlags (what each button may do)', () => {
     expect(f.canEnd).toBe(false)
   })
 
+  it('0j2: a slow replay between the first two steps may still go to the start or back; one a hair before the end may go to the end', () => {
+    // ×1/100 from the start: the playhead sits between steps 0 and 1 for 0.4 s, and To the start was greyed out all that time.
+    const near = transportFlags({ ...base, mode: 'replay', playhead: 0.4, tapePlaying: true })
+    expect(near.head).toBe(0)
+    expect(near.canStart && near.canBack).toBe(true)
+    const end = transportFlags({ ...base, mode: 'replay', playhead: 600 - 1e-10 })
+    expect(end.canEnd).toBe(true)
+  })
+
   it('playing is the engine in live and the recording otherwise', () => {
     expect(transportFlags({ ...base, scenePlaying: true }).playing).toBe(true)
     expect(transportFlags({ ...base, tapePlaying: true }).playing).toBe(false)
@@ -682,6 +699,8 @@ describe('with the real recorder and engine (Bouncing ball, 5 s)', () => {
     expect(tape().playing).toBe(true)
     pause()
     expect(tape().playing).toBe(false)
+    // L from a moment before the end plays the recording forwards (from the end itself it would carry on the live run, BUGREC).
+    scrubTo(300)
     play()
     expect(tape().direction).toBe(1)
     expect(tape().playing).toBe(true)

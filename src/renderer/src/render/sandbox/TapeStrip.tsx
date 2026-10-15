@@ -84,9 +84,22 @@ interface StripModel {
   text: string
 }
 
+/**
+ * The length of bar a recording of `seconds` is shown on: the next of 5, 10, 20, 30 s, 1, 2, 3, 5, 10, 20, 30 min, then whole
+ * hours (BUGREC, owner Wed 14 Oct: "while recording, the bar flickers and moves right and left violently"). The bar used to be
+ * exactly as long as the recording, so every new step rescaled it and every tick moved; now it grows in steps and the ticks
+ * stand still between them.
+ */
+export function barSeconds(seconds: number): number {
+  const steps = [MIN_SPAN_SECONDS, 10, 20, 30, 60, 120, 180, 300, 600, 1200, 1800, 3600]
+  const s = Math.max(0, seconds)
+  return steps.find((v) => s <= v) ?? Math.ceil(s / 3600) * 3600
+}
+
 export function stripView(tape: StripTape, mode: TapeMode, width: number): StripView {
-  // The fast re-run is one second and is shown whole; a recording is shown at least MIN_SPAN_SECONDS long.
-  const last = mode === 'fine' ? tape.last : Math.max(tape.last, tape.first + Math.round(MIN_SPAN_SECONDS * tape.rate))
+  // The fast re-run is one second and is shown whole; a recording on the next length of barSeconds (at least 5 s).
+  const span = (tape.last - tape.first) / tape.rate
+  const last = mode === 'fine' ? tape.last : tape.first + Math.round(barSeconds(span) * tape.rate)
   return { first: tape.first, last, rate: tape.rate, startStep: tape.first, startTime: tape.timeOf(tape.first), width }
 }
 
@@ -149,6 +162,8 @@ export function barKeyTarget(key: string, shift: boolean, m: StripModel): number
 
 /** The widest time text a run shows below 1000 s, laid invisibly in the time's cell so the strip never changes width as the digits grow (Fix 22). */
 export const WIDEST_TIME_TEXT = timeText(888.888, 888888)
+/** The slim bar's widest time below 1000 s, two decimals (BUGREC). */
+const SLIM_WIDEST = 't = 888.89 s'
 
 /** The speed buttons' labels, in the order of SPEEDS. */
 const SPEED_LABEL: Record<number, string> = { 1: '×1', 0.5: '×½', 0.25: '×¼', 0.1: '×1/10', 0.01: '×1/100' }
@@ -284,6 +299,36 @@ function ScrubBar({ model, onWidth, isSimple, slim = false }: { model: StripMode
  * Timeline dock panel) instead of over the bottom of the drawing.
  */
 export function TapeStrip({ inline = false }: { inline?: boolean }) {
+  const barShown = useTapeBar((s) => s.shown)
+  // 0j2: hidden (the default), the pill listens only to whether there is a run; the whole strip listened to the playhead,
+  // which a live run moves 240 times a second, and drew itself again every frame behind a pill that never changes.
+  if (!inline && !barShown) return <ReplayPill />
+  return <ShownStrip inline={inline} />
+}
+
+/** SB66: hidden (the default): a small pill at the bottom left of the drawing brings the bar back. */
+function ReplayPill() {
+  const hasRun = useTape((s) => {
+    void s.revision
+    const t = shownTape()
+    return !!t && t.last > t.first
+  })
+  const refusal = useEditRefusal((s) => s.sentence)
+  const setBarShown = useTapeBar((s) => s.setShown)
+  if (!hasRun) return null
+  return (
+    <>
+      {refusal && <p className="pointer-events-none absolute bottom-[52px] left-3 max-w-[60%] rounded bg-[var(--label-bg)] px-2 py-1 text-[color:var(--text)] shadow" role="status">{refusal}</p>}
+      <button type="button" data-tape-pill="" className="pointer-events-auto absolute bottom-3 left-3 flex min-h-[32px] items-center gap-1.5 rounded-full border border-[color:var(--line-2)] bg-[var(--label-bg)] px-3 text-small text-[color:var(--text)] shadow" title="Show the replay bar" onClick={() => setBarShown(true)}>
+        <Rewind size={14} aria-hidden="true" />
+        <span>Replay</span>
+      </button>
+    </>
+  )
+}
+
+/** The bar, open (or inline in the Timeline dock panel). */
+function ShownStrip({ inline }: { inline: boolean }) {
   const view = useSandboxView((s) => s.view)
   const isSimple = view === 'simple'
   const flags = useTransportFlags()
@@ -300,24 +345,10 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
   const settings = useScene((s) => s.settings)
   const world = useSandbox((s) => s.world)
   const [width, setWidth] = useState(640)
-  const barShown = useTapeBar((s) => s.shown)
   const setBarShown = useTapeBar((s) => s.setShown)
   const tape = shownTape()
   if (!tape || !flags.hasRun) {
     return inline ? <p className="text-[color:var(--text-dim)]">The recording appears here once a run has started. Press Play.</p> : null
-  }
-  const shownBar = inline || barShown
-  if (!shownBar) {
-    // SB66: hidden (the default): a small pill at the bottom left of the drawing brings the bar back.
-    return (
-      <>
-      {refusal && <p className="pointer-events-none absolute bottom-[52px] left-3 max-w-[60%] rounded bg-[var(--label-bg)] px-2 py-1 text-[color:var(--text)] shadow" role="status">{refusal}</p>}
-      <button type="button" data-tape-pill="" className="pointer-events-auto absolute bottom-3 left-3 flex min-h-[32px] items-center gap-1.5 rounded-full border border-[color:var(--line-2)] bg-[var(--label-bg)] px-3 text-small text-[color:var(--text)] shadow" title="Show the replay bar" onClick={() => setBarShown(true)}>
-        <Rewind size={14} aria-hidden="true" />
-        <span>Replay</span>
-      </button>
-      </>
-    )
   }
   const model = stripModel({ tape, mode, playhead, marks, bookmarks, loop, branchStep: tapes.parent?.step ?? null, width: Math.max(120, width) })
   // Live, the speeds are the Sandbox's slow motion; in replay they are the recording's own speed.
@@ -352,7 +383,14 @@ export function TapeStrip({ inline = false }: { inline?: boolean }) {
           <StepForward size={15} />
         </Btn>
         <ScrubBar model={model} onWidth={setWidth} isSimple slim />
-        <span className="ml-1 font-mono tabular-nums text-[color:var(--text-strong)]">t = {seconds} s</span>
+        {/* BUGREC: in a box as wide as the widest time (the full bar's trick), so the timeline beside it never changes width as
+            the digits do: its width fed back through the ResizeObserver and the bar jumped left and right while recording. */}
+        <span className="ml-1 grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]">
+          <span className="invisible col-start-1 row-start-1" aria-hidden="true">
+            {SLIM_WIDEST}
+          </span>
+          <span className="col-start-1 row-start-1">t = {seconds} s</span>
+        </span>
         <button
           type="button"
           className="btn min-h-[44px] min-w-[52px] justify-center"

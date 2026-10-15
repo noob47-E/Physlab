@@ -16,6 +16,7 @@ import { useScene } from '../src/renderer/src/core/store'
 import { useSandbox } from '../src/renderer/src/sim/store'
 import {
   MIN_SPAN_SECONDS,
+  barSeconds,
   TapeStrip,
   WIDEST_TIME_TEXT,
   barKeyTarget,
@@ -24,7 +25,7 @@ import {
   stripView,
   type StripInput
 } from '../src/renderer/src/render/sandbox/TapeStrip'
-import { durationWords, stepToX, timeText } from '../src/renderer/src/render/sandbox/tapeStripMath'
+import { durationWords, stepToX, ticks, timeText } from '../src/renderer/src/render/sandbox/tapeStripMath'
 import { Transport } from '../src/renderer/src/panels/sandbox/Transport'
 import { Timeline } from '../src/renderer/src/panels/Timeline'
 import { useApp } from '../src/renderer/src/app/modes'
@@ -74,8 +75,23 @@ describe('stripView', () => {
     const short = stripView(makeTape(60), 'live', 600)
     expect(short.first).toBe(0)
     expect(short.last).toBe(5 * RATE)
+    // BUGREC (owner: 'while recording, the bar flickers and moves right and left violently'): a longer recording is shown on
+    // the next nice length, 10, 20, 30, 60 s …, so the ticks stand still while it grows instead of rescaling every frame.
     const long = stripView(makeTape(10 * RATE), 'live', 600)
-    expect(long.last).toBe(10 * RATE - 1)
+    expect(long.last).toBe(10 * RATE)
+    expect(stripView(makeTape(6 * RATE), 'live', 600).last).toBe(10 * RATE)
+    expect(stripView(makeTape(25 * RATE), 'live', 600).last).toBe(30 * RATE)
+    expect(stripView(makeTape(45 * RATE), 'replay', 600).last).toBe(60 * RATE)
+  })
+
+  it('BUGREC: the bar lengths are 5, 10, 20, 30 s, 1, 2, 3, 5, 10, 20, 30 min, then whole hours', () => {
+    expect([0, 5, 5.01, 10, 19, 29, 59, 61, 150, 200, 400, 700, 1500, 3000, 3601].map(barSeconds)).toEqual([5, 5, 10, 10, 20, 30, 60, 120, 180, 300, 600, 1200, 1800, 3600, 7200])
+  })
+
+  it('BUGREC: while a run records, the ticks stand still between two steps of the scale', () => {
+    const views = [6, 7, 8, 9, 9.9].map((s) => stripView(makeTape(Math.round(s * RATE)), 'live', 600))
+    expect(new Set(views.map((v) => v.last)).size).toBe(1)
+    expect(new Set(views.map((v) => JSON.stringify(ticks(v)))).size).toBe(1)
   })
 
   it('shows the fast re-run whole, however short', () => {
@@ -717,6 +733,13 @@ describe('SB66: the replay bar is hidden by default, a Replay pill opens it, Hid
     expect([...at].sort((a, b) => a - b)).toEqual(at)
     // No note line and no second row in the slim bar.
     expect(html).not.toContain('min-h-[18px]')
+  })
+
+  it('BUGREC: the slim bar keeps its time in a box as wide as the widest time, so the timeline never changes width', () => {
+    useSandboxView.setState({ view: 'simple' })
+    const html = render()
+    expect(html).toContain('data-tape-row="slim"')
+    expect(html).toMatch(/class="invisible[^"]*"[^>]*aria-hidden="true">t = 888.89 s</)
   })
 
   it('the one speed button cycles ×1 → ×½ → ×¼ → ×1, and says the next', () => {

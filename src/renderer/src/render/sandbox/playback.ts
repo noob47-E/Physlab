@@ -15,7 +15,7 @@ import type { RunTape } from '../../sim/recorder'
 import { blendRecord, REC_FLOATS } from '../../sim/tape'
 import { SimWorld, STRIDE } from '../../sim/world'
 import { pulleyRim } from '../../sim/links'
-import { shownTape, useTape } from '../../sim/tapeStore'
+import { handOverAtEnd, shownTape, useTape } from '../../sim/tapeStore'
 
 /** What moves the playhead: where it is, how fast and which way the recording plays, the loop, and the tape's span. */
 export interface PlaybackState {
@@ -179,6 +179,8 @@ export function replayFrame(realDt: number, bodies: readonly BodyDef[], settle =
     const next = advancePlayhead({ playhead: s.playhead, speed: s.speed, direction: s.direction, loop: s.loop, first: tape.first, last: tape.last, rate: tape.rate }, realDt)
     // Straight into the store, not through scrubTo: its "an end stops" would also stop a loop whose B is the end.
     useTape.setState({ playhead: next.playhead, playing: !next.stopped })
+    // Played into the end of the recording: the live run carries on from there (BUGREC), and the view is live again.
+    if (next.stopped && handOverAtEnd()) return null
   } else if (settle && !Number.isInteger(s.playhead)) {
     useTape.setState({ playhead: Math.min(tape.last, Math.max(tape.first, Math.round(s.playhead))) })
   }
