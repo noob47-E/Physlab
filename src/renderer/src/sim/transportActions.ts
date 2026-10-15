@@ -71,8 +71,8 @@ export function transportFlags(i: TransportInput): TransportFlags {
     playing,
     // By the playhead itself, not its whole step (0j2): a slow replay sits between steps 0 and 1 for a while, and To the
     // start was greyed out all that time.
-    canStart: here && at! > t!.first,
-    canBack: here && at! > t!.first,
+    canStart: here && (i.mode === 'live' ? t!.last > t!.first : at! > t!.first),
+    canBack: here && (i.mode === 'live' ? t!.last > t!.first : at! > t!.first),
     canEnd: here && i.mode !== 'live' && at! < t!.last,
     fineWhy,
     branchWhy

@@ -147,6 +147,7 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   events(step: number): E[] {
+    step = Math.floor(step)
     if (step < this._first || step > this._last) return []
     for (const chunk of this.chunks) {
       if (step >= chunk.startStep && step < chunk.startStep + this.rate) {
@@ -157,6 +158,8 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   eventsIn(from: number, to: number): { step: number; e: E }[] {
+    from = Math.floor(from)
+    to = Math.floor(to)
     const res: { step: number; e: E }[] = []
     for (const chunk of this.chunks) {
       if (chunk.startStep + this.rate <= from || chunk.startStep > to) {
@@ -177,6 +180,8 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   workSum(from: number, to: number): Float32Array {
+    from = Math.floor(from)
+    to = Math.floor(to)
     const sum = new Float32Array(WORK_FLOATS)
     const start = Math.max(from, this._first)
     const end = Math.min(to, this._last)
@@ -200,6 +205,7 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   keyframeAtOrBefore(step: number): TapeKeyframe<K> | null {
+    step = Math.floor(step)
     let low = 0
     let high = this.keyframes.length - 1
     let best: TapeKeyframe<K> | null = null
@@ -221,6 +227,7 @@ export class Tape<K = unknown, E = unknown> {
   }
 
   truncateAfter(step: number, free: (k: K) => void): void {
+    step = Math.floor(step)
     if (this._last === -1 || step >= this._last) return
 
     // Find first keyframe after step
@@ -312,7 +319,7 @@ export function blendRecord(a: Float32Array, b: Float32Array, alpha: number, out
     const ry = qay + (qby - qay) * t
     const rz = qaz + (qbz - qaz) * t
     const rw = qaw + (qbw - qaw) * t
-    const len = Math.sqrt(rx * rx + ry * ry + rz * rz + rw * rw)
+    const len = Math.sqrt(rx * rx + ry * ry + rz * rz + rw * rw) || 1
     out[offset + 3] = rx / len
     out[offset + 4] = ry / len
     out[offset + 5] = rz / len

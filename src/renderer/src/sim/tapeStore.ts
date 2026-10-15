@@ -136,8 +136,10 @@ export const useTape = create<TapeState>((set, get) => {
         useScene.getState().setPlaying(true)
         return
       }
-      if (s.direction === 1 && p >= t.last) p = t.first
-      if (s.direction === -1 && p <= t.first) p = t.last
+      const lo = s.loop ? Math.max(t.first, s.loop.a) : t.first
+      const hi = s.loop ? Math.min(t.last, s.loop.b) : t.last
+      if (s.direction === 1 && p >= hi) p = lo
+      if (s.direction === -1 && p <= lo) p = hi
       set({ playing: true, playhead: p })
     },
     pause: () => {
@@ -149,7 +151,7 @@ export const useTape = create<TapeState>((set, get) => {
       if (!t || n === 0 || !Number.isFinite(n)) return
       if (get().mode === 'live' && n > 0) return
       const { mode, playhead } = replayFrom()
-      const to = n > 0 ? Math.floor(playhead) + Math.trunc(n) : Math.ceil(playhead) + Math.trunc(n)
+      const to = n > 0 ? Math.floor(playhead + 1e-9) + Math.trunc(n) : Math.ceil(playhead - 1e-9) + Math.trunc(n)
       set({ mode, playhead: clampTo(t, to), playing: false })
     },
     toStart: () => {
