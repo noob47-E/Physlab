@@ -55,7 +55,10 @@ export type CircleDef =
  * 'piecewise' is one curve made of several formulas, each on its own stretch of x (`pieces`).
  * 'between' shades the region between y = exprs[0] (upper) and y = exprs[1] (lower) for x in [tMin, tMax].
  */
-export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area' | 'piecewise' | 'between'
+export type GraphKind = 'explicit' | 'implicit' | 'parametric' | 'polar' | 'inequality' | 'surface' | 'area' | 'piecewise' | 'between' | 'curve3d' | 'plane' | 'psurface'
+
+/** The graphs that live in space (3D-2): drawn in the 3-D view, which they open. */
+export const is3DGraph = (kind: GraphKind): boolean => kind === 'surface' || kind === 'curve3d' || kind === 'plane' || kind === 'psurface'
 
 interface ObjectBase {
   id: ObjId
@@ -174,9 +177,12 @@ export interface GraphObj extends ObjectBase {
   source: string
   /** Main expression(s), e.g. f(x), F(x,y), [x(t), y(t)], r(θ), z(x,y). */
   exprs: string[]
-  /** Parameter range for parametric/polar. */
+  /** Parameter range for parametric/polar (and u for a parametric surface, 3D-2). */
   tMin?: number
   tMax?: number
+  /** 3D-2: the range of v of a parametric surface x(u, v), y(u, v), z(u, v). */
+  vMin?: number
+  vMax?: number
   /** Inequality operator. */
   op?: '<' | '<=' | '>' | '>='
   /** The formulas of a piecewise curve, each with the stretch of x it holds on. */

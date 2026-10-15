@@ -14,6 +14,7 @@ import { tapes } from '../../sim/recorder'
 import { shownTape, useTape } from '../../sim/tapeStore'
 import { fillTrail, newTrailBuffer, trailStart } from './playback'
 import { readoutRef } from './readout'
+import { useReleaseLater } from '../releaseLater'
 
 /** The moment (s) "Clear trails" was last pressed in this run, or null: the trails start there. */
 let clearedAt: number | null = null
@@ -61,7 +62,7 @@ function TraceLine({ def }: { def: BodyDef }) {
     g.setDrawRange(0, 0)
     return g
   }, [buf])
-  useEffect(() => () => geo.dispose(), [geo])
+  useReleaseLater(geo, (g) => g.dispose())
   const line = useRef<THREE.LineSegments>(null)
 
   useFrame(() => {

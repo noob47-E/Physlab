@@ -12,6 +12,7 @@ import { cssColor } from '../app/theme'
 import { EXPRESSION_WORDS as W, expressionRows, moveRow, rangeEdit, rangeOf, type ExpressionRow } from './expressionRows'
 import { fmt } from '../math/format'
 import { bumpAction } from '../core/actionSignals'
+import { TryOne3D } from './TryOne3D'
 
 const graphCount = (): number => Object.values(scene().objects).filter((o) => o.type === 'graph').length
 
@@ -23,6 +24,8 @@ export function Expressions() {
   const objects = useScene((s) => s.objects)
   const order = useScene((s) => s.order)
   const rows = useMemo(() => expressionRows(objects, order), [objects, order])
+  // 3D-2: the 'Try one' tiles are for the 3-D view.
+  const is3D = useScene((s) => s.viewMode === '3d')
   const [problem, setProblem] = useState<{ id: string; text: string } | null>(null)
   const [draft, setDraft] = useState('')
 
@@ -50,6 +53,8 @@ export function Expressions() {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
+        {/* 3D-2: the gallery of graphs in space, in the 3-D view. */}
+        {is3D && <TryOne3D />}
         {rows.length === 0 && <div className="px-3 py-2 text-[var(--text-dim)]">{W.empty}</div>}
         {rows.map((r, i) => (
           <Row

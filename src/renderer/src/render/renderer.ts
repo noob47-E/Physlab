@@ -73,4 +73,3 @@ export async function createRenderer(props: DefaultProps): Promise<THREE.WebGPUR
   console.info(`PHYSLAB_CHECK renderer=${backend} adapter=${adapter || 'unknown'} quality=${detected}`)
   return renderer
 }
-

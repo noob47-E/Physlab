@@ -8,7 +8,7 @@ import { planDrawing, type DrawStyle, type Solution, type VisualVector } from '.
 import { compileScalar, sceneNames } from '../../math/expr'
 import { fmtLabel } from '../../math/format'
 import { curveBox, slopeAt, type Box } from '../../math/graphs'
-import type { GraphKind, GraphObj, SceneObject } from '../types'
+import { is3DGraph, type GraphKind, type GraphObj, type SceneObject } from '../types'
 import { fitCamera } from '../../render/viewState'
 import { mixOklabMany, mixParents } from '../../render/colourMix'
 import { seriesColor, themeColor } from '../../app/theme'
@@ -138,7 +138,7 @@ export function visualizePoint(p: V3, name?: string): void {
  * shown instead: pressing Visualize twice on one line used to stack a second, identical graph and a
  * second Expressions row. Returns whether it drew a new graph. A line typed in the bar never reuses.
  */
-export function visualizeGraph(source: string, exprs: string[], kind: GraphKind = 'explicit', extra: { tMin?: number; tMax?: number; op?: '<' | '<=' | '>' | '>='; name?: string; color?: string; reuse?: boolean } = {}): boolean {
+export function visualizeGraph(source: string, exprs: string[], kind: GraphKind = 'explicit', extra: { tMin?: number; tMax?: number; vMin?: number; vMax?: number; op?: '<' | '<=' | '>' | '>='; name?: string; color?: string; reuse?: boolean } = {}): boolean {
   if (extra.reuse) {
     const same = Object.values(scene().objects).find(
       (o) => o.type === 'graph' && o.kind === kind && o.op === extra.op && o.tMin === extra.tMin && o.tMax === extra.tMax && o.exprs.length === exprs.length && o.exprs.every((e, i) => e === exprs[i])
@@ -146,14 +146,15 @@ export function visualizeGraph(source: string, exprs: string[], kind: GraphKind 
     if (same) {
       if (!same.visible) scene().updateObject(same.id, (d) => void (d.visible = true))
       scene().select([same.id])
-      scene().setViewMode(kind === 'surface' ? '3d' : '2d')
+      scene().setViewMode(is3DGraph(kind) ? '3d' : '2d')
       return false
     }
   }
   const b = new Builder()
-  b.graph({ kind, source, exprs, tMin: extra.tMin, tMax: extra.tMax, op: extra.op, showRoots: kind === 'explicit', showExtrema: kind === 'explicit' }, { name: extra.name, color: extra.color })
+  b.graph({ kind, source, exprs, tMin: extra.tMin, tMax: extra.tMax, vMin: extra.vMin, vMax: extra.vMax, op: extra.op, showRoots: kind === 'explicit', showExtrema: kind === 'explicit' }, { name: extra.name, color: extra.color })
   b.commit()
-  if (kind === 'surface') scene().setViewMode('3d')
+  // A graph in space opens the 3-D view (3D-2: a surface, a curve in space, a plane, a parametric surface).
+  if (is3DGraph(kind)) scene().setViewMode('3d')
   else scene().setViewMode('2d')
   return true
 }

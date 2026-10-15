@@ -11,9 +11,11 @@ import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
 import { solutionsInX } from '../core/visualize'
 import { compileScalar, math, preprocess, sceneNames, symbolsOf } from '../math/expr'
-import { betweenMesh, carriedSolutions, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, surfaceGeometry, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
-import { themeColor, useTheme, useThemed, type Theme } from '../app/theme'
+import { betweenMesh, carriedSolutions, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
+import { themeColor, useTheme, useThemed } from '../app/theme'
 import type { V3 } from '../math/vec'
+import { useReleaseLater } from './releaseLater'
+import { ParamSurfaceView, PlaneView, SpaceCurveView, SurfaceView } from './Graph3DViews'
 
 const scopeNow = () => useScene.getState().ev.scope
 
@@ -68,6 +70,13 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
           return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow, names), vertical: obj.kind === 'implicit' && !symbolsOf(math.parse(preprocess(obj.exprs[0], names))).includes('y') }
         case 'surface':
           return { F: compileScalar(obj.exprs[0], ['x', 'y'], scopeNow, names) }
+        // 3D-2: the graphs in space (render/Graph3DViews.tsx draws them).
+        case 'plane':
+          return { F: compileScalar(obj.exprs[0], ['x', 'y', 'z'], scopeNow, names) }
+        case 'curve3d':
+          return { fx: compileScalar(obj.exprs[0], ['t'], scopeNow, names), fy: compileScalar(obj.exprs[1], ['t'], scopeNow, names), fz: compileScalar(obj.exprs[2], ['t'], scopeNow, names) }
+        case 'psurface':
+          return { fx: compileScalar(obj.exprs[0], ['u', 'v'], scopeNow, names), fy: compileScalar(obj.exprs[1], ['u', 'v'], scopeNow, names), fz: compileScalar(obj.exprs[2], ['u', 'v'], scopeNow, names) }
         case 'polar':
           return { f: compileScalar(obj.exprs[0], ['theta', 't'], scopeNow, names) }
         case 'parametric':
@@ -243,7 +252,10 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   void camera
   void size
 
-  if (obj.kind === 'surface') return <SurfaceView obj={obj} F={fns.F} selected={selected} version={evVersion} wireframe={colors.wireframe} theme={theme} />
+  if (obj.kind === 'surface') return <SurfaceView obj={obj} F={fns.F} selected={selected} version={evVersion} theme={theme} />
+  if (obj.kind === 'psurface') return <ParamSurfaceView obj={obj} fx={fns.fx} fy={fns.fy} fz={fns.fz} selected={selected} version={evVersion} theme={theme} />
+  if (obj.kind === 'plane') return <PlaneView obj={obj} F={fns.F} selected={selected} version={evVersion} />
+  if (obj.kind === 'curve3d') return <SpaceCurveView obj={obj} fx={fns.fx} fy={fns.fy} fz={fns.fz} width={width} selected={selected} selectColour={colors.select} version={evVersion} />
 
   return (
     <>
@@ -296,37 +308,10 @@ function FillMesh({ positions, color }: { positions: Float32Array; color: string
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     return g
   }, [positions])
-  useEffect(() => () => geo.dispose(), [geo])
+  useReleaseLater(geo, (g) => g.dispose())
   return (
     <mesh geometry={geo} renderOrder={0} frustumCulled={false}>
       <meshBasicMaterial color={color} transparent opacity={0.2} depthTest={false} depthWrite={false} side={THREE.DoubleSide} />
     </mesh>
-  )
-}
-
-function SurfaceView({ obj, F, selected, version, wireframe, theme }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown; wireframe: string; theme: Theme }) {
-  const geo = useMemo(() => {
-    if (!F) return null
-    const s = surfaceGeometry((x, y) => F({ x, y }), 6, 140)
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(s.positions, 3))
-    g.setAttribute('color', new THREE.BufferAttribute(s.colors, 3))
-    g.setIndex(s.indices)
-    g.computeVertexNormals()
-    return g
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is the evaluator's result: F reads the scope through a closure, so the same F gives a new surface once a slider moves
-  }, [F, version])
-  useEffect(() => () => geo?.dispose(), [geo])
-  useFrame(() => labelAnchors.set(obj.id, { p: [6, 6, 0] }))
-  if (!geo) return null
-  return (
-    <group>
-      <mesh geometry={geo}>
-        <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.55} metalness={0.05} transparent opacity={selected ? 0.8 : 0.95} />
-      </mesh>
-      <mesh geometry={geo}>
-        <meshBasicMaterial key={theme} color={wireframe} wireframe transparent opacity={0.12} />
-      </mesh>
-    </group>
   )
 }

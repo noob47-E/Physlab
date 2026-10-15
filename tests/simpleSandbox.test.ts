@@ -440,6 +440,22 @@ describe('the side lessons panel (Examples) in Sandbox Simple view', () => {
     expect(all.ids()).toContain('examples')
   })
 
+  it('3D-2: the Sandbox panel leaves with the Sandbox (Graphing showed it docked beside the 3-D graph) and comes back with it', () => {
+    useApp.setState({ mode: 'sandbox' })
+    const d = dock(['viewport', 'sandbox'])
+    enterMode('graphing')
+    expect(d.ids()).not.toContain('sandbox')
+    // Back in the Sandbox its mode asks for the panel (the app opens it on that request).
+    useScene.setState({ focusPanel: null } as never)
+    enterMode('sandbox')
+    expect((useScene.getState() as unknown as { focusPanel: { id: string } | null }).focusPanel?.id).toBe('sandbox')
+    // A restored session is left as the student had it.
+    useApp.setState({ mode: 'sandbox' })
+    const restored = dock(['viewport', 'sandbox'])
+    enterMode('graphing', { restored: true })
+    expect(restored.ids()).toContain('sandbox')
+  })
+
   it('a mode with lessons that never lost Examples to the Sandbox is left alone', () => {
     useApp.setState({ mode: 'vectors' })
     const d = dock(['viewport', 'vectorcalc'])

@@ -10,6 +10,7 @@ import { LINK_LOOK, linkPlacement, visibleRadius } from '../sandboxLooks'
 import { unitCylinder } from '../sandboxMeshes'
 import { newPlacement, pixelsPerMetre, placeCylinder } from './Links'
 import { readoutRef } from './readout'
+import { useReleaseLater } from '../releaseLater'
 
 /**
  * Where the cursor is while the second object of a connection is being chosen, in the world,
@@ -26,7 +27,7 @@ export function JoinPreview() {
   const joinMode = useSandbox((s) => s.joinMode)
   const colour = useThemed(() => themeColor('--accent'))
   const geo = useMemo(() => unitCylinder(), [])
-  useEffect(() => () => geo.dispose(), [geo])
+  useReleaseLater(geo, (g) => g.dispose())
   const mesh = useRef<THREE.Mesh>(null)
   const place = useMemo(() => newPlacement(), [])
   const from = joinMode?.step === 'second' ? joinMode.a : undefined

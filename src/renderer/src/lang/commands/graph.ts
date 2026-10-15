@@ -290,6 +290,13 @@ export function tryGraph(input: string): boolean {
   let m: RegExpMatchArray | null
   const s = scene()
 
+  // 3D-2: a curve in space written as its three coordinates, x = cos(t), y = sin(t), z = t/5 (t from 0 to 2π), before
+  // the three = signs are taken for three relations.
+  if ((m = input.match(/^\s*x\s*=\s*(.+?)\s*,\s*y\s*=\s*(.+?)\s*,\s*z\s*=\s*(.+?)\s*$/))) {
+    graphSpaceCurve(input, [m[1], m[2], m[3]], 0, 2 * Math.PI)
+    return true
+  }
+
   // curve(…), piecewise(…), between(…) and tangent(…) read their own arguments and say how they are written.
   const rels = /^\s*(curve|piecewise|between|tangent)\s*\(/i.test(input) ? [] : relationsIn(input)
   if (rels.length > 1) refuseSeveral(input, rels)
@@ -311,10 +318,32 @@ export function tryGraph(input: string): boolean {
   }
   // Every route below asks mustDraw before it makes anything: each used to store the formula and
   // announce it, and the viewport, compiling it later, drew nothing without a word.
+  // 3D-2: a surface given by its three coordinates, surface(x(u, v), y(u, v), z(u, v), u0, u1, v0, v1).
+  if ((m = line.match(/^\s*surface\s*\((.+)\)\s*$/i))) {
+    const parts = splitArgs(m[1])
+    if (parts.length !== 3 && parts.length !== 7) throw new Error('surface(x(u, v), y(u, v), z(u, v), u from, u to, v from, v to)')
+    const [tMin, tMax, vMin, vMax] = parts.length === 7 ? parts.slice(3).map(numberArg) : [0, 2 * Math.PI, 0, Math.PI]
+    const exprs = parts.slice(0, 3)
+    const note = mustDraw({ kind: 'psurface', exprs, tMin, tMax, vMin, vMax })
+    visualizeGraph(input, exprs, 'psurface', { tMin, tMax, vMin, vMax })
+    s.pushLog({ input, kind: 'result', text: withNote('Surface created in the 3D view.', note) + landInGraphing() })
+    return true
+  }
   if ((m = line.match(/^\s*z\s*=\s*(.+)$/))) {
     const note = mustDraw({ kind: 'surface', exprs: [m[1]] })
     visualizeGraph(input, [m[1]], 'surface')
     s.pushLog({ input, kind: 'result', text: withNote('Surface created in the 3D view.', note) + landInGraphing() })
+    return true
+  }
+  // 3D-2: an equation in z with x or y that is not z = … is a plane, ax + by + cz = d; anything else in z cannot be drawn.
+  // A name on the left (n = 2z, z1 = |√−4|) is a definition, not a plane: it goes on to the routes that answer those.
+  const leftName = rel ? line.slice(0, rel.at).trim() : ''
+  const definesName = /^[A-Za-z]\w*$/.test(leftName) && !['x', 'y', 'z'].includes(leftName)
+  if (rel?.op === '=' && usesSymbol(line, 'z') && (usesSymbol(line, 'x') || usesSymbol(line, 'y')) && !definesName) {
+    const expr = `(${line.slice(0, rel.at)}) - (${line.slice(rel.at + 1)})`
+    const note = mustDraw({ kind: 'plane', exprs: [expr] })
+    visualizeGraph(input, [expr], 'plane')
+    s.pushLog({ input, kind: 'result', text: withNote('Plane created in the 3D view.', note) + landInGraphing() })
     return true
   }
   if ((m = line.match(/^\s*r\s*=\s*(.+)$/)) && /θ|theta/.test(m[1])) {
@@ -327,6 +356,12 @@ export function tryGraph(input: string): boolean {
   if ((m = line.match(/^\s*curve\s*\((.+)\)\s*$/i))) {
     const parts = splitArgs(m[1])
     if (parts.length < 2) throw new Error('curve(x(t), y(t), tmin, tmax)')
+    // 3D-2: curve(x(t), y(t), z(t), tmin, tmax) is a curve in space: five inputs, or a third that is a formula of t
+    // (curve(cos(t), sin(t), 0) is still the flat curve from t = 0).
+    if (parts.length === 5 || (parts.length >= 3 && usesSymbol(parts[2], 't'))) {
+      graphSpaceCurve(input, parts.slice(0, 3), parts[3] ? numberArg(parts[3]) : 0, parts[4] ? numberArg(parts[4]) : 2 * Math.PI)
+      return true
+    }
     // numberArg reads a slider, as every other bound on the bar does; math.evaluate without the
     // scope answered curve(cos(t), sin(t), 0, k) with I don't know "k" while k was on the screen.
     const tMin = parts[2] ? numberArg(parts[2]) : 0
@@ -418,6 +453,13 @@ export function tryGraph(input: string): boolean {
 }
 
 /** A number typed as an argument, which may use a slider's name; anything else is refused in a sentence. */
+/** A curve in space (3D-2) from its three formulas of t, drawn over t from t0 to t1. */
+function graphSpaceCurve(input: string, exprs: string[], tMin: number, tMax: number): void {
+  const note = mustDraw({ kind: 'curve3d', exprs, tMin, tMax })
+  visualizeGraph(input, exprs, 'curve3d', { tMin, tMax })
+  scene().pushLog({ input, kind: 'result', text: withNote('Curve in space created in the 3D view.', note) + landInGraphing() })
+}
+
 function numberArg(text: string): number {
   let v: unknown
   try {

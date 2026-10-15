@@ -1,6 +1,6 @@
 // The Sandbox's bodies: one mesh each, matched to the engine by userData.bodyId, and its material.
 
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import * as THREE from 'three/webgpu'
 import { useSandbox } from '../../sim/store'
 import { materialFinish } from '../../sim/materials'
@@ -8,6 +8,7 @@ import { drawnColour } from '../../sim/palette'
 import { themeColor, useTheme, useThemed } from '../../app/theme'
 import { bodyGeometry } from '../sandboxMeshes'
 import { apparatusGeometry, getMetreRuleTexture, isMetreRule } from './apparatusLooks'
+import { useReleaseLater } from '../releaseLater'
 
 /**
  * Every body's mesh. A fragment, not a group: the meshes stay direct children of SandboxView's group, where
@@ -23,7 +24,7 @@ export function Bodies() {
     const geos = bodies.map((def) => apparatusGeometry(def) ?? bodyGeometry(def))
     return { geos }
   }, [bodies])
-  useEffect(() => () => meshes.geos.forEach((g) => g.dispose()), [meshes])
+  useReleaseLater(meshes, (m) => m.geos.forEach((g) => g.dispose()))
 
   // The colour each body is drawn in under this theme (a palette token read off the stylesheet,
   // or the student's own colour), and how its material takes the light. The key carries both and

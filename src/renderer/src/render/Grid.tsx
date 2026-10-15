@@ -10,10 +10,11 @@ import { drawnVertices, writePositions } from './gpuBuffers'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
-import { axisLabels, axisTitle, ringLabels, rulerLabels, type ScreenOf } from './gridLabels'
+import { axisLabels, axisTitle, axisTitleSpot, ringLabels, rulerLabels, type ScreenOf } from './gridLabels'
 import type { V3 } from '../math/vec'
 import type { GridStyle } from '../core/types'
 import type { MeasureSettings } from '../math/format'
+import { useReleaseLater } from './releaseLater'
 
 // Grid colours come from the stylesheet so they follow the light/dark theme.
 const MINOR = () => themeColor('--grid-minor')
@@ -70,7 +71,7 @@ function useGridLines(): GridLines {
       m.needsUpdate = true
     })
   }, [theme, lines])
-  useEffect(() => () => lines.forEach((l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose())), [lines])
+  useReleaseLater(lines, (ls) => ls.forEach((l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose())))
   return lines
 }
 
@@ -127,7 +128,7 @@ function useShaderGrid(): ShaderGrid {
   }, [])
   const theme = useTheme((t) => t.theme)
   useEffect(() => repaintShaderGrid(grid), [theme, grid])
-  useEffect(() => () => (grid.mesh.geometry.dispose(), (grid.mesh.material as THREE.Material).dispose()), [grid])
+  useReleaseLater(grid, (g) => (g.mesh.geometry.dispose(), (g.mesh.material as THREE.Material).dispose()))
   return grid
 }
 
@@ -325,13 +326,12 @@ export function Grid3D() {
     showGridLines(lines, showGrid)
     ticks.begin()
     if (showAxes) {
-      const put = (label: string, p: V3, color?: string) => {
-        const s = toScreen(camera, size, p)
-        if (s.visible) ticks.place(label, s.x, s.y, 'center', color)
+      // Each axis named once, at the farthest point of it that is on screen (3D-2: the names used to sit past the end, off screen).
+      const titles: [string, V3, string][] = [['x', [1, 0, 0], AXIS_COLORS.x], ['y', [0, 1, 0], AXIS_COLORS.y], ['z', [0, 0, 1], AXIS_COLORS.z]]
+      for (const [axis, dir, color] of titles) {
+        const at = axisTitleSpot((p) => toScreen(camera, size, p), dir, half, size)
+        if (at) ticks.place(axisTitle(axis, settings), at.x + 10, at.y - 10, 'center', color)
       }
-      put(axisTitle('x', settings), [half * 1.08, 0, 0], AXIS_COLORS.x)
-      put(axisTitle('y', settings), [0, half * 1.08, 0], AXIS_COLORS.y)
-      put(axisTitle('z', settings), [0, 0, half * 1.08], AXIS_COLORS.z)
       for (const { text, x, y } of floorLabels((p) => toScreen(camera, size, p), size, half, step, settings)) ticks.place(text, x, y, 'center')
     }
     ticks.end()

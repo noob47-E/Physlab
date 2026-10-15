@@ -21,6 +21,7 @@ import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadiu
 import { pieceNameAnchor } from './pieceLabels'
 import { BatchedArrow, useArrowBatched } from './ArrowBatch'
 import { arcBetween, cornerAngle, polygonCornerMark } from './markGeometry'
+import { useReleaseLater } from './releaseLater'
 import { arrowHead3D } from './arrow3dMath'
 
 const UP = new THREE.Vector3(0, 1, 0)
@@ -160,7 +161,7 @@ function useArrowMaterials(color: string, is3D: boolean) {
     // Double-sided so the flat head is never culled when the quaternion that turns it flips it over.
     return new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false, side: THREE.DoubleSide })
   }, [color, is3D])
-  useEffect(() => () => mat.dispose(), [mat])
+  useReleaseLater(mat, (m) => m.dispose())
   return mat
 }
 
@@ -510,7 +511,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
     if (z) g.translate(0, 0, z)
     return g
   }, [pts])
-  useEffect(() => () => geometry?.dispose(), [geometry])
+  useReleaseLater(geometry, (g) => g.dispose())
 
   // The viewer's "angle marks" switch wins over every polygon's own setting.
   const showMeasures = (selected || sideSelected || obj.showAngles) && settings.showAngleMarks
@@ -630,7 +631,7 @@ function DecomposedParts({ dec, pts, wpp }: { obj: PolygonObj; dec: Decompositio
       }),
     [dec]
   )
-  useEffect(() => () => geos.forEach((g) => g.dispose()), [geos])
+  useReleaseLater(geos, (gs) => gs.forEach((g) => g.dispose()))
   useFrame(({ camera, size }) => {
     pool.begin()
     if (dec.parts.length > 1) {
@@ -710,7 +711,7 @@ export const AngleView = memo(function AngleView({ obj, c, selected }: ViewProps
     return new THREE.ShapeGeometry(shape)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the arc's coordinates: `pts` is a fresh array every render, and keying on it would rebuild the geometry each time
   }, [pts.map((p) => p.join(',')).join(';')])
-  useEffect(() => () => sector?.dispose(), [sector])
+  useReleaseLater(sector, (s) => s.dispose())
   return (
     <>
       {sector && (

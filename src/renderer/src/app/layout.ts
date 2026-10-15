@@ -60,6 +60,9 @@ export function enterMode(id: ModeId, opts: { restored?: boolean } = {}) {
   // Graphing's own list does not follow the student into other modes (the Console did, and the
   // owner saw it under Geometry).
   if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
+  // Nor does the Sandbox's panel (3D-2: it stayed docked on the right in Graphing, beside the 3-D graph). Entering the
+  // Sandbox opens it again (its mode's panel, requestFocus below). Only on a real change of mode, never on a restored session.
+  if (from === 'sandbox' && id !== 'sandbox' && !opts.restored && isPanelOpen('sandbox')) hidePanel('sandbox')
   // The simple Sandbox opens with the side lessons closed (SB63): a first-time student sees the drawing and one calm panel.
   // Only on a real change of mode — never on a restored session or a repeat, so a student who reopened Examples in the
   // Sandbox keeps it — and the panel is owed back: the next mode with lessons gets it, or Geometry would silently lose

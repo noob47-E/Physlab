@@ -12,6 +12,7 @@ import { visibleIn } from '../core/visibility'
 import { graphBox } from '../core/visualize'
 import { themeColor, useThemed } from '../app/theme'
 import { SANDBOX_FAR, SANDBOX_FOV, SANDBOX_START_VIEW, sandboxHomeView } from './sandboxCamera'
+import { drawnBoxes } from './Graph3DViews'
 
 /** Bounding box of all visible geometry (graphs only where they have ends). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -53,6 +54,13 @@ function sceneBounds(): { min: [number, number, number]; max: [number, number, n
         // A graph with ends (a piecewise curve, a shaded region) has a box; one that runs for
         // ever does not, and is left out as before.
         const o = objects[id]
+        // 3D-2: a graph in space frames what it drew (render/Graph3DViews.tsx).
+        const drawn = drawnBoxes.get(id)
+        if (drawn) {
+          add(drawn.min)
+          add(drawn.max)
+          break
+        }
         const g = o?.type === 'graph' ? graphBox(o) : null
         if (g) {
           add(g.min)
@@ -129,8 +137,14 @@ export function CameraRig() {
     camera.lookAt(...start.target)
     c?.update()
     return () => {
-      // Put the maths view back the way it was when leaving the sandbox.
+      // Put the maths view back the way it was when leaving the sandbox: z up, and the maths 3-D home view. Only the up
+      // vector used to come back, so Graphing in 3D after the Sandbox looked from the Sandbox's side view with y up: a
+      // flat front view whose labels sat in odd places (3D-2, the owner's "odd axis numbers").
       camera.up.set(0, 0, 1)
+      camera.position.set(...HOME_3D.position)
+      c?.target.set(...HOME_3D.target)
+      camera.lookAt(...HOME_3D.target)
+      c?.update()
     }
   }, [mode, viewMode, sideView, camera, controls])
 
@@ -180,8 +194,20 @@ export function CameraRig() {
       camera.updateProjectionMatrix()
       c?.target.set(0, 0, 0)
     } else {
-      camera.position.set(...HOME_3D.position)
-      c?.target.set(...HOME_3D.target)
+      // 3D-2: Home frames what is drawn (a surface, a helix, a plane, the vectors), seen from the home view's direction;
+      // with nothing drawn it is the home view itself.
+      const box = sceneBounds()
+      if (box) {
+        const centre = box.min.map((v, i) => (v + box.max[i]) / 2) as [number, number, number]
+        const r = Math.max(2, Math.hypot(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2]) / 2)
+        const dir = new THREE.Vector3(...HOME_3D.position).sub(new THREE.Vector3(...HOME_3D.target)).normalize()
+        c?.target.set(...centre)
+        camera.position.set(centre[0] + dir.x * r * 2.6, centre[1] + dir.y * r * 2.6, centre[2] + dir.z * r * 2.6)
+        camera.lookAt(...centre)
+      } else {
+        camera.position.set(...HOME_3D.position)
+        c?.target.set(...HOME_3D.target)
+      }
     }
     c?.update()
   }, [command, viewMode, camera, controls, get])

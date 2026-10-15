@@ -5,6 +5,7 @@ import type { MathNode } from 'mathjs'
 import { compileScalar, math, namedConstant, preprocess, sceneNames, symbolsOf, type ScalarFn } from '../../math/expr'
 import { fmtLabel, type Precision } from '../../math/format'
 import { implicitSegments, inequalityMesh, surfaceGeometry, verticalLineXs, type Fx, type Fxy } from '../../math/graphs'
+import { parametricSurface, planeOf, spaceCurve } from '../../math/graph3d'
 import { parseExpr, varsOf, writeTimes } from '../../math/pure/mono'
 import { pDeg, pDivMod, pGcd, pPrimitive, pTrim, polyFromExpr, type Poly } from '../../math/pure/poly'
 import { rMul, rNum, rSign, rat } from '../../math/pure/rat'
@@ -26,12 +27,15 @@ import { unknownFunctionReason } from '../../calc/errors'
 
 /** A graph the command bar is about to make, as render/GraphView.tsx will draw it. */
 export interface DrawSpec {
-  kind: 'explicit' | 'implicit' | 'inequality' | 'surface' | 'polar' | 'parametric' | 'piecewise' | 'between'
+  kind: 'explicit' | 'implicit' | 'inequality' | 'surface' | 'polar' | 'parametric' | 'piecewise' | 'between' | 'curve3d' | 'plane' | 'psurface'
   /** The formulas as the graph stores them: θ already spelt theta, an equation as (left) - (right). */
   exprs: string[]
-  /** The stretch of t of a parametric or polar curve, or of x of the region between two curves. */
+  /** The stretch of t of a parametric or polar curve, or of x of the region between two curves (u of a parametric surface). */
   tMin?: number
   tMax?: number
+  /** 3D-2: the stretch of v of a parametric surface. */
+  vMin?: number
+  vMax?: number
   op?: '<' | '<=' | '>' | '>='
   pieces?: { expr: string; from: number; to: number }[]
   /** An equation's two sides as typed, so that a square set to 0 can be offered without its square. */
@@ -57,7 +61,10 @@ const DRAW_VARS: Record<DrawKind, string[]> = {
   inequality: ['x', 'y'],
   surface: ['x', 'y'],
   polar: ['theta', 't'],
-  parametric: ['t']
+  parametric: ['t'],
+  curve3d: ['t'],
+  plane: ['x', 'y', 'z'],
+  psurface: ['u', 'v']
 }
 const DRAW_NOUN: Record<DrawKind, string> = {
   explicit: 'graph',
@@ -67,7 +74,10 @@ const DRAW_NOUN: Record<DrawKind, string> = {
   inequality: 'inequality',
   surface: 'surface',
   polar: 'polar curve',
-  parametric: 'curve'
+  parametric: 'curve',
+  curve3d: 'curve in space',
+  plane: 'plane',
+  psurface: 'surface'
 }
 const DRAW_PLACE: Record<DrawKind, string> = {
   explicit: 'function',
@@ -77,7 +87,10 @@ const DRAW_PLACE: Record<DrawKind, string> = {
   inequality: 'inequality',
   surface: 'formula',
   polar: 'formula',
-  parametric: 'formula'
+  parametric: 'formula',
+  curve3d: 'formula',
+  plane: 'equation',
+  psurface: 'formula'
 }
 /** sampleExplicit leaves out every point higher than this (math/graphs.ts): a curve that is all above it never shows. */
 export const EXPLICIT_LIMIT = 1e7
@@ -1068,6 +1081,30 @@ function emptyWhy(spec: DrawSpec, fns: ScalarFn[], digits: Digits, spans: number
       const seen = alongT((t) => fns[0]({ t }), (t) => fns[1]({ t }), t0, t1)
       const span = `for t from ${fmt(t0)} to ${fmt(t1)}`
       return seen === 'line' ? null : seen === 'none' ? `it has no real point ${span}` : `it has a real point only at separate values of t ${span}, with no line between them`
+    }
+    case 'curve3d': {
+      // 3D-2: a curve in space, sampled as the viewport samples it.
+      const t0 = spec.tMin ?? 0
+      const t1 = spec.tMax ?? 2 * Math.PI
+      if (t0 === t1) return `t runs from ${fmt(t0)} to ${fmt(t1)}, so the curve is a single point`
+      const runs = spaceCurve((t) => fns[0]({ t }), (t) => fns[1]({ t }), (t) => fns[2]({ t }), t0, t1, 400)
+      return runs.length ? null : `it has no real point for t from ${fmt(t0)} to ${fmt(t1)}`
+    }
+    case 'plane':
+      return planeOf((x, y, z) => fns[0]({ x, y, z })) ? null : 'it is not a plane: its equation is not of the form ax + by + cz = d'
+    case 'psurface': {
+      const s = parametricSurface(
+        (u, v) => fns[0]({ u, v }),
+        (u, v) => fns[1]({ u, v }),
+        (u, v) => fns[2]({ u, v }),
+        spec.tMin ?? 0,
+        spec.tMax ?? 2 * Math.PI,
+        spec.vMin ?? 0,
+        spec.vMax ?? Math.PI,
+        48,
+        24
+      )
+      return s.indices.length ? null : 'it has no real point for the u and v it is given'
     }
     case 'surface': {
       let real = false

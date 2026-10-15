@@ -149,6 +149,10 @@ export function layoutVectors(vs: LayoutVector[], style: LayoutStyle): Layout {
     const tail = at.get(x) ?? (mode === 'common-tail' || role === 'helper' ? (x.tail ?? ZERO) : ZERO)
     return { name: x.name, role, tail, comp: x.v }
   })
-  const sides = mode === 'parallelogram' ? chain.map((c) => c.name) : []
+  // The far sides meet at the answer's head only when the answer is the diagonal (a sum, a subtraction's A + (−B)); joined to
+  // A × B's head they drew a triangle in space and called it the parallelogram, so then there are none.
+  const result = vs.find((x) => x.role === 'result')
+  const diagonal = chain.length === 2 && (!result || equals(add(chain[0].v, chain[1].v), result.v))
+  const sides = mode === 'parallelogram' && diagonal ? chain.map((c) => c.name) : []
   return { arrows, sides, style: mode }
 }

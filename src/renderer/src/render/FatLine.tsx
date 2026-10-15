@@ -6,6 +6,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js'
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import type { V3 } from '../math/vec'
 import { writeLinePoints } from './gpuBuffers'
+import { useReleaseLater } from './releaseLater'
 
 interface FatLineProps {
   /** Polyline vertices, or pairs of segment endpoints when `segments` is true. */
@@ -76,13 +77,11 @@ export function FatLine({
     obj.renderOrder = renderOrder
   }, [obj, color, width, depthTest, dashSize, gapSize, renderOrder])
 
-  useEffect(
-    () => () => {
-      obj.geometry.dispose()
-      ;(obj.material as THREE.Material).dispose()
-    },
-    [obj]
-  )
+  // Freed when the line is let go for good, not on StrictMode's rehearsal unmount (render/releaseLater.ts: the black canvas).
+  useReleaseLater(obj, (o) => {
+    o.geometry.dispose()
+    ;(o.material as THREE.Material).dispose()
+  })
 
   return <primitive object={obj} />
 }

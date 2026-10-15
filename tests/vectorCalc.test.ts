@@ -545,6 +545,16 @@ describe('the textbook layout (Fix 2, math/vec.ts)', () => {
     expect(three.style).toBe('head-to-tail')
     expect(at(three, 'C').tail).toEqual([4, 3, 0])
   })
+
+  it('parallelogram of A × B: A and B from the origin but no far sides to the answer, which is not their diagonal', () => {
+    // Joined to A × B's head, the far sides drew a triangle in space and called it the parallelogram (Argon, Q6).
+    const A3 = { name: 'A', v: [4, 1, 0] as V3, role: 'input' as const }
+    const B3 = { name: 'B', v: [1, 3, 2] as V3, role: 'input' as const }
+    const l = layoutVectors([A3, B3, { name: 'C', v: [2, -8, 11], role: 'result' }], 'parallelogram')
+    expect(l.style).toBe('parallelogram')
+    expect(l.sides).toEqual([])
+    expect(layoutVectors([A3, B3, { name: 'R', v: [5, 4, 2], role: 'result' }], 'parallelogram').sides).toEqual(['A', 'B'])
+  })
 })
 
 describe('Draw on graph and Resultant only (Fix 2)', () => {

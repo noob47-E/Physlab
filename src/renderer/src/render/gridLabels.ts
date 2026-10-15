@@ -118,3 +118,19 @@ function piFraction(num: number, den: number): string {
   const top = n === 1 ? 'π' : `${n}π`
   return d === 1 ? top : `${top}/${d}`
 }
+
+/**
+ * Where an axis's name goes in the 3-D view (3D-2: "x, y, z labelled once each"): just past the axis's far end when that is
+ * on screen, else the farthest point of the axis that is, 18 px in from the edge, so the name is always seen beside its
+ * own axis. Null when no part of the positive axis is on screen (it points straight at the eye, or is out of view).
+ */
+export function axisTitleSpot(screenOf: ScreenOf, dir: V3, half: number, view: { width: number; height: number }, margin = 18): { x: number; y: number } | null {
+  const inView = (p: { x: number; y: number; visible: boolean }) => p.visible && p.x >= margin && p.x <= view.width - margin && p.y >= margin && p.y <= view.height - margin
+  for (let k = 0; k <= 40; k++) {
+    const t = half * (1.08 - k * 0.025)
+    if (t <= 0) break
+    const p = screenOf([dir[0] * t, dir[1] * t, dir[2] * t])
+    if (inView(p)) return { x: p.x, y: p.y }
+  }
+  return null
+}

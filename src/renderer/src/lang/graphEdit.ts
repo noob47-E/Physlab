@@ -89,7 +89,7 @@ function refusalFor(log: LogEntry[], seen: number): string {
  * equation's value of it: tests/graphEdit.test.ts fails for any field of a graph the command bar
  * makes that is in neither list.
  */
-export const GRAPH_DEFINES = ['kind', 'source', 'exprs', 'tMin', 'tMax', 'op', 'pieces', 'solvedXs'] as const
+export const GRAPH_DEFINES = ['kind', 'source', 'exprs', 'tMin', 'tMax', 'vMin', 'vMax', 'op', 'pieces', 'solvedXs'] as const
 /** The fields that are the student's own (who it is, how it looks): they stay. The two marks are handled apart. */
 export const GRAPH_KEEPS = ['id', 'type', 'name', 'visible', 'locked', 'color', 'themed', 'showLabel', 'labelMode', 'labelPin', 'auxiliary', 'caption', 'label', 'space', 'width', 'showRoots', 'showExtrema'] as const
 

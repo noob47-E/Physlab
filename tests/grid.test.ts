@@ -392,8 +392,8 @@ describe('the axes switch', () => {
       expect(f).toMatch(/\}\s*\n\s*ticks\.end\(\)$/)
       // Every place() sits inside the showAxes block: nothing between begin() and the if.
       expect(f.indexOf('ticks.place')).toBeGreaterThan(f.indexOf('if (showAxes)'))
-      expect(f).toContain("axisTitle('x', settings)")
-      expect(f).toContain("axisTitle('y', settings)")
+      // 2D names x and y one by one; 3D (3D-2) names x, y and z in a loop at the farthest point of each axis on screen.
+      expect(f).toMatch(/axisTitle\('x', settings\)[\s\S]*axisTitle\('y', settings\)|\['x', \[1, 0, 0\][\s\S]*\['y', \[0, 1, 0\][\s\S]*axisTitle\(axis, settings\)/)
     }
   })
 

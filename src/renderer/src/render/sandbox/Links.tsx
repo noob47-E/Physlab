@@ -13,6 +13,7 @@ import { themeColor, useThemed } from '../../app/theme'
 import { BEAD_SCALE, beadMatrices, hingePin, LINK_LOOK, linkPlacement, pulleyRopePath, ropeMatrices, springLook, visibleRadius, writeCoil, type LinkPlacement } from '../sandboxLooks'
 import { coilGeometry, unitBall, unitCylinder } from '../sandboxMeshes'
 import { readoutRef, type SimReadout } from './readout'
+import { useReleaseLater } from '../releaseLater'
 
 /**
  * How strongly a connection catches the light: the steel of a spring, a rod and a pin shines a
@@ -118,7 +119,7 @@ function LinkView({ link, bodies, depths, colours }: { link: Link; bodies: BodyD
 function SpringCoil({ link, ends, colour }: { link: Link; ends: (w: SimReadout) => [V3, V3] | null; colour: string }) {
   const look = useMemo(() => springLook(link.length), [link.length])
   const geo = useMemo(() => coilGeometry(look.shape), [look])
-  useEffect(() => () => geo.dispose(), [geo])
+  useReleaseLater(geo, (g) => g.dispose())
   const mesh = useRef<THREE.Mesh>(null)
   useFrame((state) => {
     const m = mesh.current
@@ -149,7 +150,7 @@ function SpringCoil({ link, ends, colour }: { link: Link; ends: (w: SimReadout) 
 /** A rod (a solid bar) or a string (a thin thread): one unit cylinder between its hold points, never thinner on screen than its look allows. */
 function Bar({ ends, look, colour, shine, gloss }: { ends: (w: SimReadout) => [V3, V3] | null; look: { radius: number; minPixels: number }; colour: string; shine: THREE.Color; gloss: number }) {
   const geo = useMemo(() => unitCylinder(), [])
-  useEffect(() => () => geo.dispose(), [geo])
+  useReleaseLater(geo, (g) => g.dispose())
   const mesh = useRef<THREE.Mesh>(null)
   const place = useMemo(() => newPlacement(), [])
   useFrame((state) => {
@@ -241,7 +242,7 @@ function pinHalfLength(b: BodyDef): number {
  */
 function HingePinView({ link, body, colour }: { link: Link; body: BodyDef; colour: string }) {
   const geo = useMemo(() => unitCylinder(), [])
-  useEffect(() => () => geo.dispose(), [geo])
+  useReleaseLater(geo, (g) => g.dispose())
   const mesh = useRef<THREE.Mesh>(null)
   const place = useMemo(() => newPlacement(), [])
   const pivot = useMemo((): V3 => {

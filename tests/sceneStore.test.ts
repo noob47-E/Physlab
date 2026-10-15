@@ -515,8 +515,9 @@ describe('deleting a shape takes its sides', () => {
     expect(viewport.match(/function Invalidator\(\)[\s\S]*?\n\}/)?.[0]).toMatch(/useScene\.subscribe\(kick\)/)
     expect(readSource('src/renderer/src/render/SceneObjects.tsx')).toMatch(/<GraphView key=\{id\}/)
     const fatLine = readSource('src/renderer/src/render/FatLine.tsx')
-    expect(fatLine).toMatch(/obj\.geometry\.dispose\(\)/)
-    expect(fatLine).toMatch(/\(obj\.material as THREE\.Material\)\.dispose\(\)/)
+    // 3D-2: freed through useReleaseLater (after StrictMode's rehearsal unmount), still the line's own geometry.
+    expect(fatLine).toMatch(/useReleaseLater\(obj, \(o\) => \{\s*o\.geometry\.dispose\(\)/)
+    expect(fatLine).toMatch(/\(o\.material as THREE\.Material\)\.dispose\(\)/)
   })
 })
 

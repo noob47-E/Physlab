@@ -1,10 +1,11 @@
 // The Sandbox's stage: the lights and the floor's metre grid.
 
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import * as THREE from 'three/webgpu'
 import { useSandbox } from '../../sim/store'
 import type { BodyDef } from '../../sim/types'
 import { themeColor, useThemed } from '../../app/theme'
+import { useReleaseLater } from '../releaseLater'
 
 /** The lights, and the floor's grid. */
 export function Stage() {
@@ -78,8 +79,8 @@ function FloorGrid({ bodies }: { bodies: BodyDef[] }) {
     t.colorSpace = THREE.SRGBColorSpace
     return t
   }, [gridColour])
-  useEffect(() => () => geometry?.dispose(), [geometry])
-  useEffect(() => () => texture?.dispose(), [texture])
+  useReleaseLater(geometry, (g) => g.dispose())
+  useReleaseLater(texture, (t) => t.dispose())
   if (!geometry || !texture || thickness === undefined || y === undefined) return null
   const top = y + thickness / 2
   return (

@@ -129,6 +129,11 @@
   --vec-result: #ff87bd;
   --vec-x: #ff7b72;
   --vec-y: #58c4ff;
+  /* 3D-2: a 3-D surface coloured by height, low to high, and its thin mesh lines. */
+  --surface-low: #3d6de0;
+  --surface-mid: #22b88a;
+  --surface-high: #f2c14e;
+  --surface-mesh: #10131a;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #ffe066;
   /* The Sandbox (P28): the eight colours its moving bodies are painted in, in the order they are
@@ -250,6 +255,11 @@
   --vec-result: #7619a3;
   --vec-x: #c0392b;
   --vec-y: #1565c0;
+  /* 3D-2: a 3-D surface coloured by height, low to high, and its thin mesh lines. */
+  --surface-low: #2457c5;
+  --surface-mid: #15a07c;
+  --surface-high: #e3a21a;
+  --surface-mesh: #2b3445;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #4a148c;
   /* Deep inks on the pale canvas: a mid-tone colour that reads on the dark themes is lost here. */
@@ -367,6 +377,11 @@
   --vec-result: #cf79ff;
   --vec-x: #ff8b94;
   --vec-y: #6cc8ff;
+  /* 3D-2: a 3-D surface coloured by height, low to high, and its thin mesh lines. */
+  --surface-low: #5b6cff;
+  --surface-mid: #34c3b0;
+  --surface-high: #ffd36b;
+  --surface-mesh: #0c1230;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #ffe066;
   --sim-c1: #419bd4;
@@ -489,6 +504,11 @@
   --vec-result: #eb51ff;
   --vec-x: #f28474;
   --vec-y: #6fb8e8;
+  /* 3D-2: a 3-D surface coloured by height, low to high, and its thin mesh lines. */
+  --surface-low: #6a5acd;
+  --surface-mid: #c9953f;
+  --surface-high: #ffe7a3;
+  --surface-mesh: #1c150e;
   /* 3D-1: a vector's z part, apart from x (red) and y (blue) for every kind of eye. */
   --vec-z: #f4f469;
   --sim-c1: #419bd4;
