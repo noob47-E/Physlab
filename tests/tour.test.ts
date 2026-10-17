@@ -23,7 +23,7 @@ vi.stubGlobal('localStorage', {
 })
 
 import { AFTER_SANDBOX, MISSIONS, resetMissionBaseline, TOUR } from '../src/renderer/src/app/tour/steps'
-import { ALL_DONE_MESSAGE, formatMissionHint, readDone, showWorkingExample, useTour, watchMissions } from '../src/renderer/src/app/tour/Tour'
+import { ALL_DONE_MESSAGE, formatMissionHint, readDone, showWorkingExample, useTour, watchMissions, WELCOME_TILES } from '../src/renderer/src/app/tour/Tour'
 import { buildItems } from '../src/renderer/src/app/SearchPalette'
 import { MODES, readyModes } from '../src/renderer/src/app/modes'
 import { runCommand } from '../src/renderer/src/lang/commands'
@@ -417,5 +417,40 @@ describe('af-tb2 — the Start here chip, card and exact words', () => {
     it('top-bar chip says "Start here N of 6"', () => {
       expect(tourSource()).toContain('Start here {count} of {MISSIONS.length}')
     })
+
+    it('Welcome screen includes Sandbox and Problem Sets tiles (F3)', () => {
+      expect(WELCOME_TILES.map((t) => t.mode)).toEqual([
+        'calculator',
+        'vectors',
+        'shapes',
+        'graphing',
+        'sandbox',
+        'problems'
+      ])
+      const sandbox = WELCOME_TILES.find((t) => t.mode === 'sandbox')
+      expect(sandbox?.label).toBe('Sandbox')
+      expect(sandbox?.text).toBe('Collisions, ramps, pendulums, gravity and springs.')
+      const problems = WELCOME_TILES.find((t) => t.mode === 'problems')
+      expect(problems?.label).toBe('Problem Sets')
+      expect(problems?.text).toBe('Practice questions with hints and step-by-step solutions.')
+    })
+
+    it('Welcome screen has helper note on its own row below action buttons (F3)', () => {
+      const src = tourSource()
+      expect(src).not.toMatch(/<span className="flex-1" \/>\s*<span className="text-fine/)
+      expect(src).toMatch(/<\/div>\s*<div[^>]*text-fine[^>]*>\s*The tour and the missions are both in the Help menu\.\s*<\/div>/)
+      expect(src).toContain('role="dialog"')
+      expect(src).toContain('aria-modal="true"')
+    })
+
+    it('Examples panel level filter wraps, is accessible as radiogroup, and does not use clipped non-wrapping .seg (F3)', () => {
+      const src = readSource('src/renderer/src/panels/Examples.tsx')
+      expect(src).not.toContain('<div className="seg">')
+      expect(src).toMatch(/flex flex-wrap gap/)
+      expect(src).toContain('role="radiogroup"')
+      expect(src).toContain('role="radio"')
+      expect(src).toContain('aria-checked={level === l}')
+    })
   })
 })
+

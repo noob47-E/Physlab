@@ -375,9 +375,15 @@ export function Examples() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
         />
-        <div className="seg">
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Level">
           {(['All', ...LEVELS] as const).map((l) => (
-            <button key={l} className={level === l ? 'on' : ''} onClick={() => setLevel(l)}>
+            <button
+              key={l}
+              role="radio"
+              aria-checked={level === l}
+              className={`btn h-6 px-2 text-fine ${level === l ? 'primary' : ''}`}
+              onClick={() => setLevel(l)}
+            >
               {l}
             </button>
           ))}

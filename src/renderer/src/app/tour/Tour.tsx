@@ -318,17 +318,20 @@ export function showWorkingExample(): void {
   showPanel('maths')
 }
 
+export const WELCOME_TILES = [
+  { mode: 'calculator' as const, label: 'Calculator', text: 'Fractions, roots, powers, ∫ and Σ, just as they look in a book.' },
+  { mode: 'vectors' as const, label: 'Vectors', text: 'Draw and add vectors, with the working written out.' },
+  { mode: 'shapes' as const, label: 'Geometry', text: 'Sketch a shape and get its area with the formula.' },
+  { mode: 'graphing' as const, label: 'Graphing', text: 'y = x² − 4, circles, inequalities, 3D surfaces.' },
+  { mode: 'sandbox' as const, label: 'Sandbox', text: 'Collisions, ramps, pendulums, gravity and springs.' },
+  { mode: 'problems' as const, label: 'Problem Sets', text: 'Practice questions with hints and step-by-step solutions.' }
+]
+
 function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void }) {
-  const tiles = [
-    { mode: 'calculator' as const, label: 'Calculator', text: 'Fractions, roots, powers, ∫ and Σ, just as they look in a book.' },
-    { mode: 'vectors' as const, label: 'Vectors', text: 'Draw and add vectors, with the working written out.' },
-    { mode: 'shapes' as const, label: 'Geometry', text: 'Sketch a shape and get its area with the formula.' },
-    { mode: 'graphing' as const, label: 'Graphing', text: 'y = x² − 4, circles, inequalities, 3D surfaces.' }
-  ]
   return (
     <div className="tour-backdrop">
-      <div className="tour-card w-[34rem]">
-        <div className="mb-1 text-title font-semibold text-[var(--text-strong)]">Welcome to PhysLab</div>
+      <div className="tour-card w-[34rem] max-h-[92vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+        <div id="welcome-title" className="mb-1 text-title font-semibold text-[var(--text-strong)]">Welcome to PhysLab</div>
         <div className="mb-3 text-[var(--text)]">Maths and physics you can see. What would you like to do first?</div>
         <div className="mb-3 grid grid-cols-2 gap-2">
           <button
@@ -341,7 +344,7 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
             <div className="font-semibold text-[var(--text-strong)]">Show your working</div>
             <div className="text-[var(--text-dim)]">{WELCOME_PROMISE} step by step, the way it is set out on the board. Then try your own.</div>
           </button>
-          {tiles.map((t) => (
+          {WELCOME_TILES.map((t) => (
             <button
               key={t.mode}
               className="card m-0 p-2 text-left hover:border-[var(--accent)]"
@@ -372,8 +375,9 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
           <button className="btn" onClick={onSkip}>
             Skip
           </button>
-          <span className="flex-1" />
-          <span className="text-fine text-[var(--text-faint)]">The tour and the missions are both in the Help menu.</span>
+        </div>
+        <div className="mt-2 text-fine text-[var(--text-faint)]">
+          The tour and the missions are both in the Help menu.
         </div>
       </div>
     </div>
