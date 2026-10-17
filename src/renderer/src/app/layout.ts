@@ -58,68 +58,64 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
     regroupWithViewport('maths')
     showPanel('viewport')
   }
-  // Graphing's own list does not follow the student into other modes (the Console did, and the
-  // owner saw it under Geometry).
-  if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
-  // Nor does the Sandbox's panel (3D-2: it stayed docked on the right in Graphing, beside the 3-D graph). Entering the
-  // Sandbox opens it again (its mode's panel, requestFocus below). Only on a real change of mode, never on a restored session.
-  if (from === 'sandbox' && id !== 'sandbox' && !opts.restored && isPanelOpen('sandbox')) hidePanel('sandbox')
-  // The simple Sandbox opens with the side lessons closed (SB63): a first-time student sees the drawing and one calm panel.
-  // Only on a real change of mode — never on a restored session or a repeat, so a student who reopened Examples in the
-  // Sandbox keeps it — and the panel is owed back: the next mode with lessons gets it, or Geometry would silently lose
-  // its Examples to a Sandbox visit. The one dock layout is shared by every mode, which is why this is a loan, not a removal.
-  if (id === 'sandbox') {
-    if (from !== id && !opts.restored && useSandboxView.getState().view === 'simple') {
-      if (isPanelOpen('examples')) {
-        hidePanel('examples')
-        if (!isPanelOpen('examples')) {
-          examplesLentBySandbox = true
-        }
-      }
-      // Also hide Vector Calculator and Maths panels in simple Sandbox.
+  // One Mode = One Layout (Part L1): switching modes closes panels that do not belong to the new mode.
+  if (from !== id && !opts.restored) {
+    if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
+    if (id !== 'shapes' && isPanelOpen('measure')) hidePanel('measure')
+    if (id !== 'problems' && isPanelOpen('practice')) hidePanel('practice')
+    if (id !== 'lab' && isPanelOpen('labdata')) hidePanel('labdata')
+    if (id !== 'gpu' && isPanelOpen('gpulab')) hidePanel('gpulab')
+    if (id !== 'sandbox' && isPanelOpen('sandbox')) hidePanel('sandbox')
+    if (id !== 'vectors') {
+      if (isPanelOpen('solver')) hidePanel('solver')
       if (isPanelOpen('vectorcalc')) {
-        hidePanel('vectorcalc')
-        if (!isPanelOpen('vectorcalc')) {
-          vectorcalcLentBySandbox = true
+        if (!(id === 'sandbox' && useSandboxView.getState().view === 'all')) {
+          hidePanel('vectorcalc')
+          if (!isPanelOpen('vectorcalc')) vectorcalcLentBySandbox = true
         }
       }
+    }
+    if (!m.examples) {
+      if (isPanelOpen('examples')) {
+        if (!(id === 'sandbox' && useSandboxView.getState().view === 'all')) {
+          hidePanel('examples')
+          if (!isPanelOpen('examples')) examplesLentBySandbox = true
+        }
+      }
+    }
+    if (id === 'sandbox' && useSandboxView.getState().view === 'simple') {
       if (isPanelOpen('maths')) {
         hidePanel('maths')
-        if (!isPanelOpen('maths')) {
-          mathsLentBySandbox = true
-        }
+        if (!isPanelOpen('maths')) mathsLentBySandbox = true
       }
     }
-  } else {
-    // Restore Examples and other panels to their modes.
-    if (m.examples) {
-      // Clear the loan flag when entering any mode with lessons, whether or not Examples was closed.
-      if (examplesLentBySandbox && !isPanelOpen('examples')) {
-        showPanel('examples')
-        // Restore the Examples panel group to its normal width.
-        const api = getDockApi()
-        const examples = api?.getPanel('examples')
-        if (api && examples?.api.group?.api?.setSize) {
-          const c = columns(api.width, api.height)
-          examples.api.group.api.setSize({ width: c.examples })
-        }
-      }
-      examplesLentBySandbox = false
+    if (isPanelOpen('console')) hidePanel('console')
+  }
+
+  // Restore Examples and other owed panels to their modes.
+  if (m.examples) {
+    if (examplesLentBySandbox && !isPanelOpen('examples')) {
+      showPanel('examples')
     }
-    // Restore Vector Calculator when entering Vectors mode.
-    if (id === 'vectors') {
-      if (vectorcalcLentBySandbox && !isPanelOpen('vectorcalc')) {
-        showPanel('vectorcalc')
-      }
-      vectorcalcLentBySandbox = false
+    const api = getDockApi()
+    const examples = api?.getPanel('examples')
+    if (api && examples?.api.group?.api?.setSize) {
+      const c = columns(api.width, api.height)
+      examples.api.group.api.setSize({ width: c.examples })
     }
-    // Restore Maths when entering Calculator mode.
-    if (id === 'calculator') {
-      if (mathsLentBySandbox && !isPanelOpen('maths')) {
-        showPanel('maths')
-      }
-      mathsLentBySandbox = false
+    examplesLentBySandbox = false
+  }
+  if (id === 'vectors') {
+    if (vectorcalcLentBySandbox && !isPanelOpen('vectorcalc')) {
+      showPanel('vectorcalc')
     }
+    vectorcalcLentBySandbox = false
+  }
+  if (id === 'calculator') {
+    if (mathsLentBySandbox && !isPanelOpen('maths')) {
+      showPanel('maths')
+    }
+    mathsLentBySandbox = false
   }
   if (m.panel && !opts.skipFocus) s.requestFocus(m.panel)
   // After requestFocus opens the panel, constrain the side panel group back to its normal width

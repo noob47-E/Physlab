@@ -14,8 +14,9 @@ describe('the Console is closed by default', () => {
     for (const m of MODES) expect(panelsForMode(m), m.id).not.toContain('console')
   })
 
-  it('the View menu still lists it, so it can be opened', () => {
-    expect(PANEL_LIST.map((p) => p.id)).toContain('console')
+  it('is hidden from the View menu in Phase 0.9 cuts, but kept in PANEL_TITLES', () => {
+    expect(PANEL_LIST.map((p) => p.id)).not.toContain('console')
+    expect(PANEL_TITLES).toHaveProperty('console')
   })
 
   it('a layout saved before (version 3) is rebuilt once', () => {
