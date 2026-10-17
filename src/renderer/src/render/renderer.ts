@@ -35,8 +35,31 @@ export const QUALITY = {
 
 type DefaultProps = { canvas: HTMLCanvasElement | OffscreenCanvas } & Record<string, unknown>
 
+const rendererOf = new WeakMap<object, Promise<THREE.WebGPURenderer>>()
+
+/**
+ * One renderer per canvas, however often it is asked for. React Three Fiber calls this from every
+ * `configure()`, and its Canvas configures again on every render: the dock settling the canvas's
+ * size, and the quality tier arriving (`buildRenderer` writes `useGpuInfo`, which re-renders the
+ * viewport), both land while the WebGPU adapter is still being awaited. Each ask used to build a
+ * whole extra renderer on the same canvas, and the one that finished last made R3F put a fresh
+ * stand-in perspective camera (zoom 1) over the 2-D view's orthographic one: about half of the first
+ * launches on a discrete GPU showed no grid, no axes and no numbers, and Home did not help, until
+ * the student went 2-D, 3-D and 2-D again.
+ */
+export function createRenderer(props: DefaultProps): Promise<THREE.WebGPURenderer> {
+  let renderer = rendererOf.get(props.canvas)
+  if (!renderer) {
+    renderer = buildRenderer(props)
+    rendererOf.set(props.canvas, renderer)
+    // A renderer that failed to start must not be handed back for ever.
+    renderer.catch(() => rendererOf.delete(props.canvas))
+  }
+  return renderer
+}
+
 /** WebGPU renderer (GPU-accelerated) that falls back to WebGL2 automatically; ?webgl=1 forces WebGL2. */
-export async function createRenderer(props: DefaultProps): Promise<THREE.WebGPURenderer> {
+async function buildRenderer(props: DefaultProps): Promise<THREE.WebGPURenderer> {
   const forceWebGL = new URLSearchParams(location.search).get('webgl') === '1'
   const renderer = new THREE.WebGPURenderer({
     canvas: props.canvas as HTMLCanvasElement,

@@ -15,7 +15,7 @@ equilibrium(A, B, C)  =>  result | tex: E = -4\hat{i} - 5\hat{j},\quad |E| = 6.4
 torque(r, F)  =>  result | tex: τ = 10\hat{k}\,\text{N m},\quad |τ| = 10\,\text{N m},\quad θ = 90^\circ
 work(F, d)  =>  result | tex: W = 0\,\text{J},\quad θ = 90^\circ
 magforce(q, v, B)  =>  result | tex: F = -2\hat{k}\,\text{N},\quad |F| = 2\,\text{N}
-Triangle((0,0), (4,0), (0,3))  =>  result | tex: poly1 = \text{triangle, area } 6 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon]
+Triangle((0,0), (4,0), (0,3))  =>  result | tex: poly1 = \text{triangle, } 3 \text{ sides, area } 6 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon]
 Segment(P, Q)  =>  result | tex: a = \text{length } 4 [Made: a: segment]
 Line(P, Q)  =>  result | tex: l = \text{line through } (0, 0) [Made: l: line]
 Circle(P, 3)  =>  result | tex: c1 = \text{circle, } r = 3 [Made: c1: circle]
@@ -149,8 +149,8 @@ x^4 + 3x^2 + 2 = 0  =>  error | text: No real x makes this true — it has no po
 x^3 = 1  =>  result | text: The solution is x = 1 — drawn as a vertical line. [Made: f1: graph]
 x^2 = k  =>  error | text: Unknown name "k" in the equation. Make a slider first, e.g. k = 1
 x(x + 1) = 0  =>  result | text: The solutions are x = −1 and x = 0 — each drawn as a vertical line. [Made: f1: graph]
-Square(P, (1, 0))  =>  result | tex: poly1 = \text{polygon, area } 1 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
-RegularPolygon(P, (1, 0), 6)  =>  result | tex: poly1 = \text{polygon, area } 2.6 [Made: D: point, E: point, G: point, H: point, J: point, a1: segment, a2: segment, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+Square(P, (1, 0))  =>  result | tex: poly1 = \text{quadrilateral, } 4 \text{ sides, area } 1 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+RegularPolygon(P, (1, 0), 6)  =>  result | tex: poly1 = \text{6\text{-gon}, } 6 \text{ sides, area } 2.6 [Made: D: point, E: point, G: point, H: point, J: point, a1: segment, a2: segment, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
 cross(A, r)  =>  result | tex: A×r = -8\hat{k},\quad |A×r| = 8,\quad θ = 53.13^\circ
 dot(A, r)  =>  result | tex: A·r = 6,\quad θ = 53.13^\circ
 subtract(A, r)  =>  result | tex: R = 1\hat{i} + 4\hat{j},\quad |R| = 4.12,\quad θ = 75.96^\circ
@@ -160,9 +160,9 @@ magnitude(A)  =>  result | tex: |A| = 5,\quad θ = 53.13^\circ
 add(A)  =>  result | tex: R = 3\hat{i} + 4\hat{j},\quad |R| = 5,\quad θ = 53.13^\circ
 equilibrium(A)  =>  result | tex: E = -3\hat{i} - 4\hat{j},\quad |E| = 5
 Centroid(T)  =>  error | text: "T" is not a point or object
-RegularPolygon(P, (1, 0), 3)  =>  result | tex: poly1 = \text{triangle, area } 0.43 [Made: D: point, E: point, a: segment, b: segment, c: segment, poly1: polygon]
-RegularPolygon(P, (1, 0), 4)  =>  result | tex: poly1 = \text{polygon, area } 1 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
-RegularPolygon(P, (1, 0), 12)  =>  result | tex: poly1 = \text{polygon, area } 11.2 [Made: D: point, E: point, G: point, H: point, J: point, K: point, L: point, M: point, N: point, O: point, R: point, a1: segment, a2: segment, a3: segment, a4: segment, a5: segment, a6: segment, a7: segment, a8: segment, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+RegularPolygon(P, (1, 0), 3)  =>  result | tex: poly1 = \text{triangle, } 3 \text{ sides, area } 0.43 [Made: D: point, E: point, a: segment, b: segment, c: segment, poly1: polygon]
+RegularPolygon(P, (1, 0), 4)  =>  result | tex: poly1 = \text{quadrilateral, } 4 \text{ sides, area } 1 [Made: D: point, E: point, G: point, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
+RegularPolygon(P, (1, 0), 12)  =>  result | tex: poly1 = \text{12\text{-gon}, } 12 \text{ sides, area } 11.2 [Made: D: point, E: point, G: point, H: point, J: point, K: point, L: point, M: point, N: point, O: point, R: point, a1: segment, a2: segment, a3: segment, a4: segment, a5: segment, a6: segment, a7: segment, a8: segment, a: segment, b: segment, c: segment, poly1: polygon, s: segment]
 Text("hi", Q)  =>  result | tex: text1 =  [Made: text1: text]
 Text("hi", A)  =>  result | tex: text1 =  [Made: text1: text]
 Text("hi", Q + A)  =>  result | tex: text1 =  [Made: text1: text]
@@ -338,7 +338,7 @@ k = 4.1e13  =>  result | tex: k = 4.1\times 10^{13} [Made: k: number]
 k = 0  =>  result | tex: k = 0 [Made: k: number]
 k = 1  =>  result | tex: k = 1 [Made: k: number]
 f = Line(P, (1, 1))  =>  result | tex: f = \text{line through } (0, 0) [Made: D: point]
-T = Triangle(P, (6, 0), (0, 3))  =>  result | tex: T = \text{triangle, area } 9 [Made: D: point, E: point, T: polygon, a: segment, b: segment, c: segment]
+T = Triangle(P, (6, 0), (0, 3))  =>  result | tex: T = \text{triangle, } 3 \text{ sides, area } 9 [Made: D: point, E: point, T: polygon, a: segment, b: segment, c: segment]
 Q = (3, 4)  =>  result | tex: Q = (3, 4, 0)
 a = 1  =>  result | tex: a = 1 [Made: a: number]
 A = <1, 2, 3>  =>  result | tex: A = 1\hat{i} + 2\hat{j} + 3\hat{k},\quad \text{magnitude } 3.74

@@ -33,9 +33,10 @@ let mathsLentBySandbox = false
 
 /**
  * Switch mode: tool shelf, view and the panel that belongs to the mode. `restored` is the start-up call on a layout put
- * back from the last session, which is left as the student had it.
+ * back from the last session, which is left as the student had it. `skipFocus` prevents requesting focus on the mode's panel,
+ * used when opening a visual alongside Practice so the answer box keeps focus.
  */
-export function enterMode(id: ModeId, opts: { restored?: boolean } = {}) {
+export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: boolean } = {}) {
   const m = modeById(id)
   const from = useApp.getState().mode
   useApp.getState().setMode(id)
@@ -120,7 +121,7 @@ export function enterMode(id: ModeId, opts: { restored?: boolean } = {}) {
       mathsLentBySandbox = false
     }
   }
-  if (m.panel) s.requestFocus(m.panel)
+  if (m.panel && !opts.skipFocus) s.requestFocus(m.panel)
   // After requestFocus opens the panel, constrain the side panel group back to its normal width
   // (SB63, T310: the sandbox panel doesn't exist until requestFocus is called).
   if (id === 'sandbox' && from !== id && !opts.restored && useSandboxView.getState().view === 'simple') {

@@ -9,6 +9,7 @@ import { planeOf } from '../math/graph3d'
 import { formatMeasure, fmtPoint } from '../math/format'
 import { planeEquationTex, type Item3D } from '../math/measure3d'
 import { add, cross, len, sub, type V3 } from '../math/vec'
+import { polygonArea } from '../math/geometry'
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
 
@@ -81,6 +82,9 @@ export function objectList(order: ObjId[], objects: Record<ObjId, SceneObject>, 
     else if (c?.type === 'plane' || (o.type === 'graph' && o.kind === 'plane')) {
       const it = itemOf(o, c, objects, ev)
       if (it?.type === 'plane') rows.push({ id, name, text: planeEquationTex(it.a, it.b, it.c, it.d, s) })
+    } else if (c?.type === 'polygon') {
+      const area = polygonArea(c.pts)
+      rows.push({ id, name, text: `${c.pts.length} sides, area ${formatMeasure(area, 'area', s)}` })
     } else if (c?.type === 'point') rows.push({ id, name, text: fmtPoint(c.p) })
     // Review: a segment with its length, a line or ray with its direction, so it can be picked from here too.
     else if (c?.type === 'segment') rows.push({ id, name, text: `length ${formatMeasure(len(c.line.d), 'length', s)}` })

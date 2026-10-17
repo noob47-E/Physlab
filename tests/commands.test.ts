@@ -210,7 +210,7 @@ const HELP_EXAMPLES: Example[] = [
     line: 'Triangle((0,0), (4,0), (0,3))',
     check: (last) => {
       madeA('polygon')
-      expect(last.tex).toContain('triangle, area } 6')
+      expect(last.tex).toContain('triangle, } 3 \\text{ sides, area } 6')
     }
   },
   {

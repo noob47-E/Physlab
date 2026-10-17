@@ -286,8 +286,10 @@ export function describeComputed(c: Computed | undefined, decimals: Precision = 
       return `\\text{line through } (${c.line.p.slice(0, c.line.p[2] !== 0 || c.line.d[2] !== 0 ? 3 : 2).map((v) => texAt(v, decimals)).join(', ')})`
     case 'circle':
       return `\\text{circle, } r = ${texAt(c.circle.r, decimals)}`
-    case 'polygon':
-      return `\\text{${c.pts.length === 3 ? 'triangle' : 'polygon'}, area } ${texAt(polygonArea(c.pts), decimals)}`
+    case 'polygon': {
+      const polyName = c.pts.length === 3 ? 'triangle' : c.pts.length === 4 ? 'quadrilateral' : `${c.pts.length}\\text{-gon}`
+      return `\\text{${polyName}, } ${c.pts.length} \\text{ sides, area } ${texAt(polygonArea(c.pts), decimals)}`
+    }
     case 'angle':
       return texMeasure(c.value, 'angle', scene().settings)
     case 'solid':

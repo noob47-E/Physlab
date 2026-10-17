@@ -16,6 +16,7 @@ const GROUPS: { type: ObjType[]; label: string }[] = [
   { type: ['point'], label: 'Points' },
   { type: ['segment', 'ray', 'line'], label: 'Lines' },
   { type: ['circle', 'polygon', 'angle'], label: 'Shapes' },
+  { type: ['solid'], label: 'Solids' },
   { type: ['graph'], label: 'Graphs' },
   { type: ['number'], label: 'Numbers & sliders' },
   { type: ['text'], label: 'Text' }

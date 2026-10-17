@@ -175,3 +175,13 @@ export function expectedText(f: AnswerField, s: Pick<MeasureSettings, 'decimals'
  * sentence about rounding early, under a cross.
  */
 export const isCorrect = (c: Check | undefined): boolean => c?.verdict === 'right'
+
+/** Adjust the hint message based on whether hints are available. */
+export function adjustHintMessage(check: Check, hasHints: boolean): Check {
+  if (check.verdict !== 'wrong' || !check.message?.includes('Press Hint')) return check
+  if (hasHints) return check
+  return {
+    ...check,
+    message: 'Not quite. Press Show the full solution to see how it is done.'
+  }
+}

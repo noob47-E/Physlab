@@ -255,7 +255,7 @@ function shapeRows(it: Extract<Item3D, { type: 'solid' }>, poly: ShapePoly, s: M
     angles.push(`${cornerName(a)}${cornerName(b)}: ${texMeasure(Math.PI - Math.acos(dot), 'angle', s)}`)
   }
   const dihedral: Row3D = {
-    title: 'Angles between faces',
+    title: 'Face angles',
     general: '\\theta = 180^\\circ - \\text{(angle between the outward normals)}',
     substitution: angles.join(',\\; '),
     answer: `${angles.length} \\text{ edges}`,

@@ -148,7 +148,7 @@ export function Measure3DPanel() {
           {solid && <SolidSizes id={solid.id} />}
           {shape && <ShapeActions key={shape.id} id={shape.id} />}
           {m && m.rows.length > 1 && (
-            <div className="mt-1 flex gap-1" role="tablist">
+            <div className="mt-1 flex flex-wrap gap-1" role="tablist">
               {m.rows.map((r, i) => (
                 <button key={r.title} type="button" role="tab" aria-selected={tab === i} className={`btn px-2 text-small pointer-coarse:min-h-[44px] ${tab === i ? 'primary' : ''}`} onClick={() => setTab(i)}>
                   {r.title}
@@ -157,7 +157,7 @@ export function Measure3DPanel() {
             </div>
           )}
           {m && <Steps row={m.rows[Math.min(tab, m.rows.length - 1)]} />}
-          {!m && !point && <p className="text-small text-ink-faint">Pick a second object with Measure or Angle: two points, a point and a plane, two lines, a line and a plane, or two planes.</p>}
+          {!m && !point && !shape && !solid && <p className="text-small text-ink-faint">Pick a second object with Measure or Angle: two points, a point and a plane, two lines, a line and a plane, or two planes.</p>}
         </div>
       )}
       {sel.length === 0 && <p className="px-3 pt-2 text-small text-ink-faint">{HINT_3D}</p>}

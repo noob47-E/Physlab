@@ -87,7 +87,7 @@ describe('as a solid and in Measure', () => {
     const { measure3D } = await import('../src/renderer/src/math/measure3d')
     const sh = solidShape('extrusion', { h: 4 }, [0, 0, 0], { pts: rect })
     const m = measure3D([{ type: 'solid', name: 'Prism', kind: 'extrusion', size: { h: 4 }, volume: sh.volume, area: sh.area, poly: { ...sh.poly!, vertices: sh.vertices } }], { decimals: 2, precisionMode: 'dp', unit: 'unit', unitPerSquare: 1, angleUnit: 'deg' })!
-    expect(m.rows.map((r) => r.title)).toEqual(['Volume', 'Surface area', 'Face areas', 'Edge lengths', 'Angles between faces'])
+    expect(m.rows.map((r) => r.title)).toEqual(['Volume', 'Surface area', 'Face areas', 'Edge lengths', 'Face angles'])
     expect(m.rows[0].value).toBeCloseTo(24, 9)
     expect(m.rows[0].substitution).toContain('4')
     expect(m.rows[1].value).toBeCloseTo(52, 9)

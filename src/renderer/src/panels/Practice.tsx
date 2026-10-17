@@ -7,7 +7,7 @@ import { enterMode } from '../app/layout'
 import { showPanel } from '../app/panels'
 import { panelToFront } from './solverState'
 import { classResultsFileText, openQuestionFile } from '../app/files'
-import { checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
+import { adjustHintMessage, checkAnswer, expectedText, isCorrect } from '../math/checkAnswer'
 import { generateSet, rngFor, TOPICS, type Level, type Problem, type TopicId } from '../math/problems'
 import type { FadingLevel, PQQuestion } from '../questions/pqjson'
 import type { QuestionSet } from '../questions/bank'
@@ -366,11 +366,21 @@ export function Practice() {
     const typed = useSession.getState().typed
     let next: Record<string, RowCheck> = {}
     if (item.kind === 'topic') {
-      for (const f of item.problem.fields) next[f.key] = checkAnswer(String(typed[f.key] ?? ''), f, settings)
+      const hasHints = item.problem.solution.steps.length > 0
+      for (const f of item.problem.fields) {
+        const result = checkAnswer(String(typed[f.key] ?? ''), f, settings)
+        next[f.key] = adjustHintMessage(result, hasHints)
+      }
     } else if (played) {
       // Every part in the author's order, each later one also marked with the student's own
       // earlier answers where it carries them forward.
       next = markPlayed(played, typed, settings)
+      const hasHints = played.working.moves.length > 0
+      for (const key in next) {
+        if (next[key]) {
+          next[key] = adjustHintMessage(next[key], hasHints)
+        }
+      }
     }
     // Facility (decision 8) is "right at the first Check": each part's own first real try,
     // recorded once and never replaced; one first tried after the full solution is not right first time.
@@ -428,7 +438,7 @@ export function Practice() {
   const show = (run: () => string, mode: 'graphing' | 'sandbox' | 'lab') => {
     try {
       const text = run()
-      enterMode(mode)
+      enterMode(mode, { skipFocus: true })
       // Practice, the Sandbox and Lab Data share a dock group, and the button just pressed is in
       // Practice: left there, the tab switched to stayed behind it while the note named it.
       const front = panelToFront(mode)
