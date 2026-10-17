@@ -26,7 +26,7 @@ import {
   Waypoints
 } from 'lucide-react'
 import { newProject, openProject, saveProject } from './files'
-import { clampPrecision, scaleFromText } from './topBarInputs'
+import { clampPrecision, scaleFromText, toggleTopMenu } from './topBarInputs'
 import { comingSoonModes, isDrawingMode, modeById, readyModes, toolsFor, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
@@ -192,13 +192,27 @@ function useOutsideClose(open: boolean, close: () => void) {
 
 type MenuItem = { label: string; sc?: string; run: () => void; disabled?: boolean; on?: boolean } | '-'
 
-function Menu({ label, items, title, className = '' }: { label: React.ReactNode; items: MenuItem[]; title?: string; className?: string }) {
-  const [open, setOpen] = useState(false)
-  const close = useCallback(() => setOpen(false), [])
-  const ref = useOutsideClose(open, close)
+function Menu({
+  label,
+  items,
+  title,
+  className = '',
+  open,
+  onToggle,
+  onClose
+}: {
+  label: React.ReactNode
+  items: MenuItem[]
+  title?: string
+  className?: string
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+}) {
+  const ref = useOutsideClose(open, onClose)
   return (
     <div ref={ref} className="relative">
-      <button className={`menu-btn ${open ? 'open' : ''} ${className}`} title={title} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button className={`menu-btn ${open ? 'open' : ''} ${className}`} title={title} aria-haspopup="menu" aria-expanded={open} onClick={onToggle}>
         {label}
       </button>
       {open && (
@@ -215,7 +229,7 @@ function Menu({ label, items, title, className = '' }: { label: React.ReactNode;
                 disabled={it.disabled}
                 className={`${it.disabled ? 'opacity-45' : ''} ${it.on ? 'on' : ''}`}
                 onClick={() => {
-                  setOpen(false)
+                  onClose()
                   it.run()
                 }}
               >
@@ -235,10 +249,18 @@ const UNITS: LengthUnit[] = ['unit', 'mm', 'cm', 'm', 'km', 'in', 'ft']
 const Heading = ({ children }: { children: React.ReactNode }) => <div className="mb-1 text-fine uppercase tracking-wide text-[var(--text-faint)]">{children}</div>
 
 /** Units, precision, what every object shows on the drawing, and the size of the whole window. */
-function MeasureSettingsMenu({ density }: { density: BarDensity }) {
-  const [open, setOpen] = useState(false)
-  const close = useCallback(() => setOpen(false), [])
-  const ref = useOutsideClose(open, close)
+function MeasureSettingsMenu({
+  density,
+  open,
+  onToggle,
+  onClose
+}: {
+  density: BarDensity
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+}) {
+  const ref = useOutsideClose(open, onClose)
   const settings = useScene((s) => s.settings)
   const set = useScene((s) => s.setSettings)
   const graphicsInfo = useApp((a) => a.graphicsInfo)
@@ -257,12 +279,12 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
   const summary = `1 □ = ${settings.unitPerSquare} ${settings.unit === 'unit' ? 'unit' : settings.unit} · ${settings.decimals} ${settings.precisionMode === 'dp' ? 'd.p.' : 's.f.'}`
   return (
     <div ref={ref} className="relative">
-      <button className={`menu-btn flex items-center gap-1.5 ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} title={`Units, precision and labels (${summary})`} aria-expanded={open}>
+      <button className={`menu-btn flex items-center gap-1.5 ${open ? 'open' : ''}`} onClick={onToggle} title={`Units, precision and labels (${summary})`} aria-expanded={open} aria-haspopup="dialog">
         <Settings2 size={14} />
         {density !== 'tight' && <span className="text-[var(--text)]">{summary}</span>}
       </button>
       {open && (
-        <div className="menu right-0 left-auto w-[22rem] p-3" onKeyDown={(e) => e.stopPropagation()}>
+        <div className="menu right-0 left-auto w-[22rem] p-3 pb-5" onKeyDown={(e) => e.stopPropagation()}>
           <Heading>Scale</Heading>
           <div className="mb-3 flex items-center gap-2">
             <span className="text-[var(--text)]">1 grid square =</span>
@@ -433,7 +455,7 @@ function MeasureSettingsMenu({ density }: { density: BarDensity }) {
               </div>
             </div>
           )}
-          <label className="flex cursor-pointer items-center gap-2 text-[var(--text)]">
+          <label className="mb-1 flex cursor-pointer items-center gap-2 text-[var(--text)]">
             <input type="checkbox" checked={graphicsInfo} onChange={(e) => setGraphicsInfo(e.target.checked)} />
             Show graphics info on the drawing (WebGPU, quality, fps)
           </label>
@@ -456,6 +478,9 @@ export function TopBar() {
   const openPanels = useOpenPanels((s) => s.open)
   const mode = useApp((a) => a.mode)
   const setSearchOpen = useApp((a) => a.setSearchOpen)
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const toggleMenu = useCallback((id: string) => setOpenMenu((cur) => toggleTopMenu(cur, id)), [])
+  const closeMenu = useCallback(() => setOpenMenu(null), [])
   const [barRef, width] = useContainerWidth()
   const density = barDensity(width)
   const title = filePath ? filePath.split(/[\\/]/).pop() : 'untitled'
@@ -473,6 +498,9 @@ export function TopBar() {
         {density !== 'tight' && 'PhysLab'}
       </div>
       <Menu
+        open={openMenu === 'file'}
+        onToggle={() => toggleMenu('file')}
+        onClose={closeMenu}
         label="File"
         items={[
           { label: 'New', sc: 'Ctrl+N', run: newProject },
@@ -485,6 +513,9 @@ export function TopBar() {
         ]}
       />
       <Menu
+        open={openMenu === 'edit'}
+        onToggle={() => toggleMenu('edit')}
+        onClose={closeMenu}
         label="Edit"
         items={[
           // The same history the keys reach: Lab Data used to run the drawing's.
@@ -508,6 +539,9 @@ export function TopBar() {
         ]}
       />
       <Menu
+        open={openMenu === 'view'}
+        onToggle={() => toggleMenu('view')}
+        onClose={closeMenu}
         label="View"
         items={[
           // Greyed where the drawing is not shown (Sandbox, GPU Lab), the same rule as the key.
@@ -546,6 +580,9 @@ export function TopBar() {
       />
 
       <Menu
+        open={openMenu === 'help'}
+        onToggle={() => toggleMenu('help')}
+        onClose={closeMenu}
         label="Help"
         items={[
           { label: 'Take the tour', run: () => useTour.getState().start() },
@@ -586,19 +623,37 @@ export function TopBar() {
         {split.tabs.map((i) => {
           const m = ready[i]
           return (
-            <button key={m.id} className={`mode-tab shrink-0 ${mode === m.id ? 'on' : ''}`} title={m.description} aria-current={mode === m.id ? 'page' : undefined} onClick={() => enterMode(m.id)}>
+            <button
+              key={m.id}
+              className={`mode-tab shrink-0 ${mode === m.id ? 'on' : ''}`}
+              title={m.description}
+              aria-current={mode === m.id ? 'page' : undefined}
+              onClick={() => {
+                closeMenu()
+                enterMode(m.id)
+              }}
+            >
               {m.label}
             </button>
           )
         })}
         <Menu
+          open={openMenu === 'more'}
+          onToggle={() => toggleMenu('more')}
+          onClose={closeMenu}
           label={
             <span className="flex items-center gap-1 whitespace-nowrap text-[var(--text-dim)]">
               More modes <ChevronDown size={13} />
             </span>
           }
           items={[
-            ...split.more.map((i) => ({ label: ready[i].label, run: () => enterMode(ready[i].id) })),
+            ...split.more.map((i) => ({
+              label: ready[i].label,
+              run: () => {
+                closeMenu()
+                enterMode(ready[i].id)
+              }
+            })),
             ...(split.more.length ? ['-' as const] : []),
             ...later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))
           ]}
@@ -607,7 +662,15 @@ export function TopBar() {
 
       <StartHereChip />
 
-      <button data-tour="search" className="menu-btn flex items-center gap-2 text-[var(--text-dim)]" onClick={() => setSearchOpen(true)} title="Search everything (Ctrl+K)">
+      <button
+        data-tour="search"
+        className="menu-btn flex items-center gap-2 text-[var(--text-dim)]"
+        onClick={() => {
+          closeMenu()
+          setSearchOpen(true)
+        }}
+        title="Search everything (Ctrl+K)"
+      >
         <Search size={14} />
         {density !== 'tight' && (
           <>
@@ -615,7 +678,12 @@ export function TopBar() {
           </>
         )}
       </button>
-      <MeasureSettingsMenu density={density} />
+      <MeasureSettingsMenu
+        density={density}
+        open={openMenu === 'settings'}
+        onToggle={() => toggleMenu('settings')}
+        onClose={closeMenu}
+      />
       {density !== 'tight' && (
         <span className="ml-2 max-w-[14rem] truncate text-small text-[var(--text-dim)]" title={filePath ?? undefined}>
           {title}

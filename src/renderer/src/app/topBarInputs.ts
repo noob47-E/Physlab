@@ -16,3 +16,10 @@ export function scaleFromText(text: string): number | null {
   const n = Number(t)
   return Number.isFinite(n) && n > 0 ? n : null
 }
+
+/** Menu toggling in the top bar: opening any menu closes whatever was open before.
+ *  Clicking the currently open menu closes it (returns null). */
+export function toggleTopMenu<T extends string>(active: T | null, target: T): T | null {
+  return active === target ? null : target
+}
+

@@ -3,7 +3,7 @@
 // drawing tools opening the Calculator over the drawing.
 
 import { describe, expect, it } from 'vitest'
-import { clampPrecision, scaleFromText } from '../src/renderer/src/app/topBarInputs'
+import { clampPrecision, scaleFromText, toggleTopMenu } from '../src/renderer/src/app/topBarInputs'
 
 describe('precision box', () => {
   it('refuses 0 and a cleared box in significant-figure mode (one figure at least)', () => {
@@ -65,3 +65,29 @@ describe('Ctrl+K palette', () => {
     expect(modeForTool('point', 'shapes')).toBeNull() // already has it: stay
   })
 })
+
+describe('top-bar menus (F2)', () => {
+  it('opening any menu or popover closes whatever was open before', () => {
+    let openMenu: string | null = null
+    // Clicking View opens View
+    openMenu = toggleTopMenu(openMenu, 'view')
+    expect(openMenu).toBe('view')
+
+    // Clicking Help while View is open closes View and opens Help
+    openMenu = toggleTopMenu(openMenu, 'help')
+    expect(openMenu).toBe('help')
+
+    // Clicking More modes while Help is open closes Help and opens More modes
+    openMenu = toggleTopMenu(openMenu, 'more')
+    expect(openMenu).toBe('more')
+
+    // Clicking Settings popover while More modes is open closes More modes and opens Settings
+    openMenu = toggleTopMenu(openMenu, 'settings')
+    expect(openMenu).toBe('settings')
+
+    // Clicking Settings again closes Settings
+    openMenu = toggleTopMenu(openMenu, 'settings')
+    expect(openMenu).toBeNull()
+  })
+})
+
