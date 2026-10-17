@@ -86,7 +86,23 @@ neighbour is open.
   anything derived from the camera on that frame is wrong; the real orthographic camera arrives a
   moment later. The `Invalidator` in `render/Viewport.tsx` therefore watches the camera object, the
   canvas size, the renderer readiness and the stores. Watching a store that is only written *inside*
-  a frame is circular and does not work. This was the "black viewport" bug.
+  a frame is circular and does not work. This was the "black viewport" bug. The same goes for state
+  set *inside* a frame: `Grid2D` mounts the axis lines from a `setAxes` in `useFrame`; React commits
+  that after the frame was drawn and `FatLine` writes the line's points in an effect of its own, so
+  the frame that mounting asks for can be drawn before the points exist. The effect on `axes` and
+  `showAxes` in `Grid2D` has to `invalidate()`, or about one 2-D → 3-D → 2-D switch in five showed
+  the grid and its numbers without the axis lines until the next click
+  (`tests/gridAxesInvalidate.test.ts` reads the component for that join). When the capture tool
+  (`PhysLab-research\09\sandbox\tools\f1-axes`) still reports "axes missing" after several quick
+  switches, read that run's frame lines first: in the runs checked no frame was drawn between the
+  mount and the screenshot at all (the first came 1.8 s after the mount, as the screenshot was
+  taken, instead of about 5 ms), so the picture was of a frame drawn before the axes were mounted.
+- **R3F re-enters `configure()` while `gl` is still pending, so `createRenderer` must stay idempotent
+  per canvas** (`render/renderer.ts`). The `Canvas` configures again on every render — the dock
+  settling its size, the quality tier written to `useGpuInfo` — and each call used to build another
+  whole renderer; the one that finished last put a stand-in perspective camera (zoom 1) over the 2-D
+  orthographic one, so about half of the first launches showed an empty viewport that Home could not
+  fix. `tests/rendererStartup.test.ts` counts the renderers built.
 - **WebGPU compiles a material's colour in.** Changing `material.color` after the first render does
   nothing until `material.needsUpdate = true`. That is why a theme switch used to leave the old
   theme's grid on screen.

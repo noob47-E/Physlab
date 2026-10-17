@@ -18,6 +18,7 @@
 
 import { math } from '../math/expr'
 import { toFraction } from '../math/fraction'
+import { isNoise } from '../math/noise'
 import { findRationalRoot, pDeg, pDivMod, pGcd, pPrimitive, pTrim, type Poly as ExactPoly } from '../math/pure/poly'
 import { R1, rFromNumber, rMul, rNeg, rat } from '../math/pure/rat'
 import { keypadToMath, constantOf, exactForm, polyRoots, type Cx, type ExprNode } from './engine'
@@ -277,7 +278,7 @@ function solveExact(p: ExactPoly, out: Cx[]): void {
 function polished(c: number[], roots: Cx[]): Cx[] {
   const deriv = c.slice(0, -1).map((a, i) => a * (c.length - 1 - i))
   const at = (poly: number[], z: Cx): Cx => poly.reduce<Cx>((acc, a) => ({ re: acc.re * z.re - acc.im * z.im + a, im: acc.re * z.im + acc.im * z.re }), { re: 0, im: 0 })
-  return roots.map((z0) => {
+  const polishedRoots = roots.map((z0) => {
     let z = z0
     for (let i = 0; i < 6; i++) {
       const f = at(c, z)
@@ -296,6 +297,22 @@ function polished(c: number[], roots: Cx[]): Cx[] {
     const snapped = { re: snap(z.re), im: snap(z.im) }
     return residual(c, snapped) <= Math.max(residual(c, z), Number.EPSILON) ? snapped : z
   })
+  return withoutCopies(polishedRoots)
+}
+
+/**
+ * Real roots that are one root to within round-off are listed once. Two real roots agree when they differ by a billionth of their own size, or by round-off
+ * of the biggest root of the polynomial (isNoise, math/noise.ts): x³ = 10³⁰ used to list its real root three times, the pair of complex roots having lost their
+ * imaginary part to a floor judged against the coefficients' size. A complex root is never merged: only a part that is round-off turns a pair into reals first.
+ */
+function withoutCopies(roots: Cx[]): Cx[] {
+  const scale = Math.max(...roots.map((z) => Math.hypot(z.re, z.im)))
+  const kept: Cx[] = []
+  for (const z of roots) {
+    const twin = z.im === 0 && kept.some((k) => k.im === 0 && (Math.abs(k.re - z.re) <= 1e-9 * Math.max(Math.abs(k.re), Math.abs(z.re)) || isNoise(k.re - z.re, scale)))
+    if (!twin) kept.push(z)
+  }
+  return kept
 }
 
 /** The roots as the screens list them, and whether every one of them checked. */
@@ -413,16 +430,66 @@ function readPolynomial(n: ExprNode, scope: Record<string, unknown>): Poly | nul
 }
 
 /**
+ * A polynomial with the same roots as one side of an equation that is zero, for a side that is a product of powers too big to expand: (x − 1)¹³ is zero
+ * where x − 1 is, and (x − 1)¹³(x + 2)¹⁵ where x − 1 or x + 2 is. Each power is replaced by its base (the base of a power is zero exactly where the power is,
+ * for a whole-number exponent of 1 or more), each product by the product of those, and anything that is not a product of powers is read exactly or not at all:
+ * a sum cannot be reduced this way ((x − 1)¹³ + 1 is not zero where x − 1 is), and a sum too big to expand is not read. Without this a repeated root of
+ * degree 13 or more went to the numeric search, which stops the moment |f| < 10⁻¹⁴ and answered x = 0.9163677215 for (x − 1)¹³ = 0.
+ */
+function readRoots(n: ExprNode, scope: Record<string, unknown>): Poly | null {
+  return readPolynomial(n, scope) ?? radicalOf(n, scope)
+}
+
+/** readRoots without expanding a power or a product that could be expanded: (x² + 1)⁶ is x² + 1, so the product (x − 1)¹³(x² + 1)⁶ stays a cubic. */
+function radicalOf(n: ExprNode, scope: Record<string, unknown>): Poly | null {
+  if (n.type === 'ParenthesisNode') return radicalOf(n.content as ExprNode, scope)
+  if (n.type !== 'OperatorNode') return readPolynomial(n, scope)
+  const args = n.args as ExprNode[]
+  switch (n.fn) {
+    case 'unaryMinus':
+    case 'unaryPlus':
+      return radicalOf(args[0], scope)
+    case 'multiply': {
+      const [a, b] = args.map((arg) => radicalOf(arg, scope))
+      return a && b ? polyMul(a, b) : null
+    }
+    case 'divide': {
+      const by = readPolynomial(args[1], scope)
+      return by && by.length === 1 && by[0] !== 0 ? radicalOf(args[0], scope) : null
+    }
+    case 'pow': {
+      const k = readPolynomial(args[1], scope)
+      return k && k.length === 1 && Number.isInteger(k[0]) && k[0] >= 1 ? radicalOf(args[0], scope) : null
+    }
+    default:
+      return readPolynomial(n, scope)
+  }
+}
+
+/**
  * left = right as the polynomial left − right, coefficients [aₙ … a₀] highest power first, or null
  * when the equation is not a polynomial in x. A top coefficient that is round-off beside the largest
  * (x² + 4 = x² + 1) is no coefficient at all.
+ *
+ * One exception, for a root-finder and nothing else: when one side is zero and the other a product of powers too big to expand, the polynomial returned is
+ * not left − right but the one with the same roots (readRoots), so (x − 1)¹³ = 0 gives x − 1. Every caller asks only for the roots of what it gets back.
  */
 export function polynomialInX(left: string, right: string, scope: Record<string, unknown>): number[] | null {
   let l: Poly | null
   let r: Poly | null
   try {
-    l = readPolynomial(math.parse(keypadToMath(left)) as ExprNode, scope)
-    r = readPolynomial(math.parse(keypadToMath(right)) as ExprNode, scope)
+    const sideL = math.parse(keypadToMath(left)) as ExprNode
+    const sideR = math.parse(keypadToMath(right)) as ExprNode
+    l = readPolynomial(sideL, scope)
+    r = readPolynomial(sideR, scope)
+    const nothing = (p: Poly | null): boolean => p !== null && p.every((v) => v === 0)
+    if (!l && nothing(r)) {
+      l = readRoots(sideL, scope)
+      r = [0]
+    } else if (!r && nothing(l)) {
+      r = readRoots(sideR, scope)
+      l = [0]
+    }
   } catch {
     return null
   }

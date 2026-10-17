@@ -9,6 +9,7 @@ import { visibleOrder, type Space } from '../core/visibility'
 import { add, type V3 } from '../math/vec'
 import { outlineRefusal } from '../math/shape3d'
 import { themeColor } from '../app/theme'
+import { canIntersect, intersectionsOf } from '../math/intersections'
 
 interface ToolInfo {
   id: ToolId
@@ -35,7 +36,7 @@ export const TOOLS: ToolInfo[] = [
   { id: 'parallel', label: 'Parallel', key: '', hint: ['Click a point and a line (any order).', 'Click the other one.'] },
   { id: 'perpBisector', label: 'Perp. bisector', key: '', hint: ['Click two points or a segment.', 'Click the second point.'] },
   { id: 'angleBisector', label: 'Angle bisector', key: '', hint: ['Click a point on arm 1.', 'Click the vertex.', 'Click a point on arm 2.'] },
-  { id: 'intersect', label: 'Intersect', key: 'I', hint: ['Click the first line or circle.', 'Click the second line or circle.'] },
+  { id: 'intersect', label: 'Intersect', key: 'I', hint: ['Click the first curve, line or circle.', 'Click the second curve, line or circle.'] },
   { id: 'text', label: 'Text', key: '', hint: ['Click where the text should go.'] },
   { id: 'delete', label: 'Delete', key: 'X', hint: ['Click an object to delete it.'] },
   // 3D-3B: Geometry's 3-D row (app/modes.ts tools3d).
@@ -309,7 +310,7 @@ export function undoLastPick(): boolean {
 }
 
 const isLineLike = (c?: Computed) => !!c && (c.type === 'line' || c.type === 'segment' || c.type === 'ray' || c.type === 'vector')
-const isCurve = (c?: Computed) => isLineLike(c) || c?.type === 'circle'
+const isCurve = (c?: Computed) => isLineLike(c) || c?.type === 'circle' || c?.type === 'graph'
 /** A plane typed as an equation (3D-2), which Measure and Angle read as a plane. */
 const isPlaneGraph = (o: SceneObject) => o.type === 'graph' && o.kind === 'plane'
 
@@ -501,8 +502,17 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
     }
     case 'intersect': {
       if (picks.length < 2) return false
-      b.point({ kind: 'intersection', a: picks[0], b: picks[1], index: 0 })
-      if (vals.some((c) => c?.type === 'circle')) b.point({ kind: 'intersection', a: picks[0], b: picks[1], index: 1 })
+      const c0 = vals[0]
+      const c1 = vals[1]
+      const pts = c0 && c1 && canIntersect(c0, c1) ? intersectionsOf(c0, c1) : []
+      if (pts.length > 0) {
+        for (let i = 0; i < pts.length; i++) {
+          b.point({ kind: 'intersection', a: picks[0], b: picks[1], index: i, approx: pts[i] })
+        }
+      } else {
+        b.point({ kind: 'intersection', a: picks[0], b: picks[1], index: 0 })
+        if (vals.some((c) => c?.type === 'circle')) b.point({ kind: 'intersection', a: picks[0], b: picks[1], index: 1 })
+      }
       b.commit()
       // Drop intersection points that do not exist (e.g. a line missing a circle).
       const bad = b.created.filter((o) => scene().ev.errors.has(o.id)).map((o) => o.id)

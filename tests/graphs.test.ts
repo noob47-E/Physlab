@@ -242,7 +242,7 @@ const typed = (expr: string) => {
 const byX = (pts: KeyPoint[]): KeyPoint[] => [...pts].sort((a, b) => a.x - b.x)
 const near = (pts: KeyPoint[], x: number, within: number): KeyPoint[] => pts.filter((k) => Math.abs(k.x - x) < within)
 /** A point names its turning first, then that it is a root, then that it is the y-intercept. */
-const RANK: Record<KeyPoint['kind'], number> = { max: 0, min: 0, root: 1, yIntercept: 2 }
+const RANK: Record<KeyPoint['kind'], number> = { max: 0, min: 0, root: 1, intersection: 2, yIntercept: 2 }
 const dp3 = { decimals: 3, precisionMode: 'dp' } as const
 const sf3 = { decimals: 3, precisionMode: 'sf' } as const
 

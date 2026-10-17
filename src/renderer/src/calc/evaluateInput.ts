@@ -66,8 +66,9 @@ export interface EvalResult {
   /** The quick answer and the working disagreed: this is the working's answer, and neither is confirmed (calc/working.ts). */
   unconfirmed?: boolean
   /**
-   * True when the number is a polynomial's root that only the numeric search stands behind: put back into the polynomial it does not come out
-   * zero. Unless the working confirms it, the card says it is approximate and does not give it as the answer (calc/working.ts).
+   * True when the number is a root that only the numeric search stands behind and the search could not confirm to the figures shown: put back into
+   * a polynomial it does not come out zero, or for any other equation the arithmetic could not place it (a repeated root that round-off hides, f
+   * zero over a stretch of the line). Unless the working confirms it, the card says it is approximate and does not give it as the answer (calc/working.ts).
    */
   approximate?: boolean
   /**
@@ -350,7 +351,8 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       // A polynomial's real roots are all of them, and the search's one root is the whole answer too when there is only one.
       const coefficients = withAngle(opts.angle, () => polynomialInX(left, right, calcScope(ctx)))
       polynomial = coefficients !== null
-      approximate = coefficients !== null && typeof out.value === 'number' && !rootChecks(coefficients, out.value)
+      // A polynomial's root is checked by putting it back; any other equation's by the search itself, which says when it could not settle on its number.
+      approximate = coefficients !== null ? typeof out.value === 'number' && !rootChecks(coefficients, out.value) : out.approximate === true
       // Solving never stores. Only the student's own "x = 5" does, and then the stored x is the 5 that was typed.
       if (typeof out.value === 'number' && ((left.trim() === 'x' && !hasFreeX(right)) || (right.trim() === 'x' && !hasFreeX(left)))) assign = { name: 'x', value: out.value }
     } else {

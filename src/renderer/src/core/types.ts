@@ -25,7 +25,7 @@ export type PointDef =
   | { kind: 'midpoint'; a: ObjId; b: ObjId }
   /** Sits on a segment/ray/line at fraction t of its direction, and slides along it when dragged. */
   | { kind: 'onObject'; on: ObjId; t: number }
-  | { kind: 'intersection'; a: ObjId; b: ObjId; index: number }
+  | { kind: 'intersection'; a: ObjId; b: ObjId; index: number; approx?: V3 }
   | { kind: 'vectorHead'; vector: ObjId }
   | { kind: 'center'; circle: ObjId }
   | { kind: 'triangleCenter'; poly: ObjId; which: 'centroid' | 'circumcenter' | 'incenter' | 'orthocenter' }
@@ -253,7 +253,7 @@ export type Computed =
   | { type: 'polygon'; pts: V3[] }
   | { type: 'angle'; a: V3; vertex: V3; b: V3; value: number }
   | { type: 'number'; value: number }
-  | { type: 'graph' }
+  | { type: 'graph'; graph?: GraphObj; f?: (x: number) => number }
   | { type: 'text'; p: V3 }
   /** `size`: each size's value now (its formula worked out). */
   | { type: 'solid'; kind: SolidKind; shape: SolidShape; size: Record<string, number> }

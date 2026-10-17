@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
 import { CommandBar } from './CommandBar'
+// The top command bar is kept in code but hidden from students (Phase 0.9 C-shell cuts); one flag for App and the search palette.
+import { SHOW_COMMAND_BAR } from './shellFlags'
 import { TopBar, ToolShelf } from './TopBar'
 import { LAYOUT_KEY, buildLayout, enterMode, restoreLayout, savedMode, watchLayout } from './layout'
 import './shell.css'
@@ -100,9 +102,6 @@ export function App() {
       setTimeout(() => useScene.getState().setPlaying(true), 1500)
     }
   }, [])
-
-  // Top command bar is kept in code but hidden from student view (Phase 0.9 C-shell cuts).
-  const SHOW_COMMAND_BAR = false
 
   return (
     <div className="flex h-full flex-col">

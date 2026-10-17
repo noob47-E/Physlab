@@ -62,7 +62,8 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
   if (from !== id && !opts.restored) {
     if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
     if (id !== 'shapes' && isPanelOpen('measure')) hidePanel('measure')
-    if (id !== 'problems' && isPanelOpen('practice')) hidePanel('practice')
+    // skipFocus is how a question opens its picture beside Practice: the question and its answer box stay.
+    if (id !== 'problems' && !opts.skipFocus && isPanelOpen('practice')) hidePanel('practice')
     if (id !== 'lab' && isPanelOpen('labdata')) hidePanel('labdata')
     if (id !== 'gpu' && isPanelOpen('gpulab')) hidePanel('gpulab')
     if (id !== 'sandbox' && isPanelOpen('sandbox')) hidePanel('sandbox')

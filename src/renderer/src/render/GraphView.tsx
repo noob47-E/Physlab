@@ -11,7 +11,8 @@ import { useScene } from '../core/store'
 import type { GraphObj } from '../core/types'
 import { solutionsInX } from '../core/visualize'
 import { compileScalar, math, preprocess, sceneNames, symbolsOf } from '../math/expr'
-import { betweenMesh, carriedSolutions, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
+import { betweenMesh, carriedSolutions, curveIntersections, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
+import { visibleIn } from '../core/visibility'
 import { themeColor, useTheme, useThemed } from '../app/theme'
 import type { V3 } from '../math/vec'
 import { useReleaseLater } from './releaseLater'
@@ -39,7 +40,7 @@ function useGraphColors() {
     // Resolved once per theme: reading the stylesheet inside useFrame for every key point made a
     // graph with many roots pay a style read per root per frame.
     const extremum = themeColor('--key-extremum')
-    const key: Record<KeyPoint['kind'], string> = { root: themeColor('--key-root'), yIntercept: themeColor('--key-intercept'), max: extremum, min: extremum }
+    const key: Record<KeyPoint['kind'], string> = { root: themeColor('--key-root'), yIntercept: themeColor('--key-intercept'), max: extremum, min: extremum, intersection: themeColor('--key-intercept') }
     return { select: themeColor('--sel-glow'), wireframe: themeColor('--wireframe'), key }
   })
   return { theme, colors }
@@ -124,6 +125,18 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   )
   const known = carried ?? solved
 
+  const activeSpace = useScene((s) => s.activeSpace)
+  const otherGraphsKey = useScene((s) =>
+    s.order
+      .map((id) => {
+        if (id === obj.id) return ''
+        const o = s.objects[id]
+        return o?.type === 'graph' ? `${id}:${o.visible ? 1 : 0}:${visibleIn(o, s.activeSpace) ? 1 : 0}` : ''
+      })
+      .filter(Boolean)
+      .join(',')
+  )
+
   const data = useMemo(() => {
     const out: { polylines: V3[][]; segments?: V3[]; fill?: Float32Array; keys: KeyPoint[] } = { polylines: [], keys: [] }
     try {
@@ -131,8 +144,21 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
         const f = (x: number) => fns.f!({ x })
         const n = Math.min(4000, Math.max(300, Math.round(((b.xMax - b.xMin) / b.wpp / 2) * QUALITY[qualityNow()].samples)))
         out.polylines = sampleExplicit(f, b.xMin, b.xMax, n, b.viewH)
-        if (obj.showRoots || obj.showExtrema) {
-          out.keys = shownKeyPoints(keyPoints(f, b.xMin, b.xMax, 1200), !!obj.showRoots, !!obj.showExtrema)
+        if (obj.showRoots || obj.showExtrema || selected || hovered) {
+          const raw = keyPoints(f, b.xMin, b.xMax, 1200)
+          const interKeys: KeyPoint[] = []
+          const s = useScene.getState()
+          for (const otherId of s.order) {
+            if (otherId === obj.id) continue
+            const other = s.objects[otherId]
+            if (other?.type === 'graph' && other.visible && visibleIn(other, s.activeSpace)) {
+              const c = s.ev.values.get(otherId)
+              if (c?.type === 'graph' && c.f) {
+                interKeys.push(...curveIntersections(f, c.f, b.xMin, b.xMax))
+              }
+            }
+          }
+          out.keys = shownKeyPoints([...raw, ...interKeys], !!obj.showRoots || selected || hovered, !!obj.showExtrema || selected || hovered)
         }
       } else if (obj.kind === 'area' && fns.f) {
         const a = obj.tMin ?? 0
@@ -197,7 +223,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
     // `evVersion` is not read here: the compiled functions read the scene's scope through a
     // closure, so a moved slider changes the curve without changing `fns`.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax, obj.pieces, known])
+  }, [fns, obj.kind, b.xMin, b.xMax, b.yMin, b.yMax, b.viewH, b.wpp, evVersion, obj.showRoots, obj.showExtrema, obj.op, obj.tMin, obj.tMax, obj.pieces, known, selected, hovered, otherGraphsKey, activeSpace])
 
   useEffect(() => {
     const polys = data.segments ? pairsToPolys(data.segments) : data.polylines

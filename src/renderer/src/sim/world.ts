@@ -1990,7 +1990,8 @@ export class SimWorld {
     if (!e || e.def.shape === 'ground') return
     this.input()
     const from = this.positionOf(e)
-    this.put(e, position)
+    const target = this.constrainPlacement(id, position, from)
+    this.put(e, target)
     this.faceTies(e)
     if (e.def.motion !== 'dynamic') this.wakeAll()
     // A mass on a pulley takes its partner the other way, so the rope stays its length while it
@@ -2001,13 +2002,118 @@ export class SimWorld {
       const partner = this.entries.get(link.a === id ? link.b : link.a)
       const wheel = link.over ? this.entries.get(link.over) : undefined
       if (!partner || !wheel || partner.def.motion !== 'dynamic') continue
-      this.put(partner, pulleyPartnerMove(wheel.def, from, position, this.positionOf(partner)))
+      const wheelDef = { ...wheel.def, position: this.positionOf(wheel) }
+      this.put(partner, pulleyPartnerMove(wheelDef, from, target, this.positionOf(partner)))
     }
     // A rope or pulley bakes its end points and rim into its constraints. Move a wheel or a rope
     // end and those must be laid again, exactly as updateBody does.
     if (this.linkDefs.some((l) => l.over === id || ((l.kind === 'pulley' || l.kind === 'rope') && (l.a === id || l.b === id)))) {
       this.setLinks(this.linkDefs)
     }
+  }
+
+  /**
+   * Clamps a proposed placement position so that distance constraints (strings, rods, ropes, pulleys)
+   * are not stretched or violated while dragging a body paused (S1, Finding 8.1).
+   */
+  private constrainPlacement(id: BodyId, position: V3, from: V3): V3 {
+    const e = this.entries.get(id)
+    if (!e) return position
+    const touching = this.linkDefs.filter((l) => l.a === id || l.b === id)
+    if (touching.length === 0) return position
+
+    let target: V3 = [...position]
+    // In 2D, the dragged body always remains strictly in its 2D plane (from[2]).
+    if (this.settings.twoD) target[2] = from[2]
+
+    // Sort links touching id so that parent links (lower depth) are prioritized.
+    touching.sort((l1, l2) => {
+      const o1 = l1.a === id ? l1.b : l1.a
+      const o2 = l2.a === id ? l2.b : l2.a
+      const d1 = this.depths.get(o1) ?? Infinity
+      const d2 = this.depths.get(o2) ?? Infinity
+      return d1 - d2
+    })
+
+    // Iterative projection relaxation (converges simultaneous multiple constraints, e.g. two strings).
+    const passes = touching.length > 1 ? 30 : 1
+    for (let iter = 0; iter < passes; iter++) {
+      for (const link of touching) {
+        const otherId = link.a === id ? link.b : link.a
+        const other = this.entries.get(otherId)
+        if (!other) continue
+        const otherPos = this.positionOf(other)
+
+        if (link.kind === 'string') {
+          const maxDist = Math.max(0.01, link.length)
+          const dx = target[0] - otherPos[0]
+          const dy = target[1] - otherPos[1]
+          const dz = this.settings.twoD ? 0 : target[2] - otherPos[2]
+          const d = Math.hypot(dx, dy, dz)
+          if (d > maxDist) {
+            const s = maxDist / (d || 1)
+            target = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? from[2] : otherPos[2] + dz * s]
+          }
+        } else if (link.kind === 'rod') {
+          const fixedDist = Math.max(0.01, link.length)
+          const dx = target[0] - otherPos[0]
+          const dy = target[1] - otherPos[1]
+          const dz = this.settings.twoD ? 0 : target[2] - otherPos[2]
+          const d = Math.hypot(dx, dy, dz)
+          if (d < 1e-6) {
+            target = [otherPos[0], otherPos[1] - fixedDist, from[2]]
+          } else {
+            const s = fixedDist / d
+            target = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? from[2] : otherPos[2] + dz * s]
+          }
+        } else if (link.kind === 'rope') {
+          const dx = target[0] - otherPos[0]
+          const dy = target[1] - otherPos[1]
+          const dz = this.settings.twoD ? 0 : target[2] - otherPos[2]
+          const d = Math.hypot(dx, dy, dz)
+          const dir: V3 = d > 1e-6 ? [dx / d, dy / d, dz / d] : [0, -1, 0]
+          const reachOther = reachAlong(other.def, dir)
+          const reachMe = reachAlong(e.def, [-dir[0], -dir[1], -dir[2]])
+          const maxDist = Math.max(0.1, link.length) + reachOther + reachMe
+          if (d > maxDist) {
+            const s = maxDist / (d || 1)
+            target = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? from[2] : otherPos[2] + dz * s]
+          }
+        } else if (link.kind === 'pulley') {
+          const wheel = link.over ? this.entries.get(link.over) : undefined
+          if (wheel) {
+            const wheelDef = { ...wheel.def, position: this.positionOf(wheel) }
+            const partnerPos = this.positionOf(other)
+            const { p1, p2 } = pulleyRim(wheelDef, from, partnerPos)
+            const myRim = link.a === id ? p1 : p2
+            const partnerRim = link.a === id ? p2 : p1
+            const partnerToRim = Math.hypot(partnerPos[0] - partnerRim[0], partnerPos[1] - partnerRim[1], partnerPos[2] - partnerRim[2])
+            const maxPartnerLift = Math.max(0, partnerToRim - 0.05)
+            const fromDist = Math.hypot(from[0] - myRim[0], from[1] - myRim[1], from[2] - myRim[2])
+            const totalLen = Math.max(0.05, link.length)
+            const maxDistFromRim = Math.max(0.01, Math.min(totalLen - 0.05, fromDist + maxPartnerLift))
+            const diffRim: V3 = [target[0] - myRim[0], target[1] - myRim[1], this.settings.twoD ? 0 : target[2] - myRim[2]]
+            const dRim = Math.hypot(...diffRim)
+            if (dRim > maxDistFromRim && dRim > 1e-6) {
+              const s = maxDistFromRim / dRim
+              target = [myRim[0] + diffRim[0] * s, myRim[1] + diffRim[1] * s, this.settings.twoD ? from[2] : myRim[2] + diffRim[2] * s]
+            }
+          }
+        } else if (link.kind === 'hinge') {
+          const qOther = this.rotationOf(other)
+          const pivotOther = link.a === id ? (link.pivotB ?? [0, 0, 0]) : (link.pivotA ?? [0, 0, 0])
+          const rotPivot = rotateVec(qOther, pivotOther)
+          const pivotWorld: V3 = [otherPos[0] + rotPivot[0], otherPos[1] + rotPivot[1], otherPos[2] + rotPivot[2]]
+          const pivotMe = link.a === id ? (link.pivotA ?? [0, 0, 0]) : (link.pivotB ?? [0, 0, 0])
+          const qMe = this.rotationOf(e)
+          const myOffsetInWorld = rotateVec(qMe, pivotMe)
+          target = [pivotWorld[0] - myOffsetInWorld[0], pivotWorld[1] - myOffsetInWorld[1], this.settings.twoD ? from[2] : pivotWorld[2] - myOffsetInWorld[2]]
+        } else if (link.kind === 'weld') {
+          target = [...from]
+        }
+      }
+    }
+    return target
   }
 
   /**

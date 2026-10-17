@@ -4,6 +4,7 @@ import { MODES, readyModes, useApp, type ModeId } from './modes'
 import { enterMode } from './layout'
 import { PANEL_LIST, showPanel } from './panels'
 import { CATALOG } from './CommandBar'
+import { SHOW_COMMAND_BAR } from './shellFlags'
 import { runCommand } from '../lang/commands'
 import { scene } from '../core/store'
 import { useTour } from './tour/Tour'
@@ -45,8 +46,12 @@ export function modeForTool(tool: string, current: ModeId): ModeId | null {
   return readyModes().find(shows)?.id ?? null
 }
 
-/** Every row Ctrl+K can offer; exported so a test can walk them and find none that leads to a hidden mode. */
-export function buildItems(): Item[] {
+/**
+ * Every row Ctrl+K can offer; exported so a test can walk them and find none that leads to a hidden mode.
+ * `withCommands` is the command bar's own switch: a Commands row runs a typed line, and while the bar and
+ * the Console are hidden its answer has nowhere to appear, so the row would do nothing a student can see.
+ */
+export function buildItems(withCommands: boolean = SHOW_COMMAND_BAR): Item[] {
   const items: Item[] = []
   // Only the modes that exist: a "coming soon" row that opened an empty mode was a dead end.
   for (const m of readyModes()) items.push({ group: 'Modes', title: m.label, hint: m.description, run: () => enterMode(m.id) })
@@ -64,7 +69,7 @@ export function buildItems(): Item[] {
   }
   for (const p of PANEL_LIST) items.push({ group: 'Panels', title: p.title, hint: 'Show this panel (and reopen it if it was closed)', run: () => showPanel(p.id) })
   for (const ex of EXAMPLES) items.push({ group: 'Examples', title: ex.title, hint: ex.what, run: () => void runExample(ex) })
-  for (const c of CATALOG) items.push({ group: 'Commands', title: c.insert, hint: `${c.desc} · ${c.group}`, run: () => fillCommandBar(c.insert) })
+  if (withCommands) for (const c of CATALOG) items.push({ group: 'Commands', title: c.insert, hint: `${c.desc} · ${c.group}`, run: () => fillCommandBar(c.insert) })
   for (const cm of CALC_MODES) {
     items.push({
       group: 'Calculator',
@@ -122,6 +127,10 @@ export function buildItems(): Item[] {
   return items
 }
 
+/** The search box's invitation: it names only the groups it will really search. */
+export const searchPlaceholder = (withCommands: boolean = SHOW_COMMAND_BAR): string =>
+  `Search modes, tools, examples, ${withCommands ? 'commands, ' : ''}settings…`
+
 /** Exported for the test that keeps the singular a student types ("x axis") reaching the Axes rows. */
 export function score(item: Item, q: string): number {
   const t = item.title.toLowerCase()
@@ -143,7 +152,7 @@ export function SearchPalette() {
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
-  const items = useMemo(buildItems, [])
+  const items = useMemo(() => buildItems(), [])
 
   const results = useMemo(() => {
     if (!q.trim()) return items.filter((i) => i.group === 'Modes' || i.group === 'Examples').slice(0, 14)
@@ -178,7 +187,7 @@ export function SearchPalette() {
           <input
             ref={input}
             className="h-11 flex-1 bg-transparent text-lead outline-none"
-            placeholder="Search modes, tools, examples, commands, settings…"
+            placeholder={searchPlaceholder()}
             value={q}
             onChange={(e) => {
               setQ(e.target.value)

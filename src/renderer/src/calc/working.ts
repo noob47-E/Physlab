@@ -35,7 +35,7 @@ interface Reconciled {
 const DISAGREEMENT_NOTE = 'The quick answer and the working gave different answers for this line, so neither is confirmed. This is the working’s answer.'
 
 /** What the card says under a number only the quick search stands behind, when the working cannot check it either. */
-const APPROXIMATE_NOTE = 'Treat this value as approximate: put back into the equation it does not come out as zero, and the working could not check it.'
+const APPROXIMATE_NOTE = 'Treat this value as approximate: the search could not confirm it to the figures shown, and the working could not check it.'
 
 /** The card as it stands, or marked as unconfirmed with the reason when its number is one nothing has checked (EvalResult.approximate). */
 const flagIfApproximate = (result: EvalResult): EvalResult => (result.approximate ? { ...result, extra: [...(result.extra ?? []), APPROXIMATE_NOTE], unconfirmed: true } : result)

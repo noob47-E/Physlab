@@ -262,6 +262,16 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         const st = w.state(d.id)
         const def = defOf(d.id)
         if (act && st && def && dragSetsStart(w.time, def)) useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
+        for (const link of useSandbox.getState().links) {
+          if (link.kind === 'pulley' && (link.a === d.id || link.b === d.id)) {
+            const partnerId = link.a === d.id ? link.b : link.a
+            const pst = w.state(partnerId)
+            const pdef = defOf(partnerId)
+            if (act && pst && pdef && dragSetsStart(w.time, pdef)) {
+              useSandbox.getState().updateBody(partnerId, { position: [pst.position[0], pst.position[1], pst.position[2]] })
+            }
+          }
+        }
         invalidate()
         return
       }

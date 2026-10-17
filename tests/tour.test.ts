@@ -22,10 +22,11 @@ vi.stubGlobal('localStorage', {
   removeItem: (k: string) => void store.delete(k)
 })
 
-import { AFTER_SANDBOX, MISSIONS, resetMissionBaseline, TOUR } from '../src/renderer/src/app/tour/steps'
+import { AFTER_SANDBOX, MISSIONS, resetMissionBaseline, SHORTCUTS, TOUR } from '../src/renderer/src/app/tour/steps'
 import { ALL_DONE_MESSAGE, formatMissionHint, readDone, showWorkingExample, useTour, watchMissions, WELCOME_TILES } from '../src/renderer/src/app/tour/Tour'
 import { buildItems } from '../src/renderer/src/app/SearchPalette'
 import { MODES, readyModes } from '../src/renderer/src/app/modes'
+import { EXPRESSION_WORDS } from '../src/renderer/src/panels/expressionRows'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { scene } from '../src/renderer/src/core/store'
 import { usePure } from '../src/renderer/src/math/pure/store'
@@ -47,7 +48,9 @@ const mission = (id: string) => {
 /** Where each anchor a mission points at must live: the panel or bar the mission's mode shows. */
 const ANCHOR_HOME: Record<string, { file: string; mark: string }> = {
   equals: { file: 'src/renderer/src/panels/Maths.tsx', mark: 'data-tour="equals"' },
-  command: { file: 'src/renderer/src/app/CommandBar.tsx', mark: 'data-tour="command"' },
+  // The graph mission points at the drawing, where the typed line appears: the Expressions list has no anchor of its own.
+  viewport: { file: 'src/renderer/src/render/Viewport.tsx', mark: 'data-tour="viewport"' },
+  'tool-vector': { file: 'src/renderer/src/app/TopBar.tsx', mark: 'data-tour={`tool-${id}`}' },
   'tool-sketch': { file: 'src/renderer/src/app/TopBar.tsx', mark: 'data-tour={`tool-${id}`}' },
   play: { file: 'src/renderer/src/panels/sandbox/Transport.tsx', mark: 'data-tour="play"' },
   'start-practice': { file: 'src/renderer/src/panels/Practice.tsx', mark: 'data-tour="start-practice"' }
@@ -88,6 +91,8 @@ describe('the six missions point at real things', () => {
     expect(byId.sandbox.panel).toBe('sandbox') // play is in the Sandbox panel
     expect(byId.problems.panel).toBe('practice') // start-practice is in Practice
     expect(byId.shapes.tools).toContain('sketch') // tool-sketch: the shelf draws a button per tool of the mode
+    expect(byId.vectors.tools).toContain('vector') // tool-vector: the same, for the arrow mission
+    expect(byId.graphing.panel).toBe('expressions') // the graph mission types into this list
   })
 
   it('every mode a mission opens is ready and not hidden', () => {
@@ -96,8 +101,14 @@ describe('the six missions point at real things', () => {
   })
 
   it('every anchor of the spotlight tour exists somewhere in the app', () => {
-    const files = ['app/CommandBar.tsx', 'app/TopBar.tsx', 'panels/Measurements.tsx', 'panels/sandbox/Transport.tsx', 'panels/sandbox/AddRow.tsx', 'render/Viewport.tsx'].map((f) => readSource(`src/renderer/src/${f}`)).join('\n')
+    const files = ['app/TopBar.tsx', 'panels/Measurements.tsx', 'panels/sandbox/Transport.tsx', 'panels/sandbox/AddRow.tsx', 'render/Viewport.tsx'].map((f) => readSource(`src/renderer/src/${f}`)).join('\n')
     for (const s of TOUR) if (s.anchor) expect(files, s.anchor).toContain(`data-tour="${s.anchor}"`)
+  })
+
+  it('nothing points at the command bar: it is hidden from students, so a ring there would show nothing', () => {
+    // app/CommandBar.tsx is left out of the file list above on purpose, for the same reason.
+    for (const s of TOUR) expect(s.anchor, s.title).not.toBe('command')
+    for (const m of MISSIONS) expect(m.anchor, m.id).not.toBe('command')
   })
 })
 
@@ -139,9 +150,10 @@ describe('every mission ticks by exactly the action its hint names', () => {
   it('2 Draw a graph: a line typed in Graphing\'s Expressions list counts as typed too (P-GCALC)', () => {
     const src = readSource('src/renderer/src/panels/Expressions.tsx')
     expect(src).toMatch(/const before = graphCount\(\)\s*\n\s*await runCommand\(text\)[\s\S]{0,160}if \(graphCount\(\) > before\) bumpAction\('typedGraphs'\)/)
-    // Mission 2's hint still names a control that exists: the command bar stays at the top.
-    expect(mission('graph').hint).toContain('in the bar at the top')
-    expect(readSource('src/renderer/src/app/App.tsx')).toMatch(/<CommandBar \/>/)
+    // Mission 2's hint names the list the student types into, which Graphing opens (the command bar is hidden).
+    expect(mission('graph').hint).toContain(`${EXPRESSION_WORDS.heading} list`)
+    expect(EXPRESSION_WORDS.placeholder).toContain('y = x^2') // the same kind of line the box itself suggests
+    expect(mission('graph').hint).toContain('y = x^2 - 4')
   })
 
   it('2 Draw a graph: a graph typed in the command bar ticks; one loaded with a file does not', async () => {
@@ -286,8 +298,27 @@ describe('the words', () => {
     for (const w of words) expect(w).not.toMatch(/bar at the bottom/)
   })
 
+  it('never tell a student to type a command or open the Console: the bar and the Console are hidden', () => {
+    // WELCOME_TILES, the missions, every tour card, the shortcut list and the Ctrl+K card: all the words a student reads.
+    const everything = [...words, ...TOUR.flatMap((s) => [s.title, s.body]), ...SHORTCUTS.flat(), ...WELCOME_TILES.flatMap((t) => [t.label, t.text])]
+    for (const w of everything) expect(w, w).not.toMatch(/command|console|type "help"|bar at the top/i)
+    // The old card, by title, and the old shortcut row that jumped to the bar.
+    expect(TOUR.map((s) => s.title)).not.toContain('Type what you want')
+    expect(SHORTCUTS.map(([keys]) => keys)).not.toContain('Enter or /')
+  })
+
+  it('the Ctrl+K card names only what the palette really searches', () => {
+    const card = TOUR.find((s) => s.title === 'Find anything')!
+    expect(card.body).toContain('Ctrl+K')
+    const groups = new Set(buildItems().map((r) => r.group.toLowerCase()))
+    expect(groups.has('commands')).toBe(false)
+    expect(card.body).not.toMatch(/commands/i)
+  })
+
   it('use touch words on a touch screen', () => {
-    expect(formatMissionHint(mission('vector').hint, true)).toBe('Type A = <3, 4> and press Enter. Then slide the tip of the arrow with your finger.')
+    expect(formatMissionHint(mission('vector').hint, true)).toBe(
+      'Pick the Vector tool and slide your finger across the drawing to make an arrow. Tap the Move tool, then slide the tip of the arrow with your finger.'
+    )
     expect(formatMissionHint(mission('geometry').hint, true)).toBe(
       'Pick the Sketch tool and draw a rough rectangle. Tap the Move tool, then tap the rectangle to see its area and the formula in the Measure panel.'
     )
@@ -306,10 +337,12 @@ describe('the answers the missions promise', () => {
     expect(tex).toMatch(/\(2x\+3\)\(3x-1\)|\(3x-1\)\(2x\+3\)/)
   })
 
-  it('A = <3, 4> is the vector the hint types', async () => {
-    await runCommand('A = <3, 4>')
-    const a = scene().objects[scene().ev.names.get('A')!]
-    expect(a.type === 'vector' && a.def.kind === 'free' ? a.def.comp.slice(0, 2) : null).toEqual([3, 4])
+  it('the graph mission\'s line, y = x^2 - 4, is a graph the Expressions list can draw', async () => {
+    const m = mission('graph')
+    const line = m.hint.match(/y = x\^2 - 4/)![0]
+    await runCommand(line) // what the list sends on Enter (panels/Expressions.tsx addLine)
+    expect(scene().log.filter((l) => l.kind === 'error')).toEqual([])
+    expect(Object.values(scene().objects).filter((o) => o.type === 'graph')).toHaveLength(1)
   })
 })
 

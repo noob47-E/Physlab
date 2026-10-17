@@ -29,6 +29,7 @@ export function formatMissionHint(hint: string, isTouch: boolean): string {
   return hint
     // A touch screen has no Esc key: the Move tool does what Esc does here (leaves the Sketch tool).
     .replace('Press Esc, then click', 'Tap the Move tool, then tap')
+    .replace('Press Esc, then drag the tip of the arrow', 'Tap the Move tool, then slide the tip of the arrow with your finger')
     .replace('drag the tip of the arrow', 'slide the tip of the arrow with your finger')
     .replace(/\bdrag\b/g, 'slide your finger')
     // Mission 4: "click the rectangle" is a tap on a touch screen.

@@ -55,8 +55,8 @@ export function keypadToMath(src: string): string {
 // Calculus helpers
 // ---------------------------------------------------------------------------
 
-function derivativeAt(f: (x: number) => number, x: number): number {
-  const h = 1e-3 * Math.max(1, Math.abs(x))
+function derivativeAt(f: (x: number) => number, x: number, step?: number): number {
+  const h = step ?? 1e-3 * Math.max(1, Math.abs(x))
   return (-f(x + 2 * h) + 8 * f(x + h) - 8 * f(x - h) + f(x - 2 * h)) / (12 * h)
 }
 
@@ -202,20 +202,127 @@ export function integrate(f: (x: number) => number, a: number, b: number, tol = 
   }
 }
 
-/** Numeric root of f near `guess` (Newton, then bracketing scan + bisection). */
-export function solveNumeric(f: (x: number) => number, guess = 0): number {
+/** A root the search found, and whether it is sure of it: a root it could not settle is a number the card must call approximate. */
+interface Searched {
+  root: number
+  settled: boolean
+}
+
+/**
+ * The derivative of f at x over a stretch short enough to be the derivative there: the stretch starts at a thousandth of x and is cut by eight until two
+ * stretches agree to a tenth. Over a stretch longer than the distance to a repeated root the five-point formula measures the shape of f at that scale
+ * instead — for (x − 1)¹³ at 1.000003 it said −1.4×10⁻³³ where the slope is 10⁻⁶⁵ — and a step made from that reads as arrival.
+ */
+function steadyDerivative(f: (x: number) => number, x: number): number {
+  const size = Math.max(1, Math.abs(x))
+  let h = 1e-3 * size
+  let d = derivativeAt(f, x, h)
+  // Below this the points x ± h are a few steps of the arithmetic apart, and what the formula measures is round-off.
+  while (h > 64 * Number.EPSILON * size) {
+    h /= 8
+    const finer = derivativeAt(f, x, h)
+    const agree = Number.isFinite(d) && Number.isFinite(finer) && Math.abs(finer - d) <= 0.1 * Math.abs(finer)
+    d = finer
+    if (agree) break
+  }
+  return d
+}
+
+/**
+ * Whether x, where a walk has come to rest, is a root to the precision it is shown at (ten figures): f changes sign within 10⁻¹⁰ of x, or |f| is lower at x
+ * than a hair either side of it (the bottom of a root repeated an even number of times, where nothing changes sign) — and, either way, what f does across
+ * that hair is clearly more than what it does between neighbouring numbers, which is round-off. What fails is a point where f is round-off on both sides:
+ * the expanded (sin x − ½)², whose root the arithmetic can place only to about 10⁻⁸, is a number to call approximate and not to give as the answer. A
+ * function that is exactly 0 at x stands unless it is 0 a hair either side as well, and one that has no value on one side stands if it is 0 at x.
+ */
+function stands(f: (x: number) => number, x: number, fx: number): boolean {
+  const size = Math.max(1, Math.abs(x))
+  const hair = 1e-10 * size
+  const below = f(x - hair)
+  const above = f(x + hair)
+  // No value on one side (a root at the end of the function's domain: √x = 0 at 0): f being 0 at x is all there is to check.
+  if (!Number.isFinite(below) || !Number.isFinite(above)) return fx === 0
+  // 0 a hair either side as well is a stretch of the line where f is 0 only because round-off or underflow made it so (x + 1/x − 2 is 0 from 1 − 10⁻⁸ to 1 + 10⁻⁸):
+  // the root is somewhere in it and the arithmetic cannot say where to ten figures. A function that is 0 on one side only has its root at the edge, and stands.
+  if (fx === 0) return !(below === 0 && above === 0)
+  let noise = Math.abs(fx)
+  for (const j of [-8, -4, 4, 8]) {
+    const near = f(x + j * Number.EPSILON * size)
+    if (Number.isFinite(near)) noise = Math.max(noise, Math.abs(near))
+  }
+  if (!(4 * noise < Math.min(Math.abs(below), Math.abs(above)))) return false
+  return (below < 0 && above > 0) || (below > 0 && above < 0) || (Math.abs(below) > Math.abs(fx) && Math.abs(above) > Math.abs(fx))
+}
+
+/**
+ * A root that Newton's method stopped on, taken the rest of the way when it has not arrived. Newton stops the moment |f| < 10⁻¹⁴, and for a root repeated
+ * m times that is a distance of 10^(−14/m) from it: (x − 1)¹³ was "settled" at 0.9163677215, and (sin x − ½)³ at 0.5235751287, with the root 0.08 and 2×10⁻⁵
+ * away. A step of Newton's method from the stopping point says how far it is (f/f′ is a 13th of the way to a 13-fold root); a point less than 10⁻¹⁰ of its
+ * size from where Newton says the root is stays exactly as the search found it, and any other is walked on with the step multiplied by the multiplicity the
+ * steps themselves give (successive steps shrink by (m − 1)/m, so the multiplier that makes them shrink faster is m / (1 − ratio)), taking a step only
+ * when |f| falls (the derivative comes from steadyDerivative). If the walk ends where round-off stops it with the step still above 10⁻⁹ of the root's
+ * size, or no step lowers |f|, the answer is not settled.
+ */
+function settleRoot(f: (x: number) => number, x0: number): Searched {
+  const sizeOf = (v: number): number => Math.max(1, Math.abs(v))
+  let x = x0
+  try {
+    let fx = f(x)
+    if (!Number.isFinite(fx)) return { root: x0, settled: false }
+    // How many steps of Newton's method the last move was: 1 for Newton's own, m for a root repeated m times once the steps have said so.
+    let applied = 1
+    let before = NaN
+    for (let k = 0; k < 80; k++) {
+      if (fx === 0) return { root: x, settled: stands(f, x, fx) }
+      const d = steadyDerivative(f, x)
+      if (!Number.isFinite(d) || d === 0) return { root: x, settled: false }
+      const step = fx / d
+      if (k === 0 && Math.abs(step) <= 1e-10 * sizeOf(x)) return { root: x0, settled: stands(f, x0, fx) }
+      // A move of `applied` steps left this step at `ratio` of the one before: the move that would have reached the root is applied / (1 − ratio) steps.
+      if (Number.isFinite(before) && before !== 0) {
+        const ratio = step / before
+        applied = ratio > -2 && ratio < 0.995 ? Math.min(100, Math.max(1, applied / (1 - ratio))) : 1
+      }
+      before = step
+      // The multiplied step first, then plain Newton's, then shorter ones: the first that lowers |f| is taken.
+      let taken = NaN
+      let next = NaN
+      for (const times of applied > 1 ? [applied, 1, 0.5, 0.25] : [1, 0.5, 0.25]) {
+        const there = f(x - times * step)
+        if (Number.isFinite(there) && Math.abs(there) <= Math.abs(fx)) {
+          taken = times
+          next = there
+          break
+        }
+      }
+      if (Number.isNaN(taken)) return { root: x, settled: Math.abs(step) <= 1e-9 * sizeOf(x) && stands(f, x, fx) }
+      x -= taken * step
+      fx = next
+      applied = taken
+      if (Math.abs(taken * step) <= 1e-13 * sizeOf(x)) return { root: x, settled: stands(f, x, fx) }
+    }
+    return { root: x, settled: false }
+  } catch {
+    // Whatever stopped the walk (a sum past its budget, a function with no value there), the number the search had is the one it has.
+    return { root: x, settled: false }
+  }
+}
+
+/** Numeric root of f near `guess` (Newton, then bracketing scan + bisection), and whether it is settled (see settleRoot). */
+export function solveNumericChecked(f: (x: number) => number, guess = 0): Searched {
   let x = guess
   for (let i = 0; i < 60; i++) {
     const y = f(x)
     if (!Number.isFinite(y)) break
-    if (Math.abs(y) < 1e-14) return x
+    if (Math.abs(y) < 1e-14) return settleRoot(f, x)
     const d = derivativeAt(f, x)
     if (!Number.isFinite(d) || Math.abs(d) < 1e-14) break
     const nx = x - y / d
-    if (Math.abs(nx - x) < 1e-13 * Math.max(1, Math.abs(x))) return nx
+    // A step this small also reads as arrival where the derivative is wrong for a repeated root, so what it arrived at is checked, not assumed.
+    if (Math.abs(nx - x) < 1e-13 * Math.max(1, Math.abs(x))) return settleRoot(f, nx)
     x = nx
   }
-  if (Number.isFinite(f(x)) && Math.abs(f(x)) < 1e-9) return x
+  if (Number.isFinite(f(x)) && Math.abs(f(x)) < 1e-9) return settleRoot(f, x)
   const scan = (lo: number, hi: number, n: number) => {
     let px = lo
     let py = f(px)
@@ -244,9 +351,14 @@ export function solveNumeric(f: (x: number) => number, guess = 0): number {
   // of f (each a mathjs evaluate) before "No solution", a visible freeze after Enter.
   for (const R of [10, 100, 1e4, 1e6]) {
     const r = scan(guess - R, guess + R, 1000)
-    if (Number.isFinite(r)) return r
+    if (Number.isFinite(r)) return { root: r, settled: true }
   }
   throw new Error('No solution found')
+}
+
+/** Numeric root of f near `guess` (Newton, then bracketing scan + bisection). */
+export function solveNumeric(f: (x: number) => number, guess = 0): number {
+  return solveNumericChecked(f, guess).root
 }
 
 // ---------------------------------------------------------------------------
@@ -614,6 +726,8 @@ export interface CalcOutput {
   /** Secondary lines (e.g. Pol → r and θ). */
   extra?: string[]
   latexInput?: string
+  /** True when the number is a root of an equation that the search could not settle (settleRoot): it is not given as a plain answer. */
+  approximate?: boolean
 }
 
 export interface CalcContext {
@@ -698,8 +812,8 @@ function evaluateCompLine(input: string, ctx: CalcContext): CalcOutput {
     // terms was 4 × 10⁸ terms before "No solution" — minutes, with the screen frozen (H14). The whole search spends
     // one now, and a line it cannot afford says so in the words of what it is built on. The residual below is one
     // more try worked out on its own, as it always was: a root that was found is not refused for the cost of showing it.
-    const root = withOneBudget(workOwnerOf(src), () => solveNumeric(f, guess))
-    return { value: root, text: `x = ${calcNum(root)}`, extra: [`L − R = ${calcNum(f(root))}`] }
+    const { root, settled } = withOneBudget(workOwnerOf(src), () => solveNumericChecked(f, guess))
+    return { value: root, text: `x = ${calcNum(root)}`, extra: [`L − R = ${calcNum(f(root))}`], ...(settled ? {} : { approximate: true }) }
   }
   const node = math.parse(keypadToMath(src))
   refuseStoring(node)
@@ -1026,12 +1140,17 @@ export function polyRoots(coeffs: number[]): Cx[] {
     })
     if (maxStep < 1e-15) break
   }
+  // The size the arithmetic was done at is the size of the roots, not of the coefficients: for x³ = 10³⁰ the coefficients are 10³⁰ and the roots 10¹⁰, and
+  // an imaginary part of 8.66×10⁹ judged against 10³⁰ is "round-off" — the pair became two more copies of the real root, and x³ = 10³⁰ listed 10¹⁰ three
+  // times. The coefficients' size (bound) still caps it, because a root that did not converge can be far outside.
+  const sizes = roots.map((z) => Math.hypot(z.re, z.im)).filter(Number.isFinite)
+  const scale = sizes.length ? Math.min(bound, Math.max(...sizes)) : bound
   return roots
     .map((z) => {
       const mag = Math.hypot(z.re, z.im)
       // The reference is the size of the root, and for a root of 0 that is nothing — 2×10⁻³¹ of imaginary part was a pair of its own. The polynomial's
-      // own size (bound) is what the arithmetic that found the root was done in, so a part a trillionth of it is noise, a root of 0 included.
-      const imNoise = mag === 0 || Math.abs(z.im) < 1e-9 * Math.max(Math.abs(z.re), mag * 1e-6) || isNoise(z.im, bound)
+      // own size (scale, the biggest root) is what the arithmetic that found the root was done in, so a part a trillionth of it is noise, a root of 0 included.
+      const imNoise = mag === 0 || Math.abs(z.im) < 1e-9 * Math.max(Math.abs(z.re), mag * 1e-6) || isNoise(z.im, scale)
       return {
         // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-1): absolute floors, so x³ − 10⁻³⁹ = 0 answers 0 (tests/noiseFloors.test.ts)
         re: Math.abs(z.re) < 1e-12 ? 0 : z.re,

@@ -14,7 +14,7 @@ import {
   type GLine
 } from '../math/geometry'
 import { asGLine, canIntersect, intersectionsOf } from '../math/intersections'
-import { math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode, setSceneNames, sceneNames, speltName } from '../math/expr'
+import { compileScalar, math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode, setSceneNames, sceneNames, speltName } from '../math/expr'
 import { evaluateWithRealRoots } from '../calc/engine'
 import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
 import type { Computed, EvalResult, ObjId, SceneObject, SceneSettings } from './types'
@@ -166,7 +166,21 @@ export function evaluateScene(
             const b = need(d.b)
             if (!canIntersect(a, b)) throw new Error('cannot intersect these objects')
             // The same function, in the same order, that the viewport snapped the point with.
-            const p = intersectionsOf(a, b)[d.index]
+            const searchBounds = d.approx ? { approx: d.approx } : undefined
+            const pts = intersectionsOf(a, b, searchBounds)
+            let p = pts[d.index]
+            if (d.approx && pts.length > 0) {
+              let best = pts[0]
+              let bestDist = Math.hypot(pts[0][0] - d.approx[0], pts[0][1] - d.approx[1])
+              for (let i = 1; i < pts.length; i++) {
+                const dist = Math.hypot(pts[i][0] - d.approx[0], pts[i][1] - d.approx[1])
+                if (dist < bestDist) {
+                  bestDist = dist
+                  best = pts[i]
+                }
+              }
+              p = best
+            }
             if (!p) throw new Error('no intersection')
             return { type: 'point', p }
           }
@@ -282,8 +296,17 @@ export function evaluateScene(
         }
         return { type: 'number', value: evalNumber(o.expr) }
       }
-      case 'graph':
-        return { type: 'graph' }
+      case 'graph': {
+        if (o.kind === 'explicit' && o.exprs[0]) {
+          try {
+            const compiled = compileScalar(o.exprs[0], ['x'], () => scope, sceneNames())
+            return { type: 'graph', graph: o, f: (x: number) => compiled({ x }) }
+          } catch {
+            return { type: 'graph', graph: o }
+          }
+        }
+        return { type: 'graph', graph: o }
+      }
       case 'text':
         return { type: 'text', p: o.p }
       case 'solid': {

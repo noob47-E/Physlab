@@ -175,7 +175,7 @@ function showGridLines(lines: GridLines, show: boolean) {
 
 /** Adaptive 2D graph-paper grid with numbered axes. */
 export function Grid2D() {
-  const { camera, size } = useThree()
+  const { camera, size, invalidate } = useThree()
   const lines = useGridLines()
   const shader = useShaderGrid()
   const [minor] = lines
@@ -193,6 +193,16 @@ export function Grid2D() {
   const ticks = useMemo(() => new SpanPool(() => overlay.ticks, 'tick-label'), [])
   useEffect(() => () => ticks.dispose(), [ticks])
   const traced = useRef(0)
+
+  // The axis lines are mounted by the setAxes call inside the frame below, which React commits after
+  // that frame has been drawn, and FatLine writes the line's real points in an effect of its own. The
+  // frame that mounting them asks for can be drawn before that effect has run, and the canvas draws on
+  // demand, so unless something asks again no frame ever shows the points: about one 2-D -> 3-D -> 2-D
+  // switch in five painted the grid and its numbers without the axis lines until the student moved or
+  // clicked. A parent's effect runs after its children's, so by here the points are written.
+  useEffect(() => {
+    invalidate()
+  }, [axes, showAxes, invalidate])
 
   useFrame(() => {
     // A frame can arrive before the canvas has been measured: the dock panel is still settling, or

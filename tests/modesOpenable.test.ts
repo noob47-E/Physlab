@@ -8,9 +8,9 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { savedMode } from '../src/renderer/src/app/layout'
-import { HIDDEN_MODES, MODES, openableMode, type ModeId } from '../src/renderer/src/app/modes'
+import { HIDDEN_MODES, MODES, isModeHidden, openableMode, readyModes, type ModeId } from '../src/renderer/src/app/modes'
 
-/** The mode App.tsx opens for a given saved layout (the expression is copied from App.tsx:118). */
+/** The mode App.tsx opens for a given saved layout (the expression is copied from App.tsx's onReady). */
 function appOpens(raw: string | null): ModeId {
   vi.mocked(localStorage.getItem).mockReturnValue(raw)
   return openableMode(savedMode() ?? 'vectors')
@@ -36,11 +36,27 @@ afterEach(() => {
 })
 
 describe('which mode a saved session opens', () => {
-  it('a ready mode is reopened as it was left, for every ready mode', () => {
-    for (const m of MODES.filter((d) => d.ready)) {
+  it('a mode a student can open is reopened as it was left, for every one of them', () => {
+    // readyModes() is the list the top bar draws: ready and not hidden. This used to sweep every ready entry of MODES, which
+    // includes GPU Lab; GPU Lab is hidden from students now (AG-C-shell, HIDDEN_MODES) and has its own test below.
+    expect(readyModes().map((d) => d.id)).toContain('problems')
+    for (const m of readyModes()) {
       expect(savedAs(layout(m.id)), m.id).toBe(m.id)
       expect(appOpens(layout(m.id)), m.id).toBe(m.id)
     }
+  })
+
+  it('a ready mode that is hidden from students (GPU Lab) is saved as it was, and the app opens Problem Sets instead', () => {
+    // Problem Sets is openableMode's one fallback for a hidden mode or one this build lacks, the same as for a session saved in the
+    // removed Class Results: it is a tab in the main mode list, ready and not hidden, so the student lands on a mode they can see.
+    // The saved GPU Lab panel is dropped by dropHiddenPanels and Problem Sets' own panel is opened by enterMode.
+    const hiddenReady = MODES.filter((d) => d.ready && isModeHidden(d.id))
+    expect(hiddenReady.map((d) => d.id)).toContain('gpu')
+    for (const m of hiddenReady) {
+      expect(savedAs(layout(m.id)), m.id).toBe(m.id)
+      expect(appOpens(layout(m.id)), m.id).toBe('problems')
+    }
+    expect(isModeHidden('problems')).toBe(false)
   })
 
   it('a saved graphing session reopens Graphing', () => {
@@ -48,7 +64,7 @@ describe('which mode a saved session opens', () => {
     expect(appOpens(layout('graphing'))).toBe('graphing')
   })
 
-  it('a mode in HIDDEN_MODES opens Problem Sets (none is hidden in this build, so the set is put in for this test)', () => {
+  it('any mode put in HIDDEN_MODES opens Problem Sets (Graphing is added to the set for this test, to show the switch itself, not GPU Lab)', () => {
     // HIDDEN_MODES is a Set at run time, typed read-only. It is restored in the finally block.
     const hidden = HIDDEN_MODES as Set<ModeId>
     hidden.add('graphing')

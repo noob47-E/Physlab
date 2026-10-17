@@ -4,11 +4,13 @@
 // width: tabs for as many modes as fit, the rest in "More modes", the open mode always a tab.
 
 import { describe, expect, it } from 'vitest'
-import { MODES } from '../src/renderer/src/app/modes'
+import { readyModes } from '../src/renderer/src/app/modes'
 import { MODE_MORE_W, MODE_TAB_GAP, modeTabs, modeTabWidth } from '../src/renderer/src/app/modeSwitch'
 import { readSource } from './helpers/repo'
 
-const ready = MODES.filter((m) => m.ready)
+// The modes the bar draws as tabs: a student's modes, not every `ready` entry of MODES. GPU Lab is ready but hidden from students (AG-C-shell,
+// HIDDEN_MODES); this file counted it as a tab (index 6, between Problem Sets and Lab Data), which made the widths and folded tabs below disagree with the bar.
+const ready = readyModes()
 const labels = ready.map((m) => m.label)
 const idx = (id: string) => ready.findIndex((m) => m.id === id)
 /** Real tab widths measured in the app at 1920 px (13 px Segoe UI, 11 px padding). */
@@ -52,16 +54,21 @@ describe('Fix 13: one way to switch modes', () => {
     for (const l of labels) expect(MEASURED[l], `${l} was measured`).toBeDefined()
   })
 
-  it('at 1366 px, measured as drawn, every student mode is a tab (the estimate alone folded Problem Sets away)', () => {
+  it('at 1366 px, measured as drawn, every student mode is a tab (the estimate alone folds the last one away in a 700 px box)', () => {
     // Measured in the app at 1366 × 768: 8 px padding at 1440 px and below; the modes box is 760 px.
     const at1366 = { tabs: labels.map((l) => MEASURED_1366[l]), more: MEASURED_1366_MORE }
     for (const l of labels) expect(MEASURED_1366[l], `${l} was measured at 1366 px`).toBeDefined()
     const all = ready.map((_, i) => i)
-    // Calculator through Problem Sets (8 tabs, 599 px used) fit the 656 px budget. Question Author and
-    // Class Results, which folded into More here, were taken out of PhysLab in 0.9.
+    // All seven student modes, Calculator through Lab Data (529 px with their gaps), fit the 656 px budget. Question Author and Class Results
+    // were taken out of PhysLab in 0.9, and GPU Lab is hidden from students (AG-C-shell), so none of them is a tab.
     expect(modeTabs(760, labels, idx('calculator'), at1366)).toEqual({ tabs: all, more: [] })
-    expect(modeTabs(760, labels, idx('calculator')).more).toEqual([idx('problems')])
-    // 1180 px leaves a 574 px box: six tabs, and Lab Data (70.7 px with its gap) would not fit in the 51 px left.
+    // The estimate alone is a safe upper bound (25-30 % over what is drawn). Seven tabs are few enough that even it fits them at 760 px,
+    // but in a 700 px box it would fold Lab Data into More modes while the measured widths keep all seven: a measured width must win.
+    expect(modeTabs(760, labels, idx('calculator')).more).toEqual([])
+    expect(modeTabs(700, labels, idx('calculator')).more).toEqual([idx('lab')])
+    expect(modeTabs(700, labels, idx('calculator'), at1366)).toEqual({ tabs: all, more: [] })
+    // 1180 px leaves a 574 px box (470 px of tabs beside the More button): six tabs, Calculator through Problem Sets (458 px with their gaps),
+    // and Lab Data (71 px with its gap) would not fit in the 12 px left.
     expect(modeTabs(574, labels, idx('calculator'), at1366).tabs).toEqual(all.slice(0, 6))
     // The tabs taken and the More button never run past the box.
     for (const room of [300, 450, 574, 684, 760]) {

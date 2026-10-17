@@ -123,4 +123,31 @@ describe('Part L1: One mode = one layout', () => {
     expect(dock.ids()).not.toContain('measure')
     expect(dock.ids()).not.toContain('examples')
   })
+
+  // 'Show the picture' / 'Open the experiment' / 'Show it in Lab Data' open a mode FOR the question
+  // (skipFocus), so the question and its answer box have to stay beside the picture.
+  it('a picture opened for a Problem Sets question keeps Practice open beside it', () => {
+    for (const mode of ['graphing', 'sandbox', 'lab'] as const) {
+      useApp.setState({ mode: 'problems' })
+      const dock = fakeDock(['viewport', 'practice'])
+      enterMode(mode, { skipFocus: true })
+      expect(dock.ids(), mode).toContain('practice')
+    }
+  })
+
+  it('switching to Graphing yourself, Practice still closes', () => {
+    useApp.setState({ mode: 'problems' })
+    const dock = fakeDock(['viewport', 'practice'])
+    enterMode('graphing')
+    expect(dock.ids()).not.toContain('practice')
+  })
+
+  it('after the picture opened, switching mode yourself closes Practice', () => {
+    useApp.setState({ mode: 'problems' })
+    const dock = fakeDock(['viewport', 'practice'])
+    enterMode('graphing', { skipFocus: true })
+    expect(dock.ids()).toContain('practice')
+    enterMode('shapes')
+    expect(dock.ids()).not.toContain('practice')
+  })
 })

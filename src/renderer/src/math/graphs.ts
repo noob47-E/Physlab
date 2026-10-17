@@ -79,7 +79,7 @@ export function sampleExplicit(f: Fx, xMin: number, xMax: number, n: number, vie
 }
 
 /** What a key point of a graph is. One point can be several: the bottom of y = x² − 4 is its min and its y-intercept. */
-type KeyKind = 'root' | 'max' | 'min' | 'yIntercept'
+type KeyKind = 'root' | 'max' | 'min' | 'yIntercept' | 'intersection'
 
 export interface KeyPoint {
   x: number
@@ -90,8 +90,8 @@ export interface KeyPoint {
   kinds: KeyKind[]
 }
 
-/** A turning point says the most about a curve, then a root, then where it crosses the y-axis. */
-const KIND_RANK: Record<KeyKind, number> = { max: 0, min: 0, root: 1, yIntercept: 2 }
+/** A turning point says the most about a curve, then a root, then an intersection, then where it crosses the y-axis. */
+const KIND_RANK: Record<KeyKind, number> = { max: 0, min: 0, root: 1, intersection: 2, yIntercept: 3 }
 
 /**
  * Where f changes sign between a and b. The halving goes on to neighbouring doubles, so that a root
@@ -549,8 +549,38 @@ function oneSpotOnePoint(found: Found[], near: (x: number) => number, flat: numb
 export function shownKeyPoints(points: readonly KeyPoint[], roots: boolean, extrema: boolean): KeyPoint[] {
   const out: KeyPoint[] = []
   for (const k of points) {
-    const kinds = k.kinds.filter((kind) => (kind === 'root' ? roots : extrema))
+    const kinds = k.kinds.filter((kind) => (kind === 'root' || kind === 'intersection' ? roots : extrema))
     if (kinds.length) out.push({ ...k, kind: kinds[0], kinds })
+  }
+  return out
+}
+
+/**
+ * Every intersection between two 2-D scalar functions f and g inside [xMin, xMax].
+ * Found by locating the roots and touches of h(x) = f(x) - g(x).
+ */
+export function curveIntersections(f: Fx, g: Fx, xMin: number, xMax: number, n = 1200): KeyPoint[] {
+  const h: Fx = (x: number) => {
+    const yf = f(x)
+    const yg = g(x)
+    return Number.isFinite(yf) && Number.isFinite(yg) ? yf - yg : NaN
+  }
+  const raw = keyPoints(h, xMin, xMax, n)
+  const out: KeyPoint[] = []
+  for (const k of raw) {
+    if (k.kinds.includes('root')) {
+      let x = k.x
+      const nearInt = Math.round(x)
+      if (Math.abs(x - nearInt) < 1e-5) {
+        if (!Number.isFinite(f(nearInt)) || !Number.isFinite(g(nearInt))) continue
+        if (Math.abs(x - nearInt) < 1e-7) x = nearInt
+      }
+      const yf = f(x)
+      const yg = g(x)
+      if (!Number.isFinite(yf) || !Number.isFinite(yg)) continue
+      const y = (yf + yg) / 2
+      out.push({ x, y, kind: 'intersection', kinds: ['intersection'] })
+    }
   }
   return out
 }
@@ -645,7 +675,7 @@ export function solvedLineXs(graph: { exprs: readonly string[]; source?: string 
   return [...solved.xs]
 }
 
-const KIND_WORD: Record<KeyKind, string> = { root: 'root', max: 'max', min: 'min', yIntercept: 'y-intercept' }
+const KIND_WORD: Record<KeyKind, string> = { root: 'root', max: 'max', min: 'min', yIntercept: 'y-intercept', intersection: 'intersection' }
 
 /**
  * What a key point's label says, in the student's precision: its first kind and where it is, then

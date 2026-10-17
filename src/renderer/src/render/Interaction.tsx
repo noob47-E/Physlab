@@ -63,8 +63,8 @@ const SNAP_AXIS_PX = 6
 /** How far from a line or circle the cursor may be for it to count towards a crossing. */
 const SNAP_CURVE_PX = 12
 
-/** A line, segment, ray, vector or circle: something that can cross something else. */
-const isCurve = (c: Computed) => !!asGLine(c) || c.type === 'circle'
+/** A line, segment, ray, vector, circle or graph: something that can cross something else. */
+const isCurve = (c: Computed) => !!asGLine(c) || c.type === 'circle' || c.type === 'graph'
 
 /**
  * The positions that decide whether a selection box takes an object: the whole of what defines
@@ -265,13 +265,18 @@ export function Interaction() {
           const ca = s.ev.values.get(a)
           const cb = s.ev.values.get(b)
           if (!ca || !cb) continue
+          const isGraphCurve = ca.type === 'graph' || cb.type === 'graph'
+          const w = isGraphCurve ? (worldOn(x, y, XY_PLANE) ?? [0, 0, 0]) : undefined
+          const bounds = w ? { approx: w } : undefined
           // Numbered by intersectionsOf, which is what the evaluator uses to place the point later.
-          intersectionsOf(ca, cb).forEach((p, index) => {
+          intersectionsOf(ca, cb, bounds).forEach((p, index) => {
             const sp = scr(p)
             const d = Math.hypot(sp.x - x, sp.y - y)
             if (!sp.visible || d >= bestD) return
             bestD = d
-            best = { p, kind: 'intersection', a, b, index, label: `${s.objects[a]?.name} ∩ ${s.objects[b]?.name}` }
+            const nameA = s.objects[a]?.name ?? 'curve'
+            const nameB = s.objects[b]?.name ?? 'curve'
+            best = { p, kind: 'intersection', a, b, index, label: `intersection of ${nameA} and ${nameB}` }
           })
         }
       }
@@ -304,7 +309,7 @@ export function Interaction() {
       // arrow's head stays on the tip when the arrow is dragged, retyped or laid out again.
       const p =
         sn.kind === 'intersection' && sn.a && sn.b && sn.index !== undefined
-          ? b.point({ kind: 'intersection', a: sn.a, b: sn.b, index: sn.index })
+          ? b.point({ kind: 'intersection', a: sn.a, b: sn.b, index: sn.index, approx: sn.p })
           : sn.kind === 'onObject' && sn.onId
             ? b.point({ kind: 'onObject', on: sn.onId, t: sn.t ?? 0 })
             : sn.kind === 'vectorHead' && sn.vectorId

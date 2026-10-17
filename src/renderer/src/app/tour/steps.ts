@@ -70,13 +70,8 @@ export const TOUR: TourStep[] = [
     body: 'Every value lives here: lengths, angles, areas with their formulas, and the steps behind an answer. Point at a row to light up that object on the drawing.'
   },
   {
-    anchor: 'command',
-    title: 'Type what you want',
-    body: 'A = <3, 4>, R = A + B, Triangle((0,0),(4,0),(0,3)), y = sin(x), solve(x^2 = 4). Type "help" to see more.'
-  },
-  {
     title: 'Find anything',
-    body: 'Ctrl+K searches modes, tools, lessons, settings and commands. If you cannot remember where something is, look there.'
+    body: 'Ctrl+K searches modes, tools, lessons and settings. If you cannot remember where something is, look there.'
   },
   {
     anchor: 'connect',
@@ -166,19 +161,21 @@ export const MISSIONS: Mission[] = [
   {
     id: 'graph',
     label: 'Draw a graph',
-    hint: 'Type y = x^2 - 4 in the bar at the top and press Enter.',
+    hint: 'Type y = x^2 - 4 in the Expressions list and press Enter. The graph appears in the drawing.',
     mode: 'graphing',
-    anchor: 'command',
-    // A line typed in the command bar that made a graph (app/CommandBar.tsx), not one loaded with a file.
+    // The drawing is the ring: the Expressions list has no anchor of its own, and the graph is what the line makes.
+    anchor: 'viewport',
+    // A line typed into Graphing's Expressions list (panels/Expressions.tsx) that made a graph, not one loaded with a file.
+    // The command bar counts too (app/CommandBar.tsx), though students no longer see it.
     done: () => since('typedGraphs') > 0 && objectsOf('graph').length > 0
   },
   {
     id: 'vector',
     label: 'Draw a vector and drag it',
-    hint: 'Type A = <3, 4> and press Enter. Then drag the tip of the arrow.',
+    hint: 'Pick the Vector tool and drag across the drawing to make an arrow. Press Esc, then drag the tip of the arrow.',
     mode: 'vectors',
-    anchor: 'command',
-    // A drag of a vector's head with the Move tool (render/Interaction.tsx), not a retyped vector.
+    anchor: 'tool-vector',
+    // A drag of a vector's head with the Move tool (render/Interaction.tsx), not a drawn or retyped vector.
     done: () => since('headDrags') > 0
   },
   {
@@ -243,7 +240,6 @@ export const MISSION_STORES: { subscribe: (listener: () => void) => () => void }
 
 export const SHORTCUTS: [string, string][] = [
   ['Ctrl+K', 'Search everything'],
-  ['Enter or /', 'Jump to the command bar'],
   ['Right-click', 'Menu for the object you clicked (finishes a shape while drawing)'],
   ['Enter, double-click', 'Finish the shape you are drawing'],
   ['Backspace', 'Remove the last point while drawing'],

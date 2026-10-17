@@ -9,7 +9,9 @@
 import { describe, expect, it } from 'vitest'
 import { comingSoonModes, isModeHidden, readyModes } from '../src/renderer/src/app/modes'
 import { isPanelHidden, PANEL_LIST } from '../src/renderer/src/app/panels'
-import { buildItems } from '../src/renderer/src/app/SearchPalette'
+import { buildItems, searchPlaceholder } from '../src/renderer/src/app/SearchPalette'
+import { CATALOG } from '../src/renderer/src/app/CommandBar'
+import { SHOW_COMMAND_BAR } from '../src/renderer/src/app/shellFlags'
 import { readSource } from './helpers/repo'
 
 describe('C-shell cuts (Phase 0.9)', () => {
@@ -53,7 +55,8 @@ describe('C-shell cuts (Phase 0.9)', () => {
     expect(groups).toContain('Modes')
     expect(groups).toContain('Tools')
     expect(groups).toContain('Panels')
-    expect(groups).toContain('Commands')
+    // The bar and the Console are hidden, so a Commands row would run a line whose answer has nowhere to show.
+    expect(groups).not.toContain('Commands')
     expect(groups).toContain('Settings')
 
     const modeTitles = items.filter((i) => i.group === 'Modes').map((i) => i.title)
@@ -63,5 +66,39 @@ describe('C-shell cuts (Phase 0.9)', () => {
     const panelTitles = items.filter((i) => i.group === 'Panels').map((i) => i.title)
     expect(panelTitles).not.toContain('Console')
     expect(panelTitles).not.toContain('GPU Lab')
+  })
+
+  // SHELLFIX: Ctrl+K used to list a Commands group that ran a typed line while the command bar and the
+  // Console were both hidden, so a student picked "solve(x^2 = 4)" and saw nothing happen.
+  it('Ctrl+K offers no Commands rows while the command bar is hidden, and every other row stays', () => {
+    expect(SHOW_COMMAND_BAR).toBe(false)
+    const shown = buildItems()
+    expect(shown.some((i) => i.group === 'Commands')).toBe(false)
+    // The group is only gated: turn the bar on and every catalogue line is back.
+    const withBar = buildItems(true)
+    const commandRows = withBar.filter((i) => i.group === 'Commands')
+    expect(CATALOG.length).toBeGreaterThan(0)
+    expect(commandRows.map((i) => i.title)).toEqual(CATALOG.map((c) => c.insert))
+    // Nothing else is lost: the two lists differ by exactly the Commands rows.
+    expect(withBar.filter((i) => i.group !== 'Commands').map((i) => `${i.group}/${i.title}`)).toEqual(shown.map((i) => `${i.group}/${i.title}`))
+  })
+
+  it('the search box does not promise commands while the bar is hidden', () => {
+    expect(searchPlaceholder(false)).not.toMatch(/command/i)
+    expect(searchPlaceholder(true)).toMatch(/commands/)
+    expect(searchPlaceholder(SHOW_COMMAND_BAR)).toBe(searchPlaceholder(false))
+    for (const word of ['modes', 'tools', 'examples', 'settings']) expect(searchPlaceholder(false), word).toContain(word)
+  })
+
+  it('the palette and App.tsx follow the same switch for the bar', () => {
+    const app = readSource('src/renderer/src/app/App.tsx')
+    const local = app.match(/const SHOW_COMMAND_BAR = (true|false)/)
+    // Either App.tsx still holds the literal (then it must agree), or it imports the shared one.
+    if (local) expect(local[1]).toBe(String(SHOW_COMMAND_BAR))
+    else expect(app).toMatch(/import \{[^}]*\bSHOW_COMMAND_BAR\b[^}]*\} from '\.\/shellFlags'/)
+    const palette = readSource('src/renderer/src/app/SearchPalette.tsx')
+    expect(palette).toMatch(/import \{ SHOW_COMMAND_BAR \} from '\.\/shellFlags'/)
+    // SearchPalette must never import App: App imports the palette (the cycle AGENTS.md warns about).
+    expect(palette).not.toMatch(/from '\.\/App'/)
   })
 })
