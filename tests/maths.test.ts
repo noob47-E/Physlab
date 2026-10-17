@@ -6,7 +6,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, linearOf, mainLine, readValueBoxes, shownText, tangentAt, type Answered } from '../src/renderer/src/calc/evaluateInput'
+import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, linearOf, mainLine, readValueBoxes, shownText, tangentAt, varsAfter, type Answered } from '../src/renderer/src/calc/evaluateInput'
 import { errorSentence, nonFiniteSentence, outsideBaseSentence } from '../src/renderer/src/calc/errors'
 import { evaluateComp, formatValue, solveNumeric, tidyComplex, type Base } from '../src/renderer/src/calc/engine'
 import { getAngleMode, math, setAngleMode } from '../src/renderer/src/math/expr'
@@ -81,7 +81,9 @@ describe('from the field to the answer', () => {
     for (const line of ['2t+1', '3m+2', 's+1']) {
       const r = evaluateInput('COMP', line, opts)!
       expect(r.error!.sentence, line).toMatch(/read as a unit/)
-      expect(r.error!.sentence, line).toMatch(/A to F, M, x or y/)
+      // It said "Use one of the letters A to F…", the letters that are units after a number too (2A is two amperes): it points to Variables now.
+      expect(r.error!.sentence, line).toMatch(/under Variables/)
+      expect(r.error!.sentence, line).not.toMatch(/A to F/)
       expect(r.error!.detail, line).toBeUndefined()
     }
   })
@@ -117,13 +119,21 @@ describe('from the field to the answer', () => {
     expect(nonFiniteSentence(Infinity, '1/0.5').sentence).not.toMatch(/divides/)
   })
 
-  it('solves an equation, marks it so x is remembered, and never offers an exact form for it', () => {
+  it('solves an equation with every one of its solutions, stores none of them, and never offers an exact form for it', () => {
+    // It used to answer x = 1.414 only (the root nearest the stored x = 1) and write it into x: half the answer, and a
+    // letter overwritten without a word (AG-FULLTEST-16 finding 2.2). Both roots now, and the stored letters untouched.
     const r = evaluateInput('COMP', 'x^{2}=2', { ...opts, vars: { x: 1 } })!
     expect(r.error).toBeUndefined()
     expect(r.solved).toBe(true)
-    expect(Number(r.value)).toBeCloseTo(Math.SQRT2)
+    expect(r.roots).toHaveLength(2)
+    expect(r.roots![0]).toBeCloseTo(Math.SQRT2)
+    expect(r.roots![1]).toBeCloseTo(-Math.SQRT2)
     expect(r.exact).toBeNull()
-    expect(r.main).toMatch(/^x = /)
+    expect(r.main).toMatch(/^x₁ = /)
+    expect(varsAfter({ x: 1 }, r)).toEqual({ x: 1 })
+    // The student's own x = 5 is what stores.
+    expect(r.assign).toBeUndefined()
+    expect(evaluateInput('COMP', 'x=5', opts)!.assign).toEqual({ name: 'x', value: 5 })
   })
 
   it('says it cannot find a root in a sentence', () => {
@@ -398,8 +408,9 @@ describe('the store, without the handheld', () => {
     // other line — the tour's example, a recalled entry — still takes the card with it.
     const maths = readSource('src/renderer/src/panels/Maths.tsx')
     expect(maths).toMatch(/usePure\.subscribe\(\(s, prev\) => \{\s*if \(s\.runSeq === prev\.runSeq\) return\s*setAnswered\(\(a\) => answerStillFor\(a, s\.inputLatex\)\)/)
-    // The keypad hangs over exactly where the steps appear, so the same run closes it.
-    expect(maths).toMatch(/if \(s\.runSeq === prev\.runSeq\) return[\s\S]{0,200}setKeypad\(false\)/)
+    // The keypad hangs over exactly where the steps appear, so a working asked for from elsewhere closes it; the working a press of =
+    // asks for itself does not (its steps are folded, and the keypad is what the student is using).
+    expect(maths).toMatch(/if \(ownRun\.current\) return[\s\S]{0,200}setPanes\(\(p\) => \(p\.keypad \? \{ \.\.\.p, keypad: false \} : p\)\)/)
     // The line the field holds is the line the working is for, character for character, so the
     // comparison the subscriber makes is the one answerStillFor already makes for a keystroke.
     const latex = '\\frac{2}{3}+\\sqrt{2}'
@@ -707,10 +718,11 @@ describe('P7 — one root format and one order on every route', () => {
     expect.soft(polynomialRootRows([1, -4, 6, -4, 1]).map((r) => [r.label, r.text]), '(x − 1)⁴').toEqual([['x =', '1']])
     expect.soft(polynomialRootRows([1, 0, 0, 0]).map((r) => [r.label, r.text]), 'x³').toEqual([['x =', '0']])
     expect.soft(polynomialRootRows([1, 0, 2, 0, 1]).map((r) => r.text), '(x² + 1)²').toEqual(['i', '−i'])
-    // …and x = ? on a cubic with a double root gives the root itself, not the eight digits Newton reaches.
+    // …and x = ? on a cubic with a double root gives that root itself, once, not the eight digits Newton reaches, and
+    // the other root beside it (it gave x = 1 alone: half the answer).
     const cubic = evaluateInput('COMP', 'x^{3}-3x+2=0', opts)!
-    expect.soft(cubic.main, 'x³ − 3x + 2 = 0 on x = ?').toBe('x = 1')
-    expect.soft(cubic.value, 'x³ − 3x + 2 = 0 on x = ?').toBe(1)
+    expect.soft(cubic.main, 'x³ − 3x + 2 = 0 on x = ?').toBe('x₁ = −2, x₂ = 1')
+    expect.soft(cubic.roots, 'x³ − 3x + 2 = 0 on x = ?').toEqual([-2, 1])
   })
 
   it('labels the Equations rows x₁, x₂, … in the order of the rule, and x for one root', () => {
@@ -837,7 +849,7 @@ describe('P7 — one root format and one order on every route', () => {
     const none = 'No real solution. In complex numbers: x = '
     // x² + A = 0 with A stored is x² + 3 = 0, and with A = −4 it has real roots, which come as before.
     expect.soft(say('x^{2}+A=0', { A: 3, x: 0 }).main).toBe(`${none}±${calcNum(Math.sqrt(3))}i`)
-    expect.soft(say('x^{2}+A=0', { A: -4, x: 0 }).main).toBe('x = −2')
+    expect.soft(say('x^{2}+A=0', { A: -4, x: 0 }).main).toBe('x₁ = 2, x₂ = −2')
     // Two pairs: each pair once, the pairs by real part and then by size.
     expect.soft(say('x^{4}+5x^{2}+4=0').main).toBe(`${none}±i or x = ±2i`)
     expect.soft(say('x^{4}+2x^{3}+6x^{2}+2x+5=0').main).toBe(`${none}−1 ± 2i or x = ±i`)
@@ -1050,8 +1062,9 @@ describe('G4 — the ENG view writes powers as superscripts', () => {
       // History keeps r.main, and its line reads exactly as the answer did.
       expect.soft(shownText(r.main), line).toBe(mainLine(r, false))
     }
-    // x² = 2 leaves a residual of rounding noise under the root. Whatever it reads, never a caret.
-    const eq = evaluateInput('COMP', 'x^{2}=2', opts)!
+    // ln x = 0.3 leaves a residual of rounding noise (5.55×10⁻¹⁷) under the root. Whatever it reads, never a caret.
+    // (x² = 2 stood here: it now answers with both its roots and no residual line, and this needs a line that has one.)
+    const eq = evaluateInput('COMP', '\\ln x=0.3', opts)!
     expect(eq.extra?.length).toBeGreaterThan(0)
     for (const t of eq.extra ?? []) expect.soft(shownText(t), t).not.toContain('^')
   })
@@ -1067,7 +1080,7 @@ describe('G4 — the ENG view writes powers as superscripts', () => {
     }
     const answer = between('function Answer(', 'function WithValuesForm(')
     expect(answer).toMatch(/<div key=\{i\}>\{shownText\(x\)\}<\/div>/)
-    const drawer = between('function HistoryDrawer(', 'function WorkingArea(')
+    const drawer = between('function HistoryDrawer(', 'function Intro(')
     expect(drawer).toMatch(/\{shownText\(h\.result\)\}/)
     // The engine's own text keeps the caret, so neither line may draw it as it is.
     expect(answer).not.toMatch(/\{x\}/)
@@ -1124,17 +1137,17 @@ describe('B3 — Maths screen: tangent, stale answer, with-values, keys', () => 
   const mathsSource = (): string => readSource('src/renderer/src/panels/Maths.tsx')
 
   describe('H3 — the tangent is drawn from the numbers the answer card reads', () => {
-    it('in degrees, d/dx sin x at 30 draws the slope the card shows (π/180 × cos 30°), not cos of 30 radians', () => {
-      // draw() worked the height out in whatever mode the maths held and the slope in radians always: in degrees the
-      // tangent went through (30, 0.5) with slope cos(30 rad) = 0.154 under a card that said 0.01511.
+    it('in degrees, d/dx sin x at 30 draws the slope the card shows, and both are in radians: cos 30 through (30, sin 30)', () => {
+      // The card and the picture agree, and calculus is in radians (the owner's decision of 17 Oct 2026): this pinned them both in the
+      // screen's unit, (π/180) × cos 30° = 0.01511 through (30, 0.5). The picture then draws the curve in radians too (calc/formula.ts inRadians).
       const shown = evaluateInput('COMP', DDX_SIN_30, { ...opts, angle: 'deg' })!
       const t = tangentAt(lineOf(DDX_SIN_30), screen('deg'))
       expect(t.x0).toBe(30)
-      expect(t.fx).toBeCloseTo(0.5, 12)
+      expect(t.fx).toBeCloseTo(Math.sin(30), 12)
       // The number on the card itself, not a second reading of the same question.
       expect(t.slope).toBe(shown.value)
-      expect(t.slope).toBeCloseTo((Math.PI / 180) * Math.cos(Math.PI / 6), 9)
-      expect(Math.abs(t.slope - Math.cos(30))).toBeGreaterThan(0.1)
+      expect(t.slope).toBeCloseTo(Math.cos(30), 7)
+      expect(Math.abs(t.slope - (Math.PI / 180) * Math.cos(Math.PI / 6))).toBeGreaterThan(0.1)
       expect(t.f).toBe('sin(x)')
     })
 
@@ -1152,8 +1165,8 @@ describe('B3 — Maths screen: tangent, stale answer, with-values, keys', () => 
       for (const held of ['deg', 'rad'] as const) {
         setAngleMode(held)
         const d = tangentAt(line, screen('deg'))
-        expect(d.fx, `held ${held}`).toBeCloseTo(0.5, 12)
-        expect(d.slope, `held ${held}`).toBeCloseTo(0.015115, 6)
+        expect(d.fx, `held ${held}`).toBeCloseTo(Math.sin(30), 12)
+        expect(d.slope, `held ${held}`).toBeCloseTo(Math.cos(30), 7)
         const r = tangentAt(line, screen('rad'))
         expect(r.fx, `held ${held}`).toBeCloseTo(Math.sin(30), 12)
         expect(r.slope, `held ${held}`).toBeCloseTo(Math.cos(30), 7)
@@ -1161,10 +1174,11 @@ describe('B3 — Maths screen: tangent, stale answer, with-values, keys', () => 
       }
     })
 
-    it('reads the point in the screen’s unit as well: the point where sin x is 0.5 is 30 degrees or 0.5236 radians', () => {
+    it('reads the point in the screen’s unit, the curve in radians: the point where sin x is 0.5 is 30 degrees or 0.5236 radians', () => {
       const line = 'ddx(sin(x), asin(0.5))'
+      // The point is plain trig outside the body, so 30 in DEG; the height there is the curve in radians, sin(30 rad).
       expect(tangentAt(line, screen('deg')).x0).toBeCloseTo(30, 9)
-      expect(tangentAt(line, screen('deg')).fx).toBeCloseTo(0.5, 9)
+      expect(tangentAt(line, screen('deg')).fx).toBeCloseTo(Math.sin(30), 9)
       expect(tangentAt(line, screen('rad')).x0).toBeCloseTo(Math.PI / 6, 9)
       expect(tangentAt(line, screen('rad')).fx).toBeCloseTo(0.5, 9)
     })

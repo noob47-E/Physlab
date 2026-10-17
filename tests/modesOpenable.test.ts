@@ -123,24 +123,18 @@ describe('the Calculator rows of the Ctrl+K palette', () => {
     palette = await import('../src/renderer/src/app/SearchPalette')
   }, 120_000)
 
-  it('lists the fifteen calculator modes, in order, with the words the Maths screen uses', () => {
+  it('lists the seven calculator modes the Calculator offers, in order, with the words the screen uses', () => {
+    // Fifteen once. Complex is Numbers' now, and Matrices, Vectors, Statistics, Table, Sheet, Units and Measure are away being redesigned (their
+    // code and tests are kept): search offers what the chips and the More menu offer, and every hint is a line of its own, not the label again.
     const rows = palette.buildItems().filter((r) => r.group === 'Calculator').map((r) => [r.title, r.hint])
     expect(rows).toEqual([
-      ['Calculator: Numbers', 'Everyday calculating: fractions, roots, powers, trigonometry, calculus'],
-      ['Calculator: Complex', 'Complex numbers, with modulus, argument and conjugate'],
+      ['Calculator: Numbers', 'Everyday calculating: fractions, roots, powers, trigonometry, calculus, complex numbers'],
       ['Calculator: Bases', 'Binary, octal and hexadecimal'],
-      ['Calculator: Matrices', 'Matrices'],
-      ['Calculator: Vectors', 'Vectors'],
-      ['Calculator: Statistics', 'Statistics and regression'],
-      ['Calculator: Distributions', 'Probability distributions'],
-      ['Calculator: Table', 'A table of values for a function'],
+      ['Calculator: Distributions', 'Normal, binomial and Poisson probabilities'],
       ['Calculator: Equations', 'Simultaneous and polynomial equations'],
-      ['Calculator: Inequalities', 'Polynomial inequalities'],
-      ['Calculator: Ratio', 'Proportions'],
-      ['Calculator: Sheet', 'A small spreadsheet'],
-      ['Calculator: Units', 'Unit conversion'],
-      ['Calculator: Constants', 'Physical constants'],
-      ['Calculator: Measure', 'Significant figures and uncertainty']
+      ['Calculator: Inequalities', 'Where a polynomial is above or below zero'],
+      ['Calculator: Ratio', 'Proportions, a : b = c : d'],
+      ['Calculator: Constants', 'Physical constants']
     ])
   })
 })

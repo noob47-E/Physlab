@@ -17,11 +17,9 @@ calc	998.4971499×10^-3
 calc	1.732050808×10^0
 calc	90×10^0
 calc	1.495978707×10^11
-calc	L − R = −4.440892099×10^-16
 calc	6.62607015×10^-34
 calc	3.345243852×10^-27
 calc	L − R = 1×10^-20
-calc	L − R = −5.551115123×10^-17
 errors	bar: That region cannot be shaded: y = sqrt(-1 - x^2) has no real value between x = 0 and 1.
 errors	bar: That curve cannot be drawn: (x - y)^2 only touches 0 without crossing it, and PhysLab can draw a curve only where the two sides cross — type it without the square: x - y = 0.
 errors	bar: h is a graph, and a graph cannot use another graph yet — type its formula instead, e.g. y = 2*x^2 + g(x - 1)*2^2.
@@ -75,8 +73,6 @@ presets	pos=[0.019, 3, −2.603×10^-7] vel=[−1.485, −0.019, −2.31×10^-7]
 presets	pos=[0.176, 0.25, 0] vel=[2.877, −1.863×10^-10, 0]
 presets	pos=[0.596, 0.25, 0] vel=[0.396, 9.313×10^-11, 0]
 presets	pos=[0.581, 0.25, 0] vel=[0.785, 9.313×10^-11, 0]
-pure	CHECK: 2^3 × 3^2 × 5 = 360 [ok]
-pure	CHECK: 2^3 × 3^2 × 5 × 7 × 11 × 13 = 360360 [ok]
 questions	PROMPT: A lump sum of €1000 is deposited into a savings account that pays compound interest for 5 years. If no withdrawals are made from the account, then the amount that the lump sum will have grown to is €1187.69. The compound interest formula is: A = P(1+i)^n
 questions	A = P(1+i)^n
 questions	PROMPT: A lump sum of €2500 is deposited into a savings account that pays compound interest for 5 years. If no withdrawals are made from the account, then the amount that the lump sum will have grown to is €2828.52. The compound interest formula is: A = P(1+i)^n

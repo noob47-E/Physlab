@@ -10,7 +10,7 @@ import { useTour } from './tour/Tour'
 import type { LengthUnit } from '../core/types'
 import { TOOLS } from '../render/tools'
 import { EXAMPLES, runExample } from '../panels/Examples'
-import { MODE_HINTS, MODE_LABELS, useCalc, type CalcMode } from '../calc/calcStore'
+import { LISTED_MODES, MODE_HINTS, MODE_LABELS, useCalc } from '../calc/calcStore'
 import { UNIT_NAMES } from '../math/format'
 import { GRID_STYLES } from '../render/gridMath'
 import { breakApartSelection, confirmClearDrawing, flipSelection, fuseSelection, turnSelection } from './contextActions'
@@ -29,8 +29,9 @@ function fillCommandBar(text: string) {
   void runCommand(text)
 }
 
-// The keys of MODE_LABELS in their own order: a new calculator mode gets its row here without a second list to keep.
-const CALC_MODES = Object.keys(MODE_LABELS) as CalcMode[]
+// The modes the Calculator offers (calc/calcStore.ts): the chips and the More menu list the same ones, so a student cannot search their way
+// into a mode the screen has put away.
+const CALC_MODES = LISTED_MODES
 
 /**
  * The mode a drawing tool's row should open, or null to stay where the student is. A mode whose centre

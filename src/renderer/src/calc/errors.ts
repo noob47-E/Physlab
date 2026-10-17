@@ -70,7 +70,7 @@ export function errorSentence(raw: unknown): ErrorSentence {
   // mathjs knows t as a tonne, m as a metre and s as a second, so 2t + 1 adds a number to a unit.
   // "Check the brackets" sent the student to the wrong place for it.
   if (/expected: Unit/.test(msg)) {
-    return { sentence: 'A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.' }
+    return { sentence: 'A letter here was read as a unit (2t is two tonnes, 3m three metres, 2A two amperes), and a unit cannot be added to a plain number. To use a value of your own, give a letter a value under Variables.' }
   }
   if (/Undefined symbol\s+(\S+)/.test(msg)) {
     const name = /Undefined symbol\s+(\S+)/.exec(msg)![1]

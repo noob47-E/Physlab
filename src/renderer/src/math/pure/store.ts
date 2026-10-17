@@ -16,6 +16,7 @@ import { casWaitNote, followCasStart } from '../../ui/casStatus'
 import { calculusUnitNote, casInDegrees } from '../../calc/angle'
 import { scene } from '../../core/store'
 import { math, preprocess, splitArgs } from '../expr'
+import { calculusCall } from '../calculusCall'
 import { CONSTANT_NAMES, GREEK_LETTERS } from '../names'
 import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
@@ -77,14 +78,18 @@ interface PureState {
   history: PureEntry[]
   setInput: (s: string) => void
   setJob: (j: JobId) => void
-  run: (job?: JobId, input?: string, latex?: string) => void
+  /**
+   * `quiet` is for the Calculator's = asking for the working of a line it has already answered: when the step engine refuses the line,
+   * the algebra engine is not asked for a second opinion (a Work it out pressed by hand still is).
+   */
+  run: (job?: JobId, input?: string, latex?: string, opts?: { quiet?: boolean }) => void
   /**
    * Run straight from a maths field. The LaTeX is converted here, inside the same guard as the
    * generators, so a refusal thrown by the converter (a ± the engine cannot use, say) is shown to
    * the student as a sentence. Converting in the panel first put that throw in the middle of a
    * render, where nothing catches it. 'auto' guesses the job from the shape of the text.
    */
-  runLatex: (latex: string, job: JobId | 'auto') => void
+  runLatex: (latex: string, job: JobId | 'auto', opts?: { quiet?: boolean }) => void
   recall: (id: string) => void
   remove: (id: string) => void
   clearHistory: () => void
@@ -102,7 +107,7 @@ export const usePure = create<PureState>((set, get) => ({
   setInput: (input) => set({ input }),
   setJob: (job) => set({ job }),
 
-  run: (job, input, latex) => {
+  run: (job, input, latex, opts) => {
     const j = job ?? get().job
     const src = (input ?? get().input).trim()
     if (!src) return
@@ -142,10 +147,10 @@ export const usePure = create<PureState>((set, get) => ({
 
     // The answer is not optional. When this engine cannot show working, the algebra engine is asked for the
     // result alone, and the panel says plainly that the steps are missing.
-    void askCas(j, src, shown, runSeq, set, get)
+    if (!opts?.quiet) void askCas(j, src, shown, runSeq, set, get)
   },
 
-  runLatex: (latex, job) => {
+  runLatex: (latex, job, opts) => {
     let text: string
     try {
       text = latexToMath(latex).trim()
@@ -156,7 +161,7 @@ export const usePure = create<PureState>((set, get) => ({
       return
     }
     if (!text) return
-    get().run(job === 'auto' ? suggestJob(text) : job, text, latex)
+    get().run(job === 'auto' ? suggestJob(text) : job, text, latex, opts)
   },
 
   recall: (id) => {
@@ -341,7 +346,10 @@ function stepsRequest(
   src: string,
   deg: boolean
 ): { job: EngineJob; req: EngineRequest } | { error: string } {
-  const parts = splitArgs(src)
+  // A derivative or integral as the field writes it — diff(f, x), integral(f, a, b) — is the same question as the
+  // comma form below with its call taken off: the arguments are what Differentiate and Integrate are given.
+  const call = calculusCall(src)
+  const parts = (call ? call.args : splitArgs(src))
     .map((p) => p.trim())
     .filter(Boolean)
   const expr = parts[0] === undefined ? undefined : spelledOut(parts[0])

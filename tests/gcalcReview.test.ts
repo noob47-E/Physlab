@@ -232,7 +232,7 @@ describe('Visualize on a line that is already drawn shows that graph instead of 
 
   it('every Visualize button of the Calculator asks for it, and the selected graph\'s Expressions row is marked', () => {
     const reuse = /visualizeGraph\([^\n]*\{ reuse: true \}\)/g
-    expect(readSource('src/renderer/src/panels/Maths.tsx').match(reuse)).toHaveLength(3)
+    expect(readSource('src/renderer/src/panels/Maths.tsx').match(reuse)).toHaveLength(4)
     expect(readSource('src/renderer/src/lang/commands/solve.ts').match(reuse)).toHaveLength(2)
     expect(readSource('src/renderer/src/panels/calcModes.tsx').match(reuse)).toHaveLength(1)
     expect(readSource('src/renderer/src/panels/Expressions.tsx')).toMatch(/const selected = useScene\(\(s\) => s\.selection\.includes\(row\.id\)\)/)

@@ -3,6 +3,7 @@
 import type { MathNode } from 'mathjs'
 import { fromRadians, getAngleMode, math, preprocess, setAngleMode, splitArgs } from '../math/expr'
 import { texSci } from '../math/format'
+import { isNoise } from '../math/noise'
 import { constantScope } from './constants'
 import { OWN_LETTERS } from './errors'
 import { calcNum, formatComplex, mathFormatOptions } from './format'
@@ -23,6 +24,9 @@ export function keypadToMath(src: string): string {
     .replace(/×/g, '*')
     .replace(/÷/g, '/')
     .replace(/[−–]/g, '-')
+    // Ω is the ohm: the keypad and the Greek letter both write it, and mathjs knows only its name (a unit cannot be called Ω).
+    // The prefix stays beside it (kΩ is kohm); formatUnit writes the ohm back as Ω.
+    .replace(/([kMGmμ]?)Ω/g, (_all, prefix: string) => `${prefix === 'μ' ? 'u' : prefix}ohm`)
     // ᴇ is the standard-form mark, and what it makes is ONE number: 2ᴇ3 is the literal 2e3 and
     // 1.6ᴇ−19 is 1.6e-19, so 1 ÷ 2ᴇ3 divides by 2000. Turning ᴇ into "*10^" read it as 1 ÷ 2 × 10³ =
     // 500, a thousand times too big, with no error to warn anyone. (The ×10ˣ key's own mark in the
@@ -301,12 +305,9 @@ function scopeToObject(scope: MapLike, ...expressions: Array<MathNode | undefine
 function lambdaOf(node: MathNode, scope: MapLike, variable = 'x') {
   const code = node.compile()
   const base = scopeToObject(scope, node)
-  // Calculus follows the angle mode, the way the real calculator does. Forcing radians here
-  // answered a different question from the one that was typed: in DEG mode, sin(30) means 30
-  // degrees, so ddx(sin(x), 30) has to mean the slope at 30 degrees too — otherwise the same
-  // number means two things on one screen, and the answer disagrees with the calculator in the
-  // student's hand. (A scientific calculator’s manual advises the user to switch to Rad for trig calculus;
-  // it does not switch for them.)
+  // The body is worked in whatever angle mode the maths holds when this runs. For ddx and ∫ that is radians, whatever
+  // DEG/RAD says (the callers below set it): calculus is in radians, as every textbook and algebra system has it, and a derivative
+  // or an integral of sin x that carried π/180 was the textbook-wrong answer. A Σ or Π is not calculus and keeps the setting.
   return (v: number) => {
     const here = { ...base, [variable]: v }
     const y = Number(code.evaluate(here))
@@ -364,14 +365,18 @@ function series(kind: SeriesKind, args: MathNode[], scope: Map<string, unknown>)
 math.import(
   {
     // d/dx(f(x), a)
+    // The point is read in the screen's unit (sin(30) is 1/2 in DEG, plain trig outside the body); the body, in radians.
     ddx: raw((args, _m, scope) => {
       const at = Number(args[1].compile().evaluate(scopeToObject(scope, args[1])))
-      return derivativeAt(lambdaOf(args[0], scope), at)
+      return withAngle('rad', () => derivativeAt(lambdaOf(args[0], scope), at))
     }),
     // ∫(f(x), a, b)
     integral: raw((args, _m, scope) => {
       const s = scopeToObject(scope, args[1], args[2])
-      return integrate(lambdaOf(args[0], scope), Number(args[1].compile().evaluate(s)), Number(args[2].compile().evaluate(s)))
+      // The limits, like the point of ddx, are read in the screen's unit; only the body is calculus.
+      const from = Number(args[1].compile().evaluate(s))
+      const to = Number(args[2].compile().evaluate(s))
+      return withAngle('rad', () => integrate(lambdaOf(args[0], scope), from, to))
     }),
     // Σ(f(x), a, b)
     sigma: raw((args, _m, scope) => series('sum', args, scope)),
@@ -721,11 +726,57 @@ export function formatValue(v: unknown): string {
     const c = tidyComplex(v as { re: number; im: number })
     return formatComplex(c.re, c.im)
   }
+  if (math.isUnit(v)) return formatUnit(v as unknown as MathUnit)
   try {
     return math.format(v as never, mathFormatOptions())
   } catch {
     return String(v)
   }
+}
+
+/** The part of a mathjs Unit this file reads: its text, with the number written by the callback it is given. */
+interface MathUnit {
+  format: (options: (n: number) => string) => string
+}
+
+/** A power as a raised number, and 1 as nothing: m², s⁻², mol⁻¹. */
+const raisedPower = (power: number): string =>
+  power === 1 ? '' : String(power).replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)]).replace('-', '⁻').replace('.', '·')
+
+/**
+ * mathjs's text for the units of a quantity — "C / mol", "m / s^2", "kg / (m s^2)", "mol^-1" — with every power
+ * raised and the dividing ones after the multiplying ones: "C mol⁻¹", "m s⁻²", "kg m⁻¹ s⁻²". A caret is programming
+ * syntax, and no screen of PhysLab shows one.
+ */
+function raiseUnits(text: string): string {
+  const [top, bottom = ''] = text.split(' / ')
+  const side = (part: string, sign: number): { name: string; power: number }[] =>
+    part
+      .replace(/[()]/g, '')
+      .split(' ')
+      .filter(Boolean)
+      .map((token) => {
+        const m = /^(.+?)\^(-?[\d.]+)$/.exec(token)
+        return { name: m ? m[1] : token, power: (m ? Number(m[2]) : 1) * sign }
+      })
+  const all = [...side(top, 1), ...side(bottom, -1)]
+  return [...all.filter((u) => u.power > 0), ...all.filter((u) => u.power < 0)]
+    .map((u) => `${u.name.replace(/^([kMGmu]?)ohm$/, (_all, prefix: string) => `${prefix === 'u' ? 'μ' : prefix}Ω`)}${raisedPower(u.power)}`)
+    .join(' ')
+}
+
+/** The mark around the number in a quantity mathjs has written, so the units after it can be told from it. */
+const NUMBER_MARK = '\u0001'
+
+/**
+ * A quantity as a student writes it: the number at the student's precision, then the units with their powers raised —
+ * "96320 C mol⁻¹", "9.8 m s⁻²". mathjs chooses the units (N m is J, a lone C of 3×10⁻¹⁹ is zC) and writes them
+ * "96320 C / mol", "9.8 m / s^2" and, with nothing but dividing units, "0 mol^-1"; only the writing changes here.
+ */
+function formatUnit(u: MathUnit): string {
+  const written = u.format((n) => `${NUMBER_MARK}${mathFormatOptions()(n)}${NUMBER_MARK}`)
+  const m = new RegExp(`^${NUMBER_MARK}(.*)${NUMBER_MARK} ?(.*)$`, 's').exec(written)
+  return m ? `${m[1]} ${raiseUnits(m[2])}`.trim() : raiseUnits(written)
 }
 
 // ---------------------------------------------------------------------------
@@ -741,8 +792,15 @@ function fracTex(n: number, d: number, suffix = ''): string {
   return `${sign}\\frac{${n === 1 && suffix ? '' : n}${suffix}}{${d}}`
 }
 
-/** Recognises v as p/q, p√r/q or pπ/q. Returns LaTeX or null. */
-export function exactForm(v: number): string | null {
+/**
+ * Recognises v as p/q, p√r/q or pπ/q. Returns LaTeX or null.
+ *
+ * `roundOff` is how many units in the last place v may be away from the form (ROUND_OFF for a number worked
+ * out in a few operations). A numeric integral carries the quadrature's own error, some tens of units: the
+ * integral of 1/(1+x²) from 0 to 1 is π/4 to 77 of them, and with ROUND_OFF it stayed a decimal. The guard
+ * against a number that is only luckily close (LUCK, in math/fraction.ts) is not loosened.
+ */
+export function exactForm(v: number, roundOff = ROUND_OFF): string | null {
   if (!Number.isFinite(v)) return null
   // From 10²¹ on String() writes e-notation ("1e+22"), which is programming syntax: such a whole
   // number is written in the scientific form of math/format.ts, to the 15 figures a calculator holds.
@@ -751,13 +809,13 @@ export function exactForm(v: number): string | null {
   // round-off of a few 10⁻¹⁶, so anything nearer a whole number than that reads as it, and 7 ÷ 3h
   // used to come out as the exact answer 0.
   if (Math.abs(v) < 1e-9) return null
-  const f = toFraction(v, 10000)
+  const f = toFraction(v, 10000, roundOff)
   if (f) return fracTex(f[0], f[1])
-  const piF = toFraction(v / Math.PI, 360)
+  const piF = toFraction(v / Math.PI, 360, roundOff)
   if (piF) return fracTex(piF[0], piF[1], '\\pi')
   // Squaring doubles v's relative round-off, so v² gets twice the room. Judged through v², a surd is
   // found only below about 5×10⁵ (v² < 2.7×10¹¹, see LUCK): 4000000√3 km² keeps its decimal alone.
-  const sq = toFraction(v * v, 100000, 2 * ROUND_OFF)
+  const sq = toFraction(v * v, 100000, 2 * roundOff)
   // v² within round-off of zero is read as the fraction 0/1 (1 ÷ 10⁸ squared is 10⁻¹⁶), and such an
   // answer used to be √0 (1 ÷ 500000 was, under the old tolerance).
   if (sq && sq[0] !== 0) {
@@ -971,7 +1029,9 @@ export function polyRoots(coeffs: number[]): Cx[] {
   return roots
     .map((z) => {
       const mag = Math.hypot(z.re, z.im)
-      const imNoise = mag === 0 || Math.abs(z.im) < 1e-9 * Math.max(Math.abs(z.re), mag * 1e-6)
+      // The reference is the size of the root, and for a root of 0 that is nothing — 2×10⁻³¹ of imaginary part was a pair of its own. The polynomial's
+      // own size (bound) is what the arithmetic that found the root was done in, so a part a trillionth of it is noise, a root of 0 included.
+      const imNoise = mag === 0 || Math.abs(z.im) < 1e-9 * Math.max(Math.abs(z.re), mag * 1e-6) || isNoise(z.im, bound)
       return {
         // eslint-disable-next-line no-restricted-syntax -- parked for the owner (OWNER-APPROVALS CW3b-1): absolute floors, so x³ − 10⁻³⁹ = 0 answers 0 (tests/noiseFloors.test.ts)
         re: Math.abs(z.re) < 1e-12 ? 0 : z.re,

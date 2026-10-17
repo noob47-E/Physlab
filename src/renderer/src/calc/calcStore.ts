@@ -56,27 +56,42 @@ export const MODE_LABELS: Record<CalcMode, string> = {
 
 /** One line under each mode's name, for the picker. */
 export const MODE_HINTS: Record<CalcMode, string> = {
-  COMP: 'Everyday calculating: fractions, roots, powers, trigonometry, calculus',
-  CMPLX: 'Complex numbers, with modulus, argument and conjugate',
+  COMP: 'Everyday calculating: fractions, roots, powers, trigonometry, calculus, complex numbers',
+  CMPLX: 'Modulus, argument and conjugate of a complex number',
   'BASE-N': 'Binary, octal and hexadecimal',
-  MATRIX: 'Matrices',
-  VECTOR: 'Vectors',
-  STAT: 'Statistics and regression',
-  DIST: 'Probability distributions',
-  TABLE: 'A table of values for a function',
+  MATRIX: 'Add, multiply and invert tables of numbers',
+  VECTOR: 'Dot and cross products of arrows',
+  STAT: 'Mean, spread and the line of best fit',
+  DIST: 'Normal, binomial and Poisson probabilities',
+  TABLE: 'Values of a function, one row per x',
   EQUATION: 'Simultaneous and polynomial equations',
-  INEQUALITY: 'Polynomial inequalities',
-  RATIO: 'Proportions',
+  INEQUALITY: 'Where a polynomial is above or below zero',
+  RATIO: 'Proportions, a : b = c : d',
   SHEET: 'A small spreadsheet',
-  UNITS: 'Unit conversion',
+  UNITS: 'Change one unit into another',
   CONST: 'Physical constants',
   MEASURE: 'Significant figures and uncertainty'
 }
 
 /** The three modes that share the maths field; the rest have a screen of their own. */
 export const FIELD_MODES = ['COMP', 'CMPLX', 'BASE-N'] as const satisfies readonly CalcMode[]
+
+/**
+ * What the Calculator offers a student. Complex numbers are Numbers' own (their modulus, argument, conjugate and polar form are
+ * on its answer card), so Complex has no chip; Matrices, Vectors, Statistics, Table, Sheet, Units and Measure wait to come back
+ * redesigned. Their code and tests are kept: this is the one list the chips, the More menu and the search palette read.
+ */
+export const CHIP_MODES = ['COMP', 'BASE-N'] as const satisfies readonly CalcMode[]
+export const MORE_MODES = ['DIST', 'EQUATION', 'INEQUALITY', 'RATIO', 'CONST'] as const satisfies readonly CalcMode[]
+export const LISTED_MODES: readonly CalcMode[] = [...CHIP_MODES, ...MORE_MODES]
 export type FieldMode = (typeof FIELD_MODES)[number]
 export const isFieldMode = (m: CalcMode): m is FieldMode => (FIELD_MODES as readonly CalcMode[]).includes(m)
+
+/**
+ * The letters the Variables drawer offers to keep a number under. A letter is in the store's `vars` only
+ * once the student has given it a value; it starts out with none.
+ */
+export const STORED_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'M', 'x', 'y'] as const
 
 export interface HistoryItem {
   input: string
@@ -100,6 +115,13 @@ interface CalcStore {
    * could never see CMPLX, because insert only runs while the CONST list is showing.
    */
   keypad: 'COMP' | 'CMPLX'
+  /**
+   * The stored letters, and ONLY the ones the student has given a value. A letter with no entry is not 0: it
+   * was, once (every letter started at 0), and that was two wrong answers. C, A and F are also the coulomb,
+   * ampere and farad, and a stored C = 0 stood in front of the unit, so 1.6×10⁻¹⁹ C read as 0; and x² − 1 was
+   * worked out at a hidden x = 0 and answered −1. With no entry the line reaches the engine as it was typed —
+   * C after a number is the unit, x stays x — and a letter given a value is a variable from then on.
+   */
   vars: Record<string, unknown>
   ans: unknown
   history: HistoryItem[]
@@ -119,7 +141,7 @@ export const useCalc = create<CalcStore>((set, get) => ({
   input: '',
   pending: null,
   keypad: 'COMP',
-  vars: { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, M: 0, x: 0, y: 0 },
+  vars: {},
   ans: 0,
   history: loadHistory(),
   matrices: { MatA: mat(2, 2), MatB: [[2, 1], [1, 3]], MatC: mat(3, 3), MatD: mat(3, 3) },

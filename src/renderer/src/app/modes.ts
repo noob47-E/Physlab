@@ -49,7 +49,7 @@ export const MODES: ModeDef[] = [
   {
     id: 'calculator',
     label: 'Calculator',
-    description: 'One Maths screen: type in natural textbook maths, get the answer, then the working step by step — factorising, division, partial fractions, HCF/LCM and complex numbers.',
+    description: 'One Calculator screen: type in natural textbook maths, get the answer, then the working step by step — factorising, division, partial fractions, HCF/LCM and complex numbers.',
     ready: true,
     tools: ['select', '|', 'point', 'distance', '|', 'delete'],
     // One screen holds the field, the answer and the working, so it is the mode's panel and its

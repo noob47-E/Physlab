@@ -17,6 +17,12 @@ export function casInDegrees(angleUnit: AngleUnit): boolean {
 const CALCULUS = new Set(['diff', 'integrate', 'limit', 'series'])
 const TRIG = /\b(a?(sin|cos|tan|sec|csc|cot)h?|arc(sin|cos|tan))\b/i
 
+/** What a DEG card says under a calculus answer that used radians (when the line has an angle in it: ∫ x² dx has nothing to say). */
+export const CALCULUS_IN_RADIANS = 'Calculus uses radians.'
+
+/** Whether a line has trigonometry in it, the only thing the unit of an angle can change in a calculus answer. */
+export const usesAngles = (expr: string): boolean => TRIG.test(expr)
+
 /**
  * The note a calculus answer carries in DEG mode, or null when the unit made no difference.
  * Degrees are what the calculator uses, as a scientific calculator does, so the algebra engine uses them too —

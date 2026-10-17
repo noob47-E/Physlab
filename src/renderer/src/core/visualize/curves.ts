@@ -185,10 +185,11 @@ export const curveOf = (expr: string) => {
  * "slope =" label off: a question asking for that slope must not have it written on the drawing
  * before the student has answered.
  */
-export function visualizeTangent(expr: string, a: number, fa: number, slope: number, hideSlope = false): void {
+export function visualizeTangent(expr: string, a: number, fa: number, slope: number, hideSlope = false, label = expr): void {
   clearTagged('calculus')
   const b = new Builder()
-  b.graph({ kind: 'explicit', source: `y = ${expr}`, exprs: [expr], showRoots: false, showExtrema: false })
+  // `label` is what the Expressions list calls the curve when what is drawn (`expr`) is written differently from the way it was typed.
+  b.graph({ kind: 'explicit', source: `y = ${label}`, exprs: [expr], showRoots: false, showExtrema: false })
   const tangent = `${fa} + ${slope} * (x - ${a})`
   const line = b.graph({ kind: 'explicit', source: `tangent at x = ${fmtLabel(a, precision())}`, exprs: [tangent], width: 1.8 }, { color: themeColor('--warn', '#ffb84d'), name: 'tangent' })
   inGraphing(b.point([a, fa, 0], { name: 'T' }))

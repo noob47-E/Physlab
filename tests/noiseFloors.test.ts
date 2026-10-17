@@ -492,9 +492,13 @@ describe('CW9-N2: floors pinned at their edge', () => {
     expect(d('M')).toEqual([-4, 3, 0])
   })
 
-  it('a typed polynomial loses a top coefficient under 10⁻¹² of its biggest: 10⁻¹³x² + x − 1 reads x − 1 (calc/roots.ts, CW9-N2-1)', () => {
-    expect(polynomialInX('1e-13x^2 + x - 1', '0', {})).toEqual([1, -1])
+  it('a typed top coefficient is kept however small; only round-off of the line’s own arithmetic goes: 10⁻¹³x² + x − 1 is a quadratic (calc/roots.ts)', () => {
+    // CW9-N2-1 pinned the other way: the top coefficient went when it was under 10⁻¹² of the biggest, so 10⁻¹³x² + x − 1 read x − 1 and
+    // 1×10⁻¹⁶x² + x = 0 lost its root −10¹⁶ (found by two reviewers, 17 Oct 2026). A student typed that coefficient; it is a coefficient.
+    expect(polynomialInX('1e-13x^2 + x - 1', '0', {})).toEqual([1e-13, 1, -1])
     expect(polynomialInX('1e-11x^2 + x - 1', '0', {})).toEqual([1e-11, 1, -1])
+    // What the arithmetic leaves behind still goes: 0.1x² + 0.2x² − 0.3x² is 5.5×10⁻¹⁷ of 0.3 and 0.3, round-off and not a term.
+    expect(polynomialInX('0.1x^2 + 0.2x^2', '0.3x^2 - x', {})).toEqual([1, 0])
   })
 })
 

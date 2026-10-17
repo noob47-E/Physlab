@@ -9,12 +9,18 @@
 import { argOf, calcScope, keypadToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, hasFreeX, isEquationInX, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
 import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
-import { errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
-import { beyondTheReals, polishedRoot, polynomialInX } from './roots'
+import { OWN_LETTERS, errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
+import { beyondTheReals, polynomialInX, realAndPairs, rootChecks, rowLabel } from './roots'
+import { derivativeForm, hasQuantity, loneUnitLetters, openForm } from './formula'
+import { CALCULUS_IN_RADIANS, usesAngles } from './angle'
+import { bigNumberText } from '../math/pure/integers'
+import { isConstant, parseExpr } from '../math/pure/mono'
 import { math, splitArgs } from '../math/expr'
+import { calculusCall } from '../math/calculusCall'
 import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
 import type { FieldMode } from './calcStore'
+import type { EngineAsk } from './engineAnswer'
 
 /** How many units in the last place two sides of a true statement may differ by (rounding in a long sum). */
 const STATEMENT_ULPS = 1024
@@ -41,9 +47,47 @@ export interface EvalResult {
   src: string
   /** True when the algebra engine is worth asking for an exact form this engine could not see. */
   askExact?: boolean
-  /** True when the input was an equation and its root should become x. */
+  /** True when the input was an equation that was solved: its answer reads "x = …". It stores nothing by itself (see `assign`). */
   solved?: boolean
+  /** The answer when it is a formula and not a number (LaTeX): d/dx(x³ sin x), or x² − 1 while x has no value. */
+  tex?: string
+  /** That formula as a line the engine can read back (the same function, for a test or a graph). */
+  formula?: string
+  /** Every real solution of an equation, each once. */
+  roots?: number[]
+  /** True when `roots` is the whole list (a polynomial's real roots), not the one root a numeric search found. */
+  rootsComplete?: boolean
+  /**
+   * What a complex answer is made of, for its card: its size (modulus), its angle (argument, in the screen's unit), its
+   * conjugate and its polar form. These were the Complex mode's extras; Numbers has the same numbers now, so a student
+   * does not have to know which mode a line belongs to.
+   */
+  complex?: { size: string; angle: string; conjugate: string; polar: string }
+  /** The quick answer and the working disagreed: this is the working's answer, and neither is confirmed (calc/working.ts). */
+  unconfirmed?: boolean
+  /**
+   * True when the number is a polynomial's root that only the numeric search stands behind: put back into the polynomial it does not come out
+   * zero. Unless the working confirms it, the card says it is approximate and does not give it as the answer (calc/working.ts).
+   */
+  approximate?: boolean
+  /**
+   * The letter a line typed as `x = 5` stores, and the number. This is the only way a press of = writes to the
+   * stored letters: solving x² − 5x + 6 = 0 used to write the root nearest the old x without a word.
+   */
+  assign?: { name: string; value: number }
+  /** The algebra engine is to answer this line (an indefinite integral, a derivative mathjs could not do); `main` waits for it. */
+  engine?: EngineAsk
 }
+
+/** What the answer says while the algebra engine is still working on it. */
+const WORKING_ON_IT = 'Working it out…'
+
+/**
+ * How many units in the last place an integral's number may be from its exact form. The quadrature is good to
+ * about 10⁻¹⁴ (π/4 comes out 77 units short), against the 4 a few operations cost; the guard against a number
+ * that is merely luckily near a fraction stays as it is.
+ */
+const INTEGRAL_ROUND_OFF = 1000
 
 /**
  * The two settings of the screen an answer depends on: the angle unit (Numbers and Complex read it in sin, arg and the
@@ -93,23 +137,41 @@ export function linearOf(mode: FieldMode, input: string): string {
  * nearest the stored x. When the equation is also a polynomial in x its roots are known exactly, and
  * that settles two things the search cannot: a repeated root is given as itself (not −2.999999917),
  * and when the search finds no real root the sentence says where the roots are instead of "no solution".
+ *
+ * A polynomial with two real roots or more answers with all of them (x² − 5x + 6 = 0 is 3 and 2, the pair Work it
+ * out gives): the search can only ever find the one nearest the start, and "x = 2" for that equation was half the
+ * answer. One real root beside a complex pair is still the one root, and the pair is named under it.
+ *
+ * One real root, found exactly, is the answer as it is: the search is not asked, because it stops short of a root repeated three times or more
+ * ((x − 1)⁸ = 0 is x = 1, not the 0.9840701616 where |f| first fell under 10⁻¹⁴). The search answers alone only when the exact route found
+ * no real root, and then what it finds is kept only if it checks (rootChecks).
  */
-function solveEquation(src: string, ctx: CalcContext): CalcOutput | { sentence: string } {
+function solveEquation(src: string, ctx: CalcContext): CalcOutput | { sentence: string } | { real: number[]; pairs: string[]; complete: boolean } {
   const [left, right] = src.split('=')
   const scope = calcScope(ctx)
   // A search that starts on the answer stops at once and writes the same lines for it.
   const startingAt = (x: number): CalcOutput => evaluateComp(src, { ...ctx, vars: { ...ctx.vars, x } })
-  // The coefficients are read after evaluateComp has returned, and a constant in one — sin(30) — is read in whatever
-  // angle mode the maths holds by then, not the line's: x² + 1 + sin(30) = 0 on a RAD screen named the roots of the
+  // evaluateComp puts the angle mode it found back when it returns, and a constant in a coefficient — sin(30) — is
+  // read in whatever mode the maths holds, not the line's: x² + 1 + sin(30) = 0 on a RAD screen named the roots of the
   // DEG polynomial (±1.2247i for ±0.1094i), and a repeated root lost its polish the same way. The line's own angle
   // is set for the reading and the mode that was held is put back.
   const coefficients = (): number[] | null => withAngle(ctx.angle, () => polynomialInX(left, right, scope))
   try {
+    const known = coefficients()
+    const roots = known ? realAndPairs(known) : null
+    if (roots && roots.real.length >= 2) return roots
+    // The complex pair beside one real root is said under it, where the residual of the root already is.
+    const withPair = (o: CalcOutput): CalcOutput => (roots?.real.length === 1 && roots.pairs.length ? { ...o, extra: [...(o.extra ?? []), complexNote(roots.pairs)] } : o)
+    // The one real root is known exactly (every root listed was put back into the polynomial first), so it is the answer and the search is not asked.
+    // The search stops the moment |f| < 10⁻¹⁴, and for a root repeated m times that is 10^(−14/m) away: (x − 1)⁸ = 0 answered 0.9840701616.
+    if (roots?.real.length === 1) return withPair(startingAt(roots.real[0]))
     const out = evaluateComp(src, ctx)
-    const coeffs = coefficients()
-    if (!coeffs || typeof out.value !== 'number') return out
-    const exact = polishedRoot(coeffs, out.value)
-    return exact === out.value ? out : startingAt(exact)
+    if (!known || typeof out.value !== 'number') return out
+    // The exact route found no real root, so the number the search stopped on stands on its own: it is a root if it checks, and when it does not
+    // (x² + 10⁻¹² = 0 was "x = 6.7×10⁻⁶") the polynomial's complex roots are the answer. With none of those known it is kept, marked by the caller.
+    if (rootChecks(known, out.value)) return out
+    const beyond = beyondTheReals(known, out.value)
+    return beyond && 'sentence' in beyond ? beyond : out
   } catch (e) {
     if (!(e instanceof Error) || !/No solution/i.test(e.message)) throw e
     const coeffs = coefficients()
@@ -118,6 +180,75 @@ function solveEquation(src: string, ctx: CalcContext): CalcOutput | { sentence: 
     if (!beyond) throw e
     return 'sentence' in beyond ? beyond : startingAt(beyond.root)
   }
+}
+
+/** The first argument of every ddx, integral, diff or integrate in the line: the body, whose angles calculus reads in radians. */
+function calculusBodies(src: string): string[] {
+  const bodies: string[] = []
+  const open = /\b(ddx|integral|diff|integrate)\s*\(/g
+  for (let m = open.exec(src); m; m = open.exec(src)) {
+    let depth = 1
+    let at = m.index + m[0].length
+    const start = at
+    for (; at < src.length && depth > 0; at++) depth += src[at] === '(' ? 1 : src[at] === ')' ? -1 : 0
+    bodies.push(splitArgs(src.slice(start, at - 1))[0] ?? '')
+  }
+  return bodies
+}
+
+/** The one note a DEG card carries under a calculus answer: calculus used radians, and the line has an angle in it to say so about. */
+const radiansNote = (src: string, angle: 'deg' | 'rad'): string[] => (angle === 'deg' && calculusBodies(src).some(usesAngles) ? [CALCULUS_IN_RADIANS] : [])
+
+/** A complex answer's size, angle, conjugate and polar form, in the screen's angle unit; nothing for a real answer. */
+function complexCard(value: unknown, angle: 'deg' | 'rad'): EvalResult['complex'] {
+  if (!math.isComplex(value)) return undefined
+  const c = tidyComplex(value as { re: number; im: number })
+  if (c.im === 0) return undefined
+  const size = calcNum(Math.hypot(c.re, c.im))
+  const theta = Math.atan2(c.im, c.re)
+  const turn = angle === 'deg' ? `${calcNum((theta * 180) / Math.PI)}°` : `${calcNum(theta)} rad`
+  return { size, angle: turn, conjugate: formatValue(math.conj(math.complex(c.re, c.im))), polar: `${size}∠${turn}` }
+}
+
+/**
+ * A whole number too big for a double (10¹⁰⁰⁰, 2²⁰⁰⁰) written as itself, or null when the line is not one. The numeric engine
+ * overflows past 1.8×10³⁰⁸ and said "runs off to infinity" about a number that is perfectly finite; the exact engine holds it.
+ */
+function bigIntegerLine(src: string): string | null {
+  try {
+    const e = parseExpr(src)
+    const k = isConstant(e) ? e[0]?.c : undefined
+    return k && k.d === 1n ? bigNumberText(k.n) : null
+  } catch {
+    return null
+  }
+}
+
+/** The complex roots of an equation that has real ones, said under them: each pair once, as −0.5 ± 0.866i. */
+const complexNote = (pairs: string[]): string => `Also, in complex numbers: x = ${pairs.join(' or x = ')}`
+
+/** "x has no value yet", in the words of the letters that have none. */
+function noValueNote(letters: string[]): string {
+  const names = letters.length < 2 ? letters.join('') : `${letters.slice(0, -1).join(', ')} and ${letters[letters.length - 1]}`
+  return `${names} ${letters.length < 2 ? 'has' : 'have'} no value yet, so this stays a formula. Give ${letters.length < 2 ? 'it' : 'them'} a value under Variables to get a number.`
+}
+
+/**
+ * d/dx(f) and ∫ f dx. The derivative is worked here, in radians whatever DEG says (calculus is: d/dx sin x is cos x), and
+ * only shown once it has been checked against the slope of the line as typed; what mathjs cannot differentiate, and
+ * every indefinite integral, is handed to the algebra engine, whose answer the screen puts in when it arrives.
+ */
+function textbookCalculus(name: 'diff' | 'integrate', args: string[], src: string, vars: Record<string, unknown>, angle: 'deg' | 'rad'): EvalResult {
+  const [body, letter] = args
+  const variable = letter ?? 'x'
+  const note = radiansNote(src, angle)
+  const extra = note.length ? note : undefined
+  if (name === 'diff') {
+    const form = derivativeForm(body, variable, vars)
+    if (form) return { main: form.text, tex: form.tex, formula: form.src, extra, src, exact: null, solved: false }
+  }
+  const engine: EngineAsk = name === 'diff' ? { job: 'diff', req: { expr: body, var: variable, deg: false }, plusC: false } : { job: 'integrate', req: { expr: body, var: variable, deg: false }, plusC: true }
+  return { main: WORKING_ON_IT, extra, src, exact: null, solved: false, engine }
 }
 
 /**
@@ -177,7 +308,17 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       })
     }
     const ctx: CalcContext = { vars: opts.vars, ans: opts.ans, angle: opts.angle }
+    // d/dx(f) and ∫ f dx as a textbook writes them: a function, not a number. The numeric engine reads
+    // diff() as mathjs's differences of a list ("Those numbers do not fit this function") and knows no integrate().
+    const call = calculusCall(src)
+    if (call && call.name !== 'integral' && call.args.length < 3) return textbookCalculus(call.name, call.args, src, opts.vars, opts.angle)
+    // integrate(f, a, b) is the question ∫ₐᵇ f dx asks, which the numeric engine answers as integral(f, a, b).
+    if (call?.name === 'integrate' && call.args.length === 3) src = `integral(${call.args.join(', ')})`
+    const definite = calculusCall(src)?.name === 'integral'
     let out: CalcOutput
+    let assign: { name: string; value: number } | undefined
+    let polynomial = false
+    let approximate = false
     if (isEquationInX(src)) {
       const [left, right] = src.split('=')
       // An equation whose x's are all the index variables of a Σ, Π, ∫ or d/dx is a statement about
@@ -200,27 +341,75 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       // No real root, but where the roots are is known: an answer to the question, not an error, and
       // no number to keep — so no x is stored from it and the eng chip leaves the sentence alone.
       if ('sentence' in answer) return { main: answer.sentence, src, exact: null, solved: false }
+      if ('real' in answer) {
+        // Two roots or more, each on its own label and in the order every screen lists them (calc/roots.ts).
+        const lines = answer.real.map((r, i) => `${rowLabel(i, answer.real.length)} ${calcNum(r)}`)
+        return { main: lines.join(', '), extra: answer.pairs.length ? [complexNote(answer.pairs)] : undefined, roots: answer.real, rootsComplete: answer.complete, src, exact: null, solved: true }
+      }
       out = answer
+      // A polynomial's real roots are all of them, and the search's one root is the whole answer too when there is only one.
+      const coefficients = withAngle(opts.angle, () => polynomialInX(left, right, calcScope(ctx)))
+      polynomial = coefficients !== null
+      approximate = coefficients !== null && typeof out.value === 'number' && !rootChecks(coefficients, out.value)
+      // Solving never stores. Only the student's own "x = 5" does, and then the stored x is the 5 that was typed.
+      if (typeof out.value === 'number' && ((left.trim() === 'x' && !hasFreeX(right)) || (right.trim() === 'x' && !hasFreeX(left)))) assign = { name: 'x', value: out.value }
     } else {
-      out = evaluateComp(src, ctx)
+      // A lone A, B, C or F (x + A, C x, A + 1) has no number before it, so it is the letter and not the ampere, the byte, the coulomb or the farad:
+      // the numeric reading would take it for the unit and refuse the line, so the line goes straight to the formula.
+      const lone = loneUnitLetters(src, opts.vars, OWN_LETTERS).length ? openForm(src, opts.vars, OWN_LETTERS) : null
+      if (lone) return { main: lone.form.text, tex: lone.form.tex, formula: lone.form.src, extra: [noValueNote(lone.letters)], src, exact: null, solved: false }
+      try {
+        out = evaluateComp(src, ctx)
+      } catch (e) {
+        // A letter nobody gave a value to is not 0: the line stays a formula in that letter (x² − 1 is x² − 1).
+        const open = e instanceof Error && /Undefined symbol/.test(e.message) ? openForm(src, opts.vars, OWN_LETTERS) : null
+        if (!open) {
+          // A line that has a quantity in it and a letter with no value: the trouble is the mixture, and x is a perfectly good letter.
+          const named = e instanceof Error ? /Undefined symbol\s+(\S+)/.exec(e.message)?.[1] : undefined
+          if (named && OWN_LETTERS.test(named) && hasQuantity(src, opts.vars)) {
+            return { main: '', src, error: { sentence: `${named} has no value yet, and a letter right after a number is read as a unit here (2C is two coulombs). Give ${named} a value under Variables, or take the units out of the line.` } }
+          }
+          throw e
+        }
+        return { main: open.form.text, tex: open.form.tex, formula: open.form.src, extra: [noValueNote(open.letters)], src, exact: null, solved: false }
+      }
     }
     const num = typeof out.value === 'number' ? out.value : NaN
-    if (typeof out.value === 'number' && !Number.isFinite(out.value)) return { main: '', src, error: nonFiniteSentence(out.value, src) }
+    if (typeof out.value === 'number' && !Number.isFinite(out.value)) {
+      const big = bigIntegerLine(src)
+      if (big !== null) return { main: big, src, exact: null, solved: false }
+      return { main: '', src, error: nonFiniteSentence(out.value, src) }
+    }
     const solved = /=/.test(src)
-    const exact = Number.isFinite(num) && !solved && !/^(Pol|Rec)/i.test(src) ? exactForm(num) : null
+    const exact = Number.isFinite(num) && !solved && !/^(Pol|Rec)/i.test(src) ? exactForm(num, definite ? INTEGRAL_ROUND_OFF : undefined) : null
+    const note = radiansNote(src, opts.angle)
+    const complex = complexCard(out.value, opts.angle)
     return {
       main: opts.eng && Number.isFinite(num) ? calcEng(num) : out.text,
-      extra: out.extra,
+      extra: note.length ? [...(out.extra ?? []), ...note] : out.extra,
+      ...(complex ? { complex } : {}),
       exact: exact && exact !== String(num) ? exact : null,
       value: out.value,
       src,
       solved,
+      ...(solved && Number.isFinite(num) ? { roots: [num], rootsComplete: polynomial } : {}),
+      ...(assign ? { assign } : {}),
+      ...(approximate ? { approximate } : {}),
       // A whole number is its own exact form; letters, calculus and random numbers have none worth asking for.
       askExact: !exact && Number.isFinite(num) && !Number.isInteger(num) && !/[xy=]|ddx|integral|sigma|product|Ran/.test(src)
     }
   } catch (e) {
     return { main: '', src, error: errorSentence(e) }
   }
+}
+
+/**
+ * The stored letters after an answer has been worked out: what the screen keeps for the next line.
+ * One place decides, so a test can see what a press of = leaves behind without a DOM. The same object
+ * comes back when nothing is to be stored, so a setState with it is no render.
+ */
+export function varsAfter(vars: Record<string, unknown>, r: EvalResult): Record<string, unknown> {
+  return r.assign ? { ...vars, [r.assign.name]: r.assign.value } : vars
 }
 
 /**
@@ -283,8 +472,9 @@ interface Tangent {
 
 /**
  * The numbers Visualize draws the tangent of a `ddx(f, a)` line from: the point a, the height f(a) and the slope —
- * every one worked out the way the answer card works the line out, in the screen's angle unit, and the slope by the
- * very call that makes the card's number.
+ * every one worked out the way the answer card works the line out: the point in the screen's angle unit (plain trig
+ * outside the curve), the curve and its slope in radians (calculus is), and the slope by the very call that makes
+ * the card's number. The picture then draws the curve in radians too (calc/formula.ts inRadians).
  *
  * Maths.tsx used to work the height out in whatever mode the maths held and the slope in radians always, so in
  * degrees d/dx(sin(x), 30) drew the tangent through (30, 0.5) with the slope of cos(30 rad) = 0.154 under a card that
@@ -300,7 +490,7 @@ export function tangentAt(input: string, ctx: CalcContext): Tangent {
   if (parts.length !== 2) throw new Error('A tangent needs an expression and a point, like d/dx(x², 3).')
   const [f, a] = parts
   const x0 = Number(evaluateComp(a, ctx).value)
-  const fx = Number(evaluateComp(f, { ...ctx, vars: { ...ctx.vars, x: x0 } }).value)
+  const fx = Number(evaluateComp(f, { ...ctx, angle: 'rad', vars: { ...ctx.vars, x: x0 } }).value)
   const slope = Number(evaluateComp(input, ctx).value)
   if (![x0, fx, slope].every(Number.isFinite)) throw new Error('There is no tangent there: the curve has no value, or no slope, at that point.')
   return { f, x0, fx, slope }

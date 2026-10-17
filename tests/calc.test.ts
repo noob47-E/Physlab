@@ -157,14 +157,25 @@ describe('the × key means what is on either side of it', () => {
   })
 })
 
-describe('calculus follows the angle mode, like the real calculator', () => {
+describe('calculus is always in radians, whatever the angle mode says', () => {
   const deg = { vars: {}, ans: 0, angle: 'deg' as const }
   const rad = { vars: {}, ans: 0, angle: 'rad' as const }
 
-  it('differentiates in degrees when the calculator is in DEG', () => {
-    // d/dx sin(x°) = cos(x°) × π/180 — what a scientific calculator shows in DEG mode.
-    expect(Number(evaluateComp('ddx(sin(x), 30)', deg).value)).toBeCloseTo((Math.cos(Math.PI / 6) * Math.PI) / 180, 6)
-    expect(Number(evaluateComp('integral(sin(x), 0, 90)', deg).value)).toBeCloseTo(180 / Math.PI, 4)
+  it('differentiates and integrates in radians when the calculator is in DEG', () => {
+    // The owner's decision (17 Oct 2026): calculus is in radians, as every textbook and every algebra system has it. This pinned the
+    // other way, the slope of sin(x°) — (π/180) × cos 30° — and ∫₀⁹⁰ sin x dx = 180/π, "what a scientific calculator shows in DEG"; the
+    // factors of π/180 in an answer to a textbook question were the wrong answer.
+    expect(Number(evaluateComp('ddx(sin(x), 30)', deg).value)).toBeCloseTo(Math.cos(30), 6)
+    expect(Number(evaluateComp('integral(sin(x), 0, 90)', deg).value)).toBeCloseTo(1 - Math.cos(90), 4)
+    expect(Number(evaluateComp('integral(sin(x), 0, pi)', deg).value)).toBeCloseTo(2, 6)
+  })
+
+  it('reads the point and the limits in the angle mode, and only the body in radians', () => {
+    // The point is plain trig outside the body: sin(30) is 1/2 in DEG, so the slope is taken at x = 0.5.
+    expect(Number(evaluateComp('ddx(x^2, sin(30))', deg).value)).toBeCloseTo(1, 6)
+    expect(Number(evaluateComp('integral(x, 0, sin(30))', deg).value)).toBeCloseTo(0.125, 9)
+    // A sum is not calculus: it keeps the setting.
+    expect(Number(evaluateComp('sigma(sin(30 * x), 1, 1)', deg).value)).toBeCloseTo(0.5, 12)
   })
 
   it('is unchanged in RAD', () => {
@@ -1358,7 +1369,8 @@ describe('H8 — ∫, d/dx, Σ and Π see stored letters and Ans', () => {
     // when it could not see the one in scope.
     expect(line('arg(1 + i)')).toBeCloseTo(45, 9)
     expect(line('sigma(arg(1 + i), 1, 1)')).toBeCloseTo(45, 9)
-    expect(line('integral(arg(1 + i), 0, 1)')).toBeCloseTo(45, 9)
+    // Inside a ∫ the body is calculus, so it is in radians whatever the mode: arg(1 + i) is π/4 there and 45° outside.
+    expect(line('integral(arg(1 + i), 0, 1)')).toBeCloseTo(Math.PI / 4, 9)
   })
 
   it('whatever the scope the line is worked out in: an object, a Map, and one body inside another', () => {

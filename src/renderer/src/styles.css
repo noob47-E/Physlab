@@ -1299,6 +1299,10 @@ math-field.math-input::part(menu-toggle) {
 .maths-answer.is-error {
   border-color: color-mix(in srgb, var(--bad) 40%, transparent);
 }
+/* An answer nobody has confirmed: the quick answer and the working disagreed (calc/working.ts). */
+.maths-answer.is-warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+}
 .maths-result {
   font-size: var(--text-display);
   color: var(--text-strong);

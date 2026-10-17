@@ -46,7 +46,7 @@ const mission = (id: string) => {
 
 /** Where each anchor a mission points at must live: the panel or bar the mission's mode shows. */
 const ANCHOR_HOME: Record<string, { file: string; mark: string }> = {
-  'work-it-out': { file: 'src/renderer/src/panels/Maths.tsx', mark: 'data-tour="work-it-out"' },
+  equals: { file: 'src/renderer/src/panels/Maths.tsx', mark: 'data-tour="equals"' },
   command: { file: 'src/renderer/src/app/CommandBar.tsx', mark: 'data-tour="command"' },
   'tool-sketch': { file: 'src/renderer/src/app/TopBar.tsx', mark: 'data-tour={`tool-${id}`}' },
   play: { file: 'src/renderer/src/panels/sandbox/Transport.tsx', mark: 'data-tour="play"' },
@@ -84,7 +84,7 @@ describe('the six missions point at real things', () => {
 
   it('every anchor sits on a screen its mode really shows', () => {
     const byId = Object.fromEntries(MODES.map((d) => [d.id, d]))
-    expect(byId.calculator.centre).toBe('maths') // work-it-out is on the Maths screen
+    expect(byId.calculator.centre).toBe('maths') // = is on the Calculator screen
     expect(byId.sandbox.panel).toBe('sandbox') // play is in the Sandbox panel
     expect(byId.problems.panel).toBe('practice') // start-practice is in Practice
     expect(byId.shapes.tools).toContain('sketch') // tool-sketch: the shelf draws a button per tool of the mode

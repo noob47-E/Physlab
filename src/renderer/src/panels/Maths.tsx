@@ -12,22 +12,27 @@
 
 import { memo, Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronUp, Eye, History, Keyboard, Play, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Eye, History, Keyboard, Sparkles, Trash2, X } from 'lucide-react'
 import { casInDegrees } from '../calc/angle'
-import { FIELD_MODES, MODE_HINTS, MODE_LABELS, clearCalcHistory, isFieldMode, useCalc, type CalcMode, type FieldMode, type HistoryItem } from '../calc/calcStore'
-import { keypadToMath, withAngle, type Base } from '../calc/engine'
+import { CHIP_MODES, MODE_HINTS, MODE_LABELS, MORE_MODES, STORED_LETTERS, clearCalcHistory, isFieldMode, useCalc, type CalcMode, type FieldMode, type HistoryItem } from '../calc/calcStore'
+import { openPane, type Panes } from '../calc/drawers'
+import { inRadians } from '../calc/formula'
+import { reconcile, wantsWorking } from '../calc/working'
+import { engineAnswer } from '../calc/engineAnswer'
+import { formatValue, keypadToMath, withAngle, type Base } from '../calc/engine'
 import { calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
-import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, mainLine, readValueBoxes, shownText, tangentAt, type Answered, type EvalResult } from '../calc/evaluateInput'
+import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, mainLine, readValueBoxes, shownText, tangentAt, varsAfter, type Answered, type EvalResult } from '../calc/evaluateInput'
 import { groupsForMode, type KeyDef, type KeyGroupId } from '../calc/keys'
 import { math } from '../math/expr'
+import { calculusCall } from '../math/calculusCall'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
-import { fieldHasText, type StepPref } from '../math/pure/reveal'
+import type { StepPref } from '../math/pure/reveal'
 import { ask, useEngineStatus } from '../math/engine'
 import { casStartingSentence } from '../ui/casStatus'
 import { usePure, type PureEntry } from '../math/pure/store'
-import { treatAs, workingIsFor } from './treatAs'
-import { JOBS, jobById, type JobId } from '../math/pure/run'
+import { treatAs } from './treatAs'
+import { JOBS, jobById } from '../math/pure/run'
 import { parseExpr, varsOf } from '../math/pure/mono'
 import { useScene } from '../core/store'
 import { themeColor } from '../app/theme'
@@ -45,8 +50,6 @@ import { WorkingView, readStepPref, writeStepPref } from './WorkingView'
 // Every number the screen shows follows the precision the student chose in Settings (Rule 4).
 // The scene store is read lazily so calc/ never imports it back.
 setCalcPrecisionSource(() => useScene.getState().settings)
-
-const MORE_MODES: CalcMode[] = ['MATRIX', 'VECTOR', 'STAT', 'DIST', 'TABLE', 'EQUATION', 'INEQUALITY', 'RATIO', 'SHEET', 'UNITS', 'CONST', 'MEASURE']
 
 const CHIP = 'rounded px-2 py-0.5 text-fine font-semibold'
 const CHIP_ON = 'bg-[color:var(--accent-2)] text-[color:var(--on-accent)]'
@@ -96,6 +99,12 @@ const Measured = ({ children }: { children: ReactNode }) => (import.meta.env?.DE
 
 export function Maths() {
   const mode = useCalc((s) => s.mode)
+  // A mode the Calculator does not offer (Complex is Numbers' now; the list modes that are away being redesigned) is never shown, however
+  // it was reached — a stored history entry, an old shortcut: the student is on Numbers.
+  const listed = (CHIP_MODES as readonly CalcMode[]).includes(mode) || (MORE_MODES as readonly CalcMode[]).includes(mode)
+  useEffect(() => {
+    if (!listed) useCalc.setState({ mode: 'COMP' })
+  }, [listed])
   // Re-render when the precision setting changes, so every number on the screen follows it.
   useScene((s) => s.settings.decimals)
   useScene((s) => s.settings.precisionMode)
@@ -109,7 +118,7 @@ export function Maths() {
 
 function ModeChips({ mode }: { mode: CalcMode }) {
   const [more, setMore] = useState(false)
-  const other = MORE_MODES.includes(mode) ? mode : null
+  const other = (MORE_MODES as readonly CalcMode[]).includes(mode) ? mode : null
   // The field's text is one store value for every mode. Bases types plain text and the others
   // LaTeX, so crossing that line with the text kept showed 1\div3 in the Bases field; the
   // text is cleared on that crossing only (Numbers ↔ Complex keep it, and so does a recall).
@@ -119,12 +128,12 @@ function ModeChips({ mode }: { mode: CalcMode }) {
   }
   return (
     <div className="relative flex flex-wrap items-center gap-1">
-      {FIELD_MODES.map((m) => (
+      {CHIP_MODES.map((m) => (
         <button key={m} title={MODE_HINTS[m]} onClick={() => setMode(m)} className={`${CHIP} ${mode === m ? CHIP_ON : CHIP_OFF}`}>
           {MODE_LABELS[m]}
         </button>
       ))}
-      <button title="Matrices, vectors, statistics, tables, equations and more" onClick={() => setMore(!more)} className={`${CHIP} flex items-center gap-1 ${other ? CHIP_ON : CHIP_OFF}`}>
+      <button title="Distributions, equations, inequalities, ratio and constants" onClick={() => setMore(!more)} className={`${CHIP} flex items-center gap-1 ${other ? CHIP_ON : CHIP_OFF}`}>
         {other ? MODE_LABELS[other] : 'More'} <ChevronDown size={11} />
       </button>
       {more && (
@@ -195,30 +204,50 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   const [showExact, setShowExact] = useState(true)
   const [eng, setEng] = useState(false)
   const [asked, setAsked] = useState<{ mode: FieldMode; letters: string[] } | null>(null)
-  const [keypad, setKeypad] = useState(false)
-  // A new working — from Work it out, the command bar, a recalled entry or the tour — takes the
-  // screen: the field now holds its line (calcStore follows the pure store), and the
-  // with-values form belonged to the line before. The answer card stays while it answers the
-  // very line the working is for: = and then Work it out on 2/3 + √2 used to drop the ≈ 2.08
-  // card the student had a second ago and leave only the working's refusal under an empty
-  // space. The keypad closes because it hangs over exactly where the steps appear.
+  // The keypad and the two drawers under the field: opening one never leaves another covered (calc/drawers.ts).
+  const [panes, setPanes] = useState<Panes>({ keypad: false, vars: false, history: false })
+  const { keypad, vars: showVars, history: showHistory } = panes
+  // The working folded under the answer: closed until the student asks for it, open at once when the working was asked for from
+  // somewhere else (the command bar's Show the working, a recalled entry, an offer, the tour).
+  const [foldOpen, setFoldOpen] = useState(false)
+  const [external, setExternal] = useState(false)
+  // True while a press of = is asking the step engine for the line's working, so the working that arrives is not mistaken for one the
+  // student asked for elsewhere. The store tells its listeners inside the call, so it is set and put back around the call.
+  const ownRun = useRef(false)
+  const answeredRef = useRef<Answered | null>(null)
+  answeredRef.current = answered
+  const evaluateRef = useRef<(o: { steps: boolean }) => void>(() => undefined)
+  // A working that arrives takes the screen: the field now holds its line (calcStore follows the pure store), and the with-values form
+  // belonged to the line before. The answer card stays while it answers the very line the working is for. One asked for from elsewhere
+  // opens the fold, gets its answer card if the line has none, and closes the keypad, which hangs over exactly where the steps appear.
   useEffect(
     () =>
       usePure.subscribe((s, prev) => {
         if (s.runSeq === prev.runSeq) return
         setAnswered((a) => answerStillFor(a, s.inputLatex))
         setAsked(null)
-        setKeypad(false)
+        if (ownRun.current) return
+        setPanes((p) => (p.keypad ? { ...p, keypad: false } : p))
+        setFoldOpen(true)
+        setExternal(true)
+        evaluateRef.current({ steps: false })
       }),
     []
   )
   const withValues = asked?.mode === mode ? asked.letters : null
   const setWithValues = (letters: string[] | null): void => setAsked(letters ? { mode, letters } : null)
-  const [showVars, setShowVars] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
-  const [jobs, setJobs] = useState(false)
-  // True from "Work it out" until the answer it produced has decided about taking the focus.
-  const invite = useRef(false)
+
+  // The working for the line the card answers, and the card the screen shows: "=" and the working never disagree, and when they do
+  // neither is shown as final (calc/working.ts). The disagreement goes to the log once.
+  const working = usePure((s) => s.working)
+  const pureLatex = usePure((s) => s.inputLatex)
+  const forCard = held && result && working && pureLatex === held.input ? working : null
+  const shown = useMemo(() => (result ? reconcile(result, forCard) : null), [result, forCard])
+  useEffect(() => {
+    if (shown?.line) console.warn(shown.line)
+  }, [shown?.line])
+  // The fold belongs to the card: a working for another line (the field has moved on) is not offered.
+  const foldAvailable = !!forCard
 
   /** The current input as PhysLab's linear syntax. Throws the converter's sentence on a ± it cannot use. */
   const linear = (): string => {
@@ -232,19 +261,44 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     return mode === 'BASE-N' ? s : tryLatexToMath(s).src
   }
 
-  const evaluate = (varsOverride?: Record<string, unknown>): void => {
+  const evaluate = (varsOverride?: Record<string, unknown>, o: { steps?: boolean } = {}): void => {
     const s = useCalc.getState()
+    // A working asked for elsewhere comes with the answer card for its line, unless the line has one already.
+    if (o.steps === false && answeredRef.current?.input === s.input) return
     const opts = { vars: { ...s.vars, ...varsOverride }, ans: s.ans, angle: angleUnit, base }
     const run = (): void => {
       const r = evaluateInput(mode, s.input, opts)
       if (!r) return
       setAnswered({ mode, input: s.input, angle: angleUnit, base, result: r })
+      // = is the one button: the step engine works the same line out underneath, folded, where it has a working to show. It is asked
+      // quietly (no second opinion from the algebra engine for a line the step engine refused) and without moving the keyboard.
+      if (o.steps !== false && mode !== 'BASE-N' && wantsWorking(r.src)) {
+        setFoldOpen(false)
+        setExternal(false)
+        ownRun.current = true
+        try {
+          usePure.getState().runLatex(s.input, 'auto', { quiet: true })
+        } finally {
+          ownRun.current = false
+        }
+      }
       if (r.error) return
+      if (r.engine) {
+        // The algebra engine answers this line a moment later (seconds on its first start), and the card says so until
+        // it does. The answer lands only while this very card is still the one held: a newer line, or another mode or
+        // setting, has replaced it otherwise. History keeps the line once it has an answer.
+        void engineAnswer(r.engine).then((res) => {
+          const next: EvalResult = res.ok ? { ...r, engine: undefined, main: res.main, tex: res.tex } : { ...r, engine: undefined, main: '', error: { sentence: res.error } }
+          setAnswered((a) => (a && a.mode === mode && a.input === s.input && a.result === r ? { ...a, result: next } : a))
+          if (res.ok) useCalc.setState((c) => ({ history: [{ input: s.input, result: res.main, mode }, ...c.history].slice(0, 100) }))
+        })
+        return
+      }
       useCalc.setState({
         // "No real solution. In complex numbers: …" is an answer with no number in it: Ans stays the
         // last number, where an undefined Ans would read as 0 in the next line.
         ans: r.value === undefined ? s.ans : r.value,
-        vars: r.solved ? { ...s.vars, x: r.value } : s.vars,
+        vars: varsAfter(s.vars, r),
         history: [{ input: s.input, result: r.main, mode }, ...s.history].slice(0, 100)
       })
       if (r.askExact) {
@@ -265,26 +319,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     else run()
   }
 
-  const workOut = (job: JobId | 'auto' = 'auto'): void => {
-    setJobs(false)
-    if (mode === 'BASE-N') return
-    const latex = useCalc.getState().input
-    if (!fieldHasText(latex)) {
-      const def = job === 'auto' ? null : jobById(job)
-      if (def) {
-        // An empty field and a chosen job: show what that job does, on its own example.
-        useCalc.setState({ input: def.exampleLatex })
-        invite.current = true
-        usePure.getState().run(def.id, def.example, def.exampleLatex)
-        return
-      }
-      setResult({ main: '', src: '', error: { sentence: 'Type something first.' } })
-      return
-    }
-    invite.current = true
-    // The store converts the LaTeX itself, so a converter refusal reaches the student as a sentence.
-    usePure.getState().runLatex(latex, job)
-  }
+  evaluateRef.current = (o) => evaluate(undefined, o)
 
   const insertTex = (tex: string): void => {
     if (mode === 'BASE-N') {
@@ -343,7 +378,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   const actions = useRef<Actions>({ press })
   actions.current = { press }
   const onKey = useCallback((k: KeyDef) => actions.current.press(k), [])
-  const closeKeypad = useCallback(() => setKeypad(false), [])
+  const closeKeypad = useCallback(() => setPanes((p) => ({ ...p, keypad: false })), [])
 
   /** Draws the line in the viewport; true when something was drawn. Its numbers are read in the screen's unit (see draw). */
   const drawLine = (input: string): boolean => {
@@ -354,7 +389,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       // tangent drawn has the slope the card shows: d/dx(sin(x), 30) in degrees drew cos(30 rad) = 0.154 under a card
       // that said 0.01511, because the slope was worked out in radians and the height in whatever mode the maths held (H3).
       const t = tangentAt(input, { vars: s.vars, ans: s.ans, angle: angleUnit })
-      visualizeTangent(keypadToMath(t.f), t.x0, t.fx, t.slope)
+      // The curve is drawn in radians whatever the screen's unit, as the tangent's height and slope were worked out: calculus is in radians.
+      visualizeTangent(inRadians(keypadToMath(t.f), angleUnit), t.x0, t.fx, t.slope, false, keypadToMath(t.f))
       return true
     }
     const integ = input.match(/^integral\((.*)\)$/)
@@ -362,7 +398,14 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       const [f, a, b] = args(integ[1])
       const lo = Number(math.evaluate(keypadToMath(a), { ...constantScope(), ...s.vars }))
       const hi = Number(math.evaluate(keypadToMath(b), { ...constantScope(), ...s.vars }))
-      visualizeArea(keypadToMath(f), lo, hi, `∫ ${f} dx from ${a} to ${b}`)
+      visualizeArea(inRadians(keypadToMath(f), angleUnit), lo, hi, `∫ ${f} dx from ${a} to ${b}`, keypadToMath(f))
+      return true
+    }
+    // d/dx(f) in x has a function for its answer, and the picture is that function's graph (the line itself, diff(f, x), is
+    // not something the grapher can plot).
+    const dif = calculusCall(input)
+    if (dif?.name === 'diff' && (dif.args[1] ?? 'x') === 'x' && result?.formula) {
+      visualizeGraph(`y = ${result.formula}`, [inRadians(result.formula, angleUnit)], 'explicit', { reuse: true })
       return true
     }
     const pol = input.match(/^(Pol|Rec)\((.*)\)$/i)
@@ -450,7 +493,7 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
             className={`btn ${keypad ? 'primary' : ''}`}
             data-keypad-toggle
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setKeypad(!keypad)}
+            onClick={() => setPanes(keypad ? { ...panes, keypad: false } : openPane(panes, 'keypad'))}
             title={keypad ? 'Close the keypad' : 'Open a keypad for √, ∫, π and the rest; typing keeps working'}
           >
             <Keyboard size={14} /> Keypad
@@ -459,27 +502,9 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
         {keypad && <KeypadPopover mode={mode} anchorRef={headBox} onKey={onKey} onClose={closeKeypad} />}
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <button className="btn primary" onClick={() => evaluate()} title="Work out the answer (Enter does the same)">
+          <button className="btn primary" data-tour="equals" onClick={() => evaluate()} title="Work out the answer, with its working under it (Enter does the same)">
             =
           </button>
-          <div className="relative flex items-center">
-            <button className="btn" data-tour="work-it-out" onClick={() => workOut()} disabled={mode === 'BASE-N'} title="Show the steps, worked out exactly">
-              <Play size={13} /> Work it out
-            </button>
-            <button className="btn ghost px-1" onClick={() => setJobs(!jobs)} disabled={mode === 'BASE-N'} title="Work it out as a particular kind of question">
-              <ChevronDown size={12} />
-            </button>
-            {jobs && (
-              <div className="menu top-full mt-1" onMouseLeave={() => setJobs(false)}>
-                {JOBS.map((j) => (
-                  <button key={j.id} onClick={() => workOut(j.id)} title={j.about}>
-                    <span>{j.label}</span>
-                    <span className="sc">{j.example}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <button className="btn" onClick={visualize} disabled={mode === 'BASE-N'} title="Show this calculation in the viewport (graph, tangent, area, vector…)">
             <Eye size={13} /> Visualize
           </button>
@@ -506,16 +531,33 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
             </div>
           )}
           <div className="flex-1" />
-          <button className={`btn ghost ${showVars ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowVars(!showVars)} title="The letters you can use in a calculation, and their values">
+          <button
+            className={`btn ghost ${showVars ? 'text-[color:var(--text-strong)]' : ''}`}
+            onClick={() => setPanes(showVars ? { ...panes, vars: false } : openPane(panes, 'vars'))}
+            title="The letters you can use in a calculation, and their values"
+          >
             Variables
           </button>
-          <button className={`btn ghost ${showHistory ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setShowHistory(!showHistory)}>
+          <button className={`btn ghost ${showHistory ? 'text-[color:var(--text-strong)]' : ''}`} onClick={() => setPanes(showHistory ? { ...panes, history: false } : openPane(panes, 'history'))}>
             <History size={13} /> History
           </button>
         </div>
 
-        {result && (
-          <Answer result={result} showExact={showExact} onExact={setShowExact} eng={eng} onEng={mode === 'COMP' ? () => setEng(!eng) : undefined} />
+        {shown && <Answer result={shown.result} showExact={showExact} onExact={setShowExact} eng={eng} onEng={mode === 'COMP' ? () => setEng(!eng) : undefined} />}
+
+        {/* The working, folded under its answer: one control, closed until the student asks. */}
+        {foldAvailable && (!working?.error || external) && (
+          <button
+            className="btn ghost self-start"
+            aria-expanded={foldOpen}
+            title={foldOpen ? 'Fold the working away' : 'The steps, worked out exactly and checked'}
+            onClick={() => {
+              if (!foldOpen) setPanes((p) => (p.keypad ? { ...p, keypad: false } : p))
+              setFoldOpen(!foldOpen)
+            }}
+          >
+            {foldOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />} {foldOpen ? 'Hide the working' : 'Show the working'}
+          </button>
         )}
 
         {withValues && (
@@ -536,17 +578,12 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
           </div>
         )}
 
-        {showVars && <VariablesDrawer onInsert={(name) => insertTex(name)} onClose={() => setShowVars(false)} />}
-        {showHistory && <HistoryDrawer onClose={() => setShowHistory(false)} />}
+        {showVars && <VariablesDrawer onInsert={(name) => insertTex(name)} onClose={() => setPanes((p) => ({ ...p, vars: false }))} />}
+        {showHistory && <HistoryDrawer onClose={() => setPanes((p) => ({ ...p, history: false }))} />}
       </div>
 
-      <WorkingArea
-        invited={() => invite.current}
-        settled={() => {
-          invite.current = false
-        }}
-        onTry={() => mathRef.current?.focus()}
-      />
+      {foldAvailable && foldOpen && <WorkingBody onTry={() => mathRef.current?.focus()} />}
+      {!shown && !(foldAvailable && foldOpen) && <Intro />}
 
       <div className="flex items-center gap-1.5 text-fine text-[color:var(--text-faint)]">
         <Sparkles size={12} /> Type straight from your keyboard: <code className="text-[color:var(--code-text)]">/</code> makes a fraction, <code className="text-[color:var(--code-text)]">^</code> a power,{' '}
@@ -672,8 +709,8 @@ const KeypadPopover = memo(function KeypadPopover({ mode, anchorRef, onKey, onCl
           </button>
         ))}
         <div className="flex-1" />
-        <button className="icon-btn h-6 w-6" onMouseDown={(e) => e.preventDefault()} onClick={onClose} title="Close the keypad (Esc)">
-          <X size={12} />
+        <button className="btn ghost" onMouseDown={(e) => e.preventDefault()} onClick={onClose} title="Close the keypad (Esc)">
+          <X size={12} /> Close
         </button>
       </div>
       <div className="keypad-body">
@@ -696,14 +733,18 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
       </div>
     )
   }
-  const exact = result.exact ?? null
+  // A formula (d/dx(x³ sin x), x² − 1 while x has no value) is typeset as it is: it has no decimal to put beside it.
+  const formula = result.tex ?? null
+  const exact = formula ? null : (result.exact ?? null)
   const exactShown = showExact && !!exact
   // Decided here, not when = was pressed, so the eng chip changes the number at once like the
   // exact/decimal chip beside it does.
   const main = mainLine(result, eng)
+  // The eng chip changes how a number is written; a formula has none.
+  const showEng = onEng && !formula
   return (
-    <div className="maths-answer">
-      <div className="maths-result">{exactShown ? <Tex tex={exact} /> : main}</div>
+    <div className={`maths-answer${result.unconfirmed ? ' is-warn' : ''}`}>
+      <div className="maths-result">{formula ? <Tex tex={formula} /> : exactShown ? <Tex tex={exact} /> : main}</div>
       {exactShown && !/^-?\d+$/.test(exact) && <div className="text-lead text-[color:var(--text-dim)]">≈ {main}</div>}
       {result.extra && (
         <div className="text-small leading-5 text-[color:var(--text-dim)]">
@@ -712,7 +753,14 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
           ))}
         </div>
       )}
-      {(exact || onEng) && (
+      {result.complex && (
+        <div className="text-small leading-5 text-[color:var(--text-dim)]">
+          <div>{shownText(`size ${result.complex.size}, angle ${result.complex.angle}`)}</div>
+          <div>{shownText(`conjugate ${result.complex.conjugate}`)}</div>
+          <div>{shownText(`polar form ${result.complex.polar}`)}</div>
+        </div>
+      )}
+      {(exact || showEng) && (
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {exact && (
             <div className="seg" title="The answer as a fraction, surd or multiple of π, or as a decimal">
@@ -724,7 +772,7 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
               </button>
             </div>
           )}
-          {onEng && (
+          {showEng && (
             <button className={`btn ghost ${eng ? 'text-[color:var(--text-strong)]' : ''}`} onClick={onEng} title="Engineering notation: the power of ten a multiple of three">
               eng
             </button>
@@ -782,16 +830,21 @@ function WithValuesForm({ vars, initial, angleUnit, onSubmit }: { vars: string[]
 function VariablesDrawer({ onInsert, onClose }: { onInsert: (name: string) => void; onClose: () => void }) {
   const vars = useCalc((s) => s.vars)
   const ans = useCalc((s) => s.ans)
-  const names = Object.keys(vars)
-  const [storeAs, setStoreAs] = useState(names[0] ?? 'A')
-  const ansText = typeof ans === 'number' ? calcNum(ans) : String(ans)
+  // Every letter is offered; a letter with a value is in `vars`, and one without is not 0 — it reads as itself (x stays x)
+  // or, after a number, as a unit (C is the coulomb).
+  const names = STORED_LETTERS
+  const [storeAs, setStoreAs] = useState<string>(names[0])
+  const ansText = typeof ans === 'number' ? calcNum(ans) : formatValue(ans)
   return (
     <div className="card p-2">
       <div className="mb-1 flex items-center gap-2 text-fine text-[color:var(--text-dim)]">
-        <span className="flex-1">Variables — click a letter to put it in the field</span>
+        <span className="flex-1">Variables — click a letter to put it in the field. An empty box means no value yet.</span>
         <button className="icon-btn h-5 w-5" onClick={onClose} title="Close">
           <X size={12} />
         </button>
+      </div>
+      <div className="mb-1 text-fine text-[color:var(--text-faint)]">
+        A letter with no value stays itself (x stays x), and after a number C, A and F are the coulomb, ampere and farad. Give one a value and it is that value.
       </div>
       <div className="grid grid-cols-3 gap-x-3 gap-y-1">
         {names.map((n) => (
@@ -822,14 +875,23 @@ function VariablesDrawer({ onInsert, onClose }: { onInsert: (name: string) => vo
 }
 
 function VarField({ name, value }: { name: string; value: unknown }) {
-  const shown = typeof value === 'number' ? calcNum(value) : String(value)
+  const shown = value === undefined ? '' : typeof value === 'number' ? calcNum(value) : String(value)
   const [text, setText] = useState(shown)
-  // The store's value changed from elsewhere (an equation solved for x, an answer stored).
+  // The store's value changed from elsewhere (an x = 5 typed in the field, an answer stored).
   useEffect(() => setText(shown), [shown])
   const angleUnit = useScene((s) => s.settings.angleUnit)
   // Read as a "with values" box is, in the screen's angle unit: sin(30) typed here was worked out in whatever mode
   // the maths last held (H17). A box it cannot read goes back to the value it had.
   const commit = (): void => {
+    // An emptied box takes the letter's value away: it is a letter with none again.
+    if (!text.trim()) {
+      if (name in useCalc.getState().vars) {
+        const rest = { ...useCalc.getState().vars }
+        delete rest[name]
+        useCalc.setState({ vars: rest })
+      }
+      return
+    }
     const read = readValueBoxes({ [name]: text }, angleUnit)
     if (read.ok) useCalc.setState({ vars: { ...useCalc.getState().vars, [name]: read.values[name] } })
     else setText(shown)
@@ -838,6 +900,7 @@ function VarField({ name, value }: { name: string; value: unknown }) {
     <input
       className="field num w-24"
       value={text}
+      placeholder="no value"
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -860,7 +923,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
   const clearPure = usePure((s) => s.clearHistory)
   const [shownCalcs, setShownCalcs] = useState(HISTORY_PAGE)
   const [shownPure, setShownPure] = useState(HISTORY_PAGE)
-  const pickCalc = (h: HistoryItem): void => useCalc.setState({ input: h.input, mode: h.mode })
+  const pickCalc = (h: HistoryItem): void => useCalc.setState({ input: h.input, mode: h.mode === 'CMPLX' ? 'COMP' : h.mode })
   return (
     <div className="card max-h-72 overflow-auto">
       <div className="flex items-center gap-2 border-b border-[color:var(--line)] px-2 py-1.5">
@@ -929,84 +992,61 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
 
 // ---------------------------------------------------------------------------
 
-/** The working under the answer: what "Work it out" produced, with its steps hidden until asked. */
-function WorkingArea({ invited, settled, onTry }: { invited: () => boolean; settled: () => void; onTry: () => void }) {
+/** What the screen says before there is an answer: how to ask, and what it can work out. */
+function Intro() {
+  const run = usePure((s) => s.run)
+  const [showExamples, setShowExamples] = useState(false)
+  return (
+    <div className="px-1 py-2 text-[color:var(--text-dim)]">
+      <div>
+        Type a line and press <b className="text-[color:var(--text)]">=</b> for the answer. Where there is working to show, <b className="text-[color:var(--text)]">Show the working</b> opens under it: every answer
+        there is worked out exactly — in fractions, never in rounded decimals — and checked by putting it back together before it is shown. The steps stay hidden until you ask, so you can try first.
+      </div>
+      <button className="btn ghost mt-2" onClick={() => setShowExamples(!showExamples)}>
+        {showExamples ? <ChevronUp size={13} /> : <ChevronDown size={13} />} What can it do?
+      </button>
+      {showExamples && (
+        <ul className="mt-2 space-y-1">
+          {JOBS.map((j) => (
+            <li key={j.id} className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  useCalc.setState({ input: j.exampleLatex })
+                  run(j.id, j.example, j.exampleLatex)
+                }}
+              >
+                {j.label}
+              </button>
+              <Tex tex={j.exampleLatex} className="text-[color:var(--text-faint)]" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** The working itself, as the step engine made it: the fold's body. The step cards, rule badges, the second-way check and "Let me try first" are WorkingView's. */
+function WorkingBody({ onTry }: { onTry: () => void }) {
   const working = usePure((s) => s.working)
   const asking = usePure((s) => s.asking)
-  const job = usePure((s) => s.job)
   const input = usePure((s) => s.input)
-  const inputLatex = usePure((s) => s.inputLatex)
-  // The line in the field: Treat as works on it, and the working says when it is for an earlier line.
-  const field = useCalc((s) => s.input)
-  const calcMode = useCalc((s) => s.mode)
-  const run = usePure((s) => s.run)
   // The first-load stage, as a sentence (empty once the engine is ready): P17.
   const casNote = useEngineStatus((s) => (s.status === 'loading' ? casStartingSentence(s.stage) : ''))
   const [pref, setPref] = useState<StepPref>(readStepPref)
-  const [showExamples, setShowExamples] = useState(false)
   const setPreference = (p: StepPref): void => {
     setPref(p)
     writeStepPref(p)
   }
-  if (!working) {
-    return (
-      <div className="px-1 py-2 text-[color:var(--text-dim)]">
-        <div>
-          Press <b className="text-[color:var(--text)]">Work it out</b> to see the steps: every answer there is worked out exactly — in fractions, never in rounded decimals — and checked by putting it back together
-          before it is shown. The steps stay hidden until you ask, so you can try first.
-        </div>
-        <button className="btn ghost mt-2" onClick={() => setShowExamples(!showExamples)}>
-          {showExamples ? <ChevronUp size={13} /> : <ChevronDown size={13} />} What can it do?
-        </button>
-        {showExamples && (
-          <ul className="mt-2 space-y-1">
-            {JOBS.map((j) => (
-              <li key={j.id}>
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    useCalc.setState({ input: j.exampleLatex })
-                    run(j.id, j.example, j.exampleLatex)
-                  }}
-                >
-                  {j.label}
-                </button>
-                <span className="ml-2 text-[color:var(--text-faint)]">{j.example}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    )
-  }
+  if (!working) return null
   return (
     <div className="maths-working">
-      <div className="flex flex-wrap items-center gap-2 px-3 pt-2 text-[color:var(--text-dim)]">
-        <label className="flex items-center gap-1">
-          Treat as
-          <select
-            className="field w-auto"
-            value={job}
-            title="What to do with what you typed: the same line, worked out as a different kind of question"
-            onChange={(e) => treatAs(e.target.value as JobId)}
-          >
-            {JOBS.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="text-[color:var(--text-faint)]">{jobById(job).about}</span>
-      </div>
-      {!workingIsFor(field, inputLatex, input, calcMode) && (
-        <div className="px-3 pt-1 text-[color:var(--text-faint)]">This working is for an earlier line. Choose under Treat as, or press Work it out, to work the line in the field.</div>
-      )}
       <WorkingView
         doc={working}
         pref={pref}
-        invited={invited}
-        settled={settled}
+        invited={() => false}
+        settled={() => undefined}
         onPref={setPreference}
         onOffer={(j) => treatAs(j)}
         onTry={onTry}

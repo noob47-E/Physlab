@@ -5,6 +5,7 @@
 // working, which is what makes it all testable without a browser.
 
 import { math, preprocess, splitArgs } from '../expr'
+import { calculusCall } from '../calculusCall'
 import { R0, R1, rAbs, rAdd, rEq, rIsNeg, rMul, rSub, rTex, rat, type Rat } from './rat'
 import {
   NotPolynomial,
@@ -480,6 +481,11 @@ export function runPure(job: JobId, input: string): Working {
 export function suggestJob(src: string): JobId {
   const s = src.trim()
   if (!s) return 'factor'
+  // d/dx(f) and ∫ f dx, as the field's converter writes them (diff(f, x), integrate(f, x), integral(f, a, b)), are the
+  // two jobs of their own. They went to Factorise and Divide, which cannot read them: a derivative was "factorised" as
+  // diff(x^(3)sin(x), x) and an integral "divided", and a DEG screen scaled the first by π/180.
+  const call = calculusCall(s)
+  if (call) return call.name === 'diff' ? 'differentiate' : 'integrate'
   if (parseNormalQuery(s)) return 'normal'
   if (WHOLE.test(s)) return 'primes'
   // Through writeTimes, because an i typed in front of its root reaches here glued to the root's

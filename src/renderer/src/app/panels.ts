@@ -20,7 +20,7 @@ export const PANEL_TITLES: Record<string, string> = {
   solver: 'Solver',
   practice: 'Practice',
   labdata: 'Lab Data',
-  maths: 'Maths',
+  maths: 'Calculator',
   console: 'Console',
   timeline: 'Timeline',
   graphs: 'Graphs',

@@ -46,6 +46,56 @@ export function primeFactorise(input: bigint): Factorisation {
   return { n: input, factors }
 }
 
+const RAISED = '⁰¹²³⁴⁵⁶⁷⁸⁹'
+const raised = (k: number): string => String(k).replace(/\d/g, (d) => RAISED[Number(d)])
+
+/** Past this many digits a number is written short: nobody reads a thousand zeros, and the panel does not wrap them. */
+const LONG = 24
+
+interface ShortNumber {
+  /** For a sentence: 10¹⁰⁰⁰, 1.2676506×10³⁰. */
+  plain: string
+  /** For KaTeX: 10^{1000}, 1.2676506\times 10^{30}. */
+  tex: string
+}
+
+/** The mantissa and exponent of a big whole number, to ten figures: [1.2676506, 30]. Rounded on the digits themselves, half up, so no float is in it. */
+function sciOf(digits: string): [string, number] {
+  let e = digits.length - 1
+  // Eleven digits, the eleventh decides the rounding of the tenth.
+  let ten = (BigInt(digits.slice(0, 11).padEnd(11, '0')) + 5n) / 10n
+  // 9.9999999999 rounds up to ten digits of 1 and one power more.
+  if (ten >= 10n ** 10n) {
+    ten = 10n ** 9n
+    e += 1
+  }
+  const text = String(ten)
+  const mantissa = `${text[0]}.${text.slice(1)}`.replace(/\.?0+$/, '')
+  return [mantissa, e]
+}
+
+/** A whole number as it is written when it is long: 10^1000 is 10¹⁰⁰⁰, and a short number is itself. */
+function shortNumber(n: bigint): ShortNumber {
+  const sign = n < 0n ? '-' : ''
+  const digits = (n < 0n ? -n : n).toString()
+  if (digits.length <= LONG) return { plain: String(n), tex: String(n) }
+  if (/^10*$/.test(digits)) return { plain: `${sign}10${raised(digits.length - 1)}`, tex: `${sign}10^{${digits.length - 1}}` }
+  const [m, e] = sciOf(digits)
+  return { plain: `${sign}${m}×10${raised(e)}`, tex: `${sign}${m}\\times 10^{${e}}` }
+}
+
+/**
+ * A whole number too big for a double as the Calculator's card shows it: 10¹⁰⁰⁰ for a power of ten, and the standard form the card
+ * writes every large number in (1.071508607×10^602, its caret drawn raised by the screen) for any other.
+ */
+export function bigNumberText(n: bigint): string {
+  const sign = n < 0n ? '−' : ''
+  const digits = (n < 0n ? -n : n).toString()
+  if (/^10*$/.test(digits)) return `${sign}10${raised(digits.length - 1)}`
+  const [m, e] = sciOf(digits)
+  return `${sign}${m}×10^${e}`
+}
+
 /** 2^{3} \times 3^{2} \times 5 */
 function factorTex(f: Factorisation): string {
   if (f.factors.length === 0) return String(f.n)
@@ -69,36 +119,43 @@ function ladderTex(f: Factorisation): string {
   const rows: string[] = []
   for (const [p, k] of f.factors) {
     for (let i = 0; i < k; i++) {
-      rows.push(`${p} & ${running}`)
+      rows.push(`${p} & ${shortNumber(running).tex}`)
       running /= p
     }
   }
   rows.push(`& ${running}`)
-  return `\\begin{array}{r|r}\n${rows.join(' \\\\\n')}\n\\end{array}`
+  // 10^1000 divides by 2 a thousand times and by 5 a thousand times: the first rows and the last say how it goes.
+  const shown = rows.length > LADDER_ROWS ? [...rows.slice(0, 4), '\\vdots & \\vdots', ...rows.slice(-3)] : rows
+  return `\\begin{array}{r|r}\n${shown.join(' \\\\\n')}\n\\end{array}`
 }
+
+/** A division ladder longer than this shows its first rows and its last. */
+const LADDER_ROWS = 14
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many)
 
 export function factoriseNumberWorking(input: bigint): Working {
-  const title = `Factorise ${input} into primes`
-  const tex = String(input)
+  const short = shortNumber(input)
+  const title = `Factorise ${short.plain} into primes`
+  const tex = short.tex
   if (input === 0n) return failed(title, tex, 'Zero has no prime factorisation — every prime divides it.')
   const abs = input < 0n ? -input : input
   if (abs === 1n) return failed(title, tex, '1 has no prime factors. It is neither prime nor composite.')
 
   const f = primeFactorise(input)
   if (f.tooBig) {
-    return failed(title, tex, `${input} is too large for me to split all the way down. Try a number below about 10¹⁴.`)
+    return failed(title, tex, `${short.plain} is too large for me to split all the way down. Try a number below about 10¹⁴.`)
   }
 
   const s = new Steps()
+  const size = shortNumber(abs)
   if (input < 0n) {
-    s.goal('Deal with the minus sign').add('The number is negative, so factorise its size and keep the minus sign outside.', `${input} = -\\left(${abs}\\right)`)
+    s.goal('Deal with the minus sign').add('The number is negative, so factorise its size and keep the minus sign outside.', `${short.tex} = -\\left(${size.tex}\\right)`)
   }
 
   if (f.factors.length === 1 && f.factors[0][1] === 1) {
-    s.goal('Check whether it is prime').add(`${abs} has no factors except 1 and itself, so it is already prime.`, `${abs}\\text{ is prime}`, '\\text{a prime has exactly two factors}')
-    return { title, input: tex, moves: s.moves, answers: [{ label: `${input}`, tex: factorTex(f) }], check: `${abs} is prime.`, checked: f.factors[0][0] === abs ? 'ok' : 'failed' }
+    s.goal('Check whether it is prime').add(`${size.plain} has no factors except 1 and itself, so it is already prime.`, `${size.tex}\\text{ is prime}`, '\\text{a prime has exactly two factors}')
+    return { title, input: tex, moves: s.moves, answers: [{ label: short.plain, tex: factorTex(f) }], check: `${size.plain} is prime.`, checked: f.factors[0][0] === abs ? 'ok' : 'failed' }
   }
 
   s.goal('Split into primes').add(
@@ -108,13 +165,13 @@ export function factoriseNumberWorking(input: bigint): Working {
   )
   s.goal('Count each prime').add(
     `Collect the ${plural(f.factors.length, 'prime down the left', 'primes down the left')}, counting how many times each one appeared.`,
-    `${abs} = ${factorTex({ ...f, n: abs })}`,
+    `${size.tex} = ${factorTex({ ...f, n: abs })}`,
     '\\text{index} = \\text{how many times it divided in}'
   )
   const total = f.factors.reduce((a, [, k]) => a + k, 0)
   const divisors = f.factors.reduce((a, [, k]) => a * (k + 1), 1)
   s.goal('Count the divisors').add(
-    `That is ${total} prime ${plural(total, 'factor', 'factors')} altogether. Add 1 to each index and multiply: ${abs} has ${divisors} ${plural(divisors, 'divisor', 'divisors')} in all.`,
+    `That is ${total} prime ${plural(total, 'factor', 'factors')} altogether. Add 1 to each index and multiply: ${size.plain} has ${divisors} ${plural(divisors, 'divisor', 'divisors')} in all.`,
     f.factors.map(([, k]) => `(${k}+1)`).join(' \\times ') + ` = ${divisors}`,
     '\\text{divisors} = \\prod (\\text{index} + 1)'
   )
@@ -124,8 +181,9 @@ export function factoriseNumberWorking(input: bigint): Working {
     title,
     input: tex,
     moves: s.moves,
-    answers: [{ label: `${input} =`, tex: factorTex(f) }],
-    check: ok ? `${f.factors.map(([p, k]) => (k === 1 ? `${p}` : `${p}^${k}`)).join(' × ')} = ${abs}` : `Careful: those primes do not multiply back to ${abs}. Treat this answer with suspicion.`,
+    answers: [{ label: `${short.plain} =`, tex: factorTex(f) }],
+    // The powers are written raised here, not as p^k for the panel to raise: it raised only the first digit, so 2^1000 read 2¹000.
+    check: ok ? `${f.factors.map(([p, k]) => (k === 1 ? `${p}` : `${p}${raised(k)}`)).join(' × ')} = ${size.plain}` : `Careful: those primes do not multiply back to ${size.plain}. Treat this answer with suspicion.`,
     checked: ok ? 'ok' : 'failed'
   }
 }

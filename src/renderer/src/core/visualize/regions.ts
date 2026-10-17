@@ -55,10 +55,11 @@ export function visualizeBetween(upper: string, lower: string, a: number, bnd: n
 }
 
 /** f(x) with the area between the curve and the x-axis from a to b shaded (integral visualisation). */
-export function visualizeArea(expr: string, a: number, bnd: number, label: string): void {
+export function visualizeArea(expr: string, a: number, bnd: number, label: string, curveLabel = expr): void {
   clearTagged('calculus')
   const b = new Builder()
-  b.graph({ kind: 'explicit', source: `y = ${expr}`, exprs: [expr], showRoots: false, showExtrema: false })
+  // `curveLabel` names the curve in the Expressions list when `expr`, what is drawn, is written differently from what was typed.
+  b.graph({ kind: 'explicit', source: `y = ${curveLabel}`, exprs: [expr], showRoots: false, showExtrema: false })
   b.graph({ kind: 'area', source: label, exprs: [expr], tMin: Math.min(a, bnd), tMax: Math.max(a, bnd) }, { color: themeColor('--accent', '#4f8cff'), name: 'area' })
   b.commit()
   remember('calculus', b)

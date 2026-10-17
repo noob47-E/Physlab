@@ -151,10 +151,10 @@ export const MISSIONS: Mission[] = [
   {
     id: 'calc',
     label: 'Show your working',
-    // Work it out picks the kind of question itself (Factorise for this one); the ▾ beside it is for choosing by hand.
-    hint: 'Type 6x^2 + 7x - 3 (the ^ key makes the power), then press Work it out. Read each step.',
+    // = works the line out and picks the kind of question itself (Factorise for this one); Show the working opens the steps.
+    hint: 'Type 6x^2 + 7x - 3 (the ^ key makes the power), press =, then Show the working. Read each step.',
     mode: 'calculator',
-    anchor: 'work-it-out',
+    anchor: 'equals',
     done: () => {
       const p = usePure.getState()
       const w = p.working

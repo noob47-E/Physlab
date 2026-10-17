@@ -15,7 +15,7 @@ import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import { keypadToMath, evaluateBaseN, evaluateComp } from '../src/renderer/src/calc/engine'
 import { constantScope } from '../src/renderer/src/calc/constants'
 import { math } from '../src/renderer/src/math/expr'
-import { MODE_HINTS, MODE_LABELS } from '../src/renderer/src/calc/calcStore'
+import { LISTED_MODES, MODE_HINTS, MODE_LABELS } from '../src/renderer/src/calc/calcStore'
 
 beforeEach(resetGlobals)
 
@@ -377,10 +377,12 @@ describe('nothing that looks like a handheld calculator survives', () => {
     // gone through MODE_LABELS.
   })
 
-  it('offers one Ctrl+K row per calculator mode, titled with its label and hinted with its line', async () => {
+  it('offers one Ctrl+K row per calculator mode the Calculator offers, titled with its label and hinted with its line', async () => {
     const { buildItems } = await import('../src/renderer/src/app/SearchPalette')
     const rows = buildItems().filter((r) => r.group === 'Calculator')
-    const modes = Object.keys(MODE_LABELS) as Array<keyof typeof MODE_LABELS>
+    // The modes the screen has put away (Complex is Numbers' now; Matrices, Vectors, Statistics, Table, Sheet, Units and Measure are being
+    // redesigned) are not offered by search either: the rows follow the one list the chips and the More menu read.
+    const modes = [...LISTED_MODES] as Array<keyof typeof MODE_LABELS>
     expect(rows.length).toBe(modes.length)
     for (const cm of modes) {
       const row = rows.find((r) => r.title === `Calculator: ${MODE_LABELS[cm]}`)

@@ -23,7 +23,7 @@ COMP deg \sum_{n=1}^{5}n^{2}=56  =>  false | L − R = −1
 COMP deg sigma(x,1,100000)=5  =>  false | L − R = 5.000049995×10^9
 COMP deg x+sigma(x,1,100)=5100  =>  x = 50 | L − R = 0
 COMP deg 2x=4  =>  x = 2 | L − R = 0
-COMP deg x^2=4  =>  x = 2 | L − R = 0
+COMP deg x^2=4  =>  x₁ = 2, x₂ = −2
 COMP deg x^2+x+1=0  =>  No real solution. In complex numbers: x = −0.5 ± 0.8660254038i
 COMP deg \sin\;30  =>  0.5 | exact \frac{1}{2}
 COMP deg \log_{2}\;8  =>  3
@@ -35,8 +35,8 @@ COMP deg 10^{100}  =>  1×10^100 | exact 1\times 10^{100}
 COMP deg \frac{1}{0}  =>  REFUSED That divides by zero.
 COMP deg 0\div0  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
 COMP deg x^100000  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
-COMP deg \int_{0}^{\pi}\sin x\,dx  =>  0.08610697004
-COMP deg \frac{d}{dx}x^{2}  =>  REFUSED Those numbers do not fit this function.
+COMP deg \int_{0}^{\pi}\sin x\,dx  =>  2 | Calculus uses radians. | exact 2
+COMP deg \frac{d}{dx}x^{2}  =>  2x
 COMP deg integral(1.6e-19*x,0,1)=1e-19  =>  false | L − R = −2×10^-20
 COMP deg 5=5  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
 COMP deg A+B=7  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
@@ -70,7 +70,7 @@ COMP rad \sum_{n=1}^{5}n^{2}=56  =>  false | L − R = −1
 COMP rad sigma(x,1,100000)=5  =>  false | L − R = 5.000049995×10^9
 COMP rad x+sigma(x,1,100)=5100  =>  x = 50 | L − R = 0
 COMP rad 2x=4  =>  x = 2 | L − R = 0
-COMP rad x^2=4  =>  x = 2 | L − R = 0
+COMP rad x^2=4  =>  x₁ = 2, x₂ = −2
 COMP rad x^2+x+1=0  =>  No real solution. In complex numbers: x = −0.5 ± 0.8660254038i
 COMP rad \sin\;30  =>  −0.9880316241
 COMP rad \log_{2}\;8  =>  3
@@ -83,7 +83,7 @@ COMP rad \frac{1}{0}  =>  REFUSED That divides by zero.
 COMP rad 0\div0  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
 COMP rad x^100000  =>  REFUSED I can't read that — check the brackets, and that every operator has a number on each side.
 COMP rad \int_{0}^{\pi}\sin x\,dx  =>  2 | exact 2
-COMP rad \frac{d}{dx}x^{2}  =>  REFUSED Those numbers do not fit this function.
+COMP rad \frac{d}{dx}x^{2}  =>  2x
 COMP rad integral(1.6e-19*x,0,1)=1e-19  =>  false | L − R = −2×10^-20
 COMP rad 5=5  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
 COMP rad A+B=7  =>  REFUSED Equations are solved in Numbers mode: type both sides with = and press x = ?
@@ -156,8 +156,8 @@ COMP deg sigma(x, 1, 100)  =>  5050
 COMP rad sigma(x, 1, 100)  =>  5050
 COMP deg Ans + 1  =>  1
 COMP rad Ans + 1  =>  1
-COMP deg x^2 = 2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
-COMP rad x^2 = 2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
+COMP deg x^2 = 2  =>  x₁ = 1.414213562, x₂ = −1.414213562
+COMP rad x^2 = 2  =>  x₁ = 1.414213562, x₂ = −1.414213562
 COMP deg Pol(3, 4)  =>  r = 5 | θ = 53.13010235°
 COMP rad Pol(3, 4)  =>  r = 5 | θ = 0.927295218 rad
 COMP deg Pol(max(1,3), 4)  =>  r = 5 | θ = 53.13010235°
@@ -168,11 +168,11 @@ COMP deg Rec(√(4), 60)  =>  x = 1 | y = 1.732050808
 COMP rad Rec(√(4), 60)  =>  x = −1.904825961 | y = −0.6096212422
 COMP deg Rec(max(1,2), 60)  =>  x = 1 | y = 1.732050808
 COMP rad Rec(max(1,2), 60)  =>  x = −1.904825961 | y = −0.6096212422
-COMP deg ddx(sin(x), 30)  =>  0.0151149947
+COMP deg ddx(sin(x), 30)  =>  0.1542514457 | Calculus uses radians.
 COMP rad ddx(sin(x), 30)  =>  0.1542514457
-COMP deg integral(sin(x), 0, 90)  =>  57.29577951
+COMP deg integral(sin(x), 0, 90)  =>  1.448073616 | Calculus uses radians.
 COMP rad integral(sin(x), 0, 90)  =>  1.448073616
-COMP deg integral(sin(x), 0, pi)  =>  0.08610697004
+COMP deg integral(sin(x), 0, pi)  =>  2 | Calculus uses radians. | exact 2
 COMP rad integral(sin(x), 0, pi)  =>  2 | exact 2
 COMP deg h_P  =>  6.62607015×10^-34
 COMP rad h_P  =>  6.62607015×10^-34
@@ -202,8 +202,8 @@ COMP deg speed = 5  =>  REFUSED Typing speed = … does not store a value. Under
 COMP rad speed = 5  =>  REFUSED Typing speed = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
 COMP deg f(t) = t^2  =>  REFUSED Typing f(t) = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
 COMP rad f(t) = t^2  =>  REFUSED Typing f(t) = … does not store a value. Under Variables, type the value beside one of the letters A to F, M, x or y, or work the number out and press Store.
-COMP deg 2A + 1  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
-COMP rad 2A + 1  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
+COMP deg 2A + 1  =>  REFUSED A letter here was read as a unit (2t is two tonnes, 3m three metres, 2A two amperes), and a unit cannot be added to a plain number. To use a value of your own, give a letter a value under Variables.
+COMP rad 2A + 1  =>  REFUSED A letter here was read as a unit (2t is two tonnes, 3m three metres, 2A two amperes), and a unit cannot be added to a plain number. To use a value of your own, give a letter a value under Variables.
 COMP deg sin(1)  =>  0.01745240644
 COMP rad sin(1)  =>  0.8414709848
 COMP deg 1  =>  1
@@ -246,38 +246,38 @@ COMP deg \frac{0}{0}  =>  REFUSED That has no value here — perhaps a root of a
 COMP rad \frac{0}{0}  =>  REFUSED That has no value here — perhaps a root of a negative number, or 0 ÷ 0.
 COMP deg \ln\left(0\right)  =>  REFUSED That runs off to infinity — like 1 ÷ 0 or ln 0 does — so there is no number to show.
 COMP rad \ln\left(0\right)  =>  REFUSED That runs off to infinity — like 1 ÷ 0 or ln 0 does — so there is no number to show.
-COMP deg x^{2}=2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
-COMP rad x^{2}=2  =>  x = 1.414213562 | L − R = −4.440892099×10^-16
+COMP deg x^{2}=2  =>  x₁ = 1.414213562, x₂ = −1.414213562
+COMP rad x^{2}=2  =>  x₁ = 1.414213562, x₂ = −1.414213562
 COMP deg \sin\left(x\right)=2  =>  REFUSED No solution I can find near 0. Try giving x a value close to the answer first. [No solution found]
 COMP rad \sin\left(x\right)=2  =>  REFUSED No solution I can find near 0. Try giving x a value close to the answer first. [No solution found]
 COMP deg 12345  =>  12345
 COMP rad 12345  =>  12345
 COMP deg 12345\times678  =>  8369910
 COMP rad 12345\times678  =>  8369910
-COMP deg x^{3}-1=0  =>  x = 1 | L − R = 0
-COMP rad x^{3}-1=0  =>  x = 1 | L − R = 0
+COMP deg x^{3}-1=0  =>  x = 1 | L − R = 0 | Also, in complex numbers: x = −0.5 ± 0.8660254038i
+COMP rad x^{3}-1=0  =>  x = 1 | L − R = 0 | Also, in complex numbers: x = −0.5 ± 0.8660254038i
 COMP deg \sqrt{9}  =>  3
 COMP rad \sqrt{9}  =>  3
 COMP deg \left(-8\right)^{\frac{1}{2}}  =>  2.828427125i | imaginary — the answer has an i part, so it is a complex number
 COMP rad \left(-8\right)^{\frac{1}{2}}  =>  2.828427125i | imaginary — the answer has an i part, so it is a complex number
 COMP deg x^{2}+6x+9=0  =>  x = −3 | L − R = 0
 COMP rad x^{2}+6x+9=0  =>  x = −3 | L − R = 0
-COMP deg x^{3}-3x+2=0  =>  x = 1 | L − R = 0
-COMP rad x^{3}-3x+2=0  =>  x = 1 | L − R = 0
+COMP deg x^{3}-3x+2=0  =>  x₁ = −2, x₂ = 1
+COMP rad x^{3}-3x+2=0  =>  x₁ = −2, x₂ = 1
 COMP deg \sqrt{-4}+1  =>  1 + 2i | imaginary — √(−4) = 2i
 COMP rad \sqrt{-4}+1  =>  1 + 2i | imaginary — √(−4) = 2i
 COMP deg \sqrt{-4}\times\sqrt{-4}  =>  −4
 COMP rad \sqrt{-4}\times\sqrt{-4}  =>  −4
 COMP deg x^{\frac{1}{3}}  =>  1.25992105
 COMP rad x^{\frac{1}{3}}  =>  1.25992105
-COMP deg x^{2}-\sin\left(30\right)=0  =>  x = 0.7071067812 | L − R = −5.551115123×10^-17
+COMP deg x^{2}-\sin\left(30\right)=0  =>  x₁ = 0.7071067812, x₂ = −0.7071067812
 COMP rad x^{2}-\sin\left(30\right)=0  =>  No real solution. In complex numbers: x = ±0.9939977988i
 COMP deg \left(x+\sin\left(30\right)\right)^{2}=0  =>  x = −0.5 | L − R = 0
 COMP rad \left(x+\sin\left(30\right)\right)^{2}=0  =>  x = 0.9880316241 | L − R = 0
 COMP deg arg(-1)  =>  180
 COMP rad arg(-1)  =>  3.141592654 | exact \pi
-COMP deg A(B+1)  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
-COMP rad A(B+1)  =>  REFUSED A letter here was read as a unit (t, m, s…). Use one of the letters A to F, M, x or y for a value, or pick the constant from the keypad.
+COMP deg A(B+1)  =>  A(B + 1) | A and B have no value yet, so this stays a formula. Give them a value under Variables to get a number.
+COMP rad A(B+1)  =>  A(B + 1) | A and B have no value yet, so this stays a formula. Give them a value under Variables to get a number.
 COMP deg Abs(-3)  =>  3
 COMP rad Abs(-3)  =>  3
 CMPLX rad \operatorname{re}\left(3+4i\right)  =>  REFUSED There is no function called re. Check the spelling, or pick one from the keypad.
