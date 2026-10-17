@@ -103,6 +103,7 @@ export function naturalUnit(src: Source): string | null {
     case 'vy':
       return 'm/s'
     case 'x':
+    case 'arm':
     case 'height':
     case 'bottom':
     case 'radius':

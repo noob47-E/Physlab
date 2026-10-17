@@ -112,6 +112,7 @@ export type BodyGet =
   | 'vx'
   | 'vy'
   | 'x'
+  | 'arm' /* distance from lever pivot or origin */
   | 'height'
   | 'bottom' /* the underside above the floor */
   | 'KE'

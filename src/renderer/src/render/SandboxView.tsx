@@ -261,14 +261,27 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
         // start stays where the run began (H18).
         const st = w.state(d.id)
         const def = defOf(d.id)
-        if (act && st && def && dragSetsStart(w.time, def)) useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
-        for (const link of useSandbox.getState().links) {
-          if (link.kind === 'pulley' && (link.a === d.id || link.b === d.id)) {
-            const partnerId = link.a === d.id ? link.b : link.a
-            const pst = w.state(partnerId)
-            const pdef = defOf(partnerId)
-            if (act && pst && pdef && dragSetsStart(w.time, pdef)) {
-              useSandbox.getState().updateBody(partnerId, { position: [pst.position[0], pst.position[1], pst.position[2]] })
+        if (act && st && def) {
+          if (dragSetsStart(w.time, def)) {
+            useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
+          }
+          for (const link of useSandbox.getState().links) {
+            if (link.kind === 'pulley' && (link.a === d.id || link.b === d.id)) {
+              const partnerId = link.a === d.id ? link.b : link.a
+              const pst = w.state(partnerId)
+              const pdef = defOf(partnerId)
+              if (pst && pdef && dragSetsStart(w.time, pdef)) {
+                useSandbox.getState().updateBody(partnerId, { position: [pst.position[0], pst.position[1], pst.position[2]] })
+              }
+            }
+          }
+          // If a mass on a lever beam was slid along the beam, persist the updated link anchor:
+          for (const link of w.getLinkDefs()) {
+            if (link.kind === 'string' && (link.a === d.id || link.b === d.id)) {
+              useSandbox.getState().updateLink(link.id, {
+                pivotA: link.pivotA ? [...link.pivotA] : undefined,
+                pivotB: link.pivotB ? [...link.pivotB] : undefined
+              })
             }
           }
         }

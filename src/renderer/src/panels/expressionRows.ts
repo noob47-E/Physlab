@@ -4,12 +4,15 @@
 // and a row deleted here is gone from the Outliner too.
 
 import { fmt } from '../math/format'
-import type { Computed, GraphObj, NumberObj, ObjId, SceneObject } from '../core/types'
+import type { Computed, GraphKind, GraphObj, NumberObj, ObjId, SceneObject } from '../core/types'
 import { math, namedConstant, preprocess, sceneNames, symbolsOf } from '../math/expr'
 import type { MathNode } from 'mathjs'
 import { visibleIn } from '../core/visibility'
 import { Builder } from '../core/factory'
-import { scene } from '../core/store'
+import { scene, useScene } from '../core/store'
+import { runCommand } from '../lang/commands'
+import { putBack, replaceGraphEquation, stockOf } from '../lang/graphEdit'
+import { bumpAction } from '../core/actionSignals'
 
 export interface GraphRow {
   kind: 'graph'
@@ -20,6 +23,12 @@ export interface GraphRow {
   width: number
   /** A y = f(x) line, the only kind "Draw only from … to …" applies to. */
   explicit: boolean
+  graphKind?: GraphKind
+  exprs?: string[]
+  tMin?: number
+  tMax?: number
+  vMin?: number
+  vMax?: number
 }
 
 export interface SliderRow {
@@ -60,7 +69,13 @@ export function expressionRows(
         color: g.color,
         visible: g.visible,
         width: g.width ?? DEFAULT_WIDTH,
-        explicit: g.kind === 'explicit'
+        explicit: g.kind === 'explicit',
+        graphKind: g.kind,
+        exprs: g.exprs ?? [],
+        tMin: g.tMin,
+        tMax: g.tMax,
+        vMin: g.vMin,
+        vMax: g.vMax
       })
     } else if (o.type === 'number' && o.slider && visibleIn(o, 'graphing')) {
       const s = o.slider
@@ -158,7 +173,13 @@ export function freeParametersFor(text: string, scope: Record<string, unknown> =
 
   // Direct assignments like "a = 1" or "k = 2.5" define a value, not a curve with free parameters
   const assign = expr.match(/^\s*([A-Za-z]\w*)\s*=\s*(.+)$/)
-  if (assign && !/[xyzt]/.test(assign[0])) return []
+  if (assign) {
+    const lhs = assign[1]
+    const rhs = assign[2]
+    const isCurveLhs = /^(?:y|z|r)$/.test(lhs)
+    const hasCurveVar = /\b[xyzt]\b/.test(rhs)
+    if (!isCurveLhs && !hasCurveVar) return []
+  }
 
   const rel = expr.match(/^\s*(?:y|[A-Za-z]\w*\s*\(\s*x\s*\)|z|r)\s*=\s*(.+)$/)
   if (rel) expr = rel[1]
@@ -178,7 +199,7 @@ export function freeParametersFor(text: string, scope: Record<string, unknown> =
   const found: string[] = []
   for (const name of symbolsOf(node)) {
     if (vars.has(name)) continue
-    if (name in scope) continue
+    if (scene().ev.names.has(name) || typeof scope[name] === 'number') continue
     if (namedConstant(name) !== undefined) continue
     if (typeof (math as unknown as Record<string, unknown>)[name] === 'function') continue
     if (!found.includes(name)) found.push(name)
@@ -200,6 +221,79 @@ export function createSlider(name: string, value = 1, min = -10, max = 10, step 
   return obj
 }
 
+/**
+ * Adds an expression line to the scene, auto-creating sliders for offered parameters if accepted.
+ * If the line is rejected or fails to create a graph, any newly created sliders are cleaned up.
+ * The graph and its auto-created sliders undo together in a single step.
+ */
+export async function addExpressionLine(
+  text: string,
+  offers: string[] = []
+): Promise<{ ok: boolean; reason?: string }> {
+  const trimmed = text.trim()
+  if (!trimmed) return { ok: false, reason: 'empty' }
+
+  const stock = stockOf()
+  const beforeCount = Object.values(scene().objects).filter((o) => o.type === 'graph').length
+
+  for (const p of offers) {
+    createSlider(p)
+  }
+
+  let errorLogged: string | undefined
+  try {
+    await runCommand(trimmed)
+  } catch (e) {
+    errorLogged = e instanceof Error ? e.message : String(e)
+  }
+
+  const afterCount = Object.values(scene().objects).filter((o) => o.type === 'graph').length
+  const createdGraph = afterCount > beforeCount
+  const lastLog = scene().log.at(-1)
+  const hadError = errorLogged !== undefined || (lastLog && lastLog.kind === 'error')
+
+  if (createdGraph && !hadError) {
+    bumpAction('typedGraphs')
+    if (offers.length > 0) {
+      useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
+    }
+    return { ok: true }
+  } else if (!offers.length && !hadError) {
+    return { ok: true }
+  } else {
+    putBack(stock)
+    return { ok: false, reason: errorLogged ?? lastLog?.text ?? 'Line was not accepted as a graph.' }
+  }
+}
+
+/**
+ * Commits a replacement equation for an existing graph, creating any free parameters as sliders.
+ * If rejected, leaves no sliders behind and restores the old equation.
+ * The edited equation and its new sliders undo together in a single step.
+ */
+export async function commitGraphEquation(
+  id: ObjId,
+  text: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const stock = stockOf()
+  const free = freeParametersFor(text, scene().ev.scope)
+
+  for (const p of free) {
+    createSlider(p)
+  }
+
+  const r = await replaceGraphEquation(id, text)
+  if (!r.ok) {
+    putBack(stock)
+    return { ok: false, reason: r.reason }
+  }
+
+  if (free.length > 0) {
+    useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
+  }
+  return { ok: true }
+}
+
 export const EXPRESSION_WORDS = {
   heading: 'Expressions',
   add: 'Add an expression',
@@ -213,6 +307,10 @@ export const EXPRESSION_WORDS = {
   move: 'Move',
   moveUp: 'Move up',
   moveDown: 'Move down',
+  settings: 'Style and range',
+  curve2d: '2D Curve',
+  curve3d: '3D Curve',
+  surface3d: '3D Surface',
   oneEnd: 'Type both ends to draw only part of the line.',
   notANumber: 'Each end must be a number, like -2 or 3.5.',
   cannotRange: 'Only a line written as y = … can be drawn on part of its range.',

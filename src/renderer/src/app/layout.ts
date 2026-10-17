@@ -105,7 +105,18 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
     }
     vectorcalcLentBySandbox = false
   }
-  if (m.panel && !opts.skipFocus) s.requestFocus(m.panel)
+  if (m.panel && !opts.skipFocus) {
+    const api = getDockApi()
+    const isMobile = api && api.width < 768
+    if (!isMobile) {
+      s.requestFocus(m.panel)
+    } else {
+      showPanel(m.panel)
+      if (!m.centre) {
+        api?.getPanel('viewport')?.api.setActive()
+      }
+    }
+  }
   // After requestFocus opens the panel, constrain the side panel group back to its normal width
   // (SB63, T310: the sandbox panel doesn't exist until requestFocus is called).
   if (id === 'sandbox' && from !== id && !opts.restored && useSandboxView.getState().view === 'simple') {
@@ -153,24 +164,41 @@ const readSaved = (): SavedLayout | null => {
  */
 export function buildLayout(api: DockviewApi, modeId: ModeId): void {
   const m = modeById(modeId)
+  const isMobile = api.width < 768
+  const isTablet = api.width >= 768 && api.width < 1024
   const c = columns(api.width, api.height)
   api.clear()
-  api.addPanel({ id: 'viewport', component: 'viewport', title: PANEL_TITLES.viewport, minimumWidth: c.viewportMin })
+  api.addPanel({ id: 'viewport', component: 'viewport', title: PANEL_TITLES.viewport, minimumWidth: isMobile ? 100 : c.viewportMin })
   let leftDone: string | null = null
+  let sideDone: string | null = null
   for (const id of panelsForMode(m)) {
     if (id === 'viewport' || !PANEL_TITLES[id]) continue
     const home = panelHome(id)
     const base = { id, component: id, title: PANEL_TITLES[id] }
-    if (home === 'centre') api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'within' } })
-    // A second left panel (Graphing's Examples and Expressions) is a tab beside the first, not a
-    // second column: two columns took about 460 px of a 1366 px laptop.
-    else if (home === 'left' && leftDone) api.addPanel({ ...base, position: { referencePanel: leftDone, direction: 'within' } })
-    else if (home === 'left') {
+    if (isMobile) {
+      // Under 768px: strictly one pane, all panels are 'within' the single group.
+      api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'within' } })
+    } else if (isTablet && (home === 'left' || home === 'right')) {
+      // Tablet (800x1100): avoid 3 columns. Examples sits as a tab with the side panel.
+      if (sideDone) {
+        api.addPanel({ ...base, position: { referencePanel: sideDone, direction: 'within' } })
+      } else {
+        api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'right' }, initialWidth: c.side, minimumWidth: c.sideMin })
+        sideDone = id
+      }
+    } else if (home === 'centre') {
+      api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'within' } })
+    } else if (home === 'left' && leftDone) {
+      api.addPanel({ ...base, position: { referencePanel: leftDone, direction: 'within' } })
+    } else if (home === 'left') {
       api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'left' }, initialWidth: c.examples, minimumWidth: c.examplesMin })
       leftDone = id
+    } else if (home === 'below') {
+      api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'below' }, initialHeight: c.bottom, minimumHeight: c.bottomMin })
+    } else {
+      api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'right' }, initialWidth: c.side, minimumWidth: c.sideMin })
+      sideDone = id
     }
-    else if (home === 'below') api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'below' }, initialHeight: c.bottom, minimumHeight: c.bottomMin })
-    else api.addPanel({ ...base, position: { referencePanel: 'viewport', direction: 'right' }, initialWidth: c.side, minimumWidth: c.sideMin })
   }
   // A centre panel was added inside the drawing's group, so it is what shows; the drawing comes
   // back the moment another mode opens.

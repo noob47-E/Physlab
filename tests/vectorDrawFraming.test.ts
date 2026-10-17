@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readSource } from './helpers/repo'
 import { scene } from '../src/renderer/src/core/store'
 import { useCameraCommand } from '../src/renderer/src/render/viewState'
 import { drawAnswer, useVC } from '../src/renderer/src/panels/vectorCalcStore'
@@ -82,4 +83,13 @@ describe('vector "Draw on graph" camera framing (X8)', () => {
       vi.useRealTimers()
     }
   })
+
+  it('does not duplicate unshifted raw vectors from vis.vectors when framing laid-out arrows (X8b)', () => {
+    // In vectorCalcStore.ts, vectorsFrameBox should only collect points from lay.arrows and scene objects,
+    // not redundant un-shifted raw vectors from vis.vectors that introduce phantom copies at the origin.
+    const src = readSource('src/renderer/src/panels/vectorCalcStore.ts')
+    const frameBoxFn = src.slice(src.indexOf('function vectorsFrameBox'), src.indexOf('function drawAnswer'))
+    expect(frameBoxFn).not.toContain('for (const v of vis.vectors)')
+  })
 })
+

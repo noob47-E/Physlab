@@ -545,7 +545,55 @@ const THEORIES: Record<string, Entry> = {
   },
 
   spring: springTheory('spring', 'M', 'y'),
-  springice: springTheory('springice', 'M', 'x')
+  springice: springTheory('springice', 'M', 'x'),
+
+  seesaw: {
+    cards: ['lever-balance', 'lever-left-moment', 'lever-right-moment'],
+    roles: { 'Left hanger': 'Left hanger', 'Right hanger': 'Right hanger', Beam: 'Beam' },
+    predict: (b) => {
+      const g = worldOf(b).gravity
+      const left = named(b, 'Left hanger')
+      const right = named(b, 'Right hanger')
+      const beam = named(b, 'Beam')
+      const m1 = massOf(left)
+      const m2 = massOf(right)
+      const d1 = Math.abs(left.position[0] - beam.position[0])
+      const d2 = Math.abs(right.position[0] - beam.position[0])
+      const tau1 = m1 * g * d1
+      const tau2 = m2 * g * d2
+      const net = tau1 - tau2
+      const status = Math.abs(net) < 0.02 ? 'balanced' : net > 0 ? 'turns left' : 'turns right'
+      return [
+        { scene: 'seesaw', key: 'tau1', label: 'anticlockwise moment (left)', value: tau1, unit: 'N m', formula: `m₁ g d₁ = ${num(m1)} × ${num(g)} × ${num(d1)}`, facts: facts(), step: null },
+        { scene: 'seesaw', key: 'tau2', label: 'clockwise moment (right)', value: tau2, unit: 'N m', formula: `m₂ g d₂ = ${num(m2)} × ${num(g)} × ${num(d2)}`, facts: facts(), step: null },
+        { scene: 'seesaw', key: 'net', label: `net moment (${status})`, value: net, unit: 'N m', formula: `τ₁ − τ₂ = ${num(tau1)} − ${num(tau2)}`, facts: facts(), step: null }
+      ]
+    },
+    measure: (tape, b, step) => {
+      const g = worldOf(b).gravity
+      const left = named(b, 'Left hanger')
+      const right = named(b, 'Right hanger')
+      const beam = named(b, 'Beam')
+      const trLeft = track(tape, idOf(b, 'Left hanger'), endOf(tape, step))
+      const trRight = track(tape, idOf(b, 'Right hanger'), endOf(tape, step))
+      const trBeam = track(tape, idOf(b, 'Beam'), endOf(tape, step))
+      const m1 = massOf(left)
+      const m2 = massOf(right)
+      const xLeft = trLeft.x.length ? trLeft.x[trLeft.x.length - 1] : left.position[0]
+      const xRight = trRight.x.length ? trRight.x[trRight.x.length - 1] : right.position[0]
+      const xBeam = trBeam.x.length ? trBeam.x[trBeam.x.length - 1] : beam.position[0]
+      const d1 = Math.abs(xLeft - xBeam)
+      const d2 = Math.abs(xRight - xBeam)
+      const tau1 = m1 * g * d1
+      const tau2 = m2 * g * d2
+      return [
+        { key: 'tau1', value: tau1 },
+        { key: 'tau2', value: tau2 },
+        { key: 'net', value: tau1 - tau2 }
+      ]
+    },
+    tolerance: () => 0.5
+  }
 }
 
 function pulleyTheory(scene: string, light: string, heavy: string): Entry {

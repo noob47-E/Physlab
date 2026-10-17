@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
 import { CommandBar } from './CommandBar'
 // The top command bar is kept in code but hidden from students (Phase 0.9 C-shell cuts); one flag for App and the search palette.
@@ -24,6 +24,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
 import { Tour } from './tour/Tour'
 import { ModeWheel, ModesFloatingButton } from './ModeWheel'
+import { MobileNav } from './MobileNav'
 import { PANEL_TITLES, dropHiddenPanels, refreshOpenPanels, setDockApi, showPanel } from './panels'
 import { warmupEngineWhenIdle } from '../math/engine'
 
@@ -104,6 +105,14 @@ export function App() {
     }
   }, [])
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   return (
     <div className="flex h-full flex-col">
       <TopBar />
@@ -112,6 +121,7 @@ export function App() {
       {SHOW_COMMAND_BAR && <CommandBar />}
       <div className="min-h-0 flex-1">
         <DockviewReact
+          className={isMobile ? 'pb-[52px]' : undefined}
           theme={themeDark}
           components={components}
           onReady={(e: DockviewReadyEvent) => {
@@ -151,6 +161,7 @@ export function App() {
       <SearchPalette />
       <ContextMenuHost />
       <Tour />
+      {isMobile && <MobileNav />}
     </div>
   )
 }

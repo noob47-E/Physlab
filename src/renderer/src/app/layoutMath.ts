@@ -14,9 +14,10 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
  * the app next opens on a narrow one: dockview rescales proportionally, but 430 px of side panel
  * scaled to a 960 px window leaves nothing to draw in.
  */
-type WindowClass = 'narrow' | 'medium' | 'wide'
+type WindowClass = 'phone' | 'narrow' | 'medium' | 'wide'
 
 export function windowClass(width: number): WindowClass {
+  if (width < 768) return 'phone'
   if (width < 1150) return 'narrow'
   if (width < 1500) return 'medium'
   return 'wide'

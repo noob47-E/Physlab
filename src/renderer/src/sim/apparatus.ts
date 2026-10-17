@@ -11,6 +11,18 @@ import { materialById } from './materials'
 /** Discs on a slotted mass hanger: 0.5 kg per disc. */
 export const discCountOf = (mass: number): number => Math.max(1, Math.round(mass / 0.5))
 
+/** Whether a body is a metre rule or lever beam. */
+export function isMetreRule(def: BodyDef): boolean {
+  const name = def.name.toLowerCase()
+  return name === 'beam' || name === 'metre rule' || def.id === 'rule' || def.id.endsWith('_rule') || def.id.includes('lever_beam')
+}
+
+/** Whether a body is a slotted mass hanger. */
+export function isHangerBody(def: BodyDef): boolean {
+  const name = def.name.toLowerCase()
+  return name.includes('hanger') || def.id.includes('hanger') || name === 'm₁' || name === 'm₂'
+}
+
 /** A 1 m metre-rule beam (horizontal) or measuring rule (vertical). Light wood, 3 cm × 0.6 cm. */
 export function buildMetreRule(
   id: string,
@@ -50,7 +62,8 @@ export function buildKnifeEdge(
     id: `${prefix}_base`,
     size: [0.18, 0.04, 0.12],
     motion: 'static',
-    material: 'steel', color: materialById('steel').color
+    material: 'lead',
+    color: materialById('lead').color
   }
 
   // A wedge (ramp) reaching up toward the pivot point. Height leaves 2.5 cm under the pivot.
@@ -60,7 +73,8 @@ export function buildKnifeEdge(
     id: `${prefix}_wedge`,
     size: [0.12, wedgeHeight, 0.08],
     motion: 'static',
-    material: 'steel', color: materialById('steel').color
+    material: 'lead',
+    color: materialById('lead').color
   }
 
   const pivot: V3 = [pos[0], height, pos[2]]

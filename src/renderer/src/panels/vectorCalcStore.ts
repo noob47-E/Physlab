@@ -1043,11 +1043,6 @@ function vectorsFrameBox(sol?: VS.Solution, style?: DrawStyle | null): { min: [n
       pts.push(a.tail)
       pts.push(add(a.tail, a.comp))
     }
-    for (const v of vis.vectors) {
-      const tail = v.tail ?? ZERO
-      pts.push(tail)
-      pts.push(add(tail, v.drawn ?? v.v))
-    }
   }
   const sc = useScene.getState()
   for (const o of Object.values(sc.objects)) {

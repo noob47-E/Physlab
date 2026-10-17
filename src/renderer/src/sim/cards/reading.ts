@@ -119,6 +119,11 @@ function bodyValue(b: BodyReading, st: BodyState, get: BodyGet, now: boolean, r:
       return v[1]
     case 'x':
       return st.position[0]
+    case 'arm': {
+      const beam = r.bodies['Beam'] ?? Object.values(r.bodies).find((b) => b.def.name.toLowerCase().includes('beam'))
+      const pivotX = beam ? beam.state.position[0] : 0
+      return Math.abs(st.position[0] - pivotX)
+    }
     case 'height':
       return st.position[1] - r.datum
     case 'bottom':

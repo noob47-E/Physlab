@@ -98,21 +98,36 @@ export function showPanel(id: string): void {
     // dockview it would land in whichever group happened to be active — a Lab Data table
     // appearing as a tab inside the drawing, for instance.
     const home = panelHome(id)
+    const isMobile = api.width < 768
+    const isTablet = api.width >= 768 && api.width < 1024
     const c = columns(api.width, api.height)
     const anchor = api.getPanel('viewport') ?? api.getPanel('maths') ?? api.panels[0]
+    let dir: 'left' | 'right' | 'above' | 'below' | 'within' = isMobile || home === 'centre' ? 'within' : home
+    let ref = anchor ? anchor.id : undefined
+    if (isTablet && home === 'left') {
+      const openSide = api.panels.find((p) => p.id !== 'viewport' && p.id !== 'maths' && panelHome(p.id) === 'right')
+      if (openSide) {
+        ref = openSide.id
+        dir = 'within'
+      } else {
+        dir = 'right'
+      }
+    }
     const size =
-      home === 'right'
-        ? { initialWidth: c.side, minimumWidth: c.sideMin }
-        : home === 'left'
-          ? { initialWidth: c.examples, minimumWidth: c.examplesMin }
-          : home === 'below'
-            ? { initialHeight: c.bottom, minimumHeight: c.bottomMin }
-            : {}
+      isMobile
+        ? {}
+        : dir === 'right'
+          ? { initialWidth: c.side, minimumWidth: c.sideMin }
+          : dir === 'left'
+            ? { initialWidth: c.examples, minimumWidth: c.examplesMin }
+            : dir === 'below'
+              ? { initialHeight: c.bottom, minimumHeight: c.bottomMin }
+              : {}
     api.addPanel({
       id,
       component: id,
       title: PANEL_TITLES[id],
-      position: anchor ? { referencePanel: anchor.id, direction: home === 'centre' ? 'within' : home } : undefined,
+      position: ref ? { referencePanel: ref, direction: dir } : undefined,
       ...size
     })
   }
@@ -132,6 +147,18 @@ export function showBeside(id: string, besideId: string): void {
   if (!api || !PANEL_TITLES[id] || isPanelHidden(id)) return
   const beside = api.getPanel(besideId)
   if (!beside) return showPanel(id)
+  const isMobile = api.width < 768
+  if (isMobile) {
+    const panel = api.getPanel(id)
+    if (panel) {
+      if (panel.api.group !== beside.api.group) panel.api.moveTo({ group: beside.api.group, position: 'center' })
+    } else {
+      api.addPanel({ id, component: id, title: PANEL_TITLES[id], position: { referencePanel: besideId, direction: 'within' } })
+    }
+    api.getPanel(id)?.api.setActive()
+    refreshOpenPanels()
+    return
+  }
   const narrow = windowClass(api.width) === 'narrow'
   const panel = api.getPanel(id)
   if (panel) {

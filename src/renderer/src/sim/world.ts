@@ -14,6 +14,7 @@ import type { Actuator, AfterStep, Driver, BodyDef, BodyId, BodyState, ContactEv
 import { DEFAULT_STEP_RATE, DEFAULT_WORLD, rateOf } from './types'
 import { REC_FLOATS, type RecordLayout } from './tape'
 import type { V3 } from '../math/vec'
+import { isHangerBody, isMetreRule } from './apparatus'
 
 /** Object layers: things that never move, and things that do. */
 const LAYER_STATIC = 0
@@ -1990,7 +1991,56 @@ export class SimWorld {
     if (!e || e.def.shape === 'ground') return
     this.input()
     const from = this.positionOf(e)
-    const target = this.constrainPlacement(id, position, from)
+    // Sliding masses on a lever beam (S2, Finding 8.2):
+    // A mass hanger attached to a metre rule beam by a string slides horizontally along the beam.
+    let target: V3 | null = null
+    for (const link of this.linkDefs) {
+      if (link.kind !== 'string') continue
+      const isA = link.a === id
+      const isB = link.b === id
+      if (!isA && !isB) continue
+      const other = this.entries.get(isA ? link.b : link.a)
+      if (!other || !isMetreRule(other.def) || !isHangerBody(e.def)) continue
+
+      const beamPos = this.positionOf(other)
+      const halfBeam = Math.max(0.1, other.def.size[0] / 2 - 0.02)
+      // Longitudinal vector along beam (supports level and tilted beam in 2D)
+      const q = this.rotationOf(other)
+      const theta = 2 * Math.atan2(q[2], q[3])
+      const cosTh = Math.cos(theta)
+      const sinTh = Math.sin(theta)
+
+      // Project dragged position onto beam's longitudinal axis
+      const dx = position[0] - beamPos[0]
+      const dy = position[1] - beamPos[1]
+      const relX = dx * cosTh + dy * sinTh
+
+      // Prevent jumping across knife edge pivot: keep Left hanger on left, Right on right
+      const isLeft = e.def.name.toLowerCase().includes('left') || from[0] < beamPos[0]
+      const clampedRelX = isLeft
+        ? Math.max(-halfBeam, Math.min(-0.02, relX))
+        : Math.max(0.02, Math.min(halfBeam, relX))
+
+      const stringLen = Math.max(0.01, link.length ?? 0.15)
+      // Target position in world space: attach point on beam + hang downwards
+      target = [
+        beamPos[0] + clampedRelX * cosTh + stringLen * sinTh,
+        beamPos[1] + clampedRelX * sinTh - stringLen * cosTh,
+        from[2]
+      ]
+
+      if (isA) {
+        link.pivotB = [clampedRelX, 0, 0]
+      } else {
+        link.pivotA = [clampedRelX, 0, 0]
+      }
+      this.setLinks(this.linkDefs)
+      break
+    }
+
+    if (!target) {
+      target = this.constrainPlacement(id, position, from)
+    }
     this.put(e, target)
     this.faceTies(e)
     if (e.def.motion !== 'dynamic') this.wakeAll()
@@ -2010,6 +2060,11 @@ export class SimWorld {
     if (this.linkDefs.some((l) => l.over === id || ((l.kind === 'pulley' || l.kind === 'rope') && (l.a === id || l.b === id)))) {
       this.setLinks(this.linkDefs)
     }
+  }
+
+  /** The link definitions currently in the world. */
+  getLinkDefs(): readonly Link[] {
+    return this.linkDefs.map((l) => ({ ...l }))
   }
 
   /**

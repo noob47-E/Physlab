@@ -6,18 +6,14 @@
 import * as THREE from 'three/webgpu'
 import type { BodyDef } from '../../sim/types'
 import type { V3 } from '../../math/vec'
-import { discCountOf } from '../../sim/apparatus'
+import { discCountOf, isMetreRule } from '../../sim/apparatus'
 import { EDGE_TONE, mergeMeshes, type MeshData } from '../sandboxLooks'
 
 // ---------------------------------------------------------------------------
 // A. Detection of apparatus parts
 // ---------------------------------------------------------------------------
 
-export function isMetreRule(def: BodyDef): boolean {
-  const name = def.name.toLowerCase()
-  // By name, or by an id the apparatus builders give a rule ('rule', 'atwood_rule', 'metre_rule', 'lever_beam').
-  return name === 'beam' || name === 'metre rule' || def.id === 'rule' || def.id.endsWith('_rule') || def.id.includes('lever_beam')
-}
+export { isMetreRule }
 
 function isKnifeEdgeWedge(def: BodyDef): boolean {
   const name = def.name.toLowerCase()
@@ -471,6 +467,9 @@ function buildForkBracketMesh(size: V3): MeshData {
 // ---------------------------------------------------------------------------
 
 export function apparatusGeometry(def: BodyDef): THREE.BufferGeometry | null {
+  if (isMetreRule(def)) {
+    return new THREE.BoxGeometry(def.size[0], def.size[1], def.size[2])
+  }
   if (isKnifeEdgeWedge(def)) {
     return meshGeometry(buildKnifeEdgeMesh(def.size))
   }

@@ -5,6 +5,7 @@
 //   Rail:   left edge, under HudTop             GraphDock: under CardsDock
 //   TapeStrip: along the bottom, above the hint Hint: bottom centre
 
+import { useEffect, useState } from 'react'
 import { CardsDock } from './CardsDock'
 import { GraphDock } from './GraphDock'
 import { Hint } from './Hint'
@@ -14,11 +15,28 @@ import { Rail } from './Rail'
 import { TapeStrip } from './TapeStrip'
 import { useTapeBar } from '../../sim/tapeBar'
 import { useSandboxView } from '../../sim/sandboxView'
+import { SandboxPhoneControls } from './SandboxPhoneControls'
 
 export function SandboxHud() {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   // The column stops above the replay bar: the full bar, the slim one (SB66, simple view), or only the pill and the hint.
   const barShown = useTapeBar((s) => s.shown)
   const simple = useSandboxView((s) => s.view === 'simple')
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none absolute inset-0">
+        <HudTop />
+        <SandboxPhoneControls />
+      </div>
+    )
+  }
   const bottom = !barShown ? 'bottom-[60px]' : simple ? 'bottom-[124px]' : 'bottom-[260px]'
   return (
     <div className="pointer-events-none absolute inset-0">

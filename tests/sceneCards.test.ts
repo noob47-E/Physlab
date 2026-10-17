@@ -184,6 +184,8 @@ describe('Scene Cards tests', () => {
              view = await evalCard(card.id, 'recoil', { Gun: 'Gun', Bullet: 'Bullet' })
         } else if (card.id.startsWith('terminal')) {
              view = await evalCard(card.id, 'terminal', { Foam: 'Foam' })
+        } else if (card.id.startsWith('lever')) {
+             view = await evalCard(card.id, 'seesaw', { 'Left hanger': 'Left hanger', 'Right hanger': 'Right hanger', Beam: 'Beam' })
         }
         
         expect(view, `view for ${card.id}`).not.toBeNull()

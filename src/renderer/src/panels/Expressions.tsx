@@ -2,10 +2,10 @@
 // Every row is a graph or slider in the scene store, so the command bar, the Outliner and Undo all see the
 // same thing (P-GCALC GC4; the rules are in expressionRows.ts).
 
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Keyboard, Pause, Play, Plus, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, Keyboard, Pause, Play, Plus, Settings, X } from 'lucide-react'
 import { scene, useScene } from '../core/store'
-import { replaceGraphEquation } from '../lang/graphEdit'
+import { putBack, replaceGraphEquation, stockOf } from '../lang/graphEdit'
 import { runCommand } from '../lang/commands'
 import { NumField, TextField } from '../ui/fields'
 import { cssColor } from '../app/theme'
@@ -21,6 +21,12 @@ import {
   type GraphRow,
   type SliderRow
 } from './expressionRows'
+import {
+  formatParametric,
+  parametricToTeX,
+  parseParametric,
+  type ParametricDef
+} from './parametricCard'
 import { fmt } from '../math/format'
 import { bumpAction } from '../core/actionSignals'
 import { Tex } from '../ui/Tex'
@@ -58,13 +64,22 @@ export function Expressions() {
     const text = draft.trim()
     if (!text) return
     setDraft('')
+    const stock = stockOf()
     for (const p of offers) {
       createSlider(p)
     }
     const before = graphCount()
-    await runCommand(text)
+    await runCommand(text).catch(() => {})
     // A line the student typed here is a typed graph too: the Start here mission 2 counts it.
     if (graphCount() > before) bumpAction('typedGraphs')
+    const lastLog = scene().log.at(-1)
+    if (graphCount() > before && lastLog?.kind !== 'error') {
+      if (offers.length > 0) {
+        useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
+      }
+    } else {
+      putBack(stock)
+    }
   }
 
   return (
@@ -93,16 +108,34 @@ export function Expressions() {
         {/* 3D-2: the gallery of graphs in space, in the 3-D view. */}
         {is3D && <TryOne3D />}
         {rows.length === 0 && <div className="px-3 py-2 text-[var(--text-dim)]">{W.empty}</div>}
-        {rows.map((r, i) =>
-          r.kind === 'slider' ? (
-            <SliderRowView
-              key={r.id}
-              row={r}
-              first={i === 0}
-              last={i === rows.length - 1}
-              onMove={(dir) => move(r.id, dir)}
-            />
-          ) : (
+        {rows.map((r, i) => {
+          if (r.kind === 'slider') {
+            return (
+              <SliderRowView
+                key={r.id}
+                row={r}
+                first={i === 0}
+                last={i === rows.length - 1}
+                onMove={(dir) => move(r.id, dir)}
+              />
+            )
+          }
+          const p = parseParametric(r.source, r.graphKind)
+          if (p) {
+            return (
+              <ParametricRowView
+                key={r.id}
+                row={r}
+                parametric={p}
+                first={i === 0}
+                last={i === rows.length - 1}
+                problem={problem?.id === r.id ? problem.text : null}
+                onProblem={(text) => setProblem(text ? { id: r.id, text } : null)}
+                onMove={(dir) => move(r.id, dir)}
+              />
+            )
+          }
+          return (
             <Row
               key={r.id}
               row={r}
@@ -113,7 +146,7 @@ export function Expressions() {
               onMove={(dir) => move(r.id, dir)}
             />
           )
-        )}
+        })}
         <div className="px-3 py-2" data-graph-line>
           <input
             id="expressions-new"
@@ -348,6 +381,7 @@ function Row({
   // A line not being edited is shown typeset; clicking it opens the text box with a live preview.
   const [editing, setEditing] = useState(false)
   const [live, setLive] = useState(row.source)
+  const [gearOpen, setGearOpen] = useState(false)
   // The boxes follow the line: a range typed into the equation, an edit that drops it, Undo or Redo
   // must not leave old ends that a blur would quietly apply again (or quietly clear).
   useEffect(() => {
@@ -358,12 +392,21 @@ function Row({
   const [rangeNote, setRangeNote] = useState<string | null>(null)
 
   const commit = async (text: string) => {
+    const stock = stockOf()
     const free = freeParametersFor(text, scene().ev.scope)
     for (const p of free) {
       createSlider(p)
     }
     const r = await replaceGraphEquation(row.id, text)
-    onProblem(r.ok ? null : r.reason)
+    if (!r.ok) {
+      putBack(stock)
+      onProblem(r.reason)
+      return
+    }
+    if (free.length > 0) {
+      useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
+    }
+    onProblem(null)
   }
 
   const applyRange = (a: string, b: string) => {
@@ -384,7 +427,10 @@ function Row({
     >
       <div className="flex items-center gap-2">
         {/* The theme-matched colour, so the dot reads on Light as well as on the dark themes. */}
-        <span className="h-3 w-3 shrink-0 rounded-full border border-[var(--line-2)]" style={{ background: obj ? cssColor(obj) : row.color, opacity: row.visible ? 1 : 0.3 }} />
+        <span
+          className="h-3 w-3 shrink-0 rounded-full border border-[var(--line-2)]"
+          style={{ background: obj ? cssColor(obj) : row.color, opacity: row.visible ? 1 : 0.3 }}
+        />
         <div className="min-w-0 flex-1" data-graph-line>
           {editing ? (
             <>
@@ -406,6 +452,15 @@ function Row({
           )}
         </div>
         <button
+          className={`${ICON} ${gearOpen ? 'text-[var(--accent)]' : ''}`}
+          title={W.settings}
+          aria-label={W.settings}
+          aria-expanded={gearOpen}
+          onClick={() => setGearOpen(!gearOpen)}
+        >
+          <Settings size={13} />
+        </button>
+        <button
           className={ICON}
           title={W.showHide}
           aria-label={W.showHide}
@@ -426,47 +481,419 @@ function Row({
           {problem}
         </div>
       )}
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-[var(--text-dim)]">
-        <span className="flex items-center gap-1">
-          {W.width}
-          <NumField
-            className="w-14"
-            value={row.width}
-            decimals={1}
-            onChange={(v) =>
-              update(row.id, (d) => {
-                if (d.type === 'graph') d.width = Math.max(0.5, v)
-              })
-            }
-          />
-        </span>
-        {(row.explicit || range) && (
+      {gearOpen && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-[var(--text-dim)] border-t border-[var(--line-2)] pt-1">
           <span className="flex items-center gap-1">
-            {W.range}
-            {/* Enter applies as leaving the box does (it did nothing, and "Type both ends…" stayed); applying the
-                same ends again changes nothing, so Enter and then a blur do not count twice. */}
-            <input className="field w-14" value={from} inputMode="decimal" onChange={(e) => setFrom(e.target.value)} onBlur={() => applyRange(from, to)} onKeyDown={(e) => e.key === 'Enter' && applyRange(from, to)} />
-            {W.rangeTo}
-            <input className="field w-14" value={to} inputMode="decimal" onChange={(e) => setTo(e.target.value)} onBlur={() => applyRange(from, to)} onKeyDown={(e) => e.key === 'Enter' && applyRange(from, to)} />
+            {W.width}
+            <NumField
+              className="w-14"
+              value={row.width}
+              decimals={1}
+              onChange={(v) =>
+                update(row.id, (d) => {
+                  if (d.type === 'graph') d.width = Math.max(0.5, v)
+                })
+              }
+            />
           </span>
-        )}
-        {/* Touch has no Alt key: the arrows move the row too. */}
-        <span className="flex items-center gap-1">
-          <span>{W.move}</span>
-          <span className="flex items-center gap-0.5">
-            <button className={ICON} title={W.moveUp} aria-label={W.moveUp} disabled={first} onClick={() => onMove(-1)}>
-              <ArrowUp size={12} />
-            </button>
-            <button className={ICON} title={W.moveDown} aria-label={W.moveDown} disabled={last} onClick={() => onMove(1)}>
-              <ArrowDown size={12} />
-            </button>
+          {(row.explicit || range) && (
+            <span className="flex items-center gap-1">
+              {W.range}
+              <input className="field w-14" value={from} inputMode="decimal" onChange={(e) => setFrom(e.target.value)} onBlur={() => applyRange(from, to)} onKeyDown={(e) => e.key === 'Enter' && applyRange(from, to)} />
+              {W.rangeTo}
+              <input className="field w-14" value={to} inputMode="decimal" onChange={(e) => setTo(e.target.value)} onBlur={() => applyRange(from, to)} onKeyDown={(e) => e.key === 'Enter' && applyRange(from, to)} />
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <span>{W.move}</span>
+            <span className="flex items-center gap-0.5">
+              <button className={ICON} title={W.moveUp} aria-label={W.moveUp} disabled={first} onClick={() => onMove(-1)}>
+                <ArrowUp size={12} />
+              </button>
+              <button className={ICON} title={W.moveDown} aria-label={W.moveDown} disabled={last} onClick={() => onMove(1)}>
+                <ArrowDown size={12} />
+              </button>
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      )}
       {rangeNote && <div className="mt-0.5 text-fine text-[var(--text-faint)]">{rangeNote}</div>}
     </div>
   )
 }
+
+function ParametricRowView({
+  row,
+  first,
+  last,
+  parametric,
+  problem,
+  onProblem,
+  onMove
+}: {
+  row: GraphRow
+  first: boolean
+  last: boolean
+  parametric: ParametricDef
+  problem: string | null
+  onProblem: (text: string | null) => void
+  onMove: (dir: -1 | 1) => void
+}) {
+  const obj = useScene((s) => s.objects[row.id])
+  const update = useScene((s) => s.updateObject)
+  const remove = useScene((s) => s.removeObjects)
+  const selected = useScene((s) => s.selection.includes(row.id))
+  const [gearOpen, setGearOpen] = useState(false)
+  const [fields, setFields] = useState<ParametricDef>(parametric)
+  const [rawMode, setRawMode] = useState(false)
+  const [rawText, setRawText] = useState(row.source)
+  const fieldsRef = useRef(fields)
+  fieldsRef.current = fields
+
+  useEffect(() => {
+    // If the store source matches what our local fields produce, this is an echo of our own edit
+    if (formatParametric(fieldsRef.current) === row.source) {
+      setRawText(row.source)
+      return
+    }
+    const next = parseParametric(row.source, row.graphKind)
+    if (next) {
+      setFields(next)
+      fieldsRef.current = next
+    }
+    setRawText(row.source)
+  }, [row.source, row.graphKind])
+
+  const commitDef = async (def: ParametricDef) => {
+    setFields(def)
+    const cmd = formatParametric(def)
+    setRawText(cmd)
+    const stock = stockOf()
+    const free = freeParametersFor(cmd, scene().ev.scope)
+    for (const p of free) {
+      createSlider(p)
+    }
+    const r = await replaceGraphEquation(row.id, cmd)
+    if (!r.ok) {
+      putBack(stock)
+      onProblem(r.reason)
+      return
+    }
+    if (free.length > 0) {
+      useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
+    }
+    onProblem(null)
+  }
+
+  const commitRaw = async (cmd: string) => {
+    setRawText(cmd)
+    const next = parseParametric(cmd, row.graphKind)
+    if (next) setFields(next)
+    const stock = stockOf()
+    const free = freeParametersFor(cmd, scene().ev.scope)
+    for (const p of free) {
+      createSlider(p)
+    }
+    const r = await replaceGraphEquation(row.id, cmd)
+    if (!r.ok) {
+      putBack(stock)
+      onProblem(r.reason)
+      return
+    }
+    if (free.length > 0) {
+      useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
+    }
+    onProblem(null)
+  }
+
+  const title =
+    parametric.kind === 'curve2d'
+      ? W.curve2d
+      : parametric.kind === 'curve3d'
+        ? W.curve3d
+        : W.surface3d
+
+  const tex = useMemo(() => parametricToTeX(fields), [fields])
+
+  return (
+    <div
+      className={`border-b border-[var(--line)] px-3 py-1.5 ${selected ? 'bg-[var(--bg-3)] shadow-[inset_3px_0_0_var(--accent)]' : ''}`}
+      onKeyDownCapture={(e) => {
+        if (!e.altKey) return
+        if (e.key === 'ArrowUp' && !first) onMove(-1)
+        if (e.key === 'ArrowDown' && !last) onMove(1)
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="h-3 w-3 shrink-0 rounded-full border border-[var(--line-2)]"
+          style={{ background: obj ? cssColor(obj) : row.color, opacity: row.visible ? 1 : 0.3 }}
+        />
+        <div className="flex flex-1 items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-small text-[var(--text-strong)] truncate">{title}</span>
+          <button
+            type="button"
+            className="text-fine text-[var(--accent)] hover:underline ml-1"
+            title={rawMode ? 'Switch to structured fields' : 'Edit as single code command'}
+            onClick={() => setRawMode(!rawMode)}
+          >
+            {rawMode ? 'fields' : 'raw'}
+          </button>
+        </div>
+        <button
+          className={`${ICON} ${gearOpen ? 'text-[var(--accent)]' : ''}`}
+          title={W.settings}
+          aria-label={W.settings}
+          aria-expanded={gearOpen}
+          onClick={() => setGearOpen(!gearOpen)}
+        >
+          <Settings size={13} />
+        </button>
+        <button
+          className={ICON}
+          title={W.showHide}
+          aria-label={W.showHide}
+          onClick={() =>
+            update(row.id, (d) => {
+              d.visible = !d.visible
+            })
+          }
+        >
+          {row.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+        </button>
+        <button
+          className={`${ICON} hover:text-[var(--bad)]`}
+          title={W.remove}
+          aria-label={W.remove}
+          onClick={() => remove([row.id])}
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {problem && (
+        <div role="status" className="mt-0.5 text-small text-[var(--bad)]">
+          {problem}
+        </div>
+      )}
+
+      {rawMode ? (
+        <div className="mt-1" data-graph-line>
+          <TextField
+            mono
+            value={rawText}
+            onCommit={(v) => void commitRaw(v)}
+            onText={setRawText}
+          />
+        </div>
+      ) : (
+        <div className="mt-1.5 space-y-1.5" data-graph-line>
+          {tex && (
+            <div className="overflow-x-auto py-0.5">
+              <Tex tex={tex} className="text-small text-[var(--text-strong)]" />
+            </div>
+          )}
+          {fields.kind === 'curve2d' && (
+            <div className="space-y-1 text-fine">
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(t) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.x}
+                  onChange={(e) => setFields({ ...fields, x: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(t) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.y}
+                  onChange={(e) => setFields({ ...fields, y: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-fine text-[var(--text-dim)] font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic">t:</span>
+                <input
+                  className="field w-16"
+                  value={fields.tMin}
+                  onChange={(e) => setFields({ ...fields, tMin: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+                <span>{W.rangeTo}</span>
+                <input
+                  className="field w-16"
+                  value={fields.tMax}
+                  onChange={(e) => setFields({ ...fields, tMax: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+            </div>
+          )}
+          {fields.kind === 'curve3d' && (
+            <div className="space-y-1 text-fine">
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(t) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.x}
+                  onChange={(e) => setFields({ ...fields, x: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(t) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.y}
+                  onChange={(e) => setFields({ ...fields, y: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">z(t) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.z}
+                  onChange={(e) => setFields({ ...fields, z: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-fine text-[var(--text-dim)] font-math">
+                <span className="w-12 shrink-0 text-right whitespace-nowrap italic">t:</span>
+                <input
+                  className="field w-16"
+                  value={fields.tMin}
+                  onChange={(e) => setFields({ ...fields, tMin: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+                <span>{W.rangeTo}</span>
+                <input
+                  className="field w-16"
+                  value={fields.tMax}
+                  onChange={(e) => setFields({ ...fields, tMax: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+            </div>
+          )}
+          {fields.kind === 'surface3d' && (
+            <div className="space-y-1 text-fine">
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(u,v) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.x}
+                  onChange={(e) => setFields({ ...fields, x: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(u,v) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.y}
+                  onChange={(e) => setFields({ ...fields, y: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 font-math">
+                <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">z(u,v) =</span>
+                <input
+                  className="field flex-1"
+                  value={fields.z}
+                  onChange={(e) => setFields({ ...fields, z: e.target.value })}
+                  onBlur={() => void commitDef(fields)}
+                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-fine text-[var(--text-dim)] font-math">
+                <span className="flex items-center gap-1">
+                  <span className="italic">u:</span>
+                  <input
+                    className="field w-14"
+                    value={fields.uMin}
+                    onChange={(e) => setFields({ ...fields, uMin: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                  <span>{W.rangeTo}</span>
+                  <input
+                    className="field w-14"
+                    value={fields.uMax}
+                    onChange={(e) => setFields({ ...fields, uMax: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="italic">v:</span>
+                  <input
+                    className="field w-14"
+                    value={fields.vMin}
+                    onChange={(e) => setFields({ ...fields, vMin: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                  <span>{W.rangeTo}</span>
+                  <input
+                    className="field w-14"
+                    value={fields.vMax}
+                    onChange={(e) => setFields({ ...fields, vMax: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {gearOpen && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-[var(--text-dim)] border-t border-[var(--line-2)] pt-1">
+          <span className="flex items-center gap-1">
+            {W.width}
+            <NumField
+              className="w-14"
+              value={row.width}
+              decimals={1}
+              onChange={(v) =>
+                update(row.id, (d) => {
+                  if (d.type === 'graph') d.width = Math.max(0.5, v)
+                })
+              }
+            />
+          </span>
+          <span className="flex items-center gap-1">
+            <span>{W.move}</span>
+            <span className="flex items-center gap-0.5">
+              <button className={ICON} title={W.moveUp} aria-label={W.moveUp} disabled={first} onClick={() => onMove(-1)}>
+                <ArrowUp size={12} />
+              </button>
+              <button className={ICON} title={W.moveDown} aria-label={W.moveDown} disabled={last} onClick={() => onMove(1)}>
+                <ArrowDown size={12} />
+              </button>
+            </span>
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 /** A graph line typeset; one that does not read shows its plain text (the row's own problem line carries the error words). */
 function LineTex({ text, plain = false }: { text: string; plain?: boolean }) {

@@ -10,6 +10,7 @@ import { useSandbox } from '../../sim/store'
 import { SIMPLE_HINTS } from '../../sim/simpleHint'
 import { NowBox } from './NowBox'
 import { MassRow } from './Selected'
+import { LeverFold } from './LeverFold'
 import { ReplayLock, useReplayLocked } from './ReplayLock'
 
 export function SimpleSelected() {
@@ -34,6 +35,7 @@ export function SimpleSelected() {
       {/* The object's numbers, standing still and large (the owner, 13 Oct); a fixed ramp has no speed to show. */}
       {moves && <NowBox sel={sel} live={showsLive(playing, engineTime) ? (live[sel.id] ?? null) : null} />}
       <ReplayLock>
+        <LeverFold sel={sel} />
         <MassRow sel={sel} update={update} />
         <div className="px-3 pb-1 pt-1">
           <button

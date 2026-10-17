@@ -239,6 +239,41 @@ const rollingACylinder: CardSpec = {
   compute: s => (s.g * Math.sin(s.th * Math.PI / 180)) / (1 + 1/2)
 }
 
+const leverM1: SymbolSpec = { key: 'm1', tex: 'm_1', unit: 'kg', q: null, from: { body: 'Left hanger', get: 'mass' } }
+const leverM2: SymbolSpec = { key: 'm2', tex: 'm_2', unit: 'kg', q: null, from: { body: 'Right hanger', get: 'mass' } }
+const leverD1: SymbolSpec = { key: 'd1', tex: 'd_1', unit: 'm', q: 'pos', from: { body: 'Left hanger', get: 'arm' } }
+const leverD2: SymbolSpec = { key: 'd2', tex: 'd_2', unit: 'm', q: 'pos', from: { body: 'Right hanger', get: 'arm' } }
+
+const leverLeftMoment: CardSpec = {
+  id: 'lever-left-moment',
+  title: 'Anticlockwise turning effect (left moment)',
+  formulaTex: '@{m1} * @{g} * @{d1}',
+  symbols: [leverM1, g, leverD1],
+  result: { tex: '\\tau_1', unit: 'N m', q: 'force' },
+  compute: (s) => s.m1 * s.g * s.d1
+}
+
+const leverRightMoment: CardSpec = {
+  id: 'lever-right-moment',
+  title: 'Clockwise turning effect (right moment)',
+  formulaTex: '@{m2} * @{g} * @{d2}',
+  symbols: [leverM2, g, leverD2],
+  result: { tex: '\\tau_2', unit: 'N m', q: 'force' },
+  compute: (s) => s.m2 * s.g * s.d2
+}
+
+const leverBalance: CardSpec = {
+  id: 'lever-balance',
+  title: 'Principle of moments (balance)',
+  formulaTex: '@{m1} * @{g} * @{d1} - @{m2} * @{g} * @{d2}',
+  symbols: [leverM1, g, leverD1, leverM2, leverD2],
+  result: { tex: '\\Delta\\tau', unit: 'N m', q: 'force' },
+  compute: (s) => {
+    const diff = s.m1 * s.g * s.d1 - s.m2 * s.g * s.d2
+    return Math.abs(diff) < 1e-4 ? 0 : diff
+  }
+}
+
 export const SCENE_CARDS: CardSpec[] = [
   bounceNextTop, bounceKeLost,
   frictionStop, frictionHeat,
@@ -254,5 +289,6 @@ export const SCENE_CARDS: CardSpec[] = [
   slopeN, slopeF,
   circleF,
   coupledW1, coupledW2,
-  rollingABall, rollingACylinder
+  rollingABall, rollingACylinder,
+  leverLeftMoment, leverRightMoment, leverBalance
 ]

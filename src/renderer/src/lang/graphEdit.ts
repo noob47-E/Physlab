@@ -55,7 +55,7 @@ export function classifyEdit(before: Shape, after: Shape): EditOutcome {
 /** What a refused line has to put back: everything a command can touch in the scene store. */
 type Stock = Pick<SceneState, 'objects' | 'order' | 'selection' | 'past' | 'future' | 'log' | 'dirty'>
 
-const stockOf = (): Stock => {
+export const stockOf = (): Stock => {
   const { objects, order, selection, past, future, log, dirty } = scene()
   return { objects, order, selection, past, future, log, dirty }
 }
@@ -66,7 +66,7 @@ const stockOf = (): Stock => {
  * that was never kept. The store has no action for this (its undo would leave the line's step on
  * the redo side), and its other actions all record history.
  */
-function putBack(stock: Stock): void {
+export function putBack(stock: Stock): void {
   const s = scene()
   useScene.setState({
     ...stock,
