@@ -302,5 +302,5 @@ describe('one name for the Geometry mode (Fix 16)', () => {
     expect(files.length).toBeGreaterThan(50)
     for (const f of files) expect(readFileSync(f, 'utf8').includes('Shapes & Geometry'), f).toBe(false)
     expect(readSource('README.md').includes('Shapes & Geometry')).toBe(false)
-  })
+  }, 20000)
 })

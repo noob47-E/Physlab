@@ -17,7 +17,6 @@ import {
   Pentagon,
   Ruler,
   Scissors,
-  Search,
   Settings2,
   Slash,
   SquareDashedBottom,
@@ -233,7 +232,7 @@ function Menu({
                   it.run()
                 }}
               >
-                <span>{it.label}</span>
+                <span className="whitespace-nowrap">{it.label}</span>
                 <span className="sc">{it.sc}</span>
               </button>
             )
@@ -477,7 +476,6 @@ export function TopBar() {
   const theme = useTheme((t) => t.theme)
   const openPanels = useOpenPanels((s) => s.open)
   const mode = useApp((a) => a.mode)
-  const setSearchOpen = useApp((a) => a.setSearchOpen)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const toggleMenu = useCallback((id: string) => setOpenMenu((cur) => toggleTopMenu(cur, id)), [])
   const closeMenu = useCallback(() => setOpenMenu(null), [])
@@ -637,47 +635,33 @@ export function TopBar() {
             </button>
           )
         })}
-        <Menu
-          open={openMenu === 'more'}
-          onToggle={() => toggleMenu('more')}
-          onClose={closeMenu}
-          label={
-            <span className="flex items-center gap-1 whitespace-nowrap text-[var(--text-dim)]">
-              More modes <ChevronDown size={13} />
-            </span>
-          }
-          items={[
-            ...split.more.map((i) => ({
-              label: ready[i].label,
-              run: () => {
-                closeMenu()
-                enterMode(ready[i].id)
-              }
-            })),
-            ...(split.more.length ? ['-' as const] : []),
-            ...later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))
-          ]}
-        />
+        {(split.more.length > 0 || later.length > 0) && (
+          <Menu
+            open={openMenu === 'more'}
+            onToggle={() => toggleMenu('more')}
+            onClose={closeMenu}
+            label={
+              <span className="flex items-center gap-1 whitespace-nowrap text-[var(--text-dim)]">
+                More modes <ChevronDown size={13} />
+              </span>
+            }
+            items={[
+              ...split.more.map((i) => ({
+                label: ready[i].label,
+                run: () => {
+                  closeMenu()
+                  enterMode(ready[i].id)
+                }
+              })),
+              ...(split.more.length && later.length ? ['-' as const] : []),
+              ...later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))
+            ]}
+          />
+        )}
       </div>
 
       <StartHereChip />
 
-      <button
-        data-tour="search"
-        className="menu-btn flex items-center gap-2 text-[var(--text-dim)]"
-        onClick={() => {
-          closeMenu()
-          setSearchOpen(true)
-        }}
-        title="Search everything (Ctrl+K)"
-      >
-        <Search size={14} />
-        {density !== 'tight' && (
-          <>
-            Search <kbd className="rounded border border-[var(--line)] bg-[var(--bg-3)] px-1 text-fine text-[var(--text-dim)]">Ctrl K</kbd>
-          </>
-        )}
-      </button>
       <MeasureSettingsMenu
         density={density}
         open={openMenu === 'settings'}

@@ -22,6 +22,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
 import { Tour } from './tour/Tour'
 import { PANEL_TITLES, dropHiddenPanels, refreshOpenPanels, setDockApi, showPanel } from './panels'
+import { warmupEngineWhenIdle } from '../math/engine'
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
@@ -81,7 +82,10 @@ export function App() {
     if (focus) showPanel(focus.id)
   }, [focus])
 
-  useEffect(() => startAutosave(), [])
+  useEffect(() => {
+    startAutosave()
+    warmupEngineWhenIdle()
+  }, [])
 
   useEffect(() => {
     // #bench=1000000 starts the GPU particle benchmark (used for performance checks).
@@ -97,12 +101,15 @@ export function App() {
     }
   }, [])
 
+  // Top command bar is kept in code but hidden from student view (Phase 0.9 C-shell cuts).
+  const SHOW_COMMAND_BAR = false
+
   return (
     <div className="flex h-full flex-col">
       <TopBar />
       <RecoveryBar />
       <ToolShelf />
-      <CommandBar />
+      {SHOW_COMMAND_BAR && <CommandBar />}
       <div className="min-h-0 flex-1">
         <DockviewReact
           theme={themeDark}

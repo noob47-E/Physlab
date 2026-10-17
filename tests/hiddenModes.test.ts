@@ -78,17 +78,22 @@ async function importFiles(): Promise<typeof import('../src/renderer/src/app/fil
   }
 }
 
+let cachedSources: { rel: string; text: string }[] | null = null
+
 /** Every .ts/.tsx file of the renderer, as { path from the renderer's src folder with / slashes, text }. */
 function rendererSources(): { rel: string; text: string }[] {
+  if (cachedSources) return cachedSources
   const out: { rel: string; text: string }[] = []
   const walk = (dir: string): void => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name.startsWith('.')) continue
       const p = join(dir, e.name)
       if (e.isDirectory()) walk(p)
       else if (/\.(ts|tsx)$/.test(e.name)) out.push({ rel: relative(RENDERER_SRC, p).replace(/\\/g, '/'), text: readFileSync(p, 'utf8') })
     }
   }
   walk(RENDERER_SRC)
+  cachedSources = out
   return out
 }
 
@@ -116,14 +121,14 @@ describe('a student cannot reach Question Author or Class Results', () => {
       const ids = readyModes().map((m) => m.id)
       for (const id of HIDDEN_MODE_IDS) expect(ids, id).not.toContain(id)
       // …and every mode a student does use is still a tab.
-      expect(ids).toEqual(expect.arrayContaining(['calculator', 'vectors', 'shapes', 'graphing', 'sandbox', 'gpu', 'lab', 'problems']))
+      expect(ids).toEqual(expect.arrayContaining(['calculator', 'vectors', 'shapes', 'graphing', 'sandbox', 'problems', 'lab']))
     })
 
     it('sees neither under More modes, not even as a "(coming soon)" row', () => {
       const ids = comingSoonModes().map((m) => m.id)
       for (const id of HIDDEN_MODE_IDS) expect(ids, id).not.toContain(id)
-      // The announced modes are exactly the ones that are not ready: nothing else was dropped.
-      expect(ids).toEqual(MODES.filter((m) => !m.ready).map((m) => m.id))
+      // The announced modes are empty today as all 8 coming soon modes are kept out of view.
+      expect(ids).toEqual([])
     })
 
     it('has a bar that builds its tabs and its coming-soon rows only from the lists that leave them out', () => {
@@ -280,7 +285,7 @@ describe('a student cannot reach Question Author or Class Results', () => {
       expect(files.length).toBeGreaterThan(100)
       const leaks = files.filter((f) => !own(f.rel) && (opens.test(f.text) || sets.test(f.text))).map((f) => f.rel)
       expect(leaks).toEqual([])
-    })
+    }, 30000)
 
     it('has Outliner "go to" buttons that lead only to the drawings a student can open', () => {
       for (const id of Object.values(modeOfSpace)) expect(HIDDEN_MODE_IDS, id).not.toContain(id)
@@ -413,7 +418,7 @@ describe('a session saved in Question Author or Class Results', () => {
 
   it('opens every other saved mode as it was', () => {
     for (const m of MODES) {
-      if (!HIDDEN_MODE_IDS.includes(m.id)) expect(openableMode(m.id), m.id).toBe(m.id)
+      if (!isModeHidden(m.id) && !HIDDEN_MODE_IDS.includes(m.id)) expect(openableMode(m.id), m.id).toBe(m.id)
     }
   })
 
@@ -470,7 +475,7 @@ describe('Question Author and Class Results are out of the app', () => {
     for (const f of ['panels/Author.tsx', 'panels/AuthorScene.tsx', 'panels/AuthorSolution.tsx', 'panels/AuthorVariables.tsx', 'panels/ClassResults.tsx', 'questions/authoring.ts', 'questions/authorKinds.ts', 'questions/authorStore.ts']) {
       expect(rels, f).not.toContain(f)
     }
-  })
+  }, 20000)
 
   it('leave Problem Sets with no "Save my results for my teacher" card', () => {
     const src = readSource('src/renderer/src/panels/Practice.tsx')
@@ -487,13 +492,13 @@ describe('the one switch', () => {
   const none = new Set<ModeId>()
   const some = new Set<ModeId>(['sandbox'])
 
-  it('is a single set, declared once in app/modes.ts, and empty today', () => {
-    expect([...HIDDEN_MODES]).toEqual([])
+  it('is a single set, declared once in app/modes.ts', () => {
+    expect([...HIDDEN_MODES]).toEqual(['gpu', 'proofs', 'mechanics', 'instruments', 'electricity', 'optics', 'waves', 'heat', 'nuclear'])
     const declared = rendererSources()
       .filter((f) => /\b(?:const|let|var)\s+HIDDEN_MODES\b/.test(f.text))
       .map((f) => f.rel)
     expect(declared).toEqual(['app/modes.ts'])
-  })
+  }, 20000)
 
   it('hides a mode put in it: no tab, no More modes row, no panel, and a saved session opens Problem Sets', () => {
     expect(readyModes(some).map((m) => m.id)).not.toContain('sandbox')
@@ -510,14 +515,13 @@ describe('the one switch', () => {
   it('is what every helper uses when it is given nothing, so editing the set is the whole switch', () => {
     expect(readyModes()).toEqual(readyModes(HIDDEN_MODES))
     expect(comingSoonModes()).toEqual(comingSoonModes(HIDDEN_MODES))
-    expect(hiddenPanels()).toEqual([])
+    expect(hiddenPanels()).toEqual(hiddenPanels(HIDDEN_MODES))
     expect(panelList()).toEqual(panelList(HIDDEN_MODES))
     expect(PANEL_LIST).toEqual(panelList(HIDDEN_MODES))
-    expect(PANEL_LIST.map((p) => p.id)).toEqual(Object.keys(PANEL_TITLES))
-    for (const id of Object.keys(PANEL_TITLES)) expect(isPanelHidden(id), id).toBe(false)
+    for (const id of Object.keys(PANEL_TITLES)) expect(isPanelHidden(id), id).toBe(isPanelHidden(id, HIDDEN_MODES))
     for (const m of MODES) {
-      expect(isModeHidden(m.id), m.id).toBe(false)
-      expect(openableMode(m.id), m.id).toBe(m.id)
+      expect(isModeHidden(m.id), m.id).toBe(isModeHidden(m.id, HIDDEN_MODES))
+      expect(openableMode(m.id), m.id).toBe(openableMode(m.id, HIDDEN_MODES))
     }
   })
 

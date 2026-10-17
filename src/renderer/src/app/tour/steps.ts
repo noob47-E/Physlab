@@ -75,7 +75,6 @@ export const TOUR: TourStep[] = [
     body: 'A = <3, 4>, R = A + B, Triangle((0,0),(4,0),(0,3)), y = sin(x), solve(x^2 = 4). Type "help" to see more.'
   },
   {
-    anchor: 'search',
     title: 'Find anything',
     body: 'Ctrl+K searches modes, tools, lessons, settings and commands. If you cannot remember where something is, look there.'
   },

@@ -98,6 +98,15 @@ export const MODES: ModeDef[] = [
     panel: 'sandbox',
     view: '3d'
   },
+  {
+    id: 'problems',
+    label: 'Problem Sets',
+    description: 'Random practice problems: hints one step at a time, and checking of the answer you worked out yourself.',
+    ready: true,
+    tools: ['select', '|', 'vector', 'point', '|', 'delete'],
+    panel: 'practice',
+    view: '2d'
+  },
   { id: 'gpu', label: 'GPU Lab', description: 'Millions of charged particles in electric and magnetic fields on the graphics card.', ready: true, tools: ['select'], panel: 'gpulab', view: '3d' },
   { id: 'proofs', label: 'Proofs', description: 'Interactive proofs of theorems, laws and formulas with written steps.', ready: false, tools: ['select'] },
   { id: 'mechanics', label: 'Mechanics', description: 'Free fall, projectiles and pendulums with air resistance, trains, collisions, circular motion.', ready: false, tools: ['select'] },
@@ -115,25 +124,25 @@ export const MODES: ModeDef[] = [
     tools: ['select'],
     panel: 'labdata',
     view: '2d'
-  },
-  {
-    id: 'problems',
-    label: 'Problem Sets',
-    description: 'Random practice problems: hints one step at a time, and checking of the answer you worked out yourself.',
-    ready: true,
-    tools: ['select', '|', 'vector', 'point', '|', 'delete'],
-    panel: 'practice',
-    view: '2d'
   }
 ]
 
 /**
- * Modes this build keeps out of reach: none today. Question Author and Class Results were kept here
- * until 0.9, then taken out of the app (owner, 2026-10-06; archived at the tag
- * archive/question-author-0.9). The mechanism stays for the next mode that is not ready: put its id
- * in this set and no tab, More modes row, search row, View-menu panel or saved layout leads to it.
+ * Modes this build keeps out of reach: GPU Lab (its charged-particle demo will become a Sandbox experiment)
+ * and the 8 unready coming-soon modes. Hidden modes produce no tabs, no More modes rows, no search results,
+ * and cannot be opened from a saved layout or View menu.
  */
-export const HIDDEN_MODES: ReadonlySet<ModeId> = new Set<ModeId>()
+export const HIDDEN_MODES: ReadonlySet<ModeId> = new Set<ModeId>([
+  'gpu',
+  'proofs',
+  'mechanics',
+  'instruments',
+  'electricity',
+  'optics',
+  'waves',
+  'heat',
+  'nuclear'
+])
 
 // Each helper below takes the set as its last parameter, defaulting to HIDDEN_MODES, so a test can
 // pass an empty one and see the modes come back: the default is the switch, nothing else is.

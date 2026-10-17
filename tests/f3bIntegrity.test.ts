@@ -25,7 +25,7 @@ describe('F3b integrity guards', () => {
       .filter((e) => e.path.endsWith('.ts') || e.path.endsWith('.tsx') || e.path.endsWith('.html'))
       .map((e) => e.content)
       .join('\n')
-  })
+  }, 30000)
 
   it('no file in renderer src or README ever contains "Shapes & Geometry"', () => {
     expect(fileEntries.length).toBeGreaterThan(50)

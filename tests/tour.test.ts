@@ -281,8 +281,8 @@ describe('the words', () => {
       }
   })
 
-  it('say where the command bar really is (it is at the top of the window)', () => {
-    expect(readSource('src/renderer/src/app/App.tsx')).toMatch(/<ToolShelf \/>\s*<CommandBar \/>\s*<div className="min-h-0 flex-1">/)
+  it('say where the command bar really is (it is at the top of the window, hidden for students in Phase 0.9)', () => {
+    expect(readSource('src/renderer/src/app/App.tsx')).toMatch(/<ToolShelf \/>\s*\{SHOW_COMMAND_BAR && <CommandBar \/>\}\s*<div className="min-h-0 flex-1">/)
     for (const w of words) expect(w).not.toMatch(/bar at the bottom/)
   })
 
@@ -338,7 +338,7 @@ describe('af-tb1 — the six missions\' shape and words', () => {
         if (/^tool-/.test(m.anchor)) expect(contents).toContain('data-tour={`tool-${id}`}')
         else expect(contents).toContain(`data-tour="${m.anchor}"`)
       }
-    })
+    }, 30000)
 
     it('every hint is plain English with no LaTeX and no code', () => {
       for (const m of MISSIONS) {

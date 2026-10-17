@@ -4,6 +4,7 @@ import { MODES, readyModes, useApp, type ModeId } from './modes'
 import { enterMode } from './layout'
 import { PANEL_LIST, showPanel } from './panels'
 import { CATALOG } from './CommandBar'
+import { runCommand } from '../lang/commands'
 import { scene } from '../core/store'
 import { useTour } from './tour/Tour'
 import type { LengthUnit } from '../core/types'
@@ -22,9 +23,10 @@ interface Item {
   run: () => void
 }
 
-/** Put text into the command bar and focus it. */
+/** Put text into the command bar and execute it. */
 function fillCommandBar(text: string) {
   window.dispatchEvent(new CustomEvent('physlab:command', { detail: text }))
+  void runCommand(text)
 }
 
 // The keys of MODE_LABELS in their own order: a new calculator mode gets its row here without a second list to keep.

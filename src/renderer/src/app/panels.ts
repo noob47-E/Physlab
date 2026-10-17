@@ -29,8 +29,12 @@ export const PANEL_TITLES: Record<string, string> = {
   sandbox: 'Sandbox'
 }
 
-/** True for a panel that belongs to a mode this build keeps out of reach (HIDDEN_MODES in modes.ts). */
-export const isPanelHidden = (id: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean => hiddenPanels(hidden).includes(id)
+/** Panels kept out of student view (Phase 0.9 cuts). Stored in PANEL_TITLES so code remains. */
+const HIDDEN_PANELS: ReadonlySet<string> = new Set<string>(['console'])
+
+/** True for a panel that belongs to a mode this build keeps out of reach, or is hidden. */
+export const isPanelHidden = (id: string, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean =>
+  HIDDEN_PANELS.has(id) || hiddenPanels(hidden).includes(id)
 
 /** The panels a student can ask for: PANEL_TITLES without the hidden ones. */
 export const panelList = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): { id: string; title: string }[] =>
@@ -176,12 +180,9 @@ export function togglePanel(id: string): void {
 export function dropHiddenPanels(): boolean {
   const api = dockApi
   if (!api) return false
-  for (const id of hiddenPanels()) {
-    const panel = api.getPanel(id)
-    if (panel) api.removePanel(panel)
+  for (const panel of [...api.panels]) {
+    if (!PANEL_TITLES[panel.id] || isPanelHidden(panel.id)) api.removePanel(panel)
   }
-  // A layout saved by an older build may hold a panel this one does not have (Author, Class Results).
-  for (const panel of [...api.panels]) if (!PANEL_TITLES[panel.id]) api.removePanel(panel)
   refreshOpenPanels()
   return api.panels.length > 0
 }
