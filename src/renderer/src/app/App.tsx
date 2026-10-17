@@ -23,6 +23,7 @@ import { RecoveryBar } from './RecoveryBar'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { ContextMenuHost } from '../ui/ContextMenu'
 import { Tour } from './tour/Tour'
+import { ModeWheel, ModesFloatingButton } from './ModeWheel'
 import { PANEL_TITLES, dropHiddenPanels, refreshOpenPanels, setDockApi, showPanel } from './panels'
 import { warmupEngineWhenIdle } from '../math/engine'
 
@@ -145,6 +146,8 @@ export function App() {
           }}
         />
       </div>
+      <ModeWheel />
+      <ModesFloatingButton />
       <SearchPalette />
       <ContextMenuHost />
       <Tour />

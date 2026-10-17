@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
   Box,
@@ -25,15 +25,16 @@ import {
   Waypoints
 } from 'lucide-react'
 import { newProject, openProject, saveProject } from './files'
-import { clampPrecision, scaleFromText, toggleTopMenu } from './topBarInputs'
-import { comingSoonModes, isDrawingMode, modeById, readyModes, toolsFor, useApp } from './modes'
+import { clampPrecision, scaleFromText, toggleTopMenu, setActiveMenuCloser } from './topBarInputs'
+import { useModeWheel } from './modeWheelStore'
+import { isDrawingMode, modeById, toolsFor, useApp } from './modes'
 import { scene, useScene } from '../core/store'
 import type { LengthUnit, ToolId } from '../core/types'
 import { shelfFitLabel, TOOLS } from '../render/tools'
 import { saveViewportImage } from '../render/exportImage'
 import { THEMES, THEME_LABELS, useTheme } from './theme'
 import { StartHereChip, useTour } from './tour/Tour'
-import { enterMode, resetLayout } from './layout'
+import { resetLayout } from './layout'
 import { PANEL_LIST, togglePanel, useOpenPanels } from './panels'
 import { LABEL_SHOW_HELP, LabelShowSwitch } from '../ui/LabelControls'
 import { ToolCardHost } from '../ui/ToolCard'
@@ -45,7 +46,6 @@ import { UNIT_NAMES } from '../math/format'
 import { spaceOf, visibleOrder } from '../core/visibility'
 import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { confirmClearDrawing } from './contextActions'
-import { modeTabs, type MeasuredModeWidths } from './modeSwitch'
 import { runHistory } from './undoRoute'
 import { barDensity, clampZoom, shelfMode, zoomPercent, ZOOM_MAX, ZOOM_MIN, type BarDensity } from './layoutMath'
 
@@ -133,35 +133,6 @@ function useContainerWidth(): [(el: HTMLElement | null) => void, number] {
     return () => ro.disconnect()
   }, [el])
   return [setEl, width]
-}
-
-/**
- * The mode tabs and the More modes button as the bar draws them, measured in a hidden row that
- * carries their classes (Fix 13). The estimate in modeSwitch.ts is 25–30 % wide at 1440 px and
- * below, so it folded Problem Sets into More modes at 1366 px with room to spare. Measured again
- * whenever `key` changes (the room, the density, the labels) and once the fonts have loaded.
- */
-function useModeWidths(key: string): [RefObject<HTMLDivElement | null>, MeasuredModeWidths] {
-  const ref = useRef<HTMLDivElement>(null)
-  const [widths, setWidths] = useState<MeasuredModeWidths>({})
-  useLayoutEffect(() => {
-    let live = true
-    const measure = () => {
-      const row = ref.current?.firstElementChild
-      if (!live || !row) return
-      // Rounded up, so a tab is never taken as narrower than it draws.
-      const ws = Array.from(row.children, (k) => Math.ceil(k.getBoundingClientRect().width))
-      const next = { tabs: ws.slice(0, -1), more: ws[ws.length - 1] ?? 0 }
-      setWidths((old) => (old.more === next.more && old.tabs?.join() === next.tabs.join() ? old : next))
-    }
-    measure()
-    // A label measured in the fallback font is narrower or wider than in Segoe UI.
-    void document.fonts?.ready.then(measure)
-    return () => {
-      live = false
-    }
-  }, [key])
-  return [ref, widths]
 }
 
 function useOutsideClose(open: boolean, close: () => void) {
@@ -479,14 +450,21 @@ export function TopBar() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const toggleMenu = useCallback((id: string) => setOpenMenu((cur) => toggleTopMenu(cur, id)), [])
   const closeMenu = useCallback(() => setOpenMenu(null), [])
+
+  useEffect(() => {
+    setActiveMenuCloser(() => {
+      if (openMenu !== null) {
+        setOpenMenu(null)
+        return true
+      }
+      return false
+    })
+    return () => setActiveMenuCloser(null)
+  }, [openMenu])
+
   const [barRef, width] = useContainerWidth()
   const density = barDensity(width)
   const title = filePath ? filePath.split(/[\\/]/).pop() : 'untitled'
-  const ready = readyModes()
-  const later = comingSoonModes()
-  const [modesRef, modesWidth] = useContainerWidth()
-  const [measureRef, measured] = useModeWidths(`${modesWidth}|${density}|${ready.map((m) => m.label).join()}`)
-  const split = modeTabs(modesWidth, ready.map((m) => m.label), ready.findIndex((m) => m.id === mode), measured)
   const s = scene
   return (
     <div ref={barRef} className={`topbar ${density}`}>
@@ -495,6 +473,23 @@ export function TopBar() {
         <span className="inline-block h-4 w-4 rounded-sm" style={{ background: 'linear-gradient(135deg, var(--series-1), var(--series-5))' }} />
         {density !== 'tight' && 'PhysLab'}
       </div>
+      <button
+        type="button"
+        className="menu-btn mode-current-pill mr-2 flex items-center gap-1.5 px-2 py-0.5 rounded font-medium text-[var(--text-strong)] hover:bg-[var(--bg-3)] cursor-pointer"
+        onClick={() => {
+          closeMenu()
+          useModeWheel.getState().openWheel()
+        }}
+        title="Modes (Esc)"
+        aria-label="Modes (Esc)"
+      >
+        <span
+          className="w-2.5 h-2.5 rounded-full inline-block"
+          style={{ backgroundColor: `var(--mode-${mode === 'shapes' ? 'geometry' : mode})` }}
+        />
+        <span>{modeById(mode).label}</span>
+        <ChevronDown size={13} className="text-[var(--text-dim)]" />
+      </button>
       <Menu
         open={openMenu === 'file'}
         onToggle={() => toggleMenu('file')}
@@ -603,62 +598,7 @@ export function TopBar() {
           room the bar has left, and modeTabs (modeSwitch.ts) decides from that how many modes are
           tabs; the rest sit in More modes. One design at every width — the bar used to swap its
           tabs for a "Mode" dropdown below 1500 px (Fix 13). */}
-      <div ref={modesRef} data-tour="modes" className="relative flex min-w-0 flex-1 items-center gap-1">
-        <div ref={measureRef} className="mode-measure" aria-hidden="true">
-          <div>
-            {ready.map((m) => (
-              <button key={m.id} type="button" tabIndex={-1} className="mode-tab">
-                {m.label}
-              </button>
-            ))}
-            <button type="button" tabIndex={-1} className="menu-btn">
-              <span className="flex items-center gap-1 whitespace-nowrap">
-                More modes <ChevronDown size={13} />
-              </span>
-            </button>
-          </div>
-        </div>
-        {split.tabs.map((i) => {
-          const m = ready[i]
-          return (
-            <button
-              key={m.id}
-              className={`mode-tab shrink-0 ${mode === m.id ? 'on' : ''}`}
-              title={m.description}
-              aria-current={mode === m.id ? 'page' : undefined}
-              onClick={() => {
-                closeMenu()
-                enterMode(m.id)
-              }}
-            >
-              {m.label}
-            </button>
-          )
-        })}
-        {(split.more.length > 0 || later.length > 0) && (
-          <Menu
-            open={openMenu === 'more'}
-            onToggle={() => toggleMenu('more')}
-            onClose={closeMenu}
-            label={
-              <span className="flex items-center gap-1 whitespace-nowrap text-[var(--text-dim)]">
-                More modes <ChevronDown size={13} />
-              </span>
-            }
-            items={[
-              ...split.more.map((i) => ({
-                label: ready[i].label,
-                run: () => {
-                  closeMenu()
-                  enterMode(ready[i].id)
-                }
-              })),
-              ...(split.more.length && later.length ? ['-' as const] : []),
-              ...later.map((m) => ({ label: `${m.label}  (coming soon)`, run: () => {}, disabled: true }))
-            ]}
-          />
-        )}
-      </div>
+      <div data-tour="modes" className="flex-1" />
 
       <StartHereChip />
 

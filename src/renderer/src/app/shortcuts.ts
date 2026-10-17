@@ -14,6 +14,8 @@ import { visibleOrder } from '../core/visibility'
 import { pressSpace, releaseSpace, resetSpace } from '../render/panKey'
 
 import { isActivatable, isTyping as typingIn } from './keyTargets'
+import { useModeWheel } from './modeWheelStore'
+import { closeActiveMenu } from './topBarInputs'
 
 const isTyping = (e: KeyboardEvent) => typingIn(e.target as HTMLElement)
 
@@ -97,6 +99,12 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
     return
   }
   if (isTyping(e)) return
+  if (useModeWheel.getState().open) {
+    if (useModeWheel.getState().handleKeyDown(e.key, e.shiftKey)) {
+      e.preventDefault()
+      return
+    }
+  }
   // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y reach the history of the mode in front (the Sandbox and Lab
   // Data each keep their own); undoRoute decides, for the Edit menu too.
   if (ctrl && runHistory(useApp.getState().mode, { key: e.key, shift: e.shiftKey })) {
@@ -138,24 +146,47 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
       if (sb.selection) sb.removeBody(sb.selection)
       return
     }
-    if (e.key === 'Escape') {
-      sb.select(null)
-      return
-    }
     if (e.key === 'Home') {
       resetCamera()
       return
     }
     if (sandboxTransportKey(e)) return
-    if (e.key !== ' ') return
+    if (e.key !== ' ' && e.key !== 'Escape') return
   }
   switch (e.key) {
     case 'Escape':
-      // First Esc throws away the unfinished drawing, a second one goes back to Move.
+      // Esc order (Part L2):
+      // 0. If wheel is open: close it
+      if (useModeWheel.getState().open) {
+        useModeWheel.getState().close(false)
+        return
+      }
+      // 1. Close open menu or dialog
+      if (closeActiveMenu()) return
+      // 2. Throw away unfinished drawing
       if (cancelTool()) return
-      resetTool()
-      s.setTool('select')
-      s.select([])
+      // 3. Go back to Move tool
+      if (s.tool !== 'select') {
+        resetTool()
+        s.setTool('select')
+        s.select([])
+        return
+      }
+      // 4. Clear selection
+      if (useApp.getState().mode === 'sandbox') {
+        const sb = useSandbox.getState()
+        if (sb.selection) {
+          sb.select(null)
+          return
+        }
+      } else {
+        if (s.selection.length > 0) {
+          s.select([])
+          return
+        }
+      }
+      // 5. Open the mode wheel
+      useModeWheel.getState().openWheel()
       return
     case 'Delete':
       if (s.selection.length) s.removeObjects(s.selection)

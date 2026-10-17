@@ -27,9 +27,8 @@ let casWarmed = false
 /** Examples was closed by the simple Sandbox (enterMode below) and is owed back to the next mode that has lessons. */
 let examplesLentBySandbox = false
 
-/** Vector Calculator and Maths panels were closed by the simple Sandbox and are owed back to their modes. */
+/** Vector Calculator panel was closed by the simple Sandbox and is owed back to its mode. */
 let vectorcalcLentBySandbox = false
-let mathsLentBySandbox = false
 
 /**
  * Switch mode: tool shelf, view and the panel that belongs to the mode. `restored` is the start-up call on a layout put
@@ -84,12 +83,6 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
         }
       }
     }
-    if (id === 'sandbox' && useSandboxView.getState().view === 'simple') {
-      if (isPanelOpen('maths')) {
-        hidePanel('maths')
-        if (!isPanelOpen('maths')) mathsLentBySandbox = true
-      }
-    }
     if (isPanelOpen('console')) hidePanel('console')
   }
 
@@ -111,12 +104,6 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
       showPanel('vectorcalc')
     }
     vectorcalcLentBySandbox = false
-  }
-  if (id === 'calculator') {
-    if (mathsLentBySandbox && !isPanelOpen('maths')) {
-      showPanel('maths')
-    }
-    mathsLentBySandbox = false
   }
   if (m.panel && !opts.skipFocus) s.requestFocus(m.panel)
   // After requestFocus opens the panel, constrain the side panel group back to its normal width
@@ -143,6 +130,8 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
     casWarmed = true
     warmupEngine()
   }
+  const api = getDockApi()
+  if (api) updateTabHeaderVisibility(api)
 }
 
 interface SavedLayout extends Partial<LayoutStamp> {
@@ -186,6 +175,30 @@ export function buildLayout(api: DockviewApi, modeId: ModeId): void {
   // A centre panel was added inside the drawing's group, so it is what shows; the drawing comes
   // back the moment another mode opens.
   if (!m.centre) api.getPanel('viewport')?.api.setActive()
+  updateTabHeaderVisibility(api)
+}
+
+/**
+ * Dock tab headers are hidden unless two or more tabs share one group (Part L3).
+ * A single panel in a group does not need a tab header taking up vertical space.
+ */
+export function updateTabHeaderVisibility(api: DockviewApi): void {
+  if (!api?.groups) return
+  for (const group of api.groups) {
+    const shouldHide = group.panels.length <= 1
+    if (group.header && group.header.hidden !== shouldHide) {
+      group.header.hidden = shouldHide
+    }
+  }
+}
+
+/**
+ * Prevent docking to top or bottom positions (Part L3: panels on the side only).
+ */
+export function preventTopBottomDrop(event: { position: string; preventDefault: () => void }): void {
+  if (event.position === 'top' || event.position === 'bottom') {
+    event.preventDefault()
+  }
 }
 
 /**
@@ -203,6 +216,7 @@ export function restoreLayout(api: DockviewApi): boolean {
   if (needsLayoutRebuild(saved, { w: api.width, h: api.height })) return false
   try {
     api.fromJSON(saved.layout as never)
+    updateTabHeaderVisibility(api)
   } catch {
     return false
   }
@@ -246,7 +260,20 @@ export function watchLayout(api: DockviewApi): () => void {
     if (timer) clearTimeout(timer)
     timer = setTimeout(save, 800)
   }
-  const subs = [api.onDidLayoutChange(queue), api.onDidLayoutChange(refreshOpenPanels)]
+  const syncHeaders = () => updateTabHeaderVisibility(api)
+  const subs = [
+    api.onDidLayoutChange(queue),
+    api.onDidLayoutChange(refreshOpenPanels),
+    api.onDidLayoutChange(syncHeaders),
+    api.onDidAddGroup?.(syncHeaders),
+    api.onDidRemoveGroup?.(syncHeaders),
+    api.onDidAddPanel?.(syncHeaders),
+    api.onDidRemovePanel?.(syncHeaders),
+    api.onDidMovePanel?.(syncHeaders),
+    api.onWillShowOverlay?.(preventTopBottomDrop),
+    api.onWillDrop?.(preventTopBottomDrop)
+  ].filter(Boolean) as { dispose: () => void }[]
+  updateTabHeaderVisibility(api)
   window.addEventListener('beforeunload', save)
   return () => {
     if (timer) clearTimeout(timer)

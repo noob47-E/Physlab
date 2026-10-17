@@ -19,9 +19,10 @@ describe('the Console is closed by default', () => {
     expect(PANEL_TITLES).toHaveProperty('console')
   })
 
-  it('a layout saved before (version 3) is rebuilt once', () => {
-    expect(LAYOUT_VERSION).toBe(4)
+  it('a layout saved before (version 3 or 4) is rebuilt once', () => {
+    expect(LAYOUT_VERSION).toBe(5)
     expect(needsLayoutRebuild({ v: 3, app: '0.9', w: 1920, h: 1080 }, { w: 1920, h: 1080 })).toBe(true)
+    expect(needsLayoutRebuild({ v: 4, app: '0.9', w: 1920, h: 1080 }, { w: 1920, h: 1080 })).toBe(true)
   })
 })
 

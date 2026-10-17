@@ -44,7 +44,7 @@ export const TOOL_GROUP: Record<Extract<ToolCardKey, `tool:${string}`>, ToolCard
   'tool:triangle': { title: 'Triangle', shortcut: 'T', sentence: 'Click the three corners.', Animation: Triangle },
   'tool:polygon': { title: 'Polygon', shortcut: 'G', sentence: 'Click each corner in turn, then click the first corner again to finish.', Animation: Polygon },
   'tool:angle': { title: 'Angle', shortcut: 'A', sentence: 'Click a point on one arm, the vertex, then a point on the other arm.', Animation: Angle },
-  'tool:distance': { title: 'Measure', shortcut: 'D', sentence: 'Click two points to measure the distance between them.', Animation: Measure },
+  'tool:distance': { title: 'Distance', shortcut: 'D', sentence: 'Click two points to measure the distance between them.', Animation: Measure },
   'tool:midpoint': { title: 'Midpoint', shortcut: 'M', sentence: 'Click two points, or a segment, to mark the point halfway between.', Animation: Midpoint },
   'tool:perpendicular': { title: 'Perpendicular', sentence: 'Click a point and a line, in either order, for the line through the point at right angles.', Animation: Perpendicular },
   'tool:parallel': { title: 'Parallel', sentence: 'Click a point and a line, in either order, for the line through the point that never meets it.', Animation: Parallel },

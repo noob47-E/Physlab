@@ -4,7 +4,7 @@ import { openFailureText, saveFailureText } from '../core/fileErrors'
 import { isResultFileText } from '../questions/results'
 import { pickFile, saveBlob } from './download'
 
-const bridge = window.physlab
+const bridge = typeof window !== 'undefined' ? window.physlab : undefined
 
 const QUESTION_FILE_FILTERS = [{ name: 'Question file', extensions: ['pqjson', 'exam'] }]
 

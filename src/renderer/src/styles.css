@@ -188,6 +188,14 @@
   --sim-key-light: #fff4e6;
   --sim-fill-light: #8fa3c4;
   --sim-sky-light: #c8d6f0;
+  /* Mode wheel tokens (Part L2) */
+  --mode-calculator: #F2B544;
+  --mode-graphing: #5B9CFF;
+  --mode-geometry: #4CC38A;
+  --mode-vectors: #A78BFA;
+  --mode-sandbox: #FF8A5B;
+  --mode-problems: #F472B6;
+  --mode-lab: #38C6D9;
 }
 
 /* Light theme for bright rooms and classroom projectors. */
@@ -316,6 +324,14 @@
   --sim-key-light: #ffffff;
   --sim-fill-light: #c9d6ea;
   --sim-sky-light: #eef3fb;
+  /* Mode wheel tokens (Part L2) */
+  --mode-calculator: #A86B00;
+  --mode-graphing: #1F5FD1;
+  --mode-geometry: #18794E;
+  --mode-vectors: #6D3FD6;
+  --mode-sandbox: #C2410C;
+  --mode-problems: #BE185D;
+  --mode-lab: #0E7490;
 }
 
 /* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
@@ -442,6 +458,14 @@
   --sim-key-light: #dfe6ff;
   --sim-fill-light: #6e7fc0;
   --sim-sky-light: #9aa8e8;
+  /* Mode wheel tokens (Part L2) */
+  --mode-calculator: #F2B544;
+  --mode-graphing: #5B9CFF;
+  --mode-geometry: #4CC38A;
+  --mode-vectors: #A78BFA;
+  --mode-sandbox: #FF8A5B;
+  --mode-problems: #F472B6;
+  --mode-lab: #38C6D9;
 }
 
 /* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
@@ -573,6 +597,14 @@
   --sim-key-light: #ffe9c4;
   --sim-fill-light: #b8a07a;
   --sim-sky-light: #e6d2b0;
+  /* Mode wheel tokens (Part L2) */
+  --mode-calculator: #F2B544;
+  --mode-graphing: #5B9CFF;
+  --mode-geometry: #4CC38A;
+  --mode-vectors: #A78BFA;
+  --mode-sandbox: #FF8A5B;
+  --mode-problems: #F472B6;
+  --mode-lab: #38C6D9;
 }
 
 html,
@@ -631,11 +663,16 @@ input[type='range'] {
   --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
   --dv-inactivegroup-visiblepanel-tab-color: var(--text);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--text-faint);
-  --dv-separator-border: var(--line);
+  --dv-separator-border: transparent;
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--accent);
   --dv-tabs-and-actions-container-height: 28px;
   --dv-tabs-and-actions-container-font-size: var(--text-small);
+}
+
+/* Part L3: dock tab headers hidden unless two tabs share one place */
+.dv-tabs-and-actions-container:not(:has(.dv-tab ~ .dv-tab)) {
+  display: none !important;
 }
 
 /* Dockview split-view cells must not scroll: the panel itself (.panel) is the one vertical scroller.
@@ -643,6 +680,15 @@ input[type='range'] {
    own whenever rounding or scaling leaves the panel a pixel taller than its cell. */
 .dv-split-view-container .dv-view-container .dv-view {
   overflow: hidden !important;
+  box-sizing: border-box;
+  padding: 3px;
+}
+
+/* Part L3: rounded panels floating cleanly with subtle line borders */
+.dv-groupview {
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  overflow: hidden;
 }
 
 /* Custom component classes live in a cascade layer so Tailwind utilities (w-12, h-auto…) can override them. */
@@ -1779,6 +1825,47 @@ math-field.math-input::part(menu-toggle) {
   border: 1px solid var(--accent);
   background: var(--sel-fill-faint);
   border-radius: 2px;
+}
+
+/* ---------- Mode Wheel (Part L2) ---------- */
+@keyframes mode-wheel-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mode-wheel-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes mode-wheel-breathe {
+  0%, 100% {
+    transform: scale(1.05);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.mode-wheel-active-segment {
+  animation: mode-wheel-breathe 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-wheel-active-segment {
+    animation: none !important;
+    transform: scale(1) !important;
+  }
+  .mode-wheel-overlay,
+  .mode-wheel-container {
+    animation: none !important;
+  }
 }
 
 } /* end @layer components */

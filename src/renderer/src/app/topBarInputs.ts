@@ -23,3 +23,14 @@ export function toggleTopMenu<T extends string>(active: T | null, target: T): T 
   return active === target ? null : target
 }
 
+let activeMenuCloser: (() => boolean) | null = null
+
+export function setActiveMenuCloser(closer: (() => boolean) | null): void {
+  activeMenuCloser = closer
+}
+
+export function closeActiveMenu(): boolean {
+  if (activeMenuCloser) return activeMenuCloser()
+  return false
+}
+

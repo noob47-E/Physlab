@@ -52,8 +52,8 @@ const PANEL_GROUPS: string[][] = [
   ['viewport', 'maths'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
-  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab'],
-  ['console', 'timeline', 'graphs']
+  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab', 'timeline', 'graphs'],
+  ['console']
 ]
 
 let dockApi: DockviewApi | null = null

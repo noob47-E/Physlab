@@ -30,7 +30,7 @@ export const TOOLS: ToolInfo[] = [
   { id: 'triangle', label: 'Triangle', key: 'T', hint: ['Click vertex 1.', 'Click vertex 2.', 'Click vertex 3.'] },
   { id: 'polygon', label: 'Polygon', key: 'G', hint: ['Click the first corner.', 'Click the next corners. Right-click or Enter to finish (or click the first corner again).'] },
   { id: 'angle', label: 'Angle', key: 'A', hint: ['Click a point on the first arm.', 'Click the vertex.', 'Click a point on the second arm.'] },
-  { id: 'distance', label: 'Measure', key: 'D', hint: ['Click the first point.', 'Click the second point to measure the distance.'] },
+  { id: 'distance', label: 'Distance', key: 'D', hint: ['Click the first point.', 'Click the second point to measure the distance.'] },
   { id: 'midpoint', label: 'Midpoint', key: 'M', hint: ['Click two points or a segment.', 'Click the second point.'] },
   { id: 'perpendicular', label: 'Perpendicular', key: '', hint: ['Click a point and a line (any order).', 'Click the other one.'] },
   { id: 'parallel', label: 'Parallel', key: '', hint: ['Click a point and a line (any order).', 'Click the other one.'] },

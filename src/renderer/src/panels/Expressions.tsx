@@ -305,13 +305,17 @@ function SliderRowView({
             }
           />
         </span>
-        <span className="flex items-center gap-0.5">
-          <button className={ICON} title="Move up" aria-label="Move up" disabled={first} onClick={() => onMove(-1)}>
-            <ArrowUp size={12} />
-          </button>
-          <button className={ICON} title="Move down" aria-label="Move down" disabled={last} onClick={() => onMove(1)}>
-            <ArrowDown size={12} />
-          </button>
+        {/* The same labelled arrows as a line's row (L5): a slider row came in after L5 and had them bare. */}
+        <span className="flex items-center gap-1">
+          <span>{W.move}</span>
+          <span className="flex items-center gap-0.5">
+            <button className={ICON} title={W.moveUp} aria-label={W.moveUp} disabled={first} onClick={() => onMove(-1)}>
+              <ArrowUp size={12} />
+            </button>
+            <button className={ICON} title={W.moveDown} aria-label={W.moveDown} disabled={last} onClick={() => onMove(1)}>
+              <ArrowDown size={12} />
+            </button>
+          </span>
         </span>
       </div>
     </div>
@@ -447,13 +451,16 @@ function Row({
           </span>
         )}
         {/* Touch has no Alt key: the arrows move the row too. */}
-        <span className="flex items-center gap-0.5">
-          <button className={ICON} title="Move up" aria-label="Move up" disabled={first} onClick={() => onMove(-1)}>
-            <ArrowUp size={12} />
-          </button>
-          <button className={ICON} title="Move down" aria-label="Move down" disabled={last} onClick={() => onMove(1)}>
-            <ArrowDown size={12} />
-          </button>
+        <span className="flex items-center gap-1">
+          <span>{W.move}</span>
+          <span className="flex items-center gap-0.5">
+            <button className={ICON} title={W.moveUp} aria-label={W.moveUp} disabled={first} onClick={() => onMove(-1)}>
+              <ArrowUp size={12} />
+            </button>
+            <button className={ICON} title={W.moveDown} aria-label={W.moveDown} disabled={last} onClick={() => onMove(1)}>
+              <ArrowDown size={12} />
+            </button>
+          </span>
         </span>
       </div>
       {rangeNote && <div className="mt-0.5 text-fine text-[var(--text-faint)]">{rangeNote}</div>}

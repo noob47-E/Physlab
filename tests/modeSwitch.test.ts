@@ -84,19 +84,11 @@ describe('Fix 13: one way to switch modes', () => {
     expect(used(tabs) + MODE_MORE_W).toBeLessThanOrEqual(700)
   })
 
-  it('TopBar measures each tab and the More button in a hidden row drawn with their own classes', () => {
+  it('replaced TopBar mode tabs with the Esc mode wheel and current mode pill (Part L2)', () => {
     const bar = readSource('src/renderer/src/app/TopBar.tsx')
-    expect(bar).toMatch(/modeTabs\(modesWidth, [^\n]*, measured\)/)
-    expect(bar).toMatch(/className="mode-measure" aria-hidden="true"/)
-    expect(bar).toMatch(/tabIndex=\{-1\} className="mode-tab"/)
-    expect(bar).toMatch(/tabIndex=\{-1\} className="menu-btn"/)
-  })
-
-  it('is one control family in the bar: no width-switched "Mode" dropdown is left', () => {
-    const bar = readSource('src/renderer/src/app/TopBar.tsx')
-    expect(bar).toMatch(/modeTabs\(modesWidth, /)
+    expect(bar).toMatch(/mode-current-pill/)
+    expect(bar).toMatch(/openWheel\(\)/)
     expect(bar).not.toMatch(/density === 'full' \? \(/)
     expect(bar).not.toMatch(/>Mode<\/span>/)
-    expect(bar).toMatch(/More modes/)
   })
 })

@@ -28,7 +28,7 @@ export const MODE_MORE_W = 116
 export const modeTabWidth = (label: string): number => label.length * MODE_TAB_CHAR + MODE_TAB_PAD
 
 /** Widths the app measured (px): each ready mode's tab, in order, and the More modes button. 0 or missing means not measured. */
-export interface MeasuredModeWidths {
+interface MeasuredModeWidths {
   tabs?: readonly number[]
   more?: number
 }

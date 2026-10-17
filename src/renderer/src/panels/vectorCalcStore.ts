@@ -1030,6 +1030,56 @@ function copyArrow(b: Builder, of: ObjId, a: { name: string; tail: V3; comp: V3 
 }
 
 /**
+ * Computes a bounding box framing all vectors (solution arrows, cards, origin, and scene vectors)
+ * with comfortable top padding so tall vectors (like Vector A) and their labels are never cut off by
+ * the viewport's top HUD controls.
+ */
+function vectorsFrameBox(sol?: VS.Solution, style?: DrawStyle | null): { min: [number, number, number]; max: [number, number, number] } {
+  const pts: V3[] = [[0, 0, 0]]
+  if (sol?.visual) {
+    const vis = sol.visual
+    const lay = layoutVectors(layoutInput(vis), style ?? vis.mode ?? 'common-tail')
+    for (const a of lay.arrows) {
+      pts.push(a.tail)
+      pts.push(add(a.tail, a.comp))
+    }
+    for (const v of vis.vectors) {
+      const tail = v.tail ?? ZERO
+      pts.push(tail)
+      pts.push(add(tail, v.drawn ?? v.v))
+    }
+  }
+  const sc = useScene.getState()
+  for (const o of Object.values(sc.objects)) {
+    if (o.type === 'vector' && o.visible && (o.space === 'vectors' || !o.space || o.space === sc.activeSpace)) {
+      const val = sc.ev.values.get(o.id)
+      const tail = val?.type === 'vector' ? val.tail : (o.def.kind === 'free' ? o.def.tail : ZERO)
+      const comp = val?.type === 'vector' ? val.comp : (o.def.kind === 'free' ? o.def.comp : ZERO)
+      pts.push(tail)
+      pts.push(add(tail, comp))
+    }
+  }
+  let minX = 0, maxX = 0, minY = 0, maxY = 0, minZ = 0, maxZ = 0
+  for (const p of pts) {
+    if (Number.isFinite(p[0])) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]) }
+    if (Number.isFinite(p[1])) { minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]) }
+    if (Number.isFinite(p[2])) { minZ = Math.min(minZ, p[2]); maxZ = Math.max(maxZ, p[2]) }
+  }
+  const spanX = Math.max(maxX - minX, 1)
+  const spanY = Math.max(maxY - minY, 1)
+  const spanZ = maxZ - minZ
+  const span = Math.max(spanX, spanY, spanZ, 2)
+  const padX = Math.max(span * 0.15, 0.8)
+  const padBottom = Math.max(span * 0.15, 0.8)
+  const padTop = Math.max(span * 0.35, 1.8)
+  const padZ = Math.max(span * 0.15, 0.8)
+  return {
+    min: [minX - padX, minY - padBottom, minZ - (spanZ > 0 ? padZ : 0)],
+    max: [maxX + padX, maxY + padTop, maxZ + (spanZ > 0 ? padZ : 0)]
+  }
+}
+
+/**
  * Draws an answer with the cards' own arrows. `style` is the student's choice of picture, or
  * null for the answer's own. One undo step takes the drawing away (with a second for clearing
  * the drawing before it, when there was one).
@@ -1041,7 +1091,7 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
   // are laid out again in place (switchLayout), so what a student built on them stays.
   if (drawn.sol === sol && switchLayout(sol, vis, style)) {
     useScene.getState().select([])
-    fitCamera()
+    fitCamera(vectorsFrameBox(sol, style))
     return
   }
   // Only the answer the panel shows has a recipe: a picture of anything else is not worked out again.
@@ -1050,7 +1100,7 @@ export function drawAnswer(sol: VS.Solution, style: DrawStyle | null): void {
   // Nothing is left selected: a selected answer wears the selection band and looks heavier than
   // its parents.
   useScene.getState().select([])
-  fitCamera()
+  fitCamera(vectorsFrameBox(sol, style))
 }
 
 /**

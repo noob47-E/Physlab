@@ -203,7 +203,7 @@ export function cas(op: string, payload: Record<string, unknown> = {}): Promise<
  * worker that exists is already loading or loaded, so a second warm-up does nothing.
  */
 export const warmupCas = (): void => {
-  if (worker) return
+  if (worker || typeof Worker === 'undefined') return
   getWorker().postMessage({ op: 'warmup', payload: {} })
 }
 

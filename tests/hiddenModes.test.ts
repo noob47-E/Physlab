@@ -131,10 +131,14 @@ describe('a student cannot reach Question Author or Class Results', () => {
       expect(ids).toEqual([])
     })
 
-    it('has a bar that builds its tabs and its coming-soon rows only from the lists that leave them out', () => {
+    it('has a wheel and bar that build modes only from lists that leave them out', () => {
+      // In L2, top mode tabs and More modes are replaced by the Esc mode wheel (ModeWheel)
+      // and the current mode pill in TopBar. WHEEL_MODES contains only student modes.
+      const wheel = readSource('src/renderer/src/app/modeWheelData.ts')
       const bar = readSource('src/renderer/src/app/TopBar.tsx')
-      expect(has(bar, /const ready = readyModes\(\)/), 'TopBar builds `ready` from readyModes()').toBe(true)
-      expect(has(bar, /const later = comingSoonModes\(\)/), 'TopBar builds `later` from comingSoonModes()').toBe(true)
+      for (const id of HIDDEN_MODE_IDS) {
+        expect(wheel).not.toContain(`id: '${id}'`)
+      }
       expect(has(bar, /MODES\.filter\(/), 'TopBar filters MODES itself').toBe(false)
     })
   })

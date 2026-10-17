@@ -77,7 +77,8 @@ export interface LayoutStamp {
 // names the dead ids would restore with empty tabs, so the version bump rebuilds it.
 // 4: the Console is no longer a mode's own panel (Graphing has Expressions), so a saved layout
 // that still holds it — in Graphing, or left open in Geometry after a visit — is rebuilt once.
-export const LAYOUT_VERSION = 4
+// 5: Part L3: panels on the side only, rounded panels, dock tab headers hidden unless two tabs share one place.
+export const LAYOUT_VERSION = 5
 
 /**
  * A saved layout is used again only when it was made by this schema for this size of window.
@@ -102,8 +103,6 @@ export function panelHome(id: string): PanelHome {
     case 'expressions':
       return 'left'
     case 'console':
-    case 'timeline':
-    case 'graphs':
       return 'below'
     default:
       return 'right'
