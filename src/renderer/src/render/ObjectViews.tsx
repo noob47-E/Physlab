@@ -129,7 +129,7 @@ export const PointView = memo(function PointView({ obj, c, selected, hovered, is
     <group ref={group}>
       {selected && (
         <mesh renderOrder={20}>
-          <ringGeometry args={[r + 3, r + 6, 32]} />
+          <ringGeometry args={[r + 1.5, r + 2.8, 32]} />
           <meshBasicMaterial key={colors.theme} color={colors.select} transparent opacity={0.85} depthTest={false} depthWrite={false} />
         </mesh>
       )}
@@ -445,7 +445,7 @@ export const LineLikeView = memo(function LineLikeView({ obj, c, selected, hover
   })
   return (
     <>
-      {selected && <FatLine points={pts} color={colors.select} width={width + 4} renderOrder={4} />}
+      {selected && <FatLine points={pts} color={colors.select} width={width + 1.6} renderOrder={4} />}
       <FatLine points={pts} color={shownColor(obj)} width={width} renderOrder={5} />
     </>
   )
@@ -459,6 +459,7 @@ export const CircleView = memo(function CircleView({ obj, c, selected, hovered }
   const { c: center, r } = c.circle
   const colors = useDrawingColors()
   const colour = shownColor(obj)
+  const width = hovered ? 2.8 : 2.2
   const pts = useMemo(() => arcPoints(center, r, 0, Math.PI * 2, 160), [center, r])
   useFrame(() => labelAnchors.set(obj.id, { p: [center[0] + r * Math.SQRT1_2, center[1] + r * Math.SQRT1_2, center[2]], dx: 10, dy: -10 }))
   return (
@@ -470,8 +471,8 @@ export const CircleView = memo(function CircleView({ obj, c, selected, hovered }
           <meshBasicMaterial key={`${colors.theme}${colour}`} color={colour} transparent opacity={0.12} depthTest={false} depthWrite={false} />
         </mesh>
       )}
-      {selected && <FatLine points={pts} color={colors.select} width={6} renderOrder={4} />}
-      <FatLine points={pts} color={colour} width={hovered ? 2.8 : 2.2} renderOrder={5} />
+      {selected && <FatLine points={pts} color={colors.select} width={width + 1.6} renderOrder={4} />}
+      <FatLine points={pts} color={colour} width={width} renderOrder={5} />
     </>
   )
 })

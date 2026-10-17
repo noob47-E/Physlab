@@ -260,7 +260,10 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
   return (
     <>
       {data.fill && data.fill.length > 0 && <FillMesh positions={data.fill} color={obj.color} />}
-      {selected && data.polylines.map((p, i) => <FatLine key={`s${i}`} points={p} color={colors.select} width={width + 4} renderOrder={2} />)}
+      {selected && data.polylines.map((p, i) => <FatLine key={`s${i}`} points={p} color={colors.select} width={width + 1.6} renderOrder={2} />)}
+      {selected && data.segments && data.segments.length > 1 && (
+        <FatLine points={data.segments} segments color={colors.select} width={width + 1.6} renderOrder={2} dashed={obj.op === '<' || obj.op === '>'} dashSize={8 * b.wpp} gapSize={5 * b.wpp} />
+      )}
       {data.polylines.map((p, i) => (
         <FatLine key={i} points={p} color={obj.color} width={width} renderOrder={3} />
       ))}

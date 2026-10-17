@@ -205,7 +205,7 @@ export function SpaceCurveView({ obj, fx, fy, fz, width, selected, selectColour,
   })
   return (
     <>
-      {selected && runs.map((r, i) => <FatLine key={`s${i}`} points={r} color={selectColour} width={width + 4} depthTest renderOrder={2} />)}
+      {selected && runs.map((r, i) => <FatLine key={`s${i}`} points={r} color={selectColour} width={width + 1.6} depthTest renderOrder={2} />)}
       {runs.map((r, i) => (
         <FatLine key={i} points={r} color={obj.color} width={width} depthTest renderOrder={3} />
       ))}

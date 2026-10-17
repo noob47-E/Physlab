@@ -55,7 +55,7 @@ export function SolidView({ obj, c, selected, hovered }: { obj: SolidObj; c: C<'
       <mesh geometry={geo} renderOrder={1}>
         <meshStandardMaterial key={fill} color={fill} side={THREE.DoubleSide} transparent opacity={selected ? 0.38 : hovered ? 0.34 : 0.28} depthWrite={false} roughness={0.8} />
       </mesh>
-      {selected && <FatLine points={edges} segments color={themeColor('--sel-glow', edge)} width={4.6} depthTest renderOrder={2} />}
+      {selected && <FatLine points={edges} segments color={themeColor('--sel-glow', edge)} width={(selected ? 2.4 : 1.8) + 1.4} depthTest renderOrder={2} />}
       <FatLine points={edges} segments color={edge} width={selected ? 2.4 : 1.8} depthTest renderOrder={3} />
       {HEIGHT_LINE.has(obj.kind) && <FatLine points={[sh.base, sh.top]} color={edge} width={1.4} dashed dashSize={0.18} gapSize={0.14} renderOrder={3} />}
     </group>

@@ -101,7 +101,7 @@
   /* Drawing colours the viewport reads through themeColor(): the halo round a selected curve or
      body, the dots a graph puts on its roots, intercepts and turning points, the mesh over a 3D
      surface, and the cool fill light on the far side of a solid. */
-  --sel-glow: #ffd43b;
+  --sel-glow: #ffffff;
   --key-root: #ff8787;
   --key-intercept: #74c0fc;
   --key-extremum: #8ce99a;
@@ -110,8 +110,8 @@
   /* Chrome colours the rules further down used to hardcode: the ring round a selected label, the
      dimming behind the tour, the focus ring of a text or maths field and the fill of a selection
      inside one. Each is the accent or the selection glow at a set opacity, in the theme's own hue. */
-  --sel-label: rgba(255, 212, 59, 0.6);
-  --sel-label-ring: rgba(255, 212, 59, 0.35);
+  --sel-label: rgba(255, 255, 255, 0.7);
+  --sel-label-ring: rgba(255, 255, 255, 0.35);
   --scrim: rgba(8, 10, 14, 0.55);
   --focus-ring: rgba(79, 140, 255, 0.2);
   --sel-fill: rgba(79, 140, 255, 0.35);
@@ -239,14 +239,14 @@
   --series-4: #b3800a;
   --series-5: #862e9c;
   --series-6: #0b7285;
-  --sel-glow: #c48600;
+  --sel-glow: #6e7681;
   --key-root: #c92a2a;
   --key-intercept: #1c7ed6;
   --key-extremum: #2b8a3e;
   --wireframe: #1c1e22;
   --light-fill: #dbe7fa;
-  --sel-label: rgba(196, 134, 0, 0.7);
-  --sel-label-ring: rgba(196, 134, 0, 0.35);
+  --sel-label: rgba(110, 118, 129, 0.7);
+  --sel-label-ring: rgba(110, 118, 129, 0.35);
   --scrim: rgba(30, 40, 60, 0.45);
   --focus-ring: rgba(47, 111, 228, 0.25);
   --sel-fill: rgba(47, 111, 228, 0.3);
@@ -366,14 +366,14 @@
   --series-4: #f9d56e;
   --series-5: #d29bf5;
   --series-6: #6fd6e6;
-  --sel-glow: #f5c76b;
+  --sel-glow: #ffffff;
   --key-root: #ff8fa3;
   --key-intercept: #7cc4ff;
   --key-extremum: #8fe3b0;
   --wireframe: #05070f;
   --light-fill: #b4c4ff;
-  --sel-label: rgba(245, 199, 107, 0.6);
-  --sel-label-ring: rgba(245, 199, 107, 0.35);
+  --sel-label: rgba(255, 255, 255, 0.7);
+  --sel-label-ring: rgba(255, 255, 255, 0.35);
   --scrim: rgba(4, 6, 16, 0.6);
   --focus-ring: rgba(139, 156, 255, 0.25);
   --sel-fill: rgba(139, 156, 255, 0.35);
@@ -496,16 +496,15 @@
   --series-4: #c9a8ff;
   --series-5: #d79bd1;
   --series-6: #6fc9c9;
-  /* Gold, like every theme's glow: objects take their colours from PALETTE in core/naming.ts, blue
-     first, and a gold halo shows against each of them better than any cool one tried. */
-  --sel-glow: #ffdb7a;
+  /* Selection: thin white in dark themes, thin grey in light themes (L4). */
+  --sel-glow: #ffffff;
   --key-root: #ff8f6b;
   --key-intercept: #7cc4ff;
   --key-extremum: #8fe08a;
   --wireframe: #0a0602;
   --light-fill: #e8d9a8;
-  --sel-label: rgba(255, 219, 122, 0.6);
-  --sel-label-ring: rgba(255, 219, 122, 0.35);
+  --sel-label: rgba(255, 255, 255, 0.7);
+  --sel-label-ring: rgba(255, 255, 255, 0.35);
   --scrim: rgba(10, 6, 2, 0.6);
   --focus-ring: rgba(224, 184, 74, 0.25);
   --sel-fill: rgba(224, 184, 74, 0.35);
