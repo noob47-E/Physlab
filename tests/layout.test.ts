@@ -292,6 +292,7 @@ describe('one name for the Geometry mode (Fix 16)', () => {
     const files: string[] = []
     const walk = (dir: string): void => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.name.startsWith('.')) continue
         const p = join(dir, e.name)
         if (e.isDirectory()) walk(p)
         else if (/\.(ts|tsx|html|json|pqjson)$/.test(e.name)) files.push(p)

@@ -34,7 +34,7 @@ import { useSandbox } from '../src/renderer/src/sim/store'
 import { usePracticeMission } from '../src/renderer/src/panels/practiceMission'
 import { bumpAction, pressAction } from '../src/renderer/src/core/actionSignals'
 import { resetGlobals } from './helpers/globals'
-import { readSource } from './helpers/repo'
+import { readSource, RENDERER_SRC } from './helpers/repo'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -321,6 +321,7 @@ describe('af-tb1 — the six missions\' shape and words', () => {
   function filesUnder(dir: string): string[] {
     const out: string[] = []
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue
       const p = join(dir, entry.name)
       if (entry.isDirectory()) out.push(...filesUnder(p))
       else if (p.endsWith('.ts') || p.endsWith('.tsx')) out.push(p)
@@ -330,7 +331,7 @@ describe('af-tb1 — the six missions\' shape and words', () => {
 
   describe('Option B missions: shape and wording', () => {
     it('every mission anchor is a data-tour name in the source (a literal or the tool shelf\'s tool-<id>)', () => {
-      const contents = filesUnder(join(__dirname, '../src/renderer/src'))
+      const contents = filesUnder(RENDERER_SRC)
         .map((f) => readFileSync(f, 'utf8'))
         .join('\n')
       for (const m of MISSIONS) {
