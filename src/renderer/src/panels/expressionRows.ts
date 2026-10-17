@@ -1,12 +1,18 @@
 // The rules behind the Expressions panel (P-GCALC GC4), kept out of the component so a test can
-// cross the same boundary the student does. The rows are the scene's graphs, nothing else: the
-// scene store is the one source of truth, so a graph typed in the command bar is a row here, and a
-// row deleted here is gone from the Outliner too.
+// cross the same boundary the student does. The rows are the scene's graphs and sliders, in scene
+// order: the scene store is the one source of truth, so a graph typed in the command bar is a row here,
+// and a row deleted here is gone from the Outliner too.
 
 import { fmt } from '../math/format'
-import type { GraphObj, ObjId, SceneObject } from '../core/types'
+import type { Computed, GraphObj, NumberObj, ObjId, SceneObject } from '../core/types'
+import { math, namedConstant, preprocess, sceneNames, symbolsOf } from '../math/expr'
+import type { MathNode } from 'mathjs'
+import { visibleIn } from '../core/visibility'
+import { Builder } from '../core/factory'
+import { scene } from '../core/store'
 
-export interface ExpressionRow {
+export interface GraphRow {
+  kind: 'graph'
   id: ObjId
   source: string
   color: string
@@ -16,17 +22,64 @@ export interface ExpressionRow {
   explicit: boolean
 }
 
+export interface SliderRow {
+  kind: 'slider'
+  id: ObjId
+  name: string
+  source: string
+  value: number
+  color: string
+  visible: boolean
+  min: number
+  max: number
+  step: number
+  animate?: boolean
+}
+
+export type ExpressionRow = GraphRow | SliderRow
+
 /** The default line width a graph is drawn with when it has none of its own (render/GraphView.tsx). */
 export const DEFAULT_WIDTH = 2.4
 
-/** One row per graph in the Graphing drawing, in scene order. */
-export function expressionRows(objects: Record<ObjId, SceneObject>, order: readonly ObjId[]): ExpressionRow[] {
+/** One row per graph or slider in the Graphing drawing, in scene order. */
+export function expressionRows(
+  objects: Record<ObjId, SceneObject>,
+  order: readonly ObjId[],
+  ev?: { values?: Map<ObjId, Computed>; scope?: Record<string, unknown> }
+): ExpressionRow[] {
   const rows: ExpressionRow[] = []
   for (const id of order) {
     const o = objects[id]
-    if (o?.type !== 'graph' || o.space !== 'graphing') continue
-    const g = o as GraphObj
-    rows.push({ id, source: g.source, color: g.color, visible: g.visible, width: g.width ?? DEFAULT_WIDTH, explicit: g.kind === 'explicit' })
+    if (!o) continue
+    if (o.type === 'graph' && visibleIn(o, 'graphing')) {
+      const g = o as GraphObj
+      rows.push({
+        kind: 'graph',
+        id,
+        source: g.source,
+        color: g.color,
+        visible: g.visible,
+        width: g.width ?? DEFAULT_WIDTH,
+        explicit: g.kind === 'explicit'
+      })
+    } else if (o.type === 'number' && o.slider && visibleIn(o, 'graphing')) {
+      const s = o.slider
+      const c = ev?.values?.get(o.id)
+      const val = c?.type === 'number' ? c.value : ((ev?.scope?.[o.name] as number) ?? (Number(o.expr) || 0))
+      rows.push({
+        kind: 'slider',
+        id,
+        name: o.name,
+        source: `${o.name} = ${fmt(val, 4)}`,
+        value: val,
+        color: o.color,
+        visible: o.visible,
+        min: s.min,
+        max: s.max,
+        step: s.step,
+        animate: o.animate
+      })
+    }
   }
   return rows
 }
@@ -98,6 +151,55 @@ export function rangeEdit(source: string, range: { expr: string } | null, a: str
   return { line: line === source ? null : line, note: null }
 }
 
+/** Detects free parameter symbols in an expression that could be offered as sliders. */
+export function freeParametersFor(text: string, scope: Record<string, unknown> = {}): string[] {
+  let expr = text.trim()
+  if (!expr) return []
+
+  // Direct assignments like "a = 1" or "k = 2.5" define a value, not a curve with free parameters
+  const assign = expr.match(/^\s*([A-Za-z]\w*)\s*=\s*(.+)$/)
+  if (assign && !/[xyzt]/.test(assign[0])) return []
+
+  const rel = expr.match(/^\s*(?:y|[A-Za-z]\w*\s*\(\s*x\s*\)|z|r)\s*=\s*(.+)$/)
+  if (rel) expr = rel[1]
+  else if (expr.includes('=')) {
+    const parts = expr.split('=')
+    expr = `(${parts[0]}) - (${parts[1]})`
+  }
+
+  let node: MathNode
+  try {
+    node = math.parse(preprocess(expr, sceneNames()))
+  } catch {
+    return []
+  }
+
+  const vars = new Set(['x', 'y', 'z', 't', 'theta', 'u', 'v', 'deg', 'rad'])
+  const found: string[] = []
+  for (const name of symbolsOf(node)) {
+    if (vars.has(name)) continue
+    if (name in scope) continue
+    if (namedConstant(name) !== undefined) continue
+    if (typeof (math as unknown as Record<string, unknown>)[name] === 'function') continue
+    if (!found.includes(name)) found.push(name)
+  }
+  return found
+}
+
+/** Creates a slider in the scene for a given variable name. */
+export function createSlider(name: string, value = 1, min = -10, max = 10, step = 0.1): NumberObj {
+  const existingId = scene().ev.names.get(name)
+  if (existingId) {
+    const existing = scene().objects[existingId]
+    if (existing && existing.type === 'number') return existing as NumberObj
+  }
+  const b = new Builder()
+  const obj = b.number(String(value), { name, slider: { min, max, step } })
+  obj.space = 'graphing'
+  b.commit()
+  return obj
+}
+
 export const EXPRESSION_WORDS = {
   heading: 'Expressions',
   add: 'Add an expression',
@@ -110,5 +212,7 @@ export const EXPRESSION_WORDS = {
   rangeTo: 'to',
   oneEnd: 'Type both ends to draw only part of the line.',
   notANumber: 'Each end must be a number, like -2 or 3.5.',
-  cannotRange: 'Only a line written as y = … can be drawn on part of its range.'
+  cannotRange: 'Only a line written as y = … can be drawn on part of its range.',
+  addSlider: 'add slider:',
+  allSliders: 'all'
 } as const

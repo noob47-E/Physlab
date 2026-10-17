@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
 import { runCommand } from '../lang/commands'
 import { scene } from '../core/store'
 import { useParticleLab } from '../render/GpuParticles'
 import { fitCamera, resetCamera } from '../render/viewState'
 import { enterMode } from '../app/layout'
-import type { ModeId } from '../app/modes'
+import { useApp, type ModeId } from '../app/modes'
 import { useLab } from '../lab/labStore'
 import type { LabTable } from '../lab/types'
 
@@ -14,7 +14,7 @@ type Level = 'Basic' | 'Intermediate' | 'Advanced'
 
 type Area = 'Vectors' | 'Shapes & geometry' | 'Graphs & functions' | 'Motion' | 'Electricity & magnetism'
 
-interface Example {
+export interface Example {
   title: string
   /** What it teaches, in plain words (no book or chapter numbers). */
   topic: string
@@ -345,10 +345,50 @@ export async function runExample(ex: Example): Promise<void> {
 const LEVELS: Level[] = ['Basic', 'Intermediate', 'Advanced']
 const AREAS: Area[] = ['Vectors', 'Shapes & geometry', 'Graphs & functions', 'Motion', 'Electricity & magnetism']
 
+/** The topic area that belongs to each mode: Examples opens on this section first. */
+export function areaForMode(mode: ModeId): Area {
+  switch (mode) {
+    case 'shapes':
+      return 'Shapes & geometry'
+    case 'graphing':
+      return 'Graphs & functions'
+    case 'vectors':
+    default:
+      return 'Vectors'
+  }
+}
+
+/** The list of areas with the current mode's topic placed first. */
+export function orderedAreasForMode(mode: ModeId): Area[] {
+  const current = areaForMode(mode)
+  return [current, ...AREAS.filter((a) => a !== current)]
+}
+
+/** Filters examples by query string across title/topic/what/area and by level. */
+export function filterExamples(
+  examples: readonly Example[],
+  query: string,
+  level: Level | 'All'
+): Example[] {
+  const q = query.trim().toLowerCase()
+  return examples.filter(
+    (ex) =>
+      (level === 'All' || ex.level === level) &&
+      (!q || `${ex.title} ${ex.topic} ${ex.what} ${ex.area}`.toLowerCase().includes(q))
+  )
+}
+
 export function Examples() {
+  const mode = useApp((s) => s.mode)
+  const panelRef = useRef<HTMLDivElement>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [level, setLevel] = useState<Level | 'All'>('All')
+
+  // When switching modes, scroll the newly prioritised topic to the top before paint.
+  useLayoutEffect(() => {
+    panelRef.current?.scrollTo({ top: 0 })
+  }, [mode])
 
   const run = async (ex: Example) => {
     setRunning(ex.title)
@@ -359,18 +399,17 @@ export function Examples() {
     }
   }
 
-  const q = query.trim().toLowerCase()
-  const shown = EXAMPLES.filter(
-    (ex) => (level === 'All' || ex.level === level) && (!q || `${ex.title} ${ex.topic} ${ex.what} ${ex.area}`.toLowerCase().includes(q))
-  )
+  const shown = filterExamples(EXAMPLES, query, level)
+
+  const areas = orderedAreasForMode(mode)
 
   return (
-    <div className="panel pb-6">
+    <div className="panel pb-6" ref={panelRef}>
       <div className="px-3 pb-1 pt-3 text-ink">Ready-made lessons, by topic. Click one, then play with it.</div>
       <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pt-1">
         <input
           className="field flex-1"
-          placeholder="Search: dot product, area, relative velocity…"
+          placeholder="Search: area, circle, slope, dot…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -390,7 +429,7 @@ export function Examples() {
         </div>
       </div>
       {shown.length === 0 && <div className="px-3 py-4 text-ink-faint">Nothing matches that search.</div>}
-      {AREAS.filter((a) => shown.some((ex) => ex.area === a)).map((area) => (
+      {areas.filter((a) => shown.some((ex) => ex.area === a)).map((area) => (
         <div key={area}>
           <div className="section-title">{area}</div>
           {shown

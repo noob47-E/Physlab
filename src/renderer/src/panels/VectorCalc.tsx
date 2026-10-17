@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, Plus, Sigma, Trash2 } from 'lucide-react'
 import { useScene } from '../core/store'
 import { isDrawnAnswer, type DrawStyle } from '../core/visualize'
+import * as VS from '../math/vectorSolver'
 import { len, type V3 } from '../math/vec'
 import { useView } from '../render/viewState'
 import { partsLatex, partsOf } from './vectorParts'
@@ -53,6 +54,7 @@ export function VectorCalc() {
   const objects = useScene((s) => s.objects)
   const ev = useScene((s) => s.ev)
   const selection = useScene((s) => s.selection)
+  const sceneSolution = useScene((s) => s.solution)
   // 3D-1: in the 3-D view a card is typed or entered as x, y and z; size ∠ angle is a way of writing a plane vector.
   const is3D = useScene((s) => s.viewMode === '3d')
   // The drawing's width in pixels, subscribed to: the size limit in "Too big to draw…" is a number of
@@ -60,11 +62,18 @@ export function VectorCalc() {
   // after a window or panel resize, until a retype (G4b).
   const widthPx = useView((s) => s.widthPx)
   const [error, setError] = useState('')
+  const [additionMethod, setAdditionMethod] = useState<'components' | 'cosine' | 'graphical'>('components')
   /** Why a card's new name was refused, beside that card. */
   const [nameProblem, setNameProblem] = useState<{ id: number; text: string }>({ id: 0, text: '' })
   const exprRef = useRef<MathInputHandle>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
   const set = useVC.setState
+
+  useEffect(() => {
+    if (sceneSolution) {
+      set({ result: { sol: sceneSolution, label: sceneSolution.title }, showSteps: true })
+    }
+  }, [sceneSolution, set])
 
   // One pass from the top (cardValues): working each card out on its own redid every card above it.
   const values = useMemo(() => cardValues(st.cards, ev), [st.cards, ev])
@@ -161,6 +170,55 @@ export function VectorCalc() {
     const taken = Object.values(useScene.getState().objects).map((o) => ({ name: o.name }) as Card)
     const name = newCardName([...st.cards, ...taken], peekCardId())
     set({ cards: [...st.cards, { id: nextCardId(), name, entry: 'comp', latex: '', mag: '1', angle: '0', sceneId: '' }] })
+  }
+
+  // When adding two vectors, allow switching between Components, Law of cosines, and Drawing (head-to-tail)
+  const twoVecsForAddition = useMemo((): [VS.NamedVec, VS.NamedVec] | null => {
+    if (!st.result) return null
+    if (st.result.from?.cards && st.result.from.cards.length === 2) {
+      const c1 = st.result.from.cards[0]
+      const c2 = st.result.from.cards[1]
+      const idx1 = st.cards.findIndex((c) => c.id === c1.id)
+      const idx2 = st.cards.findIndex((c) => c.id === c2.id)
+      if (idx1 >= 0 && idx2 >= 0) {
+        const v1 = values[idx1]
+        const v2 = values[idx2]
+        if (typeof v1 !== 'string' && typeof v2 !== 'string') {
+          return [{ name: c1.name, v: v1 }, { name: c2.name, v: v2 }]
+        }
+      }
+    }
+    if (st.result.sol.visual) {
+      const inputs = st.result.sol.visual.vectors.filter((v) => v.role === 'input')
+      if (inputs.length === 2) {
+        const title = st.result.sol.title.toLowerCase()
+        if (title.includes('addition') || title.includes('resultant') || title.includes('cosines') || title.includes('drawing') || title.includes('head-to-tail')) {
+          return [inputs[0], inputs[1]]
+        }
+      }
+    }
+    return null
+  }, [st.result, st.cards, values])
+
+  const switchAdditionMethod = (method: 'components' | 'cosine' | 'graphical') => {
+    if (!twoVecsForAddition || !st.result) return
+    setAdditionMethod(method)
+    const [A, B] = twoVecsForAddition
+    let sol: VS.Solution
+    if (method === 'cosine') {
+      sol = VS.solveAdditionCosineLaw(A, B, 'R', settings)
+    } else if (method === 'graphical') {
+      sol = VS.solveAdditionGraphical([A, B], 'R', settings)
+    } else {
+      sol = VS.solveAddition([A, B], 'R', settings)
+    }
+    set({
+      result: {
+        ...st.result,
+        sol,
+        label: method === 'cosine' ? 'Law of cosines' : method === 'graphical' ? 'Drawing' : 'Add all'
+      }
+    })
   }
 
   // The buttons shrink to their track and wrap a two-word label inside the button (V2); the track
@@ -327,6 +385,29 @@ export function VectorCalc() {
           <div className="flex items-center gap-2 border-b border-[color:var(--warn)] px-2 py-1.5">
             <span className="flex-1 font-semibold text-[color:var(--warn)]">{st.result.sol.title}</span>
           </div>
+          {twoVecsForAddition && (
+            <div className="border-b border-[color:var(--warn)] px-3 py-1.5">
+              <div className="mb-1 text-fine uppercase tracking-wide text-[color:var(--text-faint)]">Solve by</div>
+              <div className="seg flex-wrap">
+                {(
+                  [
+                    ['components', 'Components'],
+                    ['cosine', 'Law of cosines'],
+                    ['graphical', 'Drawing']
+                  ] as const
+                ).map(([k, l]) => (
+                  <button
+                    key={k}
+                    className={`min-h-[44px] whitespace-nowrap ${additionMethod === k ? 'on' : ''}`}
+                    onClick={() => switchAdditionMethod(k)}
+                    title="Every method gives the same answer"
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="px-3 py-2">
             {st.result.sol.answers.map((a) => (
               <div key={a.label} className="flex items-baseline gap-3 py-0.5">

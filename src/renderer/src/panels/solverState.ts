@@ -3,7 +3,7 @@
 // tab Practice's "Show it" brings forward.
 import type { V3 } from '../math/vec'
 
-export type VecInput = { mode: 'comp' | 'polar' | 'scene'; comp: V3; mag: number; angle: number; sceneId: string; name: string }
+type VecInput = { mode: 'comp' | 'polar' | 'scene'; comp: V3; mag: number; angle: number; sceneId: string; name: string }
 
 export const newVec = (name: string, comp: V3 = [3, 4, 0]): VecInput => ({ mode: 'comp', comp, mag: 10, angle: 30, sceneId: '', name })
 

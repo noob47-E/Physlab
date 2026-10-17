@@ -69,7 +69,7 @@ export interface SceneState {
 
   log: LogEntry[]
   solution: Solution | null
-  /** Bumped to ask panels to focus (e.g. the Solver tab). */
+  /** Bumped to ask panels to focus (e.g. the Vector Calculator tab). */
   focusPanel: { id: string; nonce: number } | null
 
   addObjects: (objs: SceneObject[], opts?: { select?: boolean; record?: boolean }) => void
@@ -533,7 +533,7 @@ export const useScene = create<SceneState>()((set, get) => {
     },
     updateLog: (id, patch) => set({ log: get().log.map((l) => (l.id === id ? { ...l, ...patch } : l)) }),
     clearLog: () => set({ log: [] }),
-    showSolution: (solution) => set({ solution, focusPanel: { id: 'solver', nonce: Date.now() } }),
+    showSolution: (solution) => set({ solution, focusPanel: { id: 'vectorcalc', nonce: Date.now() } }),
     requestFocus: (id) => set({ focusPanel: { id, nonce: Date.now() } }),
 
     newScene: () => {
