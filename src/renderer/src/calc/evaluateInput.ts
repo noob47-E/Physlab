@@ -6,7 +6,7 @@
 // line, the extras, the exact form when one is known at once, and a sentence when it fails.
 // It never touches the store: the caller decides what to remember.
 
-import { argOf, calcScope, keypadToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, hasFreeX, isEquationInX, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
+import { argOf, calcScope, keypadToMath, evaluateBaseN, evaluateComp, evaluateWithRealRoots, exactForm, formatBase, formatValue, hasFreeX, isEquationInX, NoMeeting, noMeetingSentence, refuseStoring, tidyComplex, withAngle, type Base, type CalcContext, type CalcOutput } from './engine'
 import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
 import { OWN_LETTERS, errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
@@ -175,6 +175,8 @@ function solveEquation(src: string, ctx: CalcContext): CalcOutput | { sentence: 
     return beyond && 'sentence' in beyond ? beyond : out
   } catch (e) {
     if (!(e instanceof Error) || !/No solution/i.test(e.message)) throw e
+    // The two sides only meet at infinity (eˣ = 0): that is the answer, in words, and not "try giving x a value", which promises a root somewhere.
+    if (e instanceof NoMeeting) return { sentence: noMeetingSentence(e.towards) }
     const coeffs = coefficients()
     const beyond = coeffs ? beyondTheReals(coeffs, typeof ctx.vars.x === 'number' ? ctx.vars.x : 0) : null
     // Not a polynomial (sin x = 2): the sentence about where to start looking stays.
@@ -443,6 +445,38 @@ export function mainLine(r: EvalResult, eng: boolean): string {
  * text result draws blank, as the bare {h.result} it replaces did, instead of taking the drawer down.
  */
 export const shownText = (text: string): string => (typeof text === 'string' ? superscriptPowers(text) : '')
+
+/**
+ * Whether the eng chip would change the answer on the screen: it sat under every answer — a sentence, true or false, the two roots of a
+ * quadratic, a 5 — where pressing it did nothing, or only wrote 5 as 5 × 10⁰ (owner, 17 Oct: a stray "eng" under the answers). It is offered
+ * where it rewrites the number with a power of ten: 96 320 is 96.32 × 10³, 0.5 is 500 × 10⁻³.
+ */
+export const engChanges = (r: EvalResult): boolean =>
+  !r.error && typeof r.value === 'number' && Number.isFinite(r.value) && !/×\s*10\^0$/.test(calcEng(r.value)) && mainLine(r, true) !== mainLine(r, false)
+
+/**
+ * Whether Visualize has a picture to draw for the answered line (Maths.tsx drawLine, in its order): a tangent, an area, a derivative's graph, a
+ * vector, a complex number, an equation's or a function's graph, a sum's bars. A plain number used to be "drawn" as a dot on the axis with a
+ * slider beside it — a button on every answer for a picture that shows nothing (owner, 17 Oct: pictures only where they are possible).
+ */
+export function hasPicture(src: string, mode: FieldMode, r: EvalResult): boolean {
+  if (r.error || mode === 'BASE-N' || !src.trim()) return false
+  if (/^(ddx|integral|sigma)\(/.test(src) || /^(Pol|Rec)\(/i.test(src)) return true
+  const dif = calculusCall(src)
+  if (dif?.name === 'diff' && (dif.args[1] ?? 'x') === 'x' && !!r.formula) return true
+  if (mode === 'CMPLX' && !!r.value && typeof r.value === 'object') return true
+  return (/=/.test(src) && /x/.test(src)) || /(^|[^a-z])x([^a-z]|$)/.test(src)
+}
+
+/**
+ * The graph Visualize draws for an equation l = r in x: the curve y = l − r, which crosses the axis at the roots (eˣ = 0 shows a curve that never
+ * comes down to it). When one side is y itself, y = x² is the curve y = x², not y = y − (x²): that drew nothing, y having no value on a graph.
+ */
+export function equationGraph(l: string, r: string): { label: string; expr: string } {
+  if (l.trim() === 'y' && !/(^|[^a-z])y([^a-z]|$)/.test(r)) return { label: `y = ${r.trim()}`, expr: keypadToMath(r.trim()) }
+  if (r.trim() === 'y' && !/(^|[^a-z])y([^a-z]|$)/.test(l)) return { label: `y = ${l.trim()}`, expr: keypadToMath(l.trim()) }
+  return { label: `y = ${l} − (${r})`, expr: `(${keypadToMath(l)}) - (${keypadToMath(r)})` }
+}
 
 /**
  * Whether a line is worth a frame's delay before it runs: an integral, a sum, a product or an

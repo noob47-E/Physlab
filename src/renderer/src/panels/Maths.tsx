@@ -22,7 +22,7 @@ import { engineAnswer } from '../calc/engineAnswer'
 import { formatValue, keypadToMath, withAngle, type Base } from '../calc/engine'
 import { calcNum, setCalcPrecisionSource } from '../calc/format'
 import { constantScope } from '../calc/constants'
-import { answerStillFor, answerStillUnder, evaluateInput, isHeavy, lettersIn, mainLine, readValueBoxes, shownText, tangentAt, varsAfter, type Answered, type EvalResult } from '../calc/evaluateInput'
+import { answerStillFor, answerStillUnder, engChanges, equationGraph, evaluateInput, hasPicture, isHeavy, lettersIn, mainLine, readValueBoxes, shownText, tangentAt, varsAfter, type Answered, type EvalResult } from '../calc/evaluateInput'
 import { groupsForMode, type KeyDef, type KeyGroupId } from '../calc/keys'
 import { math } from '../math/expr'
 import { calculusCall } from '../math/calculusCall'
@@ -422,8 +422,9 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     }
     if (/=/.test(input) && /x/.test(input)) {
       const [l, r] = input.split('=')
+      const g = equationGraph(l, r)
       // reuse: Visualize again on the same line shows the graph already drawn rather than a second copy.
-      visualizeGraph(`y = ${l} − (${r})`, [`(${keypadToMath(l)}) - (${keypadToMath(r)})`], 'explicit', { reuse: true })
+      visualizeGraph(g.label, [g.expr], 'explicit', { reuse: true })
       return true
     }
     if (/(^|[^a-z])x([^a-z]|$)/.test(input)) {
@@ -462,6 +463,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   const draw = (input: string): boolean => withAngle(angleUnit, () => drawLine(input))
   // Set once Visualize has drawn something: then Open in Graphing has a picture to open.
   const [drew, setDrew] = useState(false)
+  // The answered line has something to draw (calc/evaluateInput hasPicture): Visualize, and Open in Graphing after it, are offered only then.
+  const picture = !!result && hasPicture(linearOrEmpty(), mode, result)
 
   const visualize = (): void => {
     let input: string
@@ -505,10 +508,14 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
           <button className="btn primary" data-tour="equals" onClick={() => evaluate()} title="Work out the answer, with its working under it (Enter does the same)">
             =
           </button>
-          <button className="btn" onClick={visualize} disabled={mode === 'BASE-N'} title="Show this calculation in the viewport (graph, tangent, area, vector…)">
-            <Eye size={13} /> Visualize
-          </button>
-          {drew && (
+          {/* Only once the line is answered, and only when it has a picture (calc/evaluateInput hasPicture): a plain number has none. */}
+          {picture && (
+            <button className="btn" onClick={visualize} title="Show this calculation in the viewport (graph, tangent, area, vector…)">
+              <Eye size={13} /> Visualize
+            </button>
+          )}
+          {/* Beside its Visualize only: under 2 + 3 = 5 it still offered the picture of the line before. */}
+          {drew && picture && (
             <button className="btn" onClick={() => enterMode('graphing')} title="Open this picture in Graphing, with its list of expressions">
               Open in Graphing
             </button>
@@ -740,8 +747,8 @@ function Answer({ result, showExact, onExact, eng, onEng }: { result: EvalResult
   // Decided here, not when = was pressed, so the eng chip changes the number at once like the
   // exact/decimal chip beside it does.
   const main = mainLine(result, eng)
-  // The eng chip changes how a number is written; a formula has none.
-  const showEng = onEng && !formula
+  // The eng chip changes how a number is written; a formula has none, and it is offered only where it would rewrite this one (engChanges).
+  const showEng = onEng && !formula && engChanges(result)
   return (
     <div className={`maths-answer${result.unconfirmed ? ' is-warn' : ''}`}>
       <div className="maths-result">{formula ? <Tex tex={formula} /> : exactShown ? <Tex tex={exact} /> : main}</div>

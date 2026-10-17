@@ -91,7 +91,8 @@ describe('who calls it', () => {
     const src = readSource('src/renderer/src/panels/Maths.tsx')
     expect(src.match(/showBeside\('viewport', 'maths'\)/g)?.length).toBe(2)
     expect(src).not.toContain("showPanel('viewport')")
-    expect(src).toMatch(/\{drew && \(\s*<button className="btn" onClick=\{\(\) => enterMode\('graphing'\)\}/)
+    // Beside its Visualize only (17 Oct): under a plain number it offered the picture of the line before.
+    expect(src).toMatch(/\{drew && picture && \(\s*<button className="btn" onClick=\{\(\) => enterMode\('graphing'\)\}/)
     expect(src).toContain('Open in Graphing')
   })
 

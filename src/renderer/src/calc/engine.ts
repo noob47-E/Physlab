@@ -308,28 +308,121 @@ function settleRoot(f: (x: number) => number, x0: number): Searched {
   }
 }
 
-/** Numeric root of f near `guess` (Newton, then bracketing scan + bisection), and whether it is settled (see settleRoot). */
-export function solveNumericChecked(f: (x: number) => number, guess = 0): Searched {
-  let x = guess
-  for (let i = 0; i < 60; i++) {
-    const y = f(x)
-    if (!Number.isFinite(y)) break
-    if (Math.abs(y) < 1e-14) return settleRoot(f, x)
-    const d = derivativeAt(f, x)
-    if (!Number.isFinite(d) || Math.abs(d) < 1e-14) break
-    const nx = x - y / d
-    // A step this small also reads as arrival where the derivative is wrong for a repeated root, so what it arrived at is checked, not assumed.
-    if (Math.abs(nx - x) < 1e-13 * Math.max(1, Math.abs(x))) return settleRoot(f, nx)
-    x = nx
+/**
+ * The search ran off to infinity: the two sides only get closer as x goes that way, and nowhere in the sweep do they cross or touch (eˣ = 0).
+ * Its message is the plain "No solution found", so whatever reads only that keeps reading it; the Calculator's "=" says "No real solution".
+ */
+export class NoMeeting extends Error {
+  constructor(readonly towards: '−∞' | '+∞') {
+    super('No solution found')
   }
-  if (Number.isFinite(f(x)) && Math.abs(f(x)) < 1e-9) return settleRoot(f, x)
-  const scan = (lo: number, hi: number, n: number) => {
+}
+
+/** What "=" says for a NoMeeting: the reason in the words a textbook gives for eˣ = 0. */
+export const noMeetingSentence = (towards: '−∞' | '+∞'): string =>
+  `No real solution: the two sides get closer and closer as x goes to ${towards}, but never meet.`
+
+/**
+ * The way on from x, where a walk from `from` stopped without settling, when that way is long: Newton's step from x, or, where f has already come
+ * down to 0 by underflow (e^(−x²) is 0 past x = 27.3), the way the walk came — taken only when it is over 10⁻³ of x's size. A root the arithmetic
+ * cannot place leaves a step near 10⁻⁸, and (cos x − 1)² stops in the 10⁻⁸-wide stretch where it is 0: those are not runs.
+ */
+function longWayOn(f: (x: number) => number, x: number, from: number): number | null {
+  const fx = f(x)
+  if (!Number.isFinite(fx)) return null
+  let ahead = x - from
+  if (fx !== 0) {
+    const d = steadyDerivative(f, x)
+    if (!Number.isFinite(d) || d === 0) return null
+    ahead = -fx / d
+  }
+  return Math.abs(ahead) >= 1e-3 * Math.max(1, Math.abs(x)) ? ahead : null
+}
+
+/**
+ * Newton's walk followed on from x, where settleRoot's 80 steps ran out on a long run, for up to 4 000 steps more while each lowers |f|: a crossing
+ * on the way is bisected, and a walk whose steps shrink to 10⁻⁶ of x is handed back to settleRoot. eˣ = 10⁻³⁰⁰ stopped at −113 with its root at
+ * −690.78, and (x + 500.1)²eˣ = 0 has a touch at −500.1 that no sweep's grid sees under the eˣ (the walk steps 1 at a time and slows into it). Null
+ * when the walk ends without one: f has no value, comes down to a stretch of 0 (eˣ past −745), stops lowering |f|, or the steps run out.
+ */
+function followRun(f: (x: number) => number, x0: number): Searched | null {
+  let x = x0
+  let fx = f(x)
+  for (let i = 0; i < 4000; i++) {
+    if (!Number.isFinite(fx) || fx === 0) return null
+    const d = derivativeAt(f, x)
+    if (!Number.isFinite(d) || d === 0) return null
+    const nx = x - fx / d
+    const nf = f(nx)
+    if (!Number.isFinite(nf) || (nf === 0 && zeroStretch(nf, f(nx + (nx - x))))) return null
+    if (nf === 0 || Math.sign(nf) !== Math.sign(fx)) {
+      let a = x
+      let b = nx
+      for (let k = 0; k < 80 && a !== b; k++) {
+        const m = (a + b) / 2
+        if (m === a || m === b) break
+        if (Math.sign(f(m)) === Math.sign(fx)) a = m
+        else b = m
+      }
+      const r = (a + b) / 2
+      const s = settleRoot(f, r)
+      if (s.settled) return s
+      // A change of sign across a pole (1/(x + 500) on the way) bisects to the pole, where f is huge: not a root, and the walk is over.
+      return Math.abs(f(r)) < 1e-6 * Math.max(1, Math.abs(fx), Math.abs(nf)) ? { root: r, settled: true } : null
+    }
+    if (Math.abs(nf) > Math.abs(fx)) return null
+    if (Math.abs(nx - x) <= 1e-6 * Math.max(1, Math.abs(nx))) {
+      const s = settleRoot(f, nx)
+      return s.settled ? s : null
+    }
+    x = nx
+    fx = nf
+  }
+  return null
+}
+
+/**
+ * Where a walk from `from` that could not settle stopped at x because f only shrinks that way, without end: the way on is long (longWayOn), and
+ * along it |f| keeps its sign and never grows, at every doubling out to a thousand steps. eˣ walked to −113 with each step 1; a root repeated a
+ * hundred times also has a long step, but |f| turns and grows within a few steps of it.
+ */
+function runsAway(f: (x: number) => number, x: number, from: number): '−∞' | '+∞' | null {
+  const ahead = longWayOn(f, x, from)
+  if (ahead === null) return null
+  const fx = f(x)
+  let last = Math.abs(fx)
+  for (let k = 1; k <= 1024; k *= 2) {
+    const there = f(x + k * ahead)
+    // No value, or 0 where f was not (past e⁻⁷⁴⁵ the arithmetic gives 0): the run has gone as far as it can be followed. A real root on the way is the sweep's to find.
+    if (!Number.isFinite(there) || (there === 0 && fx !== 0)) break
+    if ((fx !== 0 && Math.sign(there) !== Math.sign(fx)) || Math.abs(there) > last) return null
+    last = Math.abs(there)
+  }
+  return ahead < 0 ? '−∞' : '+∞'
+}
+
+/** Whether f is 0 at both of two neighbouring samples: a stretch where it is 0 only because the arithmetic ran out of small numbers, not a root to bisect. */
+const zeroStretch = (a: number, b: number): boolean => a === 0 && b === 0
+
+/**
+ * A root anywhere in four sweeps around `guess`, ±10 to ±10⁶ at 1 000 points each: where f changes sign (bisected), and with `touches` also where |f| dips
+ * to a point that a parabola through three samples puts near 0 — a root repeated an even number of times, where nothing changes sign ((x − π)²eˣ) —
+ * taken only if settleRoot settles it inside the three samples. A dip that stays well above 0 (sin x + 2) is not tried.
+ */
+function sweepForRoot(f: (x: number) => number, guess: number, touches: boolean): Searched | null {
+  const scan = (lo: number, hi: number, n: number): Searched | null => {
+    let tries = 0
+    let qx = NaN
+    let qy = NaN
     let px = lo
     let py = f(px)
     for (let i = 1; i <= n; i++) {
       const cx = lo + ((hi - lo) * i) / n
       const cy = f(cx)
-      if (Number.isFinite(py) && Number.isFinite(cy) && Math.sign(py) !== Math.sign(cy)) {
+      // An end that is 0 with another 0 beyond it is the edge of a stretch of underflow (eˣ is 0 below −745), not a root: bisecting there gave eˣ = 0 the
+      // answer x = −745.1332191.
+      const edge = (py === 0 && zeroStretch(py, qy)) || (cy === 0 && zeroStretch(cy, f(cx + (cx - px))))
+      if (!edge && Number.isFinite(py) && Number.isFinite(cy) && Math.sign(py) !== Math.sign(cy)) {
         let a = px
         let b = cx
         // 60 halvings take a 2 000 000-wide bracket below 10⁻¹²; the 200 it used to do were
@@ -340,19 +433,67 @@ export function solveNumericChecked(f: (x: number) => number, guess = 0): Search
           else b = m
         }
         const r = (a + b) / 2
-        if (Math.abs(f(r)) < 1e-6 * Math.max(1, Math.abs(py), Math.abs(cy))) return r
+        if (Math.abs(f(r)) < 1e-6 * Math.max(1, Math.abs(py), Math.abs(cy))) return { root: r, settled: true }
       }
+      if (touches && tries < 20 && Number.isFinite(qy) && Number.isFinite(py) && Number.isFinite(cy) && py !== 0 && Math.sign(qy) === Math.sign(py) && Math.sign(cy) === Math.sign(py) && Math.abs(py) < Math.abs(qy) && Math.abs(py) <= Math.abs(cy)) {
+        const bend = qy - 2 * py + cy
+        // The lowest point of the parabola through the three samples, and its height: near 0 for a touch, about py for a dip that never comes down.
+        const low = py - (qy - cy) ** 2 / (8 * bend)
+        if (bend !== 0 && Math.abs(low) <= 0.25 * Math.abs(py)) {
+          tries++
+          const at = px + ((cx - px) * (qy - cy)) / (2 * bend)
+          const s = settleRoot(f, at)
+          if (s.settled && s.root >= qx && s.root <= cx) return s
+        }
+      }
+      qx = px
+      qy = py
       px = cx
       py = cy
     }
-    return NaN
+    return null
   }
   // 1 000 points per sweep, not 4 000: an equation with no root used to cost 16 000 evaluations
   // of f (each a mathjs evaluate) before "No solution", a visible freeze after Enter.
   for (const R of [10, 100, 1e4, 1e6]) {
     const r = scan(guess - R, guess + R, 1000)
-    if (Number.isFinite(r)) return { root: r, settled: true }
+    if (r) return r
   }
+  return null
+}
+
+/** Numeric root of f near `guess` (Newton, then bracketing scan + bisection), and whether it is settled (see settleRoot). */
+export function solveNumericChecked(f: (x: number) => number, guess = 0): Searched {
+  // A walk that could not settle because it ran off to infinity found no root at all: eˣ = 0 stopped at x = −113 and the card showed that, marked
+  // approximate, and (x − 5)eˣ = 0 ran off the same way past its root at 5. So such a walk is followed on (a crossing or touch further along it:
+  // eˣ = 10⁻³⁰⁰), then swept for one anywhere (behind it: (x − 5)eˣ), and with none it is NoMeeting. An unsettled stop that is not a long run (a
+  // root the arithmetic cannot place) stays as it was.
+  const settle = (x: number): Searched => {
+    const s = settleRoot(f, x)
+    if (s.settled || longWayOn(f, s.root, x) === null) return s
+    const on = followRun(f, s.root)
+    if (on) return on
+    const away = runsAway(f, s.root, x)
+    if (!away) return s
+    const found = sweepForRoot(f, guess, true)
+    if (found) return found
+    throw new NoMeeting(away)
+  }
+  let x = guess
+  for (let i = 0; i < 60; i++) {
+    const y = f(x)
+    if (!Number.isFinite(y)) break
+    if (Math.abs(y) < 1e-14) return settle(x)
+    const d = derivativeAt(f, x)
+    if (!Number.isFinite(d) || Math.abs(d) < 1e-14) break
+    const nx = x - y / d
+    // A step this small also reads as arrival where the derivative is wrong for a repeated root, so what it arrived at is checked, not assumed.
+    if (Math.abs(nx - x) < 1e-13 * Math.max(1, Math.abs(x))) return settle(nx)
+    x = nx
+  }
+  if (Number.isFinite(f(x)) && Math.abs(f(x)) < 1e-9) return settle(x)
+  const found = sweepForRoot(f, guess, false)
+  if (found) return found
   throw new Error('No solution found')
 }
 
