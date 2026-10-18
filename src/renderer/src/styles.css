@@ -1857,6 +1857,16 @@ math-field.math-input::part(menu-toggle) {
   animation: mode-wheel-breathe 2s ease-in-out infinite;
 }
 
+/* The round Modes button is for touch screens only: on a laptop it covered panel text, and a mouse has Esc and the mode pill. */
+.modes-fab {
+  display: none;
+}
+@media (pointer: coarse) {
+  .modes-fab {
+    display: flex;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mode-wheel-active-segment {
     animation: none !important;

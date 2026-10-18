@@ -103,6 +103,23 @@ export function getSegmentAngles(index: number): { startAngle: number; endAngle:
   }
 }
 
+/**
+ * The segment under the pointer, from its offset (dx, dy) in screen pixels from the wheel's centre and the width the wheel is
+ * drawn at. The wheel is drawn `size` units across but shown at min(520 px, 85 % of the shorter side), so on a phone a unit is
+ * about 0.65 px: the ring's radii taken as pixels lit a segment only well outside the ring. Null away from the ring.
+ */
+export function segmentAt(dx: number, dy: number, drawnWidth: number, size = 520, innerR = 120, outerR = 230): number | null {
+  const unitsPerPixel = drawnWidth > 0 ? size / drawnWidth : 1
+  const dist = Math.hypot(dx, dy) * unitsPerPixel
+  if (dist < innerR * 0.7 || dist > outerR * 1.3) return null
+  // Clockwise from the top, where the first segment (Calculator) is centred.
+  let offset = (Math.atan2(dy, dx) * 180) / Math.PI + 90
+  while (offset < 0) offset += 360
+  while (offset >= 360) offset -= 360
+  const index = Math.floor(((offset + SEGMENT_SPAN / 2) % 360) / SEGMENT_SPAN)
+  return index >= 0 && index < WHEEL_MODES.length ? index : null
+}
+
 /** Convert polar (radius, angleInDegrees) to cartesian (x, y) relative to center. */
 export function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
   const angleInRadians = (angleInDegrees * Math.PI) / 180.0

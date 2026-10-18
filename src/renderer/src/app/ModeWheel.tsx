@@ -14,7 +14,8 @@ import {
   WHEEL_MODES,
   getSegmentAngles,
   describeAnnularSector,
-  polarToCartesian
+  polarToCartesian,
+  segmentAt
 } from './modeWheelData'
 
 const ICONS: Record<ModeId, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -53,33 +54,12 @@ export function ModeWheel() {
   const containerRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
-  // Radial angle tracking for mouseover
+  // Radial angle tracking for mouseover: the segment in the pointer's direction lights up (segmentAt, in drawing units).
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const rect = e.currentTarget.getBoundingClientRect()
-      const cx = rect.left + rect.width / 2
-      const cy = rect.top + rect.height / 2
-      const dx = e.clientX - cx
-      const dy = e.clientY - cy
-      const dist = Math.hypot(dx, dy)
-
-      // Only respond to radial mouse movement if within or near the ring
-      if (dist >= INNER_R * 0.7 && dist <= OUTER_R * 1.3) {
-        const deg = (Math.atan2(dy, dx) * 180) / Math.PI
-        // midAngle for Calculator is -90° (top)
-        // Normalize deg relative to -90°: angle from top clockwise
-        let offset = deg - -90
-        while (offset < 0) offset += 360
-        while (offset >= 360) offset -= 360
-
-        const segmentSpan = 360 / WHEEL_MODES.length
-        // Center the 0th segment at top (-90°)
-        const shifted = (offset + segmentSpan / 2) % 360
-        const index = Math.floor(shifted / segmentSpan)
-        if (index >= 0 && index < WHEEL_MODES.length) {
-          setHighlightedIndex(index)
-        }
-      }
+      const index = segmentAt(e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2), rect.width, WHEEL_SIZE, INNER_R, OUTER_R)
+      if (index !== null) setHighlightedIndex(index)
     },
     [setHighlightedIndex]
   )
@@ -193,23 +173,6 @@ export function ModeWheel() {
                   className={isHighlighted ? 'mode-wheel-active-segment' : ''}
                 />
 
-                {/* Number badge / shortcut key in top corner of slice */}
-                {(() => {
-                  const badgePos = polarToCartesian(0, 0, OUTER_R - 18, midAngle)
-                  return (
-                    <text
-                      x={badgePos.x}
-                      y={badgePos.y}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      className="text-fine font-semibold tracking-wider pointer-events-none"
-                      fill={isHighlighted ? mode.colorToken : 'var(--text-faint)'}
-                    >
-                      {mode.index}
-                    </text>
-                  )
-                })()}
-
                 {/* Content group at slice center */}
                 <g
                   transform={`translate(${textPos.x}, ${textPos.y})`}
@@ -219,9 +182,22 @@ export function ModeWheel() {
                     transition: 'transform 180ms ease-out'
                   }}
                 >
-                  {/* Icon */}
-                  <g transform="translate(-10, -18)">
-                    <Icon size={20} className={isHighlighted ? 'text-[var(--text-strong)]' : 'text-[var(--text)]'} />
+                  {/* The key that picks it, in the same place in every segment, just above the icon: placed out towards the
+                      rim it ran into the longer names ("6Problem Sets", "Geometry3"). */}
+                  <text
+                    x={0}
+                    y={-30}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    className="text-fine font-semibold tracking-wider pointer-events-none"
+                    fill={isHighlighted ? mode.colorToken : 'var(--text-faint)'}
+                  >
+                    {mode.index}
+                  </text>
+
+                  {/* Icon, in the mode's own colour at rest as well: "a circle of glowing coloured modes" (owner). */}
+                  <g transform="translate(-10, -18)" style={{ color: mode.colorToken }}>
+                    <Icon size={20} />
                   </g>
 
                   {/* Mode name */}
@@ -289,8 +265,9 @@ export function ModeWheel() {
 }
 
 /**
- * Floating 44px round button on left edge of screen for touch devices and mouse users.
- * Accessible name: "Modes (Esc)".
+ * Floating 44px round button on the left edge for touch screens, which have no Esc key. Accessible name: "Modes (Esc)".
+ * Shown only where the pointer is coarse (styles.css .modes-fab): on a laptop it sat on the Examples panel's text, and a mouse
+ * has Esc and the mode pill at the top left.
  */
 export function ModesFloatingButton() {
   const toggle = useModeWheel((s) => s.toggle)
@@ -300,7 +277,7 @@ export function ModesFloatingButton() {
   return (
     <button
       type="button"
-      className="fixed left-2 top-1/2 -translate-y-1/2 z-40 flex items-center justify-center w-11 h-11 rounded-full bg-[var(--bg-2)] border border-[var(--line-2)] text-[var(--text)] shadow-lg hover:bg-[var(--bg-3)] hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] transition-all cursor-pointer"
+      className="modes-fab fixed left-2 top-1/2 -translate-y-1/2 z-40 items-center justify-center w-11 h-11 rounded-full bg-[var(--bg-2)] border border-[var(--line-2)] text-[var(--text)] shadow-lg hover:bg-[var(--bg-3)] hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] transition-all cursor-pointer"
       onClick={toggle}
       title="Modes (Esc)"
       aria-label="Modes (Esc)"

@@ -9,7 +9,7 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { WHEEL_MODES, getWheelModeByIndex } from '../src/renderer/src/app/modeWheelData'
+import { WHEEL_MODES, getWheelModeByIndex, segmentAt } from '../src/renderer/src/app/modeWheelData'
 import { useModeWheel, wheelKeyDown } from '../src/renderer/src/app/modeWheelStore'
 import { scene } from '../src/renderer/src/core/store'
 import { useApp } from '../src/renderer/src/app/modes'
@@ -360,5 +360,46 @@ describe('Part L2: Wheel Keyboard Navigation and Selection', () => {
     useModeWheel.getState().handleKeyDown('Enter')
     expect(useApp.getState().mode).toBe('graphing')
     expect(useModeWheel.getState().open).toBe(false)
+  })
+})
+
+// L2b (wave head, 18 Oct; owner's bar "neat, not crowded"): the round button covered panel text on a laptop, two key numbers ran
+// into the names, the icons had no colour at rest, and on a small wheel the pointer lit segments from the wrong distance.
+describe('Part L2b: the wheel, tidied', () => {
+  const wheelSrc = readFileSync(resolve(__dirname, '../src/renderer/src/app/ModeWheel.tsx'), 'utf8')
+  const css = readFileSync(resolve(__dirname, '../src/renderer/src/styles.css'), 'utf8')
+
+  it('the round Modes button shows only where the pointer is coarse (a touch screen)', () => {
+    expect(wheelSrc).toMatch(/className="modes-fab fixed /)
+    // A display utility on the button would beat the stylesheet and show it everywhere again.
+    expect(wheelSrc).not.toMatch(/className="modes-fab[^"]*\b(flex|block|inline-flex)\b /)
+    expect(css).toMatch(/\.modes-fab \{\s*display: none;\s*\}\s*@media \(pointer: coarse\) \{\s*\.modes-fab \{\s*display: flex;/)
+  })
+
+  it('every key number sits in the same place in its segment, above the icon, not out by the rim', () => {
+    expect(wheelSrc).not.toMatch(/OUTER_R - 18/)
+    expect(wheelSrc).toMatch(/y=\{-30\}[\s\S]{0,300}\{mode\.index\}/)
+  })
+
+  it('each icon is drawn in its own mode colour', () => {
+    expect(wheelSrc).toMatch(/style=\{\{ color: mode\.colorToken \}\}>\s*<Icon size=\{20\} \/>/)
+  })
+
+  it('the segment under the pointer is found in drawing units, whatever size the wheel is shown at', () => {
+    // Straight up, mid-ring (175 units out), on the full 520 px wheel and on a phone's 340 px one.
+    expect(segmentAt(0, -175, 520)).toBe(0)
+    expect(segmentAt(0, -175 * (340 / 520), 340)).toBe(0)
+    // Straight right is the third segment (Geometry); up and to the left (the 7th segment's middle, 141° from the right) is Lab Data,
+    // and a little below straight left is Problem Sets.
+    expect(WHEEL_MODES[segmentAt(175, 0, 520)!].id).toBe('shapes')
+    expect(WHEEL_MODES[segmentAt(-89, -71, 340)!].id).toBe('lab')
+    expect(WHEEL_MODES[segmentAt(-114, 20, 340)!].id).toBe('problems')
+    // On the phone's 340 px wheel, 60 px out is 92 units, the ring's inner edge (read as pixels it was "the hub", nothing lit),
+    // and 250 px out is well past the rim (read as pixels it still lit a segment).
+    expect(segmentAt(60, 0, 340)).toBe(2)
+    expect(segmentAt(250, 0, 340)).toBeNull()
+    // The hub and far outside are nothing.
+    expect(segmentAt(0, -40, 520)).toBeNull()
+    expect(segmentAt(0, -400, 520)).toBeNull()
   })
 })
