@@ -394,8 +394,9 @@ const THEORIES: Record<string, Entry> = {
     tolerance: () => 2
   },
 
-  atwood: pulleyTheory('atwood', 'm₁', 'm₂'),
-  lift: pulleyTheory('lift', 'Crate', 'Weight'),
+  // Each pulley shows its own acceleration and tension (S4, report 8.4): both used to show W = mg and s = ut + ½at².
+  atwood: pulleyTheory('atwood', 'm₁', 'm₂', ['atwood-a', 'atwood-T']),
+  lift: pulleyTheory('lift', 'Crate', 'Weight', ['lift-a', 'lift-T']),
 
   crane: {
     // mg is the tension only while the crate hangs: off the floor, on a rope as long as the gap, not slack.
@@ -596,14 +597,15 @@ const THEORIES: Record<string, Entry> = {
   }
 }
 
-function pulleyTheory(scene: string, light: string, heavy: string): Entry {
+function pulleyTheory(scene: string, light: string, heavy: string, cards: string[]): Entry {
   return {
     fits: (b) => {
       const [l, h] = [named(b, light), named(b, heavy)]
       return (b.links ?? []).some((k) => k.kind === 'pulley' && [k.a, k.b].includes(l.id) && [k.a, k.b].includes(h.id))
     },
-    cards: ['weight', 'suvat-s'],
-    roles: { A: light, B: heavy },
+    cards,
+    // The scene's own cards read each mass by the body's name (sceneCards.ts, as the lever's do), so the names are roles too.
+    roles: { A: light, B: heavy, [light]: light, [heavy]: heavy },
     predict: (b) => {
       const g = worldOf(b).gravity
       const m1 = massOf(named(b, light))
