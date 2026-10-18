@@ -12,6 +12,7 @@ import { evaluateScene } from '../core/evaluate'
 import { scene, useScene, type LogEntry, type SceneState } from '../core/store'
 import type { GraphObj, ObjId, SceneObject } from '../core/types'
 import { runCommand } from './commands'
+import { bracketBareCalls } from './bareCalls'
 
 // ---------------------------------------------------------------------------
 // The Equation box of a graph
@@ -132,7 +133,8 @@ function bareRightSide(text: string): boolean {
 }
 
 export async function replaceGraphEquation(id: ObjId, line: string): Promise<GraphEdit> {
-  let text = line.trim()
+  // sin x, sin 2x, sqrt 3: the calculator-style calls get their brackets (lang/bareCalls).
+  let text = bracketBareCalls(line.trim())
   const obj = scene().objects[id]
   if (obj?.type !== 'graph') return { ok: false, reason: GONE }
   if (!text) return { ok: false, reason: EMPTY }

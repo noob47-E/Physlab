@@ -355,6 +355,8 @@ function formulaProblem(spec: DrawSpec, scope: Record<string, unknown>, graphs: 
       // x, y and z are left to the graph routes (tryAssignment): x = 1 and y = 1 are lines and z = 1
       // a plane, so "make a slider first, e.g. y = 1" after f(x) = y drew a line instead of a slider.
       if (name === 'x' || name === 'y' || name === 'z') return `Unknown name "${name}" in the ${place}. ${name} is the letter graphs use, so it cannot be a slider — use another letter, e.g. k = 1`
+      // sin, cos, sqrt … with nothing to work on: "make a slider sin" was no help.
+      if (typeof (math as unknown as Record<string, unknown>)[name] === 'function') return `"${name}" needs what it works on, e.g. y = ${name} x or y = ${name}(x).`
       return `Unknown name "${name}" in the ${place}. Make a slider first, e.g. ${name} = 1`
     }
     const call = callProblem(node, vars, scope, spec.kind, graphs, spec.lineWith ?? ((formula) => `y = ${formula}`))
