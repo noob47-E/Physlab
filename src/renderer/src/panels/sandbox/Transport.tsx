@@ -1,7 +1,7 @@
 // The Sandbox panel’s Transport section (moved word for word from panels/Sandbox.tsx, SB2). Play and Step go through
 // sim/transportActions.ts (SB17), so in replay they play and step the recording, as the tape strip and the keys do.
 
-import { Eraser, Pause, Play, Redo2, RotateCcw, SkipForward, Undo2 } from 'lucide-react'
+import { Eraser, MoveUpRight, Pause, Play, Redo2, RotateCcw, SkipForward, Undo2 } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
 import { clockText, widestClockText } from '../../sim/transport'
@@ -26,6 +26,8 @@ export function Transport({ simple = false }: { simple?: boolean }) {
   const undo = useSandbox((s) => s.undo)
   const redo = useSandbox((s) => s.redo)
   const resetRun = useSandbox((s) => s.resetRun)
+  const arrowsShown = useSandbox((s) => s.arrowsShown)
+  const setArrowsShown = useSandbox((s) => s.setArrowsShown)
   const clearTrails = useSandbox((s) => s.clearTrails)
   const anyTrail = useSandbox((s) => s.bodies.some((b) => b.trace))
   const setPlaying = useScene((s) => s.setPlaying)
@@ -61,6 +63,18 @@ export function Transport({ simple = false }: { simple?: boolean }) {
         title="Every object back to its starting position, t = 0"
       >
         <RotateCcw size={13} /> Reset
+      </button>
+      {/* One switch for every arrow on the objects, in both views (S3, report 8.3): the only one was in All tools → World, and a
+          fast run's arrows covered the formula cards with no way to clear them from the simple panel. */}
+      <button
+        className={`${simple ? 'btn min-h-[44px] px-3' : 'icon-btn'} ${arrowsShown ? '' : 'text-[color:var(--text-faint)]'}`}
+        aria-pressed={arrowsShown}
+        aria-label="Arrows"
+        onClick={() => setArrowsShown(!arrowsShown)}
+        title={arrowsShown ? 'Hide the velocity and force arrows, for a clean picture of the motion' : 'Show the velocity and force arrows'}
+      >
+        <MoveUpRight size={13} />
+        {simple && ' Arrows'}
       </button>
       {!simple && (
         <>

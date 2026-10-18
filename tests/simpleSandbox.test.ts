@@ -107,7 +107,8 @@ describe('Simple is the default', () => {
     const primary = buttons(html).filter((b) => /\bprimary\b/.test(attr(b.attrs, 'class') ?? ''))
     expect(primary).toHaveLength(1)
     expect(primary[0].attrs).toContain('data-tour="play"')
-    expect(buttons(html).map(nameOf)).toEqual(['Play Pause', 'Reset'])
+    // S3 (fix plan, report 8.3): the one Arrows switch joins them, so a fast run's arrows can be cleared from the simple panel.
+    expect(buttons(html).map(nameOf)).toEqual(['Play Pause', 'Reset', 'Arrows'])
     expect(html).toContain('t = 0 s')
     // The default row is still the full one (tests/tapeStrip.test.ts renders it so).
     expect(buttons(render(Transport)).length).toBeGreaterThan(2)

@@ -7,8 +7,9 @@ import type { V3 } from '../../math/vec'
 import { Arrow } from '../ObjectViews'
 import { themeColor, useThemed } from '../../app/theme'
 import { readoutRef } from './readout'
+import { pushArrowScale, velocityArrowScale } from '../../sim/arrowScale'
 
-/** The velocity arrows, then the pushes' force arrows; none at all when the World section's Arrows switch says Hide. */
+/** The velocity arrows, then the pushes' force arrows; none at all when the Arrows switch (the Play/Reset row, or World) says Hide. */
 export function Arrows() {
   const shown = useSandbox((s) => s.arrowsShown)
   if (!shown) return null
@@ -44,9 +45,9 @@ function VelocityArrows() {
         slot.comp[0] = slot.comp[1] = slot.comp[2] = 0
         continue
       }
-      // One metre of arrow for every two metres per second. At the old quarter-scale a ball
-      // doing 4 m/s grew an arrow shorter than the ramp it had just left.
-      const k = 0.5
+      // One metre of arrow for every two metres per second, up to 2.5 m (sim/arrowScale.ts): uncapped, a fast body's
+      // arrow shot up through the formula cards and the top bar (S3).
+      const k = velocityArrowScale(speed)
       slot.tail[0] = st.position[0]
       slot.tail[1] = st.position[1]
       slot.tail[2] = st.position[2]
@@ -89,7 +90,7 @@ function PushArrows() {
         slot.comp[0] = slot.comp[1] = slot.comp[2] = 0
         return
       }
-      const k = Math.min(1 / 20, 3 / size)
+      const k = pushArrowScale(size)
       for (let c = 0; c < 3; c++) {
         slot.tail[c] = st.position[c]
         slot.comp[c] = f[c] * k
