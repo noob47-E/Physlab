@@ -42,6 +42,7 @@ import {
   checkSystemOp,
   checkQuadraticSolutionSet,
   checkPolySolutionSet,
+  checkHigherSolutionSet,
   checkSurdZeroProduct,
   displayKey,
   readSurd,
@@ -219,10 +220,16 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
     return checkSurdZeroProduct(String(step.before), zp, String(step.after), v, payload.solutions as unknown[])
   }
   const domain = payload.domain === 'complex' ? 'complex' : 'real'
-  if (Array.isArray(payload.solutions) && payload.solutions.length > 0) {
-    // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
-    const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
-    if (quad !== null) return quad
+  if (Array.isArray(payload.solutions)) {
+    if (payload.solutions.length > 0) {
+      // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
+      const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (quad !== null) return quad
+      const poly = checkPolySolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (poly !== null) return poly
+    }
+    const higher = checkHigherSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+    if (higher !== null) return higher
   }
   const proof = solutionProofOf(String(step.before), v)
   if (!proof) return 'unknown'

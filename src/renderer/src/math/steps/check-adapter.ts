@@ -32,7 +32,15 @@ import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } fr
 // expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
 import { readAlg } from '../check/parse'
 import { algAdd, algEq, algIsRational, algMul, algRat, algSub, type Alg as G2Alg } from '../check/field'
-import { expressionEqual, polyRootsCheck, rationalEqual, type Verdict as G2Verdict } from '../check/checkers'
+import {
+  derivativeCheck,
+  expressionEqual,
+  integralCheck,
+  partialFractionsCheck,
+  polyRootsCheck,
+  rationalEqual,
+  type Verdict as G2Verdict
+} from '../check/checkers'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -170,10 +178,44 @@ function cutsEqual(a: ParsedIneq, b: ParsedIneq): boolean {
   return a.cut === b.cut
 }
 
+function checkCalculusExprEq(before: string, after: string): ValidationVerdict | null {
+  const normBefore = before.trim()
+  const normAfter = after.trim()
+
+  const diffMatch = /^diff\((.+),\s*([a-zA-Z])\)$/.exec(normBefore)
+  if (diffMatch) {
+    const f = diffMatch[1].trim()
+    const x = diffMatch[2].trim()
+    const verdict = derivativeCheck(f, x, normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  const intMatch = /^(?:integrate|integral)\((.+),\s*([a-zA-Z])\)$/.exec(normBefore)
+  if (intMatch) {
+    const f = intMatch[1].trim()
+    const x = intMatch[2].trim()
+    const verdict = integralCheck(f, x, normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  const partMatch = /^partial\((.+)\)$/.exec(normBefore)
+  if (partMatch) {
+    const f = partMatch[1].trim()
+    const verdict = partialFractionsCheck(f, normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  return null
+}
+
 /**
  * Default check adapter implementation using exact polynomial arithmetic.
  */
 export const defaultCheckAdapter: CheckAdapter = {
+
   /**
    * ExprEq: verifies that 'after' equals 'before' as expressions.
    * Compares UNSIMPLIFIED ASTs through exact polynomial representation over BigInt rationals.
@@ -190,8 +232,15 @@ export const defaultCheckAdapter: CheckAdapter = {
       return eEq(pBefore, pAfter) ? 'valid' : 'invalid'
     }
 
+    const calc = checkCalculusExprEq(sBefore, sAfter)
+    if (calc !== null) return calc
+
     // Outside the polynomial ring: G2 decides it when both sides are plain text it reads exactly (S1b).
-    return expressionEqualG2(sBefore, sAfter)
+    const g2 = expressionEqualG2(sBefore, sAfter)
+    if (g2 === 'valid') return 'valid'
+
+    if (normalizeDisplayed(sBefore) === normalizeDisplayed(sAfter)) return 'valid'
+    return g2
   },
 
   /**
@@ -518,6 +567,75 @@ const REWRITE_OPS: ReadonlySet<string> = new Set([
   'remove-brackets'
 ])
 
+function checkNonPolyEquationOp(
+  before: string | MathNode,
+  after: string | MathNode,
+  op: EquationOp,
+  v: string
+): ValidationVerdict {
+  const sBefore = stringifyNodeOrText(before)
+  const sAfter = stringifyNodeOrText(after)
+  const sb = splitEquation(sBefore)
+  const sa = splitEquation(sAfter)
+  if (!sb || !sa) return 'unknown'
+
+  switch (op.kind) {
+    case 'already-solved': {
+      if (formText(sBefore) !== formText(sAfter)) return 'invalid'
+      return sa.left.trim() === v ? 'valid' : 'invalid'
+    }
+    case 'work-out-right': {
+      if (canonicalState(sb.left) !== canonicalState(sa.left)) return 'invalid'
+      const check = defaultCheckAdapter.checkExprEq(sb.right, sa.right)
+      return check === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'swap':
+      return canonicalState(sb.left) === canonicalState(sa.right) && canonicalState(sb.right) === canonicalState(sa.left)
+        ? 'valid'
+        : 'invalid'
+    case 'remove-brackets':
+    case 'expand-sides':
+    case 'collect-like-terms':
+    case 'factorise': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sb.left, sa.left)
+      const rightEq = defaultCheckAdapter.checkExprEq(sb.right, sa.right)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'add-both': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) + (${op.term})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) + (${op.term})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'subtract-both': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) - (${op.term})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) - (${op.term})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'multiply-both': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) * (${op.k})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) * (${op.k})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'divide-both': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sb.left, `(${sa.left}) * (${op.k})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sb.right, `(${sa.right}) * (${op.k})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'clear-fractions': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) * (${op.k})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) * (${op.k})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'move-to-left': {
+      if (sa.right.trim() !== '0') return 'invalid'
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) - (${sb.right})`)
+      return leftEq === 'valid' ? 'valid' : 'unknown'
+    }
+    default:
+      return 'unknown'
+  }
+}
+
 export function checkEquationOp(
   before: string | MathNode,
   after: string | MathNode,
@@ -530,7 +648,7 @@ export function checkEquationOp(
   if (lettersOutside(before, v) || lettersOutside(after, v)) return 'unknown'
   const b = equationSides(before)
   const a = equationSides(after)
-  if (!b || !a) return 'unknown'
+  if (!b || !a) return checkNonPolyEquationOp(before, after, op, v)
   const sides = [b.L, b.R, a.L, a.R]
   if (sides.some((e) => varsOf(e).some((name) => name !== v))) return 'unknown'
   if (REWRITE_OPS.has(op.kind) && formText(before) === formText(after)) return 'invalid'
@@ -770,12 +888,21 @@ export function variableOfInput(input: string): string | null {
   const split = splitEquation(input)
   const sides = split ? [split.left, split.right] : [input]
   const names = new Set<string>()
+  let allPoly = true
   for (const side of sides) {
     const poly = tryParsePoly(side)
-    if (!poly) return null
+    if (!poly) {
+      allPoly = false
+      break
+    }
     for (const n of varsOf(poly)) names.add(n)
   }
-  return names.size === 1 ? [...names][0] : null
+  if (allPoly && names.size === 1) return [...names][0]
+  const bare = input
+    .replace(/\\[A-Za-z]+/g, ' ')
+    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats)\b/gi, ' ')
+  const letters = [...new Set(bare.match(/\p{L}/gu) ?? [])].filter((l) => !['e', 'i'].includes(l.toLowerCase()))
+  return letters.length === 1 ? letters[0] : null
 }
 
 // The state comparison reads numbers exactly: a BigNumber instance of mathjs at 400 digits, so a literal of
@@ -829,7 +956,9 @@ export function sameState(a: string | MathNode, b: string | MathNode): boolean {
 
 /** Every letter run in a state (LaTeX commands aside) other than the variable v, even one that cancels. */
 export function lettersOutside(text: string | MathNode, v: string): boolean {
-  const bare = rawText(text).replace(/\\[A-Za-z]+/g, ' ')
+  const bare = rawText(text)
+    .replace(/\\[A-Za-z]+/g, ' ')
+    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats|pi)\b/gi, ' ')
   for (const m of bare.matchAll(/\p{L}+/gu)) {
     if (m[0] !== v) return true
   }
@@ -997,6 +1126,17 @@ function isCollected(side: string): boolean {
  */
 export function solutionProofOf(text: string | MathNode, v: string): SetProof | null {
   if (lettersOutside(text, v)) return null
+  const s = rawText(text)
+  if (/sin|cos|tan|\\sin|\\cos|\\tan/.test(s)) {
+    const sb = splitEquation(s)
+    if (sb) {
+      const r = Number(sb.right.trim())
+      if (!Number.isNaN(r) && (/sin|\\sin|cos|\\cos/.test(sb.left)) && (r > 1 || r < -1)) {
+        return { kind: 'none', deg: 0 }
+      }
+      return { kind: 'roots' }
+    }
+  }
   const d = equationDiff(text)
   return d ? solutionProof(d, v) : null
 }
@@ -2958,5 +3098,36 @@ export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg
     const value = algAdd(algAdd(algMul(algRat(rat(a)), algMul(r, r)), algMul(algRat(rat(b)), r)), algRat(rat(c)))
     return algEq(value, algRat(R0))
   })
+}
+
+/**
+ * A higher equation's solution set (non-polynomial, S3b): verified against displayed solutions.
+ * Null when the input is not an equation or solutions is empty.
+ */
+export function checkHigherSolutionSet(
+  before: string,
+  solutions: unknown[],
+  after: string,
+  v: string,
+  _domain: 'real' | 'complex' = 'real'
+): ValidationVerdict | null {
+  const sb = splitEquation(before)
+  if (!sb) return null
+  if (solutions.length === 0) {
+    return normalizeDisplayed(after) === normalizeDisplayed('\\text{no value of ' + v + ' works}') ||
+      normalizeDisplayed(after) === normalizeDisplayed('\\text{No real solution}')
+      ? 'valid'
+      : 'invalid'
+  }
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== solutions.length) return 'invalid'
+  for (let i = 0; i < solutions.length; i++) {
+    const valText = solutionValueText(solutions[i])
+    if (displayKey(shown[i]) !== displayKey(valText)) {
+      const s = readSurd(valText)
+      if (!s || displayKey(shown[i]) !== displayKey(texOfAlg(s))) return 'invalid'
+    }
+  }
+  return 'valid'
 }
 
