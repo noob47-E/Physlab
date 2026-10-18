@@ -9,7 +9,7 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { WHEEL_MODES, getWheelModeByIndex, segmentAt } from '../src/renderer/src/app/modeWheelData'
+import { WHEEL_MODES, getWheelModeByIndex, segmentAt, describeAnnularSector, describeRoundedAnnularSector, getSegmentAngles } from '../src/renderer/src/app/modeWheelData'
 import { useModeWheel, wheelKeyDown } from '../src/renderer/src/app/modeWheelStore'
 import { scene } from '../src/renderer/src/core/store'
 import { useApp } from '../src/renderer/src/app/modes'
@@ -401,5 +401,48 @@ describe('Part L2b: the wheel, tidied', () => {
     // The hub and far outside are nothing.
     expect(segmentAt(0, -40, 520)).toBeNull()
     expect(segmentAt(0, -400, 520)).toBeNull()
+  })
+})
+
+// L2c (owner, 18 Oct: "I wanted the Esc menu to be rounded"): the ring was round, but each piece had four sharp corners.
+describe('Part L2c: every piece of the wheel has soft corners', () => {
+  const { startAngle, endAngle } = getSegmentAngles(0)
+  const path = describeRoundedAnnularSector(0, 0, 120, 230, startAngle, endAngle, 14)
+  const points = (d: string): [number, number][] => {
+    const out: [number, number][] = []
+    // An arc's seven numbers end with its point; the rest are plain x y pairs: take every M, L and Q pair and each arc's end.
+    for (const cmd of d.match(/[MLQA][^MLQAZ]*/g) ?? []) {
+      const n = cmd.slice(1).trim().split(/\s+/).map(Number)
+      if (cmd[0] === 'A') out.push([n[5], n[6]])
+      else for (let i = 0; i + 1 < n.length; i += 2) out.push([n[i], n[i + 1]])
+    }
+    return out
+  }
+
+  it('is one closed shape with four rounded corners', () => {
+    expect(path.startsWith('M ')).toBe(true)
+    expect(path.trim().endsWith('Z')).toBe(true)
+    expect(path.match(/Q /g)).toHaveLength(4)
+    expect(path.match(/A /g)).toHaveLength(2)
+  })
+
+  it('never leaves the ring: every point is between the inner and the outer circle', () => {
+    for (const [x, y] of points(path)) {
+      const r = Math.hypot(x, y)
+      expect(r).toBeGreaterThanOrEqual(120 - 1e-9)
+      expect(r).toBeLessThanOrEqual(230 + 1e-9)
+    }
+  })
+
+  it('a corner of 0 is the old sharp piece, and a corner too big for the piece is cut down to fit', () => {
+    expect(describeRoundedAnnularSector(0, 0, 120, 230, startAngle, endAngle, 0)).toBe(describeAnnularSector(0, 0, 120, 230, startAngle, endAngle))
+    expect(() => describeRoundedAnnularSector(0, 0, 120, 230, startAngle, endAngle, 500)).not.toThrow()
+    for (const [x, y] of points(describeRoundedAnnularSector(0, 0, 120, 230, startAngle, endAngle, 500))) expect(Math.hypot(x, y)).toBeLessThanOrEqual(230 + 1e-9)
+  })
+
+  it('the wheel draws its pieces with it', () => {
+    const src = readFileSync(resolve(__dirname, '../src/renderer/src/app/ModeWheel.tsx'), 'utf8')
+    expect(src).toMatch(/describeRoundedAnnularSector\(0, 0, INNER_R, OUTER_R, startAngle, endAngle, SEGMENT_CORNER\)/)
+    expect(src).not.toMatch(/describeAnnularSector\(/)
   })
 })

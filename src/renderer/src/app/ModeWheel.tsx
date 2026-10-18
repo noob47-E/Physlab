@@ -13,7 +13,7 @@ import { useApp, type ModeId } from './modes'
 import {
   WHEEL_MODES,
   getSegmentAngles,
-  describeAnnularSector,
+  describeRoundedAnnularSector,
   polarToCartesian,
   segmentAt
 } from './modeWheelData'
@@ -42,6 +42,8 @@ const HALF_SIZE = WHEEL_SIZE / 2
 const OUTER_R = 230
 const INNER_R = 120
 const ICON_TEXT_R = 175
+/** How far each piece's corners are rounded, in the wheel's own units (it is drawn 520 across). */
+const SEGMENT_CORNER = 14
 
 export function ModeWheel() {
   const open = useModeWheel((s) => s.open)
@@ -134,7 +136,8 @@ export function ModeWheel() {
           {/* Annular segments */}
           {WHEEL_MODES.map((mode, idx) => {
             const { startAngle, endAngle, midAngle } = getSegmentAngles(idx)
-            const pathD = describeAnnularSector(0, 0, INNER_R, OUTER_R, startAngle, endAngle)
+            // Soft corners on every piece (owner, 18 Oct: "rounded"); the ring and its gaps are as they were.
+            const pathD = describeRoundedAnnularSector(0, 0, INNER_R, OUTER_R, startAngle, endAngle, SEGMENT_CORNER)
             const isHighlighted = idx === highlightedIndex
             const isCurrent = mode.id === currentMode
             const Icon = ICONS[mode.id] ?? Boxes

@@ -155,3 +155,41 @@ export function describeAnnularSector(
     'Z'
   ].join(' ')
 }
+
+/**
+ * The same ring sector with its four corners rounded off by `corner` units (owner, 18 Oct: "I wanted the Esc menu to be rounded" -
+ * the ring was round but each piece had sharp corners). Each arc stops `corner` short of the corner (measured along the arc) and
+ * each side stops `corner` short of it, and a curve whose control point is the old sharp corner joins them, so the piece keeps
+ * its shape and only its corners soften. A corner larger than a third of the ring's width or of the inner arc is cut down to fit.
+ */
+export function describeRoundedAnnularSector(
+  cx: number,
+  cy: number,
+  innerR: number,
+  outerR: number,
+  startAngle: number,
+  endAngle: number,
+  corner: number
+): string {
+  const span = ((endAngle - startAngle) * Math.PI) / 180
+  const r = Math.max(0, Math.min(corner, (outerR - innerR) / 3, (innerR * span) / 3))
+  if (r === 0) return describeAnnularSector(cx, cy, innerR, outerR, startAngle, endAngle)
+  // The angle an arc of length r takes up on each circle.
+  const dOut = (r / outerR) * (180 / Math.PI)
+  const dIn = (r / innerR) * (180 / Math.PI)
+  const at = (radius: number, angle: number) => polarToCartesian(cx, cy, radius, angle)
+  const pt = (p: { x: number; y: number }) => `${p.x} ${p.y}`
+  const large = endAngle - startAngle - 2 * dOut <= 180 ? 0 : 1
+  return [
+    `M ${pt(at(outerR, startAngle + dOut))}`,
+    `A ${outerR} ${outerR} 0 ${large} 1 ${pt(at(outerR, endAngle - dOut))}`,
+    `Q ${pt(at(outerR, endAngle))} ${pt(at(outerR - r, endAngle))}`,
+    `L ${pt(at(innerR + r, endAngle))}`,
+    `Q ${pt(at(innerR, endAngle))} ${pt(at(innerR, endAngle - dIn))}`,
+    `A ${innerR} ${innerR} 0 ${large} 0 ${pt(at(innerR, startAngle + dIn))}`,
+    `Q ${pt(at(innerR, startAngle))} ${pt(at(innerR + r, startAngle))}`,
+    `L ${pt(at(outerR - r, startAngle))}`,
+    `Q ${pt(at(outerR, startAngle))} ${pt(at(outerR, startAngle + dOut))}`,
+    'Z'
+  ].join(' ')
+}
