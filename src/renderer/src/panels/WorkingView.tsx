@@ -171,7 +171,7 @@ export function WorkingView({
         {activeDoc.method && <span className="pure-method">{activeDoc.method}</span>}
         {doc.anotherWay && (
           <button
-            className="btn ghost text-xs"
+            className="btn ghost text-fine"
             onClick={() => setAlt(!alt)}
             title={alt ? `Switch back to ${doc.method ?? 'primary method'}` : `Show solution via ${doc.anotherWay.method ?? 'another method'}`}
           >

@@ -495,7 +495,8 @@ export function suggestJob(src: string): JobId {
   // way). A comma inside one belongs to a function: ∛8 arrives as nthRoot(8, 3) and log₂8 as
   // log(2, 8), and both were sent to HCF, which refused them (H15); only a line with i was spared (P22).
   // A system of equations with commas (x + y = 3, 2x - y = 0) belongs to Solve, not HCF.
-  if (commaOutsideBrackets(s) && !s.includes('=')) return 'hcf'
+  if (s.includes(',') && s.split(',').filter((part) => part.includes('=')).length >= 2) return 'solve'
+  if (commaOutsideBrackets(s)) return 'hcf'
   if (hasI) return 'complex'
   // sin²x + cos²x = 1 is an identity to prove, not an equation to solve; sin x = 0.5 stays with Solve.
   if (isTrigIdentity(s)) return 'trigidentity'
