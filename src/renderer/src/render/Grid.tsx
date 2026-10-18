@@ -21,6 +21,9 @@ import { normaliseGrid3D } from '../math/workingPlane'
 const MINOR = () => themeColor('--grid-minor')
 const MAJOR = () => themeColor('--grid-major')
 const AXIS = () => themeColor('--grid-axis')
+// The 3-D floor's own: thin lines seen at a slant faded into the Light theme's pale floor (X10), so Light draws them darker.
+const FLOOR_MINOR = () => themeColor('--grid-3d-minor')
+const FLOOR_MAJOR = () => themeColor('--grid-3d-major')
 
 // The axis colours are read when needed rather than once: a theme switch changes them.
 const AXIS_COLORS = {
@@ -38,8 +41,11 @@ const AXIS_COLORS = {
 /** The three drawables a grid is made of: minor lines, major lines and (for the dots style) a dot at each crossing. */
 type GridLines = [THREE.LineSegments, THREE.LineSegments, THREE.Mesh]
 
-function useGridLines(): GridLines {
+/** The grid's lines and dots, in the theme's grid colours; `floor` takes the 3-D floor's own (FLOOR_MINOR, FLOOR_MAJOR). */
+function useGridLines(floor = false): GridLines {
   const lines = useMemo(() => {
+    const minor = floor ? FLOOR_MINOR : MINOR
+    const major = floor ? FLOOR_MAJOR : MAJOR
     const geom = () => {
       const g = new THREE.BufferGeometry()
       g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3))
@@ -55,23 +61,23 @@ function useGridLines(): GridLines {
     // Each dot is a small square mesh, not a THREE.Points vertex: WebGPU draws a point primitive
     // as exactly one device pixel and ignores PointsMaterial.size, so the dots style was a field
     // of invisible specks on the default renderer. `fillGrid` sizes the squares from the zoom.
-    const pm = new THREE.MeshBasicMaterial({ color: MAJOR(), side: THREE.DoubleSide, depthTest: false, depthWrite: false })
+    const pm = new THREE.MeshBasicMaterial({ color: major(), side: THREE.DoubleSide, depthTest: false, depthWrite: false })
     const dots = new THREE.Mesh(geom(), pm)
     dots.frustumCulled = false
     dots.renderOrder = -10
-    return [mk(MINOR()), mk(MAJOR()), dots] as GridLines
-  }, [])
+    return [mk(minor()), mk(major()), dots] as GridLines
+  }, [floor])
   // Repaint the grid when the theme changes.
   const theme = useTheme((t) => t.theme)
   useEffect(() => {
-    const colors = [MINOR(), MAJOR(), MAJOR()]
+    const colors = floor ? [FLOOR_MINOR(), FLOOR_MAJOR(), FLOOR_MAJOR()] : [MINOR(), MAJOR(), MAJOR()]
     lines.forEach((l, i) => {
       const m = l.material as THREE.LineBasicMaterial | THREE.MeshBasicMaterial
       m.color.set(colors[i])
       // The WebGPU backend compiles the colour into the material, so it has to be told.
       m.needsUpdate = true
     })
-  }, [theme, lines])
+  }, [theme, lines, floor])
   useReleaseLater(lines, (ls) => ls.forEach((l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose())))
   return lines
 }
@@ -318,7 +324,7 @@ export function floorLabels(screenOf: ScreenOf, view: { width: number; height: n
 /** Floor grid on the xy-plane with coloured x, y, z axes (z is up). */
 export function Grid3D() {
   const { camera, size, invalidate } = useThree()
-  const lines = useGridLines()
+  const lines = useGridLines(true)
   const showGrid = useScene((s) => s.settings.showGrid)
   const mode3 = useScene((s) => normaliseGrid3D(s.settings.grid3d))
   const workZ = useScene((s) => s.settings.workZ ?? 0)
@@ -390,14 +396,14 @@ function WallGrids({ half, step }: { half: number; step: number }) {
     }
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-    const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: MINOR(), depthTest: false, depthWrite: false }))
+    const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: FLOOR_MINOR(), depthTest: false, depthWrite: false }))
     l.frustumCulled = false
     l.renderOrder = -11
     return l
   }, [half, step])
   const theme = useTheme((t) => t.theme)
   useEffect(() => {
-    ;(wall.material as THREE.LineBasicMaterial).color.set(MINOR())
+    ;(wall.material as THREE.LineBasicMaterial).color.set(FLOOR_MINOR())
     ;(wall.material as THREE.LineBasicMaterial).needsUpdate = true
   }, [theme, wall])
   useReleaseLater(wall, (l) => (l.geometry.dispose(), (l.material as THREE.Material).dispose()))
