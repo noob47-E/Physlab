@@ -126,7 +126,7 @@ export const usePure = create<PureState>((set, get) => ({
     // deep inside one used to leave the panel showing the previous problem with no explanation.
     // Whatever escapes becomes a refusal the student can read.
     let working: Working
-    const stepped = stepWorkingFor({ job: j, input: src, rawInput: latex })
+    const stepped = !/sin|cos|tan/i.test(src) ? stepWorkingFor({ job: j, input: src, rawInput: latex }) : null
     if (stepped) {
       working = stepped
     } else {

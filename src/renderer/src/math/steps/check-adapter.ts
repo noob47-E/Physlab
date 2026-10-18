@@ -3111,9 +3111,13 @@ export function checkHigherSolutionSet(
   v: string,
   _domain: 'real' | 'complex' = 'real'
 ): ValidationVerdict | null {
+  if (!/sin|cos|tan|\\sin|\\cos|\\tan/.test(before)) return null
   const sb = splitEquation(before)
   if (!sb) return null
+  if (lettersOutside(before, v)) return null
   if (solutions.length === 0) {
+    const proof = solutionProofOf(before, v)
+    if (!proof || proof.kind !== 'none') return 'invalid'
     return normalizeDisplayed(after) === normalizeDisplayed('\\text{no value of ' + v + ' works}') ||
       normalizeDisplayed(after) === normalizeDisplayed('\\text{No real solution}')
       ? 'valid'
