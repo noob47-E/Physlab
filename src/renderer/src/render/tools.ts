@@ -516,8 +516,14 @@ export function advanceTool(tool: ToolId, picks: ObjId[]): boolean {
       b.commit()
       // Drop intersection points that do not exist (e.g. a line missing a circle).
       const bad = b.created.filter((o) => scene().ev.errors.has(o.id)).map((o) => o.id)
-      if (bad.length) scene().removeObjects(bad)
+      let notice: string | null = null
+      if (bad.length) {
+        const firstErr = scene().ev.errors.get(bad[0])
+        if (firstErr) notice = firstErr
+        scene().removeObjects(bad)
+      }
       resetTool()
+      if (notice) useTool.setState({ notice })
       return true
     }
   }

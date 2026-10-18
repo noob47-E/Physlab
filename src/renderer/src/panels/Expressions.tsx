@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Eye, EyeOff, Keyboard, Pause, Play, Plus, Settings,
 import { scene, useScene } from '../core/store'
 import { putBack, replaceGraphEquation, stockOf } from '../lang/graphEdit'
 import { runCommand } from '../lang/commands'
+import { bumpAction } from '../core/actionSignals'
 import { NumField, TextField } from '../ui/fields'
 import { cssColor } from '../app/theme'
 import {
@@ -28,7 +29,6 @@ import {
   type ParametricDef
 } from './parametricCard'
 import { fmt } from '../math/format'
-import { bumpAction } from '../core/actionSignals'
 import { Tex } from '../ui/Tex'
 import { graphLineToTeX } from './expressionTex'
 import { TryOne3D } from './TryOne3D'

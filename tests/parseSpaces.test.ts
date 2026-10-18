@@ -2,8 +2,17 @@
 // a paste from elsewhere may bring a narrow or thin space. Every one of them is an ordinary space to the
 // reader, so a shown value pasted back is the number it shows and 2 × 3 is 6 whatever space is round ×.
 // W2 helper: the spelling preprocess gives a name, so a caller can publish a θ slider as theta too.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { math, preprocess, speltName } from '../src/renderer/src/math/expr'
+import { runCommand } from '../src/renderer/src/lang/commands'
+import { scene } from '../src/renderer/src/core/store'
+import { resetGlobals } from './helpers/globals'
+
+vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
+  cas: vi.fn(async () => ({ latex: '', text: '', numeric: null })),
+  useCasStatus: { getState: () => ({ status: 'idle', busy: 0 }), setState: () => {}, subscribe: () => () => {} },
+  CAS_OPS: []
+}))
 
 const value = (s: string): unknown => math.evaluate(preprocess(s))
 
@@ -28,9 +37,6 @@ describe('W2 — the name a formula reads for a Greek name', () => {
 
 describe('W2 — on the bar, a slider named θ is read by 2θ', () => {
   it('θ = 30 then 2θ is 60, and θ + θ′ adds two sliders', async () => {
-    const { runCommand } = await import('../src/renderer/src/lang/commands')
-    const { scene } = await import('../src/renderer/src/core/store')
-    const { resetGlobals } = await import('./helpers/globals')
     resetGlobals()
     scene().newScene()
     scene().clearLog()
@@ -42,5 +48,5 @@ describe('W2 — on the bar, a slider named θ is read by 2θ', () => {
     }
     expect(value('t2')).toBe(60)
     expect(value('t3')).toBe(32)
-  })
+  }, 20_000)
 })

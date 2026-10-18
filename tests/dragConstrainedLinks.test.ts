@@ -146,4 +146,109 @@ describe('S1: dragging while paused never stretches links', () => {
     expect(st.position[0]).toBeCloseTo(12, 3)
     expect(st.position[1]).toBeCloseTo(-3, 3)
   })
+
+  it('moves a welded pair of dynamic bodies rigidly when either body is dragged', () => {
+    const a = put('box', 'A', [0, 2, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 2 })
+    const b = put('box', 'B', [2, 2, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 2 })
+    const weldLink = makeLink('w1', 'weld', a, b, { posA: [0, 2, 0], posB: [2, 2, 0] })!
+
+    world.rebuild([a, b], [weldLink])
+
+    // Drag A by (+1, +3, 0) to [1, 5, 0]
+    world.placeBody(a.id, [1, 5, 0])
+
+    const stA = world.state(a.id)!
+    const stB = world.state(b.id)!
+
+    // A moves to target, and B follows by the exact same displacement
+    expect(stA.position[0]).toBeCloseTo(1.0, 2)
+    expect(stA.position[1]).toBeCloseTo(5.0, 2)
+    expect(stB.position[0]).toBeCloseTo(3.0, 2)
+    expect(stB.position[1]).toBeCloseTo(5.0, 2)
+  })
+
+  it('moves a hinged pair of dynamic bodies rigidly when either body is dragged', () => {
+    const a = put('box', 'A', [0, 2, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 1 })
+    const b = put('box', 'B', [2, 2, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 1 })
+    const hingeLink = makeLink('h1', 'hinge', a, b, { posA: [0, 2, 0], posB: [2, 2, 0] })!
+
+    world.rebuild([a, b], [hingeLink])
+
+    // Drag B by (-2, +2, 0) to [0, 4, 0]
+    world.placeBody(b.id, [0, 4, 0])
+
+    const stA = world.state(a.id)!
+    const stB = world.state(b.id)!
+
+    // B moves to target, and A translates with B rigidly
+    expect(stB.position[0]).toBeCloseTo(0.0, 2)
+    expect(stB.position[1]).toBeCloseTo(4.0, 2)
+    expect(stA.position[0]).toBeCloseTo(-2.0, 2)
+    expect(stA.position[1]).toBeCloseTo(4.0, 2)
+  })
+
+  it('moves a chain of dynamic welded and hinged bodies rigidly together', () => {
+    const a = put('box', 'A', [0, 2, 0], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1 })
+    const b = put('box', 'B', [1, 2, 0], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1 })
+    const c = put('box', 'C', [2, 2, 0], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1 })
+    const wLink = makeLink('w1', 'weld', a, b, { posA: [0, 2, 0], posB: [1, 2, 0] })!
+    const hLink = makeLink('h1', 'hinge', b, c, { posA: [1, 2, 0], posB: [2, 2, 0] })!
+
+    world.rebuild([a, b, c], [wLink, hLink])
+
+    // Drag C to [2, 6, 0] (delta +4 along y)
+    world.placeBody(c.id, [2, 6, 0])
+
+    const stA = world.state(a.id)!
+    const stB = world.state(b.id)!
+    const stC = world.state(c.id)!
+
+    expect(stC.position[1]).toBeCloseTo(6.0, 2)
+    expect(stB.position[1]).toBeCloseTo(6.0, 2)
+    expect(stA.position[1]).toBeCloseTo(6.0, 2)
+  })
+
+  it('keeps a body anchored if welded or hinged to an immovable static body', () => {
+    const wall = put('box', 'Wall', [0, 5, 0], { size: [1, 1, 1], motion: 'static' })
+    const sign = put('box', 'Sign', [0, 3, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 1 })
+    const weldLink = makeLink('w1', 'weld', wall, sign, { posA: [0, 5, 0], posB: [0, 3, 0] })!
+
+    world.rebuild([wall, sign], [weldLink])
+
+    // Try to drag sign away to [4, 3, 0]
+    world.placeBody(sign.id, [4, 3, 0])
+
+    const stSign = world.state(sign.id)!
+    // Because wall is static, sign cannot move away from wall
+    expect(stSign.position[0]).toBeCloseTo(0.0, 2)
+    expect(stSign.position[1]).toBeCloseTo(3.0, 2)
+  })
+
+  it('clamps drag of welded assembly so external string constraint on partner is not stretched', () => {
+    const ceiling = put('sphere', 'Ceiling', [0, 5, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const a = put('box', 'A', [0, 3, 0], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1 })
+    const b = put('box', 'B', [1, 3, 0], { size: [0.4, 0.4, 0.4], massMode: 'mass', mass: 1 })
+
+    // String from Ceiling [0, 5, 0] to A [0, 3, 0]: length = 2.0 m
+    const strLink = makeLink('s1', 'string', ceiling, a, { posA: [0, 5, 0], posB: [0, 3, 0] })!
+    // Weld between A and B
+    const weldLink = makeLink('w1', 'weld', a, b, { posA: [0, 3, 0], posB: [1, 3, 0] })!
+
+    world.rebuild([ceiling, a, b], [strLink, weldLink])
+
+    // Drag B far to the right: [10, 3, 0]
+    world.placeBody(b.id, [10, 3, 0])
+
+    const stA = world.state(a.id)!
+    const stB = world.state(b.id)!
+
+    // String between Ceiling [0, 5, 0] and A must not stretch beyond 2.0 m
+    const distA = Math.hypot(stA.position[0] - 0, stA.position[1] - 5, stA.position[2] - 0)
+    expect(distA).toBeLessThanOrEqual(2.01)
+
+    // And B must remain rigidly attached at offset [1, 0, 0] from A
+    expect(stB.position[0] - stA.position[0]).toBeCloseTo(1.0, 2)
+    expect(stB.position[1] - stA.position[1]).toBeCloseTo(0.0, 2)
+  })
 })
+

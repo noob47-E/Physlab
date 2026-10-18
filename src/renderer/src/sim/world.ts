@@ -1980,6 +1980,41 @@ export class SimWorld {
   }
 
   /**
+   * Finds all dynamic bodies connected to `id` through 'weld' or 'hinge' links (rigid assemblies).
+   * If any connected body is non-dynamic (static/kinematic), `isAnchored` is true.
+   */
+  private rigidAssemblyOf(id: BodyId): { entries: Entry[]; isAnchored: boolean } {
+    const e = this.entries.get(id)
+    if (!e) return { entries: [], isAnchored: false }
+    if (e.def.motion !== 'dynamic') return { entries: [e], isAnchored: false }
+
+    const visited = new Set<BodyId>([id])
+    const queue: BodyId[] = [id]
+    const dynamicEntries: Entry[] = [e]
+    let isAnchored = false
+
+    while (queue.length > 0) {
+      const curId = queue.shift()!
+      for (const link of this.linkDefs) {
+        if (link.kind !== 'weld' && link.kind !== 'hinge') continue
+        if (link.a !== curId && link.b !== curId) continue
+        const otherId = link.a === curId ? link.b : link.a
+        if (visited.has(otherId)) continue
+        visited.add(otherId)
+        const otherEntry = this.entries.get(otherId)
+        if (!otherEntry || otherEntry.def.motion !== 'dynamic') {
+          isAnchored = true
+        } else {
+          dynamicEntries.push(otherEntry)
+          queue.push(otherId)
+        }
+      }
+    }
+
+    return { entries: dynamicEntries, isAnchored }
+  }
+
+  /**
    * Put a body somewhere, at rest, whatever it was doing: arranging the scene while paused. A
    * static body (wall, ramp) is moved the same way, and everything else is woken so a ball asleep
    * on something that has just moved notices. The floor is never moved this way (owner,
@@ -2041,23 +2076,59 @@ export class SimWorld {
     if (!target) {
       target = this.constrainPlacement(id, position, from)
     }
-    this.put(e, target)
-    this.faceTies(e)
-    if (e.def.motion !== 'dynamic') this.wakeAll()
-    // A mass on a pulley takes its partner the other way, so the rope stays its length while it
-    // is dragged and nothing jumps on Play. `put`, not `placeBody`, for the partner: placing it
-    // would move this body back again.
-    for (const link of this.linkDefs) {
-      if (link.kind !== 'pulley' || (link.a !== id && link.b !== id)) continue
-      const partner = this.entries.get(link.a === id ? link.b : link.a)
-      const wheel = link.over ? this.entries.get(link.over) : undefined
-      if (!partner || !wheel || partner.def.motion !== 'dynamic') continue
-      const wheelDef = { ...wheel.def, position: this.positionOf(wheel) }
-      this.put(partner, pulleyPartnerMove(wheelDef, from, target, this.positionOf(partner)))
+    // S1b, after the lever's own placement above (merged by the wave head, 18 Oct): a body in an unanchored welded or
+    // hinged assembly takes the whole assembly with it.
+    const assembly = this.rigidAssemblyOf(id)
+    const delta: V3 = [target[0] - from[0], target[1] - from[1], target[2] - from[2]]
+    const moved = delta[0] !== 0 || delta[1] !== 0 || delta[2] !== 0
+
+    // Capture initial positions of all assembly members before moving anything in the engine
+    const memberFroms = new Map<BodyId, V3>()
+    for (const m of assembly.entries) {
+      memberFroms.set(m.def.id, this.positionOf(m))
     }
-    // A rope or pulley bakes its end points and rim into its constraints. Move a wheel or a rope
-    // end and those must be laid again, exactly as updateBody does.
-    if (this.linkDefs.some((l) => l.over === id || ((l.kind === 'pulley' || l.kind === 'rope') && (l.a === id || l.b === id)))) {
+
+    this.put(e, target)
+
+    // S1b: When dragging a body that belongs to an unanchored welded/hinged assembly, move the
+    // whole connected assembly rigidly so links stay valid and the student can still arrange it.
+    if (moved && !assembly.isAnchored) {
+      for (const partner of assembly.entries) {
+        if (partner.def.id === id) continue
+        const pFrom = memberFroms.get(partner.def.id)!
+        this.put(partner, [pFrom[0] + delta[0], pFrom[1] + delta[1], pFrom[2] + delta[2]])
+      }
+    }
+
+    // Only a single isolated body turns its tie to face what it hangs from (SB61).
+    // An assembly of multiple bodies connected by welds or hinges must preserve its rigid relative orientation.
+    if (assembly.entries.length <= 1) {
+      this.faceTies(e)
+    }
+    if (e.def.motion !== 'dynamic') this.wakeAll()
+
+    // A mass on a pulley takes its partner the other way, so the rope stays its length while it
+    // is dragged and nothing jumps on Play. Applies to any member of the assembly attached to an external partner.
+    const assemblySet = new Set(assembly.entries.map((b) => b.def.id))
+    for (const member of assembly.entries) {
+      const mFrom = memberFroms.get(member.def.id)!
+      const mTarget: V3 = [mFrom[0] + delta[0], mFrom[1] + delta[1], mFrom[2] + delta[2]]
+      for (const link of this.linkDefs) {
+        if (link.kind !== 'pulley' || (link.a !== member.def.id && link.b !== member.def.id)) continue
+        const partnerId = link.a === member.def.id ? link.b : link.a
+        if (assemblySet.has(partnerId)) continue
+        const partner = this.entries.get(partnerId)
+        const wheel = link.over ? this.entries.get(link.over) : undefined
+        if (!partner || !wheel || partner.def.motion !== 'dynamic') continue
+        const wheelDef = { ...wheel.def, position: this.positionOf(wheel) }
+        this.put(partner, pulleyPartnerMove(wheelDef, mFrom, mTarget, this.positionOf(partner)))
+      }
+    }
+
+    // A rope or pulley bakes its end points and rim into its constraints, and weld/hinge constraints
+    // need to be re-laid if moved. Move a wheel, rope end, weld or hinge and those must be laid again.
+    const movedIds = new Set<BodyId>([id, ...(!assembly.isAnchored && moved ? assembly.entries.map((b) => b.def.id) : [])])
+    if (this.linkDefs.some((l) => movedIds.has(l.over ?? '') || ((l.kind === 'pulley' || l.kind === 'rope' || l.kind === 'weld' || l.kind === 'hinge') && (movedIds.has(l.a) || movedIds.has(l.b))))) {
       this.setLinks(this.linkDefs)
     }
   }
@@ -2070,6 +2141,8 @@ export class SimWorld {
   /**
    * Clamps a proposed placement position so that distance constraints (strings, rods, ropes, pulleys)
    * are not stretched or violated while dragging a body paused (S1, Finding 8.1).
+   * For welded or hinged assemblies, unanchored dynamic bodies translate together rigidly, while
+   * assemblies anchored to immovable static bodies remain pinned (S1b).
    */
   private constrainPlacement(id: BodyId, position: V3, from: V3): V3 {
     const e = this.entries.get(id)
@@ -2077,98 +2150,147 @@ export class SimWorld {
     const touching = this.linkDefs.filter((l) => l.a === id || l.b === id)
     if (touching.length === 0) return position
 
-    let target: V3 = [...position]
-    // In 2D, the dragged body always remains strictly in its 2D plane (from[2]).
-    if (this.settings.twoD) target[2] = from[2]
+    const assembly = this.rigidAssemblyOf(id)
+    if (assembly.isAnchored) {
+      // Anchored to an immovable static body via weld or hinge: cannot translate away.
+      return [...from]
+    }
 
-    // Sort links touching id so that parent links (lower depth) are prioritized.
-    touching.sort((l1, l2) => {
-      const o1 = l1.a === id ? l1.b : l1.a
-      const o2 = l2.a === id ? l2.b : l2.a
-      const d1 = this.depths.get(o1) ?? Infinity
-      const d2 = this.depths.get(o2) ?? Infinity
-      return d1 - d2
+    const assemblyIds = new Set(assembly.entries.map((b) => b.def.id))
+    let delta: V3 = [
+      position[0] - from[0],
+      position[1] - from[1],
+      this.settings.twoD ? 0 : position[2] - from[2]
+    ]
+
+    // Find all external links touching any body in this assembly
+    const externalLinks: { link: Link; member: Entry }[] = []
+    for (const member of assembly.entries) {
+      for (const link of this.linkDefs) {
+        if (link.kind === 'pulley') {
+          if (link.a === member.def.id || link.b === member.def.id) {
+            const otherId = link.a === member.def.id ? link.b : link.a
+            if (!assemblyIds.has(otherId) || (link.over && !assemblyIds.has(link.over))) {
+              externalLinks.push({ link, member })
+            }
+          }
+          continue
+        }
+        if (link.a !== member.def.id && link.b !== member.def.id) continue
+        const otherId = link.a === member.def.id ? link.b : link.a
+        if (assemblyIds.has(otherId)) continue // internal link inside rigid assembly
+        externalLinks.push({ link, member })
+      }
+    }
+
+    if (externalLinks.length === 0) {
+      return [from[0] + delta[0], from[1] + delta[1], this.settings.twoD ? from[2] : from[2] + delta[2]]
+    }
+
+    // Sort external links so lower depths (parent links) take priority
+    externalLinks.sort((a, b) => {
+      const oA = a.link.a === a.member.def.id ? a.link.b : a.link.a
+      const oB = b.link.a === b.member.def.id ? b.link.b : b.link.a
+      const dA = this.depths.get(oA) ?? Infinity
+      const dB = this.depths.get(oB) ?? Infinity
+      return dA - dB
     })
 
-    // Iterative projection relaxation (converges simultaneous multiple constraints, e.g. two strings).
-    const passes = touching.length > 1 ? 30 : 1
+    const passes = externalLinks.length > 1 ? 30 : 1
     for (let iter = 0; iter < passes; iter++) {
-      for (const link of touching) {
-        const otherId = link.a === id ? link.b : link.a
+      for (const { link, member } of externalLinks) {
+        const otherId = link.a === member.def.id ? link.b : link.a
         const other = this.entries.get(otherId)
         if (!other) continue
         const otherPos = this.positionOf(other)
+        const mFrom = this.positionOf(member)
+        let mTarget: V3 = [
+          mFrom[0] + delta[0],
+          mFrom[1] + delta[1],
+          this.settings.twoD ? mFrom[2] : mFrom[2] + delta[2]
+        ]
 
         if (link.kind === 'string') {
           const maxDist = Math.max(0.01, link.length)
-          const dx = target[0] - otherPos[0]
-          const dy = target[1] - otherPos[1]
-          const dz = this.settings.twoD ? 0 : target[2] - otherPos[2]
+          const dx = mTarget[0] - otherPos[0]
+          const dy = mTarget[1] - otherPos[1]
+          const dz = this.settings.twoD ? 0 : mTarget[2] - otherPos[2]
           const d = Math.hypot(dx, dy, dz)
           if (d > maxDist) {
             const s = maxDist / (d || 1)
-            target = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? from[2] : otherPos[2] + dz * s]
+            mTarget = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? mFrom[2] : otherPos[2] + dz * s]
+            delta = [mTarget[0] - mFrom[0], mTarget[1] - mFrom[1], this.settings.twoD ? 0 : mTarget[2] - mFrom[2]]
           }
         } else if (link.kind === 'rod') {
           const fixedDist = Math.max(0.01, link.length)
-          const dx = target[0] - otherPos[0]
-          const dy = target[1] - otherPos[1]
-          const dz = this.settings.twoD ? 0 : target[2] - otherPos[2]
+          const dx = mTarget[0] - otherPos[0]
+          const dy = mTarget[1] - otherPos[1]
+          const dz = this.settings.twoD ? 0 : mTarget[2] - otherPos[2]
           const d = Math.hypot(dx, dy, dz)
           if (d < 1e-6) {
-            target = [otherPos[0], otherPos[1] - fixedDist, from[2]]
+            mTarget = [otherPos[0], otherPos[1] - fixedDist, mFrom[2]]
           } else {
             const s = fixedDist / d
-            target = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? from[2] : otherPos[2] + dz * s]
+            mTarget = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? mFrom[2] : otherPos[2] + dz * s]
           }
+          delta = [mTarget[0] - mFrom[0], mTarget[1] - mFrom[1], this.settings.twoD ? 0 : mTarget[2] - mFrom[2]]
         } else if (link.kind === 'rope') {
-          const dx = target[0] - otherPos[0]
-          const dy = target[1] - otherPos[1]
-          const dz = this.settings.twoD ? 0 : target[2] - otherPos[2]
+          const dx = mTarget[0] - otherPos[0]
+          const dy = mTarget[1] - otherPos[1]
+          const dz = this.settings.twoD ? 0 : mTarget[2] - otherPos[2]
           const d = Math.hypot(dx, dy, dz)
           const dir: V3 = d > 1e-6 ? [dx / d, dy / d, dz / d] : [0, -1, 0]
           const reachOther = reachAlong(other.def, dir)
-          const reachMe = reachAlong(e.def, [-dir[0], -dir[1], -dir[2]])
+          const reachMe = reachAlong(member.def, [-dir[0], -dir[1], -dir[2]])
           const maxDist = Math.max(0.1, link.length) + reachOther + reachMe
           if (d > maxDist) {
             const s = maxDist / (d || 1)
-            target = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? from[2] : otherPos[2] + dz * s]
+            mTarget = [otherPos[0] + dx * s, otherPos[1] + dy * s, this.settings.twoD ? mFrom[2] : otherPos[2] + dz * s]
+            delta = [mTarget[0] - mFrom[0], mTarget[1] - mFrom[1], this.settings.twoD ? 0 : mTarget[2] - mFrom[2]]
           }
         } else if (link.kind === 'pulley') {
           const wheel = link.over ? this.entries.get(link.over) : undefined
           if (wheel) {
+            const otherIsInternal = assemblyIds.has(otherId)
             const wheelDef = { ...wheel.def, position: this.positionOf(wheel) }
-            const partnerPos = this.positionOf(other)
-            const { p1, p2 } = pulleyRim(wheelDef, from, partnerPos)
-            const myRim = link.a === id ? p1 : p2
-            const partnerRim = link.a === id ? p2 : p1
+            const partnerPos = otherIsInternal
+              ? [this.positionOf(other)[0] + delta[0], this.positionOf(other)[1] + delta[1], this.settings.twoD ? this.positionOf(other)[2] : this.positionOf(other)[2] + delta[2]]
+              : this.positionOf(other)
+            const { p1, p2 } = pulleyRim(wheelDef, mFrom, this.positionOf(other))
+            const myRim = link.a === member.def.id ? p1 : p2
+            const partnerRim = link.a === member.def.id ? p2 : p1
             const partnerToRim = Math.hypot(partnerPos[0] - partnerRim[0], partnerPos[1] - partnerRim[1], partnerPos[2] - partnerRim[2])
-            const maxPartnerLift = Math.max(0, partnerToRim - 0.05)
-            const fromDist = Math.hypot(from[0] - myRim[0], from[1] - myRim[1], from[2] - myRim[2])
             const totalLen = Math.max(0.05, link.length)
-            const maxDistFromRim = Math.max(0.01, Math.min(totalLen - 0.05, fromDist + maxPartnerLift))
-            const diffRim: V3 = [target[0] - myRim[0], target[1] - myRim[1], this.settings.twoD ? 0 : target[2] - myRim[2]]
-            const dRim = Math.hypot(...diffRim)
-            if (dRim > maxDistFromRim && dRim > 1e-6) {
-              const s = maxDistFromRim / dRim
-              target = [myRim[0] + diffRim[0] * s, myRim[1] + diffRim[1] * s, this.settings.twoD ? from[2] : myRim[2] + diffRim[2] * s]
+
+            if (otherIsInternal) {
+              const dMe = Math.hypot(mTarget[0] - myRim[0], mTarget[1] - myRim[1], this.settings.twoD ? 0 : mTarget[2] - myRim[2])
+              const dOther = partnerToRim
+              const totalRun = dMe + dOther
+              if (totalRun > totalLen && dMe > 1e-6) {
+                const maxDMe = Math.max(0.01, totalLen - dOther)
+                const s = maxDMe / dMe
+                const diffRim: V3 = [mTarget[0] - myRim[0], mTarget[1] - myRim[1], this.settings.twoD ? 0 : mTarget[2] - myRim[2]]
+                mTarget = [myRim[0] + diffRim[0] * s, myRim[1] + diffRim[1] * s, this.settings.twoD ? mFrom[2] : myRim[2] + diffRim[2] * s]
+                delta = [mTarget[0] - mFrom[0], mTarget[1] - mFrom[1], this.settings.twoD ? 0 : mTarget[2] - mFrom[2]]
+              }
+            } else {
+              const maxPartnerLift = Math.max(0, partnerToRim - 0.05)
+              const fromDist = Math.hypot(mFrom[0] - myRim[0], mFrom[1] - myRim[1], mFrom[2] - myRim[2])
+              const maxDistFromRim = Math.max(0.01, Math.min(totalLen - 0.05, fromDist + maxPartnerLift))
+              const diffRim: V3 = [mTarget[0] - myRim[0], mTarget[1] - myRim[1], this.settings.twoD ? 0 : mTarget[2] - myRim[2]]
+              const dRim = Math.hypot(...diffRim)
+              if (dRim > maxDistFromRim && dRim > 1e-6) {
+                const s = maxDistFromRim / dRim
+                mTarget = [myRim[0] + diffRim[0] * s, myRim[1] + diffRim[1] * s, this.settings.twoD ? mFrom[2] : myRim[2] + diffRim[2] * s]
+                delta = [mTarget[0] - mFrom[0], mTarget[1] - mFrom[1], this.settings.twoD ? 0 : mTarget[2] - mFrom[2]]
+              }
             }
           }
-        } else if (link.kind === 'hinge') {
-          const qOther = this.rotationOf(other)
-          const pivotOther = link.a === id ? (link.pivotB ?? [0, 0, 0]) : (link.pivotA ?? [0, 0, 0])
-          const rotPivot = rotateVec(qOther, pivotOther)
-          const pivotWorld: V3 = [otherPos[0] + rotPivot[0], otherPos[1] + rotPivot[1], otherPos[2] + rotPivot[2]]
-          const pivotMe = link.a === id ? (link.pivotA ?? [0, 0, 0]) : (link.pivotB ?? [0, 0, 0])
-          const qMe = this.rotationOf(e)
-          const myOffsetInWorld = rotateVec(qMe, pivotMe)
-          target = [pivotWorld[0] - myOffsetInWorld[0], pivotWorld[1] - myOffsetInWorld[1], this.settings.twoD ? from[2] : pivotWorld[2] - myOffsetInWorld[2]]
-        } else if (link.kind === 'weld') {
-          target = [...from]
         }
       }
     }
-    return target
+
+    return [from[0] + delta[0], from[1] + delta[1], this.settings.twoD ? from[2] : from[2] + delta[2]]
   }
 
   /**

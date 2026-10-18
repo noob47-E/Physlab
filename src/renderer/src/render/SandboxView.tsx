@@ -258,20 +258,18 @@ function useGrabAndThrow(sim: React.RefObject<SimWorld | null>, group: React.Ref
       if (d.place) {
         // The definition follows the drag, so Reset, undo and the file all agree with the screen —
         // before the run. Paused part-way, a moving body is only put somewhere to go on from: its
-        // start stays where the run began (H18).
-        const st = w.state(d.id)
-        const def = defOf(d.id)
-        if (act && st && def) {
-          if (dragSetsStart(w.time, def)) {
-            useSandbox.getState().updateBody(d.id, { position: [st.position[0], st.position[1], st.position[2]] })
-          }
-          for (const link of useSandbox.getState().links) {
-            if (link.kind === 'pulley' && (link.a === d.id || link.b === d.id)) {
-              const partnerId = link.a === d.id ? link.b : link.a
-              const pst = w.state(partnerId)
-              const pdef = defOf(partnerId)
-              if (pst && pdef && dragSetsStart(w.time, pdef)) {
-                useSandbox.getState().updateBody(partnerId, { position: [pst.position[0], pst.position[1], pst.position[2]] })
+        // start stays where the run began (H18). Every body the drag moved follows the same rule: a welded or hinged
+        // assembly carried along (S1b) and a pulley partner, found by what actually moved. A mass slid along a lever
+        // beam keeps its new place on the beam (S2). (Merged by the wave head, 18 Oct.)
+        if (act) {
+          for (const b of useSandbox.getState().bodies) {
+            const bst = w.state(b.id)
+            if (bst && dragSetsStart(w.time, b)) {
+              const dx = Math.abs(bst.position[0] - b.position[0])
+              const dy = Math.abs(bst.position[1] - b.position[1])
+              const dz = Math.abs(bst.position[2] - b.position[2])
+              if (dx > 1e-4 || dy > 1e-4 || dz > 1e-4) {
+                useSandbox.getState().updateBody(b.id, { position: [bst.position[0], bst.position[1], bst.position[2]] })
               }
             }
           }

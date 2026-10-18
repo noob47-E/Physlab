@@ -12,6 +12,7 @@ import type { GraphObj } from '../core/types'
 import { solutionsInX } from '../core/visualize'
 import { compileScalar, math, preprocess, sceneNames, symbolsOf } from '../math/expr'
 import { betweenMesh, carriedSolutions, curveIntersections, implicitSegments, inequalityMesh, keyPointLabel, keyPoints, labelPoints, placeLabels, sampleExplicit, sampleParametric, samplePiecewise, shownKeyPoints, solvedLineXs, verticalLineXs, type KeyPoint, type LabelSpot } from '../math/graphs'
+import { circleGraphIntersections } from '../math/intersections'
 import { visibleIn } from '../core/visibility'
 import { themeColor, useTheme, useThemed } from '../app/theme'
 import type { V3 } from '../math/vec'
@@ -131,7 +132,7 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
       .map((id) => {
         if (id === obj.id) return ''
         const o = s.objects[id]
-        return o?.type === 'graph' ? `${id}:${o.visible ? 1 : 0}:${visibleIn(o, s.activeSpace) ? 1 : 0}` : ''
+        return (o?.type === 'graph' || o?.type === 'circle') ? `${id}:${o.visible ? 1 : 0}:${visibleIn(o, s.activeSpace) ? 1 : 0}` : ''
       })
       .filter(Boolean)
       .join(',')
@@ -151,10 +152,15 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
           for (const otherId of s.order) {
             if (otherId === obj.id) continue
             const other = s.objects[otherId]
-            if (other?.type === 'graph' && other.visible && visibleIn(other, s.activeSpace)) {
+            if (other && other.visible && visibleIn(other, s.activeSpace)) {
               const c = s.ev.values.get(otherId)
-              if (c?.type === 'graph' && c.f) {
+              if (other.type === 'graph' && c?.type === 'graph' && c.f) {
                 interKeys.push(...curveIntersections(f, c.f, b.xMin, b.xMax))
+              } else if (other.type === 'circle' && c?.type === 'circle') {
+                const pts = circleGraphIntersections(c.circle, f, { xMin: b.xMin, xMax: b.xMax }, obj)
+                for (const p of pts) {
+                  interKeys.push({ x: p[0], y: p[1], kind: 'intersection', kinds: ['intersection'] })
+                }
               }
             }
           }

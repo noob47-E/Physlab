@@ -573,7 +573,16 @@ export function curveIntersections(f: Fx, g: Fx, xMin: number, xMax: number, n =
       const nearInt = Math.round(x)
       if (Math.abs(x - nearInt) < 1e-5) {
         if (!Number.isFinite(f(nearInt)) || !Number.isFinite(g(nearInt))) continue
-        if (Math.abs(x - nearInt) < 1e-7) x = nearInt
+        if (Math.abs(x - nearInt) < 1e-7) {
+          const yfInt = f(nearInt)
+          const ygInt = g(nearInt)
+          if (Number.isFinite(yfInt) && Number.isFinite(ygInt)) {
+            const scale = Math.max(1, Math.abs(yfInt), Math.abs(ygInt))
+            if (Math.abs(yfInt - ygInt) <= 1e-11 * scale) {
+              x = nearInt
+            }
+          }
+        }
       }
       const yf = f(x)
       const yg = g(x)

@@ -13,7 +13,7 @@ import {
   type GCircle,
   type GLine
 } from '../math/geometry'
-import { asGLine, canIntersect, intersectionsOf } from '../math/intersections'
+import { asGLine, canIntersect, intersectionsOf, isSameCurve } from '../math/intersections'
 import { compileScalar, math, preprocess, symbolsOf, toV3, fromRadians, setAngleMode, setSceneNames, sceneNames, speltName } from '../math/expr'
 import { evaluateWithRealRoots } from '../calc/engine'
 import { add, dist, mid, scale, sub, type V3 } from '../math/vec'
@@ -165,6 +165,7 @@ export function evaluateScene(
             const a = need(d.a)
             const b = need(d.b)
             if (!canIntersect(a, b)) throw new Error('cannot intersect these objects')
+            if (isSameCurve(d.a, d.b, a, b)) throw new Error('they are the same curve')
             // The same function, in the same order, that the viewport snapped the point with.
             const searchBounds = d.approx ? { approx: d.approx } : undefined
             const pts = intersectionsOf(a, b, searchBounds)
