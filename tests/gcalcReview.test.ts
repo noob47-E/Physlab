@@ -15,6 +15,7 @@ import { EXAMPLES, runExample } from '../src/renderer/src/panels/Examples'
 import { EXPRESSION_WORDS, rangeEdit, rangeOf } from '../src/renderer/src/panels/expressionRows'
 import { regroupWithViewport, setDockApi } from '../src/renderer/src/app/panels'
 import { buildLayout, enterMode } from '../src/renderer/src/app/layout'
+import { useApp } from '../src/renderer/src/app/modes'
 import { runCommand } from '../src/renderer/src/lang/commands'
 import { replaceGraphEquation } from '../src/renderer/src/lang/graphEdit'
 import { scene } from '../src/renderer/src/core/store'
@@ -82,7 +83,7 @@ describe('the Maths screen and Expressions do not follow the student into other 
     expect(moves).toEqual([]) // already together: nothing moves
   })
 
-  it('enterMode does it for every mode without a centre panel, and closes Expressions outside Graphing', () => {
+  it('enterMode closes Maths for modes without a centre panel, and closes Expressions outside Graphing', () => {
     // A fresh fake dock for each case: the drawing, Maths split off into its own group, and Expressions open beside it.
     interface FakePanel {
       id: string
@@ -108,15 +109,18 @@ describe('the Maths screen and Expressions do not follow the student into other 
       } as never)
       return { centre, panels, group: (id: string) => panels.find((p) => p.id === id)!.api.group }
     }
-    // Graphing has no centre panel: Maths goes back behind the drawing, and its own Expressions stays (Graphing's list).
+    // Graphing has no centre panel: Maths does not follow the student (One Mode = One Layout), and Expressions stays.
+    // The student leaves the Calculator, where Visualize split Maths off beside the drawing.
+    useApp.setState({ mode: 'calculator' })
     const g = dock()
     enterMode('graphing')
-    expect(g.group('maths')).toBe(g.centre)
+    expect(g.panels.map((p) => p.id)).not.toContain('maths')
     expect(g.panels.map((p) => p.id)).toContain('expressions')
-    // Geometry has no centre panel either: Maths goes back behind the drawing, and Expressions is closed.
+    // Geometry has no centre panel either: Maths is closed, and Expressions is closed.
+    useApp.setState({ mode: 'calculator' })
     const s = dock()
     enterMode('shapes')
-    expect(s.group('maths')).toBe(s.centre)
+    expect(s.panels.map((p) => p.id)).not.toContain('maths')
     expect(s.panels.map((p) => p.id)).not.toContain('expressions')
   })
 

@@ -92,6 +92,29 @@ describe('Part L1: One mode = one layout', () => {
     expect(dock.ids()).toContain('viewport')
   })
 
+  it('entering Sandbox (or any non-calculator mode) closes leftover Calculator (maths)', () => {
+    useApp.setState({ mode: 'calculator' })
+    const dock = fakeDock(['viewport', 'maths'])
+    enterMode('sandbox')
+    expect(dock.ids()).not.toContain('maths')
+    expect(dock.ids()).toContain('viewport')
+  })
+
+  it('leaving Lab Data closes its centre screen too, as leaving the Calculator closes Maths', () => {
+    useApp.setState({ mode: 'lab' })
+    const dock = fakeDock(['viewport', 'labdata'])
+    enterMode('sandbox')
+    expect(dock.ids()).not.toContain('labdata')
+    expect(dock.ids()).toContain('viewport')
+  })
+
+  it('a layout restored from the last session keeps a Calculator the student opened in Sandbox', () => {
+    useApp.setState({ mode: 'calculator' })
+    const dock = fakeDock(['viewport', 'maths'])
+    enterMode('sandbox', { restored: true })
+    expect(dock.ids()).toContain('maths')
+  })
+
   it('entering Problem Sets closes leftover Examples and Sandbox', () => {
     const dock = fakeDock(['viewport', 'examples', 'sandbox'])
     enterMode('problems')

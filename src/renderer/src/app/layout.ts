@@ -68,6 +68,10 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
   }
   // One Mode = One Layout (Part L1): switching modes closes panels that do not belong to the new mode.
   if (from !== id && !opts.restored) {
+    // The Calculator's Maths screen and Lab Data are their own modes' centre screens: they do not follow the student
+    // into another mode, not even as a tab behind the drawing (a restored layout above is left as it was).
+    if (id !== 'calculator' && isPanelOpen('maths')) hidePanel('maths')
+    if (id !== 'lab' && isPanelOpen('labdata')) hidePanel('labdata')
     if (id !== 'graphing' && isPanelOpen('expressions')) hidePanel('expressions')
     if (id !== 'shapes' && isPanelOpen('measure')) hidePanel('measure')
     // skipFocus is how a question opens its picture beside Practice: the question and its answer box stay.
