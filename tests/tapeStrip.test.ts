@@ -888,6 +888,22 @@ describe('S5: All tools replay bar is a single row with extra tools behind More 
       expect(simple.text).toBe('t = 2.45 s')
       expect(simple.widest).toBe('t = 888.89 s')
     })
+
+    it('More menu has a gap above the bar and max height with scroll to fit the canvas', () => {
+      useSandboxView.setState({ view: 'all' })
+      useTapeBar.setState({ shown: true, more: true })
+      const html = render()
+      // The More menu should have mb-2 for gap above the bar
+      expect(html).toContain('mb-2')
+      // The More menu should have max-height to prevent overflow
+      expect(html).toContain('max-h-[calc(100vh-140px)]')
+      // The More menu should have overflow-y-auto for scrolling
+      expect(html).toContain('overflow-y-auto')
+      // Verify the menu is rendered with proper structure
+      expect(html).toContain('id="tape-more-controls"')
+      expect(html).toContain('role="dialog"')
+      expect(html).toContain('aria-label="More replay controls"')
+    })
   })
 })
 

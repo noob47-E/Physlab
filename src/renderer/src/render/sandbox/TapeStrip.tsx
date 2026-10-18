@@ -479,7 +479,7 @@ function ShownStrip({ inline }: { inline: boolean }) {
           <div
             ref={moreMenuRef}
             id="tape-more-controls"
-            className="pointer-events-auto absolute bottom-full mb-2 right-0 z-50 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] p-2 text-[color:var(--text)] shadow-xl"
+            className="pointer-events-auto absolute bottom-full mb-2 right-0 z-50 flex max-w-full max-h-[calc(100vh-140px)] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] p-2 text-[color:var(--text)] shadow-xl overflow-y-auto"
             role="dialog"
             aria-label="More replay controls"
           >
