@@ -7,7 +7,7 @@ import { circleCircleIntersection, lineCircleIntersection, lineLineIntersection,
 import type { Computed, GraphObj } from '../core/types'
 import type { V3 } from './vec'
 import { curveIntersections, keyPoints } from './graphs'
-import { isNoise } from './noise'
+import { isNoise, sameNumber } from './noise'
 
 /** The straight part of a line, segment, ray or vector, or null for anything else. */
 export function asGLine(c: Computed): GLine | null {
@@ -66,59 +66,84 @@ function graphGraphIntersections(
   graphA?: GraphObj,
   graphB?: GraphObj
 ): V3[] {
+  let domLow = -Infinity
+  let domHigh = Infinity
+  if (graphA?.tMin !== undefined) domLow = Math.max(domLow, graphA.tMin)
+  if (graphB?.tMin !== undefined) domLow = Math.max(domLow, graphB.tMin)
+  if (graphA?.tMax !== undefined) domHigh = Math.min(domHigh, graphA.tMax)
+  if (graphB?.tMax !== undefined) domHigh = Math.min(domHigh, graphB.tMax)
+
+  if (domLow > domHigh) return []
+
+  const testSinglePoint = (x: number): V3[] => {
+    const yf = f(x)
+    const yg = g(x)
+    if (Number.isFinite(yf) && Number.isFinite(yg) && Math.abs(yf - yg) <= 1e-9 * Math.max(1, Math.abs(yf), Math.abs(yg))) {
+      return [[x, (yf + yg) / 2, 0]]
+    }
+    return []
+  }
+
+  if (sameNumber(domLow, domHigh)) {
+    return testSinglePoint(domLow)
+  }
+
   if (bounds?.xMin !== undefined && bounds?.xMax !== undefined) {
-    let low = bounds.xMin
-    let high = bounds.xMax
-    if (graphA?.tMin !== undefined) low = Math.max(low, graphA.tMin)
-    if (graphB?.tMin !== undefined) low = Math.max(low, graphB.tMin)
-    if (graphA?.tMax !== undefined) high = Math.min(high, graphA.tMax)
-    if (graphB?.tMax !== undefined) high = Math.min(high, graphB.tMax)
+    const low = Math.max(domLow, bounds.xMin)
+    const high = Math.min(domHigh, bounds.xMax)
     if (low > high) return []
+    if (sameNumber(low, high)) return testSinglePoint(low)
     const span = high - low
     const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
     const keys = curveIntersections(f, g, low, high, n)
     return keys.map((k) => [k.x, k.y, 0] as V3)
   }
 
-  // Without explicit viewport bounds, search over the curves' whole drawn range.
-  // Standard view span [-1000, 1000] (or widened to include approx seed if present).
+  // Without explicit viewport bounds, start search around approx seed if present.
   const center = bounds?.approx?.[0]
-  let low = -1000
-  let high = 1000
   if (center !== undefined) {
-    low = Math.min(low, center - 1000)
-    high = Math.max(high, center + 1000)
+    const low = Math.max(domLow, center - 1000)
+    const high = Math.min(domHigh, center + 1000)
+    if (low <= high) {
+      if (sameNumber(low, high)) {
+        const pt = testSinglePoint(low)
+        if (pt.length > 0) return pt
+      } else {
+        const span = high - low
+        const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
+        const keys = curveIntersections(f, g, low, high, n)
+        if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+      }
+    }
   }
 
-  if (graphA?.tMin !== undefined) low = Math.max(low, graphA.tMin)
-  if (graphB?.tMin !== undefined) low = Math.max(low, graphB.tMin)
-  if (graphA?.tMax !== undefined) high = Math.min(high, graphA.tMax)
-  if (graphB?.tMax !== undefined) high = Math.min(high, graphB.tMax)
-
-  if (low > high) return []
-
-  const span = high - low
-  const n = Math.min(8000, Math.max(2000, Math.round(span * 2)))
-  const keys = curveIntersections(f, g, low, high, n)
-
-  if (keys.length > 0) {
-    return keys.map((k) => [k.x, k.y, 0] as V3)
+  // Standard view span [-1000, 1000]
+  const low = Math.max(domLow, -1000)
+  const high = Math.min(domHigh, 1000)
+  if (low <= high) {
+    if (sameNumber(low, high)) {
+      const pt = testSinglePoint(low)
+      if (pt.length > 0) return pt
+    } else {
+      const span = high - low
+      const n = Math.min(8000, Math.max(2000, Math.round(span * 2)))
+      const keys = curveIntersections(f, g, low, high, n)
+      if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+    }
   }
 
   // If no crossings found in [-1000, 1000] and curves are wider, expand search to ±10000
-  const canExpandLow = (graphA?.tMin === undefined || graphA.tMin < low) && (graphB?.tMin === undefined || graphB.tMin < low)
-  const canExpandHigh = (graphA?.tMax === undefined || graphA.tMax > high) && (graphB?.tMax === undefined || graphB.tMax > high)
-  if (canExpandLow || canExpandHigh) {
-    let wideLow = canExpandLow ? -10000 : low
-    let wideHigh = canExpandHigh ? 10000 : high
-    if (graphA?.tMin !== undefined) wideLow = Math.max(wideLow, graphA.tMin)
-    if (graphB?.tMin !== undefined) wideLow = Math.max(wideLow, graphB.tMin)
-    if (graphA?.tMax !== undefined) wideHigh = Math.min(wideHigh, graphA.tMax)
-    if (graphB?.tMax !== undefined) wideHigh = Math.min(wideHigh, graphB.tMax)
-    if (wideLow < wideHigh) {
-      const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
-      return wideKeys.map((k) => [k.x, k.y, 0] as V3)
-    }
+  let wideLow = domLow > -Infinity ? domLow : -10000
+  let wideHigh = domHigh < Infinity ? domHigh : 10000
+  if (center !== undefined) {
+    wideLow = Math.min(wideLow, center - 10000)
+    wideHigh = Math.max(wideHigh, center + 10000)
+  }
+  wideLow = Math.max(domLow, wideLow)
+  wideHigh = Math.min(domHigh, wideHigh)
+  if (wideLow < wideHigh) {
+    const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
+    return wideKeys.map((k) => [k.x, k.y, 0] as V3)
   }
 
   return []
@@ -207,33 +232,115 @@ function lineGraphIntersections(
   const slope = line.d[1] / line.d[0]
   const g = (x: number) => line.p[1] + slope * (x - line.p[0])
 
-  let low = bounds?.xMin ?? -1000
-  let high = bounds?.xMax ?? 1000
+  let domLow = -Infinity
+  let domHigh = Infinity
 
   if (line.kind === 'segment') {
     const x0 = line.p[0]
     const x1 = line.p[0] + line.d[0]
-    low = Math.max(low, Math.min(x0, x1))
-    high = Math.min(high, Math.max(x0, x1))
+    domLow = Math.min(x0, x1)
+    domHigh = Math.max(x0, x1)
   } else if (line.kind === 'ray') {
-    if (line.d[0] > 0) low = Math.max(low, line.p[0])
-    else high = Math.min(high, line.p[0])
+    if (line.d[0] > 0) domLow = line.p[0]
+    else domHigh = line.p[0]
   }
 
-  if (graph?.tMin !== undefined) low = Math.max(low, graph.tMin)
-  if (graph?.tMax !== undefined) high = Math.min(high, graph.tMax)
+  if (graph?.tMin !== undefined) domLow = Math.max(domLow, graph.tMin)
+  if (graph?.tMax !== undefined) domHigh = Math.min(domHigh, graph.tMax)
 
-  if (low > high) return []
-  const span = high - low
-  const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
-  const keys = curveIntersections(f, g, low, high, n)
-  return keys.map((k) => [k.x, k.y, 0] as V3)
+  if (domLow > domHigh) return []
+
+  const testSinglePoint = (x: number): V3[] => {
+    const yf = f(x)
+    const yg = g(x)
+    if (Number.isFinite(yf) && Number.isFinite(yg) && Math.abs(yf - yg) <= 1e-9 * Math.max(1, Math.abs(yf), Math.abs(yg))) {
+      return [[x, (yf + yg) / 2, 0]]
+    }
+    return []
+  }
+
+  if (sameNumber(domLow, domHigh)) {
+    return testSinglePoint(domLow)
+  }
+
+  if (bounds?.xMin !== undefined && bounds?.xMax !== undefined) {
+    const low = Math.max(domLow, bounds.xMin)
+    const high = Math.min(domHigh, bounds.xMax)
+    if (low > high) return []
+    if (sameNumber(low, high)) return testSinglePoint(low)
+    const span = high - low
+    const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
+    const keys = curveIntersections(f, g, low, high, n)
+    return keys.map((k) => [k.x, k.y, 0] as V3)
+  }
+
+  // Without explicit viewport bounds, start search around approx seed if present.
+  const center = bounds?.approx?.[0]
+  if (center !== undefined) {
+    const low = Math.max(domLow, center - 1000)
+    const high = Math.min(domHigh, center + 1000)
+    if (low <= high) {
+      if (sameNumber(low, high)) {
+        const pt = testSinglePoint(low)
+        if (pt.length > 0) return pt
+      } else {
+        const span = high - low
+        const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
+        const keys = curveIntersections(f, g, low, high, n)
+        if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+      }
+    }
+  }
+
+  // Standard view span [-1000, 1000]
+  const low = Math.max(domLow, -1000)
+  const high = Math.min(domHigh, 1000)
+  if (low <= high) {
+    if (sameNumber(low, high)) {
+      const pt = testSinglePoint(low)
+      if (pt.length > 0) return pt
+    } else {
+      const span = high - low
+      const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
+      const keys = curveIntersections(f, g, low, high, n)
+      if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+    }
+  }
+
+  // If no crossings found in [-1000, 1000], expand search to ±10000 (and around approx)
+  let wideLow = domLow > -Infinity ? domLow : -10000
+  let wideHigh = domHigh < Infinity ? domHigh : 10000
+  if (center !== undefined) {
+    wideLow = Math.min(wideLow, center - 10000)
+    wideHigh = Math.max(wideHigh, center + 10000)
+  }
+  wideLow = Math.max(domLow, wideLow)
+  wideHigh = Math.min(domHigh, wideHigh)
+  if (wideLow < wideHigh) {
+    const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
+    return wideKeys.map((k) => [k.x, k.y, 0] as V3)
+  }
+
+  return []
 }
 
 /** Whether two objects represent the exact same curve (e.g. y = x typed twice). */
 export function isSameCurve(idA: string, idB: string, a: Computed, b: Computed): boolean {
   if (idA === idB) return true
   if (a.type === 'graph' && b.type === 'graph') {
+    // If they have domain restrictions, check whether their domains overlap in more than an isolated point.
+    // If they only meet at endpoints (e.g. [0, 1] and [1, 2]), they are distinct segments that can intersect at that point.
+    const minA = a.graph?.tMin ?? -Infinity
+    const maxA = a.graph?.tMax ?? Infinity
+    const minB = b.graph?.tMin ?? -Infinity
+    const maxB = b.graph?.tMax ?? Infinity
+    const overlapMin = Math.max(minA, minB)
+    const overlapMax = Math.min(maxA, maxB)
+    if (overlapMin > overlapMax || sameNumber(overlapMin, overlapMax)) {
+      // Overlap is at most a single point or disjoint — they are not the same curve.
+      return false
+    }
+
     if (a.graph && b.graph) {
       const sA = a.graph.exprs[0]?.trim()
       const sB = b.graph.exprs[0]?.trim()
@@ -243,6 +350,7 @@ export function isSameCurve(idA: string, idB: string, a: Computed, b: Computed):
       const testXs = [0, 1, -1, 0.5, 2.7, -3.2, 10]
       let agree = 0
       for (const x of testXs) {
+        if (x < overlapMin || x > overlapMax) continue
         const yf = a.f(x)
         const yg = b.f(x)
         if (Number.isFinite(yf) && Number.isFinite(yg)) {
