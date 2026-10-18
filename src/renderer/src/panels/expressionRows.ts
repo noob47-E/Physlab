@@ -12,7 +12,9 @@ import { Builder } from '../core/factory'
 import { scene, useScene } from '../core/store'
 import { runCommand } from '../lang/commands'
 import { putBack, replaceGraphEquation, stockOf } from '../lang/graphEdit'
+import { bracketBareCalls } from '../lang/bareCalls'
 import { bumpAction } from '../core/actionSignals'
+import { evaluateScene } from '../core/evaluate'
 
 export interface GraphRow {
   kind: 'graph'
@@ -237,7 +239,8 @@ export async function addExpressionLine(
   text: string,
   offers: string[] = []
 ): Promise<{ ok: boolean; reason?: string }> {
-  const trimmed = text.trim()
+  // sin x, sin 2x, sqrt 3: the calculator-style calls get their brackets (lang/bareCalls).
+  const trimmed = bracketBareCalls(text.trim())
   if (!trimmed) return { ok: false, reason: 'empty' }
 
   const stock = stockOf()
@@ -262,6 +265,10 @@ export async function addExpressionLine(
 
   if (error === undefined && (createdGraph || madeSomething)) {
     if (createdGraph) bumpAction('typedGraphs')
+    const s = scene()
+    useScene.setState({
+      ev: evaluateScene(s.objects, s.order, s.settings, s.time)
+    })
     if (offers.length > 0) {
       useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
     }
