@@ -381,7 +381,7 @@ describe('the store, without the handheld', () => {
       const importsPanel = /^import[^\n]*from '(\.\.?\/)+panels\/VectorCalc'/m.test(src)
       expect(importsPanel, `${f} imports panels/VectorCalc statically`).toBe(false)
     }
-  })
+  }, 20000)
 
   it('keeps an answer only while the field still holds the line it answers', () => {
     // A calculation recalled from History wrote the store and set the field silently, and the

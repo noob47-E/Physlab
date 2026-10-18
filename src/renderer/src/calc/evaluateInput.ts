@@ -15,6 +15,7 @@ import { derivativeForm, hasQuantity, loneUnitLetters, openForm } from './formul
 import { CALCULUS_IN_RADIANS, usesAngles } from './angle'
 import { bigNumberText } from '../math/pure/integers'
 import { isConstant, parseExpr } from '../math/pure/mono'
+import { CONSTANT_NAMES, GREEK_NAMES } from '../math/names'
 import { math, splitArgs } from '../math/expr'
 import { calculusCall } from '../math/calculusCall'
 import { superscriptPowers } from '../math/format'
@@ -254,6 +255,91 @@ function textbookCalculus(name: 'diff' | 'integrate', args: string[], src: strin
   return { main: WORKING_ON_IT, extra, src, exact: null, solved: false, engine }
 }
 
+const BUILTIN_CALC_NAMES: ReadonlySet<string> = new Set([
+  'Pol', 'pol', 'Rec', 'rec',
+  'diff', 'integrate', 'integral', 'ddx', 'sigma', 'product',
+  'Ans', 'ans'
+])
+
+const MATH_FUNCS: ReadonlySet<string> = new Set([
+  'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
+  'asin', 'acos', 'atan', 'asec', 'acsc', 'acot', 'atan2',
+  'sinh', 'cosh', 'tanh', 'sech', 'csch', 'coth',
+  'asinh', 'acosh', 'atanh', 'asech', 'acsch', 'acoth',
+  'exp', 'ln', 'log', 'log10', 'log2', 'sqrt', 'cbrt', 'nthRoot',
+  'abs', 'sign', 'floor', 'ceil', 'round', 'gcd', 'lcm', 'mod',
+  'arg', 'conj', 're', 'im'
+])
+
+const CONSTANT_SCOPE = constantScope()
+
+function isValuelessUnit(name: string): boolean {
+  try {
+    return math.Unit.isValuelessUnit(name)
+  } catch {
+    return false
+  }
+}
+
+function isKnownName(name: string, vars?: Record<string, unknown>): boolean {
+  if (name.length <= 1) return true
+  if (vars && name in vars) return true
+  if (name in CONSTANT_SCOPE) return true
+  if (name in (math as unknown as Record<string, unknown>)) return true
+  if (CONSTANT_NAMES.has(name) || GREEK_NAMES.has(name)) return true
+  if (BUILTIN_CALC_NAMES.has(name) || MATH_FUNCS.has(name)) return true
+  if (isValuelessUnit(name)) return true
+  return false
+}
+
+const BASE_VALID_SINGLE_LETTERS: ReadonlySet<string> = new Set([
+  'A', 'B', 'C', 'D', 'E', 'F', 'M', 'x', 'y',
+  'a', 'b', 'c', 'd', 'e', 'f', 'm',
+  'i'
+])
+
+function readRunsAsMultiplication(expr: string, vars?: Record<string, unknown>): string {
+  const assignMatch = expr.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\s*\([^)]*\))?)\s*=(.*)$/)
+  if (assignMatch) {
+    return `${assignMatch[1]}=${readRunsAsMultiplication(assignMatch[2], vars)}`
+  }
+
+  const text = expr.replace(/([A-Za-z0-9])\s+(sin|cos|tan|sec|csc|cot|asin|acos|atan|sinh|cosh|tanh|ln|log|exp|sqrt)\b/g, '$1*$2')
+
+  const validLetters = new Set(BASE_VALID_SINGLE_LETTERS)
+  if (vars) {
+    for (const k of Object.keys(vars)) {
+      if (k.length === 1) validLetters.add(k)
+    }
+  }
+
+  const multiNames = [
+    ...new Set([
+      ...(vars ? Object.keys(vars) : []),
+      ...BUILTIN_CALC_NAMES,
+      ...GREEK_NAMES
+    ])
+  ].filter((k) => typeof k === 'string' && k.length > 1)
+  multiNames.sort((a, b) => b.length - a.length)
+  const escaped = multiNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const splitRe = escaped.length ? new RegExp(`(${escaped.join('|')})`) : null
+
+  return text.replace(/([A-Za-z]+(?:_[A-Za-z0-9]+)*)(\s*\()?/g, (match, ident: string, paren?: string) => {
+    if (paren !== undefined) return match
+    if (isKnownName(ident, vars)) return match
+    if (ident.includes('_')) return match
+
+    const parts = splitRe ? ident.split(splitRe).filter(Boolean) : [ident]
+    const allValid = parts.every((part) => multiNames.includes(part) || part.split('').every((ch) => validLetters.has(ch)))
+    if (!allValid) return match
+
+    return parts
+      .flatMap((part) => (multiNames.includes(part) ? [part] : part.split('')))
+      .filter(Boolean)
+      .join('*')
+  })
+}
+
 /**
  * Evaluate one line. Returns null for an empty field. Never throws: a refusal from the
  * converter or the engine comes back as `error`, a sentence the student can act on.
@@ -282,6 +368,7 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       }
     }
     if (mode === 'CMPLX') {
+      src = readRunsAsMultiplication(src, opts.vars)
       // The line runs in the screen's angle and the mode that was held is put back, as evaluateComp does for the
       // Numbers mode: set and left, one Complex answer in radians made every later bare evaluation (the Table, a
       // tangent) work in radians without a word.
@@ -317,6 +404,7 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     if (call && call.name !== 'integral' && call.args.length < 3) return textbookCalculus(call.name, call.args, src, opts.vars, opts.angle)
     // integrate(f, a, b) is the question ∫ₐᵇ f dx asks, which the numeric engine answers as integral(f, a, b).
     if (call?.name === 'integrate' && call.args.length === 3) src = `integral(${call.args.join(', ')})`
+    src = readRunsAsMultiplication(src, opts.vars)
     const definite = calculusCall(src)?.name === 'integral'
     let out: CalcOutput
     let assign: { name: string; value: number } | undefined

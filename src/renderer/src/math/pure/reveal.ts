@@ -20,8 +20,8 @@ export function fieldHasText(latex: string): boolean {
   }
 }
 
-/** What the student wants to see first: nothing (work it out yourself) or every step. */
-export type StepPref = 'try' | 'all'
+/** What the student wants to see first: nothing (work it out yourself), every step, or guess first. */
+export type StepPref = 'try' | 'all' | 'guess'
 
 export const STEP_PREF_KEY = 'physlab.pure.steps'
 
@@ -31,7 +31,9 @@ export const STEP_PREF_KEY = 'physlab.pure.steps'
  * read everything says so once, and the panel remembers.
  */
 export function stepPrefFrom(raw: string | null | undefined): StepPref {
-  return raw === 'all' ? 'all' : 'try'
+  if (raw === 'all') return 'all'
+  if (raw === 'guess') return 'guess'
+  return 'try'
 }
 
 /** How many steps to reveal when a new piece of working arrives. */

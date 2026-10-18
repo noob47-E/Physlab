@@ -28,6 +28,8 @@ import { math } from '../math/expr'
 import { calculusCall } from '../math/calculusCall'
 import { latexToMath, tryLatexToMath } from '../math/latexToMath'
 import type { StepPref } from '../math/pure/reveal'
+import { checkCalculatorGuess } from '../calc/guessCalc'
+import type { Check } from '../math/checkAnswer'
 import { ask, useEngineStatus } from '../math/engine'
 import { casStartingSentence } from '../ui/casStatus'
 import { usePure, type PureEntry } from '../math/pure/store'
@@ -182,12 +184,27 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   // there) and FF read as a hex number sat under Decimal (H4). The answer that does not belong to the settings now is
   // dropped while rendering — React's own way for state that follows a setting — so no stale card is ever painted,
   // and going back to the old setting does not bring an old card back.
+  const [pref, setPref] = useState<StepPref>(readStepPref)
+  const setPreference = (p: StepPref): void => {
+    setPref(p)
+    writeStepPref(p)
+  }
+
+  const [guess, setGuess] = useState<{ input: string; typed: string; check: Check | null; revealed: boolean } | null>(null)
+  const [guessMsg, setGuessMsg] = useState<string | null>(null)
+
   const [answered, setAnswered] = useState<Answered | null>(null)
   const held = answerStillUnder(answered, { angle: angleUnit, base })
   if (held !== answered) setAnswered(held)
   const result = held?.mode === mode ? held.result : null
   /** A fresh answer belongs to what the field holds now. */
-  const setResult = (r: EvalResult | null): void => setAnswered(r ? { mode, input: useCalc.getState().input, angle: angleUnit, base, result: r } : null)
+  const setResult = (r: EvalResult | null): void => {
+    setAnswered(r ? { mode, input: useCalc.getState().input, angle: angleUnit, base, result: r } : null)
+    if (!r) {
+      setGuess(null)
+      setGuessMsg(null)
+    }
+  }
   // Every keystroke lands here: one store write, and no render of this screen.
   const onEdit = useCallback((latex: string) => useCalc.setState({ input: latex }), [])
   // The answer follows the store's line, not the keystroke: it is dropped on the first change
@@ -198,6 +215,10 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
     () =>
       useCalc.subscribe((s, prev) => {
         if (s.input !== prev.input) setAnswered((a) => answerStillFor(a, s.input))
+        if (s.input !== prev.input) {
+          setGuess((g) => (g && g.input === s.input ? g : null))
+          setGuessMsg(null)
+        }
       }),
     []
   )
@@ -248,6 +269,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
   }, [shown?.line])
   // The fold belongs to the card: a working for another line (the field has moved on) is not offered.
   const foldAvailable = !!forCard
+  const activeGuess = guess && guess.input === (held?.input ?? '') ? guess : null
+  const isGuessPending = pref === 'guess' && !!shown && !shown.result.error && (!activeGuess || !activeGuess.revealed)
 
   /** The current input as PhysLab's linear syntax. Throws the converter's sentence on a ± it cannot use. */
   const linear = (): string => {
@@ -270,6 +293,13 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       const r = evaluateInput(mode, s.input, opts)
       if (!r) return
       setAnswered({ mode, input: s.input, angle: angleUnit, base, result: r })
+      if (pref === 'guess' && !r.error) {
+        setGuess({ input: s.input, typed: '', check: null, revealed: false })
+        setGuessMsg(null)
+      } else {
+        setGuess(null)
+        setGuessMsg(null)
+      }
       // = is the one button: the step engine works the same line out underneath, folded, where it has a working to show. It is asked
       // quietly (no second opinion from the algebra engine for a line the step engine refused) and without moving the keyboard.
       if (o.steps !== false && mode !== 'BASE-N' && wantsWorking(r.src)) {
@@ -354,6 +384,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
         case 'clear':
           setResult(null)
           setWithValues(null)
+          setGuess(null)
+          setGuessMsg(null)
           mathRef.current?.setLatex('')
           return useCalc.setState({ input: '' })
         case 'eq':
@@ -371,6 +403,33 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
       }
     }
     if (k.tex) insertTex(k.texDeg && angleUnit === 'deg' ? k.texDeg : k.tex)
+  }
+
+  const checkGuess = (guessText: string): void => {
+    if (!shown) return
+    const settings = useScene.getState().settings
+    const chk = checkCalculatorGuess(guessText, shown.result, settings)
+    if (chk.verdict === 'empty' || chk.verdict === 'unreadable') {
+      setGuessMsg(chk.message || 'Type a guess first, or click "Show me" to reveal the answer.')
+      return
+    }
+    setGuessMsg(null)
+    setGuess({
+      input: useCalc.getState().input,
+      typed: guessText,
+      check: chk,
+      revealed: true
+    })
+  }
+
+  const showAnswer = (): void => {
+    setGuessMsg(null)
+    setGuess({
+      input: useCalc.getState().input,
+      typed: '',
+      check: null,
+      revealed: true
+    })
   }
 
   // The keypad and toolbar callbacks read the latest handlers through this ref, so the keys —
@@ -550,10 +609,27 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
           </button>
         </div>
 
-        {shown && <Answer result={shown.result} showExact={showExact} onExact={setShowExact} eng={eng} onEng={mode === 'COMP' ? () => setEng(!eng) : undefined} />}
+        {isGuessPending && shown && (
+          <GuessPromptCard
+            pref={pref}
+            onPref={setPreference}
+            onCheck={checkGuess}
+            onShow={showAnswer}
+            errorMsg={guessMsg}
+          />
+        )}
+
+        {!isGuessPending && shown && (
+          <>
+            {activeGuess?.revealed && activeGuess.check && (
+              <GuessVerdictBadge check={activeGuess.check} typed={activeGuess.typed} />
+            )}
+            <Answer result={shown.result} showExact={showExact} onExact={setShowExact} eng={eng} onEng={mode === 'COMP' ? () => setEng(!eng) : undefined} />
+          </>
+        )}
 
         {/* The working, folded under its answer: one control, closed until the student asks. */}
-        {foldAvailable && (!working?.error || external) && (
+        {!isGuessPending && foldAvailable && (!working?.error || external) && (
           <button
             className="btn ghost self-start"
             aria-expanded={foldOpen}
@@ -589,8 +665,8 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
         {showHistory && <HistoryDrawer onClose={() => setPanes((p) => ({ ...p, history: false }))} />}
       </div>
 
-      {foldAvailable && foldOpen && <WorkingBody onTry={() => mathRef.current?.focus()} />}
-      {!shown && !(foldAvailable && foldOpen) && <Intro />}
+      {!isGuessPending && foldAvailable && foldOpen && <WorkingBody pref={pref} onPref={setPreference} onTry={() => mathRef.current?.focus()} />}
+      {!shown && !(foldAvailable && foldOpen) && <Intro pref={pref} onPref={setPreference} />}
 
       <div className="flex items-center gap-1.5 text-fine text-[color:var(--text-faint)]">
         <Sparkles size={12} /> Type straight from your keyboard: <code className="text-[color:var(--code-text)]">/</code> makes a fraction, <code className="text-[color:var(--code-text)]">^</code> a power,{' '}
@@ -833,6 +909,136 @@ function WithValuesForm({ vars, initial, angleUnit, onSubmit }: { vars: string[]
 
 // ---------------------------------------------------------------------------
 
+function GuessPromptCard({
+  pref,
+  onPref,
+  onCheck,
+  onShow,
+  errorMsg
+}: {
+  pref: StepPref
+  onPref: (p: StepPref) => void
+  onCheck: (guess: string) => void
+  onShow: () => void
+  errorMsg: string | null
+}) {
+  const [typed, setTyped] = useState('')
+  const [localErr, setLocalErr] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const submit = (): void => {
+    const trimmed = typed.trim()
+    if (!trimmed) {
+      setLocalErr('Type a guess first, or click "Show me" to reveal the answer.')
+      return
+    }
+    setLocalErr(null)
+    onCheck(trimmed)
+  }
+
+  const err = errorMsg ?? localErr
+
+  return (
+    <div className="maths-answer flex flex-col gap-2.5" data-testid="guess-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--line)] pb-1.5 text-fine text-[color:var(--text-dim)]">
+        <span className="font-semibold text-[color:var(--text-strong)]">Guess first</span>
+        <div className="seg" title="Choose how steps and answers appear">
+          <button className={pref === 'try' ? 'on' : ''} onClick={() => onPref('try')} title="Steps stay hidden so you can try first">
+            Let me try first
+          </button>
+          <button className={pref === 'all' ? 'on' : ''} onClick={() => onPref('all')} title="Always show all steps">
+            Always show all steps
+          </button>
+          <button className={pref === 'guess' ? 'on' : ''} onClick={() => onPref('guess')} title="Answer stays hidden until you type a guess">
+            Guess first
+          </button>
+        </div>
+      </div>
+
+      <div className="text-small text-[color:var(--text-dim)]">
+        What do you think the answer will be? Type a guess before revealing:
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          className="field flex-1 font-mono text-lead"
+          placeholder="e.g. 14, 3/4, or x^2 - 1"
+          value={typed}
+          onChange={(e) => {
+            setTyped(e.target.value)
+            if (localErr) setLocalErr(null)
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === 'Enter') submit()
+            else if (e.key === 'Escape') onShow()
+          }}
+        />
+        <button className="btn primary" onClick={submit} title="Check your guess against the calculated answer">
+          Check my guess
+        </button>
+        <button className="btn ghost" onClick={onShow} title="Reveal the answer without guessing (Esc)">
+          Show me
+        </button>
+      </div>
+
+      {err && (
+        <div role="alert" className="text-fine text-[color:var(--bad)]">
+          {err}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GuessVerdictBadge({ check, typed }: { check: Check; typed: string }) {
+  if (check.verdict === 'right') {
+    return (
+      <div className="mb-2 flex items-center gap-2 rounded-lg border border-[color:color-mix(in_srgb,var(--good)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--good)_15%,transparent)] px-3 py-2 text-small text-[color:var(--good)]">
+        <span className="font-bold">✓ Right!</span>
+        <span>
+          You guessed <strong className="font-mono text-[color:var(--text-strong)]">{typed}</strong>.
+        </span>
+      </div>
+    )
+  }
+  if (check.verdict === 'close') {
+    return (
+      <div className="mb-2 flex flex-col gap-1 rounded-lg border border-[color:color-mix(in_srgb,var(--warn)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--warn)_15%,transparent)] px-3 py-2 text-small text-[color:var(--warn)]">
+        <div className="flex items-center gap-2">
+          <span className="font-bold">≈ Close!</span>
+          <span>
+            You guessed <strong className="font-mono text-[color:var(--text-strong)]">{typed}</strong>.
+          </span>
+        </div>
+        {check.message && <div className="text-fine text-[color:var(--text-dim)]">{check.message}</div>}
+      </div>
+    )
+  }
+  if (check.verdict === 'wrong') {
+    const detail = check.message?.replace(/^(?:Not quite\.?\s*)+/i, '').trim()
+    return (
+      <div className="mb-2 flex flex-col gap-1 rounded-lg border border-[color:color-mix(in_srgb,var(--bad)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--bad)_15%,transparent)] px-3 py-2 text-small text-[color:var(--bad)]">
+        <div className="flex items-center gap-2">
+          <span className="font-bold">✗ Not quite.</span>
+          <span>
+            You guessed <strong className="font-mono text-[color:var(--text-strong)]">{typed}</strong>.
+          </span>
+        </div>
+        {detail && <div className="text-fine text-[color:var(--text-dim)]">{detail}</div>}
+      </div>
+    )
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+
 /** The letters a calculation can use, their values, and a way to keep the answer under one. */
 function VariablesDrawer({ onInsert, onClose }: { onInsert: (name: string) => void; onClose: () => void }) {
   const vars = useCalc((s) => s.vars)
@@ -1000,7 +1206,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
 // ---------------------------------------------------------------------------
 
 /** What the screen says before there is an answer: how to ask, and what it can work out. */
-function Intro() {
+function Intro({ pref, onPref }: { pref?: StepPref; onPref?: (p: StepPref) => void }) {
   const run = usePure((s) => s.run)
   const [showExamples, setShowExamples] = useState(false)
   return (
@@ -1009,6 +1215,22 @@ function Intro() {
         Type a line and press <b className="text-[color:var(--text)]">=</b> for the answer. Where there is working to show, <b className="text-[color:var(--text)]">Show the working</b> opens under it: every answer
         there is worked out exactly — in fractions, never in rounded decimals — and checked by putting it back together before it is shown. The steps stay hidden until you ask, so you can try first.
       </div>
+      {onPref && pref && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-fine text-[color:var(--text-dim)]">Steps &amp; answers:</span>
+          <div className="seg" title="Choose how steps and answers appear">
+            <button className={pref === 'try' ? 'on' : ''} onClick={() => onPref('try')} title="Steps stay hidden so you can try first">
+              Let me try first
+            </button>
+            <button className={pref === 'all' ? 'on' : ''} onClick={() => onPref('all')} title="Always show all steps">
+              Always show all steps
+            </button>
+            <button className={pref === 'guess' ? 'on' : ''} onClick={() => onPref('guess')} title="Answer stays hidden until you type a guess">
+              Guess first
+            </button>
+          </div>
+        </div>
+      )}
       <button className="btn ghost mt-2" onClick={() => setShowExamples(!showExamples)}>
         {showExamples ? <ChevronUp size={13} /> : <ChevronDown size={13} />} What can it do?
       </button>
@@ -1035,16 +1257,20 @@ function Intro() {
 }
 
 /** The working itself, as the step engine made it: the fold's body. The step cards, rule badges, the second-way check and "Let me try first" are WorkingView's. */
-function WorkingBody({ onTry }: { onTry: () => void }) {
+function WorkingBody({ onTry, pref: outerPref, onPref: outerOnPref }: { onTry: () => void; pref?: StepPref; onPref?: (p: StepPref) => void }) {
   const working = usePure((s) => s.working)
   const asking = usePure((s) => s.asking)
   const input = usePure((s) => s.input)
   // The first-load stage, as a sentence (empty once the engine is ready): P17.
   const casNote = useEngineStatus((s) => (s.status === 'loading' ? casStartingSentence(s.stage) : ''))
-  const [pref, setPref] = useState<StepPref>(readStepPref)
+  const [localPref, setLocalPref] = useState<StepPref>(readStepPref)
+  const pref = outerPref ?? localPref
   const setPreference = (p: StepPref): void => {
-    setPref(p)
-    writeStepPref(p)
+    if (outerOnPref) outerOnPref(p)
+    else {
+      setLocalPref(p)
+      writeStepPref(p)
+    }
   }
   if (!working) return null
   return (
