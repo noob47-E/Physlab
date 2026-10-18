@@ -4,6 +4,8 @@ import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { toScreen } from './cameraUtils'
 import { labelAnchors, overlay, SpanPool } from './overlay'
+import { crossingLabelsToShow } from './crossingLabels'
+import { usePointerStore } from './pointerStore'
 import { graphPolylines } from './picking'
 import { useView } from './viewState'
 import { QUALITY, qualityNow } from './renderer'
@@ -263,10 +265,21 @@ export const GraphView = memo(function GraphView({ obj, selected, hovered, is3D 
     } else labelAnchors.delete(obj.id)
     pool.begin()
     if (selected || hovered) {
+      // Get pointer position from store
+      const pointerX = usePointerStore.getState().x
+      const pointerY = usePointerStore.getState().y
+      const pointer = pointerX !== null && pointerY !== null ? { x: pointerX, y: pointerY } : null
+
+      // Build screen points for all keys
+      const screenPoints = data.keys.map((k) => toScreen(cam, sz, [k.x, k.y, 0]))
+
+      // Filter to show only the appropriate crossing labels
+      const visibleKeyIndices = crossingLabelsToShow(data.keys, screenPoints, pointer, null)
+
       const onScreen: number[] = []
       const spots: LabelSpot[] = []
-      data.keys.forEach((k, i) => {
-        const s = toScreen(cam, sz, [k.x, k.y, 0])
+      visibleKeyIndices.forEach((i) => {
+        const s = screenPoints[i]
         // A position that is not a number passes every bounds test below and would be written as
         // translate(NaNpx, …), which parks the label in the corner of the view.
         if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) return
