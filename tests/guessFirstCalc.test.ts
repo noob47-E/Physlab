@@ -157,5 +157,23 @@ describe('GF-CALC: checkCalculatorGuess evaluations', () => {
     }
     expect(checkCalculatorGuess('\\frac{\\sqrt{2}}{2}', exactResult).verdict).toBe('right')
   })
+
+  it('does not treat a case-changed shown answer as a direct right match', () => {
+    const unitResult: EvalResult = {
+      main: '1 MW',
+      src: 'power',
+      value: 1
+    }
+    expect(checkCalculatorGuess('1 mW', unitResult).verdict).not.toBe('right')
+  })
+
+  it('uses shown scientific notation without a decimal point for half-unit tolerance', () => {
+    const sciResult: EvalResult = {
+      main: '1e-3',
+      src: 'value',
+      value: 0.0012
+    }
+    expect(checkCalculatorGuess('0.001', sciResult).verdict).toBe('right')
+  })
 })
 

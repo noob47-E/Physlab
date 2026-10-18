@@ -114,4 +114,42 @@ describe('part XE: card and working reconciliation', () => {
     expect(reconciled.result.error).toBeDefined()
     expect(reconciled.result.error!.sentence).toMatch(/does not store a value/)
   })
+
+  it('keeps a refusal when the working has no check verdict', () => {
+    const refused = {
+      main: '',
+      src: 'xe^(x)',
+      error: { sentence: "I don't know what xe is. Use one of the letters A to F, M, x or y for a value, or check the spelling." }
+    }
+    const uncheckedWorking: Working = {
+      title: 'Integrate',
+      input: 'xe^{x}',
+      moves: [],
+      answers: [{ label: 'Answer', tex: '\\left(x - 1\\right) e^{x} + C' }]
+    }
+
+    const reconciled = reconcile(refused, uncheckedWorking)
+    expect(reconciled.result.error).toEqual(refused.error)
+    expect(reconciled.result.tex).toBeUndefined()
+  })
+
+  it('replaces a refusal when the working is checked ok', () => {
+    const refused = {
+      main: '',
+      src: 'xe^(x)',
+      error: { sentence: "I don't know what xe is. Use one of the letters A to F, M, x or y for a value, or check the spelling." }
+    }
+    const checkedWorking: Working = {
+      title: 'Integrate',
+      input: 'xe^{x}',
+      moves: [],
+      answers: [{ label: 'Answer', tex: '\\left(x - 1\\right) e^{x} + C' }],
+      checked: 'ok'
+    }
+
+    const reconciled = reconcile(refused, checkedWorking)
+    expect(reconciled.result.error).toBeUndefined()
+    expect(reconciled.result.tex).toBe('\\left(x - 1\\right) e^{x} + C')
+    expect(reconciled.result.main).toBe('(x - 1) e^x + C')
+  })
 })
