@@ -92,7 +92,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Projectile',
     topic: 'Motion',
     tags: ['projectile', 'gravity', 'launch', 'angle', 'range'],
-    about: 'A ball launched at 14 m/s and 30°. Range v² sin 2θ / g = 17.3 m; greatest height 2.8 m. Read both off the trail.',
+    about: 'A ball launched at 14 m/s and 30° reaches greatest height 2.8 m. Predict its range before reading the trail.',
     build: () => ({
       bodies: [floor(), ball('P', [-8, 0.3, 0], { size: [0.3, 0.3, 0.3], mass: 0.5, velocity: launchVelocity(14, 30), restitution: 0.3 })],
       world: VACUUM
@@ -103,7 +103,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Off a cliff',
     topic: 'Motion',
     tags: ['projectile', 'gravity', 'edge', 'falling'],
-    about: 'Slides off a 4 m ledge at 3 m/s. It falls for √(2h/g) = 0.90 s, so it lands 2.7 m out from the edge, at x ≈ −1.3 — however fast it was going.',
+    about: 'Slides off a 4 m ledge at 3 m/s. Predict how long it takes to fall and how far out from the edge it lands.',
     build: () => ({
       // Frictionless, so it leaves the edge at the 3 m/s in the sentence: with friction the
       // ledge spun it up to a roll at 5/7 of that and it landed at x = −2.1.
@@ -116,7 +116,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Free fall',
     topic: 'Motion',
     tags: ['gravity', 'free fall', 'mass', 'vacuum', 'air'],
-    about: 'A 5 kg ball and a 0.5 kg ball, dropped together with their undersides 6 m up. In a vacuum they land together after √(2h/g) = 1.11 s — switch the air back on and see what changes.',
+    about: 'A 5 kg ball and a 0.5 kg ball, dropped together with their undersides 6 m up in a vacuum. Predict whether the heavy ball lands first, or both land together.',
     build: () => ({
       bodies: [floor(), ball('Heavy', [-1, 6.25, 0], { size: [0.25, 0.25, 0.25], mass: 5, material: 'lead' }), ball('Light', [1, 6.25, 0], { size: [0.25, 0.25, 0.25], mass: 0.5, material: 'foam' })],
       world: VACUUM
@@ -127,7 +127,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Drop on the Moon',
     topic: 'Motion',
     tags: ['gravity', 'moon', 'free fall', 'drop'],
-    about: 'The same drop with g = 1.62 m/s². With its underside 5 m up it takes √(2h/g) = 2.48 s instead of 1.01 s.',
+    about: 'A 5 m drop with lunar gravity g = 1.62 m/s². Predict how long the fall will take on the Moon compared to Earth.',
     build: () => ({
       bodies: [floor(), ball('A', [0, 5.2, 0])],
       world: { ...VACUUM, gravity: 1.62 }
@@ -138,7 +138,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Terminal velocity',
     topic: 'Motion',
     tags: ['air resistance', 'drag', 'terminal velocity', 'gravity', 'falling'],
-    about: 'A 0.8 kg foam ball falls 45 m through air. Watch the speed stop rising near √(2mg / ρ C A) ≈ 20 m/s: it reaches 95 % of that by the floor, where a 30 m drop only got to 88 %.',
+    about: 'A 0.8 kg foam ball falls 45 m through air with drag. Predict the terminal speed it approaches as drag balances weight.',
     build: () => ({
       // 45 m, not 30: the speed reaches 95 % of terminal on the way down, so the plateau shows.
       bodies: [floor(), ball('Foam', [0, 45.15, 0], { size: [0.15, 0.15, 0.15], mass: 0.8, material: 'foam' })],
@@ -151,7 +151,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Down a slope',
     topic: 'Forces',
     tags: ['ramp', 'slope', 'energy', 'rolling', 'gravity'],
-    about: 'Potential energy becomes kinetic on the way down: a 1.5 m drop gives a rolling ball √(10gh/7) = 4.6 m/s at the bottom, not √(2gh) = 5.4 m/s, because two sevenths of the energy goes into the spin. The readout gets to about 4.5 m/s — the rolling contact costs a little on the way. Watch the energy bar tip over.',
+    about: 'A solid sphere rolls down a 1.5 m drop without slipping. Predict its speed at the bottom, where part of the energy goes into spin.',
     build: () => ({
       // The ball rests on the slope with its centre 1.5 m above where it ends up on the floor,
       // so the drop in the sentence is the drop it makes. A steel slope: concrete's rolling
@@ -182,7 +182,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Sliding to a stop',
     topic: 'Forces',
     tags: ['friction', 'crate', 'stopping', 'floor'],
-    about: 'A crate shoved along at 6 m/s with μ = 0.4 stops after v² / 2μg = 4.6 m. Check the distance on the floor grid.',
+    about: 'A crate shoved along at 6 m/s on a floor with μ = 0.4. Predict how far it will slide before friction brings it to a stop.',
     build: () => ({
       // The engine takes the friction between two surfaces as √(μ₁ μ₂), so the floor has to be
       // 0.4 as well: against concrete's 0.8 the crate stopped after 3.2 m, not 4.6.
@@ -195,7 +195,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Lever: the principle of moments',
     topic: 'Forces',
     tags: ['balance', 'lever', 'moments', 'torque', 'hanger', 'weights'],
-    about: 'A metre-rule beam on a knife-edge pivot with hanging slotted masses. 2 kg at 0.3 m left balances 3 kg at 0.2 m right. Slide a hanger along the beam to upset the balance, or change its mass.',
+    about: 'A metre-rule beam on a knife-edge pivot with 2 kg at 0.3 m and 3 kg at 0.2 m. Predict the turning balance, or slide a hanger to upset it.',
     build: () => {
       const beam = buildMetreRule('beam', 'Beam', [0, 0.6, 0])
       const { base, wedge, hingeLink } = buildKnifeEdge('pivot', [0, 0, 0], 0.6)
@@ -213,7 +213,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Atwood machine',
     topic: 'Forces',
     tags: ['pulley', 'rope', 'mass', 'acceleration', 'retort'],
-    about: 'Two mass hangers on a string over a pulley on a retort stand. 0.50 kg against 0.55 kg accelerates slowly at 0.47 m/s². In 2 s the masses travel 0.93 m, read off the vertical metre rule behind m₁.',
+    about: 'Two mass hangers (0.50 kg and 0.55 kg) on a string over a pulley on a retort stand. Predict their acceleration.',
     build: () => {
       const { base, rod, clamp, arm, armEnd } = buildRetortStand([0, 0, -0.18], 1.6)
       const wheelPos: [number, number, number] = [0, 1.45, 0]
@@ -237,7 +237,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Lifting with a pulley',
     topic: 'Forces',
     tags: ['pulley', 'rope', 'weight', 'crate', 'lifting'],
-    about: 'A 4 kg weight lifts a 3 kg crate off the floor. The pair accelerates at (4 − 3) g / 7 = 1.4 m/s²; the rope carries 3 × (g + a) = 33.6 N. Watch the crate leave the floor at once, and how slowly it gains speed compared with a drop.',
+    about: 'A 4 kg weight lifts a 3 kg crate off the floor over a pulley. Predict the acceleration and string tension as it lifts.',
     build: () => {
       const wheel = put('pulley', 'Pulley', [0, 4.5, 0], { size: [0.3, 0.15, 0.3] })
       const crate = put('box', 'Crate', [-0.3, 0.3, 0], { size: [0.6, 0.6, 0.6], massMode: 'mass', mass: 3, material: 'wood', trace: true })
@@ -250,7 +250,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Balanced pulley',
     topic: 'Forces',
     tags: ['pulley', 'rope', 'balance', 'equal mass'],
-    about: 'Equal 2 kg masses on a rope over a pulley: nothing moves, because the rope pulls both up with the same 19.6 N. Drag one down 1 m and the other rises 1 m — that is all a pulley does: it turns the pull round.',
+    about: 'Equal 2 kg masses on a rope over a pulley: nothing moves, because the rope pulls both up with the same force. Drag one down 1 m and predict what the other does.',
     build: () => {
       const wheel = put('pulley', 'Pulley', [0, 4.5, 0], { size: [0.3, 0.15, 0.3] })
       const left = put('box', 'A', [-0.3, 2, 0], { size: [0.3, 0.3, 0.3], massMode: 'mass', mass: 2, material: 'wood', trace: true })
@@ -263,7 +263,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Crane',
     topic: 'Forces',
     tags: ['rope', 'crane', 'hanging', 'tension', 'weight'],
-    about: 'A 3 kg crate hangs from a beam on a 2.5 m rope. At rest the rope carries the whole weight, mg = 29.4 N. Shorten L in Connections and the crate lifts; lengthen it and the crate is lowered.',
+    about: 'A 3 kg crate hangs from a beam on a 2.5 m rope. Predict the tension carried by the rope before moving it.',
     build: () => {
       const beam = put('box', 'Beam', [0, 5, 0], { size: [0.15, 0.15, 0.15], motion: 'static', material: 'steel' })
       // 5 − 0.075 (beam) − 2.5 (rope) − 0.25 (half the crate): the rope is exactly 2.5 m.
@@ -277,7 +277,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Bouncing ball',
     topic: 'Energy',
     tags: ['bounce', 'energy', 'restitution', 'gravity'],
-    about: 'A rubber ball with e = 0.8 dropped from 3 m comes back to e² × 3 = 1.92 m, then 1.23 m, then 0.79 m.',
+    about: 'A rubber ball with restitution e = 0.8 dropped from 3 m. Predict how high it will rebound on its first bounce.',
     build: () => ({
       // The underside is what drops 3 m: a 20 cm ball whose centre was at 3.0 fell 2.8 and came
       // back to 1.79, not 1.92.
@@ -333,7 +333,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Head-on collision',
     topic: 'Momentum',
     tags: ['collision', 'momentum', 'bounce', 'ice'],
-    about: 'A 1 kg ball at 5 m/s into a 3 kg ball at rest, e = 0.9. Momentum before (5 kg m/s) equals momentum after, whatever the bounce does to the energy: A comes back at 2.1 m/s and B goes on at 2.4 m/s.',
+    about: 'A 1 kg ball at 5 m/s into a 3 kg ball at rest, e = 0.9. Momentum is conserved whatever the bounce does to the energy: predict their speeds after impact.',
     build: () => ({
       // Frictionless balls: with friction the floor spun A up on the way in and it arrived at
       // 3.6 m/s, not 5, so no after-speed matched the sentence.
@@ -350,7 +350,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Sticky collision',
     topic: 'Momentum',
     tags: ['collision', 'momentum', 'sticking', 'energy'],
-    about: '1 kg at 4 m/s hits 3 kg at rest and they move off together: 4 = (1 + 3) v, so v = 1 m/s. Three quarters of the kinetic energy is gone.',
+    about: 'A 1 kg ball at 4 m/s hits a stationary 3 kg ball and they stick together. Predict their combined velocity after impact.',
     build: () => ({
       bodies: [
         floor('ice'),
@@ -365,7 +365,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Recoil',
     topic: 'Momentum',
     tags: ['momentum', 'recoil', 'collision', 'ice'],
-    about: 'A 10 kg block fires a 0.5 kg ball. They leave with equal and opposite momentum, 25 kg m/s each way, so the small one goes twenty times faster.',
+    about: 'A 10 kg block fires a 0.5 kg ball with 25 kg m/s of momentum. Predict the recoil velocity of the block.',
     build: () => ({
       bodies: [
         floor('ice'),
@@ -448,7 +448,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Pendulum',
     topic: 'Oscillation',
     tags: ['pendulum', 'swing', 'period', 'string'],
-    about: 'A bob on a 2 m string, let go from 15°. Time ten swings: T = 2π√(L/g) = 2.84 s, whatever the mass. Drag it out to 53° and a swing takes 3.0 s — the formula is for small swings.',
+    about: 'A bob on a 2 m string, released from a 15° swing. Predict its period of oscillation, then time the swings.',
     build: () => {
       const pivot = put('box', 'Pivot', [0, 4, 0], { size: [0.12, 0.12, 0.12], motion: 'static', material: 'steel' })
       // 15° from the vertical (2 sin 15°, 4 − 2 cos 15°): from the old 53° a swing took 3.0 s.
@@ -473,7 +473,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Bob on two strings',
     topic: 'Oscillation',
     tags: ['swing', 'string', 'pendulum', 'period'],
-    about: 'A bob hung from two beams on two 2.5 m strings, making a V. It swings across the V like a pendulum of its vertical drop h = 2 m: T = 2π√(h/g) = 2.84 s, not 3.17 s for 2.5 m. In the side view the two strings line up; switch to 3D to see the V.',
+    about: 'A bob hung from two beams on two 2.5 m strings making a V with vertical drop h = 2 m. Predict whether its period follows string length or vertical drop.',
     build: () => {
       // The beams stand either side of the swing, along z, so the swing itself is across the
       // side view. Two strings in the x–y plane would have held the bob still in 2D. Strings,
@@ -501,7 +501,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Mass on a spring',
     topic: 'Oscillation',
     tags: ['spring', 'oscillation', 'period'],
-    about: 'Pull it down and let go. The period is T = 2π√(m/k) = 0.63 s for 2 kg on 200 N/m — check it against the clock.',
+    about: 'Pull down a 2 kg mass on a 200 N/m spring and let go. Predict the oscillation period, then check against the clock.',
     build: () => {
       const hook = put('box', 'Hook', [0, 4, 0], { size: [0.12, 0.12, 0.12], motion: 'static', material: 'steel' })
       const mass = put('box', 'M', [0, 2.2, 0], { size: [0.35, 0.35, 0.35], material: 'steel', massMode: 'mass', mass: 2, trace: true })
@@ -513,7 +513,7 @@ const EXPERIMENTS: Preset[] = [
     label: 'Spring on ice',
     topic: 'Oscillation',
     tags: ['spring', 'ice', 'oscillation', 'energy'],
-    about: 'A 2 kg block on ice, on a 50 N/m spring stretched by 0.6 m. It oscillates with T = 2π√(m/k) = 1.26 s, and the energy swaps between spring and motion.',
+    about: 'A 2 kg block on ice on a 50 N/m spring stretched by 0.6 m. Predict its oscillation period as energy trades back and forth.',
     build: () => {
       // The post's centre is at the block's height, so the spring is level. It used to run from
       // the middle of a 2 m wall down to the block: tilted, 0.68 m stretched instead of 0.6, and

@@ -696,7 +696,7 @@ function springTheory(scene: string, name: string, axis: 'x' | 'y'): Entry {
 
 /** The theory of a demo experiment, or null for a scene with none. */
 export function theoryFor(presetId: string | null | undefined): Theory | null {
-  const e = (presetId && THEORIES[presetId]) || null
+  const e = (presetId && (THEORIES[presetId] ?? (LAB_THEORY as Record<string, Entry>)[presetId])) || null
   if (!e) return null
   const ok = (b: Built): boolean => {
     try {

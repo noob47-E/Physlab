@@ -7,7 +7,6 @@
 
 import { describe, it, expect } from 'vitest'
 import { PRESETS } from '../../src/renderer/src/sim/presets'
-import { dragCoefficient } from '../../src/renderer/src/sim/materials'
 import { gapPasses } from '../../src/renderer/src/sim/chaosTwins'
 import { LAB_TEXT_ROWS } from './presetTextLab'
 
@@ -43,12 +42,10 @@ const PRESET_CHECKS: {
       const v = Math.hypot(vx, vy)
       const angle = Math.round(Math.atan2(vy, vx) * 180 / Math.PI)
       const g = built.world?.gravity ?? 9.81
-      const range = v * v * Math.sin(2 * angle * Math.PI / 180) / g
       const hMax = ball.position[1] + vy * vy / (2 * g)
       return [
         ['14', v],
         ['30', angle],
-        ['17.3', range],
         ['2.8', hMax]
       ]
     }
@@ -60,17 +57,9 @@ const PRESET_CHECKS: {
       const ball = built.bodies.find(b => b.name === 'P')!
       const h = ledge.position[1] + ledge.size[1] / 2
       const v = ball.velocity[0]
-      const g = built.world?.gravity ?? 9.81
-      const t = Math.sqrt(2 * h / g)
-      const d = v * t
-      const edgeX = ledge.position[0] + ledge.size[0] / 2
-      const landX = edgeX + d
       return [
         ['4', h],
-        ['3', v],
-        ['0.90', t],
-        ['2.7', d],
-        ['-1.3', landX]
+        ['3', v]
       ]
     }
   },
@@ -80,12 +69,10 @@ const PRESET_CHECKS: {
       const heavy = built.bodies.find(b => b.name === 'Heavy')!
       const light = built.bodies.find(b => b.name === 'Light')!
       const h = heavy.position[1] - heavy.size[1]
-      const g = built.world?.gravity ?? 9.81
       return [
         ['5', heavy.mass],
         ['0.5', light.mass],
-        ['6', h],
-        ['1.11', Math.sqrt(2 * h / g)]
+        ['6', h]
       ]
     }
   },
@@ -96,10 +83,8 @@ const PRESET_CHECKS: {
       const h = ball.position[1] - ball.size[1]
       const g = built.world?.gravity ?? 9.81
       return [
-        ['1.62', g],
         ['5', h],
-        ['2.48', Math.sqrt(2 * h / g)],
-        ['1.01', Math.sqrt(2 * h / 9.81)]
+        ['1.62', g]
       ]
     }
   },
@@ -109,23 +94,11 @@ const PRESET_CHECKS: {
       const ball = built.bodies.find(b => b.name === 'Foam')!
       const h = ball.position[1] - ball.size[1]
       const m = ball.mass
-      const g = built.world?.gravity ?? 9.81
-      const rho = built.world!.airDensity!
-      // The sim's own drag coefficient for the shape, unless the body sets one.
-      const C = ball.dragCd ?? dragCoefficient(ball.shape)
-      const A = Math.PI * ball.size[0] * ball.size[0]
-      const vTerm = Math.sqrt(2 * m * g / (rho * C * A))
-      // Falling from rest against v² drag: v(d) = v_t √(1 − e^(−2gd/v_t²)), as a percentage of v_t.
-      const percentAfter = (d: number): number => 100 * Math.sqrt(1 - Math.exp((-2 * g * d) / (vTerm * vTerm)))
       return [
         ['0.8', m],
-        ['45', h],
-        ['20', vTerm],
-        ['95', percentAfter(h)],
-        ['88', percentAfter(30)]
+        ['45', h]
       ]
-    },
-    unchecked: { '30': 'a shorter drop the sentence compares with, not part of the set-up' }
+    }
   },
   {
     id: 'ramp',
@@ -135,14 +108,10 @@ const PRESET_CHECKS: {
       const ground = built.bodies.find(b => b.name === 'Floor')!
       const floorTop = ground.position[1] + ground.size[1] / 2
       const drop = ball.position[1] - (floorTop + ball.size[1])
-      const g = built.world?.gravity ?? 9.81
       return [
-        ['1.5', drop],
-        ['4.6', Math.sqrt(10 * g * drop / 7)],
-        ['5.4', Math.sqrt(2 * g * drop)],
+        ['1.5', drop]
       ]
-    },
-    unchecked: { '4.5': 'what the readout shows when the sim runs (the rolling contact costs a little), not a formula' }
+    }
   },
   {
     id: 'rollslide',
@@ -155,11 +124,9 @@ const PRESET_CHECKS: {
       const crate = built.bodies.find(b => b.name === 'Crate')!
       const v = crate.velocity[0]
       const mu = crate.friction
-      const g = built.world?.gravity ?? 9.81
       return [
         ['6', v],
-        ['0.4', mu],
-        ['4.6', v * v / (2 * mu * g)]
+        ['0.4', mu]
       ]
     }
   },
@@ -183,16 +150,9 @@ const PRESET_CHECKS: {
     check: (built) => {
       const m1 = built.bodies.find((b) => b.name === 'm₁')!.mass
       const m2 = built.bodies.find((b) => b.name === 'm₂')!.mass
-      const g = built.world?.gravity ?? 9.81
-      const a = ((m2 - m1) * g) / (m1 + m2)
-      const t = 2
-      const d = 0.5 * a * t * t
       return [
         ['0.50', m1],
-        ['0.55', m2],
-        ['0.47', a],
-        ['0.93', d],
-        ['2', t]
+        ['0.55', m2]
       ]
     }
   },
@@ -201,18 +161,9 @@ const PRESET_CHECKS: {
     check: (built) => {
       const weight = built.bodies.find(b => b.name === 'Weight')!.mass
       const crate = built.bodies.find(b => b.name === 'Crate')!.mass
-      const g = built.world?.gravity ?? 9.81
-      const a = (weight - crate) * g / (weight + crate)
-      const T = crate * (g + a)
       return [
         ['4', weight],
-        ['3', crate],
-        ['4', weight],
-        ['3', crate],
-        ['7', weight + crate],
-        ['1.4', a],
-        ['3', crate],
-        ['33.6', T]
+        ['3', crate]
       ]
     }
   },
@@ -220,10 +171,8 @@ const PRESET_CHECKS: {
     id: 'balance',
     check: (built) => {
       const m = built.bodies.find(b => b.name === 'A')!.mass
-      const g = built.world?.gravity ?? 9.81
       return [
-        ['2', m],
-        ['19.6', m * g],
+        ['2', m]
       ]
     },
     unchecked: { '1': 'a drag the student makes (down 1 m, up 1 m), not part of the set-up' }
@@ -233,11 +182,9 @@ const PRESET_CHECKS: {
     check: (built) => {
       const crate = built.bodies.find(b => b.name === 'Crate')!.mass
       const rope = built.links!.find(l => l.kind === 'rope')!
-      const g = built.world?.gravity ?? 9.81
       return [
         ['3', crate],
-        ['2.5', rope.length],
-        ['29.4', crate * g]
+        ['2.5', rope.length]
       ]
     }
   },
@@ -247,16 +194,9 @@ const PRESET_CHECKS: {
       const ball = built.bodies.find(b => b.name === 'Ball')!
       const e = ball.restitution
       const h = ball.position[1] - ball.size[1]
-      const h1 = e * e * h
-      const h2 = e * e * h1
-      const h3 = e * e * h2
       return [
         ['0.8', e],
-        ['3', h],
-        ['3', h],
-        ['1.92', h1],
-        ['1.23', h2],
-        ['0.79', h3]
+        ['3', h]
       ]
     }
   },
@@ -296,19 +236,12 @@ const PRESET_CHECKS: {
       const m1 = a.mass
       const v1 = a.velocity[0]
       const m2 = b.mass
-      const v2 = b.velocity[0]
       const e = a.restitution
-      const p = m1 * v1 + m2 * v2
-      const v1After = (m1 * v1 + m2 * v2 + m2 * e * (v2 - v1)) / (m1 + m2)
-      const v2After = (m1 * v1 + m2 * v2 + m1 * e * (v1 - v2)) / (m1 + m2)
       return [
         ['1', m1],
         ['5', v1],
         ['3', m2],
-        ['0.9', e],
-        ['5', p],
-        ['2.1', Math.abs(v1After)],
-        ['2.4', v2After]
+        ['0.9', e]
       ]
     }
   },
@@ -420,25 +353,15 @@ const PRESET_CHECKS: {
     check: (built) => {
       const rope = built.links!.find(l => l.kind === 'string')!
       const L = rope.length
-      const g = built.world?.gravity ?? 9.81
-      const T = 2 * Math.PI * Math.sqrt(L / g)
       // The release angle from the vertical, from where the bob hangs below the pivot.
       const pivot = built.bodies.find(b => b.name === 'Pivot')!
       const bob = built.bodies.find(b => b.name === 'Bob')!
       const release = (Math.atan2(Math.abs(bob.position[0] - pivot.position[0]), pivot.position[1] - bob.position[1]) * 180) / Math.PI
-      // A wide swing's period, to the θ⁴ term: T₀ (1 + θ²/16 + 11θ⁴/3072).
-      const wide = (deg: number): number => {
-        const th = (deg * Math.PI) / 180
-        return T * (1 + th ** 2 / 16 + (11 * th ** 4) / 3072)
-      }
       return [
         ['2', L],
-        ['15', release],
-        ['2.84', T],
-        ['3.0', wide(53)]
+        ['15', release]
       ]
-    },
-    unchecked: { '53': 'the angle the sentence asks the student to try; its 3.0 s is worked out above' }
+    }
   },
   {
     id: 'ropeswing',
@@ -458,15 +381,9 @@ const PRESET_CHECKS: {
       const beams = built.bodies.filter(b => b.name.startsWith('Beam'))
       const halfSpan = Math.abs(beams[0].position[2] - beams[1].position[2]) / 2
       const h = Math.sqrt(L * L - halfSpan * halfSpan)
-      const g = built.world?.gravity ?? 9.81
-      const Th = 2 * Math.PI * Math.sqrt(h / g)
-      const TL = 2 * Math.PI * Math.sqrt(L / g)
       return [
         ['2.5', L],
-        ['2', h],
-        ['2.84', Th],
-        ['3.17', TL],
-        ['2.5', L],
+        ['2', h]
       ]
     }
   },
@@ -488,9 +405,7 @@ const PRESET_CHECKS: {
       const m = built.bodies.find(b => b.name === 'M')!.mass
       const spring = built.links!.find(l => l.kind === 'spring')!
       const k = spring.stiffness
-      const T = 2 * Math.PI * Math.sqrt(m / k)
       return [
-        ['0.63', T],
         ['2', m],
         ['200', k]
       ]
@@ -502,7 +417,6 @@ const PRESET_CHECKS: {
       const m = built.bodies.find(b => b.name === 'M')!.mass
       const spring = built.links!.find(l => l.kind === 'spring')!
       const k = spring.stiffness
-      const T = 2 * Math.PI * Math.sqrt(m / k)
       const post = built.bodies.find(b => b.name === 'Post')!
       const block = built.bodies.find(b => b.name === 'M')!
       const dist = Math.abs(post.position[0] - block.position[0])
@@ -510,8 +424,7 @@ const PRESET_CHECKS: {
       return [
         ['2', m],
         ['50', k],
-        ['0.6', stretch],
-        ['1.26', T]
+        ['0.6', stretch]
       ]
     }
   },

@@ -17,6 +17,7 @@ import { nextPaletteColour, paintBodies } from './palette'
 // because neither side reads the other at load time: presets builds its bodies inside build(),
 // and presetById is called from loadPreset, never while the module is evaluating.
 import { presetById } from './presets'
+import { useGuessStore } from './guessStore'
 
 /** What addLink hands back: the link, or the sentence that says why there is none. */
 type LinkResult = { ok: true; link: Link } | { ok: false; why: string }
@@ -435,6 +436,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
   loadBuilt: (presetId, built, _opts) => {
     get().setScene(built.bodies, { ...DEFAULT_WORLD, ...(built.world ?? {}) }, built.links ?? [])
     set({ presetId })
+    useGuessStore.getState().initPreset(presetId, built)
   },
   setActuators: (actuators) => {
     set({ actuators })
@@ -533,6 +535,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
 
   resetRun: () => {
     bumpAction('resets') // the Start here mission's Reset (a preset load also zeroes the clock, but is not one)
+    useGuessStore.getState().reset()
     set({ runNonce: get().runNonce + 1, engineTime: 0, live: {}, recording: {}, contacts: [] })
   },
   snapshot: () => ({ bodies: get().bodies, links: get().links, world: get().world, sideView: get().sideView }),
@@ -556,6 +559,7 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       actuators: [],
       presetId: null
     })
+    useGuessStore.getState().initPreset('')
     engine.world?.setActuators([])
   },
   clearTrails: () => set({ trailNonce: get().trailNonce + 1 })

@@ -15,6 +15,7 @@ import { Rail } from './Rail'
 import { TapeStrip } from './TapeStrip'
 import { useTapeBar } from '../../sim/tapeBar'
 import { SandboxPhoneControls } from './SandboxPhoneControls'
+import { GuessPrompt } from './GuessPrompt'
 
 export function SandboxHud() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
@@ -32,6 +33,7 @@ export function SandboxHud() {
       <div className="pointer-events-none absolute inset-0">
         <HudTop />
         <SandboxPhoneControls />
+        <GuessPrompt />
       </div>
     )
   }
@@ -51,6 +53,7 @@ export function SandboxHud() {
       </div>
       <TapeStrip />
       <Hint />
+      <GuessPrompt />
     </div>
   )
 }

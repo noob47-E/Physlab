@@ -20,6 +20,14 @@ import { theoryFor } from '../../sim/theory'
 import { cardsInView, gapRows, OPEN_CARDS, type GapRow } from '../../sim/cardGaps'
 import { tapeReadout } from './playback'
 import { cardLink } from '../../sim/cardLink'
+import {
+  cardMatchesTarget,
+  evaluateGuess,
+  findMeasuredForTarget,
+  type PredictionTarget,
+  type StudentGuess,
+  useGuessStore
+} from '../../sim/guessStore'
 
 const STORAGE_KEY_FOLDED = 'physlab.cardsDock.folded'
 const STORAGE_KEY_BIG = 'physlab.cardsDock.big'
@@ -154,6 +162,10 @@ interface CardsDockProps {
   readout?: { time: number; state(id: string): BodyState | null } | null
   getTapeAcc?: (bodyId: string) => V3 | undefined
   digitSettings?: DigitSettings
+  target?: PredictionTarget | null
+  guess?: StudentGuess | null
+  hasRun?: boolean
+  measuredList?: { key: string; value: number }[]
 }
 
 export const CardsDockView = memo(function CardsDockView({
@@ -165,13 +177,18 @@ export const CardsDockView = memo(function CardsDockView({
   presetId,
   readout,
   getTapeAcc,
-  digitSettings = { decimals: 2, precisionMode: 'dp' }
+  digitSettings = { decimals: 2, precisionMode: 'dp' },
+  target = null,
+  guess = null,
+  hasRun = false,
+  measuredList = []
 }: CardsDockProps) {
   const bodies = useSandbox((s) => s.bodies)
   const selection = useSandbox((s) => s.selection)
   const links = useSandbox((s) => s.links)
   const world = useSandbox((s) => s.world)
   const engineTime = useSandbox((s) => s.engineTime)
+  const settings = useScene((s) => s.settings)
 
   const [dockFolded, setDockFolded] = useState(() => readStoredPref(STORAGE_KEY_FOLDED, false))
   const [bigMode, setBigMode] = useState(() => readStoredPref(STORAGE_KEY_BIG, false))
@@ -328,6 +345,7 @@ export const CardsDockView = memo(function CardsDockView({
     const formulaLine = card.lines[0]
     const substitutedLine = card.lines[1]
     const resultLine = card.lines[2]
+    const isTargetCard = cardMatchesTarget(card, target)
 
     return (
       <div key={card.id} className={cardClasses}>
@@ -369,9 +387,61 @@ export const CardsDockView = memo(function CardsDockView({
                 <CardTex tex={big(substitutedLine.tex)} />
               </div>
             )}
-            <div className={`${resultSize} text-ink-strong mt-0.5`}>
-              <CardTex tex={resultLine ? resultLine.tex : card.text} />
-            </div>
+            {isTargetCard && !hasRun ? (
+              <div
+                className={`${resultSize} text-ink-dim flex items-center gap-2 mt-0.5`}
+                data-testid="card-unspoiled-result"
+              >
+                <span className="font-mono font-bold text-accent">?</span>
+                <span className="text-fine italic text-ink-dim">Press Play to predict</span>
+              </div>
+            ) : (
+              <div className={`${resultSize} text-ink-strong mt-0.5`}>
+                <CardTex tex={resultLine ? resultLine.tex : card.text} />
+              </div>
+            )}
+            {isTargetCard && hasRun && guess && !guess.skipped && (() => {
+              const measuredValue = findMeasuredForTarget(measuredList, target)
+              const evalResult = target ? evaluateGuess(guess.text, target, measuredValue) : null
+              const verdictSym = evalResult
+                ? evalResult.verdict === 'right'
+                  ? '✓'
+                  : evalResult.verdict === 'close'
+                    ? '~'
+                    : '✗'
+                : ''
+              const verdictText = evalResult ? `(${verdictSym} vs ${evalResult.against})` : ''
+
+              return (
+                <div
+                  className="mt-1 pt-1 border-t border-line/40 text-fine flex flex-wrap items-center justify-between gap-x-2 text-ink-dim"
+                  data-testid="card-guess-row"
+                >
+                  <span>
+                    Your guess: <strong className="text-ink">{guess.text}</strong>{' '}
+                    {verdictText && <span className="font-semibold text-ink">{verdictText}</span>}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span>
+                      Formula:{' '}
+                      <strong className="text-ink">
+                        {formatMeasure(card.value, 'number', settings)}
+                        {card.unit ? ` ${card.unit}` : ''}
+                      </strong>
+                    </span>
+                    {measuredValue !== null && (
+                      <span>
+                        Measured:{' '}
+                        <strong className="text-ink">
+                          {formatMeasure(measuredValue, 'number', settings)}
+                          {card.unit ? ` ${card.unit}` : ''}
+                        </strong>
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
@@ -471,19 +541,29 @@ export function CardsDock() {
   )
 
   const [gaps, setGaps] = useState<GapRow[]>([])
+  const [measuredList, setMeasuredList] = useState<{ key: string; value: number }[]>([])
   const lastGaps = useRef(0)
   useEffect(() => {
     if (!theory || !tape) {
       setGaps([])
+      setMeasuredList([])
       return
     }
     const work = () => {
       lastGaps.current = performance.now()
       const num = (v: number) => formatMeasure(v, 'number', settings)
       try {
-        setGaps(gapRows(theory, { bodies, links, world }, tape, tape.rate, num, replaying ? Math.round(playhead) : undefined))
+        const built = { bodies, links, world }
+        const step = replaying ? Math.round(playhead) : undefined
+        setGaps(gapRows(theory, built, tape, tape.rate, num, step))
+        if (tape.last > tape.first) {
+          setMeasuredList(theory.measure(tape, built, step))
+        } else {
+          setMeasuredList([])
+        }
       } catch {
         setGaps([])
+        setMeasuredList([])
       }
     }
     const wait = replaying ? 0 : 500 - (performance.now() - lastGaps.current)
@@ -495,6 +575,10 @@ export function CardsDock() {
     return () => clearTimeout(timer)
   }, [theory, tape, engineTime, revision, playhead, replaying, bodies, links, world, settings])
 
+  const target = useGuessStore((s) => s.target)
+  const guess = useGuessStore((s) => s.guess)
+  const hasRun = tape ? tape.last > tape.first : false
+
   return (
     <CardsDockView
       view={view}
@@ -505,6 +589,10 @@ export function CardsDock() {
       presetId={presetId}
       readout={readout}
       digitSettings={{ decimals: settings.decimals, precisionMode: settings.precisionMode }}
+      target={target}
+      guess={guess}
+      hasRun={hasRun}
+      measuredList={measuredList}
     />
   )
 }

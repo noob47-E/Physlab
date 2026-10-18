@@ -11,6 +11,7 @@ import { presetById, type Preset } from './presets'
 import { stepOneFrame, stepButtonTitle } from './stepping'
 import { replayRefusal } from './recorder'
 import { shownTape, useTape, type ReplaySpeed, type TapeMode } from './tapeStore'
+import { useGuessStore } from './guessStore'
 
 /** The speeds the strip offers, fastest first. In live they are the Sandbox's slow motion; in replay, the recording's speed. */
 export const SPEEDS: readonly ReplaySpeed[] = [1, 0.5, 0.25, 0.1, 0.01]
@@ -135,9 +136,13 @@ export function togglePlay(): void {
 }
 
 /** L, and the forward play button: play forwards (the engine in live; the recording in replay, which starts again from the start when it is at the end). */
-export function play(): void {
+export function play(options?: { force?: boolean }): void {
   const s = useTape.getState()
   if (s.mode === 'live') {
+    if (!options?.force) {
+      const allowed = useGuessStore.getState().requestPlay({ hasRun: flagsNow().hasRun })
+      if (!allowed) return
+    }
     useScene.getState().setPlaying(true)
     return
   }
