@@ -163,7 +163,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   // every other card stands as it is.
   if (!working || working.error || working.answers.length === 0) return { result: flagIfApproximate(result), verdict: 'unchecked' }
   if (result.error) {
-    if (working.checked === 'failed' || REFUSAL_STAYS.test(result.error.sentence)) return { result, verdict: 'unchecked' }
+    if (working.checked !== 'ok' || REFUSAL_STAYS.test(result.error.sentence)) return { result, verdict: 'unchecked' }
     const tex = texOfAnswers(working)
     return { result: { main: texToPlain(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
   }

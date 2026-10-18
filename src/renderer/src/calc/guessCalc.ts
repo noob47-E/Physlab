@@ -52,18 +52,23 @@ function halfUnitTol(shownText: string, typedText: string, v: number): number {
   if (Number.isInteger(v)) {
     return 1e-9
   }
-  const mTyped = typedText.match(/\.(\d+)(?:[eE]([+-]?\d+))?/)
-  if (mTyped && mTyped[1]) {
-    const decimals = mTyped[1].length
-    const exp = mTyped[2] ? parseInt(mTyped[2], 10) : 0
+
+  const decimalOrSci = /^(?:[+-]?\d+\.(\d+)(?:[eE]([+-]?\d+))?|[+-]?\d+(?:[eE]([+-]?\d+)))$/
+
+  const mTyped = typedText.trim().match(decimalOrSci)
+  if (mTyped) {
+    const decimals = mTyped[1] ? mTyped[1].length : 0
+    const exp = parseInt(mTyped[2] ?? mTyped[3] ?? '0', 10)
     return 0.5 * 10 ** (exp - decimals)
   }
-  const mShown = shownText.match(/\.(\d+)(?:[eE]([+-]?\d+))?/)
-  if (mShown && mShown[1]) {
-    const decimals = mShown[1].length
-    const exp = mShown[2] ? parseInt(mShown[2], 10) : 0
+
+  const mShown = shownText.trim().match(decimalOrSci)
+  if (mShown) {
+    const decimals = mShown[1] ? mShown[1].length : 0
+    const exp = parseInt(mShown[2] ?? mShown[3] ?? '0', 10)
     return 0.5 * 10 ** (exp - decimals)
   }
+
   return 1e-9
 }
 
@@ -81,13 +86,13 @@ export function checkCalculatorGuess(
   if (!trimmed) return { verdict: 'empty' }
 
   // Direct match against formatted result string, formula, or exact representation (handles Base-N, units, symbols)
-  if (trimmed.toLowerCase() === result.main.trim().toLowerCase()) {
+  if (trimmed === result.main.trim()) {
     return { verdict: 'right', parsed: parseExprNumber(trimmed) ?? undefined }
   }
-  if (result.exact && trimmed.toLowerCase() === result.exact.trim().toLowerCase()) {
+  if (result.exact && trimmed === result.exact.trim()) {
     return { verdict: 'right', parsed: parseExprNumber(trimmed) ?? undefined }
   }
-  if (result.formula && trimmed.toLowerCase() === result.formula.trim().toLowerCase()) {
+  if (result.formula && trimmed === result.formula.trim()) {
     return { verdict: 'right', parsed: parseExprNumber(trimmed) ?? undefined }
   }
 
