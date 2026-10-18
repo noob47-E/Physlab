@@ -356,6 +356,8 @@ export class SimWorld {
   private linkDefs: Link[] = []
   /** Each body's distance in links from a fixed one (links.ts linkDepths): who a rod, string or spring hangs from. */
   private depths = new Map<string, number>()
+  /** How many times each link has been instantiated (for testing selective link re-laying). */
+  private linkRebuilds = new Map<string, number>()
   /**
    * Forces a question drives bodies with, by body. They belong to the experiment, not to one
    * run: a Reset rebuilds the bodies and must find the same push waiting at t = 0.
@@ -513,6 +515,7 @@ export class SimWorld {
     // Who touched whom belongs to the run that just ended: kept, the first step after Reset gave
     // a spinning ball in mid-air one step of rolling torque from the floor it rolled on before.
     this.touching.clear()
+    this.linkRebuilds.clear()
     // At t = 0 every rate lands on the grid: one still waiting starts with the new run.
     if (this.pendingRate !== null) this.switchRate(this.pendingRate)
     this.restructured()
@@ -781,32 +784,85 @@ export class SimWorld {
     this.removeLinks()
     this.depths = linkDepths([...this.entries.values()].map((e) => e.def), links)
     for (const link of links) {
-      const a = this.entries.get(link.a)
-      const b = this.entries.get(link.b)
-      if (!a || !b || a === b) continue
-      // Between two ends that nothing pushes (fixed, or moved along a path: SB60's twins) a link has nothing to hold;
-      // it is drawn, and Jolt is not asked to solve a joint it could only fight.
-      if (a.def.motion !== 'dynamic' && b.def.motion !== 'dynamic') continue
-      switch (link.kind) {
-        case 'rope':
-          this.addRope(link, a, b)
-          break
-        case 'pulley':
-          this.addPulley(link, a, b)
-          break
-        case 'hinge':
-          this.addHinge(link, a, b)
-          break
-        case 'weld':
-          this.addWeld(link, a, b)
-          break
-        case 'spring':
-          this.addSpring(link, a, b)
-          break
-        default:
-          this.addDistance(link, a, b)
-      }
+      this.instantiateLink(link)
     }
+  }
+
+  private instantiateLink(link: Link): void {
+    const a = this.entries.get(link.a)
+    const b = this.entries.get(link.b)
+    if (!a || !b || a === b) return
+    this.linkRebuilds.set(link.id, (this.linkRebuilds.get(link.id) ?? 0) + 1)
+    // Between two ends that nothing pushes (fixed, or moved along a path: SB60's twins) a link has nothing to hold;
+    // it is drawn, and Jolt is not asked to solve a joint it could only fight.
+    if (a.def.motion !== 'dynamic' && b.def.motion !== 'dynamic') return
+    switch (link.kind) {
+      case 'rope':
+        this.addRope(link, a, b)
+        break
+      case 'pulley':
+        this.addPulley(link, a, b)
+        break
+      case 'hinge':
+        this.addHinge(link, a, b)
+        break
+      case 'weld':
+        this.addWeld(link, a, b)
+        break
+      case 'spring':
+        this.addSpring(link, a, b)
+        break
+      default:
+        this.addDistance(link, a, b)
+    }
+  }
+
+  private removeLink(linkId: string): void {
+    const c = this.links.get(linkId)
+    if (c) {
+      this.physics.RemoveConstraint(c)
+      this.links.delete(linkId)
+    }
+    this.ownSprings = this.ownSprings.filter((s) => s.link.id !== linkId)
+    this.springKinds.delete(linkId)
+    const rope = this.ropes.get(linkId)
+    if (rope) {
+      for (const rc of rope.constraints) this.physics.RemoveConstraint(rc)
+      const linkDef = this.linkDefs.find((l) => l.id === linkId)
+      const a = linkDef ? this.entries.get(linkDef.a) : undefined
+      const b = linkDef ? this.entries.get(linkDef.b) : undefined
+      const J = this.jolt as unknown as AnyJolt & Jolt
+      for (const body of rope.bodies) {
+        if (a) this.ropeTies.delete(pairKey(J.getPointer(a.body), J.getPointer(body)))
+        if (b) this.ropeTies.delete(pairKey(J.getPointer(b.body), J.getPointer(body)))
+        const id = body.GetID()
+        this.bodies.RemoveBody(id)
+        this.bodies.DestroyBody(id)
+      }
+      this.ropes.delete(linkId)
+    }
+  }
+
+  /**
+   * Re-lays only specific links without tearing down unaffected links in the world (S1c).
+   */
+  relayLinks(linksToRelay: Link[]): void {
+    this.input()
+    this.restructured()
+    for (const link of linksToRelay) {
+      this.removeLink(link.id)
+      this.instantiateLink(link)
+    }
+  }
+
+  /** Gets the constraint handle for a link id, if present (for tests and inspection). */
+  linkConstraint(linkId: string): unknown {
+    return this.links.get(linkId)
+  }
+
+  /** How many times a link has been instantiated (for testing selective re-laying). */
+  linkRebuildCount(linkId: string): number {
+    return this.linkRebuilds.get(linkId) ?? 0
   }
 
   /**
@@ -1980,17 +2036,19 @@ export class SimWorld {
   }
 
   /**
-   * Finds all dynamic bodies connected to `id` through 'weld' or 'hinge' links (rigid assemblies).
-   * If any connected body is non-dynamic (static/kinematic), `isAnchored` is true.
+   * Finds all bodies connected to `id` through 'weld' or 'hinge' links (rigid assemblies).
+   * If any connected body (other than `id`) is non-dynamic (static/kinematic), `isAnchored` is true.
+   * If `id` is dynamic and connected to any non-dynamic body, `isAnchored` is true.
+   * If `id` is non-dynamic and connected to another non-dynamic body, `isAnchored` is true.
+   * Dynamic bodies connected to `id` are included in `entries` alongside `id` (S1c).
    */
   private rigidAssemblyOf(id: BodyId): { entries: Entry[]; isAnchored: boolean } {
     const e = this.entries.get(id)
     if (!e) return { entries: [], isAnchored: false }
-    if (e.def.motion !== 'dynamic') return { entries: [e], isAnchored: false }
 
     const visited = new Set<BodyId>([id])
     const queue: BodyId[] = [id]
-    const dynamicEntries: Entry[] = [e]
+    const entries: Entry[] = [e]
     let isAnchored = false
 
     while (queue.length > 0) {
@@ -2002,16 +2060,17 @@ export class SimWorld {
         if (visited.has(otherId)) continue
         visited.add(otherId)
         const otherEntry = this.entries.get(otherId)
-        if (!otherEntry || otherEntry.def.motion !== 'dynamic') {
+        if (!otherEntry) continue
+        if (otherEntry.def.motion !== 'dynamic') {
           isAnchored = true
         } else {
-          dynamicEntries.push(otherEntry)
-          queue.push(otherId)
+          entries.push(otherEntry)
         }
+        queue.push(otherId)
       }
     }
 
-    return { entries: dynamicEntries, isAnchored }
+    return { entries, isAnchored }
   }
 
   /**
@@ -2069,7 +2128,7 @@ export class SimWorld {
       } else {
         link.pivotA = [clampedRelX, 0, 0]
       }
-      this.setLinks(this.linkDefs)
+      this.relayLinks([link])
       break
     }
 
@@ -2126,13 +2185,20 @@ export class SimWorld {
     }
 
     // A rope or pulley bakes its end points and rim into its constraints, and weld/hinge constraints
-    // need to be re-laid if moved. Move a wheel, rope end, weld or hinge and those must be laid again.
-    const movedIds = new Set<BodyId>([id, ...(!assembly.isAnchored && moved ? assembly.entries.map((b) => b.def.id) : [])])
-    if (this.linkDefs.some((l) => movedIds.has(l.over ?? '') || ((l.kind === 'pulley' || l.kind === 'rope' || l.kind === 'weld' || l.kind === 'hinge') && (movedIds.has(l.a) || movedIds.has(l.b))))) {
-      this.setLinks(this.linkDefs)
+    // need to be re-laid if moved. Move a wheel, rope end, weld or hinge and only those links touching
+    // moved bodies are re-laid (S1c).
+    if (moved) {
+      const movedIds = new Set<BodyId>([id, ...(!assembly.isAnchored ? assembly.entries.map((b) => b.def.id) : [])])
+      const linksToRelay = this.linkDefs.filter(
+        (l) =>
+          movedIds.has(l.over ?? '') ||
+          ((l.kind === 'pulley' || l.kind === 'rope' || l.kind === 'weld' || l.kind === 'hinge') && (movedIds.has(l.a) || movedIds.has(l.b)))
+      )
+      if (linksToRelay.length > 0) {
+        this.relayLinks(linksToRelay)
+      }
     }
   }
-
   /** The link definitions currently in the world. */
   getLinkDefs(): readonly Link[] {
     return this.linkDefs.map((l) => ({ ...l }))

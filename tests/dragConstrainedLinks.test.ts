@@ -250,5 +250,163 @@ describe('S1: dragging while paused never stretches links', () => {
     expect(stB.position[0] - stA.position[0]).toBeCloseTo(1.0, 2)
     expect(stB.position[1] - stA.position[1]).toBeCloseTo(0.0, 2)
   })
+
+  it('S1c: dragging fixed pivot of a hinged pair carries the dynamic assembly and preserves offset', () => {
+    const pivot = put('box', 'Pivot', [0, 4, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const rod = put('box', 'Rod', [0, 3, 0], { size: [0.1, 1.0, 0.1], massMode: 'mass', mass: 1 })
+    const bob = put('sphere', 'Bob', [0, 2, 0], { size: [0.2, 0.2, 0.2], massMode: 'mass', mass: 1 })
+    const hingeLink = makeLink('h1', 'hinge', pivot, rod, { posA: [0, 4, 0], posB: [0, 3, 0] })!
+    const weldLink = makeLink('w1', 'weld', rod, bob, { posA: [0, 3, 0], posB: [0, 2, 0] })!
+
+    world.rebuild([pivot, rod, bob], [hingeLink, weldLink])
+
+    // Drag the static pivot to [2, 5, 0] (delta = [+2, +1, 0])
+    world.placeBody(pivot.id, [2, 5, 0])
+
+    const stPivot = world.state(pivot.id)!
+    const stRod = world.state(rod.id)!
+    const stBob = world.state(bob.id)!
+
+    expect(stPivot.position[0]).toBeCloseTo(2.0, 2)
+    expect(stPivot.position[1]).toBeCloseTo(5.0, 2)
+
+    // Rod and bob must have been carried along with the pivot by the same delta!
+    expect(stRod.position[0]).toBeCloseTo(2.0, 2)
+    expect(stRod.position[1]).toBeCloseTo(4.0, 2)
+    expect(stBob.position[0]).toBeCloseTo(2.0, 2)
+    expect(stBob.position[1]).toBeCloseTo(3.0, 2)
+
+    // Relative offsets preserved
+    expect(stRod.position[1] - stPivot.position[1]).toBeCloseTo(-1.0, 2)
+    expect(stBob.position[1] - stRod.position[1]).toBeCloseTo(-1.0, 2)
+  })
+
+  it('S1c: dragging a fixed body that is anchored to another static body does not move', () => {
+    const wall = put('box', 'Wall', [0, 5, 0], { size: [1, 1, 1], motion: 'static' })
+    const bracket = put('box', 'Bracket', [1, 5, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const sign = put('box', 'Sign', [1, 3, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 1 })
+
+    const weldWall = makeLink('w_wall', 'weld', wall, bracket, { posA: [0, 5, 0], posB: [1, 5, 0] })!
+    const hingeSign = makeLink('h_sign', 'hinge', bracket, sign, { posA: [1, 5, 0], posB: [1, 3, 0] })!
+
+    world.rebuild([wall, bracket, sign], [weldWall, hingeSign])
+
+    // Try to drag bracket away to [4, 5, 0]
+    world.placeBody(bracket.id, [4, 5, 0])
+
+    const stBracket = world.state(bracket.id)!
+    const stSign = world.state(sign.id)!
+
+    // Because bracket is anchored to Wall via weld, it cannot move away
+    expect(stBracket.position[0]).toBeCloseTo(1.0, 2)
+    expect(stBracket.position[1]).toBeCloseTo(5.0, 2)
+    expect(stSign.position[0]).toBeCloseTo(1.0, 2)
+    expect(stSign.position[1]).toBeCloseTo(3.0, 2)
+  })
+
+  it('S1c: selective link re-laying only reconstructs links touching moved bodies', () => {
+    // Untouched string pendulum:
+    const stand = put('box', 'Stand', [-3, 4, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const load = put('sphere', 'Load', [-3, 2, 0], { size: [0.2, 0.2, 0.2], massMode: 'mass', mass: 1 })
+    const stringUntouched = makeLink('str_untouched', 'string', stand, load, { posA: [-3, 4, 0], posB: [-3, 2, 0] })!
+
+    // Moved hinged pair:
+    const pivot = put('box', 'Pivot2', [0, 4, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const arm = put('box', 'Arm', [0, 2, 0], { size: [0.1, 1.0, 0.1], massMode: 'mass', mass: 1 })
+    const hingeMoved = makeLink('h_moved', 'hinge', pivot, arm, { posA: [0, 4, 0], posB: [0, 2, 0] })!
+
+    world.rebuild([stand, load, pivot, arm], [stringUntouched, hingeMoved])
+
+    const untouchedBefore = world.linkConstraint('str_untouched')
+    const hingeBefore = world.linkConstraint('h_moved')
+
+    expect(untouchedBefore).toBeDefined()
+    expect(hingeBefore).toBeDefined()
+    expect(world.linkRebuildCount('str_untouched')).toBe(1)
+    expect(world.linkRebuildCount('h_moved')).toBe(1)
+
+    // Move pivot:
+    world.placeBody(pivot.id, [1, 4, 0])
+
+    const untouchedAfter = world.linkConstraint('str_untouched')
+
+    // Untouched link constraint handle was NOT touched or reconstructed!
+    expect(untouchedAfter).toBe(untouchedBefore)
+    expect(world.linkRebuildCount('str_untouched')).toBe(1)
+
+    // The moved hinge constraint WAS re-laid!
+    expect(world.linkRebuildCount('h_moved')).toBe(2)
+  })
+
+  it('S1c: anchored or zero-movement drag does not re-lay links', () => {
+    const wall = put('box', 'Wall2', [0, 5, 0], { size: [1, 1, 1], motion: 'static' })
+    const bracket = put('box', 'Bracket2', [1, 5, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const sign = put('box', 'Sign2', [1, 3, 0], { size: [0.5, 0.5, 0.5], massMode: 'mass', mass: 1 })
+
+    const weldWall = makeLink('w_wall2', 'weld', wall, bracket, { posA: [0, 5, 0], posB: [1, 5, 0] })!
+    const hingeSign = makeLink('h_sign2', 'hinge', bracket, sign, { posA: [1, 5, 0], posB: [1, 3, 0] })!
+
+    world.rebuild([wall, bracket, sign], [weldWall, hingeSign])
+
+    expect(world.linkRebuildCount('w_wall2')).toBe(1)
+    expect(world.linkRebuildCount('h_sign2')).toBe(1)
+
+    // Attempt drag on anchored body - movement clamped to zero
+    world.placeBody(bracket.id, [2, 5, 0])
+
+    // Neither link should have been re-laid
+    expect(world.linkRebuildCount('w_wall2')).toBe(1)
+    expect(world.linkRebuildCount('h_sign2')).toBe(1)
+
+    // Drag to same position (delta 0)
+    world.placeBody(bracket.id, [1, 5, 0])
+    expect(world.linkRebuildCount('w_wall2')).toBe(1)
+    expect(world.linkRebuildCount('h_sign2')).toBe(1)
+  })
+
+  it('S1c: rigidAssemblyOf traverses through non-dynamic intermediaries', () => {
+    // static A — hinge — dynamic B — hinge — static C — hinge — dynamic D
+    const a = put('box', 'StatA', [0, 4, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const b = put('box', 'DynB', [1, 4, 0], { size: [0.2, 0.2, 0.2], massMode: 'mass', mass: 1 })
+    const c = put('box', 'StatC', [2, 4, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const d = put('box', 'DynD', [3, 4, 0], { size: [0.2, 0.2, 0.2], massMode: 'mass', mass: 1 })
+
+    const hAB = makeLink('hAB', 'hinge', a, b, { posA: [0, 4, 0], posB: [1, 4, 0] })!
+    const hBC = makeLink('hBC', 'hinge', b, c, { posA: [1, 4, 0], posB: [2, 4, 0] })!
+    const hCD = makeLink('hCD', 'hinge', c, d, { posA: [2, 4, 0], posB: [3, 4, 0] })!
+
+    world.rebuild([a, b, c, d], [hAB, hBC, hCD])
+
+    // Dragging A: because C is static and reachable, the whole assembly is anchored and cannot be dragged
+    world.placeBody(a.id, [0, 6, 0])
+    expect(world.state(a.id)!.position[1]).toBeCloseTo(4.0, 2)
+    expect(world.state(b.id)!.position[1]).toBeCloseTo(4.0, 2)
+    expect(world.state(d.id)!.position[1]).toBeCloseTo(4.0, 2)
+  })
+
+  it('S1c: selective re-lay of a rope increments rebuildSerial and invalidates keyframes', () => {
+    const post = put('box', 'Post', [0, 5, 0], { size: [0.2, 0.2, 0.2], motion: 'static' })
+    const weight = put('sphere', 'Weight', [0, 2, 0], { size: [0.2, 0.2, 0.2], massMode: 'mass', mass: 2 })
+    const rope = makeLink('rope1', 'rope', post, weight, { posA: [0, 5, 0], posB: [0, 2, 0] })!
+
+    world.rebuild([post, weight], [rope])
+
+    // Take a keyframe
+    const kf = world.saveKeyframe()
+    const serialBefore = world.rebuildSerial
+
+    expect(world.linkRebuildCount('rope1')).toBe(1)
+
+    // Move post
+    world.placeBody(post.id, [1, 5, 0])
+
+    // Serial bumped, rope re-laid
+    expect(world.rebuildSerial).toBeGreaterThan(serialBefore)
+    expect(world.linkRebuildCount('rope1')).toBe(2)
+
+    // Restoring old keyframe should fail because world restructured
+    const restored = world.restoreKeyframe(kf)
+    expect(restored).toBe(false)
+  })
 })
 

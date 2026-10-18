@@ -265,25 +265,17 @@ function buildKnifeEdgeMesh(size: V3): MeshData {
     indices.push(base, base + 1, base + 2)
   }
 
-  // Bottom face (pointing down)
-  addQuad(p[0], p[3], p[2], p[1], [0, -1, 0])
-  // Left slanted face
-  addQuad(p[0], p[1], p[4], p[4], nLeft) // degenerate quad replaced below:
-  positions.length = 0
-  normals.length = 0
-  indices.length = 0
-
-  // Crisp faces with correct vertex normals:
-  // Bottom:
-  addQuad(p[3], p[2], p[1], p[0], [0, -1, 0])
-  // Slanted right face: 1 -> 2 -> 5 -> 4
-  addQuad(p[1], p[2], p[5], p[4], nRight)
-  // Slanted left face: 3 -> 0 -> 4 -> 5
-  addQuad(p[3], p[0], p[4], p[5], nLeft)
-  // Front triangle (+z): 3 -> 5 -> 2
-  addTri(p[3], p[5], p[2], [0, 0, 1])
-  // Back triangle (-z): 0 -> 1 -> 4
-  addTri(p[0], p[1], p[4], [0, 0, -1])
+  // Crisp faces with correct vertex normals (counter-clockwise winding seen from outside):
+  // Bottom (pointing down):
+  addQuad(p[0], p[1], p[2], p[3], [0, -1, 0])
+  // Slanted right face (pointing +x, +y):
+  addQuad(p[4], p[5], p[2], p[1], nRight)
+  // Slanted left face (pointing -x, +y):
+  addQuad(p[5], p[4], p[0], p[3], nLeft)
+  // Front triangle (+z):
+  addTri(p[3], p[2], p[5], [0, 0, 1])
+  // Back triangle (-z):
+  addTri(p[0], p[4], p[1], [0, 0, -1])
 
   const mesh: MeshData = {
     positions: new Float32Array(positions),
