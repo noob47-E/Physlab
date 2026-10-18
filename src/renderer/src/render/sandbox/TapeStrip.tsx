@@ -165,6 +165,35 @@ export const WIDEST_TIME_TEXT = timeText(888.888, 888888)
 /** The slim bar's widest time below 1000 s, two decimals (BUGREC). */
 const SLIM_WIDEST = 't = 888.89 s'
 
+/**
+ * Format the time readout for the slim canvas strip.
+ * In simple view, or on a narrow canvas (width < 260), returns compact seconds (t = X.XX s)
+ * and SLIM_WIDEST spacer to save 130 px and keep More and Hide reachable.
+ */
+export function stripTimeDisplay(
+  seconds: string,
+  fullTimeText: string,
+  width: number,
+  isSimple: boolean
+): { text: string; widest: string } {
+  if (isSimple || width < 260) {
+    return { text: `t = ${seconds} s`, widest: SLIM_WIDEST }
+  }
+  return { text: fullTimeText, widest: WIDEST_TIME_TEXT }
+}
+
+/**
+ * Whether a click outside should close the More menu.
+ * Returns false if button or menu is not mounted (e.g. from an inline strip in the Timeline dock)
+ * or if the target is inside the button or menu.
+ */
+export function shouldCloseMore(target: Node | null, button: Node | null, menu: Node | null): boolean {
+  if (!button || !menu) return false
+  if (button.contains(target)) return false
+  if (menu.contains(target)) return false
+  return true
+}
+
 /** The speed buttons' labels, in the order of SPEEDS. */
 const SPEED_LABEL: Record<number, string> = { 1: '×1', 0.5: '×½', 0.25: '×¼', 0.1: '×1/10', 0.01: '×1/100' }
 
@@ -356,11 +385,11 @@ function ShownStrip({ inline }: { inline: boolean }) {
   }, [isSimple, more, setMore])
 
   useEffect(() => {
-    if (!more) return
+    if (inline || isSimple || !more) return
     const handleClickOutside = (e: Event) => {
-      if (moreButtonRef.current?.contains(e.target as Node)) return
-      if (moreMenuRef.current?.contains(e.target as Node)) return
-      setMore(false)
+      if (shouldCloseMore(e.target as Node, moreButtonRef.current, moreMenuRef.current)) {
+        setMore(false)
+      }
     }
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') setMore(false)
@@ -371,7 +400,7 @@ function ShownStrip({ inline }: { inline: boolean }) {
       document.removeEventListener('pointerdown', handleClickOutside)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [more, setMore])
+  }, [inline, isSimple, more, setMore])
 
   const tape = shownTape()
   if (!tape || !flags.hasRun) {
@@ -395,8 +424,9 @@ function ShownStrip({ inline }: { inline: boolean }) {
     const shownStep = Math.floor(model.head + 1e-9)
     const seconds = formatMeasure(tape.timeOf(shownStep), 'number', { ...settings, decimals: 2, precisionMode: 'dp' })
     const label = SPEED_LABEL[speedShown] ?? '×1'
+    const timeDisplay = stripTimeDisplay(seconds, timeText, width, isSimple)
     return (
-      <div className="pointer-events-auto absolute bottom-[64px] left-14 right-3 flex items-center gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-2 text-[color:var(--text)]" data-tape-strip="" data-tape-row="slim">
+      <div className="pointer-events-auto absolute bottom-[64px] left-14 right-3 flex flex-wrap items-center gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-2 py-0.5 text-[color:var(--text)]" data-tape-strip="" data-tape-row="slim">
         {note && <p className="absolute -top-6 left-2 max-w-full truncate rounded bg-[var(--label-bg)] px-2 text-[color:var(--text-dim)]" title={note}>{note}</p>}
         <Btn name="To the start" title="Jump to the start of the recording" onClick={toStart} disabled={!flags.canStart}>
           <SkipBack size={15} />
@@ -411,12 +441,12 @@ function ShownStrip({ inline }: { inline: boolean }) {
           <StepForward size={15} />
         </Btn>
         <ScrubBar model={model} onWidth={setWidth} isSimple={isSimple} slim />
-        {/* In simple view, formatted seconds. In All tools, full timeText (t = X.XX s · step N) */}
-        <span className="ml-1 grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]">
+        {/* In simple view, or on narrow canvas, formatted seconds. In wide All tools, full timeText (t = X.XX s · step N) */}
+        <span className="ml-1 grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]" title={timeText}>
           <span className="invisible col-start-1 row-start-1" aria-hidden="true">
-            {isSimple ? SLIM_WIDEST : WIDEST_TIME_TEXT}
+            {timeDisplay.widest}
           </span>
-          <span className="col-start-1 row-start-1">{isSimple ? `t = ${seconds} s` : timeText}</span>
+          <span className="col-start-1 row-start-1">{timeDisplay.text}</span>
         </span>
         <button
           type="button"
@@ -449,8 +479,8 @@ function ShownStrip({ inline }: { inline: boolean }) {
           <div
             ref={moreMenuRef}
             id="tape-more-controls"
-            className="pointer-events-auto absolute bottom-full mb-2 right-0 z-50 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] p-2 text-[color:var(--text)] shadow-xl"
-            role="region"
+            className="pointer-events-auto absolute bottom-full mb-2 right-0 z-50 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] p-2 text-[color:var(--text)] shadow-xl"
+            role="dialog"
             aria-label="More replay controls"
           >
             <div className="flex items-center gap-1">

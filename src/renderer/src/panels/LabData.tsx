@@ -442,6 +442,7 @@ export function LabData() {
                 title="Put the readings and the line into the main drawing, where everything else lives"
                 onClick={() => {
                   visualizeReadings(xs, ys, fit?.expr ?? null, table.title || 'readings')
+                  useScene.getState().setViewMode('2d')
                   showPanel('viewport')
                 }}
               >

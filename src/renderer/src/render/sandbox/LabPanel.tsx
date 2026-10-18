@@ -1,11 +1,11 @@
 // SB51: the Collision Lab's panel - in the HUD's left column, under the clock, only while one of the three lab experiments is
-// loaded. Sliders with a number beside each (bounciness, masses, speeds, the impact angle, the balls lifted, strings), "Run
-// it", "Run when I change something", "Pause just after the hit", and the facts line. A change is committed when the slider is
+// loaded. Sliders with a number beside each (bounciness, masses, speeds, the impact angle, the balls lifted, strings),
+// "Run when I change something", "Pause just after the hit", and the facts line. A change is committed when the slider is
 // let go (one Undo step): clamped (sim/labControls.ts), built (sim/labScenes.ts) and loaded with the viewer's own view kept.
 // In a replay the panel changes nothing and says why.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Play } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { engine, useSandbox } from '../../sim/store'
 import type { BodyState } from '../../sim/types'
@@ -193,9 +193,6 @@ export function LabPanel() {
               Hang them from strings
             </label>
           )}
-          <button type="button" className="btn primary flex min-h-[32px] items-center justify-center gap-1 pointer-coarse:min-h-[44px]" disabled={replaying} onClick={() => commit(draft, true)}>
-            <Play size={14} /> Run it
-          </button>
           <label className="flex min-h-[28px] items-center gap-2 pointer-coarse:min-h-[44px]">
             <input type="checkbox" checked={runOnChange} onChange={(e) => setRunOnChange(e.currentTarget.checked)} />
             Run when I change something

@@ -284,7 +284,12 @@ export function Tour() {
   useEffect(() => {
     if (step === null) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') stop()
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        stop()
+        return
+      }
       // This listener is on window in the capture phase, so without this guard it would take the
       // arrow keys and Enter out of whatever the student is typing in before the field sees them.
       if (isTyping(e.target as HTMLElement)) return

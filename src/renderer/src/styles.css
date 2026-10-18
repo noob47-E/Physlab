@@ -847,18 +847,6 @@ input[type='range'] {
   }
 }
 
-@media (min-width: 768px) {
-  .lab-split {
-    flex-direction: row;
-  }
-  .lab-chart-col {
-    border-top: none;
-    border-left: 1px solid var(--line-2);
-    padding-top: 0;
-    padding-left: 1.5rem;
-  }
-}
-
 .section-title {
   display: flex;
   align-items: center;

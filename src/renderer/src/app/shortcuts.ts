@@ -8,6 +8,7 @@ import { useTour } from './tour/Tour'
 import { isDrawingMode, modeById, useApp } from './modes'
 import { toolForKey } from './toolKeys'
 import { useSandbox } from '../sim/store'
+import { useTapeBar } from '../sim/tapeBar'
 import * as transport from '../sim/transportActions'
 import { runHistory } from './undoRoute'
 import { visibleOrder } from '../core/visibility'
@@ -154,7 +155,9 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
     if (e.key !== ' ' && e.key !== 'Escape') return
   }
   switch (e.key) {
-    case 'Escape':
+    case 'Escape': {
+      // An Esc another window handler already used (it closed its own thing) does not also open the wheel.
+      if (e.defaultPrevented) return
       // Esc order (Part L2):
       // 0. If wheel is open: close it
       if (useModeWheel.getState().open) {
@@ -163,6 +166,16 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
       }
       // 1. Close open menu or dialog
       if (closeActiveMenu()) return
+      const tour = useTour.getState()
+      if (tour.showShortcuts) {
+        tour.setShortcuts(false)
+        return
+      }
+      const tapeBar = useTapeBar.getState()
+      if (useApp.getState().mode === 'sandbox' && tapeBar.more) {
+        tapeBar.setMore(false)
+        return
+      }
       // 2. Throw away unfinished drawing
       if (cancelTool()) return
       // 3. Go back to Move tool
@@ -188,6 +201,7 @@ export function shortcutKeyDown(e: KeyboardEvent): void {
       // 5. Open the mode wheel
       useModeWheel.getState().openWheel()
       return
+    }
     case 'Delete':
       if (s.selection.length) s.removeObjects(s.selection)
       return

@@ -23,6 +23,8 @@ import {
   seekStep,
   stripModel,
   stripView,
+  shouldCloseMore,
+  stripTimeDisplay,
   type StripInput
 } from '../src/renderer/src/render/sandbox/TapeStrip'
 import { durationWords, stepToX, ticks, timeText } from '../src/renderer/src/render/sandbox/tapeStripMath'
@@ -834,6 +836,58 @@ describe('S5: All tools replay bar is a single row with extra tools behind More 
     const html = render()
     expect(html).not.toContain('aria-label="More replay tools"')
     expect(html).not.toContain('aria-label="More replay controls"')
+  })
+
+  // ---------------------------------------------------------------- S5b: robust outside clicks and narrow canvas reachability
+  describe('S5b: robust outside clicks and narrow canvas wrapping (findings 1 & 2)', () => {
+    it('the canvas replay bar has flex-wrap so controls wrap cleanly on narrow canvas and remain reachable', () => {
+      useSandboxView.setState({ view: 'all' })
+      useTapeBar.setState({ shown: true, more: false })
+      const html = render()
+      expect(html).toContain('flex-wrap')
+      expect(html).toContain('data-tape-row="slim"')
+    })
+
+    it('shouldCloseMore ignores null refs and never closes More menu from an unmounted or inline strip', () => {
+      // Inline strip has null button and null menu refs
+      const mockTarget = {} as Node
+      expect(shouldCloseMore(mockTarget, null, null)).toBe(false)
+      expect(shouldCloseMore(mockTarget, {} as Node, null)).toBe(false)
+      expect(shouldCloseMore(mockTarget, null, {} as Node)).toBe(false)
+    })
+
+    it('shouldCloseMore does not close when clicking inside the More menu or button, but closes outside', () => {
+      const button = { contains: (n: Node) => n === button || n === buttonChild } as unknown as Node
+      const buttonChild = {} as Node
+      const menu = { contains: (n: Node) => n === menu || n === menuChild } as unknown as Node
+      const menuChild = {} as Node
+      const outside = {} as Node
+
+      expect(shouldCloseMore(button, button, menu)).toBe(false)
+      expect(shouldCloseMore(buttonChild, button, menu)).toBe(false)
+      expect(shouldCloseMore(menu, button, menu)).toBe(false)
+      expect(shouldCloseMore(menuChild, button, menu)).toBe(false)
+      expect(shouldCloseMore(outside, button, menu)).toBe(true)
+    })
+
+    it('stripTimeDisplay switches to compact seconds when narrow (width < 260) to keep More and Hide reachable', () => {
+      const seconds = '2.45'
+      const fullText = 't = 2.450 s · step 588'
+      // Wide canvas in All tools
+      const wide = stripTimeDisplay(seconds, fullText, 500, false)
+      expect(wide.text).toBe('t = 2.450 s · step 588')
+      expect(wide.widest).toBe(WIDEST_TIME_TEXT)
+
+      // Narrow canvas in All tools
+      const narrow = stripTimeDisplay(seconds, fullText, 200, false)
+      expect(narrow.text).toBe('t = 2.45 s')
+      expect(narrow.widest).toBe('t = 888.89 s')
+
+      // Simple view always compact regardless of width
+      const simple = stripTimeDisplay(seconds, fullText, 600, true)
+      expect(simple.text).toBe('t = 2.45 s')
+      expect(simple.widest).toBe('t = 888.89 s')
+    })
   })
 })
 

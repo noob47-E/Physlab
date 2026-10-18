@@ -142,6 +142,8 @@ export async function replaceGraphEquation(id: ObjId, line: string): Promise<Gra
   // refused as a stray x (browser check BAR-06, F3). Only a line with no relation sign at all: y < x
   // or x = 2 keep their own meaning.
   if (obj.kind === 'explicit' && bareRightSide(text)) text = `y = ${text}`
+  // The line it already has: nothing to redo (Enter then clicking away used to save twice - two undo steps).
+  if (text === obj.source) return { ok: true }
 
   const stock = stockOf()
   const seen = stock.log.at(-1)?.id ?? 0

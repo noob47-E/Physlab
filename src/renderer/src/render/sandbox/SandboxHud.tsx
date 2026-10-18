@@ -14,14 +14,12 @@ import { LabPanel } from './LabPanel'
 import { Rail } from './Rail'
 import { TapeStrip } from './TapeStrip'
 import { useTapeBar } from '../../sim/tapeBar'
-import { useSandboxView } from '../../sim/sandboxView'
 import { SandboxPhoneControls } from './SandboxPhoneControls'
 
 export function SandboxHud() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
-  // The column stops above the replay bar: the full bar, the slim one (SB66, simple view), or only the pill and the hint.
+  // The column stops above the replay bar (one slim row in both views since S5), or only the pill and the hint.
   const barShown = useTapeBar((s) => s.shown)
-  const simple = useSandboxView((s) => s.view === 'simple')
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -37,7 +35,8 @@ export function SandboxHud() {
       </div>
     )
   }
-  const bottom = !barShown ? 'bottom-[60px]' : simple ? 'bottom-[124px]' : 'bottom-[260px]'
+  // Both views' replay bars are one slim row since S5 (All tools' extras open upward from More, over the drawing).
+  const bottom = !barShown ? 'bottom-[60px]' : 'bottom-[124px]'
   return (
     <div className="pointer-events-none absolute inset-0">
       <HudTop />

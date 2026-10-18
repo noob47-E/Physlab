@@ -160,12 +160,13 @@ describe('Part L3: Panels on the side only', () => {
     expect(addedDirection).toBe('right')
   })
 
-  it('invalidates older layouts with version < 5 so pre-L3 bottom panels rebuild to side-only', async () => {
+  it('invalidates older layouts with version < 6 so pre-X9b panels rebuild to centre layout', async () => {
     const { LAYOUT_VERSION, needsLayoutRebuild } = await import('../src/renderer/src/app/layoutMath')
-    expect(LAYOUT_VERSION).toBe(5)
+    expect(LAYOUT_VERSION).toBe(6)
+    expect(needsLayoutRebuild({ v: 5, w: 1366, h: 768 }, { w: 1366, h: 768 })).toBe(true)
     expect(needsLayoutRebuild({ v: 4, w: 1366, h: 768 }, { w: 1366, h: 768 })).toBe(true)
     expect(needsLayoutRebuild({ v: 3, w: 1366, h: 768 }, { w: 1366, h: 768 })).toBe(true)
-    expect(needsLayoutRebuild({ v: 5, w: 1366, h: 768 }, { w: 1366, h: 768 })).toBe(false)
+    expect(needsLayoutRebuild({ v: 6, w: 1366, h: 768 }, { w: 1366, h: 768 })).toBe(false)
   })
 })
 

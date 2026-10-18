@@ -23,12 +23,23 @@ describe('Lab Data table and chart side by side (X9)', () => {
     expect(splitMatch).not.toBeNull()
   })
 
-  it('configures Lab Data as a centre panel so it takes the main screen at 1366x768', () => {
+  it('configures Lab Data as a centre panel and switches to 2-D when showing on drawing (X9b)', async () => {
     const modesSrc = readSource('src/renderer/src/app/modes.ts')
     expect(modesSrc).toMatch(/id:\s*'lab'[\s\S]*?centre:\s*'labdata'/)
 
     const labSrc = readSource('src/renderer/src/panels/LabData.tsx')
     expect(labSrc).toContain("showPanel('viewport')")
+    // Show on the drawing must switch to 2D view first so plotted points are not shown in 3D
+    expect(labSrc).toMatch(/setViewMode\(['"]2d['"]\)/)
+
+    // styles.css must use container query on the panel width, not window media query
+    const css = readSource('src/renderer/src/styles.css')
+    expect(css).toContain('@container (min-width: 600px)')
+    expect(css).not.toMatch(/@media[^{]+\{[^}]*\.lab-split/)
+
+    // LAYOUT_VERSION must be 6
+    const { LAYOUT_VERSION } = await import('../src/renderer/src/app/layoutMath')
+    expect(LAYOUT_VERSION).toBe(6)
   })
 
   it('contains the chart section inside its own column, not buried below table buttons', () => {

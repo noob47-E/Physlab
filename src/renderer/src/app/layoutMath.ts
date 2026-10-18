@@ -79,7 +79,8 @@ export interface LayoutStamp {
 // 4: the Console is no longer a mode's own panel (Graphing has Expressions), so a saved layout
 // that still holds it — in Graphing, or left open in Geometry after a visit — is rebuilt once.
 // 5: Part L3: panels on the side only, rounded panels, dock tab headers hidden unless two tabs share one place.
-export const LAYOUT_VERSION = 5
+// 6: Part X9b: Lab Data becomes a centre panel, rebuilding layouts saved with it in the side dock.
+export const LAYOUT_VERSION = 6
 
 /**
  * A saved layout is used again only when it was made by this schema for this size of window.
