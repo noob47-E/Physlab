@@ -147,21 +147,23 @@ function texOfAnswers(working: Working): string {
     .join(',\\quad ')
 }
 
-/** The sentences an "=" refusal may give way to a working's answer for: a line it could not read, and a number it overflowed. */
-const GIVES_WAY = /^I can't read that|^That runs off to infinity/
+/** The sentences an "=" refusal must NOT give way for: intentional rule refusals like variable storing. */
+const REFUSAL_STAYS = /^Typing .+ does not store a value\./
 
 /**
  * The card the screen shows, given the "=" answer and the working for the same line.
  *
- * A refusal to read the line, or to hold a number, gives way to a working that has the answer (an HCF list; the primes of a number past
- * a double) — no disagreement, the numeric engine simply could not answer. Any other refusal stays the answer.
+ * If "=" cannot answer but the working answered the same job, the card shows the working's checked answer
+ * (an HCF list; the primes of a number past a double; indefinite integration) — no disagreement, the numeric engine
+ * simply could not answer. A refusal that is the answer itself (typing A = … does not store a value) or a working
+ * whose check failed stays a refusal.
  */
 export function reconcile(result: EvalResult, working: Working | null): Reconciled {
   // No working to compare with (the step engine refuses a power-8 equation): a number only the search stands behind is said to be approximate, and
   // every other card stands as it is.
   if (!working || working.error || working.answers.length === 0) return { result: flagIfApproximate(result), verdict: 'unchecked' }
   if (result.error) {
-    if (!GIVES_WAY.test(result.error.sentence)) return { result, verdict: 'unchecked' }
+    if (working.checked === 'failed' || REFUSAL_STAYS.test(result.error.sentence)) return { result, verdict: 'unchecked' }
     const tex = texOfAnswers(working)
     return { result: { main: texToPlain(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
   }
