@@ -231,10 +231,17 @@ export function WorkingView({
             </button>
           )}
           <div className="flex-1" />
-          <label className="flex items-center gap-1 text-[color:var(--text-faint)]" title="Whether new working starts with every step showing">
-            <input type="checkbox" checked={pref === 'all'} onChange={(e) => onPref(e.target.checked ? 'all' : 'try')} />
-            Always show all steps
-          </label>
+          <div className="seg" title="Choose how steps and answers appear">
+            <button className={pref === 'try' ? 'on' : ''} onClick={() => onPref('try')} title="Steps stay hidden so you can try first">
+              Let me try first
+            </button>
+            <button className={pref === 'all' ? 'on' : ''} onClick={() => onPref('all')} title="Always show all steps">
+              Always show all steps
+            </button>
+            <button className={pref === 'guess' ? 'on' : ''} onClick={() => onPref('guess')} title="Answer stays hidden until you type a guess">
+              Guess first
+            </button>
+          </div>
         </div>
       )}
 
