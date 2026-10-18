@@ -7,7 +7,8 @@
 import { create } from 'zustand'
 import type { DockviewApi } from 'dockview-react'
 import { columns, panelHome, windowClass } from './layoutMath'
-import { HIDDEN_MODES, hiddenPanels, type ModeId } from './modes'
+import { HIDDEN_MODES, hiddenPanels, useApp, type ModeId } from './modes'
+import { conflictingPanels, isCalmMode } from './sidePanelsCalm'
 
 /** Panel id → the name shown on its tab. */
 export const PANEL_TITLES: Record<string, string> = {
@@ -84,6 +85,14 @@ export function showPanel(id: string): void {
   const api = dockApi
   // A hidden mode's panel opens from nowhere, not even a stray requestFocus.
   if (!api || !PANEL_TITLES[id] || isPanelHidden(id)) return
+  const home = panelHome(id)
+  const mode = useApp.getState().mode
+  if (isCalmMode(mode) && (home === 'left' || home === 'right')) {
+    const conflicts = conflictingPanels(mode, home, api.panels.map((p) => p.id))
+    for (const conflictId of conflicts) {
+      hidePanel(conflictId)
+    }
+  }
   const existing = api.getPanel(id)
   if (existing) {
     existing.api.setActive()

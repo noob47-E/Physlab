@@ -3,6 +3,23 @@ import { visibleIn } from '../core/visibility'
 import { useScene } from '../core/store'
 import type { NumberObj } from '../core/types'
 import { sliderLabel, sliderPlayClick } from './shellLogic'
+import { useOpenPanels } from '../app/panels'
+
+/**
+ * Filter sliders for the floating SliderDock.
+ * When the Expressions panel is open, sliders shown in Expressions (visible in graphing) are not duplicated here.
+ */
+export function filterFloatingSliders(
+  sliders: NumberObj[],
+  activeSpace: Parameters<typeof visibleIn>[1],
+  isExpressionsOpen: boolean
+): NumberObj[] {
+  return sliders.filter((o) => {
+    if (!o || o.type !== 'number' || !o.slider || !o.visible || !visibleIn(o, activeSpace)) return false
+    if (isExpressionsOpen && visibleIn(o, 'graphing')) return false
+    return true
+  })
+}
 
 /**
  * The width of every slider's value column, in `ch`: the longest label plus one for the wider
@@ -36,9 +53,11 @@ export function SliderDock() {
   const playing = useScene((s) => s.playing)
   const setPlaying = useScene((s) => s.setPlaying)
   const settings = useScene((s) => s.settings)
+  const openPanels = useOpenPanels((s) => s.open)
 
   const space = useScene((s) => s.activeSpace)
-  const sliders = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number' && !!o.slider && o.visible && visibleIn(o, space))
+  const allNumberObjs = order.map((id) => objects[id]).filter((o): o is NumberObj => o?.type === 'number')
+  const sliders = filterFloatingSliders(allNumberObjs, space, openPanels.includes('expressions'))
   if (!sliders.length) return null
   const valueOf = (o: NumberObj): number => {
     const c = ev.values.get(o.id)

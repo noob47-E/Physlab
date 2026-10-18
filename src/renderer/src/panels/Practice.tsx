@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { BookOpen, Check, ChevronRight, ChevronsDown, Eye, FolderOpen, Lightbulb, Minus, Play, RotateCcw, Sparkles, TableProperties, Timer, X } from 'lucide-react'
 import { visualizeSolution } from '../core/visualize'
-import { useScene } from '../core/store'
+import { scene, useScene } from '../core/store'
 import { enterMode } from '../app/layout'
 import { showPanel } from '../app/panels'
 import { panelToFront } from './solverState'
@@ -431,6 +431,7 @@ export function Practice() {
       questionLevel: level,
       ...blankQuestionState()
     })
+    scene().clearDrawing()
     setNow(Date.now())
   }
 

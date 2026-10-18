@@ -17,6 +17,7 @@ import { getDockApi, hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, re
 import { LAYOUT_VERSION, columns, needsLayoutRebuild, panelHome, panelsForMode, type LayoutStamp } from './layoutMath'
 import { storedRecord } from '../core/schema'
 import { useSandboxView } from '../sim/sandboxView'
+import { isCalmMode } from './sidePanelsCalm'
 
 export const LAYOUT_KEY = 'physlab.layout'
 
@@ -99,7 +100,7 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
   }
 
   // Restore Examples and other owed panels to their modes.
-  if (m.examples) {
+  if (m.examples && !opts.skipFocus) {
     if (examplesLentBySandbox && !isPanelOpen('examples')) {
       showPanel('examples')
     }
@@ -118,14 +119,20 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
     vectorcalcLentBySandbox = false
   }
   if (m.panel && !opts.skipFocus) {
-    const api = getDockApi()
-    const isMobile = api && api.width < 768
-    if (!isMobile) {
-      s.requestFocus(m.panel)
+    // In Geometry, Vectors and Graphing: never show left and right side panels at the same time.
+    // If examples is open, do not requestFocus on m.panel.
+    if (isCalmMode(id) && isPanelOpen('examples')) {
+      // Keep examples open without competing right panel
     } else {
-      showPanel(m.panel)
-      if (!m.centre) {
-        api?.getPanel('viewport')?.api.setActive()
+      const api = getDockApi()
+      const isMobile = api && api.width < 768
+      if (!isMobile) {
+        s.requestFocus(m.panel)
+      } else {
+        showPanel(m.panel)
+        if (!m.centre) {
+          api?.getPanel('viewport')?.api.setActive()
+        }
       }
     }
   }
@@ -186,6 +193,12 @@ export function buildLayout(api: DockviewApi, modeId: ModeId): void {
   for (const id of panelsForMode(m)) {
     if (id === 'viewport' || !PANEL_TITLES[id]) continue
     const home = panelHome(id)
+    // Never show left and right side panels at the same time in Geometry, Vectors and Graphing on desktop.
+    // (On tablet and mobile, panels are already combined into a single side or within group).
+    // The lessons panel (examples) opens first; the right panel appears when the student selects or draws something.
+    if (!isTablet && !isMobile && isCalmMode(modeId) && m.examples && home === 'right') {
+      continue
+    }
     const base = { id, component: id, title: PANEL_TITLES[id] }
     if (isMobile) {
       // Under 768px: strictly one pane, all panels are 'within' the single group.

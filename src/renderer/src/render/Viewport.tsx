@@ -21,6 +21,8 @@ import { GRID_STYLES, normaliseGridStyle } from './gridMath'
 import { clampWorkZ, GRID3D_MODES, normaliseGrid3D } from '../math/workingPlane'
 import { normalizeRect } from './selectMath'
 import { useScene } from '../core/store'
+import { visibleOrder } from '../core/visibility'
+import { shouldShowDrawingGrid } from './viewportCalm'
 import { SliderDock } from '../panels/SliderDock'
 import { SandboxView } from './SandboxView'
 import { SandboxHud } from './sandbox/SandboxHud'
@@ -170,8 +172,13 @@ export function Viewport() {
   const drawing = isDrawingMode(mode)
   const quality = useGpuInfo((g) => (g.choice === 'auto' ? g.detected : g.choice))
   const theme = useTheme((t) => t.theme)
+  const space = useScene((s) => s.activeSpace)
+  const order = useScene((s) => s.order)
+  const objects = useScene((s) => s.objects)
+  const hasPicture = visibleOrder(order, objects, space).length > 0
+  const gridVisible = shouldShowDrawingGrid(mode, hasPicture)
   // The "paper" grid is a tinted page under the lines; the tint is the canvas colour itself.
-  const paper = drawing && settings.showGrid && settings.gridStyle === 'paper'
+  const paper = drawing && gridVisible && settings.showGrid && settings.gridStyle === 'paper'
   const canvasBg = themeColor(paper ? '--grid-paper' : '--canvas-bg')
   void theme // re-reads the colour whenever the theme changes
 
@@ -201,7 +208,7 @@ export function Viewport() {
         <CameraRig />
         {/* The sandbox is its own world: the maths grid used to stand through it as a vertical
             wall, and a stray tool click dropped maths points over the physics. */}
-        {mode !== 'sandbox' && (viewMode === '2d' ? <Grid2D /> : <Grid3D />)}
+        {mode !== 'sandbox' && gridVisible && (viewMode === '2d' ? <Grid2D /> : <Grid3D />)}
         {mode !== 'sandbox' && <SceneObjects />}
         {mode !== 'sandbox' && <ArrowBatch />}
         {mode === 'sandbox' && <SandboxView />}
@@ -230,7 +237,7 @@ export function Viewport() {
       // two panels, as in Geometry or Vectors 3-D), and the Labels row follows it however many lines it takes.
       <div className="pointer-events-none absolute left-3 right-3 top-3 flex flex-col items-start gap-1">
       <div className="viewport-tools pointer-events-auto flex flex-wrap items-center gap-1">
-        {drawing && (
+        {drawing && gridVisible && (
           <div className="seg">
             <button className={viewMode === '2d' ? 'on' : ''} onClick={() => setViewMode('2d')} title="2D view (3)">
               <Square size={13} /> 2D
@@ -240,10 +247,12 @@ export function Viewport() {
             </button>
           </div>
         )}
-        <button className="icon-btn" onClick={resetCamera} title="Reset view (Home)">
-          <Home size={14} />
-        </button>
-        {drawing && (
+        {gridVisible && (
+          <button className="icon-btn" onClick={resetCamera} title="Reset view (Home)">
+            <Home size={14} />
+          </button>
+        )}
+        {drawing && gridVisible && (
           <>
             <button className={`icon-btn ${settings.showGrid ? 'on' : ''}`} onClick={() => setSettings({ showGrid: !settings.showGrid })} title="Grid">
               <Grid3x3 size={14} />
@@ -255,11 +264,13 @@ export function Viewport() {
             </button>
           </>
         )}
-        <button className="icon-btn" onClick={() => void saveViewportImage(2)} title="Save the drawing as an image (PNG)">
-          <Camera size={14} />
-        </button>
+        {gridVisible && (
+          <button className="icon-btn" onClick={() => void saveViewportImage(2)} title="Save the drawing as an image (PNG)">
+            <Camera size={14} />
+          </button>
+        )}
       </div>
-      {drawing && (
+      {drawing && gridVisible && (
       <div data-tour="labels" className="pointer-events-auto flex items-center gap-1.5">
         <span className="text-fine text-[var(--text-faint)]">Labels</span>
         <LabelShowSwitch />

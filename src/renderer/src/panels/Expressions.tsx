@@ -548,6 +548,7 @@ function ParametricRowView({
   const remove = useScene((s) => s.removeObjects)
   const selected = useScene((s) => s.selection.includes(row.id))
   const [gearOpen, setGearOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [fields, setFields] = useState<ParametricDef>(parametric)
   const [rawMode, setRawMode] = useState(false)
   const [rawText, setRawText] = useState(row.source)
@@ -589,7 +590,7 @@ function ParametricRowView({
     onProblem(null)
   }
 
-  const commitRaw = async (cmd: string) => {
+  const commitRaw = async (cmd: string): Promise<boolean> => {
     setRawText(cmd)
     const next = parseParametric(cmd, row.graphKind)
     if (next) setFields(next)
@@ -602,12 +603,13 @@ function ParametricRowView({
     if (!r.ok) {
       putBack(stock)
       onProblem(r.reason)
-      return
+      return false
     }
     if (free.length > 0) {
       useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
     }
     onProblem(null)
+    return true
   }
 
   const title =
@@ -634,15 +636,36 @@ function ParametricRowView({
           style={{ background: obj ? cssColor(obj) : row.color, opacity: row.visible ? 1 : 0.3 }}
         />
         <div className="flex flex-1 items-center gap-1.5 min-w-0">
-          <span className="font-semibold text-small text-[var(--text-strong)] truncate">{title}</span>
-          <button
-            type="button"
-            className="text-fine text-[var(--accent)] hover:underline ml-1"
-            title={rawMode ? 'Switch to structured fields' : 'Edit as single code command'}
-            onClick={() => setRawMode(!rawMode)}
-          >
-            {rawMode ? 'fields' : 'raw'}
-          </button>
+          <span className="font-semibold text-small text-[var(--text-strong)] shrink-0 whitespace-nowrap">{title}</span>
+          {editing ? (
+            <div className="flex items-center gap-1.5 ml-1">
+              <button
+                type="button"
+                className="text-fine text-[var(--accent)] hover:underline"
+                title={rawMode ? 'Switch to structured fields' : 'Edit as single code command'}
+                onClick={() => setRawMode(!rawMode)}
+              >
+                {rawMode ? 'fields' : 'raw'}
+              </button>
+              <button
+                type="button"
+                className="text-fine font-semibold text-[var(--accent)] hover:underline"
+                title="Finish editing"
+                onClick={() => setEditing(false)}
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="text-fine text-[var(--text-dim)] hover:text-[var(--accent)] hover:underline ml-1"
+              title="Edit parametric equations"
+              onClick={() => setEditing(true)}
+            >
+              edit
+            </button>
+          )}
         </div>
         <button
           className={`${ICON} ${gearOpen ? 'text-[var(--accent)]' : ''}`}
@@ -681,189 +704,212 @@ function ParametricRowView({
         </div>
       )}
 
-      {rawMode ? (
-        <div className="mt-1" data-graph-line>
-          <TextField
-            mono
-            value={rawText}
-            onCommit={(v) => void commitRaw(v)}
-            onText={setRawText}
-          />
-        </div>
+      {editing ? (
+        rawMode ? (
+          <div className="mt-1" data-graph-line>
+            <TextField
+              mono
+              autoFocus
+              value={rawText}
+              onCommit={async (v) => {
+                const ok = await commitRaw(v)
+                if (ok) setEditing(false)
+              }}
+              onText={setRawText}
+            />
+          </div>
+        ) : (
+          <div className="mt-1.5 space-y-1.5" data-graph-line>
+            {fields.kind === 'curve2d' && (
+              <div className="space-y-1 text-fine">
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(t) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.x}
+                    onChange={(e) => setFields({ ...fields, x: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(t) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.y}
+                    onChange={(e) => setFields({ ...fields, y: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 text-fine text-[var(--text-dim)] font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic">t:</span>
+                  <input
+                    className="field w-16"
+                    value={fields.tMin}
+                    onChange={(e) => setFields({ ...fields, tMin: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                  <span>{W.rangeTo}</span>
+                  <input
+                    className="field w-16"
+                    value={fields.tMax}
+                    onChange={(e) => setFields({ ...fields, tMax: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+              </div>
+            )}
+            {fields.kind === 'curve3d' && (
+              <div className="space-y-1 text-fine">
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(t) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.x}
+                    onChange={(e) => setFields({ ...fields, x: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(t) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.y}
+                    onChange={(e) => setFields({ ...fields, y: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">z(t) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.z}
+                    onChange={(e) => setFields({ ...fields, z: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 text-fine text-[var(--text-dim)] font-math">
+                  <span className="w-12 shrink-0 text-right whitespace-nowrap italic">t:</span>
+                  <input
+                    className="field w-16"
+                    value={fields.tMin}
+                    onChange={(e) => setFields({ ...fields, tMin: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                  <span>{W.rangeTo}</span>
+                  <input
+                    className="field w-16"
+                    value={fields.tMax}
+                    onChange={(e) => setFields({ ...fields, tMax: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+              </div>
+            )}
+            {fields.kind === 'surface3d' && (
+              <div className="space-y-1 text-fine">
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(u,v) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.x}
+                    onChange={(e) => setFields({ ...fields, x: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(u,v) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.y}
+                    onChange={(e) => setFields({ ...fields, y: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 font-math">
+                  <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">z(u,v) =</span>
+                  <input
+                    className="field flex-1"
+                    value={fields.z}
+                    onChange={(e) => setFields({ ...fields, z: e.target.value })}
+                    onBlur={() => void commitDef(fields)}
+                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-fine text-[var(--text-dim)] font-math">
+                  <span className="flex items-center gap-1">
+                    <span className="italic">u:</span>
+                    <input
+                      className="field w-14"
+                      value={fields.uMin}
+                      onChange={(e) => setFields({ ...fields, uMin: e.target.value })}
+                      onBlur={() => void commitDef(fields)}
+                      onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                    />
+                    <span>{W.rangeTo}</span>
+                    <input
+                      className="field w-14"
+                      value={fields.uMax}
+                      onChange={(e) => setFields({ ...fields, uMax: e.target.value })}
+                      onBlur={() => void commitDef(fields)}
+                      onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                    />
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="italic">v:</span>
+                    <input
+                      className="field w-14"
+                      value={fields.vMin}
+                      onChange={(e) => setFields({ ...fields, vMin: e.target.value })}
+                      onBlur={() => void commitDef(fields)}
+                      onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                    />
+                    <span>{W.rangeTo}</span>
+                    <input
+                      className="field w-14"
+                      value={fields.vMax}
+                      onChange={(e) => setFields({ ...fields, vMax: e.target.value })}
+                      onBlur={() => void commitDef(fields)}
+                      onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
+                    />
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end pt-0.5">
+              <button
+                type="button"
+                className="btn btn-sm text-fine px-2 py-0.5"
+                onClick={() => setEditing(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )
       ) : (
-        <div className="mt-1.5 space-y-1.5" data-graph-line>
-          {tex && (
-            <div className="overflow-x-auto py-0.5">
-              <Tex tex={tex} className="text-small text-[var(--text-strong)]" />
-            </div>
+        <button
+          type="button"
+          className="field min-h-[44px] w-full overflow-x-auto text-left py-1.5 px-2 mt-1.5 cursor-pointer hover:border-[var(--accent)] transition-colors"
+          aria-label={`Edit ${title}`}
+          onClick={() => setEditing(true)}
+        >
+          {tex ? (
+            <Tex tex={tex} className="text-small text-[var(--text-strong)]" />
+          ) : (
+            <span className="font-mono text-small">{row.source}</span>
           )}
-          {fields.kind === 'curve2d' && (
-            <div className="space-y-1 text-fine">
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(t) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.x}
-                  onChange={(e) => setFields({ ...fields, x: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(t) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.y}
-                  onChange={(e) => setFields({ ...fields, y: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 text-fine text-[var(--text-dim)] font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic">t:</span>
-                <input
-                  className="field w-16"
-                  value={fields.tMin}
-                  onChange={(e) => setFields({ ...fields, tMin: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-                <span>{W.rangeTo}</span>
-                <input
-                  className="field w-16"
-                  value={fields.tMax}
-                  onChange={(e) => setFields({ ...fields, tMax: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-            </div>
-          )}
-          {fields.kind === 'curve3d' && (
-            <div className="space-y-1 text-fine">
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(t) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.x}
-                  onChange={(e) => setFields({ ...fields, x: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(t) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.y}
-                  onChange={(e) => setFields({ ...fields, y: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">z(t) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.z}
-                  onChange={(e) => setFields({ ...fields, z: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 text-fine text-[var(--text-dim)] font-math">
-                <span className="w-12 shrink-0 text-right whitespace-nowrap italic">t:</span>
-                <input
-                  className="field w-16"
-                  value={fields.tMin}
-                  onChange={(e) => setFields({ ...fields, tMin: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-                <span>{W.rangeTo}</span>
-                <input
-                  className="field w-16"
-                  value={fields.tMax}
-                  onChange={(e) => setFields({ ...fields, tMax: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-            </div>
-          )}
-          {fields.kind === 'surface3d' && (
-            <div className="space-y-1 text-fine">
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">x(u,v) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.x}
-                  onChange={(e) => setFields({ ...fields, x: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">y(u,v) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.y}
-                  onChange={(e) => setFields({ ...fields, y: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 font-math">
-                <span className="w-16 shrink-0 text-right whitespace-nowrap italic text-[var(--text-dim)]">z(u,v) =</span>
-                <input
-                  className="field flex-1"
-                  value={fields.z}
-                  onChange={(e) => setFields({ ...fields, z: e.target.value })}
-                  onBlur={() => void commitDef(fields)}
-                  onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-fine text-[var(--text-dim)] font-math">
-                <span className="flex items-center gap-1">
-                  <span className="italic">u:</span>
-                  <input
-                    className="field w-14"
-                    value={fields.uMin}
-                    onChange={(e) => setFields({ ...fields, uMin: e.target.value })}
-                    onBlur={() => void commitDef(fields)}
-                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                  />
-                  <span>{W.rangeTo}</span>
-                  <input
-                    className="field w-14"
-                    value={fields.uMax}
-                    onChange={(e) => setFields({ ...fields, uMax: e.target.value })}
-                    onBlur={() => void commitDef(fields)}
-                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                  />
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="italic">v:</span>
-                  <input
-                    className="field w-14"
-                    value={fields.vMin}
-                    onChange={(e) => setFields({ ...fields, vMin: e.target.value })}
-                    onBlur={() => void commitDef(fields)}
-                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                  />
-                  <span>{W.rangeTo}</span>
-                  <input
-                    className="field w-14"
-                    value={fields.vMax}
-                    onChange={(e) => setFields({ ...fields, vMax: e.target.value })}
-                    onBlur={() => void commitDef(fields)}
-                    onKeyDown={(e) => e.key === 'Enter' && void commitDef(fields)}
-                  />
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+        </button>
       )}
 
       {gearOpen && (

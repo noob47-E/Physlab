@@ -382,7 +382,6 @@ export function Examples() {
   const mode = useApp((s) => s.mode)
   const panelRef = useRef<HTMLDivElement>(null)
   const [running, setRunning] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [level, setLevel] = useState<Level | 'All'>('All')
 
   // When switching modes, scroll the newly prioritised topic to the top before paint.
@@ -399,7 +398,7 @@ export function Examples() {
     }
   }
 
-  const shown = filterExamples(EXAMPLES, query, level)
+  const shown = filterExamples(EXAMPLES, '', level)
 
   const areas = orderedAreasForMode(mode)
 
@@ -407,13 +406,6 @@ export function Examples() {
     <div className="panel pb-6" ref={panelRef}>
       <div className="px-3 pb-1 pt-3 text-ink">Ready-made lessons, by topic. Click one, then play with it.</div>
       <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pt-1">
-        <input
-          className="field flex-1"
-          placeholder="Search: area, circle, slope, dot…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Level">
           {(['All', ...LEVELS] as const).map((l) => (
             <button
@@ -428,7 +420,7 @@ export function Examples() {
           ))}
         </div>
       </div>
-      {shown.length === 0 && <div className="px-3 py-4 text-ink-faint">Nothing matches that search.</div>}
+      {shown.length === 0 && <div className="px-3 py-4 text-ink-faint">No lessons for this level.</div>}
       {areas.filter((a) => shown.some((ex) => ex.area === a)).map((area) => (
         <div key={area}>
           <div className="section-title">{area}</div>

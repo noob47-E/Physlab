@@ -17,7 +17,7 @@ import { Timeline } from '../panels/Timeline'
 import { Examples } from '../panels/Examples'
 import { useParticleLab } from '../render/GpuParticles'
 import { useScene } from '../core/store'
-import { openableMode, useApp } from './modes'
+import { modeById, openableMode, useApp } from './modes'
 import { startAutosave } from './autosave'
 import { RecoveryBar } from './RecoveryBar'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
@@ -25,7 +25,8 @@ import { ContextMenuHost } from '../ui/ContextMenu'
 import { Tour } from './tour/Tour'
 import { ModeWheel, ModesFloatingButton } from './ModeWheel'
 import { MobileNav } from './MobileNav'
-import { PANEL_TITLES, dropHiddenPanels, refreshOpenPanels, setDockApi, showPanel } from './panels'
+import { PANEL_TITLES, dropHiddenPanels, hidePanel, isPanelOpen, refreshOpenPanels, setDockApi, showPanel } from './panels'
+import { isCalmMode } from './sidePanelsCalm'
 import { warmupEngineWhenIdle } from '../math/engine'
 
 // Heavier panels load on first use so the app starts faster on slow computers.
@@ -77,6 +78,11 @@ export function App() {
   const api = useRef<DockviewApi | null>(null)
   const unwatch = useRef<(() => void) | null>(null)
   const focus = useScene((s) => s.focusPanel)
+  const selection = useScene((s) => s.selection)
+  const orderCount = useScene((s) => s.order.length)
+  const mode = useApp((s) => s.mode)
+  const prevSelection = useRef(selection)
+  const prevOrderCount = useRef(orderCount)
   useShortcuts()
 
   useEffect(() => () => unwatch.current?.(), [])
@@ -85,6 +91,22 @@ export function App() {
     // A mode asking for its panel reopens it when the user has closed it.
     if (focus) showPanel(focus.id)
   }, [focus])
+
+  useEffect(() => {
+    const justSelected = prevSelection.current.length === 0 && selection.length > 0
+    const justDrew = orderCount > prevOrderCount.current
+    prevSelection.current = selection
+    prevOrderCount.current = orderCount
+
+    if (!isCalmMode(mode)) return
+    if ((justSelected || justDrew) && isPanelOpen('examples')) {
+      hidePanel('examples')
+      const m = modeById(mode)
+      if (m.panel && !isPanelOpen(m.panel)) {
+        showPanel(m.panel)
+      }
+    }
+  }, [mode, selection, orderCount])
 
   useEffect(() => {
     startAutosave()
