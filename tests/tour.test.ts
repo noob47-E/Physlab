@@ -148,8 +148,9 @@ describe('every mission ticks by exactly the action its hint names', () => {
   })
 
   it('2 Draw a graph: a line typed in Graphing\'s Expressions list counts as typed too (P-GCALC)', () => {
-    const src = readSource('src/renderer/src/panels/Expressions.tsx')
-    expect(src).toMatch(/const before = graphCount\(\)\s*\n\s*await runCommand\(text\)[\s\S]{0,160}if \(graphCount\(\) > before\) bumpAction\('typedGraphs'\)/)
+    // The panel adds through addExpressionLine (G2c), which counts a line that made a graph.
+    expect(readSource('src/renderer/src/panels/Expressions.tsx')).toMatch(/await addExpressionLine\(text, offers\)/)
+    expect(readSource('src/renderer/src/panels/expressionRows.ts')).toMatch(/const createdGraph = [^\n]*> beforeCount[\s\S]{0,400}if \(createdGraph\) bumpAction\('typedGraphs'\)/)
     // Mission 2's hint names the list the student types into, which Graphing opens (the command bar is hidden).
     expect(mission('graph').hint).toContain(`${EXPRESSION_WORDS.heading} list`)
     expect(EXPRESSION_WORDS.placeholder).toContain('y = x^2') // the same kind of line the box itself suggests

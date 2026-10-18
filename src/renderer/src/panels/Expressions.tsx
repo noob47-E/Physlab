@@ -6,12 +6,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Eye, EyeOff, Keyboard, Pause, Play, Plus, Settings, X } from 'lucide-react'
 import { scene, useScene } from '../core/store'
 import { putBack, replaceGraphEquation, stockOf } from '../lang/graphEdit'
-import { runCommand } from '../lang/commands'
-import { bumpAction } from '../core/actionSignals'
 import { NumField, TextField } from '../ui/fields'
 import { cssColor } from '../app/theme'
 import {
   EXPRESSION_WORDS as W,
+  NOT_A_NEW_GRAPH,
+  addExpressionLine,
   createSlider,
   expressionRows,
   freeParametersFor,
@@ -37,8 +37,6 @@ import { readKeypadOn, writeKeypadOn } from './graphKeypad'
 import { sliderPlayClick } from './shellLogic'
 import type { NumberObj } from '../core/types'
 
-const graphCount = (): number => Object.values(scene().objects).filter((o) => o.type === 'graph').length
-
 const ICON = 'icon-btn pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px]'
 
 export function Expressions() {
@@ -60,25 +58,22 @@ export function Expressions() {
     scene().setOrder(moveRow(scene().order, rows.map((r) => r.id), id, dir))
   }
 
+  // Why the last line typed in the add box was refused, shown under it: the Console that said so is hidden now, so a refused line
+  // vanished without a word and took the typed text with it (G2c).
+  const [addProblem, setAddProblem] = useState<string | null>(null)
+
+  // Through addExpressionLine, the tested route (its own sliders, one undo step, a refusal put back with its reason); the
+  // panel used to run a copy of it that read the Console's last line. A line the student typed here is a typed graph too:
+  // the Start here mission 2 counts it there.
   const addLine = async () => {
     const text = draft.trim()
     if (!text) return
-    setDraft('')
-    const stock = stockOf()
-    for (const p of offers) {
-      createSlider(p)
-    }
-    const before = graphCount()
-    await runCommand(text).catch(() => {})
-    // A line the student typed here is a typed graph too: the Start here mission 2 counts it.
-    if (graphCount() > before) bumpAction('typedGraphs')
-    const lastLog = scene().log.at(-1)
-    if (graphCount() > before && lastLog?.kind !== 'error') {
-      if (offers.length > 0) {
-        useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
-      }
+    const res = await addExpressionLine(text, offers)
+    if (res.ok) {
+      setDraft('')
+      setAddProblem(null)
     } else {
-      putBack(stock)
+      setAddProblem(res.reason ?? NOT_A_NEW_GRAPH)
     }
   }
 
@@ -154,12 +149,21 @@ export function Expressions() {
             value={draft}
             spellCheck={false}
             placeholder={W.placeholder}
-            onChange={(e) => setDraft(e.target.value)}
+            aria-invalid={addProblem ? true : undefined}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setAddProblem(null)
+            }}
             onKeyDown={(e) => {
               e.stopPropagation()
               if (e.key === 'Enter') void addLine()
             }}
           />
+          {addProblem && (
+            <div role="status" className="mt-1 text-small text-[var(--bad)]">
+              {addProblem}
+            </div>
+          )}
           {offers.length > 0 && (
             <div className="mt-2 flex items-center gap-1.5 text-small text-[var(--text-dim)]">
               <span>{W.addSlider}</span>

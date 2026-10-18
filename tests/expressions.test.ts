@@ -87,6 +87,9 @@ describe('the words', () => {
     expect(EXPRESSION_WORDS.empty).toBe('No lines yet. Type an equation below, or open a picture in the Examples panel.')
     const src = readSource('src/renderer/src/panels/Expressions.tsx')
     expect(src).toContain('replaceGraphEquation(row.id')
-    expect(src).toContain('runCommand(text)')
+    // A new line goes through addExpressionLine, which runs it in the command bar's language (G2c: the panel's own copy of
+    // that logic judged a line by the Console's last entry).
+    expect(src).toContain('addExpressionLine(text, offers)')
+    expect(readSource('src/renderer/src/panels/expressionRows.ts')).toContain('await runCommand(trimmed)')
   })
 })

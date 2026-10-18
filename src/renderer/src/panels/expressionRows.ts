@@ -221,10 +221,17 @@ export function createSlider(name: string, value = 1, min = -10, max = 10, step 
   return obj
 }
 
+/** What the add box says under a line that drew nothing at all (2 + 3): its answer went to the Console, which students no longer see. */
+export const NOT_A_NEW_GRAPH = 'That line does not draw anything. Type an equation such as y = x².'
+
 /**
  * Adds an expression line to the scene, auto-creating sliders for offered parameters if accepted.
- * If the line is rejected or fails to create a graph, any newly created sliders are cleaned up.
- * The graph and its auto-created sliders undo together in a single step.
+ * If the line is rejected or makes nothing, the scene, the undo history and the Console are put back as they were and the
+ * reason comes back in a sentence for the panel to show under the box (the Console is hidden). The graph and its
+ * auto-created sliders undo together in a single step.
+ *
+ * Only what this line wrote counts (G2c): the last Console entry used to decide, so an older line's error could undo a
+ * good graph, and a line that made nothing (2 + 3) was "accepted" and vanished.
  */
 export async function addExpressionLine(
   text: string,
@@ -234,36 +241,35 @@ export async function addExpressionLine(
   if (!trimmed) return { ok: false, reason: 'empty' }
 
   const stock = stockOf()
+  const seen = stock.log.at(-1)?.id ?? 0
   const beforeCount = Object.values(scene().objects).filter((o) => o.type === 'graph').length
 
   for (const p of offers) {
     createSlider(p)
   }
+  const withSliders = scene().objects
 
-  let errorLogged: string | undefined
+  let thrown: string | undefined
   try {
     await runCommand(trimmed)
   } catch (e) {
-    errorLogged = e instanceof Error ? e.message : String(e)
+    thrown = e instanceof Error ? e.message : String(e)
   }
 
-  const afterCount = Object.values(scene().objects).filter((o) => o.type === 'graph').length
-  const createdGraph = afterCount > beforeCount
-  const lastLog = scene().log.at(-1)
-  const hadError = errorLogged !== undefined || (lastLog && lastLog.kind === 'error')
+  const createdGraph = Object.values(scene().objects).filter((o) => o.type === 'graph').length > beforeCount
+  const madeSomething = scene().objects !== withSliders
+  const error = thrown ?? scene().log.filter((e) => e.id > seen && e.kind === 'error').at(-1)?.text
 
-  if (createdGraph && !hadError) {
-    bumpAction('typedGraphs')
+  if (error === undefined && (createdGraph || madeSomething)) {
+    if (createdGraph) bumpAction('typedGraphs')
     if (offers.length > 0) {
       useScene.setState({ past: [...stock.past, { objects: stock.objects, order: stock.order }] })
     }
     return { ok: true }
-  } else if (!offers.length && !hadError) {
-    return { ok: true }
-  } else {
-    putBack(stock)
-    return { ok: false, reason: errorLogged ?? lastLog?.text ?? 'Line was not accepted as a graph.' }
   }
+  putBack(stock)
+  const reason = error?.trim()
+  return { ok: false, reason: reason ? (/[.!?]$/.test(reason) ? reason : `${reason}.`) : NOT_A_NEW_GRAPH }
 }
 
 /**
