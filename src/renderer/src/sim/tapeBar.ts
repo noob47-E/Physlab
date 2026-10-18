@@ -35,12 +35,19 @@ const barStore = (): FoldStore | null => {
   }
 }
 
-export const useTapeBar = create<{ shown: boolean; setShown: (shown: boolean) => void }>((set) => ({
+export const useTapeBar = create<{
+  shown: boolean
+  setShown: (shown: boolean) => void
+  more: boolean
+  setMore: (more: boolean) => void
+}>((set) => ({
   shown: readTapeBarShown(barStore()),
   setShown: (shown) => {
     writeTapeBarShown(shown, barStore())
-    set({ shown })
-  }
+    set({ shown, ...(shown ? {} : { more: false }) })
+  },
+  more: false,
+  setMore: (more) => set({ more })
 }))
 
 /** The simple view's one speed button: ×1 → ×½ → ×¼ → ×1 (any other speed, set in All tools, goes back to ×1). */

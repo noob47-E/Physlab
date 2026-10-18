@@ -4,8 +4,8 @@
 // (one place for the panel, this strip and the keys); where things sit on the bar is in tapeStripMath.ts.
 // Colours are the tape tokens in styles.css; every number goes through the app's writer; a control is 44 px tall.
 
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { Bookmark, ChevronDown, FastForward, GitBranch, Microscope, Pause, Play, Radio, Rewind, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { Bookmark, ChevronDown, ChevronUp, FastForward, GitBranch, Microscope, Pause, Play, Radio, Rewind, SkipBack, SkipForward, SlidersHorizontal, StepBack, StepForward } from 'lucide-react'
 import { useScene } from '../../core/store'
 import { useSandbox } from '../../sim/store'
 import { useSandboxView } from '../../sim/sandboxView'
@@ -346,6 +346,33 @@ function ShownStrip({ inline }: { inline: boolean }) {
   const world = useSandbox((s) => s.world)
   const [width, setWidth] = useState(640)
   const setBarShown = useTapeBar((s) => s.setShown)
+  const more = useTapeBar((s) => s.more)
+  const setMore = useTapeBar((s) => s.setMore)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isSimple && more) setMore(false)
+  }, [isSimple, more, setMore])
+
+  useEffect(() => {
+    if (!more) return
+    const handleClickOutside = (e: Event) => {
+      if (moreButtonRef.current?.contains(e.target as Node)) return
+      if (moreMenuRef.current?.contains(e.target as Node)) return
+      setMore(false)
+    }
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setMore(false)
+    }
+    document.addEventListener('pointerdown', handleClickOutside)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [more, setMore])
+
   const tape = shownTape()
   if (!tape || !flags.hasRun) {
     return inline ? <p className="text-[color:var(--text-dim)]">The recording appears here once a run has started. Press Play.</p> : null
@@ -361,9 +388,10 @@ function ShownStrip({ inline }: { inline: boolean }) {
       <ChevronDown size={15} />
     </Btn>
   )
-  if (isSimple && !inline) {
-    // SB66: the simple view's bar is ONE slim row, like a video player: start, step back, play, step on, the timeline, the
-    // time (two decimals, the app's writer), one speed button and Hide. A refused edit says why just above it.
+
+  if (!inline) {
+    // S5: Both simple view and All tools are ONE slim row on canvas (report 8.5).
+    // In All tools, extra tools (backwards, bookmarks, loop, fine replay, branch...) are behind 'More'.
     const shownStep = Math.floor(model.head + 1e-9)
     const seconds = formatMeasure(tape.timeOf(shownStep), 'number', { ...settings, decimals: 2, precisionMode: 'dp' })
     const label = SPEED_LABEL[speedShown] ?? '×1'
@@ -382,14 +410,13 @@ function ShownStrip({ inline }: { inline: boolean }) {
         <Btn name="Step on" title={stepTitle} onClick={stepForward}>
           <StepForward size={15} />
         </Btn>
-        <ScrubBar model={model} onWidth={setWidth} isSimple slim />
-        {/* BUGREC: in a box as wide as the widest time (the full bar's trick), so the timeline beside it never changes width as
-            the digits do: its width fed back through the ResizeObserver and the bar jumped left and right while recording. */}
+        <ScrubBar model={model} onWidth={setWidth} isSimple={isSimple} slim />
+        {/* In simple view, formatted seconds. In All tools, full timeText (t = X.XX s · step N) */}
         <span className="ml-1 grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]">
           <span className="invisible col-start-1 row-start-1" aria-hidden="true">
-            {SLIM_WIDEST}
+            {isSimple ? SLIM_WIDEST : WIDEST_TIME_TEXT}
           </span>
-          <span className="col-start-1 row-start-1">t = {seconds} s</span>
+          <span className="col-start-1 row-start-1">{isSimple ? `t = ${seconds} s` : timeText}</span>
         </span>
         <button
           type="button"
@@ -400,15 +427,94 @@ function ShownStrip({ inline }: { inline: boolean }) {
         >
           {label}
         </button>
+        {!isSimple && (
+          <button
+            ref={moreButtonRef}
+            type="button"
+            className={`btn min-h-[44px] min-w-[44px] justify-center gap-1 px-2.5 ${more ? 'on' : ''}`}
+            aria-label="More replay tools"
+            aria-expanded={more}
+            aria-haspopup="dialog"
+            aria-controls="tape-more-controls"
+            onClick={() => setMore(!more)}
+            title={more ? 'Hide extra replay tools' : 'More replay tools: backwards, bookmarks, loop, fine replay, branch'}
+          >
+            <SlidersHorizontal size={13} />
+            <span className="text-small">More</span>
+            <ChevronUp size={13} className={`transition-transform duration-150 ${more ? 'rotate-180' : ''}`} />
+          </button>
+        )}
         {hide}
+        {more && !isSimple && (
+          <div
+            ref={moreMenuRef}
+            id="tape-more-controls"
+            className="pointer-events-auto absolute bottom-full mb-2 right-0 z-50 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] p-2 text-[color:var(--text)] shadow-xl"
+            role="region"
+            aria-label="More replay controls"
+          >
+            <div className="flex items-center gap-1">
+              <Btn name="Play backwards" title="Play backwards (J)" onClick={playBackwards} disabled={!flags.canBack}>
+                <Rewind size={15} />
+              </Btn>
+              <Btn name="Play forwards" title="Play forwards (L)" onClick={play}>
+                <FastForward size={15} />
+              </Btn>
+              <Btn name="To the end" title="Jump to the end of the recording" onClick={toEnd} disabled={!flags.canEnd}>
+                <SkipForward size={15} />
+              </Btn>
+            </div>
+            <div className="seg" role="group" aria-label="Speed">
+              {SPEEDS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`min-h-[44px] min-w-[44px] justify-center ${speedShown === s ? 'on' : ''}`}
+                  title={`${SPEED_TITLE[s]}${mode === 'live' ? ' (the same as slow motion under World)' : ''}`}
+                  aria-pressed={speedShown === s}
+                  onClick={() => chooseSpeed(s)}
+                >
+                  {SPEED_LABEL[s]}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
+              <Btn name="Bookmark" title="Leave a bookmark at this moment (M)" onClick={bookmarkHere} disabled={mode === 'fine'}>
+                <Bookmark size={15} />
+              </Btn>
+              <Btn name="Loop start" title="The loop starts here ([ key)" onClick={loopStart} disabled={mode === 'fine'}>
+                <span className="font-semibold">A</span>
+              </Btn>
+              <Btn name="Loop end" title="The loop ends here (] key)" onClick={loopEnd} disabled={mode === 'fine'}>
+                <span className="font-semibold">B</span>
+              </Btn>
+              {loop && mode !== 'fine' && (
+                <TextBtn title="Stop looping: clear the start and end" onClick={clearLoop}>
+                  Clear loop
+                </TextBtn>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <TextBtn title={flags.fineWhy ?? 'Run the second around this moment again at 1/600 s, to see what falls between two ordinary pictures, such as the contact of a bounce'} onClick={fineReplay} disabled={flags.fineWhy !== null}>
+                <Microscope size={15} /> Fine replay 1/600 s
+              </TextBtn>
+              <TextBtn title={flags.branchWhy ?? 'Continue the run from this moment, so something can be changed (B)'} onClick={branchFromHere} disabled={flags.branchWhy !== null}>
+                <GitBranch size={15} /> Branch from here
+              </TextBtn>
+              {mode !== 'live' && (
+                <TextBtn title="Back to the end of the recording, where the run goes on" onClick={backToLive}>
+                  <Radio size={15} /> Back to live
+                </TextBtn>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
-  const frame = inline
-    ? 'flex flex-col gap-1'
-    : 'pointer-events-auto absolute bottom-[72px] left-14 right-3 flex flex-col gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-3 py-1 text-[color:var(--text)]'
+
   return (
-    <div className={frame} data-tape-strip="">
+    <div className="flex flex-col gap-1" data-tape-strip="">
       <ScrubBar model={model} onWidth={setWidth} isSimple={isSimple} />
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
         <Btn name="To the start" title="Jump to the start of the recording" onClick={toStart} disabled={!flags.canStart}>

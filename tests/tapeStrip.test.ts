@@ -330,11 +330,15 @@ describe('the strip is hidden until the first step of a run, then always there',
 })
 
 describe('every control: a name, a title, a 44 px target', () => {
-  it('has the seven transport buttons, five speeds, Bookmark and the two loop ends, Fine replay and Branch from here in live; no Back to live', () => {
+  beforeEach(() => {
+    useTapeBar.setState({ shown: true, more: true })
+  })
+
+  it('has the transport buttons, speeds, Bookmark and the two loop ends, Fine replay and Branch from here in live; no Back to live', () => {
     const html = render()
     const bs = buttons(html)
-    // SB66: and Hide (icon).
-    expect(bs).toHaveLength(7 + 5 + 3 + 2 + 1)
+    // S5: 7 in main row + 13 in More panel = 20 buttons total.
+    expect(bs).toHaveLength(7 + 13)
     for (const tag of bs) {
       expect(tag, tag).toMatch(/min-h-\[44px\]/)
       expect(tag, tag).toMatch(/ title="[^"]+"/)
@@ -346,7 +350,8 @@ describe('every control: a name, a title, a 44 px target', () => {
 
   it('every icon button has a name read aloud and a 44 px square', () => {
     const icons = buttons(render()).filter((t) => /icon-btn/.test(t))
-    expect(icons).toHaveLength(7 + 3 + 1)
+    // 5 in main row + 6 in More panel = 11 icon buttons
+    expect(icons).toHaveLength(5 + 6)
     for (const tag of icons) {
       expect(tag).toMatch(/aria-label="[^"]+"/)
       expect(tag).toMatch(/min-w-\[44px\]/)
@@ -382,7 +387,7 @@ describe('every control: a name, a title, a 44 px target', () => {
     useTape.setState({ mode: 'replay', playhead: 100 })
     const replay = render()
     expect(replay).toContain('Back to live')
-    expect(buttons(replay)).toHaveLength(7 + 5 + 3 + 3 + 1)
+    expect(buttons(replay)).toHaveLength(7 + 13 + 1)
     tapes.fine = makeTape(600, 600, 300)
     useTape.setState({ mode: 'fine', playhead: 400 })
     expect(render()).toContain('Back to live')
@@ -413,6 +418,10 @@ describe('every control: a name, a title, a 44 px target', () => {
 })
 
 describe('bookmarks and the loop', () => {
+  beforeEach(() => {
+    useTapeBar.setState({ shown: true, more: true })
+  })
+
   it('a loop shows a Clear loop button in live and replay, not in fine; it is not there without a loop', () => {
     expect(render()).not.toContain('Clear loop')
     useTape.setState({ loop: { a: 100, b: 300 } })
@@ -493,13 +502,19 @@ describe('nothing changes width as the numbers grow (Fix 22)', () => {
     expect(late).toBe(early)
   })
 
-  it('a note arriving does not add a line: the note’s line is always there', () => {
-    const without = render()
+  it('a note arriving does not add a line: in inline view the note line is reserved; on canvas the note floats above the bar', () => {
+    const without = render(true)
     useTape.setState({ note: 'Branched at t = 0.782 s. The old run is shown as a ghost.' })
-    const withNote = render()
+    const withNote = render(true)
     expect(without).toContain('min-h-[18px]')
     expect(withNote).toContain('min-h-[18px]')
     expect(without.replace(/ title="[^"]*"/g, '').replace(/>[^<]*</g, '><')).toBe(withNote.replace(/ title="[^"]*"/g, '').replace(/>[^<]*</g, '><'))
+
+    // On canvas, the note floats above the bar without expanding the bar's height
+    useTape.setState({ note: null })
+    expect(render()).not.toContain('min-h-[18px]')
+    useTape.setState({ note: 'Branched at t = 0.782 s. The old run is shown as a ghost.' })
+    expect(render()).toContain('absolute -top-6')
   })
 })
 
@@ -605,6 +620,7 @@ describe("Simple view shows only the essential controls (SB65)", () => {
 
   it("All tools non-simple renders all controls", () => {
     useSandboxView.setState({ view: "all" })
+    useTapeBar.setState({ more: true })
     const html = render()
     const labels = ariaLabels(html)
     expect(labels).toContain("To the start")
@@ -754,10 +770,70 @@ describe('SB66: the replay bar is hidden by default, a Replay pill opens it, Hid
     expect(html).toMatch(/title="Half speed: press for a quarter of the speed"/)
   })
 
-  it('All tools keeps every control as before', () => {
+  it('All tools keeps every control as before when More is open', () => {
     useSandboxView.setState({ view: 'all' })
+    useTapeBar.setState({ more: true })
     const html = render()
     for (const label of ['Play backwards', 'Play forwards', 'To the end', 'Bookmark', 'Loop start']) expect(html).toContain(`aria-label="${label}"`)
     expect(html).toContain('Fine replay 1/600 s')
   })
 })
+
+// ---------------------------------------------------------------- S5: All tools replay bar as one slim row (report 8.5)
+describe('S5: All tools replay bar is a single row with extra tools behind More (report 8.5)', () => {
+  it('All tools view defaults to a single slim row, avoiding the 2-row 12-button crowding', () => {
+    useSandboxView.setState({ view: 'all' })
+    useTapeBar.setState({ shown: true, more: false })
+    const html = render()
+    expect(html).toContain('data-tape-row="slim"')
+    expect(html).toContain('aria-label="More replay tools"')
+    expect(html).toContain('aria-expanded="false"')
+    // When More is closed, the extra controls are not polluting the main bar
+    expect(html).not.toContain('aria-label="Play backwards"')
+    expect(html).not.toContain('aria-label="Bookmark"')
+    expect(html).not.toContain('Fine replay 1/600 s')
+  })
+
+  it('Opening More reveals all extra controls behind the More button', () => {
+    useSandboxView.setState({ view: 'all' })
+    useTapeBar.setState({ shown: true, more: true })
+    const html = render()
+    expect(html).toContain('aria-label="More replay tools"')
+    expect(html).toContain('aria-expanded="true"')
+    expect(html).toContain('aria-label="More replay controls"')
+    for (const label of ['Play backwards', 'Play forwards', 'To the end', 'Bookmark', 'Loop start', 'Loop end']) {
+      expect(html).toContain(`aria-label="${label}"`)
+    }
+    expect(html).toContain('Fine replay 1/600 s')
+    expect(html).toContain('Branch from here')
+    for (const s of ['×1<', '×½<', '×¼<', '×1/10<', '×1/100<']) {
+      expect(html).toContain(s)
+    }
+  })
+
+  it('Back to live and Clear loop appear in the More panel when applicable', () => {
+    useSandboxView.setState({ view: 'all' })
+    useTapeBar.setState({ shown: true, more: true })
+    useTape.setState({ mode: 'replay', playhead: 100, loop: { a: 50, b: 200 } })
+    const html = render()
+    expect(html).toContain('Back to live')
+    expect(html).toContain('Clear loop')
+  })
+
+  it('Hiding the replay bar resets more to false', () => {
+    useTapeBar.setState({ shown: true, more: true })
+    expect(useTapeBar.getState().more).toBe(true)
+    useTapeBar.getState().setShown(false)
+    expect(useTapeBar.getState().shown).toBe(false)
+    expect(useTapeBar.getState().more).toBe(false)
+  })
+
+  it('Simple view never exposes the More button or More controls even if more state was true', () => {
+    useSandboxView.setState({ view: 'simple' })
+    useTapeBar.setState({ shown: true, more: true })
+    const html = render()
+    expect(html).not.toContain('aria-label="More replay tools"')
+    expect(html).not.toContain('aria-label="More replay controls"')
+  })
+})
+
