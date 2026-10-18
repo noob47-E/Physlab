@@ -93,7 +93,7 @@ type Agreement = 'agree' | 'differ' | 'unknown'
 function realRootsOf(working: Working): number[] {
   const found: number[] = []
   for (const a of working.answers) {
-    if (!/^x(_\d+)?\s*=?$/.test(a.label.trim())) continue
+    if (!/^([a-zA-Z]|\\theta)(_\d+)?\s*=?$/.test(a.label.trim())) continue
     const v = numberOfTex(a.tex)
     if (v !== null && parts(v).im === 0) found.push(parts(v).re)
   }

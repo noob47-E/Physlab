@@ -1848,7 +1848,7 @@ describe('H12 — a Greek unknown is θ in words and \\theta in maths, never the
     expect(theta.moves[0]?.head).toBe('Line the equation up as aθ² + bθ + c = 0 and read off the three numbers.')
     expect(theta.moves[0]?.rule).toBe('a\\theta^2 + b\\theta + c = 0')
     expect(theta.moves.some((m) => (m.tex ?? '').includes('\\theta_1 + \\theta_2'))).toBe(true)
-    const x = workTyped('x^2-5x+6=0')
+    const x = runPure('solve', 'x^2-5x+6=0')
     expect(x.moves[0]?.head).toBe('Line the equation up as ax² + bx + c = 0 and read off the three numbers.')
     expect(x.moves[0]?.rule).toBe('ax^2 + bx + c = 0')
     expect(x.moves.some((m) => (m.tex ?? '').includes('x_1 + x_2'))).toBe(true)

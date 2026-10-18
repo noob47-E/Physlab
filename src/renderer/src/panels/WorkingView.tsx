@@ -86,7 +86,13 @@ export function WorkingView({
   onOffer: (job: JobId) => void
   onTry: () => void
 }) {
-  const [shown, setShown] = useState(() => initialShown(doc.moves.length, pref))
+  const [alt, setAlt] = useState(false)
+  useEffect(() => {
+    setAlt(false)
+  }, [doc])
+
+  const activeDoc = alt && doc.anotherWay ? doc.anotherWay : doc
+  const [shown, setShown] = useState(() => initialShown(activeDoc.moves.length, pref))
   const [copied, setCopied] = useState(false)
   // "Let me try first" has been pressed for this piece of working: the invitation goes, the
   // step buttons stay.
@@ -96,17 +102,17 @@ export function WorkingView({
   // or all at once. The preference is read when the document changes, not on every render, so
   // pressing "Show all" is not undone by the next keystroke.
   useEffect(() => {
-    setShown(initialShown(doc.moves.length, pref))
+    setShown(initialShown(activeDoc.moves.length, pref))
     setTrying(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `pref` is read, not followed: see above
-  }, [doc])
+  }, [activeDoc])
 
-  const hidden = doc.moves.length - shown
+  const hidden = activeDoc.moves.length - shown
   const finished = hidden === 0
-  const offer = offeredJob(doc, JOB_IDS)
+  const offer = offeredJob(activeDoc, JOB_IDS)
   // A new answer with its steps hidden asks the student to try: that button is the primary
   // one, so Enter after "Work it out" chooses trying rather than a reveal.
-  const inviting = invitesTry(doc.moves.length, shown, trying)
+  const inviting = invitesTry(activeDoc.moves.length, shown, trying)
   // It takes the focus only when the answer was asked for from the field. Focusing whenever the
   // invitation appeared pulled the keyboard away on every remount (switching back to Calculator
   // mode re-mounts this view with the old answer) and off the "Treat as" select mid-arrow-key,
@@ -116,7 +122,7 @@ export function WorkingView({
   // waits for `inviting` rather than deciding from the stale `shown`.
   useEffect(() => {
     if (!invited()) return
-    if (!invitesTry(doc.moves.length, initialShown(doc.moves.length, pref), false)) {
+    if (!invitesTry(activeDoc.moves.length, initialShown(activeDoc.moves.length, pref), false)) {
       settled()
       return
     }
@@ -125,16 +131,16 @@ export function WorkingView({
       tryBtn.current?.focus()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs for a new answer or a change of invitation only; `invited`/`settled` are the container's stable readers and `pref` is read the way the reset effect reads it
-  }, [doc, inviting])
+  }, [activeDoc, inviting])
 
   const copyAll = (): void => {
     const lines = [
-      `${doc.title}:  ${doc.input}`,
+      `${activeDoc.title}:  ${activeDoc.input}`,
       // A stage heading travels with its move, so the pasted working keeps the "what for" above the "how".
-      ...doc.moves.map((m, i) => `${m.subgoal ? `${texToPlain(m.subgoal)}\n` : ''}${i + 1}. ${m.head}${m.rule ? `   [${m.rule}]` : ''}${m.tex ? `\n   ${m.tex}` : ''}`),
+      ...activeDoc.moves.map((m, i) => `${m.subgoal ? `${texToPlain(m.subgoal)}\n` : ''}${i + 1}. ${m.head}${m.rule ? `   [${m.rule}]` : ''}${m.tex ? `\n   ${m.tex}` : ''}`),
       // How the label is written as text is decided in calc/labels.ts, beside how the panel draws it.
-      ...doc.answers.map(answerCopyLine),
-      doc.check ? texToPlain(doc.check) : ''
+      ...activeDoc.answers.map(answerCopyLine),
+      activeDoc.check ? texToPlain(activeDoc.check) : ''
     ]
     navigator.clipboard?.writeText(lines.filter(Boolean).join('\n')).then(
       () => {
@@ -145,13 +151,13 @@ export function WorkingView({
     )
   }
 
-  if (doc.error) {
+  if (activeDoc.error) {
     return (
       <div className="card m-3 border-[color:var(--warn)]/40 p-3">
         <div className="mb-1 flex items-center gap-2 text-[color:var(--warn)]">
           <TriangleAlert size={15} /> I cannot do that one
         </div>
-        <div className="text-[color:var(--text-dim)]">{doc.error}</div>
+        <div className="text-[color:var(--text-dim)]">{activeDoc.error}</div>
       </div>
     )
   }
@@ -160,9 +166,18 @@ export function WorkingView({
     <div className="pure-doc">
       <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
         <BookOpen size={15} className="text-[color:var(--accent)]" />
-        <div className="text-lead font-semibold text-[color:var(--text-strong)]">{doc.title}</div>
-        <Tex tex={doc.input} className="text-[color:var(--text-dim)]" />
-        {doc.method && <span className="pure-method">{doc.method}</span>}
+        <div className="text-lead font-semibold text-[color:var(--text-strong)]">{activeDoc.title}</div>
+        <Tex tex={activeDoc.input} className="text-[color:var(--text-dim)]" />
+        {activeDoc.method && <span className="pure-method">{activeDoc.method}</span>}
+        {doc.anotherWay && (
+          <button
+            className="btn ghost text-xs"
+            onClick={() => setAlt(!alt)}
+            title={alt ? `Switch back to ${doc.method ?? 'primary method'}` : `Show solution via ${doc.anotherWay.method ?? 'another method'}`}
+          >
+            {alt ? `Back to ${doc.method ?? 'primary'}` : `Another way: ${doc.anotherWay.method ?? 'Alternative'}`}
+          </button>
+        )}
         <div className="flex-1" />
         <button className="btn ghost" onClick={copyAll} title="Copy the whole working">
           {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}
@@ -170,18 +185,18 @@ export function WorkingView({
       </div>
 
       {/* The answer is never hidden: it is pinned here, above the steps, whatever is shown below. */}
-      {doc.answers.length > 0 && <AnswerCard doc={doc} />}
+      {activeDoc.answers.length > 0 && <AnswerCard doc={activeDoc} />}
 
-      {offer && doc.offer && (
+      {offer && activeDoc.offer && (
         <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
-          <button className="btn" onClick={() => onOffer(offer)} title={doc.offer.hint}>
-            {doc.offer.label}
+          <button className="btn" onClick={() => onOffer(offer)} title={activeDoc.offer.hint}>
+            {activeDoc.offer.label}
           </button>
-          <span className="text-[color:var(--text-faint)]">{doc.offer.hint}</span>
+          <span className="text-[color:var(--text-faint)]">{activeDoc.offer.hint}</span>
         </div>
       )}
 
-      {doc.moves.length > 0 && (
+      {activeDoc.moves.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
           {shown === 0 && <span className="text-ink-dim">{trying ? 'Whenever you are ready, check a step.' : 'Try it yourself first, then check a step at a time.'}</span>}
           {inviting && (
@@ -211,8 +226,8 @@ export function WorkingView({
               <button className="btn" onClick={() => setShown((n) => n + 1)}>
                 <Lightbulb size={13} /> {shown === 0 ? 'Show a step' : 'Next step'}
               </button>
-              <button className="btn ghost" onClick={() => setShown(doc.moves.length)}>
-                Show all {doc.moves.length} steps
+              <button className="btn ghost" onClick={() => setShown(activeDoc.moves.length)}>
+                Show all {activeDoc.moves.length} steps
               </button>
               {shown > 0 && <span className="text-[color:var(--text-faint)]">{hidden} to go</span>}
             </>
@@ -239,7 +254,7 @@ export function WorkingView({
       )}
 
       <ol className="mt-2 space-y-1 px-3">
-        {doc.moves.slice(0, shown).map((m, i) => (
+        {activeDoc.moves.slice(0, shown).map((m, i) => (
           <MoveRow key={i} n={i + 1} {...m} />
         ))}
       </ol>

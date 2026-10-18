@@ -494,11 +494,13 @@ export function suggestJob(src: string): JobId {
   // HCF takes a list, and a list's commas stand outside every bracket (asList splits it the same
   // way). A comma inside one belongs to a function: ∛8 arrives as nthRoot(8, 3) and log₂8 as
   // log(2, 8), and both were sent to HCF, which refused them (H15); only a line with i was spared (P22).
-  if (commaOutsideBrackets(s)) return 'hcf'
+  // A system of equations with commas (x + y = 3, 2x - y = 0) belongs to Solve, not HCF.
+  if (commaOutsideBrackets(s) && !s.includes('=')) return 'hcf'
   if (hasI) return 'complex'
   // sin²x + cos²x = 1 is an identity to prove, not an equation to solve; sin x = 0.5 stays with Solve.
   if (isTrigIdentity(s)) return 'trigidentity'
   if (s.includes('=')) return 'solve'
+
   // A plain sum — 1/2 + 1/3 — has nothing to divide out or split; Factorise says so in one
   // sentence, where Divide used to complain that sqrt is not something it can factorise. A line
   // with a square root in it — 3√2 + 2√2, 1/(√3 + 1) — is simplified from the same job (P22b);

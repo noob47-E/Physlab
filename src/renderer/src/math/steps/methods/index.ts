@@ -6,6 +6,20 @@ import { linearOneVarMethod } from './linearOneVar'
 import { quadraticFactoriseMethod } from './quadraticFactorise'
 import { quadraticFormulaMethod } from './quadraticFormula'
 import { quadraticSquareMethod } from './quadraticSquare'
+import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from './linearSystem'
+import { expandMethod } from './expand'
+import { factoriseMethod } from './factorise'
+
+export {
+  linearOneVarMethod,
+  quadraticFactoriseMethod,
+  quadraticFormulaMethod,
+  quadraticSquareMethod,
+  linearSystemEliminationMethod,
+  linearSystemSubstitutionMethod,
+  expandMethod,
+  factoriseMethod
+}
 
 /** Every S1a method, in the order a router should consider them. */
 export const S1A_METHODS: Method[] = [
@@ -14,3 +28,16 @@ export const S1A_METHODS: Method[] = [
   quadraticFormulaMethod,
   quadraticSquareMethod
 ]
+
+/** All checked step methods built in the step engine. */
+export const ALL_STEP_METHODS: Method[] = [
+  linearOneVarMethod,
+  quadraticFactoriseMethod,
+  quadraticFormulaMethod,
+  quadraticSquareMethod,
+  linearSystemEliminationMethod,
+  linearSystemSubstitutionMethod,
+  expandMethod,
+  factoriseMethod
+]
+

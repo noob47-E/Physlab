@@ -35,6 +35,8 @@ const SHOWN_METHOD_NAMES = new Set([
   'Solve by elimination',
   'Solve by substitution',
   'Factorising',
+  'Factorise',
+  'Expand',
   'Quadratic formula',
   'Discriminant',
   'Completing the square'
@@ -158,15 +160,24 @@ function renderChecked(working: Working, problem: Problem | undefined, adapter: 
   const validation = validateWorking(working, adapter, problem?.domain)
   if (!validation.valid) return cantShow(working, problem)
 
-  return {
+  const doc: PureWorkingDoc = {
     title: titleOf(working, problem),
     input: inputOf(working, problem),
     method: shownMethod(working.method),
     moves: collectMoves(working),
     answers: formatAnswers(working.answer),
     check: checkDrawn(working),
-    checked: working.checked
+    checked: working.checked ?? (validation.valid ? 'ok' : undefined)
   }
+
+  if (working.anotherWay) {
+    const alt = renderChecked(working.anotherWay, problem, adapter)
+    if (!alt.noWorking && alt.moves.length > 0) {
+      doc.anotherWay = alt
+    }
+  }
+
+  return doc
 }
 
 /** The check line as the page draws it: the builder's text, with powers braced as the validator checked them. */
