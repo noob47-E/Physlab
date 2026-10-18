@@ -460,7 +460,8 @@ describe('af-tb2 — the Start here chip, card and exact words', () => {
         'shapes',
         'graphing',
         'sandbox',
-        'problems'
+        'problems',
+        'lab'
       ])
       const sandbox = WELCOME_TILES.find((t) => t.mode === 'sandbox')
       expect(sandbox?.label).toBe('Sandbox')

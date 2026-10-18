@@ -6,6 +6,7 @@ import { scene } from '../core/store'
 import { runCommand } from '../lang/commands'
 import { tileLines, type Tile3D } from '../math/graph3dTiles'
 import { resetCamera } from '../render/viewState'
+import { visibleIn } from '../core/visibility'
 
 /** What the last tile added, taken away when another tile is chosen. */
 let lastTile: { id: string; objects: string[] } | null = null
@@ -13,12 +14,38 @@ let lastTile: { id: string; objects: string[] } | null = null
 /** The tile shown now (its caption is written under the tiles), or null once nothing it drew is left (deleted, a new scene). */
 export const shownTile = (): string | null => (lastTile && lastTile.objects.some((id) => scene().objects[id]) ? lastTile.id : null)
 
+/** The student's own objects in the graphing drawing (excluding objects added by preset tiles). */
+export function studentGraphingObjects(): string[] {
+  const objs = scene().objects
+  if (lastTile && !lastTile.objects.some((id) => objs[id])) {
+    lastTile = null
+  }
+  const tileObjIds = new Set(lastTile?.objects ?? [])
+  return Object.keys(objs).filter((id) => {
+    const o = objs[id]
+    return visibleIn(o, 'graphing') && !tileObjIds.has(id)
+  })
+}
+
+/** Whether the student already has their own lines or objects on the graphing drawing. */
+export const hasStudentLines = (): boolean => studentGraphingObjects().length > 0
+
+interface PlayTileOptions {
+  cleanDrawing?: boolean
+}
+
 /** Puts a tile's graph on the drawing; returns what it added. */
-export async function playTile(tile: Tile3D): Promise<string[]> {
+export async function playTile(tile: Tile3D, options: PlayTileOptions = {}): Promise<string[]> {
+  const toRemove: string[] = []
+  if (options.cleanDrawing) {
+    toRemove.push(...studentGraphingObjects())
+  }
   if (lastTile) {
     const still = lastTile.objects.filter((id) => scene().objects[id])
-    if (still.length) scene().removeObjects(still)
+    toRemove.push(...still)
   }
+  const unique = [...new Set(toRemove)]
+  if (unique.length) scene().removeObjects(unique)
   const before = new Set(Object.keys(scene().objects))
   for (const line of tileLines(tile)) await runCommand(line)
   const id = scene().ev.names.get(tile.slider.name)

@@ -182,7 +182,7 @@ export function CameraRig() {
         const h = Math.max(box.max[1] - box.min[1], 1)
         if (viewMode === '2d') {
           camera.position.set(cx, cy, 100)
-          ;(camera as THREE.OrthographicCamera).zoom = Math.max(2, Math.min(width / (w * 1.35), height / (h * 1.45), 400))
+          ;(camera as THREE.OrthographicCamera).zoom = Math.max(0.002, Math.min(width / (w * 1.35), height / (h * 1.45), 20000))
           camera.updateProjectionMatrix()
           c?.target.set(cx, cy, 0)
         } else {
@@ -273,6 +273,7 @@ export function CameraRig() {
   })
 
   if (viewMode === '2d') {
+    const MIN_ZOOM_2D = mode === 'graphing' ? 0.002 : 0.05
     return (
       <>
         <OrthographicCamera makeDefault position={[0, 0, 100]} zoom={50} near={0.1} far={1000} />
@@ -285,7 +286,7 @@ export function CameraRig() {
           // getting the scale you want matters. Hold Ctrl for a finer step still.
           zoomSpeed={fineZoom ? 0.15 : 0.6}
           mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }}
-          minZoom={0.05}
+          minZoom={MIN_ZOOM_2D}
           maxZoom={20000}
         />
       </>
@@ -294,7 +295,15 @@ export function CameraRig() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[...HOME_3D.position]} fov={SANDBOX_FOV} near={0.01} far={SANDBOX_FAR} up={[0, 0, 1]} />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.12} mouseButtons={mouseButtons} />
+      <OrbitControls
+        makeDefault
+        enableDamping
+        dampingFactor={0.12}
+        zoomSpeed={fineZoom ? 0.15 : 0.6}
+        minDistance={2}
+        maxDistance={180}
+        mouseButtons={mouseButtons}
+      />
       <ambientLight intensity={0.55} />
       <directionalLight position={[6, -8, 14]} intensity={2.2} />
       <directionalLight position={[-10, 6, -4]} intensity={0.6} color={fillLight} />

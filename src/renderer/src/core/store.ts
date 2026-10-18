@@ -132,6 +132,7 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   showGrid: true,
   gridStyle: 'lines',
   showAxes: true,
+  showAxisNumbers: true,
   grid3d: 'floor',
   workZ: 0,
   snap: true,

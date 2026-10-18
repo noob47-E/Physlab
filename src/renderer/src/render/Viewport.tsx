@@ -335,6 +335,7 @@ function GridStylePicker() {
   // Normalised, so a file naming a style this build lacks shows the lines it draws, not a blank picker.
   const gridStyle = useScene((s) => normaliseGridStyle(s.settings.gridStyle))
   const showAxes = useScene((s) => s.settings.showAxes)
+  const showAxisNumbers = useScene((s) => s.settings.showAxisNumbers !== false)
   const setSettings = useScene((s) => s.setSettings)
   return (
     <>
@@ -361,7 +362,7 @@ function GridStylePicker() {
       <button
         type="button"
         className="badge pointer-events-auto cursor-pointer outline-none"
-        title={showAxes ? 'Hide the axes and their numbers' : 'Show the axes and their numbers'}
+        title={showAxes ? 'Hide the axes' : 'Show the axes'}
         aria-pressed={showAxes}
         onClick={(e) => {
           setSettings({ showAxes: !showAxes })
@@ -369,6 +370,18 @@ function GridStylePicker() {
         }}
       >
         {showAxes ? '✓ Axes' : 'Axes'}
+      </button>
+      <button
+        type="button"
+        className="badge pointer-events-auto cursor-pointer outline-none"
+        title={showAxisNumbers ? 'Hide the numbers along the axes' : 'Show the numbers along the axes'}
+        aria-pressed={showAxisNumbers}
+        onClick={(e) => {
+          setSettings({ showAxisNumbers: !showAxisNumbers })
+          e.currentTarget.blur()
+        }}
+      >
+        {showAxisNumbers ? '✓ Numbers' : 'Numbers'}
       </button>
     </>
   )

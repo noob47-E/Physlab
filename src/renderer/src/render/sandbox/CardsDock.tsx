@@ -284,9 +284,11 @@ export const CardsDockView = memo(function CardsDockView({
     )
   }
 
+  const hasMomentPair = evaluatedCards.some((c) => c.id === 'lever-left-moment') && evaluatedCards.some((c) => c.id === 'lever-right-moment')
+
   const containerClasses = bigMode
-    ? 'pointer-events-auto select-none flex min-h-0 flex-col items-end gap-3 w-[640px] max-w-full'
-    : 'pointer-events-auto select-none flex min-h-0 flex-col items-end gap-2 w-[360px] max-w-full'
+    ? `pointer-events-auto select-none flex min-h-0 flex-col items-end gap-3 ${hasMomentPair ? 'w-[720px]' : 'w-[640px]'} max-w-full`
+    : `pointer-events-auto select-none flex min-h-0 flex-col items-end gap-2 ${hasMomentPair ? 'w-[540px]' : 'w-[360px]'} max-w-full`
 
   const cardClasses = bigMode
     ? 'w-full rounded bg-surface-1/95 border-2 border-line p-4 shadow-lg backdrop-blur text-lead'
@@ -302,6 +304,81 @@ export const CardsDockView = memo(function CardsDockView({
   const titleRow = bigMode ? 'min-h-[44px]' : 'min-h-[28px]'
   // Big: fractions and roots at full size (KaTeX's display style), where the inline style shrinks L/g under the root.
   const big = (tex: string) => (bigMode ? '\\displaystyle ' + tex : tex)
+
+  const leftCard = evaluatedCards.find((c) => c.id === 'lever-left-moment')
+  const rightCard = evaluatedCards.find((c) => c.id === 'lever-right-moment')
+  let momentStatusText = 'balanced'
+  let momentStatusClass = 'text-good'
+  if (leftCard && rightCard && Number.isFinite(leftCard.value) && Number.isFinite(rightCard.value)) {
+    const diff = leftCard.value - rightCard.value
+    if (Math.abs(diff) < 0.02) {
+      momentStatusText = 'balanced'
+      momentStatusClass = 'text-good'
+    } else if (diff < 0) {
+      momentStatusText = 'turns clockwise'
+      momentStatusClass = 'text-warn'
+    } else {
+      momentStatusText = 'turns anticlockwise'
+      momentStatusClass = 'text-warn'
+    }
+  }
+
+  const renderCard = (card: CardView, index: number) => {
+    const isFolded = cardFoldedState[card.id] ?? index >= OPEN_CARDS
+    const formulaLine = card.lines[0]
+    const substitutedLine = card.lines[1]
+    const resultLine = card.lines[2]
+
+    return (
+      <div key={card.id} className={cardClasses}>
+        {/* Card Title Bar */}
+        <button
+          type="button"
+          onClick={() => toggleCardFold(card.id)}
+          className={`w-full text-left flex items-center justify-between ${titleRow} group focus-visible:outline-none`}
+          aria-expanded={!isFolded}
+        >
+          <div className="flex items-center gap-2">
+            <span className={`${titleSize} text-ink group-hover:text-accent transition`}>
+              {card.title}
+            </span>
+            {card.unitsCheck && (
+              <span
+                className="text-fine text-good border border-good/40 rounded px-1.5 py-0.5"
+                title="Unit scaling verified"
+              >
+                units {'\u2713'}
+              </span>
+            )}
+          </div>
+          <span className="text-fine text-ink-dim ml-2 font-mono">
+            {isFolded ? '\u25BC' : '\u25B2'}
+          </span>
+        </button>
+
+        {/* Card Body (when unfolded) */}
+        {!isFolded && (
+          <div className="mt-1 pt-1.5 border-t border-line/60 flex flex-col gap-1">
+            {formulaLine && (
+              <div className={`${formulaSize} text-ink-dim`}>
+                <CardTex tex={big(formulaLine.tex)} />
+              </div>
+            )}
+            {substitutedLine && (
+              <div className={`${formulaSize} text-ink`}>
+                <CardTex tex={big(substitutedLine.tex)} />
+              </div>
+            )}
+            <div className={`${resultSize} text-ink-strong mt-0.5`}>
+              <CardTex tex={resultLine ? resultLine.tex : card.text} />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const otherCards = evaluatedCards.filter((c) => c.id !== 'lever-left-moment' && c.id !== 'lever-right-moment')
 
   return (
     <div className={containerClasses}>
@@ -332,62 +409,24 @@ export const CardsDockView = memo(function CardsDockView({
 
       {/* Rendered cards */}
       <div className="flex min-h-0 flex-col gap-2 w-full overflow-y-auto pr-1">
-        {evaluatedCards.map((card, index) => {
-          // The first three start open, the rest folded to their title line (a lab lists up to seven).
-          const isFolded = cardFoldedState[card.id] ?? index >= OPEN_CARDS
-          const formulaLine = card.lines[0]
-          const substitutedLine = card.lines[1]
-          const resultLine = card.lines[2]
-
-          return (
-            <div key={card.id} className={cardClasses}>
-              {/* Card Title Bar */}
-              <button
-                type="button"
-                onClick={() => toggleCardFold(card.id)}
-                className={`w-full text-left flex items-center justify-between ${titleRow} group focus-visible:outline-none`}
-                aria-expanded={!isFolded}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`${titleSize} text-ink group-hover:text-accent transition`}>
-                    {card.title}
-                  </span>
-                  {card.unitsCheck && (
-                    <span
-                      className="text-fine text-good border border-good/40 rounded px-1.5 py-0.5"
-                      title="Unit scaling verified"
-                    >
-                      units {'\u2713'}
-                    </span>
-                  )}
-                </div>
-                <span className="text-fine text-ink-dim ml-2 font-mono">
-                  {isFolded ? '\u25BC' : '\u25B2'}
-                </span>
-              </button>
-
-              {/* Card Body (when unfolded) */}
-              {!isFolded && (
-                <div className="mt-1 pt-1.5 border-t border-line/60 flex flex-col gap-1">
-                  {formulaLine && (
-                    <div className={`${formulaSize} text-ink-dim`}>
-                      <CardTex tex={big(formulaLine.tex)} />
-                    </div>
-                  )}
-                  {substitutedLine && (
-                    <div className={`${formulaSize} text-ink`}>
-                      <CardTex tex={big(substitutedLine.tex)} />
-                    </div>
-                  )}
-                  <div className={`${resultSize} text-ink-strong mt-0.5`}>
-                    <CardTex tex={resultLine ? resultLine.tex : card.text} />
-                  </div>
-
-                </div>
-              )}
+        {hasMomentPair && leftCard && rightCard ? (
+          <>
+            <div className="grid grid-cols-2 gap-2 w-full">
+              {renderCard(leftCard, 0)}
+              {renderCard(rightCard, 1)}
             </div>
-          )
-        })}
+            <div
+              className="w-full text-center py-1 px-3 rounded border border-line bg-surface-1/90 text-small flex items-center justify-center gap-2 shadow-sm"
+              aria-live="polite"
+            >
+              <span className="text-ink-dim font-medium">Turning effect:</span>
+              <span className={`font-semibold ${momentStatusClass}`}>{momentStatusText}</span>
+            </div>
+            {otherCards.map((card, idx) => renderCard(card, idx + 2))}
+          </>
+        ) : (
+          evaluatedCards.map((card, index) => renderCard(card, index))
+        )}
         {/* SB15's honest gap: the formula against the run, and why they differ. */}
         {gaps.length > 0 && (
           <div className={cardClasses} data-testid="cards-gaps">

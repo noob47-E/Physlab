@@ -40,7 +40,14 @@ export function gapRows(theory: Theory, built: Built, tape: RunTape, rate: numbe
 
 /** The cards a view shows: the simple Sandbox one card for the loaded experiment (its first), All tools every card. */
 export function cardsInView(ids: string[], view: SandboxView): string[] {
-  return view === 'simple' ? ids.slice(0, 1) : ids
+  if (view === 'simple') {
+    // S2b: For lever moments, show both left and right turning moments side by side
+    if (ids.includes('lever-left-moment') && ids.includes('lever-right-moment')) {
+      return ['lever-left-moment', 'lever-right-moment']
+    }
+    return ids.slice(0, 1)
+  }
+  return ids
 }
 
 /** How many cards start open; the rest start folded to their title line (a lab may list up to 7, SB18 amended). */

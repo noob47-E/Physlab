@@ -73,8 +73,8 @@ export function buildKnifeEdge(
     id: `${prefix}_wedge`,
     size: [0.12, wedgeHeight, 0.08],
     motion: 'static',
-    material: 'lead',
-    color: materialById('lead').color
+    material: 'steel',
+    color: materialById('steel').color
   }
 
   const pivot: V3 = [pos[0], height, pos[2]]
@@ -253,14 +253,14 @@ export function slideHanger(
 export function leverMoments(
   beam: BodyDef,
   hangers: { mass: number; x: number }[],
+  pivotX: number = beam.position[0],
   g: number = 9.81
 ): {
   leftFd: number
   rightFd: number
-  status: 'balanced' | 'turns left' | 'turns right'
+  status: 'balanced' | 'turns anticlockwise' | 'turns clockwise'
   text: string
 } {
-  const pivotX = beam.position[0]
   let leftFd = 0
   let rightFd = 0
 
@@ -275,14 +275,14 @@ export function leverMoments(
   }
 
   const diff = Math.abs(leftFd - rightFd)
-  let status: 'balanced' | 'turns left' | 'turns right' = 'balanced'
+  let status: 'balanced' | 'turns anticlockwise' | 'turns clockwise' = 'balanced'
   if (diff >= 0.02) {
-    status = leftFd > rightFd ? 'turns left' : 'turns right'
+    status = leftFd > rightFd ? 'turns anticlockwise' : 'turns clockwise'
   }
 
-  const leftStr = `${fmt(leftFd)} N·m`
-  const rightStr = `${fmt(rightFd)} N·m`
-  const text = `Left F·d ${leftStr}, Right F·d ${rightStr} — ${status}`
+  const leftStr = `${fmt(leftFd)} N m`
+  const rightStr = `${fmt(rightFd)} N m`
+  const text = `Turning effect: ${status} (left moment ${leftStr}, right moment ${rightStr})`
 
   return { leftFd, rightFd, status, text }
 }

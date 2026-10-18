@@ -330,7 +330,8 @@ export const WELCOME_TILES = [
   { mode: 'shapes' as const, label: 'Geometry', text: 'Sketch a shape and get its area with the formula.' },
   { mode: 'graphing' as const, label: 'Graphing', text: 'y = x² − 4, circles, inequalities, 3D surfaces.' },
   { mode: 'sandbox' as const, label: 'Sandbox', text: 'Collisions, ramps, pendulums, gravity and springs.' },
-  { mode: 'problems' as const, label: 'Problem Sets', text: 'Practice questions with hints and step-by-step solutions.' }
+  { mode: 'problems' as const, label: 'Problem Sets', text: 'Practice questions with hints and step-by-step solutions.' },
+  { mode: 'lab' as const, label: 'Lab Data', text: 'Type your readings, plot them and read the gradient off the best-fit line.' }
 ]
 
 function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void }) {
@@ -350,10 +351,11 @@ function Welcome({ onTour, onSkip }: { onTour: () => void; onSkip: () => void })
             <div className="font-semibold text-[var(--text-strong)]">Show your working</div>
             <div className="text-[var(--text-dim)]">{WELCOME_PROMISE} step by step, the way it is set out on the board. Then try your own.</div>
           </button>
-          {WELCOME_TILES.map((t) => (
+          {WELCOME_TILES.map((t, i) => (
             <button
               key={t.mode}
-              className="card m-0 p-2 text-left hover:border-[var(--accent)]"
+              // An odd last tile takes the whole row, so the grid ends even.
+              className={`card m-0 p-2 text-left hover:border-[var(--accent)] ${i === WELCOME_TILES.length - 1 && WELCOME_TILES.length % 2 === 1 ? 'col-span-2' : ''}`}
               onClick={() => {
                 enterMode(t.mode)
                 onSkip()

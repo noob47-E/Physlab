@@ -51,6 +51,15 @@ export function Labels() {
           const arm = Math.abs(link.pivotA ? link.pivotA[0] : st.position[0] - beam.position[0])
           const tau = (def.mass ?? 1) * world.gravity * arm
           text = `${def.name}  ${num(def.mass ?? 1)} kg  d = ${num(arm)} m  τ = ${num(tau)} N·m`
+
+          // Arm length marker along the ruled beam
+          const armRelX = link.pivotA ? link.pivotA[0] : st.position[0] - beam.position[0]
+          const midX = beam.position[0] + armRelX / 2
+          const armPt = toScreen(state.camera, state.size, [midX, beam.position[1] + beam.size[1] / 2 + 0.02, beam.position[2]])
+          if (armPt.visible) {
+            const armName = def.name.toLowerCase().includes('left') ? 'd₁' : 'd₂'
+            pool.place(`${armName} = ${num(arm)} m`, armPt.x, armPt.y - 14, 'center', def.color)
+          }
         } else {
           // Speed and mass alone could not answer the question a mechanics practical asks. Height
           // and kinetic energy are what a student needs to watch while something falls.
@@ -59,7 +68,7 @@ export function Labels() {
           text = `${def.name}  ${num(speed)} m/s  h ${num(st.position[1] - groundTop)} m  KE ${num(e.kinetic)} J`
         }
         // Offset below mass stack for hangers so the rod and beam remain unobscured; standard 26px above for others
-        const yOffset = isHanger && beam ? 24 : -26
+        const yOffset = isHanger && beam ? 38 : -26
         pool.place(text, p.x, p.y + yOffset, 'center', def.color)
       })
     }

@@ -127,10 +127,10 @@ describe('H19: changing a graph’s equation in Properties', () => {
     expect(only().tMin).toBeUndefined()
 
     // Back to y = f(x): nothing of the parametric range or the inequality sign is left behind,
-    // and the curve starts from the Roots and Max / min marks a new y = f(x) gets.
+    // and the curve starts as a new y = f(x) does: its marks only on demand (calmFixes.test.ts).
     expect(await replaceGraphEquation(g.id, 'y = 2x + 1')).toEqual({ ok: true })
     const back = only()
-    expect(back).toMatchObject({ id: g.id, name: g.name, kind: 'explicit', exprs: ['2x + 1'], showRoots: true, showExtrema: true })
+    expect(back).toMatchObject({ id: g.id, name: g.name, kind: 'explicit', exprs: ['2x + 1'], showRoots: false, showExtrema: false })
     expect(back.tMin).toBeUndefined()
     expect(back.tMax).toBeUndefined()
     expect(back.op).toBeUndefined()

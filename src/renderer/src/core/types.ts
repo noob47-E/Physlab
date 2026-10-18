@@ -329,6 +329,8 @@ export interface SceneSettings {
   /** Saved with the drawing, like the unit. A file from before this setting existed draws lines. */
   gridStyle: GridStyle
   showAxes: boolean
+  /** Whether numbers along the axes are shown (defaults to true). */
+  showAxisNumbers?: boolean
   /** The 3-D grid: the floor, the floor with walls, or nothing. Saved with the drawing. */
   grid3d?: 'floor' | 'walls' | 'off'
   /** The height z of the 3-D working plane that clicks land on (whole units). */

@@ -38,7 +38,13 @@ export function EnergyLedger() {
 }
 
 /** The simple panel's Energy (SB63): the bar and the total line, and no Details fold. */
+/** The simple panel leaves the energy line out for the lever: it is about turning moments, and its energy (all height,
+ *  nothing moving) only took room from the moment cards (research report, 18 Oct). All tools keeps the full ledger. */
+export const simpleEnergyHidden = (presetId: string | null): boolean => presetId === 'seesaw'
+
 export function SimpleEnergy() {
+  const presetId = useSandbox((s) => s.presetId)
+  if (simpleEnergyHidden(presetId)) return null
   return <Ledger simple />
 }
 

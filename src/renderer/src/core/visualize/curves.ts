@@ -151,7 +151,9 @@ export function visualizeGraph(source: string, exprs: string[], kind: GraphKind 
     }
   }
   const b = new Builder()
-  b.graph({ kind, source, exprs, tMin: extra.tMin, tMax: extra.tMax, vMin: extra.vMin, vMax: extra.vMax, op: extra.op, showRoots: kind === 'explicit', showExtrema: kind === 'explicit' }, { name: extra.name, color: extra.color })
+  // Zeros, turning points and crossings show while the curve is selected or under the pointer (GraphView), or for good from
+  // the right-click menu: marked on every curve by themselves they covered sin x with cos x in dots (research report, 18 Oct).
+  b.graph({ kind, source, exprs, tMin: extra.tMin, tMax: extra.tMax, vMin: extra.vMin, vMax: extra.vMax, op: extra.op, showRoots: false, showExtrema: false }, { name: extra.name, color: extra.color })
   b.commit()
   // A graph in space opens the 3-D view (3D-2: a surface, a curve in space, a plane, a parametric surface).
   if (is3DGraph(kind)) scene().setViewMode('3d')

@@ -5,7 +5,7 @@
 // (drawnBoxes) so Home frames what is on screen. The maths is math/graph3d.ts.
 
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { FatLine } from './FatLine'
 import { toScreen } from './cameraUtils'
@@ -64,10 +64,71 @@ function shadedGeometry(positions: Float32Array, indices: number[], colours: Flo
 /** The (x, y, z) read-out where the pointer is on a surface, written beside the pointer at the student's precision. */
 function useHoverReadout(id: string) {
   const at = useRef<V3 | null>(null)
+  const lastCam = useRef<{ pos: THREE.Vector3; quat: THREE.Quaternion; zoom: number; init: boolean }>({
+    pos: new THREE.Vector3(),
+    quat: new THREE.Quaternion(),
+    zoom: 1,
+    init: false
+  })
   const settings = useScene((s) => s.settings)
+  const activeSpace = useScene((s) => s.activeSpace)
+  const viewMode = useScene((s) => s.viewMode)
   const pool = useMemo(() => new SpanPool(() => overlay.labels, 'measure-label'), [])
-  useReleaseLater(pool, (p) => p.dispose())
+  const { invalidate } = useThree()
+
+  // Dispose DOM spans when unmounting so no pills linger across views.
+  useEffect(() => {
+    return () => {
+      at.current = null
+      pool.dispose()
+    }
+  }, [pool])
+
+  // Clear immediately when space or view mode changes.
+  useEffect(() => {
+    at.current = null
+    pool.begin()
+    pool.end()
+    invalidate()
+  }, [activeSpace, viewMode, pool, invalidate])
+
+  // Clear when the pointer leaves the browser window, cancels, or loses focus.
+  useEffect(() => {
+    const clear = () => {
+      if (at.current) {
+        at.current = null
+        pool.begin()
+        pool.end()
+        invalidate()
+      }
+    }
+    window.addEventListener('pointerleave', clear)
+    window.addEventListener('pointercancel', clear)
+    window.addEventListener('blur', clear)
+    return () => {
+      window.removeEventListener('pointerleave', clear)
+      window.removeEventListener('pointercancel', clear)
+      window.removeEventListener('blur', clear)
+    }
+  }, [pool, invalidate])
+
   useFrame(({ camera, size }) => {
+    // If camera moved (orbit, pan, zoom), clear the hover readout
+    const c = lastCam.current
+    if (c.init) {
+      const moved =
+        camera.position.distanceToSquared(c.pos) > 1e-6 ||
+        Math.abs(camera.zoom - c.zoom) > 1e-4 ||
+        1 - Math.abs(camera.quaternion.dot(c.quat)) > 1e-6
+      if (moved) {
+        at.current = null
+      }
+    }
+    c.pos.copy(camera.position)
+    c.quat.copy(camera.quaternion)
+    c.zoom = camera.zoom
+    c.init = true
+
     pool.begin()
     const p = at.current
     if (p) {
@@ -86,6 +147,9 @@ function useHoverReadout(id: string) {
     },
     onPointerOut: () => {
       at.current = null
+      pool.begin()
+      pool.end()
+      invalidate()
     }
   }
 }
@@ -155,6 +219,7 @@ export function ParamSurfaceView({ obj, fx, fy, fz, selected, version, theme }: 
 /** The plane ax + by + cz = d inside the cube from −6 to 6: a clear sheet in the graph's colour with its edge. */
 export function PlaneView({ obj, F, selected, version }: { obj: GraphObj; F?: (v: Record<string, number>) => number; selected: boolean; version: unknown }) {
   useForgetBox(obj.id)
+  const hover = useHoverReadout(obj.id)
   const built = useMemo(() => {
     const p = F ? planeOf((x, y, z) => F({ x, y, z })) : null
     if (!p) return null
@@ -178,7 +243,7 @@ export function PlaneView({ obj, F, selected, version }: { obj: GraphObj; F?: (v
   if (!built) return null
   return (
     <group>
-      <mesh geometry={built.geo}>
+      <mesh geometry={built.geo} onPointerMove={hover.onPointerMove} onPointerOut={hover.onPointerOut}>
         <meshStandardMaterial key={obj.color} color={obj.color} side={THREE.DoubleSide} transparent opacity={selected ? 0.5 : 0.35} depthWrite={false} roughness={0.7} />
       </mesh>
       <FatLine points={built.quad} closed color={obj.color} width={selected ? 2.6 : 1.8} depthTest renderOrder={3} />

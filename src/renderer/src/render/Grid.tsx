@@ -10,7 +10,7 @@ import { drawnVertices, writePositions } from './gpuBuffers'
 import { overlay, SpanPool } from './overlay'
 import { useScene } from '../core/store'
 import { themeColor, useTheme } from '../app/theme'
-import { axisLabels, axisTitle, axisTitleSpot, ringLabels, rulerLabels, type ScreenOf } from './gridLabels'
+import { axisTitle, axisTitleSpot, pinnedAxisLabels, ringLabels, rulerLabels, type ScreenOf } from './gridLabels'
 import type { V3 } from '../math/vec'
 import type { GridStyle } from '../core/types'
 import type { MeasureSettings } from '../math/format'
@@ -192,6 +192,7 @@ export function Grid2D() {
   const path = gridShaderPlan(backend, gridStyle, false)
   const buildMs = useRef(0)
   const showAxes = useScene((s) => s.settings.showAxes)
+  const showAxisNumbers = useScene((s) => s.settings.showAxisNumbers !== false)
   // Ticks are written in the drawing's unit and scale, like every other number on screen.
   const settings = useScene((s) => s.settings)
   const built = useRef({ key: '', xMin: 0, xMax: 0, yMin: 0, yMax: 0 })
@@ -258,17 +259,20 @@ export function Grid2D() {
     ticks.begin()
     if (showAxes) {
       const origin = toScreen(camera, size, [0, 0, 0])
-      const axisY = Math.min(Math.max(origin.y + 14, 12), size.height - 10)
-      const axisX = Math.min(Math.max(origin.x - 8, 30), size.width - 6)
-      // Labels come from the Talbot search, not from every major line: never under 60 px apart,
-      // always on a drawn line, and the same step on both axes.
-      for (const { value, text } of axisLabels(b.xMin, b.xMax, size.width, majorStep, minorStep, settings)) {
-        ticks.place(text, toScreen(camera, size, [value, 0, 0]).x, axisY)
+      if (showAxisNumbers) {
+        const { xTicks, yTicks, originTick } = pinnedAxisLabels(
+          b,
+          size,
+          origin,
+          majorStep,
+          minorStep,
+          settings,
+          (p) => toScreen(camera, size, p)
+        )
+        for (const t of xTicks) ticks.place(t.text, t.x, t.y, t.align)
+        for (const t of yTicks) ticks.place(t.text, t.x, t.y, t.align)
+        if (originTick) ticks.place(originTick.text, originTick.x, originTick.y, originTick.align)
       }
-      for (const { value, text } of axisLabels(b.yMin, b.yMax, size.height, majorStep, minorStep, settings)) {
-        ticks.place(text, axisX, toScreen(camera, size, [0, value, 0]).y, 'right')
-      }
-      ticks.place('0', origin.x - 8, origin.y + 12, 'right')
       if (showGrid && gridStyle === 'polar') {
         // The angle of each ray, written just outside the biggest major circle that fits in the
         // view whole (or the first circle when none does), and only where that point is on screen.
@@ -331,6 +335,7 @@ export function Grid3D() {
   // The floor knows only the square styles: circles and lattices are drawing paper, so it draws lines for them.
   const gridStyle = useScene((s) => styleFor3D(normaliseGridStyle(s.settings.gridStyle)))
   const showAxes = useScene((s) => s.settings.showAxes)
+  const showAxisNumbers = useScene((s) => s.settings.showAxisNumbers !== false)
   const settings = useScene((s) => s.settings)
   const [extent, setExtent] = useState({ size: 10, step: 1 })
   const ticks = useMemo(() => new SpanPool(() => overlay.ticks, 'tick-label'), [])
@@ -351,7 +356,9 @@ export function Grid3D() {
         const at = axisTitleSpot((p) => toScreen(camera, size, p), dir, half, size)
         if (at) ticks.place(axisTitle(axis, settings), at.x + 10, at.y - 10, 'center', color)
       }
-      for (const { text, x, y } of floorLabels((p) => toScreen(camera, size, p), size, half, step, settings)) ticks.place(text, x, y, 'center')
+      if (showAxisNumbers) {
+        for (const { text, x, y } of floorLabels((p) => toScreen(camera, size, p), size, half, step, settings)) ticks.place(text, x, y, 'center')
+      }
     }
     ticks.end()
   })

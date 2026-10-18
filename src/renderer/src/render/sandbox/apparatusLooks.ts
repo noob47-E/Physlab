@@ -67,54 +67,54 @@ function createBeamRuleTexture(): THREE.CanvasTexture {
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
-  // Light wood grain background
-  ctx.fillStyle = '#deb887'
+  // Light bright boxwood background
+  ctx.fillStyle = '#fef08a'
   ctx.fillRect(0, 0, w, h)
 
-  // Subtle wood grain streaks
-  ctx.fillStyle = 'rgba(180, 130, 70, 0.12)'
-  for (let y = 8; y < h; y += 14) {
-    ctx.fillRect(0, y, w, 3 + (y % 4))
+  // Subtle wood streaks
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.08)'
+  for (let y = 6; y < h; y += 16) {
+    ctx.fillRect(0, y, w, 2 + (y % 4))
   }
 
-  // Border lines along edges
-  ctx.strokeStyle = '#2d2319'
-  ctx.lineWidth = 3
+  // Border lines along top and bottom edges
+  ctx.strokeStyle = '#0f172a'
+  ctx.lineWidth = 4
   ctx.strokeRect(0, 0, w, h)
 
   // 100 cm along the 1.0 m rule
-  ctx.fillStyle = '#1e293b'
-  ctx.strokeStyle = '#1e293b'
+  ctx.fillStyle = '#0f172a'
+  ctx.strokeStyle = '#0f172a'
   ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  ctx.font = 'bold 24px monospace'
+  ctx.textBaseline = 'middle'
+  ctx.font = 'bold 38px sans-serif'
 
   for (let cm = 0; cm <= 100; cm++) {
-    const x = (cm / 100) * (w - 24) + 12
+    const x = (cm / 100) * w
     if (cm % 10 === 0) {
-      // 10 cm mark: long tick and number
-      ctx.lineWidth = 3
+      // 10 cm mark: bold long tick and distance from pivot
+      ctx.lineWidth = 14
       ctx.beginPath()
       ctx.moveTo(x, 0)
-      ctx.lineTo(x, 52)
+      ctx.lineTo(x, 56)
       ctx.stroke()
 
       // Distance from pivot at 50 cm: 50 … 0 … 50
       const distFromPivot = Math.abs(50 - cm)
-      ctx.fillText(`${distFromPivot}`, x, 60)
+      ctx.fillText(`${distFromPivot}`, x, 92)
     } else if (cm % 5 === 0) {
       // 5 cm mark: medium tick
-      ctx.lineWidth = 2.5
+      ctx.lineWidth = 9
       ctx.beginPath()
       ctx.moveTo(x, 0)
-      ctx.lineTo(x, 38)
+      ctx.lineTo(x, 42)
       ctx.stroke()
     } else {
-      // 1 cm mark: short tick
-      ctx.lineWidth = 1.5
+      // 1 cm mark: distinct tick
+      ctx.lineWidth = 5
       ctx.beginPath()
       ctx.moveTo(x, 0)
-      ctx.lineTo(x, 22)
+      ctx.lineTo(x, 26)
       ctx.stroke()
     }
   }
@@ -122,6 +122,9 @@ function createBeamRuleTexture(): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.ClampToEdgeWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
   texture.needsUpdate = true
   return texture
 }
@@ -134,47 +137,47 @@ function createVerticalRuleTexture(): THREE.CanvasTexture {
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
-  // Light wood background
-  ctx.fillStyle = '#deb887'
+  // Light bright boxwood background
+  ctx.fillStyle = '#fef08a'
   ctx.fillRect(0, 0, w, h)
 
-  // Wood grain
-  ctx.fillStyle = 'rgba(180, 130, 70, 0.12)'
-  for (let x = 8; x < w; x += 14) {
-    ctx.fillRect(x, 0, 3 + (x % 4), h)
+  // Subtle wood streaks
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.08)'
+  for (let x = 6; x < w; x += 16) {
+    ctx.fillRect(x, 0, 2 + (x % 4), h)
   }
 
-  ctx.strokeStyle = '#2d2319'
-  ctx.lineWidth = 3
+  ctx.strokeStyle = '#0f172a'
+  ctx.lineWidth = 4
   ctx.strokeRect(0, 0, w, h)
 
-  ctx.fillStyle = '#1e293b'
-  ctx.strokeStyle = '#1e293b'
+  ctx.fillStyle = '#0f172a'
+  ctx.strokeStyle = '#0f172a'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.font = 'bold 24px monospace'
+  ctx.font = 'bold 38px sans-serif'
 
-  // 0 at bottom (y = h - margin), 100 at top (y = margin)
+  // 0 at bottom (y = h), 100 at top (y = 0)
   for (let cm = 0; cm <= 100; cm++) {
-    const y = h - 16 - (cm / 100) * (h - 32)
+    const y = h - (cm / 100) * h
     if (cm % 10 === 0) {
-      ctx.lineWidth = 3
+      ctx.lineWidth = 14
       ctx.beginPath()
       ctx.moveTo(0, y)
-      ctx.lineTo(52, y)
+      ctx.lineTo(56, y)
       ctx.stroke()
-      ctx.fillText(`${cm}`, 60, y)
+      ctx.fillText(`${cm}`, 64, y)
     } else if (cm % 5 === 0) {
-      ctx.lineWidth = 2.5
+      ctx.lineWidth = 9
       ctx.beginPath()
       ctx.moveTo(0, y)
-      ctx.lineTo(38, y)
+      ctx.lineTo(42, y)
       ctx.stroke()
     } else {
-      ctx.lineWidth = 1.5
+      ctx.lineWidth = 5
       ctx.beginPath()
       ctx.moveTo(0, y)
-      ctx.lineTo(22, y)
+      ctx.lineTo(26, y)
       ctx.stroke()
     }
   }
@@ -182,6 +185,9 @@ function createVerticalRuleTexture(): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.ClampToEdgeWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
   texture.needsUpdate = true
   return texture
 }

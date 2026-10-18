@@ -563,7 +563,7 @@ const THEORIES: Record<string, Entry> = {
       const tau1 = m1 * g * d1
       const tau2 = m2 * g * d2
       const net = tau1 - tau2
-      const status = Math.abs(net) < 0.02 ? 'balanced' : net > 0 ? 'turns left' : 'turns right'
+      const status = Math.abs(net) < 0.02 ? 'balanced' : net > 0 ? 'turns anticlockwise' : 'turns clockwise'
       return [
         { scene: 'seesaw', key: 'tau1', label: 'anticlockwise moment (left)', value: tau1, unit: 'N m', formula: `m₁ g d₁ = ${num(m1)} × ${num(g)} × ${num(d1)}`, facts: facts(), step: null },
         { scene: 'seesaw', key: 'tau2', label: 'clockwise moment (right)', value: tau2, unit: 'N m', formula: `m₂ g d₂ = ${num(m2)} × ${num(g)} × ${num(d2)}`, facts: facts(), step: null },

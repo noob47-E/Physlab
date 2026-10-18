@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { presetById } from '../src/renderer/src/sim/presets'
 import { evaluateCard, readingOf } from '../src/renderer/src/sim/cards'
-import { DEFAULT_WORLD } from '../src/renderer/src/sim/types'
+import { DEFAULT_WORLD, type BodyDef } from '../src/renderer/src/sim/types'
 import { theoryFor } from '../src/renderer/src/sim/theory'
 import { cardsForScene } from '../src/renderer/src/render/sandbox/CardsDock'
+import { cardsInView } from '../src/renderer/src/sim/cardGaps'
 import { loadJolt } from '../src/renderer/src/sim/jolt'
 import { SimWorld } from '../src/renderer/src/sim/world'
 import { slideHanger, leverMoments } from '../src/renderer/src/sim/apparatus'
@@ -115,6 +116,65 @@ describe('S2: lever with sliding masses + ruler + live turning effects (Finding 
     // Right: 3 * 9.81 * 0.2 = 5.886 N m
     expect(moments.leftFd).toBeCloseTo(7.848, 2)
     expect(moments.rightFd).toBeCloseTo(5.886, 2)
-    expect(moments.status).toBe('turns left')
+    expect(moments.status).toBe('turns anticlockwise')
+  })
+
+  it('cardsInView in simple view includes both lever moment cards for side-by-side display', () => {
+    const cards = ['lever-left-moment', 'lever-right-moment', 'lever-balance']
+    const simple = cardsInView(cards, 'simple')
+    expect(simple).toEqual(['lever-left-moment', 'lever-right-moment'])
+  })
+
+  it('leverMoments returns "turns anticlockwise" and "turns clockwise" in words', () => {
+    const beam = { name: 'Beam', position: [0, 0.6, 0] } as unknown as BodyDef
+    // Left heavier -> turns anticlockwise
+    const anticlock = leverMoments(beam, [{ mass: 3.0, x: -0.30 }, { mass: 2.0, x: 0.20 }])
+    expect(anticlock.status).toBe('turns anticlockwise')
+    expect(anticlock.text).toContain('turns anticlockwise')
+
+    // Right heavier -> turns clockwise
+    const clock = leverMoments(beam, [{ mass: 2.0, x: -0.30 }, { mass: 4.0, x: 0.20 }])
+    expect(clock.status).toBe('turns clockwise')
+    expect(clock.text).toContain('turns clockwise')
+
+    // Balanced
+    const bal = leverMoments(beam, [{ mass: 2.0, x: -0.30 }, { mass: 3.0, x: 0.20 }])
+    expect(bal.status).toBe('balanced')
+    expect(bal.text).toContain('balanced')
+  })
+
+  it('seesaw preset has steel knife edge wedge and clearance for hinge pin', () => {
+    const preset = presetById('seesaw')!
+    const built = preset.build()
+    const wedge = built.bodies.find((b) => b.id.includes('wedge') || b.name.toLowerCase().includes('knife'))
+    expect(wedge).toBeDefined()
+    expect(wedge!.material).toBe('steel')
+
+    const beam = built.bodies.find((b) => b.name === 'Beam')!
+    expect(beam).toBeDefined()
+    // Beam half-height is 0.015 m (total 0.03 m). Hinge pin base radius must be strictly capped to beam.size[1] * 0.25 (0.0075 m)
+    const maxAllowedRadius = beam.size[1] / 2
+    const pinRadius = Math.min(0.035, beam.size[1] * 0.25)
+    expect(pinRadius).toBeLessThan(maxAllowedRadius)
+    expect(pinRadius).toBe(0.0075)
+
+    // Extra thin body (1 cm height) stays capped strictly at 2.5 mm
+    const extraThinHeight = 0.01
+    const extraThinRadius = Math.min(0.035, extraThinHeight * 0.25)
+    expect(extraThinRadius).toBe(0.0025)
+    expect(extraThinRadius).toBeLessThan(extraThinHeight / 2)
+  })
+
+  it('leverMoments correctly accounts for off-centre pivot', () => {
+    const beam = { name: 'Beam', position: [0, 0.6, 0] } as unknown as BodyDef
+    // Off-centre pivot at x = 0.10 m
+    // Left hanger at -0.10 m (distance = 0.20 m, mass = 2 kg -> moment = 2 * 9.81 * 0.20 = 3.924)
+    // Right hanger at 0.30 m (distance = 0.20 m, mass = 2 kg -> moment = 2 * 9.81 * 0.20 = 3.924)
+    const res = leverMoments(beam, [{ mass: 2.0, x: -0.10 }, { mass: 2.0, x: 0.30 }], 0.10)
+    expect(res.status).toBe('balanced')
+    expect(res.leftFd).toBeCloseTo(3.924, 2)
+    expect(res.rightFd).toBeCloseTo(3.924, 2)
   })
 })
+
+

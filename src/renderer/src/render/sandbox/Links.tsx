@@ -14,6 +14,7 @@ import { BEAD_SCALE, beadMatrices, hingePin, LINK_LOOK, linkPlacement, pulleyRop
 import { coilGeometry, unitBall, unitCylinder } from '../sandboxMeshes'
 import { readoutRef, type SimReadout } from './readout'
 import { useReleaseLater } from '../releaseLater'
+import { isMetreRule } from '../../sim/apparatus'
 
 /**
  * How strongly a connection catches the light: the steel of a spring, a rod and a pin shines a
@@ -260,8 +261,11 @@ function HingePinView({ link, body, colour }: { link: Link; body: BodyDef; colou
       m.visible = false
       return
     }
+    const isThin = isMetreRule(body) || body.size[1] < 0.08
+    const baseRadius = isThin ? Math.min(LINK_LOOK.hinge.radius, body.size[1] * 0.25) : LINK_LOOK.hinge.radius
+    const minPx = isThin ? 2 : LINK_LOOK.hinge.minPixels
     hingePin(st.position, st.rotation, pivot, half, place)
-    placeCylinder(m, place, visibleRadius(LINK_LOOK.hinge.radius, LINK_LOOK.hinge.minPixels, pixelsPerMetre(state, place.mid)))
+    placeCylinder(m, place, visibleRadius(baseRadius, minPx, pixelsPerMetre(state, place.mid)))
     m.visible = true
   })
   return (

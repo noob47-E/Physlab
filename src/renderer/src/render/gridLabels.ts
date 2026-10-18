@@ -43,11 +43,85 @@ export function tickText(v: number, step: number, s: MeasureSettings): string {
  * used to sit on every major line, as little as 57 px apart — tight for a label like "−0.0015".
  * 0 is left out: the origin carries one 0 for both axes.
  */
-export function axisLabels(dmin: number, dmax: number, pxLength: number, majorStep: number, minorStep: number, s: MeasureSettings): { value: number; text: string }[] {
+export function axisLabels(dmin: number, dmax: number, pxLength: number, majorStep: number, minorStep: number, s: MeasureSettings, includeZero = false): { value: number; text: string }[] {
   const ticks = axisTicks(dmin, dmax, pxLength, minorStep, majorStep)
   // The label step sets the decimals, so 0.5, 1.0, 1.5 read alike; one label alone falls back on the major step.
   const step = ticks.length > 1 ? ticks[1] - ticks[0] : majorStep
-  return ticks.filter((t) => t !== 0).map((t) => ({ value: t, text: tickText(t, step, s) }))
+  return ticks.filter((t) => includeZero || t !== 0).map((t) => ({ value: t, text: tickText(t, step, s) }))
+}
+
+interface PinnedTick<Align extends 'center' | 'left' | 'right'> {
+  value: number
+  text: string
+  x: number
+  y: number
+  align: Align
+}
+
+interface PinnedLabelsResult {
+  xTicks: PinnedTick<'center'>[]
+  yTicks: PinnedTick<'left' | 'right'>[]
+  originTick: { text: string; x: number; y: number; align: 'right' } | null
+}
+
+/**
+ * Positions axis numbers across the viewport, pinning them to the nearest screen edges
+ * with safe padding and proper alignments whenever an axis leaves the screen (2-D graph paper style).
+ */
+export function pinnedAxisLabels(
+  b: { xMin: number; xMax: number; yMin: number; yMax: number },
+  size: { width: number; height: number },
+  origin: { x: number; y: number },
+  majorStep: number,
+  minorStep: number,
+  settings: MeasureSettings,
+  toScreen: (p: V3) => { x: number; y: number }
+): PinnedLabelsResult {
+  const originOnScreen =
+    origin.x >= 12 && origin.x <= size.width - 12 && origin.y >= 12 && origin.y <= size.height - 12
+
+  let axisX: number
+  let yAlign: 'left' | 'right'
+  if (origin.x < 35) {
+    axisX = 8
+    yAlign = 'left'
+  } else if (origin.x > size.width - 24) {
+    axisX = size.width - 12
+    yAlign = 'right'
+  } else {
+    axisX = origin.x - 8
+    yAlign = 'right'
+  }
+
+  const axisY = Math.min(Math.max(origin.y + 14, 14), size.height - 14)
+
+  const includeZeroX = !originOnScreen && b.xMin <= 0 && b.xMax >= 0
+  const includeZeroY = !originOnScreen && b.yMin <= 0 && b.yMax >= 0
+
+  const xLabels = axisLabels(b.xMin, b.xMax, size.width, majorStep, minorStep, settings, includeZeroX)
+  const yLabels = axisLabels(b.yMin, b.yMax, size.height, majorStep, minorStep, settings, includeZeroY)
+
+  const xTicks: PinnedTick<'center'>[] = xLabels.map(({ value, text }) => ({
+    value,
+    text,
+    x: Math.min(Math.max(toScreen([value, 0, 0]).x, 24), size.width - 24),
+    y: axisY,
+    align: 'center'
+  }))
+
+  const yTicks: PinnedTick<'left' | 'right'>[] = yLabels.map(({ value, text }) => ({
+    value,
+    text,
+    x: axisX,
+    y: Math.min(Math.max(toScreen([0, value, 0]).y, 16), size.height - 16),
+    align: yAlign
+  }))
+
+  const originTick = originOnScreen
+    ? { text: '0', x: origin.x - 8, y: origin.y + 12, align: 'right' as const }
+    : null
+
+  return { xTicks, yTicks, originTick }
 }
 
 /** Where a point of the scene lands on screen, as `toScreen` gives it. */
