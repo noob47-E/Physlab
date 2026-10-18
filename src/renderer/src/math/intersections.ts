@@ -99,54 +99,72 @@ function graphGraphIntersections(
     return keys.map((k) => [k.x, k.y, 0] as V3)
   }
 
-  // Without explicit viewport bounds, start search around approx seed if present.
-  const center = bounds?.approx?.[0]
-  if (center !== undefined) {
-    const low = Math.max(domLow, center - 1000)
-    const high = Math.min(domHigh, center + 1000)
-    if (low <= high) {
-      if (sameNumber(low, high)) {
-        const pt = testSinglePoint(low)
-        if (pt.length > 0) return pt
-      } else {
-        const span = high - low
-        const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
-        const keys = curveIntersections(f, g, low, high, n)
-        if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+  // Collect all crossings across multiple search windows, return in x-order.
+  const allKeys: { x: number; y: number }[] = []
+  const xValues = new Set<number>()
+  const addKeys = (keys: { x: number; y: number }[]) => {
+    for (const k of keys) {
+      const nearX = Math.round(k.x * 1e6) / 1e6 // deduplicate near-duplicates
+      if (!xValues.has(nearX)) {
+        xValues.add(nearX)
+        allKeys.push(k)
       }
     }
   }
 
-  // Standard view span [-1000, 1000]
+  // Without explicit viewport bounds, start search around approx seed if present.
+  const center = bounds?.approx?.[0]
+  let approxLow = Infinity
+  let approxHigh = -Infinity
+  if (center !== undefined) {
+    approxLow = Math.max(domLow, center - 1000)
+    approxHigh = Math.min(domHigh, center + 1000)
+    if (approxLow <= approxHigh) {
+      if (sameNumber(approxLow, approxHigh)) {
+        const pts = testSinglePoint(approxLow)
+        addKeys(pts.map((p) => ({ x: p[0], y: p[1] })))
+      } else {
+        const span = approxHigh - approxLow
+        const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
+        const keys = curveIntersections(f, g, approxLow, approxHigh, n)
+        addKeys(keys)
+      }
+    }
+  }
+
+  // Standard view span [-1000, 1000], skip if already covered by approx window
   const low = Math.max(domLow, -1000)
   const high = Math.min(domHigh, 1000)
-  if (low <= high) {
+  if (low <= high && !(center !== undefined && approxLow <= low && high <= approxHigh)) {
     if (sameNumber(low, high)) {
-      const pt = testSinglePoint(low)
-      if (pt.length > 0) return pt
+      const pts = testSinglePoint(low)
+      addKeys(pts.map((p) => ({ x: p[0], y: p[1] })))
     } else {
       const span = high - low
       const n = Math.min(8000, Math.max(2000, Math.round(span * 2)))
       const keys = curveIntersections(f, g, low, high, n)
-      if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+      addKeys(keys)
     }
   }
 
-  // If no crossings found in [-1000, 1000] and curves are wider, expand search to ±10000
-  let wideLow = domLow > -Infinity ? domLow : -10000
-  let wideHigh = domHigh < Infinity ? domHigh : 10000
-  if (center !== undefined) {
-    wideLow = Math.min(wideLow, center - 10000)
-    wideHigh = Math.max(wideHigh, center + 10000)
-  }
-  wideLow = Math.max(domLow, wideLow)
-  wideHigh = Math.min(domHigh, wideHigh)
-  if (wideLow < wideHigh) {
-    const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
-    return wideKeys.map((k) => [k.x, k.y, 0] as V3)
+  // If no crossings found, expand search to ±10000
+  if (allKeys.length === 0) {
+    let wideLow = domLow > -Infinity ? domLow : -10000
+    let wideHigh = domHigh < Infinity ? domHigh : 10000
+    if (center !== undefined) {
+      wideLow = Math.min(wideLow, center - 10000)
+      wideHigh = Math.max(wideHigh, center + 10000)
+    }
+    wideLow = Math.max(domLow, wideLow)
+    wideHigh = Math.min(domHigh, wideHigh)
+    if (wideLow < wideHigh) {
+      const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
+      addKeys(wideKeys)
+    }
   }
 
-  return []
+  allKeys.sort((a, b) => a.x - b.x)
+  return allKeys.map((k) => [k.x, k.y, 0] as V3)
 }
 
 export function circleGraphIntersections(
@@ -274,54 +292,72 @@ function lineGraphIntersections(
     return keys.map((k) => [k.x, k.y, 0] as V3)
   }
 
-  // Without explicit viewport bounds, start search around approx seed if present.
-  const center = bounds?.approx?.[0]
-  if (center !== undefined) {
-    const low = Math.max(domLow, center - 1000)
-    const high = Math.min(domHigh, center + 1000)
-    if (low <= high) {
-      if (sameNumber(low, high)) {
-        const pt = testSinglePoint(low)
-        if (pt.length > 0) return pt
-      } else {
-        const span = high - low
-        const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
-        const keys = curveIntersections(f, g, low, high, n)
-        if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+  // Collect all crossings across multiple search windows, return in x-order.
+  const allKeys: { x: number; y: number }[] = []
+  const xValues = new Set<number>()
+  const addKeys = (keys: { x: number; y: number }[]) => {
+    for (const k of keys) {
+      const nearX = Math.round(k.x * 1e6) / 1e6 // deduplicate near-duplicates
+      if (!xValues.has(nearX)) {
+        xValues.add(nearX)
+        allKeys.push(k)
       }
     }
   }
 
-  // Standard view span [-1000, 1000]
+  // Without explicit viewport bounds, start search around approx seed if present.
+  const center = bounds?.approx?.[0]
+  let approxLow = Infinity
+  let approxHigh = -Infinity
+  if (center !== undefined) {
+    approxLow = Math.max(domLow, center - 1000)
+    approxHigh = Math.min(domHigh, center + 1000)
+    if (approxLow <= approxHigh) {
+      if (sameNumber(approxLow, approxHigh)) {
+        const pts = testSinglePoint(approxLow)
+        addKeys(pts.map((p) => ({ x: p[0], y: p[1] })))
+      } else {
+        const span = approxHigh - approxLow
+        const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
+        const keys = curveIntersections(f, g, approxLow, approxHigh, n)
+        addKeys(keys)
+      }
+    }
+  }
+
+  // Standard view span [-1000, 1000], skip if already covered by approx window
   const low = Math.max(domLow, -1000)
   const high = Math.min(domHigh, 1000)
-  if (low <= high) {
+  if (low <= high && !(center !== undefined && approxLow <= low && high <= approxHigh)) {
     if (sameNumber(low, high)) {
-      const pt = testSinglePoint(low)
-      if (pt.length > 0) return pt
+      const pts = testSinglePoint(low)
+      addKeys(pts.map((p) => ({ x: p[0], y: p[1] })))
     } else {
       const span = high - low
       const n = Math.min(8000, Math.max(1200, Math.round(span * 2)))
       const keys = curveIntersections(f, g, low, high, n)
-      if (keys.length > 0) return keys.map((k) => [k.x, k.y, 0] as V3)
+      addKeys(keys)
     }
   }
 
-  // If no crossings found in [-1000, 1000], expand search to ±10000 (and around approx)
-  let wideLow = domLow > -Infinity ? domLow : -10000
-  let wideHigh = domHigh < Infinity ? domHigh : 10000
-  if (center !== undefined) {
-    wideLow = Math.min(wideLow, center - 10000)
-    wideHigh = Math.max(wideHigh, center + 10000)
-  }
-  wideLow = Math.max(domLow, wideLow)
-  wideHigh = Math.min(domHigh, wideHigh)
-  if (wideLow < wideHigh) {
-    const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
-    return wideKeys.map((k) => [k.x, k.y, 0] as V3)
+  // If no crossings found, expand search to ±10000
+  if (allKeys.length === 0) {
+    let wideLow = domLow > -Infinity ? domLow : -10000
+    let wideHigh = domHigh < Infinity ? domHigh : 10000
+    if (center !== undefined) {
+      wideLow = Math.min(wideLow, center - 10000)
+      wideHigh = Math.max(wideHigh, center + 10000)
+    }
+    wideLow = Math.max(domLow, wideLow)
+    wideHigh = Math.min(domHigh, wideHigh)
+    if (wideLow < wideHigh) {
+      const wideKeys = curveIntersections(f, g, wideLow, wideHigh, 4000)
+      addKeys(wideKeys)
+    }
   }
 
-  return []
+  allKeys.sort((a, b) => a.x - b.x)
+  return allKeys.map((k) => [k.x, k.y, 0] as V3)
 }
 
 /** Whether two objects represent the exact same curve (e.g. y = x typed twice). */

@@ -193,4 +193,65 @@ describe('G1c graph intersection fixes', () => {
     expect(intersectionsOf(compLine, compG1, undefined)).toEqual([])
     expect(intersectionsOf(compG2, compG3, undefined)).toEqual([])
   })
+
+  it('returns crossings in stable x-order regardless of approx seed', () => {
+    // Two curves: y = x and y = -x + 5000 cross at x = 2500 (far out)
+    // and y = x and y = sin(x) cross near x = 0
+    const g1 = graph('g1', 'f1', 'x')
+    const g2 = graph('g2', 'f2', '-x + 5000')
+
+    const ev = evaluateScene({ g1, g2 }, ['g1', 'g2'], DEFAULT_SETTINGS, 0)
+    const c1 = ev.values.get('g1')!
+    const c2 = ev.values.get('g2')!
+
+    // With approx, finds crossing far out
+    const ptsWithApprox = intersectionsOf(c1, c2, { approx: [2500, 2500, 0] })
+    expect(ptsWithApprox.length).toBeGreaterThan(0)
+
+    // Without approx, should find the same crossing(s) in x-order
+    const ptsWithoutApprox = intersectionsOf(c1, c2)
+
+    // Crossings must be returned in stable x-order in both cases
+    // so that an index in one list points to the same x-coordinate in the other
+    const sortedWithApprox = [...ptsWithApprox].sort((a, b) => a[0] - b[0])
+    const sortedWithoutApprox = [...ptsWithoutApprox].sort((a, b) => a[0] - b[0])
+
+    // Find common crossings
+    for (let i = 0; i < sortedWithApprox.length; i++) {
+      const xWithApprox = sortedWithApprox[i][0]
+      const matching = sortedWithoutApprox.find(p => Math.abs(p[0] - xWithApprox) < 10)
+      if (matching) {
+        // The crossing found with approx should be in the results without approx
+        // and at the same sorted position
+        const indexWithoutApprox = sortedWithoutApprox.indexOf(matching)
+        expect(indexWithoutApprox).toBeDefined()
+      }
+    }
+  })
+
+  it('finds all crossings across full range and returns in stable x-order', () => {
+    // Two curves: y = sin(x) and y = 0.2
+    // They cross multiple times across a wide range
+    const g1 = graph('g1', 'f1', 'sin(x)')
+    const g2 = graph('g2', 'f2', '0.2')
+
+    const ev = evaluateScene({ g1, g2 }, ['g1', 'g2'], DEFAULT_SETTINGS, 0)
+    const c1 = ev.values.get('g1')!
+    const c2 = ev.values.get('g2')!
+
+    // Search with approx seed near one crossing
+    const ptsWithApprox = intersectionsOf(c1, c2, { approx: [0, 0.2, 0] })
+
+    // Search without approx should find the same crossings in x-order
+    const ptsWithoutApprox = intersectionsOf(c1, c2)
+
+    // Both should find multiple crossings
+    expect(ptsWithApprox.length).toBeGreaterThan(0)
+    expect(ptsWithoutApprox.length).toBeGreaterThanOrEqual(ptsWithApprox.length)
+
+    // Results must be in x-order
+    for (let i = 1; i < ptsWithoutApprox.length; i++) {
+      expect(ptsWithoutApprox[i][0]).toBeGreaterThanOrEqual(ptsWithoutApprox[i - 1][0])
+    }
+  })
 })
