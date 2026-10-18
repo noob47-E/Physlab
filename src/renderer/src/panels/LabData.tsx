@@ -3,6 +3,7 @@ import { Download, Eye, Lightbulb, Plus, Sigma, Trash2, Undo2, Upload, X } from 
 import { fmt, fmtPrecise, type Precision } from '../math/format'
 import { saveTextFile } from '../app/files'
 import { pickFile } from '../app/download'
+import { showPanel } from '../app/panels'
 import { useScene } from '../core/store'
 import { visualizeReadings } from '../core/visualize'
 import { applyPaste, csvFileName, parseTable, pasteTarget, toCsv } from '../lab/csv'
@@ -246,7 +247,7 @@ export function LabData() {
   const plottable = table.columns.filter((c) => !c.uncertaintyFor)
 
   return (
-    <div className="panel pb-8">
+    <div className="panel lab-container pb-8">
       <div className="section-title">Lab data</div>
       <div className="px-3 text-ink-dim">
         Type the readings you measured. A column can also be worked out from the others — press{' '}
@@ -254,253 +255,264 @@ export function LabData() {
         reading is.
       </div>
 
-      {/* One tab per table. A recording sent from the Sandbox lands beside the readings the
-          student typed, and this is how they get back to those — without it the older tables
-          were still in the file but nothing on screen could reach them. */}
-      <div className="mt-2 flex items-center gap-2 px-3">
-        <div className="seg min-w-0 shrink overflow-x-auto">
-          {tables.map((t) => (
-            <button key={t.id} className={t.id === table.id ? 'on' : ''} title={t.title || DEFAULT_TABLE_TITLE} onClick={() => setCurrent(t.id)}>
-              <span className="max-w-40 truncate">{t.title || DEFAULT_TABLE_TITLE}</span>
+      {/* ---------------------------------------------------------------- table & chart side by side */}
+      <div data-lab-split="true" className="lab-split mt-2 min-w-0">
+        {/* -------------------------------------------------------------- table column */}
+        <div data-lab-table="true" className="lab-table-col flex-1 min-w-0 flex flex-col">
+          {/* One tab per table. A recording sent from the Sandbox lands beside the readings the
+              student typed, and this is how they get back to those — without it the older tables
+              were still in the file but nothing on screen could reach them. */}
+          <div className="flex items-center gap-2 px-3">
+            <div className="seg min-w-0 shrink overflow-x-auto">
+              {tables.map((t) => (
+                <button key={t.id} className={t.id === table.id ? 'on' : ''} title={t.title || DEFAULT_TABLE_TITLE} onClick={() => setCurrent(t.id)}>
+                  <span className="max-w-40 truncate">{t.title || DEFAULT_TABLE_TITLE}</span>
+                </button>
+              ))}
+            </div>
+            <button className="icon-btn" title="Start another table" onClick={addTable}>
+              <Plus size={13} />
             </button>
-          ))}
-        </div>
-        <button className="icon-btn" title="Start another table" onClick={addTable}>
-          <Plus size={13} />
-        </button>
-        <button className="icon-btn" title="Remove this table (Ctrl+Z brings it back)" onClick={() => removeTable(table.id)}>
-          <X size={13} />
-        </button>
-      </div>
+            <button className="icon-btn" title="Remove this table (Ctrl+Z brings it back)" onClick={() => removeTable(table.id)}>
+              <X size={13} />
+            </button>
+          </div>
 
-      <div className="mt-2 px-3">
-        <input
-          className="field font-semibold"
-          value={table.title}
-          placeholder="What was the experiment?"
-          onChange={(e) => patch((t) => ({ ...t, title: e.target.value }))}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      </div>
-
-      <div
-        className="mt-3 overflow-x-auto px-3 outline-none"
-        tabIndex={0}
-        onPaste={(e) => {
-          const text = e.clipboardData.getData('text')
-          const cell = (e.target as HTMLElement).closest<HTMLInputElement>('input[data-row]')
-          // One value belongs to the cell the student is typing in ("1,2" is a decimal comma); a
-          // block lands at that cell, or replaces the readings when the table itself is selected.
-          if (pasteTarget(text, !!cell) === 'text') return
-          e.preventDefault()
-          e.stopPropagation()
-          const at = cell ? { row: Number(cell.dataset.row), col: Number(cell.dataset.col) } : undefined
-          // Let the cell go first, so its own text is not written back over the pasted one.
-          cell?.blur()
-          takeIn(text, 'Pasted', at)
-        }}
-      >
-        <div className="grid min-w-min gap-1" style={{ gridTemplateColumns: `28px repeat(${table.columns.length}, minmax(104px, 1fr)) 26px` }}>
-          <div />
-          {table.columns.map((col) => (
-            <HeaderCell
-              key={col.id}
-              table={table}
-              col={col}
-              canRemove={table.columns.length > 1}
-              onPatch={(p) => patch((t) => setColumn(t, col.id, p))}
-              onRemove={() => patch((t) => removeColumn(t, col.id))}
-              onUncertainty={() => patch((t) => addUncertainty(t, col.id))}
+          <div className="mt-2 px-3">
+            <input
+              className="field font-semibold"
+              value={table.title}
+              placeholder="What was the experiment?"
+              onChange={(e) => patch((t) => ({ ...t, title: e.target.value }))}
+              onKeyDown={(e) => e.stopPropagation()}
             />
-          ))}
-          <div />
+          </div>
 
-          {table.rows.map((_row, r) => (
-            <FlatRow key={r}>
-              <div className="flex items-center justify-center text-fine text-ink-faint">{r + 1}</div>
-              {table.columns.map((col, c) =>
-                col.formula ? (
-                  <div key={col.id} className="field num flex items-center justify-end text-ink-dim" title="Worked out from the other columns">
-                    {resolved.values[r]?.[c] === null || resolved.values[r]?.[c] === undefined ? '' : fmtPrecise(resolved.values[r][c] as number, settings)}
-                  </div>
-                ) : (
-                  <Cell key={col.id} shown={shownCell(table, r, c)} row={r} col={c} onChange={(v, text) => patch((t) => setCell(t, r, c, v, text))} />
-                )
-              )}
-              <button className="icon-btn" title="Remove this row" onClick={() => patch((t) => removeRow(t, r))}>
-                <Trash2 size={12} />
-              </button>
-            </FlatRow>
-          ))}
-        </div>
-      </div>
-
-      {Object.entries(resolved.errors).map(([id, message]) => (
-        <div key={id} className="mt-2 px-3 text-bad">
-          {table.columns.find((c) => c.id === id)?.name}: {message}
-        </div>
-      ))}
-
-      <div className="mt-3 flex flex-wrap gap-2 px-3">
-        <button className="btn" onClick={() => patch(addRow)}>
-          <Plus size={13} /> Row
-        </button>
-        <button className="btn" onClick={() => patch((t) => addColumn(t))}>
-          <Plus size={13} /> Column
-        </button>
-        <button
-          className="btn"
-          title="Read a .csv file of readings"
-          onClick={async () => {
-            // pickFile opens a fresh picker each time, so the same file can be picked again after an undo.
-            const file = await pickFile('.csv,.txt,text/csv,text/plain')
-            if (file) takeIn(await file.text(), 'Imported')
-          }}
-        >
-          <Upload size={13} /> Import
-        </button>
-        <button className="btn" title="Save these readings as a .csv file" onClick={() => void saveTextFile(toCsv(table, resolved), csvFileName(table.title))}>
-          <Download size={13} /> Export
-        </button>
-      </div>
-
-      <div className="mt-2 px-3 text-ink-faint">
-        You can also copy readings out of a spreadsheet and paste them straight onto the table.
-      </div>
-
-      {undo && undo.after === tables && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
-          <span className="min-w-0 flex-1 text-ink">{undo.what}.</span>
-          <button
-            className="btn"
-            onClick={() => {
-              undoLab()
-              setUndo(null)
+          <div
+            className="mt-3 overflow-x-auto px-3 outline-none"
+            tabIndex={0}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData('text')
+              const cell = (e.target as HTMLElement).closest<HTMLInputElement>('input[data-row]')
+              // One value belongs to the cell the student is typing in ("1,2" is a decimal comma); a
+              // block lands at that cell, or replaces the readings when the table itself is selected.
+              if (pasteTarget(text, !!cell) === 'text') return
+              e.preventDefault()
+              e.stopPropagation()
+              const at = cell ? { row: Number(cell.dataset.row), col: Number(cell.dataset.col) } : undefined
+              // Let the cell go first, so its own text is not written back over the pasted one.
+              cell?.blur()
+              takeIn(text, 'Pasted', at)
             }}
           >
-            <Undo2 size={13} /> Undo
-          </button>
-          <button className="icon-btn" title="Keep it" onClick={() => setUndo(null)}>
-            <X size={13} />
-          </button>
-        </div>
-      )}
+            <div className="grid min-w-min gap-1" style={{ gridTemplateColumns: `28px repeat(${table.columns.length}, minmax(104px, 1fr)) 26px` }}>
+              <div />
+              {table.columns.map((col) => (
+                <HeaderCell
+                  key={col.id}
+                  table={table}
+                  col={col}
+                  canRemove={table.columns.length > 1}
+                  onPatch={(p) => patch((t) => setColumn(t, col.id, p))}
+                  onRemove={() => patch((t) => removeColumn(t, col.id))}
+                  onUncertainty={() => patch((t) => addUncertainty(t, col.id))}
+                />
+              ))}
+              <div />
 
-      {/* ---------------------------------------------------------------- graph */}
-      <div className="section-title mt-4">Graph</div>
-      <div className="flex flex-wrap items-center gap-2 px-3">
-        <span className="text-ink-faint">Plot</span>
-        <select className="field w-auto" value={table.plot.y} onChange={(e) => patch((t) => setPlot(t, { y: e.target.value }))}>
-          {plottable.map((c) => (
-            <option key={c.id} value={c.id}>
-              {headerOf(c)}
-            </option>
-          ))}
-        </select>
-        <span className="text-ink-faint">against</span>
-        <select className="field w-auto" value={table.plot.x} onChange={(e) => patch((t) => setPlot(t, { x: e.target.value }))}>
-          {plottable.map((c) => (
-            <option key={c.id} value={c.id}>
-              {headerOf(c)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="mt-2 px-3">
-        <select className="field" value={table.plot.fit} onChange={(e) => patch((t) => setPlot(t, { fit: e.target.value as FitShape }))}>
-          {Object.entries(FIT_LABELS).map(([shape, label]) => (
-            <option key={shape} value={shape}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="mt-2 px-1">
-        <LabChart
-          xs={xs}
-          ys={ys}
-          fit={fit}
-          xErr={series.xErr}
-          yErr={series.yErr}
-          xLabel={xCol ? headerOf(xCol) : 'x'}
-          yLabel={yCol ? headerOf(yCol) : 'y'}
-        />
-      </div>
-
-      {xs.length > 0 && (
-        <div className="mt-2 px-3">
-          <button
-            className="btn"
-            title="Put the readings and the line into the main drawing, where everything else lives"
-            onClick={() => visualizeReadings(xs, ys, fit?.expr ?? null, table.title || 'readings')}
-          >
-            <Eye size={13} /> Show on the drawing
-          </button>
-        </div>
-      )}
-
-      {xs.length < MIN_POINTS ? (
-        <div className="px-3 text-ink-faint">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>
-      ) : fit ? (
-        <div className="card mx-3 mt-2 border-warn/40 bg-warn/5 p-3">
-          <div className="text-lead text-ink-strong">{equationText(fit, yCol?.label?.trim() || yCol?.name || 'y', xCol?.label?.trim() || xCol?.name || 'x', settings)}</div>
-          <div className="mt-1 text-ink-dim">
-            {/* r² is a score of how well the line fits, not a measurement, so it keeps a fixed
-                four decimals: at 0 d.p. it would read "1" for every fit worth having. */}
-            r² = {fmt(fit.r2, 4)}
-            {fit.r2 > 0.98 ? ' — the readings sit very close to this line.' : fit.r2 < 0.9 && advice.kind === 'none' ? ' — the readings are scattered; check for a mistake.' : ''}
+              {table.rows.map((_row, r) => (
+                <FlatRow key={r}>
+                  <div className="flex items-center justify-center text-fine text-ink-faint">{r + 1}</div>
+                  {table.columns.map((col, c) =>
+                    col.formula ? (
+                      <div key={col.id} className="field num flex items-center justify-end text-ink-dim" title="Worked out from the other columns">
+                        {resolved.values[r]?.[c] === null || resolved.values[r]?.[c] === undefined ? '' : fmtPrecise(resolved.values[r][c] as number, settings)}
+                      </div>
+                    ) : (
+                      <Cell key={col.id} shown={shownCell(table, r, c)} row={r} col={c} onChange={(v, text) => patch((t) => setCell(t, r, c, v, text))} />
+                    )
+                  )}
+                  <button className="icon-btn" title="Remove this row" onClick={() => patch((t) => removeRow(t, r))}>
+                    <Trash2 size={12} />
+                  </button>
+                </FlatRow>
+              ))}
+            </div>
           </div>
-          {fit.slope !== undefined && (
-            <div className="mt-2">
-              <span className="text-ink-dim">gradient = </span>
-              <span className="text-lead font-semibold text-ink-strong">
-                {pmText(fit.slope, bars ? bars.half : fit.slopeError)} {slopeUnit}
-              </span>
-              {bars ? (
-                <div className="mt-1 text-ink-faint">
-                  From your error bars: the steepest line through them gives {fmtPrecise(bars.max, settings)}, the shallowest {fmtPrecise(bars.min, settings)}, and half
-                  the difference is the ±.
-                </div>
-              ) : (
-                fit.slopeError !== undefined &&
-                fit.slopeError > Math.abs(fit.slope) * 1e-9 && (
-                  <div className="mt-1 text-ink-faint">The ± is how far the line could tilt and still pass through readings this scattered.</div>
-                )
-              )}
-              {meaning && <div className="mt-1 text-good">{meaning}</div>}
+
+          {Object.entries(resolved.errors).map(([id, message]) => (
+            <div key={id} className="mt-2 px-3 text-bad">
+              {table.columns.find((c) => c.id === id)?.name}: {message}
+            </div>
+          ))}
+
+          <div className="mt-3 flex flex-wrap gap-2 px-3">
+            <button className="btn" onClick={() => patch(addRow)}>
+              <Plus size={13} /> Row
+            </button>
+            <button className="btn" onClick={() => patch((t) => addColumn(t))}>
+              <Plus size={13} /> Column
+            </button>
+            <button
+              className="btn"
+              title="Read a .csv file of readings"
+              onClick={async () => {
+                // pickFile opens a fresh picker each time, so the same file can be picked again after an undo.
+                const file = await pickFile('.csv,.txt,text/csv,text/plain')
+                if (file) takeIn(await file.text(), 'Imported')
+              }}
+            >
+              <Upload size={13} /> Import
+            </button>
+            <button className="btn" title="Save these readings as a .csv file" onClick={() => void saveTextFile(toCsv(table, resolved), csvFileName(table.title))}>
+              <Download size={13} /> Export
+            </button>
+          </div>
+
+          <div className="mt-2 px-3 text-ink-faint">
+            You can also copy readings out of a spreadsheet and paste them straight onto the table.
+          </div>
+
+          {undo && undo.after === tables && (
+            <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
+              <span className="min-w-0 flex-1 text-ink">{undo.what}.</span>
+              <button
+                className="btn"
+                onClick={() => {
+                  undoLab()
+                  setUndo(null)
+                }}
+              >
+                <Undo2 size={13} /> Undo
+              </button>
+              <button className="icon-btn" title="Keep it" onClick={() => setUndo(null)}>
+                <X size={13} />
+              </button>
             </div>
           )}
         </div>
-      ) : (
-        <div className="px-3 text-warn">This shape cannot be fitted to these readings — a logarithm or a power needs positive values.</div>
-      )}
 
-      {advice.kind !== 'none' && xs.length >= MIN_POINTS && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
-          <Lightbulb size={14} className="shrink-0 text-warn" />
-          <span className="min-w-0 flex-1 text-ink">{adviceText(advice)}</span>
-          {advice.kind === 'better' && (
-            <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: advice.best.shape }))}>
-              Use it
-            </button>
+        {/* -------------------------------------------------------------- chart column */}
+        <div data-lab-chart="true" className="lab-chart-col flex-1 min-w-0 flex flex-col">
+          <div className="section-title">Graph</div>
+          <div className="flex flex-wrap items-center gap-2 px-3">
+            <span className="text-ink-faint">Plot</span>
+            <select className="field w-auto" value={table.plot.y} onChange={(e) => patch((t) => setPlot(t, { y: e.target.value }))}>
+              {plottable.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {headerOf(c)}
+                </option>
+              ))}
+            </select>
+            <span className="text-ink-faint">against</span>
+            <select className="field w-auto" value={table.plot.x} onChange={(e) => patch((t) => setPlot(t, { x: e.target.value }))}>
+              {plottable.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {headerOf(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-2 px-3">
+            <select className="field" value={table.plot.fit} onChange={(e) => patch((t) => setPlot(t, { fit: e.target.value as FitShape }))}>
+              {Object.entries(FIT_LABELS).map(([shape, label]) => (
+                <option key={shape} value={shape}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-2 px-1">
+            <LabChart
+              xs={xs}
+              ys={ys}
+              fit={fit}
+              xErr={series.xErr}
+              yErr={series.yErr}
+              xLabel={xCol ? headerOf(xCol) : 'x'}
+              yLabel={yCol ? headerOf(yCol) : 'y'}
+            />
+          </div>
+
+          {xs.length > 0 && (
+            <div className="mt-2 px-3">
+              <button
+                className="btn"
+                title="Put the readings and the line into the main drawing, where everything else lives"
+                onClick={() => {
+                  visualizeReadings(xs, ys, fit?.expr ?? null, table.title || 'readings')
+                  showPanel('viewport')
+                }}
+              >
+                <Eye size={13} /> Show on the drawing
+              </button>
+            </div>
+          )}
+
+          {xs.length < MIN_POINTS ? (
+            <div className="px-3 text-ink-faint">Fill in at least {MIN_POINTS} rows to draw a line through the readings.</div>
+          ) : fit ? (
+            <div className="card mx-3 mt-2 border-warn/40 bg-warn/5 p-3">
+              <div className="text-lead text-ink-strong">{equationText(fit, yCol?.label?.trim() || yCol?.name || 'y', xCol?.label?.trim() || xCol?.name || 'x', settings)}</div>
+              <div className="mt-1 text-ink-dim">
+                {/* r² is a score of how well the line fits, not a measurement, so it keeps a fixed
+                    four decimals: at 0 d.p. it would read "1" for every fit worth having. */}
+                r² = {fmt(fit.r2, 4)}
+                {fit.r2 > 0.98 ? ' — the readings sit very close to this line.' : fit.r2 < 0.9 && advice.kind === 'none' ? ' — the readings are scattered; check for a mistake.' : ''}
+              </div>
+              {fit.slope !== undefined && (
+                <div className="mt-2">
+                  <span className="text-ink-dim">gradient = </span>
+                  <span className="text-lead font-semibold text-ink-strong">
+                    {pmText(fit.slope, bars ? bars.half : fit.slopeError)} {slopeUnit}
+                  </span>
+                  {bars ? (
+                    <div className="mt-1 text-ink-faint">
+                      From your error bars: the steepest line through them gives {fmtPrecise(bars.max, settings)}, the shallowest {fmtPrecise(bars.min, settings)}, and half
+                      the difference is the ±.
+                    </div>
+                  ) : (
+                    fit.slopeError !== undefined &&
+                    fit.slopeError > Math.abs(fit.slope) * 1e-9 && (
+                      <div className="mt-1 text-ink-faint">The ± is how far the line could tilt and still pass through readings this scattered.</div>
+                    )
+                  )}
+                  {meaning && <div className="mt-1 text-good">{meaning}</div>}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-3 text-warn">This shape cannot be fitted to these readings — a logarithm or a power needs positive values.</div>
+          )}
+
+          {advice.kind !== 'none' && xs.length >= MIN_POINTS && (
+            <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-line-2 bg-surface-0 px-3 py-2">
+              <Lightbulb size={14} className="shrink-0 text-warn" />
+              <span className="min-w-0 flex-1 text-ink">{adviceText(advice)}</span>
+              {advice.kind === 'better' && (
+                <button className="btn" onClick={() => patch((t) => setPlot(t, { fit: advice.best.shape }))}>
+                  Use it
+                </button>
+              )}
+            </div>
+          )}
+
+          {fit && (
+            <div className="mt-3 px-3">
+              <label className="flex items-center gap-2 text-ink-dim">
+                <input type="checkbox" checked={showResiduals} onChange={(e) => setShowResiduals(e.target.checked)} />
+                Residuals — how far each reading is from the line
+              </label>
+            </div>
+          )}
+          {fit && showResiduals && (
+            <div className="mt-1 px-1">
+              <ResidualStrip xs={xs} fit={fit} xLabel={xCol ? headerOf(xCol) : 'x'} />
+            </div>
           )}
         </div>
-      )}
-
-      {fit && (
-        <div className="mt-3 px-3">
-          <label className="flex items-center gap-2 text-ink-dim">
-            <input type="checkbox" checked={showResiduals} onChange={(e) => setShowResiduals(e.target.checked)} />
-            Residuals — how far each reading is from the line
-          </label>
-        </div>
-      )}
-      {fit && showResiduals && (
-        <div className="mt-1 px-1">
-          <ResidualStrip xs={xs} fit={fit} xLabel={xCol ? headerOf(xCol) : 'x'} />
-        </div>
-      )}
+      </div>
     </div>
   )
 }

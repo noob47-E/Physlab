@@ -49,10 +49,10 @@ export const PANEL_LIST = panelList()
 const PANEL_GROUPS: string[][] = [
   // Graphing's list of lines lives on the left with the other lists.
   ['outliner', 'examples', 'expressions'],
-  ['viewport', 'maths'],
+  ['viewport', 'maths', 'labdata'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.
-  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'labdata', 'sandbox', 'gpulab', 'timeline', 'graphs'],
+  ['vectorcalc', 'measure', 'properties', 'solver', 'practice', 'sandbox', 'gpulab', 'timeline', 'graphs'],
   ['console']
 ]
 

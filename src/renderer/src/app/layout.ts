@@ -50,11 +50,20 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
   resetTool()
   // The centre panel is switched directly: requestFocus holds one panel at a time, so asking
   // for two in a row would lose the first.
-  if (m.centre) showPanel(m.centre)
-  else if (isPanelOpen('maths')) {
-    // Visualize may have split the Maths screen off beside the drawing: in a mode without a centre
+  if (m.centre && isPanelOpen(m.centre)) {
+    const api = getDockApi()
+    const p = api?.getPanel(m.centre)
+    const vp = api?.getPanel('viewport')
+    if (api && p && vp && p.api.group !== vp.api.group) {
+      p.api.moveTo({ group: vp.api.group, position: 'center' })
+    }
+    showPanel(m.centre)
+  }
+  else if (isPanelOpen('maths') || isPanelOpen('labdata')) {
+    // Visualize may have split a centre screen off beside the drawing: in a mode without a centre
     // panel it goes back behind the drawing, as a tab, instead of keeping a column everywhere.
-    regroupWithViewport('maths')
+    if (isPanelOpen('maths')) regroupWithViewport('maths')
+    if (isPanelOpen('labdata')) regroupWithViewport('labdata')
     showPanel('viewport')
   }
   // One Mode = One Layout (Part L1): switching modes closes panels that do not belong to the new mode.
@@ -63,7 +72,6 @@ export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: bo
     if (id !== 'shapes' && isPanelOpen('measure')) hidePanel('measure')
     // skipFocus is how a question opens its picture beside Practice: the question and its answer box stay.
     if (id !== 'problems' && !opts.skipFocus && isPanelOpen('practice')) hidePanel('practice')
-    if (id !== 'lab' && isPanelOpen('labdata')) hidePanel('labdata')
     if (id !== 'gpu' && isPanelOpen('gpulab')) hidePanel('gpulab')
     if (id !== 'sandbox' && isPanelOpen('sandbox')) hidePanel('sandbox')
     if (id !== 'vectors') {

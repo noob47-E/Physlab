@@ -67,12 +67,12 @@ describe('Part L3: Panels on the side only', () => {
   it('assigns all standard and tool panels to left or right sides (or centre), never below', () => {
     expect(panelHome('viewport')).toBe('centre')
     expect(panelHome('maths')).toBe('centre')
+    expect(panelHome('labdata')).toBe('centre')
     expect(panelHome('examples')).toBe('left')
     expect(panelHome('expressions')).toBe('left')
     expect(panelHome('outliner')).toBe('left')
     expect(panelHome('measure')).toBe('right')
     expect(panelHome('sandbox')).toBe('right')
-    expect(panelHome('labdata')).toBe('right')
     expect(panelHome('practice')).toBe('right')
     expect(panelHome('vectorcalc')).toBe('right')
     expect(panelHome('solver')).toBe('right')

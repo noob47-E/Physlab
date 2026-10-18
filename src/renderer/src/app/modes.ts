@@ -123,6 +123,7 @@ export const MODES: ModeDef[] = [
     ready: true,
     tools: ['select'],
     panel: 'labdata',
+    centre: 'labdata',
     view: '2d'
   }
 ]

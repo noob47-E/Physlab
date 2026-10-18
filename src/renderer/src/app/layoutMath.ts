@@ -98,6 +98,7 @@ export function panelHome(id: string): PanelHome {
   switch (id) {
     case 'viewport':
     case 'maths':
+    case 'labdata':
       return 'centre'
     case 'outliner':
     case 'examples':

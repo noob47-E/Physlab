@@ -115,6 +115,11 @@ describe('what a mode opens by default', () => {
     expect(panelsForMode(calc)).toEqual(['viewport', 'maths'])
   })
 
+  it('opens Lab Data as a screen in the centre so table and chart sit side by side', () => {
+    const lab = MODES.find((m) => m.id === 'lab')!
+    expect(panelsForMode(lab)).toEqual(['viewport', 'labdata'])
+  })
+
   it('rebuilds a layout saved with the old calculator panels', () => {
     // A saved layout naming `calculator` or `working` would restore with empty tabs; the schema
     // version went up so it is thrown away and rebuilt instead.
@@ -148,9 +153,9 @@ describe('what a mode opens by default', () => {
   it('knows where each panel lives when it has no neighbour', () => {
     expect(panelHome('viewport')).toBe('centre')
     expect(panelHome('maths')).toBe('centre')
+    expect(panelHome('labdata')).toBe('centre')
     expect(panelHome('examples')).toBe('left')
     expect(panelHome('console')).toBe('below')
-    expect(panelHome('labdata')).toBe('right')
     expect(panelHome('vectorcalc')).toBe('right')
     // A mode's own panel, so beside the drawing — not in the console strip.
     expect(panelHome('gpulab')).toBe('right')
