@@ -29,7 +29,7 @@ export const SANDBOX_START_VIEW: { side: CameraView; turned: CameraView } = {
  * view. The maths views' Home put the camera twelve metres under the floor. `positionOf` is where a
  * body is at this moment: the engine's live state while a run is on, the definition otherwise.
  */
-export function sandboxHomeView(bodies: BodyDef[], positionOf: (b: BodyDef) => V3, sideView: boolean): CameraView {
+export function sandboxHomeView(bodies: BodyDef[], positionOf: (b: BodyDef) => V3, sideView: boolean, isLab = false): CameraView {
   const min: V3 = [Infinity, Infinity, Infinity]
   const max: V3 = [-Infinity, -Infinity, -Infinity]
   for (const b of bodies) {
@@ -58,8 +58,11 @@ export function sandboxHomeView(bodies: BodyDef[], positionOf: (b: BodyDef) => V
   // At least 1.5 m across: a 1 m lever or a pendulum then fills the view when it is loaded (SB63), where
   // the old 3 m floor left a metre-rule lever small in the middle of a wide floor.
   const r = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 1.5)
+  // CLAB2: When a lab experiment loads, the Collision Lab panel sits at the top-left (w = 280px).
+  // Shifting the camera target to the left moves the framed carts to the right of the panel so both carts are clearly seen.
+  const tx = isLab ? cx - 1.2 : cx
   return {
-    position: sideView ? [cx, cy + r * 0.25, cz + r * 1.6] : [cx + r * 0.9, cy + r * 0.7, cz + r * 1.2],
-    target: [cx, cy, cz]
+    position: sideView ? [tx, cy + r * 0.25, cz + r * 1.6] : [tx + r * 0.9, cy + r * 0.7, cz + r * 1.2],
+    target: [tx, cy, cz]
   }
 }

@@ -226,7 +226,10 @@ export function Viewport() {
 
       {mode === 'sandbox' && <SandboxHud />}
       {mode !== 'sandbox' && (
-      <div className="absolute left-3 top-3 flex items-center gap-1">
+      // The tool row wraps inside the drawing instead of squeezing its buttons over each other (a narrow drawing between
+      // two panels, as in Geometry or Vectors 3-D), and the Labels row follows it however many lines it takes.
+      <div className="pointer-events-none absolute left-3 right-3 top-3 flex flex-col items-start gap-1">
+      <div className="viewport-tools pointer-events-auto flex flex-wrap items-center gap-1">
         {drawing && (
           <div className="seg">
             <button className={viewMode === '2d' ? 'on' : ''} onClick={() => setViewMode('2d')} title="2D view (3)">
@@ -256,12 +259,13 @@ export function Viewport() {
           <Camera size={14} />
         </button>
       </div>
-      )}
       {drawing && (
-      <div data-tour="labels" className={`absolute left-3 flex items-center gap-1.5 ${viewMode === '3d' ? 'top-[68px]' : 'top-11'}`}>
+      <div data-tour="labels" className="pointer-events-auto flex items-center gap-1.5">
         <span className="text-fine text-[var(--text-faint)]">Labels</span>
         <LabelShowSwitch />
         <AngleMarksSwitch />
+      </div>
+      )}
       </div>
       )}
       {mode !== 'sandbox' && <MarqueeBox />}
@@ -410,11 +414,11 @@ function Grid3DControls() {
         ))}
       </select>
       <span className="badge pointer-events-auto flex items-center gap-1" title="Height: clicks land on the level plane at this z">
-        <button type="button" className="min-h-[44px] min-w-[44px] cursor-pointer outline-none" aria-label="Lower the drawing plane" onClick={(e) => (setSettings({ workZ: clampWorkZ(workZ - 1) }), e.currentTarget.blur())}>
+        <button type="button" className="min-h-[28px] min-w-[28px] cursor-pointer outline-none pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px]" aria-label="Lower the drawing plane" onClick={(e) => (setSettings({ workZ: clampWorkZ(workZ - 1) }), e.currentTarget.blur())}>
           −
         </button>
         <span>Height z = {workZ}</span>
-        <button type="button" className="min-h-[44px] min-w-[44px] cursor-pointer outline-none" aria-label="Raise the drawing plane" onClick={(e) => (setSettings({ workZ: clampWorkZ(workZ + 1) }), e.currentTarget.blur())}>
+        <button type="button" className="min-h-[28px] min-w-[28px] cursor-pointer outline-none pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px]" aria-label="Raise the drawing plane" onClick={(e) => (setSettings({ workZ: clampWorkZ(workZ + 1) }), e.currentTarget.blur())}>
           +
         </button>
       </span>

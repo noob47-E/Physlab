@@ -1947,3 +1947,10 @@ math-field.math-input::part(menu-toggle) {
     height: 44px;
   }
 }
+
+/* The viewport tool row (Viewport.tsx) wraps onto a second line when the drawing is narrow; its buttons never shrink and
+   break their words over each other ("✓ Axes" over the Lines menu in Geometry 3-D at 1366x768). */
+.viewport-tools > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

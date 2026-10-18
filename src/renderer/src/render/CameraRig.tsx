@@ -13,6 +13,7 @@ import { graphBox } from '../core/visualize'
 import { themeColor, useThemed } from '../app/theme'
 import { SANDBOX_FAR, SANDBOX_FOV, SANDBOX_START_VIEW, sandboxHomeView } from './sandboxCamera'
 import { drawnBoxes } from './Graph3DViews'
+import { isLab } from '../sim/labScenes'
 
 /** Bounding box of all visible geometry (graphs only where they have ends). */
 function sceneBounds(): { min: [number, number, number]; max: [number, number, number] } | null {
@@ -137,7 +138,12 @@ export function CameraRig() {
   useEffect(() => {
     if (mode !== 'sandbox' || viewMode !== '3d') return
     const c = controls as unknown as { target: THREE.Vector3; update: () => void } | null
-    const start = sideView ? SANDBOX_START_VIEW.side : SANDBOX_START_VIEW.turned
+    const { bodies, sideView, presetId } = useSandbox.getState()
+    const start = isLab(presetId)
+      ? sandboxHomeView(bodies, (b) => engine.world?.state(b.id)?.position ?? b.position, sideView, true)
+      : sideView
+        ? SANDBOX_START_VIEW.side
+        : SANDBOX_START_VIEW.turned
     camera.up.set(0, 1, 0)
     camera.position.set(...start.position)
     c?.target.set(...start.target)
@@ -163,8 +169,8 @@ export function CameraRig() {
     if (useApp.getState().mode === 'sandbox') {
       // The maths presets below put the camera 12 m under the floor. Frame the objects instead,
       // where they are now rather than where they started.
-      const { bodies, sideView } = useSandbox.getState()
-      const home = sandboxHomeView(bodies, (b) => engine.world?.state(b.id)?.position ?? b.position, sideView)
+      const { bodies, sideView, presetId } = useSandbox.getState()
+      const home = sandboxHomeView(bodies, (b) => engine.world?.state(b.id)?.position ?? b.position, sideView, isLab(presetId))
       camera.up.set(0, 1, 0)
       camera.position.set(...home.position)
       c?.target.set(...home.target)
