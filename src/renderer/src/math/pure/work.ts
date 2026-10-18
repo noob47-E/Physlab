@@ -63,6 +63,8 @@ export interface Working {
    * at x² + 4. `job` is a JobId; it is a string here only because this file sits below run.ts.
    */
   offer?: { job: string; label: string; hint: string }
+  /** Another way of solving the same problem (e.g. completing the square or substitution). */
+  anotherWay?: Working
 }
 
 

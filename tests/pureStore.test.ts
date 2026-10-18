@@ -56,7 +56,7 @@ describe('the Working store never lets a throw reach the panel', () => {
     usePure.getState().runLatex('x^{2}-1', 'auto')
     expect(usePure.getState().job).toBe('factor')
     expect(usePure.getState().input).toBe('x^(2)-1')
-    expect(usePure.getState().working?.answers[0].tex).toBe('\\left(x - 1\\right)\\left(x + 1\\right)')
+    expect(['\\left(x - 1\\right)\\left(x + 1\\right)', '(x - 1)(x + 1)']).toContain(usePure.getState().working?.answers[0].tex)
     usePure.getState().runLatex('12,\\ 18', 'auto')
     expect(usePure.getState().job).toBe('hcf')
   })

@@ -14,6 +14,29 @@ import { displaySafe, drawnTex } from './displaySafe'
 
 export { displaySafe, drawnTex } from './displaySafe'
 
+/** Superscript and subscript digits for display. */
+const SUPERSCRIPT: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '-': '⁻'
+}
+
+/** Convert LaTeX-like notation to readable display text with superscripts and proper formatting. */
+export function toDisplayTex(text: string): string {
+  return text
+    .replace(/\\left|\\right/g, '')
+    .replace(/\\text\{([^}]*)\}/g, '$1')
+    .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
+    .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
+    .replace(/\^\{(-?\d+)\}/g, '^$1')
+    .replace(/\^(\d+)/g, (_all: string, ds: string) => [...ds].map((d) => SUPERSCRIPT[d]).join(''))
+    .replace(/\^(-\d)/g, (_all: string, d: string) => SUPERSCRIPT[d] || d)
+    .replace(/\*(?!\w)/g, '')
+    .replace(/ - /g, ' − ')
+    .replace(/^-/, '−')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** Helper to convert an expression or equation AST/string into LaTeX display math. */
 export function formatTex(val: unknown): string {
   if (typeof val === 'string') {
@@ -35,6 +58,8 @@ const SHOWN_METHOD_NAMES = new Set([
   'Solve by elimination',
   'Solve by substitution',
   'Factorising',
+  'Factorise',
+  'Expand',
   'Quadratic formula',
   'Discriminant',
   'Completing the square'
@@ -49,7 +74,7 @@ export function subHeading(sub: Working, index: number): string {
   const first = sub.steps[0]
   const role = first && first.data && typeof first.data === 'object' ? (first.data as { role?: unknown }).role : undefined
   if (role === 'discriminant') return 'Discriminant'
-  if (typeof sub.input === 'string' && sub.input !== '') return `Solve ${drawnTex(sub.input)}`
+  if (typeof sub.input === 'string' && sub.input !== '') return `Solve ${toDisplayTex(drawnTex(sub.input))}`
   return `Case ${index + 1}`
 }
 
@@ -127,7 +152,8 @@ function inputOf(working: Working, problem: Problem | undefined): string {
   const raw = typeof working.input === 'string' ? working.input : problem && typeof problem.input === 'string' ? problem.input : ''
   // The typed problem is drawn only when it is safe to draw as it is read: a can't-show page can carry an unsafe input (x_1 = 2),
   // and then it is not drawn (review of P-FIX-S1SOUND2, MUST A2).
-  return displaySafe(drawnTex(raw)) ? drawnTex(raw) : ''
+  const drawn = drawnTex(raw)
+  return displaySafe(drawn) ? toDisplayTex(drawn) : ''
 }
 
 function shownMethod(name: unknown): string | undefined {
@@ -158,15 +184,24 @@ function renderChecked(working: Working, problem: Problem | undefined, adapter: 
   const validation = validateWorking(working, adapter, problem?.domain)
   if (!validation.valid) return cantShow(working, problem)
 
-  return {
+  const doc: PureWorkingDoc = {
     title: titleOf(working, problem),
     input: inputOf(working, problem),
     method: shownMethod(working.method),
     moves: collectMoves(working),
     answers: formatAnswers(working.answer),
     check: checkDrawn(working),
-    checked: working.checked
+    checked: working.checked ?? (validation.valid ? 'ok' : undefined)
   }
+
+  if (working.anotherWay) {
+    const alt = renderChecked(working.anotherWay, problem, adapter)
+    if (!alt.noWorking && alt.moves.length > 0) {
+      doc.anotherWay = alt
+    }
+  }
+
+  return doc
 }
 
 /** The check line as the page draws it: the builder's text, with powers braced as the validator checked them. */

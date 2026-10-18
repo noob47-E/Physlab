@@ -21,6 +21,7 @@ import { CONSTANT_NAMES, GREEK_LETTERS } from '../names'
 import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
+import { stepWorkingFor } from '../steps/solve'
 
 export interface PureEntry {
   id: string
@@ -125,10 +126,15 @@ export const usePure = create<PureState>((set, get) => ({
     // deep inside one used to leave the panel showing the previous problem with no explanation.
     // Whatever escapes becomes a refusal the student can read.
     let working: Working
-    try {
-      working = runPure(j, src)
-    } catch (err) {
-      working = failed(jobById(j).label, latex ?? src, err instanceof Error && err.message ? err.message : 'Something went wrong while working that out.')
+    const stepped = stepWorkingFor({ job: j, input: src, rawInput: latex })
+    if (stepped) {
+      working = stepped
+    } else {
+      try {
+        working = runPure(j, src)
+      } catch (err) {
+        working = failed(jobById(j).label, latex ?? src, err instanceof Error && err.message ? err.message : 'Something went wrong while working that out.')
+      }
     }
     // With no LaTeX given, the source doubles as the display form. That is only safe because the
     // callers that have real LaTeX always pass it; see the contract test.

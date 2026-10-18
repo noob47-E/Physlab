@@ -26,7 +26,7 @@ import {
   type SetProof
 } from './check-adapter'
 import { MINUS, ratPlain, shiftPlain } from './methods/stepText'
-import { evalAt, varsOf } from '../pure/mono'
+import { evalAt, varsOf, type Expr } from '../pure/mono'
 import { rEq, type Rat } from '../pure/rat'
 
 
@@ -45,7 +45,11 @@ function plainTex(text: string): string {
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
     .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
+    .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
+    .replace(/\^\{(-?\d+)\}/g, '^$1')
+    .replace(/\^\((-?\d+)\)/g, '^$1')
     .replace(/\^(\d+)/g, (_all: string, ds: string) => [...ds].map((d) => SUPERSCRIPT[d]).join(''))
+    .replace(/\^(-\d)/g, (_all: string, d: string) => SUPERSCRIPT[d])
     .replace(/\*/g, '')
     .replace(/ - /g, ` ${MINUS} `)
     .replace(/^-/, MINUS)
@@ -332,6 +336,12 @@ export function substitutionOf(working: Working): Substitution | null {
   if (typeof working.input !== 'string' || working.answer === undefined) return null
   const answers: StepAnswer[] = Array.isArray(working.answer) ? working.answer : [working.answer]
   if (answers.length === 0) return null
+
+  // Check if this is a system (multiple equations separated by comma)
+  if (working.input.includes(',')) {
+    return systemSubstitutionOf(working, answers)
+  }
+
   const sides = equationSides(working.input)
   if (!sides) return null
   const v = answers[0].label
@@ -356,6 +366,50 @@ export function substitutionOf(working: Working): Substitution | null {
     sentences.push(`Put ${v} = ${ratPlain(r)} back: both sides give ${ratPlain(left)}.`)
   }
   return { ok: true, text: sentences.join(' ') }
+}
+
+/** Helper: check a system of equations by substituting the answers. */
+function systemSubstitutionOf(working: Working, answers: StepAnswer[]): Substitution | null {
+  if (typeof working.input !== 'string') return null
+
+  // Split system into individual equations
+  const equations = working.input.split(',').map((e) => e.trim())
+  if (equations.length < 2) return null
+
+  // Try to parse all equations
+  const eqSides: Array<{ L: Expr; R: Expr } | null> = []
+  for (const eq of equations) {
+    const sides = equationSides(eq)
+    eqSides.push(sides)
+  }
+  if (eqSides.some((s) => !s)) return null
+
+  // Build substitution check text
+  const answerMap: Record<string, Rat> = {}
+  for (const a of answers) {
+    const r = parseExactRat(a.value ?? normalizeDisplayed(a.tex))
+    if (!r) return null
+    answerMap[a.label] = r
+  }
+
+  // Check each equation with all variables substituted
+  for (const sides of eqSides) {
+    if (!sides) return null
+    const left = evalAt(sides.L, answerMap)
+    const right = evalAt(sides.R, answerMap)
+    if (!rEq(left, right)) {
+      return {
+        ok: false,
+        reason: `The answers do not satisfy all equations`
+      }
+    }
+  }
+
+  // Build the check text showing all substitutions
+  const parts: string[] = []
+  parts.push(`Put ${answers.map((a) => `${a.label} = ${ratPlain(answerMap[a.label])}`).join(', ')} back`)
+  parts.push('both equations hold')
+  return { ok: true, text: `${parts.join(': ')}.` }
 }
 
 // ---- S1c: the sentences and rules of the product steps (expanding and factorising) ----

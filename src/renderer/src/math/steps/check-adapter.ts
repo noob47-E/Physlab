@@ -362,8 +362,8 @@ export const defaultCheckAdapter: CheckAdapter = {
 
     const vars = varsOf(pDiff)
     if (vars.some((name) => name !== variable)) return 'invalid'
-    // A quadratic's roots (surds, complex pairs, a double root) are checked by G2 in the domain (S1b).
-    if (exprDegree(pDiff) === 2) return checkRootSetG2(eqStr, proposedSolutions, domain)
+    // A polynomial's roots of degree 2 or higher (surds, complex pairs, repeated roots) are checked by G2 in the domain (S1b / S3).
+    if (exprDegree(pDiff) >= 2) return checkRootSetG2(eqStr, proposedSolutions, domain)
     if (exprDegree(pDiff) !== 1) return 'unknown'
 
     // Linear equation: must have exactly 1 root
@@ -2870,6 +2870,88 @@ export function solutionTextOf(s: unknown): string {
   return solutionValueText(s)
 }
 
+export { algRat, algEq, type G2Alg }
+
+/** Sign (-1, 0, 1) of p + q·√d in ℚ(√d) with d ≥ 1, computed with exact rational arithmetic (no floats). */
+function signOfSurd(p: Rat, q: Rat, d: bigint): number {
+  const sp = p.n < 0n ? -1 : p.n > 0n ? 1 : 0
+  const sq = q.n < 0n ? -1 : q.n > 0n ? 1 : 0
+  if (sq === 0) return sp
+  if (sp === 0) return sq
+  if (sp === sq) return sp
+  const p2 = rMul(p, p)
+  const dq2 = rMul(rat(d), rMul(q, q))
+  const diff = sp > 0 ? rSub(p2, dq2) : rSub(dq2, p2)
+  return diff.n < 0n ? -1 : diff.n > 0n ? 1 : 0
+}
+
+/** Exact comparison of two real or complex algebraic numbers in ℚ(√d, i): real roots ascending, then complex by (re, im). */
+export function compareAlgRoots(x: G2Alg, y: G2Alg): number {
+  if (algEq(x, y)) return 0
+  const xReal = rIsZero(x.c) && rIsZero(x.e)
+  const yReal = rIsZero(y.c) && rIsZero(y.e)
+  if (xReal !== yReal) return xReal ? -1 : 1
+  if (x.d === y.d || rIsZero(x.b) || rIsZero(y.b)) {
+    const d = !rIsZero(x.b) ? x.d : y.d
+    const reSign = signOfSurd(rSub(x.a, y.a), rSub(x.b, y.b), d)
+    if (reSign !== 0) return reSign
+  }
+  if (x.d === y.d || rIsZero(x.e) || rIsZero(y.e)) {
+    const d = !rIsZero(x.e) ? x.d : y.d
+    const imSign = signOfSurd(rSub(x.c, y.c), rSub(x.e, y.e), d)
+    if (imSign !== 0) return imSign
+  }
+  const reX = Number(x.a.n) / Number(x.a.d) + (Number(x.b.n) / Number(x.b.d)) * Math.sqrt(Number(x.d))
+  const reY = Number(y.a.n) / Number(y.a.d) + (Number(y.b.n) / Number(y.b.d)) * Math.sqrt(Number(y.d))
+  if (reX !== reY) return reX < reY ? -1 : 1
+  const imX = Number(x.c.n) / Number(x.c.d) + (Number(x.e.n) / Number(x.e.d)) * Math.sqrt(Number(x.d))
+  const imY = Number(y.c.n) / Number(y.c.d) + (Number(y.e.n) / Number(y.e.d)) * Math.sqrt(Number(y.d))
+  return imX < imY ? -1 : imX > imY ? 1 : 0
+}
+
+/**
+ * A polynomial equation's solution set (degree 2 or higher, S1b / S3): G2 checks that the proposed roots are all the
+ * roots of the equation in the domain (each with its multiplicity), and the displayed line names them in their exact
+ * display. Null when the equation is not a polynomial of degree at least 2.
+ */
+export function checkPolySolutionSet(
+  before: string,
+  solutions: unknown[],
+  after: string,
+  v: string,
+  domain: 'real' | 'complex'
+): ValidationVerdict | null {
+  const eq = tryEquationPoly(before)
+  if (!eq || exprDegree(eq) < 2) return null
+  if (domain === 'complex' && solutions.length === 0) return 'invalid'
+  const verdict = checkRootSetG2(before, solutions, domain)
+  if (verdict !== 'valid') return verdict
+  if (solutions.length === 0) {
+    return normalizeDisplayed(after) === normalizeDisplayed('\\text{No real solution}') ? 'valid' : 'invalid'
+  }
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== solutions.length) return 'invalid'
+  for (let i = 0; i < solutions.length; i++) {
+    const x = readSurd(solutionValueText(solutions[i]))
+    if (!x) return 'unknown'
+    if (displayKey(shown[i]) !== displayKey(texOfAlg(x))) return 'invalid'
+  }
+  return 'valid'
+}
+
+/** True when every root (exact, in ℚ(√d, i)) makes the polynomial expr equal to zero in v: the working's own check (S3). */
+export function polyRootsHold(expr: Expr, v: string, roots: G2Alg[]): boolean {
+  const deg = exprDegree(expr)
+  return roots.every((r) => {
+    let acc = algRat(R0)
+    for (let k = deg; k >= 0; k--) {
+      const c = coefficientOf(expr, v, k)
+      acc = algAdd(algMul(acc, r), algRat(c))
+    }
+    return algEq(acc, algRat(R0))
+  })
+}
+
 /** True when every root (exact, in ℚ(√d, i)) makes a·x² + b·x + c equal to zero: the working's own check (S1b). */
 export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg[]): boolean {
   return roots.every((r) => {
@@ -2877,3 +2959,4 @@ export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg
     return algEq(value, algRat(R0))
   })
 }
+

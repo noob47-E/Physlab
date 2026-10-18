@@ -93,7 +93,7 @@ type Agreement = 'agree' | 'differ' | 'unknown'
 function realRootsOf(working: Working): number[] {
   const found: number[] = []
   for (const a of working.answers) {
-    if (!/^x(_\d+)?\s*=?$/.test(a.label.trim())) continue
+    if (!/^([a-zA-Z]|\\theta)(_\d+)?\s*=?$/.test(a.label.trim())) continue
     const v = numberOfTex(a.tex)
     if (v !== null && parts(v).im === 0) found.push(parts(v).re)
   }
@@ -142,7 +142,8 @@ function texOfAnswers(working: Working): string {
   return working.answers
     .map((a) => {
       const label = labelTex(a.label)
-      return label ? `${label}\\; ${a.tex}` : a.tex
+      const shownLabel = label ? (/\s=$/.test(label) ? label : `${label} =`) : null
+      return shownLabel ? `${shownLabel}\\; ${a.tex}` : a.tex
     })
     .join(',\\quad ')
 }

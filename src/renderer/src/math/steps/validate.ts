@@ -41,6 +41,7 @@ import {
   variableOfInput,
   checkSystemOp,
   checkQuadraticSolutionSet,
+  checkPolySolutionSet,
   checkSurdZeroProduct,
   displayKey,
   readSurd,
@@ -61,6 +62,7 @@ import {
   coefficientOf,
   parseExactRat
 } from './check-adapter'
+import { exprDegree, varsOf } from '../pure/mono'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { displaySafe, drawnTex } from './displaySafe'
 
@@ -161,10 +163,17 @@ export function validateCaseSplitComplete(step: Step, adapter: CheckAdapter = de
     const verdict = checkZeroProduct(step.before, cases, c, v)
     if (verdict !== 'valid') return verdict
     const roots = cases.map((text) => linearRootOf(text, v))
-    if (roots.some((r) => r === null)) return 'unknown'
-    const shown = displayedValues(String(step.after), v)
-    if (shown === null) return 'unknown'
-    return sameList(shown, uniqueInOrder(roots as Rat[])) ? 'valid' : 'invalid'
+    if (roots.every((r): r is Rat => r !== null)) {
+      const shown = displayedValues(String(step.after), v)
+      if (shown === null) return 'unknown'
+      return sameList(shown, uniqueInOrder(roots)) ? 'valid' : 'invalid'
+    }
+    if (Array.isArray(payload.solutions)) {
+      const domain = payload.domain === 'complex' ? 'complex' : 'real'
+      const polyVerdict = checkPolySolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (polyVerdict !== null) return polyVerdict
+    }
+    return 'unknown'
   }
 
   // The other form: a covering of a domain (real, integers) by its cases. Its before names the domain and its after is the
@@ -351,10 +360,9 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
 /** A step checked in its working: a reduction needs the working around it, every other step is checked alone. */
 function validateStepIn(working: Working, index: number, adapter: CheckAdapter, domain: Domain): StepValidationResult {
   const step = working.steps[index]
-  // S1b: a solution set is proved in the domain of the problem the working answers. A step that states another domain
-  // for itself is refused (a real problem with complex roots is never shown, whatever the step's data says). A step that
-  // states none is not a mismatch.
-  if (step.kind === 'SolutionSetEq') {
+  // S1b / S3: a solution set or zero-product split is proved in the domain of the problem the working answers. A step that
+  // states another domain for itself is refused (a real problem with complex roots is never shown, whatever the step's data says).
+  if (step.kind === 'SolutionSetEq' || step.kind === 'CaseSplitComplete') {
     const stated = dataOf(step).domain
     if (stated !== undefined && stated !== domain) {
       return { verdict: 'invalid', reason: `The step's domain (${String(stated)}) is not the problem's (${domain})` }
@@ -546,8 +554,22 @@ function subWorkingsBelong(working: Working): string | null {
     used.add(k)
     const root = linearRootOf(distinct[k], v)
     const answers = Array.isArray(sub.answer) ? sub.answer : sub.answer ? [sub.answer] : []
-    if (!root || answers.length !== 1 || normalizeDisplayed(answers[0].tex) !== rStr(root)) {
+    if (root) {
+      if (answers.length !== 1 || normalizeDisplayed(answers[0].tex) !== rStr(root)) {
+        return 'A sub-working does not solve its case'
+      }
+      continue
+    }
+    const casePoly = tryEquationPoly(distinct[k])
+    if (!casePoly || varsOf(casePoly).some((name) => name !== v) || exprDegree(casePoly) < 2 || answers.length === 0) {
       return 'A sub-working does not solve its case'
+    }
+    const parentAnswers = Array.isArray(working.answer) ? working.answer : working.answer ? [working.answer] : []
+    for (const a of answers) {
+      if (normalizeDisplayed(a.tex) === normalizeDisplayed('\\text{No real solution}')) continue
+      if (!parentAnswers.some((pa) => displayKey(pa.tex) === displayKey(a.tex))) {
+        return 'A sub-working does not solve its case'
+      }
     }
   }
   return null
