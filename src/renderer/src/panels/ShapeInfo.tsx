@@ -7,6 +7,7 @@ import { decompose, partLabel, type DecomposeGoal } from '../math/decompose'
 import { fuseChoice, legoStatus, pieceLettered } from '../math/lego'
 import { congruentParts } from '../math/congruence'
 import { formatMeasure, texMeasure } from '../math/format'
+import { canDecompose, sidesCross } from '../math/shapes'
 import type { V3 } from '../math/vec'
 import { answerTex, circleReport, polygonReport, type FormulaRow, type Highlight, type ShapeReport } from '../math/shapeFormulas'
 import { useHighlight } from '../render/Highlights'
@@ -115,7 +116,9 @@ export function ShapeInfo({ id }: { id: ObjId }) {
     if (obj.type === 'polygon' && c.type === 'polygon' && c.pts.length >= 3) {
       const names = obj.points.map((p) => objects[p]?.name ?? '?')
       const report = polygonReport(c.pts, names, settings)
-      const dec = obj.decomposed ? decompose(c.pts, goal, decIndex) : null
+      // A bow-tie has no single inside to split: its sides cross, so it is never decomposed (the
+      // canvas draws no parts for it either), and its own explanation shows instead.
+      const dec = obj.decomposed && !sidesCross(c.pts) ? decompose(c.pts, goal, decIndex) : null
       // Corners made by the cut get the next free capitals, the same letter in every part.
       const letters = dec ? freeCapitals(Object.values(objects).map((o) => o.name), dec.newPoints.length) : []
       // Matched in 3-D: Decompose now leaves a shape off the page where it is, and two corners of an
@@ -146,7 +149,8 @@ export function ShapeInfo({ id }: { id: ObjId }) {
   if (!data || !obj) return null
   // A decomposed shape breaks into its parts; a simple one (and a triangle, which has no
   // Decompose) is cut in two instead, so Break apart works on the shapes a student draws most.
-  const canBreak = data.kind === 'polygon' && !lego && (data.dec !== null || data.pts.length === 3)
+  const isCrossed = data.kind === 'polygon' && sidesCross(data.pts)
+  const canBreak = data.kind === 'polygon' && !lego && !isCrossed && (data.dec !== null || data.pts.length === 3)
   const simple = canBreak && data.kind === 'polygon' && (!data.dec || data.dec.parts.length < 2)
 
   return (
@@ -158,7 +162,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
           {data.kind === 'polygon' && (!lego || (obj.type === 'polygon' && pieceLettered(obj.points, objects))) && <span className="font-math italic text-ink-dim">{data.names.join('')}</span>}
           {lego && <span className="text-ink-dim">, a piece of a shape</span>}
         </div>
-        {data.kind === 'polygon' && data.pts.length >= 4 && (
+        {data.kind === 'polygon' && canDecompose(data.pts) && (
           <button
             className={`btn h-6 ${obj.type === 'polygon' && obj.decomposed ? 'primary' : ''}`}
             title="Split into simple shapes"
@@ -293,7 +297,7 @@ export function ShapeInfo({ id }: { id: ObjId }) {
       ) : (
         <ShapeReportView report={data.report} owner={id} piFactor={data.kind === 'circle'} />
       )}
-      {data.report.note && !(obj.type === 'polygon' && obj.decomposed) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
+      {data.report.note && !(data.kind === 'polygon' && data.dec) && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{data.report.note}</div>}
       {fuseNote && <div className="border-t border-line px-2 py-1.5 text-small text-warn">{fuseNote}</div>}
       {lego && together?.status.kind === 'different' && (
         <div className="border-t border-line px-2 py-1.5 text-small text-accent">These pieces make a new shape: {together.status.name}. Press Fuse to join them.</div>

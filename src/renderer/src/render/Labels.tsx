@@ -10,6 +10,7 @@ import type { Computed, ObjId, SceneObject, SceneSettings } from '../core/types'
 import { DISPLAY_FLOOR, fmtSci, formatMeasure, measureNumber, measureValue, superscriptPowers, unitSuffix } from '../math/format'
 import { heading, len, type V3 } from '../math/vec'
 import { polygonArea } from '../math/geometry'
+import { sidesCross } from '../math/shapes'
 import { duplicateSides, PIECE_LETTER_PX, settleLabel, sharedCornerLabels, type LabelBox, type MergedCorner } from './pieceLabels'
 
 // What the chip calls an object is core/naming.ts's displayName: the Measure list and the
@@ -88,7 +89,7 @@ function measureTextAsFormatted(o: SceneObject, c: Computed | undefined, s: Scen
     case 'circle':
       return `r = ${formatMeasure(c.circle.r, 'length', s)}`
     case 'polygon':
-      return `Area ${formatMeasure(polygonArea(c.pts), 'area', s)}`
+      return sidesCross(c.pts) ? '' : `Area ${formatMeasure(polygonArea(c.pts), 'area', s)}`
     // 3D-3B: one summary on a solid ("Square pyramid · V = 32 u³"), never every edge's length.
     case 'solid':
       return `V = ${formatMeasure(c.shape.volume, 'volume', s)}`
@@ -226,7 +227,7 @@ export function LabelLayer() {
         if (letterOnly) showMeasure = content === 'full'
         // A piece reads "ΔKLM · 6 u²": the long "Right-angled triangle" and "Area" belong in the
         // Measure panel, and two 230 px labels at the middle of the cut covered each other.
-        const pieceArea = o.type === 'polygon' && o.lego && c?.type === 'polygon' ? superscriptPowers(`· ${formatMeasure(polygonArea(c.pts), 'area', settings)}`) : null
+        const pieceArea = o.type === 'polygon' && o.lego && c?.type === 'polygon' && !sidesCross(c.pts) ? superscriptPowers(`· ${formatMeasure(polygonArea(c.pts), 'area', settings)}`) : null
         const text = showMeasure ? (pieceArea ?? measureText(o, c, settings, content === 'full' || sel)) : ''
         if (!showName && !text) return null
         // A plain letter wears the label text colour and the halo every label has: in the point's

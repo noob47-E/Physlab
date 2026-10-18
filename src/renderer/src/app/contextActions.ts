@@ -8,6 +8,7 @@ import type { Computed, ObjId, SceneObject } from '../core/types'
 import { heading, len, neg, normalize, toDeg, type V3 } from '../math/vec'
 import * as VS from '../math/vectorSolver'
 import { fuseChoice } from '../math/lego'
+import { canDecompose, sidesCross } from '../math/shapes'
 import { useTool } from '../render/tools'
 import { GRID_STYLES, normaliseGridStyle } from '../render/gridMath'
 import { ANGLE_MARKS_HELP } from '../ui/LabelControls'
@@ -135,23 +136,25 @@ function lineItems(o: SceneObject, c: Extract<Computed, { type: 'segment' | 'ray
 }
 
 // REGION L: Geometry Lego rows live in polygonItems.
-function polygonItems(o: SceneObject): MenuItem[] {
-  if (o.type !== 'polygon') return []
-  const items: MenuItem[] = [
-    { label: 'Area with the formula', run: () => (s().select([o.id]), focusPanel('measure')) },
-    {
+function polygonItems(o: SceneObject, c: Computed): MenuItem[] {
+  if (o.type !== 'polygon' || c.type !== 'polygon') return []
+  const items: MenuItem[] = [{ label: 'Area with the formula', run: () => (s().select([o.id]), focusPanel('measure')) }]
+  // The Measure panel's rule (canDecompose): a triangle has no Decompose, and a bow-tie, whose sides cross, has no inside to split. The
+  // menu kept offering it, and Split it another way, on a bow-tie after the panel had stopped.
+  if (canDecompose(c.pts)) {
+    items.push({
       label: o.decomposed ? 'Undo decompose' : 'Decompose into simple shapes',
       checked: !!o.decomposed,
       run: () => (s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposed = !o.decomposed))), focusPanel('measure'))
-    }
-  ]
-  if (o.decomposed) {
-    items.push({
-      label: 'Split it another way',
-      run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
     })
+    if (o.decomposed) {
+      items.push({
+        label: 'Split it another way',
+        run: () => s().updateObject(o.id, (d) => void (d.type === 'polygon' && (d.decomposeIndex = (d.decomposeIndex ?? 0) + 1)))
+      })
+    }
   }
-  if (canBreakApart(o)) {
+  if (canBreakApart(o, c)) {
     items.push({ label: 'Break apart', hint: 'Turn the pieces into shapes you can slide, turn and flip', run: () => (s().breakApart(o.id), focusPanel('measure')) })
   }
   // Every selected shape; the right-clicked one counts even when it was not selected. Any
@@ -175,9 +178,11 @@ function polygonItems(o: SceneObject): MenuItem[] {
 
 /**
  * A decomposed shape breaks into its parts, and a triangle (which has no Decompose) is cut in two
- * along a median; a piece is already a piece.
+ * along a median; a piece is already a piece. A shape whose sides cross has no parts, even one an
+ * older build saved as decomposed (the Measure panel's rule).
  */
-const canBreakApart = (o: SceneObject): boolean => o.type === 'polygon' && !o.lego && (!!o.decomposed || o.points.length === 3)
+const canBreakApart = (o: SceneObject, c: Computed | undefined): boolean =>
+  o.type === 'polygon' && !o.lego && (!!o.decomposed || o.points.length === 3) && !(c?.type === 'polygon' && sidesCross(c.pts))
 
 /** What the search palette says when Break apart has no decomposed shape to work on. */
 export const BREAK_APART_NEEDS_SHAPE = 'Select a shape and decompose it first; then it can be broken apart.'
@@ -188,7 +193,7 @@ export const BREAK_APART_NEEDS_SHAPE = 'Select a shape and decompose it first; t
  */
 export function breakApartSelection(): void {
   const st = s()
-  const shape = st.selection.map((id) => st.objects[id]).find((o) => o !== undefined && canBreakApart(o))
+  const shape = st.selection.map((id) => st.objects[id]).find((o) => o !== undefined && canBreakApart(o, st.ev.values.get(o.id)))
   if (!shape) {
     st.pushLog({ input: '', kind: 'info', text: BREAK_APART_NEEDS_SHAPE })
     return
@@ -263,7 +268,7 @@ export function menuForObject(id: ObjId): MenuGroup[] {
   if (c?.type === 'point') specific = pointItems(o, c)
   else if (c?.type === 'vector') specific = vectorItems(o, c)
   else if (c?.type === 'segment' || c?.type === 'ray' || c?.type === 'line') specific = lineItems(o, c)
-  else if (c?.type === 'polygon') specific = polygonItems(o)
+  else if (c?.type === 'polygon') specific = polygonItems(o, c)
   else if (o.type === 'graph') specific = graphItems(o)
   else if (c?.type === 'circle') specific = [{ label: 'Area & circumference', run: () => (st.select([id]), focusPanel('measure')) }]
   const groups: MenuGroup[] = []

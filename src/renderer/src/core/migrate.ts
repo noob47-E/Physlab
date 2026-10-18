@@ -234,7 +234,17 @@ function checkLego(o: Raw): Raw {
   if (o.type !== 'polygon' || o.lego === undefined) return o
   // The signature is only what lets the pieces be recognised as the original shape; without
   // it they still move, turn and fuse into "a new shape".
-  if (isLegoRecord(o.lego)) return typeof o.lego.sourceSignature === 'string' ? o : { ...o, lego: { ...o.lego, sourceSignature: '' } }
+  if (isLegoRecord(o.lego)) {
+    const lego: Raw = typeof o.lego.sourceSignature === 'string' ? o.lego : { ...o.lego, sourceSignature: '' }
+    // The original corners' letters are a list; anything else in a hand-edited file is left out, and Fuse letters the corners
+    // fresh (it crashed on a string there; DeepSeek, 18 Oct).
+    if (lego.originalCorners !== undefined && !Array.isArray(lego.originalCorners)) {
+      const { originalCorners: _bad, ...kept } = lego
+      void _bad
+      return { ...o, lego: kept }
+    }
+    return lego === o.lego ? o : { ...o, lego }
+  }
   const { lego: _dropped, ...rest } = o
   void _dropped
   return rest

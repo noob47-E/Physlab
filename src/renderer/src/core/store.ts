@@ -16,7 +16,7 @@ import type { V3 } from '../math/vec'
 import { classifyPolygon } from '../math/shapes'
 import { storedJson } from './schema'
 import { doomedBy } from './doomed'
-import { consumeShapes, cornersOf, dropPieceCorners, isPiece, legoNewColor, makePolygon, movedPieces, type Piece } from './legoScene'
+import { consumeShapes, cornersOf, dropPieceCorners, isPiece, legoNewColor, makePolygon, movedPieces, restoreCornerNames, type Piece } from './legoScene'
 
 export interface LogEntry {
   id: number
@@ -334,6 +334,9 @@ export const useScene = create<SceneState>()((set, get) => {
       const nextOrder = order.filter((k) => !doomed.has(k))
       const signature = signatureOf(pts)
       const retired = [...doomed].map((k) => objects[k].name)
+      // Where each corner stood and what it was called, carried by every piece, so the shape fused
+      // back into its outline gets its own letters again instead of the next free ones.
+      const originalCorners = parent.points.map((k, i) => ({ p: [...pts[i]] as V3, name: objects[k]?.name ?? '' }))
       const pieceIds: ObjId[] = []
       parts.forEach((part, i) => {
         const made = makePolygon(
@@ -341,7 +344,7 @@ export const useScene = create<SceneState>()((set, get) => {
           {
             color: tintPiece(parent.color, i, parts.length),
             space: parent.space,
-            lego: { sourceId: parent.id, sourceSignature: signature, pieceIndex: i, originalColor: parent.color },
+            lego: { sourceId: parent.id, sourceSignature: signature, pieceIndex: i, originalColor: parent.color, originalCorners },
             piece: true,
             label: part.cls.name,
             reserved: retired
@@ -412,6 +415,8 @@ export const useScene = create<SceneState>()((set, get) => {
               { color: legoNewColor(shapes[0].color), themed: '--lego-new', space, piece: false, decomposed: false },
         nextObjects
       )
+      // The shape again keeps the letters it had before Break apart; any other result is lettered fresh.
+      if (plan.kind === 'original') restoreCornerNames(made, shapes.find((p) => p.lego?.originalCorners)?.lego?.originalCorners ?? [], nextObjects)
       for (const o of made) nextOrder.push(o.id)
       const poly = made.find((o) => o.type === 'polygon')!
       commit(nextObjects, nextOrder, {

@@ -122,7 +122,7 @@ export function polygonReport(input: V3[], names: string[], s: MeasureSettings):
       rows.push({ title: 'Area', general: 'A = s^2', symbols: [sSym], substitution: `A = (${num(sSym.value, 'length', s)})^2`, value: area, kind: 'area', highlight: { region } })
       rows.push(perimeterRow('P = 4s', [sSym], `P = 4 \\times ${num(sSym.value, 'length', s)}`))
       const d = { sym: 'd', label: nm(0, 2), value: L(0, 2), kind: 'length' as const, highlight: { segments: [seg(pts[0], pts[2])] } }
-      rows.push({ title: 'Diagonal', general: 'd = s\\sqrt{2}', symbols: [sSym, d], substitution: `d = ${num(sSym.value, 'length', s)}\\sqrt{2}`, value: d.value, kind: 'length', highlight: d.highlight })
+      rows.push({ title: 'Diagonal', general: 'd = s\\sqrt{2}', symbols: [sSym], substitution: `d = ${num(sSym.value, 'length', s)}\\sqrt{2}`, value: d.value, kind: 'length', highlight: d.highlight })
       break
     }
     case 'rectangle': {
@@ -131,7 +131,7 @@ export function polygonReport(input: V3[], names: string[], s: MeasureSettings):
       rows.push({ title: 'Area', general: 'A = l \\times w', symbols: [l, w], substitution: `A = ${num(l.value, 'length', s)} \\times ${num(w.value, 'length', s)}`, value: area, kind: 'area', highlight: { region } })
       rows.push(perimeterRow('P = 2(l + w)', [l, w], `P = 2(${num(l.value, 'length', s)} + ${num(w.value, 'length', s)})`))
       const d = { sym: 'd', label: nm(0, 2), value: L(0, 2), kind: 'length' as const, highlight: { segments: [seg(pts[0], pts[2])] } }
-      rows.push({ title: 'Diagonal', general: 'd = \\sqrt{l^2 + w^2}', symbols: [l, w, d], substitution: `d = \\sqrt{${numSquared(l.value, 'length', s)} + ${numSquared(w.value, 'length', s)}}`, value: d.value, kind: 'length', highlight: d.highlight })
+      rows.push({ title: 'Diagonal', general: 'd = \\sqrt{l^2 + w^2}', symbols: [l, w], substitution: `d = \\sqrt{${numSquared(l.value, 'length', s)} + ${numSquared(w.value, 'length', s)}}`, value: d.value, kind: 'length', highlight: d.highlight })
       break
     }
     case 'parallelogram':
@@ -197,7 +197,7 @@ export function polygonReport(input: V3[], names: string[], s: MeasureSettings):
         const p = { ...sym('p', right, (right + 2) % 3) }
         rows.push({ title: 'Area', general: 'A = \\tfrac{1}{2} \\times b \\times p', symbols: [b, p], substitution: `A = \\tfrac{1}{2} \\times ${num(b.value, 'length', s)} \\times ${num(p.value, 'length', s)}`, value: area, kind: 'area', highlight: { region } })
         const hyp = sym('c', (right + 1) % 3, (right + 2) % 3)
-        rows.push({ title: 'Hypotenuse (Pythagoras)', general: 'c = \\sqrt{b^2 + p^2}', symbols: [b, p, hyp], substitution: `c = \\sqrt{${numSquared(b.value, 'length', s)} + ${numSquared(p.value, 'length', s)}}`, value: hyp.value, kind: 'length', highlight: hyp.highlight })
+        rows.push({ title: 'Hypotenuse (Pythagoras)', general: 'c = \\sqrt{b^2 + p^2}', symbols: [b, p], substitution: `c = \\sqrt{${numSquared(b.value, 'length', s)} + ${numSquared(p.value, 'length', s)}}`, value: hyp.value, kind: 'length', highlight: hyp.highlight })
       } else {
         const b = sym('b', 0, 1)
         const foot = footOfPerpendicular(pts[2], { kind: 'line', p: pts[0], d: sub(pts[1], pts[0]) })

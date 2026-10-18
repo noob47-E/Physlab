@@ -20,7 +20,8 @@ two triangles (**Congruence**).
 | `src/renderer/src/panels/Congruence.tsx` | The congruence card and "Draw a triangle from its sides" (`sidesInWorld`). |
 | `src/renderer/src/render/ObjectViews.tsx` (`DecomposedParts`) | Draws Decompose's parts, cut lines and numerals. |
 | `src/renderer/src/core/store.ts` (`breakApart`, `fusePieces`) | The scene side of Lego; one undo step each. |
-| `src/renderer/src/core/legoScene.ts` | The helpers those actions use: `makePolygon` (a piece or fused shape with its corners and sides), `consumeShapes` (what goes with a broken or fused shape), `movedPieces`, `dropPieceCorners`. |
+| `src/renderer/src/core/legoScene.ts` | The helpers those actions use: `makePolygon` (a piece or fused shape with its corners and sides), `consumeShapes` (what goes with a broken or fused shape), `movedPieces`, `dropPieceCorners`, `restoreCornerNames` (a shape fused back keeps its letters). |
+| `src/renderer/src/render/areaLabelPlacement.ts` | `areaLabelPlacement`: where a flat shape's name-and-area chip stands, searched in pixels clear of the angle badges (`cornerBadge`, which ObjectViews draws the badges with too). |
 | `src/renderer/src/core/doomed.ts` | `sidesOf` (a shape's own sides) and `doomedBy` (what a delete takes); the store re-exports both. |
 
 ## Invariants
@@ -32,6 +33,18 @@ two triangles (**Congruence**).
   `crossed` (two sides cross — a bow-tie) or `degenerate` (corners in a line), each with
   `notAShape`, one sentence. Callers show that sentence instead of an area or angles (Measure
   panel, `polygonReport`, ShapeInfo's Decompose). `decompose` never counts these as simple parts.
+- **A crossed polygon shows no inside**: `sidesCross` (the one test) turns off its fill, parts, angle marks and area
+  label on the canvas (`PolygonView`, `Labels.tsx`), and `canDecompose` (`math/shapes.ts`) keeps the Decompose button off
+  its card; the card shows the "sides cross" sentence instead.
+- **The shape's label is placed in pixels, never in drawing units.** The angle badges stand 42 px from their corners, so
+  `areaLabelPlacement` searches the screen and hands back drawing units at the end: the same picture at any zoom puts the
+  label in the same place against it. A fixed offset in drawing units was 3000 px at the default zoom, off the screen.
+  Only a flat shape in an orthographic view is placed; any other keeps its centre.
+- **Fuse back into the original keeps every letter.** Break apart saves each corner's position and letter in the
+  pieces' `lego.originalCorners`; `restoreCornerNames` matches the fused outline's corners to them by position within a
+  millionth of the shape's size (the outline is rounded to nine decimals, so a corner at 1/3 never equals what was saved).
+  A corner another object is built on is never deleted by Fuse: `consumeShapes` decides, and the new corner is made
+  beside it.
 - **Decompose** splits a shape on the page exactly as it always did; a level shape above the page
   at its own height; a tilted or upright one in its plane, with the parts put back there (`lift`,
   which snaps a carried point onto the shape's own corner so letters match in 3-D).

@@ -137,6 +137,12 @@ export interface LegoRecord {
   pieceIndex: number
   /** The parent's colour, given back to the shape when the pieces fuse into it again. */
   originalColor: string
+  /**
+   * The parent's corners, where each stood and what it was called, so the shape fused back into
+   * its original outline gives every corner its own letter again. Optional: an older file, and a
+   * piece made by a question, have none.
+   */
+  originalCorners?: { p: V3; name: string }[]
 }
 
 export interface PolygonObj extends ObjectBase {

@@ -154,7 +154,7 @@ const IN_LINE = 'All its corners lie on one straight line, so it encloses nothin
  * first). Only a true crossing counts: a corner that just touches another side, as when a corner is
  * dragged onto it, leaves a shape with one inside still.
  */
-function sidesCross(pts: V3[]): boolean {
+export function sidesCross(pts: V3[]): boolean {
   const n = pts.length
   const size = pts.reduce((m, p) => Math.max(m, Math.abs(p[0] - pts[0][0]), Math.abs(p[1] - pts[0][1])), 0)
   // eslint-disable-next-line no-restricted-syntax -- relative already (10⁻¹² of the sizes); math/noise.ts says 10⁻¹⁵, and which number is the owner's (OWNER-APPROVALS CW9-N2-1, with CW9-N3-1)
@@ -176,6 +176,13 @@ function sidesCross(pts: V3[]): boolean {
   }
   return false
 }
+
+/**
+ * Whether a polygon can be split into simple shapes: it has four corners or more (a triangle is
+ * simple already) and its sides do not cross. A bow-tie has no single inside to split, and the
+ * canvas draws no fill, parts or angle marks for it, so its panel offers no Decompose either.
+ */
+export const canDecompose = (pts: V3[]): boolean => pts.length >= 4 && !sidesCross(pts)
 
 /** A triangle all but flat by cleanPolygon's own rule: the one it uses to drop a corner in line. */
 function inLine([a, b, c]: V3[], eps = 1e-9): boolean {

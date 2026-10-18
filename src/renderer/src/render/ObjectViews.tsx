@@ -13,6 +13,7 @@ import { centroid, polygonPlane } from '../math/geometry'
 import { add, angleBetween, dot, heading, len, normalize, scale, sub, toDeg, type V3 } from '../math/vec'
 import { formatMeasure, superscriptPowers } from '../math/format'
 import { decompose, partLabel, type Decomposition } from '../math/decompose'
+import { sidesCross } from '../math/shapes'
 import { fillOutline, fillsWhole } from './fillMath'
 import { headingArc } from '../math/vectorSolver'
 import { SERIES_COUNT, seriesColor, shownColor, themeColor, useTheme } from '../app/theme'
@@ -20,9 +21,10 @@ import { isResultArrow, RESULT_HEAD_GAP_PX, showsComponents } from './colourMix'
 import { arrowHead, HALO_TIP_PX, HEAD_PX, pickLabelOffset, pointHalo, pointRadius, type Px } from './viewMath'
 import { pieceNameAnchor } from './pieceLabels'
 import { BatchedArrow, useArrowBatched } from './ArrowBatch'
-import { arcBetween, cornerAngle, polygonCornerMark } from './markGeometry'
+import { arcBetween, polygonCornerMark } from './markGeometry'
 import { useReleaseLater } from './releaseLater'
 import { arrowHead3D } from './arrow3dMath'
+import { areaLabelPlacement, BADGE_DISTANCE_PX, cornerBadge } from './areaLabelPlacement'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -495,33 +497,51 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   const fillColor = shownColor(obj)
   const wpp = worldPerPixel(camera, size, centroid(pts))
 
+  // A shape whose sides cross (a bow-tie) has no single inside: it gets no fill, no parts, no angle
+  // marks and no area, in the drawing as in the Measure panel (math/shapes.ts sidesCross).
+  const isCrossed = useMemo(() => pts.length >= 3 && sidesCross(pts), [pts])
+
   // Only a decomposed shape is split into parts. evaluateScene hands every polygon a fresh `pts` on
   // every evaluation (each drag frame), and decompose tries up to 2000 triangulations of a shape
   // with ten corners or fewer, so running it for every polygon cost up to ~120 ms a frame.
-  const dec = useMemo(
+  const split = useMemo(
     () => (obj.decomposed ? decompose(pts, obj.decomposeGoal ?? 'basic', obj.decomposeIndex ?? 0) : null),
     [obj.decomposed, pts, obj.decomposeGoal, obj.decomposeIndex]
   )
+  const dec = isCrossed ? null : split
   const whole = fillsWhole(obj.decomposed, dec?.parts.length ?? 1)
 
   const geometry = useMemo(() => {
-    if (pts.length < 3) return null
+    if (pts.length < 3 || isCrossed) return null
     const shape = new THREE.Shape(pts.map((p) => new THREE.Vector2(p[0], p[1])))
     const g = new THREE.ShapeGeometry(shape)
     const z = pts[0][2]
     if (z) g.translate(0, 0, z)
     return g
-  }, [pts])
+  }, [pts, isCrossed])
   useReleaseLater(geometry, (g) => g.dispose())
 
   // The viewer's "angle marks" switch wins over every polygon's own setting.
-  const showMeasures = (selected || sideSelected || obj.showAngles) && settings.showAngleMarks
+  const showMeasures = (selected || sideSelected || obj.showAngles) && settings.showAngleMarks && !isCrossed
   const orientation = pts.length >= 3 ? Math.sign(signedArea(pts)) || 1 : 1
 
   // A piece's name stands away from the cut (render/pieceLabels.ts); worked out once per evaluation.
   const nameAt = useRef<{ key: unknown; p: V3 } | null>(null)
-  const anchor = (): V3 => {
-    if (!obj.lego) return centroid(pts)
+  // The shape's own label is placed against the angle badges, which stand at a fixed number of
+  // pixels, so it is worked out in pixels (render/areaLabelPlacement.ts) and only when the shape,
+  // the zoom or the badges change. A shape off the page, or seen in perspective, keeps its centre.
+  const placed = useRef<{ pts: V3[]; wpp: number; badges: boolean; p: V3 } | null>(null)
+  const anchor = (cam: THREE.Camera, sz: { width: number; height: number }): V3 => {
+    if (!obj.lego) {
+      if (pts.length < 3 || !(cam as THREE.OrthographicCamera).isOrthographicCamera || pts.some((p) => p[2] !== pts[0][2])) return centroid(pts)
+      const w = worldPerPixel(cam, sz)
+      const badges = !!showMeasures
+      const last = placed.current
+      if (last?.pts === pts && last.wpp === w && last.badges === badges) return last.p
+      const p = areaLabelPlacement(pts, w, { badges }).p
+      placed.current = { pts, wpp: w, badges, p }
+      return p
+    }
     const { objects, ev } = useScene.getState()
     if (nameAt.current?.key !== ev) {
       const others: V3[][] = []
@@ -535,7 +555,7 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
   }
 
   useFrame(({ camera: cam, size: sz }) => {
-    labelAnchors.set(obj.id, { p: anchor() })
+    labelAnchors.set(obj.id, { p: anchor(cam, sz) })
     pool.begin()
     // Side lengths come from the side segments' own labels and the area from the polygon label,
     // so only interior angles are drawn here.
@@ -543,11 +563,9 @@ export const PolygonView = memo(function PolygonView({ obj, c, selected, hovered
       pts.forEach((v, i) => {
         const prev = pts[(i - 1 + pts.length) % pts.length]
         const next = pts[(i + 1) % pts.length]
-        const ang = cornerAngle(prev, v, next, orientation, pts.length === 3)
-        let bis = normalize(add(normalize(sub(prev, v)), normalize(sub(next, v))))
-        if (pts.length > 3 && ang > Math.PI) bis = scale(bis, -1)
+        const { angle: ang, dir: bis } = cornerBadge(prev, v, next, orientation, pts.length === 3)
         const w = worldPerPixel(cam, sz, v)
-        const lp = toScreen(cam, sz, add(v, scale(bis, 42 * w)))
+        const lp = toScreen(cam, sz, add(v, scale(bis, BADGE_DISTANCE_PX * w)))
         pool.place(formatMeasure(ang, 'angle', settings), lp.x, lp.y, 'center', colors.arc)
       })
     }

@@ -168,6 +168,65 @@ export function makePolygon(
   return out
 }
 
+/**
+ * Gives the corners of a shape fused back into its original outline the letters it had before
+ * Break apart. A corner is matched to an original one by where it stands, within a millionth of
+ * the shape's own size: Fuse rebuilds the outline from the pieces and `math/lego.ts` rounds that to
+ * nine decimals, so a corner at one third is never exactly where it was, and comparing the numbers
+ * (or their text) for equality misses every corner that is not on a whole number. A letter that a
+ * staying object already wears is not taken, and a corner left without one is lettered fresh, so
+ * no two objects share a name.
+ */
+export function restoreCornerNames(made: SceneObject[], saved: readonly { p: V3; name: string }[], objects: Record<ObjId, SceneObject>): void {
+  const corners: { point: PointObj; at: V3 }[] = []
+  for (const o of made) if (o.type === 'point' && o.def.kind === 'free') corners.push({ point: o, at: o.def.p })
+  // A record edited by hand, or damaged, is ignored entry by entry: Fuse must still work without it. One that is not a list at
+  // all ("garbage" in the file) crashed Fuse with "saved.filter is not a function" (DeepSeek, 18 Oct).
+  const list: readonly unknown[] = Array.isArray(saved) ? saved : []
+  const original = list.filter((o): o is { p: V3; name: string } => {
+    const e = o as { p?: unknown; name?: unknown } | null
+    return !!e && Array.isArray(e.p) && Number.isFinite(e.p[0]) && Number.isFinite(e.p[1]) && typeof e.name === 'string'
+  })
+  if (!corners.length || !original.length) return
+  const xs = original.map((o) => o.p[0])
+  const ys = original.map((o) => o.p[1])
+  const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+  // The 10⁻³ floor keeps the tolerance above the nine-decimal rounding (5·10⁻¹⁰) for a very small shape.
+  const tol = 1e-6 * Math.max(size, 1e-3)
+  const madeIds = new Set(corners.map((c) => c.point.id))
+  const staying = new Set<string>()
+  const rest: Record<ObjId, SceneObject> = {}
+  for (const [k, o] of Object.entries(objects)) {
+    if (madeIds.has(k)) continue
+    rest[k] = o
+    staying.add(o.name)
+  }
+  const restored = new Map<ObjId, string>()
+  const taken = new Set<string>()
+  for (const { point, at } of corners) {
+    let best: { name: string; d: number } | undefined
+    for (const o of original) {
+      const d = Math.hypot(o.p[0] - at[0], o.p[1] - at[1])
+      if (d <= tol && (!best || d < best.d)) best = { name: o.name, d }
+    }
+    if (best && best.name && !staying.has(best.name) && !taken.has(best.name)) {
+      restored.set(point.id, best.name)
+      taken.add(best.name)
+    }
+  }
+  if (restored.size === 0) return
+  const reserved = [...taken]
+  for (const { point } of corners) {
+    const letter = restored.get(point.id)
+    if (letter) {
+      point.name = letter
+    } else {
+      point.name = nextName('point', rest, reserved)
+      reserved.push(point.name)
+    }
+  }
+}
+
 /** The colour of a shape fused into a new outline, from the theme; a test has no stylesheet and keeps the piece's colour. */
 export const legoNewColor = (fallback: string): string => (typeof document === 'undefined' ? fallback : themeColor('--lego-new', fallback))
 
