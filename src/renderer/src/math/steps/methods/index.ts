@@ -9,6 +9,7 @@ import { quadraticSquareMethod } from './quadraticSquare'
 import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from './linearSystem'
 import { expandMethod } from './expand'
 import { factoriseMethod } from './factorise'
+import { cubicQuarticMethod } from './cubicQuartic'
 
 export {
   linearOneVarMethod,
@@ -18,7 +19,8 @@ export {
   linearSystemEliminationMethod,
   linearSystemSubstitutionMethod,
   expandMethod,
-  factoriseMethod
+  factoriseMethod,
+  cubicQuarticMethod
 }
 
 /** Every S1a method, in the order a router should consider them. */
@@ -35,6 +37,7 @@ export const ALL_STEP_METHODS: Method[] = [
   quadraticFactoriseMethod,
   quadraticFormulaMethod,
   quadraticSquareMethod,
+  cubicQuarticMethod,
   linearSystemEliminationMethod,
   linearSystemSubstitutionMethod,
   expandMethod,
