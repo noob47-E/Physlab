@@ -90,3 +90,53 @@ export function labelText(label: string): string {
 export function answerCopyLine(a: { label: string; tex: string }): string {
   return `${labelText(a.label)} ${a.tex}`
 }
+
+/**
+ * The Greek letters an unknown can be named with as one character: each letter of the one list and its capital (ω, Ω, Δ).
+ * The step engine names a solved ω or Δ that way, so the card must read it as a symbol and not as a word.
+ */
+const GREEK_CHARS: ReadonlySet<string> = new Set(
+  GREEK_LETTERS.filter((g) => g.name !== 'pi' && g.name !== 'omicron').flatMap((g) => [g.letter, g.letter.toUpperCase()])
+)
+
+/**
+ * One letter or Greek letter, then an optional subscript written as digits (v1, x_1, ω2), then an optional "=". labelTex
+ * does not read a subscript without its underscore, and tests/nameList.test.ts pins what labelTex and labelText give for
+ * every corpus name, so the card reads this wider form itself and leaves those two as they are.
+ */
+const ONE_SYMBOL = /^(\S)(?:_?(\d+))?(\s*=)?$/u
+
+interface OneSymbol {
+  name: string
+  sub: string | undefined
+  equals: boolean
+}
+
+/** The label as one symbol, or null when it is anything else (a word, a longer name, a sum). */
+function readOneSymbol(label: string): OneSymbol | null {
+  const m = ONE_SYMBOL.exec(label.trim())
+  if (!m) return null
+  const [, name, sub, equals] = m
+  if (!/^[A-Za-z]$/.test(name) && !GREEK_CHARS.has(name)) return null
+  return { name, sub, equals: equals !== undefined }
+}
+
+/**
+ * The card's TeX for an answer's label, or null when the card shows the answer bare. Everything labelTex reads, and also a
+ * single letter or Greek letter with its subscript written as digits: v1 =, x1 =, ω =, Δ =. A word ("HCF =", "Answer") and
+ * a longer name still give null.
+ */
+export function cardLabelTex(label: string): string | null {
+  const direct = labelTex(label)
+  if (direct !== null) return direct
+  const s = readOneSymbol(label)
+  if (!s) return null
+  return `${s.name}${s.sub === undefined ? '' : `_{${s.sub}}`}${s.equals ? ' =' : ''}`
+}
+
+/** The card's plain text for a label: the symbols of cardLabelTex as characters ("v₁ =", "ω ="), anything else as labelText writes it. */
+export function cardLabelText(label: string): string {
+  const s = readOneSymbol(label)
+  if (!s) return labelText(label)
+  return `${s.name}${s.sub === undefined ? '' : subscript(s.sub)}${s.equals ? ' =' : ''}`
+}

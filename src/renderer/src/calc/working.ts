@@ -19,7 +19,7 @@ import { suggestJob } from '../math/pure/run'
 import { texToPlain, type Working } from '../math/pure/work'
 import { keypadToMath, withAngle } from './engine'
 import { compareFunctions } from './formula'
-import { labelTex, labelText } from './labels'
+import { cardLabelTex, cardLabelText } from './labels'
 import type { EvalResult } from './evaluateInput'
 
 type Verdict = 'agree' | 'differ' | 'unchecked'
@@ -146,7 +146,7 @@ type Answer = Working['answers'][number]
  * ("Answer") is not a symbol, so that answer stays bare too.
  */
 function showsLabel(working: Working, a: Answer): boolean {
-  if (labelTex(a.label) === null) return false
+  if (cardLabelTex(a.label) === null) return false
   if (working.answers.length > 1) return true
   return /^Solve\b/.test(working.title) && !a.tex.startsWith('\\text{')
 }
@@ -159,9 +159,9 @@ function showsLabel(working: Working, a: Answer): boolean {
 function answerCard(working: Working): { tex: string; plain: string } {
   const parts = working.answers.map((a) => {
     if (!showsLabel(working, a)) return { tex: a.tex, plain: texToPlain(a.tex) }
-    const symbol = labelTex(a.label) ?? ''
+    const symbol = cardLabelTex(a.label) ?? ''
     const shownTex = /\s=$/.test(symbol) ? symbol : `${symbol} =`
-    const words = labelText(a.label)
+    const words = cardLabelText(a.label)
     const shownPlain = /=$/.test(words) ? words : `${words} =`
     return { tex: `${shownTex}\\; ${a.tex}`, plain: `${shownPlain} ${texToPlain(a.tex)}` }
   })

@@ -11,6 +11,8 @@ import { reconcile } from '../src/renderer/src/calc/working'
 import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
 import { checkCalculatorGuess } from '../src/renderer/src/calc/guessCalc'
 import { defaultCheckAdapter } from '../src/renderer/src/math/steps/check-adapter'
+import { latexToMath } from '../src/renderer/src/math/latexToMath'
+import { cardLabelTex, cardLabelText } from '../src/renderer/src/calc/labels'
 import { resetGlobals } from './helpers/globals'
 
 const COMP = { vars: {}, ans: 0, angle: 'deg' } as const
@@ -276,5 +278,115 @@ describe('Review 6: an identity or a no-value working is not contradicted by one
     const r = reconcile(cardOf('3x+4=3x+4'), workingNow())
     expect(r.result.main).toBe('every real number')
     expect(checkCalculatorGuess('0', r.result).verdict).not.toBe('right')
+  })
+})
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Round 2 (K3 fixer). Each block names the finding it pins. Each one fails on 129f6ab9 and passes after the fix.
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('Round 2 (high): a 0 in front of a subscript is 0 times that letter, never a hex number', () => {
+  it('the converter writes 0x_1 as 0*x1, and leaves a plain 0x1F hexadecimal and 10x_1 a number of ten', () => {
+    expect(latexToMath('0x_1+2')).toBe('0*x1+2')
+    expect(latexToMath('0x_{12}+3')).toBe('0*x12+3')
+    expect(latexToMath('0b_2')).toBe('0*b2')
+    expect(latexToMath('0o_7')).toBe('0*o7')
+    expect(latexToMath('0x1F+2')).toBe('0x1F+2')
+    expect(latexToMath('10x_1')).toBe('10x1')
+  })
+
+  it('x^2+0x_1-4=0 gives -2 and 2, checked, and the "=" card agrees (it was sqrt(3) and -sqrt(3))', () => {
+    usePure.getState().runLatex('x^2+0x_1-4=0', 'auto', { quiet: true })
+    const w = workingNow()
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex).sort()).toEqual(['-2', '2'])
+    const r = reconcile(cardOf('x^2+0x_1-4=0'), w)
+    expect(r.verdict).not.toBe('differ')
+    expect(r.result.main).toContain('= 2')
+    expect(r.result.main).toContain('= -2')
+    expect(r.result.main).not.toMatch(/1\.73/)
+  })
+
+  it('2x_1+0x_2=4 gives x_1 = 2 with x_2 free, checked, and the card reads 2 (it was a bare 1)', () => {
+    usePure.getState().runLatex('2x_1+0x_2=4', 'auto', { quiet: true })
+    const w = workingNow()
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['2'])
+    expect(reconcile(cardOf('2x_1+0x_2=4'), w).result.main).toBe('x₁ = 2')
+  })
+
+  it.each([
+    ['x_1+0x_2=3', ['3']],
+    ['x_1+0x_{12}=3', ['3']],
+    ['x^2+0x_2-4=0', ['2', '-2']]
+  ])('%s gives %j (0x_2 and 0x_{12} are 0 times the letter, not hex)', (latex, answers) => {
+    usePure.getState().runLatex(latex, 'auto', { quiet: true })
+    const w = workingNow()
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex).sort()).toEqual([...answers].sort())
+  })
+
+  it('0x_1+1=2 is refused as "no value of x1 works", and the card never says true', () => {
+    usePure.getState().runLatex('0x_1+1=2', 'auto', { quiet: true })
+    expect(workingNow()?.error).toMatch(/no value of x1 works/)
+    const r = reconcile(cardOf('0x_1+1=2'), workingNow())
+    expect(r.result.main).not.toBe('true')
+    expect(r.verdict).not.toBe('agree')
+  })
+
+  it('a plain 0x1 with no subscript is still the hexadecimal number 1, as it was typed', () => {
+    expect(latexToMath('0x1+2')).toBe('0x1+2')
+    expect(defaultCheckAdapter.checkExprEq('0x1', '1')).toBe('valid')
+  })
+
+  it('the checker reads 0x_1 as 0 times x_1, not as the hex number 1', () => {
+    expect(defaultCheckAdapter.checkExprEq('0x_1', '1')).not.toBe('valid')
+    expect(defaultCheckAdapter.checkExprEq('0x_1', '0')).toBe('valid')
+  })
+})
+
+describe('Round 2 (medium): a single answer keeps its label when the unknown is a Greek letter or a subscript', () => {
+  it.each([
+    ['2\\omega+1=7', 'ω = 3'],
+    ['2\\alpha+1=7', 'α = 3'],
+    ['2\\Delta+1=7', 'Δ = 3'],
+    ['3\\tau=12', 'τ = 4'],
+    ['2\\phi+2=3', 'φ = 1/2'],
+    ['2v_1+1=5', 'v₁ = 2']
+  ])('%s reads "%s" on the card, not a bare value', (latex, shown) => {
+    usePure.getState().runLatex(latex, 'auto', { quiet: true })
+    const w = workingNow()
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers).toHaveLength(1)
+    expect(reconcile(cardOf(latex), w).result.main).toBe(shown)
+  })
+
+  it('\\alpha^2=9 labels both roots: "α = -3, α = 3"', () => {
+    usePure.getState().runLatex('\\alpha^2=9', 'auto', { quiet: true })
+    expect(reconcile(cardOf('\\alpha^2=9'), workingNow()).result.main).toBe('α = -3, α = 3')
+  })
+
+  it.each([
+    ['ω', 'ω'],
+    ['Δ =', 'Δ ='],
+    ['v1 =', 'v₁ ='],
+    ['x_1 =', 'x₁ ='],
+    ['theta_2', 'θ₂']
+  ])('the card writes the label %s as %s in plain text', (label, plain) => {
+    expect(cardLabelText(label)).toBe(plain)
+  })
+
+  it.each([
+    ['ω', 'ω'],
+    ['v1 =', 'v_{1} ='],
+    ['Δ =', 'Δ ='],
+    ['x_1 =', 'x_{1} ='],
+    ['theta =', '\\theta =']
+  ])('the card draws the label %s as %s', (label, tex) => {
+    expect(cardLabelTex(label)).toBe(tex)
+  })
+
+  it('a word stays a word on the card: 12 =, HCF =, Answer and speed1 = give no symbol', () => {
+    expect(['12 =', 'HCF =', 'Answer', 'speed1 ='].map(cardLabelTex)).toEqual([null, null, null, null])
   })
 })
