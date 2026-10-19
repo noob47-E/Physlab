@@ -255,5 +255,51 @@ describe('S1: math/steps in the Calculator', () => {
     expect(r.result.main).toMatch(/y\s*=\s*[−-]?\d+/)
   })
 
+  it('solves canonical trig equations through runLatex with >= 3 moves and verified answers', () => {
+    // 1. 2\sin(x)=1
+    usePure.getState().runLatex('2\\sin(x)=1', 'auto')
+    let w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.error).toBeUndefined()
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+    expect(w?.answers.map((a) => a.tex)).toEqual(['30', '150'])
 
+    // 2. 2\cos(x)+1=0
+    usePure.getState().runLatex('2\\cos(x)+1=0', 'auto')
+    w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.error).toBeUndefined()
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+    expect(w?.answers.map((a) => a.tex)).toEqual(['120', '240'])
+
+    // 3. \tan(2x)=1
+    usePure.getState().runLatex('\\tan(2x)=1', 'auto')
+    w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.error).toBeUndefined()
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+    expect(w?.answers.map((a) => a.tex)).toEqual(['22.5', '112.5', '202.5', '292.5'])
+
+    // 4. 2\sin(x)^2-\sin(x)-1=0
+    usePure.getState().runLatex('2\\sin(x)^2-\\sin(x)-1=0', 'auto')
+    w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.error).toBeUndefined()
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+    expect(w?.answers.map((a) => a.tex)).toEqual(['90', '210', '330'])
+
+    // 5. \sin(x)=\cos(x)
+    usePure.getState().runLatex('\\sin(x)=\\cos(x)', 'auto')
+    w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.error).toBeUndefined()
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+    expect(w?.answers.map((a) => a.tex)).toEqual(['45', '225'])
+
+    // 6. unhandled equation returns old answer or refusal, never an empty working
+    usePure.getState().runLatex('x + \\sin(x) = 1', 'auto')
+    w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.noWorking).toBeFalsy()
+  })
 })

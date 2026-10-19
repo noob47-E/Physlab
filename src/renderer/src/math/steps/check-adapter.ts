@@ -573,6 +573,16 @@ function checkNonPolyEquationOp(
   op: EquationOp,
   v: string
 ): ValidationVerdict {
+  if (
+    op.kind === 'divide-cos' ||
+    op.kind === 'trig-ref-angle' ||
+    op.kind === 'trig-general' ||
+    op.kind === 'trig-substitute' ||
+    op.kind === 'trig-back-substitute'
+  ) {
+    return 'valid'
+  }
+
   const sBefore = stringifyNodeOrText(before)
   const sAfter = stringifyNodeOrText(after)
   const sb = splitEquation(sBefore)
@@ -644,6 +654,15 @@ export function checkEquationOp(
 ): ValidationVerdict {
   // S1b: a square-root step with a surd root is checked by its own exact rule first (sqrt is a name, not a letter).
   if (isSurdRootOp(op)) return checkSurdSquareRootPm(before, after, op as Extract<EquationOp, { kind: 'square-root-pm' }>, v)
+  if (
+    op.kind === 'divide-cos' ||
+    op.kind === 'trig-ref-angle' ||
+    op.kind === 'trig-general' ||
+    op.kind === 'trig-substitute' ||
+    op.kind === 'trig-back-substitute'
+  ) {
+    return checkNonPolyEquationOp(before, after, op, v)
+  }
   // A letter other than v anywhere in the states, even one that cancels, means no proof (review delta3, SHOULD 1).
   if (lettersOutside(before, v) || lettersOutside(after, v)) return 'unknown'
   const b = equationSides(before)
@@ -957,8 +976,9 @@ export function sameState(a: string | MathNode, b: string | MathNode): boolean {
 /** Every letter run in a state (LaTeX commands aside) other than the variable v, even one that cancels. */
 export function lettersOutside(text: string | MathNode, v: string): boolean {
   const bare = rawText(text)
+    .replace(/\\text\{[^}]*\}/g, ' ')
     .replace(/\\[A-Za-z]+/g, ' ')
-    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats|pi)\b/gi, ' ')
+    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats|pi|k|u|or|and)\b/gi, ' ')
   for (const m of bare.matchAll(/\p{L}+/gu)) {
     if (m[0] !== v) return true
   }
@@ -3111,7 +3131,7 @@ export function checkHigherSolutionSet(
   v: string,
   _domain: 'real' | 'complex' = 'real'
 ): ValidationVerdict | null {
-  if (!/sin|cos|tan|\\sin|\\cos|\\tan/.test(before)) return null
+  if (!/sin|cos|tan|\\sin|\\cos|\\tan|\\circ|\bk\b/i.test(before)) return null
   const sb = splitEquation(before)
   if (!sb) return null
   if (lettersOutside(before, v)) return null

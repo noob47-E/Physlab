@@ -44,7 +44,12 @@ function plainTex(text: string): string {
   return text
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
-    .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
+    .replace(/\^\{\\circ\}|\\circ/g, '°')
+    .replace(/\\pi\b/g, 'π')
+    .replace(/\\theta\b/g, 'θ')
+    .replace(/\\(sin|cos|tan|sec|csc|cot)\b/g, '$1')
+    .replace(/\\quad\b/g, ' ')
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
     .replace(/\^\((-?\d+)\)/g, '^$1')
@@ -121,6 +126,18 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       return 'Swap the two sides'
     case 'already-solved':
       return 'The equation is already solved'
+    case 'divide-cos':
+      return `Divide both sides by cos(${plainTex(v)}), noting that cos(${plainTex(v)}) = 0 is not a solution`
+    case 'trig-ref-angle':
+      return op.angle
+        ? `Find reference angle ${plainTex(op.angle)} from the unit circle${op.quad ? ` (${plainTex(op.quad)})` : ''}`
+        : 'Find the reference angle from the unit circle'
+    case 'trig-general':
+      return 'Write the general solution with integer k'
+    case 'trig-substitute':
+      return `Substitute u = sin(${plainTex(v)}) to form a quadratic equation`
+    case 'trig-back-substitute':
+      return `Substitute sin(${plainTex(v)}) back for u and solve each equation`
     default:
       return null
   }
@@ -164,6 +181,16 @@ function equationRule(op: EquationOp): string {
       return 'Swap sides'
     case 'already-solved':
       return 'Already solved'
+    case 'divide-cos':
+      return 'Divide by cosine'
+    case 'trig-ref-angle':
+      return 'Reference angle'
+    case 'trig-general':
+      return 'General solution'
+    case 'trig-substitute':
+      return 'Substitution'
+    case 'trig-back-substitute':
+      return 'Back substitution'
   }
 }
 
@@ -214,6 +241,10 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 }
 
 function solutionSentence(step: Step): string | null {
+  const d = dataOf(step)
+  if (d.role === 'trig' || d.trig !== undefined) {
+    return `The solutions are ${plainTex(String(step.after))}.`
+  }
   const surd = surdSolutionsSentence(step)
   if (surd !== undefined) return surd
   const p = setProofOf(step)
@@ -228,6 +259,8 @@ function solutionSentence(step: Step): string | null {
 }
 
 function solutionRule(step: Step): string | null {
+  const d = dataOf(step)
+  if (d.role === 'trig' || d.trig !== undefined) return 'Solutions'
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   const p = setProofOf(step)
   if (!p) return null

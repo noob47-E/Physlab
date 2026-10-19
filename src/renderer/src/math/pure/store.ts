@@ -126,7 +126,8 @@ export const usePure = create<PureState>((set, get) => ({
     // deep inside one used to leave the panel showing the previous problem with no explanation.
     // Whatever escapes becomes a refusal the student can read.
     let working: Working
-    const stepped = stepWorkingFor({ job: j, input: src, rawInput: latex })
+    const angleUnit = casInDegrees(scene().settings.angleUnit) ? 'deg' : 'rad'
+    const stepped = stepWorkingFor({ job: j, input: src, rawInput: latex, angleUnit })
     if (stepped) {
       working = stepped
     } else {

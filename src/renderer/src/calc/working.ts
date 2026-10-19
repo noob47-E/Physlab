@@ -169,6 +169,16 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
     return { result: { main: texToPlain(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
   }
   if (result.engine) return { result, verdict: 'unchecked' }
+  if (result.solved && result.roots && !result.rootsComplete && working.checked === 'ok') {
+    const theirs = realRootsOf(working)
+    if (theirs.length > 1 || (theirs.length === 1 && !near(result.roots[0], theirs[0], 1e-8))) {
+      const tex = texOfAnswers(working)
+      return {
+        result: { ...result, main: texToPlain(tex), tex, roots: theirs, rootsComplete: true, approximate: false },
+        verdict: 'agree'
+      }
+    }
+  }
   const verdict = agreement(result, working)
   if (verdict === 'agree') return { result, verdict: 'agree' }
   if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
