@@ -55,6 +55,7 @@ export function formatTex(val: unknown): string {
  */
 const SHOWN_METHOD_NAMES = new Set([
   'Linear equation in one variable',
+  'Exponential and logarithmic equation',
   'Solve by elimination',
   'Solve by substitution',
   'Factorising',
