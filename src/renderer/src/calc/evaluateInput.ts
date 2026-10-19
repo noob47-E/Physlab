@@ -11,6 +11,7 @@ import { calcEng, calcNum } from './format'
 import { constantScope } from './constants'
 import { OWN_LETTERS, errorSentence, nonFiniteSentence, outsideBaseSentence, type ErrorSentence } from './errors'
 import { beyondTheReals, polynomialInX, realAndPairs, rootChecks, rowLabel } from './roots'
+import { exactQuadratic } from './exactComplex'
 import { derivativeForm, hasQuantity, loneUnitLetters, openForm } from './formula'
 import { CALCULUS_IN_RADIANS, usesAngles } from './angle'
 import { bigNumberText } from '../math/pure/integers'
@@ -172,14 +173,14 @@ function solveEquation(src: string, ctx: CalcContext): CalcOutput | { sentence: 
     // The exact route found no real root, so the number the search stopped on stands on its own: it is a root if it checks, and when it does not
     // (x² + 10⁻¹² = 0 was "x = 6.7×10⁻⁶") the polynomial's complex roots are the answer. With none of those known it is kept, marked by the caller.
     if (rootChecks(known, out.value)) return out
-    const beyond = beyondTheReals(known, out.value)
+    const beyond = beyondTheReals(known, out.value, exactQuadratic(left, right))
     return beyond && 'sentence' in beyond ? beyond : out
   } catch (e) {
     if (!(e instanceof Error) || !/No solution/i.test(e.message)) throw e
     // The two sides only meet at infinity (eˣ = 0): that is the answer, in words, and not "try giving x a value", which promises a root somewhere.
     if (e instanceof NoMeeting) return { sentence: noMeetingSentence(e.towards) }
     const coeffs = coefficients()
-    const beyond = coeffs ? beyondTheReals(coeffs, typeof ctx.vars.x === 'number' ? ctx.vars.x : 0) : null
+    const beyond = coeffs ? beyondTheReals(coeffs, typeof ctx.vars.x === 'number' ? ctx.vars.x : 0, exactQuadratic(left, right)) : null
     // Not a polynomial (sin x = 2): the sentence about where to start looking stays.
     if (!beyond) throw e
     return 'sentence' in beyond ? beyond : startingAt(beyond.root)

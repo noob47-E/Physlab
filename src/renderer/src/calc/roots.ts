@@ -24,6 +24,7 @@ import { R1, rFromNumber, rMul, rNeg, rat } from '../math/pure/rat'
 import { keypadToMath, constantOf, exactForm, polyRoots, type Cx, type ExprNode } from './engine'
 import { calcNum, formatComplex, formatImaginary } from './format'
 import { labelText } from './labels'
+import { exactPairText, type ExactQuadratic } from './exactComplex'
 
 interface RootRow {
   /** What the row is called on screen: "x₁ =", "x₂ =", … or "x =" when there is one root. */
@@ -523,12 +524,18 @@ const pairText = (z: Cx): string => (z.re === 0 ? `±${formatImaginary(z.im)}` :
  * missed, to try again from, or the sentence naming the complex roots, each pair once and in the
  * order of the rule (x = ±i or x = ±2i). The sentence is an answer, not an error: nothing is
  * wrong with the question, and no x is stored from it.
+ *
+ * `exact` is the quadratic's coefficients as exact fractions, when the typed line has them (exactComplex.ts): a pair
+ * is then written as a textbook writes it (1 ± √7 i). Without it, or when the exact pair does not agree with the
+ * search's numbers, the decimal pair is said as before.
  */
-export function beyondTheReals(coeffs: number[], guess: number): { root: number } | { sentence: string } | null {
+export function beyondTheReals(coeffs: number[], guess: number, exact?: ExactQuadratic | null): { root: number } | { sentence: string } | null {
   const roots = polynomialRoots(coeffs)
   if (!roots.length) return null
   const real = roots.filter((z) => z.im === 0)
   if (real.length) return { root: real.reduce((best, z) => (Math.abs(z.re - guess) < Math.abs(best.re - guess) ? z : best)).re }
-  const pairs = roots.filter((z) => z.im > 0).map(pairText)
+  const found = roots.filter((z) => z.im > 0)
+  const exactPair = exact && found.length === 1 ? exactPairText(exact, coeffs, found[0]) : null
+  const pairs = exactPair ? [exactPair] : found.map(pairText)
   return { sentence: `No real solution. In complex numbers: x = ${pairs.join(' or x = ')}` }
 }
