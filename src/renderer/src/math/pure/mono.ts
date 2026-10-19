@@ -324,6 +324,35 @@ export function parseExpr(src: string): Expr {
   return fromNode(readNode(src))
 }
 
+/**
+ * Whether a typed division has a bottom that holds a letter, read from the same tree parseExpr reads.
+ *
+ * parseExpr divides such a bottom out (x²/x becomes x), so the expression it returns no longer shows
+ * the division. A bottom parseExpr accepts is a single term (a bracket is refused), and a single term
+ * that holds a letter is 0 only where that letter is 0, so this answer tells the solver that the one
+ * value the typed text can refuse is 0. Every spelling of division the reader accepts is covered (÷,
+ * \frac and \div all reach here as "/"). Call it only on text parseExpr has already read.
+ */
+export function dividesByLetter(src: string): boolean {
+  const holdsLetter = (node: MathNode): boolean => {
+    const n = node as unknown as Loose
+    if (n.type === 'OperatorNode' && n.op === '/' && n.args && n.args.length === 2) {
+      // A bottom this reader cannot make into a polynomial is treated as holding the letter. Refusing
+      // the root 0 is the safe mistake here; keeping a root the typed text does not allow is not.
+      let bottom: Expr
+      try {
+        bottom = fromNode(n.args[1])
+      } catch {
+        return true
+      }
+      if (varsOf(bottom).length > 0) return true
+    }
+    const kids = [...(n.args ?? []), ...(n.content ? [n.content] : [])]
+    return kids.some(holdsLetter)
+  }
+  return holdsLetter(readNode(src))
+}
+
 type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode }
 
 /** How many times a bracket is written out for Expand: (x + 1)⁸ is eight columns, not one lump. */

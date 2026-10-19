@@ -21,10 +21,7 @@ import {
   rat,
   type Rat
 } from '../rat'
-import type { BigNumber } from 'mathjs'
-import { NotPolynomial, evalAt, exprTex, parseExpr, varsOf, writeTimes, type Expr } from '../mono'
-import { math, preprocess } from '../../expr'
-import { sameNumber } from '../../noise'
+import { NotPolynomial, dividesByLetter, evalAt, exprTex, parseExpr, varsOf, type Expr } from '../mono'
 import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from '../poly'
 import { discriminant, factorsOf } from '../factor'
 import { labelTex, labelText } from '../../../calc/labels'
@@ -98,58 +95,36 @@ const unknownWords = (name: string): string => labelText(name)
 // parseExpr divides out a letter that stands on both the top and the bottom of a fraction (x²/x
 // becomes x), so the equation it solves can have a root at which the typed fraction is 0/0. For
 // \frac{x^2}{x} = 0 that root is x = 0, and the check on the cancelled sides passes, so the student
-// saw a tick under an answer the typed equation does not allow. Each real root is therefore put back
-// into the typed text and worked out again here, with the app's own maths reader.
-
-/** A real root as a BigNumber: 64 digits, and an exponent range too wide for x¹⁰⁰⁰ to overflow into a false NaN. */
-const bigOf = (r: Rat): BigNumber => math.bignumber(r.n.toString()).div(r.d.toString())
-
-/** The two sides of the typed equation with the unknown set to `at`, or null when mathjs cannot read them. */
-function sidesAt(src: string, name: string, at: BigNumber): [unknown, unknown] | null {
-  const [lhsSrc, rhsSrc = '0'] = src.split('=')
-  try {
-    const scope = { [name]: at }
-    return [math.evaluate(writeTimes(preprocess(lhsSrc)), scope), math.evaluate(writeTimes(preprocess(rhsSrc)), scope)]
-  } catch {
-    return null
-  }
-}
-
-const isFiniteSide = (v: unknown): boolean => (math.isBigNumber(v) ? v.isFinite() : typeof v === 'number' && Number.isFinite(v))
-
-/**
- * Whether the typed equation has no value at this root: one of its sides is not a finite number
- * there. A denominator of 0 gives exactly that (0/0 is NaN, 1/0 is infinite). Only a typed division
- * can do it, so a line without one is never worked out again here.
- */
-function undefinedAt(src: string, name: string, at: BigNumber): boolean {
-  if (!src.includes('/')) return false
-  const sides = sidesAt(src, name, at)
-  // A line mathjs cannot read here would have been refused by parseExpr already, so there is no
-  // verdict to give and the root stays as it was.
-  return sides !== null && !sides.every(isFiniteSide)
-}
-
-/**
- * A real root as a BigNumber, or null for a complex one. A complex root is never refused: the reader
- * only divides out a monomial in the letter, and a monomial is 0 only at the real value 0.
- */
-function realValueOf(r: Root, sign: 1 | -1): BigNumber | null {
-  if (r.imaginary) return null
-  const surd = math.multiply(math.multiply(bigOf(r.coef), math.sqrt(math.bignumber(r.rad.toString()))), sign) as BigNumber
-  return math.add(bigOf(r.re), surd) as BigNumber
-}
-
-/** Whether the two sides of the typed equation come to the same number at this real root. */
-function sidesAgreeAt(src: string, name: string, at: BigNumber): boolean {
-  const sides = sidesAt(src, name, at)
-  if (sides === null || !sides.every(isFiniteSide)) return false
-  return sameNumber(Number(sides[0]), Number(sides[1]))
-}
+// would see a tick under an answer the typed equation does not allow.
+//
+// A bottom that parseExpr accepts is a single term (a bracket is refused), and a single term that
+// holds the letter is 0 only where the letter is 0. So the one root the typed text can refuse is 0,
+// and only when a typed division has a bottom that holds the letter. That is decided from the typed
+// division itself (dividesByLetter in mono.ts) in exact arithmetic, so no decimal or double is ever
+// involved. Every other root is an exact root of the cancelled equation, and the cancelled sides are
+// the typed sides at every value except 0.
 
 /** The sentence that replaces an answer when the typed equation allows no value of the letter. */
 const noValueWorks = (nameWords: string, leftOut: string): string =>
   `No value of ${nameWords} works. ${leftOut} makes a denominator 0, so it is not allowed.`
+
+/**
+ * A refusal the algebra engine must not replace. The engine cancels x²/x itself and answers x = 0,
+ * which the typed equation does not allow, so a refusal of this kind stands as it is (store.ts).
+ */
+const finalRefusal = (w: Working): Working => ({ ...w, finalRefusal: true })
+
+/** Whether either side of the typed equation divides by something that holds the letter, so that 0 is not an answer. */
+const bottomHoldsLetter = (lhsSrc: string, rhsSrc: string): boolean => dividesByLetter(lhsSrc) || dividesByLetter(rhsSrc)
+
+/**
+ * Whether a real root is exactly 0. The root is a rational number when its radicand is 1; an irrational
+ * root is never 0, because its surd part is never cancelled (a non-square radicand stays a surd).
+ */
+function isZeroRoot(r: Root, sign: 1 | -1): boolean {
+  if (r.imaginary || r.rad !== 1n) return false
+  return rIsZero(rAdd(r.re, sign === 1 ? r.coef : rNeg(r.coef)))
+}
 
 /**
  * A linear equation, solved the way it is solved on the board: collect, move across, divide.
@@ -167,9 +142,11 @@ function solveLinearWorking(src: string): Working {
   const [lhsSrc, rhsSrc = '0'] = sides
   let lhs: Expr
   let rhs: Expr
+  let zeroRefused: boolean
   try {
     lhs = parseExpr(lhsSrc)
     rhs = parseExpr(rhsSrc)
+    zeroRefused = bottomHoldsLetter(lhsSrc, rhsSrc)
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
@@ -201,19 +178,17 @@ function solveLinearWorking(src: string): Working {
   if (rIsZero(a)) {
     // A letter on the bottom cancels (x²/x = x becomes x = x), and the cancelled sides agree at every
     // value except one: the typed fraction is 0/0 at x = 0, so that value is left out of "every value".
-    const zeroLeftOut = undefinedAt(src, name, bigOf(R0))
-    const everyValue = zeroLeftOut
-      ? `Both sides are the same, so every value of ${nameWords} works except ${nameWords} = 0, which makes a denominator 0.`
-      : `Both sides are the same, so every value of ${nameWords} works.`
-    return failed(
-      title,
-      input,
-      rIsZero(c) ? everyValue : `The ${nameWords} terms cancel and ${rTex(L[0] ?? R0)} = ${rTex(R[0] ?? R0)} is false, so no value of ${nameWords} works.`
-    )
+    if (rIsZero(c)) {
+      return zeroRefused
+        ? finalRefusal(failed(title, input, `Both sides are the same, so every value of ${nameWords} works except ${nameWords} = 0, which makes a denominator 0.`))
+        : failed(title, input, `Both sides are the same, so every value of ${nameWords} works.`)
+    }
+    const refusal = failed(title, input, `The ${nameWords} terms cancel and ${rTex(L[0] ?? R0)} = ${rTex(R[0] ?? R0)} is false, so no value of ${nameWords} works.`)
+    return zeroRefused ? finalRefusal(refusal) : refusal
   }
   const x = rDiv(c, a)
-  // A value the typed fraction leaves undefined is refused before any step is shown (see undefinedAt).
-  if (undefinedAt(src, name, bigOf(x))) return failed(title, input, noValueWorks(nameWords, `${nameWords} = ${texToPlain(rTex(x))}`))
+  // The one value the typed fraction can leave undefined is 0, so a root of 0 is refused before any step is shown.
+  if (zeroRefused && rIsZero(x)) return finalRefusal(failed(title, input, noValueWorks(nameWords, `${nameWords} = ${texToPlain(rTex(x))}`)))
   if (rIsOne(a)) {
     s.goal('Isolate the letter').add(`So ${nameWords} is on its own.`, `${nameTex} = ${rTex(x)}`)
   } else if (a.d !== 1n) {
@@ -260,10 +235,12 @@ export function solveQuadraticWorking(src: string): Working {
   const title = 'Solve'
   if (src.split('=').length > 2) return failed(title, src, TWO_EQUALS)
   let left: Expr
+  let zeroRefused: boolean
   try {
     // "x^2 + 4 = 0" and "x^2 + 4" both mean the same thing here.
     const [lhs, rhs] = src.split('=')
     left = rhs === undefined ? parseExpr(lhs) : parseExpr(`(${lhs}) - (${rhs})`)
+    zeroRefused = bottomHoldsLetter(lhs, rhs ?? '0')
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
@@ -350,14 +327,12 @@ export function solveQuadraticWorking(src: string): Working {
     root = { re, coef: rDiv(rat(1n, absD.d), denom), rad: radicand, imaginary: sign < 0 }
   }
 
-  // With a zero discriminant both signs are the same root, so there is only one to test.
+  // With a zero discriminant both signs are the same root, so there is only one to test. A root the
+  // typed fraction leaves undefined is only ever 0, and only when a typed bottom holds the letter.
   const rootSigns: (1 | -1)[] = sign === 0 ? [1] : [1, -1]
-  const undefinedRoots = rootSigns.filter((sg) => {
-    const at = realValueOf(root, sg)
-    return at !== null && undefinedAt(src, name, at)
-  })
+  const undefinedRoots = rootSigns.filter((sg) => zeroRefused && isZeroRoot(root, sg))
   const leftOut = undefinedRoots.map((sg) => `${nameWords} = ${texToPlain(rootText(root, sg))}`).join(' or ')
-  if (undefinedRoots.length === rootSigns.length) return failed(title, input, noValueWorks(nameWords, leftOut))
+  if (undefinedRoots.length === rootSigns.length) return finalRefusal(failed(title, input, noValueWorks(nameWords, leftOut)))
   const kept = rootSigns.filter((sg) => !undefinedRoots.includes(sg))
 
   const r1 = rootText(root, 1)
@@ -389,16 +364,11 @@ export function solveQuadraticWorking(src: string): Working {
     '\\text{sum} = -b/a,\\quad \\text{product} = c/a'
   )
 
-  // The real check: each root, substituted exactly, has to make the polynomial zero.
-  const polyOk = [rootValue(root, 1), rootValue(root, -1)].every((z) => isRootOf(poly, z))
-  // With a root left out, the root that is left is checked in the typed text itself: the cancelled
-  // sides only agree with the typed ones away from the root that was left out.
-  const ok = undefinedRoots.length
-    ? polyOk && kept.every((sg) => {
-        const at = realValueOf(root, sg)
-        return at === null || sidesAgreeAt(src, name, at)
-      })
-    : polyOk
+  // The real check: each root, substituted exactly, has to make the polynomial zero. It is exact all
+  // the way, so a root such as 7/3 or 1/7 is never refused by rounding. With a root left out, the kept
+  // roots are not 0, and the cancelled sides are the typed sides at every value other than 0, so this
+  // exact check covers the typed equation too.
+  const ok = [rootValue(root, 1), rootValue(root, -1)].every((z) => isRootOf(poly, z))
   // The kept roots are written out only in the sentence that uses them: rootText takes the surd apart,
   // which is the slow part of a huge discriminant, and the usual path never needs it here.
   const check = undefinedRoots.length
