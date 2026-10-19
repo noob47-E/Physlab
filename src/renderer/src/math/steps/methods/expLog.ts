@@ -2,14 +2,18 @@
 //
 // Two shapes are worked: a power of a whole-number base equal to a power of that same base, or to a whole number that is
 // one (2^(x) = 8 is written 2^(x) = 2^(3), then the exponents are equal); and a logarithm of the unknown equal to a whole
-// number (log(x) = 2 becomes x = 10^(2), then x = 100). A base written with a subscript (log_{2}(x) = 5) is read the same
-// way, but the page refuses a subscript on a working line, so that one falls back to the older path too.
+// number (log(x) = 2 becomes x = 10^(2), then x = 100). A base written with a subscript (log_{2}(x) = 5) is worked the same
+// way: latexToMath writes it as log(2, x), readLogTerm reads that, and the working keeps the line as typed, so the page draws
+// the subscript (displaySafe allows that one subscript, and only on log).
 //
 // Each move is one EquationEquiv with a declared op, checked exactly by checkExpLogOp (check-adapter.ts). What is left is a
-// linear or quadratic equation, and the router solves it: its steps and its answer are the working's own. Anything else, such
-// as 5^(x) = 12 (no whole power), e^(x) = 5 (the answer is a logarithm) or log(x) + log(x - 3) = 1 (a root must be rejected
-// by its logarithms), is noWorking(), so the older path answers it. A complex problem is noWorking() too: cancelling a base is
-// only an equivalence over the real numbers.
+// linear or quadratic equation, and the router solves it: its steps and its answer are the working's own. Anything else is
+// noWorking(), so the older path answers it. That covers 5^(x) = 12, e^(x) = 5 and ln(x + 1) = 2 (the answer is a logarithm,
+// and no exact logarithm answer is shown yet), log(x) + log(x - 3) = 1 (a root must be rejected by evaluating its logarithms,
+// which is not done yet), and a power whose exponent holds a bracket inside its own bracket, such as 2^(x^(2)) = 16 or
+// 2^((x + 1)(x - 3)) = 2^(4): drawnTex (displaySafe.ts) braces only a power whose bracket has no bracket inside, so the page
+// would draw those lines differently from how they are read, and displaySafe refuses them.
+// A complex problem is noWorking() too: cancelling a base is only an equivalence over the real numbers.
 
 import type { Method, Problem, Step, StepRouter, Working } from '../types'
 import { parseExactRat, readExpPower, readLogTerm, splitEquation, tryParsePoly } from '../check-adapter'

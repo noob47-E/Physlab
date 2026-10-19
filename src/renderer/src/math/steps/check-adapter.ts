@@ -802,7 +802,7 @@ interface ExpPower {
   exp: string
 }
 
-/** A logarithm as read: base "10" for log(A), otherwise the base digits (log2(A), which latexToMath writes for log_{2}). */
+/** A logarithm as read: base "10" for log(A), otherwise the base digits (see readLogTerm for each form it takes). */
 interface LogTerm {
   base: string
   arg: string
@@ -835,14 +835,24 @@ export function readExpPower(text: string): ExpPower | null {
   return null
 }
 
-/** A logarithm, written log(A) (base 10) or log2(A) with base digits; a leading backslash is allowed (\log(A)). */
+/**
+ * A logarithm, read in the forms it takes: log(A) (base 10), log2(A) and \log_{2}(A) (base digits, the subscript the student
+ * types), and log(2, A), which latexToMath writes for \log_{2}(A) with the base first, as expr.ts reads log(a, b). A leading
+ * backslash is allowed (\log(A)). A base that is not whole digits, or a base after the argument, is not read.
+ */
 export function readLogTerm(text: string): LogTerm | null {
-  const s = text.replace(/\s+/g, '').replace(/^\\/, '')
+  // The subscript form \log_{2}(A) reads as log2(A), so the one rule below covers both.
+  const s = text.replace(/\s+/g, '').replace(/^\\/, '').replace(/^log_\{(\d+)\}/, 'log$1')
   const m = /^log(\d*)(.+)$/.exec(s)
   if (!m) return null
-  const arg = wholeGroup(m[2])
-  if (arg === null) return null
-  return { base: m[1] === '' ? '10' : m[1], arg }
+  const grouped = wholeGroup(m[2])
+  if (grouped === null) return null
+  if (m[1] !== '') return grouped.includes(',') ? null : { base: m[1], arg: grouped }
+  const withBase = /^(\d+),(.+)$/.exec(grouped)
+  if (withBase) return { base: withBase[1], arg: withBase[2] }
+  // A comma that is not after whole-number digits makes it a two-part call, not a base-10 logarithm: it is not read.
+  if (grouped.includes(',')) return null
+  return { base: '10', arg: grouped }
 }
 
 /** The letters an exponential or logarithmic side uses, or null when the side is not one of those forms. */

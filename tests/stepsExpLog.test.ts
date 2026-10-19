@@ -5,6 +5,8 @@ import { validateStep, validateWorking } from '../src/renderer/src/math/steps/va
 import { equationStep } from '../src/renderer/src/math/steps/methods/equation'
 import { expLogMethod } from '../src/renderer/src/math/steps/methods/expLog'
 import { toDisplayTex } from '../src/renderer/src/math/steps/render'
+import { displaySafe } from '../src/renderer/src/math/steps/displaySafe'
+import { readLogTerm } from '../src/renderer/src/math/steps/check-adapter'
 import type { Working } from '../src/renderer/src/math/steps/types'
 
 const METHOD = 'Exponential and logarithmic equation'
@@ -48,10 +50,42 @@ describe('S3: exponential and logarithmic equations, through runLatex', () => {
     expect(w?.moves.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('leaves to the older path what this method cannot show: no whole power, a logarithmic answer, a log base subscript, two logs', () => {
-    // 5^x = 12 and e^x = 5 have answers that are logarithms, ln(x + 1) = 2 is e squared minus one, and log_{2}(x) = 5 has a
-    // subscript the page refuses on a working line. log(x) + log(x - 3) = 1 needs a root rejected by its logarithms.
-    for (const latex of ['5^{x}=12', 'e^{x}=5', '\\ln(x+1)=2', '\\log_{2}(x)=5', '\\log(x)+\\log(x-3)=1']) {
+  it('log_{2}(x) = 5 is written as x = 2^(5), worked out to x = 32, and checked', () => {
+    // latexToMath reads the subscript as log(2, x); the working keeps the line as typed, so the page draws the subscript.
+    const w = typed('\\log_{2}(x)=5')
+    expect(w?.method).toBe(METHOD)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers[0].tex).toBe('32')
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('log(2, x) = 5, the same logarithm as latexToMath reads it, is worked the same way', () => {
+    const w = typed('\\log(2,x)=5')
+    expect(w?.method).toBe(METHOD)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers[0].tex).toBe('32')
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('log_{b}(x) = c with a whole base b and power c gives x = b^c, worked and checked for every case', () => {
+    const failures: string[] = []
+    for (const b of [2, 3, 5]) {
+      for (const c of [1, 2, 3, 4]) {
+        const w = typed(`\\log_{${b}}(x)=${c}`)
+        const want = String(b ** c)
+        if (w?.method !== METHOD || w?.checked !== 'ok' || w?.answers[0]?.tex !== want || (w?.moves.length ?? 0) < 3) {
+          failures.push(`log_${b}(x)=${c} -> method ${String(w?.method)}, checked ${String(w?.checked)}, answer ${String(w?.answers[0]?.tex)}, expected ${want}`)
+        }
+      }
+    }
+    expect(failures).toEqual([])
+  })
+
+  it('leaves to the older path what this method does not work yet: an answer that is a logarithm, and two logarithms', () => {
+    // 5^x = 12 and e^x = 5 have answers that are logarithms, and ln(x + 1) = 2 is e squared minus one. No exact logarithm
+    // answer is shown yet, so these stay noWorking and the older path answers them. log(x) + log(x - 3) = 1 needs its roots
+    // rejected by evaluating every logarithm of the original equation, which this method does not do yet either.
+    for (const latex of ['5^{x}=12', 'e^{x}=5', '\\ln(x+1)=2', '\\log(x)+\\log(x-3)=1']) {
       const w = typed(latex)
       expect(w?.method, latex).not.toBe(METHOD)
     }
@@ -186,5 +220,48 @@ describe('S3 review: this method reads real equations only, and a negative power
     expect(toDisplayTex('2^{(-12)}')).toBe('2⁻¹²')
     expect(toDisplayTex('2^-1')).toBe('2⁻¹')
     expect(toDisplayTex('x^2-1')).toBe('x²-1')
+  })
+})
+
+describe('S3 fix: a logarithm with a base is read in each form, and only a whole-number subscript on log is drawn', () => {
+  it('readLogTerm reads log_{2}(x), log(2, x), log2(x) and log(x), and refuses log(x, 2)', () => {
+    expect(readLogTerm('\\log_{2}(x)')).toEqual({ base: '2', arg: 'x' })
+    expect(readLogTerm('log(2, x)')).toEqual({ base: '2', arg: 'x' })
+    expect(readLogTerm('log2(x)')).toEqual({ base: '2', arg: 'x' })
+    expect(readLogTerm('\\log(x)')).toEqual({ base: '10', arg: 'x' })
+    expect(readLogTerm('log(x, 2)')).toBeNull()
+    expect(readLogTerm('log2(x, 3)')).toBeNull()
+  })
+
+  it('log_{2}(x) = 5 becomes x = 2^(5) with the base it has; another power or another base is refused', () => {
+    const right = equationStep('\\log_{2}(x) = 5', 'x = 2^(5)', { kind: 'log-to-power', base: '2' }, 'x')
+    expect(validateStep(right).verdict).toBe('valid')
+    const wrongPower = equationStep('\\log_{2}(x) = 5', 'x = 2^(4)', { kind: 'log-to-power', base: '2' }, 'x')
+    expect(validateStep(wrongPower).verdict).not.toBe('valid')
+    const wrongBase = equationStep('\\log_{2}(x) = 5', 'x = 3^(5)', { kind: 'log-to-power', base: '3' }, 'x')
+    expect(validateStep(wrongBase).verdict).not.toBe('valid')
+  })
+
+  it('a log with a base and a linear argument, log_{3}(2x - 1) = 2, is solved through 2x - 1 = 9, x = 5, and checked', () => {
+    const w = typed('\\log_{3}(2x-1)=2')
+    expect(w?.method).toBe(METHOD)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers[0].tex).toBe('5')
+    expect(w?.moves.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('a working for log_{2}(x) = 5 whose answer is changed to a wrong number is never shown', () => {
+    const router = createDefaultStepRouter()
+    const working = router.solve({ job: 'solve', input: 'log(2, x)=5', variable: 'x', rawInput: '\\log_{2}(x)=5' })
+    expect(working.method).toBe(METHOD)
+    expect(validateWorking(working).valid).toBe(true)
+    const wrong: Working = { ...working, answer: { label: 'x', tex: '31', value: '31' } }
+    expect(validateWorking(wrong).valid).toBe(false)
+  })
+
+  it('a subscript is drawn only as the base of a log: a subscript anywhere else is still refused', () => {
+    expect(displaySafe('\\log_{2}(x)=5')).toBe(true)
+    expect(displaySafe('x_{2}=5')).toBe(false)
+    expect(displaySafe('\\log_{x}(y)=5')).toBe(false)
   })
 })
