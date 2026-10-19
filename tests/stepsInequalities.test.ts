@@ -4,11 +4,13 @@
 // inequalities checked against plain sampling, and workings that claim a wrong solution set, which must not be valid.
 
 import { beforeEach, describe, expect, it } from 'vitest'
+import katex from 'katex'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { createDefaultStepRouter } from '../src/renderer/src/math/steps/solve'
 import { validateWorking } from '../src/renderer/src/math/steps/validate'
 import {
   agreesWithTypedSides,
+  ineqDrawnTex,
   intervalForm,
   readInequality,
   setData,
@@ -62,7 +64,11 @@ describe('S1e: inequalities in the Calculator', () => {
     const w = workedLine('x^2-5x+6>0')
     expect(answerTexts()).toEqual(['x < 2 \\text{ or } x > 3', '(-\\infty, 2) \\cup (3, \\infty)'])
     expect(w.moves.some((m) => m.head === 'Factorise the left side as (x − 2)(x − 3)')).toBe(true)
-    expect(w.moves.some((m) => m.head.startsWith('Sign in each part: x < 2 is positive'))).toBe(true)
+    expect(
+      w.moves.some(
+        (m) => m.head === 'Left side minus right side is positive for x < 2, negative for 2 < x < 3 and positive for x > 3.'
+      )
+    ).toBe(true)
   })
 
   it('keeps the end points of a closed quadratic set', () => {
@@ -390,5 +396,101 @@ describe('S1e review: the second check reads the typed sides, not the solver', (
     expect(agreesWithTypedSides('x^2+1<0', [])).toBe(true)
     expect(agreesWithTypedSides('x^2+1>0', [])).toBe(false)
     expect(agreesWithTypedSides('x^2+1>0', [part(null, false, null, false)])).toBe(true)
+  })
+})
+
+describe('S1e round 2 review: the working says only what is true of the line it shows', () => {
+  /** The Calculator's working for one typed LaTeX line, checked ok by the step engine (it may have only two steps). */
+  function calcWorking(latex: string): NonNullable<ReturnType<typeof usePure.getState>['working']> {
+    usePure.getState().runLatex(latex, 'auto', { quiet: true })
+    const w = usePure.getState().working
+    expect(w?.error, latex).toBeUndefined()
+    expect(w?.noWorking, latex).toBeFalsy()
+    expect(w?.method, latex).toBe('Inequalities')
+    expect(w?.checked, latex).toBe('ok')
+    return w as NonNullable<typeof w>
+  }
+
+  it('names no side for a denominator 0, whichever side the fraction is on', () => {
+    const right = calcWorking('0>\\frac{x-1}{x+2}')
+    expect(
+      right.moves.some(
+        (m) => m.head === 'The sides are equal when x = 1. A denominator is 0 when x = −2, so that point is left out.'
+      )
+    ).toBe(true)
+    const left = calcWorking('x<\\frac{1}{x}')
+    expect(left.moves.some((m) => m.head.includes('A denominator is 0 when x = 0, so that point is left out.'))).toBe(true)
+    const both = calcWorking('\\frac{x}{x-1}>\\frac{x}{x+1}')
+    expect(
+      both.moves.some(
+        (m) =>
+          m.head === 'The sides are equal when x = 0. A denominator is 0 when x = −1 or x = 1, so those points are left out.'
+      )
+    ).toBe(true)
+    for (const w of [right, left, both]) {
+      expect(w.moves.some((m) => /left side is undefined/.test(m.head))).toBe(false)
+    }
+  })
+
+  it('says which quantity is positive or negative, and gives no sign step for a linear line already solved', () => {
+    expect(routed('-2x+1>=5').steps.some((s) => s.kind === 'IneqSigns')).toBe(false)
+    const abs = calcWorking('|2x-1|\\geq 3')
+    expect(
+      abs.moves.some(
+        (m) => m.head === '|2x − 1| − 3 is positive for x < −1, negative for −1 < x < 2 and positive for x > 2.'
+      )
+    ).toBe(true)
+    const fraction = calcWorking('\\frac{x-1}{x+2}\\geq 0')
+    expect(
+      fraction.moves.some(
+        (m) => m.head === 'Left side minus right side is positive for x < −2, negative for −2 < x < 1 and positive for x > 1.'
+      )
+    ).toBe(true)
+  })
+
+  it('draws every line of an inequality working as LaTeX that KaTeX reads: ≤ and ≥, fractions and no code-like brackets', () => {
+    const lines = [
+      'x\\le 3',
+      '5-2x>=3x',
+      '\\frac{x-1}{x+2}\\geq 0',
+      '\\frac{x}{x^2-4}\\geq 0',
+      '|x-1|\\leq 2',
+      'x^2-4x+3\\leq 0',
+      '\\frac{x}{x-1}>\\frac{x}{x+1}',
+      '0>\\frac{x-1}{x+2}'
+    ]
+    for (const latex of lines) {
+      const w = calcWorking(latex)
+      expect(w.moves.length, latex).toBeGreaterThanOrEqual(2)
+      for (const m of w.moves) {
+        if (m.tex === undefined) continue
+        expect(m.tex, `${latex}: ${m.tex}`).not.toMatch(/<=|>=|\//)
+        expect(m.tex, `${latex}: ${m.tex}`).not.toMatch(/\^\{\(/)
+        expect(() => katex.renderToString(m.tex as string, { displayMode: true, throwOnError: true, strict: 'ignore' }), `${latex}: ${m.tex}`).not.toThrow()
+      }
+    }
+  })
+
+  it('rejects a signs step that names another quantity than the one the line has', () => {
+    const w = routed('|2x-1|>=3')
+    const steps = w.steps.map((s) => ({ ...s }))
+    const idx = steps.findIndex((s) => s.kind === 'IneqSigns')
+    expect(idx).toBeGreaterThanOrEqual(0)
+    const data = { ...(steps[idx].data as Record<string, unknown>), expression: 'left-minus-right' }
+    steps[idx] = finishStep({ ...steps[idx], sentence: '', rule: undefined, data } as Step)
+    expect(validateWorking({ ...w, steps }).valid).toBe(false)
+  })
+})
+
+describe('S1e round 2 review: the drawing of a line reads as the line', () => {
+  it('draws a rational term as a term: x^2 - 1/2 is not (x^2 - 1)/2', () => {
+    expect(ineqDrawnTex('x^2-1/2>0')).toBe('x^2-\\frac{1}{2} > 0')
+    expect(ineqDrawnTex('x^2 - 1/2 > 0')).toBe('x^2 - \\frac{1}{2} > 0')
+  })
+
+  it('draws the closed relations as \\le and \\ge, and a fraction side as \\frac', () => {
+    expect(ineqDrawnTex('((x-1)/(x+2))>=0')).toBe('\\frac{x-1}{x+2} \\ge 0')
+    expect(ineqDrawnTex('x<=3')).toBe('x \\le 3')
+    expect(ineqDrawnTex('x^(2)-4<=0')).toBe('x^{2}-4 \\le 0')
   })
 })

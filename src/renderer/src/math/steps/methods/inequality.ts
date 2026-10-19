@@ -2,11 +2,11 @@
 //
 // The steps, in order, depend on the shape of the inequality:
 // - a linear inequality with whole-number sides: the x-terms and then the numbers are moved (each move keeps the
-//   relation; dividing by a negative number flips it), then the solution set;
+//   relation; dividing by a negative number flips it), then the critical point, then the solution set;
 // - a quadratic: the right side moved to 0, the left side factorised (when it has real roots), the critical points,
 //   the sign of each part, then the solution set;
 // - a fraction, |linear| against a number, or a linear with fractions: the critical points, the sign of each part,
-//   then the solution set.
+//   then the solution set. The sign step names its expression (left side minus right side, or |g| − c).
 // Every step is checked (inequality.ts, validateIneqWorking), and the sentences are built from the typed data
 // (sentences.ts, finishStep), so a method never writes its own words.
 
@@ -24,6 +24,7 @@ import {
   scaleBy,
   setData,
   setForm,
+  signedExpression,
   splitRelation,
   stateText,
   type IneqAnalysis,
@@ -89,13 +90,17 @@ function solveInequality(input: string): Working {
   const b = builderFor(input, v)
   const sides = read.sides
   const degree = sides ? exprDegree(eSub(sides.L, sides.R)) : -1
+  // A linear line with whole-number sides is solved by its moves alone, so it gets no sign step: a sign chart would only
+  // repeat what the moves have already said, and it would have to name a quantity the shown line does not hold.
+  const linear = sides !== null && degree === 1 && wholeSides(sides.L, sides.R)
 
-  if (sides && degree === 1 && wholeSides(sides.L, sides.R)) {
+  if (sides && linear) {
     linearMoves(sides.L, sides.R, read.rel, v, b)
   } else if (sides && degree === 2) {
     quadraticMoves(sides.L, sides.R, read.rel, v, analysis, b)
   }
-  criticalAndSigns(analysis, b)
+  claimCritical(analysis, b)
+  if (!linear) claimSigns(analysis, b, signedExpression(read))
   const set = analysis.set
   b.ending(intervalForm(set), { intervals: setData(set) })
 
@@ -165,15 +170,20 @@ function quadraticMoves(L: Expr, R: Expr, rel: IneqRel, v: string, analysis: Ine
   }
 }
 
-/** The critical points, then the sign of each part, both about the state the working has reached. */
-function criticalAndSigns(analysis: IneqAnalysis, b: Builder): void {
+/** The critical points: where the two sides are equal, and where a denominator is 0 (the expression is undefined there). */
+function claimCritical(analysis: IneqAnalysis, b: Builder): void {
   b.claim('IneqCritical', {
     zeros: analysis.zeros.map((r) => rStr(r)),
     poles: analysis.poles.map((r) => rStr(r))
   })
+}
+
+/** The sign of the named expression in each part between the critical points. */
+function claimSigns(analysis: IneqAnalysis, b: Builder, expression: string): void {
   b.claim('IneqSigns', {
     points: analysis.points.map((r) => rStr(r)),
-    signs: analysis.signs.map((s) => (s > 0 ? '+' : '-'))
+    signs: analysis.signs.map((s) => (s > 0 ? '+' : '-')),
+    expression
   })
 }
 

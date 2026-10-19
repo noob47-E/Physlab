@@ -17,6 +17,7 @@ import type { Expr } from '../pure/mono'
 import { constExpr, eAdd, eEq, eMul, eNeg, eSub, evalAt, exprDegree, normalize, varsOf } from '../pure/mono'
 import { rAbs, rAdd, rCmp, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rSign, rSqrt, rStr, rSub, rTex, rat, type Rat } from '../pure/rat'
 import { coefficientOf, parseExactRat, tryParsePoly } from './check-adapter'
+import { displaySafe, drawnTex } from './displaySafe'
 import type { Step, ValidationVerdict, Working, WorkingValidationResult } from './types'
 
 /** The relation between the two sides, as written. */
@@ -74,6 +75,11 @@ const LE_TEX = '\\le'
 const GE_TEX = '\\ge'
 const LE = '≤'
 const GE = '≥'
+
+/** The name a Signs step gives its expression when it is left side minus right side (the fraction and polynomial cases). */
+const LEFT_MINUS_RIGHT = 'left-minus-right'
+
+const RELATION_TEX: Record<IneqRel, string> = { '<': '<', '<=': LE_TEX, '>': '>', '>=': GE_TEX }
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
@@ -258,6 +264,62 @@ export function readInequality(text: string): IneqRead | null {
 export function canWorkInequality(text: string): boolean {
   const read = readInequality(text)
   return read !== null && analyseInequality(read) !== null
+}
+
+/**
+ * The expression whose sign a Signs step gives, as its data names it: left side minus right side for a fraction or a
+ * polynomial, or |g| − c for an absolute value. A sign is only ever about the expression named here.
+ */
+export function signedExpression(read: IneqRead): string {
+  const fn = read.fn
+  if (fn.kind === 'ratio') return LEFT_MINUS_RIGHT
+  return `|${polyText(fn.g, read.v)}| - ${rStr(fn.c)}`
+}
+
+/**
+ * One side as LaTeX. A side is a fraction only when readSide reads it as one: a single top-level slash, a numerator with no
+ * top-level sum, and a denominator that is a bracket, a number or one letter power. So "x^2 - 1/2" keeps its 1/2 as a
+ * rational term and is never drawn as (x^2 - 1)/2.
+ */
+function sideTex(side: string): string {
+  const s = unbracket(side.trim())
+  const slashes = topLevel(s, '/')
+  if (slashes.length === 1) {
+    const numText = s.slice(0, slashes[0]).trim()
+    const denText = s.slice(slashes[0] + 1).trim()
+    const denOk = isOneBracket(denText) || /^\d+$/.test(denText) || /^[A-Za-z](\^\d+)?$/.test(denText)
+    if (numText !== '' && denOk && !hasTopLevelSum(numText) && !numText.includes('/')) {
+      return `\\frac{${unbracket(numText)}}{${unbracket(denText)}}`
+    }
+  }
+  return fractionCoefficientsTex(s)
+}
+
+/** A text with its outer brackets removed while they wrap the whole text: "((x-1))" is "x-1". */
+function unbracket(text: string): string {
+  let s = text.trim()
+  while (isOneBracket(s)) s = s.slice(1, -1).trim()
+  return s
+}
+
+/**
+ * A rational number written (1/2), (-1/2) or 1/2 is drawn as \frac{1}{2}, with the brackets that only held it dropped. A
+ * minus sign outside the brackets is a subtraction or a sign in front, so it stays outside: x^2-1/2 is x^2-\frac{1}{2}.
+ */
+function fractionCoefficientsTex(text: string): string {
+  return text.replace(/\((-?\d+)\/(\d+)\)/g, '\\frac{$1}{$2}').replace(/(\d+)\/(\d+)/g, '\\frac{$1}{$2}')
+}
+
+/**
+ * The TeX an inequality step draws under its sentence: \le and \ge for the closed relations, a fraction (n)/(d) as
+ * \frac{n}{d}, a fraction coefficient (1/2) as \frac{1}{2} and a power written x^{(2)} as x^2. The ASCII line is still what
+ * the chain checks; only the drawing changes.
+ */
+export function ineqDrawnTex(text: string): string {
+  const tidy = text.replace(/\^\{\((-?\d+)\)\}/g, '^{$1}').replace(/\^\((-?\d+)\)/g, '^{$1}')
+  const rel = splitRelation(tidy)
+  if (rel === null) return drawnTex(fractionCoefficientsTex(tidy))
+  return drawnTex(`${sideTex(rel.left)} ${RELATION_TEX[rel.rel]} ${sideTex(rel.right)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -539,6 +601,22 @@ function partWord(sign: string): string {
   return sign === '+' ? 'positive' : 'negative'
 }
 
+/**
+ * The expression a Signs sentence starts with, as its data names it: "Left side minus right side", or the absolute value
+ * "|2x − 1| − 3". Null when the data names neither, so the sentence is not written.
+ */
+function signedSubject(expression: unknown): string | null {
+  if (expression === LEFT_MINUS_RIGHT) return 'Left side minus right side'
+  if (typeof expression === 'string' && expression.startsWith('|')) return plainPoly(expression)
+  return null
+}
+
+/** Clauses in a list, as a sentence reads them: "a", "a and b", "a, b and c". */
+function joinClauses(items: string[]): string {
+  if (items.length < 2) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
 /** The sentence a step must carry, built from its typed data. Null when the data does not determine one. */
 export function ineqSentence(step: Step): string | null {
   const v = variableOfStep(step)
@@ -566,9 +644,10 @@ export function ineqSentence(step: Step): string | null {
       const parts: string[] = []
       if (zeros.length === 0) parts.push('The sides are never equal.')
       else parts.push(`The sides are equal when ${zeros.map((r) => `${v} = ${numberPlain(r)}`).join(' or ')}.`)
+      // The poles are the points where a denominator on either side is 0, so no side is named: a side could be the wrong one.
       if (poles.length > 0) {
         parts.push(
-          `The left side is undefined when ${poles.map((r) => `${v} = ${numberPlain(r)}`).join(' or ')}, so ${poles.length === 1 ? 'that point is' : 'those points are'} left out.`
+          `A denominator is 0 when ${poles.map((r) => `${v} = ${numberPlain(r)}`).join(' or ')}, so ${poles.length === 1 ? 'that point is' : 'those points are'} left out.`
         )
       }
       return parts.join(' ')
@@ -576,16 +655,17 @@ export function ineqSentence(step: Step): string | null {
     case 'IneqSigns': {
       const points = parsedRats(dataOf(step).points)
       const signs = dataOf(step).signs
-      if (points === null || !Array.isArray(signs) || !signs.every((s) => s === '+' || s === '-')) return null
+      const subject = signedSubject(dataOf(step).expression)
+      if (points === null || subject === null || !Array.isArray(signs) || !signs.every((s) => s === '+' || s === '-')) return null
       if (signs.length !== points.length + 1) return null
-      if (points.length === 0) return `It is ${partWord(String(signs[0]))} for every ${v}.`
+      if (points.length === 0) return `${subject} is ${partWord(String(signs[0]))} for every ${v}.`
       const labels = signs.map((_s, j) => {
         const n = points.length
         if (j === 0) return `${v} < ${numberPlain(points[0])}`
         if (j === n) return `${v} > ${numberPlain(points[n - 1])}`
         return `${numberPlain(points[j - 1])} < ${v} < ${numberPlain(points[j])}`
       })
-      return `Sign in each part: ${signs.map((s, j) => `${labels[j]} is ${partWord(String(s))}`).join(', ')}.`
+      return `${subject} is ${joinClauses(signs.map((s, j) => `${partWord(String(s))} for ${labels[j]}`))}.`
     }
     case 'IneqSolutionSet': {
       const set = intervalsOf(dataOf(step).intervals)
@@ -819,7 +899,9 @@ function checkStep(step: Step, read: IneqRead, analysis: IneqAnalysis): Validati
       const want = analysis.signs.map((s) => (s > 0 ? '+' : '-'))
       const claimed: unknown = d.signs
       const signsOk = Array.isArray(claimed) && claimed.length === want.length && want.every((s, i) => claimed[i] === s)
-      return sameTexts(d.points, analysis.points) && signsOk ? 'valid' : 'invalid'
+      // The signs are of the expression the typed line gives, and the sentence must name that expression, not another.
+      const namesOk = d.expression === signedExpression(read)
+      return sameTexts(d.points, analysis.points) && signsOk && namesOk ? 'valid' : 'invalid'
     }
     case 'IneqSolutionSet':
       return sameIntervals(d.intervals, analysis.set) && step.after === intervalForm(analysis.set) ? 'valid' : 'invalid'
@@ -865,6 +947,10 @@ export function validateIneqWorking(working: Working): WorkingValidationResult {
       return { valid: false, failedStepIndex: i, failedStep: step, verdict, reason: `Step ${i + 1} is not valid (${verdict})` }
     }
     if (typeof step.after !== 'string') return reject('A step does not end in text', i)
+    // The line the page draws (ineqDrawnTex) must also be one KaTeX draws as the chain reads it, so the drawing is checked too.
+    if (step.kind !== 'IneqSolutionSet' && !displaySafe(ineqDrawnTex(step.after))) {
+      return reject('A line would be drawn differently from how it is read', i)
+    }
     prev = step.after
   }
   if (steps[steps.length - 1].kind !== 'IneqSolutionSet') return reject('An inequality must end with its solution set')
