@@ -8,11 +8,14 @@
 //
 // Each move is one EquationEquiv with a declared op, checked exactly by checkExpLogOp (check-adapter.ts). What is left is a
 // linear or quadratic equation, and the router solves it: its steps and its answer are the working's own. Anything else is
-// noWorking(), so the older path answers it. That covers 5^(x) = 12, e^(x) = 5 and ln(x + 1) = 2 (the answer is a logarithm,
-// and no exact logarithm answer is shown yet), log(x) + log(x - 3) = 1 (a root must be rejected by evaluating its logarithms,
-// which is not done yet), and a power whose exponent holds a bracket inside its own bracket, such as 2^(x^(2)) = 16 or
-// 2^((x + 1)(x - 3)) = 2^(4): drawnTex (displaySafe.ts) braces only a power whose bracket has no bracket inside, so the page
-// would draw those lines differently from how they are read, and displaySafe refuses them.
+// noWorking(), so the older path answers it. That covers 5^(x) = 12, e^(x) = 5 and ln(x + 1) = 2, whose answers are logarithms:
+// the exact checks read whole-number answers only, so a logarithm answer would not be put back into its equation (substitutionOf
+// returns nothing for it), and a base e is not read at all. It also covers log(x) + log(x - 3) = 1, which needs a move that joins
+// two logarithms and a step that rejects a root by evaluating its logarithms; neither exists yet. These four stay noWorking()
+// until the checks can prove a logarithm answer, so nothing unchecked is ever drawn as a working. A power whose exponent
+// holds a bracket inside its own bracket, such as 2^(x^(2)) = 16 or 2^((x + 1)(x - 3)) = 2^(4): drawnTex (displaySafe.ts)
+// braces only a power whose bracket has no bracket inside, so the page would draw those lines differently from how they are
+// read, and displaySafe refuses them.
 // A complex problem is noWorking() too: cancelling a base is only an equivalence over the real numbers.
 
 import type { Method, Problem, Step, StepRouter, Working } from '../types'
