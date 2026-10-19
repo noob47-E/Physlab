@@ -774,6 +774,18 @@ const PURE_SPREAD: Record<Exclude<JobId, 'integrate' | 'differentiate'>, string[
     'P(45 < X < 60), X ~ N(50, 5^2)',
     'P(X > x) = 0.1, X ~ N(50, 10^2)'
   ],
+  // Limits, as the Maths field's converter writes them: lim(f, x, a) with 1 or −1 for a side, and Infinity for ±∞.
+  limit: [
+    'lim((x^2-1)/(x-1), x, 1)',
+    'lim((x^3-1)/(x^2-1), x, 1)',
+    'lim((sin(3x))/x, x, 0)',
+    'lim((e^x-1)/x, x, 0)',
+    'lim((cos(x)-1)/x^2, x, 0)',
+    'lim((3x^2+1)/(x^2-5), x, Infinity)',
+    'lim(1/x, x, 0, 1)',
+    'lim(1/x, x, 0)',
+    'lim((x^2-4)/(x+2), x, -2)'
+  ],
   // Trig lines are not read as numbers here (tests/trigSteps.test.ts checks every line at five
   // angles); what this list holds them to is the writing: no doubled sign, no fraction inside a
   // fraction, no bracketed whole denominator, no step that changes nothing.

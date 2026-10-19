@@ -19,6 +19,11 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
 - `math/pure/run.ts` (job router, `suggestJob`), `math/pure/complex.ts` (complex numbers, surds, Solve,
   Factorise with i), `math/pure/store.ts` (Work it out; asks SymPy when this engine refuses), `math/latexToMath.ts`
   (granted regions: fnArg, sqrt, seq, the ×10ˣ mark).
+- Limits: `math/latexToMath.ts` (`limitAtom`) reads \lim_{x\to a} f as `lim(f, x, a[, side])`; `math/limitCall.ts` reads
+  that line (the "= claim" after it too); `math/limitSamples.ts` reads a function's values next to the point (the check, and
+  the fallback); `math/pure/limitWorking.ts` gives the answer and its working (rational functions, the standard limits,
+  substitution, L'Hôpital's rule at most twice, the values near the point). The "=" card (`calc/evaluateInput.ts`
+  `limitResult`) and Work it out read the same answer, so they cannot disagree. Tests: `tests/calcLimits.test.ts`.
 
 ## The rules (invariants)
 1. **Root order** (the PhysLab Calculator's): a quadratic's x₁ is the formula's +√ root, real or complex; cubics and
@@ -36,6 +41,9 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
    engine's spelling ("theta_1 =") because the command bar reads them.
 8. **Sentences raise a power of ten** ("x = 1 × 10⁻⁸", with no-break spaces) — solve() answers in exact LaTeX.
 9. **A result belongs to its settings**: the Matrix result and the screen answer are left off after a DEG/RAD switch.
+10. **A limit is shown only when checked.** Each answer (a rule's, a substitution's, or one read from the values near the
+    point) is compared with the function's own values on both sides (`limitSamples.ts`); a claim that fails is dropped, and
+    when nothing passes there is a sentence and no working. The card's decimal is four figures when it comes from the values.
 
 ## Traps met
 - `mathjs` rounds a complex/matrix/unit number with no 15-figure cut (0.35×3 → "1.0"): `mathFormatOptions`.

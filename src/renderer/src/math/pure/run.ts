@@ -38,6 +38,8 @@ import { complexWorking, factoriseComplexWorking, isSurdLine, solveQuadraticWork
 import { normalRefusal, parseNormalQuery, zscoreWorking } from './zscore'
 import { Steps, failed, texToPlain, type Working } from './work'
 import { isTrigIdentity, trigWorking } from './trigIdentity'
+import { limitCall } from '../limitCall'
+import { limitWorking } from './limitWorking'
 
 export type JobId =
   | 'factor'
@@ -54,6 +56,7 @@ export type JobId =
   | 'trigidentity'
   | 'integrate'
   | 'differentiate'
+  | 'limit'
 
 interface JobDef {
   id: JobId
@@ -200,7 +203,21 @@ export const JOBS: JobDef[] = [
   }
 ]
 
-export const jobById = (id: JobId): JobDef => JOBS.find((j) => j.id === id) ?? JOBS[0]
+/**
+ * The limit job. It is not one of the panel's buttons: the Calculator reaches it through "=" and "Show the working", and
+ * JOBS is pinned line for line by the golden sweep (tests/golden/pure.golden.test.ts), so one more entry would move every
+ * line after it. jobById still knows it, so a limit's history entry and its working say "Limit", not "Factorise".
+ */
+const LIMIT_JOB: JobDef = {
+  id: 'limit',
+  label: 'Limit',
+  about: 'Find the value a function settles on as x comes to a number (from one side or both) or goes to infinity, step by step, with each answer checked against the values next to the point.',
+  placeholder: 'x → 1 of (x^2 - 1)/(x - 1)',
+  example: 'lim((x^2-1)/(x-1), x, 1)',
+  exampleLatex: '\\lim_{x\\to 1}\\frac{x^2-1}{x-1}'
+}
+
+export const jobById = (id: JobId): JobDef => JOBS.find((j) => j.id === id) ?? (id === LIMIT_JOB.id ? LIMIT_JOB : JOBS[0])
 
 /**
  * LaTeX for a linear-syntax source, so it can be written into a maths field.
@@ -469,6 +486,9 @@ export function runPure(job: JobId, input: string): Working {
     case 'trigidentity':
       return trigWorking(src)
 
+    case 'limit':
+      return limitWorking(src)
+
     default:
       return failed('Pure Math', src, 'I do not know that job.')
   }
@@ -481,6 +501,8 @@ export function runPure(job: JobId, input: string): Working {
 export function suggestJob(src: string): JobId {
   const s = src.trim()
   if (!s) return 'factor'
+  // A limit, lim(f, x, a), is the limit job's own line: the rest of the readers would take its letters and commas for a list or a product.
+  if (limitCall(s)) return 'limit'
   // d/dx(f) and ∫ f dx, as the field's converter writes them (diff(f, x), integrate(f, x), integral(f, a, b)), are the
   // two jobs of their own. They went to Factorise and Divide, which cannot read them: a derivative was "factorised" as
   // diff(x^(3)sin(x), x) and an integral "divided", and a DEG screen scaled the first by π/180.

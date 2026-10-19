@@ -62,7 +62,8 @@ export function errorSentence(raw: unknown): ErrorSentence {
   // ("That sum has too many terms…", calc/engine.ts series) and the line that tries to store a letter
   // ("Typing A = … does not store a value", calc/engine.ts refuseStoring) are already sentences written
   // for the student; the generic fallback below would bury them as small print.
-  if (/^Choose \+ or −|^The area cannot be worked out|^That (sum|product) |^Typing .+ does not store a value\./.test(msg)) return { sentence: msg }
+  // The limit's refusals (math/latexToMath.ts limitAtom: "A limit needs a point after the arrow") are sentences too.
+  if (/^Choose \+ or −|^The area cannot be worked out|^That (sum|product) |^Typing .+ does not store a value\.|^A limit (needs|has to be) /.test(msg)) return { sentence: msg }
   if (/Empty/.test(msg)) return { sentence: 'Type something first.' }
   if (/No solution/i.test(msg)) return { sentence: 'No solution I can find near 0. Try giving x a value close to the answer first.', detail }
   // The Bases engine's one "Math ERROR" is a division by zero; everything else it refuses is syntax.
