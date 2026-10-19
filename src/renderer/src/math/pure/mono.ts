@@ -200,6 +200,9 @@ function wholeNumberIn(node: MathNode): number | null {
   return null
 }
 
+/** What a reader says when a division leaves a letter on the bottom (golden sweep "errors" pins this sentence for 1/x = 0). */
+const LETTERS_ON_BOTTOM = 'That division leaves letters on the bottom, so it is not a polynomial.'
+
 function fromNode(node: MathNode): Expr {
   const n = node as unknown as { type: string; [k: string]: unknown }
   switch (n.type) {
@@ -239,8 +242,11 @@ function fromNode(node: MathNode): Expr {
         const top = fromNode(args[0])
         const bot = fromNode(args[1])
         if (bot.length !== 1) throw new NotPolynomial('Dividing by a bracket makes a fraction — use Partial Fractions or Divide for that.')
-        const done = divideByTerm(top, bot[0])
-        if (!done) throw new NotPolynomial('That division leaves letters on the bottom, so it is not a polynomial.')
+        // Cancelling a letter out of the bottom gives a line with no sign of the value that makes the bottom 0, where the
+        // original has no value at all (x²/x is undefined at 0). So a letter on the bottom is refused, not cancelled, and
+        // no working can report that value as its answer.
+        const done = varsOf(bot).length === 0 ? divideByTerm(top, bot[0]) : null
+        if (!done) throw new NotPolynomial(LETTERS_ON_BOTTOM)
         return done
       }
       throw new NotPolynomial(`I do not know how to handle "${op}" here.`)
@@ -309,10 +315,12 @@ const tooManyDigits = (text: string): boolean =>
  * A 0 typed straight against a letter, as in 0x + 3 or x² + 0x − 4, means 0 times that letter. mathjs reads "0x" as the
  * start of a hex number (and 0b, 0o as binary and octal) and refuses the whole line, so before the line is read a × is
  * put between the 0 and the letter. A 0 inside a longer number (10x, 0.5x) does not start a number of its own, and a 0
- * that begins an exponent (0e+3) is left to mathjs, which already reads it as 0. Only this reader does this: the checker
+ * that begins an exponent (0e+3) is left to mathjs, which already reads it as 0. A 0x, 0b or 0o that is followed by a digit
+ * of its own base (0x1F, 0b11, 0o7) is a number and is left as it is: the "=" engine reads it as one, so the working must
+ * too, or the two would disagree about the same line (0x1F + 2 is 33, not 2). Only this reader does this: the checker
  * still reads 0x as hex on purpose (tests/check/adversarial.test.ts), so writeTimes itself is not changed.
  */
-const ZERO_BEFORE_LETTER = /(?<![\w.])0(?=[A-Za-z])(?![eE][+-]?\d)/g
+const ZERO_BEFORE_LETTER = /(?<![\w.])0(?=[A-Za-z])(?![eE][+-]?\d)(?!x[0-9A-Fa-f]|b[01]|o[0-7])/g
 
 /** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */
 function readNode(src: string): MathNode {
@@ -334,9 +342,28 @@ export function parseExpr(src: string): Expr {
 }
 
 /**
+ * A letter, or a bracket with one in it, raised to the power 0. That is 1 for every value of the letter except 0, and 0 to
+ * the power 0 has no value, so a line with one cannot be said to hold for "every value of x".
+ */
+function letterToZeroPower(node: MathNode): boolean {
+  let found = false
+  node.traverse((n) => {
+    if (n.type !== 'OperatorNode') return
+    const o = n as unknown as { op?: string; args?: MathNode[] }
+    const args = o.args
+    if (o.op !== '^' || !args || args.length !== 2 || wholeNumberIn(args[1]) !== 0) return
+    args[0].traverse((m) => {
+      if (m.type === 'SymbolNode') found = true
+    })
+  })
+  return found
+}
+
+/**
  * The letters a typed equation names, in the order they first appear, both sides together. A letter whose terms cancel
  * is still named: "x - x + 3 = 3" has no letter left once worked out, yet the student typed an x, and the working can say
  * which letter it means. A side that cannot be read is skipped; the solver has already refused it with its own sentence.
+ * A letter raised to the power 0 names nothing, since the line may have no value at 0 (see letterToZeroPower).
  */
 export function typedLetters(src: string): string[] {
   const names: string[] = []
@@ -347,6 +374,7 @@ export function typedLetters(src: string): string[] {
     } catch {
       continue
     }
+    if (letterToZeroPower(node)) return []
     node.traverse((n) => {
       const name = (n as unknown as { name?: unknown }).name
       if (n.type === 'SymbolNode' && typeof name === 'string' && !names.includes(name)) names.push(name)

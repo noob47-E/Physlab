@@ -19,7 +19,7 @@ import { suggestJob } from '../math/pure/run'
 import { texToPlain, type Working } from '../math/pure/work'
 import { keypadToMath, withAngle } from './engine'
 import { compareFunctions } from './formula'
-import { labelTex } from './labels'
+import { labelTex, labelText } from './labels'
 import type { EvalResult } from './evaluateInput'
 
 type Verdict = 'agree' | 'differ' | 'unchecked'
@@ -136,19 +136,56 @@ function agreement(card: EvalResult, working: Working): Agreement {
   }
 }
 
+type Answer = Working['answers'][number]
+
 /**
- * What the card shows for a working's answers: each answer under its own label, one or several. A single answer is
- * labelled too: without "t =" the card for 2t + 4 = 10 was a bare "3", which a student cannot read as t. A label that
- * is only a word ("Answer") is not a symbol, so that answer stays bare.
+ * Whether an answer shows its label on the card. Several answers each carry their label ("x = -2, x = 2"). A single answer
+ * carries it only when it is the value of a solved unknown: without "t =" the card for 2t + 4 = 10 was a bare "3", which a
+ * student cannot read as t. A Factorise or Expand result is the answer itself ("(a - 3)(a + 3)"), and a sentence such as
+ * "no value of x works" or "every real number" is not a value, so neither takes a label. A label that is only a word
+ * ("Answer") is not a symbol, so that answer stays bare too.
  */
-function texOfAnswers(working: Working): string {
-  return working.answers
-    .map((a) => {
-      const label = labelTex(a.label)
-      const shownLabel = label ? (/\s=$/.test(label) ? label : `${label} =`) : null
-      return shownLabel ? `${shownLabel}\\; ${a.tex}` : a.tex
-    })
-    .join(',\\quad ')
+function showsLabel(working: Working, a: Answer): boolean {
+  if (labelTex(a.label) === null) return false
+  if (working.answers.length > 1) return true
+  return /^Solve\b/.test(working.title) && !a.tex.startsWith('\\text{')
+}
+
+/**
+ * What the card shows for a working's answers, as TeX (`tex`) and as plain characters (`plain`, the card's main line, which
+ * a Guess is checked against). The labels are the same in both: "t = 3", "θ = 2", "x₁ = 3". The plain line is built
+ * label by label, because texToPlain would take the Greek name off "\theta =" and leave a bare "= 2".
+ */
+function answerCard(working: Working): { tex: string; plain: string } {
+  const parts = working.answers.map((a) => {
+    if (!showsLabel(working, a)) return { tex: a.tex, plain: texToPlain(a.tex) }
+    const symbol = labelTex(a.label) ?? ''
+    const shownTex = /\s=$/.test(symbol) ? symbol : `${symbol} =`
+    const words = labelText(a.label)
+    const shownPlain = /=$/.test(words) ? words : `${words} =`
+    return { tex: `${shownTex}\\; ${a.tex}`, plain: `${shownPlain} ${texToPlain(a.tex)}` }
+  })
+  return { tex: parts.map((p) => p.tex).join(',\\quad '), plain: parts.map((p) => p.plain).join(', ') }
+}
+
+/**
+ * The sentence a working gives in place of a value: "every value of x works", "no value of x works", "every real number".
+ * Such a working says something about every value of the letter, so one root or value on the "=" card of the same line
+ * contradicts it. Null when the working gives a value (or nothing).
+ */
+function everyOrNoValue(working: Working): string | null {
+  const said = /\b((?:every|no) value of \S+ works)\.?$/.exec(working.error ?? '')
+  if (said) return said[1]
+  const whole = working.answers.find((a) => /^\\text\{(?:every real number|no value of [^{}]*)\}$/.test(a.tex))
+  return whole ? texToPlain(whole.tex) : null
+}
+
+/** Whether the "=" card gives a number of its own: a root, or a value. A refusal gives none. */
+function givesNumber(result: EvalResult): boolean {
+  if (result.error) return false
+  if (result.roots && result.roots.length > 0) return true
+  const v = result.value
+  return typeof v === 'number' || (typeof v === 'object' && v !== null && 're' in v)
 }
 
 /** The sentences an "=" refusal must NOT give way for: intentional rule refusals like variable storing. */
@@ -163,22 +200,34 @@ const REFUSAL_STAYS = /^Typing .+ does not store a value\./
  * whose check failed stays a refusal.
  */
 export function reconcile(result: EvalResult, working: Working | null): Reconciled {
+  // An identity or a no-value line: the working says every (or no) value of the letter works, and the "=" card gives one root or value
+  // of the same line (x − x + 3 = 3 read "x = 0"). That root is one guess at a claim about all the values, so the working's sentence
+  // stands and the disagreement is said, exactly as for two different answers.
+  const sentence = working ? everyOrNoValue(working) : null
+  if (working && sentence !== null && givesNumber(result)) {
+    const tex = `\\text{${sentence}}`
+    return {
+      result: { main: sentence, src: result.src, tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
+      verdict: 'differ',
+      line: `PHYSLAB_CHECK calc-disagree line="${result.src}" quick="${result.main}" working="${sentence}"`
+    }
+  }
   // No working to compare with (the step engine refuses a power-8 equation): a number only the search stands behind is said to be approximate, and
   // every other card stands as it is.
   if (!working || working.error || working.answers.length === 0) return { result: flagIfApproximate(result), verdict: 'unchecked' }
   if (result.error) {
     if (working.checked !== 'ok' || REFUSAL_STAYS.test(result.error.sentence)) return { result, verdict: 'unchecked' }
-    const tex = texOfAnswers(working)
-    return { result: { main: texToPlain(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
+    const card = answerCard(working)
+    return { result: { main: card.plain, src: result.src, tex: card.tex, exact: null, solved: false }, verdict: 'unchecked' }
   }
   if (result.engine) return { result, verdict: 'unchecked' }
   const verdict = agreement(result, working)
   if (verdict === 'agree') return { result, verdict: 'agree' }
   if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
-  const tex = texOfAnswers(working)
+  const card = answerCard(working)
   return {
-    result: { main: texToPlain(tex), src: result.src, tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
+    result: { main: card.plain, src: result.src, tex: card.tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
     verdict: 'differ',
-    line: `PHYSLAB_CHECK calc-disagree line="${result.src}" quick="${result.main}" working="${tex}"`
+    line: `PHYSLAB_CHECK calc-disagree line="${result.src}" quick="${result.main}" working="${card.tex}"`
   }
 }
