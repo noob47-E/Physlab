@@ -64,11 +64,20 @@ import {
   parseExactRat
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
+import { checkTrigSolutionSet, type TrigRange } from './trigRoots'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { displaySafe, drawnTex } from './displaySafe'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
+}
+
+/** The range a trig solution set records (whole degrees, and whether the top end is included), or nothing when it records none. */
+function trigRangeOf(value: unknown): TrigRange | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const r = value as { min?: unknown; max?: unknown; inclusive?: unknown }
+  if (typeof r.min !== 'number' || typeof r.max !== 'number' || typeof r.inclusive !== 'boolean') return undefined
+  return { min: r.min, max: r.max, inclusive: r.inclusive }
 }
 
 function variableOfStep(step: Step): string {
@@ -220,6 +229,12 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
     return checkSurdZeroProduct(String(step.before), zp, String(step.after), v, payload.solutions as unknown[])
   }
   const domain = payload.domain === 'complex' ? 'complex' : 'real'
+  // S5c: a trig solution set is the general solution's members in the range, checked exactly (trigRoots.ts). The general
+  // solution before it is checked by its own trig step, so nothing here trusts the method's list.
+  if (payload.role === 'trig') {
+    const solutions = Array.isArray(payload.solutions) ? (payload.solutions as unknown[]) : []
+    return checkTrigSolutionSet(String(step.before), solutions, String(step.after), v, trigRangeOf(payload.range))
+  }
   if (Array.isArray(payload.solutions)) {
     if (payload.solutions.length > 0) {
       // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.

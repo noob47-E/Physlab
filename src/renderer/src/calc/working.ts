@@ -171,7 +171,10 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   if (result.engine) return { result, verdict: 'unchecked' }
   if (result.solved && result.roots && !result.rootsComplete && working.checked === 'ok') {
     const theirs = realRootsOf(working)
-    if (theirs.length > 1 || (theirs.length === 1 && !near(result.roots[0], theirs[0], 1e-8))) {
+    // The working fills in the roots the quick search listed only in part, and only when every one of those is among its own:
+    // a quick answer with a root the working does not have is a disagreement, and falls through to be shown as one below.
+    const listedInWorking = result.roots.every((r) => theirs.some((q) => near(q, r, 1e-8)))
+    if (listedInWorking && (theirs.length > 1 || (theirs.length === 1 && !near(result.roots[0], theirs[0], 1e-8)))) {
       const tex = texOfAnswers(working)
       return {
         result: { ...result, main: texToPlain(tex), tex, roots: theirs, rootsComplete: true, approximate: false },

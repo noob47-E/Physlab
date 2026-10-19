@@ -87,7 +87,8 @@ export type EquationOp =
   | { kind: 'trig-ref-angle'; angle?: string; quad?: string }
   | { kind: 'trig-general' }
   | { kind: 'trig-substitute' }
-  | { kind: 'trig-back-substitute' }
+  // rejected: the roots of the equation in u that lie outside -1 to 1 (a sine or cosine has no angle for them), as values.
+  | { kind: 'trig-back-substitute'; rejected?: string[] }
 
 /**
  * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors

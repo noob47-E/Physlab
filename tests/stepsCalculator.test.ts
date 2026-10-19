@@ -303,3 +303,29 @@ describe('S1: math/steps in the Calculator', () => {
     expect(w?.noWorking).toBeFalsy()
   })
 })
+
+// Part S5c: a checked working replaces the quick answer only when that answer's roots are all among the working's roots.
+describe('Part S5c: the quick answer and the working agree or are shown as unconfirmed', () => {
+  it('keeps the working when the quick answer lists only some of its roots', () => {
+    resetGlobals()
+    usePure.getState().runLatex('2\\sin(x)=1', 'auto')
+    const w = usePure.getState().working
+    expect(w?.answers.map((a) => a.tex)).toEqual(['30', '150'])
+    const card: EvalResult = { main: '30', src: '2sin(x)=1', solved: true, roots: [30], rootsComplete: false }
+    const r = reconcile(card, w)
+    expect(r.verdict).toBe('agree')
+    expect(r.result.roots).toEqual([30, 150])
+    expect(r.result.rootsComplete).toBe(true)
+  })
+
+  it('shows the working unconfirmed when the quick answer has a root the working does not', () => {
+    resetGlobals()
+    usePure.getState().runLatex('2\\sin(x)=1', 'auto')
+    const w = usePure.getState().working
+    const card: EvalResult = { main: '200', src: '2sin(x)=1', solved: true, roots: [30, 200], rootsComplete: false }
+    const r = reconcile(card, w)
+    expect(r.verdict).toBe('differ')
+    expect(r.result.unconfirmed).toBe(true)
+    expect(r.line).toMatch(/PHYSLAB_CHECK calc-disagree/)
+  })
+})

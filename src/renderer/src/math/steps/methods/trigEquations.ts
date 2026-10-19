@@ -1,22 +1,43 @@
-// Trigonometric Equations (Part S5b):
-// Solves:
-// 1. 2*sin(x) = 1, sin(x) = 1/2, sin(x) = 0.5
-// 2. 2*cos(x) + 1 = 0
-// 3. tan(2*x) = 1
-// 4. 2*sin(x)^2 - sin(x) - 1 = 0 (and 2*sin^2(x) - sin(x) - 1 = 0)
-// 5. sin(x) = cos(x)
-// Both general solution and range solutions (0 <= x < 360 in DEG, or 0 <= x < 2pi in RAD).
-// Out-of-range refusal (sin x = 2 -> no real solutions).
-// Every step validated by validateWorking, moves.length >= 3 for every canonical equation.
+// Trigonometric equations (Part S5c): the working for an equation with one trig function of c·v in the letter v.
+//
+// It covers:
+// - sin x = cos x: divide by cos x, so tan x = 1, then the general solution;
+// - a·f(c·v) + b = r with f one of sin, cos, tan and c a whole number: isolate, the reference angle, the general solution;
+// - a quadratic in f(c·v): substitute u, factorise when the roots are rational, substitute back, the general solution;
+// - sin x = 2 and the like: no value works (|value| > 1 for a sine or a cosine).
+// The method proposes each line from the equation it reads. Every line is then checked by numbers (trigRoots.ts, through
+// check-adapter.ts), so a line that is wrong is refused there and no working is shown. Anything this cannot do soundly gives
+// no working, and the answer the Calculator already had stays.
+//
+// Angles are exact: the answers are multiples of π in radians and decimal degrees in degrees, never a rounded decimal.
 
-import type { Method, Problem, Step, StepAnswer, Working } from '../types'
+import type { Domain, EquationOp, Method, Problem, Step, StepAnswer, Working } from '../types'
 import { finishStep } from '../sentences'
-import { parseExactRat, splitEquation, stringifyNodeOrText } from '../check-adapter'
-import { rat, rSub, rDiv, rTex } from '../../pure/rat'
+import { coefficientOf, solutionProofOf, stringifyNodeOrText, tryParsePoly } from '../check-adapter'
+import { eSub, exprDegree, varsOf, type Expr } from '../../pure/mono'
+import { R1, rat, rAdd, rCmp, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rNum, rSqrt, rStr, rSub, rTex, type Rat } from '../../pure/rat'
 import { casInDegrees } from '../../../calc/angle'
 import { scene } from '../../../core/store'
+import {
+  angleLitTex,
+  angleValueTex,
+  familiesOf,
+  familyText,
+  membersIn,
+  multipleOf,
+  periodQuad,
+  principalOf,
+  quadrantText,
+  referenceAngleOf,
+  type AngleUnit,
+  type Family,
+  type TrigFn,
+  type TrigRange
+} from '../trigRoots'
 
 const TRIG_EQUATIONS_ID = 'trigEquations'
+const CANT_SHOW = "I can't show the steps for this one yet"
+const R45 = rat(45n)
 
 /** Helper to clean formula string for display safety */
 function cleanLatex(input: string): string {
@@ -31,127 +52,316 @@ function cleanLatex(input: string): string {
   return s
 }
 
-/** Standard special angle unit-circle table in degrees [0, 360) */
-const SIN_TABLE: Record<string, number[]> = {
-  '0': [0, 180],
-  '1/2': [30, 150],
-  '0.5': [30, 150],
-  '\\frac{1}{2}': [30, 150],
-  'sqrt(2)/2': [45, 135],
-  '\\frac{\\sqrt{2}}{2}': [45, 135],
-  'sqrt(3)/2': [60, 120],
-  '\\frac{\\sqrt{3}}{2}': [60, 120],
-  '1': [90],
-  '-1/2': [210, 330],
-  '-0.5': [210, 330],
-  '-\\frac{1}{2}': [210, 330],
-  '-sqrt(2)/2': [225, 315],
-  '-\\frac{\\sqrt{2}}{2}': [225, 315],
-  '-sqrt(3)/2': [240, 300],
-  '-\\frac{\\sqrt{3}}{2}': [240, 300],
-  '-1': [270]
+/** A fraction written \frac{a}{b} with whole numbers, as (a/b), so that the polynomial reader takes it. */
+function fracAsSlash(text: string): string {
+  return text.replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '($1/$2)')
 }
 
-const COS_TABLE: Record<string, number[]> = {
-  '1': [0],
-  'sqrt(3)/2': [30, 330],
-  '\\frac{\\sqrt{3}}{2}': [30, 330],
-  'sqrt(2)/2': [45, 315],
-  '\\frac{\\sqrt{2}}{2}': [45, 315],
-  '1/2': [60, 300],
-  '0.5': [60, 300],
-  '\\frac{1}{2}': [60, 300],
-  '0': [90, 270],
-  '-1/2': [120, 240],
-  '-0.5': [120, 240],
-  '-\\frac{1}{2}': [120, 240],
-  '-sqrt(2)/2': [135, 225],
-  '-\\frac{\\sqrt{2}}{2}': [135, 225],
-  '-sqrt(3)/2': [150, 210],
-  '-\\frac{\\sqrt{3}}{2}': [150, 210],
-  '-1': [180]
+/**
+ * The equation as the method reads it: one trig function f(c·v) of the letter v, the two sides as polynomials in u (the
+ * function's value), and the degree of L − R in u (1 for a linear equation, 2 for a quadratic).
+ */
+interface Form {
+  fn: TrigFn
+  /** The whole-number multiple of v in the argument: 1 for sin x, 2 for sin 2x. */
+  c: number
+  L: Expr
+  R: Expr
+  degree: 1 | 2
 }
 
-const TAN_TABLE: Record<string, number[]> = {
-  '0': [0, 180],
-  'sqrt(3)/3': [30, 210],
-  '\\frac{\\sqrt{3}}{3}': [30, 210],
-  '1': [45, 225],
-  'sqrt(3)': [60, 240],
-  '\\sqrt{3}': [60, 240],
-  '-sqrt(3)': [120, 300],
-  '-\\sqrt{3}': [120, 300],
-  '-1': [135, 315],
-  '-sqrt(3)/3': [150, 330],
-  '-\\frac{\\sqrt{3}}{3}': [150, 330]
-}
-
-const DEG_TO_RAD_TEX: Record<number, string> = {
-  0: '0',
-  22.5: '\\frac{\\pi}{8}',
-  30: '\\frac{\\pi}{6}',
-  45: '\\frac{\\pi}{4}',
-  60: '\\frac{\\pi}{3}',
-  90: '\\frac{\\pi}{2}',
-  112.5: '\\frac{5\\pi}{8}',
-  120: '\\frac{2\\pi}{3}',
-  135: '\\frac{3\\pi}{4}',
-  150: '\\frac{5\\pi}{6}',
-  180: '\\pi',
-  202.5: '\\frac{9\\pi}{8}',
-  210: '\\frac{7\\pi}{6}',
-  225: '\\frac{5\\pi}{4}',
-  240: '\\frac{4\\pi}{3}',
-  270: '\\frac{3\\pi}{2}',
-  292.5: '\\frac{13\\pi}{8}',
-  300: '\\frac{5\\pi}{3}',
-  315: '\\frac{7\\pi}{4}',
-  330: '\\frac{11\\pi}{6}',
-  360: '2\\pi'
-}
-
-/** Numerical evaluation check for a candidate degree solution in the original equation */
-function verifyDegreeSolution(rawEquation: string, deg: number, v: string): boolean {
-  const rad = (deg * Math.PI) / 180
-  const parts = rawEquation.split('=')
-  if (parts.length !== 2) return true
-  try {
-    const evalSide = (side: string): number => {
-      let expr = side.replace(new RegExp(`\\b${v}\\b`, 'g'), `(${rad})`)
-      expr = expr.replace(/\\sin/g, 'Math.sin')
-      expr = expr.replace(/\\cos/g, 'Math.cos')
-      expr = expr.replace(/\\tan/g, 'Math.tan')
-      expr = expr.replace(/\bsin\b/g, 'Math.sin')
-      expr = expr.replace(/\bcos\b/g, 'Math.cos')
-      expr = expr.replace(/\btan\b/g, 'Math.tan')
-      expr = expr.replace(/\^/g, '**')
-      const fn = new Function('Math', `"use strict"; return (${expr});`)
-      return Number(fn(Math))
-    }
-    const l = evalSide(parts[0])
-    const r = evalSide(parts[1])
-    return Math.abs(l - r) < 1e-4
-  } catch {
-    return true
+/** The equation read as a trig equation in u, or null when it is not one this method covers. */
+function parseForm(eq: string, v: string): Form | null {
+  const terms = [...eq.matchAll(/\\?(sin|cos|tan)\s*\(\s*([^()]*?)\s*\)/g)]
+  if (terms.length === 0) return null
+  const keys = new Set(terms.map((m) => `${m[1]}(${m[2].replace(/\s+/g, '')})`))
+  if (keys.size !== 1) return null
+  const fn = terms[0][1] as TrigFn
+  const c = multipleOf(terms[0][2].replace(/\s+/g, ''), v)
+  if (c === null) return null
+  const replaced = eq.replace(/\\?(sin|cos|tan)\s*\(\s*([^()]*?)\s*\)(\^\{?2\}?)?/g, (_m, _f, _a, sq) => (sq ? 'u^2' : 'u'))
+  if (/\\?(sin|cos|tan)/.test(replaced)) return null
+  const sides = replaced.split('=')
+  if (sides.length !== 2) return null
+  const L = tryParsePoly(fracAsSlash(sides[0]))
+  const R = tryParsePoly(fracAsSlash(sides[1]))
+  if (!L || !R) return null
+  if (!varsOf(L).every((n) => n === 'u') || !varsOf(R).every((n) => n === 'u')) return null
+  const degree = exprDegree(eSub(L, R))
+  if (degree !== 1 && degree !== 2) return null
+  // A linear equation has its u only on the left, and a quadratic has no other letter: anything else is not read here.
+  if (degree === 1 && (!rIsZero(coefficientOf(L, 'u', 2)) || !rIsZero(coefficientOf(R, 'u', 1)) || !rIsZero(coefficientOf(R, 'u', 2)))) {
+    return null
   }
+  return { fn, c, L, R, degree }
 }
 
-/** Lookup standard angles in degrees */
-function lookupAngles(fn: 'sin' | 'cos' | 'tan', valStr: string): number[] | null {
-  const clean = valStr.trim().replace(/\s+/g, '')
-  const table = fn === 'sin' ? SIN_TABLE : fn === 'cos' ? COS_TABLE : TAN_TABLE
-  if (table[clean]) return [...table[clean]]
-  // Normalize fractions and decimals
-  if (clean === '1/2' || clean === '0.5' || clean === '\\frac{1}{2}') return table['1/2'] ?? null
-  if (clean === '-1/2' || clean === '-0.5' || clean === '-\\frac{1}{2}') return table['-1/2'] ?? null
-  const num = Number(clean)
-  if (!Number.isNaN(num)) {
-    for (const [k, angles] of Object.entries(table)) {
-      const kNum = Number(k)
-      if (!Number.isNaN(kNum) && Math.abs(num - kNum) < 1e-5) return [...angles]
+/** The text of a·u² + b·u + c = 0, with the signs written as a student writes them. */
+function polyTex(a2: Rat, a1: Rat, a0: Rat): string {
+  const terms: Array<[Rat, string]> = [
+    [a2, 'u^2'],
+    [a1, 'u'],
+    [a0, '']
+  ]
+  let out = ''
+  for (const [c, mono] of terms) {
+    if (rIsZero(c)) continue
+    const neg = rIsNeg(c)
+    const mag = neg ? rNeg(c) : c
+    const coef = mono !== '' && rEq(mag, R1) ? '' : rTex(mag)
+    const body = `${coef}${mono}`
+    out = out === '' ? (neg ? `-${body}` : body) : `${out} ${neg ? '-' : '+'} ${body}`
+  }
+  return `${out} = 0`
+}
+
+/** One factor (q·u − p) as the student writes it: (2u + 1), (u - 1), (u). */
+function factorTex(q: bigint, p: bigint): string {
+  const lead = q === 1n ? 'u' : `${q}u`
+  if (p === 0n) return `(${lead})`
+  return p < 0n ? `(${lead} + ${-p})` : `(${lead} - ${p})`
+}
+
+/** A root of the quadratic in u: its value, and its exact rational value when it has one. */
+interface Root {
+  value: number
+  exact: Rat | null
+}
+
+/** The real roots of a·u² + b·u + c in ascending order (none when the discriminant is negative). */
+function quadraticRoots(a2: Rat, a1: Rat, a0: Rat): Root[] {
+  const disc = rSub(rMul(a1, a1), rMul(rat(4n), rMul(a2, a0)))
+  if (rIsNeg(disc)) return []
+  const twoA = rMul(rat(2n), a2)
+  const s = rSqrt(disc)
+  if (s !== null) {
+    const r1 = rDiv(rSub(rNeg(a1), s), twoA)
+    const r2 = rDiv(rAdd(rNeg(a1), s), twoA)
+    const pair = rCmp(r1, r2) <= 0 ? [r1, r2] : [r2, r1]
+    const distinct = rEq(pair[0], pair[1]) ? [pair[0]] : pair
+    return distinct.map((r) => ({ value: rNum(r), exact: r }))
+  }
+  const root = Math.sqrt(rNum(disc))
+  const a2n = rNum(a2)
+  const a1n = rNum(a1)
+  return [(-a1n - root) / (2 * a2n), (-a1n + root) / (2 * a2n)]
+    .sort((x, y) => x - y)
+    .map((value) => ({ value, exact: null }))
+}
+
+/**
+ * The factorised form (2u + 1)(u - 1) = 0 of a·u² + b·u + c = 0 when the roots are rational and the factors multiply back
+ * to the very same equation (the leading number is the product of the two denominators). Null otherwise.
+ */
+function factorisation(a2: Rat, a1: Rat, a0: Rat, roots: Root[]): string | null {
+  const first = roots[0]?.exact
+  const second = roots[roots.length - 1]?.exact
+  if (!first || !second) return null
+  const q1 = first.d
+  const p1 = first.n
+  const q2 = second.d
+  const p2 = second.n
+  const holds = rEq(a2, rat(q1 * q2)) && rEq(a1, rat(-(q1 * p2 + q2 * p1))) && rEq(a0, rat(p1 * p2))
+  return holds ? `${factorTex(q1, p1)}${factorTex(q2, p2)} = 0` : null
+}
+
+/** The working's own record of one step: the claim, the rule and the sentence come from the step's own data. */
+function step(kind: 'EquationEquiv', before: string, after: string, op: EquationOp, v: string): Step {
+  return finishStep({ kind, before, after, op, sentence: '', data: { variable: v } })
+}
+
+/** The "x" of a solution list's entries and the trig argument: "2x" for c = 2, "x" for c = 1. */
+function argumentOf(form: Form, v: string): string {
+  return form.c === 1 ? v : `${form.c}${v}`
+}
+
+/**
+ * The general solution's line, its check line and the answers in the range. Null when the range holds no answer, or the
+ * families cannot be written exactly in the unit.
+ */
+function generalAndAnswers(
+  steps: Step[],
+  before: string,
+  families: Family[],
+  v: string,
+  unit: AngleUnit,
+  range: TrigRange,
+  domain: Domain
+): StepAnswer[] | null {
+  const members = membersIn(families, range)
+  if (members.length === 0) return null
+  const general = familyText(v, families, unit)
+  const values = members.map((m) => angleValueTex(m, unit))
+  if (general === null || values.some((t) => t === null)) return null
+  const texts = values as string[]
+  steps.push(step('EquationEquiv', before, general, { kind: 'trig-general' }, v))
+  steps.push(
+    finishStep({
+      kind: 'SolutionSetEq',
+      before: general,
+      after: texts.map((t) => `${v} = ${t}`).join(' \\text{ or } '),
+      sentence: '',
+      data: {
+        variable: v,
+        domain,
+        solutions: texts.map((t) => ({ value: t })),
+        role: 'trig',
+        range
+      }
+    })
+  )
+  return texts.map((t) => ({ label: v, tex: t, value: t }))
+}
+
+/** Context shared by the cases: the typed input, the unit, the range and the way of building the working. */
+interface Ctx {
+  input: string
+  eqToInspect: string
+  v: string
+  unit: AngleUnit
+  range: TrigRange
+  domain: Domain
+  declined: () => Working
+  finish: (steps: Step[], answers: StepAnswer[], method: string) => Working
+}
+
+/** sin x = cos x: divide by cos x (tan x = 1), its reference angle, then the general solution. */
+function sinCosCase(ctx: Ctx): Working {
+  const { v, unit } = ctx
+  const tanEq = `\\tan(${v}) = 1`
+  const refAngle = angleLitTex(R45, unit)
+  if (refAngle === null) return ctx.declined()
+  const steps: Step[] = [
+    step('EquationEquiv', ctx.input, tanEq, { kind: 'divide-cos' }, v),
+    step('EquationEquiv', tanEq, tanEq, { kind: 'trig-ref-angle', angle: refAngle, quad: periodQuad(unit) }, v)
+  ]
+  const answers = generalAndAnswers(steps, tanEq, [{ a: R45, p: rat(180n) }], v, unit, ctx.range, ctx.domain)
+  return answers === null ? ctx.declined() : ctx.finish(steps, answers, 'Trigonometric equation')
+}
+
+/** a·f(c·v) + b = r: isolate the function, then its reference angle, the general solution and the answers. */
+function linearCase(ctx: Ctx, form: Form): Working {
+  const { v, unit, input } = ctx
+  const aL = coefficientOf(form.L, 'u', 1)
+  const bL = coefficientOf(form.L, 'u', 0)
+  const rR = coefficientOf(form.R, 'u', 0)
+  if (rIsZero(aL)) return ctx.declined()
+  // aL·u + bL = rR, so u = (rR − bL)/aL.
+  const u0 = rDiv(rSub(rR, bL), aL)
+  const value = rNum(u0)
+  const trig = `\\${form.fn}(${argumentOf(form, v)})`
+
+  // A sine or cosine is never more than 1 in size: "sin x = 2" has no solution, and the statement says so only when the
+  // solution-set proof of the typed equation agrees.
+  if (form.fn !== 'tan' && Math.abs(value) > 1) {
+    const proof = solutionProofOf(input, v)
+    if (!proof || proof.kind !== 'none') return ctx.declined()
+    const noValue = `\\text{no value of ${v} works}`
+    const steps = [
+      finishStep({
+        kind: 'SolutionSetEq',
+        before: input,
+        after: noValue,
+        sentence: '',
+        data: { variable: v, domain: 'real', solutions: [] }
+      })
+    ]
+    return {
+      title: `Solve ${input}`,
+      input,
+      method: 'Trigonometric equation',
+      steps,
+      answer: { label: v, tex: noValue },
+      checked: 'ok',
+      domain: ctx.domain
     }
   }
-  return null
+
+  const steps: Step[] = []
+  let cur = input
+  if (!rIsZero(bL)) {
+    // Take the constant off the left: subtract it from both sides, or add its opposite.
+    const lead = rEq(aL, R1) ? '' : rEq(aL, rNeg(R1)) ? '-' : rTex(aL)
+    const after = `${lead}${trig} = ${rTex(rSub(rR, bL))}`
+    const op: EquationOp = rIsNeg(bL) ? { kind: 'add-both', term: rStr(rNeg(bL)) } : { kind: 'subtract-both', term: rStr(bL) }
+    steps.push(step('EquationEquiv', cur, after, op, v))
+    cur = after
+  }
+  const isolated = `${trig} = ${rTex(u0)}`
+  if (!rEq(aL, R1)) {
+    steps.push(step('EquationEquiv', cur, isolated, { kind: 'divide-both', k: rStr(aL) }, v))
+    cur = isolated
+  } else if (rIsZero(bL) && (ctx.eqToInspect.split('=')[1] ?? '').includes('.')) {
+    // A decimal right side (0.5) is written as the fraction the table lists.
+    steps.push(step('EquationEquiv', cur, isolated, { kind: 'work-out-right' }, v))
+    cur = isolated
+  }
+
+  // The reference angle: the acute angle whose function has the size of the value.
+  const refAngle = referenceAngleOf(form.fn, value)
+  const refTex = refAngle === null ? null : angleLitTex(refAngle, unit)
+  if (refTex === null) return ctx.declined()
+  const quad = form.fn === 'tan' ? periodQuad(unit) : quadrantText(form.fn, value < 0)
+  steps.push(step('EquationEquiv', cur, isolated, { kind: 'trig-ref-angle', angle: refTex, quad }, v))
+  cur = isolated
+
+  const families = familiesOf(form.fn, form.c, value)
+  if (families === null) return ctx.declined()
+  const answers = generalAndAnswers(steps, cur, families, v, unit, ctx.range, ctx.domain)
+  return answers === null ? ctx.declined() : ctx.finish(steps, answers, 'Trigonometric equation')
+}
+
+/** a·f(c·v)² + b·f(c·v) + d = 0: substitute u, factorise when the roots are rational, substitute back, the general solution. */
+function quadraticCase(ctx: Ctx, form: Form): Working {
+  const { v, unit } = ctx
+  const P = eSub(form.L, form.R)
+  const a2 = coefficientOf(P, 'u', 2)
+  const a1 = coefficientOf(P, 'u', 1)
+  const a0 = coefficientOf(P, 'u', 0)
+  const roots = quadraticRoots(a2, a1, a0)
+  if (roots.length === 0) return ctx.declined()
+  // A sine or cosine is never bigger than 1 in size, so a root u outside -1 to 1 gives no angle. It stays in the factorised
+  // equation, is named in the back substitution and is left out there, and the working says so in words. A root that is
+  // not an exact rational cannot be named exactly, so the working is declined rather than shown with it.
+  const inRange = (r: Root): boolean => form.fn === 'tan' || Math.abs(r.value) <= 1 + 1e-9
+  const kept = roots.filter(inRange)
+  if (kept.length === 0) return ctx.declined()
+  const rejected: string[] = []
+  for (const r of roots) {
+    if (inRange(r)) continue
+    if (r.exact === null) return ctx.declined()
+    rejected.push(rTex(r.exact))
+  }
+
+  const rootTexts: string[] = []
+  const families: Family[] = []
+  for (const r of kept) {
+    const tex = r.exact !== null ? rTex(r.exact) : (principalOf(form.fn, r.value)?.tex ?? null)
+    const own = familiesOf(form.fn, form.c, r.value)
+    if (tex === null || own === null) return ctx.declined()
+    rootTexts.push(tex)
+    for (const f of own) if (!families.some((g) => rEq(g.a, f.a))) families.push(f)
+  }
+  families.sort((x, y) => rCmp(x.a, y.a))
+
+  const steps: Step[] = []
+  let cur = ctx.input
+  const substituted = polyTex(a2, a1, a0)
+  steps.push(step('EquationEquiv', cur, substituted, { kind: 'trig-substitute' }, v))
+  cur = substituted
+  const factored = factorisation(a2, a1, a0, roots)
+  if (factored !== null) {
+    steps.push(step('EquationEquiv', cur, factored, { kind: 'factorise' }, 'u'))
+    cur = factored
+  }
+  const trig = `\\${form.fn}(${argumentOf(form, v)})`
+  const back = kept.map((_r, i) => `${trig} = ${rootTexts[i]}`).join(' \\text{ or } ')
+  const backOp: EquationOp = rejected.length > 0 ? { kind: 'trig-back-substitute', rejected } : { kind: 'trig-back-substitute' }
+  steps.push(step('EquationEquiv', cur, back, backOp, v))
+  cur = back
+
+  const answers = generalAndAnswers(steps, cur, families, v, unit, ctx.range, ctx.domain)
+  return answers === null ? ctx.declined() : ctx.finish(steps, answers, 'Factorising')
 }
 
 export const trigEquationsMethod: Method = {
@@ -171,13 +381,13 @@ export const trigEquationsMethod: Method = {
     return { applies: false }
   },
 
-  solve(problem: Problem, router): Working {
+  solve(problem: Problem): Working {
     const raw = stringifyNodeOrText(problem.input)
     const rawIn = problem.rawInput ? String(problem.rawInput) : ''
     const v = problem.variable || 'x'
     const domain = problem.domain || 'real'
 
-    // Determine angle mode (deg vs rad)
+    // The angle unit: the problem's own, else the scene's.
     let inDeg = problem.angleUnit ? problem.angleUnit === 'deg' : true
     if (!problem.angleUnit) {
       try {
@@ -186,524 +396,37 @@ export const trigEquationsMethod: Method = {
         inDeg = true
       }
     }
+    const unit: AngleUnit = inDeg ? 'deg' : 'rad'
 
-    // Parse student range if given, e.g. "0 <= x < 360", "0 <= x <= 360", "0 <= x < 180"
-    const degRangeMatch = raw.match(/(\d+)\s*<=\s*[a-zA-Z]\s*(<=|<)\s*(\d+)/)
-    const minDeg = degRangeMatch ? Number(degRangeMatch[1]) : 0
-    const maxDeg = degRangeMatch ? Number(degRangeMatch[3]) : 360
-    const maxDegInclusive = degRangeMatch ? degRangeMatch[2] === '<=' : false
-
-    // Clean equation part
     const eqOnly = raw.split(/,\s*\d+\s*<=|;\s*\d+\s*<=|\s+for\s+/)[0].trim()
     const input = cleanLatex(eqOnly)
     const eqToInspect = cleanLatex(rawIn ? String(rawIn).split(/,\s*\d+\s*<=|;\s*\d+\s*<=|\s+for\s+/)[0].trim() : eqOnly)
 
-    // Helper to format solutions and answers
-    const buildSolutionAnswers = (degList: number[]) => {
-      const uniqueSorted = [...new Set(degList)].sort((a, b) => a - b)
-      const stepAfter = uniqueSorted
-        .map((d) => (inDeg ? `${v} = ${d}` : `${v} = ${DEG_TO_RAD_TEX[d] ?? (d * Math.PI) / 180}`))
-        .join(' \\text{ or } ')
-      const answers: StepAnswer[] = uniqueSorted.map((d) => {
-        const texVal = inDeg ? String(d) : DEG_TO_RAD_TEX[d] ?? String((d * Math.PI) / 180)
-        return {
-          label: v,
-          tex: texVal,
-          value: inDeg ? String(d) : texVal
-        }
-      })
-      return { uniqueSorted, stepAfter, answers }
-    }
-
-    // CASE 1: Out of range check (e.g. sin(x) = 2 or cos(x) = -1.5)
-    const simpleNumMatch = eqToInspect.match(/\\(sin|cos)\(?([a-zA-Z])\)?\s*=\s*(-?\d+(?:\.\d+)?)/)
-    if (simpleNumMatch) {
-      const val = Number(simpleNumMatch[3])
-      if (Math.abs(val) > 1) {
-        const noValText = `\\text{no value of ${v} works}`
-        const steps: Step[] = [
-          finishStep({
-            kind: 'SolutionSetEq',
-            before: input,
-            after: noValText,
-            sentence: '',
-            data: {
-              variable: v,
-              domain: 'real',
-              solutions: []
-            }
-          })
-        ]
-        return {
-          title: `Solve ${input}`,
-          input,
-          method: 'Trigonometric equation',
-          steps,
-          answer: { label: v, tex: noValText },
-          checked: 'ok',
-          domain
-        }
-      }
-    }
-
-    // CASE 2: sin(x) = cos(x) -> tan(x) = 1
-    if (/\\sin\(?([a-zA-Z])\)?\s*=\s*\\cos\(?\1\)?/.test(eqToInspect) || /\bsin\(?([a-zA-Z])\)?\s*=\s*cos\(?\1\)?/.test(raw)) {
-      const steps: Step[] = []
-      let curBefore = input
-
-      // Move 1: Divide by cos(x)
-      const step1After = `\\tan(${v}) = 1`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: step1After,
-          op: { kind: 'divide-cos' },
-          sentence: '',
-          data: { variable: v }
-        })
-      )
-      curBefore = step1After
-
-      // Move 2: Reference angle
-      const refAngle = inDeg ? '45^{\\circ}' : '\\frac{\\pi}{4}'
-      const step2After = `\\tan(${v}) = 1`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: step2After,
-          op: { kind: 'trig-ref-angle', angle: refAngle, quad: 'period 180^{\\circ}' },
-          sentence: '',
-          data: { variable: v }
-        })
-      )
-      curBefore = step2After
-
-      // Move 3: General solution
-      const step3After = inDeg
-        ? `${v} = 45^{\\circ} + 180^{\\circ}k`
-        : `${v} = \\frac{\\pi}{4} + \\pi k`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: step3After,
-          op: { kind: 'trig-general' },
-          sentence: '',
-          data: { variable: v }
-        })
-      )
-      curBefore = step3After
-
-      // Move 4: Solutions in range
-      const degs = [45, 225].filter((d) => (maxDegInclusive ? d >= minDeg && d <= maxDeg : d >= minDeg && d < maxDeg))
-      const { stepAfter, answers } = buildSolutionAnswers(degs)
-      steps.push(
-        finishStep({
-          kind: 'SolutionSetEq',
-          before: curBefore,
-          after: stepAfter,
-          sentence: '',
-          data: {
-            variable: v,
-            domain,
-            solutions: answers.map((a) => ({ value: a.tex })),
-            role: 'trig'
-          }
-        })
-      )
-
-      return {
-        title: `Solve ${input}`,
-        input,
-        method: 'Trigonometric equation',
-        steps,
-        answer: answers.length === 1 ? answers[0] : answers,
-        checked: 'ok',
-        domain
-      }
-    }
-
-    // CASE 3: Scaled argument tan(2x) = 1, sin(2x) = 1/2, etc.
-    const scaledMatch = eqToInspect.match(/\\(sin|cos|tan)\(?(\d+)\s*\*?\s*([a-zA-Z])\)?\s*=\s*([^\s]+)/)
-    if (scaledMatch) {
-      const fn = scaledMatch[1] as 'sin' | 'cos' | 'tan'
-      const k = Number(scaledMatch[2])
-      const targetVar = scaledMatch[3]
-      const rhs = scaledMatch[4]
-      const baseAngles = lookupAngles(fn, rhs)
-      if (baseAngles) {
-        const steps: Step[] = []
-        let curBefore = input
-
-        const period = fn === 'tan' ? 180 : 360
-        const fundamental = [...new Set(baseAngles.map((b) => b % period))]
-        const allDegs: number[] = []
-        const totalCycles = (fn === 'tan' ? 2 : 1) * k
-        for (let cycle = 0; cycle < totalCycles; cycle++) {
-          for (const b of fundamental) {
-            const angleK = b + cycle * period
-            const sol = angleK / k
-            if (maxDegInclusive ? sol >= minDeg && sol <= maxDeg : sol >= minDeg && sol < maxDeg) {
-              if (verifyDegreeSolution(raw, sol, targetVar)) {
-                allDegs.push(sol)
-              }
-            }
-          }
-        }
-        const { stepAfter, answers } = buildSolutionAnswers(allDegs)
-
-        // Move 1: Reference angle
-        const baseRef = fundamental[0]
-        const refAngle = inDeg ? `${baseRef}^{\\circ}` : (DEG_TO_RAD_TEX[baseRef] ?? `${baseRef}`)
-        const step1After = `\\${fn}(${k}${targetVar}) = ${rhs}`
-        steps.push(
-          finishStep({
-            kind: 'EquationEquiv',
-            before: curBefore,
-            after: step1After,
-            op: { kind: 'trig-ref-angle', angle: refAngle },
-            sentence: '',
-            data: { variable: targetVar }
-          })
-        )
-        curBefore = step1After
-
-        // Move 2: General solution
-        const step2After = inDeg
-          ? `${k}${targetVar} = ${baseRef}^{\\circ} + ${period}^{\\circ}k`
-          : `${k}${targetVar} = ${refAngle} + ${period === 180 ? '\\pi' : '2\\pi'}k`
-        steps.push(
-          finishStep({
-            kind: 'EquationEquiv',
-            before: curBefore,
-            after: step2After,
-            op: { kind: 'trig-general' },
-            sentence: '',
-            data: { variable: targetVar }
-          })
-        )
-        curBefore = step2After
-
-        // Move 3: Divide by k
-        const step3After = inDeg
-          ? `${targetVar} = ${baseRef / k}^{\\circ} + ${period / k}^{\\circ}k`
-          : `${targetVar} = \\frac{${refAngle}}{${k}} + \\frac{${period === 180 ? '\\pi' : '2\\pi'}}{${k}}k`
-        steps.push(
-          finishStep({
-            kind: 'EquationEquiv',
-            before: curBefore,
-            after: step3After,
-            op: { kind: 'divide-both', k: String(k) },
-            sentence: '',
-            data: { variable: targetVar }
-          })
-        )
-        curBefore = step3After
-
-        // Move 4: Solutions in range
-        steps.push(
-          finishStep({
-            kind: 'SolutionSetEq',
-            before: curBefore,
-            after: stepAfter,
-            sentence: '',
-            data: {
-              variable: targetVar,
-              domain,
-              solutions: answers.map((a) => ({ value: a.tex })),
-              role: 'trig'
-            }
-          })
-        )
-
-        return {
-          title: `Solve ${input}`,
-          input,
-          method: 'Trigonometric equation',
-          steps,
-          answer: answers.length === 1 ? answers[0] : answers,
-          checked: 'ok',
-          domain
-        }
-      }
-    }
-
-    // CASE 4: Quadratic in trig: e.g. 2*sin(x)^2 - sin(x) - 1 = 0 or 2\sin^2(x) - \sin(x) - 1 = 0
-    if (/\\(sin|cos|tan)[^=]*\^2|\(sin\(.*\)\)\^\(?2\)?|sin\(.*\)\^\(?2\)?/i.test(eqToInspect) || raw.includes('^2') || raw.includes('^(2)')) {
-      const fnMatch = eqToInspect.match(/\\(sin|cos|tan)/) || raw.match(/\b(sin|cos|tan)\b/)
-      const fn = (fnMatch ? fnMatch[1] : 'sin') as 'sin' | 'cos' | 'tan'
-      const uVar = 'u'
-
-      const steps: Step[] = []
-      let curBefore = input
-
-      // Step 1: Substitute u = sin(x)
-      const step1After = `2${uVar}^2 - ${uVar} - 1 = 0`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: step1After,
-          op: { kind: 'trig-substitute' },
-          sentence: '',
-          data: { variable: v }
-        })
-      )
-      curBefore = step1After
-
-      // Solve the quadratic in u through the router
-      const uSub = router.solve({ job: 'solve', input: step1After, variable: uVar }, { includeAlternatives: false })
-
-      // Step 2: Factorise quadratic in u
-      const step2After = `(2${uVar} + 1)(${uVar} - 1) = 0`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: step2After,
-          op: { kind: 'factorise' },
-          sentence: '',
-          data: { variable: uVar }
-        })
-      )
-      curBefore = step2After
-
-      // Step 3: Back-substitute u = sin(x)
-      const step3After = `\\${fn}(${v}) = -\\frac{1}{2} \\quad \\text{ or } \\quad \\${fn}(${v}) = 1`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: step3After,
-          op: { kind: 'trig-back-substitute' },
-          sentence: '',
-          data: { variable: v }
-        })
-      )
-      curBefore = step3After
-
-      // Solve each case using roots from router.solve (or fallback ['1', '-1/2'])
-      const uRoots = Array.isArray(uSub.answer)
-        ? uSub.answer.map((a) => a.value ?? a.tex).filter(Boolean)
-        : uSub.answer?.tex
-          ? [uSub.answer.value ?? uSub.answer.tex]
-          : ['1', '-1/2']
-      const allDegs: number[] = []
-      for (const uVal of uRoots.length > 0 ? uRoots : ['1', '-1/2']) {
-        const angles = lookupAngles(fn, uVal)
-        if (angles) {
-          for (const d of angles) {
-            if (maxDegInclusive ? d >= minDeg && d <= maxDeg : d >= minDeg && d < maxDeg) {
-              if (verifyDegreeSolution(raw, d, v)) {
-                allDegs.push(d)
-              }
-            }
-          }
-        }
-      }
-      const { answers, stepAfter } = buildSolutionAnswers(allDegs)
-
-      // Step 4: Final range solutions
-      steps.push(
-        finishStep({
-          kind: 'SolutionSetEq',
-          before: curBefore,
-          after: stepAfter,
-          sentence: '',
-          data: {
-            variable: v,
-            domain,
-            solutions: answers.map((a) => ({ value: a.tex })),
-            role: 'trig'
-          }
-        })
-      )
-
-      return {
-        title: `Solve ${input}`,
-        input,
-        method: 'Factorising',
-        steps,
-        answer: answers.length === 1 ? answers[0] : answers,
-        checked: 'ok',
-        domain
-      }
-    }
-
-    // CASE 5: Linear in trig: 2*cos(x) + 1 = 0, 2*sin(x) = 1, sin(x) = 0.5, etc.
-    const steps: Step[] = []
-    let curBefore = input
-
-    // Check if coefficient aCoeff exists, e.g. 2*sin(x) = 1 or 2*cos(x) + 1 = 0
-    const coeffMatch = eqToInspect.match(/(-?\d+)?\s*\*?\s*\\(sin|cos|tan)\(?([a-zA-Z])\)?/)
-    const aCoeff = coeffMatch && coeffMatch[1] ? Number(coeffMatch[1]) : 1
-    const fn = (coeffMatch ? coeffMatch[2] : 'sin') as 'sin' | 'cos' | 'tan'
-    const targetVar = coeffMatch && coeffMatch[3] ? coeffMatch[3] : v
-
-    // Check for constant bConst on LHS: e.g. + 1
-    const addMatch = eqToInspect.match(/([+-]\s*\d+)\s*=/)
-    const bConst = addMatch ? Number(addMatch[1].replace(/\s+/g, '')) : 0
-
-    // RHS rational
-    const sides = splitEquation(eqToInspect)
-    const rhsRaw = sides ? sides.right.trim() : '0'
-    const normalizedRhs = rhsRaw.replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
-    const parsedRat = parseExactRat(normalizedRhs)
-    const rhsRat = parsedRat || rat(0n, 1n)
-    const bRat = parseExactRat(String(bConst)) || rat(0n, 1n)
-    const aRat = parseExactRat(String(aCoeff)) || rat(1n, 1n)
-
-    if (bConst !== 0) {
-      // Step: subtract bConst from both sides
-      const rhsAfterSub = rSub(rhsRat, bRat)
-      const stepAfterSub = `${aCoeff === 1 ? '' : aCoeff === -1 ? '-' : aCoeff}\\${fn}(${targetVar}) = ${rTex(rhsAfterSub)}`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: stepAfterSub,
-          op: bConst > 0 ? { kind: 'subtract-both', term: String(bConst) } : { kind: 'add-both', term: String(-bConst) },
-          sentence: '',
-          data: { variable: targetVar }
-        })
-      )
-      curBefore = stepAfterSub
-    }
-
-    const currentRhsRat = bConst !== 0 ? rSub(rhsRat, bRat) : rhsRat
-    let trigValStr = parsedRat ? rTex(currentRhsRat) : rhsRaw
-
-    if (aCoeff !== 1) {
-      const rhsDiv = rDiv(currentRhsRat, aRat)
-      trigValStr = rTex(rhsDiv)
-
-      const stepAfterDiv = `\\${fn}(${targetVar}) = ${trigValStr}`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: stepAfterDiv,
-          op: { kind: 'divide-both', k: String(aCoeff) },
-          sentence: '',
-          data: { variable: targetVar }
-        })
-      )
-      curBefore = stepAfterDiv
-    } else if (sides && (sides.right.trim() === '0.5' || sides.right.trim() === '-0.5')) {
-      // Decimal 0.5 -> \frac{1}{2}
-      const fracVal = rTex(currentRhsRat)
-      trigValStr = fracVal
-      const stepAfterFrac = `\\${fn}(${targetVar}) = ${fracVal}`
-      steps.push(
-        finishStep({
-          kind: 'EquationEquiv',
-          before: curBefore,
-          after: stepAfterFrac,
-          op: { kind: 'work-out-right' },
-          sentence: '',
-          data: { variable: targetVar }
-        })
-      )
-      curBefore = stepAfterFrac
-    }
-
-    // Lookup angles
-    const angles = lookupAngles(fn, trigValStr)
-    if (!angles) {
-      return {
-        title: `Solve ${input}`,
-        input,
-        steps: [],
-        noWorking: true,
-        reason: "I can't show the steps for this one yet"
-      }
-    }
-    const filtered = angles
-      .filter((d) => (maxDegInclusive ? d >= minDeg && d <= maxDeg : d >= minDeg && d < maxDeg))
-      .filter((d) => verifyDegreeSolution(raw, d, targetVar))
-      .sort((a, b) => a - b)
-    if (filtered.length === 0) {
-      return {
-        title: `Solve ${input}`,
-        input,
-        steps: [],
-        noWorking: true,
-        reason: "I can't show the steps for this one yet"
-      }
-    }
-
-    // Reference angle and quadrant rule step
-    const refDeg = fn === 'cos' && angles.includes(120) ? 60 : angles[0] <= 90 ? angles[0] : 180 - angles[0] >= 0 ? 180 - angles[0] : 360 - angles[0]
-    const refAngle = inDeg ? `${refDeg}^{\\circ}` : (DEG_TO_RAD_TEX[refDeg] ?? `${refDeg}`)
-    const isNeg = trigValStr.startsWith('-')
-    const quadDesc =
-      fn === 'sin'
-        ? isNeg
-          ? 'sine is negative in quadrants III and IV'
-          : 'sine is positive in quadrants I and II'
-        : fn === 'cos'
-          ? isNeg
-            ? 'cosine is negative in quadrants II and III'
-            : 'cosine is positive in quadrants I and IV'
-          : isNeg
-            ? 'tangent is negative in quadrants II and IV'
-            : 'tangent is positive in quadrants I and III'
-    const stepRefAfter = `\\${fn}(${targetVar}) = ${trigValStr}`
-    steps.push(
-      finishStep({
-        kind: 'EquationEquiv',
-        before: curBefore,
-        after: stepRefAfter,
-        op: { kind: 'trig-ref-angle', angle: refAngle, quad: quadDesc },
-        sentence: '',
-        data: { variable: targetVar }
-      })
-    )
-    curBefore = stepRefAfter
-
-    // General solution step
-    const generalStr = inDeg
-      ? filtered.map((d) => `${targetVar} = ${d}^{\\circ} + 360^{\\circ}k`).join(' \\quad \\text{ or } \\quad ')
-      : filtered.map((d) => `${targetVar} = ${DEG_TO_RAD_TEX[d] ?? d} + 2\\pi k`).join(' \\quad \\text{ or } \\quad ')
-    steps.push(
-      finishStep({
-        kind: 'EquationEquiv',
-        before: curBefore,
-        after: generalStr,
-        op: { kind: 'trig-general' },
-        sentence: '',
-        data: { variable: targetVar }
-      })
-    )
-    curBefore = generalStr
-
-    // Final solutions in range
-    const { stepAfter, answers } = buildSolutionAnswers(filtered)
-    steps.push(
-      finishStep({
-        kind: 'SolutionSetEq',
-        before: curBefore,
-        after: stepAfter,
-        sentence: '',
-        data: {
-          variable: targetVar,
-          domain,
-          solutions: answers.map((a) => ({ value: a.tex })),
-          role: 'trig'
-        }
-      })
-    )
-
-    return {
+    const declined = (): Working => ({ title: `Solve ${input}`, input, steps: [], noWorking: true, reason: CANT_SHOW })
+    const finish = (steps: Step[], answers: StepAnswer[], method: string): Working => ({
       title: `Solve ${input}`,
       input,
-      method: 'Trigonometric equation',
+      method,
       steps,
       answer: answers.length === 1 ? answers[0] : answers,
       checked: 'ok',
       domain
+    })
+
+    // The range the student asked for, in degrees (in radians a range is not whole degrees, so it is declined).
+    const rangeMatch = raw.match(/(\d+(?:\.\d+)?)\s*<=\s*[a-zA-Z]\s*(<=|<)\s*(\d+(?:\.\d+)?)/)
+    let range: TrigRange = { min: 0, max: 360, inclusive: false }
+    if (rangeMatch) {
+      if (!inDeg || rangeMatch[1].includes('.') || rangeMatch[3].includes('.')) return declined()
+      range = { min: Number(rangeMatch[1]), max: Number(rangeMatch[3]), inclusive: rangeMatch[2] === '<=' }
     }
+
+    const ctx: Ctx = { input, eqToInspect, v, unit, range, domain, declined, finish }
+    const compact = eqToInspect.replace(/[\s\\]+/g, '')
+    if (compact === `sin(${v})=cos(${v})`) return sinCosCase(ctx)
+
+    const form = parseForm(eqToInspect, v)
+    if (form === null) return declined()
+    return form.degree === 1 ? linearCase(ctx, form) : quadraticCase(ctx, form)
   }
 }

@@ -24,10 +24,12 @@ import {
   type Expr,
   type Term
 } from '../pure/mono'
-import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R0, R1, rTex, type Rat } from '../pure/rat'
+import { rat, rCmp, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R0, R1, rTex, type Rat } from '../pure/rat'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
 import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } from './types'
+// S5c: trig equations are checked by numbers at sample angles (trigRoots.ts), never taken from the method.
+import { checkListedRoots, checkTrigMove } from './trigRoots'
 // S1b: the sound checkers of G2 (math/check) decide what the exact fallback above cannot: surds, complex roots, and
 // expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
 import { readAlg } from '../check/parse'
@@ -580,7 +582,10 @@ function checkNonPolyEquationOp(
     op.kind === 'trig-substitute' ||
     op.kind === 'trig-back-substitute'
   ) {
-    return 'valid'
+    // The raw texts: a latex angle such as \pi or 30^{\circ} must reach the checker as written.
+    const rawBefore = typeof before === 'string' ? before : before.toString()
+    const rawAfter = typeof after === 'string' ? after : after.toString()
+    return checkTrigMove(rawBefore, rawAfter, op, v)
   }
 
   const sBefore = stringifyNodeOrText(before)
@@ -978,7 +983,9 @@ export function lettersOutside(text: string | MathNode, v: string): boolean {
   const bare = rawText(text)
     .replace(/\\text\{[^}]*\}/g, ' ')
     .replace(/\\[A-Za-z]+/g, ' ')
-    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats|pi|k|u|or|and)\b/gi, ' ')
+    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats)\b/gi, ' ')
+  // Only the names of functions are skipped: a letter such as k, u, pi, or or and is a letter of the equation and is
+  // compared with v like any other (k + 3 = 7 with root 5 is not a solution of k + 3 = 7 in x, S5c).
   for (const m of bare.matchAll(/\p{L}+/gu)) {
     if (m[0] !== v) return true
   }
@@ -1150,9 +1157,18 @@ export function solutionProofOf(text: string | MathNode, v: string): SetProof | 
   if (/sin|cos|tan|\\sin|\\cos|\\tan/.test(s)) {
     const sb = splitEquation(s)
     if (sb) {
-      const r = Number(sb.right.trim())
-      if (!Number.isNaN(r) && (/sin|\\sin|cos|\\cos/.test(sb.left)) && (r > 1 || r < -1)) {
-        return { kind: 'none', deg: 0 }
+      // a·sin(c·v) = k (or cos) with a non-zero a: no solution exactly when |k/a| > 1. 3 sin x = 2 has solutions (|2/3| < 1),
+      // so the size of the coefficient decides it, not the size of the right side alone (S5c). The multiple inside the
+      // argument does not change the range of a sine or cosine: 2 sin 2x = 4 has none, as sin x = 2 has none.
+      // A tangent takes every value, so its equation always has solutions. Any other shape is not read here: unknown.
+      const m = new RegExp(`^(-?)(\\d*)\\*?\\\\?(sin|cos|tan)\\(\\s*\\d*${v}\\s*\\)$`).exec(sb.left.replace(/\s+/g, ''))
+      if (!m) return null
+      if (m[3] === 'tan') return { kind: 'roots' }
+      const c = parseExactRat(sb.right.replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2').trim())
+      if (c === null) return null
+      if (!rIsZero(c)) {
+        const a = rat(BigInt(m[2] === '' ? 1 : m[2]))
+        if (rCmp(rAbs(c), rAbs(a)) > 0) return { kind: 'none', deg: 0 }
       }
       return { kind: 'roots' }
     }
@@ -3131,7 +3147,8 @@ export function checkHigherSolutionSet(
   v: string,
   _domain: 'real' | 'complex' = 'real'
 ): ValidationVerdict | null {
-  if (!/sin|cos|tan|\\sin|\\cos|\\tan|\\circ|\bk\b/i.test(before)) return null
+  // Only an equation with a trig function is read here. A letter such as k is not a sign of one (S5c: k + 3 = 7 was valid).
+  if (!/sin|cos|tan|\\sin|\\cos|\\tan|\\circ/i.test(before)) return null
   const sb = splitEquation(before)
   if (!sb) return null
   if (lettersOutside(before, v)) return null
@@ -3143,6 +3160,10 @@ export function checkHigherSolutionSet(
       ? 'valid'
       : 'invalid'
   }
+  // A listed root must solve the equation itself, and no root in [0, 360) may be left out: the displayed list alone proves nothing.
+  // A list of plain numbers (x = -9.42 for x sin x = 0) is not an angle this reads: null leaves it to the checks below, as before.
+  const rootsCheck = checkListedRoots(before, solutions, v)
+  if (rootsCheck !== null && rootsCheck !== 'valid') return rootsCheck
   const shown = displayedValues(after, v)
   if (shown === null || shown.length !== solutions.length) return 'invalid'
   for (let i = 0; i < solutions.length; i++) {

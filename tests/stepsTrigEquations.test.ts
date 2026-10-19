@@ -10,8 +10,9 @@
 
 import { describe, expect, it } from 'vitest'
 import { createDefaultStepRouter, stepWorkingFor } from '../src/renderer/src/math/steps/solve'
-import { defaultCheckAdapter } from '../src/renderer/src/math/steps/check-adapter'
-import { validateWorking } from '../src/renderer/src/math/steps/validate'
+import { defaultCheckAdapter, solutionProofOf } from '../src/renderer/src/math/steps/check-adapter'
+import { validateSolutionSetEq, validateStep, validateWorking } from '../src/renderer/src/math/steps/validate'
+import { finishStep } from '../src/renderer/src/math/steps/sentences'
 
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { scene } from '../src/renderer/src/core/store'
@@ -194,4 +195,197 @@ describe('Part S5: Trig equations (math/steps)', () => {
       expect(v.valid).toBe(true)
     }
   }, 120_000)
+})
+
+// Part S5c: the wrong answers the held branch showed as checked. Every case here must now be right, or give no working.
+describe('Part S5c: trig equations never show a wrong answer as checked', () => {
+  const answersOf = (latex: string, unit: 'deg' | 'rad' = 'deg'): string[] | 'none' => {
+    scene().setSettings({ angleUnit: unit })
+    usePure.getState().runLatex(latex, 'auto')
+    const w = usePure.getState().working
+    scene().setSettings({ angleUnit: 'deg' })
+    if (!w || w.noWorking || w.error || w.answers.length === 0) return 'none'
+    return w.answers.map((a) => a.tex)
+  }
+
+  it('cos(x)^2 = 1 has 0 and 180, not 0 alone', () => {
+    resetGlobals()
+    expect(answersOf('\\cos(x)^2=1')).toEqual(['0', '180'])
+  }, 30_000)
+
+  it('2 sin(x)^2 = 1 has 45, 135, 225 and 315', () => {
+    resetGlobals()
+    expect(answersOf('2\\sin(x)^2=1')).toEqual(['45', '135', '225', '315'])
+  }, 30_000)
+
+  it('sin(x)^2 - sin(x) = 0 has 0, 90 and 180', () => {
+    resetGlobals()
+    expect(answersOf('\\sin(x)^2-\\sin(x)=0')).toEqual(['0', '90', '180'])
+  }, 30_000)
+
+  it('3 sin(x) = 2 is never said to have no solution (it has 41.8 and 138.2, a decimal or no working)', () => {
+    resetGlobals()
+    const got = answersOf('3\\sin(x)=2')
+    if (got !== 'none') expect(got.some((t) => /41\.8|138\.1/.test(t))).toBe(true)
+    expect(got === 'none' || !got.includes('no value of x works')).toBe(true)
+  }, 30_000)
+
+  it('sin(x) = -1/2 gives 210 and 330 (the reference angle is 30, not 150)', () => {
+    resetGlobals()
+    expect(answersOf('\\sin(x)=-\\frac{1}{2}')).toEqual(['210', '330'])
+  }, 30_000)
+
+  it('sin(x) = 1/2 written with \\frac is read the same as the decimal', () => {
+    resetGlobals()
+    expect(answersOf('\\sin(x)=\\frac{1}{2}')).toEqual(['30', '150'])
+  }, 30_000)
+
+  it('2 sin(2x) = 1 has 15, 75, 195 and 255 (not sin(2x) = 1 read alone)', () => {
+    resetGlobals()
+    expect(answersOf('2\\sin(2x)=1')).toEqual(['15', '75', '195', '255'])
+  }, 30_000)
+
+  it('tan(2x) = 1 in radians has the exact multiples of pi', () => {
+    resetGlobals()
+    expect(answersOf('\\tan(2x)=1', 'rad')).toEqual(['\\frac{\\pi}{8}', '\\frac{5\\pi}{8}', '\\frac{9\\pi}{8}', '\\frac{13\\pi}{8}'])
+  }, 30_000)
+
+  it('sin x + cos x = 1 is declined, never 90 alone', () => {
+    resetGlobals()
+    const got = answersOf('\\sin(x)+\\cos(x)=1')
+    expect(got === 'none' || got.includes('0')).toBe(true)
+    expect(got === 'none' || !(got.length === 1 && got[0] === '90')).toBe(true)
+  }, 30_000)
+
+  it('a general solution that misses a root is refused by the checker', () => {
+    // 2x is the argument: the family 15 + 180k alone misses 75, so the step must not check.
+    const bad = finishStep({
+      kind: 'EquationEquiv',
+      before: '\\sin(2x) = \\frac{1}{2}',
+      after: 'x = 15^{\\circ} + 180^{\\circ}k',
+      op: { kind: 'trig-general' },
+      sentence: '',
+      data: { variable: 'x' }
+    })
+    expect(validateStep(bad, defaultCheckAdapter).verdict).not.toBe('valid')
+  })
+
+  it('a general solution from the wrong equation is refused', () => {
+    const bad = finishStep({
+      kind: 'EquationEquiv',
+      before: '\\sin(x) = \\frac{1}{2}',
+      after: 'x = 45^{\\circ} + 360^{\\circ}k',
+      op: { kind: 'trig-general' },
+      sentence: '',
+      data: { variable: 'x' }
+    })
+    expect(validateStep(bad, defaultCheckAdapter).verdict).not.toBe('valid')
+  })
+
+  it('a divide by cos that is not an identity is refused', () => {
+    const bad = finishStep({
+      kind: 'EquationEquiv',
+      before: '\\sin(x) = \\cos(x)',
+      after: '\\tan(x) = 2',
+      op: { kind: 'divide-cos' },
+      sentence: '',
+      data: { variable: 'x' }
+    })
+    expect(validateStep(bad, defaultCheckAdapter).verdict).not.toBe('valid')
+  })
+
+  it('a solution list that adds 90 to sin(x) = 1/2 is refused', () => {
+    const bad = finishStep({
+      kind: 'SolutionSetEq',
+      before: 'x = 30^{\\circ} + 360^{\\circ}k \\text{ or } x = 150^{\\circ} + 360^{\\circ}k',
+      after: 'x = 30 \\text{ or } x = 90 \\text{ or } x = 150',
+      sentence: '',
+      data: { variable: 'x', domain: 'real', solutions: [{ value: '30' }, { value: '90' }, { value: '150' }], role: 'trig', range: { min: 0, max: 360, inclusive: false } }
+    })
+    expect(validateSolutionSetEq(bad, defaultCheckAdapter)).not.toBe('valid')
+  })
+
+  it('k + 3 = 7 with root 5 is not valid (k is not a harmless letter)', () => {
+    const bad = finishStep({
+      kind: 'SolutionSetEq',
+      before: 'k + 3 = 7',
+      after: 'x = 5',
+      sentence: '',
+      data: { variable: 'x', domain: 'real', solutions: [{ value: '5' }] }
+    })
+    expect(validateSolutionSetEq(bad, defaultCheckAdapter)).not.toBe('valid')
+  })
+
+  it('solutionProofOf reads 3 sin x = 2 as having solutions (|c/a| is 2/3, not 2)', () => {
+    expect(solutionProofOf('3\\sin(x) = 2', 'x')?.kind).toBe('roots')
+    expect(solutionProofOf('\\sin(x) = 2', 'x')).toEqual({ kind: 'none', deg: 0 })
+  })
+
+  it('solutionProofOf: the multiple inside a sine does not change its range, a tangent always has solutions, an unread shape is unknown', () => {
+    expect(solutionProofOf('2\\sin(2x) = 4', 'x')).toEqual({ kind: 'none', deg: 0 })
+    expect(solutionProofOf('\\tan(x) = 2', 'x')?.kind).toBe('roots')
+    expect(solutionProofOf('\\sin(x)^2 = 2', 'x')).toBeNull()
+  })
+
+  it('a root of u that is left out must be named by the move: an unnamed or wrongly named one is refused', () => {
+    const back = (op: { kind: 'trig-back-substitute'; rejected?: string[] }) =>
+      finishStep({
+        kind: 'EquationEquiv',
+        before: '(u + 2)(2u + 1) = 0',
+        after: '\\sin(x) = -\\frac{1}{2}',
+        op,
+        sentence: '',
+        data: { variable: 'x' }
+      })
+    // u = -2 is outside -1 to 1 (sin x = -2 has no angle), so it may be left out only when the move names it.
+    expect(validateStep(back({ kind: 'trig-back-substitute', rejected: ['-2'] }), defaultCheckAdapter).verdict).toBe('valid')
+    expect(validateStep(back({ kind: 'trig-back-substitute' }), defaultCheckAdapter).verdict).not.toBe('valid')
+    expect(validateStep(back({ kind: 'trig-back-substitute', rejected: ['2'] }), defaultCheckAdapter).verdict).not.toBe('valid')
+  })
+
+  it('a substitution in sin 2x is checked at 2x: the right u-equation passes and a wrong one is refused', () => {
+    const sub = (after: string) =>
+      finishStep({
+        kind: 'EquationEquiv',
+        before: '\\sin(2x)^2-\\sin(2x)=0',
+        after,
+        op: { kind: 'trig-substitute' },
+        sentence: '',
+        data: { variable: 'x' }
+      })
+    expect(validateStep(sub('u^2-u=0'), defaultCheckAdapter).verdict).toBe('valid')
+    expect(validateStep(sub('u^2+u=0'), defaultCheckAdapter).verdict).not.toBe('valid')
+  })
+
+  it('a quadratic with a root outside -1 to 1 names it in words and keeps the other root: 2 sin^2 x + 5 sin x + 2 = 0 has 210 and 330', () => {
+    resetGlobals()
+    expect(answersOf('2\\sin(x)^2+5\\sin(x)+2=0')).toEqual(['210', '330'])
+    const heads = (usePure.getState().working?.moves ?? []).map((m) => m.head ?? '')
+    expect(heads.some((h) => /u = .2 is outside -1 to 1, so sin\(x\) = .2 has no solution and is left out/.test(h))).toBe(true)
+  }, 30_000)
+
+  it('the substitution names cos when the equation is in cos: cos(x)^2 = 1 says Substitute u = cos(x)', () => {
+    resetGlobals()
+    answersOf('\\cos(x)^2=1')
+    expect(usePure.getState().working?.moves?.[0]?.head).toMatch(/^Substitute u = cos\(x\)/)
+  }, 30_000)
+
+  it('sin(2x)^2 - sin(2x) = 0 has 0, 45, 90, 180, 225 and 270, and says Substitute u = sin(2x) (the multiple 2 is kept)', () => {
+    resetGlobals()
+    expect(answersOf('\\sin(2x)^2-\\sin(2x)=0')).toEqual(['0', '45', '90', '180', '225', '270'])
+    expect(usePure.getState().working?.moves?.[0]?.head).toMatch(/^Substitute u = sin\(2x\)/)
+  }, 30_000)
+
+  it('2 sin^2(2x) - sin(2x) - 1 = 0 has 45, 105, 165, 225, 285 and 345 (u = 1 and u = -1/2 both kept)', () => {
+    resetGlobals()
+    expect(answersOf('2\\sin(2x)^2-\\sin(2x)-1=0')).toEqual(['45', '105', '165', '225', '285', '345'])
+  }, 30_000)
+
+  it('the radian general solution writes \\pi k with a space, never the one command \\pik', () => {
+    resetGlobals()
+    expect(answersOf('\\sin(x)=\\frac{1}{2}', 'rad')).toEqual(['\\frac{\\pi}{6}', '\\frac{5\\pi}{6}'])
+    const general = (usePure.getState().working?.moves ?? []).find((m) => m.rule === 'General solution')
+    expect(String(general?.tex)).toMatch(/\+ 2\\pi k/)
+    expect(String(general?.tex)).not.toMatch(/\\pik/)
+  }, 30_000)
 })

@@ -77,6 +77,12 @@ function rightOf(text: string): string {
   return i === -1 ? '' : text.slice(i + 1).trim()
 }
 
+/** The first trig term an equation's text uses, in words: sin(x), or sin(2x) when its argument is a multiple of x. Null when it writes none. */
+function trigTermIn(text: string): string | null {
+  const m = /\\?(sin|cos|tan)\s*\(\s*([^()]*?)\s*\)/.exec(text)
+  return m ? `${m[1]}(${plainTex(m[2])})` : null
+}
+
 function equationSentence(op: EquationOp, step: Step, v: string): string | null {
   const before = String(step.before)
   const after = String(step.after)
@@ -135,9 +141,18 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
     case 'trig-general':
       return 'Write the general solution with integer k'
     case 'trig-substitute':
-      return `Substitute u = sin(${plainTex(v)}) to form a quadratic equation`
-    case 'trig-back-substitute':
-      return `Substitute sin(${plainTex(v)}) back for u and solve each equation`
+      return `Substitute u = ${trigTermIn(before) ?? `sin(${plainTex(v)})`} to form a quadratic equation`
+    case 'trig-back-substitute': {
+      const term = trigTermIn(after) ?? trigTermIn(before) ?? `sin(${plainTex(v)})`
+      const base = `Substitute ${term} back for u and solve each equation`
+      const rejected = op.rejected ?? []
+      if (rejected.length === 0) return base
+      // A sine or cosine is never bigger than 1 in size: a root outside -1 to 1 is named and left out, in words.
+      const many = rejected.length > 1
+      const roots = rejected.map((r) => `u = ${plainTex(r)}`).join(' and ')
+      const equations = rejected.map((r) => `${term} = ${plainTex(r)}`).join(' and ')
+      return `${base}. ${roots} ${many ? 'are' : 'is'} outside -1 to 1, so ${equations} ${many ? 'have' : 'has'} no solution and ${many ? 'are' : 'is'} left out`
+    }
     default:
       return null
   }
