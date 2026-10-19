@@ -136,9 +136,12 @@ function agreement(card: EvalResult, working: Working): Agreement {
   }
 }
 
-/** What the card shows for a working's answers: one answer as it is, several each under its own label. */
+/**
+ * What the card shows for a working's answers: each answer under its own label, one or several. A single answer is
+ * labelled too: without "t =" the card for 2t + 4 = 10 was a bare "3", which a student cannot read as t. A label that
+ * is only a word ("Answer") is not a symbol, so that answer stays bare.
+ */
 function texOfAnswers(working: Working): string {
-  if (working.answers.length === 1) return working.answers[0].tex
   return working.answers
     .map((a) => {
       const label = labelTex(a.label)

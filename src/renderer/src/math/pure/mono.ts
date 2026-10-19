@@ -305,6 +305,15 @@ export const writeTimes = (text: string): string => {
 const tooManyDigits = (text: string): boolean =>
   (text.match(/\d+(?:\.\d+)?|\.\d+/g) ?? []).some((n) => n.replace('.', '').replace(/^0+/, '').replace(/0+$/, '').length > 15)
 
+/**
+ * A 0 typed straight against a letter, as in 0x + 3 or x² + 0x − 4, means 0 times that letter. mathjs reads "0x" as the
+ * start of a hex number (and 0b, 0o as binary and octal) and refuses the whole line, so before the line is read a × is
+ * put between the 0 and the letter. A 0 inside a longer number (10x, 0.5x) does not start a number of its own, and a 0
+ * that begins an exponent (0e+3) is left to mathjs, which already reads it as 0. Only this reader does this: the checker
+ * still reads 0x as hex on purpose (tests/check/adversarial.test.ts), so writeTimes itself is not changed.
+ */
+const ZERO_BEFORE_LETTER = /(?<![\w.])0(?=[A-Za-z])(?![eE][+-]?\d)/g
+
 /** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */
 function readNode(src: string): MathNode {
   const text = src.trim()
@@ -313,7 +322,7 @@ function readNode(src: string): MathNode {
     throw new NotPolynomial('A number here has more digits than I can keep exactly. Use at most 15 significant figures in each number.')
   }
   try {
-    return math.parse(writeTimes(preprocess(text)))
+    return math.parse(writeTimes(preprocess(text).replace(ZERO_BEFORE_LETTER, '0*')))
   } catch {
     throw new NotPolynomial('I could not read that. Check the brackets and signs.')
   }
@@ -322,6 +331,28 @@ function readNode(src: string): MathNode {
 /** Read typed maths into an expanded expression. Throws NotPolynomial with a readable reason. */
 export function parseExpr(src: string): Expr {
   return fromNode(readNode(src))
+}
+
+/**
+ * The letters a typed equation names, in the order they first appear, both sides together. A letter whose terms cancel
+ * is still named: "x - x + 3 = 3" has no letter left once worked out, yet the student typed an x, and the working can say
+ * which letter it means. A side that cannot be read is skipped; the solver has already refused it with its own sentence.
+ */
+export function typedLetters(src: string): string[] {
+  const names: string[] = []
+  for (const side of src.split('=')) {
+    let node: MathNode
+    try {
+      node = readNode(side)
+    } catch {
+      continue
+    }
+    node.traverse((n) => {
+      const name = (n as unknown as { name?: unknown }).name
+      if (n.type === 'SymbolNode' && typeof name === 'string' && !names.includes(name)) names.push(name)
+    })
+  }
+  return names
 }
 
 type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode }
