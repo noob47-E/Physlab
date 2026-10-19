@@ -214,6 +214,7 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 }
 
 function solutionSentence(step: Step): string | null {
+  if (dataOf(step).rational === true) return rationalEndingSentence(step)
   const surd = surdSolutionsSentence(step)
   if (surd !== undefined) return surd
   const p = setProofOf(step)
@@ -228,6 +229,7 @@ function solutionSentence(step: Step): string | null {
 }
 
 function solutionRule(step: Step): string | null {
+  if (dataOf(step).rational === true) return rationalEndingRule(step)
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   const p = setProofOf(step)
   if (!p) return null
@@ -248,11 +250,31 @@ function exprSentence(step: Step): string | null {
   return 'Write the expression another way.'
 }
 
+/** "2", "2 or 3", "1, 2 or 3": a list of values in words. */
+function listOr(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`
+}
+
+/** "x = 1", "x = 1 and x = 3": a list of statements in words. */
+function listAnd(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/** "x cannot be 0 or 1, because a denominator would be 0.": the values the letter may not take, read from the denominators. */
+function excludedSentence(d: Record<string, unknown>): string | null {
+  if (!Array.isArray(d.excluded) || d.excluded.length === 0) return null
+  const v = typeof d.variable === 'string' ? d.variable : 'x'
+  return `${v} cannot be ${listOr(d.excluded.map((t) => plainNumber(String(t))))}, because a denominator would be 0.`
+}
+
 function implicationSentence(step: Step): string | null {
   const d = dataOf(step)
   if (d.action === 'quadratic-formula') return 'Put a, b and c into the quadratic formula'
   if (d.action === 'square') return 'Square both sides'
   if (d.action === 'multiply' && typeof d.multiplier === 'string') return `Multiply both sides by ${plainTex(d.multiplier)}`
+  if (d.action === 'exclude') return excludedSentence(d)
   return null
 }
 
@@ -261,7 +283,37 @@ function implicationRule(step: Step): string | null {
   if (action === 'quadratic-formula') return 'Quadratic formula'
   if (action === 'square') return 'Squaring'
   if (action === 'multiply') return 'Multiply both sides'
+  if (action === 'exclude') return 'Excluded values'
   return null
+}
+
+/**
+ * The words of a rational equation's ending (rational.ts): the values a denominator rules out, named in words, then the
+ * solutions, or that no value works. Null when a kept value cannot be read exactly.
+ */
+function rationalEndingSentence(step: Step): string | null {
+  const d = dataOf(step)
+  const v = variableOf(step)
+  const kept = Array.isArray(d.solutions) ? d.solutions.map((s) => solutionTextOf(s)) : []
+  const rejected = Array.isArray(d.rejected) ? d.rejected.map((r) => `${v} = ${plainNumber(String(r))}`) : []
+  const one = rejected.length === 1
+  const ruled = `${listAnd(rejected)} ${one ? 'makes' : 'make'} a denominator 0`
+  if (kept.length === 0) {
+    return rejected.length === 0 ? `No value of ${v} works.` : `${ruled}, so no value of ${v} works.`
+  }
+  const parts: string[] = []
+  for (const t of kept) {
+    const x = readSurd(t)
+    if (!x) return null
+    parts.push(`${v} = ${prettyOfAlg(x)}`)
+  }
+  const solutions = `The solutions are ${listOr(parts)}.`
+  return rejected.length === 0 ? solutions : `${ruled}, so ${one ? 'it is' : 'they are'} not ${one ? 'a solution' : 'solutions'}. ${solutions}`
+}
+
+function rationalEndingRule(step: Step): string {
+  const solutions = dataOf(step).solutions
+  return Array.isArray(solutions) && solutions.length > 0 ? 'Solutions' : 'No solution'
 }
 
 /** The sentence a step must carry, built from its typed data. Null when the data does not determine one. */

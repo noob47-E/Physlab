@@ -24,13 +24,24 @@ import {
   type Expr,
   type Term
 } from '../pure/mono'
-import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R0, R1, rTex, type Rat } from '../pure/rat'
+import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, blcm, rCmp, rStr, R0, R1, rTex, type Rat } from '../pure/rat'
+import {
+  findRationalRootDetailed,
+  pDeg,
+  pDivMod,
+  pIsZero,
+  pLead,
+  pMul,
+  pTrim,
+  polyFromExpr,
+  type Poly
+} from '../pure/poly'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
 import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } from './types'
 // S1b: the sound checkers of G2 (math/check) decide what the exact fallback above cannot: surds, complex roots, and
 // expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
-import { readAlg } from '../check/parse'
+import { plainVars, readAlg, readExact, rfMul, rfSame, type RF } from '../check/parse'
 import { algAdd, algEq, algIsRational, algMul, algRat, algSub, type Alg as G2Alg } from '../check/field'
 import { expressionEqual, polyRootsCheck, rationalEqual, type Verdict as G2Verdict } from '../check/checkers'
 
@@ -259,15 +270,20 @@ export const defaultCheckAdapter: CheckAdapter = {
     // The move the step declares (data.action) is the move checked, and the only one: the words "Square both sides"
     // are shown only when the after is the before squared, however equivalent the two equations are (P-FIX-S1SOUND2
     // MUST 4). An action this cannot check (the quadratic formula among them) is unknown.
+    const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+    // The exclusions of a rational equation say what the letter cannot be; the equation itself does not move (before = after).
+    if (payload.action === 'exclude') return checkRationalExclusion(before, after, payload)
     const eq1 = splitEquation(stringifyNodeOrText(before))
     const eq2 = splitEquation(stringifyNodeOrText(after))
     if (!eq1 || !eq2) return 'unknown'
-    const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
     const l1 = tryParsePoly(eq1.left)
     const r1 = tryParsePoly(eq1.right)
     const l2 = tryParsePoly(eq2.left)
     const r2 = tryParsePoly(eq2.right)
-    if (!l1 || !r1 || !l2 || !r2) return 'unknown'
+    // A rational equation (a letter in a denominator) is checked as rational functions, side by side (R1 below).
+    if (!l1 || !r1 || !l2 || !r2) {
+      return payload.action === 'multiply' ? checkRationalMultiply(eq1, eq2, payload.multiplier) : 'unknown'
+    }
     if (payload.action === 'square') return eEq(l2, ePow(l1, 2)) && eEq(r2, ePow(r1, 2)) ? 'valid' : 'invalid'
     if (payload.action === 'multiply') {
       const m = typeof payload.multiplier === 'string' ? tryParsePoly(payload.multiplier) : null
@@ -772,7 +788,8 @@ export function variableOfInput(input: string): string | null {
   const names = new Set<string>()
   for (const side of sides) {
     const poly = tryParsePoly(side)
-    if (!poly) return null
+    // A side with a letter in a denominator is not a polynomial: its one letter is read as a rational equation (R1 below).
+    if (!poly) return readRationalEquation(input)?.v ?? null
     for (const n of varsOf(poly)) names.add(n)
   }
   return names.size === 1 ? [...names][0] : null
@@ -2958,5 +2975,278 @@ export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg
     const value = algAdd(algAdd(algMul(algRat(rat(a)), algMul(r, r)), algMul(algRat(rat(b)), r)), algRat(rat(c)))
     return algEq(value, algRat(R0))
   })
+}
+
+// ============================================================================
+// R1: rational equations, one letter in a denominator (rational.ts, validate.ts). Each side is read exactly by G2's reader
+// as a numerator over a denominator. The excluded values are the zeros of the denominators; the multiplier is their least
+// common multiple; the final roots are decided by G2 against the ORIGINAL equation, which already leaves the excluded values
+// out. Every decision here is exact rational arithmetic or G2's exact field: no floats, no sampling.
+// ============================================================================
+
+/** A rational equation in one letter, read exactly: both sides as numerator over denominator, and every denominator met. */
+export interface RationalRead {
+  v: string
+  left: RF
+  right: RF
+  /** Every denominator the reader met on either side, each a polynomial in v (the products are kept as they are). */
+  dens: Expr[]
+}
+
+/** One side read exactly by G2's reader: null when it cannot, or when it holds |…| (not a plain rational function). */
+function readRationalSide(text: string): { rf: RF; dens: Expr[] } | null {
+  try {
+    const e = readExact(text)
+    if (e.atoms.length > 0) return null
+    return { rf: e.rf, dens: e.dens }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A rational equation in one letter, read exactly. Null for anything else: not one equation, two letters, a function the
+ * reader does not hold, or no letter at all.
+ */
+export function readRationalEquation(text: string | MathNode): RationalRead | null {
+  const split = splitEquation(text)
+  if (!split || split.right.includes('=')) return null
+  const left = readRationalSide(split.left)
+  const right = readRationalSide(split.right)
+  if (!left || !right) return null
+  const letters = new Set<string>()
+  for (const e of [left.rf.num, left.rf.den, right.rf.num, right.rf.den, ...left.dens, ...right.dens]) {
+    for (const name of plainVars(e)) letters.add(name)
+  }
+  if (letters.size !== 1) return null
+  return {
+    v: [...letters][0],
+    left: left.rf,
+    right: right.rf,
+    dens: [left.rf.den, right.rf.den, ...left.dens, ...right.dens]
+  }
+}
+
+/**
+ * The rational linear factors of a polynomial over ℚ: its leading coefficient, and each distinct rational root with the power
+ * it has. Null when some factor is not a rational linear one (x² + 1, say), or the polynomial is zero.
+ */
+export function linearFactorsOf(p0: Poly): { lead: Rat; roots: Array<{ r: Rat; m: number }> } | null {
+  let cur = pTrim(p0)
+  if (pIsZero(cur)) return null
+  const lead = pLead(cur)
+  cur = cur.map((c) => rDiv(c, lead))
+  const roots: Array<{ r: Rat; m: number }> = []
+  // Each root found is divided out at once, so the degree falls on every pass (or the search gives up and says null).
+  while (pDeg(cur) > 0) {
+    const r = findRationalRootDetailed(cur).root
+    if (r === null) return null
+    const linear: Poly = [rNeg(r), R1]
+    let m = 0
+    for (;;) {
+      const { q, r: rest } = pDivMod(cur, linear)
+      if (!pIsZero(rest)) break
+      cur = q
+      m++
+    }
+    if (m === 0) return null
+    roots.push({ r, m })
+  }
+  return { lead, roots }
+}
+
+/** The exclusions and the multiplier of a rational equation. */
+export interface RationalShape {
+  v: string
+  /** The least common multiple of the denominators' leading whole numbers (1 when they are monic). */
+  k: bigint
+  /**
+   * The excluded values: the distinct zeros of the denominators, ascending, each with the highest power it has in any one
+   * denominator (the multiplier takes that power, so it is the least common multiple of the denominators).
+   */
+  roots: Array<{ r: Rat; m: number }>
+}
+
+/**
+ * The shape of a rational equation from its denominators. Null when one of them is not a product of rational linear factors
+ * with a whole-number leading coefficient: such an equation is not worked here, and its answer stays as it was.
+ */
+export function rationalShapeOf(read: RationalRead): RationalShape | null {
+  let k = 1n
+  const best = new Map<string, { r: Rat; m: number }>()
+  for (const d of read.dens) {
+    let p: Poly
+    try {
+      p = polyFromExpr(d, read.v).poly
+    } catch {
+      return null
+    }
+    const f = linearFactorsOf(p)
+    if (!f || f.lead.d !== 1n || f.lead.n === 0n) return null
+    k = blcm(k, f.lead.n < 0n ? -f.lead.n : f.lead.n)
+    for (const { r, m } of f.roots) {
+      const key = rStr(r)
+      best.set(key, { r, m: Math.max(m, best.get(key)?.m ?? 0) })
+    }
+  }
+  const roots = [...best.values()].sort((a, b) => rCmp(a.r, b.r))
+  return { v: read.v, k, roots }
+}
+
+/** The multiplier as a polynomial: the whole number k, times (x − r) to the power m for each excluded value r. */
+export function multiplierPoly(shape: RationalShape): Poly {
+  let p: Poly = [rat(shape.k)]
+  for (const { r, m } of shape.roots) for (let i = 0; i < m; i++) p = pMul(p, [rNeg(r), R1])
+  return pTrim(p)
+}
+
+/** The multiplier as the text a working shows and the checker reads back: "x(x - 1)", "2(x + 3)^2". */
+export function multiplierText(shape: RationalShape): string {
+  let out = shape.k === 1n ? '' : String(shape.k)
+  for (const { r, m } of shape.roots) {
+    const factor = rIsZero(r) ? shape.v : rIsNeg(r) ? `(${shape.v} + ${rStr(rNeg(r))})` : `(${shape.v} - ${rStr(r)})`
+    out += m === 1 ? factor : `${factor}^${m}`
+  }
+  return out
+}
+
+/**
+ * Both sides multiplied by the multiplier, each as a polynomial: its numerator times the multiplier, divided exactly by its
+ * denominator. Null when the division leaves a remainder (the multiplier then does not clear that side).
+ */
+export function clearedSides(read: RationalRead, multiplier: Poly): { lhs: Poly; rhs: Poly } | null {
+  const clear = (rf: RF): Poly | null => {
+    try {
+      const num = polyFromExpr(rf.num, read.v).poly
+      const den = polyFromExpr(rf.den, read.v).poly
+      if (pIsZero(den)) return null
+      const { q, r } = pDivMod(pMul(num, multiplier), den)
+      return pIsZero(r) ? q : null
+    } catch {
+      return null
+    }
+  }
+  const lhs = clear(read.left)
+  const rhs = clear(read.right)
+  return lhs && rhs ? { lhs, rhs } : null
+}
+
+/** The excluded values of a rational equation as exact numbers, or null when they cannot be read exactly. */
+export function rationalExcludedOf(text: string | MathNode): Rat[] | null {
+  const read = readRationalEquation(text)
+  const shape = read ? rationalShapeOf(read) : null
+  return shape ? shape.roots.map((x) => x.r) : null
+}
+
+/**
+ * The exclusions step: the equation is unchanged (before = after), and the values it names are exactly the zeros of its
+ * denominators. Each value is named once, and the list is complete.
+ */
+function checkRationalExclusion(before: string | MathNode, after: string | MathNode, payload: Record<string, unknown>): ValidationVerdict {
+  if (!sameState(before, after)) return 'invalid'
+  const excluded = rationalExcludedOf(before)
+  if (excluded === null) return 'unknown'
+  if (excluded.length === 0 || !Array.isArray(payload.excluded)) return 'invalid'
+  const named: Rat[] = []
+  for (const t of payload.excluded) {
+    const r = typeof t === 'string' ? parseExactRat(t) : null
+    if (!r || named.some((x) => rEq(x, r))) return 'invalid'
+    named.push(r)
+  }
+  if (named.length !== excluded.length) return 'invalid'
+  return excluded.every((e) => named.some((x) => rEq(x, e))) ? 'valid' : 'invalid'
+}
+
+/**
+ * The multiplying step of a rational equation: each side after is the side before times the multiplier, as rational functions.
+ * The identity N·m = P·D is exact polynomial arithmetic, so it holds wherever the sides before are defined, which is all an
+ * implication claims (the excluded values are handled by the ending, not here).
+ */
+function checkRationalMultiply(
+  eq1: { left: string; right: string },
+  eq2: { left: string; right: string },
+  multiplier: unknown
+): ValidationVerdict {
+  if (typeof multiplier !== 'string') return 'unknown'
+  const m = tryParsePoly(multiplier)
+  if (!m) return 'unknown'
+  if (m.length === 0) return 'invalid'
+  const l1 = readRationalSide(eq1.left)
+  const r1 = readRationalSide(eq1.right)
+  const l2 = tryParsePoly(eq2.left)
+  const r2 = tryParsePoly(eq2.right)
+  if (!l1 || !r1 || !l2 || !r2) return 'unknown'
+  const times = (side: RF, target: Expr): boolean =>
+    rfSame(rfMul(side, { num: m, den: constExpr(R1) }), { num: target, den: constExpr(R1) })
+  return times(l1.rf, l2) && times(r1.rf, r2) ? 'valid' : 'invalid'
+}
+
+/**
+ * The roots a rational equation's polynomial sub-working found, split by the excluded values: a rational root that is an
+ * excluded value is rejected (it makes a denominator 0); every other root is kept. Each root is listed once; the kept ones
+ * ascend.
+ */
+export function splitExcludedRoots(candidates: G2Alg[], excluded: Rat[]): { kept: G2Alg[]; rejected: Rat[] } {
+  const kept: G2Alg[] = []
+  const rejected: Rat[] = []
+  for (const x of candidates) {
+    if (kept.some((y) => algEq(x, y)) || (algIsRational(x) && rejected.some((y) => rEq(y, x.a)))) continue
+    if (algIsRational(x) && excluded.some((e) => rEq(e, x.a))) rejected.push(x.a)
+    else kept.push(x)
+  }
+  kept.sort(compareAlgRoots)
+  rejected.sort(rCmp)
+  return { kept, rejected }
+}
+
+/**
+ * The ending of a rational equation (rational.ts). The kept values must be every root of the ORIGINAL equation in the real
+ * line: G2 cancels the excluded values, so an excluded value is never a root there and never kept. Each rejected value must be
+ * an excluded value that is a root of the polynomial the working solved, and the displayed line names exactly the kept values
+ * (or says no value works). The text of the original is what the working was given; the validator binds it to the input.
+ */
+export function checkRationalEnding(
+  original: string,
+  polyState: string,
+  kept: string[],
+  rejected: string[],
+  v: string,
+  after: string
+): ValidationVerdict {
+  const read = readRationalEquation(original)
+  const shape = read ? rationalShapeOf(read) : null
+  if (!read || !shape) return 'unknown'
+  const excluded = shape.roots.map((x) => x.r)
+  const state = tryEquationPoly(polyState)
+  if (!state) return 'invalid'
+  const rejectedValues: Rat[] = []
+  for (const t of rejected) {
+    const r = parseExactRat(t)
+    if (!r || !excluded.some((e) => rEq(e, r)) || rejectedValues.some((x) => rEq(x, r))) return 'invalid'
+    rejectedValues.push(r)
+  }
+  if (!polyRootsHold(state, v, rejectedValues.map(algRat))) return 'invalid'
+  const roots: G2Alg[] = []
+  for (const t of kept) {
+    const x = plainForG2(t) === null ? null : readSurd(t)
+    if (!x) return 'unknown'
+    if (roots.some((y) => algEq(x, y))) return 'invalid'
+    roots.push(x)
+  }
+  for (let i = 1; i < roots.length; i++) if (compareAlgRoots(roots[i - 1], roots[i]) >= 0) return 'invalid'
+  const plainOriginal = plainForG2(original)
+  if (plainOriginal === null) return 'unknown'
+  const verdict = polyRootsCheck(
+    plainOriginal,
+    kept.map((value) => ({ value, multiplicity: 1 })),
+    'real'
+  )
+  if (verdict !== 'equal') return verdict === 'different' ? 'invalid' : 'unknown'
+  if (kept.length === 0) {
+    return normalizeDisplayed(after) === normalizeDisplayed(`\\text{no value of ${v} works}`) ? 'valid' : 'invalid'
+  }
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== roots.length) return 'invalid'
+  return roots.every((x, i) => displayKey(shown[i]) === displayKey(texOfAlg(x))) ? 'valid' : 'invalid'
 }
 

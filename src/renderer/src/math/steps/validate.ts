@@ -60,7 +60,9 @@ import {
   tryEquationPoly,
   tryParsePoly,
   coefficientOf,
-  parseExactRat
+  parseExactRat,
+  checkRationalEnding,
+  solutionTextOf
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
@@ -208,9 +210,42 @@ function valueText(s: unknown): string {
  * - a non-empty set is a linear equation's one root, checked exactly, and the displayed after lists it.
  * Any letter other than the variable makes the proof impossible (unknown).
  */
+/**
+ * The ending of a rational equation (rational.ts): its kept roots and its rejected values are decided by check-adapter against
+ * the ORIGINAL equation the step names. validateWorkingChecked binds that text to the working's own input.
+ */
+function validateRationalEnding(step: Step): ValidationVerdict {
+  const d = dataOf(step)
+  if (d.domain !== 'real' || typeof d.original !== 'string' || typeof d.variable !== 'string') return 'invalid'
+  if (!Array.isArray(d.solutions) || !Array.isArray(d.rejected)) return 'invalid'
+  const kept = d.solutions.map((s) => solutionTextOf(s))
+  const rejected = d.rejected.map((s) => String(s))
+  return checkRationalEnding(d.original, String(step.before), kept, rejected, d.variable, String(step.after))
+}
+
+/** The three steps of a rational equation's working, in order: the excluded values, the multiplication, the ending. */
+function isRationalWorkingShape(working: Working): boolean {
+  const s = working.steps
+  return (
+    s.length === 3 &&
+    s[0].kind === 'Implication' &&
+    dataOf(s[0]).action === 'exclude' &&
+    s[1].kind === 'Implication' &&
+    dataOf(s[1]).action === 'multiply' &&
+    s[2].kind === 'SolutionSetEq' &&
+    dataOf(s[2]).rational === true
+  )
+}
+
+/** The exclusion and the rational ending belong only to a working of the rational shape. */
+function mentionsRational(working: Working): boolean {
+  return working.steps.some((s) => dataOf(s).action === 'exclude' || dataOf(s).rational === true)
+}
+
 export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaultCheckAdapter): ValidationVerdict {
   if (step.kind !== 'SolutionSetEq') return 'invalid'
   const payload = dataOf(step)
+  if (payload.rational === true) return validateRationalEnding(step)
   const v = typeof payload.variable === 'string' ? payload.variable : 'x'
   // S1b: a surd square root's two solutions are the sides of the factored form the step names (exact, no proof needed).
   if (payload.zeroProduct && typeof payload.zeroProduct === 'object') {
@@ -515,6 +550,12 @@ function answerKey(w: Working): string {
  * solution of one zero-product case of its own split, and every case has exactly one. Null when they belong.
  */
 function subWorkingsBelong(working: Working): string | null {
+  // A rational equation's one sub-working solves the polynomial its multiplying step gave, and nothing else (rational.ts).
+  if (isRationalWorkingShape(working)) {
+    const own = working.subWorkings ?? []
+    const belongs = own.length === 1 && sameState(own[0].input ?? '', working.steps[2].before)
+    return belongs ? null : 'The polynomial working does not belong to its rational equation'
+  }
   const subs = working.subWorkings ?? []
   const v = variableOfInput(working.input ?? '')
   const split = working.steps.find((s) => s.kind === 'CaseSplitComplete' && dataOf(s).form === 'zero-product')
@@ -630,6 +671,14 @@ function validateWorkingChecked(
     }
   }
 
+  // A rational equation's working is exactly its three steps, and its ending is for the equation as typed: the working's input.
+  if (mentionsRational(working) && !isRationalWorkingShape(working)) {
+    return { valid: false, verdict: 'invalid', reason: "A rational equation's working does not have its three steps" }
+  }
+  if (isRationalWorkingShape(working) && !sameState(String(dataOf(working.steps[2]).original), working.input)) {
+    return { valid: false, verdict: 'invalid', reason: "The rational equation's ending is for another equation" }
+  }
+
   // Check main steps
   for (let i = 0; i < working.steps.length; i++) {
     const step = working.steps[i]
@@ -705,7 +754,8 @@ function validateWorkingChecked(
     const last = working.steps[working.steps.length - 1]
     const ld = dataOf(last)
     const noSolution = last.kind === 'SolutionSetEq' && Array.isArray(ld.solutions) && ld.solutions.length === 0 && ld.allReals !== true
-    if (!noSolution && !(sub && sub.ok)) {
+    // A rational ending is decided against the equation as typed (validateRationalEnding), so it needs no substitution here.
+    if (!noSolution && !(sub && sub.ok) && !isRationalWorkingShape(working)) {
       return { valid: false, verdict: 'invalid', reason: 'After a one-way step, every answer must be put back into the problem and hold' }
     }
   }
