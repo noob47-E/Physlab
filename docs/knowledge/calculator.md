@@ -36,6 +36,10 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
    engine's spelling ("theta_1 =") because the command bar reads them.
 8. **Sentences raise a power of ten** ("x = 1 × 10⁻⁸", with no-break spaces) — solve() answers in exact LaTeX.
 9. **A result belongs to its settings**: the Matrix result and the screen answer are left off after a DEG/RAD switch.
+10. **"=" and the working agree on an indefinite integral as antiderivatives** (`calc/working.ts` `antiderivativeAgreement`, then
+    `calc/formula.ts` `sameAntiderivative`): the two answers agree when their slopes agree, so a different + C or another form that
+    is real on the same stretch is the same answer. A definite integral is still compared as a number, and a derivative keeps its
+    exact comparison. A name the converter glued and the reader could not split is left unchecked, never called a disagreement.
 
 ## Traps met
 - `mathjs` rounds a complex/matrix/unit number with no 15-figure cut (0.35×3 → "1.0"): `mathFormatOptions`.
@@ -46,4 +50,4 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
 
 ## Guards
 tests/calc.test.ts, latex.test.ts, keys.test.ts, maths.test.ts, pureWorking.test.ts, answerLabels.test.ts,
-calcModes.test.ts, casFallback.test.ts, solveSentences.test.ts.
+calcModes.test.ts, casFallback.test.ts, solveSentences.test.ts, integralAgreement.test.ts.

@@ -298,7 +298,8 @@ const BASE_VALID_SINGLE_LETTERS: ReadonlySet<string> = new Set([
   'i'
 ])
 
-function readRunsAsMultiplication(expr: string, vars?: Record<string, unknown>): string {
+/** A typed line's runs of letters read as products (xe is x·e), the one reader the "=" path and the integral check share. */
+export function readRunsAsMultiplication(expr: string, vars?: Record<string, unknown>): string {
   const assignMatch = expr.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\s*\([^)]*\))?)\s*=(.*)$/)
   if (assignMatch) {
     return `${assignMatch[1]}=${readRunsAsMultiplication(assignMatch[2], vars)}`

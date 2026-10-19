@@ -11,6 +11,7 @@
 
 import type { MathNode } from 'mathjs'
 import { math } from '../math/expr'
+import { CONSTANT_NAMES, GREEK_NAMES } from '../math/names'
 import { linearToLatex } from '../math/pure/run'
 import { constantScope } from './constants'
 import { keypadToMath, withAngle, type ExprNode } from './engine'
@@ -312,6 +313,49 @@ export function compareFunctions(a: MathNode, b: MathNode, vars: Record<string, 
       agreed++
     }
     return agreed >= NEEDED ? 'same' : 'unknown'
+  })
+}
+
+/**
+ * The points an antiderivative is tried at, on both sides of ±1 and of 0. An arctanh is real on (−1, 1) only and ln x on x > 0 only,
+ * so each form needs six points of its own stretch of the line, or the check could never say "the same" for it.
+ */
+const ANTIDERIVATIVE_POINTS = [-7.3, -3.1, -1.7, -0.85, -0.6, -0.35, -0.12, 0.27, 0.58, 0.81, 1.23, 1.9, 2.6, 3.4, 5.7, 8.3, 13.1]
+
+/** Points at which two antiderivatives must agree before they are called the same. */
+const ANTIDERIVATIVE_NEEDED = 6
+
+/**
+ * A single letter, a subscripted one (a_1, which the reader leaves whole on purpose), or a word the calculator knows: a constant, or a
+ * Greek letter spelt out (theta).
+ */
+const isPlainName = (name: string): boolean => name.length === 1 || name.includes('_') || isKnownValue(name) || GREEK_NAMES.has(name) || CONSTANT_NAMES.has(name)
+
+/**
+ * Whether two indefinite integrals, written without their + C, are the same antiderivative: their slopes in `variable` agree at enough
+ * points where both are real. Two antiderivatives of one line differ by a constant on each stretch where both are real, and a slope
+ * does not see a constant, so ½ ln|(x − 1)/(x + 1)| + 3 and ½ ln|x − 1| − ½ ln|x + 1| are the same answer. 'different' when the slopes
+ * part at a point both have a value, and 'unknown' when too few points are real in both to say. Any other letter (a parameter) is held
+ * at one value for each point's slopes, so only the variable moves while the slopes are taken.
+ */
+export function sameAntiderivative(a: MathNode, b: MathNode, variable: string): 'same' | 'different' | 'unknown' {
+  const names = [...new Set([...lettersOf(a), ...lettersOf(b), variable])]
+  // A longer name nobody knows is a run of letters the converter glued together and nothing split (xe for x·e). Held at one value it
+  // would be a constant beside a function, so nothing is claimed about the pair.
+  if (names.some((name) => !isPlainName(name))) return 'unknown'
+  const fa = a.compile()
+  const fb = b.compile()
+  return withAngle('rad', () => {
+    let agreed = 0
+    for (let k = 0; k < ANTIDERIVATIVE_POINTS.length; k++) {
+      const at = (x: number): Record<string, unknown> => scopeAt(names, {}, variable, x, k)
+      const slopeA = slopeOf((x) => valueOf(fa, at(x)), ANTIDERIVATIVE_POINTS[k])
+      const slopeB = slopeOf((x) => valueOf(fb, at(x)), ANTIDERIVATIVE_POINTS[k])
+      if (!Number.isFinite(slopeA) || !Number.isFinite(slopeB)) continue
+      if (!closeTo(slopeA, slopeB, 1e-7)) return 'different'
+      agreed++
+    }
+    return agreed >= ANTIDERIVATIVE_NEEDED ? 'same' : 'unknown'
   })
 }
 
