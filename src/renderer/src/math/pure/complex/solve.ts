@@ -21,7 +21,10 @@ import {
   rat,
   type Rat
 } from '../rat'
-import { NotPolynomial, evalAt, exprTex, parseExpr, varsOf, type Expr } from '../mono'
+import type { BigNumber } from 'mathjs'
+import { NotPolynomial, evalAt, exprTex, parseExpr, varsOf, writeTimes, type Expr } from '../mono'
+import { math, preprocess } from '../../expr'
+import { sameNumber } from '../../noise'
 import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from '../poly'
 import { discriminant, factorsOf } from '../factor'
 import { labelTex, labelText } from '../../../calc/labels'
@@ -90,6 +93,64 @@ const HAS_I = 'This has i in it. Solve works on an equation in one ordinary lett
 const unknownTex = (name: string): string => labelTex(name) ?? name
 const unknownWords = (name: string): string => labelText(name)
 
+// ---------------------------------------------------------------- roots the typed text does not allow
+
+// parseExpr divides out a letter that stands on both the top and the bottom of a fraction (x²/x
+// becomes x), so the equation it solves can have a root at which the typed fraction is 0/0. For
+// \frac{x^2}{x} = 0 that root is x = 0, and the check on the cancelled sides passes, so the student
+// saw a tick under an answer the typed equation does not allow. Each real root is therefore put back
+// into the typed text and worked out again here, with the app's own maths reader.
+
+/** A real root as a BigNumber: 64 digits, and an exponent range too wide for x¹⁰⁰⁰ to overflow into a false NaN. */
+const bigOf = (r: Rat): BigNumber => math.bignumber(r.n.toString()).div(r.d.toString())
+
+/** The two sides of the typed equation with the unknown set to `at`, or null when mathjs cannot read them. */
+function sidesAt(src: string, name: string, at: BigNumber): [unknown, unknown] | null {
+  const [lhsSrc, rhsSrc = '0'] = src.split('=')
+  try {
+    const scope = { [name]: at }
+    return [math.evaluate(writeTimes(preprocess(lhsSrc)), scope), math.evaluate(writeTimes(preprocess(rhsSrc)), scope)]
+  } catch {
+    return null
+  }
+}
+
+const isFiniteSide = (v: unknown): boolean => (math.isBigNumber(v) ? v.isFinite() : typeof v === 'number' && Number.isFinite(v))
+
+/**
+ * Whether the typed equation has no value at this root: one of its sides is not a finite number
+ * there. A denominator of 0 gives exactly that (0/0 is NaN, 1/0 is infinite). Only a typed division
+ * can do it, so a line without one is never worked out again here.
+ */
+function undefinedAt(src: string, name: string, at: BigNumber): boolean {
+  if (!src.includes('/')) return false
+  const sides = sidesAt(src, name, at)
+  // A line mathjs cannot read here would have been refused by parseExpr already, so there is no
+  // verdict to give and the root stays as it was.
+  return sides !== null && !sides.every(isFiniteSide)
+}
+
+/**
+ * A real root as a BigNumber, or null for a complex one. A complex root is never refused: the reader
+ * only divides out a monomial in the letter, and a monomial is 0 only at the real value 0.
+ */
+function realValueOf(r: Root, sign: 1 | -1): BigNumber | null {
+  if (r.imaginary) return null
+  const surd = math.multiply(math.multiply(bigOf(r.coef), math.sqrt(math.bignumber(r.rad.toString()))), sign) as BigNumber
+  return math.add(bigOf(r.re), surd) as BigNumber
+}
+
+/** Whether the two sides of the typed equation come to the same number at this real root. */
+function sidesAgreeAt(src: string, name: string, at: BigNumber): boolean {
+  const sides = sidesAt(src, name, at)
+  if (sides === null || !sides.every(isFiniteSide)) return false
+  return sameNumber(Number(sides[0]), Number(sides[1]))
+}
+
+/** The sentence that replaces an answer when the typed equation allows no value of the letter. */
+const noValueWorks = (nameWords: string, leftOut: string): string =>
+  `No value of ${nameWords} works. ${leftOut} makes a denominator 0, so it is not allowed.`
+
 /**
  * A linear equation, solved the way it is solved on the board: collect, move across, divide.
  *
@@ -138,13 +199,21 @@ function solveLinearWorking(src: string): Working {
     )
   }
   if (rIsZero(a)) {
+    // A letter on the bottom cancels (x²/x = x becomes x = x), and the cancelled sides agree at every
+    // value except one: the typed fraction is 0/0 at x = 0, so that value is left out of "every value".
+    const zeroLeftOut = undefinedAt(src, name, bigOf(R0))
+    const everyValue = zeroLeftOut
+      ? `Both sides are the same, so every value of ${nameWords} works except ${nameWords} = 0, which makes a denominator 0.`
+      : `Both sides are the same, so every value of ${nameWords} works.`
     return failed(
       title,
       input,
-      rIsZero(c) ? `Both sides are the same, so every value of ${nameWords} works.` : `The ${nameWords} terms cancel and ${rTex(L[0] ?? R0)} = ${rTex(R[0] ?? R0)} is false, so no value of ${nameWords} works.`
+      rIsZero(c) ? everyValue : `The ${nameWords} terms cancel and ${rTex(L[0] ?? R0)} = ${rTex(R[0] ?? R0)} is false, so no value of ${nameWords} works.`
     )
   }
   const x = rDiv(c, a)
+  // A value the typed fraction leaves undefined is refused before any step is shown (see undefinedAt).
+  if (undefinedAt(src, name, bigOf(x))) return failed(title, input, noValueWorks(nameWords, `${nameWords} = ${texToPlain(rTex(x))}`))
   if (rIsOne(a)) {
     s.goal('Isolate the letter').add(`So ${nameWords} is on its own.`, `${nameTex} = ${rTex(x)}`)
   } else if (a.d !== 1n) {
@@ -281,20 +350,35 @@ export function solveQuadraticWorking(src: string): Working {
     root = { re, coef: rDiv(rat(1n, absD.d), denom), rad: radicand, imaginary: sign < 0 }
   }
 
+  // With a zero discriminant both signs are the same root, so there is only one to test.
+  const rootSigns: (1 | -1)[] = sign === 0 ? [1] : [1, -1]
+  const undefinedRoots = rootSigns.filter((sg) => {
+    const at = realValueOf(root, sg)
+    return at !== null && undefinedAt(src, name, at)
+  })
+  const leftOut = undefinedRoots.map((sg) => `${nameWords} = ${texToPlain(rootText(root, sg))}`).join(' or ')
+  if (undefinedRoots.length === rootSigns.length) return failed(title, input, noValueWorks(nameWords, leftOut))
+  const kept = rootSigns.filter((sg) => !undefinedRoots.includes(sg))
+
   const r1 = rootText(root, 1)
   const r2 = rootText(root, -1)
   s.goal('Read off the roots').add(
     sign === 0 ? 'Both signs give the same value.' : 'Take the plus and the minus in turn.',
     sign === 0 ? `${nameTex} = ${rTex(re)}` : `${nameTex} = ${r1} \\quad\\text{or}\\quad ${nameTex} = ${r2}`
   )
+  if (undefinedRoots.length) {
+    s.goal('Leave out the root the fraction does not allow').add(`${leftOut} makes a denominator 0, so it is not allowed.`)
+  }
 
   const answers =
     sign === 0
       ? [{ label: `${name} =`, tex: rTex(re) }]
-      : [
-          { label: `${name}_1 =`, tex: r1 },
-          { label: `${name}_2 =`, tex: r2 }
-        ]
+      : undefinedRoots.length
+        ? kept.map((sg) => ({ label: `${name} =`, tex: rootText(root, sg) }))
+        : [
+            { label: `${name}_1 =`, tex: r1 },
+            { label: `${name}_2 =`, tex: r2 }
+          ]
 
   // Vieta's relations are the cheapest possible check and are on the syllabus anyway.
   const sum = rDiv(rNeg(b), a)
@@ -306,7 +390,26 @@ export function solveQuadraticWorking(src: string): Working {
   )
 
   // The real check: each root, substituted exactly, has to make the polynomial zero.
-  const ok = [rootValue(root, 1), rootValue(root, -1)].every((z) => isRootOf(poly, z))
+  const polyOk = [rootValue(root, 1), rootValue(root, -1)].every((z) => isRootOf(poly, z))
+  // With a root left out, the root that is left is checked in the typed text itself: the cancelled
+  // sides only agree with the typed ones away from the root that was left out.
+  const ok = undefinedRoots.length
+    ? polyOk && kept.every((sg) => {
+        const at = realValueOf(root, sg)
+        return at === null || sidesAgreeAt(src, name, at)
+      })
+    : polyOk
+  // The kept roots are written out only in the sentence that uses them: rootText takes the surd apart,
+  // which is the slow part of a huge discriminant, and the usual path never needs it here.
+  const check = undefinedRoots.length
+    ? ok
+      ? `Put ${nameWords} = ${kept.map((sg) => texToPlain(rootText(root, sg))).join(' or ')} back into the typed equation: both sides come to the same number.`
+      : 'Careful: the two sides do not agree at that root. Treat this answer with suspicion.'
+    : !ok
+      ? 'Careful: putting the roots back in does not give zero. Treat this answer with suspicion.'
+      : sign < 0
+        ? 'The two roots are conjugates — that always happens when the coefficients are real — and each one makes the equation zero exactly.'
+        : `Sum of roots ${rTex(sum)}, product ${rTex(product)} — both match the coefficients.`
 
   return {
     title,
@@ -314,11 +417,7 @@ export function solveQuadraticWorking(src: string): Working {
     method: 'Quadratic formula',
     moves: s.moves,
     answers,
-    check: !ok
-      ? 'Careful: putting the roots back in does not give zero. Treat this answer with suspicion.'
-      : sign < 0
-        ? 'The two roots are conjugates — that always happens when the coefficients are real — and each one makes the equation zero exactly.'
-        : `Sum of roots ${rTex(sum)}, product ${rTex(product)} — both match the coefficients.`,
+    check,
     checked: ok ? 'ok' : 'failed'
   }
 }
