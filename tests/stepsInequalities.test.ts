@@ -7,7 +7,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { createDefaultStepRouter } from '../src/renderer/src/math/steps/solve'
 import { validateWorking } from '../src/renderer/src/math/steps/validate'
-import { intervalForm, setData, setForm, type IneqPart } from '../src/renderer/src/math/steps/inequality'
+import {
+  agreesWithTypedSides,
+  intervalForm,
+  readInequality,
+  setData,
+  setForm,
+  type IneqPart
+} from '../src/renderer/src/math/steps/inequality'
 import { finishStep } from '../src/renderer/src/math/steps/sentences'
 import type { Step, Working } from '../src/renderer/src/math/steps/types'
 import { rat } from '../src/renderer/src/math/pure/rat'
@@ -310,5 +317,78 @@ describe('S1e: the router never shows an inequality it cannot check', () => {
     const w = routed('x^2-5x+6=0')
     expect(w.steps.length).toBeGreaterThan(0)
     expect(w.steps.some((s) => s.kind.startsWith('Ineq'))).toBe(false)
+  })
+})
+
+describe('S1e review: Auto leaves other jobs their lines and the imaginary unit alone', () => {
+  it('keeps the Standard normal table for P(Z < 1.96) and its variants', () => {
+    for (const line of ['P(Z<1.96)', 'P(Z>1.96)', 'P(Z<-1.5)', 'P(1.96>Z)']) {
+      usePure.getState().runLatex(line, 'auto', { quiet: true })
+      const w = usePure.getState().working
+      expect(usePure.getState().job, line).toBe('normal')
+      expect(w?.error, line).toBeUndefined()
+      expect(w?.method, line).toMatch(/^Standard normal table/)
+    }
+  })
+
+  it('sends a line with the imaginary unit to Complex, never to an inequality in i', () => {
+    for (const line of ['3+2i<5', 'i^2+1>0', '3i-5\\leq 7', '|3+4i|<6', '3+2i>1', '2i<4', 'i^2<0']) {
+      usePure.getState().runLatex(line, 'auto', { quiet: true })
+      const w = usePure.getState().working
+      expect(usePure.getState().job, line).toBe('complex')
+      expect(w?.method, line).not.toBe('Inequalities')
+    }
+  })
+
+  it('reads no inequality in i, e or pi', () => {
+    expect(readInequality('2i<4')).toBeNull()
+    expect(readInequality('i^2<0')).toBeNull()
+    expect(readInequality('3+2i<5')).toBeNull()
+    expect(readInequality('e<2')).toBeNull()
+    expect(readInequality('pi<3')).toBeNull()
+    expect(readInequality('x^2<4')).not.toBeNull()
+  })
+
+  it('keeps the old job for an inequality the step engine cannot work, such as irrational roots', () => {
+    usePure.getState().runLatex('x^2-2>0', 'auto', { quiet: true })
+    expect(usePure.getState().job).toBe('factor')
+  })
+})
+
+describe('S1e review: the second check reads the typed sides, not the solver', () => {
+  /** A solution part as a student would claim it: integer ends (null is an infinite end), each end open or closed. */
+  const part = (lo: number | null, loClosed: boolean, hi: number | null, hiClosed: boolean): IneqPart => ({
+    lo: lo === null ? null : rat(BigInt(lo)),
+    loClosed,
+    hi: hi === null ? null : rat(BigInt(hi)),
+    hiClosed
+  })
+
+  it('agrees with the correct set of a quadratic, open and closed', () => {
+    expect(agreesWithTypedSides('x^2-5x+6>0', [part(null, false, 2, false), part(3, false, null, false)])).toBe(true)
+    expect(agreesWithTypedSides('x^2-5x+6>=0', [part(null, false, 2, true), part(3, true, null, true)])).toBe(true)
+  })
+
+  it('rejects a claimed set that is open where the typed relation allows equality, or closed where it does not', () => {
+    expect(agreesWithTypedSides('x^2-5x+6>=0', [part(null, false, 2, false), part(3, false, null, false)])).toBe(false)
+    expect(agreesWithTypedSides('x^2-5x+6>0', [part(null, false, 2, true), part(3, false, null, false)])).toBe(false)
+  })
+
+  it('rejects a set that includes the pole of a fraction, and accepts one that leaves it out', () => {
+    expect(agreesWithTypedSides('(x-1)/(x+2)>=0', [part(null, false, -2, false), part(1, true, null, false)])).toBe(true)
+    expect(agreesWithTypedSides('(x-1)/(x+2)>=0', [part(null, false, -2, true), part(1, true, null, false)])).toBe(false)
+  })
+
+  it('checks absolute values against the typed side, not a flipped one', () => {
+    expect(agreesWithTypedSides('|2x-1|<5', [part(-2, false, 3, false)])).toBe(true)
+    expect(agreesWithTypedSides('|2x-1|<5', [part(-2, false, 3, true)])).toBe(false)
+    expect(agreesWithTypedSides('5>|2x-1|', [part(-2, false, 3, false)])).toBe(true)
+    expect(agreesWithTypedSides('5>|2x-1|', [part(null, false, null, false)])).toBe(false)
+  })
+
+  it('agrees that a set is empty only when no point satisfies the typed inequality', () => {
+    expect(agreesWithTypedSides('x^2+1<0', [])).toBe(true)
+    expect(agreesWithTypedSides('x^2+1>0', [])).toBe(false)
+    expect(agreesWithTypedSides('x^2+1>0', [part(null, false, null, false)])).toBe(true)
   })
 })

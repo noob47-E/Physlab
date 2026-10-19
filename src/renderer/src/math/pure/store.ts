@@ -22,7 +22,7 @@ import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
 import { stepWorkingFor } from '../steps/solve'
-import { splitRelation } from '../steps/inequality'
+import { canWorkInequality } from '../steps/inequality'
 
 export interface PureEntry {
   id: string
@@ -168,9 +168,7 @@ export const usePure = create<PureState>((set, get) => ({
       return
     }
     if (!text) return
-    // Auto sends an inequality (< <= > >=) to Solve, which the checked step engine answers (S1e). The job the
-    // suggestion gives for other lines is unchanged, and a job the student chose is never overridden.
-    const chosen = job === 'auto' ? (splitRelation(text) !== null ? 'solve' : suggestJob(text)) : job
+    const chosen = job === 'auto' ? autoJob(text) : job
     get().run(chosen, text, latex, opts)
   },
 
@@ -190,6 +188,18 @@ export const usePure = create<PureState>((set, get) => ({
     set({ history: [] })
   }
 }))
+
+/**
+ * What Auto does with a typed line. An inequality (< <= > >=) that the step engine can work goes to Solve, but only where
+ * the ordinary suggestion is Factorise, Divide or a partial fraction: those jobs cannot answer a relation at all. A line the
+ * suggestion gives to Normal, Complex, calculus or the list job keeps that job, because it owns the line even when it holds
+ * a < or a >: P(Z < 1.96) is a normal-distribution question and 3 + 2i < 5 is about complex numbers.
+ */
+function autoJob(text: string): JobId {
+  const suggested = suggestJob(text)
+  const takenByFactorise = suggested === 'factor' || suggested === 'divide' || suggested === 'partial'
+  return takenByFactorise && canWorkInequality(text) ? 'solve' : suggested
+}
 
 /**
  * Which Pure Math jobs the algebra engine can take over when this engine cannot show working.

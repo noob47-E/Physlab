@@ -2,7 +2,8 @@
 // a polynomial, a fraction of polynomials, or |linear| against a number. Every claim about it is checked
 // exactly on rational numbers, never on floats.
 //
-// The rule behind every solution set (checked by validateIneqWorking, recomputed from the TYPED inequality):
+// The rule behind every solution set (checked by validateIneqWorking: recomputed from the TYPED inequality, then tested
+// again by agreesWithTypedSides, which reads the typed sides' own values and never the critical points or signs):
 // - the critical points are the real roots of the related equation (the two sides are equal) and the points
 //   where a denominator is 0. A root that is not rational makes the inequality unsupported, so no steps are shown;
 // - one point strictly inside each part between neighbouring critical points gives the sign of the expression
@@ -243,7 +244,20 @@ export function readInequality(text: string): IneqRead | null {
   }
   if (names.size !== 1) return null
   const v = [...names][0]
+  // i is the imaginary unit everywhere in PhysLab. Complex numbers have no order, so "3 + 2i < 5" is not an inequality
+  // in one letter, and the working for it would be a checked answer about nothing: its line belongs to Complex.
+  if (v === 'i') return null
   return { v, rel: relation, fn, sides }
+}
+
+/**
+ * Whether the step engine can work a line as an inequality: it reads as one (readInequality) and every critical point is
+ * rational (analyseInequality). Auto asks this before it sends a line to Solve, so a line with irrational roots keeps the
+ * job it had instead of being refused by Solve.
+ */
+export function canWorkInequality(text: string): boolean {
+  const read = readInequality(text)
+  return read !== null && analyseInequality(read) !== null
 }
 
 // ---------------------------------------------------------------------------
@@ -710,6 +724,87 @@ function sameIntervals(data: unknown, set: IneqPart[]): boolean {
   })
 }
 
+/**
+ * Points that sample a claimed set: every finite endpoint, a point between each pair of neighbouring endpoints, one point
+ * beyond each end, and quarter steps from -10 to 10. Membership of the claimed set can only change at an endpoint, so the
+ * first three kinds reach every claimed interval and every gap; the quarter steps catch a wrong stretch between them.
+ */
+function setTestPoints(set: IneqPart[]): Rat[] {
+  const ends: Rat[] = []
+  for (const p of set) {
+    if (p.lo !== null) ends.push(p.lo)
+    if (p.hi !== null) ends.push(p.hi)
+  }
+  const sorted = sortedDistinct(ends)
+  const points: Rat[] = [...sorted]
+  for (let j = 0; j + 1 < sorted.length; j++) points.push(rDiv(rAdd(sorted[j], sorted[j + 1]), rat(2n)))
+  if (sorted.length > 0) points.push(rSub(sorted[0], rat(1n)), rAdd(sorted[sorted.length - 1], rat(1n)))
+  points.push(rat(0n))
+  for (let k = -40n; k <= 40n; k += 1n) points.push(rat(k, 4n))
+  return points
+}
+
+/** Whether a point lies in one of the parts, each end counted open or closed as the part says. */
+function inParts(t: Rat, set: IneqPart[]): boolean {
+  return set.some((p) => {
+    if (p.lo !== null) {
+      const c = rCmp(t, p.lo)
+      if (c < 0 || (c === 0 && !p.loClosed)) return false
+    }
+    if (p.hi !== null) {
+      const c = rCmp(t, p.hi)
+      if (c > 0 || (c === 0 && !p.hiClosed)) return false
+    }
+    return true
+  })
+}
+
+/**
+ * The second opinion on a claimed solution set (a review fix). The other checks rebuild the set with analyseInequality, so
+ * a bug there would be copied into the claim and pass. This one never reads the critical points or the signs: it evaluates
+ * each side of the TYPED inequality exactly, applies the relation as typed (no flipping, no subtracting), and asks whether
+ * the claimed set holds at the same points. A point is in the true set when the relation holds and no denominator is 0.
+ */
+export function agreesWithTypedSides(input: string, set: IneqPart[]): boolean {
+  const rel = splitRelation(input)
+  if (!rel) return false
+  const left = readSide(rel.left)
+  const right = readSide(rel.right)
+  if (!left || !right) return false
+  const names = new Set<string>()
+  for (const side of [left, right]) {
+    for (const e of side.kind === 'abs' ? [side.g] : [side.num, side.den]) {
+      for (const n of varsOf(e)) names.add(n)
+    }
+  }
+  if (names.size !== 1) return false
+  const v = [...names][0]
+  // One typed side at t. A fraction has no value where its denominator is 0; |g| always has one.
+  const valueAt = (side: SideRead, t: Rat): Rat | null => {
+    const at = { [v]: t }
+    if (side.kind === 'abs') return rAbs(evalAt(side.g, at))
+    const d = evalAt(side.den, at)
+    return rIsZero(d) ? null : rDiv(evalAt(side.num, at), d)
+  }
+  const holds = (t: Rat): boolean => {
+    const a = valueAt(left, t)
+    const b = valueAt(right, t)
+    if (a === null || b === null) return false
+    const c = rCmp(a, b)
+    switch (rel.rel) {
+      case '<':
+        return c < 0
+      case '<=':
+        return c <= 0
+      case '>':
+        return c > 0
+      case '>=':
+        return c >= 0
+    }
+  }
+  return setTestPoints(set).every((t) => inParts(t, set) === holds(t))
+}
+
 function checkStep(step: Step, read: IneqRead, analysis: IneqAnalysis): ValidationVerdict {
   const d = dataOf(step)
   if (typeof d.variable !== 'string' || d.variable !== read.v) return 'invalid'
@@ -773,6 +868,11 @@ export function validateIneqWorking(working: Working): WorkingValidationResult {
     prev = step.after
   }
   if (steps[steps.length - 1].kind !== 'IneqSolutionSet') return reject('An inequality must end with its solution set')
+  // The claimed set (already equal to analysis.set) must also hold at the typed sides' own values. When the two checks
+  // disagree, neither is trusted, so the working is unknown rather than valid.
+  if (!agreesWithTypedSides(input, analysis.set)) {
+    return { valid: false, verdict: 'unknown', reason: 'The solution set does not agree with the inequality as typed' }
+  }
   const answers = Array.isArray(working.answer) ? working.answer : working.answer === undefined ? [] : [working.answer]
   const want = [setForm(analysis.set, read.v, true), intervalForm(analysis.set)]
   const answersOk = answers.length === 2 && answers.every((a, i) => a.label === '' && a.tex === want[i] && a.value === undefined)
