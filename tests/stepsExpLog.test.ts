@@ -3,6 +3,8 @@ import { usePure } from '../src/renderer/src/math/pure/store'
 import { createDefaultStepRouter } from '../src/renderer/src/math/steps/solve'
 import { validateStep, validateWorking } from '../src/renderer/src/math/steps/validate'
 import { equationStep } from '../src/renderer/src/math/steps/methods/equation'
+import { expLogMethod } from '../src/renderer/src/math/steps/methods/expLog'
+import { toDisplayTex } from '../src/renderer/src/math/steps/render'
 import type { Working } from '../src/renderer/src/math/steps/types'
 
 const METHOD = 'Exponential and logarithmic equation'
@@ -138,5 +140,51 @@ describe('S3: 200 generated a^(bx + c) = a^k cases are checked automatically', (
       }
     }
     expect(failures).toEqual([])
+  })
+})
+
+describe('S3 review: this method reads real equations only, and a negative power is written with a superscript minus', () => {
+  it('2^(x) = 8 over the complex numbers is not worked by this method (it has infinitely many roots there)', () => {
+    // Cancelling the base is not an equivalence over the complex numbers, so the real answer 3 must never be shown as the whole answer.
+    const router = createDefaultStepRouter()
+    const w = router.solve({ job: 'solve', input: '2^(x)=8', variable: 'x', domain: 'complex' })
+    expect(w.method).not.toBe(METHOD)
+    expect(expLogMethod.appliesTo({ job: 'solve', input: '2^(x)=8', variable: 'x', domain: 'complex' })).toMatchObject({ applies: false })
+  })
+
+  it('log(x^2 + 2) = 0 over the complex numbers is not worked by this method (its roots there are i and -i)', () => {
+    const router = createDefaultStepRouter()
+    const problem = { job: 'solve', input: 'log(x^(2)+2)=0', variable: 'x', rawInput: '\\log(x^{2}+2)=0' }
+    const complexWorking = router.solve({ ...problem, domain: 'complex' })
+    expect(complexWorking.method).not.toBe(METHOD)
+    // The same equation over the real numbers keeps its working, which ends "No real solution".
+    const realWorking = router.solve({ ...problem, domain: 'real' })
+    expect(realWorking.method).toBe(METHOD)
+    expect(validateWorking(realWorking, undefined, 'real').valid).toBe(true)
+  })
+
+  it('a working made over the real numbers is refused when it is checked as a complex problem', () => {
+    // The move that cancels the base is real-only, so a complex problem never shows it, even if its working was built earlier.
+    const router = createDefaultStepRouter()
+    const realWorking = router.solve({ job: 'solve', input: '2^(x)=8', variable: 'x' })
+    expect(realWorking.method).toBe(METHOD)
+    expect(validateWorking(realWorking, undefined, 'real').valid).toBe(true)
+    expect(validateWorking(realWorking, undefined, 'complex').valid).toBe(false)
+  })
+
+  it('2^(x) = 2^(-1) is titled and written with a superscript minus, not as 2 - 1, and checked ok with x = -1', () => {
+    const w = typed('2^{x}=2^{-1}')
+    expect(w?.method).toBe(METHOD)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers[0].tex).toBe('-1')
+    expect(w?.input).toBe('2^{(x)}=2⁻¹')
+    expect(w?.title).toBe('Solve 2^{(x)}=2⁻¹')
+  })
+
+  it('a power with a negative exponent is drawn as a superscript in headings, and a plain power is unchanged', () => {
+    expect(toDisplayTex('x^{-1}')).toBe('x⁻¹')
+    expect(toDisplayTex('2^{(-12)}')).toBe('2⁻¹²')
+    expect(toDisplayTex('2^-1')).toBe('2⁻¹')
+    expect(toDisplayTex('x^2-1')).toBe('x²-1')
   })
 })

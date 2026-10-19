@@ -8,7 +8,8 @@
 // Each move is one EquationEquiv with a declared op, checked exactly by checkExpLogOp (check-adapter.ts). What is left is a
 // linear or quadratic equation, and the router solves it: its steps and its answer are the working's own. Anything else, such
 // as 5^(x) = 12 (no whole power), e^(x) = 5 (the answer is a logarithm) or log(x) + log(x - 3) = 1 (a root must be rejected
-// by its logarithms), is noWorking(), so the older path answers it.
+// by its logarithms), is noWorking(), so the older path answers it. A complex problem is noWorking() too: cancelling a base is
+// only an equivalence over the real numbers.
 
 import type { Method, Problem, Step, StepRouter, Working } from '../types'
 import { parseExactRat, readExpPower, readLogTerm, splitEquation, tryParsePoly } from '../check-adapter'
@@ -24,6 +25,15 @@ const METHOD_NAME = 'Exponential and logarithmic equation'
 const MAX_EXPONENT = 300
 /** The most digits a computed power may have: a larger one would be a number no student can read off a working. */
 const MAX_VALUE_DIGITS = 40
+
+/**
+ * This method reads the equation over the real numbers only. Cancelling a base is not an equivalence over the complex numbers
+ * (2^(x) = 8 has infinitely many roots there, and log(x^(2) + 2) = 0 has i and -i instead of no root), so a complex problem
+ * is left to the older path, which answers it as it did before. A problem with no domain is real.
+ */
+function isRealProblem(problem: Problem): boolean {
+  return (problem.domain ?? 'real') === 'real'
+}
 
 /** A whole number written as text ("8", "-2"), or null. */
 function wholeNumber(text: string): bigint | null {
@@ -133,7 +143,8 @@ function startLine(input: string, raw: string | undefined): string {
  * answer is the answer of the equation left. A reduced equation the router cannot show ends the method with noWorking().
  */
 function solveRest(start: string, steps: Step[], reduced: string, v: string, router: StepRouter): Working {
-  const sub = router.solve({ job: 'solve', input: reduced, variable: v })
+  // The reduced equation is solved over the reals too: this method only takes real problems (isRealProblem).
+  const sub = router.solve({ job: 'solve', input: reduced, variable: v, domain: 'real' })
   if (sub.noWorking || sub.steps.length === 0 || sub.answer === undefined) return noWorking()
   return {
     title: `Solve ${start}`,
@@ -152,11 +163,13 @@ export const expLogMethod: Method = {
 
   appliesTo(problem: Problem) {
     if (problem.job !== 'solve' && problem.job !== 'equation') return { applies: false, why: 'Job is not solve' }
+    if (!isRealProblem(problem)) return { applies: false, why: 'Only real equations are worked by this method' }
     if (identify(String(problem.input))) return { applies: true }
     return { applies: false, why: 'Not a power or a logarithm of the unknown equal to a whole number' }
   },
 
   solve(problem: Problem, router: StepRouter): Working {
+    if (!isRealProblem(problem)) return noWorking()
     const input = String(problem.input)
     const shape = identify(input)
     if (!shape) return noWorking()

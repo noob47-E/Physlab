@@ -29,7 +29,9 @@ export function toDisplayTex(text: string): string {
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
     .replace(/\^(\d+)/g, (_all: string, ds: string) => [...ds].map((d) => SUPERSCRIPT[d]).join(''))
-    .replace(/\^(-\d)/g, (_all: string, d: string) => SUPERSCRIPT[d] || d)
+    // A negative power, 2^-1 or x^-12: the minus and each digit take their superscript. The old lookup used "-1" as one key,
+    // which is not in the table, so the caret was dropped and 2^(-1) was read as 2 - 1.
+    .replace(/\^(-\d+)/g, (_all: string, ds: string) => [...ds].map((c) => SUPERSCRIPT[c]).join(''))
     .replace(/\*(?!\w)/g, '')
     .replace(/ - /g, ' − ')
     .replace(/^-/, '−')
