@@ -43,6 +43,10 @@ import {
   checkQuadraticSolutionSet,
   checkPolySolutionSet,
   checkSurdZeroProduct,
+  checkFormulaSolutionSet,
+  isFormulaState,
+  polyRootsHold,
+  type G2Alg,
   displayKey,
   readSurd,
   texOfAlg,
@@ -217,6 +221,12 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
     const zp = payload.zeroProduct as { shift: string; root: string }
     if (!Array.isArray(payload.solutions) || payload.solutions.length !== 2) return 'invalid'
     return checkSurdZeroProduct(String(step.before), zp, String(step.after), v, payload.solutions as unknown[])
+  }
+  // The roots after a quadratic formula line: the line's own numbers give the equation, and only its exact roots are accepted.
+  if (isFormulaState(String(step.before))) {
+    if (!Array.isArray(payload.solutions) || payload.solutions.length === 0) return 'invalid'
+    const formulaDomain = payload.domain === 'complex' ? 'complex' : 'real'
+    return checkFormulaSolutionSet(String(step.before), payload.solutions, String(step.after), v, formulaDomain)
   }
   const domain = payload.domain === 'complex' ? 'complex' : 'real'
   if (Array.isArray(payload.solutions) && payload.solutions.length > 0) {
@@ -433,6 +443,27 @@ function answerProblem(working: Working): string | null {
     }
   }
   return null
+}
+
+/**
+ * Every answer is an exact root of the problem as typed: each answer's own text is read exactly by G2 (a surd included) and
+ * put into the problem's polynomial in ℚ(√d, i). The rational substitution (substitutionOf) cannot read a surd, so a
+ * quadratic formula's surd roots are proved here instead. An answer that cannot be read is not proved, so it is refused.
+ */
+export function answersHoldExactly(working: Working): boolean {
+  const input = working.input ?? ''
+  const v = variableOfInput(input)
+  const poly = input === '' ? null : tryEquationPoly(input)
+  if (v === null || poly === null) return false
+  const answers = Array.isArray(working.answer) ? working.answer : working.answer ? [working.answer] : []
+  if (answers.length === 0) return false
+  const roots: G2Alg[] = []
+  for (const a of answers) {
+    const x = readSurd(a.value ?? normalizeDisplayed(a.tex))
+    if (!x) return false
+    roots.push(x)
+  }
+  return polyRootsHold(poly, v, roots)
 }
 
 /**
@@ -705,7 +736,7 @@ function validateWorkingChecked(
     const last = working.steps[working.steps.length - 1]
     const ld = dataOf(last)
     const noSolution = last.kind === 'SolutionSetEq' && Array.isArray(ld.solutions) && ld.solutions.length === 0 && ld.allReals !== true
-    if (!noSolution && !(sub && sub.ok)) {
+    if (!noSolution && !(sub && sub.ok) && !answersHoldExactly(working)) {
       return { valid: false, verdict: 'invalid', reason: 'After a one-way step, every answer must be put back into the problem and hold' }
     }
   }

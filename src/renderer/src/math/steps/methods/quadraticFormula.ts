@@ -2,15 +2,17 @@
 // rational; "Another way" when factorising was primary.
 //
 // The discriminant b² − 4ac is its own sub-working (an expression, so its chain starts from the expression, not from
-// the equation). With a negative discriminant in the real domain the ending is a SolutionSetEq: the quadratic has no
-// real root, which the validator proves exactly from the displayed equation. Otherwise the roots are the solution set
-// itself, in simplest form (−b ± s√d)/(2a): one step (a SolutionSetEq) that the validator checks with G2's
-// polyRootsCheck in the domain, and whose displayed line is the exact display of each root. A complex pair is shown in
-// the complex domain only. The working's answer is each root, and its check substitutes each root exactly.
+// the equation); the Calculator shows it before the steps that use it. With a negative discriminant in the real domain
+// the ending is a SolutionSetEq: the quadratic has no real root, which the validator proves exactly from the displayed
+// equation, and no formula is written (a square root of a negative is not a real number). Otherwise two steps follow:
+// the formula with its numbers put in, x = (−b ± √D)/(2a) (an Implication the check reads exactly from the equation),
+// then the roots, which are the exact roots of that formula line (a SolutionSetEq whose before is the formula line).
+// A complex pair is shown in the complex domain only. The working's answer is each root, and its check substitutes
+// each root exactly.
 
 import type { Method, Problem, Step, StepAnswer, Working } from '../types'
 import { finishStep } from '../sentences'
-import { plainOfAlg, quadraticRootsHold, quadraticRootsOf, substitutedDiscriminantText, texOfAlg } from '../check-adapter'
+import { formulaStateTex, plainOfAlg, quadraticRootsHold, quadraticRootsOf, substitutedDiscriminantText, texOfAlg } from '../check-adapter'
 import { discriminantOf, noWorking, quadraticOf, type Quadratic } from './quadratic'
 
 const FORMULA_ID = 'quadratic.formula'
@@ -71,13 +73,24 @@ function solveFormula(problem: Problem): Working {
 
   const roots = quadraticRootsOf(q.a, q.b, q.c)
   if (!roots) return noWorking()
+  // The formula with the numbers put in: x = (−b ± √D)/(2a). The check reads a, b and c from the equation itself.
+  const formulaLine = formulaStateTex(v, -q.b, 2n * q.a, disc)
+  steps.push(
+    finishStep({
+      kind: 'Implication',
+      before: q.text,
+      after: formulaLine,
+      sentence: '',
+      data: { action: 'quadratic-formula' }
+    })
+  )
   // A double root is said once; the solution set then has the root with multiplicity two.
   const distinct = disc === 0n ? [roots[0]] : roots
   const shownAfter = distinct.map((r) => `${v} = ${texOfAlg(r)}`).join(' \\text{ or } ')
   steps.push(
     finishStep({
       kind: 'SolutionSetEq',
-      before: q.text,
+      before: formulaLine,
       after: shownAfter,
       sentence: '',
       data: {

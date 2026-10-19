@@ -14,6 +14,7 @@ import {
   isSystemOp,
   normalizeDisplayed,
   parseExactRat,
+  isFormulaState,
   isSurdText,
   prettyOfAlg,
   productText,
@@ -216,6 +217,8 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 function solutionSentence(step: Step): string | null {
   const surd = surdSolutionsSentence(step)
   if (surd !== undefined) return surd
+  // The roots after a quadratic formula line: the line's own numbers are the proof, so the sentence names the roots as they stand.
+  if (isFormulaState(String(step.before))) return `The solutions are ${plainTex(String(step.after))}.`
   const p = setProofOf(step)
   if (!p) return null
   if (p.proof.kind === 'all') return 'Both sides are 0 for every value, so every real number is a solution.'
@@ -229,6 +232,7 @@ function solutionSentence(step: Step): string | null {
 
 function solutionRule(step: Step): string | null {
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
+  if (isFormulaState(String(step.before))) return 'Solutions'
   const p = setProofOf(step)
   if (!p) return null
   if (p.proof.kind === 'all') return 'Every real number is a solution'

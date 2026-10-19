@@ -258,7 +258,12 @@ export const defaultCheckAdapter: CheckAdapter = {
   ): ValidationVerdict {
     // The move the step declares (data.action) is the move checked, and the only one: the words "Square both sides"
     // are shown only when the after is the before squared, however equivalent the two equations are (P-FIX-S1SOUND2
-    // MUST 4). An action this cannot check (the quadratic formula among them) is unknown.
+    // MUST 4). An action this cannot check is unknown.
+    // The quadratic formula with its numbers put in is checked by its own exact rule: the polynomial path below cannot
+    // read the ± of the formula line.
+    if (data && typeof data === 'object' && (data as Record<string, unknown>).action === 'quadratic-formula') {
+      return checkQuadraticFormulaStep(before, after)
+    }
     const eq1 = splitEquation(stringifyNodeOrText(before))
     const eq2 = splitEquation(stringifyNodeOrText(after))
     if (!eq1 || !eq2) return 'unknown'
@@ -2958,5 +2963,122 @@ export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg
     const value = algAdd(algAdd(algMul(algRat(rat(a)), algMul(r, r)), algMul(algRat(rat(b)), r)), algRat(rat(c)))
     return algEq(value, algRat(R0))
   })
+}
+
+// ---- The quadratic formula with its numbers put in (Phase 0.9 K). One template is written by the method and read by the
+// checks, so the line the student reads is the line that was checked. The line is x = (P ± √D)/Q with P = −b, Q = 2a and
+// D = b² − 4ac, all whole numbers. ----
+
+/** The formula line with its numbers put in: "x = \frac{5 \pm \sqrt{1}}{2}". */
+export function formulaStateTex(v: string, P: bigint, Q: bigint, D: bigint): string {
+  return `${v} = \\frac{${P} \\pm \\sqrt{${D}}}{${Q}}`
+}
+
+/** The numbers of a formula line, read back from its text: the letter, P, Q and D. */
+export interface FormulaState {
+  v: string
+  P: bigint
+  Q: bigint
+  D: bigint
+}
+
+/** A formula line, spaces removed; the only shape the template writes. */
+const FORMULA_LINE = /^(\p{L})=\\frac\{(-?\d+)\\pm\\sqrt\{(-?\d+)\}\}\{(-?\d+)\}$/u
+
+/** The numbers of a formula line, or null when the text is not one. Not run through latexToMath: that would unwrite it. */
+export function readFormulaState(text: string | MathNode): FormulaState | null {
+  const m = FORMULA_LINE.exec(normalizeDisplayed(String(text)))
+  if (!m) return null
+  return { v: m[1], P: BigInt(m[2]), D: BigInt(m[3]), Q: BigInt(m[4]) }
+}
+
+/** True when the text is a formula line (the state a quadratic is in after its formula step). */
+export function isFormulaState(text: string | MathNode): boolean {
+  return readFormulaState(text) !== null
+}
+
+/** The two values (P ± √D)/Q read exactly by G2 (a pair in ℚ(√d, i) for a negative D); null when G2 does not read them. */
+function formulaRootsOf(st: FormulaState): G2Alg[] | null {
+  const { P, Q, D } = st
+  if (Q === 0n) return null
+  if (D === 0n) {
+    const x = readSurd(`${P}/${Q}`)
+    return x ? [x] : null
+  }
+  // A negative discriminant gives i·√(−D), which G2 reads as "i*sqrt(...)" just as the answers are written.
+  const root = D > 0n ? `sqrt(${D})` : `i*sqrt(${-D})`
+  const plus = readSurd(`(${P} + ${root})/${Q}`)
+  const minus = readSurd(`(${P} - ${root})/${Q}`)
+  return plus && minus ? [plus, minus] : null
+}
+
+/** True when two lists of exact numbers hold the same values, each once (order does not matter). */
+function sameExactValues(xs: G2Alg[], ys: G2Alg[]): boolean {
+  if (xs.length !== ys.length) return false
+  return xs.every((x) => ys.some((y) => algEq(x, y))) && ys.every((y) => xs.some((x) => algEq(x, y)))
+}
+
+/**
+ * The quadratic's a, b, c as whole numbers, read from the equation's own polynomial (left side less right side) by the
+ * one letter in it. Null when the text is not a quadratic in one letter with whole coefficients and a above zero.
+ */
+function wholeQuadratic(text: string | MathNode): { v: string; a: bigint; b: bigint; c: bigint } | null {
+  const eq = tryEquationPoly(text)
+  if (!eq || exprDegree(eq) !== 2) return null
+  const names = varsOf(eq)
+  if (names.length !== 1) return null
+  const v = names[0]
+  const whole = (k: number): bigint | null => {
+    const r = coefficientOf(eq, v, k)
+    return r.d === 1n ? r.n : null
+  }
+  const a = whole(2)
+  const b = whole(1)
+  const c = whole(0)
+  if (a === null || b === null || c === null || a <= 0n) return null
+  return { v, a, b, c }
+}
+
+/**
+ * The quadratic formula step (an Implication with action 'quadratic-formula'): the before is the quadratic, the after is
+ * the formula with its numbers put in. The numbers are read from the before exactly (P = −b, Q = 2a, D = b² − 4ac); the
+ * after's ± roots are then compared with the true roots of the before, exactly. A line that is not a formula line of the
+ * same letter is unknown; a formula line with a wrong number, or roots that are not the true ones, is invalid.
+ */
+function checkQuadraticFormulaStep(before: string | MathNode, after: string | MathNode): ValidationVerdict {
+  const q = wholeQuadratic(before)
+  if (!q) return 'unknown'
+  const st = readFormulaState(after)
+  if (!st || st.v !== q.v) return 'unknown'
+  const { a, b, c } = q
+  if (st.P !== -b || st.Q !== 2n * a || st.D !== b * b - 4n * a * c) return 'invalid'
+  const shown = formulaRootsOf(st)
+  const truth = quadraticRootsOf(a, b, c)
+  if (!shown || !truth) return 'unknown'
+  return sameExactValues(shown, truth) ? 'valid' : 'invalid'
+}
+
+/**
+ * The roots step after a formula line (a SolutionSetEq whose before is the formula line): the line's own numbers give the
+ * equation a·x² + b·x + c = 0 (a = Q/2, b = −P, and c from D = b² − 4ac, which must come out whole), and the proposed
+ * solutions must be exactly that equation's roots in the domain, displayed as they are. Anything else is invalid.
+ */
+export function checkFormulaSolutionSet(
+  before: string,
+  solutions: unknown[],
+  after: string,
+  v: string,
+  domain: 'real' | 'complex'
+): ValidationVerdict {
+  const st = readFormulaState(before)
+  if (!st || st.v !== v) return 'invalid'
+  if (st.Q <= 0n || st.Q % 2n !== 0n) return 'invalid'
+  const a = st.Q / 2n
+  const b = -st.P
+  const num = b * b - st.D
+  if (num % (4n * a) !== 0n) return 'invalid'
+  const c = num / (4n * a)
+  const equation = `(${a})*${v}^2 + (${b})*${v} + (${c}) = 0`
+  return checkQuadraticSolutionSet(equation, solutions, after, v, domain) ?? 'invalid'
 }
 
