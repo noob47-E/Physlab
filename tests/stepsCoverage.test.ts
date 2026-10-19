@@ -25,6 +25,7 @@ import { validateWorking } from '../src/renderer/src/math/steps/validate'
  * so the allow-list is kept strictly minimal and honest.
  */
 const ALLOW_LIST_GAPS = new Set<string>([
+
   'exponential-equation',
   'logarithmic-equation',
   'radical-equation',

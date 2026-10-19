@@ -142,7 +142,8 @@ function texOfAnswers(working: Working): string {
   return working.answers
     .map((a) => {
       const label = labelTex(a.label)
-      return label ? `${label}\\; ${a.tex}` : a.tex
+      const shownLabel = label ? (/\s=$/.test(label) ? label : `${label} =`) : null
+      return shownLabel ? `${shownLabel}\\; ${a.tex}` : a.tex
     })
     .join(',\\quad ')
 }

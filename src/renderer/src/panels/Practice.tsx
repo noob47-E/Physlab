@@ -40,13 +40,14 @@ import { Tex } from '../ui/Tex'
 import { MoveRow } from './WorkingView'
 import { PartRows, questionVerdict, SegmentLines, tally, type PartAnswer, type RowCheck } from './QuestionParts'
 import { usePracticeMission } from './practiceMission'
+import { loadDaily, saveDaily, generateDailyPaper, recordResult } from './dailyPaperLogic'
 
 const SETTINGS_KEY = 'physlab.practice'
 const LEVELS: Level[] = ['Basic', 'Intermediate', 'Advanced']
 
 type Source = 'topics' | 'sets'
 
-interface Result {
+export interface Result {
   id: string
   title: string
   /** Null for a question with nothing marked on this computer (only proofs): neither right nor wrong. */
@@ -63,7 +64,7 @@ interface Result {
 }
 
 /** One question of a running set: a generated vector problem, or a question from a question set with its seed. */
-type Item = { kind: 'topic'; problem: Problem } | { kind: 'question'; question: PQQuestion; seed: number }
+export type Item = { kind: 'topic'; problem: Problem } | { kind: 'question'; question: PQQuestion; seed: number }
 
 /** How much of the working a question's steps show, in the words a student reads. */
 const LEVEL_WORDS: Record<FadingLevel, string> = {
@@ -314,7 +315,21 @@ export function Practice() {
 
   const begin = (next: Item[], setQuestions: PQQuestion[] = []) => {
     put({ items: next, index: 0, results: [], questionLevel: useSession.getState().level, setQuestions, ...blankQuestionState() })
+    scene().clearDrawing()
     setNow(Date.now())
+  }
+
+  const startDaily = () => {
+    const todayStr = new Date().toLocaleDateString('en-CA')
+    const history = loadDaily()
+    
+    let bankQuestions: PQQuestion[] = []
+    if (bank.status === 'ready') {
+      bankQuestions = bank.sets.find((s) => s.id === 'bundled:all')?.questions || []
+    }
+
+    const paperItems = generateDailyPaper(todayStr, history, chosen, bankQuestions)
+    begin(paperItems, bankQuestions)
   }
 
   const startSet = () => {
@@ -418,10 +433,16 @@ export function Practice() {
             )
           }
         : undefined
+
+    const res = { id: problem.id, title: problem.title, right, hints: hints + lines.length, seconds: Math.round((Date.now() - startedAt) / 1000), question }
+    const todayStr = new Date().toLocaleDateString('en-CA')
+    const daily = loadDaily() || { topics: [], tags: [], resultsByDate: {} }
+    saveDaily(recordResult(daily, todayStr, item, res))
+
     put({
       results: [
         ...s.results,
-        { id: problem.id, title: problem.title, right, hints: hints + lines.length, seconds: Math.round((Date.now() - startedAt) / 1000), question }
+        res
       ],
       // The deeper question may be further down the set already: it is played now, not twice.
       items: insert ? [...s.items.slice(0, s.index + 1), insert, ...s.items.slice(s.index + 1).filter((it) => !sameQuestion(it, insert))] : s.items,
@@ -456,7 +477,12 @@ export function Practice() {
     return (
       <div className="panel pb-8">
         <div className="section-title">Practice</div>
-        <div className="px-3 text-ink-dim">
+        <div className="mt-2 px-3">
+          <button className="btn primary min-h-[44px] w-full" onClick={startDaily}>
+            <Sparkles size={13} /> Today’s paper
+          </button>
+        </div>
+        <div className="mt-3 px-3 text-ink-dim">
           Pick what you want to practise. PhysLab makes fresh numbers every time, gives you a hint whenever you are stuck, and checks the answer you worked out yourself.
         </div>
         <div className="mt-3 px-3">
@@ -623,7 +649,10 @@ export function Practice() {
           <button className="btn primary min-h-[44px]" onClick={startSet}>
             <RotateCcw size={13} /> Another set
           </button>
-          <button className="btn ghost min-h-[44px]" onClick={() => put({ items: [] })}>
+          <button className="btn ghost min-h-[44px]" onClick={() => {
+            put({ items: [] })
+            scene().clearDrawing()
+          }}>
             Change what to practise
           </button>
         </div>

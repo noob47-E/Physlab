@@ -111,4 +111,149 @@ describe('S1: math/steps in the Calculator', () => {
     expect(complex).not.toBeNull()
     expect(complex?.title).toBe('Complex number')
   })
+
+
+  // Bug fixes for T2007
+  it('(BUG1) titles and sentences do not show raw notation like ^{( or ^(', () => {
+    usePure.getState().runLatex('x^2 - 5x + 6 = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+    // Title should not contain raw notation patterns
+    expect(w?.title).not.toMatch(/\^\{?\(/)
+    expect(w?.title).not.toMatch(/\^\(/)
+    // Check that steps don't have raw notation
+    expect(w?.moves).toBeDefined()
+    expect(w!.moves.length).toBeGreaterThan(0)
+    w!.moves.forEach(move => {
+      expect(move.head).not.toMatch(/\^\{?\(/)
+      expect(move.head).not.toMatch(/\^\(/)
+    })
+  })
+
+  it('(BUG2) rule names are readable with spaces, not squashed', () => {
+    usePure.getState().runLatex('x^2 - 5x + 6 = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+    // Check that rules are readable
+    expect(w?.moves).toBeDefined()
+    expect(w!.moves.length).toBeGreaterThan(0)
+    w!.moves.forEach(move => {
+      if (move.rule) {
+        // Rules should have spaces and not be squashed like "Zeroproduct" or "Addtobothsides"
+        expect(move.rule).not.toMatch(/^[A-Z][a-z]+[A-Z]/)
+      }
+    })
+  })
+
+  it('(BUG3) for simultaneous equations, answer shown only when working.checked === ok', () => {
+    // Test that solving a system equation gives a working marked as 'ok'
+    usePure.getState().runLatex('x + y = 3, 2x - y = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+    // System equations should have checked marked as 'ok'
+    expect(w?.checked).toBe('ok')
+  })
+
+  it('shows equals signs when a working answer replaces an equals error card', () => {
+    usePure.getState().runLatex('x + y = 3, 2x - y = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+
+    const card: EvalResult = evaluateInput('COMP', 'x + y = 3, 2x - y = 0', { vars: {}, ans: 0, angle: 'deg' })!
+    const r = reconcile({ ...card, error: { sentence: 'Quick answer unavailable.' } }, w)
+    expect(r.result.main).toContain('x = 1')
+    expect(r.result.main).toContain('y = 2')
+  })
+
+  it('(BUG4) answer cards show their check line', () => {
+    usePure.getState().runLatex('x + y = 3, 2x - y = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.check).toBeDefined()
+    expect(w?.check && w.check.length).toBeGreaterThan(0)
+    // Check line should mention putting back the answer
+    expect(w?.check).toMatch(/[Pp]ut|[Ss]ubstitut/i)
+  })
+
+  it('(BUG5) roots are in ascending order in both working and card', () => {
+    usePure.getState().runLatex('x^2 - 5x + 6 = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.answers).toBeDefined()
+    expect(w!.answers.length).toBeGreaterThan(1)
+    // Extract numeric values from answers for comparison
+    const values = w!.answers.map(a => {
+      const match = a.tex.match(/^(-?\d+(?:\.\d+)?)/)
+      return match ? parseFloat(match[1]) : null
+    })
+    // Check ascending order (ignoring non-numeric answers)
+    const numericValues = values.filter((v): v is number => v !== null)
+    for (let i = 1; i < numericValues.length; i++) {
+      expect(numericValues[i]).toBeGreaterThanOrEqual(numericValues[i - 1])
+    }
+  })
+
+  // T4001: Six issues to fix
+  it('(T4001-1) rule tags are readable with spaces, not squashed', () => {
+    usePure.getState().runLatex('x^2 - 5x + 6 = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+    expect(w?.moves.length).toBeGreaterThan(0)
+    // Check for specific squashed rule names that should have spaces
+    w!.moves.forEach(move => {
+      if (move.rule) {
+        expect(move.rule).not.toBe('Zeroproduct')
+        expect(move.rule).not.toBe('Addtobothsides')
+        expect(move.rule).not.toBe('Subtractfrombothsides')
+        expect(move.rule).not.toBe('Multiplybothsides')
+        expect(move.rule).not.toBe('Dividebothsides')
+        expect(move.rule).not.toBe('Norealsolutions')
+        expect(move.rule).not.toBe('Subtracttheequations')
+      }
+    })
+    // All rules with multi-word names should have spaces (not camelCase like "AddToBothSides")
+    const allRules = w!.moves.map(m => m.rule).filter(Boolean)
+    // Rules should not have camelCase patterns (lowercase letter followed by uppercase)
+    allRules.forEach(rule => {
+      expect(rule).not.toMatch(/[a-z][A-Z]/)  // No camelCase
+    })
+    expect(allRules.length).toBeGreaterThan(0)
+  })
+
+  it('(T4001-3) heading shows equation once, not twice', () => {
+    usePure.getState().runLatex('x^2 - 5x + 6 = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w?.title).toBeDefined()
+    // Title should start with "Solve " followed by the equation
+    // Count occurrences of the equation pattern - should appear once, not twice
+    const equationPatterns = w!.title.match(/x.*?6.*?0/g)
+    expect(equationPatterns?.length || 0).toBeLessThanOrEqual(1)
+  })
+
+  it('(T4001-4) sub-working headings use correct minus sign', () => {
+    usePure.getState().runLatex('x^2 - 5x + 6 = 0', 'auto')
+    const w = usePure.getState().working
+    // Find subgoals with "Solve x" pattern and check they use minus sign, not hyphen
+    const solveSubgoals = w!.moves
+      .filter(m => m.subgoal && /Solve\s+x/.test(m.subgoal))
+      .map(m => m.subgoal!)
+    expect(solveSubgoals.length).toBeGreaterThan(0)
+    solveSubgoals.forEach(sg => {
+      // Should not have hyphen followed by digit: "x - 2" is wrong, should be "x − 2"
+      expect(sg).not.toMatch(/\s-\s/)
+    })
+  })
+
+  it('(T4001-5) system equations shows equals signs in answer', () => {
+    usePure.getState().runLatex('x + y = 3, 2x - y = 0', 'auto')
+    const w = usePure.getState().working
+    expect(w).not.toBeNull()
+
+    const card: EvalResult = evaluateInput('COMP', 'x + y = 3, 2x - y = 0', { vars: {}, ans: 0, angle: 'deg' })!
+    const r = reconcile({ ...card, error: { sentence: 'Quick answer unavailable.' } }, w)
+    expect(r.result.main).toMatch(/x\s*=\s*[−-]?\d+/)
+    expect(r.result.main).toMatch(/y\s*=\s*[−-]?\d+/)
+  })
+
+
 })

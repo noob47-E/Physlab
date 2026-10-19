@@ -38,6 +38,12 @@ export const writeStepPref = (p: StepPref): void => {
  * each generator means a new tool cannot reintroduce the problem.
  */
 export function MoveRow({ n, head, rule, tex, note, subgoal }: { n: number; head: string; rule?: string; tex?: string; note?: string; subgoal?: string }) {
+  // When the rule is plain words (no backslash, no ^ or _ or =), draw it as text or wrap in \text{...}
+  // so it reads "Zero product", "Add to both sides" instead of "Zeroproduct", "Addtobothsides"
+  const ruleDisplay = rule && !rule.match(/\\|{|}|\^|_|=/)
+    ? rule.replace(/([a-z])([A-Z])/g, '$1 $2')
+    : rule
+
   return (
     <>
       {subgoal && (
@@ -56,7 +62,7 @@ export function MoveRow({ n, head, rule, tex, note, subgoal }: { n: number; head
         </div>
         {rule && (
           <div className="pure-rule" title="The formula this step uses">
-            <Tex tex={rule} />
+            {ruleDisplay === rule && rule.match(/\\|{|}|\^|_|=/) ? <Tex tex={rule} /> : ruleDisplay}
           </div>
         )}
       </li>

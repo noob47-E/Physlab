@@ -46,4 +46,3 @@ export const ALL_STEP_METHODS: Method[] = [
   expandMethod,
   factoriseMethod
 ]
-

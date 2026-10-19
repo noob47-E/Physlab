@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Highlights, useHighlight } from './Highlights'
 import { isDrawingMode, useApp } from '../app/modes'
+import { usePointerStore } from './pointerStore'
 import { Box, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Grid3x3, Home, Magnet, Rotate3d, Square, Undo2, X } from 'lucide-react'
 import * as THREE from 'three/webgpu'
 import './renderer'
@@ -185,6 +186,31 @@ export function Viewport() {
   useEffect(() => {
     overlay.canvasHost = hostRef.current
     overlay.ticks = ticksRef.current
+  }, [])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const rect = host.getBoundingClientRect()
+      usePointerStore.setState({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      })
+    }
+
+    const handlePointerLeave = () => {
+      usePointerStore.setState({ x: null, y: null })
+    }
+
+    host.addEventListener('pointermove', handlePointerMove)
+    host.addEventListener('pointerleave', handlePointerLeave)
+
+    return () => {
+      host.removeEventListener('pointermove', handlePointerMove)
+      host.removeEventListener('pointerleave', handlePointerLeave)
+    }
   }, [])
 
   const info = TOOLS.find((t) => t.id === tool)
