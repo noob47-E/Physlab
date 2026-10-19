@@ -43,6 +43,10 @@ export type StepKind =
   | 'SolutionSetEq'
   | 'SubproblemReduction'
   | 'SystemEq'
+  | 'IneqMove'
+  | 'IneqCritical'
+  | 'IneqSigns'
+  | 'IneqSolutionSet'
 
 /**
  * What a divide or multiply move is for. The sentence builder (sentences.ts) writes the words from it.

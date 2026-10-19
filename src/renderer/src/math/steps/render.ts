@@ -62,7 +62,8 @@ const SHOWN_METHOD_NAMES = new Set([
   'Expand',
   'Quadratic formula',
   'Discriminant',
-  'Completing the square'
+  'Completing the square',
+  'Inequalities'
 ])
 
 /**

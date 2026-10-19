@@ -22,6 +22,7 @@ import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
 import { stepWorkingFor } from '../steps/solve'
+import { splitRelation } from '../steps/inequality'
 
 export interface PureEntry {
   id: string
@@ -167,7 +168,10 @@ export const usePure = create<PureState>((set, get) => ({
       return
     }
     if (!text) return
-    get().run(job === 'auto' ? suggestJob(text) : job, text, latex, opts)
+    // Auto sends an inequality (< <= > >=) to Solve, which the checked step engine answers (S1e). The job the
+    // suggestion gives for other lines is unchanged, and a job the student chose is never overridden.
+    const chosen = job === 'auto' ? (splitRelation(text) !== null ? 'solve' : suggestJob(text)) : job
+    get().run(chosen, text, latex, opts)
   },
 
   recall: (id) => {
