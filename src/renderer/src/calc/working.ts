@@ -160,6 +160,12 @@ const REFUSAL_STAYS = /^Typing .+ does not store a value\./
  * whose check failed stays a refusal.
  */
 export function reconcile(result: EvalResult, working: Working | null): Reconciled {
+  // A refusal that allows no answer (a root that makes a typed bottom 0) overrules any card the quick search gave. The search cannot
+  // tell that root from a real one: under \frac{x^2}{x} = 0 it lands on a number close to 0, and the working says no value works. So
+  // the card says the refusal, unconfirmed, and no number is shown as the answer. A card that is already a refusal stays as it is.
+  if (working?.finalRefusal && working.error && !result.error) {
+    return { result: { main: '', src: result.src, error: { sentence: working.error }, unconfirmed: true }, verdict: 'unchecked' }
+  }
   // No working to compare with (the step engine refuses a power-8 equation): a number only the search stands behind is said to be approximate, and
   // every other card stands as it is.
   if (!working || working.error || working.answers.length === 0) return { result: flagIfApproximate(result), verdict: 'unchecked' }

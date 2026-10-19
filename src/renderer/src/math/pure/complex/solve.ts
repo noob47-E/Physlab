@@ -21,7 +21,7 @@ import {
   rat,
   type Rat
 } from '../rat'
-import { NotPolynomial, dividesByLetter, evalAt, exprTex, parseExpr, varsOf, type Expr } from '../mono'
+import { NotPolynomial, crossMultiplied, divisionBottoms, eSub, evalAt, exprTex, parseExpr, varsOf, type Expr } from '../mono'
 import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from '../poly'
 import { discriminant, factorsOf } from '../factor'
 import { labelTex, labelText } from '../../../calc/labels'
@@ -93,16 +93,15 @@ const unknownWords = (name: string): string => labelText(name)
 // ---------------------------------------------------------------- roots the typed text does not allow
 
 // parseExpr divides out a letter that stands on both the top and the bottom of a fraction (x²/x
-// becomes x), so the equation it solves can have a root at which the typed fraction is 0/0. For
-// \frac{x^2}{x} = 0 that root is x = 0, and the check on the cancelled sides passes, so the student
-// would see a tick under an answer the typed equation does not allow.
+// becomes x), and it refuses a division by a bracket. So the equation the solver works on can have a
+// root at which a typed bottom is 0: for \frac{x^2}{x} = 0 that root is x = 0, and for
+// \frac{x^2-4}{x-2} = 4 it is x = 2. The check on the solver's own sides passes at such a root, so the
+// student would see a tick under an answer the typed equation does not allow.
 //
-// A bottom that parseExpr accepts is a single term (a bracket is refused), and a single term that
-// holds the letter is 0 only where the letter is 0. So the one root the typed text can refuse is 0,
-// and only when a typed division has a bottom that holds the letter. That is decided from the typed
-// division itself (dividesByLetter in mono.ts) in exact arithmetic, so no decimal or double is ever
-// involved. Every other root is an exact root of the cancelled equation, and the cancelled sides are
-// the typed sides at every value except 0.
+// Every typed bottom that holds the unknown is read as a polynomial (divisionBottoms in mono.ts), and a
+// value that makes one of them 0 is left out. Those checks are exact (rational or surd arithmetic), so no
+// decimal or double is ever involved. A bracket on the bottom is multiplied out first (crossMultiplied),
+// and then the sides are the typed sides at every value that no bottom makes 0.
 
 /** The sentence that replaces an answer when the typed equation allows no value of the letter. */
 const noValueWorks = (nameWords: string, leftOut: string): string =>
@@ -114,16 +113,114 @@ const noValueWorks = (nameWords: string, leftOut: string): string =>
  */
 const finalRefusal = (w: Working): Working => ({ ...w, finalRefusal: true })
 
-/** Whether either side of the typed equation divides by something that holds the letter, so that 0 is not an answer. */
-const bottomHoldsLetter = (lhsSrc: string, rhsSrc: string): boolean => dividesByLetter(lhsSrc) || dividesByLetter(rhsSrc)
+/** The typed bottoms that hold the unknown (as polynomials in it), and a letter on a bottom that is not the unknown. */
+interface Bottoms {
+  exclude: Poly[]
+  otherLetter: string | null
+}
 
 /**
- * Whether a real root is exactly 0. The root is a rational number when its radicand is 1; an irrational
- * root is never 0, because its surd part is never cancelled (a non-square radicand stays a surd).
+ * The typed bottoms, read for the unknown. A bottom that holds the unknown leaves out the values that make it 0. A bottom
+ * that holds only another letter is noted, since the answer then holds only where that letter is not 0. A bottom with two
+ * letters in it, one of them the unknown, has no single value to leave out, so the line is refused.
  */
-function isZeroRoot(r: Root, sign: 1 | -1): boolean {
-  if (r.imaginary || r.rad !== 1n) return false
-  return rIsZero(rAdd(r.re, sign === 1 ? r.coef : rNeg(r.coef)))
+function bottomsOf(lhsSrc: string, rhsSrc: string, name: string): Bottoms {
+  const exclude: Poly[] = []
+  let otherLetter: string | null = null
+  for (const bottom of [...divisionBottoms(lhsSrc), ...divisionBottoms(rhsSrc)]) {
+    // A bottom this reader cannot make into a polynomial is taken to hold the unknown, so its 0 is refused: the safe mistake.
+    if (bottom === null) {
+      exclude.push([R0, R1])
+      continue
+    }
+    const letters = varsOf(bottom)
+    if (!letters.includes(name)) {
+      otherLetter = otherLetter ?? letters[0] ?? null
+      continue
+    }
+    if (letters.length !== 1) throw new NotPolynomial(`I need exactly one letter to solve for, and I found ${letters.length}.`)
+    exclude.push(polyFromExpr(bottom, name).poly)
+  }
+  return { exclude, otherLetter }
+}
+
+/** The note that the answer holds only where a letter on a bottom is not 0, when the bottom holds a letter that is not the unknown. */
+const onlyWhere = (otherLetter: string | null): string =>
+  otherLetter ? ` Only where ${otherLetter} is not 0, because the typed fraction divides by ${otherLetter}.` : ''
+
+/** p(at), evaluated exactly. */
+function polyValue(p: Poly, at: Rat): Rat {
+  let acc = R0
+  for (let i = p.length - 1; i >= 0; i--) acc = rAdd(rMul(acc, at), p[i] ?? R0)
+  return acc
+}
+
+/**
+ * The rational values that make a bottom 0, or null when some root is not rational (a surd, or a complex one). A bottom that is
+ * a power of the letter (x², 3x³) has only 0; a straight line has the one root it is solved for.
+ */
+function rationalRootsOf(p: Poly): Rat[] | null {
+  if (pDeg(p) === 1) return [rNeg(rDiv(p[0] ?? R0, p[1] ?? R0))]
+  const nonzero = p.flatMap((c, i) => (rIsZero(c) ? [] : [i]))
+  if (nonzero.length === 1 && nonzero[0] >= 1) return [R0]
+  return null
+}
+
+/** The rational values that make a bottom 0 and are roots of the equation too; null when a bottom's roots are not all rational. */
+function sharedValues(poly: Poly, exclude: Poly[]): Rat[] | null {
+  const found: Rat[] = []
+  for (const p of exclude) {
+    const roots = rationalRootsOf(p)
+    if (roots === null) return null
+    for (const r of roots) if (rIsZero(polyValue(poly, r)) && !found.some((f) => rEq(f, r))) found.push(r)
+  }
+  return found
+}
+
+/** The "every value works" sentence, with the values that make a bottom 0 left out (named where they are rational). */
+function identityExcept(nameWords: string, exclude: Poly[]): string {
+  const values: Rat[] = []
+  for (const p of exclude) {
+    const roots = rationalRootsOf(p)
+    if (roots === null) return `Both sides are the same, so every value of ${nameWords} works except the values that make a denominator 0.`
+    for (const r of roots) if (!values.some((v) => rEq(v, r))) values.push(r)
+  }
+  const list = values.map((v) => `${nameWords} = ${texToPlain(rTex(v))}`).join(' or ')
+  return `Both sides are the same, so every value of ${nameWords} works except ${list}, ${values.length > 1 ? 'which make' : 'which makes'} a denominator 0.`
+}
+
+/** Whether a value is one a typed bottom makes 0. */
+const makesBottomZero = (exclude: Poly[], at: Rat): boolean => exclude.some((p) => rIsZero(polyValue(p, at)))
+
+/** The step that multiplies out a bracket on the bottom, so the sides shown are the ones the solver works on. */
+function clearFractionStep(s: Steps, bottoms: Bottoms, name: string, lhs: Expr, rhs: Expr): void {
+  const under = bottoms.exclude.length ? bottoms.exclude.map((p) => texToPlain(pTexBracketed(p, name))).join(' and ') : 'the bottom of the fraction'
+  s.goal('Clear the fraction').add(
+    `Multiply both sides by ${under}, so the fraction goes. A value that makes that bottom 0 is not allowed, so it is left out at the end.`,
+    `${exprTex(lhs)} = ${exprTex(rhs)}`,
+    '\\text{same thing done to both sides}'
+  )
+}
+
+/**
+ * A power of three or more that the step engine cannot solve. Its refusal stands as it is unless one of the typed bottoms shares
+ * a root with it: then the algebra engine would cancel and answer that root, so the refusal is final and names the value.
+ */
+function powerRefusal(title: string, src: string, poly: Poly, bottoms: Bottoms, nameWords: string): Working {
+  const power = pDeg(poly)
+  const plain = failed(title, src, `This is a power-${power} equation. The step-by-step solver here does linear equations and quadratics.`)
+  if (bottoms.exclude.length === 0) return plain
+  const shared = sharedValues(poly, bottoms.exclude)
+  if (shared !== null && shared.length === 0) return plain
+  const notes = `This is a power-${power} equation, which the step-by-step solver here does not do.`
+  if (shared === null) return finalRefusal(failed(title, src, `${notes} A value that makes a denominator 0 is not allowed.`))
+  // A power of the letter has only the root 0, so when that is shared the typed line allows no value at all.
+  const only = rationalRootsOf(poly)
+  if (only !== null && only.length === 1 && rIsZero(only[0]) && shared.length) {
+    return finalRefusal(failed(title, src, noValueWorks(nameWords, `${nameWords} = 0`)))
+  }
+  const list = shared.map((v) => `${nameWords} = ${texToPlain(rTex(v))}`).join(' or ')
+  return finalRefusal(failed(title, src, `${list} ${shared.length > 1 ? 'make' : 'makes'} a denominator 0, so it is not allowed. ${notes}`))
 }
 
 /**
@@ -142,11 +239,12 @@ function solveLinearWorking(src: string): Working {
   const [lhsSrc, rhsSrc = '0'] = sides
   let lhs: Expr
   let rhs: Expr
-  let zeroRefused: boolean
+  let crossed: boolean
   try {
-    lhs = parseExpr(lhsSrc)
-    rhs = parseExpr(rhsSrc)
-    zeroRefused = bottomHoldsLetter(lhsSrc, rhsSrc)
+    const cross = crossMultiplied(lhsSrc, rhsSrc)
+    crossed = cross !== null
+    lhs = cross ? cross.lhs : parseExpr(lhsSrc)
+    rhs = cross ? cross.rhs : parseExpr(rhsSrc)
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
@@ -156,6 +254,12 @@ function solveLinearWorking(src: string): Working {
   const name = vars[0]
   // θ in the sentences and \theta in the maths (H12); `name` stays the engine's spelling, for the label.
   const [nameTex, nameWords] = [unknownTex(name), unknownWords(name)]
+  let bottoms: Bottoms
+  try {
+    bottoms = bottomsOf(lhsSrc, rhsSrc, name)
+  } catch (err) {
+    return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
+  }
   const { poly: L } = polyFromExpr(lhs, name)
   const { poly: R } = polyFromExpr(rhs, name)
   // The difference is what matters: x² = x² + 1 has a square on each side and is still the
@@ -164,6 +268,7 @@ function solveLinearWorking(src: string): Working {
 
   const input = `${exprTex(lhs)} = ${exprTex(rhs)}`
   const s = new Steps()
+  if (crossed) clearFractionStep(s, bottoms, name, lhs, rhs)
   // a·x = c once every letter is on the left and every number on the right.
   const a = rSub(L[1] ?? R0, R[1] ?? R0)
   const c = rSub(R[0] ?? R0, L[0] ?? R0)
@@ -176,19 +281,19 @@ function solveLinearWorking(src: string): Working {
     )
   }
   if (rIsZero(a)) {
-    // A letter on the bottom cancels (x²/x = x becomes x = x), and the cancelled sides agree at every
-    // value except one: the typed fraction is 0/0 at x = 0, so that value is left out of "every value".
+    // A letter on the bottom cancels (x²/x = x becomes x = x), and the cancelled sides agree at every value except the ones that
+    // make a typed bottom 0, which are left out of "every value".
     if (rIsZero(c)) {
-      return zeroRefused
-        ? finalRefusal(failed(title, input, `Both sides are the same, so every value of ${nameWords} works except ${nameWords} = 0, which makes a denominator 0.`))
-        : failed(title, input, `Both sides are the same, so every value of ${nameWords} works.`)
+      return bottoms.exclude.length
+        ? finalRefusal(failed(title, input, identityExcept(nameWords, bottoms.exclude)))
+        : failed(title, input, `Both sides are the same, so every value of ${nameWords} works.${onlyWhere(bottoms.otherLetter)}`)
     }
     const refusal = failed(title, input, `The ${nameWords} terms cancel and ${rTex(L[0] ?? R0)} = ${rTex(R[0] ?? R0)} is false, so no value of ${nameWords} works.`)
-    return zeroRefused ? finalRefusal(refusal) : refusal
+    return bottoms.exclude.length ? finalRefusal(refusal) : refusal
   }
   const x = rDiv(c, a)
-  // The one value the typed fraction can leave undefined is 0, so a root of 0 is refused before any step is shown.
-  if (zeroRefused && rIsZero(x)) return finalRefusal(failed(title, input, noValueWorks(nameWords, `${nameWords} = ${texToPlain(rTex(x))}`)))
+  // A value that makes a typed bottom 0 is not an answer, so it is refused before any step is shown.
+  if (makesBottomZero(bottoms.exclude, x)) return finalRefusal(failed(title, input, noValueWorks(nameWords, `${nameWords} = ${texToPlain(rTex(x))}`)))
   if (rIsOne(a)) {
     s.goal('Isolate the letter').add(`So ${nameWords} is on its own.`, `${nameTex} = ${rTex(x)}`)
   } else if (a.d !== 1n) {
@@ -226,7 +331,7 @@ function solveLinearWorking(src: string): Working {
     method: 'Linear equation',
     moves: s.moves,
     answers: [{ label: `${name} =`, tex: rTex(x) }],
-    check: ok ? `With ${nameWords} = ${rTex(x)} both sides come to ${rTex(lv)}.` : 'Careful: the two sides do not agree. Treat this answer with suspicion.',
+    check: (ok ? `With ${nameWords} = ${rTex(x)} both sides come to ${rTex(lv)}.` : 'Careful: the two sides do not agree. Treat this answer with suspicion.') + onlyWhere(bottoms.otherLetter),
     checked: ok ? 'ok' : 'failed'
   }
 }
@@ -235,12 +340,16 @@ export function solveQuadraticWorking(src: string): Working {
   const title = 'Solve'
   if (src.split('=').length > 2) return failed(title, src, TWO_EQUALS)
   let left: Expr
-  let zeroRefused: boolean
+  // "x^2 + 4 = 0" and "x^2 + 4" both mean the same thing here.
+  const [lhsSrc, rhsSrc] = src.split('=')
+  let cross: { lhs: Expr; rhs: Expr } | null = null
   try {
-    // "x^2 + 4 = 0" and "x^2 + 4" both mean the same thing here.
-    const [lhs, rhs] = src.split('=')
-    left = rhs === undefined ? parseExpr(lhs) : parseExpr(`(${lhs}) - (${rhs})`)
-    zeroRefused = bottomHoldsLetter(lhs, rhs ?? '0')
+    if (rhsSrc === undefined) {
+      left = parseExpr(lhsSrc)
+    } else {
+      cross = crossMultiplied(lhsSrc, rhsSrc)
+      left = cross ? eSub(cross.lhs, cross.rhs) : parseExpr(`(${lhsSrc}) - (${rhsSrc})`)
+    }
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
@@ -252,15 +361,22 @@ export function solveQuadraticWorking(src: string): Working {
   if (vars.length === 0 && src.includes('=')) return solveLinearWorking(src)
   if (vars.length !== 1) return failed(title, src, `I need exactly one letter to solve for, and I found ${vars.length || 'none'}.`)
   const name = vars[0]
+  let bottoms: Bottoms
+  try {
+    bottoms = bottomsOf(lhsSrc, rhsSrc ?? '0', name)
+  } catch (err) {
+    return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
+  }
   const { poly } = polyFromExpr(left, name)
   if (pDeg(poly) <= 1) return solveLinearWorking(src)
-  if (pDeg(poly) !== 2) return failed(title, src, `This is a power-${pDeg(poly)} equation. The step-by-step solver here does linear equations and quadratics.`)
+  // θ in the sentences and \theta in the maths (H12); `name` stays the engine's spelling, for the labels.
+  const [nameTex, nameWords] = [unknownTex(name), unknownWords(name)]
+  if (pDeg(poly) !== 2) return powerRefusal(title, src, poly, bottoms, nameWords)
 
   const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
   const input = `${pTex(poly, name)} = 0`
   const s = new Steps()
-  // θ in the sentences and \theta in the maths (H12); `name` stays the engine's spelling, for the labels.
-  const [nameTex, nameWords] = [unknownTex(name), unknownWords(name)]
+  if (cross) clearFractionStep(s, bottoms, name, cross.lhs, cross.rhs)
 
   s.goal('Read off a, b, c').add(
     `Line the equation up as a${nameWords}² + b${nameWords} + c = 0 and read off the three numbers.`,
@@ -327,10 +443,10 @@ export function solveQuadraticWorking(src: string): Working {
     root = { re, coef: rDiv(rat(1n, absD.d), denom), rad: radicand, imaginary: sign < 0 }
   }
 
-  // With a zero discriminant both signs are the same root, so there is only one to test. A root the
-  // typed fraction leaves undefined is only ever 0, and only when a typed bottom holds the letter.
+  // With a zero discriminant both signs are the same root, so there is only one to test. A root that makes a typed bottom 0 is
+  // not an answer; the test is exact, on the surd or rational root itself.
   const rootSigns: (1 | -1)[] = sign === 0 ? [1] : [1, -1]
-  const undefinedRoots = rootSigns.filter((sg) => zeroRefused && isZeroRoot(root, sg))
+  const undefinedRoots = bottoms.exclude.length ? rootSigns.filter((sg) => bottoms.exclude.some((p) => isRootOf(p, rootValue(root, sg)))) : []
   const leftOut = undefinedRoots.map((sg) => `${nameWords} = ${texToPlain(rootText(root, sg))}`).join(' or ')
   if (undefinedRoots.length === rootSigns.length) return finalRefusal(failed(title, input, noValueWorks(nameWords, leftOut)))
   const kept = rootSigns.filter((sg) => !undefinedRoots.includes(sg))
@@ -371,15 +487,16 @@ export function solveQuadraticWorking(src: string): Working {
   const ok = [rootValue(root, 1), rootValue(root, -1)].every((z) => isRootOf(poly, z))
   // The kept roots are written out only in the sentence that uses them: rootText takes the surd apart,
   // which is the slow part of a huge discriminant, and the usual path never needs it here.
-  const check = undefinedRoots.length
-    ? ok
-      ? `Put ${nameWords} = ${kept.map((sg) => texToPlain(rootText(root, sg))).join(' or ')} back into the typed equation: both sides come to the same number.`
-      : 'Careful: the two sides do not agree at that root. Treat this answer with suspicion.'
-    : !ok
-      ? 'Careful: putting the roots back in does not give zero. Treat this answer with suspicion.'
-      : sign < 0
-        ? 'The two roots are conjugates — that always happens when the coefficients are real — and each one makes the equation zero exactly.'
-        : `Sum of roots ${rTex(sum)}, product ${rTex(product)} — both match the coefficients.`
+  const check =
+    (undefinedRoots.length
+      ? ok
+        ? `Put ${nameWords} = ${kept.map((sg) => texToPlain(rootText(root, sg))).join(' or ')} back into the typed equation: both sides come to the same number.`
+        : 'Careful: the two sides do not agree at that root. Treat this answer with suspicion.'
+      : !ok
+        ? 'Careful: putting the roots back in does not give zero. Treat this answer with suspicion.'
+        : sign < 0
+          ? 'The two roots are conjugates — that always happens when the coefficients are real — and each one makes the equation zero exactly.'
+          : `Sum of roots ${rTex(sum)}, product ${rTex(product)} — both match the coefficients.`) + onlyWhere(bottoms.otherLetter)
 
   return {
     title,
