@@ -917,22 +917,25 @@ describe("the algebra engine's angle unit", () => {
   it("is the scene's angle mode, whichever door the question came through", async () => {
     // The bar sent the flag; the Working panel's SymPy fallback sent none, so in DEG mode
     // solve(sin(x) = 0.5) answered 30 from the bar and π/6 from the panel, on the same screen.
+    // Unit-circle values like sin(x) = 0.5 are now solved directly by the trig step engine
+    // (using the scene's angleUnit); a non-table value like sin(x) = 0.3 reaches the SymPy
+    // fallback and pins that it still forwards deg.
     const fromWorkingPanel = async () => {
       forgetCasCalls()
-      usePure.getState().run('solve', 'sin(x) = 0.5')
+      usePure.getState().run('solve', 'sin(x) = 0.3')
       await new Promise((r) => setTimeout(r, 0))
       return casCalls()
     }
     expect(scene().settings.angleUnit).toBe('deg')
     await run('solve(sin(x) = 0.5)')
     expect(casCalls()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], vars: [], deg: true }]])
-    expect(await fromWorkingPanel()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], deg: true }]])
+    expect(await fromWorkingPanel()).toEqual([['solve', { eqs: ['sin(x) = 0.3'], deg: true }]])
 
     scene().setSettings({ angleUnit: 'rad' })
     forgetCasCalls()
     await run('solve(sin(x) = 0.5)')
     expect(casCalls()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], vars: [], deg: false }]])
-    expect(await fromWorkingPanel()).toEqual([['solve', { eqs: ['sin(x) = 0.5'], deg: false }]])
+    expect(await fromWorkingPanel()).toEqual([['solve', { eqs: ['sin(x) = 0.3'], deg: false }]])
     // The exact-form lookup after a plain calculation goes through the same decision.
     forgetCasCalls()
     await run('divide(pi, 2)')
