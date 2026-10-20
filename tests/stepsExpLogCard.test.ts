@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { reconcile } from '../src/renderer/src/calc/working'
 import { evaluateInput, type EvalResult } from '../src/renderer/src/calc/evaluateInput'
+import type { Working } from '../src/renderer/src/math/pure/work'
 import { resetGlobals } from './helpers/globals'
 
 beforeEach(() => {
@@ -86,5 +87,27 @@ describe('S3 fix: the "=" card lists every root the checked working lists', () =
     const r = reconcile(card, unchecked)
     expect(r.result.roots).toEqual([-10])
     expect(r.result.main).toBe('x = −10')
+  })
+
+  // A radian answer is written as a multiple of π. The card's plain-text line must keep it: texToPlain alone drops
+  // the \pi, and the card read "x = 7/6" for 7π/6 and "x = ()/2" for π/2.
+  const radianWorking = (input: string, tex: string[]): Working =>
+    ({ title: 'Solve', input, moves: [{ head: 'a step' }], answers: tex.map((t) => ({ label: 'x', tex: t })), checked: 'ok' }) as unknown as Working
+  const searchCard = (src: string, root: number): EvalResult => ({ main: '', src, roots: [root], rootsComplete: false, exact: null, solved: true })
+
+  it('a radian answer keeps its π: sin(x) = 1 shows x = π/2, never ()/2', () => {
+    const r = reconcile(searchCard('sin(x) = 1', Math.PI / 2), radianWorking('sin(x) = 1', ['\\frac{\\pi}{2}']))
+    expect(r.verdict).toBe('agree')
+    expect(r.result.main).toBe('x = π/2')
+    expect(r.result.tex).toContain('\\frac{\\pi}{2}')
+  })
+
+  it('both radian roots keep their π: sin(x) = -1/2 shows 7π/6 and 11π/6, never 7/6 and 11/6', () => {
+    const r = reconcile(
+      searchCard('sin(x) = -1/2', (7 * Math.PI) / 6),
+      radianWorking('sin(x) = -1/2', ['\\frac{7\\pi}{6}', '\\frac{11\\pi}{6}'])
+    )
+    expect(r.verdict).toBe('agree')
+    expect(r.result.main).toBe('x = 7π/6, x = 11π/6')
   })
 })

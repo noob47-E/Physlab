@@ -169,7 +169,11 @@ function rootsFromWorking(card: EvalResult, working: Working): EvalResult {
     for (let j = i + 1; j < theirs.length; j++) if (near(theirs[i], theirs[j], 1e-8)) return card
   }
   const tex = labelledAnswers(working)
-  return { ...card, main: texToPlain(tex), tex, roots: theirs, approximate: false }
+  // A radian answer keeps its π on the plain-text line too: texToPlain alone drops the \pi and leaves 7/6 for 7π/6
+  // (and ()/2 for π/2). The trig part adds this same conversion as plainOfAnswer in this file; when the two parts meet,
+  // this copy should become a call to it rather than a second rule.
+  const main = texToPlain(tex.replace(/\\frac\{(-?\d*)\\pi\}\{(\d+)\}/g, '$1π/$2').replace(/\\pi(?![a-zA-Z])/g, 'π'))
+  return { ...card, main, tex, roots: theirs, approximate: false }
 }
 
 /** The sentences an "=" refusal must NOT give way for: intentional rule refusals like variable storing. */
