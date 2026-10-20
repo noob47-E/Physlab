@@ -377,6 +377,19 @@ function trigFnOf(text: string): TrigFn | null {
   return fns.size === 1 ? [...fns][0] : null
 }
 
+/**
+ * The one trig function and argument an equation or a clause uses, with the argument's spaces removed ("2x" for sin 2x).
+ * Null when there is none, or when there is more than one function or more than one argument.
+ */
+export function trigTermOf(text: string): { fn: TrigFn; arg: string } | null {
+  const terms = trigTerms(text)
+  if (terms.length === 0) return null
+  const fns = new Set(terms.map((t) => t.fn))
+  const args = new Set(terms.map((t) => t.arg.replace(/\s+/g, '')))
+  if (fns.size !== 1 || args.size !== 1) return null
+  return { fn: terms[0].fn, arg: [...args][0] }
+}
+
 /** The whole-number multiple c when an argument reads c·v (v alone is c = 1), or null otherwise. */
 export function multipleOf(arg: string, v: string): number | null {
   const s = arg.replace(/[\s*]+/g, '')
@@ -531,6 +544,13 @@ export function checkTrigMove(
       const fb = residualOf(before, v)
       const fa = residualOf(after, v)
       if (!fb || !fa) return 'unknown'
+      // Dividing by cos x loses every solution where cos x is 0. The before's two sides must therefore differ at 90° and at
+      // 270° (the two angles where cos x is 0 in one turn); a before that holds there has a solution the division would drop.
+      for (const t of [90, 270]) {
+        const y = fb(t)
+        if (!Number.isFinite(y)) return 'unknown'
+        if (Math.abs(y) <= TOL) return 'invalid'
+      }
       return sameOnSamples(fb, (t) => Math.cos(toRad(t)) * fa(t))
     }
     case 'trig-ref-angle': {
@@ -709,7 +729,7 @@ export function checkTrigSolutionSet(
 /**
  * A listed solution set for an equation that is not a trig solution-set step: each listed value is an angle that solves
  * the equation, and the equation has no other root in [0, 360). Null when a listed value is not an angle written in
- * degrees or as a multiple of π (plain numbers are not read here, so the caller's checks decide them as before).
+ * degrees or as a multiple of π (plain numbers are not read here, so the caller must not treat the list as proved).
  */
 export function checkListedRoots(before: string, solutions: unknown[], v: string): ValidationVerdict | null {
   const listed: number[] = []

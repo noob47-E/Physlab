@@ -39,6 +39,62 @@ const TRIG_EQUATIONS_ID = 'trigEquations'
 const CANT_SHOW = "I can't show the steps for this one yet"
 const R45 = rat(45n)
 
+/** Where a restriction starts after an equation: a comma or semicolon before a number, or the word "for". */
+const RESTRICTION_SPLIT = /,\s*\d+\s*<=|;\s*\d+\s*<=|\s+for\s+/
+/** The one restriction this reads: whole degrees, "a <= v < b" or "a <= v <= b", in the problem's letter v. */
+const RANGE_TAIL = /^(?:,|;|for)\s*(\d+)\s*<=\s*([a-zA-Z])\s*(<=|<)\s*(\d+)$/
+/** Signs and words that add a further condition to an equation. Such an input is never read as the equation alone. */
+const MORE_CONDITIONS = /[<>,;]|\\(?:text|quad|qquad|and|or|lt|gt|in)(?![a-zA-Z])/
+/** A star between a number (or a closing bracket) and a number or dot: cleaning would glue "1*2" into 12, so it is declined. */
+const JOINED_NUMBERS = /[A-Za-z0-9.)]\s*\*\s*[0-9.]/
+
+/** The LaTeX as typed with \le, \leq, \ge and \geq written as plain signs and the spacing commands dropped. */
+function relationsPlain(text: string): string {
+  return text
+    .replace(/\\left|\\right/g, '')
+    .replace(/\\leq?(?![a-zA-Z])/g, '<=')
+    .replace(/\\geq?(?![a-zA-Z])/g, '>=')
+    .replace(/\\[,;!]/g, ' ')
+}
+
+/** An equation with the restriction that follows it, split apart: the equation alone, and the range (null for none). */
+interface Restriction {
+  head: string
+  range: TrigRange | null
+}
+
+/**
+ * The equation a typed text states, and the range after it. Null when what follows the equation is not one range this reads:
+ * a restriction left unread would solve a different question (every root in 0 to 360 for "0 <= x <= 90").
+ */
+function restrictionOf(text: string, v: string): Restriction | null {
+  const s = text.trim()
+  const head = s.split(RESTRICTION_SPLIT)[0].trim()
+  const tail = s.slice(head.length).trim()
+  if (MORE_CONDITIONS.test(head)) return null
+  if (tail === '') return { head, range: null }
+  const m = RANGE_TAIL.exec(tail)
+  if (!m || m[2] !== v) return null
+  return { head, range: { min: Number(m[1]), max: Number(m[4]), inclusive: m[3] === '<=' } }
+}
+
+/**
+ * The equation and the range of a typed input, read from both of its forms (the text the steps read, and the LaTeX as typed).
+ * Both must state the same range. Null when either carries a restriction this does not read, or the two disagree.
+ */
+function readRestriction(raw: string, rawIn: string, v: string): { eqTyped: string; range: TrigRange | null } | null {
+  const a = restrictionOf(raw, v)
+  if (a === null) return null
+  const b = rawIn === '' ? a : restrictionOf(relationsPlain(rawIn), v)
+  if (b === null) return null
+  const sameRange =
+    a.range === null || b.range === null
+      ? a.range === b.range
+      : a.range.min === b.range.min && a.range.max === b.range.max && a.range.inclusive === b.range.inclusive
+  if (!sameRange) return null
+  return { eqTyped: b.head, range: a.range }
+}
+
 /** Helper to clean formula string for display safety */
 function cleanLatex(input: string): string {
   let s = input.trim()
@@ -398,9 +454,8 @@ export const trigEquationsMethod: Method = {
     }
     const unit: AngleUnit = inDeg ? 'deg' : 'rad'
 
-    const eqOnly = raw.split(/,\s*\d+\s*<=|;\s*\d+\s*<=|\s+for\s+/)[0].trim()
+    const eqOnly = raw.split(RESTRICTION_SPLIT)[0].trim()
     const input = cleanLatex(eqOnly)
-    const eqToInspect = cleanLatex(rawIn ? String(rawIn).split(/,\s*\d+\s*<=|;\s*\d+\s*<=|\s+for\s+/)[0].trim() : eqOnly)
 
     const declined = (): Working => ({ title: `Solve ${input}`, input, steps: [], noWorking: true, reason: CANT_SHOW })
     const finish = (steps: Step[], answers: StepAnswer[], method: string): Working => ({
@@ -413,13 +468,15 @@ export const trigEquationsMethod: Method = {
       domain
     })
 
-    // The range the student asked for, in degrees (in radians a range is not whole degrees, so it is declined).
-    const rangeMatch = raw.match(/(\d+(?:\.\d+)?)\s*<=\s*[a-zA-Z]\s*(<=|<)\s*(\d+(?:\.\d+)?)/)
-    let range: TrigRange = { min: 0, max: 360, inclusive: false }
-    if (rangeMatch) {
-      if (!inDeg || rangeMatch[1].includes('.') || rangeMatch[3].includes('.')) return declined()
-      range = { min: Number(rangeMatch[1]), max: Number(rangeMatch[3]), inclusive: rangeMatch[2] === '<=' }
-    }
+    // A star between two numbers is never read as one number, and a restriction this does not read is declined rather than
+    // dropped: the working must answer the question the student typed.
+    if (JOINED_NUMBERS.test(raw) || JOINED_NUMBERS.test(rawIn)) return declined()
+    const read = readRestriction(raw, rawIn, v)
+    if (read === null) return declined()
+    // The range the student asked for, in whole degrees: in radians a range would need exact bounds in π, which is not read.
+    if (read.range !== null && !inDeg) return declined()
+    const range: TrigRange = read.range ?? { min: 0, max: 360, inclusive: false }
+    const eqToInspect = cleanLatex(read.eqTyped)
 
     const ctx: Ctx = { input, eqToInspect, v, unit, range, domain, declined, finish }
     const compact = eqToInspect.replace(/[\s\\]+/g, '')

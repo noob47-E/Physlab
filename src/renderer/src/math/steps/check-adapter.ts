@@ -597,7 +597,9 @@ function checkNonPolyEquationOp(
   switch (op.kind) {
     case 'already-solved': {
       if (formText(sBefore) !== formText(sAfter)) return 'invalid'
-      return sa.left.trim() === v ? 'valid' : 'invalid'
+      if (sa.left.trim() !== v) return 'invalid'
+      // Only a number on the right is "solved": x = sin x shows the letter alone on the left and proves nothing.
+      return parseExactRat(sa.right.replace(/\s+/g, '')) !== null ? 'valid' : 'unknown'
     }
     case 'work-out-right': {
       if (canonicalState(sb.left) !== canonicalState(sa.left)) return 'invalid'
@@ -627,16 +629,29 @@ function checkNonPolyEquationOp(
       return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
     }
     case 'multiply-both': {
+      // The multiplier must be a nonzero exact number, as on the polynomial path: a zero, a letter or a function could add
+      // roots or lose them (multiplying by sin x adds the roots where sin x is 0). A purpose claim is judged there only.
+      const k = parseExactRat(op.k)
+      if (op.purpose !== undefined || !k || rIsZero(k)) return 'unknown'
       const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) * (${op.k})`)
       const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) * (${op.k})`)
       return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
     }
     case 'divide-both': {
+      // Dividing by a nonzero exact number loses nothing; dividing by a letter or a function can (x sin x = x loses x = 0).
+      const k = parseExactRat(op.k)
+      if (op.purpose !== undefined || !k || rIsZero(k)) return 'unknown'
       const leftEq = defaultCheckAdapter.checkExprEq(sb.left, `(${sa.left}) * (${op.k})`)
       const rightEq = defaultCheckAdapter.checkExprEq(sb.right, `(${sa.right}) * (${op.k})`)
       return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
     }
     case 'clear-fractions': {
+      // The multiplier is the LCD of the denominators written in the before, as on the polynomial path.
+      const dens = fractionDenominators(rawText(before))
+      if (dens === null || dens.length === 0) return 'unknown'
+      const lcd = lcmOf(dens)
+      const k = parseExactRat(op.k)
+      if (lcd < 2n || !k || k.d !== 1n || k.n !== lcd) return 'unknown'
       const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) * (${op.k})`)
       const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) * (${op.k})`)
       return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
@@ -3161,9 +3176,11 @@ export function checkHigherSolutionSet(
       : 'invalid'
   }
   // A listed root must solve the equation itself, and no root in [0, 360) may be left out: the displayed list alone proves nothing.
-  // A list of plain numbers (x = -9.42 for x sin x = 0) is not an angle this reads: null leaves it to the checks below, as before.
   const rootsCheck = checkListedRoots(before, solutions, v)
-  if (rootsCheck !== null && rootsCheck !== 'valid') return rootsCheck
+  // A list of plain numbers (x = -9.42 for x sin x = 0) is not an angle this reads, so it is never proved here, and the display
+  // comparison below proves nothing about a root: the answer is unknown, not valid.
+  if (rootsCheck === null) return 'unknown'
+  if (rootsCheck !== 'valid') return rootsCheck
   const shown = displayedValues(after, v)
   if (shown === null || shown.length !== solutions.length) return 'invalid'
   for (let i = 0; i < solutions.length; i++) {

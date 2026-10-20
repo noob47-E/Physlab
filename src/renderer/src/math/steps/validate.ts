@@ -64,7 +64,7 @@ import {
   parseExactRat
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
-import { checkTrigSolutionSet, type TrigRange } from './trigRoots'
+import { checkTrigSolutionSet, trigTermOf, type TrigRange } from './trigRoots'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { displaySafe, drawnTex } from './displaySafe'
 
@@ -411,6 +411,32 @@ function chainBreak(working: Working, index: number, reason: string): WorkingVal
 }
 
 /**
+ * A trig working keeps the problem's own function and argument (S5c). A trig-substitute step must start from the problem's trig
+ * term, and every clause of a trig-back-substitute step must use that same function and argument. Each step is checked on its
+ * own without this link, so a sin x back-substitution inside a cos x problem would otherwise pass. Null when the working has no
+ * trig step, or when every link holds.
+ */
+function trigChainBreak(input: string, steps: Step[]): string | null {
+  const kindOf = (step: Step): string | undefined => (step.op as { kind?: string } | undefined)?.kind
+  if (!steps.some((s) => kindOf(s) === 'trig-substitute' || kindOf(s) === 'trig-back-substitute')) return null
+  const own = trigTermOf(input)
+  if (own === null) return 'A trig working must solve one trig function of one argument'
+  const same = (term: { fn: string; arg: string } | null): boolean => term !== null && term.fn === own.fn && term.arg === own.arg
+  for (const step of steps) {
+    if (kindOf(step) === 'trig-substitute' && !same(trigTermOf(String(step.before)))) {
+      return 'A substitution changes the trig function or its argument'
+    }
+    if (kindOf(step) === 'trig-back-substitute') {
+      const clauses = String(step.after).replace(/\\text\{\s*or\s*\}/g, ' or ').split(/\s+or\s+/)
+      if (!clauses.every((clause) => same(trigTermOf(clause)))) {
+        return 'A back substitution changes the trig function or its argument'
+      }
+    }
+  }
+  return null
+}
+
+/**
  * The answer of a working must be what its validated last step displays, label and value alike, in the
  * problem's own variable. Returns the reason it does not, or null when it does (or there is no answer).
  * A solution-set ending is displayed as its text; a list of solutions as "x = 2 or x = 3" or "x in {2, 3}".
@@ -651,6 +677,9 @@ function validateWorkingChecked(
       return chainBreak(working, i, `Step ${i + 1} does not start where step ${i} ends`)
     }
   }
+  // A trig working keeps the problem's own function and argument: each step passes on its own without this link.
+  const trigBreak = trigChainBreak(working.input, working.steps)
+  if (trigBreak !== null) return { valid: false, verdict: 'invalid', reason: trigBreak }
 
   // Check main steps
   for (let i = 0; i < working.steps.length; i++) {
