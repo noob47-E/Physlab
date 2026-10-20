@@ -292,7 +292,11 @@ const knownMathName = (name: string): boolean =>
 export const writeTimes = (text: string): string => {
   // The glued i and π are split off first: as one run "isqrt" or "ipi" would become i·s·q·r·t or i·p·i.
   const unglued = text.replace(GLUED_I, 'i ').replace(GLUED_PI, 'pi ')
-  const splitLetters = unglued.replace(/[A-Za-z]+/g, (run) => {
+  const splitLetters = unglued.replace(/[A-Za-z]+/g, (run: string, offset: number, whole: string) => {
+    // 0x1F and 0xFF are ONE hexadecimal number (0b11, 0o7 likewise), not 0·x·1·F: a letter run right after a lone 0 in
+    // x, b or o starts a number of its own base, so it is left whole. A 0 inside a longer number (10x_1) or a decimal
+    // (0.5x_1) starts no number, and is split as any other run is.
+    if (run.length > 1 && /^[xbo]/.test(run) && whole[offset - 1] === '0' && !/[\w.]/.test(whole[offset - 2] ?? '')) return run
     if (run.length === 1 || knownMathName(run)) return run
     return run
       .split(/(theta)/)

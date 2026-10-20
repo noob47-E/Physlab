@@ -324,8 +324,11 @@ function readRunsAsMultiplication(expr: string, vars?: Record<string, unknown>):
   const escaped = multiNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const splitRe = escaped.length ? new RegExp(`(${escaped.join('|')})`) : null
 
-  return text.replace(/([A-Za-z]+(?:_[A-Za-z0-9]+)*)(\s*\()?/g, (match, ident: string, paren?: string) => {
+  return text.replace(/([A-Za-z]+(?:_[A-Za-z0-9]+)*)(\s*\()?/g, (match, ident: string, paren: string | undefined, offset: number, whole: string) => {
     if (paren !== undefined) return match
+    // 0x1F and 0xFF are ONE hexadecimal number (0b11, 0o7 likewise), not 0·x·F·F: the letters that follow a lone 0 in
+    // x, b or o are the number's digits, so the run is left whole. A 0 inside a longer number (10xFF) starts no number.
+    if (/^[xbo]/.test(ident) && whole[offset - 1] === '0' && !/[\w.]/.test(whole[offset - 2] ?? '')) return match
     if (isKnownName(ident, vars)) return match
     if (ident.includes('_')) return match
 
