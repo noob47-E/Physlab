@@ -386,3 +386,74 @@ describe('the engine’s plain LaTeX is read as the card it is: \\log is the nat
     })
   }
 })
+
+// ---------------------------------------------------------------- break-it probe (INTAGREE, review re-check)
+//
+// The probe ran the real Calculator path with the real SymPy behind it and checked every answer by differentiating it
+// numerically. Three things came out of it; each is pinned below where it lives: the differential's letter in
+// tests/latex.test.ts, and the two agreement findings here.
+
+describe('an integral in a Greek letter is taken in that letter, not left as an integrand in x', () => {
+  // latexToMath read a differential only when a Latin letter followed the d, so ∫ sinθ dθ reached the engine as
+  // integrate(sin(θ) dθ, x): it answered θ·d·x·sin θ (a product of the letter, d and x), and the working for the
+  // same misreading agreed with it, so a wrong answer was shown ticked. The reading is pinned in tests/latex.test.ts;
+  // here is what the Calculator's card and working do with it now.
+  const line = String.raw`\int\sin\theta\,d\theta`
+
+  it('hands the engine sin(θ) in θ', () => {
+    const r = evaluateInput('COMP', line, { vars: {}, ans: 0, angle: 'deg' })
+    expect(r?.engine?.req.expr).toBe('sin(θ)')
+    expect(r?.engine?.req.var).toBe('θ')
+  })
+
+  it('-cos θ agrees with the working, and cos θ is a disagreement', async () => {
+    const working = oneAnswer(String.raw`- \cos {\theta} + C`)
+    const right = await integralCard(line, String.raw`- \cos{\left(\theta \right)}`, '-cos(theta)')
+    expect(reconcile(right, working).verdict).toBe('agree')
+    const wrong = await integralCard(line, String.raw`\cos{\left(\theta \right)}`, 'cos(theta)')
+    expect(reconcile(wrong, working).verdict).toBe('differ')
+    const doubled = await integralCard(line, String.raw`- 2\cos{\left(\theta \right)}`, '-2*cos(theta)')
+    expect(reconcile(doubled, working).verdict).toBe('differ')
+  })
+
+  it('a spelled differential agrees too: cosθ dθ → sinθ', async () => {
+    const right = await integralCard(String.raw`\int\cos\theta\,d\theta`, String.raw`\sin{\left(\theta \right)}`, 'sin(theta)')
+    expect(reconcile(right, oneAnswer(String.raw`\sin {\theta} + C`)).verdict).toBe('agree')
+  })
+})
+
+describe('a product of the letter and a function the engine writes with \\operatorname', () => {
+  // SymPy writes arctan as \operatorname{atan}, whose text comes out the way \sin's does; with a letter in front the
+  // two were glued into the single name xatan, so the card could not be read and x·arctan x was left unchecked although
+  // the card and the working agreed. The gap is pinned in tests/latex.test.ts; this is the agreement it restores.
+  const line = String.raw`\int\arctan x\,dx`
+  const working = oneAnswer(String.raw`x \tan^{-1} {x} - \frac{1}{2} \ln\left(x^{2} + 1\right) + C`)
+
+  it('x·atan x − ½ln(x² + 1) agrees with the working', async () => {
+    const card = await integralCard(line, String.raw`x \operatorname{atan}{\left(x \right)} - \frac{\log{\left(x^{2} + 1 \right)}}{2}`, 'x*atan(x) - log(x^2 + 1)/2')
+    expect(reconcile(card, working).verdict).toBe('agree')
+  })
+
+  it('the sign flipped is a disagreement', async () => {
+    const card = await integralCard(line, String.raw`x \operatorname{atan}{\left(x \right)} + \frac{\log{\left(x^{2} + 1 \right)}}{2}`, '')
+    expect(reconcile(card, working).verdict).toBe('differ')
+  })
+})
+
+describe('a form real only above 3 is tried at enough points of its own stretch', () => {
+  // ln(x − 3) is real only for x > 3, and the points list had five there (13.1 was the last), one short of the six
+  // the check needs: the engine's and the working's forms of 1/(x² − 9) agreed and were left unchecked. A far point
+  // (21.7) gives that stretch its sixth, and a wrong card is still caught there.
+  const line = String.raw`\int\frac{1}{x^{2}-9}\,dx`
+  const working = oneAnswer(String.raw`\frac{1}{6} \ln\left|x - 3\right| - \frac{1}{6} \ln\left|x + 3\right| + C`)
+
+  it('the engine’s ln(x − 3) and ln(x + 3) agree with the working’s absolute-value logs', async () => {
+    const card = await integralCard(line, String.raw`\frac{\log{\left(x - 3 \right)}}{6} - \frac{\log{\left(x + 3 \right)}}{6}`, 'log(x - 3)/6 - log(x + 3)/6')
+    expect(reconcile(card, working).verdict).toBe('agree')
+  })
+
+  it('the doubled card is a disagreement', async () => {
+    const card = await integralCard(line, String.raw`\frac{\log{\left(x - 3 \right)}}{3} - \frac{\log{\left(x + 3 \right)}}{6}`, '')
+    expect(reconcile(card, working).verdict).toBe('differ')
+  })
+})

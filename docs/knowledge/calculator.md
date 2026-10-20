@@ -47,6 +47,12 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
     stretch a form is real on (x > 2 for 1/(x² − 4)), and six must agree. A name the reader still cannot split is left unchecked,
     never called a disagreement. Tests: tests/integralAgreement.test.ts (the tiny-scale sweep, the Greek letters, the engine's
     \log and \operatorname shapes); the engine's recorded reply is tests/fixtures/engineReplies, not tests/fixtures/calculus.
+11. **An integral's differential may carry a Greek letter, and the engine's `\operatorname` name is a function**
+    (`math/latexToMath.ts`): ∫ sinθ dθ is an integral in θ (a Latin differential, a Greek command or a Greek glyph),
+    where it used to reach the engine as integrate(sin(θ)·d·θ, x) and answer θ·d·x·sin θ — ticked, because the working
+    made the same misreading. A name in front of `\operatorname{atan}` gets the same `*` a name in front of `\sin`
+    gets, so x·arctan x is read and checked instead of becoming the one name xatan. Tests: tests/latex.test.ts
+    (P-PARSE PL: the differential, \operatorname after a name), tests/integralAgreement.test.ts.
 
 ## Traps met
 - `mathjs` rounds a complex/matrix/unit number with no 15-figure cut (0.35×3 → "1.0"): `mathFormatOptions`.

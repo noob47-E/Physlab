@@ -318,9 +318,10 @@ export function compareFunctions(a: MathNode, b: MathNode, vars: Record<string, 
 
 /**
  * The points an antiderivative is tried at, on both sides of ±1 and of 0. An arctanh is real on (−1, 1) only and ln x on x > 0 only,
- * so each form needs six points of its own stretch of the line, or the check could never say "the same" for it.
+ * so each form needs six points of its own stretch of the line, or the check could never say "the same" for it. The far point 21.7
+ * is what gives a form real only above 3 (ln(x − 3), as the engine writes 1/(x² − 9)) its sixth: 13.1 was the last and it had five.
  */
-const ANTIDERIVATIVE_POINTS = [-7.3, -3.1, -1.7, -0.85, -0.6, -0.35, -0.12, 0.27, 0.58, 0.81, 1.23, 1.9, 2.2, 2.6, 3.4, 4.4, 5.7, 8.3, 13.1]
+const ANTIDERIVATIVE_POINTS = [-7.3, -3.1, -1.7, -0.85, -0.6, -0.35, -0.12, 0.27, 0.58, 0.81, 1.23, 1.9, 2.2, 2.6, 3.4, 4.4, 5.7, 8.3, 13.1, 21.7]
 
 /** Points at which two antiderivatives must agree before they are called the same. */
 const ANTIDERIVATIVE_NEEDED = 6
