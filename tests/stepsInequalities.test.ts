@@ -18,6 +18,10 @@ import {
   type IneqPart
 } from '../src/renderer/src/math/steps/inequality'
 import { finishStep } from '../src/renderer/src/math/steps/sentences'
+import { reconcile } from '../src/renderer/src/calc/working'
+import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
+import { checkCalculatorGuess } from '../src/renderer/src/calc/guessCalc'
+import { latexToMath } from '../src/renderer/src/math/latexToMath'
 import type { Step, Working } from '../src/renderer/src/math/steps/types'
 import { rat } from '../src/renderer/src/math/pure/rat'
 import { resetGlobals } from './helpers/globals'
@@ -90,6 +94,24 @@ describe('S1e: inequalities in the Calculator', () => {
   it('solves an absolute value inequality outside two points', () => {
     workedLine('|2x-1|\\geq 3')
     expect(answerTexts()).toEqual(['x \\le -1 \\text{ or } x \\ge 2', '(-\\infty, -1] \\cup [2, \\infty)'])
+  })
+
+  it('solves an absolute value against 0 and against a negative number', () => {
+    // |g| is never negative: at 0 it is the one point where g is 0, and below 0 the relation is either true everywhere or
+    // nowhere. The sign sentence names the expression as it reads (|x|, |x| + 1), never "|x| - 0" or "|x| - -1".
+    workedLine('|x|\\leq 0')
+    expect(answerTexts()).toEqual(['x = 0', '\\{0\\}'])
+    expect(usePure.getState().working?.moves.some((m) => /\|x\| is positive for x < 0 and positive for x > 0\./.test(m.head))).toBe(true)
+    workedLine('|x|<0')
+    expect(answerTexts()).toEqual(['\\text{no value of x works}', '\\varnothing'])
+    workedLine('|x|>0')
+    expect(answerTexts()).toEqual(['x < 0 \\text{ or } x > 0', '(-\\infty, 0) \\cup (0, \\infty)'])
+    workedLine('|x+3|\\leq 0')
+    expect(answerTexts()).toEqual(['x = -3', '\\{-3\\}'])
+    workedLine('|x|>-2')
+    expect(answerTexts()).toEqual(['\\text{every real number}', '(-\\infty, \\infty)'])
+    workedLine('|x|\\leq -1')
+    expect(answerTexts()).toEqual(['\\text{no value of x works}', '\\varnothing'])
   })
 
   it('gives every real number or no value when the quadratic has no real roots', () => {
@@ -492,5 +514,181 @@ describe('S1e round 2 review: the drawing of a line reads as the line', () => {
     expect(ineqDrawnTex('((x-1)/(x+2))>=0')).toBe('\\frac{x-1}{x+2} \\ge 0')
     expect(ineqDrawnTex('x<=3')).toBe('x \\le 3')
     expect(ineqDrawnTex('x^(2)-4<=0')).toBe('x^{2}-4 \\le 0')
+  })
+})
+
+describe('S1e round 3 review: a deeply bracketed line is refused with a sentence, never thrown', () => {
+  it('refuses 6000 nested bracket pairs and a < without overflowing the stack', () => {
+    const deep = '('.repeat(6000) + 'x' + ')'.repeat(6000) + '<1'
+    expect(() => usePure.getState().runLatex(deep, 'auto', { quiet: true })).not.toThrow()
+    const w = usePure.getState().working
+    expect(typeof w?.error).toBe('string')
+    expect(w?.error).not.toMatch(/call stack/i)
+    expect(usePure.getState().job).not.toBe('solve')
+  })
+
+  it('reads no line past the router limits (400 characters, 60 open brackets) as an inequality', () => {
+    expect(readInequality('('.repeat(61) + 'x' + ')'.repeat(61) + '<1')).toBeNull()
+    expect(readInequality('x' + '+x'.repeat(200) + '<1')).toBeNull()
+    expect(readInequality('(x+1)<2')).not.toBeNull()
+  })
+})
+
+describe('S1e round 3 review: the card keeps the inequality symbols, and Guess-first reads an inequality only as shown', () => {
+  /** The Calculator's "=" card for a linear line, built the way the screen builds it. */
+  const cardFor = (linear: string) => {
+    const card = evaluateInput('COMP', linear, { vars: {}, ans: 0, angle: 'deg' })
+    expect(card, `no card for ${linear}`).not.toBeNull()
+    return card as NonNullable<typeof card>
+  }
+
+  it('keeps the relation and the infinite end in the card main', () => {
+    usePure.getState().runLatex('-2x+1\\geq 5', 'auto', { quiet: true })
+    const w = usePure.getState().working
+    expect(w?.checked).toBe('ok')
+    const r = reconcile(cardFor('-2x+1>=5'), w)
+    expect(r.result.main).toBe('x ≤ -2, (-∞, -2]')
+  })
+
+  it('keeps ∪, ∞ and ∅ in the card main, and no LaTeX is left in it', () => {
+    usePure.getState().runLatex('x^2>0', 'auto', { quiet: true })
+    const wide = usePure.getState().working
+    expect(wide?.checked).toBe('ok')
+    const wideMain = reconcile(cardFor('x^2>0'), wide).result.main
+    expect(wideMain).toContain('∪')
+    expect(wideMain).toContain('∞')
+    expect(wideMain).not.toMatch(/\\/)
+
+    usePure.getState().runLatex('x^2<0', 'auto', { quiet: true })
+    const empty = usePure.getState().working
+    expect(empty?.checked).toBe('ok')
+    expect(reconcile(cardFor('x^2<0'), empty).result.main).toContain('∅')
+
+    usePure.getState().runLatex('x^2\\leq 0', 'auto', { quiet: true })
+    const zero = usePure.getState().working
+    expect(zero?.checked).toBe('ok')
+    const zeroMain = reconcile(cardFor('x^2<=0'), zero).result.main
+    expect(zeroMain).toContain('{0}')
+    expect(zeroMain).not.toMatch(/\\/)
+  })
+
+  it('refuses a Guess-first answer to an inequality as unreadable, unless it is typed exactly as shown', () => {
+    usePure.getState().runLatex('-2x+1\\geq 5', 'auto', { quiet: true })
+    const shown = reconcile(cardFor('-2x+1>=5'), usePure.getState().working).result
+    expect(checkCalculatorGuess('x ≤ -2, (-∞, -2]', shown).verdict).toBe('right')
+    for (const guess of ['x<=-2', 'x \\le -2', 'x = -2', '-2', '0', '(-∞,-2]']) {
+      expect(checkCalculatorGuess(guess, shown).verdict, guess).toBe('unreadable')
+    }
+  })
+})
+
+describe('S1e review round 4: a fraction inside a sum or product is never read as a polynomial', () => {
+  // The bottom of each fraction is a letter, and x = 0 is where it is undefined, so x = 0 is never a solution. The
+  // parser cancels x²/x to x without a word, so these lines must be declined rather than given a checked answer.
+  const DECLINED = [
+    '2+\\frac{x^2}{x}\\ge 2',
+    'x+\\frac{x^2}{x}\\ge 0',
+    '\\frac{x^2}{x}\\cdot 2<4',
+    '\\frac{x^2}{x^2}+x>0',
+    '(x+1)\\frac{x}{x}>0'
+  ]
+
+  it.each(DECLINED)('gives no checked answer for %s', (latex) => {
+    usePure.getState().runLatex(latex, 'auto', { quiet: true })
+    const w = usePure.getState().working
+    expect(w?.checked === 'ok' && (w.answers ?? []).length > 0, latex).toBe(false)
+  })
+
+  it('reads none of them as an inequality, and the second check accepts no set for them', () => {
+    const anySet = [{ lo: null, loClosed: false, hi: null, hiClosed: false }]
+    for (const latex of DECLINED) {
+      const text = latexToMath(latex)
+      expect(readInequality(text), latex).toBeNull()
+      expect(agreesWithTypedSides(text, anySet), latex).toBe(false)
+    }
+  })
+
+  it('still reads a division by a number inside a sum, and a letter bottom at the top of a side', () => {
+    workedLine('\\frac{x}{2}+1<3')
+    expect(answerTexts()).toEqual(['x < 4', '(-\\infty, 4)'])
+    expect(readInequality('x^2/x>0')).not.toBeNull()
+  })
+})
+
+describe('S1e review round 4: the squared terms leave both sides first', () => {
+  it('shows x² off both sides before the line is solved as a linear one', () => {
+    const w = workedLine('x^2-5x+6>x^2-1')
+    expect(answerTexts()).toEqual(['x < \\frac{7}{5}', '(-\\infty, \\frac{7}{5})'])
+    expect(w.moves[0].head).toBe('Subtract x² from both sides')
+    // The router's working holds each state as text: no state after the first move may still hold a power of x.
+    const moves = routed('x^2-5x+6>x^2-1').steps.filter((s) => s.kind === 'IneqMove')
+    expect(moves).toHaveLength(3)
+    for (const s of moves) expect(s.after).not.toContain('^')
+  })
+
+  it('gives the same answers as before for other lines with x² on both sides', () => {
+    workedLine('x^2+3x<x^2+6')
+    expect(answerTexts()).toEqual(['x < 2', '(-\\infty, 2)'])
+    workedLine('x^2-4x>x^2+8')
+    expect(answerTexts()).toEqual(['x < -2', '(-\\infty, -2)'])
+  })
+
+  it('checks 60 generated lines with x² on both sides: valid, and the same set as sampling at quarter points', () => {
+    const rnd = generator(20261020)
+    const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]
+    const range = (lo: number, hi: number): number[] => Array.from({ length: hi - lo + 1 }, (_, i) => lo + i)
+    for (let i = 0; i < 60; i++) {
+      const k2 = pick([1, -1, 2, -2])
+      const a = pick(range(-5, 5).filter((n) => n !== 0))
+      const b = pick(range(-9, 9))
+      const c = pick(range(-9, 9))
+      const op = pick(OPS)
+      const input = `${polyText(k2, a, b)}${op}${polyText(k2, 0, c)}`
+      const w = routed(input)
+      expect(w.noWorking, input).toBeFalsy()
+      expect(validateWorking(w).valid, input).toBe(true)
+      expect(w.checked, input).toBe('ok')
+      const set = intervalsOfLast(w)
+      // The difference of the two sides is a x + (b − c); four times it at x = k/4 is a k + 4(b − c), with the same sign.
+      for (let k = -80; k <= 80; k++) {
+        const truth = relHolds(a * k + 4 * (b - c), op)
+        expect(inSet(k / 4, set), `${input} at x=${k / 4}`).toBe(truth)
+      }
+    }
+  })
+})
+
+describe('S1e review round 4: the second check holds on every part, not only at the claimed ends', () => {
+  const part = (lo: number | null, loClosed: boolean, hi: number | null, hiClosed: boolean): IneqPart => ({
+    lo: lo === null ? null : rat(BigInt(lo)),
+    loClosed,
+    hi: hi === null ? null : rat(BigInt(hi)),
+    hiClosed
+  })
+
+  it('rejects a set that merges two parts across a root', () => {
+    expect(agreesWithTypedSides('x^2-5x+6>0', [part(null, false, null, false)])).toBe(false)
+  })
+
+  it('accepts the correct two parts of a quadratic, and rejects one that adds a part the typed sides leave out', () => {
+    expect(agreesWithTypedSides('x^2-5x+6<0', [part(2, false, 3, false)])).toBe(true)
+    expect(agreesWithTypedSides('x^2-5x+6<0', [part(2, false, 3, false), part(4, false, 5, false)])).toBe(false)
+  })
+})
+
+describe('S1e review round 4: Auto keeps the normal-table and numeric lines their own wording', () => {
+  it('keeps the Standard normal table for P(Z <= 1.96) and P(1.5 > Z)', () => {
+    for (const line of ['P(Z<=1.96)', 'P(1.5>Z)']) {
+      usePure.getState().runLatex(line, 'auto', { quiet: true })
+      expect(usePure.getState().job, line).toBe('normal')
+      expect(usePure.getState().working?.error, line).toBeUndefined()
+    }
+  })
+
+  it('says a plain numeric comparison is just a number, not an inequality it cannot handle', () => {
+    for (const line of ['3>2', '1<2']) {
+      usePure.getState().runLatex(line, 'auto', { quiet: true })
+      expect(usePure.getState().working?.error, line).toMatch(/^That is just a number/)
+    }
   })
 })

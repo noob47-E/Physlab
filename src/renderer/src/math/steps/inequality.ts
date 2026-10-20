@@ -19,6 +19,7 @@ import { rAbs, rAdd, rCmp, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rSign, rSqrt,
 import { coefficientOf, parseExactRat, tryParsePoly } from './check-adapter'
 import { displaySafe, drawnTex } from './displaySafe'
 import type { Step, ValidationVerdict, Working, WorkingValidationResult } from './types'
+import { tooLongToRead } from './limits'
 
 /** The relation between the two sides, as written. */
 export type IneqRel = '<' | '<=' | '>' | '>='
@@ -162,20 +163,43 @@ type SideRead = { kind: 'ratio'; num: Expr; den: Expr } | { kind: 'abs'; g: Expr
 
 const ONE: Expr = normalize([{ c: rat(1n), v: {} }])
 
+/** A divisor that is a plain number: 2, 0.5 or (2), (-3). The number must end there, not run on into a letter or a power. */
+const PLAIN_DIVISOR = /^\s*(?:\d+(?:\.\d+)?|\(\s*-?\d+(?:\.\d+)?\s*\))(?!\s*[\w.^(])/
+
+/**
+ * True when a division in the text has a bottom that is not a plain number, at any depth of brackets: x/x, or x^2 over x
+ * inside a sum, as the LaTeX converter writes \frac{x^2}{x} (((x^(2))/(x))). The parser cancels a monomial divided by a
+ * monomial, so that fraction would read as x and the point x = 0, where it is undefined, would be left in the set. A division
+ * by a number is exact, so it is still read.
+ */
+function dividesByNonNumber(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '/' && !PLAIN_DIVISOR.test(text.slice(i + 1))) return true
+  }
+  return false
+}
+
+/** A text read as a polynomial, or null. A division by anything but a plain number is refused first (dividesByNonNumber). */
+function readPoly(text: string): Expr | null {
+  return dividesByNonNumber(text) ? null : tryParsePoly(text)
+}
+
 /**
  * One side read as a fraction of polynomials (a plain polynomial has den 1), or as |g|. A fraction is written
  * (numerator)/(denominator) with nothing else at the top level: the denominator a bracket, a number or one letter power.
  */
-function readSide(text: string): SideRead | null {
-  // A whole side in one bracket pair is the same side: the LaTeX converter writes ((x-1)/(x+2)) for \frac.
-  if (isOneBracket(text)) return readSide(text.slice(1, -1).trim())
+function readSide(raw: string): SideRead | null {
+  // A whole side in one bracket pair is the same side: the LaTeX converter writes ((x-1)/(x+2)) for \frac. The pairs come off in
+  // a loop, not by calling readSide again: 6000 nested pairs overflowed the stack before any limit could refuse the line.
+  let text = raw
+  while (isOneBracket(text)) text = text.slice(1, -1).trim()
   if (text.length >= 2 && text[0] === '|' && text[text.length - 1] === '|' && text.indexOf('|', 1) === text.length - 1) {
-    const g = tryParsePoly(text.slice(1, -1))
+    const g = readPoly(text.slice(1, -1))
     return g ? { kind: 'abs', g } : null
   }
   const slashes = topLevel(text, '/')
   if (slashes.length === 0) {
-    const p = tryParsePoly(text)
+    const p = readPoly(text)
     return p ? { kind: 'ratio', num: p, den: ONE } : null
   }
   if (slashes.length > 1) return null
@@ -185,8 +209,8 @@ function readSide(text: string): SideRead | null {
   if (numText === '' || denText === '') return null
   if (hasTopLevelSum(numText) || topLevel(numText, '/').length > 0) return null
   if (!(isOneBracket(denText) || /^\d+$/.test(denText) || /^[A-Za-z](\^\d+)?$/.test(denText))) return null
-  const num = tryParsePoly(numText)
-  const den = tryParsePoly(denText)
+  const num = readPoly(numText)
+  const den = readPoly(denText)
   if (!num || !den) return null
   return { kind: 'ratio', num, den }
 }
@@ -205,6 +229,8 @@ function constantOf(side: SideRead): Rat | null {
  * side is not a polynomial, a single fraction, or |linear| against a number.
  */
 export function readInequality(text: string): IneqRead | null {
+  // A line past the router's limits is refused by the router, so it is not read as an inequality here either.
+  if (tooLongToRead(text)) return null
   const rel = splitRelation(text)
   if (!rel) return null
   const left = readSide(rel.left)
@@ -273,7 +299,11 @@ export function canWorkInequality(text: string): boolean {
 export function signedExpression(read: IneqRead): string {
   const fn = read.fn
   if (fn.kind === 'ratio') return LEFT_MINUS_RIGHT
-  return `|${polyText(fn.g, read.v)}| - ${rStr(fn.c)}`
+  const abs = `|${polyText(fn.g, read.v)}|`
+  // The number is written the way the expression reads: |g| - 2, |g| (c is 0), or |g| + 1 (c is negative). "|g| - -1"
+  // would be a double sign a student cannot read.
+  if (rIsZero(fn.c)) return abs
+  return rIsNeg(fn.c) ? `${abs} + ${rStr(rAbs(fn.c))}` : `${abs} - ${rStr(fn.c)}`
 }
 
 /**
@@ -418,13 +448,17 @@ export function analyseInequality(read: IneqRead): IneqAnalysis | null {
     const signAt = (t: Rat): number => rSign(evalAt(num, { [v]: t })) * rSign(evalAt(den, { [v]: t }))
     return finish(zeros, poles, read.rel, signAt)
   }
-  // |g| − c with g linear: the related equation |g| = c has the two roots g = c and g = −c.
+  // |g| − c with g linear. Above 0 the related equation |g| = c has the two roots g = c and g = −c. At 0 it has the one
+  // root where g is 0, and |g| is never negative there; below 0 it has none, and |g| − c is positive everywhere. (A student
+  // meets both: |x| ≤ 0 is the single value 0, and |x| < 0 is no value.) A zero sign is still refused below, so a
+  // constant a line reads as one number is not given a chart.
   const { g, c } = read.fn
-  if (exprDegree(g) !== 1 || rSign(c) <= 0) return null
+  if (exprDegree(g) !== 1) return null
+  const signAt = (t: Rat): number => rSign(rSub(rAbs(evalAt(g, { [v]: t })), c))
+  if (rSign(c) < 0) return finish([], [], read.rel, signAt)
   const a = coefficientOf(g, v, 1)
   const b = coefficientOf(g, v, 0)
   const zeros = sortedDistinct([rDiv(rSub(c, b), a), rDiv(rSub(rNeg(c), b), a)])
-  const signAt = (t: Rat): number => rSign(rSub(rAbs(evalAt(g, { [v]: t })), c))
   return finish(zeros, [], read.rel, signAt)
 }
 
@@ -744,8 +778,8 @@ function readState(text: unknown, v: string): StateRead | null {
   if (typeof text !== 'string') return null
   const rel = splitRelation(text)
   if (!rel) return null
-  const L = tryParsePoly(rel.left)
-  const R = tryParsePoly(rel.right)
+  const L = readPoly(rel.left)
+  const R = readPoly(rel.right)
   if (!L || !R) return null
   if (varsOf(eAdd(L, R)).some((n) => n !== v)) return null
   return { L, R, rel: rel.rel as IneqRel }
@@ -753,7 +787,7 @@ function readState(text: unknown, v: string): StateRead | null {
 
 /** The polynomial a move's term text stands for, in v only; null when it is not one. */
 function termOf(text: string, v: string): Expr | null {
-  const t = tryParsePoly(text)
+  const t = readPoly(text)
   if (!t || varsOf(t).some((n) => n !== v)) return null
   return t
 }
@@ -805,9 +839,10 @@ function sameIntervals(data: unknown, set: IneqPart[]): boolean {
 }
 
 /**
- * Points that sample a claimed set: every finite endpoint, a point between each pair of neighbouring endpoints, one point
- * beyond each end, and quarter steps from -10 to 10. Membership of the claimed set can only change at an endpoint, so the
- * first three kinds reach every claimed interval and every gap; the quarter steps catch a wrong stretch between them.
+ * Points that sample a claimed set: every finite endpoint, a quarter, a half and three quarters of the way across each gap
+ * between neighbouring endpoints, one point beyond each end, and quarter steps from -10 to 10. Membership of the claimed set
+ * can only change at an endpoint, so the endpoints and the points beyond the ends reach every claimed interval; the points
+ * inside each gap catch a wrong stretch that a missed root would leave between two claimed ends.
  */
 function setTestPoints(set: IneqPart[]): Rat[] {
   const ends: Rat[] = []
@@ -817,7 +852,11 @@ function setTestPoints(set: IneqPart[]): Rat[] {
   }
   const sorted = sortedDistinct(ends)
   const points: Rat[] = [...sorted]
-  for (let j = 0; j + 1 < sorted.length; j++) points.push(rDiv(rAdd(sorted[j], sorted[j + 1]), rat(2n)))
+  for (let j = 0; j + 1 < sorted.length; j++) {
+    const a = sorted[j]
+    const width = rSub(sorted[j + 1], a)
+    points.push(rAdd(a, rDiv(width, rat(4n))), rAdd(a, rDiv(width, rat(2n))), rAdd(a, rDiv(rMul(width, rat(3n)), rat(4n))))
+  }
   if (sorted.length > 0) points.push(rSub(sorted[0], rat(1n)), rAdd(sorted[sorted.length - 1], rat(1n)))
   points.push(rat(0n))
   for (let k = -40n; k <= 40n; k += 1n) points.push(rat(k, 4n))
@@ -846,6 +885,7 @@ function inParts(t: Rat, set: IneqPart[]): boolean {
  * the claimed set holds at the same points. A point is in the true set when the relation holds and no denominator is 0.
  */
 export function agreesWithTypedSides(input: string, set: IneqPart[]): boolean {
+  if (tooLongToRead(input)) return false
   const rel = splitRelation(input)
   if (!rel) return false
   const left = readSide(rel.left)

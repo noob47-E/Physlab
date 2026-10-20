@@ -196,9 +196,15 @@ export const usePure = create<PureState>((set, get) => ({
  * a < or a >: P(Z < 1.96) is a normal-distribution question and 3 + 2i < 5 is about complex numbers.
  */
 function autoJob(text: string): JobId {
-  const suggested = suggestJob(text)
-  const takenByFactorise = suggested === 'factor' || suggested === 'divide' || suggested === 'partial'
-  return takenByFactorise && canWorkInequality(text) ? 'solve' : suggested
+  try {
+    const suggested = suggestJob(text)
+    const takenByFactorise = suggested === 'factor' || suggested === 'divide' || suggested === 'partial'
+    return takenByFactorise && canWorkInequality(text) ? 'solve' : suggested
+  } catch {
+    // A line the inequality reader cannot take (a deep run of brackets, say) keeps its ordinary suggestion; it must never throw
+    // out of runLatex, which the Calculator calls with no catch of its own.
+    return suggestJob(text)
+  }
 }
 
 /**

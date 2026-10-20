@@ -124,6 +124,19 @@ function linearMoves(L: Expr, R: Expr, rel: IneqRel, v: string, b: Builder): voi
   let relNow = rel
   const xTerm = (c: Rat): Expr => normalize([{ c, v: { [v]: 1 } }])
 
+  // The caller has checked that the difference of the sides is linear, so every term of degree 2 or more is the same on both
+  // sides and cancels in the difference. Those terms come off first, one move each, so no shown line keeps x² on both sides
+  // of a line that is then solved as a linear one (the review found "Divide both sides by −5" with x² still in place).
+  const top = Math.max(exprDegree(curL), exprDegree(curR))
+  for (let d = top; d >= 2; d--) {
+    const cL = coefficientOf(curL, v, d)
+    if (rIsZero(cL)) continue
+    const term = normalize([{ c: cL, v: { [v]: d } }])
+    curL = eSub(curL, term)
+    curR = eSub(curR, term)
+    b.move(stateText(curL, curR, relNow, v), { move: moveFor(term, v, cL) })
+  }
+
   const aR = coefficientOf(curR, v, 1)
   if (!rIsZero(aR)) {
     const term = xTerm(aR)
