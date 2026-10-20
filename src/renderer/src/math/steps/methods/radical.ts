@@ -3,13 +3,14 @@
 // through the router, and every root is put back into the ORIGINAL equation. A root that does not hold is extraneous and is
 // rejected in words. A square root is never negative, so sqrt(P) = c with c below zero has no solution, and nothing is squared.
 //
-// A shape this method does not decide (two roots on one side, a root with a coefficient, a squared equation with no
-// rational root) gives no working, so the Calculator's old answer stays. Nothing here is shown unless the checks pass.
+// A root may carry a coefficient on its own side (2·sqrt(x) = x − 3): the squaring then squares the coefficient with the root,
+// so 2·sqrt(x) squares to 4x. Two roots on one side, a coefficient on the root of the other side, or a squared equation with
+// no rational root give no working, so the Calculator's old answer stays. Nothing here is shown unless the checks pass.
 
 import type { Method, Problem, Step, StepAnswer, StepRouter, Working } from '../types'
 import { finishStep } from '../sentences'
 import { eNeg, eSub, eMul, exprDegree, normalize, type Expr, type Term } from '../../pure/mono'
-import { R1, rEq, rIsNeg } from '../../pure/rat'
+import { R1, rEq, rIsNeg, rIsZero, rMul, type Rat } from '../../pure/rat'
 import {
   RadicalRegistry,
   checkCandidate,
@@ -19,6 +20,7 @@ import {
   readRadicalEquation,
   rationalsOf,
   rootIndexOf,
+  scaleExpr,
   writeSide,
   type RadicalEquation,
   type RadicalRootCheck
@@ -35,14 +37,18 @@ interface Plan {
   eq: RadicalEquation
   /** The root is on the right: the sides are swapped first. */
   swap: boolean
-  /** The root of the side with the root, alone (coefficient one). */
+  /** The root of the side with the root, alone (with its coefficient, if it has one). */
   rootL: Expr
+  /** The coefficient the root carries on its side: 1 for sqrt(P), 2 for 2 sqrt(P). */
+  coef: Rat
   /** The polynomial part of that side, which isolating the root moves across. Empty when the root is alone. */
   moved: Expr
   /** The other side once `moved` has crossed (or the second root, alone, when both sides hold one). */
   rightAfter: Expr
   /** The second root, alone, when the other side holds one too. */
   rightRoot: Expr | null
+  /** The squared root side: coef² times the radicand (what the squaring turns the root side into). */
+  squaredL: Expr
   /** "negative": sqrt(P) = c with c below zero, no solution. "square": the squared equation is solved next. */
   kind: 'negative' | 'square'
 }
@@ -50,6 +56,11 @@ interface Plan {
 /** A term that is exactly one root, with coefficient one and no letter beside it. */
 function isLoneRoot(t: Term, reg: RadicalRegistry): boolean {
   return rEq(t.c, R1) && rootIndexOf(t, reg) !== null && Object.keys(t.v).filter((k) => t.v[k] !== 0).length === 1
+}
+
+/** A term that is exactly one root with any non-zero coefficient and no letter beside it: 2·sqrt(x), -sqrt(x). */
+function isRootAlone(t: Term, reg: RadicalRegistry): boolean {
+  return !rIsZero(t.c) && rootIndexOf(t, reg) !== null && Object.keys(t.v).filter((k) => t.v[k] !== 0).length === 1
 }
 
 /** The plan of a radical equation this method solves, or null when its shape is not one it decides. */
@@ -70,15 +81,18 @@ function planOf(problem: Problem): Plan | null {
   const right = swap ? eq.L : eq.R
   const rootTerms = swap ? rootsR : rootsL
   const rightRootTerms = swap ? rootsL : rootsR
-  if (rootTerms.length !== 1 || !isLoneRoot(rootTerms[0], reg)) return null
+  if (rootTerms.length !== 1 || !isRootAlone(rootTerms[0], reg)) return null
   const rootL = normalize([rootTerms[0]])
+  const coef = rootTerms[0].c
   const moved = normalize(left.filter((t) => rootIndexOf(t, reg) === null))
   const radicandL = reg.radicands[rootIndexOf(rootTerms[0], reg) as number]
+  // The root side squares to coef² times its radicand: 2·sqrt(x) squares to 4x.
+  const squaredL = scaleExpr(radicandL, rMul(coef, coef))
 
   let rightRoot: Expr | null = null
   let rightAfter: Expr
   if (rightRootTerms.length === 1) {
-    // Two roots: both must stand alone, so a squaring of the two radicands is the whole equation.
+    // Two roots: both must stand alone with coefficient one, so a squaring of the two radicands is the whole equation.
     if (!isLoneRoot(rightRootTerms[0], reg) || moved.length > 0 || right.some((t) => rootIndexOf(t, reg) === null)) return null
     rightRoot = normalize([rightRootTerms[0]])
     rightAfter = rightRoot
@@ -91,20 +105,23 @@ function planOf(problem: Problem): Plan | null {
   if (rightRoot !== null) {
     const radicandR = reg.radicands[rootIndexOf(rightRootTerms[0], reg) as number]
     kind = 'square'
-    D = eSub(radicandL, radicandR)
+    D = eSub(squaredL, radicandR)
   } else {
-    const constantNegative = rightAfter.length === 1 && Object.keys(rightAfter[0].v).length === 0 && rIsNeg(rightAfter[0].c)
+    // A root with a coefficient other than one is not decided as "no solution" here: it is squared, and the roots it gives are
+    // put back into the original equation, which refuses any that does not hold.
+    const constantNegative =
+      rEq(coef, R1) && rightAfter.length === 1 && Object.keys(rightAfter[0].v).length === 0 && rIsNeg(rightAfter[0].c)
     if (constantNegative) {
       kind = 'negative'
       D = radicandL
     } else {
       kind = 'square'
-      D = eSub(radicandL, eMul(rightAfter, rightAfter))
+      D = eSub(squaredL, eMul(rightAfter, rightAfter))
     }
   }
   // A squared equation with no letter left (or the identity 0 = 0) decides nothing about the roots: not solved here.
   if (kind === 'square' && exprDegree(D) < 1) return null
-  return { v, reg, eq, swap, rootL, moved, rightAfter, rightRoot, kind }
+  return { v, reg, eq, swap, rootL, coef, moved, rightAfter, rightRoot, squaredL, kind }
 }
 
 /** The working of a radical equation, or no working when this method does not decide it. */
@@ -115,14 +132,12 @@ function solveRadical(problem: Problem, router: StepRouter): Working {
   const typed = `${writeSide(eq.L, v, reg)} = ${writeSide(eq.R, v, reg)}`
   const steps: Step[] = []
   let cur = typed
-  let L = eq.L
   let R = eq.R
 
   if (plan.swap) {
     const after = `${writeSide(eq.R, v, reg)} = ${writeSide(eq.L, v, reg)}`
     steps.push(finishStep({ kind: 'EquationEquiv', op: { kind: 'swap' }, before: cur, after, sentence: '', data: { variable: v } }))
     cur = after
-    L = eq.R
     R = eq.L
   }
 
@@ -137,7 +152,6 @@ function solveRadical(problem: Problem, router: StepRouter): Working {
     const after = `${writeSide(newL, v, reg)} = ${writeSide(newR, v, reg)}`
     steps.push(finishStep({ kind: 'EquationEquiv', op, before: cur, after, sentence: '', data: { variable: v } }))
     cur = after
-    L = newL
     R = newR
   }
 
@@ -163,15 +177,16 @@ function solveRadical(problem: Problem, router: StepRouter): Working {
     }
   }
 
-  // Square both sides: a root squares to its radicand, the other side to its square (or, with a second root, to its radicand).
-  const radicandL = reg.radicands[rootIndexOf(L.filter((t) => rootIndexOf(t, reg) !== null)[0], reg) as number]
+  // Square both sides: the root side squares to coef² times its radicand, the other side to its square (or, with a second root,
+  // to its radicand).
+  const squaredL = plan.squaredL
   const rightRadicand =
     plan.rightRoot !== null ? reg.radicands[rootIndexOf(R.filter((t) => rootIndexOf(t, reg) !== null)[0], reg) as number] : null
   const rightSquared = rightRadicand === null ? eMul(R, R) : rightRadicand
   const sqText =
     rightRadicand === null
-      ? `${writeSide(radicandL, v)} = (${writeSide(R, v)})^2`
-      : `${writeSide(radicandL, v)} = ${writeSide(rightRadicand, v)}`
+      ? `${writeSide(squaredL, v)} = (${writeSide(R, v)})^2`
+      : `${writeSide(squaredL, v)} = ${writeSide(rightRadicand, v)}`
   steps.push(
     finishStep({
       kind: 'Implication',
@@ -188,7 +203,7 @@ function solveRadical(problem: Problem, router: StepRouter): Working {
   let solvedText = sqText
   let sub = router.solve({ job: 'solve', input: solvedText, variable: v, domain: 'real' }, { includeAlternatives: false })
   if (sub.noWorking || sub.steps.length === 0 || sub.answer === undefined) {
-    const diff = eSub(radicandL, rightSquared)
+    const diff = eSub(squaredL, rightSquared)
     if (exprDegree(diff) >= 1) {
       solvedText = `${writeSide(diff, v)} = 0`
       steps.push(

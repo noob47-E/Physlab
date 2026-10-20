@@ -56,6 +56,8 @@ import {
 } from '../check/checkers'
 // Part R: a square root of the letter is read and checked by radicalForm.ts (the polynomial reader above refuses a root).
 import { radicalCheckOp, radicalCheckSquare, radicalVarOf } from './radicalForm'
+// S3 (substitution): an exponential equation that is a quadratic in a power, u = a^x, is checked by expSubst.ts.
+import { checkExpSubstituteOp } from './expSubst'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -702,6 +704,8 @@ export function checkEquationOp(
 ): ValidationVerdict {
   // S1b: a square-root step with a surd root is checked by its own exact rule first (sqrt is a name, not a letter).
   if (isSurdRootOp(op)) return checkSurdSquareRootPm(before, after, op as Extract<EquationOp, { kind: 'square-root-pm' }>, v)
+  // S3 (substitution): the typed power equation and the quadratic in u are read and compared exactly by expSubst.ts.
+  if (op.kind === 'exp-substitute') return checkExpSubstituteOp(stringifyNodeOrText(before), stringifyNodeOrText(after), op)
   if (
     op.kind === 'divide-cos' ||
     op.kind === 'trig-ref-angle' ||

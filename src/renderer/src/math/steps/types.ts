@@ -102,6 +102,9 @@ export type EquationOp =
   | { kind: 'trig-substitute' }
   // rejected: the roots of the equation in u that lie outside -1 to 1 (a sine or cosine has no angle for them), as values.
   | { kind: 'trig-back-substitute'; rejected?: string[] }
+  // The substitution u = a^x (expSubst.ts): the typed equation, a quadratic in powers of a, becomes the quadratic in u. base is
+  // "e" or the whole number a; u is the letter of the quadratic. Checked exactly by checkExpSubstituteOp.
+  | { kind: 'exp-substitute'; base: string; u: string }
 
 /**
  * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors
