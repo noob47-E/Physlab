@@ -24,6 +24,7 @@ import { superscriptPowers } from '../src/renderer/src/math/format'
 import fs from 'fs'
 import path from 'path'
 import { beyondTheReals } from '../src/renderer/src/calc/roots'
+import { exactQuadraticOf } from '../src/renderer/src/calc/exactComplex'
 import { setCalcPrecisionSource } from '../src/renderer/src/calc/format'
 import { errorSentence } from '../src/renderer/src/calc/errors'
 
@@ -431,7 +432,7 @@ describe('fixb-f7-poly-roots-agreed — Equations > Polynomial agrees with the N
   beforeAll(() => setCalcPrecisionSource(() => ({ decimals: 2, precisionMode: 'dp' })))
   afterAll(() => setCalcPrecisionSource(() => ({ decimals: 10, precisionMode: 'sf' })))
   describe('F7: Equations > Polynomial agrees with Numbers screen on complex roots', () => {
-    it('Numbers screen beyondTheReals gives "No real solution. In complex numbers: x = −0.5 ± 0.87i"', () => {
+    it('beyondTheReals with no exact coefficients gives the decimal pair "x = −0.5 ± 0.87i"', () => {
       const res = beyondTheReals([1, 1, 1], 0)
       expect(res).not.toBeNull()
       expect('sentence' in res!).toBe(true)
@@ -440,11 +441,23 @@ describe('fixb-f7-poly-roots-agreed — Equations > Polynomial agrees with the N
       }
     })
 
+    // The Equations > Polynomial screen passes the coefficients it was typed, so x² + x + 1 = 0 says the exact pair the = card says.
+    it('the Numbers screen with its typed coefficients says the exact pair: x² + x + 1 = 0 is −1/2 ± (√3/2)i', () => {
+      const c = [1, 1, 1]
+      expect(beyondTheReals(c, 0, exactQuadraticOf(c))).toEqual({ sentence: 'No real solution. In complex numbers: x = −1/2 ± (√3/2)i' })
+    })
+
     it('calcModes.tsx Equations > Polynomial uses beyondTheReals to show the sentence rather than only separate rows', () => {
       const target = path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
       const code = fs.readFileSync(target, 'utf8')
       // The name followed by a bracket: the call itself. The import line has the bare name, never a bracket after it.
       expect(code).toMatch(/\bbeyondTheReals\(/)
+    })
+
+    it('calcModes.tsx hands the typed coefficients to beyondTheReals as exact fractions', () => {
+      const target = path.resolve(__dirname, '../src/renderer/src/panels/calcModes.tsx')
+      const code = fs.readFileSync(target, 'utf8')
+      expect(code).toMatch(/beyondTheReals\(c, 0, exactQuadraticOf\(c\)\)/)
     })
   })
 })

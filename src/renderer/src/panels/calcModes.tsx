@@ -24,6 +24,7 @@ import { calcNum, mathFormatOptions } from '../calc/format'
 import { matrixLine, sheetValues, tableRows, typedUnits } from '../calc/modeLines'
 import { errorSentence } from '../calc/errors'
 import { beyondTheReals, polynomialRootRows } from '../calc/roots'
+import { exactQuadraticOf } from '../calc/exactComplex'
 import { SHEET_COLS } from '../calc/sheet'
 import { predictY } from '../calc/stats'
 import { CONSTANTS } from '../calc/constants'
@@ -617,8 +618,9 @@ function EquationMode() {
     } else {
       const c = coef.slice(0, deg + 1)
       // The rows are decided in calc/roots.ts, where they can be compared with x = ?, the Solve job and the bar;
-      // with no real root the screen says so in the same sentence as the Numbers screen (CALC-03, F7).
-      const btr = beyondTheReals(c, 0)
+      // with no real root the screen says so in the same sentence as the Numbers screen (CALC-03, F7). The typed
+      // coefficients go too, so a quadratic's pair is written exactly as the = card writes it (calc/exactComplex.ts).
+      const btr = beyondTheReals(c, 0, exactQuadraticOf(c))
       const rows = polynomialRootRows(c)
       const expr = polyToExpr(c)
       out = (

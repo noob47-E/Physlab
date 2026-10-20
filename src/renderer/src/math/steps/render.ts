@@ -88,25 +88,38 @@ export function stepToMove(step: Step): Move {
   }
 }
 
+/** True for a discriminant sub-working (its first step is the role 'discriminant'). */
+export function isDiscriminantWorking(sub: Working): boolean {
+  const first = sub.steps[0]
+  return first !== undefined && first.data !== null && typeof first.data === 'object' && (first.data as { role?: unknown }).role === 'discriminant'
+}
+
 /**
  * Collect moves from a Working and its nested subWorkings.
  * Sub-workings are flattened into moves where the first move of each sub-working
  * is tagged with a `subgoal` representing the sub-problem heading.
+ * A discriminant is drawn after the leading normalising steps and before the first step that uses it. The student reads
+ * a, b and c off the equation those steps produce, works the discriminant out, and then sees the formula line that uses
+ * it. The normalising steps are EquationEquiv steps only, so the first step of any other kind is the first use.
  */
 export function collectMoves(working: Working): Move[] {
-  const moves: Move[] = working.steps.map(stepToMove)
-
-  if (working.subWorkings && working.subWorkings.length > 0) {
-    working.subWorkings.forEach((sub, index) => {
-      const subMoves = collectMoves(sub)
-      if (subMoves.length > 0) {
-        // The first move of the sub-working carries its heading, built from its own data.
-        subMoves[0] = { ...subMoves[0], subgoal: subHeading(sub, index) }
-        moves.push(...subMoves)
-      }
-    })
+  const subs = working.subWorkings ?? []
+  const subMoves = (sub: Working, index: number): Move[] => {
+    const moves = collectMoves(sub)
+    // The first move of the sub-working carries its heading, built from its own data.
+    if (moves.length > 0) moves[0] = { ...moves[0], subgoal: subHeading(sub, index) }
+    return moves
   }
-
+  const firstUse = working.steps.findIndex((step) => step.kind !== 'EquationEquiv')
+  const split = firstUse < 0 ? working.steps.length : firstUse
+  const moves: Move[] = working.steps.slice(0, split).map(stepToMove)
+  subs.forEach((sub, index) => {
+    if (isDiscriminantWorking(sub)) moves.push(...subMoves(sub, index))
+  })
+  moves.push(...working.steps.slice(split).map(stepToMove))
+  subs.forEach((sub, index) => {
+    if (!isDiscriminantWorking(sub)) moves.push(...subMoves(sub, index))
+  })
   return moves
 }
 

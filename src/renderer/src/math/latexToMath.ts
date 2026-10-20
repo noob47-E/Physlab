@@ -211,6 +211,9 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       return s.startsWith('(') ? s.slice(1, -1) : s
     }
     if (peek() === '{') return arg()
+    // A matrix straight after the name is its whole argument, as it is inside \left( … \right): \det\begin{pmatrix}…\end{pmatrix}
+    // came out as det() with the matrix left outside it, and the Calculator refused the empty det.
+    if (peek() === '\\begin') return atom()
     // A fraction or a root straight after the name is the whole argument, the way a book reads sin π/6 and
     // ln √x. MathLive writes exactly this when a function is typed on the keyboard and "/" follows
     // (\sin\frac{\pi}{6}; the keypad's own function keys bring their brackets). The run below knows only

@@ -233,7 +233,10 @@ describe('quadratic formula: irrational roots are shown, each one exact (G2 chec
     const w = solve('x^2 - 2x - 1 = 0')
     expect(w.method).toBe('Quadratic formula')
     expect(validateWorking(w).valid).toBe(true)
-    expect(afters(w)).toEqual(['x = 1-\\sqrt{2} \\text{ or } x = 1+\\sqrt{2}'])
+    expect(afters(w)).toEqual([
+      'x = \\frac{2 \\pm \\sqrt{8}}{2}',
+      'x = 1-\\sqrt{2} \\text{ or } x = 1+\\sqrt{2}'
+    ])
   })
 
   it('the roots are in simplest surd form, −b ± √d over 2a with √d simplified (√12 is written 2√3)', () => {
@@ -267,7 +270,10 @@ describe('endings in each domain', () => {
     expect(w.noWorking).not.toBe(true)
     expect(validateWorking(w).valid).toBe(true)
     expect(answersOf(w)).toEqual(['-1-2i', '-1+2i'])
-    expect(afters(w)).toEqual(['x = -1-2i \\text{ or } x = -1+2i'])
+    expect(afters(w)).toEqual([
+      'x = \\frac{-2 \\pm \\sqrt{-16}}{2}',
+      'x = -1-2i \\text{ or } x = -1+2i'
+    ])
   })
 
   it('in the real domain the same quadratic is "No real solution", and the complex pair is not shown there', () => {
@@ -283,7 +289,7 @@ describe('endings in each domain', () => {
     expect(formula.method).toBe('Quadratic formula')
     expect(validateWorking(formula).valid).toBe(true)
     expect(String(formula.subWorkings?.[0].steps[0].after)).toBe('1')
-    expect(afters(formula)).toEqual(['x = 2 \\text{ or } x = 3'])
+    expect(afters(formula)).toEqual(['x = \\frac{5 \\pm \\sqrt{1}}{2}', 'x = 2 \\text{ or } x = 3'])
     expect(answersOf(formula)).toEqual(['2', '3'])
   })
 
@@ -293,7 +299,7 @@ describe('endings in each domain', () => {
     expect(formula.method).toBe('Quadratic formula')
     expect(validateWorking(formula).valid).toBe(true)
     expect(answersOf(formula)).toEqual(['3'])
-    expect(afters(formula)).toEqual(['x = 3'])
+    expect(afters(formula)).toEqual(['x = \\frac{6 \\pm \\sqrt{0}}{2}', 'x = 3'])
     expect(String(formula.subWorkings?.[0].steps[0].after)).toBe('0')
   })
 

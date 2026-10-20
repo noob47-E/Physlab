@@ -16,6 +16,7 @@ import { calculusCall } from '../math/calculusCall'
 import { isNumericLine } from '../math/pure/factor'
 import { isSurdLine } from '../math/pure/complex'
 import { suggestJob } from '../math/pure/run'
+import { DETERMINANT_TITLE, INVERSE_TITLE, isMatrixLine } from '../math/pure/matrix'
 import { texToPlain, type Working } from '../math/pure/work'
 import { keypadToMath, withAngle } from './engine'
 import { compareFunctions } from './formula'
@@ -49,6 +50,9 @@ export function wantsWorking(src: string): boolean {
   const s = src.trim()
   if (!s) return false
   if (calculusCall(s)) return true
+  // A determinant or inverse of a typed matrix is all working: its numbers are a line of numbers, which would otherwise be
+  // taken for a sum with nothing to show (M^(-1) has no letter in it, so the line below says no).
+  if (isMatrixLine(s)) return true
   if (suggestJob(s) !== 'factor') return true
   return !isNumericLine(s) || isSurdLine(s)
 }
@@ -77,6 +81,32 @@ function numberOfTex(tex: string): Num | null {
 const parts = (n: Num): { re: number; im: number } => (typeof n === 'number' ? { re: n, im: 0 } : n)
 const near = (a: number, b: number, tol: number): boolean => Math.abs(a - b) <= tol * Math.max(1, Math.abs(a), Math.abs(b))
 const sameNumber = (a: Num, b: Num, tol = 1e-8): boolean => near(parts(a).re, parts(b).re, tol) && near(parts(a).im, parts(b).im, tol)
+
+/** A matrix as rows of numbers, when the value is one (mathjs gives a Matrix, or a plain array of rows); null for anything else. */
+function gridOf(v: unknown): number[][] | null {
+  const rows = typeof (v as { toArray?: unknown } | null)?.toArray === 'function' ? (v as { toArray(): unknown }).toArray() : v
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const grid: number[][] = []
+  for (const row of rows) {
+    if (!Array.isArray(row) || !row.every((x) => typeof x === 'number' && Number.isFinite(x))) return null
+    grid.push(row as number[])
+  }
+  return grid
+}
+
+/** The matrix a TeX answer stands for, as numbers, or null when it is not one. */
+function gridOfTex(tex: string): number[][] | null {
+  try {
+    return gridOf(withAngle('rad', () => math.evaluate(keypadToMath(latexToMath(tex))) as unknown))
+  } catch {
+    return null
+  }
+}
+
+/** Whether two matrices have the same shape and the same numbers, to the precision the numeric engine works to. */
+function sameGrid(a: number[][], b: number[][]): boolean {
+  return a.length === b.length && a.every((row, i) => row.length === b[i].length && row.every((x, j) => sameNumber(x, b[i][j])))
+}
 
 /** The linear source of a TeX answer, or null when the converter cannot read it. */
 function sourceOfTex(tex: string): string | null {
@@ -119,6 +149,15 @@ function agreement(card: EvalResult, working: Working): Agreement {
     if (theirs === null) return 'unknown'
     return sameNumber(mine, theirs) ? 'agree' : 'differ'
   }
+  // The inverse of a typed matrix: the same entries, cell by cell. Without this a wrong inverse working passed as unchecked.
+  if (working.title === INVERSE_TITLE) {
+    const mine = gridOf(card.value)
+    if (mine) {
+      const theirs = gridOfTex(first.tex)
+      if (!theirs) return 'unknown'
+      return sameGrid(mine, theirs) ? 'agree' : 'differ'
+    }
+  }
   // A formula: the same function of its letters. A division's working answers a quotient and a remainder: when the remainder is
   // nothing the quotient is the line, and when it is not the line is the quotient plus a fraction this does not rebuild.
   const formula = card.formula ?? (card.tex ? sourceOfTex(card.tex) : null)
@@ -152,6 +191,30 @@ function texOfAnswers(working: Working): string {
 const REFUSAL_STAYS = /^Typing .+ does not store a value\./
 
 /**
+ * The card for a determinant the working agrees with. A determinant of a typed matrix is exact, so when mathjs's float is only round-off
+ * away from the working's number (2.6×10⁻¹⁷ against 0 for a singular decimal matrix) the card shows the working's own number.
+ */
+function exactDeterminantCard(card: EvalResult, working: Working): EvalResult {
+  if (working.title !== DETERMINANT_TITLE || working.answers.length !== 1) return card
+  const exact = numberOfTex(working.answers[0].tex)
+  if (typeof exact !== 'number' || typeof card.value !== 'number' || card.value === exact) return card
+  return { ...card, main: texToPlain(working.answers[0].tex), tex: undefined, exact: null, value: exact }
+}
+
+/**
+ * A checked working that proves a matrix has no inverse, against a card that still gives numbers for it (mathjs's float inverse of a
+ * singular matrix is a grid of large numbers, not an error). The card is the working's sentence, marked unconfirmed like any other
+ * disagreement. A card that already refuses keeps its own sentence (reconcile returns it unchanged).
+ */
+function noInverseCard(card: EvalResult, sentence: string): Reconciled {
+  return {
+    result: { main: sentence, src: card.src, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
+    verdict: 'differ',
+    line: `PHYSLAB_CHECK calc-disagree line="${card.src}" quick="${card.main}" working="${sentence}"`
+  }
+}
+
+/**
  * The card the screen shows, given the "=" answer and the working for the same line.
  *
  * If "=" cannot answer but the working answered the same job, the card shows the working's checked answer
@@ -160,6 +223,10 @@ const REFUSAL_STAYS = /^Typing .+ does not store a value\./
  * whose check failed stays a refusal.
  */
 export function reconcile(result: EvalResult, working: Working | null): Reconciled {
+  // A checked working with no answer box can still conclude: a singular matrix has no inverse, and its conclusion is what the card says.
+  if (working && !working.error && working.answers.length === 0 && working.checked === 'ok' && working.conclusion && !result.error) {
+    return noInverseCard(result, working.conclusion)
+  }
   // No working to compare with (the step engine refuses a power-8 equation): a number only the search stands behind is said to be approximate, and
   // every other card stands as it is.
   if (!working || working.error || working.answers.length === 0) return { result: flagIfApproximate(result), verdict: 'unchecked' }
@@ -170,7 +237,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   }
   if (result.engine) return { result, verdict: 'unchecked' }
   const verdict = agreement(result, working)
-  if (verdict === 'agree') return { result, verdict: 'agree' }
+  if (verdict === 'agree') return { result: exactDeterminantCard(result, working), verdict: 'agree' }
   if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
   const tex = texOfAnswers(working)
   return {

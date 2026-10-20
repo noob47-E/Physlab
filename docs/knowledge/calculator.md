@@ -11,14 +11,20 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
   the Variables box), `tangentAt`, `answerStillUnder` (an answer is dropped after a DEG/RAD or base switch).
 - `calc/format.ts` — `calcNum`, `calcEng`, `mathFormatOptions` (complex/matrix/unit numbers at 15 figures).
 - `calc/roots.ts` — `quadraticRoots`, `orderRoots`, `polynomialRootRows`: THE root order. `calc/labels.ts` — x₁, θ₂ labels.
+- `calc/exactComplex.ts` — the complex pair of a quadratic with whole-number or simple-fraction coefficients, written as
+  a textbook does (1 ± √7 i, −1/2 ± (√3/2)i) on the = card (`exactQuadratic`), the command bar's equation in x
+  (`exactPairFor`, lang/commands/graph.ts) and the Numbers screen's boxes (`exactQuadraticOf`, panels/calcModes.tsx).
+  It is exact from the typed text, and said only when it agrees with the search's numbers; anything else keeps the
+  decimal pair. Guard: tests/cardExactComplex.test.ts.
 - `calc/angle.ts` — `withAngle`: every evaluation runs in the SCREEN's unit and puts the shared mode back.
 - `calc/modeLines.ts` — Table, Matrix, Spreadsheet and Units lines (each inside `withAngle`); `calc/sheet.ts` (CIRC),
   `calc/stats.ts` (`predictY` through the curve's own compiler), `calc/units.ts` (unit conversion errors `unitRefusal` and `TYPE_INSTEAD` shared with the bar), `calc/keys.ts`,
   `calc/errors.ts` (one table for unknown functions, unknown names, and engine loading sentences across the bar, calculator and pure math).
 - `panels/Maths.tsx`, `panels/calcModes.tsx`, `panels/WorkingView.tsx` — the screen.
 - `math/pure/run.ts` (job router, `suggestJob`), `math/pure/complex.ts` (complex numbers, surds, Solve,
-  Factorise with i), `math/pure/store.ts` (Work it out; asks SymPy when this engine refuses), `math/latexToMath.ts`
-  (granted regions: fnArg, sqrt, seq, the ×10ˣ mark).
+  Factorise with i), `math/pure/matrix.ts` (the determinant and inverse of a typed 2 × 2 or 3 × 3 matrix, step by step;
+  asked first by `runPure`, so every job gives the same working for a matrix line), `math/pure/store.ts` (Work it out;
+  asks SymPy when this engine refuses), `math/latexToMath.ts` (granted regions: fnArg, sqrt, seq, the ×10ˣ mark).
 
 ## The rules (invariants)
 1. **Root order** (the PhysLab Calculator's): a quadratic's x₁ is the formula's +√ root, real or complex; cubics and
@@ -46,4 +52,4 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
 
 ## Guards
 tests/calc.test.ts, latex.test.ts, keys.test.ts, maths.test.ts, pureWorking.test.ts, answerLabels.test.ts,
-calcModes.test.ts, casFallback.test.ts, solveSentences.test.ts.
+calcModes.test.ts, casFallback.test.ts, solveSentences.test.ts, matrixWorking.test.ts (the matrix workings).

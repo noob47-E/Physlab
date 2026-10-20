@@ -448,6 +448,16 @@ describe('the check sentence', () => {
     expect(texToPlain(String.raw`\sqrt{2}`)).toBe('√2')
   })
 
+  it('keeps a whole fraction whose top holds a root, a power or another fraction', () => {
+    expect(texToPlain(String.raw`\frac{-1-\sqrt{5}}{2}`)).toBe('(-1-√5)/2')
+    expect(texToPlain(String.raw`\frac{-1+\sqrt{5}}{2}`)).toBe('(-1+√5)/2')
+    expect(texToPlain(String.raw`\frac{3-\sqrt{597}}{14}`)).toBe('(3-√597)/14')
+    expect(texToPlain(String.raw`-\frac{1}{2}`)).toBe('-1/2')
+    expect(texToPlain(String.raw`\frac{x^{2}+1}{2}`)).toBe('(x²+1)/2')
+    expect(texToPlain(String.raw`\frac{\frac{1}{2}}{3}`)).toBe('(1/2)/3')
+    expect(texToPlain(String.raw`z = \frac{-1-\sqrt{5}}{2}, z = \frac{-1+\sqrt{5}}{2}`)).toBe('z = (-1-√5)/2, z = (-1+√5)/2')
+  })
+
   it('leaves no backslashes or braces anywhere a student can see', () => {
     // Everything read as a sentence — the check line, every step heading, every note, every
     // stage heading — goes through texToPlain before it is shown, so none of it may still look
