@@ -265,9 +265,8 @@ function agreement(card: EvalResult, working: Working): Agreement {
   }
 }
 
-/** What the card shows for a working's answers: one answer as it is, several each under its own label. */
-function texOfAnswers(working: Working): string {
-  if (working.answers.length === 1) return working.answers[0].tex
+/** Every answer of a working under its own label, the way the card lists roots: "x = −10,  x = 10". One answer keeps its label too. */
+function labelledAnswers(working: Working): string {
   return working.answers
     .map((a) => {
       const label = labelTex(a.label)
@@ -275,6 +274,33 @@ function texOfAnswers(working: Working): string {
       return shownLabel ? `${shownLabel}\\; ${a.tex}` : a.tex
     })
     .join(',\\quad ')
+}
+
+/** What the card shows for a working's answers: one answer as it is, several each under its own label. */
+function texOfAnswers(working: Working): string {
+  if (working.answers.length === 1) return working.answers[0].tex
+  return labelledAnswers(working)
+}
+
+/**
+ * The card the working confirms, when the card holds one root the search found and not the whole list. The search stops at one
+ * root, so "log(x²) = 2" showed x = −10 beside a checked working that lists x = −10 and x = 10. The card now takes every root the
+ * working lists, each exact where it is one (a double root reads x = −1, not −0.9999999987), and guess mode checks against the same
+ * list. Nothing new is claimed: agreement has already matched every card root to a root of the working. Only a checked working
+ * whose answers are all real numbers is used; otherwise the card stands as it was.
+ */
+function rootsFromWorking(card: EvalResult, working: Working): EvalResult {
+  if (!card.roots || card.rootsComplete || working.checked !== 'ok') return card
+  const theirs = realRootsOf(working)
+  if (theirs.length === 0 || theirs.length !== working.answers.length) return card
+  // Two answers that are the same number would print twice, so the card keeps its own root rather than list one twice.
+  for (let i = 0; i < theirs.length; i++) {
+    for (let j = i + 1; j < theirs.length; j++) if (near(theirs[i], theirs[j], 1e-8)) return card
+  }
+  const tex = labelledAnswers(working)
+  // π is kept on the plain-text line by the one rule in this file (plainOfAnswer): a second copy here would drift from it.
+  const main = plainOfAnswer(tex)
+  return { ...card, main, tex, roots: theirs, approximate: false }
 }
 
 /** The sentences an "=" refusal must NOT give way for: intentional rule refusals like variable storing. */
@@ -313,7 +339,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
     }
   }
   const verdict = agreement(result, working)
-  if (verdict === 'agree') return { result, verdict: 'agree' }
+  if (verdict === 'agree') return { result: rootsFromWorking(result, working), verdict: 'agree' }
   if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
   const tex = texOfAnswers(working)
   return {

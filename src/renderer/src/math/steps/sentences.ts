@@ -155,6 +155,14 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       const equations = rejected.map((r) => `${term} = ${plainTex(r)}`).join(' and ')
       return `${base}. ${roots} ${many ? 'are' : 'is'} outside -1 to 1, so ${equations} ${many ? 'have' : 'has'} no solution and ${many ? 'are' : 'is'} left out`
     }
+    case 'write-as-power':
+      return `Write ${plainTex(rightOf(before))} as ${plainTex(op.base)} to the power ${plainTex(op.power)}`
+    case 'cancel-base':
+      return `Equal powers of ${plainTex(op.base)} have equal exponents: ${plainTex(after)}`
+    case 'log-to-power':
+      return `Write the logarithm as a power: ${plainTex(after)}`
+    case 'work-out-power':
+      return `Work out ${plainTex(rightOf(before))} = ${plainTex(rightOf(after))}`
     default:
       return null
   }
@@ -162,6 +170,14 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
 
 function equationRule(op: EquationOp): string {
   switch (op.kind) {
+    case 'write-as-power':
+      return 'Write as a power'
+    case 'cancel-base':
+      return 'Equal bases'
+    case 'log-to-power':
+      return 'Logarithm to power'
+    case 'work-out-power':
+      return 'Work out the power'
     case 'add-both':
       return 'Add to both sides'
     case 'subtract-both':

@@ -427,9 +427,23 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
   }
 }
 
+/** The four exponential and logarithmic moves (EquationOp in types.ts). They are real-only (S3). */
+const EXP_LOG_MOVE_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power'])
+
+/** True for an equation step whose declared move is one of the exponential or logarithmic moves. */
+function isExpLogMove(step: Step): boolean {
+  if (step.kind !== 'EquationEquiv' || !step.op || typeof step.op !== 'object') return false
+  return EXP_LOG_MOVE_KINDS.has((step.op as { kind: string }).kind)
+}
+
 /** A step checked in its working: a reduction needs the working around it, every other step is checked alone. */
 function validateStepIn(working: Working, index: number, adapter: CheckAdapter, domain: Domain): StepValidationResult {
   const step = working.steps[index]
+  // S3: the exponential and logarithmic moves cancel a base or equate a logarithm, which is an equivalence only over the real
+  // numbers. In a complex problem such a move is refused, whatever the working around it says (the method never builds one).
+  if (domain !== 'real' && isExpLogMove(step)) {
+    return { verdict: 'invalid', reason: 'An exponential or logarithmic move is only valid over the real numbers' }
+  }
   // S1b / S3: a solution set or zero-product split is proved in the domain of the problem the working answers. A step that
   // states another domain for itself is refused (a real problem with complex roots is never shown, whatever the step's data says).
   if (step.kind === 'SolutionSetEq' || step.kind === 'CaseSplitComplete') {

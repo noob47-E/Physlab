@@ -715,6 +715,8 @@ export function checkEquationOp(
   if (radicalVarOf(stringifyNodeOrText(before)) !== null || radicalVarOf(stringifyNodeOrText(after)) !== null) {
     return radicalCheckOp(stringifyNodeOrText(before), stringifyNodeOrText(after), op, v)
   }
+  // An exponential or logarithmic move reads its own exponent or argument: the polynomial path below cannot hold those.
+  if (isExpLogOp(op)) return checkExpLogOp(before, after, op, v)
   // A letter other than v anywhere in the states, even one that cancels, means no proof (review delta3, SHOULD 1).
   if (lettersOutside(before, v) || lettersOutside(after, v)) return 'unknown'
   const b = equationSides(before)
@@ -966,8 +968,14 @@ export function variableOfInput(input: string): string | null {
   for (const side of sides) {
     const poly = tryParsePoly(side)
     if (!poly) {
-      allPoly = false
-      break
+      // A power or a logarithm of the unknown (2^(x), log(x)) is a side too: its letters are read from its exponent or argument.
+      const letters = expLogLetters(side)
+      if (letters === null) {
+        allPoly = false
+        break
+      }
+      for (const n of letters) names.add(n)
+      continue
     }
     for (const n of varsOf(poly)) names.add(n)
   }
@@ -980,6 +988,194 @@ export function variableOfInput(input: string): string | null {
     .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats)\b/gi, ' ')
   const letters = [...new Set(bare.match(/\p{L}/gu) ?? [])].filter((l) => !['e', 'i'].includes(l.toLowerCase()))
   return letters.length === 1 ? letters[0] : null
+}
+
+// ---- S3: exponential and logarithmic equations ----
+// The moves of an exponential or logarithmic equation are checked here, by exact arithmetic on a whole-number base
+// and a polynomial exponent or argument. The polynomial path cannot hold a letter in an exponent, so these moves never
+// reach it. A text this reader cannot take is 'unknown'; a text it reads that is the wrong maths is 'invalid'.
+
+/** The largest power a check raises a base to; a larger one is refused rather than computed. */
+const MAX_LOG_POWER = 300
+/** The largest base an exponential or logarithmic move may have (a bigger base makes a number nobody can read). */
+const MAX_LOG_BASE = 1000n
+
+/** A power as read: whole-number base digits, then the exponent (2^(x) is base "2", exponent "x"). */
+interface ExpPower {
+  base: string
+  exp: string
+}
+
+/** A logarithm as read: base "10" for log(A), otherwise the base digits (see readLogTerm for each form it takes). */
+interface LogTerm {
+  base: string
+  arg: string
+}
+
+/** The text inside one bracket group that covers the whole text, or null when the brackets do not close at its end. */
+function wholeGroup(text: string): string | null {
+  if (text.length < 2 || text[0] !== '(' || text[text.length - 1] !== ')') return null
+  let depth = 0
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '(') depth++
+    else if (text[i] === ')') {
+      depth--
+      if (depth === 0 && i < text.length - 1) return null
+    }
+    if (depth < 0) return null
+  }
+  return depth === 0 ? text.slice(1, -1) : null
+}
+
+/** A power of a whole-number base, written 2^(x), 2^(2x-1) or 2^x (spaces ignored). Null for any other text. */
+export function readExpPower(text: string): ExpPower | null {
+  const s = text.replace(/\s+/g, '')
+  const m = /^(\d+)\^(.+)$/.exec(s)
+  if (!m) return null
+  const rest = m[2]
+  const grouped = wholeGroup(rest)
+  if (grouped !== null) return { base: m[1], exp: grouped }
+  if (/^[A-Za-z]$/.test(rest)) return { base: m[1], exp: rest }
+  return null
+}
+
+/**
+ * A logarithm, read in the forms it takes: log(A) (base 10), log2(A) and \log_{2}(A) (base digits, the subscript the student
+ * types), and log(2, A), which latexToMath writes for \log_{2}(A) with the base first, as expr.ts reads log(a, b). A leading
+ * backslash is allowed (\log(A)). A base that is not whole digits, or a base after the argument, is not read.
+ */
+export function readLogTerm(text: string): LogTerm | null {
+  // The subscript form \log_{2}(A) reads as log2(A), so the one rule below covers both.
+  const s = text.replace(/\s+/g, '').replace(/^\\/, '').replace(/^log_\{(\d+)\}/, 'log$1')
+  const m = /^log(\d*)(.+)$/.exec(s)
+  if (!m) return null
+  const grouped = wholeGroup(m[2])
+  if (grouped === null) return null
+  if (m[1] !== '') return grouped.includes(',') ? null : { base: m[1], arg: grouped }
+  const withBase = /^(\d+),(.+)$/.exec(grouped)
+  if (withBase) return { base: withBase[1], arg: withBase[2] }
+  // A comma that is not after whole-number digits makes it a two-part call, not a base-10 logarithm: it is not read.
+  if (grouped.includes(',')) return null
+  return { base: '10', arg: grouped }
+}
+
+/** The letters an exponential or logarithmic side uses, or null when the side is not one of those forms. */
+function expLogLetters(side: string): string[] | null {
+  const p = readExpPower(side)
+  if (p) {
+    const e = tryParsePoly(p.exp)
+    return e ? varsOf(e) : null
+  }
+  const l = readLogTerm(side)
+  if (!l) return null
+  const a = tryParsePoly(l.arg)
+  return a ? varsOf(a) : null
+}
+
+/** A whole number written as text ("8", "-2"), or null when the text is not one. */
+function wholeOf(text: string): bigint | null {
+  const r = parseExactRat(text)
+  return r !== null && r.d === 1n ? r.n : null
+}
+
+/** A base the exponential and logarithmic checks accept: a whole number from 2 to MAX_LOG_BASE. */
+function baseOk(text: string): bigint | null {
+  if (!/^\d+$/.test(text)) return null
+  const b = BigInt(text)
+  return b >= 2n && b <= MAX_LOG_BASE ? b : null
+}
+
+/** base^n as a whole number, or null when n is outside 0 to MAX_LOG_POWER. */
+function powerOf(b: bigint, n: bigint): bigint | null {
+  if (n < 0n || n > BigInt(MAX_LOG_POWER)) return null
+  return b ** n
+}
+
+const EXP_LOG_OP_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power'])
+
+/** The four moves of an exponential or logarithmic equation (types.ts, EquationOp). */
+type ExpLogOp = Extract<EquationOp, { kind: 'write-as-power' | 'cancel-base' | 'log-to-power' | 'work-out-power' }>
+
+function isExpLogOp(op: unknown): op is ExpLogOp {
+  return typeof op === 'object' && op !== null && EXP_LOG_OP_KINDS.has((op as { kind: string }).kind)
+}
+
+/**
+ * Check one exponential or logarithmic move exactly (see the four kinds in types.ts). The left side of a move that does not
+ * touch it must read the same; each side that changes is read again and compared with the maths it claims.
+ */
+function checkExpLogOp(before: string | MathNode, after: string | MathNode, op: ExpLogOp, v: string): ValidationVerdict {
+  const b = splitEquation(before)
+  const a = splitEquation(after)
+  if (!b || !a) return 'unknown'
+  const same = (x: string, y: string): boolean => x.replace(/\s+/g, '') === y.replace(/\s+/g, '')
+  const verdict = (ok: boolean): ValidationVerdict => (ok ? 'valid' : 'invalid')
+  const onlyV = (e: Expr | null): e is Expr => e !== null && varsOf(e).every((name) => name === v)
+
+  switch (op.kind) {
+    case 'write-as-power': {
+      // The left side is untouched. The right side, a whole number c, becomes base^power, and base^power must equal c.
+      const bs = baseOk(op.base)
+      if (bs === null) return 'invalid'
+      const c = wholeOf(b.right)
+      const p = readExpPower(a.right)
+      if (c === null || !p) return 'unknown'
+      if (!same(b.left, a.left) || p.base !== op.base) return 'invalid'
+      const n = wholeOf(p.exp)
+      if (n === null || n.toString() !== op.power) return 'invalid'
+      const value = powerOf(bs, n)
+      return verdict(value !== null && value === c)
+    }
+    case 'cancel-base': {
+      // base^E1 = base^n becomes E1 = n. Powers of one base above 1 are equal only when their exponents are, so this is exact.
+      const bs = baseOk(op.base)
+      if (bs === null) return 'invalid'
+      const l = readExpPower(b.left)
+      const r = readExpPower(b.right)
+      if (!l || !r) return 'unknown'
+      if (l.base !== op.base || r.base !== op.base) return 'invalid'
+      const e1 = tryParsePoly(l.exp)
+      const n = wholeOf(r.exp)
+      const e2 = tryParsePoly(a.left)
+      const shown = wholeOf(a.right)
+      if (!e1 || !e2 || n === null || shown === null) return 'unknown'
+      if (!onlyV(e1) || !onlyV(e2)) return 'invalid'
+      return verdict(eEq(e1, e2) && shown === n)
+    }
+    case 'log-to-power': {
+      // log_base(A) = c becomes A = base^c. Both forms hold on A > 0, and base^c is positive, so no root is lost or gained.
+      const bs = baseOk(op.base)
+      if (bs === null) return 'invalid'
+      const l = readLogTerm(b.left)
+      const c = wholeOf(b.right)
+      if (!l || c === null) return 'unknown'
+      if (l.base !== op.base || c < 0n) return 'invalid'
+      const p = readExpPower(a.right)
+      if (!p) return 'unknown'
+      if (p.base !== op.base) return 'invalid'
+      const k = wholeOf(p.exp)
+      if (k === null) return 'unknown'
+      const A = tryParsePoly(l.arg)
+      const A2 = tryParsePoly(a.left)
+      if (!A || !A2) return 'unknown'
+      return verdict(k === c && onlyV(A) && eEq(A, A2))
+    }
+    case 'work-out-power': {
+      // L = base^c becomes L = its whole-number value, with the left side unchanged.
+      if (!same(b.left, a.left)) return 'invalid'
+      const p = readExpPower(b.right)
+      if (!p) return 'unknown'
+      const bs = baseOk(p.base)
+      const n = wholeOf(p.exp)
+      if (bs === null || n === null) return 'invalid'
+      const value = powerOf(bs, n)
+      const shown = wholeOf(a.right)
+      if (value === null || shown === null) return 'unknown'
+      return verdict(shown === value)
+    }
+    default:
+      return 'unknown'
+  }
 }
 
 // The state comparison reads numbers exactly: a BigNumber instance of mathjs at 400 digits, so a literal of
