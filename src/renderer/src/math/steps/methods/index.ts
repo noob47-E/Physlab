@@ -10,6 +10,7 @@ import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from '.
 import { expandMethod } from './expand'
 import { factoriseMethod } from './factorise'
 import { cubicQuarticMethod } from './cubicQuartic'
+import { radicalMethod } from './radical'
 import { rationalEquationMethod } from './rational'
 import { trigEquationsMethod } from './trigEquations'
 
@@ -23,6 +24,7 @@ export {
   expandMethod,
   factoriseMethod,
   cubicQuarticMethod,
+  radicalMethod,
   rationalEquationMethod,
   trigEquationsMethod
 }
@@ -47,5 +49,6 @@ export const ALL_STEP_METHODS: Method[] = [
   linearSystemSubstitutionMethod,
   expandMethod,
   factoriseMethod,
-  rationalEquationMethod
+  rationalEquationMethod,
+  radicalMethod
 ]

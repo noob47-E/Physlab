@@ -68,7 +68,8 @@ const SHOWN_METHOD_NAMES = new Set([
   'Discriminant',
   'Completing the square',
   'Rational equation',
-  'Trigonometric equation'
+  'Trigonometric equation',
+  'Equation with square roots'
 ])
 
 /**
@@ -151,7 +152,12 @@ const CANT_SHOW_TEXT = "I can't show the steps for this one yet"
 function titleOf(working: Working, problem: Problem | undefined): string {
   if (!problem) return 'Worked solution'
   const job = typeof problem.job === 'string' && problem.job !== '' ? problem.job.charAt(0).toUpperCase() + problem.job.slice(1) : 'Worked'
-  return `${job} ${inputOf(working, problem)}`.trim()
+  return `${job} ${plainRoots(inputOf(working, problem))}`.trim()
+}
+
+/** A title is plain text, so a square root the input writes in LaTeX is drawn as √(...) there (the input line keeps KaTeX). */
+function plainRoots(text: string): string {
+  return text.replace(/\\sqrt\{([^{}]*)\}/g, '√($1)')
 }
 
 function inputOf(working: Working, problem: Problem | undefined): string {
