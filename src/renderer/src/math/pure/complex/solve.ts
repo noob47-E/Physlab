@@ -240,8 +240,10 @@ export function solveQuadraticWorking(src: string): Working {
   } else if (sign === 0) {
     s.goal('See what kind of root').add('The discriminant is zero, so both roots are the same.', '\\Delta = 0 \\Rightarrow \\text{one repeated root}')
   } else {
+    // Said in words before the roots: a student reading only "complex roots" can miss that the
+    // equation has no real solution at all, which is the point of the answer.
     s.goal('See what kind of root').add(
-      'The discriminant is negative. A negative number has no real square root, so the roots are complex.',
+      'The discriminant is negative, so there is no real solution. A negative number has no real square root, so the roots are complex.',
       '\\Delta < 0 \\Rightarrow \\text{two complex roots}'
     )
     s.add(

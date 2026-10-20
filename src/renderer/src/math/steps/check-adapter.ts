@@ -1669,7 +1669,12 @@ export function expandTerms(text: string): Term[] | null {
         skip()
         const d = denominatorHere()
         acc = acc.map((t) => ({ c: rDiv(t.c, d), v: t.v }))
-      } else if (/[\d.(]/.test(s[i] ?? '') || letterAhead()) {
+      } else if (at('.')) {
+        // A full stop with no operator before it is a second decimal point ("0.5.5", "2 .5", "1..5"), never the start
+        // of a new factor. Read as one it multiplied the two numbers together and a wrong answer came out checked,
+        // so a malformed number is refused and the working is not shown.
+        throw new NotExpandable()
+      } else if (/[\d(]/.test(s[i] ?? '') || letterAhead()) {
         acc = mul(acc, factor())
       } else {
         break
@@ -2190,7 +2195,8 @@ export function readSystem(text: string | MathNode): LinEq[] | null {
   }
   // Every letter the text names is an unknown with a non-zero coefficient somewhere (P-FIX-S1SOUND2 MUST 10 and SHOULD 3):
   // a constant (π, e) is never solved for, and a letter that cancels out of every equation is not silently dropped.
-  const named = s.match(/[A-Za-zπ]+/g) ?? []
+  // Any alphabet counts (Greek too, as the maths keypad types it), or a cancelled α would be dropped without a word.
+  const named = s.match(/\p{L}+/gu) ?? []
   if (named.some((n) => CONSTANT_NAMES.has(n))) return null
   const used = new Set(lettersOfSystem(eqs))
   if (named.some((n) => !used.has(n))) return null
