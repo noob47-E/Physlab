@@ -7,6 +7,9 @@
 // solve back: each pivot row, with the letters solved after it put in, is scaled to "letter = number".
 // Substitution: for each letter in turn make one remaining equation its subject and substitute it into the others, then
 // solve back the same way. Both end with the same two endings: no common solution, or infinitely many (the lines).
+// Substitution also takes equations in any form readSystem reads, such as "y = 2x + 1" (letters on both sides): its
+// make-subject step gives a letter alone on one side, with a checked move, so the constants are never moved by hand.
+// Elimination still needs each equation with its letters on the left and a number on the right, and declines the rest.
 
 import type { Method, Problem, Step, StepAnswer, SystemOp, Working } from '../types'
 import { CANT_SHOW_STEPS_REASON } from '../types'
@@ -165,11 +168,16 @@ function solvedWorking(input: string, method: string, steps: Step[], state: LinE
   return { title: `Solve ${input}`, input, method, steps, answer }
 }
 
-/** The system a problem asks for: two or three equations (or more), each with its constants on the right, read exactly. */
-function systemOf(problem: Problem): { input: string; typed: LinEq[]; vars: string[] } | null {
+/**
+ * The system a problem asks for: two or more equations, read exactly. With `anyForm` false each equation must have its
+ * letters on the left and a number on the right (elimination needs that). With it true any form readSystem reads is
+ * taken, so a textbook's "y = 2x + 1" works: substitution makes a letter the subject with a checked step first.
+ */
+function systemOf(problem: Problem, anyForm: boolean): { input: string; typed: LinEq[]; vars: string[] } | null {
   const input = stringifyNodeOrText(problem.input)
   const typed = readSystem(input)
-  if (!typed || typed.length < 2 || !typed.every(isNormalEq)) return null
+  if (!typed || typed.length < 2) return null
+  if (!anyForm && !typed.every(isNormalEq)) return null
   const vars = lettersOfSystem(typed)
   if (vars.length === 0) return null
   return { input, typed, vars }
@@ -181,7 +189,7 @@ function wholeSystem(state: LinEq[], vars: string[]): boolean {
 }
 
 function eliminationWorking(problem: Problem): Working {
-  const sys = systemOf(problem)
+  const sys = systemOf(problem, false)
   if (!sys) return declined()
   const { input, typed, vars } = sys
   const steps: Step[] = []
@@ -249,7 +257,7 @@ function betterSubject(a: LinEq, b: LinEq, v: string): boolean {
 }
 
 function substitutionWorking(problem: Problem): Working {
-  const sys = systemOf(problem)
+  const sys = systemOf(problem, true)
   if (!sys) return declined()
   const { input, typed, vars } = sys
   const steps: Step[] = []
@@ -311,9 +319,9 @@ function substitutionWorking(problem: Problem): Working {
 }
 
 /** Applies to a problem that is a system of two or more linear equations (job 'solve', as the one-letter methods). */
-function appliesSystem(problem: Problem): { applies: boolean; why?: string } {
+function appliesSystem(problem: Problem, anyForm: boolean): { applies: boolean; why?: string } {
   if (problem.job !== 'solve') return { applies: false, why: `Job '${problem.job}' is not an equation solving job` }
-  return systemOf(problem) ? { applies: true } : { applies: false, why: 'not a system of linear equations read exactly' }
+  return systemOf(problem, anyForm) ? { applies: true } : { applies: false, why: 'not a system of linear equations read exactly' }
 }
 
 /** The primary method: elimination. */
@@ -322,7 +330,7 @@ export const linearSystemEliminationMethod: Method = {
   name: ELIMINATION_NAME,
   order: 10,
   isAlternative: false,
-  appliesTo: appliesSystem,
+  appliesTo: (problem) => appliesSystem(problem, false),
   solve(problem: Problem): Working {
     return eliminationWorking(problem)
   }
@@ -334,7 +342,7 @@ export const linearSystemSubstitutionMethod: Method = {
   name: SUBSTITUTION_NAME,
   order: 20,
   isAlternative: true,
-  appliesTo: appliesSystem,
+  appliesTo: (problem) => appliesSystem(problem, true),
   solve(problem: Problem): Working {
     return substitutionWorking(problem)
   }
