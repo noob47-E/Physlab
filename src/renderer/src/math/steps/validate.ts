@@ -880,7 +880,11 @@ function validateWorkingChecked(
   // After a one-way step (an Implication), the last equation can have more solutions than the problem (MUST 2, 3).
   // "No solution" still follows (the problem's solutions are among the last equation's), "every real number" does not,
   // and every root shown must be put back into the problem as typed and hold.
-  if (working.steps.some((s) => s.kind === 'Implication')) {
+  // The quadratic formula's step is an Implication in form only: checkQuadraticFormulaStep proves its ± roots are exactly
+  // the roots of the quadratic it starts from, so it cannot add a root, and it does not turn this rule on. Without the
+  // exception a log or trig equation whose reduced quadratic needs the formula loses a working it can prove.
+  const oneWay = (s: Step): boolean => s.kind === 'Implication' && (dataOf(s) as { action?: string }).action !== 'quadratic-formula'
+  if (working.steps.some(oneWay)) {
     const last = working.steps[working.steps.length - 1]
     const ld = dataOf(last)
     const noSolution = last.kind === 'SolutionSetEq' && Array.isArray(ld.solutions) && ld.solutions.length === 0 && ld.allReals !== true
