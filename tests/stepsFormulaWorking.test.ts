@@ -6,6 +6,8 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { usePure } from '../src/renderer/src/math/pure/store'
+import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
+import { reconcile } from '../src/renderer/src/calc/working'
 import { resetGlobals } from './helpers/globals'
 
 beforeEach(() => {
@@ -85,17 +87,27 @@ describe('Calculator: the quadratic formula is worked in order', () => {
     expect(formula!.answers.map((a) => a.tex)).toEqual(['-\\frac{1}{2}', '2'])
   })
 
-  it('x^2+x+1=0: the discriminant -3 is worked out before the conclusion "No real solution"', () => {
+  // Phase-0.9 (batch 36, merged into this branch) deliberately hands a real quadratic with no real root to the older
+  // complex engine, so the Calculator shows the two complex roots exactly, worked out from the discriminant — not the
+  // step framework's "No real solution" ending (that ending is still what the formula method itself gives, and
+  // tests/steps/methods/quadratic.test.ts pins it). This test is the Calculator-facing one, so it follows the merge.
+  it('x^2+x+1=0: the discriminant -3 is worked out before the exact complex roots', () => {
     const { formula } = formulaOf('x^2+x+1=0')
     expect(formula?.method).toBe('Quadratic formula')
     expect(formula?.checked).toBe('ok')
     const moves = formula!.moves
 
-    const iDisc = moves.findIndex((m) => /discriminant/i.test(m.head) && /is [−-]3\.?$/.test(m.head))
-    const iEnd = moves.length - 1
+    const iDisc = moves.findIndex((m) => /Work out the discriminant/.test(m.subgoal ?? ''))
+    const iKind = moves.findIndex((m) => /The discriminant is negative/.test(m.head))
+    const iRoots = moves.findIndex((m) => /Take the plus and the minus in turn/.test(m.head))
     expect(iDisc).toBeGreaterThanOrEqual(0)
-    expect(iDisc).toBeLessThan(iEnd)
-    expect(moves[iEnd].tex ?? moves[iEnd].head).toMatch(/No real solution/)
+    expect(iKind).toBeGreaterThan(iDisc)
+    expect(iRoots).toBeGreaterThan(iKind)
+    expect(moves[iDisc].tex ?? '').toContain('-3')
+    expect(formula!.answers.map((a) => a.tex)).toEqual([
+      '-\\frac{1}{2} + \\frac{1}{2}\\sqrt{3}i',
+      '-\\frac{1}{2} - \\frac{1}{2}\\sqrt{3}i'
+    ])
   })
 
   it('2x^2+4x=6: the equation is moved to one side and divided by 2 before the discriminant is worked out, so a, b and c are read off the line that gives them', () => {
@@ -118,5 +130,31 @@ describe('Calculator: the quadratic formula is worked in order', () => {
       { label: 'x', tex: '-3' },
       { label: 'x', tex: '1' }
     ])
+  })
+})
+
+describe('Calculator: the card reads a surd root the way the working writes it', () => {
+  // A letter other than x makes "=" refuse, so the card falls back on the working's own checked answers. Those answers
+  // are written as \frac{-1-\sqrt{5}}{2}; the card's plain text must keep the whole fraction, not flatten it.
+  it('z^2+z-1=0: the card shows (-1-√5)/2 and (-1+√5)/2, not "-1-√52"', () => {
+    usePure.getState().runLatex('z^2+z-1=0', 'auto', { quiet: true })
+    const w = usePure.getState().working
+    expect(w?.checked).toBe('ok')
+    const card = evaluateInput('COMP', 'z^2+z-1=0', { vars: {}, ans: 0, angle: 'deg' })!
+    const r = reconcile(card, w)
+    expect(r.result.main).toContain('(-1-√5)/2')
+    expect(r.result.main).toContain('(-1+√5)/2')
+    expect(r.result.main).not.toContain('√52')
+  })
+
+  it('u^2-3u+1=0: the card shows (3-√5)/2 and (3+√5)/2', () => {
+    usePure.getState().runLatex('u^2-3u+1=0', 'auto', { quiet: true })
+    const w = usePure.getState().working
+    expect(w?.checked).toBe('ok')
+    const card = evaluateInput('COMP', 'u^2-3u+1=0', { vars: {}, ans: 0, angle: 'deg' })!
+    const r = reconcile(card, w)
+    expect(r.result.main).toContain('(3-√5)/2')
+    expect(r.result.main).toContain('(3+√5)/2')
+    expect(r.result.main).not.toContain('√52')
   })
 })
