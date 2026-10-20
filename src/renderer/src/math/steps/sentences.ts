@@ -27,6 +27,7 @@ import {
   type SetProof
 } from './check-adapter'
 import { MINUS, ratPlain, shiftPlain } from './methods/stepText'
+import { ineqRule, ineqSentence } from './inequality'
 import { evalAt, varsOf, type Expr } from '../pure/mono'
 import { rEq, type Rat } from '../pure/rat'
 import { radicalRootsRule, radicalRootsSentence, radicalSubstitution } from './radicalForm'
@@ -405,6 +406,11 @@ export function sentenceFor(step: Step): string | null {
       return step.op && isExprOp(step.op) ? productSentence(step, step.op) : exprSentence(step)
     case 'SystemEq':
       return systemSentence(step)
+    case 'IneqMove':
+    case 'IneqCritical':
+    case 'IneqSigns':
+    case 'IneqSolutionSet':
+      return ineqSentence(step)
     default:
       return null
   }
@@ -429,6 +435,11 @@ export function ruleFor(step: Step): string | null {
       return dataOf(step).role === 'discriminant' ? 'Discriminant' : 'Same value'
     case 'SystemEq':
       return systemRule(step)
+    case 'IneqMove':
+    case 'IneqCritical':
+    case 'IneqSigns':
+    case 'IneqSolutionSet':
+      return ineqRule(step)
     default:
       return null
   }

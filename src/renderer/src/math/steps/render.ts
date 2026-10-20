@@ -8,6 +8,7 @@ import type { Move, Answer, Working as PureWorkingDoc } from '../pure/work'
 import type { Working, Step, Problem, StepAnswer } from './types'
 import { validateWorking } from './validate'
 import { substitutionOf } from './sentences'
+import { ineqDrawnTex } from './inequality'
 import type { CheckAdapter } from './check-adapter'
 
 import { displaySafe, drawnTex } from './displaySafe'
@@ -72,7 +73,8 @@ const SHOWN_METHOD_NAMES = new Set([
   'Completing the square',
   'Rational equation',
   'Trigonometric equation',
-  'Equation with square roots'
+  'Equation with square roots',
+  'Inequalities'
 ])
 
 /**
@@ -88,9 +90,13 @@ export function subHeading(sub: Working, index: number): string {
   return `Case ${index + 1}`
 }
 
+/** The steps whose line is an inequality: their line is drawn by ineqDrawnTex (\le, \ge and \frac), not as the ASCII reads. */
+const INEQUALITY_LINE_STEPS: ReadonlySet<string> = new Set(['IneqMove', 'IneqCritical', 'IneqSigns'])
+
 /** Convert a Step to a Pure Math Move. The note and the subgoal are free text, so they are not drawn. */
 export function stepToMove(step: Step): Move {
-  const tex = step.after ? drawnTex(formatTex(step.after)) : undefined
+  const line = step.after ? formatTex(step.after) : ''
+  const tex = step.after ? (INEQUALITY_LINE_STEPS.has(step.kind) ? ineqDrawnTex(line) : drawnTex(line)) : undefined
   return {
     head: step.sentence,
     rule: step.rule,

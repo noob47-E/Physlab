@@ -74,6 +74,7 @@ import { checkTrigSolutionSet, trigTermOf, type TrigRange } from './trigRoots'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { isNoRealSolution, radicalRootsCheck, rationalsOf, readRootsData, sameRationals } from './radicalForm'
 import { displaySafe, drawnTex } from './displaySafe'
+import { readInequality, validateIneqWorking } from './inequality'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
@@ -416,6 +417,13 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
       break
     case 'SystemEq':
       verdict = validateSystemEq(step)
+      break
+    case 'IneqMove':
+    case 'IneqCritical':
+    case 'IneqSigns':
+    case 'IneqSolutionSet':
+      // An inequality step is checked with its whole working (validateIneqWorking), which holds the inequality it reads.
+      verdict = 'unknown'
       break
     default:
       verdict = 'invalid'
@@ -774,6 +782,10 @@ function validateWorkingChecked(
   const drawn = shownAsRead(working)
   if (drawn !== null) return { valid: false, verdict: 'invalid', reason: drawn }
 
+  // An inequality (one of < <= > >=) is validated on its own path: its moves, critical points, signs and solution set,
+  // all checked from the inequality as typed. No other method's steps can stand for it.
+  if (readInequality(working.input ?? '') !== null) return validateInequalityChecked(working)
+
   // A system (two or more equations) is validated on its own path: its own chain, its own answer and check.
   if (isSystemInput(working.input ?? '')) return validateSystemWorking(working, adapter, domain)
 
@@ -904,6 +916,18 @@ function validateWorkingChecked(
   }
 
   return { valid: true }
+}
+
+/**
+ * An inequality working: each step's sentence and rule must be the ones its data gives (the same wording check as every
+ * other working), then the whole working is checked from the inequality as typed (inequality.ts).
+ */
+function validateInequalityChecked(working: Working): WorkingValidationResult {
+  for (const step of working.steps) {
+    const wording = wordingProblem(step)
+    if (wording !== null) return { valid: false, verdict: 'invalid', reason: wording }
+  }
+  return validateIneqWorking(working)
 }
 
 // ---- S1d: systems of simultaneous linear equations ----

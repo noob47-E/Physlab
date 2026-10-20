@@ -22,6 +22,7 @@ import { latexToMath } from '../latexToMath'
 import { jobById, runPure, suggestJob, type JobId } from './run'
 import { failed, type Working } from './work'
 import { stepWorkingFor } from '../steps/solve'
+import { canWorkInequality } from '../steps/inequality'
 
 export interface PureEntry {
   id: string
@@ -168,7 +169,8 @@ export const usePure = create<PureState>((set, get) => ({
       return
     }
     if (!text) return
-    get().run(job === 'auto' ? suggestJob(text) : job, text, latex, opts)
+    const chosen = job === 'auto' ? autoJob(text) : job
+    get().run(chosen, text, latex, opts)
   },
 
   recall: (id) => {
@@ -187,6 +189,24 @@ export const usePure = create<PureState>((set, get) => ({
     set({ history: [] })
   }
 }))
+
+/**
+ * What Auto does with a typed line. An inequality (< <= > >=) that the step engine can work goes to Solve, but only where
+ * the ordinary suggestion is Factorise, Divide or a partial fraction: those jobs cannot answer a relation at all. A line the
+ * suggestion gives to Normal, Complex, calculus or the list job keeps that job, because it owns the line even when it holds
+ * a < or a >: P(Z < 1.96) is a normal-distribution question and 3 + 2i < 5 is about complex numbers.
+ */
+function autoJob(text: string): JobId {
+  try {
+    const suggested = suggestJob(text)
+    const takenByFactorise = suggested === 'factor' || suggested === 'divide' || suggested === 'partial'
+    return takenByFactorise && canWorkInequality(text) ? 'solve' : suggested
+  } catch {
+    // A line the inequality reader cannot take (a deep run of brackets, say) keeps its ordinary suggestion; it must never throw
+    // out of runLatex, which the Calculator calls with no catch of its own.
+    return suggestJob(text)
+  }
+}
 
 /**
  * Which Pure Math jobs the algebra engine can take over when this engine cannot show working.

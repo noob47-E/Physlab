@@ -306,6 +306,9 @@ function rootsFromWorking(card: EvalResult, working: Working): EvalResult {
 /** The sentences an "=" refusal must NOT give way for: intentional rule refusals like variable storing. */
 const REFUSAL_STAYS = /^Typing .+ does not store a value\./
 
+/** A working's answer that is the solution set of an inequality is marked on its card, so Guess-first never reads a number out of the set. */
+const inequalityMark = (working: Working): { inequality?: true } => (working.method === 'Inequalities' ? { inequality: true } : {})
+
 /**
  * The card the screen shows, given the "=" answer and the working for the same line.
  *
@@ -321,7 +324,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   if (result.error) {
     if (working.checked !== 'ok' || REFUSAL_STAYS.test(result.error.sentence)) return { result, verdict: 'unchecked' }
     const tex = texOfAnswers(working)
-    return { result: { main: plainOfAnswer(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
+    return { result: { main: plainOfAnswer(tex), src: result.src, tex, exact: null, solved: false, ...inequalityMark(working) }, verdict: 'unchecked' }
   }
   if (result.engine) return { result, verdict: 'unchecked' }
   if (result.solved && result.roots && !result.rootsComplete && working.checked === 'ok') {
@@ -343,7 +346,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
   const tex = texOfAnswers(working)
   return {
-    result: { main: plainOfAnswer(tex), src: result.src, tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
+    result: { main: plainOfAnswer(tex), src: result.src, tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true, ...inequalityMark(working) },
     verdict: 'differ',
     line: `PHYSLAB_CHECK calc-disagree line="${result.src}" quick="${result.main}" working="${tex}"`
   }
