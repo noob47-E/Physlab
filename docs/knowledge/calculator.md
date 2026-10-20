@@ -41,6 +41,23 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
    engine's spelling ("theta_1 =") because the command bar reads them.
 8. **Sentences raise a power of ten** ("x = 1 × 10⁻⁸", with no-break spaces) — solve() answers in exact LaTeX.
 9. **A result belongs to its settings**: the Matrix result and the screen answer are left off after a DEG/RAD switch.
+10. **"=" and the working agree on an indefinite integral as antiderivatives** (`calc/working.ts` `antiderivativeAgreement`, then
+    `calc/formula.ts` `sameAntiderivative`): the two answers agree when their slopes agree, so a different + C or another form that
+    is real on the same stretch is the same answer. A definite integral is still compared as a number, and a derivative keeps its
+    exact comparison. The card's engine \log is read as the natural log (the engine's log is ln). Greek letters and subscripts the
+    converter glued are split first (ωt is ω·t, a1x is a1·x). Each slope is judged against its own size and its own rounding, never a
+    fixed floor, so an integrand of 10⁻⁹ is checked as well as one of 1; a slope smaller than its rounding is left out, and when too few
+    points are left the answer is unchecked. The integration letter is read the way the answers' TeX is read (θ is theta, α stays α,
+    μ is u, as the converter reads them), and a letter neither answer contains is unknown, never agreed. The points cover each
+    stretch a form is real on (x > 2 for 1/(x² − 4)), and six must agree. A name the reader still cannot split is left unchecked,
+    never called a disagreement. Tests: tests/integralAgreement.test.ts (the tiny-scale sweep, the Greek letters, the engine's
+    \log and \operatorname shapes); the engine's recorded reply is tests/fixtures/engineReplies, not tests/fixtures/calculus.
+11. **An integral's differential may carry a Greek letter, and the engine's `\operatorname` name is a function**
+    (`math/latexToMath.ts`): ∫ sinθ dθ is an integral in θ (a Latin differential, a Greek command or a Greek glyph),
+    where it used to reach the engine as integrate(sin(θ)·d·θ, x) and answer θ·d·x·sin θ — ticked, because the working
+    made the same misreading. A name in front of `\operatorname{atan}` gets the same `*` a name in front of `\sin`
+    gets, so x·arctan x is read and checked instead of becoming the one name xatan. Tests: tests/latex.test.ts
+    (P-PARSE PL: the differential, \operatorname after a name), tests/integralAgreement.test.ts.
 
 ## Traps met
 - `mathjs` rounds a complex/matrix/unit number with no 15-figure cut (0.35×3 → "1.0"): `mathFormatOptions`.
@@ -51,4 +68,4 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
 
 ## Guards
 tests/calc.test.ts, latex.test.ts, keys.test.ts, maths.test.ts, pureWorking.test.ts, answerLabels.test.ts,
-calcModes.test.ts, casFallback.test.ts, solveSentences.test.ts.
+calcModes.test.ts, casFallback.test.ts, solveSentences.test.ts, integralAgreement.test.ts.
