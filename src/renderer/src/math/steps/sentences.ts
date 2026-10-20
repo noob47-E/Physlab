@@ -29,7 +29,8 @@ import {
 import { MINUS, ratPlain, shiftPlain } from './methods/stepText'
 import { ineqRule, ineqSentence } from './inequality'
 import { evalAt, varsOf, type Expr } from '../pure/mono'
-import { rEq, type Rat } from '../pure/rat'
+import { rEq, rStr, type Rat } from '../pure/rat'
+import { logSumOf, ratOf, valueAt } from './expRoots'
 import { radicalRootsRule, radicalRootsSentence, radicalSubstitution } from './radicalForm'
 
 
@@ -53,6 +54,7 @@ function plainTex(text: string): string {
     .replace(/\\(sin|cos|tan|sec|csc|cot)\b/g, '$1')
     .replace(/\\quad\b/g, ' ')
     .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+    .replace(/\\ln\b/g, 'ln')
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
     .replace(/\^\((-?\d+)\)/g, '^$1')
@@ -164,6 +166,14 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       return `Write the logarithm as a power: ${plainTex(after)}`
     case 'work-out-power':
       return `Work out ${plainTex(rightOf(before))} = ${plainTex(rightOf(after))}`
+    case 'exp-to-log':
+      return op.base === 'e'
+        ? `Take the natural logarithm of both sides: ${plainTex(after)}`
+        : `Take logarithms of both sides: ${plainTex(after)}`
+    case 'log-to-exp':
+      return `Write the natural logarithm as a power of e: ${plainTex(after)}`
+    case 'work-out-exp':
+      return `Anything to the power 0 is 1: ${plainTex(after)}`
     default:
       return null
   }
@@ -179,6 +189,12 @@ function equationRule(op: EquationOp): string {
       return 'Logarithm to power'
     case 'work-out-power':
       return 'Work out the power'
+    case 'exp-to-log':
+      return 'Logarithm of both sides'
+    case 'log-to-exp':
+      return 'Natural logarithm to power'
+    case 'work-out-exp':
+      return 'Power of zero'
     case 'add-both':
       return 'Add to both sides'
     case 'subtract-both':
@@ -276,6 +292,7 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 
 function solutionSentence(step: Step): string | null {
   if (dataOf(step).rational === true) return rationalEndingSentence(step)
+  if (dataOf(step).logSum === true) return logSumEndingSentence(step)
   // Part R: a radical working's check of its roots says its own words (radicalForm.ts), from the step's data.
   if (dataOf(step).radical === true) return radicalRootsSentence(step)
   const d = dataOf(step)
@@ -299,6 +316,7 @@ function solutionSentence(step: Step): string | null {
 
 function solutionRule(step: Step): string | null {
   if (dataOf(step).rational === true) return rationalEndingRule(step)
+  if (dataOf(step).logSum === true) return rationalEndingRule(step)
   if (dataOf(step).radical === true) return radicalRootsRule(step)
   const d = dataOf(step)
   if (d.role === 'trig' || d.trig !== undefined) return 'Solutions'
@@ -348,7 +366,15 @@ function implicationSentence(step: Step): string | null {
   if (d.action === 'square') return 'Square both sides'
   if (d.action === 'multiply' && typeof d.multiplier === 'string') return `Multiply both sides by ${plainTex(d.multiplier)}`
   if (d.action === 'exclude') return excludedSentence(d)
+  if (d.action === 'log-domain') return logDomainSentence(d)
+  if (d.action === 'join-logs') return `Add the two logarithms into one: ${plainTex(String(step.after))}`
   return null
+}
+
+/** The domain of a logarithm sum, named in words: each logarithm needs its number above 0. */
+function logDomainSentence(d: Record<string, unknown>): string | null {
+  if (!Array.isArray(d.args) || d.args.length === 0) return null
+  return `A logarithm needs a number above 0: ${d.args.map((a) => `${plainTex(String(a))} > 0`).join(' and ')}`
 }
 
 function implicationRule(step: Step): string | null {
@@ -357,6 +383,8 @@ function implicationRule(step: Step): string | null {
   if (action === 'square') return 'Squaring'
   if (action === 'multiply') return 'Multiply both sides'
   if (action === 'exclude') return 'Excluded values'
+  if (action === 'log-domain') return 'Domain of the logarithms'
+  if (action === 'join-logs') return 'Sum of logarithms'
   return null
 }
 
@@ -382,6 +410,40 @@ function rationalEndingSentence(step: Step): string | null {
   }
   const solutions = `The solutions are ${listOr(parts)}.`
   return rejected.length === 0 ? solutions : `${ruled}, so ${one ? 'it is' : 'they are'} not ${one ? 'a solution' : 'solutions'}. ${solutions}`
+}
+
+/**
+ * The words of a logarithm sum's ending (logSum.ts): each rejected value is named with the logarithm that fails, then the
+ * solutions, or that no value works. Null when the typed equation or a kept value cannot be read.
+ */
+function logSumEndingSentence(step: Step): string | null {
+  const d = dataOf(step)
+  const v = variableOf(step)
+  const sum = typeof d.original === 'string' ? logSumOf(d.original) : null
+  if (sum === null || !Array.isArray(d.solutions) || !Array.isArray(d.rejected)) return null
+  const rejected: string[] = []
+  for (const r of d.rejected) {
+    const value = ratOf(String(r))
+    if (value === null) return null
+    const failing = sum.args.find((arg) => {
+      const x = valueAt(arg, v, value)
+      return x !== null && x.n <= 0n
+    })
+    if (failing === undefined) return null
+    const at = valueAt(failing, v, value)
+    if (at === null) return null
+    rejected.push(`${v} = ${plainNumber(String(r))} is rejected: log(${plainTex(failing)}) would be log(${plainNumber(rStr(at))}), and a logarithm needs a positive number.`)
+  }
+  const kept = d.solutions.map((s) => solutionTextOf(s))
+  if (kept.length === 0) return rejected.length === 0 ? `No value of ${v} works.` : `${rejected.join(' ')} So no value of ${v} works.`
+  const parts: string[] = []
+  for (const t of kept) {
+    const x = readSurd(t)
+    if (!x) return null
+    parts.push(`${v} = ${prettyOfAlg(x)}`)
+  }
+  const solutions = kept.length === 1 ? `The solution is ${parts[0]}.` : `The solutions are ${listOr(parts)}.`
+  return rejected.length === 0 ? solutions : `${rejected.join(' ')} ${solutions}`
 }
 
 function rationalEndingRule(step: Step): string {

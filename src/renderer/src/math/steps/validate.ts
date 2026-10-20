@@ -75,6 +75,7 @@ import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sent
 import { isNoRealSolution, radicalRootsCheck, rationalsOf, readRootsData, sameRationals } from './radicalForm'
 import { displaySafe, drawnTex } from './displaySafe'
 import { readInequality, validateIneqWorking } from './inequality'
+import { checkLogSumEnding } from './expRoots'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
@@ -239,6 +240,37 @@ function validateRationalEnding(step: Step): ValidationVerdict {
   return checkRationalEnding(d.original, String(step.before), kept, rejected, d.variable, String(step.after))
 }
 
+/**
+ * The five steps of a logarithm sum (logSum.ts): the domain, the join, the power, the power worked out, and the ending. A working
+ * of this shape is checked by the exact ending (checkLogSumEnding), which puts every root back into the typed equation.
+ */
+export function isLogSumWorkingShape(working: Working): boolean {
+  const s = working.steps
+  return (
+    s.length === 5 &&
+    s[0].kind === 'Implication' &&
+    dataOf(s[0]).action === 'log-domain' &&
+    s[1].kind === 'Implication' &&
+    dataOf(s[1]).action === 'join-logs' &&
+    s[2].kind === 'EquationEquiv' &&
+    (s[2].op as { kind?: string } | undefined)?.kind === 'log-to-power' &&
+    s[3].kind === 'EquationEquiv' &&
+    (s[3].op as { kind?: string } | undefined)?.kind === 'work-out-power' &&
+    s[4].kind === 'SolutionSetEq' &&
+    dataOf(s[4]).logSum === true
+  )
+}
+
+/** The ending of a logarithm sum: its kept and rejected roots are decided exactly against the typed equation (expRoots.ts). */
+function validateLogSumEnding(step: Step): ValidationVerdict {
+  const d = dataOf(step)
+  if (d.domain !== 'real' || typeof d.original !== 'string' || typeof d.variable !== 'string') return 'invalid'
+  if (!Array.isArray(d.solutions) || !Array.isArray(d.rejected)) return 'invalid'
+  const kept = d.solutions.map((s) => solutionTextOf(s))
+  const rejected = d.rejected.map((s) => String(s))
+  return checkLogSumEnding(d.original, String(step.before), kept, rejected, d.variable, String(step.after))
+}
+
 /** The three steps of a rational equation's working, in order: the excluded values, the multiplication, the ending. */
 function isRationalWorkingShape(working: Working): boolean {
   const s = working.steps
@@ -262,6 +294,7 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
   if (step.kind !== 'SolutionSetEq') return 'invalid'
   const payload = dataOf(step)
   if (payload.rational === true) return validateRationalEnding(step)
+  if (payload.logSum === true) return validateLogSumEnding(step)
   const v = typeof payload.variable === 'string' ? payload.variable : 'x'
   // Part R: the roots of a radical equation are checked by radicalForm.ts, each put back into the original equation.
   if (payload.radical === true) return radicalRootsCheck(step)
@@ -436,7 +469,7 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
 }
 
 /** The four exponential and logarithmic moves (EquationOp in types.ts). They are real-only (S3). */
-const EXP_LOG_MOVE_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power'])
+const EXP_LOG_MOVE_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power', 'exp-to-log', 'log-to-exp', 'work-out-exp'])
 
 /** True for an equation step whose declared move is one of the exponential or logarithmic moves. */
 function isExpLogMove(step: Step): boolean {
@@ -691,6 +724,11 @@ function subWorkingsBelong(working: Working): string | null {
   }
   // Part R: a radical working's one sub-working is the squared equation, and radicalWorkingProblem checks that it belongs.
   if (isRadicalWorking(working)) return radicalWorkingProblem(working)
+  // A logarithm sum's one sub-working solves the polynomial its join and power steps gave, and nothing else (logSum.ts).
+  if (isLogSumWorkingShape(working)) {
+    const own = working.subWorkings ?? []
+    return own.length === 1 && sameState(own[0].input ?? '', working.steps[3].after) ? null : 'The polynomial working does not belong to its logarithm equation'
+  }
   const subs = working.subWorkings ?? []
   const v = variableOfInput(working.input ?? '')
   const split = working.steps.find((s) => s.kind === 'CaseSplitComplete' && dataOf(s).form === 'zero-product')
@@ -817,6 +855,9 @@ function validateWorkingChecked(
   if (mentionsRational(working) && !isRationalWorkingShape(working)) {
     return { valid: false, verdict: 'invalid', reason: "A rational equation's working does not have its three steps" }
   }
+  if (isLogSumWorkingShape(working) && !sameState(String(dataOf(working.steps[4]).original), working.input)) {
+    return { valid: false, verdict: 'invalid', reason: 'The logarithm equation is not the problem as typed' }
+  }
   if (isRationalWorkingShape(working) && !sameState(String(dataOf(working.steps[2]).original), working.input)) {
     return { valid: false, verdict: 'invalid', reason: "The rational equation's ending is for another equation" }
   }
@@ -903,7 +944,7 @@ function validateWorkingChecked(
     // A rational ending is decided against the equation as typed (validateRationalEnding), so it needs no substitution here.
     // A quadratic formula's surd roots are proved exactly against the problem as typed (answersHoldExactly), not by the
     // rational substitution, which cannot read a surd.
-    if (!noSolution && !(sub && sub.ok) && !isRationalWorkingShape(working) && !answersHoldExactly(working)) {
+    if (!noSolution && !(sub && sub.ok) && !isRationalWorkingShape(working) && !isLogSumWorkingShape(working) && !answersHoldExactly(working)) {
       return { valid: false, verdict: 'invalid', reason: 'After a one-way step, every answer must be put back into the problem and hold' }
     }
   }

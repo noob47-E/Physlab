@@ -56,6 +56,7 @@ import {
 } from '../check/checkers'
 // Part R: a square root of the letter is read and checked by radicalForm.ts (the polynomial reader above refuses a root).
 import { radicalCheckOp, radicalCheckSquare, radicalVarOf } from './radicalForm'
+import { checkExpRootOp, checkLogImplication, hasExpAtom } from './expRoots'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -331,6 +332,10 @@ export const defaultCheckAdapter: CheckAdapter = {
     const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
     // The exclusions of a rational equation say what the letter cannot be; the equation itself does not move (before = after).
     if (payload.action === 'exclude') return checkRationalExclusion(before, after, payload)
+    // A logarithm sum: its domain step and its join step (expRoots.ts). Each is exact, or unknown.
+    if (payload.action === 'log-domain' || payload.action === 'join-logs') {
+      return checkLogImplication(stringifyNodeOrText(before), stringifyNodeOrText(after), payload) ?? 'unknown'
+    }
     const eq1 = splitEquation(stringifyNodeOrText(before))
     const eq2 = splitEquation(stringifyNodeOrText(after))
     if (!eq1 || !eq2) return 'unknown'
@@ -694,12 +699,21 @@ function checkNonPolyEquationOp(
   }
 }
 
+/** The exponential and logarithmic root moves that expRoots.ts checks (types.ts, EquationOp). */
+const EXP_ROOT_OP_KINDS: ReadonlySet<string> = new Set(['exp-to-log', 'log-to-exp', 'work-out-exp'])
+
 export function checkEquationOp(
   before: string | MathNode,
   after: string | MathNode,
   op: EquationOp,
   v: string
 ): ValidationVerdict {
+  // The exponential and logarithmic root moves, and the add/subtract/multiply/divide moves on a side that holds an exponential
+  // atom, are checked exactly by expRoots.ts. They read the atom as a power, never as a number or a polynomial letter.
+  const atomMove = ['add-both', 'subtract-both', 'multiply-both', 'divide-both'].includes(op.kind)
+  if (EXP_ROOT_OP_KINDS.has(op.kind) || (atomMove && (hasExpAtom(stringifyNodeOrText(before), v) || hasExpAtom(stringifyNodeOrText(after), v)))) {
+    return checkExpRootOp(stringifyNodeOrText(before), stringifyNodeOrText(after), op, v)
+  }
   // S1b: a square-root step with a surd root is checked by its own exact rule first (sqrt is a name, not a letter).
   if (isSurdRootOp(op)) return checkSurdSquareRootPm(before, after, op as Extract<EquationOp, { kind: 'square-root-pm' }>, v)
   if (

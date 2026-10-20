@@ -73,13 +73,21 @@ export type ScalePurpose = 'leading-positive' | 'leading-one' | 'common-factor'
  * - cancel-base {base}: base^E1 = base^n becomes E1 = n (equal powers of one base above 1 have equal exponents).
  * - log-to-power {base}: log_base(A) = c becomes A = base^c (base 10 is written log(A), no base digits).
  * - work-out-power: L = base^c becomes L = its whole-number value; the left is unchanged.
+ * - exp-to-log {base}: base^(x) = c (c above 0) becomes x = ln c (base e), or x = ln c / ln b (a whole base b). Exact (expRoots.ts).
+ * - log-to-exp: ln(A) = c (c a whole number) becomes A = e^c. Exact (expRoots.ts).
+ * - work-out-exp: L = e^(0) becomes L = 1; the left is unchanged.
  * The exponential and logarithmic moves are checked by checkExpLogOp (check-adapter.ts), exactly, never by the polynomial path.
+ * add-both / subtract-both / multiply-both / divide-both are also used on a side that holds an exponential atom (2e^(x) - 3):
+ * checkEquationOp routes those to expRoots.ts, which compares the sides as sums of the atom and a constant.
  */
 export type EquationOp =
   | { kind: 'write-as-power'; base: string; power: string }
   | { kind: 'cancel-base'; base: string }
   | { kind: 'log-to-power'; base: string }
   | { kind: 'work-out-power' }
+  | { kind: 'exp-to-log'; base: string }
+  | { kind: 'log-to-exp' }
+  | { kind: 'work-out-exp' }
   | { kind: 'add-both'; term: string }
   | { kind: 'subtract-both'; term: string }
   | { kind: 'multiply-both'; k: string; purpose?: 'leading-positive' }
