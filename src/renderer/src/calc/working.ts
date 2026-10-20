@@ -21,6 +21,7 @@ import { keypadToMath, withAngle } from './engine'
 import { compareFunctions, sameAntiderivative } from './formula'
 import { labelTex } from './labels'
 import { readRunsAsMultiplication, type EvalResult } from './evaluateInput'
+import { GREEK_LETTERS, GREEK_NAMES } from '../math/names'
 
 type Verdict = 'agree' | 'differ' | 'unchecked'
 
@@ -107,7 +108,21 @@ function realRootsOf(working: Working): number[] {
 function integrationLetter(card: EvalResult): string | null {
   const call = calculusCall(card.src)
   if (call?.name !== 'integrate' || call.args.length > 2) return null
-  return call.args[1] ?? 'x'
+  return letterAsRead(call.args[1] ?? 'x')
+}
+
+const GREEK_NAME_OF: ReadonlyMap<string, string> = new Map(GREEK_LETTERS.map((g) => [g.letter, g.name]))
+
+/**
+ * The letter the line names, read the way the answers' TeX is read. The same converter reads both, and it spells \theta as theta, keeps
+ * \alpha as the glyph α and turns \mu into u (the app's micro prefix). A glyph (θ) or a spelt name (alpha) is therefore looked up as its
+ * TeX command and read the same way, so the letter and the answers name one letter. Left as typed, θ names a letter no answer contains,
+ * and every answer would then agree with every other.
+ */
+const letterAsRead = (letter: string): string => {
+  const name = GREEK_NAME_OF.get(letter) ?? (GREEK_NAMES.has(letter) ? letter : null)
+  if (name === null) return letter
+  return sourceOfTex(`\\${name}`) ?? letter
 }
 
 /** An answer written with its + C taken off, or null when it does not end with one (a definite value, an unreadable answer). */
@@ -117,22 +132,40 @@ function withoutConstant(tex: string): string | null {
 }
 
 /**
+ * The linear source with the names the reader cannot take apart put apart. The converter drops the underscore of a subscript (a_1 x is a1x,
+ * v_0 t is v0t), and a Greek letter runs into the letter beside it (ωt): the reader splits ASCII runs only, so each would stay one name. A
+ * letter with its digits is a name of its own (a1·x), and a Greek letter is one letter (ω·t) on either side of the letter it touches.
+ */
+const splitGlued = (linear: string): string =>
+  linear
+    .replace(/(_\d+|[A-Za-z]\d+)(?=[A-Za-zα-ωΑ-Ω])/gu, '$1*')
+    .replace(/([A-Za-z])(?=[α-ωΑ-Ω])/gu, '$1*')
+    .replace(/([α-ωΑ-Ω])(?=[A-Za-zα-ωΑ-Ω])/gu, '$1*')
+
+/**
+ * The engine's plain LaTeX writes its natural log as \log: the algebra engine's log is the natural one, and the calculator reads \log as
+ * base 10. On the card's side the \log is read as \ln, which is what it is; the working already writes \ln.
+ */
+const naturalLogs = (tex: string): string => tex.replace(/\\log(?![A-Za-z_])/g, '\\ln')
+
+/**
  * An indefinite integral's answer and the working's answer are the same when they are the same antiderivative: they may carry
  * different constants, and may be written in any form that is real on the same stretch of the line. Two forms of one antiderivative
  * have the same slope whatever constant each carries, so the check compares the slopes (sameAntiderivative), not the values with
  * one shared C, which called a constant difference a disagreement.
  */
 function antiderivativeAgreement(card: EvalResult, working: Working, letter: string): Agreement {
-  const mine = card.tex ? withoutConstant(card.tex) : null
+  const mine = card.tex ? withoutConstant(naturalLogs(card.tex)) : null
   const theirs = withoutConstant(working.answers[0].tex)
   if (mine === null || theirs === null) return 'unknown'
   // The converter drops the space in x e^x, leaving the run xe, and n x leaves nx. Each letter the answer writes is passed to the reader
-  // as a letter, so every run splits the way a typed one does: xe is x·e and nx is n·x.
+  // as a letter, so every run splits the way a typed one does: xe is x·e and nx is n·x. Greek letters and subscripts are split first.
   const reading = (tex: string): string | null => {
     const linear = sourceOfTex(tex)
     if (linear === null) return null
-    const letters = Object.fromEntries([...new Set(linear.match(/[A-Za-z]/g) ?? [])].map((c) => [c, 0]))
-    return readRunsAsMultiplication(linear, letters)
+    const split = splitGlued(linear)
+    const letters = Object.fromEntries([...new Set(split.match(/[A-Za-z]/g) ?? [])].map((c) => [c, 0]))
+    return readRunsAsMultiplication(split, letters)
   }
   const left = reading(mine)
   const right = reading(theirs)

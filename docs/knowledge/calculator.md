@@ -39,7 +39,14 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
 10. **"=" and the working agree on an indefinite integral as antiderivatives** (`calc/working.ts` `antiderivativeAgreement`, then
     `calc/formula.ts` `sameAntiderivative`): the two answers agree when their slopes agree, so a different + C or another form that
     is real on the same stretch is the same answer. A definite integral is still compared as a number, and a derivative keeps its
-    exact comparison. A name the converter glued and the reader could not split is left unchecked, never called a disagreement.
+    exact comparison. The card's engine \log is read as the natural log (the engine's log is ln). Greek letters and subscripts the
+    converter glued are split first (ωt is ω·t, a1x is a1·x). Each slope is judged against its own size and its own rounding, never a
+    fixed floor, so an integrand of 10⁻⁹ is checked as well as one of 1; a slope smaller than its rounding is left out, and when too few
+    points are left the answer is unchecked. The integration letter is read the way the answers' TeX is read (θ is theta, α stays α,
+    μ is u, as the converter reads them), and a letter neither answer contains is unknown, never agreed. The points cover each
+    stretch a form is real on (x > 2 for 1/(x² − 4)), and six must agree. A name the reader still cannot split is left unchecked,
+    never called a disagreement. Tests: tests/integralAgreement.test.ts (the tiny-scale sweep, the Greek letters, the engine's
+    \log and \operatorname shapes); the engine's recorded reply is tests/fixtures/engineReplies, not tests/fixtures/calculus.
 
 ## Traps met
 - `mathjs` rounds a complex/matrix/unit number with no 15-figure cut (0.35×3 → "1.0"): `mathFormatOptions`.
