@@ -390,3 +390,54 @@ describe('Round 2 (medium): a single answer keeps its label when the unknown is 
     expect(['12 =', 'HCF =', 'Answer', 'speed1 ='].map(cardLabelTex)).toEqual([null, null, null, null])
   })
 })
+
+// ---------------------------------------------------------------------------------------------------------------------
+// K3 review round 2 (guards). The exact lines the checkers named, each pinned against the answer it used to give.
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('K3 review: the exact lines the checkers named', () => {
+  const bareCases: Array<[string, 'factor' | 'expand', string]> = [
+    ['t^2-9', 'factor', '(t - 3)(t + 3)'],
+    ['(t+1)^2', 'expand', 't² + 2t + 1'],
+    ['2(t+3)', 'expand', '2t + 6'],
+    ['x^2+0x-4', 'factor', '(x - 2)(x + 2)'],
+    ['(x+1)(0x+2)', 'expand', '2x + 2']
+  ]
+  it.each(bareCases)('%s (%s) keeps its answer bare on the card, with no "t =" or "x =" in front', (latex, job, shown) => {
+    usePure.getState().runLatex(latex, job, { quiet: true })
+    const w = workingNow()
+    expect(w?.checked).toBe('ok')
+    expect(reconcile(cardOf(latex), w).result.main).toBe(shown)
+  })
+
+  it('0xFF + x = 0 is never answered x = 0, since 0xFF is 255 and the line is not checked at 0', () => {
+    usePure.getState().runLatex('0xFF+x=0', 'auto', { quiet: true })
+    const w = workingNow()
+    expect((w?.answers ?? []).map((a) => a.tex)).not.toContain('0')
+    expect(reconcile(cardOf('0xFF+x=0'), w).result.main).not.toBe('x = 0')
+  })
+
+  it('\\frac{x^2}{x}=3x is refused, not answered x = 0 (x² over x is undefined at 0)', () => {
+    usePure.getState().runLatex('\\frac{x^2}{x}=3x', 'auto', { quiet: true })
+    const w = workingNow()
+    expect(w?.error).toMatch(/letters on the bottom/)
+    expect(w?.answers ?? []).toEqual([])
+    expect(reconcile(cardOf('x^2/x=3x'), w).result.main).not.toBe('x = 0')
+  })
+
+  it('x^2 + 1 = x^2 + 2 says no value of x works, and the card is marked unconfirmed (it was -5.4×10¹³)', () => {
+    usePure.getState().runLatex('x^2+1=x^2+2', 'auto', { quiet: true })
+    const r = reconcile(cardOf('x^2+1=x^2+2'), workingNow())
+    expect(r.result.main).toBe('no value of x works')
+    expect(r.verdict).toBe('differ')
+    expect(r.result.unconfirmed).toBe(true)
+  })
+
+  it('0x_1 + x_1 = 3 gives x₁ = 3 (the 0 is 0 times x₁, not the hex number 1)', () => {
+    usePure.getState().runLatex('0x_1+x_1=3', 'auto', { quiet: true })
+    const w = workingNow()
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['3'])
+    expect(reconcile(cardOf('0x_1+x_1=3'), w).result.main).toBe('x₁ = 3')
+  })
+})
