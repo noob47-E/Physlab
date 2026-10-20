@@ -389,3 +389,102 @@ describe('Part S5c: trig equations never show a wrong answer as checked', () => 
     expect(String(general?.tex)).not.toMatch(/\\pik/)
   }, 30_000)
 })
+
+// Part S5c re-check (wave 2): the required results typed the way the brief writes them (no brackets round the
+// argument), the exact radian lists, an inclusive range end, and a line with too many roots to check. Every value
+// below is verified by substituting it into the original equation here, in plain arithmetic, not by the engine.
+describe('Part S5c re-check: required results are exact, checked and complete', () => {
+  /** The answers the panel shows for a line, with the verdict, or null when there is no checked working. */
+  const checkedAnswers = (latex: string, unit: 'deg' | 'rad' = 'deg'): { tex: string[]; checked?: string } | null => {
+    scene().setSettings({ angleUnit: unit })
+    usePure.setState({ working: null, input: '', inputLatex: '', history: [] })
+    usePure.getState().runLatex(latex, 'auto')
+    const w = usePure.getState().working
+    scene().setSettings({ angleUnit: 'deg' })
+    if (!w || w.noWorking || w.error || w.answers.length === 0) return null
+    return { tex: w.answers.map((a) => a.tex), checked: w.checked }
+  }
+
+  const toRad = (deg: number): number => (deg * Math.PI) / 180
+  /** A list of degree answers, with each one put back into the equation it came from. */
+  const degAnswers = (latex: string, f: (deg: number) => number, expected: number[]): void => {
+    resetGlobals()
+    const got = checkedAnswers(latex)
+    expect(got, `no checked working for ${latex}`).not.toBeNull()
+    expect(got?.checked).toBe('ok')
+    expect(got?.tex).toEqual(expected.map((x) => String(x)))
+    for (const tex of got?.tex ?? []) {
+      const deg = Number(tex)
+      expect(Number.isFinite(deg), `${latex}: ${tex} is not a number`).toBe(true)
+      expect(Math.abs(f(deg)), `${latex}: ${tex} does not solve the equation`).toBeLessThan(1e-12)
+    }
+  }
+
+  it('cos^2 x = 1 is 0 and 180 (both, checked)', () => {
+    degAnswers('\\cos^2 x=1', (d) => Math.cos(toRad(d)) ** 2 - 1, [0, 180])
+  }, 30_000)
+
+  it('2 sin^2 x = 1 is 45, 135, 225, 315 (checked)', () => {
+    degAnswers('2\\sin^2 x=1', (d) => 2 * Math.sin(toRad(d)) ** 2 - 1, [45, 135, 225, 315])
+  }, 30_000)
+
+  it('sin x = -1/2 is 210 and 330 (the reference angle is 30, not 150)', () => {
+    degAnswers('\\sin x=-\\frac{1}{2}', (d) => Math.sin(toRad(d)) + 0.5, [210, 330])
+  }, 30_000)
+
+  it('2 sin 2x = 1 is 15, 75, 195 and 255 in degrees', () => {
+    degAnswers('2\\sin 2x=1', (d) => 2 * Math.sin(2 * toRad(d)) - 1, [15, 75, 195, 255])
+  }, 30_000)
+
+  it('2 sin 2x = 1 in radians is \\pi/12, 5\\pi/12, 13\\pi/12, 17\\pi/12 — its own multiples, not sin x = 1/2 read alone', () => {
+    resetGlobals()
+    const got = checkedAnswers('2\\sin 2x=1', 'rad')
+    expect(got?.checked).toBe('ok')
+    expect(got?.tex).toEqual(['\\frac{\\pi}{12}', '\\frac{5\\pi}{12}', '\\frac{13\\pi}{12}', '\\frac{17\\pi}{12}'])
+    // Each one, put back: 2 sin(2x) = 1 with x in radians.
+    for (const x of [Math.PI / 12, (5 * Math.PI) / 12, (13 * Math.PI) / 12, (17 * Math.PI) / 12]) {
+      expect(Math.abs(2 * Math.sin(2 * x) - 1)).toBeLessThan(1e-12)
+    }
+  }, 30_000)
+
+  it('tan 2x = 1 in radians is \\pi/8 + k\\pi/2, four exact multiples of \\pi in one turn', () => {
+    resetGlobals()
+    const got = checkedAnswers('\\tan 2x=1', 'rad')
+    expect(got?.checked).toBe('ok')
+    expect(got?.tex).toEqual(['\\frac{\\pi}{8}', '\\frac{5\\pi}{8}', '\\frac{9\\pi}{8}', '\\frac{13\\pi}{8}'])
+    for (const x of [Math.PI / 8, (5 * Math.PI) / 8, (9 * Math.PI) / 8, (13 * Math.PI) / 8]) {
+      expect(Math.abs(Math.tan(2 * x) - 1)).toBeLessThan(1e-12)
+    }
+  }, 30_000)
+
+  it('an inclusive top end of the range is answered with it: sin x = 0 on 0 to 360 has 0, 180 and 360', () => {
+    degAnswers('\\sin(x)=0, 0\\le x\\le 360', (d) => Math.sin(toRad(d)), [0, 180, 360])
+  }, 30_000)
+
+  it('a range over two turns keeps every root it asks for: sin x = 1/2 on 0 to 720 has 30, 150, 390 and 510', () => {
+    degAnswers('\\sin(x)=\\frac{1}{2}, 0\\le x\\le 720', (d) => Math.sin(toRad(d)) - 0.5, [30, 150, 390, 510])
+  }, 30_000)
+
+  it('a line with a hundred roots is refused, never shown as a shorter list marked checked', () => {
+    resetGlobals()
+    scene().setSettings({ angleUnit: 'deg' })
+    usePure.setState({ working: null, input: '', inputLatex: '', history: [] })
+    usePure.getState().runLatex('\\sin(100x)=1', 'auto')
+    const w = usePure.getState().working
+    scene().setSettings({ angleUnit: 'deg' })
+    const shown = w && !w.noWorking && !w.error && w.moves.length > 0 ? w.answers.map((a) => a.tex) : []
+    // Either nothing is shown, or the whole list of 100 roots (x = 0.9 + 3.6k, k = 0..99) is shown.
+    expect(shown.length === 0 || shown.length === 100).toBe(true)
+    if (shown.length === 100) {
+      expect(shown.map(Number)).toEqual(Array.from({ length: 100 }, (_, k) => 0.9 + 3.6 * k))
+      expect(w?.checked).toBe('ok')
+    }
+  }, 30_000)
+
+  it('a table value written with a surd is declined rather than answered with a wrong list', () => {
+    resetGlobals()
+    const got = checkedAnswers('\\sin(x)=\\frac{\\sqrt{2}}{2}')
+    // Either no working, or the exact pair 45 and 135 — never a single root or a wrong one.
+    if (got !== null) expect(got.tex).toEqual(['45', '135'])
+  }, 30_000)
+})
