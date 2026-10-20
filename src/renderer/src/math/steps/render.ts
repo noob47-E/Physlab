@@ -25,6 +25,10 @@ export function toDisplayTex(text: string): string {
   return text
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
+    .replace(/\^\{\\circ\}|\\circ/g, '°')
+    .replace(/\\pi\b/g, 'π')
+    .replace(/\\theta\b/g, 'θ')
+    .replace(/\\(sin|cos|tan|sec|csc|cot|ln|log)\b/g, '$1')
     .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
@@ -63,7 +67,8 @@ const SHOWN_METHOD_NAMES = new Set([
   'Quadratic formula',
   'Discriminant',
   'Completing the square',
-  'Rational equation'
+  'Rational equation',
+  'Trigonometric equation'
 ])
 
 /**

@@ -103,9 +103,46 @@ function realRootsOf(working: Working): number[] {
 /** The sentence a working gives when no value works: the rational method's "no value of x works" or a quadratic's "No real solution". */
 const NO_SOLUTION_TEX = /^\\text\{(no value of [a-zA-Z] works|No real solution)\}$/
 
+/**
+ * The period of the roots of a working's trig equation (one trig function of c·x), in the unit of its answers: 360° or 2π for a
+ * sine or cosine and 180° or π for a tangent, divided by c. Null when the input is not such an equation, or when every answer is
+ * zero and no π shows the unit (a zero alone cannot tell degrees from radians).
+ */
+function periodOf(working: Working): number | null {
+  if (typeof working.input !== 'string') return null
+  const terms = [...working.input.matchAll(/\\?(sin|cos|tan)\s*\(\s*([^()]*?)\s*\)/g)]
+  if (terms.length === 0) return null
+  const fns = new Set(terms.map((t) => t[1]))
+  const args = new Set(terms.map((t) => t[2].replace(/\s+/g, '')))
+  if (fns.size !== 1 || args.size !== 1) return null
+  const m = /^(\d*)[a-zA-Z]$/.exec([...args][0])
+  if (!m) return null
+  const c = m[1] === '' ? 1 : Number(m[1])
+  if (!(c > 0)) return null
+  const inRadians = working.answers.some((a) => a.tex.includes('\\pi'))
+  if (!inRadians && working.answers.every((a) => numberOfTex(a.tex) === 0)) return null
+  const tangent = [...fns][0] === 'tan'
+  const turn = inRadians ? (tangent ? Math.PI : 2 * Math.PI) : tangent ? 180 : 360
+  return turn / c
+}
+
+/** Two roots are the same when they are equal, or differ by a whole number of periods of the equation's roots. */
+function sameRoot(a: number, b: number, period: number | null): boolean {
+  if (near(a, b, 1e-8)) return true
+  if (period === null) return false
+  const d = a - b
+  return near(d, Math.round(d / period) * period, 1e-8)
+}
+
+/** The plain text of an answer, with π kept: texToPlain alone would drop the \pi and leave 7/6 for 7π/6. */
+function plainOfAnswer(tex: string): string {
+  return texToPlain(tex.replace(/\\frac\{(-?\d*)\\pi\}\{(\d+)\}/g, '$1π/$2').replace(/\\pi(?![a-zA-Z])/g, 'π'))
+}
+
 function agreement(card: EvalResult, working: Working): Agreement {
   const first = working.answers[0]
   // Roots: every root of the card is a root of the working; and when the card claims all of them, the working has no real root it left out.
+  // A root that differs from a working root by whole periods is the same root (the quick search may give -30 where the working gives 330).
   if (card.roots) {
     const theirs = realRootsOf(working)
     if (theirs.length === 0) {
@@ -114,7 +151,8 @@ function agreement(card: EvalResult, working: Working): Agreement {
       const saysNoSolution = working.checked === 'ok' && working.answers.length === 1 && NO_SOLUTION_TEX.test(working.answers[0].tex)
       return card.roots.length > 0 && saysNoSolution ? 'differ' : 'unknown'
     }
-    const has = (list: number[], r: number): boolean => list.some((q) => near(q, r, 1e-8))
+    const period = periodOf(working)
+    const has = (list: number[], r: number): boolean => list.some((q) => sameRoot(q, r, period))
     if (!card.roots.every((r) => has(theirs, r))) return 'differ'
     if (card.rootsComplete && !theirs.every((q) => has(card.roots ?? [], q))) return 'differ'
     return 'agree'
@@ -174,15 +212,29 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   if (result.error) {
     if (working.checked !== 'ok' || REFUSAL_STAYS.test(result.error.sentence)) return { result, verdict: 'unchecked' }
     const tex = texOfAnswers(working)
-    return { result: { main: texToPlain(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
+    return { result: { main: plainOfAnswer(tex), src: result.src, tex, exact: null, solved: false }, verdict: 'unchecked' }
   }
   if (result.engine) return { result, verdict: 'unchecked' }
+  if (result.solved && result.roots && !result.rootsComplete && working.checked === 'ok') {
+    const theirs = realRootsOf(working)
+    const period = periodOf(working)
+    // The working fills in the roots the quick search listed only in part, and only when every one of those is among its own:
+    // a quick answer with a root the working does not have is a disagreement, and falls through to be shown as one below.
+    const listedInWorking = result.roots.every((r) => theirs.some((q) => sameRoot(q, r, period)))
+    if (listedInWorking && (theirs.length > 1 || (theirs.length === 1 && !near(result.roots[0], theirs[0], 1e-8)))) {
+      const tex = texOfAnswers(working)
+      return {
+        result: { ...result, main: plainOfAnswer(tex), tex, roots: theirs, rootsComplete: true, approximate: false },
+        verdict: 'agree'
+      }
+    }
+  }
   const verdict = agreement(result, working)
   if (verdict === 'agree') return { result, verdict: 'agree' }
   if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
   const tex = texOfAnswers(working)
   return {
-    result: { main: texToPlain(tex), src: result.src, tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
+    result: { main: plainOfAnswer(tex), src: result.src, tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true },
     verdict: 'differ',
     line: `PHYSLAB_CHECK calc-disagree line="${result.src}" quick="${result.main}" working="${tex}"`
   }

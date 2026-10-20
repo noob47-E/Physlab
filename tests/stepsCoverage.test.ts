@@ -25,7 +25,7 @@ import { validateWorking } from '../src/renderer/src/math/steps/validate'
  * so the allow-list is kept strictly minimal and honest.
  */
 const ALLOW_LIST_GAPS = new Set<string>([
-  'trig-equation',
+
   'exponential-equation',
   'logarithmic-equation',
   'radical-equation',
@@ -101,6 +101,7 @@ describe('Part S2: Calculator step coverage gate', () => {
 
     expect(ALLOW_LIST_GAPS.has('cubic-equation')).toBe(false)
     expect(ALLOW_LIST_GAPS.has('quartic-equation')).toBe(false)
+    expect(ALLOW_LIST_GAPS.has('trig-equation')).toBe(false)
 
     for (const kind of CALCULATOR_ANSWER_KINDS) {
       let covered = false

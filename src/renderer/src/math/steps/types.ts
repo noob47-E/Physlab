@@ -29,6 +29,7 @@ export interface Problem {
   realOddRoots?: boolean
   /** Optional metadata or raw input string. */
   rawInput?: string
+  angleUnit?: 'deg' | 'rad'
   metadata?: Record<string, unknown>
 }
 
@@ -82,6 +83,12 @@ export type EquationOp =
   | { kind: 'swap' }
   | { kind: 'remove-brackets' }
   | { kind: 'already-solved' }
+  | { kind: 'divide-cos' }
+  | { kind: 'trig-ref-angle'; angle?: string; quad?: string }
+  | { kind: 'trig-general' }
+  | { kind: 'trig-substitute' }
+  // rejected: the roots of the equation in u that lie outside -1 to 1 (a sine or cosine has no angle for them), as values.
+  | { kind: 'trig-back-substitute'; rejected?: string[] }
 
 /**
  * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors

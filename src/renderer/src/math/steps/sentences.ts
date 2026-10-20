@@ -44,7 +44,12 @@ function plainTex(text: string): string {
   return text
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
-    .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
+    .replace(/\^\{\\circ\}|\\circ/g, '°')
+    .replace(/\\pi\b/g, 'π')
+    .replace(/\\theta\b/g, 'θ')
+    .replace(/\\(sin|cos|tan|sec|csc|cot)\b/g, '$1')
+    .replace(/\\quad\b/g, ' ')
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
     .replace(/\^\((-?\d+)\)/g, '^$1')
@@ -70,6 +75,12 @@ function leftOf(text: string): string {
 function rightOf(text: string): string {
   const i = text.indexOf('=')
   return i === -1 ? '' : text.slice(i + 1).trim()
+}
+
+/** The first trig term an equation's text uses, in words: sin(x), or sin(2x) when its argument is a multiple of x. Null when it writes none. */
+function trigTermIn(text: string): string | null {
+  const m = /\\?(sin|cos|tan)\s*\(\s*([^()]*?)\s*\)/.exec(text)
+  return m ? `${m[1]}(${plainTex(m[2])})` : null
 }
 
 function equationSentence(op: EquationOp, step: Step, v: string): string | null {
@@ -121,6 +132,27 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       return 'Swap the two sides'
     case 'already-solved':
       return 'The equation is already solved'
+    case 'divide-cos':
+      return `Divide both sides by cos(${plainTex(v)}), noting that cos(${plainTex(v)}) = 0 is not a solution`
+    case 'trig-ref-angle':
+      return op.angle
+        ? `Find reference angle ${plainTex(op.angle)} from the unit circle${op.quad ? ` (${plainTex(op.quad)})` : ''}`
+        : 'Find the reference angle from the unit circle'
+    case 'trig-general':
+      return 'Write the general solution with integer k'
+    case 'trig-substitute':
+      return `Substitute u = ${trigTermIn(before) ?? `sin(${plainTex(v)})`} to form a quadratic equation`
+    case 'trig-back-substitute': {
+      const term = trigTermIn(after) ?? trigTermIn(before) ?? `sin(${plainTex(v)})`
+      const base = `Substitute ${term} back for u and solve each equation`
+      const rejected = op.rejected ?? []
+      if (rejected.length === 0) return base
+      // A sine or cosine is never bigger than 1 in size: a root outside -1 to 1 is named and left out, in words.
+      const many = rejected.length > 1
+      const roots = rejected.map((r) => `u = ${plainTex(r)}`).join(' and ')
+      const equations = rejected.map((r) => `${term} = ${plainTex(r)}`).join(' and ')
+      return `${base}. ${roots} ${many ? 'are' : 'is'} outside -1 to 1, so ${equations} ${many ? 'have' : 'has'} no solution and ${many ? 'are' : 'is'} left out`
+    }
     default:
       return null
   }
@@ -164,6 +196,16 @@ function equationRule(op: EquationOp): string {
       return 'Swap sides'
     case 'already-solved':
       return 'Already solved'
+    case 'divide-cos':
+      return 'Divide by cosine'
+    case 'trig-ref-angle':
+      return 'Reference angle'
+    case 'trig-general':
+      return 'General solution'
+    case 'trig-substitute':
+      return 'Substitution'
+    case 'trig-back-substitute':
+      return 'Back substitution'
   }
 }
 
@@ -215,6 +257,10 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 
 function solutionSentence(step: Step): string | null {
   if (dataOf(step).rational === true) return rationalEndingSentence(step)
+  const d = dataOf(step)
+  if (d.role === 'trig' || d.trig !== undefined) {
+    return `The solutions are ${plainTex(String(step.after))}.`
+  }
   const surd = surdSolutionsSentence(step)
   if (surd !== undefined) return surd
   const p = setProofOf(step)
@@ -230,6 +276,8 @@ function solutionSentence(step: Step): string | null {
 
 function solutionRule(step: Step): string | null {
   if (dataOf(step).rational === true) return rationalEndingRule(step)
+  const d = dataOf(step)
+  if (d.role === 'trig' || d.trig !== undefined) return 'Solutions'
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   const p = setProofOf(step)
   if (!p) return null

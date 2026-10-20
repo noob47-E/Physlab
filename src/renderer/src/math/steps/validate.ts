@@ -42,6 +42,7 @@ import {
   checkSystemOp,
   checkQuadraticSolutionSet,
   checkPolySolutionSet,
+  checkHigherSolutionSet,
   checkSurdZeroProduct,
   displayKey,
   readSurd,
@@ -65,11 +66,20 @@ import {
   solutionTextOf
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
+import { checkTrigSolutionSet, trigTermOf, type TrigRange } from './trigRoots'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { displaySafe, drawnTex } from './displaySafe'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
+}
+
+/** The range a trig solution set records (whole degrees, and whether the top end is included), or nothing when it records none. */
+function trigRangeOf(value: unknown): TrigRange | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const r = value as { min?: unknown; max?: unknown; inclusive?: unknown }
+  if (typeof r.min !== 'number' || typeof r.max !== 'number' || typeof r.inclusive !== 'boolean') return undefined
+  return { min: r.min, max: r.max, inclusive: r.inclusive }
 }
 
 function variableOfStep(step: Step): string {
@@ -254,10 +264,22 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
     return checkSurdZeroProduct(String(step.before), zp, String(step.after), v, payload.solutions as unknown[])
   }
   const domain = payload.domain === 'complex' ? 'complex' : 'real'
-  if (Array.isArray(payload.solutions) && payload.solutions.length > 0) {
-    // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
-    const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
-    if (quad !== null) return quad
+  // S5c: a trig solution set is the general solution's members in the range, checked exactly (trigRoots.ts). The general
+  // solution before it is checked by its own trig step, so nothing here trusts the method's list.
+  if (payload.role === 'trig') {
+    const solutions = Array.isArray(payload.solutions) ? (payload.solutions as unknown[]) : []
+    return checkTrigSolutionSet(String(step.before), solutions, String(step.after), v, trigRangeOf(payload.range))
+  }
+  if (Array.isArray(payload.solutions)) {
+    if (payload.solutions.length > 0) {
+      // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
+      const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (quad !== null) return quad
+      const poly = checkPolySolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (poly !== null) return poly
+    }
+    const higher = checkHigherSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+    if (higher !== null) return higher
   }
   const proof = solutionProofOf(String(step.before), v)
   if (!proof) return 'unknown'
@@ -421,6 +443,32 @@ function chainBreak(working: Working, index: number, reason: string): WorkingVal
     verdict: 'invalid',
     reason
   }
+}
+
+/**
+ * A trig working keeps the problem's own function and argument (S5c). A trig-substitute step must start from the problem's trig
+ * term, and every clause of a trig-back-substitute step must use that same function and argument. Each step is checked on its
+ * own without this link, so a sin x back-substitution inside a cos x problem would otherwise pass. Null when the working has no
+ * trig step, or when every link holds.
+ */
+function trigChainBreak(input: string, steps: Step[]): string | null {
+  const kindOf = (step: Step): string | undefined => (step.op as { kind?: string } | undefined)?.kind
+  if (!steps.some((s) => kindOf(s) === 'trig-substitute' || kindOf(s) === 'trig-back-substitute')) return null
+  const own = trigTermOf(input)
+  if (own === null) return 'A trig working must solve one trig function of one argument'
+  const same = (term: { fn: string; arg: string } | null): boolean => term !== null && term.fn === own.fn && term.arg === own.arg
+  for (const step of steps) {
+    if (kindOf(step) === 'trig-substitute' && !same(trigTermOf(String(step.before)))) {
+      return 'A substitution changes the trig function or its argument'
+    }
+    if (kindOf(step) === 'trig-back-substitute') {
+      const clauses = String(step.after).replace(/\\text\{\s*or\s*\}/g, ' or ').split(/\s+or\s+/)
+      if (!clauses.every((clause) => same(trigTermOf(clause)))) {
+        return 'A back substitution changes the trig function or its argument'
+      }
+    }
+  }
+  return null
 }
 
 /**
@@ -670,6 +718,9 @@ function validateWorkingChecked(
       return chainBreak(working, i, `Step ${i + 1} does not start where step ${i} ends`)
     }
   }
+  // A trig working keeps the problem's own function and argument: each step passes on its own without this link.
+  const trigBreak = trigChainBreak(working.input, working.steps)
+  if (trigBreak !== null) return { valid: false, verdict: 'invalid', reason: trigBreak }
 
   // A rational equation's working is exactly its three steps, and its ending is for the equation as typed: the working's input.
   if (mentionsRational(working) && !isRationalWorkingShape(working)) {
