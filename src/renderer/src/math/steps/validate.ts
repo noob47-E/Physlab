@@ -71,6 +71,7 @@ import {
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
 import { checkTrigSolutionSet, trigTermOf, type TrigRange } from './trigRoots'
+import { checkTrigInverseSolutionSet, specOf } from './trigInverse'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { isNoRealSolution, radicalRootsCheck, rationalsOf, readRootsData, sameRationals } from './radicalForm'
 import { displaySafe, drawnTex } from './displaySafe'
@@ -283,6 +284,13 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
   if (payload.role === 'trig') {
     const solutions = Array.isArray(payload.solutions) ? (payload.solutions as unknown[]) : []
     return checkTrigSolutionSet(String(step.before), solutions, String(step.after), v, trigRangeOf(payload.range))
+  }
+  // TRIGGEN: a value that is not a table value lists its members in the range as decimals (trigInverse.ts rebuilds them).
+  if (payload.role === 'trig-inverse') {
+    const solutions = Array.isArray(payload.solutions) ? (payload.solutions as unknown[]) : []
+    const spec = specOf(payload.inverse)
+    if (spec === null) return 'invalid'
+    return checkTrigInverseSolutionSet(String(step.before), solutions, String(step.after), v, trigRangeOf(payload.range), spec)
   }
   if (Array.isArray(payload.solutions)) {
     if (payload.solutions.length > 0) {

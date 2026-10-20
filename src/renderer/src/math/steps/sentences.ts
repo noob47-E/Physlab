@@ -143,6 +143,14 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
         : 'Find the reference angle from the unit circle'
     case 'trig-general':
       return 'Write the general solution with integer k'
+    case 'trig-inverse': {
+      // The exact value is written in words as a student reads it: 2/3 and −1/4, with the minus sign as a minus.
+      const word = op.fn === 'sin' ? 'sine' : op.fn === 'cos' ? 'cosine' : 'tangent'
+      const c = op.c.replace(/\\frac\{(\d+)\}\{(\d+)\}/, '$1/$2').replace(/^-/, '−')
+      return `Take the inverse ${word}: ${op.fn}⁻¹(${c}) = ${op.value.replace(/^-/, '−')}${op.unit === 'deg' ? '°' : ''}`
+    }
+    case 'trig-inverse-general':
+      return 'Write the general solution with integer k, from the principal angle'
     case 'trig-substitute':
       return `Substitute u = ${trigTermIn(before) ?? `sin(${plainTex(v)})`} to form a quadratic equation`
     case 'trig-back-substitute': {
@@ -221,6 +229,10 @@ function equationRule(op: EquationOp): string {
       return 'Reference angle'
     case 'trig-general':
       return 'General solution'
+    case 'trig-inverse':
+      return 'Principal angle'
+    case 'trig-inverse-general':
+      return 'General solution'
     case 'trig-substitute':
       return 'Substitution'
     case 'trig-back-substitute':
@@ -279,7 +291,7 @@ function solutionSentence(step: Step): string | null {
   // Part R: a radical working's check of its roots says its own words (radicalForm.ts), from the step's data.
   if (dataOf(step).radical === true) return radicalRootsSentence(step)
   const d = dataOf(step)
-  if (d.role === 'trig' || d.trig !== undefined) {
+  if (d.role === 'trig' || d.role === 'trig-inverse' || d.trig !== undefined) {
     return `The solutions are ${plainTex(String(step.after))}.`
   }
   const surd = surdSolutionsSentence(step)
@@ -301,7 +313,7 @@ function solutionRule(step: Step): string | null {
   if (dataOf(step).rational === true) return rationalEndingRule(step)
   if (dataOf(step).radical === true) return radicalRootsRule(step)
   const d = dataOf(step)
-  if (d.role === 'trig' || d.trig !== undefined) return 'Solutions'
+  if (d.role === 'trig' || d.role === 'trig-inverse' || d.trig !== undefined) return 'Solutions'
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   if (isFormulaState(String(step.before))) return 'Solutions'
   const p = setProofOf(step)

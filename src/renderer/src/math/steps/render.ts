@@ -145,7 +145,8 @@ export function formatAnswers(answer?: StepAnswer | StepAnswer[]): Answer[] {
   const list = Array.isArray(answer) ? answer : [answer]
   return list.map((a) => ({
     label: a.label,
-    tex: drawnTex(a.tex || a.value || '')
+    tex: drawnTex(a.tex || a.value || ''),
+    ...(a.approx ? { approx: a.approx } : {})
   }))
 }
 

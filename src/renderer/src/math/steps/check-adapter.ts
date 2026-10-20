@@ -41,6 +41,8 @@ import { preprocess } from '../expr'
 import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } from './types'
 // S5c: trig equations are checked by numbers at sample angles (trigRoots.ts), never taken from the method.
 import { checkListedRoots, checkTrigMove } from './trigRoots'
+// TRIGGEN: a trig value that is not a table value is checked by its own exact rules (trigInverse.ts).
+import { checkTrigInverseMove } from './trigInverse'
 // S1b: the sound checkers of G2 (math/check) decide what the exact fallback above cannot: surds, complex roots, and
 // expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
 import { plainVars, readAlg, readExact, rfMul, rfSame, type RF } from '../check/parse'
@@ -603,6 +605,13 @@ function checkNonPolyEquationOp(
   op: EquationOp,
   v: string
 ): ValidationVerdict {
+  // The raw texts: a latex angle such as \pi or 30^{\circ} must reach the checker as written.
+  const rawBefore = typeof before === 'string' ? before : before.toString()
+  const rawAfter = typeof after === 'string' ? after : after.toString()
+  if (op.kind === 'trig-inverse' || op.kind === 'trig-inverse-general') {
+    // The right side of an equation is judged by the exact polynomial checker, so 2/3 and \frac{2}{3} are one value.
+    return checkTrigInverseMove(rawBefore, rawAfter, op, v, (typed, canonical) => defaultCheckAdapter.checkExprEq(typed, canonical) === 'valid')
+  }
   if (
     op.kind === 'divide-cos' ||
     op.kind === 'trig-ref-angle' ||
@@ -610,9 +619,6 @@ function checkNonPolyEquationOp(
     op.kind === 'trig-substitute' ||
     op.kind === 'trig-back-substitute'
   ) {
-    // The raw texts: a latex angle such as \pi or 30^{\circ} must reach the checker as written.
-    const rawBefore = typeof before === 'string' ? before : before.toString()
-    const rawAfter = typeof after === 'string' ? after : after.toString()
     return checkTrigMove(rawBefore, rawAfter, op, v)
   }
 
@@ -707,7 +713,9 @@ export function checkEquationOp(
     op.kind === 'trig-ref-angle' ||
     op.kind === 'trig-general' ||
     op.kind === 'trig-substitute' ||
-    op.kind === 'trig-back-substitute'
+    op.kind === 'trig-back-substitute' ||
+    op.kind === 'trig-inverse' ||
+    op.kind === 'trig-inverse-general'
   ) {
     return checkNonPolyEquationOp(before, after, op, v)
   }

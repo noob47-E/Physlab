@@ -30,6 +30,11 @@ export interface Move {
 export interface Answer {
   label: string
   tex: string
+  /**
+   * Set when tex is a displayed decimal of a non-table trig angle: the exact root is within tol of it, and it repeats every period.
+   * calc/working.ts matches the card's roots to these within tol (trigInverse.ts), and to nothing looser.
+   */
+  approx?: { tol: number; period: number }
 }
 
 export interface Working {
