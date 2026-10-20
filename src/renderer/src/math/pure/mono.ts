@@ -23,7 +23,7 @@ export class NotPolynomial extends Error {}
 
 /**
  * A division by a bracket, such as (x²−4)/(x−2). parseExpr refuses it, but an equation with one can still be
- * multiplied out (crossMultiplied), so the solver tells this refusal apart from the others.
+ * read side by side (bracketSides), so the solver tells this refusal apart from the others.
  */
 class BracketDivision extends NotPolynomial {}
 
@@ -375,13 +375,19 @@ function sideParts(src: string): { top: Expr; bottom: Expr } {
   return { top: fromNode(root), bottom: constExpr(R1) }
 }
 
+/** One side of an equation read as top over bottom. A side that is not a division has the bottom 1. */
+export interface SideParts {
+  top: Expr
+  bottom: Expr
+}
+
 /**
- * The two sides of an equation with a division by a bracket on one side, multiplied out: (x²−4)/(x−2) = 4
- * becomes x²−4 = 4(x−2), each side's top times the other side's bottom. parseExpr refuses such a division
- * (it can only divide by one term), so this is how that line reaches the solver. Returns null when parseExpr
- * reads both sides, so the caller reads them exactly as it always did.
+ * The two sides of an equation with a division by a bracket on one side, such as (x²−4)/(x−2) = 4. Here
+ * the solver clears the bottoms itself (solve.ts), so it needs each side as top over bottom. parseExpr refuses
+ * such a division (it can only divide by one term). Returns null when parseExpr reads both sides, so the caller
+ * reads them exactly as it always did.
  */
-export function crossMultiplied(lhsSrc: string, rhsSrc: string): { lhs: Expr; rhs: Expr } | null {
+export function bracketSides(lhsSrc: string, rhsSrc: string): { lhs: SideParts; rhs: SideParts } | null {
   try {
     parseExpr(lhsSrc)
     parseExpr(rhsSrc)
@@ -389,9 +395,7 @@ export function crossMultiplied(lhsSrc: string, rhsSrc: string): { lhs: Expr; rh
   } catch (err) {
     if (!(err instanceof BracketDivision)) throw err
   }
-  const l = sideParts(lhsSrc)
-  const r = sideParts(rhsSrc)
-  return { lhs: eMul(l.top, r.bottom), rhs: eMul(r.top, l.bottom) }
+  return { lhs: sideParts(lhsSrc), rhs: sideParts(rhsSrc) }
 }
 
 type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode }

@@ -21,8 +21,23 @@ import {
   rat,
   type Rat
 } from '../rat'
-import { NotPolynomial, crossMultiplied, divisionBottoms, eSub, evalAt, exprTex, parseExpr, varsOf, type Expr } from '../mono'
-import { pDeg, pSub, pTex, pTexAt, pTexBracketed, polyFromExpr, type Poly } from '../poly'
+import { NotPolynomial, bracketSides, divisionBottoms, eMul, eSub, evalAt, exprTex, exprTexBracketed, parseExpr, varsOf, type Expr, type SideParts } from '../mono'
+import {
+  exprFromPoly,
+  findRationalRoot,
+  pDeg,
+  pDivMod,
+  pEval,
+  pGcd,
+  pMul,
+  pSub,
+  pTex,
+  pTexAt,
+  pTexBracketed,
+  pTrim,
+  polyFromExpr,
+  type Poly
+} from '../poly'
 import { discriminant, factorsOf } from '../factor'
 import { labelTex, labelText } from '../../../calc/labels'
 import {
@@ -100,12 +115,12 @@ const unknownWords = (name: string): string => labelText(name)
 //
 // Every typed bottom that holds the unknown is read as a polynomial (divisionBottoms in mono.ts), and a
 // value that makes one of them 0 is left out. Those checks are exact (rational or surd arithmetic), so no
-// decimal or double is ever involved. A bracket on the bottom is multiplied out first (crossMultiplied),
-// and then the sides are the typed sides at every value that no bottom makes 0.
+// decimal or double is ever involved. A bracket on the bottom is cleared first (clearBrackets below), and
+// then the sides are the typed sides at every value that no bottom makes 0.
 
 /** The sentence that replaces an answer when the typed equation allows no value of the letter. */
-const noValueWorks = (nameWords: string, leftOut: string): string =>
-  `No value of ${nameWords} works. ${leftOut} makes a denominator 0, so it is not allowed.`
+const noValueWorks = (nameWords: string, leftOut: string, many = false): string =>
+  `No value of ${nameWords} works. ${leftOut} ${many ? 'make' : 'makes'} a denominator 0, so ${many ? 'they are' : 'it is'} not allowed.`
 
 /**
  * A refusal the algebra engine must not replace. The engine cancels x²/x itself and answers x = 0,
@@ -166,17 +181,6 @@ function rationalRootsOf(p: Poly): Rat[] | null {
   return null
 }
 
-/** The rational values that make a bottom 0 and are roots of the equation too; null when a bottom's roots are not all rational. */
-function sharedValues(poly: Poly, exclude: Poly[]): Rat[] | null {
-  const found: Rat[] = []
-  for (const p of exclude) {
-    const roots = rationalRootsOf(p)
-    if (roots === null) return null
-    for (const r of roots) if (rIsZero(polyValue(poly, r)) && !found.some((f) => rEq(f, r))) found.push(r)
-  }
-  return found
-}
-
 /** The "every value works" sentence, with the values that make a bottom 0 left out (named where they are rational). */
 function identityExcept(nameWords: string, exclude: Poly[]): string {
   const values: Rat[] = []
@@ -192,9 +196,17 @@ function identityExcept(nameWords: string, exclude: Poly[]): string {
 /** Whether a value is one a typed bottom makes 0. */
 const makesBottomZero = (exclude: Poly[], at: Rat): boolean => exclude.some((p) => rIsZero(polyValue(p, at)))
 
-/** The step that multiplies out a bracket on the bottom, so the sides shown are the ones the solver works on. */
-function clearFractionStep(s: Steps, bottoms: Bottoms, name: string, lhs: Expr, rhs: Expr): void {
-  const under = bottoms.exclude.length ? bottoms.exclude.map((p) => texToPlain(pTexBracketed(p, name))).join(' and ') : 'the bottom of the fraction'
+/**
+ * The step that multiplies out a bracket on the bottom, so the sides shown are the ones the solver works on. The multiplier is the
+ * lowest common bottom when both bottoms hold the same letter, so a bottom on both sides is not multiplied in twice; otherwise the
+ * bottoms are multiplied together, as before.
+ */
+function clearFractionStep(s: Steps, bottoms: Bottoms, name: string, lhs: Expr, rhs: Expr, multiplier: Expr | null): void {
+  const under = multiplier
+    ? texToPlain(exprTexBracketed(multiplier))
+    : bottoms.exclude.length
+      ? bottoms.exclude.map((p) => texToPlain(pTexBracketed(p, name))).join(' and ')
+      : 'the bottom of the fraction'
   s.goal('Clear the fraction').add(
     `Multiply both sides by ${under}, so the fraction goes. A value that makes that bottom 0 is not allowed, so it is left out at the end.`,
     `${exprTex(lhs)} = ${exprTex(rhs)}`,
@@ -203,24 +215,167 @@ function clearFractionStep(s: Steps, bottoms: Bottoms, name: string, lhs: Expr, 
 }
 
 /**
- * A power of three or more that the step engine cannot solve. Its refusal stands as it is unless one of the typed bottoms shares
- * a root with it: then the algebra engine would cancel and answer that root, so the refusal is final and names the value.
+ * Both sides of an equation with a bracket on a bottom, cleared of it. `lhs` and `rhs` are the sides the solver works on; `typed`
+ * keeps each side as the student wrote it (top over bottom), so the working shows and checks the fraction that was typed.
  */
-function powerRefusal(title: string, src: string, poly: Poly, bottoms: Bottoms, nameWords: string): Working {
+interface Cleared {
+  lhs: Expr
+  rhs: Expr
+  typed: { lhs: SideParts; rhs: SideParts }
+  /** The lowest common bottom both sides were multiplied by, or null when each side was multiplied by the other side's bottom. */
+  multiplier: Expr | null
+}
+
+/**
+ * Clears the bracket bottoms of an equation, or returns null when no bracket is on a bottom. When both bottoms hold the same single
+ * letter, both sides are multiplied by their lowest common bottom rather than by each other's bottom, so
+ * \frac{-2x+3}{x+2} = \frac{-x^2+x+6}{x+2} stays a quadratic instead of growing a spare factor x + 2 and becoming a cubic.
+ */
+function clearBrackets(lhsSrc: string, rhsSrc: string): Cleared | null {
+  const sides = bracketSides(lhsSrc, rhsSrc)
+  if (!sides) return null
+  const { lhs: l, rhs: r } = sides
+  const letters = [...new Set([...varsOf(l.bottom), ...varsOf(r.bottom)])]
+  if (letters.length === 1) {
+    const name = letters[0]
+    const bottomL = polyFromExpr(l.bottom, name).poly
+    const bottomR = polyFromExpr(r.bottom, name).poly
+    const common = pGcd(bottomL, bottomR)
+    if (pDeg(common) >= 1) {
+      // The lowest common bottom is bottomL times (bottomR / common). The left side needs bottomR / common as its multiplier,
+      // and the right side needs bottomL / common.
+      const toLeft = pDivMod(bottomR, common).q
+      const toRight = pDivMod(bottomL, common).q
+      return {
+        lhs: eMul(l.top, exprFromPoly(toLeft, name)),
+        rhs: eMul(r.top, exprFromPoly(toRight, name)),
+        typed: sides,
+        multiplier: exprFromPoly(pMul(toLeft, bottomL), name)
+      }
+    }
+  }
+  return { lhs: eMul(l.top, r.bottom), rhs: eMul(r.top, l.bottom), typed: sides, multiplier: null }
+}
+
+/** A typed side as the student wrote it: the fraction when there is one, and the plain side otherwise. */
+const typedTex = (p: SideParts): string => (exprTex(p.bottom) === '1' ? exprTex(p.top) : `\\dfrac{${exprTex(p.top)}}{${exprTex(p.bottom)}}`)
+
+/** The typed equation as LaTeX, for the working's input line. */
+const typedInputTex = (c: Cleared): string => `${typedTex(c.typed.lhs)} = ${typedTex(c.typed.rhs)}`
+
+/**
+ * A cleared polynomial split into the part a typed bottom forbids and the part it allows. The forbidden part takes out every factor
+ * that shares a root with a bottom (as many times as it occurs), and the allowed part keeps the rest, so allowed × forbidden is the
+ * cleared polynomial exactly. No root of the allowed part is a root of any bottom.
+ */
+function splitForbidden(poly: Poly, exclude: Poly[]): { allowed: Poly; forbidden: Poly } {
+  let allowed = pTrim(poly)
+  let forbidden: Poly = [R1]
+  for (const bottom of exclude) {
+    for (;;) {
+      const common = pGcd(allowed, bottom)
+      if (pDeg(common) < 1) break
+      allowed = pDivMod(allowed, common).q
+      forbidden = pMul(forbidden, common)
+    }
+  }
+  return { allowed, forbidden }
+}
+
+/** The distinct values a forbidden part makes 0, when every one of them is rational; null when some are not. */
+function forbiddenValues(forbidden: Poly): Rat[] | null {
+  const found: Rat[] = []
+  let rest = pTrim(forbidden)
+  while (pDeg(rest) >= 1) {
+    const at = rIsZero(rest[0] ?? R0) ? R0 : findRationalRoot(rest)
+    if (at === null) return null
+    if (!found.some((v) => rEq(v, at))) found.push(at)
+    rest = pDivMod(rest, [rNeg(at), R1]).q
+  }
+  return found
+}
+
+/** "x = 2 or x = -2" for the values a forbidden part makes 0, or null when they cannot all be named. */
+function namedForbidden(forbidden: Poly, nameWords: string): { list: string; many: boolean } | null {
+  const values = forbiddenValues(forbidden)
+  if (!values || values.length === 0) return null
+  return { list: values.map((v) => `${nameWords} = ${texToPlain(rTex(v))}`).join(' or '), many: values.length > 1 }
+}
+
+/** The part left over, written as a plain equation for the quadratic solver, highest power first: "(1)*x^2+(-1)=0". */
+function plainEquation(p: Poly, name: string): string {
+  const terms: string[] = []
+  p.forEach((c, k) => {
+    if (rIsZero(c)) return
+    const coef = c.d === 1n ? `${c.n}` : `${c.n}/${c.d}`
+    terms.push(`(${coef})${k === 0 ? '' : `*${name}${k > 1 ? `^${k}` : ''}`}`)
+  })
+  return `${terms.reverse().join('+')}=0`
+}
+
+/**
+ * A power of three or more, which the step engine cannot solve, when a typed bottom shares a root with the cleared polynomial. The
+ * cleared polynomial splits exactly into the part a bottom forbids and the part it allows (splitForbidden), so:
+ *  - a bottom that shares no root keeps the old refusal, and the algebra engine answers as before;
+ *  - when no part is allowed, no value works, and that refusal is final, naming the values a bottom makes 0 when they are rational;
+ *  - when the allowed part is a line or a quadratic, it is solved with the forbidden values left out, and each answer is checked
+ *    against the cleared equation (a quadratic is solved by the quadratic solver, and its steps are kept);
+ *  - a larger allowed part is refused with no root given, because the algebra engine would answer the forbidden roots as well.
+ */
+function powerCase(title: string, src: string, poly: Poly, bottoms: Bottoms, name: string, nameWords: string, cleared: Cleared | null): Working {
   const power = pDeg(poly)
   const plain = failed(title, src, `This is a power-${power} equation. The step-by-step solver here does linear equations and quadratics.`)
   if (bottoms.exclude.length === 0) return plain
-  const shared = sharedValues(poly, bottoms.exclude)
-  if (shared !== null && shared.length === 0) return plain
+  const { allowed, forbidden } = splitForbidden(poly, bottoms.exclude)
+  if (pDeg(forbidden) < 1) return plain
+  const input = cleared ? typedInputTex(cleared) : `${pTex(poly, name)} = 0`
   const notes = `This is a power-${power} equation, which the step-by-step solver here does not do.`
-  if (shared === null) return finalRefusal(failed(title, src, `${notes} A value that makes a denominator 0 is not allowed.`))
-  // A power of the letter has only the root 0, so when that is shared the typed line allows no value at all.
-  const only = rationalRootsOf(poly)
-  if (only !== null && only.length === 1 && rIsZero(only[0]) && shared.length) {
-    return finalRefusal(failed(title, src, noValueWorks(nameWords, `${nameWords} = 0`)))
+  const named = namedForbidden(forbidden, nameWords)
+  const leftOutWords = named ? `${named.list} ${named.many ? 'make' : 'makes'} a denominator 0, so ${named.many ? 'they are' : 'it is'} not allowed.` : ''
+  if (pDeg(allowed) < 1) {
+    const refusal = named
+      ? noValueWorks(nameWords, named.list, named.many)
+      : `No value of ${nameWords} works. Every value that would solve it makes a denominator 0, so it is not allowed.`
+    return finalRefusal(failed(title, input, refusal))
   }
-  const list = shared.map((v) => `${nameWords} = ${texToPlain(rTex(v))}`).join(' or ')
-  return finalRefusal(failed(title, src, `${list} ${shared.length > 1 ? 'make' : 'makes'} a denominator 0, so it is not allowed. ${notes}`))
+  if (pDeg(allowed) > 2) {
+    const reason = leftOutWords || 'Some values that make a denominator 0 are not allowed.'
+    return finalRefusal(failed(title, input, `${notes} ${reason} The other roots cannot be found here, so no answer is given.`))
+  }
+  const nameTex = unknownTex(name)
+  const s = new Steps()
+  if (cleared) clearFractionStep(s, bottoms, name, cleared.lhs, cleared.rhs, cleared.multiplier)
+  s.goal('Split the cleared equation').add(
+    'The factor that a typed bottom makes 0 is taken out, and what is left is the part that a value of the letter can satisfy.',
+    `${pTexBracketed(allowed, name)}${pTexBracketed(forbidden, name)} = 0`,
+    '\\text{allowed part} \\times \\text{forbidden part} = 0'
+  )
+  s.goal('Leave out the values the fraction does not allow').add(leftOutWords || 'The values that make a denominator 0 are left out.')
+  if (pDeg(allowed) === 1) {
+    const b = allowed[0] ?? R0
+    const a = allowed[1]
+    const root = rNeg(rDiv(b, a))
+    // The forbidden part is not 0 at this root: a shared factor was taken out above, so nothing allowed is left sharing a root.
+    if (rIsZero(pEval(forbidden, root))) return plain
+    s.goal('Solve the part that is left').add(
+      rIsOne(a) ? `Move the number across, so ${nameWords} is on its own.` : `Move the number across, then divide by ${rTex(a)}, the number in front of ${nameWords}.`,
+      rIsOne(a) ? `${nameTex} = ${rTex(root)}` : `${nameTex} = \\dfrac{${rTex(rNeg(b))}}{${rTex(a)}} = ${rTex(root)}`
+    )
+    const check = `Put ${nameWords} = ${texToPlain(rTex(root))} into the cleared equation: it comes to 0, and no typed bottom is 0 there.`
+    return { title, input, moves: s.moves, answers: [{ label: `${name} =`, tex: rTex(root) }], check: check + onlyWhere(bottoms.otherLetter), checked: 'ok' }
+  }
+  const sub = solveQuadraticWorking(plainEquation(allowed, name))
+  if (sub.error || sub.checked !== 'ok' || sub.answers.length === 0) {
+    return finalRefusal(failed(title, input, `${notes} ${leftOutWords} The other roots cannot be found here, so no answer is given.`.trim()))
+  }
+  return {
+    title,
+    input,
+    moves: [...s.moves, ...sub.moves],
+    answers: sub.answers,
+    check: 'Each root makes the cleared equation 0, and no typed bottom is 0 at any of them.' + onlyWhere(bottoms.otherLetter),
+    checked: 'ok'
+  }
 }
 
 /**
@@ -239,12 +394,11 @@ function solveLinearWorking(src: string): Working {
   const [lhsSrc, rhsSrc = '0'] = sides
   let lhs: Expr
   let rhs: Expr
-  let crossed: boolean
+  let cleared: Cleared | null
   try {
-    const cross = crossMultiplied(lhsSrc, rhsSrc)
-    crossed = cross !== null
-    lhs = cross ? cross.lhs : parseExpr(lhsSrc)
-    rhs = cross ? cross.rhs : parseExpr(rhsSrc)
+    cleared = clearBrackets(lhsSrc, rhsSrc)
+    lhs = cleared ? cleared.lhs : parseExpr(lhsSrc)
+    rhs = cleared ? cleared.rhs : parseExpr(rhsSrc)
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
   }
@@ -266,9 +420,10 @@ function solveLinearWorking(src: string): Working {
   // linear (and impossible) equation 0 = 1 once they are subtracted.
   if (pDeg(pSub(L, R)) > 1) return failed(title, src, 'That is not a linear equation.')
 
-  const input = `${exprTex(lhs)} = ${exprTex(rhs)}`
+  // A cleared bracket shows the equation as it was typed, with its fractions; the cleared sides are shown in the first step.
+  const input = cleared ? typedInputTex(cleared) : `${exprTex(lhs)} = ${exprTex(rhs)}`
   const s = new Steps()
-  if (crossed) clearFractionStep(s, bottoms, name, lhs, rhs)
+  if (cleared) clearFractionStep(s, bottoms, name, lhs, rhs, cleared.multiplier)
   // a·x = c once every letter is on the left and every number on the right.
   const a = rSub(L[1] ?? R0, R[1] ?? R0)
   const c = rSub(R[0] ?? R0, L[0] ?? R0)
@@ -315,15 +470,30 @@ function solveLinearWorking(src: string): Working {
       `a${nameTex} = c \\;\\Rightarrow\\; ${nameTex} = c/a`
     )
   }
-  const lv = evalAt(lhs, { [name]: x })
-  const rv = evalAt(rhs, { [name]: x })
-  const ok = rEq(lv, rv)
+  // A cleared bracket is checked on the fraction as typed (each side's top over its bottom), so the numbers printed are the ones
+  // the student gets by putting x into the equation they wrote. A bottom that is 0 there gives no value, and the check fails.
+  const typedValue = (p: SideParts): Rat | null => {
+    const bottomAt = evalAt(p.bottom, { [name]: x })
+    return rIsZero(bottomAt) ? null : rDiv(evalAt(p.top, { [name]: x }), bottomAt)
+  }
+  const lv = cleared ? typedValue(cleared.typed.lhs) : evalAt(lhs, { [name]: x })
+  const rv = cleared ? typedValue(cleared.typed.rhs) : evalAt(rhs, { [name]: x })
+  const ok = lv !== null && rv !== null && rEq(lv, rv)
+  const shownLeft = lv ?? R0
+  const shownRight = rv ?? R0
   // The value is shown going in, side by side (Fix 4): "3x + 4 = 10, 10 = 10" gave a result
   // without its working and then a line that changed nothing.
   const side = (e: Expr, v: Rat): string => (varsOf(e).length ? `${pTexAt(polyFromExpr(e, name).poly, x)} = ${rTex(v)}` : rTex(v))
+  // A typed fraction is shown the way a substitution is written: its top and its bottom with x put in.
+  const typedSide = (p: SideParts, v: Rat): string =>
+    exprTex(p.bottom) === '1'
+      ? side(p.top, v)
+      : `\\dfrac{${pTexAt(polyFromExpr(p.top, name).poly, x)}}{${pTexAt(polyFromExpr(p.bottom, name).poly, x)}} = ${rTex(v)}`
+  const shownLhs = cleared ? typedSide(cleared.typed.lhs, shownLeft) : side(lhs, shownLeft)
+  const shownRhs = cleared ? typedSide(cleared.typed.rhs, shownRight) : side(rhs, shownRight)
   s.goal('Check the answer').add(
     `Put ${nameWords} = ${texToPlain(rTex(x))} into each side of the original equation: both sides must come to the same number.`,
-    `\\text{LHS} = ${side(lhs, lv)},\\quad \\text{RHS} = ${side(rhs, rv)}`
+    `\\text{LHS} = ${shownLhs},\\quad \\text{RHS} = ${shownRhs}`
   )
   return {
     title,
@@ -331,7 +501,7 @@ function solveLinearWorking(src: string): Working {
     method: 'Linear equation',
     moves: s.moves,
     answers: [{ label: `${name} =`, tex: rTex(x) }],
-    check: (ok ? `With ${nameWords} = ${rTex(x)} both sides come to ${rTex(lv)}.` : 'Careful: the two sides do not agree. Treat this answer with suspicion.') + onlyWhere(bottoms.otherLetter),
+    check: (ok ? `With ${nameWords} = ${rTex(x)} both sides come to ${rTex(shownLeft)}.` : 'Careful: the two sides do not agree. Treat this answer with suspicion.') + onlyWhere(bottoms.otherLetter),
     checked: ok ? 'ok' : 'failed'
   }
 }
@@ -342,13 +512,13 @@ export function solveQuadraticWorking(src: string): Working {
   let left: Expr
   // "x^2 + 4 = 0" and "x^2 + 4" both mean the same thing here.
   const [lhsSrc, rhsSrc] = src.split('=')
-  let cross: { lhs: Expr; rhs: Expr } | null = null
+  let cleared: Cleared | null = null
   try {
     if (rhsSrc === undefined) {
       left = parseExpr(lhsSrc)
     } else {
-      cross = crossMultiplied(lhsSrc, rhsSrc)
-      left = cross ? eSub(cross.lhs, cross.rhs) : parseExpr(`(${lhsSrc}) - (${rhsSrc})`)
+      cleared = clearBrackets(lhsSrc, rhsSrc)
+      left = cleared ? eSub(cleared.lhs, cleared.rhs) : parseExpr(`(${lhsSrc}) - (${rhsSrc})`)
     }
   } catch (err) {
     return failed(title, src, err instanceof NotPolynomial ? err.message : 'I could not read that.')
@@ -371,12 +541,12 @@ export function solveQuadraticWorking(src: string): Working {
   if (pDeg(poly) <= 1) return solveLinearWorking(src)
   // θ in the sentences and \theta in the maths (H12); `name` stays the engine's spelling, for the labels.
   const [nameTex, nameWords] = [unknownTex(name), unknownWords(name)]
-  if (pDeg(poly) !== 2) return powerRefusal(title, src, poly, bottoms, nameWords)
+  if (pDeg(poly) !== 2) return powerCase(title, src, poly, bottoms, name, nameWords, cleared)
 
   const [c, b, a] = [poly[0] ?? R0, poly[1] ?? R0, poly[2]]
-  const input = `${pTex(poly, name)} = 0`
+  const input = cleared ? typedInputTex(cleared) : `${pTex(poly, name)} = 0`
   const s = new Steps()
-  if (cross) clearFractionStep(s, bottoms, name, cross.lhs, cross.rhs)
+  if (cleared) clearFractionStep(s, bottoms, name, cleared.lhs, cleared.rhs, cleared.multiplier)
 
   s.goal('Read off a, b, c').add(
     `Line the equation up as a${nameWords}² + b${nameWords} + c = 0 and read off the three numbers.`,
@@ -448,7 +618,7 @@ export function solveQuadraticWorking(src: string): Working {
   const rootSigns: (1 | -1)[] = sign === 0 ? [1] : [1, -1]
   const undefinedRoots = bottoms.exclude.length ? rootSigns.filter((sg) => bottoms.exclude.some((p) => isRootOf(p, rootValue(root, sg)))) : []
   const leftOut = undefinedRoots.map((sg) => `${nameWords} = ${texToPlain(rootText(root, sg))}`).join(' or ')
-  if (undefinedRoots.length === rootSigns.length) return finalRefusal(failed(title, input, noValueWorks(nameWords, leftOut)))
+  if (undefinedRoots.length === rootSigns.length) return finalRefusal(failed(title, input, noValueWorks(nameWords, leftOut, undefinedRoots.length > 1)))
   const kept = rootSigns.filter((sg) => !undefinedRoots.includes(sg))
 
   const r1 = rootText(root, 1)

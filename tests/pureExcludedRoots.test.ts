@@ -10,9 +10,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { runPure } from '../src/renderer/src/math/pure/run'
-import type { Working } from '../src/renderer/src/math/pure/work'
+import { texToPlain, type Working } from '../src/renderer/src/math/pure/work'
 import { evaluateInput, type EvalResult } from '../src/renderer/src/calc/evaluateInput'
 import { reconcile } from '../src/renderer/src/calc/working'
+import { tryPureMath } from '../src/renderer/src/lang/commands/solve'
 
 // The algebra engine is replaced by a spy so a test can see whether the panel asked it at all.
 // Everything else in the engine module stays the real one.
@@ -317,5 +318,224 @@ describe('the algebra engine is not asked to replace a final refusal', () => {
     expect(w?.noWorking).toBeUndefined()
     expect(w?.error).toMatch(/denominator 0|every value of x works except x = 0/)
     expect(w?.error).not.toMatch(/another way/)
+  })
+})
+
+// ---------------------------------------------------------------- review round 3 (K4 fixer, fix wave round 1)
+//
+// Checkers found three things. A cubic made by clearing a bracket bottom was refused for good even when one of its roots
+// is allowed (x = 1 under \frac{x^3-4x}{x^2-4} = 1). The same bottom was multiplied in twice when both sides share it, so
+// a quadratic became a cubic. And a check line said "both sides come to N" for the cleared sides, not the typed fraction.
+// Each case below pins its true answer, or its true refusal.
+
+/** Answers as plain text, so a test can compare "-5/2" and not the LaTeX that happens to draw it. */
+const plainAnswers = (w: Working): string[] => answersOf(w).map((t) => texToPlain(t))
+
+describe('a bracket bottom that shares a root with a cubic keeps the roots it allows', () => {
+  it.each([
+    ['\\frac{x^3-4x}{x^2-4}=1', ['1']],
+    ['\\frac{x^3-4x}{x^2-4}=0', ['0']],
+    ['\\frac{2x^3+2x}{x^2+1}=-5', ['-5/2']],
+    ['\\frac{x^3+2x^2-x-2}{x+2}=0', ['-1', '1']],
+    ['\\frac{x^2-4}{x-2}=x^2', ['-1']],
+    ['\\frac{(x^2+1)(x+2)}{x+2}=0', ['i', '-i']]
+  ])('%s gives its allowed roots, checked', (latex, expected) => {
+    const w = solveTyped(latex)
+    expect(w.error).toBeUndefined()
+    expect(w.checked).toBe('ok')
+    expect(plainAnswers(w).sort()).toEqual([...expected].sort())
+  })
+
+  it('says which values the bracket bottom leaves out, in the working', () => {
+    // (x³ − 4x)/(x² − 4) = 1: the cleared cubic is (x − 1)(x² − 4), so ±2 are left out and 1 is kept.
+    const w = solveTyped('\\frac{x^3-4x}{x^2-4}=1')
+    expect(w.moves.map((m) => m.head).join(' ')).toMatch(/denominator 0/)
+  })
+
+  it('leaves out every root of a cubic that a bottom forbids: (x−2)³ over (x−2) has no value', () => {
+    // (x−2)³/(x−2) = (x−2)² = 0 only at x = 2, and the typed bottom is 0 there, so no value works.
+    const w = solveTyped('\\frac{x^3-6x^2+12x-8}{x-2}=0')
+    expect(answersOf(w)).toEqual([])
+    expect(w.checked).toBeUndefined()
+    expect(w.finalRefusal).toBe(true)
+    expect(w.error).toBe('No value of x works. x = 2 makes a denominator 0, so it is not allowed.')
+  })
+
+  it('does not send a cubic that a bottom forbids to the algebra engine', () => {
+    askSpy.ask.mockClear()
+    askSpy.ask.mockResolvedValue({ solutions: [{ x: { latex: '2' } }] })
+    usePure.getState().runLatex('\\frac{x^3-6x^2+12x-8}{x-2}=0', 'auto')
+    expect(askSpy.ask).not.toHaveBeenCalled()
+  })
+
+  it('refuses honestly, with no root, when the cleared cubic has a factor that cannot be split here', () => {
+    // (x−2)(x³+x+1)/(x−2): the bottom cancels against x = 2, and x³+x+1 has no rational root. No answer is shown. The
+    // refusal names x = 2 as the value left out (true: the typed bottom is 0 there) and says the other roots are not found here.
+    const w = solveTyped('\\frac{(x-2)(x^3+x+1)}{x-2}=0')
+    expect(answersOf(w)).toEqual([])
+    expect(w.checked).toBeUndefined()
+    expect(w.finalRefusal).toBe(true)
+    expect(w.error).toMatch(/x = 2 makes a denominator 0/)
+    expect(w.error).toMatch(/The other roots cannot be found here, so no answer is given\./)
+  })
+})
+
+describe('a bottom that shares no root with a cubic does not refuse it for good', () => {
+  it('\\frac{x^3-x}{x^2+1}=0 is not final, so the = card keeps its x = 0', () => {
+    // x³ − x = 0 has the roots 0, 1, −1, and none of them makes x² + 1 zero, so nothing needs leaving out.
+    const w = solveTyped('\\frac{x^3-x}{x^2+1}=0')
+    expect(w.finalRefusal).toBeUndefined()
+    const card = evaluateInput('COMP', '\\frac{x^3-x}{x^2+1}=0', { vars: { x: 0 }, ans: 0, angle: 'deg' })
+    expect(card).not.toBeNull()
+    expect(reconcile(card as EvalResult, w).result.error).toBeUndefined()
+  })
+})
+
+describe('a bottom on both sides is not multiplied in twice', () => {
+  it('(-2x+3)/(x+2) = (-x^2+x+6)/(x+2) is one quadratic, with roots (3 ± √21)/2', () => {
+    const w = solveTyped('\\frac{-2x+3}{x+2}=\\frac{-x^2+x+6}{x+2}')
+    expect(w.error).toBeUndefined()
+    expect(w.checked).toBe('ok')
+    expect(answersOf(w)).toHaveLength(2)
+    expect(answersOf(w).join(' ')).toMatch(/21/)
+    expect(w.moves.map((m) => m.head).join(' ')).not.toMatch(/power/)
+  })
+
+  it('says the bottom once when it is the same on both sides', () => {
+    const w = solveTyped('\\frac{-2x+3}{x+2}=\\frac{-x^2+x+6}{x+2}')
+    const clear = w.moves.find((m) => /Multiply both sides by/.test(m.head))
+    expect(clear?.head).toMatch(/Multiply both sides by \(x \+ 2\), so the fraction goes\./)
+    expect(clear?.head).not.toMatch(/and/)
+  })
+})
+
+describe('a bracket bottom check uses the fraction as typed, not the cleared sides', () => {
+  it('\\frac{x+3}{x+1}=2 checks at x = 1 with both sides as typed (2, not 4)', () => {
+    // Cleared, the sides are x + 3 and 2x + 2, which both come to 4 at x = 1. As typed they are 4/2 and 2: both come to 2.
+    const w = solveTyped('\\frac{x+3}{x+1}=2')
+    expect(w.checked).toBe('ok')
+    expect(w.check).toMatch(/both sides come to 2\./)
+    expect(w.check).not.toMatch(/come to 4/)
+    // A step's heading is its subgoal (Steps.goal); the check step's own head is the sentence that says what to do.
+    const check = w.moves.find((m) => m.subgoal === 'Check the answer')
+    expect(check?.tex).toMatch(/dfrac/)
+  })
+
+  it('\\frac{1}{x+1}=2 shows the typed fraction in the working, not the multiplied-out sides', () => {
+    const w = solveTyped('\\frac{1}{x+1}=2')
+    expect(w.check).toMatch(/both sides come to 2/)
+    expect(w.check).not.toMatch(/come to 1\b/)
+    expect(w.input).toMatch(/dfrac\{1\}\{x \+ 1\}/)
+  })
+})
+
+// ---------------------------------------------------------------- review round 4 (K4 fixer, fix wave round 2)
+//
+// Checkers found that a bottom with a number in front of the letter (x²/2x) was read by the step framework as
+// (x²/2)·x, so the typed 0/0 was never seen; that a card showing one root of several gave "agree"; that the command bar
+// handed a final refusal to the algebra engine; and that a card's own search error hid the refusal. Each is pinned below,
+// with the fraction-coefficient, ÷, exact-root and bracket lines the same reviews named.
+
+describe('a bottom written with a number in front of the letter is not read as another equation', () => {
+  it.each([['x^2/2x=0'], ['x^2/3x=0'], ['2x^2/4x=0'], ['x^2/2x+1=1']])('%s gives no answer and no tick', (line) => {
+    const w = solveTyped(line)
+    expect(answersOf(w)).toEqual([])
+    expect(w.checked).toBeUndefined()
+    expect(w.error).toBe(NO_VALUE_ZERO)
+  })
+
+  it.each([['x^2/2x=x/2'], ['4x^2/2x=2x']])('%s says every value works except x = 0', (line) => {
+    const w = solveTyped(line)
+    expect(answersOf(w)).toEqual([])
+    expect(w.checked).toBeUndefined()
+    expect(w.error).toBe('Both sides are the same, so every value of x works except x = 0, which makes a denominator 0.')
+  })
+
+  it('x^2/2x=3 keeps its root 6, because the bottom 2x is 0 only at x = 0', () => {
+    const w = solveTyped('x^2/2x=3')
+    expect(w.error).toBeUndefined()
+    expect(w.checked).toBe('ok')
+    expect(answersOf(w)).toEqual(['6'])
+  })
+
+  it.each([['x^2/2x=0'], ['x^2/2x=x/2']])('%s is not sent to the engine when the panel runs it (not quiet)', (line) => {
+    askSpy.ask.mockClear()
+    askSpy.ask.mockResolvedValue({ solutions: [{ x: { latex: '0' } }] })
+    usePure.getState().runLatex(line, 'auto')
+    expect(askSpy.ask).not.toHaveBeenCalled()
+    expect(usePure.getState().working?.answers).toEqual([])
+  })
+})
+
+describe('more fraction coefficients, ÷ and exact roots keep the same answers', () => {
+  it.each([
+    ['\\frac{2}{7}\\cdot\\frac{x^2}{x}=0'],
+    ['\\frac{x^2}{x}\\cdot\\frac{1}{7}=0'],
+    ['\\frac{x^2+\\frac{1}{3}x}{x}=\\frac{1}{3}'],
+    ['\\frac{\\frac{1}{3}x^2}{x}=0'],
+    ['\\frac{2x^2+x\\cdot\\frac{4}{3}}{x}=\\frac{4}{3}'],
+    ['\\frac{x^2}{x}+\\frac{1}{7}=\\frac{1}{7}'],
+    ['x^2÷x+1÷3=1÷3']
+  ])('%s gives no answer and no tick', (latex) => {
+    const w = solveTyped(latex)
+    expect(answersOf(w)).toEqual([])
+    expect(w.checked).toBeUndefined()
+    expect(w.error).toBe(NO_VALUE_ZERO)
+  })
+
+  it.each([
+    ['\\frac{7x^3-2x^2}{x}=0', '\\frac{2}{7}'],
+    ['\\frac{3x^3-2x^2}{x}=0', '\\frac{2}{3}']
+  ])('%s keeps its non-zero root as ok, exactly', (latex, root) => {
+    const w = solveTyped(latex)
+    expect(w.error).toBeUndefined()
+    expect(w.checked).toBe('ok')
+    expect(answersOf(w)).toEqual([root])
+  })
+
+  it.each([['\\frac{x^2-1}{x-1}=2'], ['\\frac{x^2+4x+4}{x+2}=0'], ['\\frac{x^2-9}{x-3}=6']])(
+    '%s has no value: the bracket bottom is multiplied out and its 0 is left out, with the denominator sentence',
+    (latex) => {
+      const w = solveTyped(latex)
+      expect(answersOf(w)).toEqual([])
+      expect(w.checked).toBeUndefined()
+      expect(w.finalRefusal).toBe(true)
+      expect(w.error).toMatch(/^No value of x works\. x = -?\d+ makes a denominator 0, so it is not allowed\.$/)
+      expect(w.error).not.toMatch(/Dividing by a bracket/)
+    }
+  )
+})
+
+describe('the = card does not show one root of several as the answer', () => {
+  it.each([['\\frac{x^3-x}{x}=0'], ['\\frac{x^4}{x^2}=4'], ['\\frac{x^3-2x}{x}=0'], ['\\frac{x^4-x^2}{x}=0']])(
+    '%s: the working lists every root, and a card that shows one of them is not agreed with it',
+    (latex) => {
+      const w = solveTyped(latex)
+      expect(w.checked).toBe('ok')
+      expect(w.answers.length).toBeGreaterThan(1)
+      const card = evaluateInput('COMP', latex, { vars: { x: 0 }, ans: 0, angle: 'deg' })
+      expect(card).not.toBeNull()
+      const shown = reconcile(card as EvalResult, w)
+      expect(shown.verdict).toBe('differ')
+      expect(shown.result.unconfirmed).toBe(true)
+    }
+  )
+
+  it('\\frac{x^2-9}{x-3}=6 with x stored as 3 shows the refusal, not the search error near 3', () => {
+    const w = solveTyped('\\frac{x^2-9}{x-3}=6')
+    const card = evaluateInput('COMP', '\\frac{x^2-9}{x-3}=6', { vars: { x: 3 }, ans: 0, angle: 'deg' })
+    expect(card).not.toBeNull()
+    const shown = reconcile(card as EvalResult, w).result
+    expect(shown.error?.sentence).toBe(w.error)
+    expect(shown.value).toBeUndefined()
+  })
+})
+
+describe('the command bar does not hand a final refusal to the algebra engine', () => {
+  it.each([['solve(x^2/x=0)'], ['solve(x^4/x=0)'], ['solve(x^2/2x=0)']])('%s is refused by the bar, and the engine is not asked', (line) => {
+    askSpy.ask.mockClear()
+    askSpy.ask.mockResolvedValue({ solutions: [{ x: { latex: '0' } }] })
+    expect(tryPureMath(line)).toBe(true)
+    expect(askSpy.ask).not.toHaveBeenCalled()
   })
 })

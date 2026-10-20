@@ -102,13 +102,15 @@ function realRootsOf(working: Working): number[] {
 
 function agreement(card: EvalResult, working: Working): Agreement {
   const first = working.answers[0]
-  // Roots: every root of the card is a root of the working; and when the card claims all of them, the working has no real root it left out.
+  // Roots: every root of the card is a root of the working, and every real root the working lists is on the card too. A card that
+  // shows one root of several (a search near the stored x found x = −1 under a working that lists 1 and −1) does not show the answer,
+  // so it is not agreed with; the working's list is shown instead.
   if (card.roots) {
     const theirs = realRootsOf(working)
     if (theirs.length === 0) return 'unknown'
     const has = (list: number[], r: number): boolean => list.some((q) => near(q, r, 1e-8))
     if (!card.roots.every((r) => has(theirs, r))) return 'differ'
-    if (card.rootsComplete && !theirs.every((q) => has(card.roots ?? [], q))) return 'differ'
+    if (!theirs.every((q) => has(card.roots ?? [], q))) return 'differ'
     return 'agree'
   }
   // A number (a real one, or a complex one): the same number to the precision the numeric engine works to.
@@ -160,10 +162,11 @@ const REFUSAL_STAYS = /^Typing .+ does not store a value\./
  * whose check failed stays a refusal.
  */
 export function reconcile(result: EvalResult, working: Working | null): Reconciled {
-  // A refusal that allows no answer (a root that makes a typed bottom 0) overrules any card the quick search gave. The search cannot
-  // tell that root from a real one: under \frac{x^2}{x} = 0 it lands on a number close to 0, and the working says no value works. So
-  // the card says the refusal, unconfirmed, and no number is shown as the answer. A card that is already a refusal stays as it is.
-  if (working?.finalRefusal && working.error && !result.error) {
+  // A refusal that allows no answer (a root that makes a typed bottom 0) overrules any card the quick search gave, a number or a search
+  // error alike: the search cannot tell that root from a real one (under \frac{x^2}{x} = 0 it lands on a number close to 0, and
+  // under \frac{x^2-9}{x-3} = 6 with x stored as 3 it finds nothing near 3), and the working says no value works. So the card says the
+  // refusal, unconfirmed, and no number is shown as the answer. A card that is already one of the refusals that stay (REFUSAL_STAYS) is kept.
+  if (working?.finalRefusal && working.error && !(result.error && REFUSAL_STAYS.test(result.error.sentence))) {
     return { result: { main: '', src: result.src, error: { sentence: working.error }, unconfirmed: true }, verdict: 'unchecked' }
   }
   // No working to compare with (the step engine refuses a power-8 equation): a number only the search stands behind is said to be approximate, and

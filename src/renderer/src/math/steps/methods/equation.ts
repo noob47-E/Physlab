@@ -6,7 +6,7 @@
 // Each step starts from the text the previous step ended on (Sides.text), so the chain holds; the first
 // step starts from the problem as typed.
 
-import { normalize, parseExpr, varsOf, type Expr } from '../../pure/mono'
+import { divisionBottoms, normalize, parseExpr, varsOf, type Expr } from '../../pure/mono'
 import { rMul, rat } from '../../pure/rat'
 import type { EquationOp, Problem, Step } from '../types'
 import {
@@ -84,8 +84,18 @@ function readSide(side: string, v: string): SideRead | null {
 }
 
 /**
+ * Whether a typed bottom of one side holds the letter. parseExpr cancels a letter that stands on both the top and the bottom
+ * (x²/2x reads as x/2), but distributeTerms reads "/2x" as "/2" and then "x", so the steps would work on another equation
+ * and the typed 0/0 would never be seen. Such a line is left to the solver, which leaves out the value the bottom makes 0.
+ * A bottom that cannot be read as a polynomial is treated as holding the letter: the safe choice.
+ */
+function bottomHoldsLetter(side: string, v: string): boolean {
+  return divisionBottoms(side).some((bottom) => bottom === null || varsOf(bottom).includes(v))
+}
+
+/**
  * Read an equation for the methods. Null when the input is not one equation in one letter whose
- * sides are polynomials, or when the problem names another letter.
+ * sides are polynomials, or when the problem names another letter, or when a typed bottom holds that letter.
  */
 export function readEquation(problem: Problem): Reading | null {
   // A literal beyond the exact limits is refused before anything reads it (review delta4, crash).
@@ -100,6 +110,7 @@ export function readEquation(problem: Problem): Reading | null {
     if (names.size !== 1) return null
     const v = [...names][0]
     if (problem.variable && problem.variable !== v) return null
+    if (bottomHoldsLetter(split.left, v) || bottomHoldsLetter(split.right, v)) return null
     const left = readSide(split.left, v)
     const right = readSide(split.right, v)
     if (!left || !right) return null
