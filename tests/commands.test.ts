@@ -1386,11 +1386,35 @@ describe('an equation in x alone is solved, not plotted as a curve (polish P4)',
     expect(text).toContain('In complex numbers: x = −2 ± 3i')
   })
 
-  it("x² + x + 1 = 0: the complex roots in the student's precision", async () => {
-    // −0.5 ± 0.87i is what the Calculator shows at two decimal places, the scene's default.
+  it("x² + x + 1 = 0: the complex roots written exactly, as the = card writes them", async () => {
+    // Whole-number coefficients: −1/2 ± (√3/2)i. This was −0.5 ± 0.87i at two decimal places (the scene's default) until
+    // the bar wrote a quadratic's pair exactly too; the decimal pair is what calc/roots.ts gives with no exact coefficients.
     const text = expectRefused('x^2 + x + 1 = 0', await typed('x^2 + x + 1 = 0'))
     expect(text).toContain(NO_REAL)
-    expect(text).toContain('In complex numbers: x = −0.5 ± 0.87i')
+    expect(text).toContain('In complex numbers: x = −1/2 ± (√3/2)i')
+  })
+
+  // The owner's own example, typed on the bar: the same roots as x² − 2x + 8 = 0, written exactly as a textbook
+  // writes them, the way the = card says them (calc/exactComplex.ts). The bar used to say "x = 1 ± 2.65i" here.
+  it('−x² + 2x − 8 = 0: the complex pair is written exactly, as the = card writes it', async () => {
+    const text = expectRefused('-x^2 + 2x - 8 = 0', await typed('-x^2 + 2x - 8 = 0'))
+    expect(text).toContain(NO_REAL)
+    expect(text).toContain('In complex numbers: x = 1 ± √7 i')
+  })
+
+  // The same equation typed with the keypad's own signs and a superscript: the bar reads it the same way.
+  it('x² − 2x + 8 = 0 typed with ² and − signs: the same exact pair', async () => {
+    const text = expectRefused('x² − 2x + 8 = 0', await typed('x² − 2x + 8 = 0'))
+    expect(text).toContain('In complex numbers: x = 1 ± √7 i')
+  })
+
+  // A rounded decimal coefficient (0.3333 is not a simple fraction) has no exact pair, so the bar keeps the decimal
+  // pair it always said: the search's two decimal places, and no surd.
+  it('x² + 0.3333x + 1 = 0: a rounded decimal keeps the decimal pair, with no surd', async () => {
+    const text = expectRefused('x^2 + 0.3333x + 1 = 0', await typed('x^2 + 0.3333x + 1 = 0'))
+    expect(text).toContain(NO_REAL)
+    expect(text).toMatch(/In complex numbers: x = −0\.1[67] ± 0\.99i\.$/)
+    expect(text).not.toContain('√')
   })
 
   // sin(x) = 2 never reached the equation at all: the f(x) = route took "sin" for the name of a

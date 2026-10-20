@@ -7,6 +7,7 @@ import { drawability, inXAlone, NO_REAL_X, solutionsInX, visualizeBetween, visua
 import { inferKind, math, plainNumber, preprocess, sceneNames, splitArgs, symbolsOf, toV3 } from '../../math/expr'
 import { fmtLabel, morePrecise, superscriptPowers } from '../../math/format'
 import { calcNum, type CalcPrecision } from '../../calc/format'
+import { exactPairFor, exactQuadratic, type ExactQuadratic } from '../../calc/exactComplex'
 import { showBeside } from '../../app/panels'
 import { enterMode } from '../../app/layout'
 import { useApp } from '../../app/modes'
@@ -217,8 +218,14 @@ const listAnd = (items: string[]): string => (items.length < 2 ? items.join('') 
  * The complex solutions of a polynomial with no real one, as the PhysLab Calculator's polynomial
  * mode gives them (polyRoots, written with calcNum in the student's precision), each conjugate pair
  * once with ±: x² + 4x + 13 = 0 is "x = −2 ± 3i".
+ *
+ * `exact` is the quadratic's coefficients as typed, when they are whole numbers or simple fractions:
+ * the one pair is then written as the = card writes it (x² − 2x + 8 = 0 is "x = 1 ± √7 i"), provided
+ * the exact pair agrees with the search's to rounding. Otherwise the decimal pairs are said as before.
  */
-function complexSentence(pairs: XComplex[], p: CalcPrecision): string {
+function complexSentence(pairs: XComplex[], p: CalcPrecision, exact: ExactQuadratic | null): string {
+  const exactPair = exact && pairs.length === 1 ? exactPairFor(exact, pairs[0]) : null
+  if (exactPair) return ` In complex numbers: x = ${exactPair}.`
   const said = pairs.map(({ re, im }) => {
     const a = sayNum(re, p)
     const b = sayNum(im, p)
@@ -278,7 +285,7 @@ function equationInX(input: string, lhs: string, rhs: string, expr: string): voi
   const r = drawability({ kind: 'implicit', exprs: [expr], sides }, namedScope(), p, namedGraphs())
   if (!r.ok) {
     const none = r.reason === NO_REAL_X ? solutionsInX(expr, sides, namedScope()) : null
-    throw new Error(r.reason + (none?.kind === 'none' ? complexSentence(none.complex, p) : ''))
+    throw new Error(r.reason + (none?.kind === 'none' ? complexSentence(none.complex, p, exactQuadratic(lhs, rhs)) : ''))
   }
   const note = r.note ? ` — ${r.note}` : ''
   visualizeGraph(input, [expr], 'implicit')
