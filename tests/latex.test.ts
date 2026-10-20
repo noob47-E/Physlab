@@ -636,6 +636,31 @@ describe('af-pl — latexToMath reads powers, functions, sums and subscripts as 
     })
   })
 
+  describe('P-PARSE PL: an integral’s differential may be a Greek letter', () => {
+    it('reads ∫ sinθ dθ as an integral in θ, not as sin(θ)·d·θ in x', () => {
+      // The differential was only ever read when a Latin letter followed the d, so a Greek one stayed in the body
+      // and the letter fell back to x: ∫ sinθ dθ reached the engine as integrate(sin(θ) dθ, x) and it answered
+      // θ·d·x·sin θ. The working agreed with that, so a wrong answer was shown ticked.
+      expect(latexToMath('\\int\\sin\\theta\\,d\\theta')).toBe('integrate(sin(θ), θ)')
+      expect(latexToMath('\\int\\cos\\theta\\,d\\theta')).toBe('integrate(cos(θ), θ)')
+      expect(latexToMath('\\int 2\\theta\\,d\\theta')).toBe('integrate(2θ, θ)')
+      // A Latin differential and a definite integral read as they always did.
+      expect(latexToMath('\\int x^{2}\\,dx')).toBe('integrate(x^(2), x)')
+      expect(latexToMath('\\int_{0}^{2}x\\,dx')).toBe('integral(x, 0, 2)')
+    })
+  })
+
+  describe('P-PARSE PL: \\operatorname{atan} after a name is a product', () => {
+    it('reads x\\operatorname{atan}{x} as x·atan(x), not the one name xatan', () => {
+      // The engine's plain LaTeX writes an inverse function with \operatorname and its text comes out the way
+      // \sin's does, so a name in front was glued on: the integral check could not read xatan and left x·atan x
+      // unchecked although the card and the working agreed.
+      expect(latexToMath('x\\operatorname{atan}{\\left(x \\right)}')).toBe('x*atan((x))')
+      expect(latexToMath('3\\operatorname{asinh}{\\left(x \\right)}')).toBe('3asinh((x))')
+      expect(latexToMath('- \\operatorname{atan}{\\left(x \\right)}')).toBe('-atan((x))')
+    })
+  })
+
   describe('P-PARSE PL: standalone angle brackets', () => {
     it('reads \\langle and \\rangle as vector brackets', () => {
       expect(latexToMath('\\langle 1, 2 \\rangle')).toBe('<1,2>')

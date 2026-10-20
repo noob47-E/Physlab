@@ -51,9 +51,12 @@ function powersTakeOneCharacter(text: string): boolean {
  * treats specially, a double star (a programming power), a hexadecimal or binary prefix, e-notation (1e-5, 2E3), a power
  * that takes more than one character without braces, a bare brace, a letter touching a digit (x2, which the validator
  * reads as one name), a run of letters that is not a command or a \text{} word, and two signs in a row (+ −3).
+ * The one subscript allowed is the base of a logarithm, \log_{2}, a whole number that readLogTerm reads as the base; it is
+ * taken out first, so every other rule still applies to the rest of the line.
  */
-export function displaySafe(text: string): boolean {
-  if (typeof text !== 'string') return false
+export function displaySafe(input: string): boolean {
+  if (typeof input !== 'string') return false
+  const text = input.replace(/\\log_\{\d+\}/g, '\\log')
   if (/[%#&$~`"@_]/.test(text)) return false
   if (text.includes('**')) return false
   if (/0[xXbBoO][0-9A-Fa-f]/.test(text)) return false

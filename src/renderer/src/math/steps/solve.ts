@@ -42,10 +42,10 @@ export function stepWorkingFor(problem: Problem, adapter: CheckAdapter = default
   try {
     const router = createDefaultStepRouter(adapter)
     const working = router.solve(problem)
-    if (working.noWorking || !working.steps || working.steps.length === 0) return null
+    if (!working || working.noWorking || !working.steps || working.steps.length === 0) return null
     if (isNoRealSolutionQuadratic(problem, working.answer)) return null
     const doc = renderWorkingToDoc(working, problem, adapter)
-    if (doc.noWorking || doc.moves.length === 0) return null
+    if (!doc || doc.noWorking || !doc.moves || doc.moves.length === 0 || (doc.answers.length === 0 && !working.answer)) return null
     return doc
   } catch {
     return null

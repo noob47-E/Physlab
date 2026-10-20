@@ -109,8 +109,21 @@ export function texToPlain(s: string): string {
     .replace(/\\times/g, '×')
     .replace(/\\cdot/g, '·')
     .replace(/\\(?:quad|;|,)/g, ' ')
+    // The signs an inequality and its set are written with keep their meaning as text: x ≤ −2 and (−∞, 2] lose nothing.
+    .replace(/\\leq?(?![a-zA-Z])/g, '≤')
+    .replace(/\\geq?(?![a-zA-Z])/g, '≥')
+    .replace(/\\infty(?![a-zA-Z])/g, '∞')
+    .replace(/\\cup(?![a-zA-Z])/g, '∪')
+    .replace(/\\varnothing(?![a-zA-Z])/g, '∅')
+    // \{ and \} are braces that a set such as {0} keeps: they are held back while the other braces go, then put back.
+    .replace(/\\\{/g, '\u0001')
+    .replace(/\\\}/g, '\u0002')
     .replace(/\\[a-zA-Z]+/g, '')
     .replace(/[{}]/g, '')
+    .split('\u0001')
+    .join('{')
+    .split('\u0002')
+    .join('}')
     .replace(/\s+/g, ' ')
     .trim()
 }

@@ -9,20 +9,11 @@ import type { Problem, Working, Method, StepRouter, RouterOptions } from './type
 import { CANT_SHOW_STEPS_REASON } from './types'
 import { validateWorking } from './validate'
 import { defaultCheckAdapter, type CheckAdapter } from './check-adapter'
+import { tooLongToRead } from './limits'
 
 export { CANT_SHOW_STEPS_REASON }
 export const DEFAULT_MAX_DEPTH = 10
 export const DEFAULT_MAX_STEPS = 100
-
-/** The longest typed input the methods read, and the most brackets in it (P-FIX-S1SOUND2 SHOULD 1). */
-const MAX_INPUT_LENGTH = 400
-const MAX_BRACKETS = 60
-
-function countOf(text: string, ch: string): number {
-  let n = 0
-  for (const c of text) if (c === ch) n++
-  return n
-}
 
 /**
  * Count all steps in a Working document including nested sub-workings. Iterative, and bounded: a tree with a cycle or too many
@@ -83,7 +74,7 @@ export class DefaultStepRouter implements StepRouter {
 
     // An input too long or too deeply bracketed to read in time is declined before any method reads it (P-FIX-S1SOUND2
     // SHOULD 1: 3,000 nested brackets took seconds, every method rereading them).
-    if (typeof problem.input === 'string' && (problem.input.length > MAX_INPUT_LENGTH || countOf(problem.input, '(') > MAX_BRACKETS)) {
+    if (typeof problem.input === 'string' && tooLongToRead(problem.input)) {
       return { steps: [], noWorking: true, reason: CANT_SHOW_STEPS_REASON }
     }
 

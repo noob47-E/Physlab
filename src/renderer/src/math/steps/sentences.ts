@@ -27,8 +27,10 @@ import {
   type SetProof
 } from './check-adapter'
 import { MINUS, ratPlain, shiftPlain } from './methods/stepText'
+import { ineqRule, ineqSentence } from './inequality'
 import { evalAt, varsOf, type Expr } from '../pure/mono'
 import { rEq, type Rat } from '../pure/rat'
+import { radicalRootsRule, radicalRootsSentence, radicalSubstitution } from './radicalForm'
 
 
 function dataOf(step: Step): Record<string, unknown> {
@@ -45,7 +47,12 @@ function plainTex(text: string): string {
   return text
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
-    .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
+    .replace(/\^\{\\circ\}|\\circ/g, '°')
+    .replace(/\\pi\b/g, 'π')
+    .replace(/\\theta\b/g, 'θ')
+    .replace(/\\(sin|cos|tan|sec|csc|cot)\b/g, '$1')
+    .replace(/\\quad\b/g, ' ')
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
     .replace(/\^\((-?\d+)\)/g, '^$1')
@@ -71,6 +78,12 @@ function leftOf(text: string): string {
 function rightOf(text: string): string {
   const i = text.indexOf('=')
   return i === -1 ? '' : text.slice(i + 1).trim()
+}
+
+/** The first trig term an equation's text uses, in words: sin(x), or sin(2x) when its argument is a multiple of x. Null when it writes none. */
+function trigTermIn(text: string): string | null {
+  const m = /\\?(sin|cos|tan)\s*\(\s*([^()]*?)\s*\)/.exec(text)
+  return m ? `${m[1]}(${plainTex(m[2])})` : null
 }
 
 function equationSentence(op: EquationOp, step: Step, v: string): string | null {
@@ -122,6 +135,35 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       return 'Swap the two sides'
     case 'already-solved':
       return 'The equation is already solved'
+    case 'divide-cos':
+      return `Divide both sides by cos(${plainTex(v)}), noting that cos(${plainTex(v)}) = 0 is not a solution`
+    case 'trig-ref-angle':
+      return op.angle
+        ? `Find reference angle ${plainTex(op.angle)} from the unit circle${op.quad ? ` (${plainTex(op.quad)})` : ''}`
+        : 'Find the reference angle from the unit circle'
+    case 'trig-general':
+      return 'Write the general solution with integer k'
+    case 'trig-substitute':
+      return `Substitute u = ${trigTermIn(before) ?? `sin(${plainTex(v)})`} to form a quadratic equation`
+    case 'trig-back-substitute': {
+      const term = trigTermIn(after) ?? trigTermIn(before) ?? `sin(${plainTex(v)})`
+      const base = `Substitute ${term} back for u and solve each equation`
+      const rejected = op.rejected ?? []
+      if (rejected.length === 0) return base
+      // A sine or cosine is never bigger than 1 in size: a root outside -1 to 1 is named and left out, in words.
+      const many = rejected.length > 1
+      const roots = rejected.map((r) => `u = ${plainTex(r)}`).join(' and ')
+      const equations = rejected.map((r) => `${term} = ${plainTex(r)}`).join(' and ')
+      return `${base}. ${roots} ${many ? 'are' : 'is'} outside -1 to 1, so ${equations} ${many ? 'have' : 'has'} no solution and ${many ? 'are' : 'is'} left out`
+    }
+    case 'write-as-power':
+      return `Write ${plainTex(rightOf(before))} as ${plainTex(op.base)} to the power ${plainTex(op.power)}`
+    case 'cancel-base':
+      return `Equal powers of ${plainTex(op.base)} have equal exponents: ${plainTex(after)}`
+    case 'log-to-power':
+      return `Write the logarithm as a power: ${plainTex(after)}`
+    case 'work-out-power':
+      return `Work out ${plainTex(rightOf(before))} = ${plainTex(rightOf(after))}`
     default:
       return null
   }
@@ -129,6 +171,14 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
 
 function equationRule(op: EquationOp): string {
   switch (op.kind) {
+    case 'write-as-power':
+      return 'Write as a power'
+    case 'cancel-base':
+      return 'Equal bases'
+    case 'log-to-power':
+      return 'Logarithm to power'
+    case 'work-out-power':
+      return 'Work out the power'
     case 'add-both':
       return 'Add to both sides'
     case 'subtract-both':
@@ -165,6 +215,16 @@ function equationRule(op: EquationOp): string {
       return 'Swap sides'
     case 'already-solved':
       return 'Already solved'
+    case 'divide-cos':
+      return 'Divide by cosine'
+    case 'trig-ref-angle':
+      return 'Reference angle'
+    case 'trig-general':
+      return 'General solution'
+    case 'trig-substitute':
+      return 'Substitution'
+    case 'trig-back-substitute':
+      return 'Back substitution'
   }
 }
 
@@ -215,6 +275,13 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 }
 
 function solutionSentence(step: Step): string | null {
+  if (dataOf(step).rational === true) return rationalEndingSentence(step)
+  // Part R: a radical working's check of its roots says its own words (radicalForm.ts), from the step's data.
+  if (dataOf(step).radical === true) return radicalRootsSentence(step)
+  const d = dataOf(step)
+  if (d.role === 'trig' || d.trig !== undefined) {
+    return `The solutions are ${plainTex(String(step.after))}.`
+  }
   const surd = surdSolutionsSentence(step)
   if (surd !== undefined) return surd
   // The roots after a quadratic formula line: the line's own numbers are the proof, so the sentence names the roots as they stand.
@@ -231,6 +298,10 @@ function solutionSentence(step: Step): string | null {
 }
 
 function solutionRule(step: Step): string | null {
+  if (dataOf(step).rational === true) return rationalEndingRule(step)
+  if (dataOf(step).radical === true) return radicalRootsRule(step)
+  const d = dataOf(step)
+  if (d.role === 'trig' || d.trig !== undefined) return 'Solutions'
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   if (isFormulaState(String(step.before))) return 'Solutions'
   const p = setProofOf(step)
@@ -252,11 +323,31 @@ function exprSentence(step: Step): string | null {
   return 'Write the expression another way.'
 }
 
+/** "2", "2 or 3", "1, 2 or 3": a list of values in words. */
+function listOr(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`
+}
+
+/** "x = 1", "x = 1 and x = 3": a list of statements in words. */
+function listAnd(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/** "x cannot be 0 or 1, because a denominator would be 0.": the values the letter may not take, read from the denominators. */
+function excludedSentence(d: Record<string, unknown>): string | null {
+  if (!Array.isArray(d.excluded) || d.excluded.length === 0) return null
+  const v = typeof d.variable === 'string' ? d.variable : 'x'
+  return `${v} cannot be ${listOr(d.excluded.map((t) => plainNumber(String(t))))}, because a denominator would be 0.`
+}
+
 function implicationSentence(step: Step): string | null {
   const d = dataOf(step)
   if (d.action === 'quadratic-formula') return 'Put a, b and c into the quadratic formula'
   if (d.action === 'square') return 'Square both sides'
   if (d.action === 'multiply' && typeof d.multiplier === 'string') return `Multiply both sides by ${plainTex(d.multiplier)}`
+  if (d.action === 'exclude') return excludedSentence(d)
   return null
 }
 
@@ -265,7 +356,37 @@ function implicationRule(step: Step): string | null {
   if (action === 'quadratic-formula') return 'Quadratic formula'
   if (action === 'square') return 'Squaring'
   if (action === 'multiply') return 'Multiply both sides'
+  if (action === 'exclude') return 'Excluded values'
   return null
+}
+
+/**
+ * The words of a rational equation's ending (rational.ts): the values a denominator rules out, named in words, then the
+ * solutions, or that no value works. Null when a kept value cannot be read exactly.
+ */
+function rationalEndingSentence(step: Step): string | null {
+  const d = dataOf(step)
+  const v = variableOf(step)
+  const kept = Array.isArray(d.solutions) ? d.solutions.map((s) => solutionTextOf(s)) : []
+  const rejected = Array.isArray(d.rejected) ? d.rejected.map((r) => `${v} = ${plainNumber(String(r))}`) : []
+  const one = rejected.length === 1
+  const ruled = `${listAnd(rejected)} ${one ? 'makes' : 'make'} a denominator 0`
+  if (kept.length === 0) {
+    return rejected.length === 0 ? `No value of ${v} works.` : `${ruled}, so no value of ${v} works.`
+  }
+  const parts: string[] = []
+  for (const t of kept) {
+    const x = readSurd(t)
+    if (!x) return null
+    parts.push(`${v} = ${prettyOfAlg(x)}`)
+  }
+  const solutions = `The solutions are ${listOr(parts)}.`
+  return rejected.length === 0 ? solutions : `${ruled}, so ${one ? 'it is' : 'they are'} not ${one ? 'a solution' : 'solutions'}. ${solutions}`
+}
+
+function rationalEndingRule(step: Step): string {
+  const solutions = dataOf(step).solutions
+  return Array.isArray(solutions) && solutions.length > 0 ? 'Solutions' : 'No solution'
 }
 
 /** The sentence a step must carry, built from its typed data. Null when the data does not determine one. */
@@ -285,6 +406,11 @@ export function sentenceFor(step: Step): string | null {
       return step.op && isExprOp(step.op) ? productSentence(step, step.op) : exprSentence(step)
     case 'SystemEq':
       return systemSentence(step)
+    case 'IneqMove':
+    case 'IneqCritical':
+    case 'IneqSigns':
+    case 'IneqSolutionSet':
+      return ineqSentence(step)
     default:
       return null
   }
@@ -309,6 +435,11 @@ export function ruleFor(step: Step): string | null {
       return dataOf(step).role === 'discriminant' ? 'Discriminant' : 'Same value'
     case 'SystemEq':
       return systemRule(step)
+    case 'IneqMove':
+    case 'IneqCritical':
+    case 'IneqSigns':
+    case 'IneqSolutionSet':
+      return ineqRule(step)
     default:
       return null
   }
@@ -340,6 +471,10 @@ export function substitutionOf(working: Working): Substitution | null {
   if (typeof working.input !== 'string' || working.answer === undefined) return null
   const answers: StepAnswer[] = Array.isArray(working.answer) ? working.answer : [working.answer]
   if (answers.length === 0) return null
+
+  // Part R: an equation with a square root is put back into the typed equation by radicalForm.ts (exact, root by root).
+  const radical = radicalSubstitution(working.input, answers)
+  if (radical !== null) return radical
 
   // Check if this is a system (multiple equations separated by comma)
   if (working.input.includes(',')) {
