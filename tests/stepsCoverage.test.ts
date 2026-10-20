@@ -28,7 +28,6 @@ const ALLOW_LIST_GAPS = new Set<string>([
   'trig-equation',
   'exponential-equation',
   'logarithmic-equation',
-  'radical-equation',
   'rational-equation',
   'divide-polynomial',
   'partial-fractions',

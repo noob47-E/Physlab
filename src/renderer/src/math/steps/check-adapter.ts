@@ -33,6 +33,8 @@ import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } fr
 import { readAlg } from '../check/parse'
 import { algAdd, algEq, algIsRational, algMul, algRat, algSub, type Alg as G2Alg } from '../check/field'
 import { expressionEqual, polyRootsCheck, rationalEqual, type Verdict as G2Verdict } from '../check/checkers'
+// Part R: a square root of the letter is read and checked by radicalForm.ts (the polynomial reader above refuses a root).
+import { radicalCheckOp, radicalCheckSquare, radicalVarOf } from './radicalForm'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -263,6 +265,11 @@ export const defaultCheckAdapter: CheckAdapter = {
     const eq2 = splitEquation(stringifyNodeOrText(after))
     if (!eq1 || !eq2) return 'unknown'
     const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+    // Part R: squaring an equation with a square root of the letter is checked by radicalForm.ts (sqrt(P) squared is P).
+    if (payload.action === 'square') {
+      const rootVar = radicalVarOf(stringifyNodeOrText(before))
+      if (rootVar !== null) return radicalCheckSquare(stringifyNodeOrText(before), stringifyNodeOrText(after), rootVar)
+    }
     const l1 = tryParsePoly(eq1.left)
     const r1 = tryParsePoly(eq1.right)
     const l2 = tryParsePoly(eq2.left)
@@ -526,6 +533,10 @@ export function checkEquationOp(
 ): ValidationVerdict {
   // S1b: a square-root step with a surd root is checked by its own exact rule first (sqrt is a name, not a letter).
   if (isSurdRootOp(op)) return checkSurdSquareRootPm(before, after, op as Extract<EquationOp, { kind: 'square-root-pm' }>, v)
+  // Part R: an equation with a square root of the letter is moved by radicalForm.ts, which reads the root exactly.
+  if (radicalVarOf(stringifyNodeOrText(before)) !== null || radicalVarOf(stringifyNodeOrText(after)) !== null) {
+    return radicalCheckOp(stringifyNodeOrText(before), stringifyNodeOrText(after), op, v)
+  }
   // A letter other than v anywhere in the states, even one that cancels, means no proof (review delta3, SHOULD 1).
   if (lettersOutside(before, v) || lettersOutside(after, v)) return 'unknown'
   const b = equationSides(before)
@@ -767,6 +778,9 @@ export function normalizeDisplayed(text: string): string {
  * input is not a polynomial, or uses no letter or more than one.
  */
 export function variableOfInput(input: string): string | null {
+  // Part R: a radical equation's letter is read by radicalForm.ts, because the polynomial reader below refuses a root.
+  const rootVar = radicalVarOf(input)
+  if (rootVar !== null) return rootVar
   const split = splitEquation(input)
   const sides = split ? [split.left, split.right] : [input]
   const names = new Set<string>()

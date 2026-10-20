@@ -64,6 +64,7 @@ import {
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
+import { isNoRealSolution, radicalRootsCheck, rationalsOf, readRootsData, sameRationals } from './radicalForm'
 import { displaySafe, drawnTex } from './displaySafe'
 
 function dataOf(step: Step): Record<string, unknown> {
@@ -212,6 +213,8 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
   if (step.kind !== 'SolutionSetEq') return 'invalid'
   const payload = dataOf(step)
   const v = typeof payload.variable === 'string' ? payload.variable : 'x'
+  // Part R: the roots of a radical equation are checked by radicalForm.ts, each put back into the original equation.
+  if (payload.radical === true) return radicalRootsCheck(step)
   // S1b: a surd square root's two solutions are the sides of the factored form the step names (exact, no proof needed).
   if (payload.zeroProduct && typeof payload.zeroProduct === 'object') {
     const zp = payload.zeroProduct as { shift: string; root: string }
@@ -510,11 +513,42 @@ function answerKey(w: Working): string {
     .join(';')
 }
 
+/** True for a working that carries a radical step: its squaring, or its check of the roots (Part R). */
+function isRadicalWorking(working: Working): boolean {
+  return working.steps.some((s) => dataOf(s).radical === true)
+}
+
+/**
+ * A radical working is shown only when it ends in the check of its roots, the equation that check names is the one typed, and
+ * (with roots) its one sub-working solves the squared equation the check starts from and finds the same roots. Null when it does.
+ */
+function radicalWorkingProblem(working: Working): string | null {
+  const last = working.steps[working.steps.length - 1]
+  const data = readRootsData(last)
+  if (last.kind !== 'SolutionSetEq' || data === null) return 'A radical working must end with its check of the roots'
+  if (typeof working.input !== 'string' || !sameState(data.original, working.input)) {
+    return 'The check does not use the equation as typed'
+  }
+  const subs = working.subWorkings ?? []
+  if (data.negative) return subs.length === 0 ? null : 'A no-solution working has no sub-working to check'
+  if (subs.length !== 1) return 'The squared equation must be solved in one sub-working'
+  if (!sameState(subs[0].input ?? '', String(last.before))) return 'The sub-working does not solve the squared equation'
+  const subAnswers = Array.isArray(subs[0].answer) ? subs[0].answer : subs[0].answer ? [subs[0].answer] : []
+  const subRoots = isNoRealSolution(subAnswers) ? [] : rationalsOf(subAnswers)
+  const checkRoots = rationalsOf(data.checks.map((c) => ({ label: data.variable, tex: c.value })))
+  if (subRoots === null || checkRoots === null || !sameRationals(subRoots, checkRoots)) {
+    return 'The sub-working finds other roots than the check'
+  }
+  return null
+}
+
 /**
  * The sub-workings of a working belong to it (P-FIX-S1SOUND2 MUST 8): each is the discriminant of this equation, or the
  * solution of one zero-product case of its own split, and every case has exactly one. Null when they belong.
  */
 function subWorkingsBelong(working: Working): string | null {
+  // Part R: a radical working's one sub-working is the squared equation, and radicalWorkingProblem checks that it belongs.
+  if (isRadicalWorking(working)) return radicalWorkingProblem(working)
   const subs = working.subWorkings ?? []
   const v = variableOfInput(working.input ?? '')
   const split = working.steps.find((s) => s.kind === 'CaseSplitComplete' && dataOf(s).form === 'zero-product')

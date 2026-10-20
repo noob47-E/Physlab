@@ -300,3 +300,28 @@ remove-brackets, which the method writes when a side has brackets and none of th
 that every complete-square step on x^2 + 2x - 3 = 0 is invalid is FALSE: the validator reads the state with \left and
 \right removed, and both inputs validate (review7.test.ts pins it). Mutant counts (round 7): linear 634, rational
 quadratics 7741, negative discriminants 1230 (0 accepted in each).
+
+## Part R: equations with a square root
+
+`src/renderer/src/math/steps/methods/radical.ts` solves an equation with one square root of one letter, such as
+`sqrt(x + 1) = x - 1`, `sqrt(x) + 2 = x` or `sqrt(x + 5) = sqrt(2x - 1)`. The root is isolated by a checked
+`EquationEquiv` move. Both sides are squared with an `Implication` whose data says `action: 'square'` (rule "Squaring"):
+the squaring is checked as "sqrt(P) squared is P". The squared equation is solved through the router, and every root of
+it is put back into the ORIGINAL equation in a `SolutionSetEq` step with `data.radical`, so an extraneous root is
+rejected in words. A root set equal to a negative number has no solution and nothing is squared.
+
+The exact reading, checks and wording live in `src/renderer/src/math/steps/radicalForm.ts`. Each root is a placeholder
+letter for its radicand. Every candidate is evaluated exactly with the rational and square-root field in
+`src/renderer/src/math/check/field.ts`, and anything it cannot decide is `unknown`. `check-adapter.ts` sends an
+`EquationEquiv` or `Implication` step whose text holds a root of the letter to that file, and `validate.ts` checks the
+root step and the link between the working and its one sub-working.
+
+The router's equation methods work on "polynomial = 0", so when the square leaves x² on both sides (`sqrt(x^2 - 4) =
+x - 1`) they decline it. The method then adds a checked `move-to-left` step whose after is the squared equation with
+nothing on the right, and solves that form instead (`2x - 5 = 0`).
+
+Shapes this method does not decide give no working, so the old answer stays: two roots on one side, a coefficient on a
+root, a squared equation with irrational roots, a request in the complex domain, and a squared equation that is a
+perfect square (a double root, `sqrt(2x + 1) = x + 1`), which is declined rather than reported with a made-up
+multiplicity. Tests are in `tests/stepsRadical.test.ts` (the examples, the wrong-step plants, and 100 seeded
+`sqrt(ax + b) = cx + k` cases checked against exact whole-number substitution).

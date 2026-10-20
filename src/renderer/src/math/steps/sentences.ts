@@ -28,6 +28,7 @@ import {
 import { MINUS, ratPlain, shiftPlain } from './methods/stepText'
 import { evalAt, varsOf, type Expr } from '../pure/mono'
 import { rEq, type Rat } from '../pure/rat'
+import { radicalRootsRule, radicalRootsSentence, radicalSubstitution } from './radicalForm'
 
 
 function dataOf(step: Step): Record<string, unknown> {
@@ -214,6 +215,8 @@ function surdSolutionsSentence(step: Step): string | null | undefined {
 }
 
 function solutionSentence(step: Step): string | null {
+  // Part R: a radical working's check of its roots says its own words (radicalForm.ts), from the step's data.
+  if (dataOf(step).radical === true) return radicalRootsSentence(step)
   const surd = surdSolutionsSentence(step)
   if (surd !== undefined) return surd
   const p = setProofOf(step)
@@ -228,6 +231,7 @@ function solutionSentence(step: Step): string | null {
 }
 
 function solutionRule(step: Step): string | null {
+  if (dataOf(step).radical === true) return radicalRootsRule(step)
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'
   const p = setProofOf(step)
   if (!p) return null
@@ -336,6 +340,10 @@ export function substitutionOf(working: Working): Substitution | null {
   if (typeof working.input !== 'string' || working.answer === undefined) return null
   const answers: StepAnswer[] = Array.isArray(working.answer) ? working.answer : [working.answer]
   if (answers.length === 0) return null
+
+  // Part R: an equation with a square root is put back into the typed equation by radicalForm.ts (exact, root by root).
+  const radical = radicalSubstitution(working.input, answers)
+  if (radical !== null) return radical
 
   // Check if this is a system (multiple equations separated by comma)
   if (working.input.includes(',')) {
