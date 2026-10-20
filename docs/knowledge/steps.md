@@ -219,6 +219,11 @@ use `x^2`.
 - Endings: a linear `0 = K` with K ≠ 0 ends with a `SolutionSetEq` line ("no value of x works"). A quadratic
   with a negative discriminant in the real domain ends with a `SolutionSetEq` line ("No real solution"), proved
   exactly from the displayed equation. A linear `0 = 0` ends with the identity `SolutionSetEq` ("every real number").
+- The Calculator hands that quadratic over. `stepWorkingFor` (`steps/solve.ts`) returns null for a real quadratic
+  whose answer is "No real solution" with a negative discriminant, so the older engine (`pure/complex/solve.ts`)
+  answers it: the discriminant first, then the sentence that there is no real solution, then the exact complex
+  roots, checked. The framework's own working states the conclusion before the discriminant and gives no complex
+  roots, which is why it is not shown there. Guard: `tests/complexRootsWorking.test.ts`.
 
 **Which quadratic method is primary.** Factorising applies when the discriminant is a perfect square (the factor
 form has d₁·d₂ = a by Gauss's lemma). Otherwise the formula is primary. The formula and completing the square are
