@@ -96,6 +96,12 @@ export function checkCalculatorGuess(
     return { verdict: 'right', parsed: parseExprNumber(trimmed) ?? undefined }
   }
 
+  // An inequality's answer is a set of intervals. The number and root checks below would read a number out of its text and call a
+  // right answer wrong ("0" for x² ≤ 0), so only the answer typed exactly as the card shows it (checked above) is taken.
+  if (result.inequality) {
+    return { verdict: 'unreadable', message: 'Guess-first does not check an inequality yet. Type its answer exactly as the card shows it, or click "Show me".' }
+  }
+
   // 1. Equation / polynomial roots (e.g. roots = [3, 2] or [1 + sqrt(2), 1 - sqrt(2)])
   if (result.roots && result.roots.length > 0) {
     // Split ONLY on commas, semicolons, and the word "and" (case-insensitive)

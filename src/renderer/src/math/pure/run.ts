@@ -29,6 +29,7 @@ import {
   type Summand,
   type Term
 } from './mono'
+import { matrixWorkingFor } from './matrix'
 import { factoriseNumberWorking, hcfWorking, lcmWorking } from './integers'
 import { hcfAlgebraWorking, lcmAlgebraWorking } from './algebraHcf'
 import { factoriseWorking, factorsOf, isNumericLine, wantsAllowI } from './factor'
@@ -419,6 +420,10 @@ function expandWorking(src: string): Working {
 export function runPure(job: JobId, input: string): Working {
   const src = input.trim()
   if (!src) return failed(jobById(job).label, '', 'Type something to work on first.')
+  // A determinant or an inverse of a typed matrix has no working in any job below: a matrix is not something Factorise,
+  // Expand or Divide can read, so the line gets its own working whichever job the panel is on (or none, see matrix.ts).
+  const matrix = matrixWorkingFor(src)
+  if (matrix) return matrix
 
   switch (job) {
     case 'primes':

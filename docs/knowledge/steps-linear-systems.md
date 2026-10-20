@@ -25,6 +25,11 @@ every number a student reads is exact.
   to "letter = number".
 - **Substitution** (Another way): for each letter, make a row its subject (`v = P`, choosing a unit coefficient
   first) and substitute it into the other rows; then solve back the same way.
+- **Which equations each takes**: elimination needs every equation with its letters on the left and a number on the
+  right (`x + y = 7`), and declines any other. Substitution takes any system `readSystem` reads, letters on both sides
+  included, because it only needs one letter alone on one side of a row, and a `make-subject` step gives it that with
+  a checked move. So `y = 2x + 1, x + y = 7` is solved by substitution. A row typed in the other form stays as typed
+  until a substitution puts it into the normal form, and the endings are checked on those rows.
 
 ## Ops (`types.ts`: `SystemOp`, step kind `SystemEq`)
 
@@ -67,6 +72,7 @@ Run with `npx vitest run tests/steps/linear-systems`.
 
 ## Not covered
 
-- Systems with a letter on the right side or a number on the left (not in the scoreboard; declined).
+- Systems that `readSystem` does not read exactly (a squared letter, a letter inside a number, a constant such as π)
+  are declined, as are equations that are not linear. Letters on both sides are handled, by substitution (see Method).
 - More than three letters, or more than three equations.
 - A parametric form of the infinite solutions (the sentence alone is given).

@@ -29,6 +29,7 @@ has been checked.
 | `complex/real.ts` | Simplify surds for a line with no i: the `Pencil` that works it out step by step, and `realSteps`. |
 | `complex/solve.ts` | Solve (a linear or quadratic equation) and Factorise with i (`solveQuadraticWorking`, `factoriseComplexWorking`). |
 | `divide.ts` | Algebraic long division with the running commentary. |
+| `matrix.ts` | Determinant and inverse of a typed 2 × 2 or 3 × 3 matrix, step by step (`matrixWorkingFor`, `isMatrixLine`). Asked first by `runPure`, whatever the job; checked by row reduction and by multiplying back, and no working at all when a check disagrees. |
 | `partial.ts` | Partial fractions (cover-up and comparing coefficients). |
 | `latexCheck.ts` | Reads a displayed answer back (`splitDisplayedSum`) so the check looks at what is shown. |
 | `trigIdentity.ts` | Trig-identity proofs by a two-ended search over allowed rewrites. |
@@ -93,6 +94,9 @@ has been checked.
 - `latexCheck` must split a displayed answer exactly as the producer wrote it (`\dfrac` pieces,
   `\frac` coefficients inside the whole part) or a correct answer is marked suspicious (U10).
   `tests/pureWorking.test.ts` (af-ud block).
+- A matrix's determinant is never checked with a decimal: `matrix.ts` reads each cell as an exact fraction, and a check
+  that disagrees gives no working, so a wrong one is never shown as checked. `\det` straight before a matrix used to
+  become `det()` with the matrix left outside (latexToMath `fnArg`). `tests/matrixWorking.test.ts`.
 - Rule chips must not use the student's own variable as their constant letter (U15).
 - Table rounding goes through `roundHalfAway` (math/format.ts), never `Math.round(v·10ⁿ)/10ⁿ` (U18).
 

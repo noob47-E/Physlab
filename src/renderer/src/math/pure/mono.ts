@@ -302,7 +302,7 @@ export const writeTimes = (text: string): string => {
  * already become …567168 and was factorised with a confident tick. Leading and trailing zeros
  * do not count: 10^20 written out in full is exact.
  */
-const tooManyDigits = (text: string): boolean =>
+export const tooManyDigits = (text: string): boolean =>
   (text.match(/\d+(?:\.\d+)?|\.\d+/g) ?? []).some((n) => n.replace('.', '').replace(/^0+/, '').replace(/0+$/, '').length > 15)
 
 /** The typed text as a mathjs tree, or a NotPolynomial that says what could not be read. */

@@ -24,15 +24,38 @@ import {
   type Expr,
   type Term
 } from '../pure/mono'
-import { rat, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, R0, R1, rTex, type Rat } from '../pure/rat'
+import { rat, rCmp, rEq, rMul, rIsZero, rDiv, rAdd, rSub, rNeg, rIsNeg, rAbs, rSqrt, rPow, bgcd, blcm, rStr, R0, R1, rTex, type Rat } from '../pure/rat'
+import {
+  findRationalRootDetailed,
+  pDeg,
+  pDivMod,
+  pIsZero,
+  pLead,
+  pMul,
+  pTrim,
+  polyFromExpr,
+  type Poly
+} from '../pure/poly'
 import { latexToMath } from '../latexToMath'
 import { preprocess } from '../expr'
 import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } from './types'
+// S5c: trig equations are checked by numbers at sample angles (trigRoots.ts), never taken from the method.
+import { checkListedRoots, checkTrigMove } from './trigRoots'
 // S1b: the sound checkers of G2 (math/check) decide what the exact fallback above cannot: surds, complex roots, and
 // expressions outside the polynomial ring. Each is reached only through the functions below, never directly by a step.
-import { readAlg } from '../check/parse'
+import { plainVars, readAlg, readExact, rfMul, rfSame, type RF } from '../check/parse'
 import { algAdd, algEq, algIsRational, algMul, algRat, algSub, type Alg as G2Alg } from '../check/field'
-import { expressionEqual, polyRootsCheck, rationalEqual, type Verdict as G2Verdict } from '../check/checkers'
+import {
+  derivativeCheck,
+  expressionEqual,
+  integralCheck,
+  partialFractionsCheck,
+  polyRootsCheck,
+  rationalEqual,
+  type Verdict as G2Verdict
+} from '../check/checkers'
+// Part R: a square root of the letter is read and checked by radicalForm.ts (the polynomial reader above refuses a root).
+import { radicalCheckOp, radicalCheckSquare, radicalVarOf } from './radicalForm'
 
 // ============================================================================
 // G2 CHECKER SWAP POINT
@@ -170,10 +193,44 @@ function cutsEqual(a: ParsedIneq, b: ParsedIneq): boolean {
   return a.cut === b.cut
 }
 
+function checkCalculusExprEq(before: string, after: string): ValidationVerdict | null {
+  const normBefore = before.trim()
+  const normAfter = after.trim()
+
+  const diffMatch = /^diff\((.+),\s*([a-zA-Z])\)$/.exec(normBefore)
+  if (diffMatch) {
+    const f = diffMatch[1].trim()
+    const x = diffMatch[2].trim()
+    const verdict = derivativeCheck(f, x, normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  const intMatch = /^(?:integrate|integral)\((.+),\s*([a-zA-Z])\)$/.exec(normBefore)
+  if (intMatch) {
+    const f = intMatch[1].trim()
+    const x = intMatch[2].trim()
+    const verdict = integralCheck(f, x, normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  const partMatch = /^partial\((.+)\)$/.exec(normBefore)
+  if (partMatch) {
+    const f = partMatch[1].trim()
+    const verdict = partialFractionsCheck(f, normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  return null
+}
+
 /**
  * Default check adapter implementation using exact polynomial arithmetic.
  */
 export const defaultCheckAdapter: CheckAdapter = {
+
   /**
    * ExprEq: verifies that 'after' equals 'before' as expressions.
    * Compares UNSIMPLIFIED ASTs through exact polynomial representation over BigInt rationals.
@@ -190,8 +247,15 @@ export const defaultCheckAdapter: CheckAdapter = {
       return eEq(pBefore, pAfter) ? 'valid' : 'invalid'
     }
 
+    const calc = checkCalculusExprEq(sBefore, sAfter)
+    if (calc !== null) return calc
+
     // Outside the polynomial ring: G2 decides it when both sides are plain text it reads exactly (S1b).
-    return expressionEqualG2(sBefore, sAfter)
+    const g2 = expressionEqualG2(sBefore, sAfter)
+    if (g2 === 'valid') return 'valid'
+
+    if (normalizeDisplayed(sBefore) === normalizeDisplayed(sAfter)) return 'valid'
+    return g2
   },
 
   /**
@@ -258,16 +322,31 @@ export const defaultCheckAdapter: CheckAdapter = {
   ): ValidationVerdict {
     // The move the step declares (data.action) is the move checked, and the only one: the words "Square both sides"
     // are shown only when the after is the before squared, however equivalent the two equations are (P-FIX-S1SOUND2
-    // MUST 4). An action this cannot check (the quadratic formula among them) is unknown.
+    // MUST 4). An action this cannot check is unknown.
+    // The quadratic formula with its numbers put in is checked by its own exact rule: the polynomial path below cannot
+    // read the ± of the formula line.
+    if (data && typeof data === 'object' && (data as Record<string, unknown>).action === 'quadratic-formula') {
+      return checkQuadraticFormulaStep(before, after)
+    }
+    const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+    // The exclusions of a rational equation say what the letter cannot be; the equation itself does not move (before = after).
+    if (payload.action === 'exclude') return checkRationalExclusion(before, after, payload)
     const eq1 = splitEquation(stringifyNodeOrText(before))
     const eq2 = splitEquation(stringifyNodeOrText(after))
     if (!eq1 || !eq2) return 'unknown'
-    const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+    // Part R: squaring an equation with a square root of the letter is checked by radicalForm.ts (sqrt(P) squared is P).
+    if (payload.action === 'square') {
+      const rootVar = radicalVarOf(stringifyNodeOrText(before))
+      if (rootVar !== null) return radicalCheckSquare(stringifyNodeOrText(before), stringifyNodeOrText(after), rootVar)
+    }
     const l1 = tryParsePoly(eq1.left)
     const r1 = tryParsePoly(eq1.right)
     const l2 = tryParsePoly(eq2.left)
     const r2 = tryParsePoly(eq2.right)
-    if (!l1 || !r1 || !l2 || !r2) return 'unknown'
+    // A rational equation (a letter in a denominator) is checked as rational functions, side by side (R1 below).
+    if (!l1 || !r1 || !l2 || !r2) {
+      return payload.action === 'multiply' ? checkRationalMultiply(eq1, eq2, payload.multiplier) : 'unknown'
+    }
     if (payload.action === 'square') return eEq(l2, ePow(l1, 2)) && eEq(r2, ePow(r1, 2)) ? 'valid' : 'invalid'
     if (payload.action === 'multiply') {
       const m = typeof payload.multiplier === 'string' ? tryParsePoly(payload.multiplier) : null
@@ -518,6 +597,103 @@ const REWRITE_OPS: ReadonlySet<string> = new Set([
   'remove-brackets'
 ])
 
+function checkNonPolyEquationOp(
+  before: string | MathNode,
+  after: string | MathNode,
+  op: EquationOp,
+  v: string
+): ValidationVerdict {
+  if (
+    op.kind === 'divide-cos' ||
+    op.kind === 'trig-ref-angle' ||
+    op.kind === 'trig-general' ||
+    op.kind === 'trig-substitute' ||
+    op.kind === 'trig-back-substitute'
+  ) {
+    // The raw texts: a latex angle such as \pi or 30^{\circ} must reach the checker as written.
+    const rawBefore = typeof before === 'string' ? before : before.toString()
+    const rawAfter = typeof after === 'string' ? after : after.toString()
+    return checkTrigMove(rawBefore, rawAfter, op, v)
+  }
+
+  const sBefore = stringifyNodeOrText(before)
+  const sAfter = stringifyNodeOrText(after)
+  const sb = splitEquation(sBefore)
+  const sa = splitEquation(sAfter)
+  if (!sb || !sa) return 'unknown'
+
+  switch (op.kind) {
+    case 'already-solved': {
+      if (formText(sBefore) !== formText(sAfter)) return 'invalid'
+      if (sa.left.trim() !== v) return 'invalid'
+      // Only a number on the right is "solved": x = sin x shows the letter alone on the left and proves nothing.
+      return parseExactRat(sa.right.replace(/\s+/g, '')) !== null ? 'valid' : 'unknown'
+    }
+    case 'work-out-right': {
+      if (canonicalState(sb.left) !== canonicalState(sa.left)) return 'invalid'
+      const check = defaultCheckAdapter.checkExprEq(sb.right, sa.right)
+      return check === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'swap':
+      return canonicalState(sb.left) === canonicalState(sa.right) && canonicalState(sb.right) === canonicalState(sa.left)
+        ? 'valid'
+        : 'invalid'
+    case 'remove-brackets':
+    case 'expand-sides':
+    case 'collect-like-terms':
+    case 'factorise': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sb.left, sa.left)
+      const rightEq = defaultCheckAdapter.checkExprEq(sb.right, sa.right)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'add-both': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) + (${op.term})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) + (${op.term})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'subtract-both': {
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) - (${op.term})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) - (${op.term})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'multiply-both': {
+      // The multiplier must be a nonzero exact number, as on the polynomial path: a zero, a letter or a function could add
+      // roots or lose them (multiplying by sin x adds the roots where sin x is 0). A purpose claim is judged there only.
+      const k = parseExactRat(op.k)
+      if (op.purpose !== undefined || !k || rIsZero(k)) return 'unknown'
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) * (${op.k})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) * (${op.k})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'divide-both': {
+      // Dividing by a nonzero exact number loses nothing; dividing by a letter or a function can (x sin x = x loses x = 0).
+      const k = parseExactRat(op.k)
+      if (op.purpose !== undefined || !k || rIsZero(k)) return 'unknown'
+      const leftEq = defaultCheckAdapter.checkExprEq(sb.left, `(${sa.left}) * (${op.k})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sb.right, `(${sa.right}) * (${op.k})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'clear-fractions': {
+      // The multiplier is the LCD of the denominators written in the before, as on the polynomial path.
+      const dens = fractionDenominators(rawText(before))
+      if (dens === null || dens.length === 0) return 'unknown'
+      const lcd = lcmOf(dens)
+      const k = parseExactRat(op.k)
+      if (lcd < 2n || !k || k.d !== 1n || k.n !== lcd) return 'unknown'
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) * (${op.k})`)
+      const rightEq = defaultCheckAdapter.checkExprEq(sa.right, `(${sb.right}) * (${op.k})`)
+      return leftEq === 'valid' && rightEq === 'valid' ? 'valid' : 'unknown'
+    }
+    case 'move-to-left': {
+      if (sa.right.trim() !== '0') return 'invalid'
+      const leftEq = defaultCheckAdapter.checkExprEq(sa.left, `(${sb.left}) - (${sb.right})`)
+      return leftEq === 'valid' ? 'valid' : 'unknown'
+    }
+    default:
+      return 'unknown'
+  }
+}
+
 export function checkEquationOp(
   before: string | MathNode,
   after: string | MathNode,
@@ -526,11 +702,26 @@ export function checkEquationOp(
 ): ValidationVerdict {
   // S1b: a square-root step with a surd root is checked by its own exact rule first (sqrt is a name, not a letter).
   if (isSurdRootOp(op)) return checkSurdSquareRootPm(before, after, op as Extract<EquationOp, { kind: 'square-root-pm' }>, v)
+  if (
+    op.kind === 'divide-cos' ||
+    op.kind === 'trig-ref-angle' ||
+    op.kind === 'trig-general' ||
+    op.kind === 'trig-substitute' ||
+    op.kind === 'trig-back-substitute'
+  ) {
+    return checkNonPolyEquationOp(before, after, op, v)
+  }
+  // Part R: an equation with a square root of the letter is moved by radicalForm.ts, which reads the root exactly.
+  if (radicalVarOf(stringifyNodeOrText(before)) !== null || radicalVarOf(stringifyNodeOrText(after)) !== null) {
+    return radicalCheckOp(stringifyNodeOrText(before), stringifyNodeOrText(after), op, v)
+  }
+  // An exponential or logarithmic move reads its own exponent or argument: the polynomial path below cannot hold those.
+  if (isExpLogOp(op)) return checkExpLogOp(before, after, op, v)
   // A letter other than v anywhere in the states, even one that cancels, means no proof (review delta3, SHOULD 1).
   if (lettersOutside(before, v) || lettersOutside(after, v)) return 'unknown'
   const b = equationSides(before)
   const a = equationSides(after)
-  if (!b || !a) return 'unknown'
+  if (!b || !a) return checkNonPolyEquationOp(before, after, op, v)
   const sides = [b.L, b.R, a.L, a.R]
   if (sides.some((e) => varsOf(e).some((name) => name !== v))) return 'unknown'
   if (REWRITE_OPS.has(op.kind) && formText(before) === formText(after)) return 'invalid'
@@ -767,15 +958,224 @@ export function normalizeDisplayed(text: string): string {
  * input is not a polynomial, or uses no letter or more than one.
  */
 export function variableOfInput(input: string): string | null {
+  // Part R: a radical equation's letter is read by radicalForm.ts, because the polynomial reader below refuses a root.
+  const rootVar = radicalVarOf(input)
+  if (rootVar !== null) return rootVar
   const split = splitEquation(input)
   const sides = split ? [split.left, split.right] : [input]
   const names = new Set<string>()
+  let allPoly = true
   for (const side of sides) {
     const poly = tryParsePoly(side)
-    if (!poly) return null
+    if (!poly) {
+      // A power or a logarithm of the unknown (2^(x), log(x)) is a side too: its letters are read from its exponent or argument.
+      const letters = expLogLetters(side)
+      if (letters === null) {
+        allPoly = false
+        break
+      }
+      for (const n of letters) names.add(n)
+      continue
+    }
     for (const n of varsOf(poly)) names.add(n)
   }
-  return names.size === 1 ? [...names][0] : null
+  if (allPoly && names.size === 1) return [...names][0]
+  // A side with a letter in a denominator is not a polynomial: its one letter is read as a rational equation (R1 below).
+  const rational = readRationalEquation(input)
+  if (rational) return rational.v
+  const bare = input
+    .replace(/\\[A-Za-z]+/g, ' ')
+    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats)\b/gi, ' ')
+  const letters = [...new Set(bare.match(/\p{L}/gu) ?? [])].filter((l) => !['e', 'i'].includes(l.toLowerCase()))
+  return letters.length === 1 ? letters[0] : null
+}
+
+// ---- S3: exponential and logarithmic equations ----
+// The moves of an exponential or logarithmic equation are checked here, by exact arithmetic on a whole-number base
+// and a polynomial exponent or argument. The polynomial path cannot hold a letter in an exponent, so these moves never
+// reach it. A text this reader cannot take is 'unknown'; a text it reads that is the wrong maths is 'invalid'.
+
+/** The largest power a check raises a base to; a larger one is refused rather than computed. */
+const MAX_LOG_POWER = 300
+/** The largest base an exponential or logarithmic move may have (a bigger base makes a number nobody can read). */
+const MAX_LOG_BASE = 1000n
+
+/** A power as read: whole-number base digits, then the exponent (2^(x) is base "2", exponent "x"). */
+interface ExpPower {
+  base: string
+  exp: string
+}
+
+/** A logarithm as read: base "10" for log(A), otherwise the base digits (see readLogTerm for each form it takes). */
+interface LogTerm {
+  base: string
+  arg: string
+}
+
+/** The text inside one bracket group that covers the whole text, or null when the brackets do not close at its end. */
+function wholeGroup(text: string): string | null {
+  if (text.length < 2 || text[0] !== '(' || text[text.length - 1] !== ')') return null
+  let depth = 0
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '(') depth++
+    else if (text[i] === ')') {
+      depth--
+      if (depth === 0 && i < text.length - 1) return null
+    }
+    if (depth < 0) return null
+  }
+  return depth === 0 ? text.slice(1, -1) : null
+}
+
+/** A power of a whole-number base, written 2^(x), 2^(2x-1) or 2^x (spaces ignored). Null for any other text. */
+export function readExpPower(text: string): ExpPower | null {
+  const s = text.replace(/\s+/g, '')
+  const m = /^(\d+)\^(.+)$/.exec(s)
+  if (!m) return null
+  const rest = m[2]
+  const grouped = wholeGroup(rest)
+  if (grouped !== null) return { base: m[1], exp: grouped }
+  if (/^[A-Za-z]$/.test(rest)) return { base: m[1], exp: rest }
+  return null
+}
+
+/**
+ * A logarithm, read in the forms it takes: log(A) (base 10), log2(A) and \log_{2}(A) (base digits, the subscript the student
+ * types), and log(2, A), which latexToMath writes for \log_{2}(A) with the base first, as expr.ts reads log(a, b). A leading
+ * backslash is allowed (\log(A)). A base that is not whole digits, or a base after the argument, is not read.
+ */
+export function readLogTerm(text: string): LogTerm | null {
+  // The subscript form \log_{2}(A) reads as log2(A), so the one rule below covers both.
+  const s = text.replace(/\s+/g, '').replace(/^\\/, '').replace(/^log_\{(\d+)\}/, 'log$1')
+  const m = /^log(\d*)(.+)$/.exec(s)
+  if (!m) return null
+  const grouped = wholeGroup(m[2])
+  if (grouped === null) return null
+  if (m[1] !== '') return grouped.includes(',') ? null : { base: m[1], arg: grouped }
+  const withBase = /^(\d+),(.+)$/.exec(grouped)
+  if (withBase) return { base: withBase[1], arg: withBase[2] }
+  // A comma that is not after whole-number digits makes it a two-part call, not a base-10 logarithm: it is not read.
+  if (grouped.includes(',')) return null
+  return { base: '10', arg: grouped }
+}
+
+/** The letters an exponential or logarithmic side uses, or null when the side is not one of those forms. */
+function expLogLetters(side: string): string[] | null {
+  const p = readExpPower(side)
+  if (p) {
+    const e = tryParsePoly(p.exp)
+    return e ? varsOf(e) : null
+  }
+  const l = readLogTerm(side)
+  if (!l) return null
+  const a = tryParsePoly(l.arg)
+  return a ? varsOf(a) : null
+}
+
+/** A whole number written as text ("8", "-2"), or null when the text is not one. */
+function wholeOf(text: string): bigint | null {
+  const r = parseExactRat(text)
+  return r !== null && r.d === 1n ? r.n : null
+}
+
+/** A base the exponential and logarithmic checks accept: a whole number from 2 to MAX_LOG_BASE. */
+function baseOk(text: string): bigint | null {
+  if (!/^\d+$/.test(text)) return null
+  const b = BigInt(text)
+  return b >= 2n && b <= MAX_LOG_BASE ? b : null
+}
+
+/** base^n as a whole number, or null when n is outside 0 to MAX_LOG_POWER. */
+function powerOf(b: bigint, n: bigint): bigint | null {
+  if (n < 0n || n > BigInt(MAX_LOG_POWER)) return null
+  return b ** n
+}
+
+const EXP_LOG_OP_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power'])
+
+/** The four moves of an exponential or logarithmic equation (types.ts, EquationOp). */
+type ExpLogOp = Extract<EquationOp, { kind: 'write-as-power' | 'cancel-base' | 'log-to-power' | 'work-out-power' }>
+
+function isExpLogOp(op: unknown): op is ExpLogOp {
+  return typeof op === 'object' && op !== null && EXP_LOG_OP_KINDS.has((op as { kind: string }).kind)
+}
+
+/**
+ * Check one exponential or logarithmic move exactly (see the four kinds in types.ts). The left side of a move that does not
+ * touch it must read the same; each side that changes is read again and compared with the maths it claims.
+ */
+function checkExpLogOp(before: string | MathNode, after: string | MathNode, op: ExpLogOp, v: string): ValidationVerdict {
+  const b = splitEquation(before)
+  const a = splitEquation(after)
+  if (!b || !a) return 'unknown'
+  const same = (x: string, y: string): boolean => x.replace(/\s+/g, '') === y.replace(/\s+/g, '')
+  const verdict = (ok: boolean): ValidationVerdict => (ok ? 'valid' : 'invalid')
+  const onlyV = (e: Expr | null): e is Expr => e !== null && varsOf(e).every((name) => name === v)
+
+  switch (op.kind) {
+    case 'write-as-power': {
+      // The left side is untouched. The right side, a whole number c, becomes base^power, and base^power must equal c.
+      const bs = baseOk(op.base)
+      if (bs === null) return 'invalid'
+      const c = wholeOf(b.right)
+      const p = readExpPower(a.right)
+      if (c === null || !p) return 'unknown'
+      if (!same(b.left, a.left) || p.base !== op.base) return 'invalid'
+      const n = wholeOf(p.exp)
+      if (n === null || n.toString() !== op.power) return 'invalid'
+      const value = powerOf(bs, n)
+      return verdict(value !== null && value === c)
+    }
+    case 'cancel-base': {
+      // base^E1 = base^n becomes E1 = n. Powers of one base above 1 are equal only when their exponents are, so this is exact.
+      const bs = baseOk(op.base)
+      if (bs === null) return 'invalid'
+      const l = readExpPower(b.left)
+      const r = readExpPower(b.right)
+      if (!l || !r) return 'unknown'
+      if (l.base !== op.base || r.base !== op.base) return 'invalid'
+      const e1 = tryParsePoly(l.exp)
+      const n = wholeOf(r.exp)
+      const e2 = tryParsePoly(a.left)
+      const shown = wholeOf(a.right)
+      if (!e1 || !e2 || n === null || shown === null) return 'unknown'
+      if (!onlyV(e1) || !onlyV(e2)) return 'invalid'
+      return verdict(eEq(e1, e2) && shown === n)
+    }
+    case 'log-to-power': {
+      // log_base(A) = c becomes A = base^c. Both forms hold on A > 0, and base^c is positive, so no root is lost or gained.
+      const bs = baseOk(op.base)
+      if (bs === null) return 'invalid'
+      const l = readLogTerm(b.left)
+      const c = wholeOf(b.right)
+      if (!l || c === null) return 'unknown'
+      if (l.base !== op.base || c < 0n) return 'invalid'
+      const p = readExpPower(a.right)
+      if (!p) return 'unknown'
+      if (p.base !== op.base) return 'invalid'
+      const k = wholeOf(p.exp)
+      if (k === null) return 'unknown'
+      const A = tryParsePoly(l.arg)
+      const A2 = tryParsePoly(a.left)
+      if (!A || !A2) return 'unknown'
+      return verdict(k === c && onlyV(A) && eEq(A, A2))
+    }
+    case 'work-out-power': {
+      // L = base^c becomes L = its whole-number value, with the left side unchanged.
+      if (!same(b.left, a.left)) return 'invalid'
+      const p = readExpPower(b.right)
+      if (!p) return 'unknown'
+      const bs = baseOk(p.base)
+      const n = wholeOf(p.exp)
+      if (bs === null || n === null) return 'invalid'
+      const value = powerOf(bs, n)
+      const shown = wholeOf(a.right)
+      if (value === null || shown === null) return 'unknown'
+      return verdict(shown === value)
+    }
+    default:
+      return 'unknown'
+  }
 }
 
 // The state comparison reads numbers exactly: a BigNumber instance of mathjs at 400 digits, so a literal of
@@ -829,7 +1229,12 @@ export function sameState(a: string | MathNode, b: string | MathNode): boolean {
 
 /** Every letter run in a state (LaTeX commands aside) other than the variable v, even one that cancels. */
 export function lettersOutside(text: string | MathNode, v: string): boolean {
-  const bare = rawText(text).replace(/\\[A-Za-z]+/g, ' ')
+  const bare = rawText(text)
+    .replace(/\\text\{[^}]*\}/g, ' ')
+    .replace(/\\[A-Za-z]+/g, ' ')
+    .replace(/\b(sin|cos|tan|log|ln|sqrt|exp|diff|det|inv|normal|stats)\b/gi, ' ')
+  // Only the names of functions are skipped: a letter such as k, u, pi, or or and is a letter of the equation and is
+  // compared with v like any other (k + 3 = 7 with root 5 is not a solution of k + 3 = 7 in x, S5c).
   for (const m of bare.matchAll(/\p{L}+/gu)) {
     if (m[0] !== v) return true
   }
@@ -997,6 +1402,26 @@ function isCollected(side: string): boolean {
  */
 export function solutionProofOf(text: string | MathNode, v: string): SetProof | null {
   if (lettersOutside(text, v)) return null
+  const s = rawText(text)
+  if (/sin|cos|tan|\\sin|\\cos|\\tan/.test(s)) {
+    const sb = splitEquation(s)
+    if (sb) {
+      // a·sin(c·v) = k (or cos) with a non-zero a: no solution exactly when |k/a| > 1. 3 sin x = 2 has solutions (|2/3| < 1),
+      // so the size of the coefficient decides it, not the size of the right side alone (S5c). The multiple inside the
+      // argument does not change the range of a sine or cosine: 2 sin 2x = 4 has none, as sin x = 2 has none.
+      // A tangent takes every value, so its equation always has solutions. Any other shape is not read here: unknown.
+      const m = new RegExp(`^(-?)(\\d*)\\*?\\\\?(sin|cos|tan)\\(\\s*\\d*${v}\\s*\\)$`).exec(sb.left.replace(/\s+/g, ''))
+      if (!m) return null
+      if (m[3] === 'tan') return { kind: 'roots' }
+      const c = parseExactRat(sb.right.replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2').trim())
+      if (c === null) return null
+      if (!rIsZero(c)) {
+        const a = rat(BigInt(m[2] === '' ? 1 : m[2]))
+        if (rCmp(rAbs(c), rAbs(a)) > 0) return { kind: 'none', deg: 0 }
+      }
+      return { kind: 'roots' }
+    }
+  }
   const d = equationDiff(text)
   return d ? solutionProof(d, v) : null
 }
@@ -1652,7 +2077,12 @@ export function expandTerms(text: string): Term[] | null {
         skip()
         const d = denominatorHere()
         acc = acc.map((t) => ({ c: rDiv(t.c, d), v: t.v }))
-      } else if (/[\d.(]/.test(s[i] ?? '') || letterAhead()) {
+      } else if (at('.')) {
+        // A full stop with no operator before it is a second decimal point ("0.5.5", "2 .5", "1..5"), never the start
+        // of a new factor. Read as one it multiplied the two numbers together and a wrong answer came out checked,
+        // so a malformed number is refused and the working is not shown.
+        throw new NotExpandable()
+      } else if (/[\d(]/.test(s[i] ?? '') || letterAhead()) {
         acc = mul(acc, factor())
       } else {
         break
@@ -2173,7 +2603,8 @@ export function readSystem(text: string | MathNode): LinEq[] | null {
   }
   // Every letter the text names is an unknown with a non-zero coefficient somewhere (P-FIX-S1SOUND2 MUST 10 and SHOULD 3):
   // a constant (π, e) is never solved for, and a letter that cancels out of every equation is not silently dropped.
-  const named = s.match(/[A-Za-zπ]+/g) ?? []
+  // Any alphabet counts (Greek too, as the maths keypad types it), or a cancelled α would be dropped without a word.
+  const named = s.match(/\p{L}+/gu) ?? []
   if (named.some((n) => CONSTANT_NAMES.has(n))) return null
   const used = new Set(lettersOfSystem(eqs))
   if (named.some((n) => !used.has(n))) return null
@@ -2960,3 +3391,434 @@ export function quadraticRootsHold(a: bigint, b: bigint, c: bigint, roots: G2Alg
   })
 }
 
+// ============================================================================
+// R1: rational equations, one letter in a denominator (rational.ts, validate.ts). Each side is read exactly by G2's reader
+// as a numerator over a denominator. The excluded values are the zeros of the denominators; the multiplier is their least
+// common multiple; the final roots are decided by G2 against the ORIGINAL equation, which already leaves the excluded values
+// out. Every decision here is exact rational arithmetic or G2's exact field: no floats, no sampling.
+// ============================================================================
+
+/** A rational equation in one letter, read exactly: both sides as numerator over denominator, and every denominator met. */
+export interface RationalRead {
+  v: string
+  left: RF
+  right: RF
+  /** Every denominator the reader met on either side, each a polynomial in v (the products are kept as they are). */
+  dens: Expr[]
+}
+
+/** One side read exactly by G2's reader: null when it cannot, or when it holds |…| (not a plain rational function). */
+function readRationalSide(text: string): { rf: RF; dens: Expr[] } | null {
+  try {
+    const e = readExact(text)
+    if (e.atoms.length > 0) return null
+    return { rf: e.rf, dens: e.dens }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A rational equation in one letter, read exactly. Null for anything else: not one equation, two letters, a function the
+ * reader does not hold, or no letter at all.
+ */
+export function readRationalEquation(text: string | MathNode): RationalRead | null {
+  const split = splitEquation(text)
+  if (!split || split.right.includes('=')) return null
+  const left = readRationalSide(split.left)
+  const right = readRationalSide(split.right)
+  if (!left || !right) return null
+  const letters = new Set<string>()
+  for (const e of [left.rf.num, left.rf.den, right.rf.num, right.rf.den, ...left.dens, ...right.dens]) {
+    for (const name of plainVars(e)) letters.add(name)
+  }
+  if (letters.size !== 1) return null
+  return {
+    v: [...letters][0],
+    left: left.rf,
+    right: right.rf,
+    dens: [left.rf.den, right.rf.den, ...left.dens, ...right.dens]
+  }
+}
+
+/**
+ * The rational linear factors of a polynomial over ℚ: its leading coefficient, and each distinct rational root with the power
+ * it has. Null when some factor is not a rational linear one (x² + 1, say), or the polynomial is zero.
+ */
+export function linearFactorsOf(p0: Poly): { lead: Rat; roots: Array<{ r: Rat; m: number }> } | null {
+  let cur = pTrim(p0)
+  if (pIsZero(cur)) return null
+  const lead = pLead(cur)
+  cur = cur.map((c) => rDiv(c, lead))
+  const roots: Array<{ r: Rat; m: number }> = []
+  // Each root found is divided out at once, so the degree falls on every pass (or the search gives up and says null).
+  while (pDeg(cur) > 0) {
+    const r = findRationalRootDetailed(cur).root
+    if (r === null) return null
+    const linear: Poly = [rNeg(r), R1]
+    let m = 0
+    for (;;) {
+      const { q, r: rest } = pDivMod(cur, linear)
+      if (!pIsZero(rest)) break
+      cur = q
+      m++
+    }
+    if (m === 0) return null
+    roots.push({ r, m })
+  }
+  return { lead, roots }
+}
+
+/** The exclusions and the multiplier of a rational equation. */
+export interface RationalShape {
+  v: string
+  /** The least common multiple of the denominators' leading whole numbers (1 when they are monic). */
+  k: bigint
+  /**
+   * The excluded values: the distinct zeros of the denominators, ascending, each with the highest power it has in any one
+   * denominator (the multiplier takes that power, so it is the least common multiple of the denominators).
+   */
+  roots: Array<{ r: Rat; m: number }>
+}
+
+/**
+ * The shape of a rational equation from its denominators. Null when one of them is not a product of rational linear factors
+ * with a whole-number leading coefficient: such an equation is not worked here, and its answer stays as it was.
+ */
+export function rationalShapeOf(read: RationalRead): RationalShape | null {
+  let k = 1n
+  const best = new Map<string, { r: Rat; m: number }>()
+  for (const d of read.dens) {
+    let p: Poly
+    try {
+      p = polyFromExpr(d, read.v).poly
+    } catch {
+      return null
+    }
+    const f = linearFactorsOf(p)
+    if (!f || f.lead.d !== 1n || f.lead.n === 0n) return null
+    k = blcm(k, f.lead.n < 0n ? -f.lead.n : f.lead.n)
+    for (const { r, m } of f.roots) {
+      const key = rStr(r)
+      best.set(key, { r, m: Math.max(m, best.get(key)?.m ?? 0) })
+    }
+  }
+  const roots = [...best.values()].sort((a, b) => rCmp(a.r, b.r))
+  return { v: read.v, k, roots }
+}
+
+/** The multiplier as a polynomial: the whole number k, times (x − r) to the power m for each excluded value r. */
+export function multiplierPoly(shape: RationalShape): Poly {
+  let p: Poly = [rat(shape.k)]
+  for (const { r, m } of shape.roots) for (let i = 0; i < m; i++) p = pMul(p, [rNeg(r), R1])
+  return pTrim(p)
+}
+
+/** The multiplier as the text a working shows and the checker reads back: "x(x - 1)", "2(x + 3)^2". */
+export function multiplierText(shape: RationalShape): string {
+  let out = shape.k === 1n ? '' : String(shape.k)
+  for (const { r, m } of shape.roots) {
+    const factor = rIsZero(r) ? shape.v : rIsNeg(r) ? `(${shape.v} + ${rStr(rNeg(r))})` : `(${shape.v} - ${rStr(r)})`
+    out += m === 1 ? factor : `${factor}^${m}`
+  }
+  return out
+}
+
+/**
+ * Both sides multiplied by the multiplier, each as a polynomial: its numerator times the multiplier, divided exactly by its
+ * denominator. Null when the division leaves a remainder (the multiplier then does not clear that side).
+ */
+export function clearedSides(read: RationalRead, multiplier: Poly): { lhs: Poly; rhs: Poly } | null {
+  const clear = (rf: RF): Poly | null => {
+    try {
+      const num = polyFromExpr(rf.num, read.v).poly
+      const den = polyFromExpr(rf.den, read.v).poly
+      if (pIsZero(den)) return null
+      const { q, r } = pDivMod(pMul(num, multiplier), den)
+      return pIsZero(r) ? q : null
+    } catch {
+      return null
+    }
+  }
+  const lhs = clear(read.left)
+  const rhs = clear(read.right)
+  return lhs && rhs ? { lhs, rhs } : null
+}
+
+/** The excluded values of a rational equation as exact numbers, or null when they cannot be read exactly. */
+export function rationalExcludedOf(text: string | MathNode): Rat[] | null {
+  const read = readRationalEquation(text)
+  const shape = read ? rationalShapeOf(read) : null
+  return shape ? shape.roots.map((x) => x.r) : null
+}
+
+/**
+ * The exclusions step: the equation is unchanged (before = after), and the values it names are exactly the zeros of its
+ * denominators. Each value is named once, and the list is complete.
+ */
+function checkRationalExclusion(before: string | MathNode, after: string | MathNode, payload: Record<string, unknown>): ValidationVerdict {
+  if (!sameState(before, after)) return 'invalid'
+  const excluded = rationalExcludedOf(before)
+  if (excluded === null) return 'unknown'
+  if (excluded.length === 0 || !Array.isArray(payload.excluded)) return 'invalid'
+  const named: Rat[] = []
+  for (const t of payload.excluded) {
+    const r = typeof t === 'string' ? parseExactRat(t) : null
+    if (!r || named.some((x) => rEq(x, r))) return 'invalid'
+    named.push(r)
+  }
+  if (named.length !== excluded.length) return 'invalid'
+  return excluded.every((e) => named.some((x) => rEq(x, e))) ? 'valid' : 'invalid'
+}
+
+/**
+ * The multiplying step of a rational equation: each side after is the side before times the multiplier, as rational functions.
+ * The identity N·m = P·D is exact polynomial arithmetic, so it holds wherever the sides before are defined, which is all an
+ * implication claims (the excluded values are handled by the ending, not here).
+ */
+function checkRationalMultiply(
+  eq1: { left: string; right: string },
+  eq2: { left: string; right: string },
+  multiplier: unknown
+): ValidationVerdict {
+  if (typeof multiplier !== 'string') return 'unknown'
+  const m = tryParsePoly(multiplier)
+  if (!m) return 'unknown'
+  if (m.length === 0) return 'invalid'
+  const l1 = readRationalSide(eq1.left)
+  const r1 = readRationalSide(eq1.right)
+  const l2 = tryParsePoly(eq2.left)
+  const r2 = tryParsePoly(eq2.right)
+  if (!l1 || !r1 || !l2 || !r2) return 'unknown'
+  const times = (side: RF, target: Expr): boolean =>
+    rfSame(rfMul(side, { num: m, den: constExpr(R1) }), { num: target, den: constExpr(R1) })
+  return times(l1.rf, l2) && times(r1.rf, r2) ? 'valid' : 'invalid'
+}
+
+/**
+ * The roots a rational equation's polynomial sub-working found, split by the excluded values: a rational root that is an
+ * excluded value is rejected (it makes a denominator 0); every other root is kept. Each root is listed once; the kept ones
+ * ascend.
+ */
+export function splitExcludedRoots(candidates: G2Alg[], excluded: Rat[]): { kept: G2Alg[]; rejected: Rat[] } {
+  const kept: G2Alg[] = []
+  const rejected: Rat[] = []
+  for (const x of candidates) {
+    if (kept.some((y) => algEq(x, y)) || (algIsRational(x) && rejected.some((y) => rEq(y, x.a)))) continue
+    if (algIsRational(x) && excluded.some((e) => rEq(e, x.a))) rejected.push(x.a)
+    else kept.push(x)
+  }
+  kept.sort(compareAlgRoots)
+  rejected.sort(rCmp)
+  return { kept, rejected }
+}
+
+/**
+ * The ending of a rational equation (rational.ts). The kept values must be every root of the ORIGINAL equation in the real
+ * line: G2 cancels the excluded values, so an excluded value is never a root there and never kept. Each rejected value must be
+ * an excluded value that is a root of the polynomial the working solved, and the displayed line names exactly the kept values
+ * (or says no value works). The text of the original is what the working was given; the validator binds it to the input.
+ */
+export function checkRationalEnding(
+  original: string,
+  polyState: string,
+  kept: string[],
+  rejected: string[],
+  v: string,
+  after: string
+): ValidationVerdict {
+  const read = readRationalEquation(original)
+  const shape = read ? rationalShapeOf(read) : null
+  if (!read || !shape) return 'unknown'
+  const excluded = shape.roots.map((x) => x.r)
+  const state = tryEquationPoly(polyState)
+  if (!state) return 'invalid'
+  const rejectedValues: Rat[] = []
+  for (const t of rejected) {
+    const r = parseExactRat(t)
+    if (!r || !excluded.some((e) => rEq(e, r)) || rejectedValues.some((x) => rEq(x, r))) return 'invalid'
+    rejectedValues.push(r)
+  }
+  if (!polyRootsHold(state, v, rejectedValues.map(algRat))) return 'invalid'
+  const roots: G2Alg[] = []
+  for (const t of kept) {
+    const x = plainForG2(t) === null ? null : readSurd(t)
+    if (!x) return 'unknown'
+    if (roots.some((y) => algEq(x, y))) return 'invalid'
+    roots.push(x)
+  }
+  for (let i = 1; i < roots.length; i++) if (compareAlgRoots(roots[i - 1], roots[i]) >= 0) return 'invalid'
+  const plainOriginal = plainForG2(original)
+  if (plainOriginal === null) return 'unknown'
+  const verdict = polyRootsCheck(
+    plainOriginal,
+    kept.map((value) => ({ value, multiplicity: 1 })),
+    'real'
+  )
+  if (verdict !== 'equal') return verdict === 'different' ? 'invalid' : 'unknown'
+  if (kept.length === 0) {
+    return normalizeDisplayed(after) === normalizeDisplayed(`\\text{no value of ${v} works}`) ? 'valid' : 'invalid'
+  }
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== roots.length) return 'invalid'
+  return roots.every((x, i) => displayKey(shown[i]) === displayKey(texOfAlg(x))) ? 'valid' : 'invalid'
+}
+
+/**
+ * A higher equation's solution set (non-polynomial, S3b): verified against displayed solutions.
+ * Null when the input is not an equation or solutions is empty.
+ */
+export function checkHigherSolutionSet(
+  before: string,
+  solutions: unknown[],
+  after: string,
+  v: string,
+  _domain: 'real' | 'complex' = 'real'
+): ValidationVerdict | null {
+  // Only an equation with a trig function is read here. A letter such as k is not a sign of one (S5c: k + 3 = 7 was valid).
+  if (!/sin|cos|tan|\\sin|\\cos|\\tan|\\circ/i.test(before)) return null
+  const sb = splitEquation(before)
+  if (!sb) return null
+  if (lettersOutside(before, v)) return null
+  if (solutions.length === 0) {
+    const proof = solutionProofOf(before, v)
+    if (!proof || proof.kind !== 'none') return 'invalid'
+    return normalizeDisplayed(after) === normalizeDisplayed('\\text{no value of ' + v + ' works}') ||
+      normalizeDisplayed(after) === normalizeDisplayed('\\text{No real solution}')
+      ? 'valid'
+      : 'invalid'
+  }
+  // A listed root must solve the equation itself, and no root in [0, 360) may be left out: the displayed list alone proves nothing.
+  const rootsCheck = checkListedRoots(before, solutions, v)
+  // A list of plain numbers (x = -9.42 for x sin x = 0) is not an angle this reads, so it is never proved here, and the display
+  // comparison below proves nothing about a root: the answer is unknown, not valid.
+  if (rootsCheck === null) return 'unknown'
+  if (rootsCheck !== 'valid') return rootsCheck
+  const shown = displayedValues(after, v)
+  if (shown === null || shown.length !== solutions.length) return 'invalid'
+  for (let i = 0; i < solutions.length; i++) {
+    const valText = solutionValueText(solutions[i])
+    if (displayKey(shown[i]) !== displayKey(valText)) {
+      const s = readSurd(valText)
+      if (!s || displayKey(shown[i]) !== displayKey(texOfAlg(s))) return 'invalid'
+    }
+  }
+  return 'valid'
+}
+
+// ---- The quadratic formula with its numbers put in (Phase 0.9 K). One template is written by the method and read by the
+// checks, so the line the student reads is the line that was checked. The line is x = (P ± √D)/Q with P = −b, Q = 2a and
+// D = b² − 4ac, all whole numbers. ----
+
+/** The formula line with its numbers put in: "x = \frac{5 \pm \sqrt{1}}{2}". */
+export function formulaStateTex(v: string, P: bigint, Q: bigint, D: bigint): string {
+  return `${v} = \\frac{${P} \\pm \\sqrt{${D}}}{${Q}}`
+}
+
+/** The numbers of a formula line, read back from its text: the letter, P, Q and D. */
+export interface FormulaState {
+  v: string
+  P: bigint
+  Q: bigint
+  D: bigint
+}
+
+/** A formula line, spaces removed; the only shape the template writes. */
+const FORMULA_LINE = /^(\p{L})=\\frac\{(-?\d+)\\pm\\sqrt\{(-?\d+)\}\}\{(-?\d+)\}$/u
+
+/** The numbers of a formula line, or null when the text is not one. Not run through latexToMath: that would unwrite it. */
+export function readFormulaState(text: string | MathNode): FormulaState | null {
+  const m = FORMULA_LINE.exec(normalizeDisplayed(String(text)))
+  if (!m) return null
+  return { v: m[1], P: BigInt(m[2]), D: BigInt(m[3]), Q: BigInt(m[4]) }
+}
+
+/** True when the text is a formula line (the state a quadratic is in after its formula step). */
+export function isFormulaState(text: string | MathNode): boolean {
+  return readFormulaState(text) !== null
+}
+
+/** The two values (P ± √D)/Q read exactly by G2 (a pair in ℚ(√d, i) for a negative D); null when G2 does not read them. */
+function formulaRootsOf(st: FormulaState): G2Alg[] | null {
+  const { P, Q, D } = st
+  if (Q === 0n) return null
+  if (D === 0n) {
+    const x = readSurd(`${P}/${Q}`)
+    return x ? [x] : null
+  }
+  // A negative discriminant gives i·√(−D), which G2 reads as "i*sqrt(...)" just as the answers are written.
+  const root = D > 0n ? `sqrt(${D})` : `i*sqrt(${-D})`
+  const plus = readSurd(`(${P} + ${root})/${Q}`)
+  const minus = readSurd(`(${P} - ${root})/${Q}`)
+  return plus && minus ? [plus, minus] : null
+}
+
+/** True when two lists of exact numbers hold the same values, each once (order does not matter). */
+function sameExactValues(xs: G2Alg[], ys: G2Alg[]): boolean {
+  if (xs.length !== ys.length) return false
+  return xs.every((x) => ys.some((y) => algEq(x, y))) && ys.every((y) => xs.some((x) => algEq(x, y)))
+}
+
+/**
+ * The quadratic's a, b, c as whole numbers, read from the equation's own polynomial (left side less right side) by the
+ * one letter in it. Null when the text is not a quadratic in one letter with whole coefficients and a above zero.
+ */
+function wholeQuadratic(text: string | MathNode): { v: string; a: bigint; b: bigint; c: bigint } | null {
+  const eq = tryEquationPoly(text)
+  if (!eq || exprDegree(eq) !== 2) return null
+  const names = varsOf(eq)
+  if (names.length !== 1) return null
+  const v = names[0]
+  const whole = (k: number): bigint | null => {
+    const r = coefficientOf(eq, v, k)
+    return r.d === 1n ? r.n : null
+  }
+  const a = whole(2)
+  const b = whole(1)
+  const c = whole(0)
+  if (a === null || b === null || c === null || a <= 0n) return null
+  return { v, a, b, c }
+}
+
+/**
+ * The quadratic formula step (an Implication with action 'quadratic-formula'): the before is the quadratic, the after is
+ * the formula with its numbers put in. The numbers are read from the before exactly (P = −b, Q = 2a, D = b² − 4ac); the
+ * after's ± roots are then compared with the true roots of the before, exactly. A line that is not a formula line of the
+ * same letter is unknown; a formula line with a wrong number, or roots that are not the true ones, is invalid.
+ */
+function checkQuadraticFormulaStep(before: string | MathNode, after: string | MathNode): ValidationVerdict {
+  const q = wholeQuadratic(before)
+  if (!q) return 'unknown'
+  const st = readFormulaState(after)
+  if (!st || st.v !== q.v) return 'unknown'
+  const { a, b, c } = q
+  if (st.P !== -b || st.Q !== 2n * a || st.D !== b * b - 4n * a * c) return 'invalid'
+  const shown = formulaRootsOf(st)
+  const truth = quadraticRootsOf(a, b, c)
+  if (!shown || !truth) return 'unknown'
+  return sameExactValues(shown, truth) ? 'valid' : 'invalid'
+}
+
+/**
+ * The roots step after a formula line (a SolutionSetEq whose before is the formula line): the line's own numbers give the
+ * equation a·x² + b·x + c = 0 (a = Q/2, b = −P, and c from D = b² − 4ac, which must come out whole), and the proposed
+ * solutions must be exactly that equation's roots in the domain, displayed as they are. Anything else is invalid.
+ */
+export function checkFormulaSolutionSet(
+  before: string,
+  solutions: unknown[],
+  after: string,
+  v: string,
+  domain: 'real' | 'complex'
+): ValidationVerdict {
+  const st = readFormulaState(before)
+  if (!st || st.v !== v) return 'invalid'
+  if (st.Q <= 0n || st.Q % 2n !== 0n) return 'invalid'
+  const a = st.Q / 2n
+  const b = -st.P
+  const num = b * b - st.D
+  if (num % (4n * a) !== 0n) return 'invalid'
+  const c = num / (4n * a)
+  const equation = `(${a})*${v}^2 + (${b})*${v} + (${c}) = 0`
+  return checkQuadraticSolutionSet(equation, solutions, after, v, domain) ?? 'invalid'
+}

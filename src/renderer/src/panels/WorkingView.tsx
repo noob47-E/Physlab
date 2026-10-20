@@ -191,7 +191,8 @@ export function WorkingView({
       </div>
 
       {/* The answer is never hidden: it is pinned here, above the steps, whatever is shown below. */}
-      {activeDoc.answers.length > 0 && <AnswerCard doc={activeDoc} />}
+      {/* A working with no answer box still says its conclusion (a matrix with no inverse) where the answer would be. */}
+      {(activeDoc.answers.length > 0 || !!activeDoc.conclusion) && <AnswerCard doc={activeDoc} />}
 
       {offer && activeDoc.offer && (
         <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
@@ -291,6 +292,7 @@ function AnswerCard({ doc }: { doc: WorkingDoc }) {
           </div>
         )
       })}
+      {doc.answers.length === 0 && doc.conclusion && <div className="py-0.5 text-lead text-ink-strong">{doc.conclusion}</div>}
       {doc.noWorking && (
         <div className="mt-2 text-[color:var(--text-dim)]">
           That answer is right, but this one is past the methods I can write out by hand, so there are no steps for it.

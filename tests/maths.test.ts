@@ -609,7 +609,8 @@ describe('P7 — one root format and one order on every route', () => {
       ['x^{2}+4x+13=0', 'No real solution. In complex numbers: x = −2 ± 3i'],
       ['x^{2}=-1', 'No real solution. In complex numbers: x = ±i'],
       ['\\left(x+1\\right)^{2}=-4', 'No real solution. In complex numbers: x = −1 ± 2i'],
-      ['x^{2}+2=0', `No real solution. In complex numbers: x = ±${calcNum(Math.SQRT2)}i`]
+      // Whole-number coefficients: the pair is written exactly, as a textbook writes it (was ±1.414213562i).
+      ['x^{2}+2=0', 'No real solution. In complex numbers: x = ±√2 i']
     ]
     for (const [line, sentence] of cases) {
       const r = evaluateInput('COMP', line, opts)!

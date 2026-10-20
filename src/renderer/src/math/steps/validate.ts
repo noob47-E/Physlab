@@ -42,7 +42,12 @@ import {
   checkSystemOp,
   checkQuadraticSolutionSet,
   checkPolySolutionSet,
+  checkHigherSolutionSet,
   checkSurdZeroProduct,
+  checkFormulaSolutionSet,
+  isFormulaState,
+  polyRootsHold,
+  type G2Alg,
   displayKey,
   readSurd,
   texOfAlg,
@@ -60,14 +65,27 @@ import {
   tryEquationPoly,
   tryParsePoly,
   coefficientOf,
-  parseExactRat
+  parseExactRat,
+  checkRationalEnding,
+  solutionTextOf
 } from './check-adapter'
 import { exprDegree, varsOf } from '../pure/mono'
+import { checkTrigSolutionSet, trigTermOf, type TrigRange } from './trigRoots'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
+import { isNoRealSolution, radicalRootsCheck, rationalsOf, readRootsData, sameRationals } from './radicalForm'
 import { displaySafe, drawnTex } from './displaySafe'
+import { readInequality, validateIneqWorking } from './inequality'
 
 function dataOf(step: Step): Record<string, unknown> {
   return step.data && typeof step.data === 'object' ? (step.data as Record<string, unknown>) : {}
+}
+
+/** The range a trig solution set records (whole degrees, and whether the top end is included), or nothing when it records none. */
+function trigRangeOf(value: unknown): TrigRange | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const r = value as { min?: unknown; max?: unknown; inclusive?: unknown }
+  if (typeof r.min !== 'number' || typeof r.max !== 'number' || typeof r.inclusive !== 'boolean') return undefined
+  return { min: r.min, max: r.max, inclusive: r.inclusive }
 }
 
 function variableOfStep(step: Step): string {
@@ -208,21 +226,74 @@ function valueText(s: unknown): string {
  * - a non-empty set is a linear equation's one root, checked exactly, and the displayed after lists it.
  * Any letter other than the variable makes the proof impossible (unknown).
  */
+/**
+ * The ending of a rational equation (rational.ts): its kept roots and its rejected values are decided by check-adapter against
+ * the ORIGINAL equation the step names. validateWorkingChecked binds that text to the working's own input.
+ */
+function validateRationalEnding(step: Step): ValidationVerdict {
+  const d = dataOf(step)
+  if (d.domain !== 'real' || typeof d.original !== 'string' || typeof d.variable !== 'string') return 'invalid'
+  if (!Array.isArray(d.solutions) || !Array.isArray(d.rejected)) return 'invalid'
+  const kept = d.solutions.map((s) => solutionTextOf(s))
+  const rejected = d.rejected.map((s) => String(s))
+  return checkRationalEnding(d.original, String(step.before), kept, rejected, d.variable, String(step.after))
+}
+
+/** The three steps of a rational equation's working, in order: the excluded values, the multiplication, the ending. */
+function isRationalWorkingShape(working: Working): boolean {
+  const s = working.steps
+  return (
+    s.length === 3 &&
+    s[0].kind === 'Implication' &&
+    dataOf(s[0]).action === 'exclude' &&
+    s[1].kind === 'Implication' &&
+    dataOf(s[1]).action === 'multiply' &&
+    s[2].kind === 'SolutionSetEq' &&
+    dataOf(s[2]).rational === true
+  )
+}
+
+/** The exclusion and the rational ending belong only to a working of the rational shape. */
+function mentionsRational(working: Working): boolean {
+  return working.steps.some((s) => dataOf(s).action === 'exclude' || dataOf(s).rational === true)
+}
+
 export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaultCheckAdapter): ValidationVerdict {
   if (step.kind !== 'SolutionSetEq') return 'invalid'
   const payload = dataOf(step)
+  if (payload.rational === true) return validateRationalEnding(step)
   const v = typeof payload.variable === 'string' ? payload.variable : 'x'
+  // Part R: the roots of a radical equation are checked by radicalForm.ts, each put back into the original equation.
+  if (payload.radical === true) return radicalRootsCheck(step)
   // S1b: a surd square root's two solutions are the sides of the factored form the step names (exact, no proof needed).
   if (payload.zeroProduct && typeof payload.zeroProduct === 'object') {
     const zp = payload.zeroProduct as { shift: string; root: string }
     if (!Array.isArray(payload.solutions) || payload.solutions.length !== 2) return 'invalid'
     return checkSurdZeroProduct(String(step.before), zp, String(step.after), v, payload.solutions as unknown[])
   }
+  // The roots after a quadratic formula line: the line's own numbers give the equation, and only its exact roots are accepted.
+  if (isFormulaState(String(step.before))) {
+    if (!Array.isArray(payload.solutions) || payload.solutions.length === 0) return 'invalid'
+    const formulaDomain = payload.domain === 'complex' ? 'complex' : 'real'
+    return checkFormulaSolutionSet(String(step.before), payload.solutions, String(step.after), v, formulaDomain)
+  }
   const domain = payload.domain === 'complex' ? 'complex' : 'real'
-  if (Array.isArray(payload.solutions) && payload.solutions.length > 0) {
-    // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
-    const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
-    if (quad !== null) return quad
+  // S5c: a trig solution set is the general solution's members in the range, checked exactly (trigRoots.ts). The general
+  // solution before it is checked by its own trig step, so nothing here trusts the method's list.
+  if (payload.role === 'trig') {
+    const solutions = Array.isArray(payload.solutions) ? (payload.solutions as unknown[]) : []
+    return checkTrigSolutionSet(String(step.before), solutions, String(step.after), v, trigRangeOf(payload.range))
+  }
+  if (Array.isArray(payload.solutions)) {
+    if (payload.solutions.length > 0) {
+      // S1b: a quadratic's proposed roots are checked by G2 in the domain, then displayed exactly.
+      const quad = checkQuadraticSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (quad !== null) return quad
+      const poly = checkPolySolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+      if (poly !== null) return poly
+    }
+    const higher = checkHigherSolutionSet(String(step.before), payload.solutions, String(step.after), v, domain)
+    if (higher !== null) return higher
   }
   const proof = solutionProofOf(String(step.before), v)
   if (!proof) return 'unknown'
@@ -347,6 +418,13 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
     case 'SystemEq':
       verdict = validateSystemEq(step)
       break
+    case 'IneqMove':
+    case 'IneqCritical':
+    case 'IneqSigns':
+    case 'IneqSolutionSet':
+      // An inequality step is checked with its whole working (validateIneqWorking), which holds the inequality it reads.
+      verdict = 'unknown'
+      break
     default:
       verdict = 'invalid'
   }
@@ -357,9 +435,23 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
   }
 }
 
+/** The four exponential and logarithmic moves (EquationOp in types.ts). They are real-only (S3). */
+const EXP_LOG_MOVE_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power'])
+
+/** True for an equation step whose declared move is one of the exponential or logarithmic moves. */
+function isExpLogMove(step: Step): boolean {
+  if (step.kind !== 'EquationEquiv' || !step.op || typeof step.op !== 'object') return false
+  return EXP_LOG_MOVE_KINDS.has((step.op as { kind: string }).kind)
+}
+
 /** A step checked in its working: a reduction needs the working around it, every other step is checked alone. */
 function validateStepIn(working: Working, index: number, adapter: CheckAdapter, domain: Domain): StepValidationResult {
   const step = working.steps[index]
+  // S3: the exponential and logarithmic moves cancel a base or equate a logarithm, which is an equivalence only over the real
+  // numbers. In a complex problem such a move is refused, whatever the working around it says (the method never builds one).
+  if (domain !== 'real' && isExpLogMove(step)) {
+    return { verdict: 'invalid', reason: 'An exponential or logarithmic move is only valid over the real numbers' }
+  }
   // S1b / S3: a solution set or zero-product split is proved in the domain of the problem the working answers. A step that
   // states another domain for itself is refused (a real problem with complex roots is never shown, whatever the step's data says).
   if (step.kind === 'SolutionSetEq' || step.kind === 'CaseSplitComplete') {
@@ -386,6 +478,32 @@ function chainBreak(working: Working, index: number, reason: string): WorkingVal
     verdict: 'invalid',
     reason
   }
+}
+
+/**
+ * A trig working keeps the problem's own function and argument (S5c). A trig-substitute step must start from the problem's trig
+ * term, and every clause of a trig-back-substitute step must use that same function and argument. Each step is checked on its
+ * own without this link, so a sin x back-substitution inside a cos x problem would otherwise pass. Null when the working has no
+ * trig step, or when every link holds.
+ */
+function trigChainBreak(input: string, steps: Step[]): string | null {
+  const kindOf = (step: Step): string | undefined => (step.op as { kind?: string } | undefined)?.kind
+  if (!steps.some((s) => kindOf(s) === 'trig-substitute' || kindOf(s) === 'trig-back-substitute')) return null
+  const own = trigTermOf(input)
+  if (own === null) return 'A trig working must solve one trig function of one argument'
+  const same = (term: { fn: string; arg: string } | null): boolean => term !== null && term.fn === own.fn && term.arg === own.arg
+  for (const step of steps) {
+    if (kindOf(step) === 'trig-substitute' && !same(trigTermOf(String(step.before)))) {
+      return 'A substitution changes the trig function or its argument'
+    }
+    if (kindOf(step) === 'trig-back-substitute') {
+      const clauses = String(step.after).replace(/\\text\{\s*or\s*\}/g, ' or ').split(/\s+or\s+/)
+      if (!clauses.every((clause) => same(trigTermOf(clause)))) {
+        return 'A back substitution changes the trig function or its argument'
+      }
+    }
+  }
+  return null
 }
 
 /**
@@ -433,6 +551,27 @@ function answerProblem(working: Working): string | null {
     }
   }
   return null
+}
+
+/**
+ * Every answer is an exact root of the problem as typed: each answer's own text is read exactly by G2 (a surd included) and
+ * put into the problem's polynomial in ℚ(√d, i). The rational substitution (substitutionOf) cannot read a surd, so a
+ * quadratic formula's surd roots are proved here instead. An answer that cannot be read is not proved, so it is refused.
+ */
+export function answersHoldExactly(working: Working): boolean {
+  const input = working.input ?? ''
+  const v = variableOfInput(input)
+  const poly = input === '' ? null : tryEquationPoly(input)
+  if (v === null || poly === null) return false
+  const answers = Array.isArray(working.answer) ? working.answer : working.answer ? [working.answer] : []
+  if (answers.length === 0) return false
+  const roots: G2Alg[] = []
+  for (const a of answers) {
+    const x = readSurd(a.value ?? normalizeDisplayed(a.tex))
+    if (!x) return false
+    roots.push(x)
+  }
+  return polyRootsHold(poly, v, roots)
 }
 
 /**
@@ -510,11 +649,48 @@ function answerKey(w: Working): string {
     .join(';')
 }
 
+/** True for a working that carries a radical step: its squaring, or its check of the roots (Part R). */
+function isRadicalWorking(working: Working): boolean {
+  return working.steps.some((s) => dataOf(s).radical === true)
+}
+
+/**
+ * A radical working is shown only when it ends in the check of its roots, the equation that check names is the one typed, and
+ * (with roots) its one sub-working solves the squared equation the check starts from and finds the same roots. Null when it does.
+ */
+function radicalWorkingProblem(working: Working): string | null {
+  const last = working.steps[working.steps.length - 1]
+  const data = readRootsData(last)
+  if (last.kind !== 'SolutionSetEq' || data === null) return 'A radical working must end with its check of the roots'
+  if (typeof working.input !== 'string' || !sameState(data.original, working.input)) {
+    return 'The check does not use the equation as typed'
+  }
+  const subs = working.subWorkings ?? []
+  if (data.negative) return subs.length === 0 ? null : 'A no-solution working has no sub-working to check'
+  if (subs.length !== 1) return 'The squared equation must be solved in one sub-working'
+  if (!sameState(subs[0].input ?? '', String(last.before))) return 'The sub-working does not solve the squared equation'
+  const subAnswers = Array.isArray(subs[0].answer) ? subs[0].answer : subs[0].answer ? [subs[0].answer] : []
+  const subRoots = isNoRealSolution(subAnswers) ? [] : rationalsOf(subAnswers)
+  const checkRoots = rationalsOf(data.checks.map((c) => ({ label: data.variable, tex: c.value })))
+  if (subRoots === null || checkRoots === null || !sameRationals(subRoots, checkRoots)) {
+    return 'The sub-working finds other roots than the check'
+  }
+  return null
+}
+
 /**
  * The sub-workings of a working belong to it (P-FIX-S1SOUND2 MUST 8): each is the discriminant of this equation, or the
  * solution of one zero-product case of its own split, and every case has exactly one. Null when they belong.
  */
 function subWorkingsBelong(working: Working): string | null {
+  // A rational equation's one sub-working solves the polynomial its multiplying step gave, and nothing else (rational.ts).
+  if (isRationalWorkingShape(working)) {
+    const own = working.subWorkings ?? []
+    const belongs = own.length === 1 && sameState(own[0].input ?? '', working.steps[2].before)
+    return belongs ? null : 'The polynomial working does not belong to its rational equation'
+  }
+  // Part R: a radical working's one sub-working is the squared equation, and radicalWorkingProblem checks that it belongs.
+  if (isRadicalWorking(working)) return radicalWorkingProblem(working)
   const subs = working.subWorkings ?? []
   const v = variableOfInput(working.input ?? '')
   const split = working.steps.find((s) => s.kind === 'CaseSplitComplete' && dataOf(s).form === 'zero-product')
@@ -606,6 +782,10 @@ function validateWorkingChecked(
   const drawn = shownAsRead(working)
   if (drawn !== null) return { valid: false, verdict: 'invalid', reason: drawn }
 
+  // An inequality (one of < <= > >=) is validated on its own path: its moves, critical points, signs and solution set,
+  // all checked from the inequality as typed. No other method's steps can stand for it.
+  if (readInequality(working.input ?? '') !== null) return validateInequalityChecked(working)
+
   // A system (two or more equations) is validated on its own path: its own chain, its own answer and check.
   if (isSystemInput(working.input ?? '')) return validateSystemWorking(working, adapter, domain)
 
@@ -628,6 +808,17 @@ function validateWorkingChecked(
     if (!sameState(working.steps[i].before, working.steps[i - 1].after)) {
       return chainBreak(working, i, `Step ${i + 1} does not start where step ${i} ends`)
     }
+  }
+  // A trig working keeps the problem's own function and argument: each step passes on its own without this link.
+  const trigBreak = trigChainBreak(working.input, working.steps)
+  if (trigBreak !== null) return { valid: false, verdict: 'invalid', reason: trigBreak }
+
+  // A rational equation's working is exactly its three steps, and its ending is for the equation as typed: the working's input.
+  if (mentionsRational(working) && !isRationalWorkingShape(working)) {
+    return { valid: false, verdict: 'invalid', reason: "A rational equation's working does not have its three steps" }
+  }
+  if (isRationalWorkingShape(working) && !sameState(String(dataOf(working.steps[2]).original), working.input)) {
+    return { valid: false, verdict: 'invalid', reason: "The rational equation's ending is for another equation" }
   }
 
   // Check main steps
@@ -701,11 +892,18 @@ function validateWorkingChecked(
   // After a one-way step (an Implication), the last equation can have more solutions than the problem (MUST 2, 3).
   // "No solution" still follows (the problem's solutions are among the last equation's), "every real number" does not,
   // and every root shown must be put back into the problem as typed and hold.
-  if (working.steps.some((s) => s.kind === 'Implication')) {
+  // The quadratic formula's step is an Implication in form only: checkQuadraticFormulaStep proves its ± roots are exactly
+  // the roots of the quadratic it starts from, so it cannot add a root, and it does not turn this rule on. Without the
+  // exception a log or trig equation whose reduced quadratic needs the formula loses a working it can prove.
+  const oneWay = (s: Step): boolean => s.kind === 'Implication' && (dataOf(s) as { action?: string }).action !== 'quadratic-formula'
+  if (working.steps.some(oneWay)) {
     const last = working.steps[working.steps.length - 1]
     const ld = dataOf(last)
     const noSolution = last.kind === 'SolutionSetEq' && Array.isArray(ld.solutions) && ld.solutions.length === 0 && ld.allReals !== true
-    if (!noSolution && !(sub && sub.ok)) {
+    // A rational ending is decided against the equation as typed (validateRationalEnding), so it needs no substitution here.
+    // A quadratic formula's surd roots are proved exactly against the problem as typed (answersHoldExactly), not by the
+    // rational substitution, which cannot read a surd.
+    if (!noSolution && !(sub && sub.ok) && !isRationalWorkingShape(working) && !answersHoldExactly(working)) {
       return { valid: false, verdict: 'invalid', reason: 'After a one-way step, every answer must be put back into the problem and hold' }
     }
   }
@@ -718,6 +916,18 @@ function validateWorkingChecked(
   }
 
   return { valid: true }
+}
+
+/**
+ * An inequality working: each step's sentence and rule must be the ones its data gives (the same wording check as every
+ * other working), then the whole working is checked from the inequality as typed (inequality.ts).
+ */
+function validateInequalityChecked(working: Working): WorkingValidationResult {
+  for (const step of working.steps) {
+    const wording = wordingProblem(step)
+    if (wording !== null) return { valid: false, verdict: 'invalid', reason: wording }
+  }
+  return validateIneqWorking(working)
 }
 
 // ---- S1d: systems of simultaneous linear equations ----
