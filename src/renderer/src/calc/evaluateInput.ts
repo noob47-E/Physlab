@@ -68,6 +68,11 @@ export interface EvalResult {
   /** The quick answer and the working disagreed: this is the working's answer, and neither is confirmed (calc/working.ts). */
   unconfirmed?: boolean
   /**
+   * True when the answer is the solution set of an inequality, not a number or a list of roots. Guess-first takes such an answer only
+   * as the card shows it (calc/guessCalc.ts): a number read out of the set would call a right guess wrong.
+   */
+  inequality?: boolean
+  /**
    * True when the number is a root that only the numeric search stands behind and the search could not confirm to the figures shown: put back into
    * a polynomial it does not come out zero, or for any other equation the arithmetic could not place it (a repeated root that round-off hides, f
    * zero over a stretch of the line). Unless the working confirms it, the card says it is approximate and does not give it as the answer (calc/working.ts).
@@ -299,7 +304,8 @@ const BASE_VALID_SINGLE_LETTERS: ReadonlySet<string> = new Set([
   'i'
 ])
 
-function readRunsAsMultiplication(expr: string, vars?: Record<string, unknown>): string {
+/** A typed line's runs of letters read as products (xe is x·e), the one reader the "=" path and the integral check share. */
+export function readRunsAsMultiplication(expr: string, vars?: Record<string, unknown>): string {
   const assignMatch = expr.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\s*\([^)]*\))?)\s*=(.*)$/)
   if (assignMatch) {
     return `${assignMatch[1]}=${readRunsAsMultiplication(assignMatch[2], vars)}`

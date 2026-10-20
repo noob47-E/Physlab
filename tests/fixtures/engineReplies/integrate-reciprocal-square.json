@@ -1,0 +1,12 @@
+{
+  "op": "integrate",
+  "payload": {
+    "expr": "1/(x^2-1)",
+    "var": "x"
+  },
+  "result": {
+    "latex": "\\frac{\\log{\\left(x - 1 \\right)}}{2} - \\frac{\\log{\\left(x + 1 \\right)}}{2}",
+    "text": "log(x - 1)/2 - log(x + 1)/2",
+    "numeric": null
+  }
+}

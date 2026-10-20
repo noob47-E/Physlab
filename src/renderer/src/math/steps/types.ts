@@ -29,6 +29,7 @@ export interface Problem {
   realOddRoots?: boolean
   /** Optional metadata or raw input string. */
   rawInput?: string
+  angleUnit?: 'deg' | 'rad'
   metadata?: Record<string, unknown>
 }
 
@@ -43,6 +44,10 @@ export type StepKind =
   | 'SolutionSetEq'
   | 'SubproblemReduction'
   | 'SystemEq'
+  | 'IneqMove'
+  | 'IneqCritical'
+  | 'IneqSigns'
+  | 'IneqSolutionSet'
 
 /**
  * What a divide or multiply move is for. The sentence builder (sentences.ts) writes the words from it.
@@ -64,8 +69,17 @@ export type ScalePurpose = 'leading-positive' | 'leading-one' | 'common-factor'
  *   whose structure is not there is invalid even when the two sides are equal.
  * - square-root-pm {shift, root}: a rewrite whose left side is (x − shift − root)(x − shift + root).
  * - swap: L2 ≡ R1 and R2 ≡ L1.
+ * - write-as-power {base, power}: the right side (a whole number c) becomes base^power with base^power = c; the left is unchanged.
+ * - cancel-base {base}: base^E1 = base^n becomes E1 = n (equal powers of one base above 1 have equal exponents).
+ * - log-to-power {base}: log_base(A) = c becomes A = base^c (base 10 is written log(A), no base digits).
+ * - work-out-power: L = base^c becomes L = its whole-number value; the left is unchanged.
+ * The exponential and logarithmic moves are checked by checkExpLogOp (check-adapter.ts), exactly, never by the polynomial path.
  */
 export type EquationOp =
+  | { kind: 'write-as-power'; base: string; power: string }
+  | { kind: 'cancel-base'; base: string }
+  | { kind: 'log-to-power'; base: string }
+  | { kind: 'work-out-power' }
   | { kind: 'add-both'; term: string }
   | { kind: 'subtract-both'; term: string }
   | { kind: 'multiply-both'; k: string; purpose?: 'leading-positive' }
@@ -82,6 +96,12 @@ export type EquationOp =
   | { kind: 'swap' }
   | { kind: 'remove-brackets' }
   | { kind: 'already-solved' }
+  | { kind: 'divide-cos' }
+  | { kind: 'trig-ref-angle'; angle?: string; quad?: string }
+  | { kind: 'trig-general' }
+  | { kind: 'trig-substitute' }
+  // rejected: the roots of the equation in u that lie outside -1 to 1 (a sine or cosine has no angle for them), as values.
+  | { kind: 'trig-back-substitute'; rejected?: string[] }
 
 /**
  * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors

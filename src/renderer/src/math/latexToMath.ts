@@ -139,6 +139,9 @@ const GREEK: Record<string, string> = {
   varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω', Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Sigma: 'Σ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω'
 }
 
+/** The Greek letters themselves, as a line typed from the keypad writes them (∫ sinθ dθ) rather than by command. */
+const GREEK_GLYPHS = new Set(Object.values(GREEK))
+
 const FUNCS = new Set(['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'sinh', 'cosh', 'tanh', 'arcsin', 'arccos', 'arctan', 'ln', 'log', 'exp', 'min', 'max', 'det', 'gcd', 'deg'])
 const INVERSE: Record<string, string> = { sin: 'asin', cos: 'acos', tan: 'atan', sinh: 'asinh', cosh: 'acosh', tanh: 'atanh' }
 const ARC: Record<string, string> = { arcsin: 'asin', arccos: 'acos', arctan: 'atan' }
@@ -508,10 +511,26 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
         const bodyToks: string[] = []
         let v = 'x'
         while (i < t.length) {
-          if ((peek() === 'd' || peek() === '\\differentialD') && /^[a-z]$/.test(t[i + 1] ?? '') && (i + 2 >= t.length || !/^[a-z]$/.test(t[i + 2]))) {
+          // The differential's letter: a lone Latin one (dx) or a Greek one (dθ, d\theta, d\omega). A Greek letter
+          // used to be left in the body, so ∫ sinθ dθ read as integrate(sin(θ)·d·θ, x): the engine answered
+          // θ·d·x·sin θ and the working agreed with it, so a wrong answer was shown ticked.
+          if (peek() === 'd' || peek() === '\\differentialD') {
+            const started = i
             next()
-            v = next()
-            break
+            skipSpacing()
+            const p = peek() ?? ''
+            const greek = p.startsWith('\\') && GREEK[p.slice(1)] !== undefined ? GREEK[p.slice(1)] : GREEK_GLYPHS.has(p) ? p : ''
+            // A name of several Latin letters after the d is a word, not a differential: dxy stays in the body.
+            if (/^[a-z]$/.test(p) && !/^[a-z]$/.test(t[i + 1] ?? '')) {
+              v = next()
+              break
+            }
+            if (greek !== '') {
+              next()
+              v = greek
+              break
+            }
+            i = started
           }
           if (peek() === '\\mathrm' && t[i + 1] === '{' && t[i + 2] === 'd' && t[i + 3] === '}') {
             i += 4
@@ -607,8 +626,11 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
    */
   const gapBefore = (before: string, tok: string): string => {
     if (!tok.startsWith('\\')) return ''
+    // \operatorname{atan} writes a function's name the way SymPy's plain LaTeX does, and its text comes out as
+    // "atan(...)" the way \sin's does, so a name in front of it used to be glued on: x\operatorname{atan}{x}
+    // became the one name xatan, which no reader could take apart and the integral check left unchecked.
     const name = tok.slice(1)
-    if (!(name === 'sqrt' || name === 'pi' || FUNCS.has(name) || ARC[name])) return ''
+    if (!(name === 'sqrt' || name === 'pi' || name === 'operatorname' || FUNCS.has(name) || ARC[name])) return ''
     const written = nameAtEnd(before)
     return written === '' ? '' : written === 'i' ? ' ' : '*'
   }

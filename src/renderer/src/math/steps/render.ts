@@ -8,6 +8,7 @@ import type { Move, Answer, Working as PureWorkingDoc } from '../pure/work'
 import type { Working, Step, Problem, StepAnswer } from './types'
 import { validateWorking } from './validate'
 import { substitutionOf } from './sentences'
+import { ineqDrawnTex } from './inequality'
 import type { CheckAdapter } from './check-adapter'
 
 import { displaySafe, drawnTex } from './displaySafe'
@@ -25,11 +26,17 @@ export function toDisplayTex(text: string): string {
   return text
     .replace(/\\left|\\right/g, '')
     .replace(/\\text\{([^}]*)\}/g, '$1')
+    .replace(/\^\{\\circ\}|\\circ/g, '°')
+    .replace(/\\pi\b/g, 'π')
+    .replace(/\\theta\b/g, 'θ')
+    .replace(/\\(sin|cos|tan|sec|csc|cot|ln|log)\b/g, '$1')
     .replace(/\\frac\{(-?\d+)\}\{(\d+)\}/g, '$1/$2')
     .replace(/\^\{(\((-?\d+)\))\}/g, '^$2')
     .replace(/\^\{(-?\d+)\}/g, '^$1')
     .replace(/\^(\d+)/g, (_all: string, ds: string) => [...ds].map((d) => SUPERSCRIPT[d]).join(''))
-    .replace(/\^(-\d)/g, (_all: string, d: string) => SUPERSCRIPT[d] || d)
+    // A negative power, 2^-1 or x^-12: the minus and each digit take their superscript. The old lookup used "-1" as one key,
+    // which is not in the table, so the caret was dropped and 2^(-1) was read as 2 - 1.
+    .replace(/\^(-\d+)/g, (_all: string, ds: string) => [...ds].map((c) => SUPERSCRIPT[c]).join(''))
     .replace(/\*(?!\w)/g, '')
     .replace(/ - /g, ' − ')
     .replace(/^-/, '−')
@@ -55,6 +62,7 @@ export function formatTex(val: unknown): string {
  */
 const SHOWN_METHOD_NAMES = new Set([
   'Linear equation in one variable',
+  'Exponential and logarithmic equation',
   'Solve by elimination',
   'Solve by substitution',
   'Factorising',
@@ -62,7 +70,11 @@ const SHOWN_METHOD_NAMES = new Set([
   'Expand',
   'Quadratic formula',
   'Discriminant',
-  'Completing the square'
+  'Completing the square',
+  'Rational equation',
+  'Trigonometric equation',
+  'Equation with square roots',
+  'Inequalities'
 ])
 
 /**
@@ -78,9 +90,13 @@ export function subHeading(sub: Working, index: number): string {
   return `Case ${index + 1}`
 }
 
+/** The steps whose line is an inequality: their line is drawn by ineqDrawnTex (\le, \ge and \frac), not as the ASCII reads. */
+const INEQUALITY_LINE_STEPS: ReadonlySet<string> = new Set(['IneqMove', 'IneqCritical', 'IneqSigns'])
+
 /** Convert a Step to a Pure Math Move. The note and the subgoal are free text, so they are not drawn. */
 export function stepToMove(step: Step): Move {
-  const tex = step.after ? drawnTex(formatTex(step.after)) : undefined
+  const line = step.after ? formatTex(step.after) : ''
+  const tex = step.after ? (INEQUALITY_LINE_STEPS.has(step.kind) ? ineqDrawnTex(line) : drawnTex(line)) : undefined
   return {
     head: step.sentence,
     rule: step.rule,
@@ -158,7 +174,12 @@ const CANT_SHOW_TEXT = "I can't show the steps for this one yet"
 function titleOf(working: Working, problem: Problem | undefined): string {
   if (!problem) return 'Worked solution'
   const job = typeof problem.job === 'string' && problem.job !== '' ? problem.job.charAt(0).toUpperCase() + problem.job.slice(1) : 'Worked'
-  return `${job} ${inputOf(working, problem)}`.trim()
+  return `${job} ${plainRoots(inputOf(working, problem))}`.trim()
+}
+
+/** A title is plain text, so a square root the input writes in LaTeX is drawn as √(...) there (the input line keeps KaTeX). */
+function plainRoots(text: string): string {
+  return text.replace(/\\sqrt\{([^{}]*)\}/g, '√($1)')
 }
 
 function inputOf(working: Working, problem: Problem | undefined): string {
