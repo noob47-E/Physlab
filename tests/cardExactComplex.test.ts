@@ -45,7 +45,22 @@ describe('the = card writes a quadratic’s complex pair exactly', () => {
     // Simple decimals and fractions are exact too.
     ['0.5x^2+x+1=0', `${NONE}−1 ± i`],
     ['0.25x^2+0.5x+1=0', `${NONE}−1 ± √3 i`],
-    ['x^2/2+x+1=0', `${NONE}−1 ± i`]
+    ['x^2/2+x+1=0', `${NONE}−1 ± i`],
+    // Cases the independent break-it probe checked by putting the printed roots back into the line: a negative
+    // coefficient on x, a negative leading coefficient, a fraction leading coefficient, a denominator larger than the
+    // whole-number part, an x on both sides, and coefficients too big to read off by eye.
+    ['x^2-2.5x+7=0', `${NONE}5/4 ± (√87/4)i`],
+    ['x^2/3+x+1=0', `${NONE}−3/2 ± (√3/2)i`],
+    ['-0.5x^2+x-1=0', `${NONE}1 ± i`],
+    ['x^2=-2x-8', `${NONE}−1 ± √7 i`],
+    ['2x^2+3=x^2+1', `${NONE}±√2 i`],
+    ['x^2+12=0', `${NONE}±2√3 i`],
+    ['x^2-2x/7+5=0', `${NONE}1/7 ± (2√61/7)i`],
+    ['0.01x^2+x+26=0', `${NONE}−50 ± 10i`],
+    ['x^2+0.1x+0.1=0', `${NONE}−1/20 ± (√39/20)i`],
+    ['x^2-2x+4=0', `${NONE}1 ± √3 i`],
+    ['4x^2-4x+5=0', `${NONE}1/2 ± i`],
+    ['1000000x^2+1000000x+1000000=0', `${NONE}−1/2 ± (√3/2)i`]
   ]
   for (const [line, want] of cases) {
     it(`${line} says ${want.slice(NONE.length)}`, () => {
@@ -131,6 +146,15 @@ describe('the bar and the Numbers screen write the same exact pair as the = card
   it('the Numbers screen call says the exact pair for x² − 2x + 8 = 0, as the = card does', () => {
     const c = [1, -2, 8]
     expect(beyondTheReals(c, 0, exactQuadraticOf(c))).toEqual({ sentence: `${NONE}1 ± √7 i` })
+  })
+
+  it('the Numbers screen boxes give the same exact pair for other simple coefficients', () => {
+    // Checked by the break-it probe against the roots worked out independently with plain arithmetic.
+    expect(beyondTheReals([1, 0, 3], 0, exactQuadraticOf([1, 0, 3]))).toEqual({ sentence: `${NONE}±√3 i` })
+    expect(beyondTheReals([2, -2, 5], 0, exactQuadraticOf([2, -2, 5]))).toEqual({ sentence: `${NONE}1/2 ± (3/2)i` })
+    expect(beyondTheReals([1000000, 1000000, 1000000], 0, exactQuadraticOf([1000000, 1000000, 1000000]))).toEqual({
+      sentence: `${NONE}−1/2 ± (√3/2)i`
+    })
   })
 
   it('exactPairFor writes the search’s pair exactly, and refuses one that is not the search’s', () => {
