@@ -74,9 +74,8 @@ describe('the ordinary limits that are not oscillations are still answered', () 
     expect(r?.main ?? '').toMatch(/does not exist/)
   })
 
-  it('says sin x over x squared has no limit at 0', () => {
-    const w = workingFor(String.raw`\lim_{x\to0}\frac{\sin x}{x^{2}}`)
-    expect(w.checked).toBe('ok')
-    expect(w.answers[0]?.tex).toBe('\\text{does not exist}')
+  it('says sin x over x squared has no limit at 0, and does not tick it (no exact rule here proves it)', () => {
+    expect(card(String.raw`\lim_{x\to0}\frac{\sin x}{x^{2}}`)?.main ?? '').toMatch(/does not exist/)
+    expect(workingFor(String.raw`\lim_{x\to0}\frac{\sin x}{x^{2}}`).checked).not.toBe('ok')
   })
 })

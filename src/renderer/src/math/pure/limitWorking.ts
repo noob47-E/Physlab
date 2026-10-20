@@ -1,14 +1,19 @@
 // Limits, step by step, for the calculator's "=" card and for Work it out (math/pure/run.ts).
 //
-// A limit is answered by the first method below that gives an answer the function's own values agree with
+// A limit is answered by the first EXACT method below whose answer the function's own values agree with
 // (math/limitSamples.ts), and every method is tried in this order:
 //   1. a rational function (a fraction of polynomials in x), read exactly: substitute when the bottom is not 0;
 //      when both top and bottom are 0 at the point, cancel the factor (x − a) that they share (factor theorem),
-//      then substitute; at ±∞, divide every term by the highest power of x.
-//   2. the standard limits sin(kx)/(mx) → k/m and (1 − cos kx)/(mx) → 0 at 0.
-//   3. substitution, when the function gives a number at the point and the values next to it agree.
-//   4. L'Hôpital's rule for 0/0 or ∞/∞, at most twice, with derivatives from mathjs checked against the slope.
-//   5. the values near the point on each side, when no rule above applies (a decimal, ∞, or "does not exist").
+//      then substitute; at ±∞, divide every term by the highest power of x; when the bottom is 0 and the top is
+//      not, each side's sign comes from the factor (x − a)^m, exactly.
+//   2. |g(x)| with g a line that is 0 at the point: on each side |g| is ±g, exactly, and the sides are read as in 1.
+//   3. the standard limits sin(kx)/(mx) → k/m and (1 − cos kx)/(mx) → 0 at 0.
+//   4. substitution, when the function is built only from continuous pieces (polynomials, sin, cos, tan, exp,
+//      ln, sqrt, abs, + − × ÷ and powers), gives a number at the point, and the values next to it agree.
+//   5. L'Hôpital's rule for 0/0 or ∞/∞, at most twice, with derivatives from mathjs checked against the slope.
+//
+// Only an answer from those rules is ever shown as checked. When no rule answers, the values near the point
+// give an ESTIMATE (lookupAttempt): the card shows it as an estimate and the working says so; it is never ticked.
 //
 // Nothing is shown as checked unless the answer it gives agrees with the function at points on both sides of
 // the point: a claim that fails the check is dropped, and if nothing passes there is no working, only a sentence.
@@ -57,6 +62,8 @@ type LimitAnswer =
 interface LimitOutcome {
   working: Working
   answer: LimitAnswer
+  /** True only when an exact rule gave the answer and the values next to the point agree with it. False for an estimate. */
+  checked: boolean
 }
 
 interface Attempt {
@@ -405,6 +412,196 @@ function quotientFn(f: Fn, num: Poly, den: Poly): Fn {
   }
 }
 
+/** The pieces that are continuous wherever they are defined, so a point of their domain can be put in. */
+const CONTINUOUS_FUNCTIONS: ReadonlySet<string> = new Set(['sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'abs', 'mag'])
+const CONTINUOUS_OPERATORS: ReadonlySet<string> = new Set(['add', 'subtract', 'multiply', 'divide', 'pow', 'unaryMinus', 'unaryPlus'])
+
+/** True when the body is built only from the continuous pieces above, the variable, π and e (and nothing else). */
+function continuousBody(body: string, v: string): boolean {
+  const node = parseNode(body)
+  if (!node) return false
+  let ok = true
+  node.traverse((n, path) => {
+    if (path === 'fn' || math.isConstantNode(n) || math.isParenthesisNode(n)) return
+    if (math.isSymbolNode(n)) {
+      if (n.name !== v && n.name !== 'pi' && n.name !== 'e' && n.name !== 'tau') ok = false
+      return
+    }
+    if (math.isOperatorNode(n)) {
+      if (!CONTINUOUS_OPERATORS.has(n.fn)) ok = false
+      return
+    }
+    if (math.isFunctionNode(n)) {
+      if (!CONTINUOUS_FUNCTIONS.has((n.fn as { name?: string }).name ?? '')) ok = false
+      return
+    }
+    ok = false
+  })
+  return ok
+}
+
+/** The absolute value |x| as the Maths field writes it: mag(x) (math/expr.ts), or abs(x) as mathjs names it. */
+const isAbsNode = (n: MathNode): boolean => math.isFunctionNode(n) && ['abs', 'mag'].includes((n.fn as { name?: string }).name ?? '')
+
+/**
+ * True when every quotient and power in the body is a finite number at the point. A bottom that is 0 there makes the
+ * double read Infinity, and the value the whole body then gives is no evidence of its limit (e^(−1/x²) at 0).
+ */
+function singularitiesAvoided(body: string, v: string, point: number): boolean {
+  const node = parseNode(body)
+  if (!node) return false
+  let ok = true
+  node.traverse((n) => {
+    if (!ok || !math.isOperatorNode(n) || (n.fn !== 'divide' && n.fn !== 'pow')) return
+    const g = compileLimitBody(n.toString(), v)
+    if (!g || !Number.isFinite(g(point))) ok = false
+  })
+  return ok
+}
+
+/** True when the node holds an absolute value, |…|, anywhere in it. */
+function hasAbs(node: MathNode): boolean {
+  let found = false
+  node.traverse((n) => {
+    if (isAbsNode(n)) found = true
+  })
+  return found
+}
+
+/**
+ * The body with each |g(x)| put as ±g on the side d. g is a line that is 0 at the point a, with slope s, so on that side
+ * g has the sign of s·d and |g| = (s·d)·g exactly. Null when an |…| is anything but such a line.
+ */
+function absRewrite(spec: LimitSpec, a: Rat, d: Side): { text: string; lines: string[] } | null {
+  const node = parseNode(spec.body)
+  if (!node) return null
+  const lines: string[] = []
+  let ok = true
+  const out = node.transform((n) => {
+    if (!isAbsNode(n) || !math.isFunctionNode(n) || n.args.length !== 1) return n
+    const inner = stripParens(n.args[0])
+    let poly: Poly
+    try {
+      poly = polyFromExpr(parseExpr(inner.toString()), spec.variable).poly
+    } catch {
+      ok = false
+      return n
+    }
+    if (pDeg(poly) !== 1 || !rIsZero(pEval(poly, a))) {
+      ok = false
+      return n
+    }
+    const sign = (rIsNeg(poly[1]) ? -1 : 1) * d
+    const shown = plainOf(inner)
+    lines.push(
+      `On the ${d > 0 ? 'right' : 'left'}, ${shown} is ${sign > 0 ? 'positive' : 'negative'} (${spec.variable} is ${d > 0 ? 'above' : 'below'} ${pointText(spec.point)}), so |${shown}| = ${sign > 0 ? shown : `−(${shown})`}.`
+    )
+    return math.parse(`(${sign}) * (${inner.toString()})`)
+  })
+  if (!ok || hasAbs(out)) return null
+  return { text: out.toString(), lines }
+}
+
+/**
+ * The answer for a fraction whose top is not 0 at the point a but whose bottom is: near a the bottom is (x − a)^m times a
+ * second part Q that is not 0 at a, and (x − a) has the sign of its side, so each side's sign is that of top × Q × (x − a)^m.
+ * Each side is written as a line of the working. Null when the reading does not apply.
+ */
+function infiniteAnswer(num: Poly, den: Poly, a: Rat, spec: LimitSpec, v: string, dirs: Side[], steps: Steps): LimitAnswer | null {
+  const point = spec.point
+  const na = pEval(num, a)
+  if (rIsZero(na) || pIsZero(den)) return null
+  let m = 0
+  let q = den
+  while (rIsZero(pEval(q, a))) {
+    if (m >= 50) return null
+    const cut = pDivMod(q, [rNeg(a), R1])
+    if (!pIsZero(cut.r)) return null
+    q = cut.q
+    m++
+  }
+  if (m === 0 || pIsZero(q)) return null
+  const qa = pEval(q, a)
+  const topTex = pTex(num, v)
+  const botTex = pTex(den, v)
+  const power = m === 1 ? factorText(v, point) : `${factorText(v, point)}${raise(m)}`
+  const powerTex = m === 1 ? factorTex(v, a) : `${factorTex(v, a)}^{${m}}`
+  const base = (rIsNeg(na) ? -1 : 1) * (rIsNeg(qa) ? -1 : 1)
+  steps.goal('Look at each side')
+  steps.add(
+    `The bottom is ${power} times ${bracket(plainPoly(q, v))}, and that second part is ${plainRat(qa)} at ${v} = ${pointText(point)}, not 0.`,
+    `${botTex}=${powerTex}\\left(${pTex(q, v)}\\right)`
+  )
+  const sides = dirs.map((d) => ({ dir: d, sign: (base * (m % 2 === 1 ? d : 1)) as Side }))
+  for (const s of sides) {
+    const where = s.dir > 0 ? `From the right (${v} above ${pointText(point)})` : `From the left (${v} below ${pointText(point)})`
+    const powerSign = m % 2 === 1 && s.dir < 0 ? 'negative' : 'positive'
+    steps.add(
+      `${where}: ${power} is ${powerSign}, the top is ${plainRat(na)} and the second part is ${plainRat(qa)}, so the fraction is ${s.sign > 0 ? 'positive' : 'negative'} and grows without bound towards ${s.sign > 0 ? '+∞' : `${MINUS}∞`}.`,
+      `\\lim_{${v}\\to ${pointTex(point)}^{${s.dir > 0 ? '+' : '-'}}}\\frac{${topTex}}{${botTex}}=${s.sign > 0 ? '+\\infty' : '-\\infty'}`
+    )
+  }
+  if (sides.length === 1) return { kind: 'infinite', sign: sides[0].sign }
+  const [left, right] = sides
+  if (left.sign === right.sign) {
+    const word = left.sign > 0 ? '+∞' : `${MINUS}∞`
+    steps.add(`Both sides grow without bound towards ${word}, so the limit is ${word}.`, left.sign > 0 ? '\\infty' : '-\\infty')
+    return { kind: 'infinite', sign: left.sign }
+  }
+  steps.add('The two sides go to different infinities, so the limit does not exist.', '\\text{does not exist}')
+  const leftWord = left.sign > 0 ? '+∞' : `${MINUS}∞`
+  const rightWord = right.sign > 0 ? '+∞' : `${MINUS}∞`
+  return { kind: 'none', text: `The limit does not exist: from the left the values grow without bound towards ${leftWord}, and from the right towards ${rightWord}.` }
+}
+
+/** What one side of a limit does, in words, for the sentence that joins the two sides. */
+const sideWord = (answer: LimitAnswer): string =>
+  answer.kind === 'value'
+    ? `settle on ${shownNumber(answer.value, 6)}`
+    : answer.kind === 'infinite'
+      ? `grow without bound towards ${answer.sign > 0 ? '+∞' : `${MINUS}∞`}`
+      : 'do not settle'
+
+/**
+ * The two one-sided answers as one limit: the same exact value or the same infinity from both sides, or else no limit.
+ * Null when a side is not known.
+ */
+function joinSides(left: LimitAnswer, right: LimitAnswer): LimitAnswer | null {
+  if (left.kind === 'unknown' || right.kind === 'unknown') return null
+  if (left.kind === 'value' && right.kind === 'value' && left.exact && right.exact && left.exact.n * right.exact.d === right.exact.n * left.exact.d) {
+    return { kind: 'value', value: left.value, exact: left.exact }
+  }
+  if (left.kind === 'infinite' && right.kind === 'infinite' && left.sign === right.sign) return { kind: 'infinite', sign: left.sign }
+  return { kind: 'none', text: `The limit does not exist: from the left the values ${sideWord(left)}, and from the right they ${sideWord(right)}.` }
+}
+
+/**
+ * A function with |g(x)| in it at a point: each side is the fraction with |g| put as ±g on that side, read exactly by the
+ * rational rules, and the sides are joined. Null when an |…| is not a line through the point or a side is not rational.
+ */
+function absAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
+  const node = parseNode(spec.body)
+  if (!node || !hasAbs(node) || !Number.isFinite(spec.point)) return null
+  const a = shortFraction(spec.point)
+  if (!a) return null
+  const moves: Move[] = []
+  const sides: LimitAnswer[] = []
+  for (const d of dirs) {
+    const rewritten = absRewrite(spec, a, d)
+    if (!rewritten) return null
+    const part = rationalAttempt({ ...spec, body: rewritten.text, side: d }, f, [d])
+    if (!part) return null
+    const head = new Steps()
+    head.goal(d > 0 ? 'From the right' : 'From the left')
+    for (const line of rewritten.lines) head.add(line)
+    moves.push(...head.moves, ...part.moves)
+    sides.push(part.answer)
+  }
+  const answer = sides.length === 1 ? sides[0] : joinSides(sides[0], sides[1])
+  if (!answer || answer.kind === 'unknown') return null
+  return { ...attemptOf(spec, f, dirs, new Steps(), answer, 'Looking at each side of the point'), moves }
+}
+
 function rationalAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
   const parts = ratFunction(spec.body, spec.variable)
   if (!parts || pIsZero(parts.den)) return null
@@ -512,16 +709,19 @@ function rationalAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
       )
       return attemptOf(spec, f, dirs, steps, { kind: 'value', value: rNum(value), exact: value }, 'Cancelling a common factor')
     }
-    return null
+    // The bottom is still 0 after the cancelling and the top is not: each side goes to an infinity, by its sign.
+    const cancelled = infiniteAnswer(num, den, a, spec, v, dirs, steps)
+    return cancelled ? attemptOf(spec, f, dirs, steps, cancelled, 'Looking at each side of the point') : null
   }
 
-  // The top is not 0 at the point and the bottom is: the fraction has no value there, so the values on each side decide.
-  steps.goal('Check values near the point')
+  // The top is not 0 at the point and the bottom is: the fraction has no value there, and each side goes to an infinity.
+  steps.goal('Look at each side')
   steps.add(
     `${putIn(spec.point)}: the top is ${plainRat(na)}, not 0, and the bottom is 0, so it is ${plainRat(na)} over 0, which is not a number.`,
     `\\frac{${rTex(na)}}{0}`
   )
-  return lookupAttempt(spec, f, dirs, steps)
+  const infinite = infiniteAnswer(parts.num, parts.den, a, spec, v, dirs, steps)
+  return infinite ? attemptOf(spec, f, dirs, steps, infinite, 'Looking at each side of the point') : null
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -636,6 +836,9 @@ function isPointRounding(f: Fn, point: number, value: number): boolean {
 /** The function's value at the point, when it is a number and the values next to the point agree with it. */
 function substitutionAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
   if (!Number.isFinite(spec.point)) return null
+  // Putting the point in is exact only where the function is continuous: a floor, a sign or a condition may jump
+  // at the point and still give a number there, so only the continuous pieces are read this way.
+  if (!continuousBody(spec.body, spec.variable) || !singularitiesAvoided(spec.body, spec.variable, spec.point)) return null
   const raw = f(spec.point)
   if (!Number.isFinite(raw)) return null
   // cos(π/2) comes out as 6·10⁻¹⁷; a student is shown 0, not a 17-digit decimal.
@@ -769,12 +972,13 @@ function solve(spec: LimitSpec, depth: number): Attempt | null {
   const f = compileLimitBody(spec.body, spec.variable)
   if (!f) return null
   const dirs = approachDirs(spec.point, spec.side)
+  // Only exact rules here: the values near the point are never a checked answer (see workOutLimit).
   const methods: (() => Attempt | null)[] = [
     () => rationalAttempt(spec, f, dirs),
+    () => absAttempt(spec, f, dirs),
     () => standardAttempt(spec, f, dirs),
     () => substitutionAttempt(spec, f, dirs),
-    () => lhopitalAttempt(spec, f, dirs, depth),
-    () => lookupAttempt(spec, f, dirs)
+    () => lhopitalAttempt(spec, f, dirs, depth)
   ]
   for (const method of methods) {
     const attempt = method()
@@ -783,7 +987,14 @@ function solve(spec: LimitSpec, depth: number): Attempt | null {
   return null
 }
 
-/** Work a limit out: the answer, and the working that shows it, every line checked. */
+/** Said instead of a working when only the values near the point are left: an estimate, never a checked answer. */
+const NOT_EXACT = 'I could not work this limit out by a rule I can check, so this value is only an estimate from the values near the point. I will not show a working for it.'
+
+/**
+ * Work a limit out: the answer, and the working that shows it, every line checked. An answer from an exact rule is
+ * checked when the function's values agree with it. When no rule answers, the values near the point may give an
+ * estimate: that is shown as an estimate (checked is false, and there is no working), never as a checked answer.
+ */
 export function workOutLimit(lim: LimitCall | LimitSpec): LimitOutcome {
   const spec: LimitSpec = {
     body: lim.body,
@@ -793,19 +1004,26 @@ export function workOutLimit(lim: LimitCall | LimitSpec): LimitOutcome {
     ...(lim.pointAsTyped === undefined ? {} : { pointAsTyped: lim.pointAsTyped })
   }
   const refused = refusal(spec)
-  if (refused) return { working: failed('Limit', limitTexOf(spec), refused), answer: { kind: 'unknown', reason: refused } }
+  if (refused) return { working: failed('Limit', limitTexOf(spec), refused), answer: { kind: 'unknown', reason: refused }, checked: false }
   const found = solve(spec, 0)
-  if (!found) return { working: failed('Limit', limitTexOf(spec), NOT_CHECKED), answer: { kind: 'unknown', reason: NOT_CHECKED } }
-  const working: Working = {
-    title: 'Limit',
-    input: limitTexOf(spec),
-    method: found.method,
-    moves: found.moves,
-    answers: [{ label: 'Answer', tex: found.answerTex }],
-    check: found.check,
-    checked: 'ok'
+  if (found) {
+    const working: Working = {
+      title: 'Limit',
+      input: limitTexOf(spec),
+      method: found.method,
+      moves: found.moves,
+      answers: [{ label: 'Answer', tex: found.answerTex }],
+      check: found.check,
+      checked: 'ok'
+    }
+    return { working, answer: found.answer, checked: true }
   }
-  return { working, answer: found.answer }
+  const f = compileLimitBody(spec.body, spec.variable)
+  const estimate = f ? lookupAttempt(spec, f, approachDirs(spec.point, spec.side)) : null
+  if (estimate && estimate.checked && estimate.answer.kind !== 'unknown') {
+    return { working: failed('Limit', limitTexOf(spec), NOT_EXACT), answer: estimate.answer, checked: false }
+  }
+  return { working: failed('Limit', limitTexOf(spec), NOT_CHECKED), answer: { kind: 'unknown', reason: NOT_CHECKED }, checked: false }
 }
 
 /**

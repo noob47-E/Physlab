@@ -340,14 +340,14 @@ describe('a claim about a sampled or exact value is judged at the figures it is 
 })
 
 describe('the check line prints the values of the function the student typed', () => {
-  it('prints f(x) = y pairs that are sin x over x cubed at the printed x (1e10 near 0, not 1/(3x^2))', () => {
-    const w = workingFor(String.raw`\lim_{x\to0}\frac{\sin x}{x^{3}}`)
+  it('prints f(x) = y pairs for sin 3x over x at the printed x, the function the student typed', () => {
+    const w = workingFor(String.raw`\lim_{x\to0}\frac{\sin 3x}{x}`)
     expect(w.checked).toBe('ok')
     const pairs = [...(w.check ?? '').replace(/−/g, '-').matchAll(/f\((-?[\d.]+)\) = (-?[\d.]+)/g)]
     expect(pairs.length).toBe(2)
     for (const [, x, shown] of pairs) {
       const xv = Number(x)
-      const truth = Math.sin(xv) / xv ** 3
+      const truth = Math.sin(3 * xv) / xv
       expect(Math.abs(Number(shown) - truth) / Math.abs(truth)).toBeLessThan(1e-4)
     }
   })

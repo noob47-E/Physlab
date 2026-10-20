@@ -56,6 +56,18 @@ export function limitCall(src: string): LimitCall | null {
     if (claimed === '') return null
   }
   const args = splitArgs(s.slice(4, close))
+  // The arrow form lim(x->a, f) that a student may type: the letter and the point first, then the expression.
+  const arrow = args.length === 2 ? /^([A-Za-z])\s*->\s*(.+)$/.exec(args[0]) : null
+  if (arrow && args[1] !== '') {
+    return {
+      body: args[1],
+      variable: arrow[1],
+      point: pointOf(arrow[2]),
+      pointAsTyped: arrow[2].trim(),
+      side: 0,
+      ...(claimed === undefined ? {} : { claimed })
+    }
+  }
   if (args.length < 3 || args.length > 4 || args[0] === '') return null
   const side = args[3] === undefined ? 0 : Number(args[3])
   if (side !== 0 && side !== 1 && side !== -1) return null

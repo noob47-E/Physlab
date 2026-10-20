@@ -270,21 +270,23 @@ function textbookCalculus(name: 'diff' | 'integrate', args: string[], src: strin
  * The value is the one the working checks (math/pure/limitWorking.ts), so the card and the working cannot part company.
  */
 function limitResult(lim: LimitCall, src: string, angle: 'deg' | 'rad'): EvalResult {
-  const { answer } = workOutLimit(lim)
+  const { answer, checked } = workOutLimit(lim)
   const claim = lim.claimed === undefined ? null : claimSentence(answer, lim.claimed)
   // Limits are worked in radians whatever the screen says (the rule for calculus), so a DEG card says so when the line has an angle in it.
   const note = angle === 'deg' && usesAngles(lim.body) ? [CALCULUS_IN_RADIANS] : []
   // A value read from the numbers near the point, with no rule behind it, is four figures, and the card says so.
   const estimated = answer.kind === 'value' && answer.check !== undefined ? ['Found from the values near the point, not by a rule, so the last figure may be off.'] : []
-  const extra = [...(claim ? [claim.text] : []), ...estimated, ...note]
+  // An infinity or "does not exist" that no exact rule gave is an estimate too: the card says it is not proved.
+  const unproved = !checked && (answer.kind === 'infinite' || answer.kind === 'none') ? ['Not proved by a rule: this is read from the values near the point.'] : []
+  const extra = [...(claim ? [claim.text] : []), ...estimated, ...unproved, ...note]
   const shared = { src, extra: extra.length ? extra : undefined, solved: false }
   switch (answer.kind) {
     case 'value':
-      return { ...shared, main: shownNumber(answer.value, 10), exact: answer.exact && answer.exact.d !== 1n ? rTex(answer.exact) : null, value: answer.value }
+      return { ...shared, main: shownNumber(answer.value, 10), exact: answer.exact && answer.exact.d !== 1n ? rTex(answer.exact) : null, value: answer.value, ...(checked ? {} : { approximate: true }) }
     case 'infinite':
-      return { ...shared, main: answer.sign > 0 ? '∞' : '−∞', exact: null }
+      return { ...shared, main: answer.sign > 0 ? '∞' : '−∞', exact: null, ...(checked ? {} : { approximate: true }) }
     case 'none':
-      return { ...shared, main: answer.text, exact: null }
+      return { ...shared, main: answer.text, exact: null, ...(checked ? {} : { unconfirmed: true }) }
     case 'unknown':
       return { ...shared, main: '', exact: null, error: { sentence: answer.reason } }
   }
