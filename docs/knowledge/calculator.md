@@ -11,9 +11,11 @@ Numbers in general are in `numbers.md`; algebra loading in `cas.md`; exact pure 
   the Variables box), `tangentAt`, `answerStillUnder` (an answer is dropped after a DEG/RAD or base switch).
 - `calc/format.ts` — `calcNum`, `calcEng`, `mathFormatOptions` (complex/matrix/unit numbers at 15 figures).
 - `calc/roots.ts` — `quadraticRoots`, `orderRoots`, `polynomialRootRows`: THE root order. `calc/labels.ts` — x₁, θ₂ labels.
-- `calc/exactComplex.ts` — the = card's complex pair of a quadratic with whole-number or simple-fraction coefficients,
-  written as a textbook does (1 ± √7 i, −1/2 ± (√3/2)i). It is exact from the typed text, and said only when it agrees
-  with the search's numbers; anything else keeps the decimal pair. Guard: tests/cardExactComplex.test.ts.
+- `calc/exactComplex.ts` — the complex pair of a quadratic with whole-number or simple-fraction coefficients, written as
+  a textbook does (1 ± √7 i, −1/2 ± (√3/2)i) on the = card (`exactQuadratic`), the command bar's equation in x
+  (`exactPairFor`, lang/commands/graph.ts) and the Numbers screen's boxes (`exactQuadraticOf`, panels/calcModes.tsx).
+  It is exact from the typed text, and said only when it agrees with the search's numbers; anything else keeps the
+  decimal pair. Guard: tests/cardExactComplex.test.ts.
 - `calc/angle.ts` — `withAngle`: every evaluation runs in the SCREEN's unit and puts the shared mode back.
 - `calc/modeLines.ts` — Table, Matrix, Spreadsheet and Units lines (each inside `withAngle`); `calc/sheet.ts` (CIRC),
   `calc/stats.ts` (`predictY` through the curve's own compiler), `calc/units.ts` (unit conversion errors `unitRefusal` and `TYPE_INSTEAD` shared with the bar), `calc/keys.ts`,

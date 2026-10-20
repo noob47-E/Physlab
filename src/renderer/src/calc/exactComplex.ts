@@ -12,7 +12,7 @@
 import { keypadToMath } from './engine'
 import { eSub, parseExpr, varsOf } from '../math/pure/mono'
 import { pTrim, polyFromExpr } from '../math/pure/poly'
-import { rAbs, rDiv, rIsNeg, rIsZero, rMul, rNeg, rNum, rStr, rSub, rat, type Rat } from '../math/pure/rat'
+import { rAbs, rDiv, rFromNumber, rIsNeg, rIsZero, rMul, rNeg, rNum, rStr, rSub, rat, type Rat } from '../math/pure/rat'
 import { simplifySurd } from '../math/pure/cxpoly'
 
 /** The coefficients a, b, c of a·x² + b·x + c = 0, highest power first, as exact fractions. */
@@ -38,12 +38,31 @@ export function exactQuadratic(left: string, right: string): ExactQuadratic | nu
     if (varsOf(e).some((name) => name !== 'x')) return null
     const p = pTrim(polyFromExpr(e, 'x').poly)
     if (p.length !== 3) return null
-    if (p.some((c) => c.d > SIMPLE_DENOMINATOR)) return null
-    return [p[2], p[1], p[0]]
+    return simpleQuadratic([p[2], p[1], p[0]])
   } catch {
     // The reader refused the line (a letter it does not know, a bracket over a bracket): the decimal form stands.
     return null
   }
+}
+
+/**
+ * The exact coefficients of a quadratic whose three numbers were typed into the Numbers screen's boxes, highest power
+ * first; null for any other count. A typed decimal reads as it was written (2.5 is 5/2), so a rounded decimal such as
+ * 0.3333 has a denominator past the limit and keeps the decimal form.
+ */
+export function exactQuadraticOf(coeffs: number[]): ExactQuadratic | null {
+  if (coeffs.length !== 3) return null
+  try {
+    return simpleQuadratic([rFromNumber(coeffs[0]), rFromNumber(coeffs[1]), rFromNumber(coeffs[2])])
+  } catch {
+    // A number that is not finite cannot be read as a fraction: the decimal form stands.
+    return null
+  }
+}
+
+/** The coefficients when each one is a simple fraction (see SIMPLE_DENOMINATOR), else null. */
+function simpleQuadratic(p: [Rat, Rat, Rat]): ExactQuadratic | null {
+  return p.some((c) => c.d > SIMPLE_DENOMINATOR) ? null : p
 }
 
 /** The pair in parts: its real part, and the imaginary part as (imaginary coefficient) × √radical, radical 1 being none. */
@@ -103,9 +122,18 @@ function imaginaryTerm(im: Rat, radical: bigint): string {
  * `numeric` holds the search's coefficients, highest power first, and `pair` its root with a positive imaginary part.
  */
 export function exactPairText(exact: ExactQuadratic, numeric: number[], pair: { re: number; im: number }): string | null {
+  if (numeric.length !== 3 || exact.some((c, k) => !close(rNum(c), numeric[k]))) return null
+  return exactPairFor(exact, pair)
+}
+
+/**
+ * The exact pair of a quadratic, when the search's pair `pair` (real part and positive imaginary part) agrees with it to
+ * rounding; null otherwise. The command bar's search solves the same typed polynomial and keeps no coefficients of its
+ * own to compare, so the pair is the check there: a pair that is not the search's is never written.
+ */
+export function exactPairFor(exact: ExactQuadratic, pair: { re: number; im: number }): string | null {
   const root = exactPair(exact)
   if (!root) return null
-  if (numeric.length !== 3 || exact.some((c, k) => !close(rNum(c), numeric[k]))) return null
   const exactIm = rNum(root.im) * (root.radical === 1n ? 1 : Math.sqrt(Number(root.radical)))
   if (!close(rNum(root.re), pair.re) || !close(exactIm, pair.im)) return null
   const im = imaginaryTerm(root.im, root.radical)

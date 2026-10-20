@@ -8,7 +8,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
-import { exactPairText, exactQuadratic } from '../src/renderer/src/calc/exactComplex'
+import { exactPairFor, exactPairText, exactQuadratic, exactQuadraticOf } from '../src/renderer/src/calc/exactComplex'
 import { beyondTheReals } from '../src/renderer/src/calc/roots'
 import { calcNum } from '../src/renderer/src/calc/format'
 import { rat } from '../src/renderer/src/math/pure/rat'
@@ -116,5 +116,27 @@ describe('the exact pair is the same number as the decimal pair', () => {
     expect(exactQuadratic('x^2+A', '0')).toBeNull()
     expect(exactQuadratic('x^2+0.3333', '0')).toBeNull()
     expect(exactQuadratic('x^2+1', '0')).toEqual([rat(1n), rat(0n), rat(1n)])
+  })
+})
+
+describe('the bar and the Numbers screen write the same exact pair as the = card', () => {
+  it('the Numbers screen reads its typed boxes exactly: whole numbers and simple decimals, but not a rounded decimal', () => {
+    expect(exactQuadraticOf([1, -2, 8])).toEqual([rat(1n), rat(-2n), rat(8n)])
+    expect(exactQuadraticOf([1, 2.5, 7])).toEqual([rat(1n), rat(5n, 2n), rat(7n)])
+    expect(exactQuadraticOf([0.3333, 1, 1])).toBeNull()
+    expect(exactQuadraticOf([1, 1])).toBeNull()
+    expect(exactQuadraticOf([NaN, 1, 1])).toBeNull()
+  })
+
+  it('the Numbers screen call says the exact pair for x² − 2x + 8 = 0, as the = card does', () => {
+    const c = [1, -2, 8]
+    expect(beyondTheReals(c, 0, exactQuadraticOf(c))).toEqual({ sentence: `${NONE}1 ± √7 i` })
+  })
+
+  it('exactPairFor writes the search’s pair exactly, and refuses one that is not the search’s', () => {
+    const exact = exactQuadratic('x^2+4', '0')
+    expect(exact).not.toBeNull()
+    expect(exactPairFor(exact!, { re: 0, im: 2 })).toBe('±2i')
+    expect(exactPairFor(exact!, { re: 0, im: 2.5 })).toBeNull()
   })
 })
