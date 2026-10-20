@@ -100,12 +100,20 @@ function realRootsOf(working: Working): number[] {
   return found
 }
 
+/** The sentence a working gives when no value works: the rational method's "no value of x works" or a quadratic's "No real solution". */
+const NO_SOLUTION_TEX = /^\\text\{(no value of [a-zA-Z] works|No real solution)\}$/
+
 function agreement(card: EvalResult, working: Working): Agreement {
   const first = working.answers[0]
   // Roots: every root of the card is a root of the working; and when the card claims all of them, the working has no real root it left out.
   if (card.roots) {
     const theirs = realRootsOf(working)
-    if (theirs.length === 0) return 'unknown'
+    if (theirs.length === 0) {
+      // A working that says no value works, and passed its own check, rules out every root the quick search gives (a removable
+      // singularity, or a number too big to confirm). That is a disagreement that can be shown, not a case that cannot be compared.
+      const saysNoSolution = working.checked === 'ok' && working.answers.length === 1 && NO_SOLUTION_TEX.test(working.answers[0].tex)
+      return card.roots.length > 0 && saysNoSolution ? 'differ' : 'unknown'
+    }
     const has = (list: number[], r: number): boolean => list.some((q) => near(q, r, 1e-8))
     if (!card.roots.every((r) => has(theirs, r))) return 'differ'
     if (card.rootsComplete && !theirs.every((q) => has(card.roots ?? [], q))) return 'differ'

@@ -9,6 +9,8 @@ import { evaluate } from 'mathjs'
 import { finishStep, sentenceFor } from '../src/renderer/src/math/steps/sentences'
 import { usePure } from '../src/renderer/src/math/pure/store'
 import { createDefaultStepRouter } from '../src/renderer/src/math/steps/solve'
+import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
+import { reconcile } from '../src/renderer/src/calc/working'
 import {
   checkRationalEnding,
   defaultCheckAdapter,
@@ -314,5 +316,48 @@ describe('Rational equations: what the method declines', () => {
   it('the complex domain is not worked by this method', () => {
     const w = router.solve({ job: 'solve', input: '1/x = 2', variable: 'x', domain: 'complex' })
     expect(w.method).not.toBe('Rational equation')
+  })
+})
+
+describe('Rational equations: the "=" card and the working never disagree silently', () => {
+  /** The card the Calculator gives for a line, joined with its working the way the screen joins them. */
+  const joined = (text: string, latex: string) => {
+    const working = calculatorWorking(latex)
+    const card = evaluateInput('COMP', text, { vars: {}, ans: 0, angle: 'deg' })
+    if (!card) throw new Error(`the quick answer for ${text} should be there`)
+    return { card, working, r: reconcile(card, working) }
+  }
+
+  // Each of these lines has a quick root that is an excluded value (x = 1) or a huge number the search cannot confirm, while
+  // the working, checked by putting it back together, says there is no solution at all. The card must not keep the root.
+  const noSolutionLines: Array<[string, string]> = [
+    ['(x^2-1)/(x-1)=2', `${frac('x^2-1', 'x-1')}=2`],
+    ['1/(1/(x-1))=0', `${frac('1', frac('1', 'x-1'))}=0`],
+    ['(x-1)^2/(x-1)=0', `${frac('(x-1)^2', 'x-1')}=0`],
+    ['2/(x-1)+3/(x+1)=(5x+1)/(x^2-1)', `${frac('2', 'x-1')}+${frac('3', 'x+1')}=${frac('5x+1', 'x^2-1')}`],
+    ['x/(x-1)^2=1/(x-1)', `${frac('x', '(x-1)^2')}=${frac('1', 'x-1')}`]
+  ]
+
+  it.each(noSolutionLines)('%s: the working says no value of x works, so the quick root is not kept on the card', (text, latex) => {
+    const { r } = joined(text, latex)
+    expect(r.verdict).toBe('differ')
+    expect(r.result.main).toBe('no value of x works')
+    expect(r.result.roots).toBeUndefined()
+    expect(r.result.unconfirmed).toBe(true)
+    expect(r.line).toMatch(/^PHYSLAB_CHECK calc-disagree /)
+  })
+
+  it('1/x + 1/(x - 1) = 2: the quick roots and the working agree, so the card stands as it is', () => {
+    const { r } = joined('1/x+1/(x-1)=2', `${frac('1', 'x')}+${frac('1', 'x-1')}=2`)
+    expect(r.verdict).toBe('agree')
+    expect(r.result.unconfirmed).toBeFalsy()
+  })
+
+  it('a working whose own check failed does not overrule the quick root', () => {
+    const { card, working } = joined('(x^2-1)/(x-1)=2', `${frac('x^2-1', 'x-1')}=2`)
+    if (!working) throw new Error('the working should be there')
+    const r = reconcile(card, { ...working, checked: 'failed' })
+    expect(r.verdict).toBe('unchecked')
+    expect(r.result.main).toBe('x = 1')
   })
 })
