@@ -361,3 +361,65 @@ describe('Rational equations: the "=" card and the working never disagree silent
     expect(r.result.main).toBe('x = 1')
   })
 })
+
+describe('Rational equations: the break-it cases stay honest', () => {
+  // Found by an independent numeric probe (every answer put back into the equation as typed). None of these may come out
+  // with a wrong or excluded value marked checked; a refusal is a pass.
+  it('x/(x + 1) = 1 − 1/(x + 1) is a whole line of answers (every x except −1): no root list is claimed', () => {
+    const w = calculatorWorking(`${frac('x', 'x+1')}=1-${frac('1', 'x+1')}`)
+    expect(w?.checked === 'ok' && (w?.answers.length ?? 0) > 0).toBe(false)
+    expect(w?.answers ?? []).toEqual([])
+  })
+
+  it('1/(x − 2/(x + 1)) = 1: −2, −1 and 1 are all named as excluded, and ±√3 are the kept roots', () => {
+    const w = calculatorWorking(`${frac('1', `x-${frac('2', 'x+1')}`)}=1`)
+    expect(w?.method).toBe('Rational equation')
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['-\\sqrt{3}', '\\sqrt{3}'])
+    expect(w?.moves[0].head).toBe('x cannot be −2, −1 or 1, because a denominator would be 0.')
+    for (const value of ['-sqrt(3)', 'sqrt(3)']) {
+      expect(holdsInOriginal('(1)/(x-(2)/(x+1))=1', value, ['-2', '-1', '1'])).toBe(true)
+    }
+  })
+
+  it('x²/x = 0: the only root of the cleared polynomial is the excluded 0, so the working says no value works', () => {
+    const w = calculatorWorking(`${frac('x^2', 'x')}=0`)
+    expect(w?.method).toBe('Rational equation')
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['\\text{no value of x works}'])
+    expect(w?.moves[0].head).toBe('x cannot be 0, because a denominator would be 0.')
+  })
+
+  it('1/x² = 1/x: 0 is excluded and x = 1 is kept', () => {
+    const w = calculatorWorking(`${frac('1', 'x^2')}=${frac('1', 'x')}`)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['1'])
+    expect(holdsInOriginal('(1)/(x^2)-(1)/(x)=0', '1', ['0'])).toBe(true)
+  })
+
+  it('1/(x − 1)³ = 1/(x − 1): the multiplier takes the highest power, so x = 0 or x = 2 (1 excluded)', () => {
+    const w = calculatorWorking(`${frac('1', '(x-1)^3')}=${frac('1', 'x-1')}`)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['0', '2'])
+    expect(holdsInOriginal('(1)/((x-1)^3)-(1)/(x-1)=0', '0', ['1'])).toBe(true)
+    expect(holdsInOriginal('(1)/((x-1)^3)-(1)/(x-1)=0', '2', ['1'])).toBe(true)
+  })
+
+  it('(x² − 9)/(x + 3) = 0: x = −3 is excluded, so the one root kept is 3', () => {
+    const w = calculatorWorking(`${frac('x^2-9', 'x+3')}=0`)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['3'])
+    expect(holdsInOriginal('((x^2-9)/(x+3))=0', '3', ['-3'])).toBe(true)
+  })
+
+  it('the same work is done for a letter other than x: 1/a + 1/(a − 1) = 2 keeps the same two roots', () => {
+    const w = calculatorWorking(`${frac('1', 'a')}+${frac('1', 'a-1')}=2`)
+    expect(w?.checked).toBe('ok')
+    expect(w?.answers.map((a) => a.tex)).toEqual(['\\frac{2-\\sqrt{2}}{2}', '\\frac{2+\\sqrt{2}}{2}'])
+    expect(w?.moves[0].head).toBe('a cannot be 0 or 1, because a denominator would be 0.')
+    for (const value of ['(2-sqrt(2))/2', '(2+sqrt(2))/2']) {
+      const a = Number(evaluate(value))
+      expect(Math.abs(Number(evaluate('(1)/(a)+(1)/(a-1)', { a })) - 2)).toBeLessThan(1e-9)
+    }
+  })
+})
