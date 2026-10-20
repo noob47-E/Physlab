@@ -14,6 +14,8 @@ export interface LimitCall {
   variable: string
   /** The point: a number, Infinity or -Infinity. NaN when the point is not a number, which the working refuses in words. */
   point: number
+  /** The point as it was typed (1/3, pi, sqrt(2)), so the working can show it as written rather than as its digits. */
+  pointAsTyped?: string
   /** 0 for both sides, 1 for x coming from above, −1 for x coming from below. */
   side: 0 | 1 | -1
   /** The "= …" after the limit, as linear text: what the line says the limit is. Absent when there is no "=". */
@@ -57,5 +59,12 @@ export function limitCall(src: string): LimitCall | null {
   if (args.length < 3 || args.length > 4 || args[0] === '') return null
   const side = args[3] === undefined ? 0 : Number(args[3])
   if (side !== 0 && side !== 1 && side !== -1) return null
-  return { body: args[0], variable: args[1], point: pointOf(args[2]), side: side as 0 | 1 | -1, ...(claimed === undefined ? {} : { claimed }) }
+  return {
+    body: args[0],
+    variable: args[1],
+    point: pointOf(args[2]),
+    pointAsTyped: args[2].trim(),
+    side: side as 0 | 1 | -1,
+    ...(claimed === undefined ? {} : { claimed })
+  }
 }

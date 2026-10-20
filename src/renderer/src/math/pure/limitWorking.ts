@@ -18,18 +18,18 @@ import { math, preprocess } from '../expr'
 import { toPrecisionHalfAway } from '../format'
 import { limitCall, type LimitCall } from '../limitCall'
 import {
-  FINEST_G,
   behaviourOf,
   compileLimitBody,
   derivativeMatches,
   holdsGrows,
   holdsValue,
-  samplesOf,
+  readingOf,
+  settledValue,
   sidesAgree,
   tendsToZero,
   type Behaviour,
   type Fn,
-  type Sample,
+  type Reading,
   type Side
 } from '../limitSamples'
 import { parseExpr, parseFraction, varsOf } from './mono'
@@ -42,6 +42,8 @@ interface LimitSpec {
   body: string
   variable: string
   point: number
+  /** The point as typed, when it was typed as an expression: shown as written, since its digits are not the point. */
+  pointAsTyped?: string
   side: 0 | 1 | -1
 }
 
@@ -86,7 +88,13 @@ export function shownNumber(v: number, figures = 6): string {
 const texNumber = (v: number, figures = 10): string => shownNumber(v, figures).replace(new RegExp(MINUS, 'g'), '-')
 
 const pointText = (p: number): string => (Number.isFinite(p) ? shownNumber(p, 10) : p > 0 ? '∞' : `${MINUS}∞`)
-const pointTex = (p: number): string => (Number.isFinite(p) ? rTex(rFromNumber(p)) : p > 0 ? '\\infty' : '-\\infty')
+// A point is shown as written when it is a short fraction; a double such as 1/3 is shown as its digits, never as the
+// long fraction its 16 digits would make.
+const pointTex = (p: number): string => {
+  if (!Number.isFinite(p)) return p > 0 ? '\\infty' : '-\\infty'
+  const r = shortFraction(p)
+  return r ? rTex(r) : texNumber(p, 10)
+}
 
 const RAISED = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
 
@@ -144,10 +152,20 @@ const plainPoly = (p: Poly, v: string): string => texToPlain(pTex(p, v)).replace
 /** Brackets round a phrase that has a space or a sign in it, so "(x + 1)" reads as one factor. */
 const bracket = (s: string): string => (/[\s+−-]/.test(s) ? `(${s})` : s)
 
+/**
+ * The point for the input line. A point that is a short fraction is written as one; any other point is shown as the
+ * student typed it (1/3 as \frac{1}{3}, pi as \pi), because its decimal digits are not the point the student asked for.
+ */
+function pointLatexOf(spec: LimitSpec): string {
+  if (!Number.isFinite(spec.point) || shortFraction(spec.point) || !spec.pointAsTyped) return pointTex(spec.point)
+  const node = parseNode(spec.pointAsTyped)
+  return node ? texOf(stripParens(node)) : pointTex(spec.point)
+}
+
 /** The limit as LaTeX, the way the working shows what it was asked: \lim_{x\to1} then the expression. */
 function limitTexOf(spec: LimitSpec): string {
   const sup = spec.side > 0 ? '^{+}' : spec.side < 0 ? '^{-}' : ''
-  const sub = Number.isFinite(spec.point) ? `${spec.variable}\\to ${pointTex(spec.point)}${sup}` : `${spec.variable}\\to ${pointTex(spec.point)}`
+  const sub = Number.isFinite(spec.point) ? `${spec.variable}\\to ${pointLatexOf(spec)}${sup}` : `${spec.variable}\\to ${pointTex(spec.point)}`
   let body = spec.body
   try {
     const node = stripParens(math.parse(preprocess(spec.body)))
@@ -250,10 +268,10 @@ function linearCoefficient(node: MathNode, v: string): Rat | null {
 }
 
 /** What the function does on each side, as the samples read it, for a finite point or for ±∞. */
-function sideReadings(f: Fn, point: number, dirs: Side[]): { dir: Side; samples: Sample[]; b: Behaviour }[] {
+function sideReadings(f: Fn, point: number, dirs: Side[]): { dir: Side; reading: Reading; b: Behaviour }[] {
   return dirs.map((dir) => {
-    const samples = samplesOf(f, point, dir)
-    return { dir, samples, b: behaviourOf(samples) }
+    const reading = readingOf(f, point, dir)
+    return { dir, reading, b: behaviourOf(reading) }
   })
 }
 
@@ -275,10 +293,9 @@ function answerFromSides(sides: { dir: Side; b: Behaviour }[]): LimitAnswer | nu
   return { kind: 'none', text: noLimitText(left, right) }
 }
 
-/** A value found from the samples: four figures, or 0 when it is within what the closest sample can tell from 0. */
+/** A value found from the samples: four figures, with the unrounded number kept for the claim check. */
 function estimate(c: number): LimitAnswer {
-  const value = Math.abs(c) <= 10 / FINEST_G ? 0 : Number(toPrecisionHalfAway(c, 4))
-  return { kind: 'value', value, exact: null, check: c }
+  return { kind: 'value', value: settledValue(c), exact: null, check: c }
 }
 
 /** How one side goes, in words: it settles on a number, or grows without bound towards a sign of ∞. */
@@ -299,18 +316,18 @@ function texOfAnswer(answer: LimitAnswer): string {
   return ''
 }
 
-/** Whether a claimed answer agrees with the function's values at points on each side (every sample, at its own size). */
+/** Whether a claimed answer agrees with the function's values at points on each side (every sample and probe). */
 function verifies(f: Fn, point: number, dirs: Side[], answer: LimitAnswer): boolean {
   switch (answer.kind) {
     case 'value': {
       const target = answer.check ?? answer.value
-      return dirs.every((dir) => holdsValue(samplesOf(f, point, dir), target))
+      return dirs.every((dir) => holdsValue(readingOf(f, point, dir), target))
     }
     case 'infinite':
-      return dirs.every((dir) => holdsGrows(samplesOf(f, point, dir), answer.sign))
+      return dirs.every((dir) => holdsGrows(readingOf(f, point, dir), answer.sign))
     case 'none': {
       if (dirs.length < 2) return false
-      const bs = dirs.map((dir) => behaviourOf(samplesOf(f, point, dir)))
+      const bs = dirs.map((dir) => behaviourOf(readingOf(f, point, dir)))
       return bs.every((b) => b.kind !== 'unclear') && !sidesAgree(bs[0], bs[1])
     }
     default:
@@ -321,8 +338,9 @@ function verifies(f: Fn, point: number, dirs: Side[], answer: LimitAnswer): bool
 /** The check line: the values nearest the point on each side, and the answer they support. */
 function checkLine(spec: LimitSpec, f: Fn, dirs: Side[], answer: LimitAnswer): string {
   const nearest = dirs.map((dir) => {
-    const last = samplesOf(f, spec.point, dir).pop()
-    return last ? `f(${shownNumber(last.x, 6)}) = ${shownNumber(last.v, 6)}` : ''
+    const samples = readingOf(f, spec.point, dir).samples
+    const last = samples[samples.length - 1]
+    return `f(${shownNumber(last.x, 6)}) = ${shownNumber(last.v, 6)}`
   })
   const conclusion =
     answer.kind === 'value'
@@ -357,6 +375,36 @@ function substitutedTex(top: Rat, bottom: Rat, value: Rat): string {
   return rTex(value) === mid ? mid : `${mid}=${rTex(value)}`
 }
 
+/**
+ * A polynomial over its own leading power, at x: the sum of c_k x^(k − deg), which has no term larger than the leading
+ * one. The quotient of two polynomials is this quotient times x^(deg top − deg bottom), so a power such as x^100 far out
+ * along ∞ never has to be formed as a number that overflows.
+ */
+function scaledAt(p: Poly, x: number): number {
+  const deg = pDeg(p)
+  let sum = 0
+  for (let k = 0; k < p.length; k++) {
+    const c = p[k]
+    if (c && !rIsZero(c)) sum += rNum(c) * x ** (k - deg)
+  }
+  return sum
+}
+
+/**
+ * The function read in doubles, and where a double overflows (x^100 far out along ∞ is ∞/∞ although the quotient of
+ * two such powers is small), read from the two polynomials instead, each over its own leading power. A point that is a
+ * double is only read as the rounding of that double, and the result is good to the rounding of a double.
+ */
+function quotientFn(f: Fn, num: Poly, den: Poly): Fn {
+  return (x: number): number => {
+    const v = f(x)
+    if (Number.isFinite(v) || !Number.isFinite(x)) return v
+    const bottom = scaledAt(den, x)
+    if (bottom === 0) return NaN
+    return (scaledAt(num, x) / bottom) * x ** (pDeg(num) - pDeg(den))
+  }
+}
+
 function rationalAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
   const parts = ratFunction(spec.body, spec.variable)
   if (!parts || pIsZero(parts.den)) return null
@@ -369,6 +417,9 @@ function rationalAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
     const m = Math.max(pDeg(parts.num), pDeg(parts.den), 0)
     const dn = pDeg(parts.num)
     const dd = pDeg(parts.den)
+    // The values the answer is checked against are read in doubles, and exactly where a double overflows: a power such
+    // as x^100 far out along ∞ overflows, and the exact quotient of the two powers is still small (see quotientFn).
+    const ratioFn = quotientFn(f, parts.num, parts.den)
     steps.goal('Divide by the highest power')
     steps.add(
       `Divide every term of the top and the bottom by ${m === 0 ? '1' : xPowText(m, v)}, the highest power of ${v} in either: the top becomes ${dividedForm(parts.num, m, v, true)} and the bottom ${dividedForm(parts.den, m, v, true)}.`,
@@ -380,22 +431,25 @@ function rationalAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
     )
     if (dn < dd) {
       steps.add(`Every term with ${v} in the top goes to 0 and the bottom stays a number other than 0, so the limit is 0.`, '0')
-      return attemptOf(spec, f, dirs, steps, { kind: 'value', value: 0, exact: R0 }, 'Dividing by the highest power')
+      return attemptOf(spec, ratioFn, dirs, steps, { kind: 'value', value: 0, exact: R0 }, 'Dividing by the highest power')
     }
     if (dn === dd) {
       const ratio = rDiv(pLead(parts.num), pLead(parts.den))
       steps.add(`The top goes to ${plainRat(pLead(parts.num))} and the bottom to ${plainRat(pLead(parts.den))}, so the limit is ${plainRat(ratio)}.`, rTex(ratio))
-      return attemptOf(spec, f, dirs, steps, { kind: 'value', value: rNum(ratio), exact: ratio }, 'Dividing by the highest power')
+      return attemptOf(spec, ratioFn, dirs, steps, { kind: 'value', value: rNum(ratio), exact: ratio }, 'Dividing by the highest power')
     }
     // The top grows faster than the bottom: the sign is the ratio's, turned round by an odd power on the left.
     const ratio = rDiv(pLead(parts.num), pLead(parts.den))
     const flip = spec.point < 0 && (dn - dd) % 2 === 1 ? -1 : 1
     const sign: Side = (rIsNeg(ratio) ? -1 : 1) * flip === 1 ? 1 : -1
     steps.add(`The top grows without bound and the bottom settles, so the limit is ${sign > 0 ? '∞' : `${MINUS}∞`}.`, sign > 0 ? '\\infty' : '-\\infty')
-    return attemptOf(spec, f, dirs, steps, { kind: 'infinite', sign }, 'Dividing by the highest power')
+    return attemptOf(spec, ratioFn, dirs, steps, { kind: 'infinite', sign }, 'Dividing by the highest power')
   }
 
-  const a = rFromNumber(spec.point)
+  // The exact route needs an exact point. A decimal double such as 1/3 is not one, so the exact steps are skipped and
+  // the values near the point decide, as they do for any point that is not a short fraction.
+  const a = shortFraction(spec.point)
+  if (!a) return null
   const at = pointTex(spec.point)
   const na = pEval(parts.num, a)
   const da = pEval(parts.den, a)
@@ -565,11 +619,27 @@ function shortFraction(v: number): Rat | null {
   return r.d <= 10000n ? r : null
 }
 
+/**
+ * Whether a substituted value is a residue of the point's rounding rather than a value. The point is a double, so the
+ * function is read a rounding of the point away from where it was asked, and that moves the value by its slope times
+ * the rounding (cos(π/2) comes out as 6·10⁻¹⁷ because π is a double). The slope is measured, so the test is relative to
+ * the function and has no fixed floor: a constant 10⁻¹⁶ is kept, as it is not moved by a rounding of the point.
+ */
+function isPointRounding(f: Fn, point: number, value: number): boolean {
+  if (value === 0) return true
+  const h = 1e-5 * Math.max(1, Math.abs(point))
+  const slope = (f(point + h) - f(point - h)) / (2 * h)
+  if (!Number.isFinite(slope)) return false
+  return Math.abs(value) <= 4 * Number.EPSILON * Math.abs(point) * Math.abs(slope)
+}
+
 /** The function's value at the point, when it is a number and the values next to the point agree with it. */
 function substitutionAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
   if (!Number.isFinite(spec.point)) return null
-  const value = f(spec.point)
-  if (!Number.isFinite(value)) return null
+  const raw = f(spec.point)
+  if (!Number.isFinite(raw)) return null
+  // cos(π/2) comes out as 6·10⁻¹⁷; a student is shown 0, not a 17-digit decimal.
+  const value = isPointRounding(f, spec.point, raw) ? 0 : raw
   const exact = shortFraction(value)
   const steps = new Steps()
   steps.goal('Put the point in')
@@ -582,7 +652,8 @@ function substitutionAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | nu
 
 /**
  * The values near the point on each side, and what they settle on. This is the working of last resort: each
- * line is one of the samples the check uses, so the answer it gives is the one those values support.
+ * line is one of the samples the check uses, so the answer it gives is the one those values support. The probes
+ * that the answer must also meet are not listed; they only refuse an answer the samples alone would give.
  */
 function lookupAttempt(spec: LimitSpec, f: Fn, dirs: Side[], prefix?: Steps): Attempt | null {
   const sides = sideReadings(f, spec.point, dirs)
@@ -598,7 +669,7 @@ function lookupAttempt(spec: LimitSpec, f: Fn, dirs: Side[], prefix?: Steps): At
       : side.dir > 0
         ? 'As x goes to +∞'
         : `As x goes to ${MINUS}∞`
-    const list = side.samples.map((s) => `f(${shownNumber(s.x, 6)}) = ${shownNumber(s.v, 6)}`).join(', ')
+    const list = side.reading.samples.map((s) => `f(${shownNumber(s.x, 6)}) = ${shownNumber(s.v, 6)}`).join(', ')
     steps.add(`${where}: ${list}.`)
   }
   const conclusion =
@@ -615,10 +686,10 @@ function lookupAttempt(spec: LimitSpec, f: Fn, dirs: Side[], prefix?: Steps): At
 
 /** Whether top and bottom both go to 0 on every side (or both grow without bound), so L'Hopital's rule applies. */
 function indeterminate(fTop: Fn, fBottom: Fn, point: number, dirs: Side[]): 'zero' | 'infinite' | null {
-  const tops = dirs.map((dir) => samplesOf(fTop, point, dir))
-  const bottoms = dirs.map((dir) => samplesOf(fBottom, point, dir))
+  const tops = dirs.map((dir) => readingOf(fTop, point, dir))
+  const bottoms = dirs.map((dir) => readingOf(fBottom, point, dir))
   if (tops.every((t, i) => tendsToZero(t) && tendsToZero(bottoms[i]))) return 'zero'
-  const grows = (samples: Sample[]): boolean => behaviourOf(samples).kind === 'grows'
+  const grows = (r: Reading): boolean => behaviourOf(r).kind === 'grows'
   if (tops.every(grows) && bottoms.every(grows)) return 'infinite'
   return null
 }
@@ -679,7 +750,9 @@ function lhopitalAttempt(spec: LimitSpec, f: Fn, dirs: Side[], depth: number): A
     moves: [...steps.moves, ...sub.moves],
     answer: sub.answer,
     answerTex: sub.answerTex,
-    check: sub.check,
+    // The check line is the original function's values, not the derivative ratio's: the numbers printed are the ones the
+    // student asked about. The verdict itself is the same test the answer passed.
+    check: checkLine(spec, f, dirs, sub.answer),
     checked: verifies(f, spec.point, dirs, sub.answer)
   }
 }
@@ -712,7 +785,13 @@ function solve(spec: LimitSpec, depth: number): Attempt | null {
 
 /** Work a limit out: the answer, and the working that shows it, every line checked. */
 export function workOutLimit(lim: LimitCall | LimitSpec): LimitOutcome {
-  const spec: LimitSpec = { body: lim.body, variable: lim.variable, point: lim.point, side: lim.side }
+  const spec: LimitSpec = {
+    body: lim.body,
+    variable: lim.variable,
+    point: lim.point,
+    side: lim.side,
+    ...(lim.pointAsTyped === undefined ? {} : { pointAsTyped: lim.pointAsTyped })
+  }
   const refused = refusal(spec)
   if (refused) return { working: failed('Limit', limitTexOf(spec), refused), answer: { kind: 'unknown', reason: refused } }
   const found = solve(spec, 0)
@@ -742,20 +821,34 @@ export function claimSentence(answer: LimitAnswer, claimed: string): { holds: bo
     return null
   }
   if (Number.isNaN(target)) return null
-  const limitText = answer.kind === 'value' ? shownNumber(answer.value, 10) : answer.kind === 'infinite' ? (answer.sign > 0 ? '∞' : `${MINUS}∞`) : 'does not exist'
-  let holds = false
-  if (answer.kind === 'value') {
-    // A decimal from the samples is only as close as the samples are; an exact value is compared to the rounding of the figures typed.
-    const slack = answer.exact ? 1e-9 : 10 / FINEST_G
-    holds = Math.abs(answer.value - target) <= slack * Math.max(1, Math.abs(target))
-  } else if (answer.kind === 'infinite') {
-    holds = target === answer.sign * Infinity
-  }
   const claimText = shownNumber(target, 10)
-  if (answer.kind === 'none') return { holds: false, text: `The limit does not exist, so the statement is false.` }
+  if (answer.kind === 'none') return { holds: false, text: 'The limit does not exist, so the statement is false.' }
+  if (answer.kind === 'infinite') {
+    // A finite claim is never ∞, and ∞ is never a finite limit: the test is exact, not a tolerance.
+    const holds = target === answer.sign * Infinity
+    const limitText = answer.sign > 0 ? '∞' : `${MINUS}∞`
+    return { holds, text: holds ? `The limit is ${limitText}, so the statement is true.` : `The limit is ${limitText}, not ${claimText}, so the statement is false.` }
+  }
+  if (!Number.isFinite(target)) return { holds: false, text: `The limit is ${shownNumber(answer.value, 10)}, not ${claimText}, so the statement is false.` }
+  if (answer.exact) {
+    // An exact value is compared with the claim to the rounding of the figures typed, relative to the sizes compared.
+    const holds = Math.abs(answer.value - target) <= 1e-9 * Math.max(Math.abs(answer.value), Math.abs(target))
+    const limitText = shownNumber(answer.value, 10)
+    return { holds, text: holds ? `The limit is ${limitText}, so the statement is true.` : `The limit is ${limitText}, not ${claimText}, so the statement is false.` }
+  }
+  // A value found from the samples is only as close as the samples are, so it is never called "true": it is compared with
+  // the claim at the figures it is shown to (four for a sampled value, ten for a substituted decimal), and it agrees
+  // when both read the same at those figures. No absolute slack is used, so a value of 10⁻¹⁰ is not 0.
+  const sampled = answer.check !== undefined
+  const figures = sampled ? 4 : 10
+  const holds = Number(toPrecisionHalfAway(target, figures)) === Number(toPrecisionHalfAway(answer.value, figures))
+  const limitText = shownNumber(answer.value, 10)
+  const about = sampled ? 'about ' : ''
   return {
     holds,
-    text: holds ? `The limit is ${limitText}, so the statement is true.` : `The limit is ${limitText}, not ${claimText}, so the statement is false.`
+    text: holds
+      ? `The limit is ${about}${limitText}, which agrees with ${claimText} to the figures shown.`
+      : `The limit is ${about}${limitText}, not ${claimText}, so the statement is false.`
   }
 }
 
