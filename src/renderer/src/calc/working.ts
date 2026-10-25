@@ -451,7 +451,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   // An identity or a no-value line: the working says every (or no) value of the letter works, and the "=" card gives one root or value
   // of the same line (x − x + 3 = 3 read "x = 0"). That root is one guess at a claim about all the values, so the working's sentence
   // stands and the disagreement is said, exactly as for two different answers.
-  const sentence = working ? everyOrNoValue(working) : null
+  const sentence = working && working.checked === 'ok' ? everyOrNoValue(working) : null
   if (working && sentence !== null && givesNumber(result)) {
     const tex = `\\text{${sentence}}`
     return {
@@ -484,7 +484,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   }
   const verdict = agreement(result, working)
   if (verdict === 'agree') return { result: rootsFromWorking(exactDeterminantCard(result, working), working), verdict: 'agree' }
-  if (verdict === 'unknown') return { result: flagIfApproximate(result), verdict: 'unchecked' }
+  if (verdict === 'unknown' || working.checked !== 'ok') return { result: flagIfApproximate(result), verdict: 'unchecked' }
   const card = answerCard(working)
   return {
     result: { main: card.plain, src: result.src, tex: card.tex, extra: [DISAGREEMENT_NOTE], exact: null, solved: false, unconfirmed: true, ...inequalityMark(working) },

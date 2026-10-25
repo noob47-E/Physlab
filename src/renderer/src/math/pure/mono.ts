@@ -252,10 +252,7 @@ function fromNode(node: MathNode): Expr {
         const bot = fromNode(args[1])
         // A bottom of 0 gets the same sentence as a bracket: the reader has always said it this way, and the golden sweeps pin it.
         if (bot.length !== 1) throw new BracketDivision(BRACKET_SENTENCE)
-        // Cancelling a letter out of the bottom gives a line with no sign of the value that makes the bottom 0, where the
-        // original has no value at all (x²/x is undefined at 0). So a letter on the bottom is refused, not cancelled, and
-        // no working can report that value as its answer.
-        const done = varsOf(bot).length === 0 ? divideByTerm(top, bot[0]) : null
+        const done = divideByTerm(top, bot[0])
         if (!done) throw new NotPolynomial(LETTERS_ON_BOTTOM)
         return done
       }
