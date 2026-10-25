@@ -15,6 +15,7 @@ import { radicalMethod } from './radical'
 import { rationalEquationMethod } from './rational'
 import { trigEquationsMethod } from './trigEquations'
 import { inequalityMethod } from './inequality'
+import { expSubstMethod } from './expSubst'
 
 export {
   linearOneVarMethod,
@@ -30,6 +31,7 @@ export {
   rationalEquationMethod,
   trigEquationsMethod,
   expLogMethod,
+  expSubstMethod,
   inequalityMethod
 }
 
@@ -56,5 +58,6 @@ export const ALL_STEP_METHODS: Method[] = [
   rationalEquationMethod,
   radicalMethod,
   expLogMethod,
+  expSubstMethod,
   inequalityMethod
 ]

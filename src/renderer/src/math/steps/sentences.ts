@@ -32,6 +32,7 @@ import { evalAt, varsOf, type Expr } from '../pure/mono'
 import { rEq, rStr, type Rat } from '../pure/rat'
 import { logSumOf, ratOf, valueAt } from './expRoots'
 import { radicalRootsRule, radicalRootsSentence, radicalSubstitution } from './radicalForm'
+import { expSolutionRule, expSolutionSentence, substitutionSentence } from './expSubst'
 
 
 function dataOf(step: Step): Record<string, unknown> {
@@ -182,6 +183,8 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
       return `Write the natural logarithm as a power of e: ${plainTex(after)}`
     case 'work-out-exp':
       return `Anything to the power 0 is 1: ${plainTex(after)}`
+    case 'exp-substitute':
+      return substitutionSentence(before, op)
     default:
       return null
   }
@@ -189,6 +192,8 @@ function equationSentence(op: EquationOp, step: Step, v: string): string | null 
 
 function equationRule(op: EquationOp): string {
   switch (op.kind) {
+    case 'exp-substitute':
+      return 'Substitution'
     case 'write-as-power':
       return 'Write as a power'
     case 'cancel-base':
@@ -307,6 +312,8 @@ function solutionSentence(step: Step): string | null {
   if (dataOf(step).logSum === true) return logSumEndingSentence(step)
   // Part R: a radical working's check of its roots says its own words (radicalForm.ts), from the step's data.
   if (dataOf(step).radical === true) return radicalRootsSentence(step)
+  // S3: a substitution's final solution set says its words from its data (expSubst.ts): each root and its x, and each rejected root.
+  if (dataOf(step).expSubst === true) return expSolutionSentence(step.data)
   const d = dataOf(step)
   if (d.role === 'trig' || d.role === 'trig-inverse' || d.trig !== undefined) {
     return `The solutions are ${plainTex(String(step.after))}.`
@@ -330,6 +337,7 @@ function solutionRule(step: Step): string | null {
   if (dataOf(step).rational === true) return rationalEndingRule(step)
   if (dataOf(step).logSum === true) return rationalEndingRule(step)
   if (dataOf(step).radical === true) return radicalRootsRule(step)
+  if (dataOf(step).expSubst === true) return expSolutionRule(step.data)
   const d = dataOf(step)
   if (d.role === 'trig' || d.role === 'trig-inverse' || d.trig !== undefined) return 'Solutions'
   if (surdSolutionsSentence(step) !== undefined) return 'Solutions'

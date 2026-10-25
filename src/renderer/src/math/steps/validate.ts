@@ -74,6 +74,7 @@ import { checkTrigSolutionSet, trigTermOf, type TrigRange } from './trigRoots'
 import { checkTrigInverseSolutionSet, specOf } from './trigInverse'
 import { ruleFor, sentenceFor, substitutionOf, systemEndingAnswer } from './sentences'
 import { isNoRealSolution, radicalRootsCheck, rationalsOf, readRootsData, sameRationals } from './radicalForm'
+import { checkExpSolutionSet, readExpData } from './expSubst'
 import { displaySafe, drawnTex } from './displaySafe'
 import { readInequality, validateIneqWorking } from './inequality'
 import { checkLogSumEnding } from './expRoots'
@@ -299,6 +300,8 @@ export function validateSolutionSetEq(step: Step, adapter: CheckAdapter = defaul
   const v = typeof payload.variable === 'string' ? payload.variable : 'x'
   // Part R: the roots of a radical equation are checked by radicalForm.ts, each put back into the original equation.
   if (payload.radical === true) return radicalRootsCheck(step)
+  // S3 (substitution): the x of each root of the quadratic in u, put back into the typed equation, checked exactly (expSubst.ts).
+  if (payload.expSubst === true) return checkExpSolutionSet(step)
   // S1b: a surd square root's two solutions are the sides of the factored form the step names (exact, no proof needed).
   if (payload.zeroProduct && typeof payload.zeroProduct === 'object') {
     const zp = payload.zeroProduct as { shift: string; root: string }
@@ -476,8 +479,17 @@ export function validateStep(step: Step, adapter: CheckAdapter = defaultCheckAda
   }
 }
 
-/** The four exponential and logarithmic moves (EquationOp in types.ts). They are real-only (S3). */
-const EXP_LOG_MOVE_KINDS: ReadonlySet<string> = new Set(['write-as-power', 'cancel-base', 'log-to-power', 'work-out-power', 'exp-to-log', 'log-to-exp', 'work-out-exp'])
+/** The exponential and logarithmic moves (EquationOp in types.ts). They are real-only (S3). */
+const EXP_LOG_MOVE_KINDS: ReadonlySet<string> = new Set([
+  'write-as-power',
+  'cancel-base',
+  'log-to-power',
+  'work-out-power',
+  'exp-to-log',
+  'log-to-exp',
+  'work-out-exp',
+  'exp-substitute'
+])
 
 /** True for an equation step whose declared move is one of the exponential or logarithmic moves. */
 function isExpLogMove(step: Step): boolean {
@@ -720,6 +732,26 @@ function radicalWorkingProblem(working: Working): string | null {
 }
 
 /**
+ * A substitution working (expSubst.ts): its one sub-working is the quadratic in u that the first step gives, and it finds exactly
+ * the roots the final solution set was built from. Null when it belongs.
+ */
+function expSubWorkingProblem(working: Working): string | null {
+  const last = working.steps[working.steps.length - 1]
+  const d = readExpData(last.data)
+  const subs = working.subWorkings ?? []
+  if (d === null || last.kind !== 'SolutionSetEq') return 'A substitution working must end with its solution set'
+  if (subs.length !== 1) return 'The quadratic in u must be solved in one sub-working'
+  if (!sameState(subs[0].input ?? '', String(last.before))) return 'The sub-working does not solve the quadratic in u'
+  const subAnswers = Array.isArray(subs[0].answer) ? subs[0].answer : subs[0].answer ? [subs[0].answer] : []
+  const subRoots = d.roots.length === 0 ? (isNoRealSolution(subAnswers) ? [] : null) : rationalsOf(subAnswers)
+  const roots = d.roots.map((r) => parseExactRat(r))
+  if (subRoots === null || roots.some((r) => r === null) || !sameRationals(subRoots, roots as Rat[])) {
+    return 'The sub-working finds other roots than the substitution'
+  }
+  return null
+}
+
+/**
  * The sub-workings of a working belong to it (P-FIX-S1SOUND2 MUST 8): each is the discriminant of this equation, or the
  * solution of one zero-product case of its own split, and every case has exactly one. Null when they belong.
  */
@@ -737,6 +769,8 @@ function subWorkingsBelong(working: Working): string | null {
     const own = working.subWorkings ?? []
     return own.length === 1 && sameState(own[0].input ?? '', working.steps[3].after) ? null : 'The polynomial working does not belong to its logarithm equation'
   }
+  // S3 (substitution): the one sub-working solves the quadratic in u that the first step gives, and finds exactly its roots.
+  if (working.steps.some((s) => dataOf(s).expSubst === true)) return expSubWorkingProblem(working)
   const subs = working.subWorkings ?? []
   const v = variableOfInput(working.input ?? '')
   const split = working.steps.find((s) => s.kind === 'CaseSplitComplete' && dataOf(s).form === 'zero-product')

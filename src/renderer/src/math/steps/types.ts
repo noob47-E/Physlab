@@ -114,6 +114,9 @@ export type EquationOp =
   // solution written with the inverse function. Checked by trigInverse.ts, never by the table checks above.
   | ({ kind: 'trig-inverse'; angle: string; value: string } & TrigInverseSpec)
   | ({ kind: 'trig-inverse-general' } & TrigInverseSpec)
+  // The substitution u = a^x (expSubst.ts): the typed equation, a quadratic in powers of a, becomes the quadratic in u. base is
+  // "e" or the whole number a; u is the letter of the quadratic. Checked exactly by checkExpSubstituteOp.
+  | { kind: 'exp-substitute'; base: string; u: string }
 
 /**
  * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors

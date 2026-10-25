@@ -305,13 +305,24 @@ export function checkCandidate(eq: RadicalEquation, r: Rat): CandidateCheck | nu
   }
 }
 
-/** The square of a side, as a polynomial: a root squares to its radicand, a root-free side to its product with itself. */
+/**
+ * Every term of a polynomial multiplied by k. A root with a coefficient c squares to c² times its radicand, so the squared
+ * side of 2·sqrt(x) = x − 3 is 4x, not x.
+ */
+export function scaleExpr(e: Expr, k: Rat): Expr {
+  return normalize(e.map((t) => ({ c: rMul(t.c, k), v: { ...t.v } })))
+}
+
+/**
+ * The square of a side, as a polynomial: a lone root c·sqrt(P) squares to c²·P, a root-free side to its product with itself.
+ * The coefficient is squared with the root, so 2·sqrt(x) and sqrt(x) both square exactly (for P not negative, where the root is real).
+ */
 function squareOf(e: Expr, reg: RadicalRegistry): Expr | null {
   const roots = e.filter((t) => rootOf(t, reg) !== null)
   if (roots.length === 0) return eMul(e, e)
-  if (e.length === 1 && roots.length === 1 && rEq(e[0].c, R1) && Object.keys(e[0].v).filter((k) => e[0].v[k] !== 0).length === 1) {
+  if (e.length === 1 && roots.length === 1 && Object.keys(e[0].v).filter((k) => e[0].v[k] !== 0).length === 1) {
     const idx = rootOf(e[0], reg)
-    return idx === null ? null : reg.radicands[idx]
+    return idx === null ? null : scaleExpr(reg.radicands[idx], rMul(e[0].c, e[0].c))
   }
   return null
 }
