@@ -80,7 +80,8 @@ export interface LayoutStamp {
 // that still holds it — in Graphing, or left open in Geometry after a visit — is rebuilt once.
 // 5: Part L3: panels on the side only, rounded panels, dock tab headers hidden unless two tabs share one place.
 // 6: Part X9b: Lab Data becomes a centre panel, rebuilding layouts saved with it in the side dock.
-export const LAYOUT_VERSION = 6
+// 7: PhysLab-Brain AI Copilot (ai_copilot) added to left dock.
+export const LAYOUT_VERSION = 7
 
 /**
  * A saved layout is used again only when it was made by this schema for this size of window.
@@ -104,6 +105,7 @@ export function panelHome(id: string): PanelHome {
     case 'outliner':
     case 'examples':
     case 'expressions':
+    case 'ai_copilot':
       return 'left'
     case 'console':
       return 'below'

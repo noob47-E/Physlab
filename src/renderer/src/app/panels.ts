@@ -27,7 +27,8 @@ export const PANEL_TITLES: Record<string, string> = {
   graphs: 'Graphs',
   expressions: 'Expressions',
   gpulab: 'GPU Lab',
-  sandbox: 'Sandbox'
+  sandbox: 'Sandbox',
+  ai_copilot: 'AI Tutor'
 }
 
 /** Panels kept out of student view (Phase 0.9 cuts). Stored in PANEL_TITLES so code remains. */
@@ -49,7 +50,7 @@ export const PANEL_LIST = panelList()
 /** Which panels share a home, so a closed one comes back beside the ones it lived with. */
 const PANEL_GROUPS: string[][] = [
   // Graphing's list of lines lives on the left with the other lists.
-  ['outliner', 'examples', 'expressions'],
+  ['outliner', 'examples', 'expressions', 'ai_copilot'],
   ['viewport', 'maths', 'labdata'],
   // GPU Lab is a mode's own panel, so it lives beside the drawing with the others, as
   // panelHome in layoutMath.ts says; listed under the console strip it opened in two places.

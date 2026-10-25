@@ -41,6 +41,7 @@ const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.G
 const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
 const LabData = lazy(() => import('../panels/LabData').then((m) => ({ default: m.LabData })))
+const AiCopilot = lazy(() => import('../panels/AiCopilot').then((m) => ({ default: m.AiCopilot })))
 
 const PANEL_VIEWS: Record<string, React.ComponentType> = {
   viewport: Viewport,
@@ -58,7 +59,8 @@ const PANEL_VIEWS: Record<string, React.ComponentType> = {
   graphs: Graphs,
   expressions: Expressions,
   gpulab: GpuLab,
-  sandbox: SandboxPanel
+  sandbox: SandboxPanel,
+  ai_copilot: AiCopilot
 }
 
 const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(

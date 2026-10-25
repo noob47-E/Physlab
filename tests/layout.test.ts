@@ -155,6 +155,7 @@ describe('what a mode opens by default', () => {
     expect(panelHome('maths')).toBe('centre')
     expect(panelHome('labdata')).toBe('centre')
     expect(panelHome('examples')).toBe('left')
+    expect(panelHome('ai_copilot')).toBe('left')
     expect(panelHome('console')).toBe('below')
     expect(panelHome('vectorcalc')).toBe('right')
     // A mode's own panel, so beside the drawing — not in the console strip.

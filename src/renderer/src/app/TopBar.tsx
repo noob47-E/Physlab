@@ -19,6 +19,7 @@ import {
   Scissors,
   Settings2,
   Slash,
+  Sparkles,
   SquareDashedBottom,
   Triangle,
   Type,
@@ -599,6 +600,20 @@ export function TopBar() {
           tabs; the rest sit in More modes. One design at every width — the bar used to swap its
           tabs for a "Mode" dropdown below 1500 px (Fix 13). */}
       <div data-tour="modes" className="flex-1" />
+
+      <button
+        type="button"
+        onClick={() => togglePanel('ai_copilot')}
+        className={`mr-2 flex items-center gap-1.5 px-2.5 py-0.5 rounded font-medium text-small cursor-pointer transition-colors ${
+          openPanels.includes('ai_copilot')
+            ? 'bg-surface-3 text-accent border border-line'
+            : 'bg-surface-1 text-ink-dim hover:text-ink hover:bg-surface-2 border border-line'
+        }`}
+        title="PhysLab AI Copilot & Cognitive Tutor"
+      >
+        <Sparkles size={13} className="text-accent" />
+        <span>AI Tutor</span>
+      </button>
 
       <StartHereChip />
 
