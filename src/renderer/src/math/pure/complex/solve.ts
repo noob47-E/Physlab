@@ -21,7 +21,7 @@ import {
   rat,
   type Rat
 } from '../rat'
-import { NotPolynomial, bracketSides, divisionBottoms, eMul, eSub, evalAt, exprTex, exprTexBracketed, parseExpr, varsOf, type Expr, type SideParts } from '../mono'
+import { NotPolynomial, bracketSides, divisionBottoms, eMul, eSub, evalAt, exprTex, exprTexBracketed, parseExpr, typedLetters, varsOf, type Expr, type SideParts } from '../mono'
 import {
   exprFromPoly,
   findRationalRoot,
@@ -404,8 +404,11 @@ function solveLinearWorking(src: string): Working {
   }
   const vars = [...new Set([...varsOf(lhs), ...varsOf(rhs)])]
   if (vars.includes('i')) return failed(title, src, HAS_I)
-  if (vars.length !== 1) return failed(title, src, `I need exactly one letter to solve for, and I found ${vars.length || 'none'}.`)
-  const name = vars[0]
+  // A letter whose terms all cancel (0x + 3 = 3, x − x + 3 = 3) has gone from the expression, but the student typed it:
+  // it is the letter the sentence names ("every value of x works"), not a reason to say there is no letter at all.
+  const typed = vars.length === 0 ? typedLetters(src).filter((n) => n !== 'i') : []
+  if (vars.length !== 1 && typed.length !== 1) return failed(title, src, `I need exactly one letter to solve for, and I found ${vars.length || 'none'}.`)
+  const name = vars.length === 1 ? vars[0] : typed[0]
   // θ in the sentences and \theta in the maths (H12); `name` stays the engine's spelling, for the label.
   const [nameTex, nameWords] = [unknownTex(name), unknownWords(name)]
   let bottoms: Bottoms

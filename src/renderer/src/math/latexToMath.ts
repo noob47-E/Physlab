@@ -104,6 +104,24 @@ function resolveStandardForm(text: string): string {
   return out + text.slice(done)
 }
 
+/**
+ * A 0 typed straight against a subscripted letter, as in 0x_1, 0x_{12} or 0b_2, is 0 times that letter. The subscript is
+ * flattened to x1 further down, and mathjs then reads 0x1 as the hexadecimal number 1 (0b1 as binary, 0o7 as octal), so
+ * the 0 gets its × here, while the subscript is still a token and can still be seen. Only here is a subscript known: once
+ * it is flattened, 0x1 and 0x_1 look the same. A 0 that is part of a longer number (10x_1) or of a decimal (0.5x_1) starts
+ * no number of its own, and a plain 0x1 with no subscript stays hexadecimal, as it was typed.
+ */
+function zeroTimesSubscripted(tokens: Tok[]): Tok[] {
+  const out: Tok[] = []
+  tokens.forEach((tok, k) => {
+    out.push(tok)
+    if (tok !== '0' || !/^[xbo]$/.test(tokens[k + 1] ?? '') || tokens[k + 2] !== '_') return
+    if (/[\w.]$/.test(tokens[k - 1] ?? '')) return
+    out.push('*')
+  })
+  return out
+}
+
 function tokenize(raw: string): Tok[] {
   const src = UNICODE_ALIASES.reduce((s, [re, to]) => s.replace(re, to), raw)
   const out: Tok[] = []
@@ -165,7 +183,7 @@ export function tryLatexToMath(latex: string, opts: LatexOptions = {}): { src: s
 }
 
 export function latexToMath(latex: string, opts: LatexOptions = {}): string {
-  const t = tokenize(latex)
+  const t = zeroTimesSubscripted(tokenize(latex))
   let i = 0
 
   const peek = () => t[i]
