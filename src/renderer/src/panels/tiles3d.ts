@@ -47,13 +47,16 @@ export async function playTile(tile: Tile3D, options: PlayTileOptions = {}): Pro
   const unique = [...new Set(toRemove)]
   if (unique.length) scene().removeObjects(unique)
   const before = new Set(Object.keys(scene().objects))
+  scene().setViewMode('3d')
   for (const line of tileLines(tile)) await runCommand(line)
-  const id = scene().ev.names.get(tile.slider.name)
-  if (id) {
-    const { min, max, step = (max - min) / 100 } = tile.slider
-    scene().updateObject(id, (d) => {
-      if (d.type === 'number') d.slider = { min, max, step }
-    })
+  if (tile.slider) {
+    const id = scene().ev.names.get(tile.slider.name)
+    if (id) {
+      const { min, max, step = (max - min) / 100 } = tile.slider
+      scene().updateObject(id, (d) => {
+        if (d.type === 'number') d.slider = { min, max, step }
+      })
+    }
   }
   const added = Object.keys(scene().objects).filter((o) => !before.has(o))
   // A surface z = f(x, y) is drawn over the gallery's own square (the hill of the tangent plane is ±4, not ±6).

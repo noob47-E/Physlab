@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { TILES_3D, type Tile3D } from '../math/graph3dTiles'
+import { CHEMISTRY_TILES_3D, TILES_3D, type Tile3D } from '../math/graph3dTiles'
 import { hasStudentLines, playTile, shownTile } from './tiles3d'
 import { useScene } from '../core/store'
 
@@ -29,6 +29,7 @@ function writeFolded(folded: boolean): void {
 
 export function TryOne3D() {
   const [folded, setFolded] = useState(readFolded)
+  const [tab, setTab] = useState<'chemistry' | 'math'>('chemistry')
   // Which tile is on the drawing: worked out from the scene, so deleting its lines or starting a new scene clears it.
   const objects = useScene((s) => s.objects)
   const [played, setPlayed] = useState(0)
@@ -36,7 +37,9 @@ export function TryOne3D() {
   const shown = useMemo(() => shownTile(), [objects, played])
   const [busy, setBusy] = useState(false)
   const [pendingTile, setPendingTile] = useState<Tile3D | null>(null)
-  const tile = TILES_3D.find((t) => t.id === shown)
+  const allTiles = useMemo(() => [...TILES_3D, ...CHEMISTRY_TILES_3D], [])
+  const tile = allTiles.find((t) => t.id === shown)
+  const activeTiles = tab === 'chemistry' ? CHEMISTRY_TILES_3D : TILES_3D
 
   useEffect(() => {
     if (!hasStudentLines()) setPendingTile(null)
@@ -60,12 +63,28 @@ export function TryOne3D() {
   return (
     <div className="border-b border-[var(--line)] px-2 py-1.5" data-testid="try-one-3d">
       <button type="button" className="flex min-h-[32px] w-full items-center gap-1 text-left font-semibold text-[var(--text-strong)]" onClick={toggle} aria-expanded={!folded}>
-        {folded ? <ChevronRight size={14} /> : <ChevronDown size={14} />} Try one in 3D
+        {folded ? <ChevronRight size={14} /> : <ChevronDown size={14} />} 3D Demos (Try one in 3D)
       </button>
       {!folded && (
         <>
+          <div className="mb-2 flex items-center gap-1 rounded bg-[var(--bg-2)] p-0.5 text-small">
+            <button
+              type="button"
+              className={`flex-1 rounded py-1 px-2 text-center font-medium ${tab === 'chemistry' ? 'bg-[var(--bg-1)] text-[var(--accent)] shadow-sm' : 'text-[var(--text-dim)]'}`}
+              onClick={() => setTab('chemistry')}
+            >
+              Chemistry & DNA
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded py-1 px-2 text-center font-medium ${tab === 'math' ? 'bg-[var(--bg-1)] text-[var(--accent)] shadow-sm' : 'text-[var(--text-dim)]'}`}
+              onClick={() => setTab('math')}
+            >
+              Math Surfaces
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-1">
-            {TILES_3D.map((t) => (
+            {activeTiles.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -145,7 +164,7 @@ export function TryOne3D() {
           )}
           {tile && !pendingTile && (
             <p className="px-1 pt-1.5 text-small text-[var(--text-dim)]">
-              {tile.caption} <span className="text-[var(--text-faint)]">Move the slider {tile.slider.name} to change it.</span>
+              {tile.caption} {tile.slider && <span className="text-[var(--text-faint)]">Move the slider {tile.slider.name} to change it.</span>}
             </p>
           )}
         </>

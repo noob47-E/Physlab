@@ -7,7 +7,7 @@ import { scene } from '../src/renderer/src/core/store'
 import type { GraphObj } from '../src/renderer/src/core/types'
 import { compileScalar, sceneNames } from '../src/renderer/src/math/expr'
 import { graph3dGallery } from '../src/renderer/src/math/graph3dGallery'
-import { TILES_3D, tileLines } from '../src/renderer/src/math/graph3dTiles'
+import { CHEMISTRY_TILES_3D, TILES_3D, tileLines } from '../src/renderer/src/math/graph3dTiles'
 import { resetGlobals } from './helpers/globals'
 
 beforeEach(() => {
@@ -26,7 +26,7 @@ describe('the twelve tiles', () => {
     for (const t of TILES_3D) {
       expect(t.lines.length, t.id).toBeGreaterThan(0)
       expect(t.caption.length, t.id).toBeGreaterThan(20)
-      expect(tileLines(t)[0]).toBe(`${t.slider.name} = ${t.slider.default}`)
+      expect(tileLines(t)[0]).toBe(`${t.slider!.name} = ${t.slider!.default}`)
     }
   })
 
@@ -74,7 +74,7 @@ describe('the twelve tiles', () => {
     const scope = () => ({ ...scene().ev.scope })
     const h = compileScalar(hill.exprs[0], ['x', 'y'], scope, sceneNames())
     const p = compileScalar(plane.exprs[0], ['x', 'y'], scope, sceneNames())
-    const a = tile.slider.default
+    const a = tile.slider!.default
     expect(p({ x: a, y: 0 })).toBeCloseTo(h({ x: a, y: 0 }), 12)
     const dx = 1e-5
     expect((p({ x: a + dx, y: 0 }) - p({ x: a - dx, y: 0 })) / (2 * dx)).toBeCloseTo((h({ x: a + dx, y: 0 }) - h({ x: a - dx, y: 0 })) / (2 * dx), 6)
@@ -110,5 +110,37 @@ describe('a tile in the panel', () => {
     expect(shownTile()).toBe('gaussian-bell')
     scene().removeObjects(added)
     expect(shownTile()).toBeNull()
+  })
+
+  describe('Chemistry & DNA 3D tiles in the Expressions demo tab', () => {
+    it('has 5 3D molecular and biological structures', () => {
+      expect(CHEMISTRY_TILES_3D).toHaveLength(5)
+      const ids = CHEMISTRY_TILES_3D.map((t) => t.id)
+      expect(ids).toContain('dna-double-helix')
+      expect(ids).toContain('water-molecule')
+      expect(ids).toContain('methane-molecule')
+      expect(ids).toContain('benzene-ring')
+      expect(ids).toContain('bohr-atom')
+    })
+
+    it('DNA Double Helix sets view to 3D and plots both helical strands', async () => {
+      const { playTile } = await import('../src/renderer/src/panels/tiles3d')
+      const dna = CHEMISTRY_TILES_3D.find((t) => t.id === 'dna-double-helix')!
+      scene().setViewMode('2d')
+      await playTile(dna)
+      expect(scene().viewMode).toBe('3d')
+      const curveCount = graphs().filter((o) => o.kind === 'curve3d').length
+      expect(curveCount).toBe(2)
+    })
+
+    it('Water Molecule (H2O) sets view to 3D and plots atoms and bonds', async () => {
+      const { playTile } = await import('../src/renderer/src/panels/tiles3d')
+      const water = CHEMISTRY_TILES_3D.find((t) => t.id === 'water-molecule')!
+      await playTile(water)
+      expect(scene().viewMode).toBe('3d')
+      expect(scene().ev.names.get('O')).toBeDefined()
+      expect(scene().ev.names.get('H1')).toBeDefined()
+      expect(scene().ev.names.get('H2')).toBeDefined()
+    })
   })
 })

@@ -47,8 +47,6 @@ export function Expressions() {
   const order = useScene((s) => s.order)
   const ev = useScene((s) => s.ev)
   const rows: ExpressionRow[] = useMemo(() => expressionRows(objects, order, ev), [objects, order, ev])
-  // 3D-2: the 'Try one' tiles are for the 3-D view.
-  const is3D = useScene((s) => s.viewMode === '3d')
   const [problem, setProblem] = useState<{ id: string; text: string } | null>(null)
   const [draft, setDraft] = useState('')
   const [keypad, setKeypad] = useState(readKeypadOn)
@@ -101,8 +99,8 @@ export function Expressions() {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {/* 3D-2: the gallery of graphs in space, in the 3-D view. */}
-        {is3D && <TryOne3D />}
+        {/* 3D Demos & Structures gallery right in Expressions */}
+        <TryOne3D />
         {rows.length === 0 && <div className="px-3 py-2 text-[var(--text-dim)]">{W.empty}</div>}
         {rows.map((r, i) => {
           if (r.kind === 'slider') {

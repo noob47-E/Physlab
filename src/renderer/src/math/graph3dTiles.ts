@@ -9,7 +9,7 @@ export interface Tile3D {
   id: string
   title: string
   caption: string
-  slider: Graph3D['slider']
+  slider?: Graph3D['slider']
   /** The square a surface z = f(x, y) is drawn over, from the gallery. */
   domain?: Graph3D['domain']
   /** The graph lines, typed after the slider's own line `name = default`. */
@@ -37,5 +37,88 @@ const LINES: Record<string, string[]> = {
 /** The twelve tiles, in the gallery's order. */
 export const TILES_3D: Tile3D[] = graph3dGallery.map((g) => ({ id: g.id, title: g.title, caption: g.caption, slider: g.slider, domain: g.domain, lines: LINES[g.id] ?? [] }))
 
-/** Every line a tile types, its slider's first: `a = 1`, then the graph lines. */
-export const tileLines = (t: Tile3D): string[] => [`${t.slider.name} = ${t.slider.default}`, ...t.lines]
+/** Molecular, atomic and biological 3D structures. */
+export const CHEMISTRY_TILES_3D: Tile3D[] = [
+  {
+    id: 'dna-double-helix',
+    title: 'DNA Double Helix',
+    caption: 'Dual antiparallel helical backbones winding around a shared axis in 3D.',
+    lines: [
+      'curve(3 cos(t), 3 sin(t), 0.5 t - 6, 0, 8 pi)',
+      'curve(3 cos(t + pi), 3 sin(t + pi), 0.5 t - 6, 0, 8 pi)'
+    ]
+  },
+  {
+    id: 'water-molecule',
+    title: 'Water (H₂O)',
+    caption: 'Central Oxygen atom bonded to two Hydrogen atoms at a 104.5° angle.',
+    lines: [
+      'O = (0, 0, 0)',
+      'H1 = (1.5, 1.1, 0)',
+      'H2 = (-1.5, 1.1, 0)',
+      'Segment(O, H1)',
+      'Segment(O, H2)'
+    ]
+  },
+  {
+    id: 'methane-molecule',
+    title: 'Methane (CH₄)',
+    caption: 'Central Carbon atom bonded to four Hydrogen atoms forming a regular tetrahedron.',
+    lines: [
+      'C = (0, 0, 0)',
+      'H1 = (1.4, 1.4, 1.4)',
+      'H2 = (-1.4, -1.4, 1.4)',
+      'H3 = (-1.4, 1.4, -1.4)',
+      'H4 = (1.4, -1.4, -1.4)',
+      'Segment(C, H1)',
+      'Segment(C, H2)',
+      'Segment(C, H3)',
+      'Segment(C, H4)'
+    ]
+  },
+  {
+    id: 'benzene-ring',
+    title: 'Benzene (C₆H₆)',
+    caption: 'Planar aromatic hexagonal ring of six Carbon atoms and six Hydrogen atoms.',
+    lines: [
+      'C1 = (2.5, 0, 0)',
+      'C2 = (1.25, 2.17, 0)',
+      'C3 = (-1.25, 2.17, 0)',
+      'C4 = (-2.5, 0, 0)',
+      'C5 = (-1.25, -2.17, 0)',
+      'C6 = (1.25, -2.17, 0)',
+      'H1 = (4, 0, 0)',
+      'H2 = (2, 3.46, 0)',
+      'H3 = (-2, 3.46, 0)',
+      'H4 = (-4, 0, 0)',
+      'H5 = (-2, -3.46, 0)',
+      'H6 = (2, -3.46, 0)',
+      'Segment(C1, C2)',
+      'Segment(C2, C3)',
+      'Segment(C3, C4)',
+      'Segment(C4, C5)',
+      'Segment(C5, C6)',
+      'Segment(C6, C1)',
+      'Segment(C1, H1)',
+      'Segment(C2, H2)',
+      'Segment(C3, H3)',
+      'Segment(C4, H4)',
+      'Segment(C5, H5)',
+      'Segment(C6, H6)'
+    ]
+  },
+  {
+    id: 'bohr-atom',
+    title: 'Bohr Atom Model',
+    caption: 'Central nucleus surrounded by electron orbital shells in three-dimensional space.',
+    lines: [
+      'Nucleus = (0, 0, 0)',
+      'curve(3 cos(t), 3 sin(t), 0, 0, 2 pi)',
+      'curve(3 cos(t), 0, 3 sin(t), 0, 2 pi)',
+      'curve(0, 3 cos(t), 3 sin(t), 0, 2 pi)'
+    ]
+  }
+]
+
+/** Every line a tile types, its slider's first if present. */
+export const tileLines = (t: Tile3D): string[] => (t.slider ? [`${t.slider.name} = ${t.slider.default}`, ...t.lines] : t.lines)
