@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { pathToFileURL } from 'node:url'
 import { readSource, repoPath } from './helpers/repo'
 import { CAS_OPS } from '../src/renderer/src/math/engine/sympy/worker'
+import { derivativeWorking, type DerivTree } from '../src/renderer/src/math/engine/sympy/calculusSteps'
 
 let run: (op: string, payload: string) => string
 const ask = (op: string, payload: Record<string, unknown>): { text?: string; error?: string; detail?: string; value?: { text: string } } =>
@@ -125,5 +126,16 @@ describe('from contracts.test.ts: the contract with the Python worker (A6-06)', 
       if (op === 'warmup') continue // handled before the dispatch, not as a branch
       expect(ask(op, {}).error ?? '', op).not.toBe(`unknown operation ${op}`)
     }
+  })
+
+  it('diff and diff_steps cancel algebraic powers like (sqrt(x) - 1)', () => {
+    const expr = '((sqrt(x+1))*(x^(3/2) - 1))/(x^(1/2) - 1)'
+    const dSteps = reply('diff_steps', { expr, deg: false }) as unknown as DerivTree
+    expect(dSteps.answer_text).toBe('(3*x**(3/2) + 3*sqrt(x) + 2*x + 1)/(2*sqrt(x)*sqrt(x + 1))')
+    const dDiff = reply('diff', { expr, var: 'x', deg: false })
+    expect(dDiff.text).toBe('(3*x**(3/2) + 3*sqrt(x) + 2*x + 1)/(2*sqrt(x)*sqrt(x + 1))')
+    const w = derivativeWorking(dSteps, expr)
+    expect(w.checked).toBe('ok')
+    expect(w.answers[0]?.tex).toContain('3 x^{3/2} + 3 \\sqrt{x} + 2 x + 1')
   })
 })

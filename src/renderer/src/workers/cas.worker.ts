@@ -331,6 +331,41 @@ _OUTER = {
 class _NoSteps(Exception):
     pass
 
+def _cancel_algebraic(expr, var=None):
+    if expr is None:
+        return expr
+    try:
+        res = sp.cancel(expr)
+        if var is None:
+            syms = [s for s in expr.free_symbols if not s.name.startswith('_')]
+            if len(syms) == 1:
+                var = syms[0]
+            else:
+                return res
+        powers = []
+        for p in expr.atoms(sp.Pow):
+            if p.base == var and isinstance(p.exp, sp.Rational) and p.exp.q > 1:
+                powers.append(p.exp.q)
+        if not powers:
+            return res
+        import math as _m
+        lcm_q = powers[0]
+        for q in powers[1:]:
+            lcm_q = (lcm_q * q) // _m.gcd(lcm_q, q)
+        if lcm_q > 1:
+            u = sp.Symbol('_u', positive=True)
+            subbed = expr.subs(var, u**lcm_q)
+            for p in subbed.atoms(sp.Pow):
+                if p.base == u**lcm_q and isinstance(p.exp, sp.Rational):
+                    subbed = subbed.subs(p, u**(p.exp * lcm_q))
+            canceled = sp.cancel(subbed)
+            cand = canceled.subs(u, var**sp.Rational(1, lcm_q))
+            if sp.count_ops(cand) < sp.count_ops(res):
+                return cand
+        return res
+    except Exception:
+        return expr
+
 def _dnode(f, v, U):
     # One node per rule a textbook names. Returns (json, derivative); the derivative is kept as
     # SymPy's own expression so the parent's line is computed, never re-parsed from text.
@@ -373,7 +408,9 @@ def _dnode(f, v, U):
             jn, dn = _dnode(num, v, U)
             jd, dd = _dnode(den, v, U)
             top = sp.factor(sp.expand(den * dn - num * dd))
-            return node('quotient', top / den ** 2, numerator=_ex(num), denominator=_ex(den),
+            raw_res = top / den ** 2
+            res = _cancel_algebraic(raw_res, v)
+            return node('quotient', res, numerator=_ex(num), denominator=_ex(den),
                         expanded=_ex(sp.expand(den * dn - num * dd)), top=_ex(top), substeps=[jn, jd])
         if den.has(v):
             j, r = _dnode(sp.Pow(den, -1), v, U)
@@ -434,11 +471,13 @@ def diff_steps_op(p):
     out = {'var': str(var), 'expr': _ex(f), 'u': letters[0], 'letters': letters, 'deg_ignored': bool(p.get('deg', False))}
     try:
         tree, res = _dnode(f, var, U)
-        out.update({'tree': tree, 'unsupported': False, 'answer_latex': tree['result']['latex'],
-                    'answer_text': tree['result']['text'],
+        canceled_res = _cancel_algebraic(res, var)
+        ans = canceled_res if sp.count_ops(canceled_res) < sp.count_ops(res) else res
+        out.update({'tree': tree, 'unsupported': False, 'answer_latex': _tex(ans),
+                    'answer_text': sp.sstr(ans),
                     'checked': bool(sp.simplify(res - truth) == 0)})
     except (_NoSteps, RecursionError):
-        res = sp.simplify(truth)
+        res = _cancel_algebraic(sp.simplify(truth), var)
         out.update({'unsupported': True, 'answer_latex': _tex(res), 'answer_text': sp.sstr(res), 'checked': True})
     return out
 
@@ -468,7 +507,7 @@ def cas_run(op, payload_json):
             var = sp.Symbol(p.get('var', 'x'))
             f = P(p['expr'], deg)
             d = sp.diff(f, var, int(p.get('order', 1)))
-            res = sp.simplify(d)
+            res = _cancel_algebraic(sp.simplify(d), var)
             extra = {}
             if p.get('at') is not None:
                 extra['value'] = _out(res.subs(var, P(str(p['at']), deg)))

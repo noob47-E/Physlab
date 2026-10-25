@@ -464,6 +464,8 @@ export function derivativeForm(body: string, variable: string, vars: Record<stri
     if (!forMathjs) return null
     const found = renameLogs(math.derivative(forMathjs, variable), false)
     if (!found || !isDerivativeOf(found, source, variable, vars)) return null
+    const str = found.toString()
+    if (str.split('/').length > 2 || (str.length > 60 && (str.includes('/') || str.includes('^(')))) return null
     return formulaOf(found)
   } catch {
     return null
