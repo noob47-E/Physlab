@@ -440,11 +440,6 @@ function singleLogOf(text: string): { arg: string; c: bigint } | null {
   return { arg, c }
 }
 
-/** The one letter the logarithm sum is written in, or null when it uses none or more than one. */
-function logSumLetter(sum: LogSum): string | null {
-  const letters = [...new Set(sum.args.join('').match(/[A-Za-z]/g) ?? [])]
-  return letters.length === 1 ? letters[0] : null
-}
 
 /**
  * The one letter an exponential or logarithmic equation is written in, or null when it has none or more than one. The base e
