@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import katex from 'katex'
 
 vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
@@ -13,6 +14,9 @@ import { scene } from '../src/renderer/src/core/store'
 import { resetGlobals } from './helpers/globals'
 import { hidePanel, isPanelOpen, setDockApi, showBeside } from '../src/renderer/src/app/panels'
 import { useApp } from '../src/renderer/src/app/modes'
+import { evaluateInput } from '../src/renderer/src/calc/evaluateInput'
+import { derivativeWorking, type DerivTree } from '../src/renderer/src/math/engine/sympy/calculusSteps'
+import { repoPath } from './helpers/repo'
 
 interface FakeGroup {
   id: string
@@ -292,6 +296,56 @@ describe('Rigorous Solver Stress Testing: diverse equations across all families'
       expect(w?.method).toBe(expectedMethod)
       for (const m of w?.moves ?? []) {
         const tex = m.tex
+        if (tex) expect(() => katex.renderToString(tex, { throwOnError: true })).not.toThrow()
+      }
+    })
+  }
+
+  // 11. Differentiation Questions (Calculus Engine)
+  const DIFF_EVAL_CASES = [
+    { latex: String.raw`\frac{d}{dx}\left(x^{3}\sin x\right)`, expected: '3x² sin(x) + x³ cos(x)' },
+    { latex: String.raw`\frac{d}{dt}\left(t^{3}\right)`, expected: '3t²' },
+    { latex: String.raw`\frac{d}{dx}\left(x^{2}+3x\right)`, expected: '2x + 3' },
+    { latex: String.raw`\frac{d}{dx}\left(x^{4}-5x\right)`, expected: '4x³ − 5' },
+    { latex: String.raw`\frac{d}{dx}\left(\sin x\right)`, expected: 'cos(x)' },
+    { latex: String.raw`\frac{d}{dx}\left(\cos x\right)`, expected: '−sin(x)' }
+  ]
+
+  for (const c of DIFF_EVAL_CASES) {
+    it(`Differentiation evaluation: ${c.latex}`, () => {
+      const card = evaluateInput('COMP', c.latex, { vars: {}, ans: 0, angle: 'deg' })
+      expect(card).toBeDefined()
+      expect(card?.error).toBeUndefined()
+      expect(card?.main).toBe(c.expected)
+    })
+  }
+
+  const DIFF_FIXTURES = [
+    { name: 'derivative-product', expectedMethod: 'Product rule' },
+    { name: 'derivative-quotient', expectedMethod: 'Quotient rule' },
+    { name: 'derivative-chain', expectedMethod: 'Chain rule' },
+    { name: 'derivative-exp-chain', expectedMethod: 'Chain rule' },
+    { name: 'derivative-polynomial', expectedMethod: undefined },
+    { name: 'derivative-tan', expectedMethod: undefined }
+  ]
+
+  for (const f of DIFF_FIXTURES) {
+    it(`Differentiation step-by-step working: ${f.name}`, () => {
+      const file = JSON.parse(readFileSync(repoPath('tests', 'fixtures', 'calculus', `${f.name}.json`), 'utf8'))
+      const w = derivativeWorking(file.result as DerivTree, file.payload.expr)
+      expect(w).toBeDefined()
+      expect(w.title).toBe('Differentiate')
+      expect(w.error).toBeUndefined()
+      expect(w.checked).toBe('ok')
+      expect(w.method).toBe(f.expectedMethod)
+      expect(w.moves.length).toBeGreaterThan(0)
+      expect(w.answers.length).toBeGreaterThan(0)
+      for (const m of w.moves) {
+        const tex = m.tex
+        if (tex) expect(() => katex.renderToString(tex, { throwOnError: true })).not.toThrow()
+      }
+      for (const a of w.answers) {
+        const tex = a.tex
         if (tex) expect(() => katex.renderToString(tex, { throwOnError: true })).not.toThrow()
       }
     })
