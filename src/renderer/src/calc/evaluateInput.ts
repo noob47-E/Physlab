@@ -19,6 +19,9 @@ import { isConstant, parseExpr } from '../math/pure/mono'
 import { CONSTANT_NAMES, GREEK_NAMES } from '../math/names'
 import { math, splitArgs } from '../math/expr'
 import { calculusCall } from '../math/calculusCall'
+import { limitCall, type LimitCall } from '../math/limitCall'
+import { claimSentence, shownNumber, workOutLimit } from '../math/pure/limitWorking'
+import { rTex } from '../math/pure/rat'
 import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
 import type { FieldMode } from './calcStore'
@@ -261,6 +264,34 @@ function textbookCalculus(name: 'diff' | 'integrate', args: string[], src: strin
   return { main: WORKING_ON_IT, extra, src, exact: null, solved: false, engine }
 }
 
+/**
+ * A limit on the "=" card: the value when it is found (as a fraction too, when it is one), ∞ or −∞, or a sentence when the
+ * limit does not exist or its values do not settle. A "= …" after the limit is compared with the value and said under it.
+ * The value is the one the working checks (math/pure/limitWorking.ts), so the card and the working cannot part company.
+ */
+function limitResult(lim: LimitCall, src: string, angle: 'deg' | 'rad'): EvalResult {
+  const { answer, checked } = workOutLimit(lim)
+  const claim = lim.claimed === undefined ? null : claimSentence(answer, lim.claimed)
+  // Limits are worked in radians whatever the screen says (the rule for calculus), so a DEG card says so when the line has an angle in it.
+  const note = angle === 'deg' && usesAngles(lim.body) ? [CALCULUS_IN_RADIANS] : []
+  // A value read from the numbers near the point, with no rule behind it, is four figures, and the card says so.
+  const estimated = answer.kind === 'value' && answer.check !== undefined ? ['Found from the values near the point, not by a rule, so the last figure may be off.'] : []
+  // An infinity or "does not exist" that no exact rule gave is an estimate too: the card says it is not proved.
+  const unproved = !checked && (answer.kind === 'infinite' || answer.kind === 'none') ? ['Not proved by a rule: this is read from the values near the point.'] : []
+  const extra = [...(claim ? [claim.text] : []), ...estimated, ...unproved, ...note]
+  const shared = { src, extra: extra.length ? extra : undefined, solved: false }
+  switch (answer.kind) {
+    case 'value':
+      return { ...shared, main: shownNumber(answer.value, 10), exact: answer.exact && answer.exact.d !== 1n ? rTex(answer.exact) : null, value: answer.value, ...(checked ? {} : { approximate: true }) }
+    case 'infinite':
+      return { ...shared, main: answer.sign > 0 ? '∞' : '−∞', exact: null, ...(checked ? {} : { approximate: true }) }
+    case 'none':
+      return { ...shared, main: answer.text, exact: null, ...(checked ? {} : { unconfirmed: true }) }
+    case 'unknown':
+      return { ...shared, main: '', exact: null, error: { sentence: answer.reason } }
+  }
+}
+
 const BUILTIN_CALC_NAMES: ReadonlySet<string> = new Set([
   'Pol', 'pol', 'Rec', 'rec',
   'diff', 'integrate', 'integral', 'ddx', 'sigma', 'product',
@@ -405,6 +436,9 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       })
     }
     const ctx: CalcContext = { vars: opts.vars, ans: opts.ans, angle: opts.angle }
+    // A limit is its own question: the numeric engine has no lim(), and its answer is read from the values near the point, not from this line.
+    const limit = limitCall(src)
+    if (limit) return limitResult(limit, src, opts.angle)
     // d/dx(f) and ∫ f dx as a textbook writes them: a function, not a number. The numeric engine reads
     // diff() as mathjs's differences of a list ("Those numbers do not fit this function") and knows no integrate().
     const call = calculusCall(src)

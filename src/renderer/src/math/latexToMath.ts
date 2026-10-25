@@ -286,6 +286,46 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
     return sign + t.slice(from, j).join('')
   }
 
+  /**
+   * \lim_{x\to a} f, written as lim(f, x, a), with a 1 or −1 after the point for a one-sided limit (a^+ or a^-). The
+   * expression is everything up to a relation sign or the end: \lim_{x\to 2}(3x+1) = 7 is the limit of (3x+1), and
+   * the "= 7" follows it. Nothing moves and null comes back for a \lim written any other way, which stays as it was.
+   */
+  const limitAtom = (): string | null => {
+    if (peek() !== '_' || t[i + 1] !== '{') return null
+    const start = i
+    i += 2
+    const inside: Tok[] = []
+    let depth = 0
+    let closed = false
+    while (i < t.length) {
+      const tok = next()
+      if (tok === '}' && depth === 0) {
+        closed = true
+        break
+      }
+      if (tok === '{') depth++
+      else if (tok === '}') depth--
+      inside.push(tok)
+    }
+    const arrow = inside[1]
+    if (!closed || !/^[a-zA-Z]$/.test(inside[0] ?? '') || !['\\to', '\\rightarrow', '\\longrightarrow'].includes(arrow)) {
+      i = start
+      return null
+    }
+    let rest = inside.slice(2)
+    let side = ''
+    const ends = (...tail: Tok[]): boolean => tail.length <= rest.length && tail.every((tk, k) => rest[rest.length - tail.length + k] === tk)
+    if (ends('^', '+') || ends('^', '{', '+', '}')) side = ', 1'
+    else if (ends('^', '-') || ends('^', '{', '-', '}')) side = ', -1'
+    if (side !== '') rest = rest.slice(0, rest.lastIndexOf('^'))
+    if (rest.length === 0) throw new Error('A limit needs a point after the arrow, like x → 2.')
+    const point = latexToMath(rest.join(' '), opts).trim()
+    const body = seq(['=', '<', '>', '\\le', '\\leq', '\\ge', '\\geq', '\\ne', '\\neq', '\\lt', '\\gt']).trim()
+    if (body === '') throw new Error('A limit needs an expression after it, like (3x + 1).')
+    return `lim(${body}, ${inside[0]}, ${point}${side})`
+  }
+
   const atom = (): string => {
     const tok = next()
     if (tok === undefined) return ''
@@ -495,6 +535,12 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
         // a scalar times a column vector, which is how a book writes it.
         const body = `([${parsed.map((r) => `[${r.join(', ')}]`).join(', ')}])`
         return env === 'vmatrix' ? `det${body}` : body
+      }
+      case 'lim': {
+        // Only \lim with its subscript is a limit; a bare \lim stays the name it always was.
+        const limit = limitAtom()
+        if (limit !== null) return limit
+        break
       }
       case 'int': {
         let lo = ''

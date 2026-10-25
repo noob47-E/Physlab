@@ -15,7 +15,8 @@ has been checked.
 | `rat.ts` | Exact fractions on bigint (`Rat`, `rFromNumber`, `rAdd`…). Hub: every tool uses it. |
 | `mono.ts` | Expressions as sums of monomials (`Expr`/`Term`): the parser (`parseExpr`, `writeTimes`, `fromNode`), `ePow`, `commonFactor`, `exprTex`/`varTex`. Hub: every algebra tool uses it. |
 | `poly.ts` | One-variable polynomials over `Rat`, smallest power first; what long division and root search use. |
-| `limits.ts` | `MAX_TRIAL` and `TOO_BIG_TO_SEARCH`: the ceiling on any search that grows with a number's size. |
+| `limits.ts` | `MAX_TRIAL` and `TOO_BIG_TO_SEARCH`: the ceiling on any search that grows with a number's size. (Not the calculus limit: that is `limitWorking.ts`.) |
+| `limitWorking.ts` | The limit job (lim(f, x, a[, side]), the Calculator's "=" and Work it out): the answer and its working, with each answer checked against the function's values next to the point. Reads through `math/limitCall.ts` and checks with `math/limitSamples.ts`. |
 | `integers.ts` | Prime factorisation (division ladder), HCF and LCM of whole numbers. |
 | `algebraHcf.ts` | HCF and LCM of algebraic expressions (factorise, then common factors). |
 | `factor.ts` | Factorise step by step, methods in the order taught (common factor, difference of squares, quadratics, substitution, factor theorem); `factorAll`. |
