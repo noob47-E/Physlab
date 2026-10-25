@@ -115,6 +115,12 @@ export function tryParsePoly(input: string | MathNode): Expr | null {
   if (!text) return null
   if (!literalsWithinLimit(text)) return null
   try {
+    const e = readExact(text)
+    if (e.dens.some((d) => varsOf(d).length > 0)) return null
+  } catch {
+    // If readExact cannot read it, continue with parseExpr
+  }
+  try {
     return parseExpr(text)
   } catch {
     return null

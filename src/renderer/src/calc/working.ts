@@ -444,6 +444,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   if (working?.finalRefusal && working.error && !(result.error && REFUSAL_STAYS.test(result.error.sentence))) {
     return { result: { main: '', src: result.src, error: { sentence: working.error }, unconfirmed: true }, verdict: 'unchecked' }
   }
+  if (working?.checked === 'failed') return { result: flagIfApproximate(result), verdict: 'unchecked' }
   // A checked working with no answer box can still conclude: a singular matrix has no inverse, and its conclusion is what the card says.
   if (working && !working.error && working.answers.length === 0 && working.checked === 'ok' && working.conclusion && !result.error) {
     return noInverseCard(result, working.conclusion)
@@ -451,7 +452,7 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   // An identity or a no-value line: the working says every (or no) value of the letter works, and the "=" card gives one root or value
   // of the same line (x − x + 3 = 3 read "x = 0"). That root is one guess at a claim about all the values, so the working's sentence
   // stands and the disagreement is said, exactly as for two different answers.
-  const sentence = working && working.checked === 'ok' ? everyOrNoValue(working) : null
+  const sentence = working ? everyOrNoValue(working) : null
   if (working && sentence !== null && givesNumber(result)) {
     const tex = `\\text{${sentence}}`
     return {

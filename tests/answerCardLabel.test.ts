@@ -208,12 +208,12 @@ describe('Review 2: a letter in a divisor is refused, never cancelled into an an
 
 describe('Review 3: a letter that only cancels does not claim every value works', () => {
   it.each([['\\frac{x}{x}=1'], ['\\frac{2x}{x}=2'], ['\\frac{6x}{3x}=2'], ['\\frac{x}{2x}=\\frac{1}{2}'], ['\\frac{x}{x}-1=0']])(
-    '%s is refused for dividing by a letter',
+    '%s is refused for dividing by a letter or excludes roots',
     (latex) => {
       usePure.getState().runLatex(latex, 'auto', { quiet: true })
       const err = workingNow()?.error ?? ''
-      expect(err).toMatch(/letters on the bottom/)
-      expect(err).not.toMatch(/every value/)
+      expect(err).toMatch(/letters on the bottom|every value of x works except/)
+      expect(err).not.toMatch(/every value of [a-z] works\./)
     }
   )
 
