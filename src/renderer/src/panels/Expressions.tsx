@@ -20,7 +20,8 @@ import {
   rangeOf,
   type ExpressionRow,
   type GraphRow,
-  type SliderRow
+  type SliderRow,
+  type CalcRow
 } from './expressionRows'
 import {
   formatParametric,
@@ -107,6 +108,17 @@ export function Expressions() {
           if (r.kind === 'slider') {
             return (
               <SliderRowView
+                key={r.id}
+                row={r}
+                first={i === 0}
+                last={i === rows.length - 1}
+                onMove={(dir) => move(r.id, dir)}
+              />
+            )
+          }
+          if (r.kind === 'calc') {
+            return (
+              <CalcRowView
                 key={r.id}
                 row={r}
                 first={i === 0}
@@ -343,6 +355,77 @@ function SliderRowView({
           />
         </span>
         {/* The same labelled arrows as a line's row (L5): a slider row came in after L5 and had them bare. */}
+        <span className="flex items-center gap-1">
+          <span>{W.move}</span>
+          <span className="flex items-center gap-0.5">
+            <button className={ICON} title={W.moveUp} aria-label={W.moveUp} disabled={first} onClick={() => onMove(-1)}>
+              <ArrowUp size={12} />
+            </button>
+            <button className={ICON} title={W.moveDown} aria-label={W.moveDown} disabled={last} onClick={() => onMove(1)}>
+              <ArrowDown size={12} />
+            </button>
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function CalcRowView({
+  row,
+  first,
+  last,
+  onMove
+}: {
+  row: CalcRow
+  first: boolean
+  last: boolean
+  onMove: (dir: -1 | 1) => void
+}) {
+  const obj = useScene((s) => s.objects[row.id]) as NumberObj | undefined
+  const remove = useScene((s) => s.removeObjects)
+  const selected = useScene((s) => s.selection.includes(row.id))
+
+  if (!obj) return null
+
+  return (
+    <div
+      className={`border-b border-[var(--line)] px-3 py-2 ${selected ? 'bg-[var(--bg-3)] shadow-[inset_3px_0_0_var(--accent)]' : ''}`}
+      onKeyDownCapture={(e) => {
+        if (!e.altKey) return
+        if (e.key === 'ArrowUp' && !first) onMove(-1)
+        if (e.key === 'ArrowDown' && !last) onMove(1)
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="h-3 w-3 shrink-0 rounded-full border border-[var(--line-2)]"
+          style={{ background: cssColor(obj), opacity: 0.8 }}
+        />
+        <div className="flex flex-1 items-center justify-between font-math">
+          <div className="flex items-center gap-1.5 text-[var(--text-strong)] font-medium">
+            {!row.name.startsWith('ans') && (
+              <>
+                <span className="italic">{row.name}</span>
+                <span className="text-[var(--text-dim)]">=</span>
+              </>
+            )}
+            <span>{row.expr}</span>
+          </div>
+          <div className="font-mono tabular-nums font-semibold text-[var(--accent)]">
+            = {fmt(row.value, 4)}
+          </div>
+        </div>
+        <button
+          className={ICON}
+          title={W.delete}
+          aria-label={W.delete}
+          onClick={() => remove([row.id])}
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <div className="mt-1 flex items-center justify-end text-small text-[var(--text-dim)]">
         <span className="flex items-center gap-1">
           <span>{W.move}</span>
           <span className="flex items-center gap-0.5">

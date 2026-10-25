@@ -300,6 +300,143 @@ export const EXAMPLES: Example[] = [
     tryThis: 'The window is where all three shadings overlap. Save it with File ▸ Export the drawing as an image…',
     commands: ['y < 3', 'y > -1', 'y < x + 4'],
     mode: 'graphing'
+  },
+  {
+    title: 'Water molecule (H2O)',
+    topic: 'Molecular structure of water',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'Oxygen at the centre bonded to two Hydrogen atoms at a 104.5° angle.',
+    tryThis: 'Orbit in 3D to see the bent molecular geometry. Save it with File ▸ Export the drawing as an image…',
+    commands: ['3d', 'O = (0, 0, 0)', 'H1 = (1.5, 1.1, 0)', 'H2 = (-1.5, 1.1, 0)', 'Segment(O, H1)', 'Segment(O, H2)'],
+    mode: 'graphing'
+  },
+  {
+    title: 'Methane molecule (CH4)',
+    topic: 'Tetrahedral molecular geometry',
+    area: 'Graphs & functions',
+    level: 'Intermediate',
+    what: 'Central Carbon atom bonded to four Hydrogen atoms forming a regular tetrahedron with 109.5° angles.',
+    tryThis: 'Orbit the structure in 3D to inspect the tetrahedral symmetry. Save it with File ▸ Export the drawing as an image…',
+    commands: [
+      '3d',
+      'C = (0, 0, 0)',
+      'H1 = (1.4, 1.4, 1.4)',
+      'H2 = (-1.4, -1.4, 1.4)',
+      'H3 = (-1.4, 1.4, -1.4)',
+      'H4 = (1.4, -1.4, -1.4)',
+      'Segment(C, H1)',
+      'Segment(C, H2)',
+      'Segment(C, H3)',
+      'Segment(C, H4)'
+    ],
+    mode: 'graphing'
+  },
+  {
+    title: 'Benzene molecule (C6H6)',
+    topic: 'Planar aromatic hexagonal ring',
+    area: 'Graphs & functions',
+    level: 'Intermediate',
+    what: 'A planar aromatic hexagonal ring of six Carbon atoms and six Hydrogen atoms.',
+    tryThis: 'Orbit in 3D to view the planar ring from above and from the side. Save it with File ▸ Export the drawing as an image…',
+    commands: [
+      '3d',
+      'C1 = (2.5, 0, 0)',
+      'C2 = (1.25, 2.17, 0)',
+      'C3 = (-1.25, 2.17, 0)',
+      'C4 = (-2.5, 0, 0)',
+      'C5 = (-1.25, -2.17, 0)',
+      'C6 = (1.25, -2.17, 0)',
+      'H1 = (4, 0, 0)',
+      'H2 = (2, 3.46, 0)',
+      'H3 = (-2, 3.46, 0)',
+      'H4 = (-4, 0, 0)',
+      'H5 = (-2, -3.46, 0)',
+      'H6 = (2, -3.46, 0)',
+      'Segment(C1, C2)',
+      'Segment(C2, C3)',
+      'Segment(C3, C4)',
+      'Segment(C4, C5)',
+      'Segment(C5, C6)',
+      'Segment(C6, C1)',
+      'Segment(C1, H1)',
+      'Segment(C2, H2)',
+      'Segment(C3, H3)',
+      'Segment(C4, H4)',
+      'Segment(C5, H5)',
+      'Segment(C6, H6)'
+    ],
+    mode: 'graphing'
+  },
+  {
+    title: 'Bohr atomic model',
+    topic: 'Atomic orbital shells in space',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'Central nucleus surrounded by electron orbital shells oriented in three-dimensional space.',
+    tryThis: 'Orbit the shells in 3D to view the electron paths. Save it with File ▸ Export the drawing as an image…',
+    commands: [
+      '3d',
+      'Nucleus = (0, 0, 0)',
+      'curve(3 cos(t), 3 sin(t), 0, 0, 2 pi)',
+      'curve(3 cos(t), 0, 3 sin(t), 0, 2 pi)',
+      'curve(0, 3 cos(t), 3 sin(t), 0, 2 pi)'
+    ],
+    mode: 'graphing'
+  },
+  {
+    title: 'DNA double helix',
+    topic: 'Interactive 3D double helix',
+    area: 'Graphs & functions',
+    level: 'Advanced',
+    what: 'Dual antiparallel helical backbones winding around a shared axis.',
+    tryThis: 'Orbit in 3D to look right down the central axis of the helix. Save it with File ▸ Export the drawing as an image…',
+    commands: [
+      '3d',
+      'curve(3 cos(t), 3 sin(t), 0.5 t - 6, 0, 8 pi)',
+      'curve(3 cos(t + pi), 3 sin(t + pi), 0.5 t - 6, 0, 8 pi)'
+    ],
+    mode: 'graphing'
+  },
+  {
+    title: 'Golden spiral',
+    topic: 'Logarithmic spiral with infinite self-similarity',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'r = 0.2 exp(0.3063 θ). The logarithmic spiral maintains identical proportions under infinite zoom.',
+    tryThis: 'Use the scroll wheel to zoom in or out endlessly: the spiral looks identical at every magnification. Save it with File ▸ Export the drawing as an image…',
+    commands: ['b = 0.3063', 'r = 0.2 e^(b θ)'],
+    mode: 'graphing'
+  },
+  {
+    title: 'Sunflower spiral',
+    topic: 'Fermat spiral seed arrangement',
+    area: 'Graphs & functions',
+    level: 'Basic',
+    what: 'r = 1.5 sqrt(θ). Fermat spirals model the optimal natural packing of sunflower florets.',
+    tryThis: 'Zoom out to watch the spiral arms multiply across the canvas. Save it with File ▸ Export the drawing as an image…',
+    commands: ['a = 1.5', 'r = a sqrt(θ)'],
+    mode: 'graphing'
+  },
+  {
+    title: 'Butterfly curve',
+    topic: 'Temple H. Fay transcendental polar curve',
+    area: 'Graphs & functions',
+    level: 'Intermediate',
+    what: 'A transcendental polar curve forming the shape of a butterfly with wing patterns.',
+    tryThis: 'Zoom in to inspect the delicate loops inside the wings. Save it with File ▸ Export the drawing as an image…',
+    commands: ['r = e^sin(θ) - 2 cos(4θ) + sin((2θ - pi)/24)^5'],
+    mode: 'graphing'
+  },
+  {
+    title: 'Spirograph gear',
+    topic: 'Parametric rolling gear curves',
+    area: 'Graphs & functions',
+    level: 'Intermediate',
+    what: 'A rolling-circle hypotrochoid with live sliders for outer radius R, inner radius r, and pen offset d.',
+    tryThis: 'Drag the sliders R, r, and d to explore multi-petal star and rosette designs. Save it with File ▸ Export the drawing as an image…',
+    commands: ['R = 5', 'r = 3', 'd = 5', 'curve((R - r) cos(t) + d cos((R - r) t / r), (R - r) sin(t) - d sin((R - r) t / r), 0, 12 pi)'],
+    mode: 'graphing'
   }
 ]
 

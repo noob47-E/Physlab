@@ -12,7 +12,7 @@
 
 import { memo, Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronUp, Eye, History, Keyboard, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Eye, EyeOff, History, Keyboard, Sparkles, Trash2, X } from 'lucide-react'
 import { casInDegrees } from '../calc/angle'
 import { CHIP_MODES, MODE_HINTS, MODE_LABELS, MORE_MODES, STORED_LETTERS, clearCalcHistory, isFieldMode, useCalc, type CalcMode, type FieldMode, type HistoryItem } from '../calc/calcStore'
 import { openPane, type Panes } from '../calc/drawers'
@@ -39,7 +39,7 @@ import { parseExpr, varsOf } from '../math/pure/mono'
 import { useScene } from '../core/store'
 import { themeColor } from '../app/theme'
 import { placeTourCard } from '../app/layoutMath'
-import { showBeside } from '../app/panels'
+import { hidePanel, showBeside } from '../app/panels'
 import { enterMode } from '../app/layout'
 import { visualizeArea, visualizeGraph, visualizePoint, visualizeTangent, visualizeVector } from '../core/visualize'
 import { Builder } from '../core/factory'
@@ -577,6 +577,18 @@ function FieldScreen({ mode }: { mode: FieldMode }) {
           {drew && picture && (
             <button className="btn" onClick={() => enterMode('graphing')} title="Open this picture in Graphing, with its list of expressions">
               Open in Graphing
+            </button>
+          )}
+          {drew && (
+            <button
+              className="btn"
+              onClick={() => {
+                hidePanel('viewport')
+                setDrew(false)
+              }}
+              title="Close the viewport and show Maths full-screen"
+            >
+              <EyeOff size={13} /> Hide drawing
             </button>
           )}
           <div className="seg" title="The angle unit for sin, cos and tan">

@@ -48,10 +48,18 @@ describe('G2c: the add box judges a line by what that line did', () => {
     expect(scene().log.length).toBe(logBefore)
   })
 
-  it('a line that draws nothing is refused in words, not swallowed: 2 + 3', async () => {
+  it('a simple arithmetic line like 2 + 3 is evaluated and kept as a calculation row', async () => {
     const res = await addExpressionLine('2 + 3')
-    expect(res).toEqual({ ok: false, reason: NOT_A_NEW_GRAPH })
-    expect(Object.keys(scene().objects)).toHaveLength(0)
+    expect(res.ok).toBe(true)
+    const nums = Object.values(scene().objects).filter((o) => o.type === 'number')
+    expect(nums.length).toBe(1)
+    expect(nums[0].expr).toBe('2 + 3')
+  })
+
+  it('a line that neither draws nor computes is refused in words: foobar', async () => {
+    const res = await addExpressionLine('foobar')
+    expect(res.ok).toBe(false)
+    expect(res.reason).toBeTruthy()
   })
 
   it('a line that makes something other than a graph is still kept: a = 3', async () => {

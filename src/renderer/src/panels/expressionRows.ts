@@ -47,7 +47,18 @@ export interface SliderRow {
   animate?: boolean
 }
 
-export type ExpressionRow = GraphRow | SliderRow
+export interface CalcRow {
+  kind: 'calc'
+  id: ObjId
+  name: string
+  source: string
+  expr: string
+  value: number
+  color: string
+  visible: boolean
+}
+
+export type ExpressionRow = GraphRow | SliderRow | CalcRow
 
 /** The default line width a graph is drawn with when it has none of its own (render/GraphView.tsx). */
 export const DEFAULT_WIDTH = 2.4
@@ -79,23 +90,37 @@ export function expressionRows(
         vMin: g.vMin,
         vMax: g.vMax
       })
-    } else if (o.type === 'number' && o.slider && visibleIn(o, 'graphing')) {
-      const s = o.slider
+    } else if (o.type === 'number' && visibleIn(o, 'graphing')) {
+      const num = o as NumberObj
       const c = ev?.values?.get(o.id)
-      const val = c?.type === 'number' ? c.value : ((ev?.scope?.[o.name] as number) ?? (Number(o.expr) || 0))
-      rows.push({
-        kind: 'slider',
-        id,
-        name: o.name,
-        source: `${o.name} = ${fmt(val, 4)}`,
-        value: val,
-        color: o.color,
-        visible: o.visible,
-        min: s.min,
-        max: s.max,
-        step: s.step,
-        animate: o.animate
-      })
+      const val = c?.type === 'number' ? c.value : ((ev?.scope?.[o.name] as number) ?? (Number(num.expr) || 0))
+      if (num.slider) {
+        const s = num.slider
+        rows.push({
+          kind: 'slider',
+          id,
+          name: o.name,
+          source: `${o.name} = ${fmt(val, 4)}`,
+          value: val,
+          color: o.color,
+          visible: o.visible,
+          min: s.min,
+          max: s.max,
+          step: s.step,
+          animate: num.animate
+        })
+      } else {
+        rows.push({
+          kind: 'calc',
+          id,
+          name: o.name,
+          expr: num.expr,
+          source: o.name.startsWith('ans') ? `${num.expr} = ${fmt(val, 6)}` : `${o.name} = ${num.expr}`,
+          value: val,
+          color: o.color,
+          visible: o.visible
+        })
+      }
     }
   }
   return rows
@@ -274,6 +299,40 @@ export async function addExpressionLine(
     }
     return { ok: true }
   }
+
+  // Pure arithmetic / scalar line (e.g. 2 + 2, 3 * 5, sqrt(16)): evaluate and create a calculation entry
+  if (error === undefined && !createdGraph && !madeSomething) {
+    try {
+      const val = math.evaluate(preprocess(trimmed), scene().ev.scope)
+      if (typeof val === 'number' && Number.isFinite(val)) {
+        const b = new Builder()
+        const names = scene().ev.names
+        let numName = ''
+        for (const candidate of ['a', 'b', 'c', 'd', 'k', 'm', 'n', 'p', 'q', 'u', 'v', 'w']) {
+          if (!names.has(candidate)) {
+            numName = candidate
+            break
+          }
+        }
+        if (!numName) {
+          let i = 1
+          while (names.has(`ans${i}`)) i++
+          numName = `ans${i}`
+        }
+        const obj = b.number(trimmed, { name: numName })
+        obj.space = 'graphing'
+        b.commit()
+        const s = scene()
+        useScene.setState({
+          ev: evaluateScene(s.objects, s.order, s.settings, s.time)
+        })
+        return { ok: true }
+      }
+    } catch {
+      // not scalar arithmetic; fall through to putBack
+    }
+  }
+
   putBack(stock)
   const reason = error?.trim()
   return { ok: false, reason: reason ? (/[.!?]$/.test(reason) ? reason : `${reason}.`) : NOT_A_NEW_GRAPH }

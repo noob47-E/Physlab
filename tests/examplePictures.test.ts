@@ -35,3 +35,33 @@ describe('the example pictures', () => {
       expect(ex.tryThis).toMatch(/Save it with File ▸ Export the drawing as an image…$/)
     })
 })
+
+const CHEMISTRY_AND_SPIRAL_DEMOS = [
+  'Water molecule (H2O)',
+  'Methane molecule (CH4)',
+  'Benzene molecule (C6H6)',
+  'Bohr atomic model',
+  'DNA double helix',
+  'Golden spiral',
+  'Sunflower spiral',
+  'Butterfly curve',
+  'Spirograph gear'
+]
+
+describe('the chemistry, DNA, and spiral examples', () => {
+  for (const title of CHEMISTRY_AND_SPIRAL_DEMOS) {
+    it(`${title} runs without error and leaves objects in graphing space`, async () => {
+      const ex = EXAMPLES.find((e) => e.title === title)!
+      expect(ex).toBeDefined()
+      resetGlobals()
+      scene().newScene()
+      scene().clearLog()
+      scene().setActiveSpace('graphing')
+      for (const c of ex.commands) await runCommand(c)
+      expect(scene().log.filter((l) => l.kind === 'error')).toEqual([])
+      expect(Object.keys(scene().objects).length).toBeGreaterThan(0)
+      expect(`${ex.what} ${ex.tryThis}`).not.toMatch(/\^/)
+      expect(ex.tryThis).toMatch(/Save it with File ▸ Export the drawing as an image…$/)
+    })
+  }
+})

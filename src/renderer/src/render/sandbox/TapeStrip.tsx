@@ -230,12 +230,21 @@ function ScrubBar({ model, onWidth, isSimple, slim = false }: { model: StripMode
   const [box, setBox] = useState<HTMLDivElement | null>(null)
   const dragging = useRef(false)
   const modelRef = useRef(model)
+  const lastWidth = useRef(0)
   useLayoutEffect(() => {
     modelRef.current = model
   })
   useLayoutEffect(() => {
     if (!box || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => onWidth(box.clientWidth))
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width)
+        if (Math.abs(w - lastWidth.current) >= 4) {
+          lastWidth.current = w
+          onWidth(w)
+        }
+      }
+    })
     ro.observe(box)
     return () => ro.disconnect()
   }, [box, onWidth])
@@ -428,21 +437,23 @@ function ShownStrip({ inline }: { inline: boolean }) {
     return (
       <div className="pointer-events-auto absolute bottom-[64px] left-14 right-3 flex flex-wrap items-center gap-1 rounded-lg border border-[color:var(--line-2)] bg-[var(--label-bg)] px-2 py-0.5 text-[color:var(--text)]" data-tape-strip="" data-tape-row="slim">
         {note && <p className="absolute -top-6 left-2 max-w-full truncate rounded bg-[var(--label-bg)] px-2 text-[color:var(--text-dim)]" title={note}>{note}</p>}
-        <Btn name="To the start" title="Jump to the start of the recording" onClick={toStart} disabled={!flags.canStart}>
-          <SkipBack size={15} />
-        </Btn>
-        <Btn name="Step back" title="Step back one step (comma key)" onClick={stepBack} disabled={!flags.canBack}>
-          <StepBack size={15} />
-        </Btn>
-        <Btn name={flags.playing ? 'Pause' : 'Play'} title={flags.playing ? 'Pause (Space or K)' : 'Play (Space or L)'} onClick={togglePlay} on>
-          {flags.playing ? <Pause size={15} /> : <Play size={15} />}
-        </Btn>
-        <Btn name="Step on" title={stepTitle} onClick={stepForward}>
-          <StepForward size={15} />
-        </Btn>
+        <div className="flex shrink-0 items-center gap-1">
+          <Btn name="To the start" title="Jump to the start of the recording" onClick={toStart} disabled={!flags.canStart}>
+            <SkipBack size={15} />
+          </Btn>
+          <Btn name="Step back" title="Step back one step (comma key)" onClick={stepBack} disabled={!flags.canBack}>
+            <StepBack size={15} />
+          </Btn>
+          <Btn name={flags.playing ? 'Pause' : 'Play'} title={flags.playing ? 'Pause (Space or K)' : 'Play (Space or L)'} onClick={togglePlay} on>
+            {flags.playing ? <Pause size={15} /> : <Play size={15} />}
+          </Btn>
+          <Btn name="Step on" title={stepTitle} onClick={stepForward}>
+            <StepForward size={15} />
+          </Btn>
+        </div>
         <ScrubBar model={model} onWidth={setWidth} isSimple={isSimple} slim />
         {/* In simple view, or on narrow canvas, formatted seconds. In wide All tools, full timeText (t = X.XX s · step N) */}
-        <span className="ml-1 grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]" title={timeText}>
+        <span className="ml-1 shrink-0 grid justify-items-end font-mono tabular-nums text-[color:var(--text-strong)]" title={timeText}>
           <span className="invisible col-start-1 row-start-1" aria-hidden="true">
             {timeDisplay.widest}
           </span>
@@ -450,7 +461,7 @@ function ShownStrip({ inline }: { inline: boolean }) {
         </span>
         <button
           type="button"
-          className="btn min-h-[44px] min-w-[52px] justify-center"
+          className="btn shrink-0 min-h-[44px] min-w-[52px] justify-center"
           aria-label="Speed"
           title={`${SPEED_TITLE[speedShown] ?? SPEED_TITLE[1]}: press for ${NEXT_WORDS[nextSimpleSpeed(speedShown)]}${mode === 'live' ? ' (the same as slow motion)' : ''}`}
           onClick={() => chooseSpeed(nextSimpleSpeed(speedShown))}
@@ -461,7 +472,7 @@ function ShownStrip({ inline }: { inline: boolean }) {
           <button
             ref={moreButtonRef}
             type="button"
-            className={`btn min-h-[44px] min-w-[44px] justify-center gap-1 px-2.5 ${more ? 'on' : ''}`}
+            className={`btn shrink-0 min-h-[44px] min-w-[44px] justify-center gap-1 px-2.5 ${more ? 'on' : ''}`}
             aria-label="More replay tools"
             aria-expanded={more}
             aria-haspopup="dialog"
