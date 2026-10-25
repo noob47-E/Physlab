@@ -418,8 +418,8 @@ function CalcRowView({
         </div>
         <button
           className={ICON}
-          title={W.delete}
-          aria-label={W.delete}
+          title={W.remove}
+          aria-label={W.remove}
           onClick={() => remove([row.id])}
         >
           <X size={14} />

@@ -15,7 +15,7 @@ const OPTS = { vars: {}, ans: 0, angle: 'deg' as const }
 
 /** The card, the working and the joined result for a typed line, exactly as the Maths screen computes them after "=". */
 function run(line: string) {
-  const card = evaluateInput('COMP', line, OPTS)
+  const card = evaluateInput('COMP', line, OPTS)!
   usePure.getState().runLatex(line, 'auto', { quiet: true })
   const working = usePure.getState().working ?? null
   return { card, working, joined: reconcile(card, working) }

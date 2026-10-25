@@ -14,7 +14,7 @@ vi.mock('../src/renderer/src/math/engine/sympy/worker', () => ({
   CAS_OPS: []
 }))
 
-import { addExpressionLine, NOT_A_NEW_GRAPH } from '../src/renderer/src/panels/expressionRows'
+import { addExpressionLine } from '../src/renderer/src/panels/expressionRows'
 import { scene } from '../src/renderer/src/core/store'
 import { readSource } from './helpers/repo'
 import { resetGlobals } from './helpers/globals'
