@@ -135,7 +135,7 @@ function identify(text: string): Shape | null {
  * reading the router gets, log(x), is refused on the page because a plain run of letters reads as a word. Only the LaTeX
  * that reads as the same problem is used, so the working never shows a line that is not the typed problem.
  */
-function startLine(input: string, raw: string | undefined): string {
+export function startLine(input: string, raw: string | undefined): string {
   if (raw === undefined) return input
   try {
     if (latexToMath(raw).replace(/\s+/g, '') === input.replace(/\s+/g, '')) return raw.trim()
@@ -149,7 +149,7 @@ function startLine(input: string, raw: string | undefined): string {
  * The rest of the working: the equation left after the move is solved by the router. Its steps are the working's own, and its
  * answer is the answer of the equation left. A reduced equation the router cannot show ends the method with noWorking().
  */
-function solveRest(start: string, steps: Step[], reduced: string, v: string, router: StepRouter): Working {
+export function solveRest(start: string, steps: Step[], reduced: string, v: string, router: StepRouter): Working {
   // The reduced equation is solved over the reals too: this method only takes real problems (isRealProblem).
   const sub = router.solve({ job: 'solve', input: reduced, variable: v, domain: 'real' })
   if (sub.noWorking || sub.steps.length === 0 || sub.answer === undefined) return noWorking()
