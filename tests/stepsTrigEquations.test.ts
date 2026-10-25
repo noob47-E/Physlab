@@ -32,6 +32,8 @@ describe('Part S5: Trig equations (math/steps)', () => {
       { latex: '2\\cos(x)+1=0', expectedTex: ['120', '240'] },
       { latex: '\\tan(2x)=1', expectedTex: ['22.5', '112.5', '202.5', '292.5'] },
       { latex: '2\\sin(x)^2-\\sin(x)-1=0', expectedTex: ['90', '210', '330'] },
+      { latex: '\\cos^{2}x=1', expectedTex: ['0', '180'] },
+      { latex: '2\\sin^{2}x=1', expectedTex: ['45', '135', '225', '315'] },
       { latex: '\\sin(x)=\\cos(x)', expectedTex: ['45', '225'] }
     ]
 

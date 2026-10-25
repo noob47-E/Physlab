@@ -131,7 +131,10 @@ function extrapolated(samples: Sample[]): number {
 export function holdsValue(r: Reading, value: number): boolean {
   if (!Number.isFinite(value) || !allFinite(r)) return false
   const first = r.samples[0]
-  const d0 = Math.abs(first.v - value)
+  const d0 = Math.max(
+    Math.abs(first.v - value),
+    r.samples[1] ? Math.abs(r.samples[1].v - value) * (r.samples[1].g / first.g) : 0
+  )
   const size = Math.max(Math.abs(value), sizeOf(r.samples))
   const approach = (s: Sample): number => SLACK * (first.g / s.g) * d0
   const floor = (s: Sample): number => NOISE * size * (s.g / first.g) ** 2

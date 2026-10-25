@@ -833,6 +833,78 @@ function isPointRounding(f: Fn, point: number, value: number): boolean {
   return Math.abs(value) <= 4 * Number.EPSILON * Math.abs(point) * Math.abs(slope)
 }
 
+function isTrigBounded(n: MathNode): boolean {
+  if (math.isFunctionNode(n) && (n.fn as { name?: string }).name) {
+    const name = (n.fn as { name?: string }).name
+    return name === 'sin' || name === 'cos'
+  }
+  return false
+}
+
+/** Squeeze theorem for functions with bounded oscillations (such as x·sin(1/x) as x→0, or sin(x)/x as x→∞). */
+function squeezeAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
+  const v = spec.variable
+  const whole = parseNode(spec.body)
+  if (!whole) return null
+  const node = stripParens(whole)
+
+  let boundedNode: MathNode | null = null
+  let envelopeNode: MathNode | null = null
+
+  if (math.isOperatorNode(node) && node.fn === 'multiply' && node.args.length === 2) {
+    const a = stripParens(node.args[0])
+    const b = stripParens(node.args[1])
+    if (isTrigBounded(a)) {
+      boundedNode = a
+      envelopeNode = b
+    } else if (isTrigBounded(b)) {
+      boundedNode = b
+      envelopeNode = a
+    }
+  } else if (math.isOperatorNode(node) && node.fn === 'divide' && node.args.length === 2) {
+    const num = stripParens(node.args[0])
+    const den = stripParens(node.args[1])
+    if (isTrigBounded(num)) {
+      boundedNode = num
+      envelopeNode = math.parse(`1 / (${den.toString()})`)
+    }
+  }
+
+  if (!boundedNode || !envelopeNode) return null
+
+  // Check if envelope goes to 0 as x -> spec.point
+  const gFn = compileLimitBody(envelopeNode.toString(), v)
+  if (!gFn) return null
+  const gReading = dirs.map((dir) => readingOf(gFn, spec.point, dir))
+  if (!gReading.every((r) => holdsValue(r, 0))) return null
+
+  // Verify that f itself holds 0
+  const fReading = dirs.map((dir) => readingOf(f, spec.point, dir))
+  if (!fReading.every((r) => holdsValue(r, 0))) return null
+
+  const steps = new Steps()
+  const trigName = ((boundedNode as unknown as { fn?: { name?: string } }).fn?.name) ?? 'trig'
+  const boundedTex = boundedNode.toTex()
+  const pTex = pointText(spec.point)
+
+  steps.goal('Apply the Squeeze Theorem')
+  steps.add(
+    `The ${trigName} factor is bounded between -1 and 1: -1 \\le ${boundedTex} \\le 1 for all ${v} in the domain.`,
+    `-1 \\le ${boundedTex} \\le 1`
+  )
+  steps.add(
+    `As ${v} \\to ${pTex}, the bounding factor tends to 0.`,
+    `\\lim_{${v}\\to ${pTex}} ${envelopeNode.toTex()} = 0`
+  )
+  steps.add(
+    `By the Squeeze Theorem, the limit is 0.`,
+    `\\lim_{${v}\\to ${pTex}} ${spec.body} = 0`
+  )
+
+  const ans: LimitAnswer = { kind: 'value', value: 0, exact: R0 }
+  return attemptOf(spec, f, dirs, steps, ans, 'Squeeze Theorem', '0')
+}
+
 /** The function's value at the point, when it is a number and the values next to the point agree with it. */
 function substitutionAttempt(spec: LimitSpec, f: Fn, dirs: Side[]): Attempt | null {
   if (!Number.isFinite(spec.point)) return null
@@ -977,6 +1049,7 @@ function solve(spec: LimitSpec, depth: number): Attempt | null {
     () => rationalAttempt(spec, f, dirs),
     () => absAttempt(spec, f, dirs),
     () => standardAttempt(spec, f, dirs),
+    () => squeezeAttempt(spec, f, dirs),
     () => substitutionAttempt(spec, f, dirs),
     () => lhopitalAttempt(spec, f, dirs, depth)
   ]
