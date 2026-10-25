@@ -123,24 +123,54 @@ describe('a tile in the panel', () => {
       expect(ids).toContain('bohr-atom')
     })
 
-    it('DNA Double Helix sets view to 3D and plots both helical strands', async () => {
+    it('DNA Double Helix sets view to 3D and plots 3D tubular strands with base-pair rungs', async () => {
       const { playTile } = await import('../src/renderer/src/panels/tiles3d')
       const dna = CHEMISTRY_TILES_3D.find((t) => t.id === 'dna-double-helix')!
       scene().setViewMode('2d')
       await playTile(dna)
       expect(scene().viewMode).toBe('3d')
-      const curveCount = graphs().filter((o) => o.kind === 'curve3d').length
-      expect(curveCount).toBe(2)
+      const psurfaceCount = graphs().filter((o) => o.kind === 'psurface').length
+      expect(psurfaceCount).toBe(2)
+      const rungCount = graphs().filter((o) => o.kind === 'curve3d').length
+      expect(rungCount).toBe(19)
     })
 
-    it('Water Molecule (H2O) sets view to 3D and plots atoms and bonds', async () => {
+    it('Water Molecule (H2O) sets view to 3D and plots atom spheres, bonds and points', async () => {
       const { playTile } = await import('../src/renderer/src/panels/tiles3d')
       const water = CHEMISTRY_TILES_3D.find((t) => t.id === 'water-molecule')!
       await playTile(water)
       expect(scene().viewMode).toBe('3d')
+      const atomSpheres = graphs().filter((o) => o.kind === 'psurface').length
+      expect(atomSpheres).toBe(3)
+      const bonds = graphs().filter((o) => o.kind === 'curve3d').length
+      expect(bonds).toBe(2)
       expect(scene().ev.names.get('O')).toBeDefined()
       expect(scene().ev.names.get('H1')).toBeDefined()
       expect(scene().ev.names.get('H2')).toBeDefined()
+    })
+
+    it('Methane Molecule (CH4) sets view to 3D with 5 atom spheres and 4 tetrahedral bonds', async () => {
+      const { playTile } = await import('../src/renderer/src/panels/tiles3d')
+      const methane = CHEMISTRY_TILES_3D.find((t) => t.id === 'methane-molecule')!
+      await playTile(methane)
+      expect(scene().viewMode).toBe('3d')
+      const atomSpheres = graphs().filter((o) => o.kind === 'psurface').length
+      expect(atomSpheres).toBe(5)
+      const bonds = graphs().filter((o) => o.kind === 'curve3d').length
+      expect(bonds).toBe(4)
+      expect(scene().ev.names.get('C')).toBeDefined()
+    })
+
+    it('Bohr Atom sets view to 3D with nucleus sphere and 3 inclined electron shells', async () => {
+      const { playTile } = await import('../src/renderer/src/panels/tiles3d')
+      const bohr = CHEMISTRY_TILES_3D.find((t) => t.id === 'bohr-atom')!
+      await playTile(bohr)
+      expect(scene().viewMode).toBe('3d')
+      const nucleusSpheres = graphs().filter((o) => o.kind === 'psurface').length
+      expect(nucleusSpheres).toBe(1)
+      const shells = graphs().filter((o) => o.kind === 'curve3d').length
+      expect(shells).toBe(3)
+      expect(scene().ev.names.get('Nucleus')).toBeDefined()
     })
   })
 })
