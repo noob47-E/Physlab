@@ -32,7 +32,7 @@ const TURN = 360
 const HALF = 180
 
 /** One family x = a + p·k of the general solution, in degrees, with the text it is written with in the unit. */
-export interface InverseFamily {
+interface InverseFamily {
   a: number
   p: number
   aTex: string
@@ -40,7 +40,7 @@ export interface InverseFamily {
 }
 
 /** One root in the range: its value in degrees, and the decimal it is shown as. */
-export interface InverseMember {
+interface InverseMember {
   value: number
   text: string
 }
@@ -54,7 +54,7 @@ const compact = (text: string): string => text.replace(/\s+/g, '')
  * The exact rational a value text reads, when it is written the way rTex writes one: 2, -2, \frac{2}{3}, -\frac{2}{3}. Any other
  * spelling (an unreduced fraction, a decimal) is refused, so a value is never read in two different ways.
  */
-export function exactValueOf(text: string): Rat | null {
+function exactValueOf(text: string): Rat | null {
   const s = compact(text)
   const m = /^(-?)(?:(\d+)|\\frac\{(\d+)\}\{(\d+)\})$/.exec(s)
   if (!m) return null
@@ -94,7 +94,7 @@ function constantsOf(unit: AngleUnit): { turn: string; half: string } {
  * The families of the general solution of fn(x) = c: sine and cosine have two (the principal angle, and its mirror image in the
  * same turn), tangent has one. Null when c has no principal angle.
  */
-export function inverseFamilies(fn: TrigFn, c: Rat, unit: AngleUnit): InverseFamily[] | null {
+function inverseFamilies(fn: TrigFn, c: Rat, unit: AngleUnit): InverseFamily[] | null {
   const theta = principalDeg(fn, c)
   if (theta === null) return null
   const inv = inverseTex(fn, c)

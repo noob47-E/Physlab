@@ -28,10 +28,10 @@ const MAX_BASE = 1000n
 const NOT_A_LETTER = new Set(['e', 'E', 'i', 'I'])
 
 /** The base of the substitution: the base e, or a whole number from 2 up. */
-export type SubBase = 'e' | bigint
+type SubBase = 'e' | bigint
 
 /** One term of the typed left side: c·base^(k·v), or the whole number c when base is null. */
-export interface ExpTerm {
+interface ExpTerm {
   c: bigint
   base: SubBase | null
   k: bigint
@@ -80,7 +80,7 @@ export interface ExpSolutionData {
 }
 
 /** The result of solutionOf: the roots sorted into accepted and rejected, the x of each accepted root, and the put-back. */
-export interface ExpSolution {
+interface ExpSolution {
   accepted: string[]
   rejected: string[]
   xs: string[]
@@ -314,7 +314,7 @@ export function quadraticText(p: SubstPlan): string {
 }
 
 /** The quadratic in u as a polynomial, for the exact comparison with a written line. */
-export function planExpr(p: SubstPlan): Expr {
+function planExpr(p: SubstPlan): Expr {
   return normalize([
     { c: rat(p.a2), v: { [U]: 2 } },
     { c: rat(p.a1), v: { [U]: 1 } },
@@ -358,7 +358,7 @@ function wholePower(base: bigint, c: bigint): number | null {
  * The x with a^x = r, written as the answer writes it: "2", "-1", "0", or "\ln{3}" for the base e. Null when r is not a
  * positive value this writes exactly (a value that is not a whole power of a, or a fraction for the base e).
  */
-export function xTextOf(a: SubBase, r: Rat): string | null {
+function xTextOf(a: SubBase, r: Rat): string | null {
   if (r.n <= 0n) return null
   if (a === 'e') {
     if (r.d !== 1n) return null

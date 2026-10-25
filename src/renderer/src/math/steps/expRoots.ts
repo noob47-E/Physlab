@@ -20,10 +20,10 @@ import { latexToMath } from '../latexToMath'
 import type { ValidationVerdict } from './types'
 
 /** The largest whole-number exponent a check writes or raises a base to: the bound the other exponential checks use. */
-export const MAX_EXP_POWER = 300
+const MAX_EXP_POWER = 300
 
 /** The text as the checks read it: LaTeX is converted, spaces are dropped. Null when the converter refuses the text. */
-export function readableText(text: string): string | null {
+function readableText(text: string): string | null {
   try {
     const s = text.includes('\\') ? latexToMath(text) : text
     return s.replace(/\s+/g, '')
@@ -33,7 +33,7 @@ export function readableText(text: string): string | null {
 }
 
 /** The two sides of one equation, read; null when the text is not exactly one equation. */
-export function sidesOf(text: string): { left: string; right: string } | null {
+function sidesOf(text: string): { left: string; right: string } | null {
   const s = readableText(text)
   if (s === null) return null
   const i = s.indexOf('=')
@@ -77,7 +77,7 @@ function wholeOf(text: string): bigint | null {
 }
 
 /** A base an exponential may have: Euler's e, or a whole number from 2 to 1000 written in digits. */
-export function baseOf(text: string): string | null {
+function baseOf(text: string): string | null {
   if (text === 'e') return 'e'
   if (!/^\d+$/.test(text)) return null
   const b = BigInt(text)
@@ -140,7 +140,7 @@ function termsOf(side: string): string[] | null {
  */
 function atomTerm(term: string, v: string): { base: string; k: Rat } | null {
   const m =
-    /^([+-]?)(\d+(?:\/\d+)?)?(e)\^(?:\(([A-Za-z])\)|([A-Za-z]))$/.exec(term) ??
+    /^([+-]?)(?:(\d+(?:\/\d+)?)\*?)?(e)\^(?:\(([A-Za-z])\)|([A-Za-z]))$/.exec(term) ??
     /^([+-]?)(?:(\d+(?:\/\d+)?)\*)?(\d+)\^(?:\(([A-Za-z])\)|([A-Za-z]))$/.exec(term)
   if (!m) return null
   if ((m[4] ?? m[5]) !== v) return null
@@ -253,7 +253,7 @@ export function affineExpOf(text: string, v: string): AffineExp | null {
 /** Whether a text holds an exponential atom in v, such as e^(x) or 2^(x). Used to route a move to the exact checks below. */
 export function hasExpAtom(text: string, v: string): boolean {
   const s = readableText(text)
-  return s !== null && new RegExp(`(^|[^A-Za-z0-9])(e|\\d+)\\^\\(?${v}\\)?`).test(s)
+  return s !== null && new RegExp(`(?:^|[^A-Za-z])(?:\\d+\\*?)?(e|\\d+)\\^\\(?${v}\\)?`).test(s)
 }
 
 /** The LaTeX of a logarithm answer: \ln(c) for base e, or \frac{\ln(c)}{\ln(b)} for a whole base b. */
@@ -262,7 +262,7 @@ export function rootTex(base: string, c: Rat): string {
 }
 
 /** The whole equation a log root is written as: x = ln 5, or x = ln 12 / ln 5. */
-export function rootLine(v: string, base: string, c: Rat): string {
+function rootLine(v: string, base: string, c: Rat): string {
   return `${v}=${rootTex(base, c)}`
 }
 
@@ -280,7 +280,7 @@ export function expTex(c: bigint): string {
  * Each side after is compared with the exact result of the move (sums of atoms and constants), so the atom is never read as a
  * number. Other ops are not claimed here.
  */
-export function checkAtomMove(before: string, after: string, op: { kind: string; term?: string; k?: string }, v: string): ValidationVerdict {
+function checkAtomMove(before: string, after: string, op: { kind: string; term?: string; k?: string }, v: string): ValidationVerdict {
   const b = sidesOf(before)
   const a = sidesOf(after)
   if (!b || !a) return 'unknown'
@@ -388,7 +388,7 @@ export function checkExpRootOp(
 // ---------------------------------------------------------------------------------------------------------
 
 /** log(A) + log(B) = c, base 10, with c a whole number from 0 to MAX_EXP_POWER. */
-export interface LogSum {
+interface LogSum {
   args: string[]
   c: bigint
 }
@@ -441,7 +441,7 @@ function singleLogOf(text: string): { arg: string; c: bigint } | null {
 }
 
 /** The one letter the logarithm sum is written in, or null when it uses none or more than one. */
-export function logSumLetter(sum: LogSum): string | null {
+function logSumLetter(sum: LogSum): string | null {
   const letters = [...new Set(sum.args.join('').match(/[A-Za-z]/g) ?? [])]
   return letters.length === 1 ? letters[0] : null
 }
