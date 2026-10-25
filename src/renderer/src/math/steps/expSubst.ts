@@ -10,6 +10,9 @@
 // rational, or a value of u that is not an exact power of a.
 
 import type { MathNode } from 'mathjs'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyNode = MathNode & Record<string, any>
 import { math, preprocess } from '../expr'
 import { rat, rAdd, rCmp, rDiv, rEq, rIsNeg, rMul, rNeg, rSqrt, rStr, rSub, type Rat } from '../pure/rat'
 import { eEq, eSub, normalize, parseExpr, varsOf, type Expr } from '../pure/mono'
@@ -99,16 +102,16 @@ export function baseText(a: SubBase): string {
 }
 
 /** A parse of a text by the app's own maths reader, or null when it does not read. */
-function parseText(text: string): MathNode | null {
+function parseText(text: string): AnyNode | null {
   try {
-    return math.parse(preprocess(text))
+    return math.parse(preprocess(text)) as AnyNode
   } catch {
     return null
   }
 }
 
 /** A whole number written as a node (2, -3, (4)), or null. Decimals and fractions are not read: the checks are exact integers. */
-function intOf(node: MathNode): bigint | null {
+function intOf(node: AnyNode): bigint | null {
   if (node.type === 'ParenthesisNode') return intOf(node.content)
   if (node.type === 'ConstantNode') {
     const x = node.value
@@ -122,14 +125,14 @@ function intOf(node: MathNode): bigint | null {
 }
 
 /** A single letter a node is (x, or (x)), or null. The base e and the imaginary unit are constants, not letters. */
-function letterOf(node: MathNode): string | null {
+function letterOf(node: AnyNode): string | null {
   if (node.type === 'ParenthesisNode') return letterOf(node.content)
   if (node.type === 'SymbolNode' && /^[A-Za-z]$/.test(node.name) && !NOT_A_LETTER.has(node.name)) return node.name
   return null
 }
 
 /** An exponent that is a letter times a whole number: x, 2x, (2x), (2*x). Null for any other exponent. */
-function exponentOf(node: MathNode): { k: bigint; v: string } | null {
+function exponentOf(node: AnyNode): { k: bigint; v: string } | null {
   if (node.type === 'ParenthesisNode') return exponentOf(node.content)
   const bare = letterOf(node)
   if (bare !== null) return { k: 1n, v: bare }
@@ -146,7 +149,7 @@ function exponentOf(node: MathNode): { k: bigint; v: string } | null {
 }
 
 /** A power b^e with b the base e or a whole number from 2 up, and e a letter times a whole number. */
-function powerOf(node: MathNode): { base: SubBase; k: bigint; v: string } | null {
+function powerOf(node: AnyNode): { base: SubBase; k: bigint; v: string } | null {
   if (node.type === 'ParenthesisNode') return powerOf(node.content)
   if (node.type !== 'OperatorNode' || node.fn !== 'pow' || node.args.length !== 2) return null
   const [b, e] = node.args
@@ -163,7 +166,7 @@ function powerOf(node: MathNode): { base: SubBase; k: bigint; v: string } | null
 }
 
 /** One term as read (its sign is applied by the caller): a whole number, a power, or a whole number times a power. */
-function termOf(node: MathNode): ExpTerm | null {
+function termOf(node: AnyNode): ExpTerm | null {
   if (node.type === 'ParenthesisNode') return termOf(node.content)
   const whole = intOf(node)
   if (whole !== null) return { c: whole, base: null, k: 0n, v: null }
@@ -187,11 +190,11 @@ function termOf(node: MathNode): ExpTerm | null {
 
 interface Piece {
   sign: 1 | -1
-  node: MathNode
+  node: AnyNode
 }
 
 /** The pieces of a sum, each with its sign. False when a part is not a sum of pieces this reads. */
-function piecesOf(node: MathNode, sign: 1 | -1, out: Piece[]): boolean {
+function piecesOf(node: AnyNode, sign: 1 | -1, out: Piece[]): boolean {
   if (node.type === 'ParenthesisNode') return piecesOf(node.content, sign, out)
   if (node.type === 'OperatorNode' && node.args.length === 2 && node.fn === 'add') {
     return piecesOf(node.args[0], sign, out) && piecesOf(node.args[1], sign, out)

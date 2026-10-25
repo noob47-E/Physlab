@@ -170,7 +170,7 @@ describe('Part R: radical equations in the checked step engine', () => {
   })
 
   it('gives no working for a shape it cannot do soundly, so the old answer stays', () => {
-    for (const input of ['sqrt(x) + sqrt(x + 1) = 3', '2 sqrt(x) = x']) {
+    for (const input of ['sqrt(x) + sqrt(x + 1) = 3', 'sqrt(x) + x^3 = 5']) {
       const problem: Problem = { job: 'solve', input, variable: 'x' }
       const w = router.solve(problem)
       expect(w.noWorking).toBe(true)

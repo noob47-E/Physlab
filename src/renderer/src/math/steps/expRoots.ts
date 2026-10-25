@@ -14,7 +14,7 @@
 //
 // This module does not import check-adapter.ts (check-adapter imports it), so it reads its own small set of forms.
 
-import { constExpr, eAdd, eEq, eMul, eSub, evalAt, exprDegree, parseExpr, varsOf, type Expr } from '../pure/mono'
+import { constExpr, eEq, eMul, eSub, evalAt, exprDegree, parseExpr, varsOf, type Expr } from '../pure/mono'
 import { rat, rAdd, rCmp, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rSign, rSqrt, rStr, rSub, rTex, R0, type Rat } from '../pure/rat'
 import { latexToMath } from '../latexToMath'
 import type { ValidationVerdict } from './types'

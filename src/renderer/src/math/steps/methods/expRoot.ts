@@ -14,7 +14,6 @@
 import type { Method, Problem, Step, StepRouter, Working } from '../types'
 import { rAbs, rDiv, rEq, rIsNeg, rIsZero, rat, rSign, rStr, rSub, type Rat } from '../../pure/rat'
 import { affineExpOf, atomWithCoefficient, expTex, isExactPowerOf, lnEquationOf, rootTex, unknownLetter, type AffineExp } from '../expRoots'
-import { finishStep } from '../sentences'
 import { equationStep } from './equation'
 import { noWorking } from './quadratic'
 import { solveRest, startLine } from './expLog'
