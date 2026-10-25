@@ -5,6 +5,7 @@ import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:f
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { resolveAppPath } from './appPath'
 import { openDialogOptions } from './openDialog'
+import { registerLocalAiIpc } from './localAi'
 
 // Custom scheme so the production renderer gets fetch/WASM/worker support and
 // cross-origin isolation headers (file:// cannot provide either).
@@ -416,6 +417,7 @@ ipcMain.handle('autosave:clear', async () => {
 
 app.whenReady().then(() => {
   registerAppProtocol()
+  registerLocalAiIpc(app)
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -7,11 +7,16 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Compass,
+  HelpCircle,
   Play,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react'
-import type { PhysLabAction, SpecialAgent } from '../../ai/types'
+import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
 import { executePhysLabAction } from '../../ai/bridge'
+import { extractLastBoxed, stripIncompleteActionBlocks } from '../../ai/contract'
+import { enterMode } from '../../app/layout'
 
 interface MarkdownViewProps {
   content: string
@@ -19,6 +24,7 @@ interface MarkdownViewProps {
   agentTraces?: { agent: SpecialAgent; summary: string }[]
   actions?: PhysLabAction[]
   verified?: boolean
+  verification?: MessageVerification
   onActionExecuted?: (action: PhysLabAction) => void
   onChallengeClick?: (prompt: string) => void
 }
@@ -29,27 +35,6 @@ const AGENT_LABELS: Record<SpecialAgent, { label: string; token: string }> = {
   MATH_AUDITOR: { label: 'Math Auditor (3-Way)', token: 'text-good' },
   PHYSICS_SANDBOX: { label: 'Physics Sandbox Audit', token: 'text-warn' },
   HUMAN_TEACHER: { label: 'Human Teacher Soul', token: 'text-accent-2' }
-}
-
-/**
- * Extracts the contents of \boxed{...} from LaTeX strings.
- */
-function extractBoxed(text: string): string | null {
-  const marker = '\\boxed{'
-  const idx = text.indexOf(marker)
-  if (idx === -1) return null
-  let depth = 0
-  const start = idx + marker.length
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === '{') depth++
-    else if (text[i] === '}') {
-      if (depth === 0) {
-        return text.slice(start, i).trim()
-      }
-      depth--
-    }
-  }
-  return null
 }
 
 /**
@@ -68,8 +53,37 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
 
   const calcAction = actions?.find((a) => a.tool === 'calc_solve')
   if (calcAction) {
-    chips.push('What if x = 0?')
-    chips.push("What if we find second derivative f''(x)?")
+    const input = String(calcAction.args.input || '').toLowerCase()
+    const op = String(calcAction.args.op || '')
+    const hasVariableX = /\bx\b/.test(input)
+    const isPureNumber = !/[a-zA-Z]/.test(input)
+
+    if (isPureNumber) {
+      return []
+    }
+
+    if (op === 'solve' || input.includes('=')) {
+      chips.push('What if we graph y = lhs?')
+      return chips
+    }
+
+    if (input.includes('sqrt') || input.includes('^(1/2)')) {
+      chips.push('What if x = 4?')
+      chips.push('What are the domain restrictions?')
+      return chips
+    }
+
+    if (hasVariableX && op !== 'simplify' && op !== 'solve') {
+      chips.push('What if x = 0?')
+      chips.push("What if we find second derivative f''(x)?")
+      return chips
+    }
+
+    if (hasVariableX) {
+      chips.push('What if x = 0?')
+      return chips
+    }
+
     return chips
   }
 
@@ -77,6 +91,11 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
   if (lower.includes('incline') || lower.includes('friction') || lower.includes('slope')) {
     chips.push('What if incline = 35°?')
     chips.push('What if mass = 5 kg?')
+    return chips
+  }
+  if (lower.includes('sqrt')) {
+    chips.push('What if x = 4?')
+    chips.push('What are the domain restrictions?')
     return chips
   }
   if (
@@ -148,12 +167,14 @@ export const MarkdownView = memo(function MarkdownView({
   agentTraces,
   actions,
   verified,
+  verification,
   onActionExecuted,
   onChallengeClick
 }: MarkdownViewProps) {
   const [showThink, setShowThink] = useState(false)
   const [showDerivation, setShowDerivation] = useState(false)
   const [executingMap, setExecutingMap] = useState<Record<string, boolean>>({})
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({})
 
   const handleRunAction = async (action: PhysLabAction) => {
     setExecutingMap((prev) => ({ ...prev, [action.id]: true }))
@@ -165,42 +186,93 @@ export const MarkdownView = memo(function MarkdownView({
     }
   }
 
-  const boxedAnswer = extractBoxed(content)
-  const isAnyActionUnverified = actions?.some((a) => a.verified === false)
-  const isAnyActionVerified = actions?.some((a) => a.verified === true)
-  const isUnverified = verified === false || isAnyActionUnverified
-  const isVerified = !isUnverified && (verified === true || isAnyActionVerified)
+  const cleanProse = stripIncompleteActionBlocks(content)
+  const boxedAnswer = extractLastBoxed(content)
 
-  const { intuition, derivation, hasDerivation } = splitIntuitionAndDerivation(content)
-  const challengeChips = getChallengeChips(actions, content)
+  // Verification state logic
+  const verState = verification?.state
+  const isDisagreed = verState === 'disagrees'
+  const isVerified = verState === 'verified' || (!isDisagreed && verified === true)
+  const isUnverified = !isVerified && !isDisagreed
+
+  const { intuition, derivation, hasDerivation } = splitIntuitionAndDerivation(cleanProse)
+  const challengeChips = getChallengeChips(actions, cleanProse)
 
   return (
     <div className="flex flex-col gap-2.5 text-body text-ink leading-relaxed">
-      {/* 1. Answer-First Banner (Prominent Final Answer Box) */}
+      {/* 1. Answer-First Banner (Prominent Final Answer Box with Rule 3 Guarantee) */}
       {boxedAnswer && (
-        <div className="rounded-lg border border-line bg-surface-2 p-3 flex flex-col gap-2">
+        <div
+          className={`rounded-lg border p-3 flex flex-col gap-2 ${
+            isDisagreed
+              ? 'border-bad/40 bg-surface-2'
+              : isVerified
+                ? 'border-line bg-surface-2'
+                : 'border-line bg-surface-2'
+          }`}
+        >
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <span className="font-semibold text-small text-ink-strong flex items-center gap-1.5">
-              <Sparkles size={14} className="text-accent" />
-              <span>Final Answer</span>
+            <span
+              className={`font-semibold text-small flex items-center gap-1.5 ${
+                isDisagreed ? 'text-bad' : 'text-ink-strong'
+              }`}
+            >
+              {isDisagreed ? (
+                <AlertTriangle size={14} className="text-bad" />
+              ) : (
+                <Sparkles size={14} className="text-accent" />
+              )}
+              <span>{isDisagreed ? 'PhysLab Verified Answer' : 'Final Answer'}</span>
             </span>
 
-            {isVerified ? (
+            {isVerified && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-good border border-line">
                 <CheckCircle2 size={12} />
-                <span>CAS & Physics Verified</span>
+                <span>{verification?.badgeText || '✅ CAS & Physics Verified'}</span>
               </span>
-            ) : isUnverified ? (
+            )}
+
+            {isDisagreed && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-bad border border-bad/30">
+                <X size={12} />
+                <span>{verification?.badgeText || '❌ Engine disagrees'}</span>
+              </span>
+            )}
+
+            {isUnverified && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-warn border border-line">
                 <AlertTriangle size={12} />
-                <span>⚠️ Unverified Step — Check with Calculator/CAS</span>
+                <span>{verification?.badgeText || '⚠️ Unverified — check in Calculator'}</span>
               </span>
-            ) : null}
+            )}
           </div>
 
-          <div className="text-center py-1 overflow-x-auto">
-            <DisplayMath tex={`\\boxed{${boxedAnswer}}`} />
-          </div>
+          {/* If engine disagrees: prominently show verified engine answer above model's claimed answer */}
+          {isDisagreed && verification?.engineAnswerLatex && (
+            <div className="text-center py-1 overflow-x-auto">
+              <DisplayMath tex={`\\boxed{${verification.engineAnswerLatex}}`} />
+            </div>
+          )}
+
+          {/* Model Answer (or single verified answer if not disagreed) */}
+          {!isDisagreed ? (
+            <div className="text-center py-1 overflow-x-auto">
+              <DisplayMath tex={`\\boxed{${boxedAnswer}}`} />
+            </div>
+          ) : (
+            <div className="border-t border-line pt-1.5 flex items-center justify-between text-fine text-ink-dim">
+              <span>Model Claimed:</span>
+              <span className="line-through font-mono">
+                {verification?.modelAnswerLatex || boxedAnswer}
+              </span>
+            </div>
+          )}
+
+          {isDisagreed && verification?.notes && (
+            <div className="text-fine font-mono text-bad bg-surface-1 p-1.5 rounded border border-line">
+              {verification.notes}
+            </div>
+          )}
         </div>
       )}
 
@@ -286,7 +358,7 @@ export const MarkdownView = memo(function MarkdownView({
             </div>
           </>
         ) : (
-          renderMarkdownWithMath(content)
+          renderMarkdownWithMath(cleanProse)
         )}
       </div>
 
@@ -297,6 +369,112 @@ export const MarkdownView = memo(function MarkdownView({
             const isExecuting = Boolean(executingMap[act.id])
             const isSuccess = act.status === 'success'
             const isActionVerified = act.verified
+
+            // Custom Card for Quiz Challenge
+            if (act.tool === 'quiz_challenge') {
+              const question = String(act.args.question || 'Quick Concept Check')
+              const choices = Array.isArray(act.args.choices)
+                ? (act.args.choices as string[])
+                : []
+              const ansIdx = Number(act.args.answerIndex ?? 0)
+              const selectedIdx = quizAnswers[act.id]
+              const explanation = String(act.args.explanation || '')
+
+              return (
+                <div
+                  key={act.id}
+                  className="rounded border border-line bg-surface-1 p-3 flex flex-col gap-2.5"
+                >
+                  <div className="flex items-center gap-1.5 font-medium text-small text-ink-strong">
+                    <HelpCircle size={15} className="text-accent" />
+                    <span>Concept Challenge</span>
+                  </div>
+                  <div className="text-body font-medium text-ink">{question}</div>
+                  <div className="flex flex-col gap-1.5">
+                    {choices.map((choice, cIdx) => {
+                      const isSelected = selectedIdx === cIdx
+                      const isAnswer = ansIdx === cIdx
+                      const showResult = selectedIdx !== undefined
+
+                      let btnStyle = 'bg-surface-0 border-line hover:bg-surface-2 text-ink'
+                      if (showResult) {
+                        if (isAnswer) {
+                          btnStyle = 'bg-surface-2 border-line text-good font-semibold'
+                        } else if (isSelected) {
+                          btnStyle = 'bg-surface-2 border-line text-bad'
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={cIdx}
+                          type="button"
+                          onClick={() =>
+                            setQuizAnswers((prev) => ({ ...prev, [act.id]: cIdx }))
+                          }
+                          className={`text-left px-3 py-1.5 rounded border text-fine transition-colors cursor-pointer flex items-center justify-between ${btnStyle}`}
+                        >
+                          <span>{choice}</span>
+                          {showResult && isAnswer && <Check size={14} className="text-good" />}
+                          {showResult && isSelected && !isAnswer && (
+                            <X size={14} className="text-bad" />
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {selectedIdx !== undefined && explanation && (
+                    <div className="text-fine text-ink-dim bg-surface-0 p-2 rounded border border-line">
+                      <span className="font-semibold text-accent">Explanation: </span>
+                      {explanation}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            // Custom Card for App Guide
+            if (act.tool === 'app_guide') {
+              const targetMode = String(act.args.mode || 'calculator')
+              const steps = Array.isArray(act.args.steps) ? (act.args.steps as string[]) : []
+              const tip = act.args.tip ? String(act.args.tip) : ''
+
+              return (
+                <div
+                  key={act.id}
+                  className="rounded border border-line bg-surface-1 p-3 flex flex-col gap-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-medium text-small text-ink-strong">
+                      <Compass size={15} className="text-accent" />
+                      <span>PhysLab Feature Guide: {targetMode}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        enterMode(targetMode as Parameters<typeof enterMode>[0])
+                      }
+                      className="px-2.5 py-0.5 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
+                    >
+                      Open {targetMode}
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {steps.map((st, sIdx) => (
+                      <div key={sIdx} className="flex items-start gap-2 text-fine text-ink">
+                        <span className="w-4 h-4 rounded-full bg-surface-2 text-accent flex items-center justify-center shrink-0 font-mono">
+                          {sIdx + 1}
+                        </span>
+                        <span>{st}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {tip && (
+                    <div className="text-fine text-ink-faint italic mt-1">💡 Tip: {tip}</div>
+                  )}
+                </div>
+              )
+            }
 
             return (
               <div
@@ -313,6 +491,7 @@ export const MarkdownView = memo(function MarkdownView({
                       {act.tool === 'goal_update' && 'Student Goal Keeper Update'}
                       {(act.tool === 'graph_plot' || act.tool === 'graph3d_plot') &&
                         'Mathematical Graph Plot'}
+                      {act.tool === 'run_commands' && 'PhysLab Live Scene Commands'}
                     </span>
                   </div>
 
@@ -329,9 +508,39 @@ export const MarkdownView = memo(function MarkdownView({
                   {act.tool === 'calc_solve' && <div>Input: {String(act.args.input || '')}</div>}
                   {act.tool === 'sandbox_experiment' && (
                     <div>
-                      Setup: {String(act.args.title || 'Incline Experiment')} (
-                      {String(act.args.angleDeg ?? '')}°, {String(act.args.massKg ?? '')} kg, μ_s=
-                      {String(act.args.muStatic ?? '')})
+                      {act.args.experimentType === 'projectile' && (
+                        <span>
+                          Setup: {String(act.args.title || 'Projectile Launch')} (v₀ ={' '}
+                          {String(act.args.v0 ?? '')} m/s, θ = {String(act.args.angleDeg ?? '')}°)
+                        </span>
+                      )}
+                      {act.args.experimentType === 'vertical_circle' && (
+                        <span>
+                          Setup: {String(act.args.title || 'Vertical Circle Loop')} (R ={' '}
+                          {String(act.args.radiusM ?? '')} m, m = {String(act.args.massKg ?? '')} kg)
+                        </span>
+                      )}
+                      {(act.args.experimentType === 'incline_friction' ||
+                        (!act.args.experimentType && !act.args.presetId)) && (
+                        <span>
+                          Setup: {String(act.args.title || 'Incline Experiment')}
+                          {act.args.angleDeg !== undefined
+                            ? ` (${String(act.args.angleDeg)}°, ${String(act.args.massKg ?? '')} kg, μ_s=${String(act.args.muStatic ?? '')})`
+                            : ''}
+                        </span>
+                      )}
+                      {Boolean(
+                        act.args.presetId &&
+                          act.args.experimentType !== 'projectile' &&
+                          act.args.experimentType !== 'vertical_circle'
+                      ) && <span>Preset: {String(act.args.presetId)}</span>}
+                    </div>
+                  )}
+                  {act.tool === 'run_commands' && (
+                    <div>
+                      Commands ({String(act.args.mode || 'vectors')}
+                      {act.args.view ? ` ${String(act.args.view)}` : ''}):{' '}
+                      {Array.isArray(act.args.commands) ? act.args.commands.join('; ') : ''}
                     </div>
                   )}
                   {act.tool === 'mindmap_build' && (
@@ -342,7 +551,8 @@ export const MarkdownView = memo(function MarkdownView({
                   )}
                   {act.tool === 'goal_update' && (
                     <div>
-                      Goal: {String(act.args.goalId || '')} (+{String(act.args.increment ?? 1)})
+                      Goal: {String(act.args.goalTitle || act.args.goalId || '')} (+
+                      {String(act.args.increment ?? 1)})
                     </div>
                   )}
                   {(act.tool === 'graph_plot' || act.tool === 'graph3d_plot') && (

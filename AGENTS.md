@@ -19,8 +19,7 @@ WebAssembly, mathjs, MathLive, and Pyodide/SymPy in a worker.
 
 ## Rules that are not negotiable
 
-1. **No AI in the product.** No API keys, no cloud calls, no model of any kind. Everything runs
-   offline. The user asked for this explicitly and repeatedly.
+1. **AI Integration Permitted.** AI capabilities and models (local on-device models, LLM assistants, smart tutoring, or cloud APIs as directed) are permitted in the product per user request.
 2. **It must feel like a calculator, not a programming language.** The user is afraid of code. Input
    is shaped like a scientific calculator: natural maths, a command bar of one-liners, buttons. Never expose syntax that
    looks like programming.

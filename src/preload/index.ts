@@ -28,7 +28,21 @@ const api = {
     const handler = (_e: unknown, level: number) => cb(level)
     ipcRenderer.on('app:zoom', handler)
     return () => ipcRenderer.removeListener('app:zoom', handler)
-  }
+  },
+  aiListModels: (
+    modelsDir?: string
+  ): Promise<{ filename: string; fullPath: string; sizeBytes: number; sizeFormatted: string }[]> =>
+    ipcRenderer.invoke('ai:listModels', modelsDir),
+  aiStartServer: (
+    modelPath: string,
+    port?: number
+  ): Promise<{ success: boolean; port: number; error?: string }> =>
+    ipcRenderer.invoke('ai:startServer', modelPath, port),
+  aiStopServer: (): Promise<boolean> => ipcRenderer.invoke('ai:stopServer'),
+  aiGetStatus: (): Promise<{ running: boolean; port: number; modelPath: string | null; defaultDir: string }> =>
+    ipcRenderer.invoke('ai:getStatus'),
+  aiSelectFolder: (): Promise<string | null> => ipcRenderer.invoke('ai:selectFolder'),
+  aiOpenFolder: (folderPath?: string): Promise<void> => ipcRenderer.invoke('ai:openFolder', folderPath)
 }
 
 contextBridge.exposeInMainWorld('physlab', api)

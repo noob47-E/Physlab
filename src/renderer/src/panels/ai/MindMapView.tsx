@@ -21,9 +21,42 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({})
 
   const svgRef = useRef<SVGSVGElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const isDraggingCanvas = useRef(false)
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const draggingNodeRef = useRef<{ id: string; startX: number; startY: number; nodeStartX: number; nodeStartY: number } | null>(null)
+
+  // Attach non-passive wheel listener for smooth zoom centered around cursor
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const mouseX = e.clientX - rect.left
+      const mouseY = e.clientY - rect.top
+
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87
+
+      setScale((prevScale) => {
+        const nextScale = Math.min(3.5, Math.max(0.35, prevScale * zoomFactor))
+        if (nextScale === prevScale) return prevScale
+
+        setPan((prevPan) => {
+          const factor = nextScale / prevScale
+          const newPanX = mouseX - (mouseX - prevPan.x) * factor
+          const newPanY = mouseY - (mouseY - prevPan.y) * factor
+          return { x: newPanX, y: newPanY }
+        })
+
+        return nextScale
+      })
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   // Compute initial layout when data changes
   useEffect(() => {
@@ -82,13 +115,6 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
 
     return { nodes: positionedNodes, edges: positionedEdges }
   }, [data, nodePositions])
-
-  // Wheel Zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87
-    setScale((prev) => Math.min(3.5, Math.max(0.35, prev * zoomFactor)))
-  }
 
   // Pointer down on background: start pan
   const handleSvgPointerDown = (e: React.PointerEvent) => {
@@ -178,8 +204,8 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
 
       {/* SVG Canvas with Zoom & Pan */}
       <div
+        ref={containerRef}
         className="flex-1 relative overflow-hidden flex items-center justify-center cursor-grab active:cursor-grabbing"
-        onWheel={handleWheel}
         onPointerDown={handleSvgPointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

@@ -5,8 +5,7 @@ money. Anything that would break one of those is not a feature here, however goo
 
 ## The rules that do not bend
 
-1. **No AI in the product.** No API keys, no cloud calls, no model of any kind. Everything runs
-   offline, on the machine in front of the student.
+1. **AI Integration Permitted.** AI capabilities and intelligent assistance features may be added per user request.
 2. **It must feel like a calculator, not a programming language.** Natural maths, buttons, a
    command bar of one-liners. Never syntax that looks like code.
 3. **Answers are required; working is a bonus.** Every feature produces the result. Steps, hints

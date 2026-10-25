@@ -25,6 +25,7 @@ export type PhysLabTool =
   | 'goal_update'
   | 'quiz_challenge'
   | 'app_guide'
+  | 'run_commands'
 
 export interface PhysLabAction {
   id: string
@@ -43,6 +44,17 @@ export interface PhysLabAction {
   }
 }
 
+export type VerificationState = 'verified' | 'disagrees' | 'unverified'
+
+export interface MessageVerification {
+  state: VerificationState
+  badgeText: string
+  engineAnswerLatex?: string
+  engineAnswerText?: string
+  modelAnswerLatex?: string
+  notes: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -55,6 +67,7 @@ export interface ChatMessage {
   attachments?: Attachment[]
   actions?: PhysLabAction[]
   verified?: boolean
+  verification?: MessageVerification
   createdAt: number
 }
 
