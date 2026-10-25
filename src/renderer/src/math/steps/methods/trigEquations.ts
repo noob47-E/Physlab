@@ -11,8 +11,9 @@
 //
 // Angles are exact: the answers are multiples of π in radians and decimal degrees in degrees, never a rounded decimal.
 
-import type { Domain, EquationOp, Method, Problem, Step, StepAnswer, Working } from '../types'
+import type { Domain, EquationOp, Method, Problem, Step, StepAnswer, TrigInverseSpec, Working } from '../types'
 import { finishStep } from '../sentences'
+import { decimalOf, generalTextOf, inOpenUnit, inverseMembers, inverseTex, principalDeg, roundingOf } from '../trigInverse'
 import { coefficientOf, solutionProofOf, stringifyNodeOrText, tryParsePoly } from '../check-adapter'
 import { eSub, exprDegree, varsOf, type Expr } from '../../pure/mono'
 import { R1, rat, rAdd, rCmp, rDiv, rEq, rIsNeg, rIsZero, rMul, rNeg, rNum, rSqrt, rStr, rSub, rTex, type Rat } from '../../pure/rat'
@@ -353,9 +354,11 @@ function linearCase(ctx: Ctx, form: Form): Working {
     cur = isolated
   }
 
-  // The reference angle: the acute angle whose function has the size of the value.
+  // The reference angle: the acute angle whose function has the size of the value. A value that is not a table value has no
+  // reference angle written in degrees or π, so its roots are written with the inverse function instead (TRIGGEN).
   const refAngle = referenceAngleOf(form.fn, value)
-  const refTex = refAngle === null ? null : angleLitTex(refAngle, unit)
+  if (refAngle === null) return inverseCase(ctx, form, u0, steps, cur)
+  const refTex = angleLitTex(refAngle, unit)
   if (refTex === null) return ctx.declined()
   const quad = form.fn === 'tan' ? periodQuad(unit) : quadrantText(form.fn, value < 0)
   steps.push(step('EquationEquiv', cur, isolated, { kind: 'trig-ref-angle', angle: refTex, quad }, v))
@@ -365,6 +368,44 @@ function linearCase(ctx: Ctx, form: Form): Working {
   if (families === null) return ctx.declined()
   const answers = generalAndAnswers(steps, cur, families, v, unit, ctx.range, ctx.domain)
   return answers === null ? ctx.declined() : ctx.finish(steps, answers, 'Trigonometric equation')
+}
+
+/**
+ * A linear equation whose value is not a table value (TRIGGEN): the principal angle with its exact text and its decimal, the general
+ * solution written with the inverse function, and the members in the range as decimals. Each move is checked by trigInverse.ts. Only
+ * sin x, cos x or tan x with a coefficient of 1 on x is read here; anything else is declined, and the answer stays as it is.
+ */
+function inverseCase(ctx: Ctx, form: Form, value: Rat, steps: Step[], cur: string): Working {
+  const { v, unit } = ctx
+  if (form.c !== 1 || (form.fn !== 'tan' && !inOpenUnit(value))) return ctx.declined()
+  const theta = principalDeg(form.fn, value)
+  const principal = theta === null ? null : decimalOf(theta, unit)
+  const general = generalTextOf(form.fn, value, unit, v)
+  const members = inverseMembers(form.fn, value, unit, ctx.range)
+  if (theta === null || principal === null || general === null || members === null || members.length === 0) return ctx.declined()
+  const isolated = `\\${form.fn}(${v}) = ${rTex(value)}`
+  const spec: TrigInverseSpec = { fn: form.fn, c: rTex(value), unit }
+  steps.push(step('EquationEquiv', cur, isolated, { kind: 'trig-inverse', ...spec, angle: inverseTex(form.fn, value), value: principal }, v))
+  steps.push(step('EquationEquiv', isolated, general, { kind: 'trig-inverse-general', ...spec }, v))
+  steps.push(
+    finishStep({
+      kind: 'SolutionSetEq',
+      before: general,
+      after: members.map((m) => `${v} = ${m.text}`).join(' \\text{ or } '),
+      sentence: '',
+      data: {
+        variable: v,
+        domain: ctx.domain,
+        solutions: members.map((m) => ({ value: m.text })),
+        role: 'trig-inverse',
+        range: ctx.range,
+        inverse: spec
+      }
+    })
+  )
+  const rounding = roundingOf(form.fn, unit)
+  const answers: StepAnswer[] = members.map((m) => ({ label: v, tex: m.text, approx: rounding }))
+  return ctx.finish(steps, answers, 'Trigonometric equation')
 }
 
 /** a·f(c·v)² + b·f(c·v) + d = 0: substitute u, factorise when the roots are rational, substitute back, the general solution. */

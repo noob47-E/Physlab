@@ -165,6 +165,29 @@ function sameRoot(a: number, b: number, period: number | null): boolean {
   return near(d, Math.round(d / period) * period, 1e-8)
 }
 
+/**
+ * The rounding a working's answers carry, when every answer is a displayed decimal of a non-table trig angle (trigInverse.ts). The
+ * exact root lies within tol of each answer, and the same root comes back every period. Null for every other working, whose answers
+ * are exact and are matched to 1e-8 as before.
+ */
+function roundingOfWorking(working: Working): { tol: number; period: number } | null {
+  const first = working.answers[0]?.approx
+  if (!first || !working.answers.every((a) => a.approx?.tol === first.tol && a.approx?.period === first.period)) return null
+  return first
+}
+
+/**
+ * Whether a root the card gives and a root of the working are the same root. For a displayed decimal, the card's root is the
+ * working's rounded to the place shown: within the rounding and a whole period, and no further (the card's own search is exact
+ * to about 1e-10, so the slack is far below the rounding). A working with exact answers keeps sameRoot.
+ */
+function sameRootOf(a: number, b: number, working: Working): boolean {
+  const rounding = roundingOfWorking(working)
+  if (rounding === null) return sameRoot(a, b, periodOf(working))
+  const d = a - b
+  return Math.abs(d - Math.round(d / rounding.period) * rounding.period) <= rounding.tol + 1e-9
+}
+
 /** The plain text of an answer, with π kept: texToPlain alone would drop the \pi and leave 7/6 for 7π/6. */
 function plainOfAnswer(tex: string): string {
   return texToPlain(tex.replace(/\\frac\{(-?\d*)\\pi\}\{(\d+)\}/g, '$1π/$2').replace(/\\pi(?![a-zA-Z])/g, 'π'))
@@ -261,8 +284,7 @@ function agreement(card: EvalResult, working: Working): Agreement {
       const saysNoSolution = working.checked === 'ok' && working.answers.length === 1 && NO_SOLUTION_TEX.test(working.answers[0].tex)
       return card.roots.length > 0 && saysNoSolution ? 'differ' : 'unknown'
     }
-    const period = periodOf(working)
-    const has = (list: number[], r: number): boolean => list.some((q) => sameRoot(q, r, period))
+    const has = (list: number[], r: number): boolean => list.some((q) => sameRootOf(q, r, working))
     if (!card.roots.every((r) => has(theirs, r))) return 'differ'
     if (card.rootsComplete && !theirs.every((q) => has(card.roots ?? [], q))) return 'differ'
     return 'agree'
@@ -396,10 +418,9 @@ export function reconcile(result: EvalResult, working: Working | null): Reconcil
   if (result.engine) return { result, verdict: 'unchecked' }
   if (result.solved && result.roots && !result.rootsComplete && working.checked === 'ok') {
     const theirs = realRootsOf(working)
-    const period = periodOf(working)
     // The working fills in the roots the quick search listed only in part, and only when every one of those is among its own:
     // a quick answer with a root the working does not have is a disagreement, and falls through to be shown as one below.
-    const listedInWorking = result.roots.every((r) => theirs.some((q) => sameRoot(q, r, period)))
+    const listedInWorking = result.roots.every((r) => theirs.some((q) => sameRootOf(q, r, working)))
     if (listedInWorking && (theirs.length > 1 || (theirs.length === 1 && !near(result.roots[0], theirs[0], 1e-8)))) {
       const tex = texOfAnswers(working)
       return {

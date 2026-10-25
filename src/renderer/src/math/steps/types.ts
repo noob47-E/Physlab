@@ -102,6 +102,10 @@ export type EquationOp =
   | { kind: 'trig-substitute' }
   // rejected: the roots of the equation in u that lie outside -1 to 1 (a sine or cosine has no angle for them), as values.
   | { kind: 'trig-back-substitute'; rejected?: string[] }
+  // TRIGGEN: a value that is not a table value. The principal angle (its exact text and its decimal in the unit) and the general
+  // solution written with the inverse function. Checked by trigInverse.ts, never by the table checks above.
+  | ({ kind: 'trig-inverse'; angle: string; value: string } & TrigInverseSpec)
+  | ({ kind: 'trig-inverse-general' } & TrigInverseSpec)
 
 /**
  * The move an ExprEq step claims (S1c: expanding and factorising). A step replaces the factors
@@ -201,6 +205,21 @@ export interface StepAnswer {
   label: string
   tex: string
   value?: string
+  /**
+   * Set when tex is a displayed decimal of an angle whose exact value is not a table value (trigInverse.ts): the exact root lies
+   * within tol of tex, and the same root comes back every period (in the unit). The card matches its own roots within this, and no more.
+   */
+  approx?: { tol: number; period: number }
+}
+
+/**
+ * A trig equation whose value is not a table value (TRIGGEN): the function, the exact value written as rTex writes a rational
+ * (2, -2, \frac{2}{3}, -\frac{2}{3}), and the unit the angles are shown in.
+ */
+export interface TrigInverseSpec {
+  fn: 'sin' | 'cos' | 'tan'
+  c: string
+  unit: 'deg' | 'rad'
 }
 
 /**
