@@ -274,8 +274,9 @@ function antiderivativeAgreement(card: EvalResult, working: Working, letter: str
 
 function agreement(card: EvalResult, working: Working): Agreement {
   const first = working.answers[0]
-  // Roots: every root of the card is a root of the working; and when the card claims all of them, the working has no real root it left out.
-  // A root that differs from a working root by whole periods is the same root (the quick search may give -30 where the working gives 330).
+  // Roots: every root of the card is a root of the working, and every real root the working lists is on the card too. A card that
+  // shows one root of several (a search near the stored x found x = −1 under a working that lists 1 and −1) does not show the answer,
+  // so it is not agreed with; the working's list is shown instead. A root that differs by whole periods is the same root.
   if (card.roots) {
     const theirs = realRootsOf(working)
     if (theirs.length === 0) {
@@ -286,7 +287,7 @@ function agreement(card: EvalResult, working: Working): Agreement {
     }
     const has = (list: number[], r: number): boolean => list.some((q) => sameRootOf(q, r, working))
     if (!card.roots.every((r) => has(theirs, r))) return 'differ'
-    if (card.rootsComplete && !theirs.every((q) => has(card.roots ?? [], q))) return 'differ'
+    if (!theirs.every((q) => has(card.roots ?? [], q))) return 'differ'
     return 'agree'
   }
   // A number (a real one, or a complex one): the same number to the precision the numeric engine works to.
@@ -403,6 +404,13 @@ function noInverseCard(card: EvalResult, sentence: string): Reconciled {
  * whose check failed stays a refusal.
  */
 export function reconcile(result: EvalResult, working: Working | null): Reconciled {
+  // A refusal that allows no answer (a root that makes a typed bottom 0) overrules any card the quick search gave, a number or a search
+  // error alike: the search cannot tell that root from a real one (under \frac{x^2}{x} = 0 it lands on a number close to 0, and
+  // under \frac{x^2-9}{x-3} = 6 with x stored as 3 it finds nothing near 3), and the working says no value works. So the card says the
+  // refusal, unconfirmed, and no number is shown as the answer. A card that is already one of the refusals that stay (REFUSAL_STAYS) is kept.
+  if (working?.finalRefusal && working.error && !(result.error && REFUSAL_STAYS.test(result.error.sentence))) {
+    return { result: { main: '', src: result.src, error: { sentence: working.error }, unconfirmed: true }, verdict: 'unchecked' }
+  }
   // A checked working with no answer box can still conclude: a singular matrix has no inverse, and its conclusion is what the card says.
   if (working && !working.error && working.answers.length === 0 && working.checked === 'ok' && working.conclusion && !result.error) {
     return noInverseCard(result, working.conclusion)

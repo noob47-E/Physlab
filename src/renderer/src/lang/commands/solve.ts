@@ -309,6 +309,12 @@ export function tryPureMath(input: string): boolean {
 
   const doc = runPure(job, body)
   if (doc.error) {
+    // A refusal that allows no answer (a root a typed bottom makes 0) stands. The algebra engine cancels x²/x itself and would
+    // answer x = 0 under it, so the line is not handed on; the refusal is the answer the bar gives.
+    if (doc.finalRefusal) {
+      logError(input, doc.error)
+      return true
+    }
     // A fraction of plain numbers is arithmetic: the refusal itself says "the calculator will do
     // that one", so it does, and divide(10, 2) answers 5 as it did before the two-argument form.
     // "Plain" is decided by parsing, not by looking for letters: the e of 2e3 and the name pi

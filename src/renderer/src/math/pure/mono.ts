@@ -21,6 +21,15 @@ export type Expr = Term[]
 /** Raised when the input is not something Pure Math can work on, with a sentence for the student. */
 export class NotPolynomial extends Error {}
 
+/**
+ * A division by a bracket, such as (x²−4)/(x−2). parseExpr refuses it, but an equation with one can still be
+ * read side by side (bracketSides), so the solver tells this refusal apart from the others.
+ */
+class BracketDivision extends NotPolynomial {}
+
+/** The sentence for a division by a bracket (or by 0), as the reader has always written it. */
+const BRACKET_SENTENCE = 'Dividing by a bracket makes a fraction — use Partial Fractions or Divide for that.'
+
 const varKey = (v: Record<string, number>): string =>
   Object.keys(v)
     .filter((k) => v[k] !== 0)
@@ -238,7 +247,8 @@ function fromNode(node: MathNode): Expr {
       if (op === '/') {
         const top = fromNode(args[0])
         const bot = fromNode(args[1])
-        if (bot.length !== 1) throw new NotPolynomial('Dividing by a bracket makes a fraction — use Partial Fractions or Divide for that.')
+        // A bottom of 0 gets the same sentence as a bracket: the reader has always said it this way, and the golden sweeps pin it.
+        if (bot.length !== 1) throw new BracketDivision(BRACKET_SENTENCE)
         const done = divideByTerm(top, bot[0])
         if (!done) throw new NotPolynomial('That division leaves letters on the bottom, so it is not a polynomial.')
         return done
@@ -322,6 +332,70 @@ function readNode(src: string): MathNode {
 /** Read typed maths into an expanded expression. Throws NotPolynomial with a readable reason. */
 export function parseExpr(src: string): Expr {
   return fromNode(readNode(src))
+}
+
+/**
+ * The bottom of every typed division, read as a polynomial in the same tree parseExpr reads. A bottom
+ * this reader cannot make into a polynomial is null, and the caller must treat it as possibly holding
+ * the letter. Call it only on text parseExpr has already read.
+ */
+export function divisionBottoms(src: string): (Expr | null)[] {
+  const found: (Expr | null)[] = []
+  const walk = (node: MathNode): void => {
+    const n = node as unknown as Loose
+    if (n.type === 'OperatorNode' && n.op === '/' && n.args && n.args.length === 2) {
+      let bottom: Expr | null
+      try {
+        bottom = fromNode(n.args[1])
+      } catch {
+        bottom = null
+      }
+      found.push(bottom)
+    }
+    for (const kid of [...(n.args ?? []), ...(n.content ? [n.content] : [])]) walk(kid)
+  }
+  walk(readNode(src))
+  return found
+}
+
+/**
+ * A typed side read as top over bottom. A side that is not a division has the bottom 1. The bottom of 0
+ * is refused here, because multiplying out by it would make every equation true.
+ */
+function sideParts(src: string): { top: Expr; bottom: Expr } {
+  const root = readNode(src)
+  let bare = root as unknown as Loose
+  while (bare.type === 'ParenthesisNode' && bare.content) bare = bare.content as unknown as Loose
+  if (bare.type === 'OperatorNode' && bare.op === '/' && bare.args?.length === 2) {
+    const top = fromNode(bare.args[0])
+    const bottom = fromNode(bare.args[1])
+    if (bottom.length === 0) throw new BracketDivision(BRACKET_SENTENCE)
+    return { top, bottom }
+  }
+  return { top: fromNode(root), bottom: constExpr(R1) }
+}
+
+/** One side of an equation read as top over bottom. A side that is not a division has the bottom 1. */
+export interface SideParts {
+  top: Expr
+  bottom: Expr
+}
+
+/**
+ * The two sides of an equation with a division by a bracket on one side, such as (x²−4)/(x−2) = 4. Here
+ * the solver clears the bottoms itself (solve.ts), so it needs each side as top over bottom. parseExpr refuses
+ * such a division (it can only divide by one term). Returns null when parseExpr reads both sides, so the caller
+ * reads them exactly as it always did.
+ */
+export function bracketSides(lhsSrc: string, rhsSrc: string): { lhs: SideParts; rhs: SideParts } | null {
+  try {
+    parseExpr(lhsSrc)
+    parseExpr(rhsSrc)
+    return null
+  } catch (err) {
+    if (!(err instanceof BracketDivision)) throw err
+  }
+  return { lhs: sideParts(lhsSrc), rhs: sideParts(rhsSrc) }
 }
 
 type Loose = { type: string; op?: string; args?: MathNode[]; content?: MathNode }

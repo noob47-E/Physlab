@@ -216,7 +216,10 @@ describe('the answer and the working never disagree', () => {
 
   it('roots, a formula and a complex number that differ are caught the same way', () => {
     expect(reconcile(card({ main: 'x₁ = 3, x₂ = 2', roots: [3, 2] }), working([['x_1 =', '3'], ['x_2 =', '5']])).verdict).toBe('differ')
-    expect(reconcile(card({ main: 'x = 2', roots: [2] }), working([['x_1 =', '3'], ['x_2 =', '2']])).verdict).toBe('agree')
+    // A card showing one root of several no longer agrees (K-EXCLUDED, review rounds 3–4): the checked working's
+    // list is the answer, and the card's single root does not show it. This is the row that used to read 'agree';
+    // tests/pureExcludedRoots.test.ts pins the same rule for the lines that turned it up (\frac{x^3-x}{x}=0).
+    expect(reconcile(card({ main: 'x = 2', roots: [2] }), working([['x_1 =', '3'], ['x_2 =', '2']])).verdict).toBe('differ')
     expect(reconcile(card({ main: 'x² − 1', formula: 'x ^ 2 - 1' }), working([['Answer', '\\left(x - 1\\right)\\left(x + 2\\right)']])).verdict).toBe('differ')
     expect(reconcile(card({ main: '2i', value: math.complex(0, 2) }), working([['Answer', '3i']])).verdict).toBe('differ')
   })

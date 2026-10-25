@@ -153,6 +153,11 @@ export const usePure = create<PureState>((set, get) => ({
     // minute and then nothing. Its refusal already says how far this goes, so it stands at once.
     if (TOO_BIG.test(working.error)) return
 
+    // A refusal that allows no answer (a root that makes a typed denominator 0) stands as it is. The
+    // algebra engine cancels x²/x and answers x = 0, which the typed line does not allow, so asking it
+    // would put a wrong answer under the refusal.
+    if (working.finalRefusal) return
+
     // The answer is not optional. When this engine cannot show working, the algebra engine is asked for the
     // result alone, and the panel says plainly that the steps are missing.
     if (!opts?.quiet) void askCas(j, src, shown, runSeq, set, get)

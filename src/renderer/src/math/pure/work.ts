@@ -62,6 +62,12 @@ export interface Working {
   /** Set instead of the rest when the input could not be handled; always a readable sentence. */
   error?: string
   /**
+   * Set with `error` when the typed line allows no answer at all (a root that makes a typed denominator 0).
+   * The algebra engine cancels the fraction itself and answers the root it was told to leave out, so the
+   * store must not ask it to replace this refusal.
+   */
+  finalRefusal?: boolean
+  /**
    * Set when the answer is right but PhysLab could not show the working — the answer still comes
    * first, which is the rule this whole project is built on.
    */
