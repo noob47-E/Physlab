@@ -182,7 +182,13 @@ const FUNCTIONS: KeyDef[] = [
 ]
 
 const CALCULUS: KeyDef[] = [
-  { id: 'ddx', label: 'd/dx', tex: op('ddx', 2), hint: 'The gradient of an expression at a point: d/dx(x², 3) is 6' },
+  {
+    id: 'diff',
+    label: 'd/dx',
+    tex: '\\frac{d}{dx}\\left(#0\\right)',
+    hint: 'Differentiate an expression with respect to x: d/dx(x² sin x)',
+    more: [{ id: 'ddx', label: 'd/dx at', tex: op('ddx', 2), hint: 'The gradient of an expression at a point: d/dx(x², 3) is 6' }]
+  },
   // The boxes are walked the way MathLive orders them — top limit, bottom limit, then the
   // expression — so ▶ goes top to bottom and never back into a limit already filled.
   { id: 'integral', label: '∫', tex: '\\int_{#?}^{#?}#0\\,dx', hint: 'The area under a curve between two limits: fill the top limit, ▶ for the bottom one, ▶ for the expression' },

@@ -368,6 +368,33 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       const a = arg()
       return /^[A-Za-z0-9]+$/.test(a) ? a : `_(${a})`
     }
+    if (tok === 'd' || tok === '\\differentialD' || tok === 'differentialD') {
+      if (peek() === '/') {
+        let lookaheadVar: string | null = null
+        let consumed = 0
+        const t1 = t[i + 1]
+        const t2 = t[i + 2]
+        if (t1) {
+          const cleanT1 = t1.replace(/^[()\\]/, '')
+          if (/^(?:differentialD|mathrm\{d\}|d)([a-zA-Z\u0370-\u03FF])$/u.test(cleanT1)) {
+            lookaheadVar = cleanT1.slice(cleanT1.startsWith('differentialD') ? 13 : cleanT1.startsWith('mathrm{d}') ? 9 : 1)
+            consumed = 2
+          } else if ((cleanT1 === 'd' || cleanT1 === 'differentialD' || cleanT1 === 'mathrm{d}') && t2) {
+            const cleanT2 = t2.startsWith('\\') ? (GREEK[t2.slice(1)] ?? t2.slice(1)) : t2.replace(/[()]/g, '')
+            if (/^[a-zA-Z\u0370-\u03FF]$/u.test(cleanT2)) {
+              lookaheadVar = cleanT2
+              consumed = 3
+            }
+          }
+        }
+        if (lookaheadVar) {
+          i += consumed
+          skipSpacing()
+          const body = fnArg()
+          return body ? `diff(${body}, ${lookaheadVar})` : `diff(x, ${lookaheadVar})`
+        }
+      }
+    }
     if (!tok.startsWith('\\')) {
       if (tok === '·') return opts.vectorOps ? '·' : '*'
       if (tok === '×') return opts.vectorOps ? '×' : '*'
@@ -409,11 +436,15 @@ export function latexToMath(latex: string, opts: LatexOptions = {}): string {
       case 'tfrac': {
         const a = arg()
         const b = arg()
-        const dm = b.match(/^(?:\(?d\)?|\\differentialD)\s*([a-zA-Z\u0370-\u03FF])$/u)
-        if ((a === 'd' || a === '(d)') && dm) {
+        const cleanA = a.replace(/[()\s\\]/g, '')
+        const isD = /^(?:differentialD|mathrm\{d\}|d)$/i.test(cleanA)
+        const cleanB = b.replace(/[()\s*·\\]/g, '')
+        const dm = cleanB.match(/^(?:differentialD|mathrm\{d\}|d)(?:([a-zA-Z]+)|([\u0370-\u03FF]))$/iu)
+        const v = dm ? (dm[1] ? (GREEK[dm[1]] ?? dm[1]) : dm[2]) : null
+        if (isD && v) {
           skipSpacing() // d/dx\;x^2: the typed space is only the gap before the body
           const body = fnArg()
-          return `diff(${body}, ${dm[1]})`
+          return body ? `diff(${body}, ${v})` : `diff(x, ${v})`
         }
         return `((${a})/(${b}))`
       }

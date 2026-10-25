@@ -688,6 +688,20 @@ describe('af-pl — latexToMath reads powers, functions, sums and subscripts as 
       expect(latexToMath('\\frac{d}{dx}\\sin x')).toBe('diff(sin(x), x)')
       expect(latexToMath('\\frac{d}{d\\theta}\\cos\\theta')).toBe('diff(cos(θ), θ)')
     })
+
+    it('reads all variations of differential d and dx in fraction and inline notations', () => {
+      expect(latexToMath('\\frac{d}{\\differentialD x}\\left(x^4 + 2x^3 + x^2\\right)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\frac{\\differentialD}{\\differentialD x}\\left(x^4 + 2x^3 + x^2\\right)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\frac{\\mathrm{d}}{\\mathrm{d}x}\\left(x^4 + 2x^3 + x^2\\right)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\frac{d}{d*x}\\left(x^4 + 2x^3 + x^2\\right)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\frac{d}{(dx)}\\left(x^4 + 2x^3 + x^2\\right)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\frac{(d)}{(dx)}\\left(x^4 + 2x^3 + x^2\\right)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\frac{d}{d\\theta}(\\sin\\theta)')).toBe('diff(sin(θ), θ)')
+      expect(latexToMath('\\frac{d}{dt}(t^2)')).toBe('diff(t^(2), t)')
+      expect(latexToMath('d/dx(x^4 + 2x^3 + x^2)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('d/\\differentialD x (x^4 + 2x^3 + x^2)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+      expect(latexToMath('\\differentialD/\\differentialD x (x^4 + 2x^3 + x^2)')).toBe('diff(x^(4)+2x^(3)+x^(2), x)')
+    })
   })
 })
 

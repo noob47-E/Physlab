@@ -623,6 +623,11 @@ math.import(
       const at = Number(args[1].compile().evaluate(scopeToObject(scope, args[1])))
       return withAngle('rad', () => derivativeAt(lambdaOf(args[0], scope), at))
     }),
+    diff: raw((args, _m, scope) => {
+      const v = (args[1] as { name?: string })?.name ?? 'x'
+      const at = Number(scope.get(v) ?? 0)
+      return withAngle('rad', () => derivativeAt(lambdaOf(args[0], scope), at))
+    }),
     // ∫(f(x), a, b)
     integral: raw((args, _m, scope) => {
       const s = scopeToObject(scope, args[1], args[2])
@@ -719,7 +724,7 @@ interface RootRun {
 }
 
 const ROOT_HELPERS = new Set(['realPowOf', 'realRootOf', 'realCbrtOf'])
-const CALCULUS = new Set(['ddx', 'integral', 'sigma', 'product'])
+const CALCULUS = new Set(['ddx', 'integral', 'sigma', 'product', 'diff'])
 
 /**
  * Evaluate a parsed line the way the handheld does: an odd root of a negative number is the REAL root,
