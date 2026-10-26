@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react'
 import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
-import { executePhysLabAction } from '../../ai/bridge'
+import { executePhysLabAction, extractThinkTrace } from '../../ai/bridge'
 import { extractLastBoxed, stripIncompleteActionBlocks } from '../../ai/contract'
 import { enterMode } from '../../app/layout'
 
@@ -112,55 +112,6 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
   return chips
 }
 
-/**
- * Splits content into an intuition hook and a detailed step-by-step derivation.
- */
-function splitIntuitionAndDerivation(text: string): {
-  intuition: string
-  derivation: string
-  hasIntuition: boolean
-  hasDerivation: boolean
-} {
-  const intuitionRegex = /###\s*(?:💡\s*)?Intuition(?:\s*Hook)?/i
-  const match = text.search(intuitionRegex)
-
-  if (match !== -1) {
-    const afterIntuition = text.slice(match)
-    const derivationRegex = /\n###\s*(?:📐\s*)?(?:Step|Derivation|Solution|Analysis|Proof|Auditor)/i
-    const devMatch = afterIntuition.search(derivationRegex)
-
-    if (devMatch !== -1) {
-      const intuitionPart = afterIntuition.slice(0, devMatch).trim()
-      const derivationPart = afterIntuition.slice(devMatch).trim()
-      return {
-        intuition: intuitionPart,
-        derivation: derivationPart,
-        hasIntuition: true,
-        hasDerivation: true
-      }
-    }
-  }
-
-  const paragraphs = text.split(/\n\s*\n/)
-  if (paragraphs.length >= 3 && text.includes('\\boxed{')) {
-    const intuitionPart = paragraphs[0].trim()
-    const derivationPart = paragraphs.slice(1).join('\n\n').trim()
-    return {
-      intuition: intuitionPart,
-      derivation: derivationPart,
-      hasIntuition: true,
-      hasDerivation: true
-    }
-  }
-
-  return {
-    intuition: text,
-    derivation: '',
-    hasIntuition: false,
-    hasDerivation: false
-  }
-}
-
 export const MarkdownView = memo(function MarkdownView({
   content,
   think,
@@ -172,7 +123,6 @@ export const MarkdownView = memo(function MarkdownView({
   onChallengeClick
 }: MarkdownViewProps) {
   const [showThink, setShowThink] = useState(false)
-  const [showDerivation, setShowDerivation] = useState(false)
   const [executingMap, setExecutingMap] = useState<Record<string, boolean>>({})
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({})
 
@@ -186,7 +136,12 @@ export const MarkdownView = memo(function MarkdownView({
     }
   }
 
-  const cleanProse = stripIncompleteActionBlocks(content)
+  // Extract inline think trace if not already parsed
+  const { cleanContent, think: inlineThink, agentTraces: inlineTraces } = extractThinkTrace(content)
+  const displayThink = think || inlineThink
+  const displayTraces = agentTraces && agentTraces.length > 0 ? agentTraces : inlineTraces
+
+  const cleanProse = stripIncompleteActionBlocks(cleanContent)
   const boxedAnswer = extractLastBoxed(content)
 
   // Verification state logic
@@ -195,7 +150,6 @@ export const MarkdownView = memo(function MarkdownView({
   const isVerified = verState === 'verified' || (!isDisagreed && verified === true)
   const isUnverified = !isVerified && !isDisagreed
 
-  const { intuition, derivation, hasDerivation } = splitIntuitionAndDerivation(cleanProse)
   const challengeChips = getChallengeChips(actions, cleanProse)
 
   return (
@@ -277,7 +231,7 @@ export const MarkdownView = memo(function MarkdownView({
       )}
 
       {/* 2. Collapsible Ultimatrix Agent Trace */}
-      {think && (
+      {displayThink && (
         <div className="rounded border border-line bg-surface-1 overflow-hidden">
           <button
             type="button"
@@ -287,9 +241,9 @@ export const MarkdownView = memo(function MarkdownView({
             <div className="flex items-center gap-1.5">
               <Brain size={14} className="text-accent" />
               <span>🧠 Ultimatrix Agent Trace</span>
-              {agentTraces && agentTraces.length > 0 && (
+              {displayTraces && displayTraces.length > 0 && (
                 <div className="flex items-center gap-1 ml-1">
-                  {agentTraces.map((trace) => (
+                  {displayTraces.map((trace) => (
                     <span
                       key={trace.agent}
                       className={`px-1.5 py-0.2 rounded bg-surface-2 text-fine ${
@@ -307,8 +261,8 @@ export const MarkdownView = memo(function MarkdownView({
 
           {showThink && (
             <div className="p-2.5 border-t border-line bg-surface-0 flex flex-col gap-2 text-fine font-mono text-ink-dim whitespace-pre-wrap">
-              {agentTraces && agentTraces.length > 0 ? (
-                agentTraces.map((trace) => (
+              {displayTraces && displayTraces.length > 0 ? (
+                displayTraces.map((trace) => (
                   <div
                     key={trace.agent}
                     className="flex flex-col gap-0.5 border-b border-line pb-1.5 last:border-none"
@@ -324,42 +278,16 @@ export const MarkdownView = memo(function MarkdownView({
                   </div>
                 ))
               ) : (
-                <div>{think}</div>
+                <div>{displayThink}</div>
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* 3. Intuition Hook & Progressive Disclosure Content */}
+      {/* 3. Step-by-Step Mathematical Solution Directly Visible */}
       <div className="markdown-prose flex flex-col gap-2">
-        {hasDerivation ? (
-          <>
-            {renderMarkdownWithMath(intuition)}
-
-            {/* Collapsible Step-by-Step Derivation */}
-            <div className="rounded border border-line bg-surface-1 overflow-hidden mt-1">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-2.5 py-1.5 text-fine font-medium text-ink-dim hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
-                onClick={() => setShowDerivation(!showDerivation)}
-              >
-                <span className="flex items-center gap-1.5 text-accent font-semibold">
-                  <span>📐 {showDerivation ? 'Hide' : 'Show'} Step-by-Step Derivation</span>
-                </span>
-                {showDerivation ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              </button>
-
-              {showDerivation && (
-                <div className="p-3 border-t border-line bg-surface-0 flex flex-col gap-2">
-                  {renderMarkdownWithMath(derivation)}
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          renderMarkdownWithMath(cleanProse)
-        )}
+        {renderMarkdownWithMath(cleanProse)}
       </div>
 
       {/* 4. Interactive PhysLab Action Cards */}
@@ -485,20 +413,19 @@ export const MarkdownView = memo(function MarkdownView({
                   <div className="flex items-center gap-1.5 font-medium text-small text-ink-strong">
                     <Sparkles size={14} className="text-accent" />
                     <span>
-                      {act.tool === 'calc_solve' && 'PhysLab Calculator & 3-Way Truth Check'}
-                      {act.tool === 'sandbox_experiment' && '3D Physics Sandbox Experiment'}
-                      {act.tool === 'mindmap_build' && 'Obsidian Concept Mind Map'}
-                      {act.tool === 'goal_update' && 'Student Goal Keeper Update'}
-                      {(act.tool === 'graph_plot' || act.tool === 'graph3d_plot') &&
-                        'Mathematical Graph Plot'}
-                      {act.tool === 'run_commands' && 'PhysLab Live Scene Commands'}
+                      {act.tool === 'calc_solve' && 'Calculator'}
+                      {act.tool === 'sandbox_experiment' && '3D Sandbox'}
+                      {act.tool === 'mindmap_build' && 'Mind Map'}
+                      {act.tool === 'goal_update' && 'Study Goal'}
+                      {(act.tool === 'graph_plot' || act.tool === 'graph3d_plot') && 'Graphing'}
+                      {act.tool === 'run_commands' && 'Live Scene'}
                     </span>
                   </div>
 
                   {isActionVerified && (
-                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-fine font-semibold text-good border border-line">
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-fine font-semibold text-good border border-line shrink-0">
                       <CheckCircle2 size={12} />
-                      3-Way Verified
+                      Verified
                     </span>
                   )}
                 </div>
@@ -784,7 +711,7 @@ function DisplayMath({ tex }: { tex: string }) {
 
   return (
     <div
-      className="my-2 p-2 rounded bg-surface-1 overflow-x-auto text-center"
+      className="my-1.5 p-2 rounded bg-surface-1 overflow-x-auto text-center text-small"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

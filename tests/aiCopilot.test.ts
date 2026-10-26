@@ -32,18 +32,19 @@ import { panelHome } from '../src/renderer/src/app/layoutMath'
 import { PANEL_TITLES } from '../src/renderer/src/app/panels'
 
 describe('PhysLab-Brain AI Copilot System', () => {
-  describe('System Prompt & 5 Special Agents', () => {
-    it('embeds all 5 Ultimatrix special agents', () => {
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('[AGENT: OCR_VISION]')
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('[AGENT: PLANNER_MINDMAP]')
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('[AGENT: MATH_AUDITOR]')
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('[AGENT: PHYSICS_SANDBOX]')
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('[AGENT: HUMAN_TEACHER]')
+  describe('System Prompt & Core Instructions', () => {
+    it('embeds prompt instructions and critical rules', () => {
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('PhysLab-Brain')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('<think>')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('<physlab_action>')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('calc_solve')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('sandbox_experiment')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('mindmap_build')
     })
 
-    it('instructs 3-Way Truth Check and incline static friction trap', () => {
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('3-Way Truth Check')
-      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('f_{s,\\max} = \\mu_s m g \\cos\\theta')
+    it('instructs physics boundary limits and incline static friction trap', () => {
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('static friction threshold')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('Incline Static Check')
       expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('<physlab_action>')
     })
 

@@ -41,6 +41,10 @@ import type { Attachment, MindMapNode } from '../ai/types'
 
 type TabId = 'chat' | 'mindmap' | 'goals' | 'settings'
 
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { aiStore?: typeof useAiStore }).aiStore = useAiStore
+}
+
 export function AiCopilot() {
   const [activeTab, setActiveTab] = useState<TabId>('chat')
   const [inputPrompt, setInputPrompt] = useState('')
@@ -872,83 +876,105 @@ export function AiCopilot() {
               </div>
             </div>
 
-            {/* Provider Configuration */}
-            {provider === 'gemini' ? (
-              <div className="flex flex-col gap-2.5 p-3 rounded border border-line bg-surface-1">
-                <div className="flex flex-col gap-1">
-                  <label className="text-fine font-medium text-ink-dim">Google AI Studio API Key</label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type={showKeyText ? 'text' : 'password'}
-                      value={geminiApiKey}
-                      onChange={(e) => useAiStore.getState().setGeminiApiKey(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="AIzaSy..."
-                      className="flex-1 p-1.5 rounded bg-surface-0 border border-line text-body text-ink outline-none focus:border-line-2 font-mono"
-                    />
-                    <button
-                      type="button"
-                      title="Show / Hide API Key"
-                      onClick={() => setShowKeyText((v) => !v)}
-                      className="p-1.5 rounded bg-surface-0 border border-line text-ink-dim hover:text-ink cursor-pointer"
-                    >
-                      {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                    <button
-                      type="button"
-                      title="Paste API Key from Clipboard"
-                      onClick={async () => {
-                        try {
-                          const clip = await navigator.clipboard.readText()
-                          if (clip && clip.trim()) {
-                            useAiStore.getState().setGeminiApiKey(clip.trim())
-                          }
-                        } catch {
-                          // Ignore clipboard error
-                        }
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
-                    >
-                      <ClipboardPaste size={13} />
-                      <span>Paste</span>
-                    </button>
-                  </div>
-                  <span className="text-fine text-ink-faint">
-                    Saved locally in your browser/app storage.
+            {/* Google Gemini Card */}
+            <div className={`flex flex-col gap-2.5 p-3 rounded border transition-colors ${
+              provider === 'gemini' ? 'border-accent bg-surface-1' : 'border-line bg-surface-1'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                  <Sparkles size={15} className="text-accent" />
+                  <span>Google Gemini API</span>
+                </div>
+                {provider === 'gemini' ? (
+                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
+                    Active Provider
                   </span>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-fine font-medium text-ink-dim">Gemini Model</label>
-                    <button
-                      type="button"
-                      onClick={handleFetchModels}
-                      disabled={isFetchingModels}
-                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw size={11} className={isFetchingModels ? 'animate-spin' : ''} />
-                      <span>{isFetchingModels ? 'Fetching…' : 'Fetch Models'}</span>
-                    </button>
-                  </div>
-                  <select
-                    value={geminiModel}
-                    onChange={(e) => useAiStore.getState().setGeminiModel(e.target.value)}
-                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => useAiStore.getState().setProvider('gemini')}
+                    className="text-fine text-accent hover:underline cursor-pointer"
                   >
-                    {availableGeminiModels.map((m) => (
-                      <option key={m} value={m}>
-                        {m} {m === 'gemini-2.5-flash' ? '(Recommended)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {modelFetchMsg && (
-                    <span className="text-fine text-good">{modelFetchMsg}</span>
-                  )}
-                </div>
+                    Set Active
+                  </button>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col gap-3">
+
+              <div className="flex flex-col gap-1">
+                <label className="text-fine font-medium text-ink-dim">Google AI Studio API Key</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type={showKeyText ? 'text' : 'password'}
+                    value={geminiApiKey}
+                    onChange={(e) => useAiStore.getState().setGeminiApiKey(e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="AIzaSy..."
+                    className="flex-1 p-1.5 rounded bg-surface-0 border border-line text-body text-ink outline-none focus:border-line-2 font-mono"
+                  />
+                  <button
+                    type="button"
+                    title="Show / Hide API Key"
+                    onClick={() => setShowKeyText((v) => !v)}
+                    className="p-1.5 rounded bg-surface-0 border border-line text-ink-dim hover:text-ink cursor-pointer"
+                  >
+                    {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    title="Paste API Key from Clipboard"
+                    onClick={async () => {
+                      try {
+                        const clip = await navigator.clipboard.readText()
+                        if (clip && clip.trim()) {
+                          useAiStore.getState().setGeminiApiKey(clip.trim())
+                        }
+                      } catch {
+                        // Ignore clipboard error
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
+                  >
+                    <ClipboardPaste size={13} />
+                    <span>Paste</span>
+                  </button>
+                </div>
+                <span className="text-fine text-ink-faint">
+                  Saved locally in your browser/app storage.
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-fine font-medium text-ink-dim">Gemini Model</label>
+                  <button
+                    type="button"
+                    onClick={handleFetchModels}
+                    disabled={isFetchingModels}
+                    className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={isFetchingModels ? 'animate-spin' : ''} />
+                    <span>{isFetchingModels ? 'Fetching…' : 'Fetch Models'}</span>
+                  </button>
+                </div>
+                <select
+                  value={geminiModel}
+                  onChange={(e) => useAiStore.getState().setGeminiModel(e.target.value)}
+                  className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+                >
+                  {availableGeminiModels.map((m) => (
+                    <option key={m} value={m}>
+                      {m} {m === 'gemini-2.5-flash' ? '(Recommended)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {modelFetchMsg && (
+                  <span className="text-fine text-good">{modelFetchMsg}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Local Brain Card */}
+            <div className="flex flex-col gap-3">
                 {/* Plug & Play PhysLab-Brain (Qwen Q4) Card */}
                 <div className="flex flex-col gap-2.5 p-3 rounded border border-line bg-surface-1">
                   <div className="flex items-center justify-between">
@@ -1150,10 +1176,7 @@ export function AiCopilot() {
                     )}
                   </div>
                 </div>
-
-
               </div>
-            )}
 
             {/* Auto Execute Toggle */}
             <label className="flex items-center gap-2 text-small text-ink-strong cursor-pointer p-2.5 rounded border border-line bg-surface-1">

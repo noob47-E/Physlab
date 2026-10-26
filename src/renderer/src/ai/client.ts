@@ -1,5 +1,5 @@
 import { buildSystemPrompt } from './systemPrompt'
-import { extractActions, extractThinkTrace } from './bridge'
+import { extractActions, extractThinkTrace, buildAppContext, preComputeEngineTurn } from './bridge'
 import { useAiStore } from './store'
 import type { Attachment, ChatMessage } from './types'
 
@@ -285,7 +285,10 @@ export async function streamChatCompletion(
 ): Promise<void> {
   const { provider, geminiApiKey, geminiModel, localEndpoint, localModel, memories, goals } =
     useAiStore.getState()
-  const systemPrompt = buildSystemPrompt(memories, goals)
+  const preComputed = preComputeEngineTurn(newPrompt)
+  const systemPrompt = `${buildSystemPrompt(memories, goals)}\n\n${buildAppContext()}${
+    preComputed.injectedEnginePrompt ? `\n\n${preComputed.injectedEnginePrompt}` : ''
+  }`
 
   abortActiveStream()
   const controller = new AbortController()
@@ -436,7 +439,8 @@ export async function streamChatCompletion(
         }
       }
 
-      const { cleanContent: textWithoutActions, actions } = extractActions(accumulated)
+      const { cleanContent: textWithoutActions, actions: parsedActions } = extractActions(accumulated)
+      const actions = parsedActions.length > 0 ? parsedActions : preComputed.actions
       const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
 
       callbacks.onDone({
@@ -532,7 +536,8 @@ export async function streamChatCompletion(
         }
       }
 
-      const { cleanContent: textWithoutActions, actions } = extractActions(accumulated)
+      const { cleanContent: textWithoutActions, actions: parsedActions } = extractActions(accumulated)
+      const actions = parsedActions.length > 0 ? parsedActions : preComputed.actions
       const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
 
       callbacks.onDone({
@@ -544,7 +549,8 @@ export async function streamChatCompletion(
     }
   } catch (err) {
     if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
-      const { cleanContent: textWithoutActions, actions } = extractActions(accumulated)
+      const { cleanContent: textWithoutActions, actions: parsedActions } = extractActions(accumulated)
+      const actions = parsedActions.length > 0 ? parsedActions : preComputed.actions
       const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
       callbacks.onDone({
         content: finalContent,
