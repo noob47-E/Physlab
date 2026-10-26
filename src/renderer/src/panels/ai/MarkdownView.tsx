@@ -1,18 +1,14 @@
-import { Fragment, memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
   Check,
   CheckCircle2,
-  Compass,
-  HelpCircle,
-  Sparkles,
-  X
+  Sparkles
 } from 'lucide-react'
 import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
 import { extractThinkTrace } from '../../ai/bridge'
 import { extractLastBoxed, repairControlCharLatex, stripIncompleteActionBlocks } from '../../ai/contract'
-import { enterMode } from '../../app/layout'
 
 interface MarkdownViewProps {
   content: string
@@ -26,43 +22,61 @@ interface MarkdownViewProps {
   onChallengeClick?: (prompt: string) => void
 }
 
-function getToolShortResult(tool: string, args: Record<string, any> = {}, result?: any): string {
+export function getToolShortResult(tool: string, args: Record<string, any> = {}, result?: any): string {
   if (tool === 'build_experiment') {
     const objs = Array.isArray(args.objects) ? args.objects : []
-    const count = objs.length || 1
-    const y = objs[0]?.y ?? 5
-    return `Built ${count} ball${count > 1 ? 's' : ''} at ${y} m`
+    if (objs.length === 1) {
+      const obj = objs[0]
+      const kind = obj?.kind || 'object'
+      const pos = obj?.y !== undefined ? ` at ${obj.y} m` : ''
+      return `Built ${kind}${pos}`
+    }
+    if (objs.length > 1) {
+      return `Built ${objs.length} objects`
+    }
+    return 'Built experiment'
   }
   if (tool === 'play') {
-    const s = args.seconds ?? 2
-    return `Ran ${s} s`
+    const s = args.seconds !== undefined ? `${args.seconds} s` : ''
+    return s ? `Ran ${s}` : 'Ran simulation'
   }
   if (tool === 'graph_readings') {
-    const slope = result?.slope !== undefined ? Number(result.slope).toFixed(2) : '-9.81'
-    return `Graph v–t, slope ${slope}`
+    const yName = args.y || 'v'
+    const xName = args.x || 't'
+    if (result?.slope !== undefined) {
+      return `Graph ${yName}–${xName}, slope ${Number(result.slope).toFixed(2)}`
+    }
+    return `Graph ${yName}–${xName}`
   }
   if (tool === 'solve' || tool === 'calc_solve') {
     const ans = result?.answer ?? result?.boxedAnswer ?? ''
-    return ans ? `Solved: ${ans}` : `Solved ${args.expression || args.input || ''}`
+    return ans ? `Solved: ${ans}` : `Solved ${args.expression || args.input || ''}`.trim()
   }
   if (tool === 'plot' || tool === 'graph_plot' || tool === 'graph3d_plot') {
-    return `Plotted ${args.expression || args.equation || ''}`
+    const expr = args.expression || args.equation || ''
+    return expr ? `Plotted ${expr}` : 'Plotted curve'
   }
   if (tool === 'load_experiment' || tool === 'sandbox_experiment') {
     return `Loaded ${args.id || args.presetId || args.experimentType || 'experiment'}`
   }
   if (tool === 'set_param') {
-    return `Set ${args.name}: ${args.value}`
+    return args.name ? `Set ${args.name}: ${args.value}` : 'Set parameter'
   }
   if (tool === 'set_speed') {
-    return `Speed: ${args.factor}x`
+    return args.factor !== undefined ? `Speed: ${args.factor}x` : 'Set speed'
   }
   if (tool === 'get_readings') {
-    const rowsCount = result?.rows?.length ?? 0
-    return `Recorded ${rowsCount} samples`
+    const rowsCount = result?.rows?.length
+    return rowsCount !== undefined ? `Recorded ${rowsCount} samples` : 'Recorded readings'
   }
   if (tool === 'export_readings') {
     return `Exported ${args.format || 'csv'}`
+  }
+  if (tool === 'quiz_challenge') {
+    return String(args.question || 'Concept challenge')
+  }
+  if (tool === 'app_guide') {
+    return `Guide: ${args.mode || 'features'}`
   }
   if (result && typeof result === 'object' && 'message' in result) {
     return String(result.message)
@@ -299,8 +313,6 @@ export const MarkdownView = memo(function MarkdownView({
   verification,
   onChallengeClick
 }: MarkdownViewProps) {
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({})
-
   // Extract inline think trace if not already parsed
   const fixedContent = repairControlCharLatex(content)
   const { cleanContent } = extractThinkTrace(fixedContent)
@@ -413,112 +425,6 @@ export const MarkdownView = memo(function MarkdownView({
         <div className="flex flex-col gap-2 mt-1">
           {actions.map((act) => {
             const isSuccess = act.status === 'success'
-
-            // Custom Card for Quiz Challenge
-            if (act.tool === 'quiz_challenge') {
-              const question = String(act.args.question || 'Quick Concept Check')
-              const choices = Array.isArray(act.args.choices)
-                ? (act.args.choices as string[])
-                : []
-              const ansIdx = Number(act.args.answerIndex ?? 0)
-              const selectedIdx = quizAnswers[act.id]
-              const explanation = String(act.args.explanation || '')
-
-              return (
-                <div
-                  key={act.id}
-                  className="rounded border border-line bg-surface-1 p-3 flex flex-col gap-2.5"
-                >
-                  <div className="flex items-center gap-1.5 font-medium text-small text-ink-strong">
-                    <HelpCircle size={15} className="text-accent" />
-                    <span>Concept Challenge</span>
-                  </div>
-                  <div className="text-body font-medium text-ink">{question}</div>
-                  <div className="flex flex-col gap-1.5">
-                    {choices.map((choice, cIdx) => {
-                      const isSelected = selectedIdx === cIdx
-                      const isAnswer = ansIdx === cIdx
-                      const showResult = selectedIdx !== undefined
-
-                      let btnStyle = 'bg-surface-0 border-line hover:bg-surface-2 text-ink'
-                      if (showResult) {
-                        if (isAnswer) {
-                          btnStyle = 'bg-surface-2 border-line text-good font-semibold'
-                        } else if (isSelected) {
-                          btnStyle = 'bg-surface-2 border-line text-bad'
-                        }
-                      }
-
-                      return (
-                        <button
-                          key={cIdx}
-                          type="button"
-                          onClick={() =>
-                            setQuizAnswers((prev) => ({ ...prev, [act.id]: cIdx }))
-                          }
-                          className={`text-left px-3 py-1.5 rounded border text-fine transition-colors cursor-pointer flex items-center justify-between ${btnStyle}`}
-                        >
-                          <span>{choice}</span>
-                          {showResult && isAnswer && <Check size={14} className="text-good" />}
-                          {showResult && isSelected && !isAnswer && (
-                            <X size={14} className="text-bad" />
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {selectedIdx !== undefined && explanation && (
-                    <div className="text-fine text-ink-dim bg-surface-0 p-2 rounded border border-line">
-                      <span className="font-semibold text-accent">Explanation: </span>
-                      {explanation}
-                    </div>
-                  )}
-                </div>
-              )
-            }
-
-            // Custom Card for App Guide
-            if (act.tool === 'app_guide') {
-              const targetMode = String(act.args.mode || 'calculator')
-              const steps = Array.isArray(act.args.steps) ? (act.args.steps as string[]) : []
-              const tip = act.args.tip ? String(act.args.tip) : ''
-
-              return (
-                <div
-                  key={act.id}
-                  className="rounded border border-line bg-surface-1 p-3 flex flex-col gap-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-medium text-small text-ink-strong">
-                      <Compass size={15} className="text-accent" />
-                      <span>PhysLab Feature Guide: {targetMode}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        enterMode(targetMode as Parameters<typeof enterMode>[0])
-                      }
-                      className="px-2.5 py-0.5 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
-                    >
-                      Open {targetMode}
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-1 mt-1">
-                    {steps.map((st, sIdx) => (
-                      <div key={sIdx} className="flex items-start gap-2 text-fine text-ink">
-                        <span className="w-4 h-4 rounded-full bg-surface-2 text-accent flex items-center justify-center shrink-0 font-mono">
-                          {sIdx + 1}
-                        </span>
-                        <span>{st}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {tip && (
-                    <div className="text-fine text-ink-faint italic mt-1">💡 Tip: {tip}</div>
-                  )}
-                </div>
-              )
-            }
 
             return (
               <div

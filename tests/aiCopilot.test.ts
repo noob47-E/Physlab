@@ -37,7 +37,8 @@ import {
   extractKnownNumbers,
   isAnswerOrResultLine,
   isStepOrStructuralNumber,
-  isKnownNumber
+  isKnownNumber,
+  getToolShortResult
 } from '../src/renderer/src/panels/ai/MarkdownView'
 import { panelHome } from '../src/renderer/src/app/layoutMath'
 import { PANEL_TITLES } from '../src/renderer/src/app/panels'
@@ -1057,6 +1058,26 @@ Simulation ready to run!`
       expect(res.text).toContain('4 kg slides down')
 
       delete (global as any).window
+    })
+  })
+
+  describe('Action Cards: getToolShortResult without hardcoded fallbacks', () => {
+    it('build_experiment describes actual kind and position without hardcoded ball fallback', () => {
+      expect(getToolShortResult('build_experiment', { objects: [{ kind: 'box', y: 12 }] })).toBe('Built box at 12 m')
+      expect(getToolShortResult('build_experiment', { objects: [{ kind: 'cylinder' }] })).toBe('Built cylinder')
+      expect(getToolShortResult('build_experiment', { objects: [{ kind: 'sphere' }, { kind: 'box' }] })).toBe('Built 2 objects')
+      expect(getToolShortResult('build_experiment', {})).toBe('Built experiment')
+    })
+
+    it('graph_readings formats slope when present and does not hallucinate -9.81 when missing', () => {
+      expect(getToolShortResult('graph_readings', { y: 'v', x: 't' }, { slope: 4.9 })).toBe('Graph v–t, slope 4.90')
+      expect(getToolShortResult('graph_readings', { y: 'v', x: 't' }, {})).toBe('Graph v–t')
+      expect(getToolShortResult('graph_readings', { y: 'x', x: 't' }, undefined)).toBe('Graph x–t')
+    })
+
+    it('play does not hallucinate 2s when seconds argument is omitted', () => {
+      expect(getToolShortResult('play', { seconds: 3.5 })).toBe('Ran 3.5 s')
+      expect(getToolShortResult('play', {})).toBe('Ran simulation')
     })
   })
 })
