@@ -10,13 +10,16 @@ import { runCommand } from '../lang/commands'
 import { resetCamera } from '../render/viewState'
 import { PRESETS } from '../sim/presets'
 import { loadExperiment, play, pause } from '../sim/transportActions'
-import { useSandbox, engine } from '../sim/store'
+import { useSandbox, engine, makeBody } from '../sim/store'
 import { SimWorld } from '../sim/world'
 import { startRecorder } from '../sim/recorder'
 import { stepOneFrame } from '../sim/stepping'
-import { type ShapeKind } from '../sim/types'
+import { type ShapeKind, type BodyDef } from '../sim/types'
 import { tableFrom, type Sample } from '../sim/recording'
 import { useLab } from '../lab/labStore'
+import { useTape } from '../sim/tapeStore'
+import { fitOf } from '../lab/fit'
+import type { FitShape } from '../lab/types'
 
 export const TOOLS = [
   {
@@ -107,6 +110,45 @@ export const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'build_experiment',
+      description: 'Build a custom physics experiment with multiple bodies, custom gravity, and floor settings in the Sandbox.',
+      parameters: {
+        type: 'object',
+        properties: {
+          objects: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                kind: { type: 'string', description: 'Shape kind (sphere/ball, box, cylinder, ramp, etc.).' },
+                mass: { type: 'number', description: 'Mass in kg.' },
+                x: { type: 'number', description: 'X position in meters.' },
+                y: { type: 'number', description: 'Y position (height) in meters.' },
+                vx: { type: 'number', description: 'Horizontal velocity in m/s.' },
+                vy: { type: 'number', description: 'Vertical velocity in m/s.' },
+                radius: { type: 'number', description: 'Radius in meters.' },
+                fixed: { type: 'boolean', description: 'Whether the body is fixed (static).' }
+              },
+              required: ['kind']
+            },
+            description: 'List of objects to create.'
+          },
+          gravity: {
+            type: 'number',
+            description: 'Downward gravitational acceleration in m/s² (default: 9.81).'
+          },
+          floor: {
+            type: 'boolean',
+            description: 'Whether to include the ground floor (default: true).'
+          }
+        },
+        required: ['objects']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'add_body',
       description: 'Add a new physical body to the Sandbox simulation.',
       parameters: {
@@ -146,15 +188,32 @@ export const TOOLS = [
     type: 'function',
     function: {
       name: 'set_param',
-      description: 'Set a property on a physical body (e.g. mass, restitution, friction).',
+      description: 'Set a property on a physical body (e.g. velocity, speed, mass, friction, restitution).',
       parameters: {
         type: 'object',
         properties: {
           bodyId: { type: 'string', description: 'ID of the body.' },
-          name: { type: 'string', description: 'Property name (e.g. mass, friction, restitution).' },
-          value: { type: 'number', description: 'Numeric value to set.' }
+          name: { type: 'string', description: 'Property name (e.g. velocity, speed, mass, friction, restitution).' },
+          value: { description: 'Numeric value or [vx, vy] array to set.' }
         },
         required: ['bodyId', 'name', 'value']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_speed',
+      description: 'Set simulation playback speed / slow motion factor (range 0.1 to 4).',
+      parameters: {
+        type: 'object',
+        properties: {
+          factor: {
+            type: 'number',
+            description: 'Playback speed factor (0.1 = 10x slow motion, 1 = normal, 2 = 2x speed, up to 4).'
+          }
+        },
+        required: ['factor']
       }
     }
   },
@@ -219,9 +278,49 @@ export const TOOLS = [
           every: {
             type: 'number',
             description: 'Sampling interval in steps.'
+          },
+          at: {
+            type: 'array',
+            items: { type: 'number' },
+            description: 'Specific timestamps in seconds to retrieve readings for (e.g. [0.5, 1, 1.5]).'
+          },
+          when: {
+            type: 'string',
+            enum: ['max_height', 'impact', 'stop'],
+            description: 'Specific moment to sample: max_height (peak y), impact (contact/bounce), or stop (v < 0.01).'
           }
         },
         required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'graph_readings',
+      description: 'Plot real recorded experiment data into Lab Data with optional curve fitting (linear or quadratic).',
+      parameters: {
+        type: 'object',
+        properties: {
+          bodyId: {
+            type: 'string',
+            description: 'ID or name of the body.'
+          },
+          x: {
+            type: 'string',
+            description: 'Quantity on x-axis (default: "t").'
+          },
+          y: {
+            type: 'string',
+            description: 'Quantity on y-axis (e.g. "v", "y", "x", "ke", "pe", "p").'
+          },
+          fit: {
+            type: 'string',
+            enum: ['linear', 'quadratic'],
+            description: 'Curve fitting shape: linear or quadratic.'
+          }
+        },
+        required: ['y']
       }
     }
   },
@@ -495,6 +594,73 @@ export async function runTool(
         return { ok: true, id: resolvedId, bodies }
       }
 
+      case 'build_experiment': {
+        enterMode('sandbox')
+        useScene.getState().setPlaying(false)
+
+        const floorWanted = args.floor !== false
+        const floorBody = floorWanted ? makeBody('ground', 'Floor', [0, -0.2, 0]) : null
+        const initialBodies: BodyDef[] = floorBody ? [floorBody] : []
+        const gravityPatch = typeof args.gravity === 'number' ? { gravity: args.gravity } : undefined
+
+        useSandbox.getState().setScene(initialBodies, gravityPatch, [])
+        useSandbox.getState().resetRun()
+
+        const objects = Array.isArray(args.objects) ? args.objects : []
+        const createdBodyIds: string[] = []
+        const createdBodies: any[] = []
+
+        for (const obj of objects) {
+          const rawKind = String(obj.kind || 'sphere').toLowerCase()
+          const shapeKind = (rawKind === 'ball' ? 'sphere' : rawKind === 'crate' ? 'box' : rawKind) as ShapeKind
+          const x = typeof obj.x === 'number' ? obj.x : 0
+          const y = typeof obj.y === 'number' ? obj.y : 2
+          const body = useSandbox.getState().addBody(shapeKind, [x, y, 0])
+
+          const patch: Partial<BodyDef> = {}
+          if (typeof obj.mass === 'number') patch.mass = obj.mass
+          if (typeof obj.radius === 'number') {
+            patch.size = [obj.radius, obj.radius, obj.radius]
+          }
+          if (typeof obj.vx === 'number' || typeof obj.vy === 'number') {
+            patch.velocity = [obj.vx ?? 0, obj.vy ?? 0, 0]
+          }
+          if (obj.fixed === true) {
+            patch.motion = 'static'
+          } else if (obj.fixed === false) {
+            patch.motion = 'dynamic'
+          }
+
+          if (Object.keys(patch).length > 0) {
+            useSandbox.getState().updateBody(body.id, patch)
+          }
+
+          const updated = useSandbox.getState().bodies.find((b) => b.id === body.id) ?? body
+          createdBodyIds.push(updated.id)
+          createdBodies.push({
+            id: updated.id,
+            name: updated.name,
+            kind: updated.shape,
+            position: updated.position,
+            mass: updated.mass,
+            velocity: updated.velocity
+          })
+        }
+
+        if (engine.world) {
+          const s = useSandbox.getState()
+          engine.world.rebuild(s.bodies, s.links)
+        }
+
+        return {
+          ok: true,
+          bodyIds: createdBodyIds,
+          bodies: createdBodies,
+          gravity: useSandbox.getState().world.gravity,
+          floor: floorWanted
+        }
+      }
+
       case 'add_body': {
         enterMode('sandbox')
         const rawKind = String(args.kind || 'sphere').toLowerCase()
@@ -507,7 +673,7 @@ export async function runTool(
         if (typeof args.mass === 'number') patch.mass = args.mass
         if (typeof args.radius === 'number') patch.radius = args.radius
         if (typeof args.vx === 'number' || typeof args.vy === 'number') {
-          patch.initialVelocity = [args.vx ?? 0, args.vy ?? 0, 0]
+          patch.velocity = [args.vx ?? 0, args.vy ?? 0, 0]
         }
         if (Object.keys(patch).length > 0) {
           useSandbox.getState().updateBody(body.id, patch)
@@ -529,15 +695,68 @@ export async function runTool(
 
       case 'set_param': {
         const bodyId = String(args.bodyId || '').trim()
-        const name = String(args.name || '').trim()
-        const value = Number(args.value)
-        if (!bodyId || !name || Number.isNaN(value)) {
-          return { ok: false, error: 'bodyId, name, and numeric value are required.' }
+        const name = String(args.name || '').trim().toLowerCase()
+        const rawValue = args.value
+        if (!bodyId || !name || rawValue === undefined) {
+          return { ok: false, error: 'bodyId, name, and value are required.' }
         }
         const target = useSandbox.getState().bodies.find((b) => b.id === bodyId || b.name.toLowerCase() === bodyId.toLowerCase())
         if (!target) return { ok: false, error: `Body not found: ${bodyId}` }
-        useSandbox.getState().updateBody(target.id, { [name]: value })
-        return { ok: true, bodyId: target.id, [name]: value }
+
+        const patch: Partial<BodyDef> = {}
+        if (name === 'velocity') {
+          if (Array.isArray(rawValue)) {
+            const vx = Number(rawValue[0]) || 0
+            const vy = Number(rawValue[1]) || 0
+            patch.velocity = [vx, vy, 0]
+          } else if (typeof rawValue === 'number' || !Number.isNaN(Number(rawValue))) {
+            const speed = Number(rawValue)
+            const curr = target.velocity
+            const curSpeed = Math.hypot(curr[0], curr[1])
+            patch.velocity = curSpeed < 1e-4 ? [0, -speed, 0] : [(curr[0] / curSpeed) * speed, (curr[1] / curSpeed) * speed, 0]
+          }
+        } else if (name === 'speed' || name === 'v') {
+          const speed = Number(rawValue)
+          if (Number.isNaN(speed)) {
+            return { ok: false, error: 'speed value must be a number' }
+          }
+          const curr = target.velocity
+          const curSpeed = Math.hypot(curr[0], curr[1])
+          patch.velocity = curSpeed < 1e-4 ? [0, -speed, 0] : [(curr[0] / curSpeed) * speed, (curr[1] / curSpeed) * speed, 0]
+        } else if (name === 'vx') {
+          patch.velocity = [Number(rawValue) || 0, target.velocity[1], 0]
+        } else if (name === 'vy') {
+          patch.velocity = [target.velocity[0], Number(rawValue) || 0, 0]
+        } else if (name === 'mass') {
+          patch.mass = Number(rawValue)
+        } else if (name === 'restitution' || name === 'bounciness' || name === 'e') {
+          patch.restitution = Math.max(0, Math.min(1, Number(rawValue)))
+        } else if (name === 'friction' || name === 'mu') {
+          patch.friction = Math.max(0, Number(rawValue))
+        } else {
+          ;(patch as any)[name] = rawValue
+        }
+
+        useSandbox.getState().updateBody(target.id, patch)
+
+        if (engine.world) {
+          if (patch.velocity) {
+            engine.world.setVelocity(target.id, patch.velocity)
+          }
+          const updatedDef = useSandbox.getState().bodies.find((b) => b.id === target.id)
+          if (updatedDef) {
+            engine.world.updateBody(updatedDef)
+          }
+        }
+
+        return { ok: true, bodyId: target.id, [name]: rawValue, velocity: patch.velocity }
+      }
+
+      case 'set_speed': {
+        const factor = Math.max(0.1, Math.min(4, Number(args.factor) || 1))
+        useSandbox.getState().setWorld({ timeScale: factor })
+        useTape.getState().setSpeed(factor as any)
+        return { ok: true, factor, timeScale: factor }
       }
 
       case 'play': {
@@ -590,10 +809,56 @@ export async function runTool(
           }
         }
 
-        const step = Math.max(1, Math.floor(recordedSamples.length / 200))
-        const sampled = recordedSamples.filter((_, idx) => idx % step === 0).slice(0, 200)
+        let selectedSamples: Sample[] = []
 
-        const rows = sampled.map((s) => {
+        if (args.at && Array.isArray(args.at) && args.at.length > 0) {
+          selectedSamples = args.at.map((reqTime: number) => {
+            const targetT = Number(reqTime)
+            return recordedSamples.reduce((best, curr) =>
+              Math.abs(curr.t - targetT) < Math.abs(best.t - targetT) ? curr : best
+            )
+          })
+        } else if (args.when) {
+          const whenType = String(args.when).toLowerCase()
+          if (whenType === 'max_height') {
+            const maxSample = recordedSamples.reduce((max, s) => (s.y > max.y ? s : max), recordedSamples[0])
+            selectedSamples = [maxSample]
+          } else if (whenType === 'impact') {
+            const contacts = useSandbox.getState().contacts.filter((c) => c.a === targetBody.id || c.b === targetBody.id)
+            if (contacts.length > 0 && typeof contacts[0].engineTime === 'number') {
+              const impactT = contacts[0].engineTime
+              const impactSample = recordedSamples.reduce((best, curr) =>
+                Math.abs(curr.t - impactT) < Math.abs(best.t - impactT) ? curr : best
+              )
+              selectedSamples = [impactSample]
+            } else {
+              let turnSample = recordedSamples[0]
+              for (let i = 1; i < recordedSamples.length - 1; i++) {
+                if (
+                  recordedSamples[i].y <= recordedSamples[i - 1].y &&
+                  recordedSamples[i].y <= recordedSamples[i + 1].y &&
+                  recordedSamples[i].y < recordedSamples[0].y - 0.05
+                ) {
+                  turnSample = recordedSamples[i]
+                  break
+                }
+              }
+              selectedSamples = [turnSample]
+            }
+          } else if (whenType === 'stop') {
+            const stopSample =
+              recordedSamples.find((s) => s.v < 0.01) ??
+              recordedSamples.reduce((min, s) => (s.v < min.v ? s : min), recordedSamples[0])
+            selectedSamples = [stopSample]
+          } else {
+            selectedSamples = recordedSamples
+          }
+        } else {
+          const step = Math.max(1, Math.floor(recordedSamples.length / 200))
+          selectedSamples = recordedSamples.filter((_, idx) => idx % step === 0).slice(0, 200)
+        }
+
+        const rows = selectedSamples.map((s) => {
           const row: Record<string, number> = {
             t: s.t,
             x: s.x,
@@ -620,6 +885,74 @@ export async function runTool(
           bodyName: targetBody.name,
           rows,
           totalSamples: recordedSamples.length
+        }
+      }
+
+      case 'graph_readings': {
+        enterMode('lab')
+        const bodies = useSandbox.getState().bodies
+        const targetBody = args.bodyId
+          ? bodies.find((b) => b.id === args.bodyId || b.name.toLowerCase() === String(args.bodyId).toLowerCase())
+          : bodies.find((b) => b.motion === 'dynamic') ?? bodies[0]
+
+        if (!targetBody) {
+          return { ok: false, error: 'No dynamic body found to graph.' }
+        }
+
+        const samples = useSandbox.getState().recording[targetBody.id] ?? []
+        if (!samples || samples.length === 0) {
+          return {
+            ok: false,
+            error: 'No simulation recording available yet. Please call play(seconds) first to generate data.'
+          }
+        }
+
+        const labTable = tableFrom(targetBody.name, samples)
+
+        const xArg = String(args.x || 't').toLowerCase()
+        const yArg = String(args.y || 'v').toLowerCase()
+
+        const colX = labTable.columns.find((c) => c.name.toLowerCase() === xArg) ?? labTable.columns[0]
+        const colY = labTable.columns.find((c) => c.name.toLowerCase() === yArg) ?? labTable.columns[3]
+
+        const fitShape: FitShape = args.fit === 'quadratic' ? 'quadratic' : 'linear'
+        labTable.plot = {
+          x: colX.id,
+          y: colY.id,
+          fit: args.fit ? fitShape : null
+        }
+
+        useLab.getState().appendTable(labTable)
+
+        const getColVal = (s: Sample, colName: string): number => {
+          switch (colName.toLowerCase()) {
+            case 't': return s.t
+            case 'x': return s.x
+            case 'y': return s.y
+            case 'v': return s.v
+            case 'ke': return s.ke
+            case 'pe': return s.pe
+            case 'p': return s.p
+            default: return s.v
+          }
+        }
+
+        const xs = samples.map((s) => getColVal(s, colX.name))
+        const ys = samples.map((s) => getColVal(s, colY.name))
+        const fitResult = args.fit ? fitOf(xs, ys, fitShape) : null
+
+        return {
+          ok: true,
+          tableId: labTable.id,
+          tableName: labTable.title,
+          x: colX.name,
+          y: colY.name,
+          fit: args.fit ?? undefined,
+          slope: fitResult?.slope,
+          intercept: fitResult?.intercept,
+          coefficients: fitResult?.coef,
+          r2: fitResult?.r2,
+          expr: fitResult?.expr
         }
       }
 

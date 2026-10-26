@@ -148,4 +148,89 @@ describe('AI Tools Layer (src/renderer/src/ai/tools.ts)', () => {
     expect(res.ok).toBe(false)
     expect(res.error).toContain('play')
   })
+
+  it('E2: build_experiment builds custom objects, sets gravity, and returns bodyIds', async () => {
+    const res = await runTool('build_experiment', {
+      gravity: 9.8,
+      floor: true,
+      objects: [
+        { kind: 'sphere', mass: 2, x: -1, y: 5, vx: 0, vy: 0 },
+        { kind: 'sphere', mass: 1, x: 1, y: 5, vx: 0, vy: 0 }
+      ]
+    })
+    expect(res.ok).toBe(true)
+    const bodyIds = res.bodyIds as string[]
+    expect(bodyIds).toHaveLength(2)
+    expect(useSandbox.getState().world.gravity).toBe(9.8)
+
+    // Floor and 2 spheres
+    expect(useSandbox.getState().bodies.length).toBe(3)
+  })
+
+  it('E2: set_param adjusts speed and guards against zero division when at rest', async () => {
+    const buildRes = await runTool('build_experiment', {
+      objects: [{ kind: 'sphere', mass: 1, x: 0, y: 4, vx: 0, vy: 0 }]
+    })
+    const bId = (buildRes.bodyIds as string[])[0]
+
+    // Ball is initially at rest (vx=0, vy=0)
+    const setSpeedRest = await runTool('set_param', { bodyId: bId, name: 'speed', value: 2 })
+    expect(setSpeedRest.ok).toBe(true)
+    // Guarded: sets straight down [0, -2, 0]
+    expect(setSpeedRest.velocity).toEqual([0, -2, 0])
+
+    // Run 1 second
+    await runTool('play', { seconds: 1 })
+
+    // Slow the ball down to 2 m/s
+    const slowRes = await runTool('set_param', { bodyId: bId, name: 'speed', value: 2 })
+    expect(slowRes.ok).toBe(true)
+    const vel = slowRes.velocity as number[]
+    expect(Math.hypot(vel[0], vel[1])).toBeCloseTo(2, 1)
+  })
+
+  it('E2: set_speed sets simulation timeScale within range 0.1 to 4', async () => {
+    const slow = await runTool('set_speed', { factor: 0.2 })
+    expect(slow.ok).toBe(true)
+    expect(useSandbox.getState().world.timeScale).toBe(0.2)
+
+    const fast = await runTool('set_speed', { factor: 2.5 })
+    expect(fast.ok).toBe(true)
+    expect(useSandbox.getState().world.timeScale).toBe(2.5)
+  })
+
+  it('E2: get_readings with at: [0.5, 1, 1.5] and when: max_height', async () => {
+    await runTool('build_experiment', {
+      objects: [{ kind: 'sphere', mass: 1, x: 0, y: 8, vx: 0, vy: 0 }]
+    })
+    await runTool('play', { seconds: 2 })
+
+    const atRes = await runTool('get_readings', { at: [0.5, 1, 1.5] })
+    expect(atRes.ok).toBe(true)
+    const atRows = atRes.rows as Array<{ t: number; y: number }>
+    expect(atRows).toHaveLength(3)
+    expect(atRows[0].t).toBeCloseTo(0.5, 1)
+    expect(atRows[1].t).toBeCloseTo(1.0, 1)
+    expect(atRows[2].t).toBeCloseTo(1.5, 1)
+
+    const whenRes = await runTool('get_readings', { when: 'max_height' })
+    expect(whenRes.ok).toBe(true)
+    const whenRows = whenRes.rows as Array<{ t: number; y: number }>
+    expect(whenRows).toHaveLength(1)
+    expect(whenRows[0].y).toBeCloseTo(8, 0)
+  })
+
+  it('E3: graph_readings creates Lab Data table and returns accurate fit slope', async () => {
+    await runTool('build_experiment', {
+      objects: [{ kind: 'sphere', mass: 1, x: 0, y: 10, vx: 0, vy: 0 }]
+    })
+    await runTool('play', { seconds: 1.2 })
+
+    const graphRes = await runTool('graph_readings', { y: 'v', x: 't', fit: 'linear' })
+    expect(graphRes.ok).toBe(true)
+    expect(graphRes.fit).toBe('linear')
+    expect(graphRes.slope).toBeDefined()
+    // For free fall v = g * t, slope should be close to 9.8 m/s^2
+    expect(Number(graphRes.slope)).toBeCloseTo(9.8, 0)
+  })
 })
