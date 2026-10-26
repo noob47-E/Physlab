@@ -38,7 +38,8 @@ import {
   isAnswerOrResultLine,
   isStepOrStructuralNumber,
   isKnownNumber,
-  getToolShortResult
+  getToolShortResult,
+  renderMarkdownWithMath
 } from '../src/renderer/src/panels/ai/MarkdownView'
 import { panelHome } from '../src/renderer/src/app/layoutMath'
 import { PANEL_TITLES } from '../src/renderer/src/app/panels'
@@ -1088,6 +1089,21 @@ Simulation ready to run!`
     it('play does not hallucinate 2s when seconds argument is omitted', () => {
       expect(getToolShortResult('play', { seconds: 3.5 })).toBe('Ran 3.5 s')
       expect(getToolShortResult('play', {})).toBe('Ran simulation')
+    })
+  })
+
+  describe('RTL & Urdu Prose Support in MarkdownView', () => {
+    it('sets dir="auto" on paragraphs and headings for automatic bidirectional layout', () => {
+      const nodes = renderMarkdownWithMath('یہاں ہم کشش ثقل کا حساب لگاتے ہیں:\n\n### مرحلہ 1: مساوات لکھیں\n\n* پہلا نکتہ')
+      expect(nodes.length).toBeGreaterThan(0)
+      const pNode = nodes[0] as React.ReactElement<{ dir?: string }>
+      expect(pNode.props.dir).toBe('auto')
+
+      const h3Node = nodes[1] as React.ReactElement<{ dir?: string }>
+      expect(h3Node.props.dir).toBe('auto')
+
+      const liNode = nodes[2] as React.ReactElement<{ dir?: string }>
+      expect(liNode.props.dir).toBe('auto')
     })
   })
 })

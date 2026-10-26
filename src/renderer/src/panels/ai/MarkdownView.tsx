@@ -416,7 +416,7 @@ export const MarkdownView = memo(function MarkdownView({
       )}
 
       {/* 2. Step-by-Step Mathematical Solution Directly Visible */}
-      <div className="markdown-prose flex flex-col gap-2">
+      <div className="markdown-prose flex flex-col gap-2" dir="auto">
         {renderMarkdownWithMath(cleanProse, knownNumbers)}
       </div>
 
@@ -470,7 +470,7 @@ export const MarkdownView = memo(function MarkdownView({
 /**
  * Parses markdown blocks and formats KaTeX math expressions safely.
  */
-function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React.ReactNode[] {
+export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React.ReactNode[] {
   if (!text) return []
 
   const cleanText = text
@@ -490,7 +490,7 @@ function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React
       const nonEmpty = paragraphLines.filter((l) => l.trim().length > 0)
       if (nonEmpty.length > 0) {
         nodes.push(
-          <div key={`p_${nodes.length}`} className="my-1">
+          <div key={`p_${nodes.length}`} className="my-1" dir="auto">
             {paragraphLines.map((pLine, lIdx) => {
               const isAns = isAnswerOrResultLine(pLine)
               return (
@@ -579,6 +579,7 @@ function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React
         <h3
           key={`h3_${nodes.length}`}
           className="font-semibold text-lead text-ink-strong mt-2 mb-1"
+          dir="auto"
         >
           {renderInlineMath(line.slice(4), isAns, knownNumbers)}
         </h3>
@@ -592,6 +593,7 @@ function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React
         <h2
           key={`h2_${nodes.length}`}
           className="font-semibold text-title text-ink-strong mt-3 mb-1"
+          dir="auto"
         >
           {renderInlineMath(line.slice(3), isAns, knownNumbers)}
         </h2>
@@ -603,9 +605,9 @@ function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React
       flushBuffer()
       const isAns = isAnswerOrResultLine(line.trim().slice(2))
       nodes.push(
-        <div key={`li_${nodes.length}`} className="flex items-start gap-2 ml-2 my-0.5">
+        <div key={`li_${nodes.length}`} className="flex items-start gap-2 ml-2 my-0.5" dir="auto">
           <span className="text-accent leading-none mt-1.5">•</span>
-          <div className="flex-1">{renderInlineMath(line.trim().slice(2), isAns, knownNumbers)}</div>
+          <div className="flex-1" dir="auto">{renderInlineMath(line.trim().slice(2), isAns, knownNumbers)}</div>
         </div>
       )
       continue
@@ -725,6 +727,7 @@ function renderInlineMath(
         const node = (
           <span
             key={idx}
+            dir="ltr"
             className="inline-block mx-0.5 align-middle"
             dangerouslySetInnerHTML={{ __html: html }}
           />
@@ -791,6 +794,7 @@ function DisplayMath({ tex, isInvented }: { tex: string; isInvented?: boolean })
 
   const content = (
     <div
+      dir="ltr"
       className={`my-1.5 p-2 rounded bg-surface-1 overflow-x-hidden text-center ${
         isLong ? 'text-fine' : 'text-small'
       }`}
