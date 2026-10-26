@@ -201,7 +201,7 @@ function extractRawJsonActions(text: string): { remainingText: string; rawAction
   let remaining = text
 
   const toolCheckRegex =
-    /(?:"tool"|"name")\s*:\s*"(?:calc_solve|sandbox_experiment|mindmap_build|goal_update|graph_plot|graph3d_plot|quiz_challenge|app_guide|run_commands)"/
+    /(?:"tool"|"name")\s*:\s*"(?:calc_solve|sandbox_experiment|mindmap_build|goal_update|graph_plot|graph3d_plot|quiz_challenge|app_guide|run_commands|build_experiment|set_speed|graph_readings|get_readings|play|pause|reset|add_body|remove_body|set_param|load_experiment|list_experiments|solve|plot|export_readings|demonstrate|get_app_state)"/
 
   let changed = true
   while (changed) {
@@ -354,13 +354,16 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
     'plot',
     'list_experiments',
     'load_experiment',
+    'build_experiment',
     'add_body',
     'remove_body',
     'set_param',
+    'set_speed',
     'play',
     'pause',
     'reset',
     'get_readings',
+    'graph_readings',
     'export_readings',
     'demonstrate',
     'get_app_state'
@@ -1030,7 +1033,7 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
 
   // 5. Physics Sandbox (Incline, Freefall, Projectile, Presets)
   const isPhysicsExp =
-    /(?:incline|slope|ramp|friction|projectile|free\s*fall|dropped\s*ball|falling|cradle|newton's\s*cradle|pendulum|atwood|seesaw|spring|collision)/i.test(
+    /(?:incline|slope|ramp|friction|projectile|free\s*fall|drop|falling|cradle|newton's\s*cradle|pendulum|atwood|seesaw|spring|collision)/i.test(
       lower
     )
 
@@ -1092,20 +1095,34 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
         `[PHYSLAB ENGINE: Prepared Projectile Motion (v0 = ${v0} m/s, θ = ${angleDeg}°), live simulation running with Lab Data readings.]`
       )
     } else if (/(?:drop|free\s*fall|falling)/i.test(lower)) {
-      actions.push({
-        id: `act_${Date.now()}_drop`,
-        tool: 'sandbox_experiment',
-        args: {
-          experimentType: 'freefall',
-          height: 10,
-          massKg: 2,
-          recordToLab: true
+      actions.push(
+        {
+          id: `act_${Date.now()}_build`,
+          tool: 'build_experiment',
+          args: {
+            objects: [{ kind: 'sphere', mass: 1, x: 0, y: 5, vx: 0, vy: 0 }],
+            floor: true
+          },
+          status: 'pending',
+          verified: true
         },
-        status: 'pending',
-        verified: true
-      })
+        {
+          id: `act_${Date.now()}_play`,
+          tool: 'play',
+          args: { seconds: 2 },
+          status: 'pending',
+          verified: true
+        },
+        {
+          id: `act_${Date.now()}_graph`,
+          tool: 'graph_readings',
+          args: { y: 'v', fit: 'linear' },
+          status: 'pending',
+          verified: true
+        }
+      )
       notes.push(
-        `[PHYSLAB ENGINE: Prepared Free Fall experiment (h = 10 m, g = 9.81 m/s²), live simulation running with Lab Data readings.]`
+        `[PHYSLAB ENGINE: Drop a ball sequence: 1) build_experiment: {"objects": [{"kind": "sphere", "mass": 1, "x": 0, "y": 5, "vx": 0, "vy": 0}], "floor": true}; 2) play: {"seconds": 2}; 3) graph_readings: {"y": "v", "fit": "linear"}. The slope and impact time must come from graph_readings' fit and get_readings(when: 'impact'). Never write any formula value, slope, acceleration, or time that did not come from a tool.]`
       )
     } else {
       let presetId = 'pendulum'

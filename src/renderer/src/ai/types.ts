@@ -26,6 +26,24 @@ export type PhysLabTool =
   | 'quiz_challenge'
   | 'app_guide'
   | 'run_commands'
+  | 'build_experiment'
+  | 'set_speed'
+  | 'graph_readings'
+  | 'get_readings'
+  | 'play'
+  | 'pause'
+  | 'reset'
+  | 'add_body'
+  | 'remove_body'
+  | 'set_param'
+  | 'load_experiment'
+  | 'list_experiments'
+  | 'solve'
+  | 'plot'
+  | 'export_readings'
+  | 'demonstrate'
+  | 'get_app_state'
+  | (string & {})
 
 export interface PhysLabAction {
   id: string

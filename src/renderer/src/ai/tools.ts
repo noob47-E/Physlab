@@ -1,4 +1,5 @@
 import { enterMode } from '../app/layout'
+import { showPanel } from '../app/panels'
 import { useApp } from '../app/modes'
 import { useScene } from '../core/store'
 import { useCalc } from '../calc/calcStore'
@@ -890,6 +891,7 @@ export async function runTool(
 
       case 'graph_readings': {
         enterMode('lab')
+        showPanel('labdata')
         const bodies = useSandbox.getState().bodies
         const targetBody = args.bodyId
           ? bodies.find((b) => b.id === args.bodyId || b.name.toLowerCase() === String(args.bodyId).toLowerCase())

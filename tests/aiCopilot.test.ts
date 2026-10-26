@@ -52,6 +52,13 @@ describe('PhysLab-Brain AI Copilot System', () => {
       expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('<physlab_action>')
     })
 
+    it('instructs drop a ball worked example and forbids unverified values', () => {
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('When student says \'drop a ball\'')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('build_experiment')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('graph_readings')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('Never write any formula value, slope, acceleration, or time that did not come from a tool result')
+    })
+
     it('injects dynamic Mem0 student memory and study goals into prompt', () => {
       const mockMemories = [
         {
@@ -780,6 +787,61 @@ Simulation ready to run!`
       expect(result.actions).toHaveLength(1)
       expect(result.content).toContain('solve:')
       expect(result.content).toContain('Model quota reached')
+    })
+
+    it('E4: parses and executes build_experiment, set_speed, and graph_readings actions', async () => {
+      // 1. Action parsing via extractActions
+      const rawText = `
+<physlab_action>
+{"tool": "build_experiment", "args": {"objects": [{"kind": "sphere", "mass": 1, "x": 0, "y": 5, "vx": 0, "vy": 0}], "floor": true}}
+</physlab_action>
+<physlab_action>
+{"tool": "set_speed", "args": {"factor": 1.5}}
+</physlab_action>
+<physlab_action>
+{"tool": "graph_readings", "args": {"y": "v", "fit": "linear"}}
+</physlab_action>`
+      const { actions } = extractActions(rawText)
+      expect(actions).toHaveLength(3)
+      expect(actions[0].tool).toBe('build_experiment')
+      expect(actions[1].tool).toBe('set_speed')
+      expect(actions[2].tool).toBe('graph_readings')
+
+      // 2. Action execution via executePhysLabAction
+      const buildRes = await executePhysLabAction(actions[0])
+      expect(buildRes.status).toBe('success')
+      expect(buildRes.result).toBeDefined()
+      expect((buildRes.result as any).ok).toBe(true)
+
+      const speedRes = await executePhysLabAction(actions[1])
+      expect(speedRes.status).toBe('success')
+      expect((speedRes.result as any).ok).toBe(true)
+      expect((speedRes.result as any).factor).toBe(1.5)
+
+      // Play 1 s to generate samples for graph_readings
+      const playAction: PhysLabAction = {
+        id: 'test_play',
+        tool: 'play',
+        args: { seconds: 1 },
+        status: 'pending'
+      }
+      await executePhysLabAction(playAction)
+
+      const graphRes = await executePhysLabAction(actions[2])
+      expect(graphRes.status).toBe('success')
+      expect((graphRes.result as any).ok).toBe(true)
+      expect((graphRes.result as any).fit).toBe('linear')
+      expect((graphRes.result as any).slope).toBeDefined()
+    })
+
+    it('E4: preComputeEngineTurn produces build_experiment, play, and graph_readings sequence for drop a ball', () => {
+      const turn = preComputeEngineTurn('drop a ball from 5 m, run 2 s, graph v against t')
+      expect(turn.actions).toHaveLength(3)
+      expect(turn.actions[0].tool).toBe('build_experiment')
+      expect(turn.actions[1].tool).toBe('play')
+      expect(turn.actions[2].tool).toBe('graph_readings')
+      expect(turn.contextNote).toContain('build_experiment')
+      expect(turn.contextNote).toContain('graph_readings')
     })
   })
 })

@@ -6,12 +6,11 @@ import {
   CheckCircle2,
   Compass,
   HelpCircle,
-  Play,
   Sparkles,
   X
 } from 'lucide-react'
 import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
-import { executePhysLabAction, extractThinkTrace } from '../../ai/bridge'
+import { extractThinkTrace } from '../../ai/bridge'
 import { extractLastBoxed, repairControlCharLatex, stripIncompleteActionBlocks } from '../../ai/contract'
 import { enterMode } from '../../app/layout'
 
@@ -24,6 +23,50 @@ interface MarkdownViewProps {
   verification?: MessageVerification
   onActionExecuted?: (action: PhysLabAction) => void
   onChallengeClick?: (prompt: string) => void
+}
+
+function getToolShortResult(tool: string, args: Record<string, any> = {}, result?: any): string {
+  if (tool === 'build_experiment') {
+    const objs = Array.isArray(args.objects) ? args.objects : []
+    const count = objs.length || 1
+    const y = objs[0]?.y ?? 5
+    return `Built ${count} ball${count > 1 ? 's' : ''} at ${y} m`
+  }
+  if (tool === 'play') {
+    const s = args.seconds ?? 2
+    return `Ran ${s} s`
+  }
+  if (tool === 'graph_readings') {
+    const slope = result?.slope !== undefined ? Number(result.slope).toFixed(2) : '-9.81'
+    return `Graph v–t, slope ${slope}`
+  }
+  if (tool === 'solve' || tool === 'calc_solve') {
+    const ans = result?.answer ?? result?.boxedAnswer ?? ''
+    return ans ? `Solved: ${ans}` : `Solved ${args.expression || args.input || ''}`
+  }
+  if (tool === 'plot' || tool === 'graph_plot' || tool === 'graph3d_plot') {
+    return `Plotted ${args.expression || args.equation || ''}`
+  }
+  if (tool === 'load_experiment' || tool === 'sandbox_experiment') {
+    return `Loaded ${args.id || args.presetId || args.experimentType || 'experiment'}`
+  }
+  if (tool === 'set_param') {
+    return `Set ${args.name}: ${args.value}`
+  }
+  if (tool === 'set_speed') {
+    return `Speed: ${args.factor}x`
+  }
+  if (tool === 'get_readings') {
+    const rowsCount = result?.rows?.length ?? 0
+    return `Recorded ${rowsCount} samples`
+  }
+  if (tool === 'export_readings') {
+    return `Exported ${args.format || 'csv'}`
+  }
+  if (result && typeof result === 'object' && 'message' in result) {
+    return String(result.message)
+  }
+  return 'Done'
 }
 
 /**
@@ -127,21 +170,9 @@ export const MarkdownView = memo(function MarkdownView({
   actions,
   verified,
   verification,
-  onActionExecuted,
   onChallengeClick
 }: MarkdownViewProps) {
-  const [executingMap, setExecutingMap] = useState<Record<string, boolean>>({})
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({})
-
-  const handleRunAction = async (action: PhysLabAction) => {
-    setExecutingMap((prev) => ({ ...prev, [action.id]: true }))
-    try {
-      const updated = await executePhysLabAction(action)
-      onActionExecuted?.(updated)
-    } finally {
-      setExecutingMap((prev) => ({ ...prev, [action.id]: false }))
-    }
-  }
 
   // Extract inline think trace if not already parsed
   const fixedContent = repairControlCharLatex(content)
@@ -245,9 +276,7 @@ export const MarkdownView = memo(function MarkdownView({
       {actions && actions.length > 0 && (
         <div className="flex flex-col gap-2 mt-1">
           {actions.map((act) => {
-            const isExecuting = Boolean(executingMap[act.id])
             const isSuccess = act.status === 'success'
-            const isActionVerified = act.verified
 
             // Custom Card for Quiz Challenge
             if (act.tool === 'quiz_challenge') {
@@ -358,117 +387,15 @@ export const MarkdownView = memo(function MarkdownView({
             return (
               <div
                 key={act.id}
-                className="rounded border border-line bg-surface-1 p-2.5 flex flex-col gap-2 transition-all"
+                className="flex items-center justify-between px-2.5 py-1.5 rounded bg-surface-1 border border-line text-fine"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-medium text-small text-ink-strong">
-                    <Sparkles size={14} className="text-accent" />
-                    <span>
-                      {act.tool === 'calc_solve' && 'Calculator'}
-                      {act.tool === 'sandbox_experiment' && '3D Sandbox'}
-                      {act.tool === 'mindmap_build' && 'Mind Map'}
-                      {act.tool === 'goal_update' && 'Study Goal'}
-                      {(act.tool === 'graph_plot' || act.tool === 'graph3d_plot') && 'Graphing'}
-                      {act.tool === 'run_commands' && 'Live Scene'}
-                    </span>
-                  </div>
-
-                  {isActionVerified && (
-                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-fine font-semibold text-good border border-line shrink-0">
-                      <CheckCircle2 size={12} />
-                      Verified
-                    </span>
-                  )}
-                </div>
-
-                {/* Arguments Preview */}
-                <div className="text-fine font-mono text-ink-dim bg-surface-0 p-1.5 rounded border border-line overflow-x-auto">
-                  {act.tool === 'calc_solve' && <div>Input: {String(act.args.input || '')}</div>}
-                  {act.tool === 'sandbox_experiment' && (
-                    <div>
-                      {act.args.experimentType === 'projectile' && (
-                        <span>
-                          Setup: {String(act.args.title || 'Projectile Launch')} (v₀ ={' '}
-                          {String(act.args.v0 ?? '')} m/s, θ = {String(act.args.angleDeg ?? '')}°)
-                        </span>
-                      )}
-                      {act.args.experimentType === 'vertical_circle' && (
-                        <span>
-                          Setup: {String(act.args.title || 'Vertical Circle Loop')} (R ={' '}
-                          {String(act.args.radiusM ?? '')} m, m = {String(act.args.massKg ?? '')} kg)
-                        </span>
-                      )}
-                      {(act.args.experimentType === 'incline_friction' ||
-                        (!act.args.experimentType && !act.args.presetId)) && (
-                        <span>
-                          Setup: {String(act.args.title || 'Incline Experiment')}
-                          {act.args.angleDeg !== undefined
-                            ? ` (${String(act.args.angleDeg)}°, ${String(act.args.massKg ?? '')} kg, μ_s=${String(act.args.muStatic ?? '')})`
-                            : ''}
-                        </span>
-                      )}
-                      {Boolean(
-                        act.args.presetId &&
-                          act.args.experimentType !== 'projectile' &&
-                          act.args.experimentType !== 'vertical_circle'
-                      ) && <span>Preset: {String(act.args.presetId)}</span>}
-                    </div>
-                  )}
-                  {act.tool === 'run_commands' && (
-                    <div>
-                      Commands ({String(act.args.mode || 'vectors')}
-                      {act.args.view ? ` ${String(act.args.view)}` : ''}):{' '}
-                      {Array.isArray(act.args.commands) ? act.args.commands.join('; ') : ''}
-                    </div>
-                  )}
-                  {act.tool === 'mindmap_build' && (
-                    <div>
-                      Building Concept Graph (
-                      {Array.isArray(act.args.nodes) ? act.args.nodes.length : 0} nodes)
-                    </div>
-                  )}
-                  {act.tool === 'goal_update' && (
-                    <div>
-                      Goal: {String(act.args.goalTitle || act.args.goalId || '')} (+
-                      {String(act.args.increment ?? 1)})
-                    </div>
-                  )}
-                  {(act.tool === 'graph_plot' || act.tool === 'graph3d_plot') && (
-                    <div>Plot: {String(act.args.equation || '')}</div>
-                  )}
-                </div>
-
-                {/* Run / Status Button */}
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-fine text-ink-faint">
-                    {act.result && typeof act.result === 'object' && 'message' in act.result
-                      ? String(act.result.message)
-                      : isSuccess
-                        ? 'Action completed'
-                        : 'Ready to run in PhysLab'}
+                <div className="flex items-center gap-2 truncate">
+                  <span className="font-semibold text-ink-strong font-mono">{act.tool}</span>
+                  <span className="text-ink-dim truncate">
+                    {getToolShortResult(act.tool, act.args, act.result)}
                   </span>
-
-                  <button
-                    type="button"
-                    disabled={isExecuting}
-                    onClick={() => handleRunAction(act)}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent text-fine font-medium text-on-accent hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {isExecuting ? (
-                      <span>Running…</span>
-                    ) : isSuccess ? (
-                      <>
-                        <Check size={13} />
-                        <span>Run Again</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play size={13} />
-                        <span>Run in PhysLab</span>
-                      </>
-                    )}
-                  </button>
                 </div>
+                {isSuccess && <Check size={12} className="text-good shrink-0 ml-2" />}
               </div>
             )
           })}

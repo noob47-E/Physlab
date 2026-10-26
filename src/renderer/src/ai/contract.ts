@@ -261,6 +261,29 @@ export function normalizeAction(
       }
     }
 
+    case 'build_experiment':
+    case 'set_speed':
+    case 'graph_readings':
+    case 'get_readings':
+    case 'play':
+    case 'pause':
+    case 'reset':
+    case 'add_body':
+    case 'remove_body':
+    case 'set_param':
+    case 'load_experiment':
+    case 'list_experiments':
+    case 'solve':
+    case 'plot':
+    case 'export_readings':
+    case 'demonstrate':
+    case 'get_app_state': {
+      return {
+        tool,
+        args: (nested && Object.keys(nested).length > 0 ? nested : rawArgs) as Record<string, unknown>
+      }
+    }
+
     default:
       return null
   }
@@ -479,6 +502,25 @@ export function validateAction(obj: unknown): { ok: boolean; reason: string } {
       return { ok: true, reason: 'Valid app_guide action' }
     }
 
+    case 'build_experiment':
+    case 'set_speed':
+    case 'graph_readings':
+    case 'get_readings':
+    case 'play':
+    case 'pause':
+    case 'reset':
+    case 'add_body':
+    case 'remove_body':
+    case 'set_param':
+    case 'load_experiment':
+    case 'list_experiments':
+    case 'solve':
+    case 'plot':
+    case 'export_readings':
+    case 'demonstrate':
+    case 'get_app_state':
+      return { ok: true, reason: `Valid ${tool} action` }
+
     default:
       return { ok: false, reason: 'Unsupported action tool' }
   }
@@ -551,7 +593,7 @@ export function stripIncompleteActionBlocks(text: string): string {
     .replace(/<\/?think>/gi, '')
     .replace(/\[\s*\{\s*"tool"\s*:[\s\S]*?\]/gi, '')
     .replace(
-      /\{\s*"tool"\s*:\s*"(?:calc_solve|sandbox_experiment|mindmap_build|goal_update|graph_plot|graph3d_plot|quiz_challenge|app_guide|run_commands)"[\s\S]*?\}\s*\}?/gi,
+      /\{\s*"tool"\s*:\s*"(?:calc_solve|sandbox_experiment|mindmap_build|goal_update|graph_plot|graph3d_plot|quiz_challenge|app_guide|run_commands|build_experiment|set_speed|graph_readings|get_readings|play|pause|reset|add_body|remove_body|set_param|load_experiment|list_experiments|solve|plot|export_readings|demonstrate|get_app_state)"[\s\S]*?\}\s*\}?/gi,
       ''
     )
     .trim()
