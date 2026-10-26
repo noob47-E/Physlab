@@ -94,6 +94,20 @@ describe('equations', () => {
     expect(x[0]).toBeCloseTo(3)
     expect(x[1]).toBeCloseTo(1)
   })
+  it('solves simultaneous linear equations in evaluateInput', () => {
+    const maths = { vars: {}, ans: 0, angle: 'deg' as const }
+    const r1 = evaluateInput('COMP', 'y = 2x + 1, x + y = 7', maths)
+    expect(r1).not.toBeNull()
+    expect(r1?.main).toBe('x = 2, y = 5')
+    expect(r1?.roots).toEqual([2, 5])
+    expect(r1?.solved).toBe(true)
+
+    const r2 = evaluateInput('COMP', '2x + y = 7, x - y = 2', maths)
+    expect(r2).not.toBeNull()
+    expect(r2?.main).toBe('x = 3, y = 1')
+    expect(r2?.roots).toEqual([3, 1])
+    expect(r2?.solved).toBe(true)
+  })
   it('solves inequalities', () => {
     const iv = polyInequality([1, -5, 6], '<')
     expect(iv).toHaveLength(1)

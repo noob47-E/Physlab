@@ -24,6 +24,8 @@ import { claimSentence, shownNumber, workOutLimit } from '../math/pure/limitWork
 import { rTex } from '../math/pure/rat'
 import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
+import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from '../math/steps/methods/linearSystem'
+import { ratOfText } from '../math/steps/check-adapter'
 import type { FieldMode } from './calcStore'
 import type { EngineAsk } from './engineAnswer'
 
@@ -292,6 +294,56 @@ function limitResult(lim: LimitCall, src: string, angle: 'deg' | 'rad'): EvalRes
   }
 }
 
+/**
+ * Simultaneous linear equations (e.g. "y = 2x + 1, x + y = 7" or "2x + y = 7, x - y = 2").
+ * Recognizes comma-separated systems and solves them using the exact linear system step solver.
+ */
+function solveSimultaneous(src: string): EvalResult | null {
+  if (!src.includes(',') || !src.includes('=')) return null
+  const problem = { job: 'solve' as const, input: src }
+  const aSub = linearSystemSubstitutionMethod.appliesTo(problem)
+  const aElim = linearSystemEliminationMethod.appliesTo(problem)
+  const okSub = typeof aSub === 'boolean' ? aSub : aSub.applies
+  const okElim = typeof aElim === 'boolean' ? aElim : aElim.applies
+  if (!okSub && !okElim) return null
+  const w = linearSystemSubstitutionMethod.solve(problem, undefined as never)
+  if (w.noWorking) return null
+  if (Array.isArray(w.answer)) {
+    const main = w.answer.map((a) => `${a.label} = ${a.tex}`).join(', ')
+    const roots: number[] = []
+    for (const a of w.answer) {
+      const r = ratOfText(a.tex)
+      if (r) {
+        roots.push(Number(r.n) / Number(r.d))
+      } else {
+        const n = Number(a.tex)
+        if (Number.isFinite(n)) roots.push(n)
+      }
+    }
+    return {
+      main,
+      roots,
+      rootsComplete: true,
+      solved: true,
+      src,
+      exact: null
+    }
+  }
+  if (w.answer && typeof w.answer === 'object') {
+    const ans = w.answer as { label?: string; tex?: string }
+    const text = (ans.tex ?? '').replace(/^\\text\{/, '').replace(/\}$/, '')
+    return {
+      main: text || 'No solution',
+      roots: [],
+      rootsComplete: true,
+      solved: false,
+      src,
+      exact: null
+    }
+  }
+  return null
+}
+
 const BUILTIN_CALC_NAMES: ReadonlySet<string> = new Set([
   'Pol', 'pol', 'Rec', 'rec',
   'diff', 'integrate', 'integral', 'ddx', 'sigma', 'product',
@@ -448,6 +500,8 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     if (call && call.name !== 'integral' && call.args.length < 3) return textbookCalculus(call.name, call.args, src, opts.vars, opts.angle)
     // integrate(f, a, b) is the question ∫ₐᵇ f dx asks, which the numeric engine answers as integral(f, a, b).
     if (call?.name === 'integrate' && call.args.length === 3) src = `integral(${call.args.join(', ')})`
+    const simultaneous = solveSimultaneous(src) ?? solveSimultaneous(readRunsAsMultiplication(src, opts.vars))
+    if (simultaneous) return simultaneous
     src = readRunsAsMultiplication(src, opts.vars)
     const definite = calculusCall(src)?.name === 'integral'
     let out: CalcOutput
