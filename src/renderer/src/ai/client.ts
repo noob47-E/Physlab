@@ -53,6 +53,10 @@ export async function testAiConnection(): Promise<{ ok: boolean; message: string
         })
       })
       if (!res.ok) {
+        if (res.status === 404 && cleanModel !== 'gemini-2.5-flash') {
+          useAiStore.getState().setGeminiModel('gemini-2.5-flash')
+          return testAiConnection()
+        }
         const errJson = await res.json().catch(() => ({}))
         return {
           ok: false,
@@ -112,7 +116,7 @@ export async function fetchAvailableModels(): Promise<{
     if (!geminiApiKey) {
       return {
         ok: false,
-        models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+        models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
         message: 'Google Gemini API key is missing.'
       }
     }
@@ -128,7 +132,7 @@ export async function fetchAvailableModels(): Promise<{
         const errJson = await res.json().catch(() => ({}))
         return {
           ok: false,
-          models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+          models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
           message: errJson.error?.message || `HTTP ${res.status}: ${res.statusText}`
         }
       }
@@ -149,15 +153,15 @@ export async function fetchAvailableModels(): Promise<{
         )
 
       generateModels.sort((a, b) => {
-        if (a === 'gemini-3.8-flash') return -1
-        if (b === 'gemini-3.8-flash') return 1
+        if (a === 'gemini-2.5-flash') return -1
+        if (b === 'gemini-2.5-flash') return 1
         return b.localeCompare(a)
       })
 
       const finalModels =
         generateModels.length > 0
           ? generateModels
-          : ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+          : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
 
       useAiStore.getState().setAvailableGeminiModels(finalModels)
       return {
@@ -168,7 +172,7 @@ export async function fetchAvailableModels(): Promise<{
     } catch (err) {
       return {
         ok: false,
-        models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+        models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
         message: err instanceof Error ? err.message : String(err)
       }
     }
@@ -299,8 +303,8 @@ export async function streamChatCompletion(
         return
       }
 
-      const cleanModel = geminiModel.replace(/^models\//, '')
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:streamGenerateContent?alt=sse`
+      let currentModel = geminiModel.replace(/^models\//, '')
+      let url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse`
 
       const contents: Array<{
         role: 'user' | 'model'
@@ -347,7 +351,7 @@ export async function streamChatCompletion(
       currentParts.push({ text: newPrompt })
       contents.push({ role: 'user', parts: currentParts })
 
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -363,6 +367,28 @@ export async function streamChatCompletion(
         }),
         signal
       })
+
+      if (!res.ok && res.status === 404 && currentModel !== 'gemini-2.5-flash') {
+        currentModel = 'gemini-2.5-flash'
+        useAiStore.getState().setGeminiModel('gemini-2.5-flash')
+        url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse`
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': geminiApiKey
+          },
+          body: JSON.stringify({
+            contents,
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 4096
+            }
+          }),
+          signal
+        })
+      }
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}))

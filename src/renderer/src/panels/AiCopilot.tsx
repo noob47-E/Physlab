@@ -938,7 +938,7 @@ export function AiCopilot() {
                   >
                     {availableGeminiModels.map((m) => (
                       <option key={m} value={m}>
-                        {m} {m === 'gemini-3.8-flash' ? '(Recommended)' : ''}
+                        {m} {m === 'gemini-2.5-flash' ? '(Recommended)' : ''}
                       </option>
                     ))}
                   </select>

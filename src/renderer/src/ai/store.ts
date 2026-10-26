@@ -29,7 +29,13 @@ function loadPersistedState(): {
       const raw = localStorage.getItem(STORE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
-        const geminiModel = parsed.geminiModel || 'gemini-3.8-flash'
+        let geminiModel = parsed.geminiModel || 'gemini-2.5-flash'
+        if (geminiModel === 'gemini-3.8-flash') {
+          geminiModel = 'gemini-2.5-flash'
+        }
+        const savedGeminiModels: string[] = Array.isArray(parsed.availableGeminiModels)
+          ? parsed.availableGeminiModels.filter((m: string) => m !== 'gemini-3.8-flash')
+          : []
         return {
           threads: parsed.threads || [],
           activeThreadId: parsed.activeThreadId || '',
@@ -40,10 +46,10 @@ function loadPersistedState(): {
           localEndpoint: parsed.localEndpoint || 'http://127.0.0.1:8080/v1',
           localModel: parsed.localModel || 'PhysLab-Brain-Ultimatrix',
           autoExecuteActions: Boolean(parsed.autoExecuteActions),
-          availableGeminiModels: parsed.availableGeminiModels || [
-            'gemini-3.8-flash',
+          availableGeminiModels: savedGeminiModels.length > 0 ? savedGeminiModels : [
             'gemini-2.5-flash',
             'gemini-2.0-flash',
+            'gemini-1.5-flash',
             'gemini-1.5-pro'
           ],
           availableLocalModels: parsed.availableLocalModels || ['PhysLab-Brain-Ultimatrix']
@@ -69,14 +75,14 @@ function loadPersistedState(): {
     memories: [],
     goals: [],
     provider: 'gemini',
-    geminiModel: 'gemini-3.8-flash',
+    geminiModel: 'gemini-2.5-flash',
     localEndpoint: 'http://127.0.0.1:8080/v1',
     localModel: 'PhysLab-Brain-Ultimatrix',
     autoExecuteActions: false,
     availableGeminiModels: [
-      'gemini-3.8-flash',
       'gemini-2.5-flash',
       'gemini-2.0-flash',
+      'gemini-1.5-flash',
       'gemini-1.5-pro'
     ],
     availableLocalModels: ['PhysLab-Brain-Ultimatrix']
