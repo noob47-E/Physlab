@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
@@ -216,15 +216,31 @@ export function extractKnownNumbers(
 /**
  * Checks whether a line represents an AI answer or result line.
  */
+export function isKnownNumber(matchStr: string, knownNumbers: Set<string>): boolean {
+  const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
+  if (knownNumbers.has(matchStr) || knownNumbers.has(absStr)) return true
+  const n = parseFloat(matchStr)
+  if (Number.isFinite(n)) {
+    const s = String(n)
+    if (knownNumbers.has(s)) return true
+    if (Number.isInteger(n) && knownNumbers.has(String(Math.trunc(n)))) return true
+  }
+  return false
+}
+
+/**
+ * Checks whether a line represents an AI answer or result line.
+ */
 export function isAnswerOrResultLine(line: string): boolean {
   if (!line) return false
   if (line.includes('\\boxed{')) return true
-  const trimmed = line.trim()
+  const clean = line.replace(/[*_#>`~]/g, '').trim()
+
   if (
-    /^(?:[*#\s>-]*)(?:(?:final\s+)?answer|result|conclusion|solution)\s*[:=]/i.test(trimmed) ||
-    /^(?:[*#\s>-]*)(?:therefore|thus|hence|so)\b/i.test(trimmed) ||
-    /^(?:[*#\s>-]*)(?:the\s+(?:final\s+)?answer\s+is|the\s+result\s+is)\b/i.test(trimmed) ||
-    /^(?:[*#\s>-]*)[a-zA-Z_](?:_[a-zA-Z0-9]+)?\s*=\s*[-+]?\d+/i.test(trimmed)
+    /^(?:(?:final\s+)?answer|result|conclusion|solution)\s*[:=]/i.test(clean) ||
+    /^(?:therefore|thus|hence|so)\b/i.test(clean) ||
+    /^(?:the\s+(?:final\s+)?answer\s+is|the\s+result\s+is)\b/i.test(clean) ||
+    /^[a-zA-Z_](?:_[a-zA-Z0-9]+)?\s*=\s*[-+]?\d+/i.test(clean)
   ) {
     return true
   }
@@ -242,8 +258,8 @@ export function isStepOrStructuralNumber(
   const prefix = line.slice(0, startIdx)
   const suffix = line.slice(startIdx + matchStr.length)
 
-  // Step 1, Part 2, Question 3, Case 1, etc.
-  if (/(?:step|part|question|stage|case|no\.?|rule)\s*$/i.test(prefix)) {
+  // Step 1, Part 2, Question 3, Case 1, Rule 4, Eq. 1, Item 1, etc.
+  if (/(?:step|part|question|stage|case|no\.?|rule|eq(?:uation)?\.?|item|option|fig(?:ure)?\.?)\s*$/i.test(prefix)) {
     return true
   }
 
@@ -257,13 +273,18 @@ export function isStepOrStructuralNumber(
     return true
   }
 
-  // Subscript: e.g. "x_1", "v_0"
-  if (/_[a-zA-Z]*$/.test(prefix)) {
+  // Subscript: e.g. "x_1", "v_0", "v_{0}"
+  if (/_[a-zA-Z]*$/.test(prefix) || /_\{[a-zA-Z]*$/.test(prefix)) {
     return true
   }
 
   // Exponent: e.g. "^2" or "^{2}"
   if (/\^\s*\{?$/.test(prefix)) {
+    return true
+  }
+
+  // Radical nth-root: e.g. \sqrt[3]{...}
+  if (/\\sqrt\[\s*$/.test(prefix) && /^\s*\]/.test(suffix)) {
     return true
   }
 
@@ -274,7 +295,7 @@ export const MarkdownView = memo(function MarkdownView({
   content,
   studentPrompt,
   actions,
-  verified,
+  verified: _verified,
   verification,
   onChallengeClick
 }: MarkdownViewProps) {
@@ -295,7 +316,7 @@ export const MarkdownView = memo(function MarkdownView({
   // Verification state logic: strictly ONE badge per answer
   const verState = verification?.state
   const isDisagreed = verState === 'disagrees'
-  const isVerified = verification?.badgeText === 'Checked by PhysLab' || (verState === 'verified' && verified === true)
+  const isVerified = verification?.badgeText === 'Checked by PhysLab'
 
   const isBoxedInvented = useMemo(() => {
     if (!boxedAnswer || isVerified) return false
@@ -304,8 +325,7 @@ export const MarkdownView = memo(function MarkdownView({
     while ((m = numRegex.exec(boxedAnswer)) !== null) {
       const matchStr = m[0]
       const matchIdx = m.index
-      const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
-      const isKnown = knownNumbers.has(matchStr) || knownNumbers.has(absStr)
+      const isKnown = isKnownNumber(matchStr, knownNumbers)
       const isStructural = isStepOrStructuralNumber(boxedAnswer, matchIdx, matchStr)
       if (!isKnown && !isStructural) {
         return true
@@ -559,16 +579,24 @@ function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React
 
   const flushBuffer = () => {
     if (buffer.length > 0) {
-      const paragraphText = buffer.join('\n').trim()
-      if (paragraphText) {
-        const isAns = isAnswerOrResultLine(paragraphText)
+      const paragraphLines = [...buffer]
+      buffer = []
+      const nonEmpty = paragraphLines.filter((l) => l.trim().length > 0)
+      if (nonEmpty.length > 0) {
         nodes.push(
           <div key={`p_${nodes.length}`} className="my-1">
-            {renderInlineMath(paragraphText, isAns, knownNumbers)}
+            {paragraphLines.map((pLine, lIdx) => {
+              const isAns = isAnswerOrResultLine(pLine)
+              return (
+                <Fragment key={`pl_${lIdx}`}>
+                  {lIdx > 0 && <br />}
+                  {renderInlineMath(pLine, isAns, knownNumbers)}
+                </Fragment>
+              )
+            })}
           </div>
         )
       }
-      buffer = []
     }
   }
 
@@ -582,16 +610,47 @@ function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React
       continue
     }
 
+    if (line.trim() === '') {
+      flushBuffer()
+      continue
+    }
+
     if (line.trim().startsWith('$$') && line.trim().endsWith('$$') && line.trim().length > 4) {
       flushBuffer()
       const formula = line.trim().slice(2, -2)
-      nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={formula} />)
+      let isInv = false
+      if (knownNumbers && isAnswerOrResultLine(formula)) {
+        const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+        let m: RegExpExecArray | null
+        while ((m = numRegex.exec(formula)) !== null) {
+          const matchStr = m[0]
+          const matchIdx = m.index
+          if (!isKnownNumber(matchStr, knownNumbers) && !isStepOrStructuralNumber(formula, matchIdx, matchStr)) {
+            isInv = true
+            break
+          }
+        }
+      }
+      nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={formula} isInvented={isInv} />)
       continue
     }
 
     if (line.trim().startsWith('$$')) {
       if (inDisplayMath) {
-        nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={mathBuffer} />)
+        let isInv = false
+        if (knownNumbers && isAnswerOrResultLine(mathBuffer)) {
+          const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+          let m: RegExpExecArray | null
+          while ((m = numRegex.exec(mathBuffer)) !== null) {
+            const matchStr = m[0]
+            const matchIdx = m.index
+            if (!isKnownNumber(matchStr, knownNumbers) && !isStepOrStructuralNumber(mathBuffer, matchIdx, matchStr)) {
+              isInv = true
+              break
+            }
+          }
+        }
+        nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={mathBuffer} isInvented={isInv} />)
         mathBuffer = ''
         inDisplayMath = false
       } else {
@@ -678,8 +737,7 @@ function renderProseWithInventedGuard(
       result.push(text.slice(lastIndex, matchIdx))
     }
 
-    const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
-    const isKnown = knownNumbers.has(matchStr) || knownNumbers.has(absStr)
+    const isKnown = isKnownNumber(matchStr, knownNumbers)
     const isStructural = isStepOrStructuralNumber(text, matchIdx, matchStr)
 
     if (!isKnown && !isStructural) {
@@ -743,8 +801,7 @@ function renderInlineMath(
         while ((m = numRegex.exec(tex)) !== null) {
           const matchStr = m[0]
           const matchIdx = m.index
-          const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
-          const isKnown = knownNumbers.has(matchStr) || knownNumbers.has(absStr)
+          const isKnown = isKnownNumber(matchStr, knownNumbers)
           const isStructural = isStepOrStructuralNumber(tex, matchIdx, matchStr)
           if (!isKnown && !isStructural) {
             hasInvented = true

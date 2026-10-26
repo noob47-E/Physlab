@@ -141,19 +141,20 @@ export function AiCopilot() {
   }, [])
 
   // Send message
-  const handleSend = async (textToSend?: string) => {
+  const handleSend = async (textToSend?: string, attachmentsToSend?: Attachment[]) => {
+    const currentAtts = attachmentsToSend !== undefined ? attachmentsToSend : attachments
     const prompt = (textToSend ?? inputPrompt).trim()
-    if ((!prompt && attachments.length === 0) || isStreaming) return
+    if ((!prompt && currentAtts.length === 0) || isStreaming) return
 
     // 1. Add user message
     const userMsg = useAiStore.getState().addMessage({
       role: 'user',
       content: prompt,
-      attachments
+      attachments: currentAtts
     })
 
     setInputPrompt('')
-    const pendingAtts = attachments
+    const pendingAtts = currentAtts
     setAttachments([])
 
     // 2. Add placeholder assistant message
@@ -624,7 +625,7 @@ export function AiCopilot() {
                   </button>
                 </div>
                 <p className="text-fine text-ink-dim">
-                  I read the following problem from your diagram. You can edit it before solving:
+                  I read: {transcribedText.slice(0, 80)}{transcribedText.length > 80 ? '…' : ''}. Confirm to solve:
                 </p>
                 <textarea
                   value={transcribedText}
@@ -637,10 +638,11 @@ export function AiCopilot() {
                     type="button"
                     onClick={() => {
                       const text = transcribedText.trim()
+                      const currentAtts = [...attachments]
                       setTranscribedText(null)
                       setAttachments([])
                       if (text) {
-                        handleSend(text)
+                        handleSend(text, currentAtts)
                       }
                     }}
                     className="px-3 py-1.5 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 cursor-pointer transition-colors"
@@ -681,7 +683,7 @@ export function AiCopilot() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      handleSend()
+                      if (!transcribing) handleSend()
                     }
                   }}
                   rows={2}
@@ -701,7 +703,7 @@ export function AiCopilot() {
                 ) : (
                   <button
                     type="button"
-                    disabled={!inputPrompt.trim() && attachments.length === 0}
+                    disabled={(!inputPrompt.trim() && attachments.length === 0) || transcribing}
                     onClick={() => handleSend()}
                     className="p-1.5 bg-accent text-on-accent rounded hover:bg-accent-2 disabled:opacity-40 cursor-pointer transition-colors"
                   >

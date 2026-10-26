@@ -36,7 +36,8 @@ import { useSandbox } from '../src/renderer/src/sim/store'
 import {
   extractKnownNumbers,
   isAnswerOrResultLine,
-  isStepOrStructuralNumber
+  isStepOrStructuralNumber,
+  isKnownNumber
 } from '../src/renderer/src/panels/ai/MarkdownView'
 import { panelHome } from '../src/renderer/src/app/layoutMath'
 import { PANEL_TITLES } from '../src/renderer/src/app/panels'
@@ -899,6 +900,30 @@ Simulation ready to run!`
       expect(vNoTool.badgeText).toBe('Not checked')
     })
 
+    it('returns Not checked for sandbox_experiment when model provides no answer or experiment has no matching answer', async () => {
+      const inclineAction: PhysLabAction = {
+        id: 'act_incline',
+        tool: 'sandbox_experiment' as any,
+        args: { angleDeg: 30, massKg: 2, muStatic: 0.8, muKinetic: 0.5 }
+      }
+      // AI explains the setup without claiming a boxed numerical result
+      const vNoBoxed = await verifyMessage('I have set up the incline sandbox experiment for you.', [inclineAction])
+      expect(vNoBoxed.state).toBe('unverified')
+      expect(vNoBoxed.badgeText).toBe('Not checked')
+      expect(inclineAction.verified).toBe(false)
+
+      // Projectile experiment without specific answer match
+      const projAction: PhysLabAction = {
+        id: 'act_proj',
+        tool: 'sandbox_experiment' as any,
+        args: { experimentType: 'projectile', v0: 20, angleDeg: 45 }
+      }
+      const vProj = await verifyMessage('Projectile launched.', [projAction])
+      expect(vProj.state).toBe('unverified')
+      expect(vProj.badgeText).toBe('Not checked')
+      expect(projAction.verified).toBe(false)
+    })
+
     it('matches tool answers across variations (latex, formatting, roots)', () => {
       expect(matchToolAnswer('2, 3', 'x = 2, 3')).toBe(true)
       expect(matchToolAnswer('\\boxed{5}', '5')).toBe(true)
@@ -933,9 +958,22 @@ Simulation ready to run!`
       expect(known.has('42')).toBe(false)
     })
 
-    it('identifies answer or result lines versus normal explanation steps', () => {
+    it('isKnownNumber matches formatted equivalents like 9.80 to 9.8', () => {
+      const known = new Set(['9.8', '5'])
+      expect(isKnownNumber('9.80', known)).toBe(true)
+      expect(isKnownNumber('5.0', known)).toBe(true)
+      expect(isKnownNumber('5', known)).toBe(true)
+      expect(isKnownNumber('9.81', known)).toBe(false)
+      expect(isKnownNumber('42', known)).toBe(false)
+    })
+
+    it('identifies answer or result lines versus normal explanation steps, including bold formatting', () => {
       expect(isAnswerOrResultLine('Final Answer: 14.5 m/s')).toBe(true)
+      expect(isAnswerOrResultLine('**Final Answer:** 14.5 m/s')).toBe(true)
+      expect(isAnswerOrResultLine('**Answer**: 14.5 m/s')).toBe(true)
+      expect(isAnswerOrResultLine('* **Result:** 42')).toBe(true)
       expect(isAnswerOrResultLine('Therefore, the acceleration is 3.2 m/s^2.')).toBe(true)
+      expect(isAnswerOrResultLine('**Therefore**, acceleration is 42 m/s^2.')).toBe(true)
       expect(isAnswerOrResultLine('Thus x = 5.')).toBe(true)
       expect(isAnswerOrResultLine('The answer is $\\boxed{12}$.')).toBe(true)
       expect(isAnswerOrResultLine('a = 9.8 m/s^2')).toBe(true)
@@ -945,7 +983,7 @@ Simulation ready to run!`
       expect(isAnswerOrResultLine('The mass cancels out algebraically.')).toBe(false)
     })
 
-    it('identifies step numbers, list items, and formula exponents as structural (never greyed)', () => {
+    it('identifies step numbers, list items, formula exponents, radical indexes, and LaTeX subscripts as structural (never greyed)', () => {
       const lineStep = 'Step 1: Draw the diagram'
       expect(isStepOrStructuralNumber(lineStep, 5, '1')).toBe(true)
 
@@ -957,6 +995,15 @@ Simulation ready to run!`
 
       const lineSub = 'v_0 = 0'
       expect(isStepOrStructuralNumber(lineSub, 2, '0')).toBe(true)
+
+      const lineSubBrace = 'v_{0} = 0'
+      expect(isStepOrStructuralNumber(lineSubBrace, 3, '0')).toBe(true)
+
+      const lineRadical = '\\sqrt[3]{8}'
+      expect(isStepOrStructuralNumber(lineRadical, lineRadical.indexOf('3'), '3')).toBe(true)
+
+      const lineEq = 'Eq. 1 gives the tension'
+      expect(isStepOrStructuralNumber(lineEq, 4, '1')).toBe(true)
 
       const lineFree = 'The value is 42'
       expect(isStepOrStructuralNumber(lineFree, 13, '42')).toBe(false)

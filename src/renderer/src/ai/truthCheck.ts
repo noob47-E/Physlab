@@ -862,20 +862,20 @@ export async function verifyMessage(
           }
         }
       } else {
-        sbAction.verified = true
+        sbAction.verified = false
         return {
-          state: 'verified',
-          badgeText: 'Checked by PhysLab',
+          state: 'unverified',
+          badgeText: 'Not checked',
           engineAnswerLatex: engineLatex,
           engineAnswerText: engineText,
           notes: val.reasons.join(' ')
         }
       }
     } else {
-      sbAction.verified = true
+      sbAction.verified = false
       return {
-        state: 'verified',
-        badgeText: 'Checked by PhysLab',
+        state: 'unverified',
+        badgeText: 'Not checked',
         notes: val.reasons.join(' ')
       }
     }
@@ -888,9 +888,12 @@ export async function verifyMessage(
     const claimed = boxed || String(calcAction.args.boxedAnswer || '')
 
     const truth = await run3WayTruthCheck(input, claimed, variable, op)
-    calcAction.verified = truth.verified
+    const res = calcAction.result as Record<string, unknown> | undefined
+    const toolChecked = res ? res.checked !== false : true
+    const isVerified = truth.verified && toolChecked
+    calcAction.verified = isVerified
 
-    if (truth.verified) {
+    if (isVerified) {
       return {
         state: 'verified',
         badgeText: 'Checked by PhysLab',
