@@ -6,6 +6,9 @@ import { join } from 'node:path'
 const GEMINI_OPENAI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
 
 const GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
   'gemini-3.8-flash',
   'gemini-flash-latest',
   'gemini-3-flash-preview',
