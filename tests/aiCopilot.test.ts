@@ -52,6 +52,9 @@ describe('PhysLab-Brain AI Copilot System', () => {
       expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('calc_solve')
       expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('sandbox_experiment')
       expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('mindmap_build')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('"tool": "solve"')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('"tool": "plot"')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('"tool": "build_experiment"')
     })
 
     it('instructs physics boundary limits and incline static friction trap', () => {
