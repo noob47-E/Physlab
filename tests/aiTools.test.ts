@@ -90,6 +90,13 @@ describe('AI Tools Layer (src/renderer/src/ai/tools.ts)', () => {
     expect(ans).toMatch(/x/i)
   })
 
+  it('solve extracts real answer instead of literal string "Answer" when working.answers has items (Bug 9)', async () => {
+    const res = await runTool('solve', { expression: 'x^2 - 5x + 6', op: 'factor' })
+    expect(res.ok).toBe(true)
+    expect(res.answer).not.toBe('Answer')
+    expect(String(res.answer)).toMatch(/x\s*-\s*[23]/)
+  })
+
   it('plot switches to 2D and plots y = sin x and y = cos x (item 5)', async () => {
     const res1 = await runTool('plot', { expression: 'y = sin(x)', dim: '2d' })
     expect(res1.ok).toBe(true)

@@ -481,9 +481,19 @@ export async function runTool(
 
         const working = usePure.getState().working
         const reconciled = card ? reconcile(card, working) : null
-        let answer = reconciled?.result?.main ?? working?.answers?.[0]?.label ?? ''
-        if (!answer && working?.answers && working.answers.length > 0) {
-          answer = working.answers.map((a) => a.tex || a.label).join(', ')
+        let answer = ''
+        if (working?.answers && working.answers.length > 0) {
+          const texAnswers = working.answers.map((a: any) => a.tex).filter(Boolean)
+          answer = texAnswers.join(', ')
+          if (!answer && working.answers[0]?.tex) {
+            answer = working.answers[0].tex
+          }
+        }
+        if (!answer || answer === 'Answer') {
+          answer = reconciled?.result?.main ?? ''
+        }
+        if (answer === 'Answer') {
+          answer = working?.answers?.[0]?.tex ?? ''
         }
 
         // 4. Run 3-way truth check
