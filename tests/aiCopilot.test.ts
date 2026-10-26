@@ -14,7 +14,8 @@ import {
   toLinearMath,
   run3WayTruthCheck,
   validatePhysicsScene,
-  verifyMessage
+  verifyMessage,
+  matchToolAnswer
 } from '../src/renderer/src/ai/truthCheck'
 import type { TruthCheckResult, PhysicsValidationResult } from '../src/renderer/src/ai/truthCheck'
 import {
@@ -842,6 +843,63 @@ Simulation ready to run!`
       expect(turn.actions[2].tool).toBe('graph_readings')
       expect(turn.contextNote).toContain('build_experiment')
       expect(turn.contextNote).toContain('graph_readings')
+    })
+  })
+
+  describe('Fix 3 [Bug 2]: Exact Badge Rule', () => {
+    it('returns Checked by PhysLab ONLY when tool checked is true and answer matches', async () => {
+      const solveAction: PhysLabAction = {
+        id: 'act_solve',
+        tool: 'solve' as any,
+        args: { expression: 'x^2 - 5x + 6 = 0' },
+        result: {
+          ok: true,
+          answer: 'x = 2, 3',
+          checked: true
+        }
+      }
+
+      // Matching answer -> Checked by PhysLab
+      const vMatch = await verifyMessage('The solutions are $\\boxed{2, 3}$.', [solveAction])
+      expect(vMatch.state).toBe('verified')
+      expect(vMatch.badgeText).toBe('Checked by PhysLab')
+      expect(solveAction.verified).toBe(true)
+
+      // Disagreeing answer -> Not checked
+      const vDisagree = await verifyMessage('The solutions are $\\boxed{4, 5}$.', [solveAction])
+      expect(vDisagree.state).toBe('disagrees')
+      expect(vDisagree.badgeText).toBe('Not checked')
+      expect(solveAction.verified).toBe(false)
+
+      // Tool unchecked (checked: false) -> Not checked
+      const solveUncheckedAction: PhysLabAction = {
+        id: 'act_unchecked',
+        tool: 'solve' as any,
+        args: { expression: 'x^2 - 5x + 6 = 0' },
+        result: {
+          ok: true,
+          answer: 'x = 2, 3',
+          checked: false
+        }
+      }
+      const vUnchecked = await verifyMessage('The solutions are $\\boxed{2, 3}$.', [solveUncheckedAction])
+      expect(vUnchecked.state).toBe('unverified')
+      expect(vUnchecked.badgeText).toBe('Not checked')
+      expect(solveUncheckedAction.verified).toBe(false)
+    })
+
+    it('returns Not checked when no tool action was run', async () => {
+      const vNoTool = await verifyMessage('The answer is $\\boxed{42}$.', [])
+      expect(vNoTool.state).toBe('unverified')
+      expect(vNoTool.badgeText).toBe('Not checked')
+    })
+
+    it('matches tool answers across variations (latex, formatting, roots)', () => {
+      expect(matchToolAnswer('2, 3', 'x = 2, 3')).toBe(true)
+      expect(matchToolAnswer('\\boxed{5}', '5')).toBe(true)
+      expect(matchToolAnswer('1.84', '1.8402')).toBe(true)
+      expect(matchToolAnswer('x^2', 'x*x')).toBe(true)
+      expect(matchToolAnswer('10', '20')).toBe(false)
     })
   })
 })

@@ -724,13 +724,91 @@ export async function run3WayTruthCheck(
  * Pure verification function that audits an assistant message and its actions
  * with ZERO side-effects.
  */
+export function matchToolAnswer(modelAnswer: string, toolAnswer: string): boolean {
+  if (!modelAnswer || !toolAnswer) return false
+  const cleanM = modelAnswer.replace(/\\boxed\{([^}]+)\}/g, '$1').replace(/\s+/g, '').replace(/\\left|\\right/g, '').replace(/\\text\{([^}]+)\}/g, '$1').trim()
+  const cleanT = toolAnswer.replace(/\\boxed\{([^}]+)\}/g, '$1').replace(/\s+/g, '').replace(/\\left|\\right/g, '').replace(/\\text\{([^}]+)\}/g, '$1').trim()
+  if (cleanM.toLowerCase() === cleanT.toLowerCase()) return true
+
+  // Handle numbers with tolerance
+  const numM = parseFloat(cleanM.replace(/[^0-9.-]/g, ''))
+  const numT = parseFloat(cleanT.replace(/[^0-9.-]/g, ''))
+  if (Number.isFinite(numM) && Number.isFinite(numT) && Math.abs(numM - numT) < 1e-3) {
+    return true
+  }
+
+  // Handle roots or comma-separated solutions (e.g. "2, 3" vs "x = 2, x = 3")
+  const rootsM = cleanM.split(/[,;]|\band\b/).map((r) => r.replace(/^[a-zA-Z_]\s*=\s*/, '').trim()).filter(Boolean)
+  const rootsT = cleanT.split(/[,;]|\band\b/).map((r) => r.replace(/^[a-zA-Z_]\s*=\s*/, '').trim()).filter(Boolean)
+  if (rootsM.length > 0 && rootsM.length === rootsT.length) {
+    const allInT = rootsM.every((rm) => rootsT.some((rt) => rm === rt || Math.abs(parseFloat(rm) - parseFloat(rt)) < 1e-3))
+    if (allInT) return true
+  }
+
+  try {
+    const exprM = toLinearMath(cleanM)
+    const exprT = toLinearMath(cleanT)
+    const diff = `(${exprM}) - (${exprT})`
+    // First try constant evaluation
+    try {
+      const val = Number(math.evaluate(diff))
+      if (Number.isFinite(val) && Math.abs(val) < 1e-5) return true
+    } catch {
+      // variable expression
+    }
+
+    // Try multi-point sampling if variables exist
+    const testPoints = [2, 3.5, 7]
+    const passes = testPoints.every((pt) => {
+      try {
+        const v = Number(math.evaluate(diff, { x: pt, y: pt, z: pt, t: pt, a: pt, b: pt }))
+        return Number.isFinite(v) && Math.abs(v) < 1e-4
+      } catch {
+        return false
+      }
+    })
+    if (passes) return true
+  } catch {
+    // ignore
+  }
+
+  return false
+}
+
 export async function verifyMessage(
   content: string,
   actions: PhysLabAction[]
 ): Promise<MessageVerification> {
   const boxed = extractLastBoxed(content)
+  const solveAction = actions.find((a) => a.tool === 'solve')
   const sbAction = actions.find((a) => a.tool === 'sandbox_experiment')
   const calcAction = actions.find((a) => a.tool === 'calc_solve')
+
+  if (solveAction && solveAction.result) {
+    const res = solveAction.result as Record<string, unknown>
+    const toolChecked = res.checked === true
+    const toolAnswer = String(res.answer ?? '')
+    const claimed = boxed || ''
+    const matches = toolChecked && matchToolAnswer(claimed, toolAnswer)
+    solveAction.verified = matches
+    if (matches) {
+      return {
+        state: 'verified',
+        badgeText: 'Checked by PhysLab',
+        engineAnswerLatex: toolAnswer,
+        modelAnswerLatex: claimed,
+        notes: 'Tool returned checked: true and final answer matches'
+      }
+    } else {
+      return {
+        state: toolChecked && claimed ? 'disagrees' : 'unverified',
+        badgeText: 'Not checked',
+        engineAnswerLatex: toolAnswer,
+        modelAnswerLatex: claimed,
+        notes: toolChecked ? 'AI final answer does not match tool answer' : 'Tool was not checked'
+      }
+    }
+  }
 
   if (sbAction) {
     const val = validatePhysicsScene(sbAction.args)
@@ -738,7 +816,7 @@ export async function verifyMessage(
       sbAction.verified = false
       return {
         state: 'disagrees',
-        badgeText: '❌ Engine disagrees',
+        badgeText: 'Not checked',
         notes: val.reasons.join(' ')
       }
     }
@@ -766,7 +844,7 @@ export async function verifyMessage(
           sbAction.verified = true
           return {
             state: 'verified',
-            badgeText: '✅ CAS & Physics Verified',
+            badgeText: 'Checked by PhysLab',
             engineAnswerLatex: engineLatex,
             engineAnswerText: engineText,
             modelAnswerLatex: boxed ?? undefined,
@@ -776,7 +854,7 @@ export async function verifyMessage(
           sbAction.verified = false
           return {
             state: 'disagrees',
-            badgeText: '❌ Engine disagrees',
+            badgeText: 'Not checked',
             engineAnswerLatex: engineLatex,
             engineAnswerText: engineText,
             modelAnswerLatex: boxed ?? undefined,
@@ -787,7 +865,7 @@ export async function verifyMessage(
         sbAction.verified = true
         return {
           state: 'verified',
-          badgeText: '✅ Physics Verified',
+          badgeText: 'Checked by PhysLab',
           engineAnswerLatex: engineLatex,
           engineAnswerText: engineText,
           notes: val.reasons.join(' ')
@@ -797,7 +875,7 @@ export async function verifyMessage(
       sbAction.verified = true
       return {
         state: 'verified',
-        badgeText: '✅ Physics Verified',
+        badgeText: 'Checked by PhysLab',
         notes: val.reasons.join(' ')
       }
     }
@@ -815,14 +893,14 @@ export async function verifyMessage(
     if (truth.verified) {
       return {
         state: 'verified',
-        badgeText: '✅ CAS & Physics Verified',
+        badgeText: 'Checked by PhysLab',
         modelAnswerLatex: claimed,
         notes: truth.notes
       }
     } else if (truth.canonicalResult) {
       return {
         state: 'disagrees',
-        badgeText: '❌ Engine disagrees',
+        badgeText: 'Not checked',
         engineAnswerLatex: truth.canonicalResult,
         engineAnswerText: toLinearMath(truth.canonicalResult),
         modelAnswerLatex: claimed,
@@ -831,107 +909,17 @@ export async function verifyMessage(
     } else {
       return {
         state: 'unverified',
-        badgeText: '⚠️ Unverified — check in Calculator',
+        badgeText: 'Not checked',
         modelAnswerLatex: claimed,
         notes: truth.notes
       }
     }
   }
 
-  if (boxed !== null) {
-    try {
-      const strippedBoxed = boxed.replace(/[\\{}]/g, '').replace(/[a-zA-Z]/g, '').trim()
-      const boxedNum = parseFloat(strippedBoxed)
-
-      if (Number.isFinite(boxedNum)) {
-        // 1. Direct arithmetic step check: scan all arithmetic expressions in content
-        const arithRegex = /(\d+(?:\s*[-+*/]\s*[-+]?\d+)+)/g
-        let match: RegExpExecArray | null
-        while ((match = arithRegex.exec(content)) !== null) {
-          try {
-            const val = Number(math.evaluate(match[1]))
-            if (Number.isFinite(val) && Math.abs(val - boxedNum) < 1e-5) {
-              return {
-                state: 'verified',
-                badgeText: '✅ CAS & Physics Verified',
-                modelAnswerLatex: boxed,
-                notes: `Verified arithmetic evaluation: ${match[1]} = ${boxedNum}`
-              }
-            }
-          } catch {
-            // continue
-          }
-        }
-
-        // 2. Equation step check: scan lines or segments with '='
-        const lines = content.split('\n')
-        for (const line of lines) {
-          if (line.includes('=')) {
-            const parts = line.split('=')
-            for (const p of parts) {
-              const clean = p.replace(/[$`*\\{}]/g, '').trim()
-              if (clean && /[-+*/\d]/.test(clean)) {
-                try {
-                  const val = Number(math.evaluate(clean))
-                  if (Number.isFinite(val) && Math.abs(val - boxedNum) < 1e-5) {
-                    return {
-                      state: 'verified',
-                      badgeText: '✅ CAS & Physics Verified',
-                      modelAnswerLatex: boxed,
-                      notes: `Verified equation step: ${clean} = ${boxedNum}`
-                    }
-                  }
-                } catch {
-                  // continue
-                }
-              }
-            }
-          }
-        }
-      }
-
-      const eqMatch = content.match(/([-+]?[0-9a-zA-Z^/*().\s]+\s*=\s*[-+]?[0-9a-zA-Z^/*().\s]+)/)
-      if (eqMatch) {
-        const inferredEq = eqMatch[1].trim()
-        const truth = await run3WayTruthCheck(inferredEq, boxed, 'x', 'solve')
-        if (truth.verified) {
-          return {
-            state: 'verified',
-            badgeText: '✅ CAS & Physics Verified',
-            modelAnswerLatex: boxed,
-            notes: truth.notes
-          }
-        }
-      }
-
-      const arithMatch = content.match(/(\d+(?:\s*[-+*/]\s*\d+)+)/)
-      if (arithMatch) {
-        const inferredArith = arithMatch[1].trim()
-        const truth = await run3WayTruthCheck(inferredArith, boxed, 'x', 'simplify')
-        if (truth.verified) {
-          return {
-            state: 'verified',
-            badgeText: '✅ CAS & Physics Verified',
-            modelAnswerLatex: boxed,
-            notes: truth.notes
-          }
-        }
-      }
-    } catch {
-      // fallback
-    }
-
-    return {
-      state: 'unverified',
-      badgeText: '⚠️ Unverified — check in Calculator',
-      modelAnswerLatex: boxed,
-      notes: 'No automated action verified this answer'
-    }
-  }
-
   return {
     state: 'unverified',
-    badgeText: '',
-    notes: 'No boxed answer'
+    badgeText: 'Not checked',
+    modelAnswerLatex: boxed ?? undefined,
+    notes: 'No tool verified this answer'
   }
 }

@@ -181,11 +181,10 @@ export const MarkdownView = memo(function MarkdownView({
   const cleanProse = stripIncompleteActionBlocks(cleanContent)
   const boxedAnswer = extractLastBoxed(fixedContent)
 
-  // Verification state logic
+  // Verification state logic: strictly ONE badge per answer
   const verState = verification?.state
   const isDisagreed = verState === 'disagrees'
-  const isVerified = verState === 'verified' || (!isDisagreed && verified === true)
-  const isUnverified = !isVerified && !isDisagreed
+  const isVerified = verification?.badgeText === 'Checked by PhysLab' || (verState === 'verified' && verified === true)
 
   const challengeChips = getChallengeChips(actions, cleanProse)
 
@@ -197,9 +196,7 @@ export const MarkdownView = memo(function MarkdownView({
           className={`rounded-lg border p-3 flex flex-col gap-2 ${
             isDisagreed
               ? 'border-bad/40 bg-surface-2'
-              : isVerified
-                ? 'border-line bg-surface-2'
-                : 'border-line bg-surface-2'
+              : 'border-line bg-surface-2'
           }`}
         >
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -216,24 +213,15 @@ export const MarkdownView = memo(function MarkdownView({
               <span>{isDisagreed ? 'PhysLab Verified Answer' : 'Final Answer'}</span>
             </span>
 
-            {isVerified && (
+            {/* Strict rule: Exactly ONE badge per answer */}
+            {isVerified ? (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-good border border-line">
                 <CheckCircle2 size={12} />
-                <span>{verification?.badgeText || '✅ CAS & Physics Verified'}</span>
+                <span>Checked by PhysLab</span>
               </span>
-            )}
-
-            {isDisagreed && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-bad border border-bad/30">
-                <X size={12} />
-                <span>{verification?.badgeText || '❌ Engine disagrees'}</span>
-              </span>
-            )}
-
-            {isUnverified && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-warn border border-line">
-                <AlertTriangle size={12} />
-                <span>{verification?.badgeText || '⚠️ Unverified — check in Calculator'}</span>
+            ) : (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-medium text-ink-dim border border-line">
+                <span>Not checked</span>
               </span>
             )}
           </div>

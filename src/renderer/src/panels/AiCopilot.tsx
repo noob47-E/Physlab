@@ -161,7 +161,7 @@ export function AiCopilot() {
             content: accumulated
           })
         },
-        onDone: async ({ content, think, actions, agentTraces, checked, model }) => {
+        onDone: async ({ content, think, actions, agentTraces, model }) => {
           const verification = await verifyMessage(content, actions)
           useAiStore.getState().updateMessage(botMsg.id, {
             content,
@@ -169,7 +169,7 @@ export function AiCopilot() {
             actions,
             agentTraces,
             verification,
-            verified: checked !== undefined ? checked : verification.state === 'verified',
+            verified: verification.state === 'verified' && verification.badgeText === 'Checked by PhysLab',
             model
           })
           useAiStore.getState().setStreaming(false)
@@ -447,19 +447,10 @@ export function AiCopilot() {
                           <div className="whitespace-pre-wrap">{m.content}</div>
                         ) : (
                           <>
-                            {/* Message Header with Verified Badge & Model Tag */}
-                            {(m.verified || m.model) && !isCurrentlyStreaming && (
-                              <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-line text-fine">
-                                <div className="flex items-center gap-1.5">
-                                  {m.verified && (
-                                    <span className="px-1.5 py-0.5 rounded text-fine bg-good-subtle text-good inline-flex items-center gap-1 font-medium">
-                                      <CheckCircle2 size={12} /> Verified by PhysLab
-                                    </span>
-                                  )}
-                                </div>
-                                {m.model && (
-                                  <span className="text-fine text-ink-faint font-mono">{m.model}</span>
-                                )}
+                            {/* Message Header with Model Tag */}
+                            {m.model && !isCurrentlyStreaming && (
+                              <div className="flex items-center justify-end gap-2 mb-1.5 pb-1 border-b border-line text-fine">
+                                <span className="text-fine text-ink-faint font-mono">{m.model}</span>
                               </div>
                             )}
 
