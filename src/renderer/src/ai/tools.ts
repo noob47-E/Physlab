@@ -350,7 +350,18 @@ export async function runTool(
         })
 
         // 2. Run step engine
-        usePure.getState().runLatex(expression, 'auto', { quiet: true })
+        const opToJob: Record<string, 'differentiate' | 'integrate' | 'solve' | 'factor' | 'limit' | 'auto'> = {
+          diff: 'differentiate',
+          differentiate: 'differentiate',
+          integrate: 'integrate',
+          solve: 'solve',
+          factor: 'factor',
+          limit: 'limit',
+          simplify: 'auto'
+        }
+        const job = args.op ? (opToJob[args.op] ?? 'auto') : (expression.includes('=') ? 'solve' : 'auto')
+        const latexExpr = expression.replace(/\b(sin|cos|tan|arcsin|arccos|arctan)\b/g, '\\$1')
+        usePure.getState().runLatex(latexExpr, job, { quiet: true })
 
         // 3. Await working if async
         if (usePure.getState().asking) {
@@ -370,7 +381,10 @@ export async function runTool(
 
         const working = usePure.getState().working
         const reconciled = card ? reconcile(card, working) : null
-        const answer = reconciled?.result?.main ?? working?.answers?.[0]?.label ?? ''
+        let answer = reconciled?.result?.main ?? working?.answers?.[0]?.label ?? ''
+        if (!answer && working?.answers && working.answers.length > 0) {
+          answer = working.answers.map((a) => a.tex || a.label).join(', ')
+        }
 
         // 4. Run 3-way truth check
         let truthCheck: any = null
@@ -500,7 +514,7 @@ export async function runTool(
         }
 
         const updated = useSandbox.getState().bodies.find((b) => b.id === body.id) ?? body
-        return { ok: true, body: updated }
+        return { ok: true, bodyId: updated.id, body: updated }
       }
 
       case 'remove_body': {
@@ -534,9 +548,9 @@ export async function runTool(
             const w = await SimWorld.create(useSandbox.getState().world)
             engine.world = w
             startRecorder(w)
-            const s = useSandbox.getState()
-            w.rebuild(s.bodies, s.links)
           }
+          const s = useSandbox.getState()
+          engine.world.rebuild(s.bodies, s.links)
           const rate = useSandbox.getState().world.stepRate ?? 240
           const totalSteps = Math.round(seconds * rate)
           for (let i = 0; i < totalSteps; i++) {

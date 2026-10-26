@@ -75,6 +75,70 @@ describe('AI Tools Layer (src/renderer/src/ai/tools.ts)', () => {
     expect(exportRes.tableId).toBeDefined()
   })
 
+  it('solve handles trigonometric equations like 2 sin x = 1 (item 3)', async () => {
+    const res = await runTool('solve', { expression: '2 sin x = 1' })
+    expect(res.ok).toBe(true)
+    const ans = String(res.answer)
+    expect(ans.length).toBeGreaterThan(0)
+  })
+
+  it('solve differentiates x^3 sin x (item 4)', async () => {
+    const res = await runTool('solve', { expression: 'x^3 \\sin(x)', op: 'diff' })
+    expect(res.ok).toBe(true)
+    const ans = String(res.answer)
+    expect(ans).toMatch(/x/i)
+  })
+
+  it('plot switches to 2D and plots y = sin x and y = cos x (item 5)', async () => {
+    const res1 = await runTool('plot', { expression: 'y = sin(x)', dim: '2d' })
+    expect(res1.ok).toBe(true)
+    const res2 = await runTool('plot', { expression: 'y = cos(x)', dim: '2d' })
+    expect(res2.ok).toBe(true)
+    expect(scene().viewMode).toBe('2d')
+  })
+
+  it('plot shows z = (x^2-y^2)/6 in 3D (item 6)', async () => {
+    const res = await runTool('plot', { expression: 'z = (x^2 - y^2)/6', dim: '3d' })
+    expect(res.ok).toBe(true)
+    expect(scene().viewMode).toBe('3d')
+  })
+
+  it('load_experiment loads Newton cradle and plays it (item 7)', async () => {
+    const loadRes = await runTool('load_experiment', { id: 'cradle' })
+    expect(loadRes.ok).toBe(true)
+    const playRes = await runTool('play', {})
+    expect(playRes.ok).toBe(true)
+    expect(playRes.playing).toBe(true)
+  })
+
+  it('runs demo item 8 and 9: drop 1kg ball from 5m, run 2s, get readings, export csv, remove body', async () => {
+    // 1. Add 1 kg ball at y = 5m
+    const addRes = await runTool('add_body', { kind: 'sphere', mass: 1, x: 0, y: 5 })
+    expect(addRes.ok).toBe(true)
+    const ballId = String(addRes.bodyId)
+    expect(ballId).toBeDefined()
+
+    // 2. Run simulation 2 seconds
+    const playRes = await runTool('play', { seconds: 2 })
+    expect(playRes.ok).toBe(true)
+
+    // 3. Get real simulation readings
+    const readings = await runTool('get_readings', { bodyId: ballId })
+    expect(readings.ok).toBe(true)
+    const rows = readings.rows as Array<{ t: number; y: number; v: number }>
+    expect(rows.length).toBeGreaterThan(5)
+
+    // 4. Export readings as CSV
+    const exportRes = await runTool('export_readings', { format: 'csv', title: '1kg Ball Drop' })
+    expect(exportRes.ok).toBe(true)
+
+    // 5. Remove the ball (demo item 9)
+    const remRes = await runTool('remove_body', { id: ballId })
+    expect(remRes.ok).toBe(true)
+    const found = useSandbox.getState().bodies.find((b) => b.id === ballId)
+    expect(found).toBeUndefined()
+  })
+
   it('prompts to call play first when get_readings has no samples', async () => {
     // Reset sandbox
     useSandbox.getState().resetRun()
