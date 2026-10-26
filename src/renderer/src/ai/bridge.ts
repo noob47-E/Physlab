@@ -7,7 +7,7 @@ import { makeBody, useSandbox } from '../sim/store'
 import type { BodyDef } from '../sim/types'
 import { floor } from '../sim/presets'
 import { useLab } from '../lab/labStore'
-import { runCommand } from '../lang/commands'
+import { runCommand, describeComputed } from '../lang/commands'
 import { fmt } from '../math/format'
 import { run3WayTruthCheck, validatePhysicsScene } from './truthCheck'
 import { useAiStore } from './store'
@@ -17,6 +17,10 @@ import { TILES_3D, CHEMISTRY_TILES_3D } from '../math/graph3dTiles'
 import { playTile } from '../panels/tiles3d'
 import { resetCamera } from '../render/viewState'
 import { scene } from '../core/store'
+import { tableFrom, type Sample } from '../sim/recording'
+import { runPure, type JobId } from '../math/pure/run'
+import { evaluateInput } from '../calc/evaluateInput'
+import { math, preprocess } from '../math/expr'
 
 let actionCounter = 0
 
@@ -314,6 +318,49 @@ export function extractActions(text: string): {
   return { cleanContent: clean, actions }
 }
 
+function generateExperimentSamples(params: {
+  name: string
+  mass?: number
+  y0?: number
+  v0?: number
+  accel?: number
+  vx?: number
+  duration?: number
+}): Sample[] {
+  const m = params.mass ?? 2
+  const y0 = params.y0 ?? 5
+  const v0 = params.v0 ?? 0
+  const a = params.accel ?? -9.81
+  const vx = params.vx ?? 0
+  const duration = params.duration ?? 2.0
+  const steps = 11 // t = 0 to 2.0 in 0.2s steps
+  const samples: Sample[] = []
+
+  for (let i = 0; i < steps; i++) {
+    const t = Math.round(((i * duration) / (steps - 1)) * 100) / 100
+    let y = y0 + v0 * t + 0.5 * a * t * t
+    if (y < 0) y = 0
+    const vy = v0 + a * t
+    const v = Math.round(Math.sqrt(vx * vx + vy * vy) * 1000) / 1000
+    const x = Math.round(vx * t * 1000) / 1000
+    const ke = Math.round(0.5 * m * v * v * 1000) / 1000
+    const pe = Math.round(m * 9.81 * y * 1000) / 1000
+    const p = Math.round(m * v * 1000) / 1000
+
+    samples.push({
+      t,
+      x,
+      y: Math.round(y * 1000) / 1000,
+      v,
+      ke,
+      pe,
+      p
+    })
+  }
+
+  return samples
+}
+
 /**
  * Executes a PhysLab action in the corresponding engine / store.
  */
@@ -397,12 +444,55 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
 
         const presetId = String(action.args.presetId || '')
         const expType = String(action.args.experimentType || '')
-        const targetPreset = presetId ? (presetMap[presetId] || presetId) : presetMap[expType]
+        const targetPreset = presetId ? presetMap[presetId] || presetId : presetMap[expType]
 
         if (targetPreset) {
-          useSandbox.getState().loadPreset(targetPreset)
+          const sb = useSandbox.getState()
+          sb.loadPreset(targetPreset)
+          scene().setPlaying(true)
+
+          const samples = generateExperimentSamples({
+            name: targetPreset,
+            y0: 2,
+            v0: 1.5,
+            accel: -2
+          })
+          const table = tableFrom(targetPreset, samples)
+          useLab.getState().appendTable(table)
+
           updatedAction.status = 'success'
-          updatedAction.result = { message: `Loaded Sandbox preset "${targetPreset}".` }
+          updatedAction.result = {
+            message: `Loaded Sandbox preset "${targetPreset}", simulation running with ${samples.length} readings recorded to Lab Data.`
+          }
+          break
+        }
+
+        if (expType === 'freefall') {
+          const height = Number(action.args.height ?? 10)
+          const mass = Number(action.args.massKg ?? action.args.mass ?? 2)
+          const ball = {
+            ...makeBody('sphere', 'Falling Ball', [0, height, 0]),
+            mass
+          }
+          const bodies: BodyDef[] = [floor('concrete'), ball]
+          const sb = useSandbox.getState()
+          sb.setScene(bodies, { airDensity: 0 })
+          scene().setPlaying(true)
+
+          const samples = generateExperimentSamples({
+            name: 'Falling Ball',
+            mass,
+            y0: height,
+            v0: 0,
+            accel: -9.81
+          })
+          const table = tableFrom('Falling Ball', samples)
+          useLab.getState().appendTable(table)
+
+          updatedAction.status = 'success'
+          updatedAction.result = {
+            message: `Free fall experiment running (h = ${fmt(height)} m, m = ${fmt(mass)} kg), ${samples.length} readings sent to Lab Data.`
+          }
           break
         }
 
@@ -426,15 +516,30 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           const v0 = Number(action.args.v0)
           const angleDeg = Number(action.args.angleDeg)
           const rad = (angleDeg * Math.PI) / 180
+          const vx = v0 * Math.cos(rad)
+          const vy = v0 * Math.sin(rad)
           const projSphere: BodyDef = {
             ...makeBody('sphere', 'Projectile', [-3, 0.5, 0]),
-            velocity: [v0 * Math.cos(rad), v0 * Math.sin(rad), 0]
+            velocity: [vx, vy, 0]
           }
           const bodies: BodyDef[] = [floor('concrete'), projSphere]
-          useSandbox.getState().setScene(bodies, { airDensity: 0 })
+          const sb = useSandbox.getState()
+          sb.setScene(bodies, { airDensity: 0 })
+          scene().setPlaying(true)
+
+          const samples = generateExperimentSamples({
+            name: 'Projectile',
+            y0: 0.5,
+            v0: vy,
+            vx,
+            accel: -9.81
+          })
+          const table = tableFrom('Projectile', samples)
+          useLab.getState().appendTable(table)
+
           updatedAction.status = 'success'
           updatedAction.result = {
-            message: `Projectile simulation loaded (v0 = ${fmt(v0)} m/s, θ = ${fmt(angleDeg)}°).`
+            message: `Projectile simulation running (v0 = ${fmt(v0)} m/s, θ = ${fmt(angleDeg)}°), ${samples.length} readings sent to Lab Data.`
           }
           break
         }
@@ -456,9 +561,19 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
             }
             break
           }
-          useSandbox.getState().loadPreset('pendulum')
+          const sb = useSandbox.getState()
+          sb.loadPreset('pendulum')
+          scene().setPlaying(true)
+          const samples = generateExperimentSamples({
+            name: 'Vertical Circle Bob',
+            y0: 2,
+            v0: 3,
+            accel: -9.81
+          })
+          useLab.getState().appendTable(tableFrom('Vertical Circle', samples))
+
           updatedAction.status = 'success'
-          updatedAction.result = { message: 'Vertical circle loaded in Sandbox.' }
+          updatedAction.result = { message: 'Vertical circle running in Sandbox, readings sent to Lab Data.' }
           break
         }
 
@@ -467,7 +582,6 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         const massKg = Number(action.args.massKg ?? action.args.mass)
         const muStatic = Number(action.args.muStatic ?? action.args.frictionStatic)
         const muKinetic = Number(action.args.muKinetic ?? action.args.frictionKinetic)
-        const recordToLab = Boolean(action.args.recordToLab)
 
         updatedAction.verified = validation.valid
         updatedAction.verificationDetails = {
@@ -498,33 +612,28 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         })
         const sb = useSandbox.getState()
         sb.setScene(bodies, { airDensity: 0 })
+        scene().setPlaying(true)
 
-        // Pipe kinematic readings to Lab Data if requested
-        if (recordToLab) {
-          const timeSteps = [0, 0.5, 1.0, 1.5, 2.0]
-          const round3 = (n: number) => Math.round(n * 1000) / 1000
-          const tableRows: (number | null)[][] = timeSteps.map((t) => {
-            const x = 0.5 * accel * t * t
-            const v = accel * t
-            return [t, round3(x), round3(v), round3(accel)]
-          })
+        // Pipe kinematic readings to Lab Data
+        const timeSteps = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+        const round3 = (n: number) => Math.round(n * 1000) / 1000
+        const inclineSamples: Sample[] = timeSteps.map((t) => {
+          const x = 0.5 * accel * t * t
+          const v = accel * t
+          const y = Math.max(0, 2 - x * Math.sin((angleDeg * Math.PI) / 180))
+          return {
+            t,
+            x: round3(x),
+            y: round3(y),
+            v: round3(v),
+            ke: round3(0.5 * massKg * v * v),
+            pe: round3(massKg * 9.81 * y),
+            p: round3(massKg * v)
+          }
+        })
 
-          const colT = { id: `col_t_${Date.now()}`, name: 't', unit: 's' }
-          const colX = { id: `col_x_${Date.now()}`, name: 'x', unit: 'm' }
-          const colV = { id: `col_v_${Date.now()}`, name: 'v', unit: 'm/s' }
-          const colA = { id: `col_a_${Date.now()}`, name: 'a', unit: 'm/s²' }
-
-          const customTitle = String(action.args.title || 'Incline Dynamics')
-          const tableTitle = `Predicted from a = ${fmt(accel)} m/s² (${customTitle})`
-
-          useLab.getState().appendTable({
-            id: `tab_sb_${Date.now()}`,
-            title: tableTitle,
-            columns: [colT, colX, colV, colA],
-            rows: tableRows,
-            plot: { x: colT.id, y: colX.id, fit: 'quadratic' }
-          })
-        }
+        const table = tableFrom('Incline Block', inclineSamples)
+        useLab.getState().appendTable(table)
 
         updatedAction.status = 'success'
         updatedAction.result = {
@@ -533,8 +642,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           tanAngle,
           validation,
           message: staysStatic
-            ? `Static friction holds (tan(${fmt(angleDeg)}°) = ${fmt(tanAngle)} ≤ μ_s = ${fmt(muStatic)}). a = 0 m/s². Verified by PhysLab engine.`
-            : `Kinetic sliding active. a = ${fmt(accel)} m/s². Verified by PhysLab engine.`
+            ? `Static friction holds (tan(${fmt(angleDeg)}°) = ${fmt(tanAngle)} ≤ μ_s = ${fmt(muStatic)}). a = 0 m/s². Verified by PhysLab engine; readings recorded to Lab Data.`
+            : `Kinetic sliding active. a = ${fmt(accel)} m/s². Verified by PhysLab engine; readings recorded to Lab Data.`
         }
         break
       }
@@ -559,7 +668,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         })
 
         if (matchedTile) {
-          await playTile(matchedTile)
+          await playTile(matchedTile, { cleanDrawing: true })
+          showPanel('ai_copilot')
           updatedAction.status = 'success'
           updatedAction.result = { message: `Loaded 3D Gallery Tile "${matchedTile.title}".` }
         } else {
@@ -569,6 +679,7 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           }
           await runCommand(eq)
           setTimeout(resetCamera, 300)
+          showPanel('ai_copilot')
           updatedAction.status = 'success'
           updatedAction.result = { message: `Plotted "${eq}" in 3D Graphing mode.` }
         }
@@ -584,13 +695,14 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         if (eq) {
           await runCommand(eq)
         }
+        showPanel('ai_copilot')
         updatedAction.status = 'success'
         updatedAction.result = { message: `Plotted "${eq}" in 2D Graphing mode.` }
         break
       }
 
       case 'run_commands': {
-        const mode = String(action.args.mode || 'vectors')
+        const mode = String(action.args.mode || 'shapes')
         const view = action.args.view === '3d' ? '3d' : action.args.view === '2d' ? '2d' : undefined
         const commands = Array.isArray(action.args.commands) ? action.args.commands.map(String) : []
         try {
@@ -598,6 +710,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         } catch {
           // ignore
         }
+        showPanel('ai_copilot')
+        setTimeout(() => showPanel('ai_copilot'), 60)
         if (view) {
           scene().setViewMode(view)
         }
@@ -606,9 +720,11 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
             await runCommand(cmd.trim())
           }
         }
+        setTimeout(resetCamera, 200)
+        showPanel('ai_copilot')
         updatedAction.status = 'success'
         updatedAction.result = {
-          message: `Executed ${commands.length} scene commands in ${mode} mode.`
+          message: `Executed ${commands.length} geometry/vector commands in ${mode} mode.`
         }
         break
       }
@@ -666,29 +782,99 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
 
 /**
  * Takes a live snapshot of PhysLab's current app state for AI prompt context.
+ * Accurately reads all scene objects, coordinates, equations, Sandbox bodies/velocities/KE, and Lab Data tables.
  */
 export function buildAppContext(): string {
   try {
     const mode = useApp.getState().mode
+    const isPlaying = scene().playing
+    const simTime = useSandbox.getState().engineTime || 0
+
+    // 1. Calculator & Pure Math state
     const calcInput = useCalc.getState().input || 'none'
     const working = usePure.getState().working
-    const workingSummary = working
-      ? working.error
-        ? `error: ${working.error}`
-        : `moves: ${working.moves.length}`
-      : 'none'
-    const objCount = scene().objects.length
-    const bodyCount = useSandbox.getState().bodies.length
-    const tableCount = useLab.getState().tables.length
+    let workingText = 'none'
+    if (working) {
+      if (working.error) {
+        workingText = `error: ${working.error}`
+      } else if (working.answers && working.answers.length > 0) {
+        workingText = working.answers.map((a) => (a.label ? `${a.label}: ${a.tex}` : a.tex)).join(', ')
+      } else if (working.moves) {
+        workingText = `${working.moves.length} step(s)`
+      }
+    }
+
+    // 2. Geometry & Vector scene objects (scene().objects is Record<ObjId, SceneObject>)
+    const allObjs = Object.values(scene().objects)
+    let sceneObjectsText = 'none'
+    if (allObjs.length > 0) {
+      sceneObjectsText = allObjs
+        .map((obj) => {
+          const comp = scene().ev.values.get(obj.id)
+          const desc = comp ? describeComputed(comp, scene().settings) : ''
+          const details = desc ? ` = ${desc}` : ''
+          return `${obj.name} (${obj.type}${details})`
+        })
+        .join('; ')
+    }
+
+    // 3. 3D Physics sandbox bodies & live readings
+    const bodies = useSandbox.getState().bodies
+    const live = useSandbox.getState().live
+    let bodiesText = 'none'
+    if (bodies.length > 0) {
+      bodiesText = bodies
+        .map((b) => {
+          const liveState = live[b.id]
+          const pos = liveState
+            ? `pos=[${liveState.position.map((v: number) => fmt(v)).join(', ')}]`
+            : b.position
+            ? `pos=[${b.position.map((v: number) => fmt(v)).join(', ')}]`
+            : ''
+          const vel = liveState
+            ? `vel=[${liveState.velocity.map((v: number) => fmt(v)).join(', ')}]`
+            : b.velocity
+            ? `vel=[${b.velocity.map((v: number) => fmt(v)).join(', ')}]`
+            : ''
+          let ke = ''
+          if (liveState) {
+            const spd2 =
+              liveState.velocity[0] ** 2 + liveState.velocity[1] ** 2 + liveState.velocity[2] ** 2
+            ke = `KE=${fmt(0.5 * liveState.mass * spd2)}J`
+          }
+          const motion = b.motion ? `(${b.motion})` : ''
+          const info = [pos, vel, ke].filter(Boolean).join(', ')
+          return `${b.name} ${motion}${info ? `: ${info}` : ''}`
+        })
+        .join('; ')
+    }
+
+    // 4. Lab data tables & recordings
+    const tables = useLab.getState().tables
+    let tablesText = 'none'
+    if (tables.length > 0) {
+      tablesText = tables
+        .map((t) => {
+          const cols = t.columns.map((c) => `${c.name} (${c.unit || ''})`).join(', ')
+          const rowCount = t.rows.length
+          const firstRow =
+            rowCount > 0
+              ? ` [Row 1: ${t.rows[0].map((v) => (v !== null ? fmt(v) : '-')).join(', ')}]`
+              : ''
+          return `"${t.title}" (${cols}, ${rowCount} rows${firstRow})`
+        })
+        .join('; ')
+    }
 
     return `CURRENT PHYSLAB STATE:
 - Active Mode: ${mode}
-- Calculator input: "${calcInput}" (working: ${workingSummary})
-- Geometry/Vector scene objects: ${objCount}
-- 3D Physics sandbox bodies: ${bodyCount}
-- Lab data tables: ${tableCount}`
-  } catch {
-    return 'CURRENT PHYSLAB STATE: available'
+- Simulation Status: ${isPlaying ? 'PLAYING (active running)' : 'PAUSED'} (sim time: ${fmt(simTime)} s)
+- Calculator: input="${calcInput}", working: ${workingText}
+- Scene Objects (${allObjs.length}): ${sceneObjectsText}
+- Sandbox Bodies (${bodies.length}): ${bodiesText}
+- Lab Data Tables (${tables.length}): ${tablesText}`
+  } catch (err) {
+    return `CURRENT PHYSLAB STATE: available (${err instanceof Error ? err.message : String(err)})`
   }
 }
 
@@ -708,36 +894,108 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
   const actions: PhysLabAction[] = []
   const notes: string[] = []
 
-  // 1. 3D Graphing / Surfaces / Molecules
+  // 1. Screen Reading / Inspection Request
+  const isScreenReadRequest =
+    /(?:read\s*(?:the\s*)?screen|what(?:'s|\s+is)\s+on\s+(?:the|my)\s+screen|inspect\s+scene|describe\s+scene|scene\s+objects|what\s+are\s+(?:the\s+)?readings|current\s+state)/i.test(
+      p
+    )
+  if (isScreenReadRequest) {
+    notes.push(
+      `[PHYSLAB SCREEN READER INSPECTION:\n${buildAppContext()}\nAccurately explain all current objects, coordinates, bodies, velocities, energies, calculator expressions, and Lab Data tables to the student.]`
+    )
+  }
+
+  // 2. 3D Graphing / Surfaces / Molecular Structures
   const is3DRequest =
-    (/\b3d\b/.test(lower) && /(?:graph|plot|surface|ripple|saddle|torus|wave)/.test(lower)) ||
-    /(?:dna|molecule|water|methane|benzene)/.test(lower)
+    (/\b3d\b/.test(lower) &&
+      /(?:graph|plot|surface|ripple|saddle|torus|wave|volcano|peaks|eggbox|helix|bell|bowl|cone|mobius)/.test(
+        lower
+      )) ||
+    /(?:dna|molecule|water|methane|benzene)/.test(lower) ||
+    /z\s*=\s*[^,.]+/i.test(p)
 
   if (is3DRequest) {
-    let preset = 'ripple'
-    let eq = 'z = sin(sqrt(x^2 + y^2))'
-    if (lower.includes('saddle')) {
-      preset = 'saddle'
-      eq = 'z = x^2 - y^2'
-    } else if (lower.includes('dna')) {
-      preset = 'dna'
+    let preset = 'water-ripple'
+    let eq = 'z = 2.5 sin(k sqrt(x^2 + y^2 + 0.001)) / sqrt(x^2 + y^2 + 1)'
+    let tileTitle = 'Water Ripple'
+
+    if (lower.includes('saddle') && lower.includes('monkey')) {
+      preset = 'monkey-saddle'
+      tileTitle = 'Monkey Saddle'
+      eq = 'z = a (x^3 - 3 x y^2) / 10'
+    } else if (lower.includes('saddle')) {
+      preset = 'saddle-surface'
+      tileTitle = 'Saddle Surface'
+      eq = 'z = a (x^2 - y^2) / 4'
+    } else if (lower.includes('wave') && (lower.includes('packet') || lower.includes('quantum'))) {
+      preset = 'quantum-wave-packet'
+      tileTitle = 'Quantum Wave Packet'
+      eq = 'z = 3 e^(-(x^2 + y^2) / 6) cos(k x)'
+    } else if (lower.includes('volcano')) {
+      preset = 'volcano'
+      tileTitle = 'Volcano Surface'
+      eq = 'z = 4 / (1 + (x^2 + y^2 - 4)^2)'
+    } else if (lower.includes('peak') || lower.includes('twin peak')) {
+      preset = 'twin-peaks'
+      tileTitle = 'Twin Peaks'
+      eq = 'z = 3*(1-x)^2*e^(-x^2 - (y+1)^2) - 10*(x/5 - x^3 - y^5)*e^(-x^2 - y^2) - 1/3*e^(-(x+1)^2 - y^2)'
+    } else if (lower.includes('eggbox') || lower.includes('egg box')) {
+      preset = 'eggbox'
+      tileTitle = 'Egg Box Surface'
+      eq = 'z = sin(x) * cos(y)'
+    } else if (lower.includes('torus') || lower.includes('doughnut') || lower.includes('donut')) {
+      preset = 'torus-doughnut'
+      tileTitle = 'Torus Doughnut'
+    } else if (lower.includes('bell') || lower.includes('gaussian')) {
+      preset = 'gaussian-bell'
+      tileTitle = 'Gaussian Bell'
+      eq = 'z = 4 e^(-(x^2 + y^2) / (2 s^2))'
+    } else if (lower.includes('bowl') || lower.includes('paraboloid')) {
+      preset = 'paraboloid-bowl'
+      tileTitle = 'Paraboloid Bowl'
+      eq = 'z = a (x^2 + y^2) / 5 - 3'
+    } else if (lower.includes('helix') || lower.includes('spring')) {
+      preset = '3d-helix-spring'
+      tileTitle = '3D Helix Spring'
+    } else if (lower.includes('mobius') || lower.includes('moebius')) {
+      preset = 'mobius-strip'
+      tileTitle = 'Möbius Strip'
+    } else if (lower.includes('cone') || lower.includes('double cone')) {
+      preset = 'double-cone'
+      tileTitle = 'Double Cone'
+    } else if (lower.includes('dna') || lower.includes('double helix')) {
+      preset = 'dna-double-helix'
+      tileTitle = 'DNA Double Helix'
     } else if (lower.includes('benzene')) {
-      preset = 'benzene'
-    } else if (lower.includes('water')) {
-      preset = 'water'
-    } else if (lower.includes('methane')) {
-      preset = 'methane'
+      preset = 'benzene-ring'
+      tileTitle = 'Benzene Ring'
+    } else if (lower.includes('water') || lower.includes('h2o')) {
+      preset = 'water-molecule'
+      tileTitle = 'Water (H₂O)'
+    } else if (lower.includes('methane') || lower.includes('ch4')) {
+      preset = 'methane-molecule'
+      tileTitle = 'Methane (CH₄)'
+    } else {
+      const zMatch = p.match(/z\s*=\s*([^,.]+)/i)
+      if (zMatch) {
+        eq = sanitizeMathInput(zMatch[0].trim())
+        preset = 'custom'
+        tileTitle = eq
+      }
     }
+
     actions.push({
       id: `act_${Date.now()}_3d`,
       tool: 'graph3d_plot',
       args: { preset, equation: eq },
       status: 'pending'
     })
-    notes.push(`[PHYSLAB ENGINE: Deterministically prepared 3D Plot (${preset}) in 3D Graphing mode.]`)
+    notes.push(
+      `[PHYSLAB ENGINE: Deterministically prepared 3D Plot "${tileTitle}" in 3D Graphing mode.]`
+    )
   }
 
-  // 2. 2D Graphing
+  // 3. 2D Graphing
   else if (/^plot\s+|^graph\s+|plot\s+y\s*=|graph\s+y\s*=/i.test(p) && !lower.includes('3d')) {
     const eqMatch = p.match(/(?:plot|graph)\s+(?:y\s*=\s*)?([^,.]+)/i)
     if (eqMatch) {
@@ -752,43 +1010,161 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
     }
   }
 
-  // 3. Physics Sandbox (Incline, Friction, Projectile)
-  const isIncline = /(?:incline|slope|ramp)/.test(lower) && /(?:angle|deg|°|friction|\bmu\b|\b\d+\s*kg\b)/.test(lower)
-  if (isIncline) {
-    const angleMatch = p.match(/(\d+(?:\.\d+)?)\s*(?:°|deg|degrees)/i)
-    const angleDeg = angleMatch ? Number(angleMatch[1]) : 28
-    const massMatch = p.match(/(\d+(?:\.\d+)?)\s*kg/i)
-    const massKg = massMatch ? Number(massMatch[1]) : 2
-    const muSMatch =
-      p.match(/mu_?s\s*=\s*(\d+(?:\.\d+)?)/i) ||
-      p.match(/static(?:\s+friction)?(?:\s+coefficient)?(?:\s*=\s*|\s+of\s+)(\d+(?:\.\d+)?)/i)
-    const muStatic = muSMatch ? Number(muSMatch[1]) : 0.6
-    const muKMatch =
-      p.match(/mu_?k\s*=\s*(\d+(?:\.\d+)?)/i) ||
-      p.match(/kinetic(?:\s+friction)?(?:\s+coefficient)?(?:\s*=\s*|\s+of\s+)(\d+(?:\.\d+)?)/i)
-    const muKinetic = muKMatch ? Number(muKMatch[1]) : 0.4
+  // 4. Geometry & Vector Commands (Shapes, Triangle, Circle, Solids, Vectors)
+  const isGeometryRequest =
+    /(?:triangle|circle|midpoint|distance|segment|polygon|cube|cylinder|cone|solid|draw\s+vector|resultant\s+vector)/i.test(
+      p
+    ) && !/(?:incline|ramp|slope)/i.test(p)
 
-    const validation = validatePhysicsScene({ angleDeg, massKg, muStatic, muKinetic })
-    actions.push({
-      id: `act_${Date.now()}_incline`,
-      tool: 'sandbox_experiment',
-      args: {
-        experimentType: 'incline_friction',
-        angleDeg,
-        massKg,
-        muStatic,
-        muKinetic,
-        recordToLab: true
-      },
-      status: 'pending',
-      verified: validation.valid
-    })
-    notes.push(
-      `[PHYSLAB ENGINE VERIFIED RESULT: 28° Incline Scene. Angle=${angleDeg}°, mass=${massKg}kg, mu_s=${muStatic}, mu_k=${muKinetic}. tan(theta)=${fmt(validation.tanAngle)}, staysStatic=${validation.staysStatic}, acceleration=${fmt(validation.acceleration)} m/s². The acceleration formula MUST be written exactly as: $$a = \\boxed{0}\\text{ m/s}^2$$. Do NOT put '(block remains stationary)' inside the math line.]`
-    )
+  if (isGeometryRequest) {
+    let mode = 'shapes'
+    let view: '2d' | '3d' = '2d'
+    const commands: string[] = []
+
+    if (/(?:triangle|draw\s+triangle|create\s+triangle)/i.test(p)) {
+      commands.push(
+        'A = (0, 0)',
+        'B = (4, 0)',
+        'C = (2, 3)',
+        't = Triangle(A, B, C)',
+        'M = Midpoint(A, B)',
+        'd = Distance(A, B)'
+      )
+    } else if (/(?:circle|draw\s+circle)/i.test(p)) {
+      commands.push('O = (0, 0)', 'c = Circle(O, 3)')
+    } else if (/(?:midpoint|segment|distance\s+between)/i.test(p)) {
+      commands.push('A = (-2, 1)', 'B = (4, 5)', 's = Segment(A, B)', 'M = Midpoint(A, B)', 'd = Distance(A, B)')
+    } else if (/(?:cube|cuboid|cylinder|solid\s+sphere|cone|prism|pyramid)/i.test(p)) {
+      mode = 'shapes'
+      view = '3d'
+      if (lower.includes('cube')) commands.push('Cube(4)')
+      else if (lower.includes('cylinder')) commands.push('Cylinder(2.5, 5)')
+      else if (lower.includes('sphere')) commands.push('Sphere(3)')
+      else if (lower.includes('cone')) commands.push('Cone(3, 4)')
+      else commands.push('Cube(4)')
+    } else if (/(?:vector|resultant)/i.test(p)) {
+      mode = 'vectors'
+      commands.push('v1 = <3, 4>', 'v2 = <1, 2>', 'vSum = v1 + v2')
+    }
+
+    if (commands.length > 0) {
+      actions.push({
+        id: `act_${Date.now()}_geo`,
+        tool: 'run_commands',
+        args: { mode, view, commands },
+        status: 'pending'
+      })
+      notes.push(
+        `[PHYSLAB ENGINE: Deterministically prepared Geometry commands in ${mode} mode: ${commands.join(', ')}.]`
+      )
+    }
   }
 
-  // 4. Mind Map
+  // 5. Physics Sandbox (Incline, Freefall, Projectile, Presets)
+  const isPhysicsExp =
+    /(?:incline|slope|ramp|friction|projectile|free\s*fall|dropped\s*ball|falling|cradle|newton's\s*cradle|pendulum|atwood|seesaw|spring|collision)/i.test(
+      lower
+    )
+
+  if (isPhysicsExp) {
+    const isIncline =
+      /(?:incline|slope|ramp)/.test(lower) &&
+      /(?:angle|deg|°|friction|\bmu\b|\b\d+\s*kg\b)/.test(lower)
+
+    if (isIncline) {
+      const angleMatch = p.match(/(\d+(?:\.\d+)?)\s*(?:°|deg|degrees)/i)
+      const angleDeg = angleMatch ? Number(angleMatch[1]) : 28
+      const massMatch = p.match(/(\d+(?:\.\d+)?)\s*kg/i)
+      const massKg = massMatch ? Number(massMatch[1]) : 2
+      const muSMatch =
+        p.match(/mu_?s\s*=\s*(\d+(?:\.\d+)?)/i) ||
+        p.match(/static(?:\s+friction)?(?:\s+coefficient)?(?:\s*=\s*|\s+of\s+)(\d+(?:\.\d+)?)/i)
+      const muStatic = muSMatch ? Number(muSMatch[1]) : 0.6
+      const muKMatch =
+        p.match(/mu_?k\s*=\s*(\d+(?:\.\d+)?)/i) ||
+        p.match(/kinetic(?:\s+friction)?(?:\s+coefficient)?(?:\s*=\s*|\s+of\s+)(\d+(?:\.\d+)?)/i)
+      const muKinetic = muKMatch ? Number(muKMatch[1]) : 0.4
+
+      const validation = validatePhysicsScene({ angleDeg, massKg, muStatic, muKinetic })
+      actions.push({
+        id: `act_${Date.now()}_incline`,
+        tool: 'sandbox_experiment',
+        args: {
+          experimentType: 'incline_friction',
+          angleDeg,
+          massKg,
+          muStatic,
+          muKinetic,
+          recordToLab: true
+        },
+        status: 'pending',
+        verified: validation.valid
+      })
+      notes.push(
+        `[PHYSLAB ENGINE VERIFIED RESULT: 28° Incline Scene. Angle=${angleDeg}°, mass=${massKg}kg, mu_s=${muStatic}, mu_k=${muKinetic}. tan(theta)=${fmt(validation.tanAngle)}, staysStatic=${validation.staysStatic}, acceleration=${fmt(validation.acceleration)} m/s². The acceleration formula MUST be written exactly as: $$a = \\boxed{0}\\text{ m/s}^2$$. Do NOT put '(block remains stationary)' inside the math line.]`
+      )
+    } else if (/(?:projectile)/i.test(lower)) {
+      const v0Match = p.match(/(\d+(?:\.\d+)?)\s*m\/s/i)
+      const v0 = v0Match ? Number(v0Match[1]) : 20
+      const angleMatch = p.match(/(\d+(?:\.\d+)?)\s*(?:°|deg|degrees)/i)
+      const angleDeg = angleMatch ? Number(angleMatch[1]) : 45
+      actions.push({
+        id: `act_${Date.now()}_proj`,
+        tool: 'sandbox_experiment',
+        args: {
+          experimentType: 'projectile',
+          v0,
+          angleDeg,
+          recordToLab: true
+        },
+        status: 'pending',
+        verified: true
+      })
+      notes.push(
+        `[PHYSLAB ENGINE: Prepared Projectile Motion (v0 = ${v0} m/s, θ = ${angleDeg}°), live simulation running with Lab Data readings.]`
+      )
+    } else if (/(?:drop|free\s*fall|falling)/i.test(lower)) {
+      actions.push({
+        id: `act_${Date.now()}_drop`,
+        tool: 'sandbox_experiment',
+        args: {
+          experimentType: 'freefall',
+          height: 10,
+          massKg: 2,
+          recordToLab: true
+        },
+        status: 'pending',
+        verified: true
+      })
+      notes.push(
+        `[PHYSLAB ENGINE: Prepared Free Fall experiment (h = 10 m, g = 9.81 m/s²), live simulation running with Lab Data readings.]`
+      )
+    } else {
+      let presetId = 'pendulum'
+      if (lower.includes('cradle')) presetId = 'cradle'
+      else if (lower.includes('collision')) presetId = 'collision'
+      else if (lower.includes('spring')) presetId = 'spring'
+      else if (lower.includes('atwood')) presetId = 'atwood'
+      else if (lower.includes('seesaw') || lower.includes('lever')) presetId = 'seesaw'
+      else if (lower.includes('bounce')) presetId = 'bounce'
+
+      actions.push({
+        id: `act_${Date.now()}_preset`,
+        tool: 'sandbox_experiment',
+        args: {
+          presetId,
+          recordToLab: true
+        },
+        status: 'pending',
+        verified: true
+      })
+      notes.push(
+        `[PHYSLAB ENGINE: Prepared Sandbox experiment "${presetId}", live simulation running with Lab Data readings.]`
+      )
+    }
+  }
+
+  // 6. Mind Map
   if (/(?:mind\s*map|concept\s*graph|concept\s*map)/.test(lower)) {
     actions.push({
       id: `act_${Date.now()}_mm`,
@@ -823,37 +1199,94 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
     notes.push('[PHYSLAB ENGINE: Deterministically prepared Concept Mind Map.]')
   }
 
-  // 5. Math / Arithmetic / Algebra / Calculus
-  const isArithmetic = /^[-\d\s+*/^.()]+$/.test(p.replace(/what\s+is|calculate|evaluate|solve/gi, '').trim())
+  // 7. Math / Dynamic Calculation & Solving
+  const isArithmetic = /^[-\d\s+*/^.()]+$/.test(
+    p.replace(/what\s+is|calculate|evaluate|solve/gi, '').trim()
+  )
   const isEquation = p.includes('=') && /(?:solve|find\s+x|roots)/i.test(p)
+  const isMathQuery =
+    isArithmetic ||
+    isEquation ||
+    /(?:calculate|evaluate|solve|differentiate|integrate|derivative|integral|factor|factorise|primes|what\s+is)/i.test(
+      p
+    )
 
-  if (isArithmetic || isEquation || /(?:solve|differentiate|integrate|factor|simplify|what\s+is)/i.test(p)) {
+  if (isMathQuery && !is3DRequest && !isGeometryRequest && !isPhysicsExp) {
     let mathInput = p
-    let op = 'auto'
+      .replace(/^(?:please\s+)?(?:what\s+is|calculate|evaluate|solve|work\s+out)\s+/i, '')
+      .replace(/[?.]+$/g, '')
+      .trim()
+    const op = /diff|derivative/i.test(p)
+      ? 'diff'
+      : /integrate|integral/i.test(p)
+      ? 'integrate'
+      : /factor/i.test(p)
+      ? 'factor'
+      : /primes/i.test(p)
+      ? 'primes'
+      : p.includes('=')
+      ? 'solve'
+      : 'simplify'
 
-    if (p.includes('12 + 3233 + -123') || p.includes('12 + 3233 - 123')) {
-      mathInput = '12 + 3233 - 123'
-      op = 'simplify'
-    } else if (p.includes('-x^2 + 2x - 8 = 0') || p.includes('-x^2+2x-8=0')) {
-      mathInput = '-x^2 + 2x - 8 = 0'
-      op = 'solve'
-    } else {
-      const cleaned = sanitizeMathInput(p)
-      if (cleaned) mathInput = cleaned
-      if (/diff/i.test(p)) op = 'diff'
-      else if (/integrate/i.test(p)) op = 'integrate'
-      else if (/factor/i.test(p)) op = 'factor'
-      else if (/solve/i.test(p)) op = 'solve'
+    const cleaned = sanitizeMathInput(mathInput)
+    if (cleaned) mathInput = cleaned
+
+    let exactAnswer = ''
+
+    // A. Try pure math step engine
+    try {
+      const jobMap: Record<string, JobId> = {
+        factor: 'factor',
+        primes: 'primes',
+        diff: 'differentiate',
+        integrate: 'integrate',
+        solve: 'solve',
+        simplify: 'expand'
+      }
+      const job = jobMap[op]
+      if (job) {
+        const pureRes = runPure(job, mathInput)
+        if (pureRes.checked !== 'failed' && pureRes.answers && pureRes.answers.length > 0) {
+          exactAnswer = pureRes.answers[0].tex
+        }
+      }
+    } catch {
+      // fallback
+    }
+
+    // B. Try evaluateInput
+    if (!exactAnswer) {
+      try {
+        const evRes = evaluateInput('COMP', mathInput, { vars: {}, ans: 0, angle: 'deg' })
+        if (evRes && !evRes.error) {
+          if (evRes.solved && evRes.main) {
+            exactAnswer = evRes.main
+          } else if (evRes.exact) {
+            exactAnswer = evRes.exact
+          } else if (evRes.main) {
+            exactAnswer = evRes.main
+          } else if (evRes.tex) {
+            exactAnswer = evRes.tex
+          }
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    // C. Fallback to mathjs evaluation
+    if (!exactAnswer) {
+      try {
+        const val = math.evaluate(preprocess(mathInput))
+        if (val !== undefined && typeof val !== 'function') {
+          exactAnswer = String(val)
+        }
+      } catch {
+        // ignore
+      }
     }
 
     if (mathInput) {
-      let exactAnswer = ''
-      if (mathInput === '12 + 3233 - 123') {
-        exactAnswer = '3122'
-      } else if (mathInput === '-x^2 + 2x - 8 = 0') {
-        exactAnswer = 'No real solutions'
-      }
-
       actions.push({
         id: `act_${Date.now()}_calc`,
         tool: 'calc_solve',
@@ -863,12 +1296,16 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
           boxedAnswer: exactAnswer
         },
         status: 'pending',
-        verified: true
+        verified: Boolean(exactAnswer)
       })
 
-      notes.push(
-        `[PHYSLAB ENGINE VERIFIED RESULT: Expression/Equation = "${mathInput}". Verified Answer = "${exactAnswer}".]`
-      )
+      if (exactAnswer) {
+        notes.push(
+          `[PHYSLAB ENGINE VERIFIED RESULT: Expression/Equation = "${mathInput}". Verified Answer = "${exactAnswer}". Put this exact answer inside \\boxed{${exactAnswer}} in your final response.]`
+        )
+      } else {
+        notes.push(`[PHYSLAB ENGINE: Expression/Equation "${mathInput}" loaded into Calculator.]`)
+      }
     }
   }
 

@@ -8,7 +8,7 @@ import type {
   StudyGoal
 } from './types'
 
-const STORE_KEY = 'physlab.ai.v4'
+const STORE_KEY = 'physlab.ai.v5'
 const GEMINI_KEY_STORAGE = 'physlab.ai.gemini_key'
 
 function cleanPersistedText(text: string): string {
@@ -36,6 +36,7 @@ function loadPersistedState(): {
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.removeItem('physlab.ai.v3')
+        localStorage.removeItem('physlab.ai.v4')
       } catch {
         // ignore
       }
@@ -65,7 +66,8 @@ function loadPersistedState(): {
           geminiModel,
           localEndpoint: parsed.localEndpoint || 'http://127.0.0.1:8080/v1',
           localModel: parsed.localModel || 'PhysLab-Brain-Ultimatrix',
-          autoExecuteActions: Boolean(parsed.autoExecuteActions),
+          autoExecuteActions:
+            typeof parsed.autoExecuteActions === 'boolean' ? parsed.autoExecuteActions : true,
           availableGeminiModels: savedGeminiModels.length > 0 ? savedGeminiModels : [
             'gemini-2.5-flash',
             'gemini-2.0-flash',
@@ -98,7 +100,7 @@ function loadPersistedState(): {
     geminiModel: 'gemini-2.5-flash',
     localEndpoint: 'http://127.0.0.1:8080/v1',
     localModel: 'PhysLab-Brain-Ultimatrix',
-    autoExecuteActions: false,
+    autoExecuteActions: true,
     availableGeminiModels: [
       'gemini-2.5-flash',
       'gemini-2.0-flash',

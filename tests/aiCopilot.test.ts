@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { buildSystemPrompt, PHYSLAB_BRAIN_BASE_PROMPT } from '../src/renderer/src/ai/systemPrompt'
 import {
+  buildAppContext,
   buildInclineScene,
+  executePhysLabAction,
   extractActions,
   extractThinkTrace,
-  getBrainStageText
+  getBrainStageText,
+  preComputeEngineTurn
 } from '../src/renderer/src/ai/bridge'
 import {
   toLinearMath,
@@ -544,6 +547,93 @@ Simulation ready to run!`
     it('registers ai_copilot in PANEL_TITLES and panelHome', () => {
       expect(PANEL_TITLES.ai_copilot).toBe('AI Tutor')
       expect(panelHome('ai_copilot')).toBe('left')
+    })
+  })
+
+  describe('Live AI Agent 6 Critical Fixes Verification', () => {
+    it('Fix 1: dynamic math solver calculates arithmetic and algebra without fake stubs', () => {
+      // Test dynamic arithmetic calculation
+      const turn1 = preComputeEngineTurn('what is 25 * 4 + 18')
+      expect(turn1.actions).toHaveLength(1)
+      expect(turn1.actions[0].tool).toBe('calc_solve')
+      expect(turn1.actions[0].args.boxedAnswer).toBe('118')
+      expect(turn1.contextNote).toContain('118')
+
+      // Test factoring
+      const turn2 = preComputeEngineTurn('factor x^2 - 9')
+      expect(turn2.actions).toHaveLength(1)
+      expect(turn2.actions[0].tool).toBe('calc_solve')
+      expect(turn2.actions[0].args.boxedAnswer).toContain('x')
+
+      // Test quadratic solving
+      const turn3 = preComputeEngineTurn('solve x^2 - 5x + 6 = 0')
+      expect(turn3.actions).toHaveLength(1)
+      expect(turn3.actions[0].tool).toBe('calc_solve')
+      expect(turn3.actions[0].args.boxedAnswer).toBeTruthy()
+    })
+
+    it('Fix 2: autoExecuteActions defaults to true for direct control over PhysLab', () => {
+      const state = useAiStore.getState()
+      expect(state.autoExecuteActions).toBe(true)
+    })
+
+    it('Fix 3: sandbox experiments start simulation and record readings into Lab Data', async () => {
+      const expAction: PhysLabAction = {
+        id: 'test_exp_1',
+        tool: 'sandbox_experiment',
+        args: {
+          experimentType: 'freefall',
+          height: 10,
+          massKg: 2,
+          recordToLab: true
+        },
+        status: 'pending'
+      }
+
+      const res = await executePhysLabAction(expAction)
+      expect(res.status).toBe('success')
+      expect(res.result?.message).toContain('readings sent to Lab Data')
+    })
+
+    it('Fix 4: buildAppContext accurately reads live scene objects, bodies, and lab tables', () => {
+      const context = buildAppContext()
+      expect(context).toContain('CURRENT PHYSLAB STATE:')
+      expect(context).toContain('Active Mode:')
+      expect(context).toContain('Simulation Status:')
+      expect(context).toContain('Scene Objects')
+      expect(context).not.toContain('undefined')
+    })
+
+    it('Fix 5: 3D graphing pre-computes matching rich 3D gallery tiles and custom surfaces', () => {
+      const waveTurn = preComputeEngineTurn('plot 3d quantum wave packet')
+      expect(waveTurn.actions).toHaveLength(1)
+      expect(waveTurn.actions[0].tool).toBe('graph3d_plot')
+      expect(waveTurn.actions[0].args.preset).toBe('quantum-wave-packet')
+
+      const volcanoTurn = preComputeEngineTurn('3d volcano surface')
+      expect(volcanoTurn.actions).toHaveLength(1)
+      expect(volcanoTurn.actions[0].tool).toBe('graph3d_plot')
+      expect(volcanoTurn.actions[0].args.equation).toContain('4 / (1 +')
+
+      const peaksTurn = preComputeEngineTurn('plot 3d twin peaks')
+      expect(peaksTurn.actions).toHaveLength(1)
+      expect(peaksTurn.actions[0].tool).toBe('graph3d_plot')
+      expect(peaksTurn.actions[0].args.preset).toBe('twin-peaks')
+    })
+
+    it('Fix 6: interacts with geometry shapes and solids via run_commands', async () => {
+      const geoTurn = preComputeEngineTurn('draw a triangle with vertices at (0,0), (4,0), and (2,3)')
+      expect(geoTurn.actions).toHaveLength(1)
+      expect(geoTurn.actions[0].tool).toBe('run_commands')
+      expect(geoTurn.actions[0].args.mode).toBe('shapes')
+      const cmds = geoTurn.actions[0].args.commands as string[]
+      expect(cmds).toContain('t = Triangle(A, B, C)')
+
+      const cubeTurn = preComputeEngineTurn('create a 3d cube with side 4')
+      expect(cubeTurn.actions).toHaveLength(1)
+      expect(cubeTurn.actions[0].tool).toBe('run_commands')
+      expect(cubeTurn.actions[0].args.view).toBe('3d')
+      expect(cubeTurn.actions[0].args.commands).toContain('Cube(4)')
     })
   })
 })
