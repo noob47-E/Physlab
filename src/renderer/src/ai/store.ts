@@ -43,9 +43,9 @@ function loadPersistedState(): {
       const raw = localStorage.getItem(STORE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
-        let geminiModel = parsed.geminiModel || 'gemini-2.5-flash'
+        let geminiModel = parsed.geminiModel || 'gemini-3.5-flash-lite'
         if (geminiModel === 'gemini-3.8-flash') {
-          geminiModel = 'gemini-2.5-flash'
+          geminiModel = 'gemini-3.5-flash-lite'
         }
         const savedGeminiModels: string[] = Array.isArray(parsed.availableGeminiModels)
           ? parsed.availableGeminiModels.filter((m: string) => m !== 'gemini-3.8-flash')
@@ -69,6 +69,8 @@ function loadPersistedState(): {
           autoExecuteActions:
             typeof parsed.autoExecuteActions === 'boolean' ? parsed.autoExecuteActions : true,
           availableGeminiModels: savedGeminiModels.length > 0 ? savedGeminiModels : [
+            'gemini-3.5-flash-lite',
+            'gemini-3.5-flash',
             'gemini-2.5-flash',
             'gemini-2.0-flash',
             'gemini-1.5-flash',
@@ -97,11 +99,13 @@ function loadPersistedState(): {
     memories: [],
     goals: [],
     provider: 'gemini-openai',
-    geminiModel: 'gemini-3.8-flash',
+    geminiModel: 'gemini-3.5-flash-lite',
     localEndpoint: 'http://127.0.0.1:8080/v1',
     localModel: 'PhysLab-Brain-Ultimatrix',
     autoExecuteActions: true,
     availableGeminiModels: [
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
       'gemini-2.5-flash',
       'gemini-2.0-flash',
       'gemini-1.5-flash',

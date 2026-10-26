@@ -509,6 +509,12 @@ Simulation ready to run!`
       expect(store.activeMindMap === null || typeof store.activeMindMap === 'object').toBe(true)
     })
 
+    it('initializes with gemini-3.5-flash-lite first in model chain', () => {
+      const store = useAiStore.getState()
+      expect(store.availableGeminiModels[0]).toBe('gemini-3.5-flash-lite')
+      expect(store.geminiModel).toBe('gemini-3.5-flash-lite')
+    })
+
     it('manages chat threads, study goals progress and toggles', () => {
       const store = useAiStore.getState()
       const newThreadId = store.createThread()

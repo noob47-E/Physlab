@@ -106,8 +106,8 @@ export async function testAiConnection(): Promise<{ ok: boolean; message: string
         })
       })
       if (!res.ok) {
-        if (res.status === 404 && cleanModel !== 'gemini-2.5-flash') {
-          useAiStore.getState().setGeminiModel('gemini-2.5-flash')
+        if (res.status === 404 && cleanModel !== 'gemini-3.5-flash-lite') {
+          useAiStore.getState().setGeminiModel('gemini-3.5-flash-lite')
           return testAiConnection()
         }
         const errJson = await res.json().catch(() => ({}))
@@ -169,7 +169,7 @@ export async function fetchAvailableModels(): Promise<{
     if (!geminiApiKey) {
       return {
         ok: false,
-        models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+        models: ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
         message: 'Google Gemini API key is missing.'
       }
     }
@@ -185,7 +185,7 @@ export async function fetchAvailableModels(): Promise<{
         const errJson = await res.json().catch(() => ({}))
         return {
           ok: false,
-          models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+          models: ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
           message: errJson.error?.message || `HTTP ${res.status}: ${res.statusText}`
         }
       }
@@ -206,15 +206,15 @@ export async function fetchAvailableModels(): Promise<{
         )
 
       generateModels.sort((a, b) => {
-        if (a === 'gemini-2.5-flash') return -1
-        if (b === 'gemini-2.5-flash') return 1
+        if (a === 'gemini-3.5-flash-lite') return -1
+        if (b === 'gemini-3.5-flash-lite') return 1
         return b.localeCompare(a)
       })
 
       const finalModels =
         generateModels.length > 0
           ? generateModels
-          : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+          : ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
 
       useAiStore.getState().setAvailableGeminiModels(finalModels)
       return {
@@ -225,7 +225,7 @@ export async function fetchAvailableModels(): Promise<{
     } catch (err) {
       return {
         ok: false,
-        models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+        models: ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
         message: err instanceof Error ? err.message : String(err)
       }
     }
@@ -697,9 +697,9 @@ export async function streamChatCompletion(
         signal
       })
 
-      if (!res.ok && res.status === 404 && currentModel !== 'gemini-2.5-flash') {
-        currentModel = 'gemini-2.5-flash'
-        useAiStore.getState().setGeminiModel('gemini-2.5-flash')
+      if (!res.ok && res.status === 404 && currentModel !== 'gemini-3.5-flash-lite') {
+        currentModel = 'gemini-3.5-flash-lite'
+        useAiStore.getState().setGeminiModel('gemini-3.5-flash-lite')
         url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse`
         res = await fetch(url, {
           method: 'POST',
