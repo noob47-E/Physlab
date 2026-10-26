@@ -33,6 +33,11 @@ import {
 import type { PhysLabAction, VerificationState } from '../src/renderer/src/ai/types'
 import { useAiStore } from '../src/renderer/src/ai/store'
 import { useSandbox } from '../src/renderer/src/sim/store'
+import {
+  extractKnownNumbers,
+  isAnswerOrResultLine,
+  isStepOrStructuralNumber
+} from '../src/renderer/src/panels/ai/MarkdownView'
 import { panelHome } from '../src/renderer/src/app/layoutMath'
 import { PANEL_TITLES } from '../src/renderer/src/app/panels'
 
@@ -900,6 +905,61 @@ Simulation ready to run!`
       expect(matchToolAnswer('1.84', '1.8402')).toBe(true)
       expect(matchToolAnswer('x^2', 'x*x')).toBe(true)
       expect(matchToolAnswer('10', '20')).toBe(false)
+    })
+  })
+
+  describe('Fix 4 [Bug 4]: Invented Numbers Guard', () => {
+    it('system prompt includes explicit Invented Numbers Guard', () => {
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('Invented Numbers Guard')
+      expect(PHYSLAB_BRAIN_BASE_PROMPT).toContain('not checked')
+    })
+
+    it('extracts known numbers from student prompt and tool results without omissions', () => {
+      const prompt = 'Drop a ball from 5 m with mass 2 kg and initial speed 0 m/s'
+      const actions: PhysLabAction[] = [
+        {
+          id: 'a1',
+          tool: 'solve' as any,
+          args: { expression: 'v = sqrt(2 * 9.8 * 5)' },
+          result: { answer: '9.899', checked: true }
+        }
+      ]
+      const known = extractKnownNumbers(prompt, actions)
+      expect(known.has('5')).toBe(true)
+      expect(known.has('2')).toBe(true)
+      expect(known.has('0')).toBe(true)
+      expect(known.has('9.8')).toBe(true)
+      expect(known.has('9.899')).toBe(true)
+      expect(known.has('42')).toBe(false)
+    })
+
+    it('identifies answer or result lines versus normal explanation steps', () => {
+      expect(isAnswerOrResultLine('Final Answer: 14.5 m/s')).toBe(true)
+      expect(isAnswerOrResultLine('Therefore, the acceleration is 3.2 m/s^2.')).toBe(true)
+      expect(isAnswerOrResultLine('Thus x = 5.')).toBe(true)
+      expect(isAnswerOrResultLine('The answer is $\\boxed{12}$.')).toBe(true)
+      expect(isAnswerOrResultLine('a = 9.8 m/s^2')).toBe(true)
+
+      expect(isAnswerOrResultLine('Step 1: Write down the equations of motion.')).toBe(false)
+      expect(isAnswerOrResultLine('Now we consider the free body diagram.')).toBe(false)
+      expect(isAnswerOrResultLine('The mass cancels out algebraically.')).toBe(false)
+    })
+
+    it('identifies step numbers, list items, and formula exponents as structural (never greyed)', () => {
+      const lineStep = 'Step 1: Draw the diagram'
+      expect(isStepOrStructuralNumber(lineStep, 5, '1')).toBe(true)
+
+      const lineList = '1. First determine the forces'
+      expect(isStepOrStructuralNumber(lineList, 0, '1')).toBe(true)
+
+      const lineExp = 'm/s^2'
+      expect(isStepOrStructuralNumber(lineExp, 4, '2')).toBe(true)
+
+      const lineSub = 'v_0 = 0'
+      expect(isStepOrStructuralNumber(lineSub, 2, '0')).toBe(true)
+
+      const lineFree = 'The value is 42'
+      expect(isStepOrStructuralNumber(lineFree, 13, '42')).toBe(false)
     })
   })
 })

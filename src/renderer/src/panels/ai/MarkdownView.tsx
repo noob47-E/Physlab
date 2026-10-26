@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
@@ -16,6 +16,7 @@ import { enterMode } from '../../app/layout'
 
 interface MarkdownViewProps {
   content: string
+  studentPrompt?: string
   think?: string
   agentTraces?: { agent: SpecialAgent; summary: string }[]
   actions?: PhysLabAction[]
@@ -165,8 +166,113 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
   return chips
 }
 
+/**
+ * Extracts all known numbers from the student's prompt and tool results.
+ */
+export function extractKnownNumbers(
+  studentPrompt?: string,
+  actions?: PhysLabAction[]
+): Set<string> {
+  const set = new Set<string>()
+
+  const addFromText = (text: string) => {
+    if (!text) return
+    const matches = text.match(/[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g)
+    if (matches) {
+      for (const m of matches) {
+        set.add(m)
+        if (m.startsWith('-') || m.startsWith('+')) {
+          set.add(m.slice(1))
+        }
+        const n = parseFloat(m)
+        if (Number.isFinite(n)) {
+          set.add(String(n))
+          if (Number.isInteger(n)) {
+            set.add(String(Math.trunc(n)))
+          }
+        }
+      }
+    }
+  }
+
+  if (studentPrompt) {
+    addFromText(studentPrompt)
+  }
+
+  if (actions && Array.isArray(actions)) {
+    for (const act of actions) {
+      if (act.args) {
+        addFromText(JSON.stringify(act.args))
+      }
+      if (act.result) {
+        addFromText(JSON.stringify(act.result))
+      }
+    }
+  }
+
+  return set
+}
+
+/**
+ * Checks whether a line represents an AI answer or result line.
+ */
+export function isAnswerOrResultLine(line: string): boolean {
+  if (!line) return false
+  if (line.includes('\\boxed{')) return true
+  const trimmed = line.trim()
+  if (
+    /^(?:[*#\s>-]*)(?:(?:final\s+)?answer|result|conclusion|solution)\s*[:=]/i.test(trimmed) ||
+    /^(?:[*#\s>-]*)(?:therefore|thus|hence|so)\b/i.test(trimmed) ||
+    /^(?:[*#\s>-]*)(?:the\s+(?:final\s+)?answer\s+is|the\s+result\s+is)\b/i.test(trimmed) ||
+    /^(?:[*#\s>-]*)[a-zA-Z_](?:_[a-zA-Z0-9]+)?\s*=\s*[-+]?\d+/i.test(trimmed)
+  ) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Checks whether a number is a step indicator, list index, or formula exponent/structural number.
+ */
+export function isStepOrStructuralNumber(
+  line: string,
+  startIdx: number,
+  matchStr: string
+): boolean {
+  const prefix = line.slice(0, startIdx)
+  const suffix = line.slice(startIdx + matchStr.length)
+
+  // Step 1, Part 2, Question 3, Case 1, etc.
+  if (/(?:step|part|question|stage|case|no\.?|rule)\s*$/i.test(prefix)) {
+    return true
+  }
+
+  // Numbered list item: e.g. "1. " or "1) " at the start of a line
+  if (/^\s*(?:[*#>-]*\s*)?$/i.test(prefix) && /^[.)]\s+/.test(suffix)) {
+    return true
+  }
+
+  // Parenthesized index: e.g. "(1)"
+  if (/\(\s*$/.test(prefix) && /^\s*\)/.test(suffix)) {
+    return true
+  }
+
+  // Subscript: e.g. "x_1", "v_0"
+  if (/_[a-zA-Z]*$/.test(prefix)) {
+    return true
+  }
+
+  // Exponent: e.g. "^2" or "^{2}"
+  if (/\^\s*\{?$/.test(prefix)) {
+    return true
+  }
+
+  return false
+}
+
 export const MarkdownView = memo(function MarkdownView({
   content,
+  studentPrompt,
   actions,
   verified,
   verification,
@@ -181,10 +287,32 @@ export const MarkdownView = memo(function MarkdownView({
   const cleanProse = stripIncompleteActionBlocks(cleanContent)
   const boxedAnswer = extractLastBoxed(fixedContent)
 
+  // Known numbers from student prompt and engine tool results
+  const knownNumbers = useMemo(() => {
+    return extractKnownNumbers(studentPrompt, actions)
+  }, [studentPrompt, actions])
+
   // Verification state logic: strictly ONE badge per answer
   const verState = verification?.state
   const isDisagreed = verState === 'disagrees'
   const isVerified = verification?.badgeText === 'Checked by PhysLab' || (verState === 'verified' && verified === true)
+
+  const isBoxedInvented = useMemo(() => {
+    if (!boxedAnswer || isVerified) return false
+    const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+    let m: RegExpExecArray | null
+    while ((m = numRegex.exec(boxedAnswer)) !== null) {
+      const matchStr = m[0]
+      const matchIdx = m.index
+      const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
+      const isKnown = knownNumbers.has(matchStr) || knownNumbers.has(absStr)
+      const isStructural = isStepOrStructuralNumber(boxedAnswer, matchIdx, matchStr)
+      if (!isKnown && !isStructural) {
+        return true
+      }
+    }
+    return false
+  }, [boxedAnswer, isVerified, knownNumbers])
 
   const challengeChips = getChallengeChips(actions, cleanProse)
 
@@ -236,7 +364,7 @@ export const MarkdownView = memo(function MarkdownView({
           {/* Model Answer (or single verified answer if not disagreed) */}
           {!isDisagreed ? (
             <div className="text-center py-1 overflow-x-auto">
-              <DisplayMath tex={`\\boxed{${boxedAnswer}}`} />
+              <DisplayMath tex={`\\boxed{${boxedAnswer}}`} isInvented={isBoxedInvented} />
             </div>
           ) : (
             <div className="border-t border-line pt-1.5 flex items-center justify-between text-fine text-ink-dim">
@@ -257,7 +385,7 @@ export const MarkdownView = memo(function MarkdownView({
 
       {/* 2. Step-by-Step Mathematical Solution Directly Visible */}
       <div className="markdown-prose flex flex-col gap-2">
-        {renderMarkdownWithMath(cleanProse)}
+        {renderMarkdownWithMath(cleanProse, knownNumbers)}
       </div>
 
       {/* 4. Interactive PhysLab Action Cards */}
@@ -416,7 +544,7 @@ export const MarkdownView = memo(function MarkdownView({
 /**
  * Parses markdown blocks and formats KaTeX math expressions safely.
  */
-function renderMarkdownWithMath(text: string): React.ReactNode[] {
+function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React.ReactNode[] {
   if (!text) return []
 
   const cleanText = text
@@ -433,9 +561,10 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
     if (buffer.length > 0) {
       const paragraphText = buffer.join('\n').trim()
       if (paragraphText) {
+        const isAns = isAnswerOrResultLine(paragraphText)
         nodes.push(
           <div key={`p_${nodes.length}`} className="my-1">
-            {renderInlineMath(paragraphText)}
+            {renderInlineMath(paragraphText, isAns, knownNumbers)}
           </div>
         )
       }
@@ -480,24 +609,26 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
 
     if (line.startsWith('### ')) {
       flushBuffer()
+      const isAns = isAnswerOrResultLine(line.slice(4))
       nodes.push(
         <h3
           key={`h3_${nodes.length}`}
           className="font-semibold text-lead text-ink-strong mt-2 mb-1"
         >
-          {renderInlineMath(line.slice(4))}
+          {renderInlineMath(line.slice(4), isAns, knownNumbers)}
         </h3>
       )
       continue
     }
     if (line.startsWith('## ')) {
       flushBuffer()
+      const isAns = isAnswerOrResultLine(line.slice(3))
       nodes.push(
         <h2
           key={`h2_${nodes.length}`}
           className="font-semibold text-title text-ink-strong mt-3 mb-1"
         >
-          {renderInlineMath(line.slice(3))}
+          {renderInlineMath(line.slice(3), isAns, knownNumbers)}
         </h2>
       )
       continue
@@ -505,10 +636,11 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
 
     if (line.trim().startsWith('* ') || line.trim().startsWith('- ')) {
       flushBuffer()
+      const isAns = isAnswerOrResultLine(line.trim().slice(2))
       nodes.push(
         <div key={`li_${nodes.length}`} className="flex items-start gap-2 ml-2 my-0.5">
           <span className="text-accent leading-none mt-1.5">•</span>
-          <div className="flex-1">{renderInlineMath(line.trim().slice(2))}</div>
+          <div className="flex-1">{renderInlineMath(line.trim().slice(2), isAns, knownNumbers)}</div>
         </div>
       )
       continue
@@ -522,9 +654,69 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
 }
 
 /**
+ * Highlights invented numbers in prose on answer/result lines.
+ */
+function renderProseWithInventedGuard(
+  text: string,
+  keyPrefix: string,
+  isAnswerLine?: boolean,
+  knownNumbers?: Set<string>
+): React.ReactNode {
+  if (!isAnswerLine || !knownNumbers) {
+    return text
+  }
+
+  const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+  const result: React.ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = numRegex.exec(text)) !== null) {
+    const matchStr = match[0]
+    const matchIdx = match.index
+    if (matchIdx > lastIndex) {
+      result.push(text.slice(lastIndex, matchIdx))
+    }
+
+    const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
+    const isKnown = knownNumbers.has(matchStr) || knownNumbers.has(absStr)
+    const isStructural = isStepOrStructuralNumber(text, matchIdx, matchStr)
+
+    if (!isKnown && !isStructural) {
+      result.push(
+        <span
+          key={`${keyPrefix}_inv_${matchIdx}`}
+          className="text-ink-faint inline-flex items-center gap-1 font-mono"
+          title="not checked"
+        >
+          <span className="opacity-70">{matchStr}</span>
+          <span className="text-[10px] text-ink-dim px-1 rounded bg-surface-2 border border-line font-sans font-normal">
+            not checked
+          </span>
+        </span>
+      )
+    } else {
+      result.push(matchStr)
+    }
+
+    lastIndex = matchIdx + matchStr.length
+  }
+
+  if (lastIndex < text.length) {
+    result.push(text.slice(lastIndex))
+  }
+
+  return result.length > 0 ? result : text
+}
+
+/**
  * Safely renders inline KaTeX math ($...$) and bold/code formatting.
  */
-function renderInlineMath(text: string): React.ReactNode {
+function renderInlineMath(
+  text: string,
+  isAnswerLine?: boolean,
+  knownNumbers?: Set<string>
+): React.ReactNode {
   // Pre-sanitize unescaped control chars and strip stray '$' characters surrounding \boxed formulas
   const preCleaned = repairControlCharLatex(text)
     .replace(/\$\s*(\\boxed\{[^}]+\})\s*\$/g, '$1')
@@ -543,19 +735,52 @@ function renderInlineMath(text: string): React.ReactNode {
 
     if (isDelimitedMath || isDirectBoxed) {
       const tex = repairControlCharLatex(part.replace(/^\$+|\$+$/g, '').trim())
+
+      let hasInvented = false
+      if (isAnswerLine && knownNumbers) {
+        const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+        let m: RegExpExecArray | null
+        while ((m = numRegex.exec(tex)) !== null) {
+          const matchStr = m[0]
+          const matchIdx = m.index
+          const absStr = matchStr.startsWith('-') || matchStr.startsWith('+') ? matchStr.slice(1) : matchStr
+          const isKnown = knownNumbers.has(matchStr) || knownNumbers.has(absStr)
+          const isStructural = isStepOrStructuralNumber(tex, matchIdx, matchStr)
+          if (!isKnown && !isStructural) {
+            hasInvented = true
+            break
+          }
+        }
+      }
+
       try {
         const html = katex.renderToString(tex, {
           displayMode: false,
           throwOnError: false,
           output: 'html'
         })
-        return (
+        const node = (
           <span
             key={idx}
             className="inline-block mx-0.5 align-middle"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )
+        if (hasInvented) {
+          return (
+            <span
+              key={idx}
+              className="text-ink-faint opacity-70 inline-flex items-center gap-1 font-mono"
+              title="not checked"
+            >
+              {node}
+              <span className="text-[10px] text-ink-dim px-1 rounded bg-surface-2 border border-line font-sans font-normal">
+                not checked
+              </span>
+            </span>
+          )
+        }
+        return node
       } catch {
         return (
           <code key={idx} className="font-mono text-fine text-code">
@@ -570,19 +795,19 @@ function renderInlineMath(text: string): React.ReactNode {
       return boldParts.map((bp, bidx) =>
         bidx % 2 === 1 ? (
           <strong key={`${idx}_${bidx}`} className="font-semibold text-ink-strong">
-            {bp}
+            {renderProseWithInventedGuard(bp, `${idx}_${bidx}`, isAnswerLine, knownNumbers)}
           </strong>
         ) : (
-          bp
+          renderProseWithInventedGuard(bp, `${idx}_${bidx}`, isAnswerLine, knownNumbers)
         )
       )
     }
 
-    return part
+    return renderProseWithInventedGuard(part, `${idx}`, isAnswerLine, knownNumbers)
   })
 }
 
-function DisplayMath({ tex }: { tex: string }) {
+function DisplayMath({ tex, isInvented }: { tex: string; isInvented?: boolean }) {
   const cleanTex = repairControlCharLatex(tex)
   const isLong = cleanTex.length > 28
   let html = ''
@@ -601,7 +826,7 @@ function DisplayMath({ tex }: { tex: string }) {
     return <div className="font-mono text-fine text-warn my-2">{cleanTex}</div>
   }
 
-  return (
+  const content = (
     <div
       className={`my-1.5 p-2 rounded bg-surface-1 overflow-x-hidden text-center ${
         isLong ? 'text-fine' : 'text-small'
@@ -609,4 +834,17 @@ function DisplayMath({ tex }: { tex: string }) {
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
+
+  if (isInvented) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <div className="opacity-70 text-ink-faint w-full">{content}</div>
+        <span className="text-[10px] text-ink-dim px-1.5 py-0.5 rounded bg-surface-2 border border-line">
+          not checked
+        </span>
+      </div>
+    )
+  }
+
+  return content
 }

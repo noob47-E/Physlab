@@ -486,6 +486,11 @@ export function AiCopilot() {
                                 )
                               }
 
+                              const studentPrompt = messages
+                                .slice(0, idx)
+                                .reverse()
+                                .find((prev) => prev.role === 'user')?.content
+
                               return (
                                 <MarkdownView
                                   content={
@@ -495,6 +500,7 @@ export function AiCopilot() {
                                         )
                                       : m.content
                                   }
+                                  studentPrompt={studentPrompt}
                                   think={m.think ?? streamingTrace?.think}
                                   agentTraces={m.agentTraces ?? streamingTrace?.agentTraces}
                                   actions={m.actions}
