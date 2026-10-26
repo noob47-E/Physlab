@@ -175,6 +175,26 @@ describe('AI Tools Layer (src/renderer/src/ai/tools.ts)', () => {
     expect(useSandbox.getState().bodies.length).toBe(3)
   })
 
+  it('Fix 9 [Bug 5]: build_experiment cleans previous bodies and links, resets selection to null', async () => {
+    // Put old body and selection into sandbox
+    const old = useSandbox.getState().addBody('box', [1, 1, 0])
+    useSandbox.setState({ selection: old.id, links: [{ id: 'link1', kind: 'rod', a: old.id, b: 'other' } as any] })
+    expect(useSandbox.getState().selection).toBe(old.id)
+    expect(useSandbox.getState().links).toHaveLength(1)
+
+    // Build new experiment
+    const res = await runTool('build_experiment', {
+      floor: true,
+      objects: [{ kind: 'sphere', mass: 1, x: 0, y: 5 }]
+    })
+    expect(res.ok).toBe(true)
+    const st = useSandbox.getState()
+    expect(st.selection).toBeNull()
+    expect(st.links).toHaveLength(0)
+    expect(st.bodies.find((b) => b.id === old.id)).toBeUndefined()
+    expect(st.bodies.length).toBe(2) // floor + sphere
+  })
+
   it('E2: set_param adjusts speed and guards against zero division when at rest', async () => {
     const buildRes = await runTool('build_experiment', {
       objects: [{ kind: 'sphere', mass: 1, x: 0, y: 4, vx: 0, vy: 0 }]

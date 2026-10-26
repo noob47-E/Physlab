@@ -658,6 +658,10 @@ export async function runTool(
           })
         }
 
+        // Reset selection to null so old body selections do not persist
+        useSandbox.setState({ selection: null, partner: null })
+        resetCamera()
+
         if (engine.world) {
           const s = useSandbox.getState()
           engine.world.rebuild(s.bodies, s.links)
