@@ -327,6 +327,26 @@ export async function autoConnectLocalBrain(): Promise<{
 
 export const MAX_TOOL_ROUNDS = 4
 
+/**
+ * Estimates number of questions in a prompt using numbering, conjunctions, semicolons, and question marks.
+ */
+export function countQuestionsInPrompt(prompt: string): number {
+  if (!prompt || typeof prompt !== 'string') return 1
+  const segments = prompt
+    .split(/\b(?:and|also)\b|[;\n\?]|\b\d+[\.\)]\s+/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2)
+  return Math.max(1, segments.length)
+}
+
+/**
+ * Calculates dynamic tool round ceiling: 4 + 2 * (number of questions), hard ceiling 12.
+ */
+export function computeMaxToolRounds(prompt: string): number {
+  const qCount = countQuestionsInPrompt(prompt)
+  return Math.min(12, Math.max(4, 4 + 2 * qCount))
+}
+
 export interface ChatMessageLike {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content?: string | null
@@ -388,6 +408,15 @@ export async function runToolLoop(
     const res = await chatFn({ messages, tools: TOOLS })
     if (!res.ok || !res.message) {
       const err = res.error ?? 'The AI needs the internet. Everything else in PhysLab works offline.'
+      if (executedActions.length > 0) {
+        // Quota: when every Gemini model is out, finish with the questions already answered and say which ones are left.
+        const summary = executedActions
+          .map((a, i) => `${i + 1}. ${a.tool}: ${a.result?.answer ? String(a.result.answer) : (a.result?.ok ? 'Done' : 'Failed')}`)
+          .join('\n')
+        const quotaNotice = `\n\n> Note: Model quota reached (${err}). Completed ${executedActions.length} question(s) before quota ended.`
+        finalContent = (finalContent ? `${finalContent}\n\n` : `${summary}\n`) + quotaNotice
+        break
+      }
       options.onError?.(err)
       return { content: err, actions: executedActions, roundCount }
     }
@@ -502,6 +531,7 @@ export async function streamChatCompletion(
 
     callbacks.onChunk('Thinking…')
 
+    const dynamicMaxRounds = computeMaxToolRounds(newPrompt)
     const loopResult = await runToolLoop(
       messages,
       async (payload) => {
@@ -511,6 +541,7 @@ export async function streamChatCompletion(
         return { ok: false, error: 'PhysLab AI bridge unavailable' }
       },
       {
+        maxRounds: dynamicMaxRounds,
         onProgress: (caption) => {
           callbacks.onChunk(caption)
         },

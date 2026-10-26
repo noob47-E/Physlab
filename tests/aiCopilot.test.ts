@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildSystemPrompt, PHYSLAB_BRAIN_BASE_PROMPT } from '../src/renderer/src/ai/systemPrompt'
-import { runToolLoop, MAX_TOOL_ROUNDS } from '../src/renderer/src/ai/client'
+import { runToolLoop, MAX_TOOL_ROUNDS, countQuestionsInPrompt, computeMaxToolRounds } from '../src/renderer/src/ai/client'
 import {
   buildAppContext,
   buildInclineScene,
@@ -675,6 +675,111 @@ Simulation ready to run!`
         (m: any) => m.role === 'assistant'
       )
       expect(assistantMsgInPayload.thought_signature).toBe('sig_gemini_3')
+    })
+
+    it('E1: dynamically computes tool rounds with ceiling 12 and handles multi-question sequential solving', async () => {
+      expect(countQuestionsInPrompt('solve x^2-5x+6=0 and 2x+4=10')).toBe(2)
+      expect(countQuestionsInPrompt('1. solve x=1\n2. solve y=2\n3. solve z=3')).toBe(3)
+      expect(computeMaxToolRounds('solve x=1')).toBe(6) // 4 + 2*1 = 6
+      expect(computeMaxToolRounds('solve x=1 and y=2 and z=3 and w=4 and v=5 and u=6')).toBe(12) // capped at 12
+
+      let step = 0
+      const mockChatFn = vi.fn().mockImplementation(async () => {
+        step++
+        if (step === 1) {
+          return {
+            ok: true,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: {
+                    name: 'solve',
+                    arguments: JSON.stringify({ expression: 'x^2-5x+6=0' })
+                  }
+                }
+              ]
+            }
+          }
+        } else if (step === 2) {
+          return {
+            ok: true,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                {
+                  id: 'call_2',
+                  type: 'function',
+                  function: {
+                    name: 'solve',
+                    arguments: JSON.stringify({ expression: '2x+4=10' })
+                  }
+                }
+              ]
+            }
+          }
+        }
+        return {
+          ok: true,
+          message: {
+            role: 'assistant',
+            content: '1. x = 2, 3\n2. x = 3'
+          }
+        }
+      })
+
+      const result = await runToolLoop(
+        [{ role: 'user', content: 'solve x^2-5x+6=0 and 2x+4=10' }],
+        mockChatFn,
+        { maxRounds: computeMaxToolRounds('solve x^2-5x+6=0 and 2x+4=10') }
+      )
+
+      expect(result.actions).toHaveLength(2)
+      expect(result.actions[0].tool).toBe('solve')
+      expect(result.actions[1].tool).toBe('solve')
+      expect(result.content).toContain('1. x = 2, 3')
+      expect(result.content).toContain('2. x = 3')
+    })
+
+    it('E1: finishes with answered questions when quota is exhausted', async () => {
+      let step = 0
+      const mockChatFn = vi.fn().mockImplementation(async () => {
+        step++
+        if (step === 1) {
+          return {
+            ok: true,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                {
+                  id: 'call_q1',
+                  type: 'function',
+                  function: {
+                    name: 'solve',
+                    arguments: JSON.stringify({ expression: 'x^2-5x+6=0' })
+                  }
+                }
+              ]
+            }
+          }
+        }
+        return {
+          ok: false,
+          error: 'RESOURCE_EXHAUSTED: Gemini quota exhausted.'
+        }
+      })
+
+      const result = await runToolLoop(
+        [{ role: 'user', content: 'solve x^2-5x+6=0 and 2x+4=10' }],
+        mockChatFn,
+        { maxRounds: 10 }
+      )
+
+      expect(result.actions).toHaveLength(1)
+      expect(result.content).toContain('solve:')
+      expect(result.content).toContain('Model quota reached')
     })
   })
 })
