@@ -292,7 +292,39 @@ export function validateAction(obj: unknown): { ok: boolean; reason: string } {
     }
 
     case 'sandbox_experiment': {
-      const expType = (args.experimentType as ExperimentType) || 'incline_friction'
+      if (args.presetId) {
+        return { ok: true, reason: 'Valid sandbox_experiment preset action' }
+      }
+      const expType = String(args.experimentType || 'incline_friction')
+      if (expType === 'freefall') {
+        const height = Number(args.height ?? args.heightM ?? 10)
+        const mass = Number(args.massKg ?? args.mass ?? 2)
+        if (isNaN(height) || height <= 0 || height > 1e4) {
+          return { ok: false, reason: 'Height must be within (0, 10000] m' }
+        }
+        if (isNaN(mass) || mass <= 0 || mass > 1e4) {
+          return { ok: false, reason: 'Mass must be strictly positive' }
+        }
+        return { ok: true, reason: 'Valid freefall action' }
+      }
+      const PRESETS = [
+        'cradle',
+        'newtons-cradle',
+        'newton-cradle',
+        'pendulum',
+        'collision',
+        'spring',
+        'atwood',
+        'seesaw',
+        'lever',
+        'bounce',
+        'bouncing',
+        'rollslide',
+        'orbit'
+      ]
+      if (PRESETS.includes(expType)) {
+        return { ok: true, reason: 'Valid sandbox_experiment preset action' }
+      }
       if (!(expType in SANDBOX_SPECS)) {
         return { ok: false, reason: `Unknown experimentType "${expType}"` }
       }

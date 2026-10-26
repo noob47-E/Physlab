@@ -592,7 +592,7 @@ Simulation ready to run!`
 
       const res = await executePhysLabAction(expAction)
       expect(res.status).toBe('success')
-      expect(res.result?.message).toContain('readings sent to Lab Data')
+      expect((res.result as { message?: string })?.message).toContain('readings sent to Lab Data')
     })
 
     it('Fix 4: buildAppContext accurately reads live scene objects, bodies, and lab tables', () => {
@@ -627,7 +627,7 @@ Simulation ready to run!`
       expect(geoTurn.actions[0].tool).toBe('run_commands')
       expect(geoTurn.actions[0].args.mode).toBe('shapes')
       const cmds = geoTurn.actions[0].args.commands as string[]
-      expect(cmds).toContain('t = Triangle(A, B, C)')
+      expect(cmds).toContain('Triangle(A, B, C)')
 
       const cubeTurn = preComputeEngineTurn('create a 3d cube with side 4')
       expect(cubeTurn.actions).toHaveLength(1)

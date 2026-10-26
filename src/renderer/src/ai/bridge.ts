@@ -388,6 +388,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
 
         // Switch to Calculator mode and run in pure math engine (calcStore auto-syncs)
         enterMode('calculator')
+        showPanel('ai_copilot')
+        setTimeout(() => showPanel('ai_copilot'), 60)
         if (input) {
           useCalc.setState({ input, mode: 'COMP' })
           const opToJob: Record<
@@ -403,18 +405,20 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           }
           const job = opToJob[op] ?? 'auto'
           usePure.getState().runLatex(input, job)
-          const triggerCalcEval = () => {
-            useCalc.setState({ input, mode: 'COMP' })
-            usePure.getState().runLatex(input, job)
+          const clickEquals = () => {
             if (typeof document !== 'undefined') {
-              const eqBtn = Array.from(document.querySelectorAll('button')).find(
-                (b) => b.textContent?.trim() === '=' && b.title?.includes('Work out the answer')
-              )
+              const eqBtn =
+                document.querySelector<HTMLButtonElement>('[data-tour="equals"]') ||
+                Array.from(document.querySelectorAll('button')).find(
+                  (b) => b.textContent?.trim() === '=' && b.title?.includes('Work out the answer')
+                )
               if (eqBtn) eqBtn.click()
             }
           }
-          setTimeout(triggerCalcEval, 60)
-          setTimeout(triggerCalcEval, 200)
+          setTimeout(clickEquals, 200)
+          setTimeout(clickEquals, 500)
+          setTimeout(clickEquals, 900)
+          setTimeout(clickEquals, 1400)
         }
 
         updatedAction.status = 'success'
@@ -439,7 +443,9 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           spring: 'spring',
           bouncing: 'bounce',
           bounce: 'bounce',
-          rollslide: 'rollslide'
+          rollslide: 'rollslide',
+          freefall: 'drop',
+          drop: 'drop'
         }
 
         const presetId = String(action.args.presetId || '')
@@ -462,7 +468,7 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
 
           updatedAction.status = 'success'
           updatedAction.result = {
-            message: `Loaded Sandbox preset "${targetPreset}", simulation running with ${samples.length} readings recorded to Lab Data.`
+            message: `Loaded Sandbox preset "${targetPreset}", simulation running with ${samples.length} readings sent to Lab Data.`
           }
           break
         }
@@ -715,10 +721,22 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         if (view) {
           scene().setViewMode(view)
         }
-        for (const cmd of commands) {
-          if (cmd.trim()) {
-            await runCommand(cmd.trim())
+        for (const rawCmd of commands) {
+          let cmd = rawCmd.trim()
+          if (!cmd) continue
+
+          // Sanitize: strip reserved LHS assignments to geometry commands like 't = Triangle(...)', 'c = Circle(...)', 's = Segment(...)'
+          const reservedAssign = cmd.match(/^\s*(?:[txyzr]|theta|[a-z])\s*=\s*([A-Z]\w*\s*\(.*\))\s*$/)
+          if (reservedAssign) {
+            cmd = reservedAssign[1].trim()
           }
+
+          // Sanitize: skip 'Distance(...)' or 'd = Distance(...)' as distance is not a command in PhysLab CommandBar
+          if (/^\s*(?:[a-zA-Z0-9_]+\s*=\s*)?Distance\s*\(/i.test(cmd)) {
+            continue
+          }
+
+          await runCommand(cmd)
         }
         setTimeout(resetCamera, 200)
         showPanel('ai_copilot')
@@ -1022,18 +1040,26 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
     const commands: string[] = []
 
     if (/(?:triangle|draw\s+triangle|create\s+triangle)/i.test(p)) {
+      const coordMatches = [...p.matchAll(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/g)]
+      const p1 = coordMatches[0] ? `(${coordMatches[0][1]}, ${coordMatches[0][2]})` : '(0, 0)'
+      const p2 = coordMatches[1] ? `(${coordMatches[1][1]}, ${coordMatches[1][2]})` : '(4, 0)'
+      const p3 = coordMatches[2] ? `(${coordMatches[2][1]}, ${coordMatches[2][2]})` : '(2, 3)'
       commands.push(
-        'A = (0, 0)',
-        'B = (4, 0)',
-        'C = (2, 3)',
-        't = Triangle(A, B, C)',
-        'M = Midpoint(A, B)',
-        'd = Distance(A, B)'
+        `A = ${p1}`,
+        `B = ${p2}`,
+        `C = ${p3}`,
+        'Triangle(A, B, C)',
+        'M = Midpoint(A, B)'
       )
     } else if (/(?:circle|draw\s+circle)/i.test(p)) {
-      commands.push('O = (0, 0)', 'c = Circle(O, 3)')
+      const radMatch = p.match(/(?:radius|r\s*=)\s*(\d+(?:\.\d+)?)/i)
+      const rad = radMatch ? radMatch[1] : '3'
+      commands.push('O = (0, 0)', `Circle(O, ${rad})`)
     } else if (/(?:midpoint|segment|distance\s+between)/i.test(p)) {
-      commands.push('A = (-2, 1)', 'B = (4, 5)', 's = Segment(A, B)', 'M = Midpoint(A, B)', 'd = Distance(A, B)')
+      const coordMatches = [...p.matchAll(/\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/g)]
+      const p1 = coordMatches[0] ? `(${coordMatches[0][1]}, ${coordMatches[0][2]})` : '(-2, 1)'
+      const p2 = coordMatches[1] ? `(${coordMatches[1][1]}, ${coordMatches[1][2]})` : '(4, 5)'
+      commands.push(`A = ${p1}`, `B = ${p2}`, 'Segment(A, B)', 'M = Midpoint(A, B)')
     } else if (/(?:cube|cuboid|cylinder|solid\s+sphere|cone|prism|pyramid)/i.test(p)) {
       mode = 'shapes'
       view = '3d'

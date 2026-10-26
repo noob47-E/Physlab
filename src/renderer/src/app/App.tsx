@@ -38,7 +38,7 @@ const Maths = lazy(() => import('../panels/Maths').then((m) => ({ default: m.Mat
 const Graphs = lazy(() => import('../panels/Graphs').then((m) => ({ default: m.Graphs })))
 const Expressions = lazy(() => import('../panels/Expressions').then((m) => ({ default: m.Expressions })))
 const GpuLab = lazy(() => import('../panels/GpuLab').then((m) => ({ default: m.GpuLab })))
-const SandboxPanel = lazy(() => import('../panels/Sandbox').then((m) => ({ default: m.Sandbox })))
+import { Sandbox as SandboxPanel } from '../panels/Sandbox'
 const Practice = lazy(() => import('../panels/Practice').then((m) => ({ default: m.Practice })))
 const LabData = lazy(() => import('../panels/LabData').then((m) => ({ default: m.LabData })))
 const AiCopilot = lazy(() => import('../panels/AiCopilot').then((m) => ({ default: m.AiCopilot })))
