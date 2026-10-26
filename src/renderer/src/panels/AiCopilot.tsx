@@ -174,7 +174,18 @@ export function AiCopilot() {
           const { autoExecuteActions } = useAiStore.getState()
           if (autoExecuteActions && verification.state !== 'disagrees') {
             for (const act of actions) {
-              void executePhysLabAction(act)
+              void executePhysLabAction(act).then((updatedAct) => {
+                const thread = useAiStore
+                  .getState()
+                  .threads.find((t) => t.id === useAiStore.getState().activeThreadId)
+                const msg = thread?.messages.find((m) => m.id === botMsg.id)
+                if (msg && msg.actions) {
+                  const updatedActions = msg.actions.map((a) =>
+                    a.id === updatedAct.id ? updatedAct : a
+                  )
+                  useAiStore.getState().updateMessage(botMsg.id, { actions: updatedActions })
+                }
+              })
             }
           }
         },
@@ -187,6 +198,17 @@ export function AiCopilot() {
       }
     )
   }
+
+  const handleSendRef = useRef(handleSend)
+  handleSendRef.current = handleSend
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      ;(window as unknown as { sendAiMessage?: (p: string) => Promise<void> }).sendAiMessage = (
+        p: string
+      ) => handleSendRef.current(p)
+    }
+  }, [])
 
   // Quick test prompts
   const runQuickTest = (prompt: string) => {

@@ -219,6 +219,24 @@ $$\\boxed{a = 0\\text{ m/s}^2}$$`
       ])
     })
 
+    it('extracts plain <think> without agent markers', () => {
+      const raw = `<think>
+Evaluating arithmetic expression: 12 + 3233 + (-123).
+First: 12 + 3233 = 3245.
+Next: 3245 - 123 = 3122.
+3-way truth check verified exact integer result 3122.
+Dispatching calc_solve action to display in Calculator.
+</think>
+
+To evaluate $12 + 3233 + (-123)$:
+The exact sum is 3122.`
+
+      const { cleanContent, think } = extractThinkTrace(raw)
+      expect(think).toContain('Evaluating arithmetic expression')
+      expect(cleanContent).not.toContain('Evaluating arithmetic expression')
+      expect(cleanContent).toContain('To evaluate $12 + 3233 + (-123)$:')
+    })
+
     it('extracts <physlab_action> JSON blocks and cleans prose', () => {
       const raw = `Here is the experiment:
 <physlab_action>

@@ -86,6 +86,10 @@ export function extractThinkTrace(text: string): {
       const lastCloseIdx = text.lastIndexOf('</think>')
       think = text.slice(0, lastCloseIdx).trim()
       cleanContent = text.slice(lastCloseIdx + 8).trim()
+    } else if (/^\s*<think>/i.test(text)) {
+      // In-progress think block (streaming before closing tag)
+      think = text.replace(/^\s*<think>/i, '').trim()
+      cleanContent = ''
     } else if (/\[AGENT:\s*[^\]]+\]/i.test(text)) {
       const firstAgentIdx = text.search(/\[AGENT:\s*[^\]]+\]/i)
       think = text.slice(firstAgentIdx).trim()
@@ -346,10 +350,18 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           }
           const job = opToJob[op] ?? 'auto'
           usePure.getState().runLatex(input, job)
-          setTimeout(() => {
+          const triggerCalcEval = () => {
             useCalc.setState({ input, mode: 'COMP' })
             usePure.getState().runLatex(input, job)
-          }, 60)
+            if (typeof document !== 'undefined') {
+              const eqBtn = Array.from(document.querySelectorAll('button')).find(
+                (b) => b.textContent?.trim() === '=' && b.title?.includes('Work out the answer')
+              )
+              if (eqBtn) eqBtn.click()
+            }
+          }
+          setTimeout(triggerCalcEval, 60)
+          setTimeout(triggerCalcEval, 200)
         }
 
         updatedAction.status = 'success'
@@ -749,7 +761,7 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
       id: `act_${Date.now()}_incline`,
       tool: 'sandbox_experiment',
       args: {
-        experimentType: 'incline',
+        experimentType: 'incline_friction',
         angleDeg,
         massKg,
         muStatic,

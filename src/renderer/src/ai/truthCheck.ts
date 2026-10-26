@@ -72,7 +72,8 @@ export function toLinearMath(raw: string): string {
  */
 export function validatePhysicsScene(args: Record<string, unknown>): PhysicsValidationResult {
   const reasons: string[] = []
-  const expType = String(args.experimentType ?? 'incline_friction')
+  let expType = String(args.experimentType ?? 'incline_friction')
+  if (expType === 'incline') expType = 'incline_friction'
 
   if (expType === 'incline_friction') {
     const rawMass = args.massKg ?? args.mass ?? args.m
