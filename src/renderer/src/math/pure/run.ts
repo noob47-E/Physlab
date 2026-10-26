@@ -5,6 +5,7 @@
 // working, which is what makes it all testable without a browser.
 
 import { math, preprocess, splitArgs } from '../expr'
+import { latexToMath } from '../latexToMath'
 import { calculusCall } from '../calculusCall'
 import { R0, R1, rAbs, rAdd, rEq, rIsNeg, rMul, rSub, rTex, rat, type Rat } from './rat'
 import {
@@ -438,6 +439,15 @@ export function runPure(job: JobId, input: string): Working {
       // just a number" was the whole of the answer to √50 (P22b). It is simplified, with the steps
       // the textbook gives; this job is where Auto sends a numeric line, so it is worked from here.
       if (isSurdLine(src)) return surdWorking(src)
+      let normalized = src
+      if (src.includes('\\')) {
+        try {
+          normalized = latexToMath(src)
+        } catch {
+          normalized = src
+        }
+      }
+      if (isSurdLine(normalized)) return surdWorking(src)
       try {
         const e = parseExpr(src)
         if (isConstant(e)) {
@@ -515,25 +525,33 @@ export function suggestJob(src: string): JobId {
   if (call) return call.name === 'diff' ? 'differentiate' : 'integrate'
   if (parseNormalQuery(s)) return 'normal'
   if (WHOLE.test(s)) return 'primes'
+  let normalized = s
+  if (s.includes('\\')) {
+    try {
+      normalized = latexToMath(s)
+    } catch {
+      normalized = s
+    }
+  }
   // Through writeTimes, because an i typed in front of its root reaches here glued to the root's
   // name ("isqrt(3)"): 1/(√2 − i√5) went to Divide and (1 + i√3)² to Factorise (P22).
-  const hasI = /(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(writeTimes(s))
+  const hasI = /(^|[^a-zA-Z])i([^a-zA-Z]|$)/.test(writeTimes(normalized))
   // HCF takes a list, and a list's commas stand outside every bracket (asList splits it the same
   // way). A comma inside one belongs to a function: ∛8 arrives as nthRoot(8, 3) and log₂8 as
   // log(2, 8), and both were sent to HCF, which refused them (H15); only a line with i was spared (P22).
   // A system of equations with commas (x + y = 3, 2x - y = 0) belongs to Solve, not HCF.
   if (s.includes(',') && s.split(',').filter((part) => part.includes('=')).length >= 2) return 'solve'
-  if (commaOutsideBrackets(s)) return 'hcf'
+  if (commaOutsideBrackets(s) || commaOutsideBrackets(normalized)) return 'hcf'
   if (hasI) return 'complex'
   // sin²x + cos²x = 1 is an identity to prove, not an equation to solve; sin x = 0.5 stays with Solve.
-  if (isTrigIdentity(s)) return 'trigidentity'
+  if (isTrigIdentity(s) || isTrigIdentity(normalized)) return 'trigidentity'
   if (s.includes('=')) return 'solve'
 
   // A plain sum — 1/2 + 1/3 — has nothing to divide out or split; Factorise says so in one
   // sentence, where Divide used to complain that sqrt is not something it can factorise. A line
   // with a square root in it — 3√2 + 2√2, 1/(√3 + 1) — is simplified from the same job (P22b);
   // isSurdLine also holds 3sqrt(2), whose glued number made isNumericLine miss it and Divide refuse it.
-  if (isSurdLine(s) || isNumericLine(s)) return 'factor'
+  if (isSurdLine(s) || isSurdLine(normalized) || isNumericLine(s) || isNumericLine(normalized)) return 'factor'
   if (s.includes('/')) return fractionJob(s)
   // A quadratic with no real roots, or x⁴ + 1, is exactly what "Factorise with i" is for; sending
   // it to the real factoriser would only produce "does not break into simpler factors".

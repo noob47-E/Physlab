@@ -6,6 +6,7 @@
 import { type MathNode } from 'mathjs'
 import { rInv, rIsOne, rIsZero, rTex } from '../rat'
 import { math } from '../../expr'
+import { latexToMath } from '../../latexToMath'
 import { type DigitSettings } from '../../format'
 import { tidyComplex } from '../../../calc/engine'
 import {
@@ -96,7 +97,15 @@ function decimalAnswer(title: string, input: string, node: MathNode, src: string
  */
 export function surdComplexWorking(src: string, digits: DigitSettings, real = false): Working {
   const title = real ? SURD_TITLE : 'Complex number'
-  const text = readable(src)
+  let normalized = src
+  if (src.includes('\\')) {
+    try {
+      normalized = latexToMath(src)
+    } catch {
+      normalized = src
+    }
+  }
+  const text = readable(normalized)
   let node: MathNode
   try {
     node = math.parse(text)
@@ -107,20 +116,20 @@ export function surdComplexWorking(src: string, digits: DigitSettings, real = fa
     }
     return failed(title, src, 'I could not read that. Check the brackets and signs.')
   }
-  const input = typedTex(node, undefined, roundedLiterals(text, node))
+  const input = src.includes('\\') ? src : typedTex(node, undefined, roundedLiterals(text, node))
   const strays = straysOf(node)
   if (strays.length) return failed(title, input, `This has ${strays.join(', ')} in it. ${real ? 'Surds are worked on numbers' : 'The complex tools work on numbers'}, not letters.`)
-  if (typedPastExact(text)) return decimalAnswer(title, input, node, src, real ? forSurds(HELD_ROUNDED) : HELD_ROUNDED, digits, real)
+  if (typedPastExact(text)) return decimalAnswer(title, input, node, normalized, real ? forSurds(HELD_ROUNDED) : HELD_ROUNDED, digits, real)
   const seen: Seen = { roots: new Map(), i: false }
   try {
-    if (real) return realSteps(title, input, node, src, digits)
+    if (real) return realSteps(title, input, node, normalized, digits)
     const { frac, plain } = readLine(node, seen)
     if (!seen.i) return failed(title, input, NO_I)
-    return surdSteps(title, input, node, frac, plain, seen, src, digits)
+    return surdSteps(title, input, node, frac, plain, seen, normalized, digits)
   } catch (err) {
     if (real && err instanceof ComplexLine) return surdComplexWorking(src, digits)
     if (real && err instanceof ZeroBottom) return failed(title, input, 'The bottom comes to zero.')
-    return decimalAnswer(title, input, node, src, real ? realReasonFor(err) : reasonFor(err), digits, real)
+    return decimalAnswer(title, input, node, normalized, real ? realReasonFor(err) : reasonFor(err), digits, real)
   }
 }
 
@@ -312,9 +321,14 @@ const SURD_TITLE = 'Simplify surds'
 export function isSurdLine(src: string): boolean {
   let text: string
   try {
-    text = readable(src)
+    const s = src.includes('\\') ? latexToMath(src) : src
+    text = readable(s)
   } catch {
-    return false
+    try {
+      text = readable(src)
+    } catch {
+      return false
+    }
   }
   if (!/(?<![A-Za-z_])sqrt\s*\(/.test(text)) return false
   return !/[A-Za-z]/.test(text.replace(/(?<![A-Za-z_])(?:sqrt|cbrt|nthRoot|abs|ln|log10|log2|log|exp|pi)(?![A-Za-z_\d])/g, ''))

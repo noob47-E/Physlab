@@ -32,6 +32,7 @@ import { polyRoots } from '../src/renderer/src/calc/engine'
 import { keepVerified, polynomialRootRows, realAndPairs } from '../src/renderer/src/calc/roots'
 import { math, setAngleMode } from '../src/renderer/src/math/expr'
 import { JOBS, runPure, suggestJob } from '../src/renderer/src/math/pure/run'
+import { isSurdLine } from '../src/renderer/src/math/pure/complex/surds'
 import { PANEL_TITLES } from '../src/renderer/src/app/panels'
 import type { Working } from '../src/renderer/src/math/pure/work'
 import { readSource } from './helpers/repo'
@@ -169,6 +170,26 @@ describe('one button: = is the only button, the working is folded under its answ
     ]
     for (const [line, yes] of wanted) expect(wantsWorking(line), line).toBe(yes)
     expect(suggestJob('diff(x^(3)sin(x), x)')).toBe('differentiate')
+  })
+
+  it('Fix 2 [Bug 3]: Plain number root evaluation for Calculator working without falling through to factorise', () => {
+    const raw = String.raw`\sqrt{2\cdot 9.81\cdot 5}`
+    expect(isSurdLine(raw)).toBe(true)
+    expect(suggestJob(raw)).toBe('factor')
+    expect(wantsWorking(raw)).toBe(true)
+
+    const wRaw = runPure('factor', raw)
+    expect(wRaw.title).toBe('Simplify surds')
+    expect(wRaw.error).toBeUndefined()
+    expect(wRaw.answers.length).toBeGreaterThanOrEqual(2)
+    expect(wRaw.answers[0].tex).toContain(String.raw`\frac{3\sqrt{1090}}{10}`)
+    expect(wRaw.answers[1].tex).toMatch(/9\.9/)
+
+    const r = equals(raw)
+    const out = reconcile(r, wRaw)
+    expect(out.verdict).toBe('agree')
+    expect(out.result.exact).toContain(String.raw`\frac{3\sqrt{1090}}{10}`)
+    expect(out.result.main).toMatch(/9\.90/)
   })
 })
 

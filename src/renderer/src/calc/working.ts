@@ -409,6 +409,9 @@ const inequalityMark = (working: Working): { inequality?: true } => (working.met
  * away from the working's number (2.6×10⁻¹⁷ against 0 for a singular decimal matrix) the card shows the working's own number.
  */
 function exactDeterminantCard(card: EvalResult, working: Working): EvalResult {
+  if (working.title === 'Simplify surds' && working.answers[0]?.tex && !card.exact) {
+    return { ...card, exact: working.answers[0].tex }
+  }
   if (working.title !== DETERMINANT_TITLE || working.answers.length !== 1) return card
   const exact = numberOfTex(working.answers[0].tex)
   if (typeof exact !== 'number' || typeof card.value !== 'number' || card.value === exact) return card
