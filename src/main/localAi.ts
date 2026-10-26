@@ -19,29 +19,55 @@ let currentPort = 8080
 const defaultModelsDir = (): string => join(homedir(), 'PhysLab', 'models')
 const defaultBinDir = (): string => join(homedir(), 'PhysLab', 'bin')
 
-async function listGgufModels(dir?: string): Promise<ModelInfo[]> {
-  const targetDir = dir || defaultModelsDir()
-  if (!existsSync(targetDir)) return []
-  try {
-    const files = await readdir(targetDir)
-    const models: ModelInfo[] = []
-    for (const file of files) {
-      if (file.toLowerCase().endsWith('.gguf')) {
-        const fullPath = join(targetDir, file)
-        const s = await stat(fullPath)
-        const sizeGb = Math.round((s.size / (1024 * 1024 * 1024)) * 100) / 100
-        models.push({
-          filename: file,
-          fullPath,
-          sizeBytes: s.size,
-          sizeFormatted: `${sizeGb} GB`
-        })
-      }
-    }
-    return models
-  } catch {
-    return []
+function findLlamaServerExe(): string | null {
+  const candidates = [
+    join(defaultBinDir(), 'llama-server.exe'),
+    join(app.getAppPath(), 'bin', 'llama-server.exe'),
+    join(process.resourcesPath, 'bin', 'llama-server.exe')
+  ]
+  for (const c of candidates) {
+    if (existsSync(c)) return c
   }
+  return null
+}
+
+async function listGgufModels(dir?: string): Promise<ModelInfo[]> {
+  const dirsToScan = dir
+    ? [dir]
+    : [
+        defaultModelsDir(),
+        join(app.getAppPath(), 'models'),
+        join(process.resourcesPath, 'models')
+      ]
+
+  const models: ModelInfo[] = []
+  const seenPaths = new Set<string>()
+
+  for (const targetDir of dirsToScan) {
+    if (!existsSync(targetDir)) continue
+    try {
+      const files = await readdir(targetDir)
+      for (const file of files) {
+        if (file.toLowerCase().endsWith('.gguf')) {
+          const fullPath = join(targetDir, file)
+          if (seenPaths.has(fullPath)) continue
+          seenPaths.add(fullPath)
+          const s = await stat(fullPath)
+          const sizeGb = Math.round((s.size / (1024 * 1024 * 1024)) * 100) / 100
+          models.push({
+            filename: file,
+            fullPath,
+            sizeBytes: s.size,
+            sizeFormatted: `${sizeGb} GB`
+          })
+        }
+      }
+    } catch {
+      // Continue to next dir
+    }
+  }
+
+  return models
 }
 
 function stopLocalAiServer(): boolean {
@@ -70,14 +96,13 @@ function startLocalAiServer(
   stopLocalAiServer()
 
   return new Promise((resolve) => {
-    const binDir = defaultBinDir()
-    const serverExe = join(binDir, 'llama-server.exe')
+    const serverExe = findLlamaServerExe()
 
-    if (!existsSync(serverExe)) {
+    if (!serverExe || !existsSync(serverExe)) {
       resolve({
         success: false,
         port,
-        error: `Engine runner not found at: ${serverExe}`
+        error: `Engine runner not found. Looked in ${defaultBinDir()}`
       })
       return
     }

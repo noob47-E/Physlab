@@ -266,6 +266,36 @@ export async function autoConnectLocalBrain(): Promise<{
     }
   }
 
+  // If running in Desktop app and no endpoint is currently listening, attempt auto-starting local model
+  if (typeof window !== 'undefined' && window.physlab?.aiListModels && window.physlab?.aiStartServer) {
+    try {
+      const models = await window.physlab.aiListModels()
+      if (models.length > 0) {
+        const targetModel =
+          models.find((m) => /qwen/i.test(m.filename)) ||
+          models.find((m) => /physlab/i.test(m.filename)) ||
+          models[0]
+
+        const startRes = await window.physlab.aiStartServer(targetModel.fullPath, 8080)
+        if (startRes.success) {
+          await new Promise((r) => setTimeout(r, 1200))
+          useAiStore.getState().setLocalEndpoint('http://127.0.0.1:8080/v1')
+          useAiStore.getState().setLocalModel(targetModel.filename)
+          useAiStore.getState().setAvailableLocalModels(models.map((m) => m.filename))
+
+          return {
+            ok: true,
+            endpoint: 'http://127.0.0.1:8080/v1',
+            model: targetModel.filename,
+            message: `Launched & connected to local model ${targetModel.filename} (port 8080).`
+          }
+        }
+      }
+    } catch {
+      // Continue to error message
+    }
+  }
+
   return {
     ok: false,
     endpoint: '',
