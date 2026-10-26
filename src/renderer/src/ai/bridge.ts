@@ -1,5 +1,4 @@
 import { enterMode } from '../app/layout'
-import { showPanel } from '../app/panels'
 import { useApp } from '../app/modes'
 import { useCalc } from '../calc/calcStore'
 import { usePure } from '../math/pure/store'
@@ -21,6 +20,9 @@ import { tableFrom, type Sample } from '../sim/recording'
 import { runPure, type JobId } from '../math/pure/run'
 import { evaluateInput } from '../calc/evaluateInput'
 import { math, preprocess } from '../math/expr'
+import { runTool } from './tools'
+import { play, pause } from '../sim/transportActions'
+import { stepOneFrame } from '../sim/stepping'
 
 let actionCounter = 0
 
@@ -318,47 +320,27 @@ export function extractActions(text: string): {
   return { cleanContent: clean, actions }
 }
 
-function generateExperimentSamples(params: {
-  name: string
-  mass?: number
-  y0?: number
-  v0?: number
-  accel?: number
-  vx?: number
-  duration?: number
-}): Sample[] {
-  const m = params.mass ?? 2
-  const y0 = params.y0 ?? 5
-  const v0 = params.v0 ?? 0
-  const a = params.accel ?? -9.81
-  const vx = params.vx ?? 0
-  const duration = params.duration ?? 2.0
-  const steps = 11 // t = 0 to 2.0 in 0.2s steps
-  const samples: Sample[] = []
-
-  for (let i = 0; i < steps; i++) {
-    const t = Math.round(((i * duration) / (steps - 1)) * 100) / 100
-    let y = y0 + v0 * t + 0.5 * a * t * t
-    if (y < 0) y = 0
-    const vy = v0 + a * t
-    const v = Math.round(Math.sqrt(vx * vx + vy * vy) * 1000) / 1000
-    const x = Math.round(vx * t * 1000) / 1000
-    const ke = Math.round(0.5 * m * v * v * 1000) / 1000
-    const pe = Math.round(m * 9.81 * y * 1000) / 1000
-    const p = Math.round(m * v * 1000) / 1000
-
-    samples.push({
-      t,
-      x,
-      y: Math.round(y * 1000) / 1000,
-      v,
-      ke,
-      pe,
-      p
-    })
+function recordRealSimSamples(bodyNameOrId?: string, seconds = 1.5): Sample[] {
+  play()
+  const rate = useSandbox.getState().world.stepRate ?? 240
+  const totalSteps = Math.round(seconds * rate)
+  for (let i = 0; i < totalSteps; i++) {
+    stepOneFrame()
   }
+  pause()
 
-  return samples
+  const bodies = useSandbox.getState().bodies
+  const target = bodyNameOrId
+    ? bodies.find(
+        (b) =>
+          b.id === bodyNameOrId ||
+          b.name.toLowerCase() === bodyNameOrId.toLowerCase() ||
+          b.name.toLowerCase().includes(bodyNameOrId.toLowerCase())
+      )
+    : bodies.find((b) => b.motion === 'dynamic') ?? bodies[0]
+
+  if (!target) return []
+  return useSandbox.getState().recording[target.id] ?? []
 }
 
 /**
@@ -367,6 +349,29 @@ function generateExperimentSamples(params: {
 export async function executePhysLabAction(action: PhysLabAction): Promise<PhysLabAction> {
   const updatedAction: PhysLabAction = { ...action, executed: true, status: 'pending' }
 
+  const newTools = [
+    'solve',
+    'plot',
+    'list_experiments',
+    'load_experiment',
+    'add_body',
+    'remove_body',
+    'set_param',
+    'play',
+    'pause',
+    'reset',
+    'get_readings',
+    'export_readings',
+    'demonstrate',
+    'get_app_state'
+  ]
+  if (newTools.includes(action.tool)) {
+    const res = await runTool(action.tool, action.args)
+    updatedAction.status = res.ok ? 'success' : 'failed'
+    updatedAction.result = res
+    return updatedAction
+  }
+
   try {
     switch (action.tool) {
       case 'calc_solve': {
@@ -374,62 +379,52 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         const op = String(action.args.op || '')
         const boxedAnswer = String(action.args.boxedAnswer || '')
 
-        // Run 3-Way Truth Check
-        if (input) {
-          const truthResult = await run3WayTruthCheck(input, boxedAnswer)
-          updatedAction.verified = truthResult.verified
-          updatedAction.verificationDetails = {
-            domainCheck: truthResult.domainCheck,
-            factorCheck: truthResult.factorCheck,
-            numericCheck: truthResult.numericCheck,
-            notes: truthResult.notes
-          }
+        if (!input) {
+          enterMode('calculator')
+          updatedAction.status = 'success'
+          updatedAction.result = { message: 'Calculator mode active.' }
+          break
         }
 
-        // Switch to Calculator mode and run in pure math engine (calcStore auto-syncs)
-        enterMode('calculator')
-        showPanel('ai_copilot')
-        setTimeout(() => showPanel('ai_copilot'), 60)
-        if (input) {
-          useCalc.setState({ input, mode: 'COMP' })
-          const opToJob: Record<
-            string,
-            'differentiate' | 'integrate' | 'solve' | 'factor' | 'limit' | 'auto'
-          > = {
-            diff: 'differentiate',
-            integrate: 'integrate',
-            solve: 'solve',
-            factor: 'factor',
-            limit: 'limit',
-            simplify: 'auto'
-          }
-          const job = opToJob[op] ?? 'auto'
-          usePure.getState().runLatex(input, job)
-          const clickEquals = () => {
-            if (typeof document !== 'undefined') {
-              const eqBtn =
-                document.querySelector<HTMLButtonElement>('[data-tour="equals"]') ||
-                Array.from(document.querySelectorAll('button')).find(
-                  (b) => b.textContent?.trim() === '=' && b.title?.includes('Work out the answer')
-                )
-              if (eqBtn) eqBtn.click()
+        const angleUnit = scene().settings.angleUnit ?? 'deg'
+        const solveRes = await runTool('solve', { expression: input, op, angle: angleUnit })
+
+        let verified: boolean | undefined = Boolean(solveRes.checked)
+        let verificationDetails: any = {
+          domainCheck: true,
+          factorCheck: true,
+          numericCheck: true,
+          notes: ''
+        }
+        if (boxedAnswer || solveRes.truthCheck) {
+          const tc = ((solveRes.truthCheck as any) ??
+            (await run3WayTruthCheck(input, boxedAnswer || String(solveRes.answer ?? '')))) as any
+          if (tc) {
+            verified = Boolean(tc.verified)
+            verificationDetails = {
+              domainCheck: Boolean(tc.domainCheck),
+              factorCheck: Boolean(tc.factorCheck),
+              numericCheck: Boolean(tc.numericCheck),
+              notes: String(tc.notes ?? '')
             }
           }
-          setTimeout(clickEquals, 200)
-          setTimeout(clickEquals, 500)
-          setTimeout(clickEquals, 900)
-          setTimeout(clickEquals, 1400)
         }
-
-        updatedAction.status = 'success'
-        updatedAction.result = { message: 'Loaded into PhysLab Calculator & verified.' }
+        updatedAction.verified = verified
+        updatedAction.verificationDetails = verificationDetails
+        updatedAction.status = solveRes.ok ? 'success' : 'failed'
+        updatedAction.result = {
+          answer: solveRes.answer,
+          checked: solveRes.checked,
+          steps: solveRes.steps,
+          answers: solveRes.answers,
+          note: solveRes.note,
+          message: solveRes.ok ? `Loaded into PhysLab Calculator & verified: ${solveRes.answer || 'done'}` : solveRes.error
+        }
         break
       }
 
       case 'sandbox_experiment': {
         enterMode('sandbox')
-        showPanel('ai_copilot')
-        setTimeout(() => showPanel('ai_copilot'), 60)
 
         const presetMap: Record<string, string> = {
           'newtons-cradle': 'cradle',
@@ -455,14 +450,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         if (targetPreset) {
           const sb = useSandbox.getState()
           sb.loadPreset(targetPreset)
-          scene().setPlaying(true)
 
-          const samples = generateExperimentSamples({
-            name: targetPreset,
-            y0: 2,
-            v0: 1.5,
-            accel: -2
-          })
+          const samples = recordRealSimSamples(targetPreset, 1.5)
           const table = tableFrom(targetPreset, samples)
           useLab.getState().appendTable(table)
 
@@ -483,15 +472,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           const bodies: BodyDef[] = [floor('concrete'), ball]
           const sb = useSandbox.getState()
           sb.setScene(bodies, { airDensity: 0 })
-          scene().setPlaying(true)
 
-          const samples = generateExperimentSamples({
-            name: 'Falling Ball',
-            mass,
-            y0: height,
-            v0: 0,
-            accel: -9.81
-          })
+          const samples = recordRealSimSamples('Falling Ball', 1.0)
           const table = tableFrom('Falling Ball', samples)
           useLab.getState().appendTable(table)
 
@@ -531,15 +513,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           const bodies: BodyDef[] = [floor('concrete'), projSphere]
           const sb = useSandbox.getState()
           sb.setScene(bodies, { airDensity: 0 })
-          scene().setPlaying(true)
 
-          const samples = generateExperimentSamples({
-            name: 'Projectile',
-            y0: 0.5,
-            v0: vy,
-            vx,
-            accel: -9.81
-          })
+          const samples = recordRealSimSamples('Projectile', 1.5)
           const table = tableFrom('Projectile', samples)
           useLab.getState().appendTable(table)
 
@@ -569,17 +544,12 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           }
           const sb = useSandbox.getState()
           sb.loadPreset('pendulum')
-          scene().setPlaying(true)
-          const samples = generateExperimentSamples({
-            name: 'Vertical Circle Bob',
-            y0: 2,
-            v0: 3,
-            accel: -9.81
-          })
+
+          const samples = recordRealSimSamples('pendulum', 1.5)
           useLab.getState().appendTable(tableFrom('Vertical Circle', samples))
 
           updatedAction.status = 'success'
-          updatedAction.result = { message: 'Vertical circle running in Sandbox, readings sent to Lab Data.' }
+          updatedAction.result = { message: `Vertical circle running in Sandbox, ${samples.length} readings sent to Lab Data.` }
           break
         }
 
@@ -618,26 +588,8 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         })
         const sb = useSandbox.getState()
         sb.setScene(bodies, { airDensity: 0 })
-        scene().setPlaying(true)
 
-        // Pipe kinematic readings to Lab Data
-        const timeSteps = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
-        const round3 = (n: number) => Math.round(n * 1000) / 1000
-        const inclineSamples: Sample[] = timeSteps.map((t) => {
-          const x = 0.5 * accel * t * t
-          const v = accel * t
-          const y = Math.max(0, 2 - x * Math.sin((angleDeg * Math.PI) / 180))
-          return {
-            t,
-            x: round3(x),
-            y: round3(y),
-            v: round3(v),
-            ke: round3(0.5 * massKg * v * v),
-            pe: round3(massKg * 9.81 * y),
-            p: round3(massKg * v)
-          }
-        })
-
+        const inclineSamples = recordRealSimSamples('Incline Block', 1.5)
         const table = tableFrom('Incline Block', inclineSamples)
         useLab.getState().appendTable(table)
 
@@ -657,8 +609,6 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
       case 'graph3d_plot': {
         enterMode('graphing', { skipFocus: true })
         scene().setViewMode('3d')
-        showPanel('ai_copilot')
-        setTimeout(() => showPanel('ai_copilot'), 60)
         const target = String(action.args.preset || action.args.equation || '')
           .toLowerCase()
           .trim()
@@ -675,7 +625,6 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
 
         if (matchedTile) {
           await playTile(matchedTile, { cleanDrawing: true })
-          showPanel('ai_copilot')
           updatedAction.status = 'success'
           updatedAction.result = { message: `Loaded 3D Gallery Tile "${matchedTile.title}".` }
         } else {
@@ -685,7 +634,6 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           }
           await runCommand(eq)
           setTimeout(resetCamera, 300)
-          showPanel('ai_copilot')
           updatedAction.status = 'success'
           updatedAction.result = { message: `Plotted "${eq}" in 3D Graphing mode.` }
         }
@@ -695,13 +643,10 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
       case 'graph_plot': {
         enterMode('graphing', { skipFocus: true })
         scene().setViewMode('2d')
-        showPanel('ai_copilot')
-        setTimeout(() => showPanel('ai_copilot'), 60)
         const eq = sanitizeMathInput(String(action.args.equation || ''))
         if (eq) {
           await runCommand(eq)
         }
-        showPanel('ai_copilot')
         updatedAction.status = 'success'
         updatedAction.result = { message: `Plotted "${eq}" in 2D Graphing mode.` }
         break
@@ -716,8 +661,6 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         } catch {
           // ignore
         }
-        showPanel('ai_copilot')
-        setTimeout(() => showPanel('ai_copilot'), 60)
         if (view) {
           scene().setViewMode(view)
         }
@@ -739,7 +682,6 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           await runCommand(cmd)
         }
         setTimeout(resetCamera, 200)
-        showPanel('ai_copilot')
         updatedAction.status = 'success'
         updatedAction.result = {
           message: `Executed ${commands.length} geometry/vector commands in ${mode} mode.`

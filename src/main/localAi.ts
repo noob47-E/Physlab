@@ -132,14 +132,38 @@ function startLocalAiServer(
         resolve({ success: false, port, error: err.message })
       })
 
-      // Give server 1.5s to initialize and verify process is alive
-      setTimeout(() => {
-        if (activeProcess && !activeProcess.killed) {
-          resolve({ success: true, port })
-        } else {
+      // Poll the server endpoint until it responds (up to 20s)
+      const startTime = Date.now()
+      const pollHealth = async () => {
+        if (!activeProcess || activeProcess.killed) {
           resolve({ success: false, port, error: 'Local model engine stopped unexpectedly' })
+          return
         }
-      }, 1500)
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(800) })
+          if (res.ok) {
+            resolve({ success: true, port })
+            return
+          }
+        } catch {
+          try {
+            const resModels = await fetch(`http://127.0.0.1:${port}/v1/models`, { signal: AbortSignal.timeout(800) })
+            if (resModels.ok) {
+              resolve({ success: true, port })
+              return
+            }
+          } catch {
+            // Not ready yet
+          }
+        }
+
+        if (Date.now() - startTime > 20000) {
+          resolve({ success: false, port, error: 'Local model server timed out during initialization (20s)' })
+          return
+        }
+        setTimeout(pollHealth, 300)
+      }
+      setTimeout(pollHealth, 300)
     } catch (err) {
       resolve({ success: false, port, error: err instanceof Error ? err.message : String(err) })
     }
