@@ -519,6 +519,13 @@ describe('the = card does not show one root of several as the answer', () => {
     expect(shown.main === 'no value of x works' || shown.error?.sentence === w.error).toBe(true)
     expect(shown.value).toBeUndefined()
   })
+
+  it('\\frac{x^2-1}{x-1}=2 rejects excluded root x = 1 and returns no value of x works directly on card', () => {
+    const card = evaluateInput('COMP', '\\frac{x^2-1}{x-1}=2', { vars: {}, ans: 0, angle: 'deg' })
+    expect(card).not.toBeNull()
+    expect(card?.main === 'no value of x works' || card?.main === 'No solution').toBe(true)
+    expect(card?.solved).toBe(false)
+  })
 })
 
 describe('the command bar does not hand a final refusal to the algebra engine', () => {

@@ -25,7 +25,7 @@ import { rTex } from '../math/pure/rat'
 import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
 import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from '../math/steps/methods/linearSystem'
-import { ratOfText } from '../math/steps/check-adapter'
+import { rationalExcludedOf, ratOfText } from '../math/steps/check-adapter'
 import { analyseInequality, intervalForm, readInequality, setForm } from '../math/steps/inequality'
 import type { FieldMode } from './calcStore'
 import type { EngineAsk } from './engineAnswer'
@@ -371,6 +371,53 @@ function solveInequalityInput(src: string): EvalResult | null {
   }
 }
 
+/**
+ * Whether a real number root is an excluded root (makes any denominator zero or undefined).
+ */
+function isExcludedRoot(r: number, left: string, right: string, scope: Record<string, unknown>, src: string): boolean {
+  try {
+    const exactExcluded = rationalExcludedOf(src)
+    if (exactExcluded && exactExcluded.some((e) => Math.abs(r - Number(e.n) / Number(e.d)) < 1e-7)) {
+      return true
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    for (const side of [left, right]) {
+      const node = math.parse(keypadToMath(side))
+      const divNodes = node.filter((n) => math.isOperatorNode(n) && (n as unknown as { op?: string }).op === '/')
+      for (const div of divNodes) {
+        const divOp = div as unknown as { args: [{ compile: () => { evaluate: (s: unknown) => unknown } }, { compile: () => { evaluate: (s: unknown) => unknown } }] }
+        if (divOp.args && divOp.args.length === 2) {
+          const den = divOp.args[1]
+          const val = Number(den.compile().evaluate({ ...scope, x: r }))
+          if (Math.abs(val) < 1e-9 || !Number.isFinite(val) || Number.isNaN(val)) {
+            return true
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const fl = math.compile(keypadToMath(left))
+    const fr = math.compile(keypadToMath(right))
+    const vl = Number(fl.evaluate({ ...scope, x: r }))
+    const vr = Number(fr.evaluate({ ...scope, x: r }))
+    if (!Number.isFinite(vl) || !Number.isFinite(vr) || Number.isNaN(vl) || Number.isNaN(vr)) {
+      return true
+    }
+  } catch {
+    return true
+  }
+
+  return false
+}
+
 const BUILTIN_CALC_NAMES: ReadonlySet<string> = new Set([
   'Pol', 'pol', 'Rec', 'rec',
   'diff', 'integrate', 'integral', 'ddx', 'sigma', 'product',
@@ -560,11 +607,26 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       // no number to keep — so no x is stored from it and the eng chip leaves the sentence alone.
       if ('sentence' in answer) return { main: answer.sentence, src, exact: null, solved: false }
       if ('real' in answer) {
-        // Two roots or more, each on its own label and in the order every screen lists them (calc/roots.ts).
-        const lines = answer.real.map((r, i) => `${rowLabel(i, answer.real.length)} ${calcNum(r)}`)
-        return { main: lines.join(', '), extra: answer.pairs.length ? [complexNote(answer.pairs)] : undefined, roots: answer.real, rootsComplete: answer.complete, src, exact: null, solved: true }
+        const validRoots = answer.real.filter((r) => !isExcludedRoot(r, left, right, calcScope(ctx), src))
+        if (validRoots.length === 0) {
+          return { main: 'no value of x works', src, exact: null, solved: false, unconfirmed: true }
+        }
+        if (validRoots.length === 1) {
+          out = { value: validRoots[0], text: `x = ${calcNum(validRoots[0])}` }
+          polynomial = true
+        } else {
+          // Two roots or more, each on its own label and in the order every screen lists them (calc/roots.ts).
+          const lines = validRoots.map((r, i) => `${rowLabel(i, validRoots.length)} ${calcNum(r)}`)
+          return { main: lines.join(', '), extra: answer.pairs.length ? [complexNote(answer.pairs)] : undefined, roots: validRoots, rootsComplete: answer.complete, src, exact: null, solved: true }
+        }
+      } else {
+        out = answer
+        if (typeof out.value === 'number' && Number.isFinite(out.value)) {
+          if (isExcludedRoot(out.value, left, right, calcScope(ctx), src)) {
+            return { main: 'no value of x works', src, exact: null, solved: false, unconfirmed: true }
+          }
+        }
       }
-      out = answer
       // A polynomial's real roots are all of them, and the search's one root is the whole answer too when there is only one.
       const coefficients = withAngle(opts.angle, () => polynomialInX(left, right, calcScope(ctx)))
       polynomial = coefficients !== null
