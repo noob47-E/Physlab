@@ -66,7 +66,7 @@ describe('AI Provider in main process', () => {
       expect(result.message.content).toBe('I will solve this.')
       expect(result.message.tool_calls).toHaveLength(1)
       expect(result.message.tool_calls[0].function.name).toBe('solve')
-      expect(result.model).toBe('gemini-3.8-flash')
+      expect(result.model).toBe('gemini-3.5-flash-lite')
     }
   })
 
@@ -75,7 +75,7 @@ describe('AI Provider in main process', () => {
     global.fetch = vi.fn().mockImplementation((_url, opts) => {
       callCount++
       const body = JSON.parse((opts as any).body)
-      if (body.model === 'gemini-3.8-flash') {
+      if (body.model === 'gemini-3.5-flash-lite') {
         return Promise.resolve({
           ok: false,
           status: 429,
@@ -97,7 +97,7 @@ describe('AI Provider in main process', () => {
     expect('message' in result).toBe(true)
     if ('message' in result) {
       expect(result.message.content).toBe('From fallback model')
-      expect(result.model).toBe('gemini-flash-latest')
+      expect(result.model).toBe('gemini-3.5-flash')
     }
     expect(callCount).toBe(2)
   })
