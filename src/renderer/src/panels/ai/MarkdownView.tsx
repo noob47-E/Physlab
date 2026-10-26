@@ -31,6 +31,14 @@ interface MarkdownViewProps {
  */
 function getChallengeChips(actions?: PhysLabAction[], content?: string): string[] {
   const chips: string[] = []
+
+  const g3dAction = actions?.find((a) => a.tool === 'graph3d_plot')
+  if (g3dAction) {
+    chips.push('Plot 3D Saddle Surface z = x^2 - y^2')
+    chips.push('Show 3D DNA Double Helix')
+    return chips
+  }
+
   const sbAction = actions?.find((a) => a.tool === 'sandbox_experiment')
   if (sbAction) {
     const curAngle = Number(sbAction.args.angleDeg ?? sbAction.args.angle ?? 25)
@@ -79,6 +87,17 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
   }
 
   const lower = (content || '').toLowerCase()
+  if (
+    lower.includes('graph3d') ||
+    lower.includes('surface') ||
+    lower.includes('ripple') ||
+    lower.includes('saddle')
+  ) {
+    chips.push('Plot 3D Saddle Surface z = x^2 - y^2')
+    chips.push('Show 3D DNA Double Helix')
+    return chips
+  }
+
   if (lower.includes('incline') || lower.includes('friction') || lower.includes('slope')) {
     chips.push('What if incline = 35°?')
     chips.push('What if mass = 5 kg?')
@@ -580,12 +599,24 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
  * Safely renders inline KaTeX math ($...$) and bold/code formatting.
  */
 function renderInlineMath(text: string): React.ReactNode {
-  const cleaned = repairControlCharLatex(text)
-  const parts = cleaned.split(/(\$[^$]+\$)/g)
+  // Pre-sanitize unescaped control chars and strip stray '$' characters surrounding \boxed formulas
+  const preCleaned = repairControlCharLatex(text)
+    .replace(/\$\s*(\\boxed\{[^}]+\})\s*\$/g, '$1')
+
+  const parts = preCleaned.split(
+    /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g
+  )
 
   return parts.map((part, idx) => {
-    if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
-      const tex = repairControlCharLatex(part.slice(1, -1))
+    if (!part) return null
+
+    const isDelimitedMath =
+      (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) ||
+      (part.startsWith('$') && part.endsWith('$') && part.length >= 2)
+    const isDirectBoxed = part.startsWith('\\boxed{')
+
+    if (isDelimitedMath || isDirectBoxed) {
+      const tex = repairControlCharLatex(part.replace(/^\$+|\$+$/g, '').trim())
       try {
         const html = katex.renderToString(tex, {
           displayMode: false,
@@ -595,7 +626,7 @@ function renderInlineMath(text: string): React.ReactNode {
         return (
           <span
             key={idx}
-            className="inline-block mx-0.5"
+            className="inline-block mx-0.5 align-middle"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )

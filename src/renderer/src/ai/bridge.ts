@@ -374,7 +374,7 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
       }
 
       case 'sandbox_experiment': {
-        enterMode('sandbox', { skipFocus: true })
+        enterMode('sandbox')
         showPanel('ai_copilot')
         setTimeout(() => showPanel('ai_copilot'), 60)
 

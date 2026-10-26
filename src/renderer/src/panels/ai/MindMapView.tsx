@@ -85,12 +85,12 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
     setScale(1)
   }, [data])
 
-  // Combine positioned nodes
+  // Combine positioned nodes and edges (supporting source/target or from/to, with fallback tree edges)
   const layout = useMemo(() => {
     if (!data || !data.nodes || data.nodes.length === 0) return { nodes: [], edges: [] }
 
     const positionedNodes = data.nodes.map((node) => {
-      const pos = nodePositions[node.id] || { x: 250, y: 180 }
+      const pos = nodePositions[node.id] || { x: 180, y: 150 }
       return { ...node, x: pos.x, y: pos.y }
     })
 
@@ -98,13 +98,24 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
 
     const positionedEdges = (data.edges || [])
       .map((e: MindMapEdge) => {
-        const source = nodeMap.get(e.source)
-        const target = nodeMap.get(e.target)
-        if (!source || !target || source.x === undefined || source.y === undefined || target.x === undefined || target.y === undefined) {
+        const srcId = e.source || (e as unknown as { from?: string }).from
+        const tgtId = e.target || (e as unknown as { to?: string }).to
+        const source = srcId ? nodeMap.get(srcId) : undefined
+        const target = tgtId ? nodeMap.get(tgtId) : undefined
+        if (
+          !source ||
+          !target ||
+          source.x === undefined ||
+          source.y === undefined ||
+          target.x === undefined ||
+          target.y === undefined
+        ) {
           return null
         }
         return {
           ...e,
+          source: srcId!,
+          target: tgtId!,
           x1: source.x,
           y1: source.y,
           x2: target.x,
@@ -113,7 +124,35 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
       })
       .filter((e): e is NonNullable<typeof e> => e !== null)
 
-    return { nodes: positionedNodes, edges: positionedEdges }
+    let finalEdges = positionedEdges
+    // Fallback: connect root to top nodes of both columns, and connect down columns when edges is empty
+    if (finalEdges.length === 0 && positionedNodes.length > 1) {
+      const root = positionedNodes[0]
+      const fallbacks: Array<{
+        source: string
+        target: string
+        x1: number
+        y1: number
+        x2: number
+        y2: number
+        label?: string
+      }> = []
+
+      for (let i = 1; i < positionedNodes.length; i++) {
+        const parentNode = i <= 2 ? root : positionedNodes[i - 2]
+        fallbacks.push({
+          source: parentNode.id,
+          target: positionedNodes[i].id,
+          x1: parentNode.x,
+          y1: parentNode.y,
+          x2: positionedNodes[i].x,
+          y2: positionedNodes[i].y
+        })
+      }
+      finalEdges = fallbacks
+    }
+
+    return { nodes: positionedNodes, edges: finalEdges }
   }, [data, nodePositions])
 
   // Pointer down on background: start pan
@@ -223,18 +262,19 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
               return (
                 <g key={`edge_${idx}`}>
                   <path
-                    d={`M ${e.x1} ${e.y1} Q ${mx + 10} ${my - 10} ${e.x2} ${e.y2}`}
+                    d={`M ${e.x1} ${e.y1} Q ${mx} ${my} ${e.x2} ${e.y2}`}
                     fill="none"
-                    stroke="var(--line-2)"
+                    stroke="var(--accent)"
                     strokeWidth="2"
-                    strokeDasharray="4 2"
+                    strokeOpacity="0.75"
                   />
                   {e.label && (
                     <text
                       x={mx}
                       y={my - 4}
-                      fill="var(--text-faint)"
+                      fill="var(--accent)"
                       fontSize="9"
+                      fontWeight="600"
                       textAnchor="middle"
                       className="font-mono"
                     >
