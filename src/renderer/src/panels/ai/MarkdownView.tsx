@@ -504,7 +504,11 @@ export const MarkdownView = memo(function MarkdownView({
 function renderMarkdownWithMath(text: string): React.ReactNode[] {
   if (!text) return []
 
-  const lines = text.split('\n')
+  const cleanText = text
+    .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
+    .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+
+  const lines = cleanText.split('\n')
   const nodes: React.ReactNode[] = []
   let buffer: string[] = []
   let inDisplayMath = false
@@ -526,6 +530,13 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+
+    if (
+      /^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook/i.test(line.trim()) ||
+      /^\*\*💡?\s*Intuition\s*Hook/i.test(line.trim())
+    ) {
+      continue
+    }
 
     if (line.trim().startsWith('$$') && line.trim().endsWith('$$') && line.trim().length > 4) {
       flushBuffer()

@@ -760,6 +760,56 @@ export async function verifyMessage(
 
   if (boxed !== null) {
     try {
+      const strippedBoxed = boxed.replace(/[\\{}]/g, '').replace(/[a-zA-Z]/g, '').trim()
+      const boxedNum = parseFloat(strippedBoxed)
+
+      if (Number.isFinite(boxedNum)) {
+        // 1. Direct arithmetic step check: scan all arithmetic expressions in content
+        const arithRegex = /(\d+(?:\s*[-+*/]\s*[-+]?\d+)+)/g
+        let match: RegExpExecArray | null
+        while ((match = arithRegex.exec(content)) !== null) {
+          try {
+            const val = Number(math.evaluate(match[1]))
+            if (Number.isFinite(val) && Math.abs(val - boxedNum) < 1e-5) {
+              return {
+                state: 'verified',
+                badgeText: '✅ CAS & Physics Verified',
+                modelAnswerLatex: boxed,
+                notes: `Verified arithmetic evaluation: ${match[1]} = ${boxedNum}`
+              }
+            }
+          } catch {
+            // continue
+          }
+        }
+
+        // 2. Equation step check: scan lines or segments with '='
+        const lines = content.split('\n')
+        for (const line of lines) {
+          if (line.includes('=')) {
+            const parts = line.split('=')
+            for (const p of parts) {
+              const clean = p.replace(/[$`*\\{}]/g, '').trim()
+              if (clean && /[-+*/\d]/.test(clean)) {
+                try {
+                  const val = Number(math.evaluate(clean))
+                  if (Number.isFinite(val) && Math.abs(val - boxedNum) < 1e-5) {
+                    return {
+                      state: 'verified',
+                      badgeText: '✅ CAS & Physics Verified',
+                      modelAnswerLatex: boxed,
+                      notes: `Verified equation step: ${clean} = ${boxedNum}`
+                    }
+                  }
+                } catch {
+                  // continue
+                }
+              }
+            }
+          }
+        }
+      }
+
       const eqMatch = content.match(/([-+]?[0-9a-zA-Z^/*().\s]+\s*=\s*[-+]?[0-9a-zA-Z^/*().\s]+)/)
       if (eqMatch) {
         const inferredEq = eqMatch[1].trim()

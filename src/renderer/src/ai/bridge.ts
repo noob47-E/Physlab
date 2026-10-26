@@ -99,10 +99,12 @@ export function extractThinkTrace(text: string): {
     }
   }
 
-  // Finally, always strip any leftover </?think> tags and [AGENT: ...] markers from cleanContent
+  // Finally, always strip any leftover </?think> tags, [AGENT: ...] markers, and Intuition Hook headers from cleanContent
   cleanContent = cleanContent
     .replace(/<\/?think>/gi, '')
     .replace(/\[AGENT:\s*[^\]]+\]/gi, '')
+    .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
+    .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
     .trim()
 
   if (think) {

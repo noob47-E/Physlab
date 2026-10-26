@@ -8,8 +8,16 @@ import type {
   StudyGoal
 } from './types'
 
-const STORE_KEY = 'physlab.ai.v3'
+const STORE_KEY = 'physlab.ai.v4'
 const GEMINI_KEY_STORAGE = 'physlab.ai.gemini_key'
+
+function cleanPersistedText(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
+    .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+    .trim()
+}
 
 function loadPersistedState(): {
   threads: ChatThread[]
@@ -26,6 +34,11 @@ function loadPersistedState(): {
 } {
   try {
     if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem('physlab.ai.v3')
+      } catch {
+        // ignore
+      }
       const raw = localStorage.getItem(STORE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
@@ -36,8 +49,15 @@ function loadPersistedState(): {
         const savedGeminiModels: string[] = Array.isArray(parsed.availableGeminiModels)
           ? parsed.availableGeminiModels.filter((m: string) => m !== 'gemini-3.8-flash')
           : []
+        const sanitizedThreads = (parsed.threads || []).map((t: ChatThread) => ({
+          ...t,
+          messages: (t.messages || []).map((m: ChatMessage) => ({
+            ...m,
+            content: cleanPersistedText(m.content)
+          }))
+        }))
         return {
-          threads: parsed.threads || [],
+          threads: sanitizedThreads,
           activeThreadId: parsed.activeThreadId || '',
           memories: parsed.memories || [],
           goals: parsed.goals || [],

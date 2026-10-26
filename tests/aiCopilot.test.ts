@@ -210,7 +210,8 @@ $$\\boxed{a = 0\\text{ m/s}^2}$$`
       expect(think).toBeDefined()
       expect(think).toContain('Decoded diagram')
       expect(cleanContent).not.toContain('<think>')
-      expect(cleanContent).toContain('Intuition Hook')
+      expect(cleanContent).not.toContain('Intuition Hook')
+      expect(cleanContent).toContain('Before plugging in formulas')
 
       expect(agentTraces.map((t) => t.agent)).toEqual([
         'OCR_VISION',
