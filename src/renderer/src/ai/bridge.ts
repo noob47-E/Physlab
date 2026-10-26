@@ -1,4 +1,5 @@
 import { enterMode } from '../app/layout'
+import { showPanel } from '../app/panels'
 import { useApp } from '../app/modes'
 import { useCalc } from '../calc/calcStore'
 import { usePure } from '../math/pure/store'
@@ -10,7 +11,7 @@ import { runCommand } from '../lang/commands'
 import { fmt } from '../math/format'
 import { run3WayTruthCheck, validatePhysicsScene } from './truthCheck'
 import { useAiStore } from './store'
-import { normalizeAction, sanitizeMathInput, stripIncompleteActionBlocks } from './contract'
+import { normalizeAction, repairControlCharLatex, sanitizeMathInput, stripIncompleteActionBlocks } from './contract'
 import type { PhysLabAction, SpecialAgent } from './types'
 import { TILES_3D, CHEMISTRY_TILES_3D } from '../math/graph3dTiles'
 import { playTile } from '../panels/tiles3d'
@@ -66,34 +67,35 @@ export function extractThinkTrace(text: string): {
     return { cleanContent: '', agentTraces: [] }
   }
 
+  const repaired = repairControlCharLatex(text)
   let think: string | undefined
-  let cleanContent = text
+  let cleanContent = repaired
 
   // 1. If [AGENT: HUMAN_TEACHER] exists (whether <think> is present or not),
   // everything before it belongs in think, and only the text after it belongs in cleanContent.
-  const htMatch = text.match(/\[AGENT:\s*HUMAN_TEACHER\]/i)
+  const htMatch = repaired.match(/\[AGENT:\s*HUMAN_TEACHER\]/i)
   if (htMatch && htMatch.index !== undefined) {
-    think = text.slice(0, htMatch.index).trim()
-    const rawAfterHt = text.slice(htMatch.index + htMatch[0].length).trim()
+    think = repaired.slice(0, htMatch.index).trim()
+    const rawAfterHt = repaired.slice(htMatch.index + htMatch[0].length).trim()
     cleanContent = stripMetaBullets(rawAfterHt)
   } else {
     // 2. Standard <think>...</think> pair or trailing </think>
-    const thinkPairMatch = text.match(/<think>([\s\S]*?)<\/think>/i)
+    const thinkPairMatch = repaired.match(/<think>([\s\S]*?)<\/think>/i)
     if (thinkPairMatch) {
       think = thinkPairMatch[1].trim()
-      cleanContent = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
-    } else if (/<\/think>/i.test(text)) {
-      const lastCloseIdx = text.lastIndexOf('</think>')
-      think = text.slice(0, lastCloseIdx).trim()
-      cleanContent = text.slice(lastCloseIdx + 8).trim()
-    } else if (/^\s*<think>/i.test(text)) {
+      cleanContent = repaired.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+    } else if (/<\/think>/i.test(repaired)) {
+      const lastCloseIdx = repaired.lastIndexOf('</think>')
+      think = repaired.slice(0, lastCloseIdx).trim()
+      cleanContent = repaired.slice(lastCloseIdx + 8).trim()
+    } else if (/^\s*<think>/i.test(repaired)) {
       // In-progress think block (streaming before closing tag)
-      think = text.replace(/^\s*<think>/i, '').trim()
+      think = repaired.replace(/^\s*<think>/i, '').trim()
       cleanContent = ''
-    } else if (/\[AGENT:\s*[^\]]+\]/i.test(text)) {
-      const firstAgentIdx = text.search(/\[AGENT:\s*[^\]]+\]/i)
-      think = text.slice(firstAgentIdx).trim()
-      cleanContent = text.slice(0, firstAgentIdx).trim()
+    } else if (/\[AGENT:\s*[^\]]+\]/i.test(repaired)) {
+      const firstAgentIdx = repaired.search(/\[AGENT:\s*[^\]]+\]/i)
+      think = repaired.slice(firstAgentIdx).trim()
+      cleanContent = repaired.slice(0, firstAgentIdx).trim()
     }
   }
 
@@ -107,9 +109,9 @@ export function extractThinkTrace(text: string): {
     think = think.replace(/<\/?think>/gi, '').trim()
   }
 
-  const agentTraces = parseAgentTraces((think ? think + '\n' : '') + text)
+  const agentTraces = parseAgentTraces((think ? think + '\n' : '') + repaired)
 
-  return { cleanContent, think: think || undefined, agentTraces }
+  return { cleanContent: repairControlCharLatex(cleanContent), think: think || undefined, agentTraces }
 }
 
 /**
@@ -165,16 +167,18 @@ export function buildInclineScene(params: {
     color: 'var(--mode-sandbox)'
   }
 
-  const s = 0.7
-  const xSurface = (s - 0.5) * rampWidth
-  const ySurface = s * rampHeight
-  const boxHalfH = 0.3
-  const xBlock = xSurface - boxHalfH * Math.sin(rad)
-  const yBlock = ySurface + boxHalfH * Math.cos(rad)
+  const t = 0.3 // 0 = top-left peak (-rampWidth/2, rampHeight), 1 = bottom-right toe (+rampWidth/2, 0)
+  const xSurface = (-0.5 + t) * rampWidth
+  const ySurface = (1 - t) * rampHeight
+  const boxSize = 0.5
+  const boxHalf = boxSize / 2
+  // Outward normal to a slope descending from left to right is (+sin(rad), +cos(rad))
+  const xBlock = xSurface + (boxHalf + 0.005) * Math.sin(rad)
+  const yBlock = ySurface + (boxHalf + 0.005) * Math.cos(rad)
 
   const blockBody: BodyDef = {
     ...makeBody('box', 'Block', [xBlock, yBlock, 0]),
-    size: [0.6, 0.6, 0.6],
+    size: [boxSize, boxSize, boxSize],
     mass: massKg,
     friction: muEff,
     rotation: [0, 0, -angleDeg]
@@ -370,7 +374,9 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
       }
 
       case 'sandbox_experiment': {
-        enterMode('sandbox')
+        enterMode('sandbox', { skipFocus: true })
+        showPanel('ai_copilot')
+        setTimeout(() => showPanel('ai_copilot'), 60)
 
         const presetMap: Record<string, string> = {
           'newtons-cradle': 'cradle',
@@ -532,8 +538,10 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
       }
 
       case 'graph3d_plot': {
-        enterMode('graphing')
+        enterMode('graphing', { skipFocus: true })
         scene().setViewMode('3d')
+        showPanel('ai_copilot')
+        setTimeout(() => showPanel('ai_copilot'), 60)
         const target = String(action.args.preset || action.args.equation || '')
           .toLowerCase()
           .trim()
@@ -566,8 +574,10 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
       }
 
       case 'graph_plot': {
-        enterMode('graphing')
+        enterMode('graphing', { skipFocus: true })
         scene().setViewMode('2d')
+        showPanel('ai_copilot')
+        setTimeout(() => showPanel('ai_copilot'), 60)
         const eq = sanitizeMathInput(String(action.args.equation || ''))
         if (eq) {
           await runCommand(eq)
@@ -772,7 +782,7 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
       verified: validation.valid
     })
     notes.push(
-      `[PHYSLAB ENGINE VERIFIED RESULT: 28° Incline Scene. Angle=${angleDeg}°, mass=${massKg}kg, mu_s=${muStatic}, mu_k=${muKinetic}. tan(theta)=${fmt(validation.tanAngle)}, staysStatic=${validation.staysStatic}, acceleration=${fmt(validation.acceleration)} m/s².]`
+      `[PHYSLAB ENGINE VERIFIED RESULT: 28° Incline Scene. Angle=${angleDeg}°, mass=${massKg}kg, mu_s=${muStatic}, mu_k=${muKinetic}. tan(theta)=${fmt(validation.tanAngle)}, staysStatic=${validation.staysStatic}, acceleration=${fmt(validation.acceleration)} m/s². The acceleration formula MUST be written exactly as: $$a = \\boxed{0}\\text{ m/s}^2$$. Do NOT put '(block remains stationary)' inside the math line.]`
     )
   }
 

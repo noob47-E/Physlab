@@ -453,24 +453,43 @@ export function validateAction(obj: unknown): { ok: boolean; reason: string } {
 }
 
 /**
+ * Repairs LaTeX strings corrupted by unescaped JSON/JS control characters (\b, \f, \t, etc.)
+ */
+/* eslint-disable no-control-regex */
+export function repairControlCharLatex(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\x08oxed\{/g, '\\boxed{')
+    .replace(/\x08egin\{/g, '\\begin{')
+    .replace(/\x0cfrac\{/g, '\\frac{')
+    .replace(/\x09ext\{/g, '\\text{')
+    .replace(/\x09heta\b/g, '\\theta')
+    .replace(/\x09an\b/g, '\\tan')
+    .replace(/\x09imes\b/g, '\\times')
+    .replace(/\x08eta\b/g, '\\beta')
+}
+/* eslint-enable no-control-regex */
+
+/**
  * Finds the LAST \boxed{...} in text using balanced brace depth counting.
  * Correctly returns nested fractions and functions without clipping at inner braces.
  */
 export function extractLastBoxed(text: string): string | null {
   if (!text) return null
+  const clean = repairControlCharLatex(text)
   const marker = '\\boxed{'
   let lastFound: string | null = null
   let searchFrom = 0
 
   while (true) {
-    const idx = text.indexOf(marker, searchFrom)
+    const idx = clean.indexOf(marker, searchFrom)
     if (idx === -1) break
     let depth = 0
     const start = idx + marker.length
     let foundEnd = -1
-    for (let i = start; i < text.length; i++) {
-      if (text[i] === '{') depth++
-      else if (text[i] === '}') {
+    for (let i = start; i < clean.length; i++) {
+      if (clean[i] === '{') depth++
+      else if (clean[i] === '}') {
         if (depth === 0) {
           foundEnd = i
           break
@@ -479,7 +498,7 @@ export function extractLastBoxed(text: string): string | null {
       }
     }
     if (foundEnd !== -1) {
-      lastFound = text.slice(start, foundEnd).trim()
+      lastFound = clean.slice(start, foundEnd).trim()
       searchFrom = foundEnd + 1
     } else {
       break

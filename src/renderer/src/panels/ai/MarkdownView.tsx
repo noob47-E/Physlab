@@ -2,11 +2,8 @@ import { memo, useState } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
-  Brain,
   Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Compass,
   HelpCircle,
   Play,
@@ -15,7 +12,7 @@ import {
 } from 'lucide-react'
 import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
 import { executePhysLabAction, extractThinkTrace } from '../../ai/bridge'
-import { extractLastBoxed, stripIncompleteActionBlocks } from '../../ai/contract'
+import { extractLastBoxed, repairControlCharLatex, stripIncompleteActionBlocks } from '../../ai/contract'
 import { enterMode } from '../../app/layout'
 
 interface MarkdownViewProps {
@@ -27,14 +24,6 @@ interface MarkdownViewProps {
   verification?: MessageVerification
   onActionExecuted?: (action: PhysLabAction) => void
   onChallengeClick?: (prompt: string) => void
-}
-
-const AGENT_LABELS: Record<SpecialAgent, { label: string; token: string }> = {
-  OCR_VISION: { label: 'OCR & Vision', token: 'text-accent' },
-  PLANNER_MINDMAP: { label: 'Planner & Mind Map', token: 'text-ink-strong' },
-  MATH_AUDITOR: { label: 'Math Auditor (3-Way)', token: 'text-good' },
-  PHYSICS_SANDBOX: { label: 'Physics Sandbox Audit', token: 'text-warn' },
-  HUMAN_TEACHER: { label: 'Human Teacher Soul', token: 'text-accent-2' }
 }
 
 /**
@@ -63,7 +52,9 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
     }
 
     if (op === 'solve' || input.includes('=')) {
-      chips.push('What if we graph y = lhs?')
+      const rawInput = String(calcAction.args.input || '')
+      const lhs = rawInput.split('=')[0].trim()
+      chips.push(`Plot y = ${lhs || rawInput}`)
       return chips
     }
 
@@ -114,15 +105,12 @@ function getChallengeChips(actions?: PhysLabAction[], content?: string): string[
 
 export const MarkdownView = memo(function MarkdownView({
   content,
-  think,
-  agentTraces,
   actions,
   verified,
   verification,
   onActionExecuted,
   onChallengeClick
 }: MarkdownViewProps) {
-  const [showThink, setShowThink] = useState(false)
   const [executingMap, setExecutingMap] = useState<Record<string, boolean>>({})
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({})
 
@@ -137,12 +125,11 @@ export const MarkdownView = memo(function MarkdownView({
   }
 
   // Extract inline think trace if not already parsed
-  const { cleanContent, think: inlineThink, agentTraces: inlineTraces } = extractThinkTrace(content)
-  const displayThink = think || inlineThink
-  const displayTraces = agentTraces && agentTraces.length > 0 ? agentTraces : inlineTraces
+  const fixedContent = repairControlCharLatex(content)
+  const { cleanContent } = extractThinkTrace(fixedContent)
 
   const cleanProse = stripIncompleteActionBlocks(cleanContent)
-  const boxedAnswer = extractLastBoxed(content)
+  const boxedAnswer = extractLastBoxed(fixedContent)
 
   // Verification state logic
   const verState = verification?.state
@@ -230,62 +217,7 @@ export const MarkdownView = memo(function MarkdownView({
         </div>
       )}
 
-      {/* 2. Collapsible Ultimatrix Agent Trace */}
-      {displayThink && (
-        <div className="rounded border border-line bg-surface-1 overflow-hidden">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between px-2.5 py-1.5 text-fine font-medium text-ink-dim hover:text-ink hover:bg-surface-2 transition-colors cursor-pointer"
-            onClick={() => setShowThink(!showThink)}
-          >
-            <div className="flex items-center gap-1.5">
-              <Brain size={14} className="text-accent" />
-              <span>🧠 Ultimatrix Agent Trace</span>
-              {displayTraces && displayTraces.length > 0 && (
-                <div className="flex items-center gap-1 ml-1">
-                  {displayTraces.map((trace) => (
-                    <span
-                      key={trace.agent}
-                      className={`px-1.5 py-0.2 rounded bg-surface-2 text-fine ${
-                        AGENT_LABELS[trace.agent]?.token || 'text-ink-dim'
-                      }`}
-                    >
-                      {AGENT_LABELS[trace.agent]?.label.split(' ')[0]}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            {showThink ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </button>
-
-          {showThink && (
-            <div className="p-2.5 border-t border-line bg-surface-0 flex flex-col gap-2 text-fine font-mono text-ink-dim whitespace-pre-wrap">
-              {displayTraces && displayTraces.length > 0 ? (
-                displayTraces.map((trace) => (
-                  <div
-                    key={trace.agent}
-                    className="flex flex-col gap-0.5 border-b border-line pb-1.5 last:border-none"
-                  >
-                    <span
-                      className={`font-semibold ${
-                        AGENT_LABELS[trace.agent]?.token || 'text-ink'
-                      }`}
-                    >
-                      [{AGENT_LABELS[trace.agent]?.label || trace.agent}]
-                    </span>
-                    <span className="text-ink-faint">{trace.summary}</span>
-                  </div>
-                ))
-              ) : (
-                <div>{displayThink}</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 3. Step-by-Step Mathematical Solution Directly Visible */}
+      {/* 2. Step-by-Step Mathematical Solution Directly Visible */}
       <div className="markdown-prose flex flex-col gap-2">
         {renderMarkdownWithMath(cleanProse)}
       </div>
@@ -648,11 +580,12 @@ function renderMarkdownWithMath(text: string): React.ReactNode[] {
  * Safely renders inline KaTeX math ($...$) and bold/code formatting.
  */
 function renderInlineMath(text: string): React.ReactNode {
-  const parts = text.split(/(\$[^$]+\$)/g)
+  const cleaned = repairControlCharLatex(text)
+  const parts = cleaned.split(/(\$[^$]+\$)/g)
 
   return parts.map((part, idx) => {
     if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
-      const tex = part.slice(1, -1)
+      const tex = repairControlCharLatex(part.slice(1, -1))
       try {
         const html = katex.renderToString(tex, {
           displayMode: false,
@@ -693,10 +626,12 @@ function renderInlineMath(text: string): React.ReactNode {
 }
 
 function DisplayMath({ tex }: { tex: string }) {
+  const cleanTex = repairControlCharLatex(tex)
+  const isLong = cleanTex.length > 28
   let html = ''
   let error = false
   try {
-    html = katex.renderToString(tex, {
+    html = katex.renderToString(cleanTex, {
       displayMode: true,
       throwOnError: false,
       output: 'html'
@@ -706,12 +641,14 @@ function DisplayMath({ tex }: { tex: string }) {
   }
 
   if (error) {
-    return <div className="font-mono text-fine text-warn my-2">{tex}</div>
+    return <div className="font-mono text-fine text-warn my-2">{cleanTex}</div>
   }
 
   return (
     <div
-      className="my-1.5 p-2 rounded bg-surface-1 overflow-x-auto text-center text-small"
+      className={`my-1.5 p-2 rounded bg-surface-1 overflow-x-hidden text-center ${
+        isLong ? 'text-fine' : 'text-small'
+      }`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

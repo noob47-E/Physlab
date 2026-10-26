@@ -78,6 +78,10 @@ export const getDockApi = (): DockviewApi | null => dockApi
 /** True while the panel is open somewhere in the layout. */
 export const isPanelOpen = (id: string): boolean => !!dockApi?.getPanel(id)
 
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { showPanel?: (id: string) => void }).showPanel = (id: string) => showPanel(id)
+}
+
 /**
  * Bring a panel forward, putting it back first if it was closed. Without this, closing a panel
  * was a one-way door: the only way to see it again was resetting the whole layout.

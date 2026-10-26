@@ -18,10 +18,7 @@ import {
   Eye,
   EyeOff,
   Square,
-  Cpu,
-  Folder,
-  FolderOpen,
-  Play
+  Cpu
 } from 'lucide-react'
 import { useAiStore } from '../ai/store'
 import {
@@ -88,10 +85,16 @@ export function AiCopilot() {
   const currentThread = threads.find((t) => t.id === activeThreadId) || threads[0]
   const messages = useMemo(() => currentThread?.messages || [], [currentThread?.messages])
 
-  // Auto-scroll to bottom of chat
+  const lastBotMsgRef = useRef<HTMLDivElement | null>(null)
+
+  // Auto-scroll logic: keep the top of the assistant message (and its Final Answer banner) visible
   useEffect(() => {
     if (activeTab === 'chat') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      if (!isStreaming && lastBotMsgRef.current) {
+        lastBotMsgRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
     }
   }, [messages, isStreaming, activeTab])
 
@@ -200,7 +203,9 @@ export function AiCopilot() {
   }
 
   const handleSendRef = useRef(handleSend)
-  handleSendRef.current = handleSend
+  useEffect(() => {
+    handleSendRef.current = handleSend
+  })
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -250,106 +255,6 @@ export function AiCopilot() {
       current: 0
     })
     setNewGoalTitle('')
-  }
-
-  // Built-in Local Engine State & Handlers
-  const [localModels, setLocalModels] = useState<
-    Array<{ filename: string; fullPath: string; sizeFormatted: string }>
-  >([])
-  const [selectedModelPath, setSelectedModelPath] = useState<string>('')
-  const [modelsDir, setModelsDir] = useState<string>('')
-  const [isServerRunning, setIsServerRunning] = useState(false)
-  const [isStartingServer, setIsStartingServer] = useState(false)
-  const [serverError, setServerError] = useState<string | null>(null)
-
-  const refreshLocalModels = useCallback(
-    async (dir?: string) => {
-      if (!window.physlab?.aiListModels) return
-      try {
-        const status = await window.physlab.aiGetStatus()
-        const targetDir = dir || modelsDir || status.defaultDir
-        setModelsDir(targetDir)
-        setIsServerRunning(status.running)
-        if (status.modelPath) setSelectedModelPath(status.modelPath)
-
-        const models = await window.physlab.aiListModels(targetDir)
-        setLocalModels(models)
-        if (models.length > 0 && !selectedModelPath) {
-          setSelectedModelPath(models[0].fullPath)
-        }
-      } catch {
-        // ignore in non-electron environment
-      }
-    },
-    [modelsDir, selectedModelPath]
-  )
-
-  useEffect(() => {
-    let active = true
-    if (provider === 'local' && window.physlab?.aiGetStatus) {
-      window.physlab.aiGetStatus().then((status) => {
-        if (!active) return
-        const targetDir = modelsDir || status.defaultDir
-        setModelsDir(targetDir)
-        setIsServerRunning(status.running)
-        if (status.modelPath) setSelectedModelPath(status.modelPath)
-        window.physlab?.aiListModels?.(targetDir).then((models) => {
-          if (!active) return
-          setLocalModels(models)
-          if (models.length > 0 && !selectedModelPath) {
-            setSelectedModelPath(models[0].fullPath)
-          }
-        })
-      })
-    }
-    return () => {
-      active = false
-    }
-  }, [provider, modelsDir, selectedModelPath])
-
-  const handleStartLocalAi = async () => {
-    if (!selectedModelPath || !window.physlab?.aiStartServer) return
-    setIsStartingServer(true)
-    setServerError(null)
-    try {
-      const res = await window.physlab.aiStartServer(selectedModelPath, 8080)
-      if (res.success) {
-        setIsServerRunning(true)
-        useAiStore.getState().setLocalEndpoint(`http://127.0.0.1:${res.port}/v1`)
-        const fname = selectedModelPath.split(/[\\/]/).pop() || 'local-gguf'
-        useAiStore.getState().setLocalModel(fname)
-        setVerifyMsg({ ok: true, message: `GPU Engine started with ${fname} on port ${res.port}` })
-      } else {
-        setServerError(res.error || 'Failed to start local AI engine')
-      }
-    } catch (err) {
-      setServerError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setIsStartingServer(false)
-    }
-  }
-
-  const handleStopLocalAi = async () => {
-    if (!window.physlab?.aiStopServer) return
-    await window.physlab.aiStopServer()
-    setIsServerRunning(false)
-    setVerifyMsg(null)
-  }
-
-  const handleOpenFolder = async () => {
-    if (window.physlab?.aiOpenFolder) {
-      await window.physlab.aiOpenFolder(modelsDir)
-    }
-  }
-
-  const handleSelectFolder = async () => {
-    if (window.physlab?.aiSelectFolder) {
-      const picked = await window.physlab.aiSelectFolder()
-      if (picked) {
-        setModelsDir(picked)
-        await refreshLocalModels(picked)
-      }
-    }
   }
 
   return (
@@ -511,6 +416,7 @@ export function AiCopilot() {
                   return (
                     <div
                       key={m.id}
+                      ref={isLastAssistantMessage ? lastBotMsgRef : undefined}
                       className={`flex flex-col gap-1 ${
                         m.role === 'user' ? 'items-end' : 'items-start w-full'
                       }`}
@@ -899,306 +805,163 @@ export function AiCopilot() {
             </div>
 
             {/* Google Gemini Card */}
-            <div className={`flex flex-col gap-2.5 p-3 rounded border transition-colors ${
-              provider === 'gemini' ? 'border-accent bg-surface-1' : 'border-line bg-surface-1'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                  <Sparkles size={15} className="text-accent" />
-                  <span>Google Gemini API</span>
-                </div>
-                {provider === 'gemini' ? (
+            {provider === 'gemini' && (
+              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                    <Sparkles size={15} className="text-accent" />
+                    <span>Google Gemini API</span>
+                  </div>
                   <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
                     Active Provider
                   </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => useAiStore.getState().setProvider('gemini')}
-                    className="text-fine text-accent hover:underline cursor-pointer"
-                  >
-                    Set Active
-                  </button>
-                )}
-              </div>
+                </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-fine font-medium text-ink-dim">Google AI Studio API Key</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type={showKeyText ? 'text' : 'password'}
-                    value={geminiApiKey}
-                    onChange={(e) => useAiStore.getState().setGeminiApiKey(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    placeholder="AIzaSy..."
-                    className="flex-1 p-1.5 rounded bg-surface-0 border border-line text-body text-ink outline-none focus:border-line-2 font-mono"
-                  />
-                  <button
-                    type="button"
-                    title="Show / Hide API Key"
-                    onClick={() => setShowKeyText((v) => !v)}
-                    className="p-1.5 rounded bg-surface-0 border border-line text-ink-dim hover:text-ink cursor-pointer"
-                  >
-                    {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                  <button
-                    type="button"
-                    title="Paste API Key from Clipboard"
-                    onClick={async () => {
-                      try {
-                        const clip = await navigator.clipboard.readText()
-                        if (clip && clip.trim()) {
-                          useAiStore.getState().setGeminiApiKey(clip.trim())
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-fine font-medium text-ink-dim">
+                      Google AI Studio API Key
+                    </label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const clip = await navigator.clipboard.readText()
+                          if (clip && clip.trim()) {
+                            useAiStore.getState().setGeminiApiKey(clip.trim())
+                          }
+                        } catch {
+                          // Ignore clipboard error
                         }
-                      } catch {
-                        // Ignore clipboard error
-                      }
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
-                  >
-                    <ClipboardPaste size={13} />
-                    <span>Paste</span>
-                  </button>
+                      }}
+                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
+                    >
+                      <ClipboardPaste size={11} />
+                      <span>Paste Key</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5 w-full">
+                    <input
+                      type={showKeyText ? 'text' : 'password'}
+                      value={geminiApiKey}
+                      onChange={(e) => useAiStore.getState().setGeminiApiKey(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      placeholder="AIzaSy..."
+                      className="flex-1 min-w-0 p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
+                    />
+                    <button
+                      type="button"
+                      title={showKeyText ? 'Hide API Key' : 'Show API Key'}
+                      onClick={() => setShowKeyText((v) => !v)}
+                      className="p-1.5 rounded bg-surface-0 border border-line text-ink-dim hover:text-ink cursor-pointer shrink-0"
+                    >
+                      {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  <span className="text-fine text-ink-faint">
+                    Saved locally in your browser/app storage.
+                  </span>
                 </div>
-                <span className="text-fine text-ink-faint">
-                  Saved locally in your browser/app storage.
-                </span>
-              </div>
 
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-fine font-medium text-ink-dim">Gemini Model</label>
-                  <button
-                    type="button"
-                    onClick={handleFetchModels}
-                    disabled={isFetchingModels}
-                    className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-fine font-medium text-ink-dim">Gemini Model</label>
+                    <button
+                      type="button"
+                      onClick={handleFetchModels}
+                      disabled={isFetchingModels}
+                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw size={11} className={isFetchingModels ? 'animate-spin' : ''} />
+                      <span>{isFetchingModels ? 'Fetching…' : 'Fetch Models'}</span>
+                    </button>
+                  </div>
+                  <select
+                    value={geminiModel}
+                    onChange={(e) => useAiStore.getState().setGeminiModel(e.target.value)}
+                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
                   >
-                    <RefreshCw size={11} className={isFetchingModels ? 'animate-spin' : ''} />
-                    <span>{isFetchingModels ? 'Fetching…' : 'Fetch Models'}</span>
-                  </button>
+                    {availableGeminiModels.map((m) => (
+                      <option key={m} value={m}>
+                        {m} {m === 'gemini-2.5-flash' ? '(Recommended)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {modelFetchMsg && (
+                    <span className="text-fine text-good">{modelFetchMsg}</span>
+                  )}
                 </div>
-                <select
-                  value={geminiModel}
-                  onChange={(e) => useAiStore.getState().setGeminiModel(e.target.value)}
-                  className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
-                >
-                  {availableGeminiModels.map((m) => (
-                    <option key={m} value={m}>
-                      {m} {m === 'gemini-2.5-flash' ? '(Recommended)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {modelFetchMsg && (
-                  <span className="text-fine text-good">{modelFetchMsg}</span>
-                )}
               </div>
-            </div>
+            )}
 
             {/* Local Brain Card */}
-            <div className="flex flex-col gap-3">
-                {/* Plug & Play PhysLab-Brain (Qwen Q4) Card */}
-                <div className="flex flex-col gap-2.5 p-3 rounded border border-line bg-surface-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                      <Cpu size={15} className="text-accent" />
-                      <span>Plug &amp; Play PhysLab-Brain (Qwen Q4)</span>
-                    </div>
-                    <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                      Local Qwen Q4
-                    </span>
+            {provider === 'local' && (
+              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                    <Cpu size={15} className="text-accent" />
+                    <span>Plug &amp; Play PhysLab-Brain (Qwen Q4)</span>
                   </div>
+                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
+                    Local Qwen Q4
+                  </span>
+                </div>
 
-                  <div className="text-fine text-ink-dim">
-                    One-click connection to local Qwen 2.5 / PhysLab-Brain runners (llama.cpp, Ollama, LM Studio, or local GPU runner).
-                  </div>
+                <div className="text-fine text-ink-dim">
+                  One-click connection to local Qwen 2.5 / PhysLab-Brain runners (llama.cpp, Ollama, LM Studio, or local GPU runner).
+                </div>
 
-                  <button
-                    type="button"
-                    disabled={isAutoConnecting}
-                    onClick={handleAutoConnectLocal}
-                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-50"
+                <button
+                  type="button"
+                  disabled={isAutoConnecting}
+                  onClick={handleAutoConnectLocal}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw size={13} className={isAutoConnecting ? 'animate-spin' : ''} />
+                  <span>{isAutoConnecting ? 'Probing Local Endpoints…' : 'Auto-Connect Local Brain'}</span>
+                </button>
+
+                {autoConnectResult && (
+                  <div
+                    className={`p-2 rounded text-fine ${
+                      autoConnectResult.ok
+                        ? 'bg-surface-0 text-good border border-line'
+                        : 'bg-surface-0 text-bad border border-line'
+                    }`}
                   >
-                    <RefreshCw size={13} className={isAutoConnecting ? 'animate-spin' : ''} />
-                    <span>{isAutoConnecting ? 'Probing Local Endpoints…' : 'Auto-Connect Local Brain'}</span>
-                  </button>
-
-                  {autoConnectResult && (
-                    <div
-                      className={`p-2 rounded text-fine ${
-                        autoConnectResult.ok
-                          ? 'bg-surface-0 text-good border border-line'
-                          : 'bg-surface-0 text-bad border border-line'
-                      }`}
-                    >
-                      {autoConnectResult.message}
-                    </div>
-                  )}
-
-                  {/* Expandable Advanced Endpoint Settings */}
-                  <details className="flex flex-col gap-2 p-2 rounded border border-line bg-surface-0 group mt-1">
-                    <summary className="text-fine font-medium text-ink-dim cursor-pointer select-none">
-                      Advanced Endpoint Settings
-                    </summary>
-                    <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-line">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-fine font-medium text-ink-dim">Base URL</label>
-                        <input
-                          type="text"
-                          value={localEndpoint}
-                          onChange={(e) => useAiStore.getState().setLocalEndpoint(e.target.value)}
-                          placeholder="http://127.0.0.1:8080/v1"
-                          className="p-1.5 rounded bg-surface-1 border border-line text-body text-ink outline-none font-mono"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-fine font-medium text-ink-dim">Model Identifier</label>
-                        <input
-                          type="text"
-                          value={localModel}
-                          onChange={(e) => useAiStore.getState().setLocalModel(e.target.value)}
-                          className="p-1.5 rounded bg-surface-1 border border-line text-small text-ink outline-none font-mono"
-                        />
-                      </div>
-                    </div>
-                  </details>
-                </div>
-
-                {/* Built-in GPU Runner Section */}
-                <div className="flex flex-col gap-2.5 p-3 rounded border border-line bg-surface-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                      <Cpu size={15} className="text-accent" />
-                      <span>Built-in GPU Model Runner</span>
-                    </div>
-                    {isServerRunning ? (
-                      <span className="flex items-center gap-1 text-fine font-medium text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                        <span className="w-1.5 h-1.5 rounded-full bg-good animate-pulse" />
-                        RTX 3060 Active
-                      </span>
-                    ) : (
-                      <span className="text-fine text-ink-faint">Engine Stopped</span>
-                    )}
+                    {autoConnectResult.message}
                   </div>
+                )}
 
-                  {/* Folder Selector */}
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-fine font-medium text-ink-dim">Specific Models Folder</label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handleOpenFolder}
-                          className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
-                          title="Open folder in File Explorer"
-                        >
-                          <FolderOpen size={12} />
-                          <span>Open Folder</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSelectFolder}
-                          className="flex items-center gap-1 text-fine text-ink-dim hover:text-ink cursor-pointer"
-                          title="Change models folder"
-                        >
-                          <Folder size={12} />
-                          <span>Change</span>
-                        </button>
-                      </div>
+                {/* Expandable Advanced Endpoint Settings */}
+                <details className="flex flex-col gap-2 p-2 rounded border border-line bg-surface-0 group mt-1">
+                  <summary className="text-fine font-medium text-ink-dim cursor-pointer select-none">
+                    Advanced Endpoint Settings
+                  </summary>
+                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-line">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-fine font-medium text-ink-dim">Base URL</label>
+                      <input
+                        type="text"
+                        value={localEndpoint}
+                        onChange={(e) => useAiStore.getState().setLocalEndpoint(e.target.value)}
+                        placeholder="http://127.0.0.1:8080/v1"
+                        className="p-1.5 rounded bg-surface-1 border border-line text-body text-ink outline-none font-mono"
+                      />
                     </div>
-                    <div className="px-2 py-1.5 rounded bg-surface-0 border border-line text-fine font-mono text-ink-dim truncate select-all">
-                      {modelsDir || 'C:\\Users\\noob47\\PhysLab\\models'}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-fine font-medium text-ink-dim">Model Identifier</label>
+                      <input
+                        type="text"
+                        value={localModel}
+                        onChange={(e) => useAiStore.getState().setLocalModel(e.target.value)}
+                        className="p-1.5 rounded bg-surface-1 border border-line text-small text-ink outline-none font-mono"
+                      />
                     </div>
                   </div>
-
-                  {/* Models List / Picker */}
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-fine font-medium text-ink-dim">Detected .gguf Model</label>
-                      <button
-                        type="button"
-                        onClick={() => refreshLocalModels(modelsDir)}
-                        className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
-                        title="Rescan folder for .gguf files"
-                      >
-                        <RefreshCw size={11} />
-                        <span>Rescan</span>
-                      </button>
-                    </div>
-
-                    {localModels.length > 0 ? (
-                      <select
-                        value={selectedModelPath}
-                        onChange={(e) => setSelectedModelPath(e.target.value)}
-                        disabled={isServerRunning}
-                        className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none disabled:opacity-60 font-mono"
-                      >
-                        {localModels.map((m) => (
-                          <option key={m.fullPath} value={m.fullPath}>
-                            {m.filename} ({m.sizeFormatted})
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="p-3 rounded border border-line bg-surface-0 text-center text-fine text-ink-faint">
-                        No .gguf models found in this folder.
-                        <br />
-                        Click <strong>Open Folder</strong> and place your <code>.gguf</code> model into it.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Server Error Notice */}
-                  {serverError && (
-                    <div className="p-2 rounded bg-surface-0 border border-line text-bad text-fine">
-                      {serverError}
-                    </div>
-                  )}
-
-                  {/* One-Click Engine Start / Stop */}
-                  <div className="flex items-center gap-2 pt-1">
-                    {isServerRunning ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleStopLocalAi}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-surface-2 text-ink hover:bg-surface-3 border border-line text-small font-medium cursor-pointer transition-colors"
-                        >
-                          <Square size={13} fill="currentColor" />
-                          <span>Stop AI Engine</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab('chat')}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 cursor-pointer transition-colors"
-                        >
-                          <MessageSquare size={14} />
-                          <span>Chat Now</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={localModels.length === 0 || isStartingServer}
-                        onClick={handleStartLocalAi}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 disabled:opacity-50 cursor-pointer transition-colors"
-                      >
-                        {isStartingServer ? (
-                          <>
-                            <RefreshCw size={14} className="animate-spin" />
-                            <span>Starting RTX 3060 Engine…</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play size={14} fill="currentColor" />
-                            <span>Start Local AI (RTX 3060)</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                </details>
               </div>
+            )}
 
             {/* Auto Execute Toggle */}
             <label className="flex items-center gap-2 text-small text-ink-strong cursor-pointer p-2.5 rounded border border-line bg-surface-1">

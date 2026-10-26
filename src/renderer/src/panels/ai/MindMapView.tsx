@@ -65,19 +65,19 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
       return
     }
 
-    const count = data.nodes.length
-    const width = 500
-    const height = 360
-    const centerX = width / 2
-    const centerY = height / 2
-    const radius = Math.min(centerX, centerY) - 70
-
     const initialPositions: Record<string, { x: number; y: number }> = {}
     data.nodes.forEach((node, i) => {
-      const angle = (2 * Math.PI * i) / count - Math.PI / 2
-      const x = centerX + radius * Math.cos(angle)
-      const y = centerY + radius * 0.8 * Math.sin(angle)
-      initialPositions[node.id] = { x, y }
+      if (i === 0) {
+        // Root node at top center
+        initialPositions[node.id] = { x: 180, y: 60 }
+      } else {
+        // Remaining nodes arranged in 2 clean columns (x = 95 and x = 265) with 95px vertical spacing
+        const row = Math.floor((i - 1) / 2)
+        const col = (i - 1) % 2
+        const x = col === 0 ? 95 : 265
+        const y = 150 + row * 95
+        initialPositions[node.id] = { x, y }
+      }
     })
 
     setNodePositions(initialPositions)
@@ -212,7 +212,7 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
       >
         <svg
           ref={svgRef}
-          viewBox="0 0 500 360"
+          viewBox="0 0 360 560"
           className="w-full h-full"
         >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
@@ -263,11 +263,11 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
                 >
                   {/* Node Pill Background */}
                   <rect
-                    x="-60"
-                    y="-22"
-                    width="120"
-                    height="44"
-                    rx="8"
+                    x="-72.5"
+                    y="-26"
+                    width="145"
+                    height="52"
+                    rx="10"
                     fill={colors.fill}
                     stroke={isSelected ? 'var(--text-strong)' : colors.stroke}
                     strokeWidth={isSelected ? '2.5' : '1.5'}
@@ -276,7 +276,7 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
                   {/* Node Label */}
                   <text
                     x="0"
-                    y="-4"
+                    y="-3"
                     fill="var(--text-strong)"
                     fontSize="11"
                     fontWeight="600"
@@ -289,7 +289,7 @@ export const MindMapView = memo(function MindMapView({ data, onNodeClick }: Mind
                   {/* Subtitle / Category */}
                   <text
                     x="0"
-                    y="12"
+                    y="13"
                     fill={colors.text}
                     fontSize="9"
                     textAnchor="middle"

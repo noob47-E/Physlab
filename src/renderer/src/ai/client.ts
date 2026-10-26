@@ -1,5 +1,6 @@
 import { buildSystemPrompt } from './systemPrompt'
 import { extractActions, extractThinkTrace, buildAppContext, preComputeEngineTurn } from './bridge'
+import { repairControlCharLatex } from './contract'
 import { useAiStore } from './store'
 import type { Attachment, ChatMessage } from './types'
 
@@ -431,7 +432,7 @@ export async function streamChatCompletion(
               : ''
             if (textChunk) {
               accumulated += textChunk
-              callbacks.onChunk(accumulated)
+              callbacks.onChunk(repairControlCharLatex(accumulated))
             }
           } catch {
             // Partial JSON chunk
@@ -444,7 +445,7 @@ export async function streamChatCompletion(
       const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
 
       callbacks.onDone({
-        content: finalContent,
+        content: repairControlCharLatex(finalContent),
         think,
         actions,
         agentTraces
@@ -528,7 +529,7 @@ export async function streamChatCompletion(
               ''
             if (textChunk) {
               accumulated += textChunk
-              callbacks.onChunk(accumulated)
+              callbacks.onChunk(repairControlCharLatex(accumulated))
             }
           } catch {
             // Partial chunk
@@ -541,7 +542,7 @@ export async function streamChatCompletion(
       const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
 
       callbacks.onDone({
-        content: finalContent,
+        content: repairControlCharLatex(finalContent),
         think,
         actions,
         agentTraces
@@ -553,7 +554,7 @@ export async function streamChatCompletion(
       const actions = parsedActions.length > 0 ? parsedActions : preComputed.actions
       const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
       callbacks.onDone({
-        content: finalContent,
+        content: repairControlCharLatex(finalContent),
         think,
         actions,
         agentTraces
