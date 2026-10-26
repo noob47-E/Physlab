@@ -656,7 +656,7 @@ function renderProseWithInventedGuard(
           title="not checked"
         >
           <span className="opacity-70">{matchStr}</span>
-          <span className="text-[10px] text-ink-dim px-1 rounded bg-surface-2 border border-line font-sans font-normal">
+          <span className="text-fine text-ink-dim px-1 rounded bg-surface-2 border border-line font-sans font-normal">
             not checked
           </span>
         </span>
@@ -740,7 +740,7 @@ function renderInlineMath(
               title="not checked"
             >
               {node}
-              <span className="text-[10px] text-ink-dim px-1 rounded bg-surface-2 border border-line font-sans font-normal">
+              <span className="text-fine text-ink-dim px-1 rounded bg-surface-2 border border-line font-sans font-normal">
                 not checked
               </span>
             </span>
@@ -806,7 +806,7 @@ function DisplayMath({ tex, isInvented }: { tex: string; isInvented?: boolean })
     return (
       <div className="flex flex-col items-center gap-1">
         <div className="opacity-70 text-ink-faint w-full">{content}</div>
-        <span className="text-[10px] text-ink-dim px-1.5 py-0.5 rounded bg-surface-2 border border-line">
+        <span className="text-fine text-ink-dim px-1.5 py-0.5 rounded bg-surface-2 border border-line">
           not checked
         </span>
       </div>

@@ -107,6 +107,18 @@ describe('equations', () => {
     expect(r2?.main).toBe('x = 3, y = 1')
     expect(r2?.roots).toEqual([3, 1])
     expect(r2?.solved).toBe(true)
+
+    const r3 = evaluateInput('COMP', '2x + y = 7; x - y = 2', maths)
+    expect(r3).not.toBeNull()
+    expect(r3?.main).toBe('x = 3, y = 1')
+    expect(r3?.roots).toEqual([3, 1])
+    expect(r3?.solved).toBe(true)
+
+    const r4 = evaluateInput('COMP', '2x + y = 7 and x - y = 2', maths)
+    expect(r4).not.toBeNull()
+    expect(r4?.main).toBe('x = 3, y = 1')
+    expect(r4?.roots).toEqual([3, 1])
+    expect(r4?.solved).toBe(true)
   })
   it('solves inequalities', () => {
     const iv = polyInequality([1, -5, 6], '<')
@@ -118,17 +130,23 @@ describe('equations', () => {
     const maths = { vars: {}, ans: 0, angle: 'deg' as const }
     const r1 = evaluateInput('COMP', 'x^2 - 4 < 0', maths)
     expect(r1).not.toBeNull()
-    expect(r1?.main).toBe('-2 < x < 2')
+    expect(r1?.main).toBe('-2 < x < 2, (-2, 2)')
     expect(r1?.extra).toContain('(-2, 2)')
     expect(r1?.inequality).toBe(true)
     expect(r1?.solved).toBe(true)
 
     const r2 = evaluateInput('COMP', '2x + 3 > 7', maths)
     expect(r2).not.toBeNull()
-    expect(r2?.main).toBe('x > 2')
+    expect(r2?.main).toBe('x > 2, (2, ∞)')
     expect(r2?.extra).toContain('(2, \\infty)')
     expect(r2?.inequality).toBe(true)
     expect(r2?.solved).toBe(true)
+
+    const r3 = evaluateInput('COMP', 'x^2 - 2 < 0', maths)
+    expect(r3).not.toBeNull()
+    expect(r3?.main).toContain('< x <')
+    expect(r3?.inequality).toBe(true)
+    expect(r3?.solved).toBe(true)
   })
 })
 

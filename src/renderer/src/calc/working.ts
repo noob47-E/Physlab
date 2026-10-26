@@ -189,7 +189,7 @@ function sameRootOf(a: number, b: number, working: Working): boolean {
 }
 
 /** The plain text of an answer, with π kept: texToPlain alone would drop the \pi and leave 7/6 for 7π/6. */
-function plainOfAnswer(tex: string): string {
+export function plainOfAnswer(tex: string): string {
   return texToPlain(tex.replace(/\\frac\{(-?\d*)\\pi\}\{(\d+)\}/g, '$1π/$2').replace(/\\pi(?![a-zA-Z])/g, 'π'))
 }
 

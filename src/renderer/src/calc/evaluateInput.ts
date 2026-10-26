@@ -26,7 +26,9 @@ import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
 import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from '../math/steps/methods/linearSystem'
 import { rationalExcludedOf, ratOfText } from '../math/steps/check-adapter'
-import { analyseInequality, intervalForm, readInequality, setForm } from '../math/steps/inequality'
+import { analyseInequality, intervalForm, readInequality, setForm, splitRelation } from '../math/steps/inequality'
+import { polyInequality } from './engine'
+import { plainOfAnswer } from './working'
 import type { FieldMode } from './calcStore'
 import type { EngineAsk } from './engineAnswer'
 
@@ -300,24 +302,32 @@ function limitResult(lim: LimitCall, src: string, angle: 'deg' | 'rad'): EvalRes
  * Recognizes comma-separated systems and solves them using the exact linear system step solver.
  */
 function solveSimultaneous(src: string): EvalResult | null {
-  if (!src.includes(',') || !src.includes('=')) return null
-  const problem = { job: 'solve' as const, input: src }
+  if (!src.includes('=')) return null
+  const normalized = src
+    .replace(/;/g, ',')
+    .replace(/\s+and\s+/gi, ', ')
+    .replace(/([0-9a-zA-Z_)])and([0-9a-zA-Z_(+-])/gi, '$1, $2')
+  if (!normalized.includes(',')) return null
+  const problem = { job: 'solve' as const, input: normalized }
   const aSub = linearSystemSubstitutionMethod.appliesTo(problem)
   const aElim = linearSystemEliminationMethod.appliesTo(problem)
   const okSub = typeof aSub === 'boolean' ? aSub : aSub.applies
   const okElim = typeof aElim === 'boolean' ? aElim : aElim.applies
   if (!okSub && !okElim) return null
-  const w = linearSystemSubstitutionMethod.solve(problem, undefined as never)
-  if (w.noWorking) return null
-  if (Array.isArray(w.answer)) {
-    const main = w.answer.map((a) => `${a.label} = ${a.tex}`).join(', ')
+  const w = (okSub ? linearSystemSubstitutionMethod.solve(problem, undefined as never) : null)
+    ?? (okElim ? linearSystemEliminationMethod.solve(problem, undefined as never) : null)
+  const working = w && !w.noWorking ? w : (okElim ? linearSystemEliminationMethod.solve(problem, undefined as never) : null)
+  if (!working || working.noWorking) return null
+  if (Array.isArray(working.answer)) {
+    const main = working.answer.map((a) => `${a.label} = ${a.tex}`).join(', ')
     const roots: number[] = []
-    for (const a of w.answer) {
-      const r = ratOfText(a.tex)
+    for (const a of working.answer) {
+      const cleanTex = a.tex.replace(/−/g, '-')
+      const r = ratOfText(cleanTex)
       if (r) {
         roots.push(Number(r.n) / Number(r.d))
       } else {
-        const n = Number(a.tex)
+        const n = Number(cleanTex)
         if (Number.isFinite(n)) roots.push(n)
       }
     }
@@ -330,8 +340,8 @@ function solveSimultaneous(src: string): EvalResult | null {
       exact: null
     }
   }
-  if (w.answer && typeof w.answer === 'object') {
-    const ans = w.answer as { label?: string; tex?: string }
+  if (working.answer && typeof working.answer === 'object') {
+    const ans = working.answer as { label?: string; tex?: string }
     const text = (ans.tex ?? '').replace(/^\\text\{/, '').replace(/\}$/, '')
     return {
       main: text || 'No solution',
@@ -354,16 +364,83 @@ function solveInequalityInput(src: string): EvalResult | null {
   const withoutIneq = src.replace(/<=|>=|≤|≥/g, '')
   if (withoutIneq.includes('=')) return null
   const read = readInequality(src)
-  if (!read) return null
-  const analysis = analyseInequality(read)
-  if (!analysis) return null
-  const plain = setForm(analysis.set, read.v, false).replace(/−/g, '-')
-  const tex = setForm(analysis.set, read.v, true)
-  const interval = intervalForm(analysis.set)
+  if (read) {
+    const analysis = analyseInequality(read)
+    if (analysis) {
+      const plain = setForm(analysis.set, read.v, false).replace(/−/g, '-')
+      const tex = setForm(analysis.set, read.v, true)
+      const interval = intervalForm(analysis.set)
+      const plainInterval = interval ? plainOfAnswer(interval) : ''
+      const main = plainInterval ? `${plain}, ${plainInterval}` : plain
+      return {
+        main,
+        tex,
+        extra: interval && interval !== '\\varnothing' ? [interval] : undefined,
+        inequality: true,
+        solved: true,
+        src,
+        exact: null
+      }
+    }
+  }
+
+  // Fallback to numeric polyInequality if exact rational inequality solver cannot solve (e.g. irrational roots)
+  const rel = splitRelation(src)
+  if (!rel) return null
+  const op = rel.rel as '<' | '<=' | '>' | '>='
+  const coeffs = polynomialInX(rel.left, rel.right, {})
+  if (!coeffs || coeffs.length < 2) return null
+  const intervals = polyInequality(coeffs, op)
+  if (!intervals.length) {
+    return {
+      main: 'no value of x works, ∅',
+      tex: '\\text{no value of x works}',
+      extra: ['\\varnothing'],
+      inequality: true,
+      solved: true,
+      src,
+      exact: null
+    }
+  }
+  const v = 'x'
+  const parts: string[] = []
+  const texIntervals: string[] = []
+  const plainIntervals: string[] = []
+  for (const iv of intervals) {
+    const loInf = !Number.isFinite(iv.from)
+    const hiInf = !Number.isFinite(iv.to)
+    if (loInf && hiInf) {
+      parts.push('every real number')
+      texIntervals.push('(-\\infty, \\infty)')
+      plainIntervals.push('(-∞, ∞)')
+    } else if (loInf && !hiInf) {
+      parts.push(`${v} ${iv.closedTo ? '≤' : '<'} ${calcNum(iv.to)}`)
+      texIntervals.push(`(-\\infty, ${calcNum(iv.to)}${iv.closedTo ? ']' : ')'}`)
+      plainIntervals.push(`(-∞, ${calcNum(iv.to)}${iv.closedTo ? ']' : ')'}`)
+    } else if (!loInf && hiInf) {
+      parts.push(`${v} ${iv.closedFrom ? '≥' : '>'} ${calcNum(iv.from)}`)
+      texIntervals.push(`(${iv.closedFrom ? '[' : '('}${calcNum(iv.from)}, \\infty)`)
+      plainIntervals.push(`(${iv.closedFrom ? '[' : '('}${calcNum(iv.from)}, ∞)`)
+    } else {
+      if (Math.abs(iv.from - iv.to) < 1e-12) {
+        parts.push(`${v} = ${calcNum(iv.from)}`)
+        texIntervals.push(`\\{${calcNum(iv.from)}\\}`)
+        plainIntervals.push(`{${calcNum(iv.from)}}`)
+      } else {
+        parts.push(`${calcNum(iv.from)} ${iv.closedFrom ? '≤' : '<'} ${v} ${iv.closedTo ? '≤' : '<'} ${calcNum(iv.to)}`)
+        texIntervals.push(`${iv.closedFrom ? '[' : '('}${calcNum(iv.from)}, ${calcNum(iv.to)}${iv.closedTo ? ']' : ')'}`)
+        plainIntervals.push(`${iv.closedFrom ? '[' : '('}${calcNum(iv.from)}, ${calcNum(iv.to)}${iv.closedTo ? ']' : ')'}`)
+      }
+    }
+  }
+  const plain = parts.join(' or ')
+  const intervalStr = texIntervals.join(' \\cup ')
+  const plainIntervalStr = plainIntervals.join(' ∪ ')
+  const main = plainIntervalStr ? `${plain}, ${plainIntervalStr}` : plain
   return {
-    main: plain,
-    tex,
-    extra: interval && interval !== '\\varnothing' ? [interval] : undefined,
+    main,
+    tex: intervalStr,
+    extra: intervalStr ? [intervalStr] : undefined,
     inequality: true,
     solved: true,
     src,
@@ -374,7 +451,9 @@ function solveInequalityInput(src: string): EvalResult | null {
 /**
  * Whether a real number root is an excluded root (makes any denominator zero or undefined).
  */
-function isExcludedRoot(r: number, left: string, right: string, scope: Record<string, unknown>, src: string): boolean {
+function isExcludedRoot(r: number, left: string, right: string, scope: Record<string, unknown>, src: string, isLatexFrac: boolean): boolean {
+  if (!isLatexFrac) return false
+
   try {
     const exactExcluded = rationalExcludedOf(src)
     if (exactExcluded && exactExcluded.some((e) => Math.abs(r - Number(e.n) / Number(e.d)) < 1e-7)) {
@@ -411,8 +490,11 @@ function isExcludedRoot(r: number, left: string, right: string, scope: Record<st
     if (!Number.isFinite(vl) || !Number.isFinite(vr) || Number.isNaN(vl) || Number.isNaN(vr)) {
       return true
     }
-  } catch {
-    return true
+  } catch (e: unknown) {
+    if (e && typeof (e as { message?: unknown }).message === 'string' && /division by zero/i.test((e as { message: string }).message)) {
+      return true
+    }
+    return false
   }
 
   return false
@@ -606,8 +688,9 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       // No real root, but where the roots are is known: an answer to the question, not an error, and
       // no number to keep — so no x is stored from it and the eng chip leaves the sentence alone.
       if ('sentence' in answer) return { main: answer.sentence, src, exact: null, solved: false }
+      const isLatexFrac = input.includes('\\frac')
       if ('real' in answer) {
-        const validRoots = answer.real.filter((r) => !isExcludedRoot(r, left, right, calcScope(ctx), src))
+        const validRoots = answer.real.filter((r) => !isExcludedRoot(r, left, right, calcScope(ctx), src, isLatexFrac))
         if (validRoots.length === 0) {
           return { main: 'no value of x works', src, exact: null, solved: false, unconfirmed: true }
         }
@@ -622,7 +705,7 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
       } else {
         out = answer
         if (typeof out.value === 'number' && Number.isFinite(out.value)) {
-          if (isExcludedRoot(out.value, left, right, calcScope(ctx), src)) {
+          if (isExcludedRoot(out.value, left, right, calcScope(ctx), src, isLatexFrac)) {
             return { main: 'no value of x works', src, exact: null, solved: false, unconfirmed: true }
           }
         }
