@@ -26,6 +26,7 @@ import { superscriptPowers } from '../math/format'
 import { latexToMath } from '../math/latexToMath'
 import { linearSystemEliminationMethod, linearSystemSubstitutionMethod } from '../math/steps/methods/linearSystem'
 import { ratOfText } from '../math/steps/check-adapter'
+import { analyseInequality, intervalForm, readInequality, setForm } from '../math/steps/inequality'
 import type { FieldMode } from './calcStore'
 import type { EngineAsk } from './engineAnswer'
 
@@ -344,6 +345,32 @@ function solveSimultaneous(src: string): EvalResult | null {
   return null
 }
 
+/**
+ * Inequalities in one variable (e.g. "x^2 - 4 < 0" or "2x + 3 > 7").
+ * Routes <, >, <=, >= expressions to the exact inequality solver and renders interval solution card.
+ */
+function solveInequalityInput(src: string): EvalResult | null {
+  if (!/[<>]|<=|>=|≤|≥/.test(src)) return null
+  const withoutIneq = src.replace(/<=|>=|≤|≥/g, '')
+  if (withoutIneq.includes('=')) return null
+  const read = readInequality(src)
+  if (!read) return null
+  const analysis = analyseInequality(read)
+  if (!analysis) return null
+  const plain = setForm(analysis.set, read.v, false).replace(/−/g, '-')
+  const tex = setForm(analysis.set, read.v, true)
+  const interval = intervalForm(analysis.set)
+  return {
+    main: plain,
+    tex,
+    extra: interval && interval !== '\\varnothing' ? [interval] : undefined,
+    inequality: true,
+    solved: true,
+    src,
+    exact: null
+  }
+}
+
 const BUILTIN_CALC_NAMES: ReadonlySet<string> = new Set([
   'Pol', 'pol', 'Rec', 'rec',
   'diff', 'integrate', 'integral', 'ddx', 'sigma', 'product',
@@ -502,6 +529,8 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     if (call?.name === 'integrate' && call.args.length === 3) src = `integral(${call.args.join(', ')})`
     const simultaneous = solveSimultaneous(src) ?? solveSimultaneous(readRunsAsMultiplication(src, opts.vars))
     if (simultaneous) return simultaneous
+    const ineq = solveInequalityInput(src) ?? solveInequalityInput(readRunsAsMultiplication(src, opts.vars))
+    if (ineq) return ineq
     src = readRunsAsMultiplication(src, opts.vars)
     const definite = calculusCall(src)?.name === 'integral'
     let out: CalcOutput

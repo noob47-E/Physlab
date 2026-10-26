@@ -114,6 +114,22 @@ describe('equations', () => {
     expect(iv[0].from).toBeCloseTo(2)
     expect(iv[0].to).toBeCloseTo(3)
   })
+  it('solves inequalities in evaluateInput', () => {
+    const maths = { vars: {}, ans: 0, angle: 'deg' as const }
+    const r1 = evaluateInput('COMP', 'x^2 - 4 < 0', maths)
+    expect(r1).not.toBeNull()
+    expect(r1?.main).toBe('-2 < x < 2')
+    expect(r1?.extra).toContain('(-2, 2)')
+    expect(r1?.inequality).toBe(true)
+    expect(r1?.solved).toBe(true)
+
+    const r2 = evaluateInput('COMP', '2x + 3 > 7', maths)
+    expect(r2).not.toBeNull()
+    expect(r2?.main).toBe('x > 2')
+    expect(r2?.extra).toContain('(2, \\infty)')
+    expect(r2?.inequality).toBe(true)
+    expect(r2?.solved).toBe(true)
+  })
 })
 
 describe('stats, distributions, base-n', () => {
