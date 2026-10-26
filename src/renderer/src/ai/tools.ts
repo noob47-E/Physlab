@@ -939,6 +939,7 @@ export async function runTool(
         }
 
         useLab.getState().appendTable(labTable)
+        useLab.getState().setCurrent(labTable.id)
 
         const getColVal = (s: Sample, colName: string): number => {
           switch (colName.toLowerCase()) {

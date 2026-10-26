@@ -4,6 +4,7 @@ import { scene } from '../src/renderer/src/core/store'
 import { useCalc } from '../src/renderer/src/calc/calcStore'
 import { useSandbox } from '../src/renderer/src/sim/store'
 import { useApp } from '../src/renderer/src/app/modes'
+import { useLab } from '../src/renderer/src/lab/labStore'
 
 describe('AI Tools Layer (src/renderer/src/ai/tools.ts)', () => {
   beforeEach(() => {
@@ -257,6 +258,8 @@ describe('AI Tools Layer (src/renderer/src/ai/tools.ts)', () => {
     const graphRes = await runTool('graph_readings', { y: 'v', x: 't', fit: 'linear' })
     expect(graphRes.ok).toBe(true)
     expect(useApp.getState().mode).toBe('lab')
+    expect(useLab.getState().currentId).toBe(graphRes.tableId)
+    expect(useLab.getState().tables.some((t) => t.id === graphRes.tableId)).toBe(true)
     expect(graphRes.fit).toBe('linear')
     expect(graphRes.slope).toBeDefined()
     // For free fall v = g * t, slope should be close to 9.8 m/s^2
