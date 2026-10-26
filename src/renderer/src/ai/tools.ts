@@ -825,8 +825,8 @@ export async function runTool(
             selectedSamples = [maxSample]
           } else if (whenType === 'impact') {
             const contacts = useSandbox.getState().contacts.filter((c) => c.a === targetBody.id || c.b === targetBody.id)
-            if (contacts.length > 0 && typeof contacts[0].engineTime === 'number') {
-              const impactT = contacts[0].engineTime
+            if (contacts.length > 0 && typeof contacts[0].t === 'number') {
+              const impactT = contacts[0].t
               const impactSample = recordedSamples.reduce((best, curr) =>
                 Math.abs(curr.t - impactT) < Math.abs(best.t - impactT) ? curr : best
               )
@@ -919,7 +919,7 @@ export async function runTool(
         labTable.plot = {
           x: colX.id,
           y: colY.id,
-          fit: args.fit ? fitShape : null
+          fit: fitShape
         }
 
         useLab.getState().appendTable(labTable)
