@@ -512,8 +512,9 @@ Simulation ready to run!`
       expect(store.activeMindMap === null || typeof store.activeMindMap === 'object').toBe(true)
     })
 
-    it('initializes with gemini-3.5-flash-lite first in model chain', () => {
+    it('initializes with gemini-3.5-flash-lite first in model chain and gemini provider', () => {
       const store = useAiStore.getState()
+      expect(store.provider).toBe('gemini')
       expect(store.availableGeminiModels[0]).toBe('gemini-3.5-flash-lite')
       expect(store.geminiModel).toBe('gemini-3.5-flash-lite')
     })
