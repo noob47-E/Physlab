@@ -31,6 +31,38 @@ export interface StreamCallbacks {
 }
 
 /**
+ * Transcribes a diagram photo or problem image into text and LaTeX using Gemini Vision.
+ */
+export async function transcribeDiagram(
+  dataUrl: string
+): Promise<{ ok: boolean; text?: string; error?: string }> {
+  if (typeof window !== 'undefined' && (window as any).physlab?.ai?.transcribe) {
+    return await (window as any).physlab.ai.transcribe(dataUrl)
+  }
+
+  if (typeof window !== 'undefined' && (window as any).physlab?.ai?.chat) {
+    const prompt =
+      'Transcribe the physics/math problem, question, numbers, and diagrams shown in this image clearly into text and LaTeX formulas. Output ONLY the transcribed problem statement without preamble or solving it.'
+    const messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: dataUrl } }
+        ]
+      }
+    ]
+    const res = await (window as any).physlab.ai.chat(messages)
+    if (res.ok && res.message?.content) {
+      return { ok: true, text: String(res.message.content).trim() }
+    }
+    return { ok: false, error: res.error || 'Failed to transcribe diagram.' }
+  }
+
+  return { ok: false, error: 'PhysLab AI service unavailable.' }
+}
+
+/**
  * Tests connection to the selected provider.
  */
 export async function testAiConnection(): Promise<{ ok: boolean; message: string }> {
@@ -527,7 +559,20 @@ export async function streamChatCompletion(
       if (msg.role === 'system') continue
       messages.push({ role: msg.role, content: msg.content })
     }
-    messages.push({ role: 'user', content: newPrompt })
+    if (attachments && attachments.length > 0) {
+      const parts: Array<Record<string, unknown>> = [
+        { type: 'text', text: newPrompt || 'Solve the physics problem shown in this diagram step by step.' }
+      ]
+      for (const att of attachments) {
+        parts.push({
+          type: 'image_url',
+          image_url: { url: att.dataUrl }
+        })
+      }
+      messages.push({ role: 'user', content: parts as any })
+    } else {
+      messages.push({ role: 'user', content: newPrompt })
+    }
 
     callbacks.onChunk('Thinking…')
 

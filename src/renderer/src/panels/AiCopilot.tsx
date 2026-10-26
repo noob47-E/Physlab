@@ -26,7 +26,8 @@ import {
   autoConnectLocalBrain,
   fetchAvailableModels,
   streamChatCompletion,
-  testAiConnection
+  testAiConnection,
+  transcribeDiagram
 } from '../ai/client'
 import { executePhysLabAction, extractThinkTrace, getBrainStageText } from '../ai/bridge'
 import { stripIncompleteActionBlocks } from '../ai/contract'
@@ -46,6 +47,9 @@ export function AiCopilot() {
   const [activeTab, setActiveTab] = useState<TabId>('chat')
   const [inputPrompt, setInputPrompt] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [transcribing, setTranscribing] = useState(false)
+  const [transcribedText, setTranscribedText] = useState<string | null>(null)
+  const [transcribeError, setTranscribeError] = useState<string | null>(null)
   const [verifyMsg, setVerifyMsg] = useState<{ ok: boolean; message: string } | null>(null)
   const [isVerifying, setIsVerifying] = useState(false)
   const [showKeyText, setShowKeyText] = useState(false)
@@ -111,6 +115,16 @@ export function AiCopilot() {
         name: file.name
       }
       setAttachments((prev) => [...prev, newAtt])
+      setTranscribing(true)
+      setTranscribeError(null)
+      void transcribeDiagram(dataUrl).then((res) => {
+        setTranscribing(false)
+        if (res.ok && res.text) {
+          setTranscribedText(res.text)
+        } else if (res.error) {
+          setTranscribeError(res.error)
+        }
+      })
     }
     reader.readAsDataURL(file)
   }
@@ -565,6 +579,75 @@ export function AiCopilot() {
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Vision Transcription Progress */}
+            {transcribing && (
+              <div className="flex items-center gap-2 p-2.5 mx-2.5 my-1 rounded bg-surface-2 border border-line text-fine text-ink-dim">
+                <Sparkles size={14} className="text-accent animate-pulse shrink-0" />
+                <span>Transcribing problem from diagram photo via Gemini Vision…</span>
+              </div>
+            )}
+
+            {/* Vision Transcription Error */}
+            {transcribeError && (
+              <div className="flex items-center justify-between p-2 mx-2.5 my-1 rounded bg-surface-2 border border-bad/30 text-fine text-ink-dim">
+                <span>{transcribeError}</span>
+                <button
+                  type="button"
+                  onClick={() => setTranscribeError(null)}
+                  className="text-ink-dim hover:text-ink text-fine ml-2 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Editable Confirmation UI for Transcribed Diagram */}
+            {transcribedText !== null && (
+              <div className="p-3 mx-2.5 my-1.5 rounded-lg border border-line bg-surface-2 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                    <Sparkles size={14} className="text-accent" />
+                    <span>Photo / Diagram Transcribed</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTranscribedText(null)
+                      setAttachments([])
+                    }}
+                    className="text-fine text-ink-dim hover:text-bad cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-fine text-ink-dim">
+                  I read the following problem from your diagram. You can edit it before solving:
+                </p>
+                <textarea
+                  value={transcribedText}
+                  onChange={(e) => setTranscribedText(e.target.value)}
+                  rows={3}
+                  className="w-full p-2 rounded bg-surface-0 border border-line text-body text-ink resize-y outline-none focus:border-accent font-math"
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = transcribedText.trim()
+                      setTranscribedText(null)
+                      setAttachments([])
+                      if (text) {
+                        handleSend(text)
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 cursor-pointer transition-colors"
+                  >
+                    Confirm & Solve with PhysLab
+                  </button>
+                </div>
               </div>
             )}
 

@@ -337,9 +337,34 @@ export async function handleAiChat(
   return { error: geminiRes.error }
 }
 
+export async function transcribeImage(
+  dataUrl: string
+): Promise<{ text?: string; error?: string }> {
+  const prompt =
+    'Transcribe the physics/math problem, question, numbers, and diagrams shown in this image clearly into text and LaTeX formulas. Output ONLY the transcribed problem statement without preamble or solving it.'
+  const messages = [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: dataUrl } }
+      ]
+    }
+  ]
+  const res = await handleAiChat(messages)
+  if (res.message?.content) {
+    return { text: String(res.message.content).trim() }
+  }
+  return { error: res.error || 'Failed to transcribe image.' }
+}
+
 export function registerAiProviderIpc(): void {
   ipcMain.handle('ai:chat', async (_e, messages: unknown[], tools?: unknown[]) => {
     return handleAiChat(messages, tools)
+  })
+
+  ipcMain.handle('ai:transcribe', async (_e, dataUrl: string) => {
+    return transcribeImage(dataUrl)
   })
 
   ipcMain.handle('ai:hasKey', async (_e, provider?: string) => {

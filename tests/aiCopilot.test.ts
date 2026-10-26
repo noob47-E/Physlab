@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildSystemPrompt, PHYSLAB_BRAIN_BASE_PROMPT } from '../src/renderer/src/ai/systemPrompt'
-import { runToolLoop, MAX_TOOL_ROUNDS, countQuestionsInPrompt, computeMaxToolRounds } from '../src/renderer/src/ai/client'
+import { runToolLoop, MAX_TOOL_ROUNDS, countQuestionsInPrompt, computeMaxToolRounds, transcribeDiagram } from '../src/renderer/src/ai/client'
 import {
   buildAppContext,
   buildInclineScene,
@@ -960,6 +960,56 @@ Simulation ready to run!`
 
       const lineFree = 'The value is 42'
       expect(isStepOrStructuralNumber(lineFree, 13, '42')).toBe(false)
+    })
+  })
+
+  describe('Fix 5 [Bug 1]: Photo / Diagram Input Pipeline', () => {
+    it('transcribeDiagram transcribes image data URL using bridge transcribe or chat', async () => {
+      const originalPhyslab = (global as any).window?.physlab
+      ;(global as any).window = {
+        physlab: {
+          ai: {
+            transcribe: vi.fn().mockResolvedValue({
+              ok: true,
+              text: 'Find tension in cable supporting 50 kg elevator accelerating upwards at 2 m/s^2.'
+            })
+          }
+        }
+      }
+
+      const res = await transcribeDiagram('data:image/png;base64,fakeImageData')
+      expect(res.ok).toBe(true)
+      expect(res.text).toContain('50 kg elevator')
+      expect((global as any).window.physlab.ai.transcribe).toHaveBeenCalledWith(
+        'data:image/png;base64,fakeImageData'
+      )
+
+      if (originalPhyslab) {
+        ;(global as any).window.physlab = originalPhyslab
+      } else {
+        delete (global as any).window
+      }
+    })
+
+    it('transcribeDiagram falls back to chat when bridge transcribe is not provided', async () => {
+      ;(global as any).window = {
+        physlab: {
+          ai: {
+            chat: vi.fn().mockResolvedValue({
+              ok: true,
+              message: {
+                content: 'Block of mass 4 kg slides down 30 deg incline with friction.'
+              }
+            })
+          }
+        }
+      }
+
+      const res = await transcribeDiagram('data:image/png;base64,fallbackData')
+      expect(res.ok).toBe(true)
+      expect(res.text).toContain('4 kg slides down')
+
+      delete (global as any).window
     })
   })
 })

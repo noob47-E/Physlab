@@ -58,7 +58,17 @@ const api = {
     },
     hasKey: (provider?: string): Promise<boolean> => ipcRenderer.invoke('ai:hasKey', provider),
     setKey: (key: string, provider?: string): Promise<boolean> =>
-      ipcRenderer.invoke('ai:setKey', key, provider)
+      ipcRenderer.invoke('ai:setKey', key, provider),
+    transcribe: async (
+      dataUrl: string
+    ): Promise<{ ok: boolean; text?: string; error?: string }> => {
+      const res = (await ipcRenderer.invoke('ai:transcribe', dataUrl)) as any
+      return {
+        ok: Boolean(res && res.text && !res.error),
+        text: res?.text,
+        error: res?.error
+      }
+    }
   }
 }
 

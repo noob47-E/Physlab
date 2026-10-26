@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { handleAiChat } from '../src/main/aiProvider'
+import { handleAiChat, transcribeImage } from '../src/main/aiProvider'
 
 describe('AI Provider in main process', () => {
   const originalFetch = global.fetch
@@ -166,5 +166,63 @@ describe('AI Provider in main process', () => {
       expect(result.error).not.toContain(secretKey)
       expect(result.error).toContain('[REDACTED]')
     }
+  })
+
+  it('handles multimodal image attachments in chat messages', async () => {
+    let capturedBody: any = null
+    global.fetch = vi.fn().mockImplementation((_url, opts) => {
+      capturedBody = JSON.parse((opts as any).body)
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'I see a 5 kg block on a 30 degree incline.' } }],
+            usage: { prompt_tokens: 50, completion_tokens: 20 }
+          })
+      })
+    })
+
+    const multimodalMessages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What problem is shown in this diagram?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==' } }
+        ]
+      }
+    ]
+
+    const result = await handleAiChat(multimodalMessages)
+    expect('message' in result).toBe(true)
+    if ('message' in result) {
+      expect(result.message.content).toContain('30 degree incline')
+    }
+    expect(capturedBody).toBeDefined()
+    expect(capturedBody.messages[0].content).toHaveLength(2)
+    expect(capturedBody.messages[0].content[1].type).toBe('image_url')
+  })
+
+  it('transcribeImage transcribes diagram photo into text statement', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'A 2 kg mass hangs from a spring with k = 100 N/m. Find the extension.'
+              }
+            }
+          ],
+          usage: { prompt_tokens: 40, completion_tokens: 25 }
+        })
+    })
+
+    const res = await transcribeImage('data:image/jpeg;base64,sampleImageData123')
+    expect(res.text).toBe('A 2 kg mass hangs from a spring with k = 100 N/m. Find the extension.')
+    expect(res.error).toBeUndefined()
   })
 })
