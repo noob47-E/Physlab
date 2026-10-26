@@ -42,7 +42,17 @@ const api = {
   aiGetStatus: (): Promise<{ running: boolean; port: number; modelPath: string | null; defaultDir: string }> =>
     ipcRenderer.invoke('ai:getStatus'),
   aiSelectFolder: (): Promise<string | null> => ipcRenderer.invoke('ai:selectFolder'),
-  aiOpenFolder: (folderPath?: string): Promise<void> => ipcRenderer.invoke('ai:openFolder', folderPath)
+  aiOpenFolder: (folderPath?: string): Promise<void> => ipcRenderer.invoke('ai:openFolder', folderPath),
+  ai: {
+    chat: (
+      messages: unknown[],
+      tools?: unknown[]
+    ): Promise<{ message?: any; model?: string; error?: string }> =>
+      ipcRenderer.invoke('ai:chat', messages, tools),
+    hasKey: (provider?: string): Promise<boolean> => ipcRenderer.invoke('ai:hasKey', provider),
+    setKey: (key: string, provider?: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setKey', key, provider)
+  }
 }
 
 contextBridge.exposeInMainWorld('physlab', api)

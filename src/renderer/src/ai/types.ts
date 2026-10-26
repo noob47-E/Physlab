@@ -1,6 +1,6 @@
 import type { PhysicsValidationResult } from './truthCheck'
 
-export type ProviderType = 'gemini' | 'local'
+export type ProviderType = 'gemini-openai' | 'azure' | 'gemini' | 'local'
 
 export interface Attachment {
   id: string
