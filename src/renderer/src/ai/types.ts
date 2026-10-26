@@ -68,6 +68,7 @@ export interface ChatMessage {
   actions?: PhysLabAction[]
   verified?: boolean
   verification?: MessageVerification
+  model?: string
   createdAt: number
 }
 

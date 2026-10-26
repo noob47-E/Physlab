@@ -186,8 +186,11 @@ export const useAiStore = create<AiStoreState>((set) => ({
   setProvider: (provider) => set({ provider }),
   setGeminiApiKey: (geminiApiKey) => {
     try {
+      if (typeof window !== 'undefined' && window.physlab?.ai?.setKey) {
+        void window.physlab.ai.setKey(geminiApiKey)
+      }
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(GEMINI_KEY_STORAGE, geminiApiKey)
+        localStorage.removeItem(GEMINI_KEY_STORAGE)
       }
     } catch {
       // Ignore

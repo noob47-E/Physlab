@@ -44,11 +44,18 @@ const api = {
   aiSelectFolder: (): Promise<string | null> => ipcRenderer.invoke('ai:selectFolder'),
   aiOpenFolder: (folderPath?: string): Promise<void> => ipcRenderer.invoke('ai:openFolder', folderPath),
   ai: {
-    chat: (
+    chat: async (
       messages: unknown[],
       tools?: unknown[]
-    ): Promise<{ message?: any; model?: string; error?: string }> =>
-      ipcRenderer.invoke('ai:chat', messages, tools),
+    ): Promise<{ ok: boolean; message?: any; model?: string; error?: string }> => {
+      const res = (await ipcRenderer.invoke('ai:chat', messages, tools)) as any
+      return {
+        ok: Boolean(res && res.message && !res.error),
+        message: res?.message,
+        model: res?.model,
+        error: res?.error
+      }
+    },
     hasKey: (provider?: string): Promise<boolean> => ipcRenderer.invoke('ai:hasKey', provider),
     setKey: (key: string, provider?: string): Promise<boolean> =>
       ipcRenderer.invoke('ai:setKey', key, provider)

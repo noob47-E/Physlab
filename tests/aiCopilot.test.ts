@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildSystemPrompt, PHYSLAB_BRAIN_BASE_PROMPT } from '../src/renderer/src/ai/systemPrompt'
+import { runToolLoop, MAX_TOOL_ROUNDS } from '../src/renderer/src/ai/client'
 import {
   buildAppContext,
   buildInclineScene,
@@ -634,6 +635,46 @@ Simulation ready to run!`
       expect(cubeTurn.actions[0].tool).toBe('run_commands')
       expect(cubeTurn.actions[0].args.view).toBe('3d')
       expect(cubeTurn.actions[0].args.commands).toContain('Cube(4)')
+    })
+
+    it('Fix 7: caps tool loop at exactly 4 rounds and preserves thought signatures', async () => {
+      let callCount = 0
+      const mockChatFn = vi.fn().mockImplementation(async () => {
+        callCount++
+        return {
+          ok: true,
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              {
+                id: `call_${callCount}`,
+                type: 'function',
+                function: {
+                  name: 'get_app_state',
+                  arguments: '{}'
+                }
+              }
+            ],
+            thought_signature: 'sig_gemini_3'
+          },
+          model: 'gemini-3.8-flash'
+        }
+      })
+
+      const result = await runToolLoop(
+        [{ role: 'user', content: 'infinite tool loop check' }],
+        mockChatFn,
+        { maxRounds: MAX_TOOL_ROUNDS }
+      )
+
+      expect(mockChatFn).toHaveBeenCalledTimes(4)
+      expect(result.roundCount).toBe(4)
+
+      const secondCallPayload = mockChatFn.mock.calls[1][0]
+      const assistantMsgInPayload = secondCallPayload.messages.find(
+        (m: any) => m.role === 'assistant'
+      )
+      expect(assistantMsgInPayload.thought_signature).toBe('sig_gemini_3')
     })
   })
 })

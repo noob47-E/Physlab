@@ -161,7 +161,7 @@ export function AiCopilot() {
             content: accumulated
           })
         },
-        onDone: async ({ content, think, actions, agentTraces }) => {
+        onDone: async ({ content, think, actions, agentTraces, checked, model }) => {
           const verification = await verifyMessage(content, actions)
           useAiStore.getState().updateMessage(botMsg.id, {
             content,
@@ -169,7 +169,8 @@ export function AiCopilot() {
             actions,
             agentTraces,
             verification,
-            verified: verification.state === 'verified'
+            verified: checked !== undefined ? checked : verification.state === 'verified',
+            model
           })
           useAiStore.getState().setStreaming(false)
 
@@ -446,11 +447,27 @@ export function AiCopilot() {
                           <div className="whitespace-pre-wrap">{m.content}</div>
                         ) : (
                           <>
-                            {/* Live Brain Stage Indicator during streaming */}
+                            {/* Message Header with Verified Badge & Model Tag */}
+                            {(m.verified || m.model) && !isCurrentlyStreaming && (
+                              <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-line text-fine">
+                                <div className="flex items-center gap-1.5">
+                                  {m.verified && (
+                                    <span className="px-1.5 py-0.5 rounded text-fine bg-good-subtle text-good inline-flex items-center gap-1 font-medium">
+                                      <CheckCircle2 size={12} /> Verified by PhysLab
+                                    </span>
+                                  )}
+                                </div>
+                                {m.model && (
+                                  <span className="text-fine text-ink-faint font-mono">{m.model}</span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Small grey tool progress lines during streaming */}
                             {isCurrentlyStreaming && (
-                              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-surface-2 border border-line text-fine text-accent font-medium mb-2">
-                                <Sparkles size={13} className="text-accent animate-pulse shrink-0" />
-                                <span>{getBrainStageText(m.content, true)}</span>
+                              <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-surface-2 border border-line text-fine text-ink-dim font-mono mb-2">
+                                <Sparkles size={12} className="text-accent animate-pulse shrink-0" />
+                                <span>{m.content.startsWith('Running') || m.content.startsWith('Solving') || m.content.startsWith('Loading') || m.content.startsWith('Simulating') || m.content.startsWith('Plotting') ? m.content : getBrainStageText(m.content, true)}</span>
                               </div>
                             )}
 
@@ -473,7 +490,7 @@ export function AiCopilot() {
                                 return (
                                   <div className="text-fine font-mono text-ink-dim px-1 line-clamp-3">
                                     {stripIncompleteActionBlocks(rawThink).trim() ||
-                                      'Analyzing problem and coordinating special agents…'}
+                                      'Analyzing problem and executing PhysLab tools…'}
                                   </div>
                                 )
                               }
@@ -509,8 +526,24 @@ export function AiCopilot() {
                 })
               )}
               {streamError && (
-                <div className="p-2 rounded bg-surface-1 border border-line text-bad text-fine">
-                  {streamError}
+                <div className="p-3 rounded bg-surface-1 border border-line flex flex-col gap-2 text-fine">
+                  <div className="text-ink-dim">
+                    The AI needs the internet. Everything else in PhysLab works offline.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('settings')}
+                      className="px-2.5 py-1 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
+                    >
+                      Set AI key
+                    </button>
+                    {streamError !== 'The AI needs the internet. Everything else in PhysLab works offline.' && (
+                      <span className="text-ink-faint text-fine truncate" title={streamError}>
+                        ({streamError})
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
               <div ref={messagesEndRef} />

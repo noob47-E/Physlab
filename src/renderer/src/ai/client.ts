@@ -3,6 +3,7 @@ import { extractActions, extractThinkTrace, buildAppContext, preComputeEngineTur
 import { repairControlCharLatex } from './contract'
 import { useAiStore } from './store'
 import type { Attachment, ChatMessage } from './types'
+import { TOOLS, runTool } from './tools'
 
 let activeAbortController: AbortController | null = null
 
@@ -16,13 +17,15 @@ export function abortActiveStream(): void {
   }
 }
 
-interface StreamCallbacks {
+export interface StreamCallbacks {
   onChunk: (accumulated: string) => void
   onDone: (finalMsg: {
     content: string
     think?: string
     actions: ReturnType<typeof extractActions>['actions']
     agentTraces: ReturnType<typeof extractThinkTrace>['agentTraces']
+    checked?: boolean
+    model?: string
   }) => void
   onError: (err: string) => void
 }
@@ -31,6 +34,23 @@ interface StreamCallbacks {
  * Tests connection to the selected provider.
  */
 export async function testAiConnection(): Promise<{ ok: boolean; message: string }> {
+  if (typeof window !== 'undefined' && window.physlab?.ai) {
+    const has = await window.physlab.ai.hasKey()
+    if (!has) {
+      return {
+        ok: false,
+        message: 'The AI needs an API key. You can set it in Settings.'
+      }
+    }
+    const res = await window.physlab.ai.chat([
+      { role: 'user', content: 'Respond with exactly: OK' }
+    ])
+    if (res.ok) {
+      return { ok: true, message: `Connected to PhysLab AI (${res.model ?? 'ready'})!` }
+    }
+    return { ok: false, message: res.error ?? 'The AI needs the internet. Everything else in PhysLab works offline.' }
+  }
+
   const { provider, geminiApiKey, geminiModel, localEndpoint, localModel } = useAiStore.getState()
 
   if (provider === 'gemini') {
@@ -305,6 +325,145 @@ export async function autoConnectLocalBrain(): Promise<{
   }
 }
 
+export const MAX_TOOL_ROUNDS = 4
+
+export interface ChatMessageLike {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content?: string | null
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: {
+      name: string
+      arguments: string
+    }
+    [key: string]: unknown
+  }>
+  tool_call_id?: string
+  [key: string]: unknown
+}
+
+export type ChatBridgeFn = (payload: {
+  messages: ChatMessageLike[]
+  tools?: typeof TOOLS
+}) => Promise<{
+  ok: boolean
+  message?: ChatMessageLike
+  model?: string
+  error?: string
+}>
+
+export async function runToolLoop(
+  initialMessages: ChatMessageLike[],
+  chatFn: ChatBridgeFn,
+  options: {
+    maxRounds?: number
+    onProgress?: (caption: string) => void
+    onDone?: (result: {
+      content: string
+      actions: any[]
+      checked?: boolean
+      model?: string
+      roundCount: number
+    }) => void
+    onError?: (error: string) => void
+  } = {}
+): Promise<{
+  content: string
+  actions: any[]
+  checked?: boolean
+  model?: string
+  roundCount: number
+}> {
+  const maxRounds = options.maxRounds ?? MAX_TOOL_ROUNDS
+  const messages = [...initialMessages]
+  let roundCount = 0
+  let finalModel: string | undefined
+  let lastChecked: boolean | undefined
+  let finalContent = ''
+  const executedActions: any[] = []
+
+  while (roundCount < maxRounds) {
+    roundCount++
+    const res = await chatFn({ messages, tools: TOOLS })
+    if (!res.ok || !res.message) {
+      const err = res.error ?? 'The AI needs the internet. Everything else in PhysLab works offline.'
+      options.onError?.(err)
+      return { content: err, actions: executedActions, roundCount }
+    }
+
+    finalModel = res.model ?? finalModel
+    const assistantMsg = res.message
+
+    // CRITICAL: Push assistant message back EXACTLY as received, preserving Gemini 3 thought signatures & extra fields
+    messages.push(assistantMsg)
+
+    if (assistantMsg.content) {
+      finalContent = assistantMsg.content
+    }
+
+    const toolCalls = assistantMsg.tool_calls
+    if (!toolCalls || !Array.isArray(toolCalls) || toolCalls.length === 0) {
+      // Done - model produced conversational response without further tool requests
+      break
+    }
+
+    // Run tool calls ONE AFTER ANOTHER, sequentially (never in parallel)
+    for (const call of toolCalls) {
+      const name = call.function.name
+      let args: Record<string, any> = {}
+      try {
+        args = typeof call.function.arguments === 'string' ? JSON.parse(call.function.arguments || '{}') : (call.function.arguments ?? {})
+      } catch {
+        args = {}
+      }
+
+      // Progress reporting
+      let caption = `Running ${name}…`
+      if (name === 'solve') {
+        caption = `Solving ${args.expression ?? ''}…`
+      } else if (name === 'load_experiment') {
+        caption = `Loading ${args.id ?? 'experiment'}…`
+      } else if (name === 'play') {
+        caption = `Simulating ${args.seconds ? `${args.seconds}s` : 'physics'}…`
+      } else if (name === 'plot') {
+        caption = `Plotting ${args.equation ?? ''}…`
+      }
+      options.onProgress?.(caption)
+
+      const result = await runTool(name, args, (cap) => options.onProgress?.(cap))
+      if (result.checked !== undefined) {
+        lastChecked = Boolean(result.checked)
+      }
+
+      executedActions.push({
+        id: call.id,
+        tool: name,
+        args,
+        status: result.ok ? 'success' : 'failed',
+        result
+      })
+
+      // Send tool result back with matching tool_call_id
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify(result)
+      })
+    }
+  }
+
+  const resultPayload = {
+    content: finalContent,
+    actions: executedActions,
+    checked: lastChecked,
+    model: finalModel,
+    roundCount
+  }
+  options.onDone?.(resultPayload)
+  return resultPayload
+}
+
 /**
  * Streams chat completion from Gemini or local OpenAI-compatible endpoint.
  */
@@ -325,6 +484,66 @@ export async function streamChatCompletion(
   const controller = new AbortController()
   activeAbortController = controller
   const signal = controller.signal
+
+  // Primary: Call the main-process IPC provider with 4-round tool loop
+  if (provider !== 'local' && typeof window !== 'undefined' && window.physlab?.ai?.chat) {
+    const hasKey = await window.physlab.ai.hasKey()
+    if (!hasKey) {
+      callbacks.onError('The AI needs an API key. You can set it in Settings.')
+      return
+    }
+
+    const messages: ChatMessageLike[] = [{ role: 'system', content: systemPrompt }]
+    for (const msg of history) {
+      if (msg.role === 'system') continue
+      messages.push({ role: msg.role, content: msg.content })
+    }
+    messages.push({ role: 'user', content: newPrompt })
+
+    callbacks.onChunk('Thinking…')
+
+    const loopResult = await runToolLoop(
+      messages,
+      async (payload) => {
+        if (typeof window !== 'undefined' && window.physlab?.ai?.chat) {
+          return await window.physlab.ai.chat(payload.messages, payload.tools)
+        }
+        return { ok: false, error: 'PhysLab AI bridge unavailable' }
+      },
+      {
+        onProgress: (caption) => {
+          callbacks.onChunk(caption)
+        },
+        onError: (err) => {
+          callbacks.onError(err)
+        }
+      }
+    )
+
+    if (loopResult.content) {
+      const { cleanContent: textWithoutActions, actions: parsedActions } = extractActions(loopResult.content)
+      const actions = parsedActions.length > 0 ? parsedActions : (loopResult.actions.length > 0 ? loopResult.actions : preComputed.actions)
+      const { cleanContent: finalContent, think, agentTraces } = extractThinkTrace(textWithoutActions)
+
+      callbacks.onDone({
+        content: repairControlCharLatex(finalContent || loopResult.content),
+        think,
+        actions,
+        agentTraces,
+        checked: loopResult.checked,
+        model: loopResult.model
+      })
+    } else if (loopResult.actions.length > 0) {
+      callbacks.onDone({
+        content: `Completed actions in PhysLab.`,
+        actions: loopResult.actions,
+        agentTraces: [],
+        checked: loopResult.checked,
+        model: loopResult.model
+      })
+    }
+    return
+  }
 
   let accumulated = ''
 
