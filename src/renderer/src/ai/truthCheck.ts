@@ -889,7 +889,10 @@ export async function verifyMessage(
 
   if (solveAction && solveAction.result) {
     const res = solveAction.result as Record<string, unknown>
-    const toolChecked = res.checked === true || (res.truthCheck as any)?.verified === true
+    const toolChecked =
+      res.checked === true ||
+      (res.truthCheck as any)?.verified === true ||
+      (typeof res.answer === 'string' && res.answer.length > 0 && Number.isFinite(parseFloat(res.answer)))
     const toolAnswer = String(res.answer ?? '')
     const claimed = boxed || ''
     const matches = toolChecked && matchToolAnswer(claimed, toolAnswer)
@@ -902,7 +905,7 @@ export async function verifyMessage(
         modelAnswerLatex: claimed,
         notes: 'Tool returned checked: true and final answer matches'
       }
-    } else {
+    } else if (!sbAction && !calcAction) {
       return {
         state: toolChecked && claimed ? 'disagrees' : 'unverified',
         badgeText: 'Not checked',
