@@ -100,7 +100,7 @@ function loadPersistedState(): {
     activeThreadId: initialThreadId,
     memories: [],
     goals: [],
-    provider: 'azure',
+    provider: 'gemini',
     geminiModel: 'gemini-3.5-flash-lite',
     azureDeployment: 'gpt-5.4',
     localEndpoint: 'http://127.0.0.1:8080/v1',

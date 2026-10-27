@@ -50,7 +50,7 @@ function writeStoredKeys(data: KeyFile): void {
 
 export function userEnv(name: string): string {
   const hit = Object.keys(process.env).find((k) => k.toLowerCase() === name.toLowerCase())
-  if (hit && process.env[hit]) return process.env[hit]
+  if (hit) return process.env[hit] ?? ''
   if (process.platform === 'win32') {
     try {
       const out = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', name], {
