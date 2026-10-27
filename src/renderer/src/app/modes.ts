@@ -148,10 +148,24 @@ export const HIDDEN_MODES: ReadonlySet<ModeId> = new Set<ModeId>([
 // Each helper below takes the set as its last parameter, defaulting to HIDDEN_MODES, so a test can
 // pass an empty one and see the modes come back: the default is the switch, nothing else is.
 
+export function normalizeModeId(mode: string): ModeId {
+  const m = mode.toLowerCase().trim()
+  if (m === 'calc' || m === 'calculator') return 'calculator'
+  if (m === 'geometry' || m === 'geom' || m === 'shapes') return 'shapes'
+  if (m === 'graph' || m === 'graphing') return 'graphing'
+  if (m === 'vector' || m === 'vectors') return 'vectors'
+  if (m === 'sandbox' || m === 'sim' || m === 'physics') return 'sandbox'
+  if (m === 'lab') return 'lab'
+  return m as ModeId
+}
+
 export const isModeHidden = (id: ModeId, hidden: ReadonlySet<ModeId> = HIDDEN_MODES): boolean => hidden.has(id)
 
 /** Never throws: a file from a newer version may name a mode this build does not have. */
-export const modeById = (id: ModeId) => MODES.find((m) => m.id === id) ?? MODES[0]
+export const modeById = (id: ModeId | string) => {
+  const norm = normalizeModeId(String(id))
+  return MODES.find((m) => m.id === norm) ?? MODES[0]
+}
 
 /** The modes a student can open in this build; the rest are announced (comingSoonModes), not clickable, or kept out of reach. */
 export const readyModes = (hidden: ReadonlySet<ModeId> = HIDDEN_MODES): ModeDef[] => MODES.filter((m) => m.ready && !hidden.has(m.id))

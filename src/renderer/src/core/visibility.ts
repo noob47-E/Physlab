@@ -17,15 +17,21 @@ import type { ObjId, SceneObject } from './types'
 export type Space = 'vectors' | 'shapes' | 'graphing' | 'lab'
 
 /** The drawing a mode looks at; null means the mode has no drawing of its own. */
-export function spaceOf(mode: ModeId): Space | null {
-  switch (mode) {
+export function spaceOf(mode: ModeId | string): Space | null {
+  const m = String(mode).toLowerCase().trim()
+  switch (m) {
     case 'calculator':
+    case 'calc':
     case 'graphing':
+    case 'graph':
       return 'graphing'
     case 'vectors':
+    case 'vector':
     case 'problems':
       return 'vectors'
     case 'shapes':
+    case 'geometry':
+    case 'geom':
       return 'shapes'
     case 'lab':
       return 'lab'

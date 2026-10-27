@@ -2,6 +2,8 @@
 
 import { newId, nextColor, nextName, uniqueName } from './naming'
 import { scene } from './store'
+import { spaceOf } from './visibility'
+import { useApp } from '../app/modes'
 import type {
   AngleObj,
   CircleDef,
@@ -45,8 +47,11 @@ export class Builder {
       showLabel: opts.showLabel ?? !opts.auxiliary,
       auxiliary: opts.auxiliary,
       // A graph always lives in Graphing, wherever it was asked for; everything else belongs to
-      // the drawing the student is looking at.
-      space: type === 'graph' ? ('graphing' as const) : (scene().activeSpace ?? undefined)
+      // the drawing the student is looking at, or the active mode's space.
+      space:
+        type === 'graph'
+          ? ('graphing' as const)
+          : (scene().activeSpace ?? spaceOf(useApp.getState().mode) ?? (type === 'vector' ? 'vectors' : 'shapes'))
     }
   }
 

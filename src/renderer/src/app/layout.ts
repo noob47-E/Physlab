@@ -12,7 +12,7 @@ import { resetTool } from '../render/tools'
 import { QUALITY, qualityNow } from '../render/renderer'
 import { useParticleLab } from '../render/GpuParticles'
 import { warmupEngine } from '../math/engine'
-import { MODES, modeById, useApp, type ModeId } from './modes'
+import { MODES, modeById, normalizeModeId, useApp, type ModeId } from './modes'
 import { getDockApi, hidePanel, isPanelOpen, PANEL_TITLES, refreshOpenPanels, regroupWithViewport, showPanel } from './panels'
 import { LAYOUT_VERSION, columns, needsLayoutRebuild, panelHome, panelsForMode, type LayoutStamp } from './layoutMath'
 import { storedRecord } from '../core/schema'
@@ -36,12 +36,13 @@ let vectorcalcLentBySandbox = false
  * back from the last session, which is left as the student had it. `skipFocus` prevents requesting focus on the mode's panel,
  * used when opening a visual alongside Practice so the answer box keeps focus.
  */
-export function enterMode(id: ModeId, opts: { restored?: boolean; skipFocus?: boolean } = {}) {
-  const m = modeById(id)
+export function enterMode(id: ModeId | string, opts: { restored?: boolean; skipFocus?: boolean } = {}) {
+  const normId = normalizeModeId(String(id))
+  const m = modeById(normId)
   const from = useApp.getState().mode
-  useApp.getState().setMode(id)
+  useApp.getState().setMode(normId)
   const s = scene()
-  s.setActiveSpace(spaceOf(id))
+  s.setActiveSpace(spaceOf(normId))
   useParticleLab.setState(id === 'gpu' ? { enabled: true, count: QUALITY[qualityNow()].particles } : { enabled: false })
   if (m.view) s.setViewMode(m.view)
   if (!m.tools.includes(s.tool)) s.setTool('select')
