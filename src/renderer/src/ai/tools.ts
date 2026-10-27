@@ -616,6 +616,10 @@ export async function runTool(
 
         useSandbox.getState().setScene(initialBodies, gravityPatch, [])
         useSandbox.getState().resetRun()
+        const presetId = typeof args.presetId === 'string' ? args.presetId : null
+        if (presetId) {
+          useSandbox.setState({ presetId })
+        }
 
         const objects = Array.isArray(args.objects) ? args.objects : []
         const createdBodyIds: string[] = []
@@ -629,6 +633,8 @@ export async function runTool(
           const body = useSandbox.getState().addBody(shapeKind, [x, y, 0])
 
           const patch: Partial<BodyDef> = {}
+          if (typeof obj.name === 'string') patch.name = obj.name
+          else if (objects.length === 1 && ((obj.vx ?? 0) !== 0 || (obj.vy ?? 0) !== 0)) patch.name = 'P'
           if (typeof obj.mass === 'number') patch.mass = obj.mass
           if (typeof obj.radius === 'number') {
             patch.size = [obj.radius, obj.radius, obj.radius]
@@ -656,6 +662,11 @@ export async function runTool(
             mass: updated.mass,
             velocity: updated.velocity
           })
+        }
+
+        const isProjectile = presetId === 'projectile' || (objects.length === 1 && ((objects[0].vx ?? 0) !== 0 || (objects[0].vy ?? 0) !== 0))
+        if (isProjectile) {
+          useSandbox.setState({ presetId: 'projectile' })
         }
 
         // Reset selection to null so old body selections do not persist

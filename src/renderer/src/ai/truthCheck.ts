@@ -72,7 +72,15 @@ export function toLinearMath(raw: string): string {
  */
 export function validatePhysicsScene(args: Record<string, unknown>): PhysicsValidationResult {
   const reasons: string[] = []
-  let expType = String(args.experimentType ?? 'incline_friction')
+  let expType = String(args.experimentType ?? (args.presetId || 'incline_friction'))
+  if (Array.isArray(args.objects) && args.objects.length > 0) {
+    const o0 = args.objects[0] as Record<string, unknown>
+    if (o0 && (o0.vx !== undefined || o0.vy !== undefined)) {
+      expType = 'projectile'
+      if (args.v0 === undefined) args.v0 = Math.hypot(Number(o0.vx || 0), Number(o0.vy || 0))
+      if (args.angleDeg === undefined) args.angleDeg = (Math.atan2(Number(o0.vy || 0), Number(o0.vx || 0)) * 180) / Math.PI
+    }
+  }
   if (expType === 'incline') expType = 'incline_friction'
 
   if (expType === 'incline_friction') {
@@ -730,11 +738,14 @@ export function matchToolAnswer(modelAnswer: string, toolAnswer: string): boolea
   const cleanT = toolAnswer.replace(/\\boxed\{([^}]+)\}/g, '$1').replace(/\s+/g, '').replace(/\\left|\\right/g, '').replace(/\\text\{([^}]+)\}/g, '$1').trim()
   if (cleanM.toLowerCase() === cleanT.toLowerCase()) return true
 
-  // Handle numbers with tolerance
+  // Handle numbers with tolerance (rounding to 2 or 3 decimals)
   const numM = parseFloat(cleanM.replace(/[^0-9.-]/g, ''))
   const numT = parseFloat(cleanT.replace(/[^0-9.-]/g, ''))
-  if (Number.isFinite(numM) && Number.isFinite(numT) && Math.abs(numM - numT) < 1e-3) {
-    return true
+  if (Number.isFinite(numM) && Number.isFinite(numT)) {
+    const tol = Math.max(0.01, 0.002 * Math.abs(numT))
+    if (Math.abs(numM - numT) <= tol || Math.round(numT * 100) / 100 === numM) {
+      return true
+    }
   }
 
   // Handle roots or comma-separated solutions (e.g. "2, 3" vs "x = 2, x = 3")
@@ -781,12 +792,12 @@ export async function verifyMessage(
 ): Promise<MessageVerification> {
   const boxed = extractLastBoxed(content)
   const solveAction = actions.find((a) => a.tool === 'solve')
-  const sbAction = actions.find((a) => a.tool === 'sandbox_experiment')
+  const sbAction = actions.find((a) => a.tool === 'sandbox_experiment' || a.tool === 'build_experiment')
   const calcAction = actions.find((a) => a.tool === 'calc_solve')
 
   if (solveAction && solveAction.result) {
     const res = solveAction.result as Record<string, unknown>
-    const toolChecked = res.checked === true
+    const toolChecked = res.checked === true || (res.truthCheck as any)?.verified === true
     const toolAnswer = String(res.answer ?? '')
     const claimed = boxed || ''
     const matches = toolChecked && matchToolAnswer(claimed, toolAnswer)
@@ -841,6 +852,56 @@ export async function verifyMessage(
       if (modelNum !== null) {
         const tol = Math.max(0.02, 0.015 * Math.abs(accel))
         if (Math.abs(modelNum - accel) <= tol) {
+          sbAction.verified = true
+          return {
+            state: 'verified',
+            badgeText: 'Checked by PhysLab',
+            engineAnswerLatex: engineLatex,
+            engineAnswerText: engineText,
+            modelAnswerLatex: boxed ?? undefined,
+            notes: val.reasons.join(' ')
+          }
+        } else {
+          sbAction.verified = false
+          return {
+            state: 'disagrees',
+            badgeText: 'Not checked',
+            engineAnswerLatex: engineLatex,
+            engineAnswerText: engineText,
+            modelAnswerLatex: boxed ?? undefined,
+            notes: val.reasons.join(' ')
+          }
+        }
+      } else {
+        sbAction.verified = false
+        return {
+          state: 'unverified',
+          badgeText: 'Not checked',
+          engineAnswerLatex: engineLatex,
+          engineAnswerText: engineText,
+          notes: val.reasons.join(' ')
+        }
+      }
+    } else if (val.experimentType === 'projectile') {
+      let modelNum: number | null = null
+      if (boxed) {
+        const stripped = boxed
+          .replace(/\\text\s*\{[^}]*\}/gi, '')
+          .replace(/m\/s/gi, '')
+          .replace(/m/gi, '')
+          .replace(/[a-zA-Z_\\=]/g, '')
+          .trim()
+        const n = parseFloat(stripped)
+        if (!isNaN(n)) modelNum = n
+      }
+
+      const range = (val.details as { range?: number } | undefined)?.range ?? 0
+      const engineText = `${fmtPrecise(range, { decimals: 2, precisionMode: 'dp' })} m`
+      const engineLatex = `${fmtPrecise(range, { decimals: 2, precisionMode: 'dp' })}\\text{ m}`
+
+      if (modelNum !== null) {
+        const tol = Math.max(0.1, 0.015 * Math.abs(range))
+        if (Math.abs(modelNum - range) <= tol) {
           sbAction.verified = true
           return {
             state: 'verified',

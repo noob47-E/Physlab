@@ -862,6 +862,16 @@ Simulation ready to run!`
       expect(turn.contextNote).toContain('build_experiment')
       expect(turn.contextNote).toContain('graph_readings')
     })
+
+    it('preComputeEngineTurn prepares projectile experiment and formula range for a ball thrown at 20 m/s at 45°', () => {
+      const turn = preComputeEngineTurn('A ball is thrown at 20 m/s at 45°. How far does it go? Show it.')
+      expect(turn.actions).toHaveLength(1)
+      expect(turn.actions[0].tool).toBe('sandbox_experiment')
+      expect(turn.actions[0].args.experimentType).toBe('projectile')
+      expect(turn.actions[0].args.v0).toBe(20)
+      expect(turn.actions[0].args.angleDeg).toBe(45)
+      expect(turn.contextNote).toContain('40.77')
+    })
   })
 
   describe('Fix 3 [Bug 2]: Exact Badge Rule', () => {
@@ -934,6 +944,28 @@ Simulation ready to run!`
       expect(vProj.state).toBe('unverified')
       expect(vProj.badgeText).toBe('Not checked')
       expect(projAction.verified).toBe(false)
+    })
+
+    it('verifies projectile range when boxed answer matches formula calculation', async () => {
+      const projAction: any = {
+        id: 'act_proj_test',
+        tool: 'sandbox_experiment' as any,
+        args: { experimentType: 'projectile', v0: 20, angleDeg: 45 }
+      }
+      const vMatch = await verifyMessage(
+        'The ball travels a distance of $R = \\boxed{40.77}\\text{ m}$.',
+        [projAction]
+      )
+      expect(vMatch.state).toBe('verified')
+      expect(vMatch.badgeText).toBe('Checked by PhysLab')
+      expect(projAction.verified).toBe(true)
+
+      const vDisagree = await verifyMessage(
+        'The ball travels a distance of $R = \\boxed{55.00}\\text{ m}$.',
+        [projAction]
+      )
+      expect(vDisagree.state).toBe('disagrees')
+      expect(vDisagree.badgeText).toBe('Not checked')
     })
 
     it('matches tool answers across variations (latex, formatting, roots)', () => {

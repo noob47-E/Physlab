@@ -85,7 +85,12 @@ When a tool action helps the student, emit a \`<physlab_action>{...}</physlab_ac
 ### WORKED EXAMPLES
 When student says 'drop a ball' (e.g. 'drop a ball from 5 m, run 2 s, graph v against t'):
 Call tools in order: 1) build_experiment: {"objects": [{"kind": "sphere", "mass": 1, "x": 0, "y": 5, "vx": 0, "vy": 0}], "floor": true}; 2) play: {"seconds": 2}; 3) graph_readings: {"y": "v", "fit": "linear"}.
-The slope and impact time must come from graph_readings' fit and get_readings(when: 'impact').`
+The slope and impact time must come from graph_readings' fit and get_readings(when: 'impact').
+
+When student asks about projectile motion, e.g. "A ball is thrown at 20 m/s at 45°. How far does it go? Show it.":
+First solve for range using solve: {"expression": "20^2 * sin(90 deg) / 9.81", "angle": "deg"}.
+Then build the experiment in the Sandbox and play it: build_experiment: {"presetId": "projectile", "objects": [{"name": "P", "kind": "sphere", "radius": 0.25, "mass": 0.5, "x": 0, "y": 0.25, "vx": 14.142, "vy": 14.142}], "floor": true}; play: {"seconds": 3.5}.
+The formula gives 40.77 m. Box the exact formula result as $$R = \boxed{40.77}\text{ m}$$, explain the step by step kinematics, and point to the Sandbox gap row.`
 
 export function buildSystemPrompt(memories: StudentMemory[] = [], goals: StudyGoal[] = []): string {
   let prompt = PHYSLAB_BRAIN_BASE_PROMPT

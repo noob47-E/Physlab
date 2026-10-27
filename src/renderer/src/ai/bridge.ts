@@ -510,12 +510,16 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
           const vx = v0 * Math.cos(rad)
           const vy = v0 * Math.sin(rad)
           const projSphere: BodyDef = {
-            ...makeBody('sphere', 'Projectile', [-3, 0.5, 0]),
-            velocity: [vx, vy, 0]
+            ...makeBody('sphere', 'P', [0, 0.5, 0]),
+            size: [0.5, 0.5, 0.5],
+            velocity: [vx, vy, 0],
+            restitution: 0.3
           }
           const bodies: BodyDef[] = [floor('concrete'), projSphere]
           const sb = useSandbox.getState()
           sb.setScene(bodies, { airDensity: 0 })
+          useSandbox.setState({ presetId: 'projectile' })
+          scene().setPlaying(true)
 
           const samples = recordRealSimSamples('Projectile', 1.5)
           const table = tableFrom('Projectile', samples)
@@ -1033,7 +1037,7 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
 
   // 5. Physics Sandbox (Incline, Freefall, Projectile, Presets)
   const isPhysicsExp =
-    /(?:incline|slope|ramp|friction|projectile|free\s*fall|drop|falling|cradle|newton's\s*cradle|pendulum|atwood|seesaw|spring|collision)/i.test(
+    /(?:incline|slope|ramp|friction|projectile|thrown|launched|how\s+far|free\s*fall|drop|falling|cradle|newton's\s*cradle|pendulum|atwood|seesaw|spring|collision)/i.test(
       lower
     )
 
@@ -1074,11 +1078,13 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
       notes.push(
         `[PHYSLAB ENGINE VERIFIED RESULT: 28° Incline Scene. Angle=${angleDeg}°, mass=${massKg}kg, mu_s=${muStatic}, mu_k=${muKinetic}. tan(theta)=${fmt(validation.tanAngle)}, staysStatic=${validation.staysStatic}, acceleration=${fmt(validation.acceleration)} m/s². The acceleration formula MUST be written exactly as: $$a = \\boxed{0}\\text{ m/s}^2$$. Do NOT put '(block remains stationary)' inside the math line.]`
       )
-    } else if (/(?:projectile)/i.test(lower)) {
-      const v0Match = p.match(/(\d+(?:\.\d+)?)\s*m\/s/i)
+    } else if (/(?:projectile|thrown|launched|how\s+far)/i.test(lower)) {
+      const v0Match = p.match(/(\d+(?:\.\d+)?)\s*m\/s/i) || p.match(/(?:at|speed|velocity)\s*(\d+(?:\.\d+)?)/i)
       const v0 = v0Match ? Number(v0Match[1]) : 20
       const angleMatch = p.match(/(\d+(?:\.\d+)?)\s*(?:°|deg|degrees)/i)
       const angleDeg = angleMatch ? Number(angleMatch[1]) : 45
+      const g = 9.81
+      const range = (v0 * v0 * Math.sin((2 * angleDeg * Math.PI) / 180)) / g
       actions.push({
         id: `act_${Date.now()}_proj`,
         tool: 'sandbox_experiment',
@@ -1092,7 +1098,7 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
         verified: true
       })
       notes.push(
-        `[PHYSLAB ENGINE: Prepared Projectile Motion (v0 = ${v0} m/s, θ = ${angleDeg}°), live simulation running with Lab Data readings.]`
+        `[PHYSLAB ENGINE: Prepared Projectile Motion (v0 = ${v0} m/s, θ = ${angleDeg}°). Formula Range R = v² sin(2θ) / g = (${v0})² sin(${2 * angleDeg}°) / 9.81 = ${range.toFixed(2)} m. The range formula MUST be written with the boxed result: $$R = \\boxed{${range.toFixed(2)}}\\text{ m}$$. Live Sandbox simulation running with gap row.]`
       )
     } else if (/(?:drop|free\s*fall|falling)/i.test(lower)) {
       actions.push(
