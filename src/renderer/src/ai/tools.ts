@@ -10,6 +10,7 @@ import { usePure } from '../math/pure/store'
 import { reconcile } from '../calc/working'
 import { run3WayTruthCheck } from './truthCheck'
 import { runCommand, type CommandResult } from '../lang/commands'
+import { describeScreen } from './describeScreen'
 
 export function normalizeModeId(mode: string): ModeId {
   const m = mode.toLowerCase().trim()
@@ -403,6 +404,26 @@ export const TOOLS = [
           view: { type: 'string', enum: ['2d', '3d'], description: 'View dimension.' }
         },
         required: ['commands']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'describe_screen',
+      description: 'Describe the current screen state in detail across any mode (Graphing, Geometry, Vectors, Sandbox, Calculator, Lab Data). Reports mode, 2D/3D view, all objects, curves, points, vectors, bodies, measurements, and simulation parameters.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            description: 'Optional mode to describe (calculator, graphing, shapes/geometry, vectors, sandbox, lab). Defaults to active mode.'
+          },
+          filter: {
+            type: 'string',
+            description: 'Optional text filter to search for specific objects by name, type, or property when there are many objects.'
+          }
+        }
       }
     }
   },
@@ -1138,6 +1159,7 @@ export async function runTool(
         const results: Array<{ command: string; result: CommandResult }> = []
         const allCreated: ObjId[] = []
         const allRemoved: ObjId[] = []
+        const allChanged: ObjId[] = []
 
         for (const cmd of commands) {
           const trimmed = cmd.trim()
@@ -1145,17 +1167,23 @@ export async function runTool(
           const res = await runCommand(trimmed)
           results.push({ command: trimmed, result: res })
           if (!res.ok) {
+            const currentMode = targetMode ?? useApp.getState().mode
+            const screen = describeScreen(currentMode)
             return {
               ok: false,
               failingCommand: trimmed,
               error: res.message || `Command failed: ${trimmed}`,
               results,
               created: allCreated,
-              removed: allRemoved
+              removed: allRemoved,
+              changed: allChanged,
+              failures: [{ command: trimmed, error: res.message || 'Failed' }],
+              screen
             }
           }
           allCreated.push(...res.created)
           allRemoved.push(...res.removed)
+          if (res.changed) allChanged.push(...res.changed)
         }
 
         const currentMode = targetMode ?? useApp.getState().mode
@@ -1170,6 +1198,7 @@ export async function runTool(
             type: o?.type ?? 'unknown'
           }
         })
+        const screen = describeScreen(currentMode)
 
         return {
           ok: true,
@@ -1177,7 +1206,19 @@ export async function runTool(
           results,
           created: allCreated,
           removed: allRemoved,
-          visibleObjects
+          changed: allChanged,
+          visibleObjects,
+          screen
+        }
+      }
+
+      case 'describe_screen': {
+        const text = describeScreen(args.mode, args.filter)
+        return {
+          ok: true,
+          mode: args.mode ? normalizeModeId(String(args.mode)) : useApp.getState().mode,
+          screen: text,
+          description: text
         }
       }
 
