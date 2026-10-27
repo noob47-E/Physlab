@@ -73,10 +73,18 @@ export function AiCopilot() {
   const provider = useAiStore((s) => s.provider)
   const geminiApiKey = useAiStore((s) => s.geminiApiKey)
   const geminiModel = useAiStore((s) => s.geminiModel)
+  const azureDeployment = useAiStore((s) => s.azureDeployment)
   const localEndpoint = useAiStore((s) => s.localEndpoint)
   const localModel = useAiStore((s) => s.localModel)
   const autoExecuteActions = useAiStore((s) => s.autoExecuteActions)
   const availableGeminiModels = useAiStore((s) => s.availableGeminiModels)
+
+  const [hasMainKey, setHasMainKey] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.physlab?.ai?.hasKey) {
+      window.physlab.ai.hasKey().then(setHasMainKey).catch(() => setHasMainKey(false))
+    }
+  }, [provider])
 
   const threads = useAiStore((s) => s.threads)
   const activeThreadId = useAiStore((s) => s.activeThreadId)
@@ -292,6 +300,9 @@ export function AiCopilot() {
           <div className="flex items-center gap-2">
             <Brain size={18} className="text-accent" />
             <span className="font-semibold text-small text-ink-strong">AI Tutor</span>
+            <span className="text-fine text-ink-faint font-mono">
+              {provider === 'azure' ? (azureDeployment || 'gpt-5.4') : provider === 'local' ? localModel : geminiModel}
+            </span>
           </div>
 
           <div className="flex items-center gap-1">
@@ -364,11 +375,11 @@ export function AiCopilot() {
         {activeTab === 'chat' && (
           <div className="flex flex-col h-full">
             {/* Missing Key Notification in Chat */}
-            {provider === 'gemini' && !geminiApiKey.trim() && (
+            {provider !== 'local' && !geminiApiKey.trim() && hasMainKey === false && (
               <div className="m-3 p-3 rounded-lg border border-line bg-surface-1 flex items-center justify-between gap-3 text-small">
                 <div className="flex items-center gap-2 text-ink-dim">
                   <Sparkles size={16} className="text-accent shrink-0" />
-                  <span>Please paste your Google Gemini API key to start chatting.</span>
+                  <span>Please configure an AI API key in Settings to start chatting.</span>
                 </div>
                 <button
                   type="button"
@@ -901,7 +912,20 @@ export function AiCopilot() {
             {/* Provider Switcher */}
             <div className="flex flex-col gap-2">
               <span className="font-semibold text-small text-ink-strong">AI Provider Selection</span>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => useAiStore.getState().setProvider('azure')}
+                  className={`p-2 rounded border text-left cursor-pointer transition-colors ${
+                    provider === 'azure'
+                      ? 'border-accent bg-surface-2'
+                      : 'border-line bg-surface-1 text-ink-dim'
+                  }`}
+                >
+                  <div className="font-semibold text-small text-ink-strong">Azure OpenAI</div>
+                  <div className="text-fine text-ink-faint font-mono">{azureDeployment || 'gpt-5.4'}</div>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => useAiStore.getState().setProvider('gemini')}
@@ -911,8 +935,8 @@ export function AiCopilot() {
                       : 'border-line bg-surface-1 text-ink-dim'
                   }`}
                 >
-                  <div className="font-semibold text-small text-ink-strong">Google Gemini API</div>
-                  <div className="text-fine text-ink-faint">Direct cloud testing (Vision + Flash)</div>
+                  <div className="font-semibold text-small text-ink-strong">Google Gemini</div>
+                  <div className="text-fine text-ink-faint">Direct cloud</div>
                 </button>
 
                 <button
@@ -924,11 +948,55 @@ export function AiCopilot() {
                       : 'border-line bg-surface-1 text-ink-dim'
                   }`}
                 >
-                  <div className="font-semibold text-small text-ink-strong">Local GGUF / Ollama</div>
-                  <div className="text-fine text-ink-faint">Custom Ultimatrix fine-tune</div>
+                  <div className="font-semibold text-small text-ink-strong">Local GGUF</div>
+                  <div className="text-fine text-ink-faint">Ultimatrix</div>
                 </button>
               </div>
             </div>
+
+            {/* Azure OpenAI Card */}
+            {provider === 'azure' && (
+              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                    <Sparkles size={15} className="text-accent" />
+                    <span>Azure OpenAI Service</span>
+                  </div>
+                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
+                    Active Provider
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1 text-small text-ink-dim">
+                  <div className="flex items-center justify-between">
+                    <span className="text-fine font-medium text-ink-dim">Deployment Model</span>
+                    <span className="font-mono text-fine text-ink-strong">{azureDeployment || 'gpt-5.4'}</span>
+                  </div>
+                  <div className="text-fine text-ink-faint">
+                    Credentials configured in environment / credential store.
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-line">
+                  <button
+                    type="button"
+                    onClick={handleVerify}
+                    disabled={isVerifying}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded bg-surface-2 hover:bg-surface-3 text-ink text-fine font-medium cursor-pointer border border-line transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={13} className="text-good" />
+                    <span>{isVerifying ? 'Testing…' : 'Test Azure Connection'}</span>
+                  </button>
+                  {verifyMsg && (
+                    <span
+                      className={`text-fine ${verifyMsg.ok ? 'text-good' : 'text-bad'}`}
+                    >
+                      {verifyMsg.message}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Google Gemini Card */}
             {provider === 'gemini' && (

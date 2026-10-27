@@ -318,19 +318,38 @@ export async function handleAiChat(
   messages: unknown[],
   tools?: unknown[]
 ): Promise<{ message?: any; model?: string; error?: string }> {
-  // 1. Try Gemini
+  const hasAzure = hasAiKey('azure')
+  const hasGemini = !!getSecretKey('google_ai_studio_noob_api')
+
+  // When Azure key exists, make Azure the default provider, with Gemini as the fallback.
+  if (hasAzure) {
+    const azureRes = await callAzureOpenAi(messages, tools)
+    if ('message' in azureRes) {
+      return azureRes
+    }
+
+    // Azure failed (e.g. quota, timeout, network); fallback to Gemini if available
+    if (hasGemini) {
+      const geminiRes = await callGeminiOpenAi(messages, tools)
+      if ('message' in geminiRes) {
+        return geminiRes
+      }
+    }
+    return { error: azureRes.error }
+  }
+
+  // Fallback when Azure key does not exist: try Gemini
   const geminiRes = await callGeminiOpenAi(messages, tools)
   if ('message' in geminiRes) {
     return geminiRes
   }
 
-  // 2. If Gemini failed due to quota/missing key, try Azure
-  if (geminiRes.tryNextProvider) {
+  // If Gemini failed due to quota/missing key, try Azure
+  if (geminiRes.tryNextProvider && hasAzure) {
     const azureRes = await callAzureOpenAi(messages, tools)
     if ('message' in azureRes) {
       return azureRes
     }
-    // Return calm error from Azure (or Gemini if Azure has no key)
     return { error: azureRes.error }
   }
 
@@ -369,6 +388,19 @@ export function registerAiProviderIpc(): void {
 
   ipcMain.handle('ai:hasKey', async (_e, provider?: string) => {
     return hasAiKey(provider)
+  })
+
+  ipcMain.handle('ai:getConfig', async () => {
+    const hasAzure = hasAiKey('azure')
+    const hasGemini = !!getSecretKey('google_ai_studio_noob_api')
+    const azureDeployment = getSecretKey('AZURE_AI_DEPLOYMENT') || 'gpt-5.4'
+    const defaultProvider = hasAzure ? 'azure' : 'gemini'
+    return {
+      hasAzure,
+      hasGemini,
+      defaultProvider,
+      azureDeployment
+    }
   })
 
   ipcMain.handle('ai:setKey', async (_e, key: string, provider?: string) => {

@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   isDesktop: true,
+  isRehearsal: Boolean(
+    process.env['PHYSLAB_SMOKE_USERDATA'] ||
+    process.env['PHYSLAB_REHEARSE'] ||
+    process.argv?.includes('--rehearse')
+  ),
   /** No filters: the .phys project dialog. A question file passes its own (.pqjson, .exam) and a title. */
   openFile: (filters?: { name: string; extensions: string[] }[], title?: string): Promise<{ path: string; content: string } | null> =>
     ipcRenderer.invoke('file:open', filters, title),
@@ -57,6 +62,12 @@ const api = {
       }
     },
     hasKey: (provider?: string): Promise<boolean> => ipcRenderer.invoke('ai:hasKey', provider),
+    getConfig: (): Promise<{
+      hasAzure: boolean
+      hasGemini: boolean
+      defaultProvider: 'azure' | 'gemini'
+      azureDeployment: string
+    }> => ipcRenderer.invoke('ai:getConfig'),
     setKey: (key: string, provider?: string): Promise<boolean> =>
       ipcRenderer.invoke('ai:setKey', key, provider),
     transcribe: async (

@@ -26,6 +26,7 @@ function loadPersistedState(): {
   goals: StudyGoal[]
   provider: ProviderType
   geminiModel: string
+  azureDeployment: string
   localEndpoint: string
   localModel: string
   autoExecuteActions: boolean
@@ -62,8 +63,9 @@ function loadPersistedState(): {
           activeThreadId: parsed.activeThreadId || '',
           memories: parsed.memories || [],
           goals: parsed.goals || [],
-          provider: parsed.provider === 'azure' ? 'azure' : parsed.provider === 'local' ? 'local' : 'gemini',
+          provider: parsed.provider === 'local' ? 'local' : parsed.provider === 'gemini' ? 'gemini' : 'azure',
           geminiModel,
+          azureDeployment: parsed.azureDeployment || 'gpt-5.4',
           localEndpoint: parsed.localEndpoint || 'http://127.0.0.1:8080/v1',
           localModel: parsed.localModel || 'PhysLab-Brain-Ultimatrix',
           autoExecuteActions:
@@ -98,8 +100,9 @@ function loadPersistedState(): {
     activeThreadId: initialThreadId,
     memories: [],
     goals: [],
-    provider: 'gemini',
+    provider: 'azure',
     geminiModel: 'gemini-3.5-flash-lite',
+    azureDeployment: 'gpt-5.4',
     localEndpoint: 'http://127.0.0.1:8080/v1',
     localModel: 'PhysLab-Brain-Ultimatrix',
     autoExecuteActions: true,
@@ -119,6 +122,7 @@ interface AiStoreState {
   provider: ProviderType
   geminiApiKey: string
   geminiModel: string
+  azureDeployment: string
   localEndpoint: string
   localModel: string
   autoExecuteActions: boolean
@@ -137,6 +141,7 @@ interface AiStoreState {
   setProvider: (p: ProviderType) => void
   setGeminiApiKey: (k: string) => void
   setGeminiModel: (m: string) => void
+  setAzureDeployment: (d: string) => void
   setLocalEndpoint: (e: string) => void
   setLocalModel: (m: string) => void
   setAutoExecute: (b: boolean) => void
@@ -172,6 +177,7 @@ export const useAiStore = create<AiStoreState>((set) => ({
   provider: initial.provider,
   geminiApiKey: initialGeminiKey,
   geminiModel: initial.geminiModel,
+  azureDeployment: initial.azureDeployment || 'gpt-5.4',
   localEndpoint: initial.localEndpoint,
   localModel: initial.localModel,
   autoExecuteActions: initial.autoExecuteActions,
@@ -202,6 +208,7 @@ export const useAiStore = create<AiStoreState>((set) => ({
     set({ geminiApiKey })
   },
   setGeminiModel: (geminiModel) => set({ geminiModel }),
+  setAzureDeployment: (azureDeployment) => set({ azureDeployment }),
   setLocalEndpoint: (localEndpoint) => set({ localEndpoint }),
   setLocalModel: (localModel) => set({ localModel }),
   setAutoExecute: (autoExecuteActions) => set({ autoExecuteActions }),
@@ -427,6 +434,7 @@ useAiStore.subscribe((s) => {
         goals: s.goals,
         provider: s.provider,
         geminiModel: s.geminiModel,
+        azureDeployment: s.azureDeployment,
         localEndpoint: s.localEndpoint,
         localModel: s.localModel,
         autoExecuteActions: s.autoExecuteActions,
@@ -439,3 +447,15 @@ useAiStore.subscribe((s) => {
     }
   }, 250)
 })
+
+// Query config from main process to prioritize Azure when configured
+if (typeof window !== 'undefined' && window.physlab?.ai?.getConfig) {
+  void window.physlab.ai.getConfig().then((cfg) => {
+    if (cfg) {
+      useAiStore.setState((s) => ({
+        azureDeployment: cfg.azureDeployment || s.azureDeployment || 'gpt-5.4',
+        provider: s.provider === 'local' ? 'local' : (cfg.hasAzure ? 'azure' : s.provider)
+      }))
+    }
+  }).catch(() => {})
+}

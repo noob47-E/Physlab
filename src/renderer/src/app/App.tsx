@@ -35,7 +35,11 @@ import { loadExperiment } from '../sim/transportActions'
 import { buildScene, LAB_DEFAULTS } from '../sim/labScenes'
 import { useAiStore } from '../ai/store'
 
-if (typeof window !== 'undefined') {
+const isDebugAllowed =
+  import.meta.env.DEV ||
+  Boolean(typeof window !== 'undefined' && ((window as any).physlab?.isRehearsal || (window as any).__PHYSLAB_REHEARSE__))
+
+if (typeof window !== 'undefined' && isDebugAllowed) {
   ;(window as any).__physlab_debug = {
     enterMode,
     showPanel,

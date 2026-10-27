@@ -17,6 +17,15 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+// Isolated user profile for smoke tests and automated rehearsals.
+if (process.env['PHYSLAB_SMOKE_USERDATA']) {
+  try {
+    app.setPath('userData', process.env['PHYSLAB_SMOKE_USERDATA'])
+  } catch {
+    // ignore
+  }
+}
+
 // Always render on the discrete GPU (RTX).
 app.commandLine.appendSwitch('force_high_performance_gpu')
 if (process.env['PHYSLAB_SWIFTSHADER']) {
