@@ -43,6 +43,11 @@
   --color-code: var(--code-text);
   --color-input: var(--input-bg);
   --color-label: var(--label-bg);
+  --color-ai-accent: var(--ai-accent);
+  --color-ai-accent-soft: var(--ai-accent-soft);
+  --color-ai-surface: var(--ai-surface);
+  --color-ai-bubble: var(--ai-bubble);
+  --color-ai-border: var(--ai-border);
 }
 
 :root {
@@ -199,6 +204,13 @@
   --mode-sandbox: #FF8A5B;
   --mode-problems: #F472B6;
   --mode-lab: #38C6D9;
+  /* AI Assistant Panel (Part 7) */
+  --ai-accent: #7c6dfa;
+  --ai-accent-soft: rgba(124, 109, 250, 0.15);
+  --ai-surface: rgba(22, 23, 32, 0.88);
+  --ai-bubble: rgba(124, 109, 250, 0.16);
+  --ai-border: rgba(124, 109, 250, 0.22);
+  --ai-shadow: rgba(0, 0, 0, 0.45);
 }
 
 /* Light theme for bright rooms and classroom projectors. */
@@ -338,6 +350,13 @@
   --mode-sandbox: #C2410C;
   --mode-problems: #BE185D;
   --mode-lab: #0E7490;
+  /* AI Assistant Panel (Part 7) */
+  --ai-accent: #5844d8;
+  --ai-accent-soft: rgba(88, 68, 216, 0.1);
+  --ai-surface: rgba(255, 255, 255, 0.92);
+  --ai-bubble: rgba(88, 68, 216, 0.08);
+  --ai-border: rgba(88, 68, 216, 0.18);
+  --ai-shadow: rgba(40, 30, 80, 0.08);
 }
 
 /* Moonlight, the default: a calm night blue, cooler than dark and softer on the eyes late in the day. */
@@ -474,6 +493,13 @@
   --mode-sandbox: #FF8A5B;
   --mode-problems: #F472B6;
   --mode-lab: #38C6D9;
+  /* AI Assistant Panel (Part 7) */
+  --ai-accent: #9378ff;
+  --ai-accent-soft: rgba(147, 120, 255, 0.16);
+  --ai-surface: rgba(18, 22, 42, 0.88);
+  --ai-bubble: rgba(147, 120, 255, 0.16);
+  --ai-border: rgba(147, 120, 255, 0.24);
+  --ai-shadow: rgba(2, 4, 14, 0.55);
 }
 
 /* Moonlight Gold: the same warm, dim-lit feel as Moonlight, but candlelight instead of moonlight —
@@ -615,6 +641,13 @@
   --mode-sandbox: #FF8A5B;
   --mode-problems: #F472B6;
   --mode-lab: #38C6D9;
+  /* AI Assistant Panel (Part 7) */
+  --ai-accent: #9f75ff;
+  --ai-accent-soft: rgba(159, 117, 255, 0.15);
+  --ai-surface: rgba(32, 24, 28, 0.88);
+  --ai-bubble: rgba(159, 117, 255, 0.16);
+  --ai-border: rgba(159, 117, 255, 0.24);
+  --ai-shadow: rgba(8, 4, 2, 0.55);
 }
 
 html,
@@ -1930,6 +1963,94 @@ math-field.math-input::part(menu-toggle) {
     animation: none !important;
   }
 }
+
+  /* ---------- AI Assistant Panel (Part 7: Round and Soft) ---------- */
+  .ai-panel-wrapper {
+    height: 100%;
+    width: 100%;
+    padding: 6px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ai-panel-card {
+    height: 100%;
+    width: 100%;
+    border-radius: 16px;
+    background: var(--ai-surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--ai-border);
+    box-shadow: 0 8px 32px var(--ai-shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ai-bubble-user {
+    border-radius: 14px 14px 4px 14px;
+    background: var(--ai-bubble);
+    border: 1px solid var(--ai-border);
+    color: var(--text);
+    box-shadow: 0 2px 8px var(--ai-shadow);
+  }
+
+  .ai-bubble-bot {
+    border-radius: 14px 14px 14px 4px;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    color: var(--text);
+    box-shadow: 0 2px 10px var(--ai-shadow);
+  }
+
+  .ai-avatar-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--ai-accent);
+    box-shadow: 0 0 8px var(--ai-accent);
+  }
+
+  @keyframes ai-message-fade-slide {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .ai-message-enter {
+    animation: ai-message-fade-slide 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes ai-shimmer-pulse {
+    0%, 100% {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .ai-thinking-shimmer {
+    animation: ai-shimmer-pulse 1.8s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-message-enter,
+    .ai-thinking-shimmer {
+      animation: none !important;
+      transition: none !important;
+      transform: none !important;
+    }
+  }
 
 } /* end @layer components */
 

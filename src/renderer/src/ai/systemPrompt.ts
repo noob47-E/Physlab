@@ -102,6 +102,13 @@ When a tool action helps the student, emit a \`<physlab_action>{...}</physlab_ac
 <physlab_action>
 {"tool": "remove", "args": {"names": "all", "mode": "graphing"}}
 </physlab_action>
+- "plot y = sin x then remove it":
+<physlab_action>
+{"tool": "plot", "args": {"expression": "y = sin(x)", "dim": "2d"}}
+</physlab_action>
+<physlab_action>
+{"tool": "remove", "args": {"names": "all", "mode": "graphing"}}
+</physlab_action>
 
 10. Inspect visible objects in a mode (\`list_objects\`):
 <physlab_action>
