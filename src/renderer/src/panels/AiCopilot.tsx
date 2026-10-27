@@ -18,7 +18,6 @@ import {
   Eye,
   EyeOff,
   Square,
-  Cpu,
   MoreHorizontal,
   RotateCcw,
   ArrowLeft
@@ -26,16 +25,14 @@ import {
 import { useAiStore } from '../ai/store'
 import {
   abortActiveStream,
-  autoConnectLocalBrain,
-  fetchAvailableModels,
   streamChatCompletion,
-  testAiConnection,
   transcribeDiagram
 } from '../ai/client'
 import { executePhysLabAction, extractThinkTrace, getBrainStageText } from '../ai/bridge'
 import { stripIncompleteActionBlocks } from '../ai/contract'
 import { runTool } from '../ai/tools'
 import { verifyMessage } from '../ai/truthCheck'
+import { AI_PROVIDER_PRESETS, type AiProviderPreset } from '../ai/presets'
 import { MarkdownView } from './ai/MarkdownView'
 import { MindMapView } from './ai/MindMapView'
 import { hidePanel } from '../app/panels'
@@ -93,16 +90,7 @@ export function AiCopilot() {
   const [transcribing, setTranscribing] = useState(false)
   const [transcribedText, setTranscribedText] = useState<string | null>(null)
   const [transcribeError, setTranscribeError] = useState<string | null>(null)
-  const [verifyMsg, setVerifyMsg] = useState<{ ok: boolean; message: string } | null>(null)
-  const [isVerifying, setIsVerifying] = useState(false)
   const [showKeyText, setShowKeyText] = useState(false)
-  const [isFetchingModels, setIsFetchingModels] = useState(false)
-  const [modelFetchMsg, setModelFetchMsg] = useState<string | null>(null)
-  const [isAutoConnecting, setIsAutoConnecting] = useState(false)
-  const [autoConnectResult, setAutoConnectResult] = useState<{
-    ok: boolean
-    message: string
-  } | null>(null)
 
   // Goal keeper form state
   const [newGoalTitle, setNewGoalTitle] = useState('')
@@ -126,20 +114,139 @@ export function AiCopilot() {
 
   // Store bindings
   const provider = useAiStore((s) => s.provider)
+  const mainProvider = useAiStore((s) => s.mainProvider)
+  const fallbackProvider = useAiStore((s) => s.fallbackProvider)
+  const providerModels = useAiStore((s) => s.providerModels)
+  const providerBaseUrls = useAiStore((s) => s.providerBaseUrls)
+  const availableProviderModels = useAiStore((s) => s.availableProviderModels)
+  const presetsFromStore = useAiStore((s) => s.presets)
+
   const geminiApiKey = useAiStore((s) => s.geminiApiKey)
   const geminiModel = useAiStore((s) => s.geminiModel)
   const azureDeployment = useAiStore((s) => s.azureDeployment)
-  const localEndpoint = useAiStore((s) => s.localEndpoint)
-  const localModel = useAiStore((s) => s.localModel)
   const autoExecuteActions = useAiStore((s) => s.autoExecuteActions)
-  const availableGeminiModels = useAiStore((s) => s.availableGeminiModels)
+
+  const presets: readonly AiProviderPreset[] =
+    presetsFromStore && presetsFromStore.length > 0 ? presetsFromStore : AI_PROVIDER_PRESETS
+
+  const [selectedConfigProvider, setSelectedConfigProvider] = useState<string>(
+    mainProvider || provider || 'gemini'
+  )
+  const [keyInput, setKeyInput] = useState<string>('')
+  const [keySavedBadge, setKeySavedBadge] = useState<boolean>(false)
+  const [hasKeyMap, setHasKeyMap] = useState<Record<string, boolean>>({})
+  const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false)
+  const [testConnResult, setTestConnResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [isLoadingRemoteModels, setIsLoadingRemoteModels] = useState<boolean>(false)
+  const [loadModelsStatus, setLoadModelsStatus] = useState<string | null>(null)
 
   const [hasMainKey, setHasMainKey] = useState<boolean | null>(null)
   useEffect(() => {
     if (typeof window !== 'undefined' && window.physlab?.ai?.hasKey) {
       window.physlab.ai.hasKey().then(setHasMainKey).catch(() => setHasMainKey(false))
+      for (const p of presets) {
+        window.physlab.ai.hasKey(p.id).then((hk) => {
+          setHasKeyMap((prev) => ({ ...prev, [p.id]: hk }))
+        }).catch(() => {})
+      }
     }
-  }, [provider])
+  }, [provider, mainProvider, presets])
+
+  const activePreset = presets.find((p) => p.id === (mainProvider || provider))
+  const activeModelName =
+    providerModels[mainProvider || provider] ||
+    (mainProvider === 'azure' ? (azureDeployment || 'gpt-5.4') : mainProvider === 'gemini' ? (geminiModel || 'gemini-2.5-flash') : activePreset?.model) ||
+    'gemini-2.5-flash'
+
+  const currentPreset = presets.find((p) => p.id === selectedConfigProvider) || presets[0]
+  const currentBaseUrl =
+    providerBaseUrls[currentPreset.id] !== undefined
+      ? providerBaseUrls[currentPreset.id]
+      : currentPreset.baseUrl
+  const currentModel =
+    providerModels[currentPreset.id] !== undefined
+      ? providerModels[currentPreset.id]
+      : (currentPreset.id === 'azure' ? azureDeployment : currentPreset.id === 'gemini' ? geminiModel : currentPreset.model)
+  const currentAvailableModels =
+    availableProviderModels[currentPreset.id] && availableProviderModels[currentPreset.id].length > 0
+      ? availableProviderModels[currentPreset.id]
+      : currentPreset.suggestedModels
+  const currentHasKey = hasKeyMap[currentPreset.id] ?? false
+
+  const handleSelectConfigProvider = (id: string) => {
+    setSelectedConfigProvider(id)
+    setKeyInput('')
+    setKeySavedBadge(false)
+    setTestConnResult(null)
+    setLoadModelsStatus(null)
+    const preset = presets.find((p) => p.id === id)
+    if (preset) {
+      if (providerBaseUrls[id] === undefined && preset.baseUrl) {
+        useAiStore.getState().setProviderBaseUrl(id, preset.baseUrl)
+      }
+      if (providerModels[id] === undefined && preset.model) {
+        useAiStore.getState().setProviderModel(id, preset.model)
+      }
+    }
+  }
+
+  const handleSaveCurrentKey = async () => {
+    if (!keyInput.trim()) return
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setKey) {
+      await window.physlab.ai.setKey(currentPreset.id, keyInput.trim())
+      setKeyInput('')
+      setKeySavedBadge(true)
+      setHasKeyMap((prev) => ({ ...prev, [currentPreset.id]: true }))
+      setTimeout(() => setKeySavedBadge(false), 5000)
+    }
+  }
+
+  const handleRemoveCurrentKey = async () => {
+    if (typeof window !== 'undefined' && window.physlab?.ai?.removeKey) {
+      await window.physlab.ai.removeKey(currentPreset.id)
+      setHasKeyMap((prev) => ({ ...prev, [currentPreset.id]: false }))
+      setKeySavedBadge(false)
+    }
+  }
+
+  const handleTestCurrentConnection = async () => {
+    setIsTestingConnection(true)
+    setTestConnResult(null)
+    try {
+      if (typeof window !== 'undefined' && window.physlab?.ai?.testConnection) {
+        const res = await window.physlab.ai.testConnection(currentPreset.id)
+        if (res.ok) {
+          setTestConnResult({ ok: true, message: res.message || 'Connection works!' })
+        } else {
+          setTestConnResult({ ok: false, message: res.error || 'Connection failed' })
+        }
+      }
+    } catch (err) {
+      setTestConnResult({ ok: false, message: String(err) })
+    } finally {
+      setIsTestingConnection(false)
+    }
+  }
+
+  const handleLoadRemoteModels = async () => {
+    setIsLoadingRemoteModels(true)
+    setLoadModelsStatus(null)
+    try {
+      if (typeof window !== 'undefined' && window.physlab?.ai?.listRemoteModels) {
+        const res = await window.physlab.ai.listRemoteModels(currentPreset.id)
+        if (res.ok && res.models && res.models.length > 0) {
+          useAiStore.getState().setAvailableProviderModels(currentPreset.id, res.models)
+          setLoadModelsStatus(`Loaded ${res.models.length} model(s)`)
+        } else {
+          setLoadModelsStatus(res.error || 'No models returned from server')
+        }
+      }
+    } catch (err) {
+      setLoadModelsStatus(String(err))
+    } finally {
+      setIsLoadingRemoteModels(false)
+    }
+  }
 
   const threads = useAiStore((s) => s.threads)
   const activeThreadId = useAiStore((s) => s.activeThreadId)
@@ -266,8 +373,9 @@ export function AiCopilot() {
           // Auto-execute if enabled and engine did not disagree
           const { autoExecuteActions } = useAiStore.getState()
           if (autoExecuteActions && verification.state !== 'disagrees') {
-            for (const act of actions) {
-              void executePhysLabAction(act).then((updatedAct) => {
+            void (async () => {
+              for (const act of actions) {
+                const updatedAct = await executePhysLabAction(act)
                 const thread = useAiStore
                   .getState()
                   .threads.find((t) => t.id === useAiStore.getState().activeThreadId)
@@ -278,8 +386,8 @@ export function AiCopilot() {
                   )
                   useAiStore.getState().updateMessage(botMsg.id, { actions: updatedActions })
                 }
-              })
-            }
+              }
+            })()
           }
         },
         onError: (err) => {
@@ -311,31 +419,6 @@ export function AiCopilot() {
     handleSend(prompt)
   }
 
-  const handleVerify = async () => {
-    setIsVerifying(true)
-    setVerifyMsg(null)
-    const result = await testAiConnection()
-    setVerifyMsg(result)
-    setIsVerifying(false)
-  }
-
-  const handleFetchModels = async () => {
-    setIsFetchingModels(true)
-    setModelFetchMsg(null)
-    const result = await fetchAvailableModels()
-    setIsFetchingModels(false)
-    if (result.message) {
-      setModelFetchMsg(result.message)
-    }
-  }
-
-  const handleAutoConnectLocal = async () => {
-    setIsAutoConnecting(true)
-    setAutoConnectResult(null)
-    const result = await autoConnectLocalBrain()
-    setAutoConnectResult(result)
-    setIsAutoConnecting(false)
-  }
 
   const handleAddGoal = () => {
     if (!newGoalTitle.trim()) return
@@ -368,7 +451,7 @@ export function AiCopilot() {
                 <Sparkles size={16} className="text-ai-accent shrink-0" />
                 <span className="font-semibold text-small text-ink-strong">AI Tutor</span>
                 <span className="text-fine text-ink-faint font-mono truncate max-w-[120px]">
-                  {provider === 'azure' ? (azureDeployment || 'gpt-5.4') : provider === 'local' ? localModel : geminiModel}
+                  {activeModelName}
                 </span>
               </>
             )}
@@ -464,7 +547,7 @@ export function AiCopilot() {
                   }`}
                 >
                   <Settings2 size={14} />
-                  <span>Settings</span>
+                  <span>AI Provider Settings</span>
                 </button>
               </div>
             )}
@@ -1024,138 +1107,137 @@ export function AiCopilot() {
         {/* TAB 4: SETTINGS & SESSIONS */}
         {activeTab === 'settings' && (
           <div className="flex flex-col h-full overflow-y-auto p-3 gap-4">
-            {/* Provider Switcher */}
-            <div className="flex flex-col gap-2">
-              <span className="font-semibold text-small text-ink-strong">AI Provider Selection</span>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => useAiStore.getState().setProvider('azure')}
-                  className={`p-2 rounded border text-left cursor-pointer transition-colors ${
-                    provider === 'azure'
-                      ? 'border-accent bg-surface-2'
-                      : 'border-line bg-surface-1 text-ink-dim'
-                  }`}
-                >
-                  <div className="font-semibold text-small text-ink-strong">Azure OpenAI</div>
-                  <div className="text-fine text-ink-faint font-mono">{azureDeployment || 'gpt-5.4'}</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => useAiStore.getState().setProvider('gemini')}
-                  className={`p-2 rounded border text-left cursor-pointer transition-colors ${
-                    provider === 'gemini'
-                      ? 'border-accent bg-surface-2'
-                      : 'border-line bg-surface-1 text-ink-dim'
-                  }`}
-                >
-                  <div className="font-semibold text-small text-ink-strong">Google Gemini</div>
-                  <div className="text-fine text-ink-faint">Direct cloud</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => useAiStore.getState().setProvider('local')}
-                  className={`p-2 rounded border text-left cursor-pointer transition-colors ${
-                    provider === 'local'
-                      ? 'border-accent bg-surface-2'
-                      : 'border-line bg-surface-1 text-ink-dim'
-                  }`}
-                >
-                  <div className="font-semibold text-small text-ink-strong">Local GGUF</div>
-                  <div className="text-fine text-ink-faint">Ultimatrix</div>
-                </button>
+            {/* Primary & Fallback Provider Selectors */}
+            <div className="flex flex-col gap-3 p-3 rounded border border-line bg-surface-1">
+              <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                <Sparkles size={15} className="text-accent" />
+                <span>AI Providers &amp; Fallback</span>
               </div>
-            </div>
 
-            {/* Azure OpenAI Card */}
-            {provider === 'azure' && (
-              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Sparkles size={15} className="text-accent" />
-                    <span>Azure OpenAI Service</span>
-                  </div>
-                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                    Active Provider
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 text-small text-ink-dim">
-                  <div className="flex items-center justify-between">
-                    <span className="text-fine font-medium text-ink-dim">Deployment Model</span>
-                    <span className="font-mono text-fine text-ink-strong">{azureDeployment || 'gpt-5.4'}</span>
-                  </div>
-                  <div className="text-fine text-ink-faint">
-                    Credentials configured in environment / credential store.
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2 border-t border-line">
-                  <button
-                    type="button"
-                    onClick={handleVerify}
-                    disabled={isVerifying}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded bg-surface-2 hover:bg-surface-3 text-ink text-fine font-medium cursor-pointer border border-line transition-colors disabled:opacity-50"
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-fine font-medium text-ink-dim">Main Provider</label>
+                  <select
+                    value={mainProvider || provider || 'gemini'}
+                    onChange={(e) => {
+                      const newMain = e.target.value
+                      useAiStore.getState().setMainProvider(newMain)
+                      setSelectedConfigProvider(newMain)
+                    }}
+                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
                   >
-                    <CheckCircle2 size={13} className="text-good" />
-                    <span>{isVerifying ? 'Testing…' : 'Test Azure Connection'}</span>
-                  </button>
-                  {verifyMsg && (
-                    <span
-                      className={`text-fine ${verifyMsg.ok ? 'text-good' : 'text-bad'}`}
-                    >
-                      {verifyMsg.message}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Google Gemini Card */}
-            {provider === 'gemini' && (
-              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Sparkles size={15} className="text-accent" />
-                    <span>Google Gemini API</span>
-                  </div>
-                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                    Active Provider
-                  </span>
+                    {presets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex flex-col gap-1">
+                  <label className="text-fine font-medium text-ink-dim">Fallback Provider (Optional)</label>
+                  <select
+                    value={fallbackProvider || ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null
+                      useAiStore.getState().setFallbackProvider(val)
+                    }}
+                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+                  >
+                    <option value="">None (No fallback)</option>
+                    {presets
+                      .filter((p) => p.id !== (mainProvider || provider))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+              <span className="text-fine text-ink-faint">
+                If the main provider fails or exceeds quota, PhysLab switches to the fallback automatically.
+              </span>
+            </div>
+
+            {/* Provider Configuration Card */}
+            <div className="flex flex-col gap-3 p-3 rounded border border-accent bg-surface-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <label className="text-small font-semibold text-ink-strong">Configure Provider:</label>
+                  <select
+                    value={selectedConfigProvider}
+                    onChange={(e) => handleSelectConfigProvider(e.target.value)}
+                    className="p-1 rounded bg-surface-0 border border-line text-small text-ink outline-none font-medium"
+                  >
+                    {presets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label} {p.id === (mainProvider || provider) ? '(Main)' : p.id === fallbackProvider ? '(Fallback)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {currentPreset.docUrl && (
+                  <a
+                    href={currentPreset.docUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-fine text-accent hover:underline cursor-pointer"
+                  >
+                    Official Docs ↗
+                  </a>
+                )}
+              </div>
+
+              {currentPreset.note && (
+                <div className="text-fine text-ink-faint">
+                  {currentPreset.note}
+                </div>
+              )}
+
+              {/* API Key Section */}
+              {currentPreset.requiresKey ? (
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
                   <div className="flex items-center justify-between">
                     <label className="text-fine font-medium text-ink-dim">
-                      Google AI Studio API Key
+                      API Key {currentHasKey ? <span className="text-good font-semibold ml-1">✓ Saved in Main Process</span> : ''}
                     </label>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const clip = await navigator.clipboard.readText()
-                          if (clip && clip.trim()) {
-                            useAiStore.getState().setGeminiApiKey(clip.trim())
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const clip = await navigator.clipboard.readText()
+                            if (clip && clip.trim()) setKeyInput(clip.trim())
+                          } catch {
+                            // ignore
                           }
-                        } catch {
-                          // Ignore clipboard error
-                        }
-                      }}
-                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
-                    >
-                      <ClipboardPaste size={11} />
-                      <span>Paste Key</span>
-                    </button>
+                        }}
+                        className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
+                      >
+                        <ClipboardPaste size={11} />
+                        <span>Paste</span>
+                      </button>
+                      {currentHasKey && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveCurrentKey}
+                          className="text-fine text-bad hover:underline cursor-pointer"
+                        >
+                          Remove key
+                        </button>
+                      )}
+                    </div>
                   </div>
+
                   <div className="flex items-center gap-1.5 w-full">
                     <input
                       type={showKeyText ? 'text' : 'password'}
-                      value={geminiApiKey}
-                      onChange={(e) => useAiStore.getState().setGeminiApiKey(e.target.value)}
+                      value={keyInput}
+                      onChange={(e) => setKeyInput(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="AIzaSy..."
+                      placeholder={currentHasKey ? '•••••••••••••••••••• (Key saved ✓ - enter new key to replace)' : 'Enter or paste API key…'}
                       className="flex-1 min-w-0 p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
                     />
                     <button
@@ -1166,111 +1248,102 @@ export function AiCopilot() {
                     >
                       {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
-                  </div>
-                  <span className="text-fine text-ink-faint">
-                    Saved locally in your browser/app storage.
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-fine font-medium text-ink-dim">Gemini Model</label>
                     <button
                       type="button"
-                      onClick={handleFetchModels}
-                      disabled={isFetchingModels}
-                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                      disabled={!keyInput.trim()}
+                      onClick={handleSaveCurrentKey}
+                      className="px-3 py-1.5 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-40 shrink-0"
                     >
-                      <RefreshCw size={11} className={isFetchingModels ? 'animate-spin' : ''} />
-                      <span>{isFetchingModels ? 'Fetching…' : 'Fetch Models'}</span>
+                      Save Key
                     </button>
                   </div>
-                  <select
-                    value={geminiModel}
-                    onChange={(e) => useAiStore.getState().setGeminiModel(e.target.value)}
-                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
-                  >
-                    {availableGeminiModels.map((m) => (
-                      <option key={m} value={m}>
-                        {m} {m === 'gemini-3.5-flash-lite' ? '(Recommended)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {modelFetchMsg && (
-                    <span className="text-fine text-good">{modelFetchMsg}</span>
-                  )}
-                </div>
-              </div>
-            )}
 
-            {/* Local Brain Card */}
-            {provider === 'local' && (
-              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Cpu size={15} className="text-accent" />
-                    <span>Plug &amp; Play PhysLab-Brain (Qwen Q4)</span>
-                  </div>
-                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                    Local Qwen Q4
+                  {keySavedBadge && (
+                    <span className="text-fine text-good font-medium">Key saved ✓</span>
+                  )}
+                  <span className="text-fine text-ink-faint">
+                    Keys live only in the secure main process key store and are never exposed to the UI or logs.
                   </span>
                 </div>
+              ) : (
+                <div className="pt-2 border-t border-line text-fine text-ink-dim">
+                  ✓ Local provider (no API key required on localhost).
+                </div>
+              )}
 
-                <div className="text-fine text-ink-dim">
-                  One-click connection to local Qwen 2.5 / PhysLab-Brain runners (llama.cpp, Ollama, LM Studio, or local GPU runner).
+              {/* Base URL */}
+              <div className="flex flex-col gap-1 pt-2 border-t border-line">
+                <label className="text-fine font-medium text-ink-dim">Base URL</label>
+                <input
+                  type="text"
+                  value={currentBaseUrl}
+                  onChange={(e) => useAiStore.getState().setProviderBaseUrl(currentPreset.id, e.target.value)}
+                  placeholder={currentPreset.baseUrl || 'https://...'}
+                  className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
+                />
+              </div>
+
+              {/* Model */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-fine font-medium text-ink-dim">Model Identifier</label>
+                  <button
+                    type="button"
+                    onClick={handleLoadRemoteModels}
+                    disabled={isLoadingRemoteModels}
+                    className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={isLoadingRemoteModels ? 'animate-spin' : ''} />
+                    <span>{isLoadingRemoteModels ? 'Loading…' : 'Load models'}</span>
+                  </button>
                 </div>
 
+                <div className="flex items-center gap-1.5 w-full">
+                  <input
+                    type="text"
+                    value={currentModel}
+                    onChange={(e) => useAiStore.getState().setProviderModel(currentPreset.id, e.target.value)}
+                    list={`suggestions-${currentPreset.id}`}
+                    placeholder="e.g. gpt-4o, deepseek-chat..."
+                    className="flex-1 min-w-0 p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
+                  />
+                  <datalist id={`suggestions-${currentPreset.id}`}>
+                    {currentAvailableModels.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {loadModelsStatus && (
+                  <span className="text-fine text-good">{loadModelsStatus}</span>
+                )}
+              </div>
+
+              {/* Test Connection Button */}
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
                 <button
                   type="button"
-                  disabled={isAutoConnecting}
-                  onClick={handleAutoConnectLocal}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-50"
+                  disabled={isTestingConnection}
+                  onClick={handleTestCurrentConnection}
+                  className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-surface-2 border border-line text-small font-medium text-ink hover:bg-surface-3 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  <RefreshCw size={13} className={isAutoConnecting ? 'animate-spin' : ''} />
-                  <span>{isAutoConnecting ? 'Probing Local Endpoints…' : 'Auto-Connect Local Brain'}</span>
+                  <RefreshCw size={14} className={isTestingConnection ? 'animate-spin' : ''} />
+                  <span>{isTestingConnection ? 'Testing…' : `Test Connection (${currentPreset.label})`}</span>
                 </button>
 
-                {autoConnectResult && (
+                {testConnResult && (
                   <div
                     className={`p-2 rounded text-fine ${
-                      autoConnectResult.ok
+                      testConnResult.ok
                         ? 'bg-surface-0 text-good border border-line'
                         : 'bg-surface-0 text-bad border border-line'
                     }`}
                   >
-                    {autoConnectResult.message}
+                    {testConnResult.message}
                   </div>
                 )}
-
-                {/* Expandable Advanced Endpoint Settings */}
-                <details className="flex flex-col gap-2 p-2 rounded border border-line bg-surface-0 group mt-1">
-                  <summary className="text-fine font-medium text-ink-dim cursor-pointer select-none">
-                    Advanced Endpoint Settings
-                  </summary>
-                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-line">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-fine font-medium text-ink-dim">Base URL</label>
-                      <input
-                        type="text"
-                        value={localEndpoint}
-                        onChange={(e) => useAiStore.getState().setLocalEndpoint(e.target.value)}
-                        placeholder="http://127.0.0.1:8080/v1"
-                        className="p-1.5 rounded bg-surface-1 border border-line text-body text-ink outline-none font-mono"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-fine font-medium text-ink-dim">Model Identifier</label>
-                      <input
-                        type="text"
-                        value={localModel}
-                        onChange={(e) => useAiStore.getState().setLocalModel(e.target.value)}
-                        className="p-1.5 rounded bg-surface-1 border border-line text-small text-ink outline-none font-mono"
-                      />
-                    </div>
-                  </div>
-                </details>
               </div>
-            )}
+            </div>
 
             {/* Auto Execute Toggle */}
             <label className="flex items-center gap-2 text-small text-ink-strong cursor-pointer p-2.5 rounded border border-line bg-surface-1">
@@ -1281,29 +1354,6 @@ export function AiCopilot() {
               />
               <span>Auto-Execute PhysLab Actions (Sandbox / Calculator)</span>
             </label>
-
-            {/* Test Connection Button */}
-            <div className="flex flex-col gap-1.5">
-              <button
-                type="button"
-                disabled={isVerifying}
-                onClick={handleVerify}
-                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-surface-2 border border-line text-small font-medium text-ink hover:bg-surface-3 transition-colors cursor-pointer"
-              >
-                <RefreshCw size={14} className={isVerifying ? 'animate-spin' : ''} />
-                <span>{isVerifying ? 'Verifying…' : 'Verify Connection'}</span>
-              </button>
-
-              {verifyMsg && (
-                <div
-                  className={`p-2 rounded text-fine ${
-                    verifyMsg.ok ? 'bg-surface-1 text-good border border-line' : 'bg-surface-1 text-bad border border-line'
-                  }`}
-                >
-                  {verifyMsg.message}
-                </div>
-              )}
-            </div>
 
             {/* Multi-Session Chat Threads */}
             <div className="flex flex-col gap-2 border-t border-line pt-3">

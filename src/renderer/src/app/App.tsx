@@ -34,6 +34,7 @@ import { useTheme } from './theme'
 import { loadExperiment } from '../sim/transportActions'
 import { buildScene, LAB_DEFAULTS } from '../sim/labScenes'
 import { useAiStore } from '../ai/store'
+import { runCommand } from '../lang/commands'
 
 const isDebugAllowed =
   import.meta.env.DEV ||
@@ -50,7 +51,8 @@ if (typeof window !== 'undefined' && isDebugAllowed) {
     loadExperiment,
     buildScene,
     LAB_DEFAULTS,
-    useAiStore
+    useAiStore,
+    runCommand
   }
 }
 
