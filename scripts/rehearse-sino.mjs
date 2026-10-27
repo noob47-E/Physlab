@@ -9,6 +9,7 @@ const run = (cmd, args) => spawnSync([cmd, ...args].join(' '), { cwd: root, enco
 
 const userData = mkdtempSync(join(tmpdir(), 'physlab-rehearse-'))
 process.env.PHYSLAB_SMOKE_USERDATA = userData
+process.env.PHYSLAB_REHEARSE = '1'
 
 console.log('Running Sinovation Rehearsal Driver (scripts/rehearse-sino-main.mjs)...')
 let r

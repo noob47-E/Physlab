@@ -318,8 +318,9 @@ export function AiCopilot() {
           // Auto-execute if enabled and engine did not disagree
           const { autoExecuteActions } = useAiStore.getState()
           if (autoExecuteActions && verification.state !== 'disagrees') {
-            for (const act of actions) {
-              void executePhysLabAction(act).then((updatedAct) => {
+            void (async () => {
+              for (const act of actions) {
+                const updatedAct = await executePhysLabAction(act)
                 const thread = useAiStore
                   .getState()
                   .threads.find((t) => t.id === useAiStore.getState().activeThreadId)
@@ -330,8 +331,8 @@ export function AiCopilot() {
                   )
                   useAiStore.getState().updateMessage(botMsg.id, { actions: updatedActions })
                 }
-              })
-            }
+              }
+            })()
           }
         },
         onError: (err) => {

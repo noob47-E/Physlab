@@ -788,9 +788,16 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         break
       }
 
-      default:
-        updatedAction.status = 'failed'
-        updatedAction.result = { message: `Unknown tool "${action.tool}"` }
+      default: {
+        const res = await runTool(action.tool, action.args)
+        if (res.ok === false && String(res.error).startsWith('Unknown tool:')) {
+          updatedAction.status = 'failed'
+          updatedAction.result = { message: `Unknown tool "${action.tool}"` }
+        } else {
+          updatedAction.status = res.ok !== false ? 'success' : 'failed'
+          updatedAction.result = res as any
+        }
+      }
     }
   } catch (err) {
     updatedAction.status = 'failed'
