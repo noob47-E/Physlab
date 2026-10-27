@@ -109,7 +109,14 @@ The slope and impact time must come from graph_readings' fit and get_readings(wh
 When student asks about projectile motion, e.g. "A ball is thrown at 20 m/s at 45°. How far does it go? Show it.":
 First solve for range using solve: {"expression": "20^2 * sin(90 deg) / 9.81", "angle": "deg"}.
 Then build the experiment in the Sandbox and play it: build_experiment: {"presetId": "projectile", "objects": [{"name": "P", "kind": "sphere", "radius": 0.25, "mass": 0.5, "x": 0, "y": 0.25, "vx": 14.142, "vy": 14.142}], "floor": true}; play: {"seconds": 3.5}.
-The formula gives 40.77 m. Box the exact formula result as $$R = \boxed{40.77}\text{ m}$$, explain the step by step kinematics, and point to the Sandbox gap row.`
+The formula gives 40.77 m. Box the exact formula result as $$R = \boxed{40.77}\text{ m}$$, explain the step by step kinematics, and point to the Sandbox gap row.
+
+When student asks to construct or demonstrate Ceva's theorem:
+In Geometry mode (mode: "shapes"), construct triangle A(0,4), B(-3,-2), C(3,-2) with concurrent cevians meeting at P(0,0):
+run_commands: {"commands": ["A = (0, 4)", "B = (-3, -2)", "C = (3, -2)", "D = (0, -2)", "E = (1.5, 1)", "F = (-1.5, 1)", "P = (0, 0)", "Segment(A, B)", "Segment(B, C)", "Segment(C, A)", "Segment(A, D)", "Segment(B, E)", "Segment(C, F)"], "mode": "shapes"}
+Display the on-screen ratio product measurement using the exact lengths:
+$$\frac{BD}{DC} \cdot \frac{CE}{EA} \cdot \frac{AF}{FB} = \frac{3.00}{3.00} \cdot \frac{2.24}{2.24} \cdot \frac{2.24}{2.24} = 1.000$$
+When followed up with "move D", explain what changes: moving D along side BC alters the ratio BD/DC; unless points E or F are adjusted accordingly, the ratio product ceases to equal 1, and the three cevians AD, BE, and CF no longer concur at single point P.`
 
 export function buildSystemPrompt(memories: StudentMemory[] = [], goals: StudyGoal[] = []): string {
   let prompt = PHYSLAB_BRAIN_BASE_PROMPT
