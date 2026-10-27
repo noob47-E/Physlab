@@ -434,7 +434,7 @@ export function AiCopilot() {
     <div className="ai-panel-wrapper font-ui select-none">
       <div className="ai-panel-card text-ink overflow-hidden relative">
         {/* 1. Header (Calm & Minimal: Title, Model, New Chat, "⋯" Menu, Close) */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-line/50 bg-surface-1/60 backdrop-blur-sm shrink-0">
+        <div className="relative z-20 flex items-center justify-between px-3.5 py-2.5 border-b border-line/50 bg-surface-1/60 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             {activeTab !== 'chat' ? (
               <button
