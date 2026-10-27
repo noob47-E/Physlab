@@ -335,19 +335,19 @@ def _cancel_algebraic(expr, var=None):
     if expr is None:
         return expr
     try:
-        res = sp.cancel(expr)
         if var is None:
             syms = [s for s in expr.free_symbols if not s.name.startswith('_')]
             if len(syms) == 1:
                 var = syms[0]
             else:
-                return res
+                return expr
         powers = []
         for p in expr.atoms(sp.Pow):
             if p.base == var and isinstance(p.exp, sp.Rational) and p.exp.q > 1:
                 powers.append(p.exp.q)
         if not powers:
-            return res
+            return expr
+        res = sp.cancel(expr)
         import math as _m
         lcm_q = powers[0]
         for q in powers[1:]:
@@ -473,8 +473,8 @@ def diff_steps_op(p):
         tree, res = _dnode(f, var, U)
         canceled_res = _cancel_algebraic(res, var)
         ans = canceled_res if sp.count_ops(canceled_res) < sp.count_ops(res) else res
-        out.update({'tree': tree, 'unsupported': False, 'answer_latex': _tex(ans),
-                    'answer_text': sp.sstr(ans),
+        out.update({'tree': tree, 'unsupported': False, 'answer_latex': tree['result']['latex'] if ans == res else _tex(ans),
+                    'answer_text': tree['result']['text'] if ans == res else sp.sstr(ans),
                     'checked': bool(sp.simplify(res - truth) == 0)})
     except (_NoSteps, RecursionError):
         res = _cancel_algebraic(sp.simplify(truth), var)
