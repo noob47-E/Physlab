@@ -20,6 +20,8 @@ import { CONSTANT_NAMES, GREEK_NAMES } from '../math/names'
 import { math, splitArgs } from '../math/expr'
 import { calculusCall } from '../math/calculusCall'
 import { limitCall, type LimitCall } from '../math/limitCall'
+import { runPure } from '../math/pure/run'
+import { sameNumber } from '../math/noise'
 import { claimSentence, shownNumber, workOutLimit } from '../math/pure/limitWorking'
 import { rTex } from '../math/pure/rat'
 import { superscriptPowers } from '../math/format'
@@ -203,7 +205,7 @@ function solveEquation(src: string, ctx: CalcContext): CalcOutput | { sentence: 
 /** The first argument of every ddx, integral, diff or integrate in the line: the body, whose angles calculus reads in radians. */
 function calculusBodies(src: string): string[] {
   const bodies: string[] = []
-  const open = /\b(ddx|integral|diff|integrate)\s*\(/g
+  const open = /\b(ddx|integral|diff|derivative|integrate)\s*\(/g
   for (let m = open.exec(src); m; m = open.exec(src)) {
     let depth = 1
     let at = m.index + m[0].length
@@ -422,7 +424,7 @@ function solveInequalityInput(src: string): EvalResult | null {
       texIntervals.push(`(${iv.closedFrom ? '[' : '('}${calcNum(iv.from)}, \\infty)`)
       plainIntervals.push(`(${iv.closedFrom ? '[' : '('}${calcNum(iv.from)}, ∞)`)
     } else {
-      if (Math.abs(iv.from - iv.to) < 1e-12) {
+      if (sameNumber(iv.from, iv.to)) {
         parts.push(`${v} = ${calcNum(iv.from)}`)
         texIntervals.push(`\\{${calcNum(iv.from)}\\}`)
         plainIntervals.push(`{${calcNum(iv.from)}}`)
@@ -656,6 +658,22 @@ export function evaluateInput(mode: FieldMode, input: string, opts: EvalOptions)
     if (call && call.name !== 'integral' && call.args.length < 3) return textbookCalculus(call.name, call.args, src, opts.vars, opts.angle)
     // integrate(f, a, b) is the question ∫ₐᵇ f dx asks, which the numeric engine answers as integral(f, a, b).
     if (call?.name === 'integrate' && call.args.length === 3) src = `integral(${call.args.join(', ')})`
+    if (call?.name === 'integrate' && call.args.length === 4) src = `integral(${call.args[0]}, ${call.args[2]}, ${call.args[3]})`
+    const polyOp = /^(expand|factor)\(([\s\S]*)\)$/.exec(src.trim())
+    if (polyOp) {
+      const op = polyOp[1] === 'expand' ? 'expand' : 'factor'
+      const inner = polyOp[2].trim()
+      const w = runPure(op, inner)
+      if (!w.error && w.answers && w.answers.length > 0 && w.answers[0]?.tex) {
+        const tex = w.answers[0].tex
+        return {
+          main: tex,
+          tex,
+          src,
+          value: tex
+        }
+      }
+    }
     const simultaneous = solveSimultaneous(src) ?? solveSimultaneous(readRunsAsMultiplication(src, opts.vars))
     if (simultaneous) return simultaneous
     const ineq = solveInequalityInput(src) ?? solveInequalityInput(readRunsAsMultiplication(src, opts.vars))

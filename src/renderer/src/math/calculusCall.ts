@@ -38,14 +38,19 @@ function wholeCall(inner: string): boolean {
  * integrate(f, a, b) and integral(f, a, b).
  */
 export function calculusCall(src: string): CalculusCall | null {
-  const m = /^(diff|integrate|integral)\(([\s\S]*)\)$/.exec(src.trim())
+  const m = /^(diff|derivative|integrate|integral)\(([\s\S]*)\)$/.exec(src.trim())
   if (!m || !wholeCall(m[2])) return null
-  const name = m[1] as CalculusName
+  const rawName = m[1]
+  const name: CalculusName = rawName === 'derivative' ? 'diff' : (rawName as CalculusName)
   const args = splitArgs(m[2])
   const n = args.length
   // diff([1, 4, 9]) is the differences of a list, a different function with the same name.
   if (args[0] === undefined || args[0].startsWith('[')) return null
   if (name === 'diff') return n === 1 || (n === 2 && LETTER.test(args[1])) ? { name, args } : null
-  if (name === 'integrate') return n === 1 || (n === 2 && LETTER.test(args[1])) || n === 3 ? { name, args } : null
+  if (name === 'integrate') {
+    if (n === 1 || (n === 2 && LETTER.test(args[1])) || n === 3) return { name, args }
+    if (n === 4 && LETTER.test(args[1])) return { name, args }
+    return null
+  }
   return n === 3 ? { name, args } : null
 }

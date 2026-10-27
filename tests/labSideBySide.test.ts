@@ -37,9 +37,9 @@ describe('Lab Data table and chart side by side (X9)', () => {
     expect(css).toContain('@container (min-width: 600px)')
     expect(css).not.toMatch(/@media[^{]+\{[^}]*\.lab-split/)
 
-    // LAYOUT_VERSION must be 6
+    // LAYOUT_VERSION must be 7
     const { LAYOUT_VERSION } = await import('../src/renderer/src/app/layoutMath')
-    expect(LAYOUT_VERSION).toBe(6)
+    expect(LAYOUT_VERSION).toBe(7)
   })
 
   it('contains the chart section inside its own column, not buried below table buttons', () => {
