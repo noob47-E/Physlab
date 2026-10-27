@@ -67,9 +67,42 @@ const api = {
       hasGemini: boolean
       defaultProvider: 'azure' | 'gemini'
       azureDeployment: string
+      mainProvider?: string
+      fallbackProvider?: string
+      presets?: Array<{
+        id: string
+        label: string
+        kind: 'openai-compatible' | 'azure' | 'anthropic'
+        baseUrl: string
+        model: string
+        suggestedModels: string[]
+        docUrl: string
+        supportsTools: boolean
+        enabledByDefault: boolean
+        requiresKey: boolean
+        hasKey: boolean
+        note?: string
+      }>
+      configs?: Record<string, { baseUrl?: string; model?: string; apiVersion?: string }>
     }> => ipcRenderer.invoke('ai:getConfig'),
-    setKey: (key: string, provider?: string): Promise<boolean> =>
-      ipcRenderer.invoke('ai:setKey', key, provider),
+    setKey: (keyOrProvider: string, maybeKey?: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setKey', keyOrProvider, maybeKey),
+    removeKey: (provider: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:removeKey', provider),
+    setProviderConfig: (
+      provider: string,
+      config: { baseUrl?: string; model?: string; apiVersion?: string }
+    ): Promise<boolean> => ipcRenderer.invoke('ai:setProviderConfig', provider, config),
+    setActiveProviders: (main: string, fallback?: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setActiveProviders', main, fallback),
+    testConnection: (
+      provider?: string
+    ): Promise<{ ok: boolean; message?: string; error?: string }> =>
+      ipcRenderer.invoke('ai:testConnection', provider),
+    listRemoteModels: (
+      provider?: string
+    ): Promise<{ ok: boolean; models: string[]; error?: string }> =>
+      ipcRenderer.invoke('ai:listRemoteModels', provider),
     transcribe: async (
       dataUrl: string
     ): Promise<{ ok: boolean; text?: string; error?: string }> => {

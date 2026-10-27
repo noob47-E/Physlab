@@ -25,6 +25,11 @@ function loadPersistedState(): {
   memories: StudentMemory[]
   goals: StudyGoal[]
   provider: ProviderType
+  mainProvider: string
+  fallbackProvider: string | null
+  providerModels: Record<string, string>
+  providerBaseUrls: Record<string, string>
+  availableProviderModels: Record<string, string[]>
   geminiModel: string
   azureDeployment: string
   localEndpoint: string
@@ -58,12 +63,18 @@ function loadPersistedState(): {
             content: cleanPersistedText(m.content)
           }))
         }))
+        const provider = parsed.provider || (parsed.mainProvider || 'gemini')
         return {
           threads: sanitizedThreads,
           activeThreadId: parsed.activeThreadId || '',
           memories: parsed.memories || [],
           goals: parsed.goals || [],
-          provider: parsed.provider === 'local' ? 'local' : parsed.provider === 'gemini' ? 'gemini' : 'azure',
+          provider,
+          mainProvider: parsed.mainProvider || provider,
+          fallbackProvider: parsed.fallbackProvider || null,
+          providerModels: parsed.providerModels || {},
+          providerBaseUrls: parsed.providerBaseUrls || {},
+          availableProviderModels: parsed.availableProviderModels || {},
           geminiModel,
           azureDeployment: parsed.azureDeployment || 'gpt-5.4',
           localEndpoint: parsed.localEndpoint || 'http://127.0.0.1:8080/v1',
@@ -101,6 +112,11 @@ function loadPersistedState(): {
     memories: [],
     goals: [],
     provider: 'gemini',
+    mainProvider: 'gemini',
+    fallbackProvider: null,
+    providerModels: {},
+    providerBaseUrls: {},
+    availableProviderModels: {},
     geminiModel: 'gemini-3.5-flash-lite',
     azureDeployment: 'gpt-5.4',
     localEndpoint: 'http://127.0.0.1:8080/v1',
@@ -118,8 +134,30 @@ function loadPersistedState(): {
   }
 }
 
+export interface PresetSummary {
+  id: string
+  label: string
+  kind: 'openai-compatible' | 'azure' | 'anthropic'
+  baseUrl: string
+  model: string
+  suggestedModels: string[]
+  docUrl: string
+  supportsTools: boolean
+  enabledByDefault: boolean
+  requiresKey: boolean
+  hasKey: boolean
+  note?: string
+}
+
 interface AiStoreState {
   provider: ProviderType
+  mainProvider: string
+  fallbackProvider: string | null
+  providerModels: Record<string, string>
+  providerBaseUrls: Record<string, string>
+  availableProviderModels: Record<string, string[]>
+  presets: PresetSummary[]
+
   geminiApiKey: string
   geminiModel: string
   azureDeployment: string
@@ -139,6 +177,14 @@ interface AiStoreState {
   activeMindMap: MindMapData | null
 
   setProvider: (p: ProviderType) => void
+  setMainProvider: (p: string) => void
+  setFallbackProvider: (p: string | null) => void
+  setProviderModel: (p: string, m: string) => void
+  setProviderBaseUrl: (p: string, url: string) => void
+  setAvailableProviderModels: (p: string, models: string[]) => void
+  setPresets: (presets: PresetSummary[]) => void
+  refreshConfig: () => Promise<void>
+
   setGeminiApiKey: (k: string) => void
   setGeminiModel: (m: string) => void
   setAzureDeployment: (d: string) => void
@@ -173,8 +219,15 @@ const initial = loadPersistedState()
 const initialGeminiKey =
   typeof localStorage !== 'undefined' ? localStorage.getItem(GEMINI_KEY_STORAGE) || '' : ''
 
-export const useAiStore = create<AiStoreState>((set) => ({
+export const useAiStore = create<AiStoreState>((set, get) => ({
   provider: initial.provider,
+  mainProvider: initial.mainProvider,
+  fallbackProvider: initial.fallbackProvider,
+  providerModels: initial.providerModels,
+  providerBaseUrls: initial.providerBaseUrls,
+  availableProviderModels: initial.availableProviderModels,
+  presets: [],
+
   geminiApiKey: initialGeminiKey,
   geminiModel: initial.geminiModel,
   azureDeployment: initial.azureDeployment || 'gpt-5.4',
@@ -193,7 +246,70 @@ export const useAiStore = create<AiStoreState>((set) => ({
   goals: initial.goals,
   activeMindMap: null,
 
-  setProvider: (provider) => set({ provider }),
+  setProvider: (provider) => {
+    set({ provider, mainProvider: provider })
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setActiveProviders) {
+      void window.physlab.ai.setActiveProviders(provider, get().fallbackProvider || undefined)
+    }
+  },
+  setMainProvider: (mainProvider) => {
+    set({ mainProvider, provider: mainProvider })
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setActiveProviders) {
+      void window.physlab.ai.setActiveProviders(mainProvider, get().fallbackProvider || undefined)
+    }
+  },
+  setFallbackProvider: (fallbackProvider) => {
+    set({ fallbackProvider })
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setActiveProviders) {
+      void window.physlab.ai.setActiveProviders(get().mainProvider, fallbackProvider || undefined)
+    }
+  },
+  setProviderModel: (p, model) => {
+    set((s) => ({
+      providerModels: { ...s.providerModels, [p]: model },
+      ...(p === 'gemini' ? { geminiModel: model } : {}),
+      ...(p === 'azure' ? { azureDeployment: model } : {}),
+      ...(p === 'local' || p === 'ollama' || p === 'lmstudio' ? { localModel: model } : {})
+    }))
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setProviderConfig) {
+      void window.physlab.ai.setProviderConfig(p, { model })
+    }
+  },
+  setProviderBaseUrl: (p, baseUrl) => {
+    set((s) => ({
+      providerBaseUrls: { ...s.providerBaseUrls, [p]: baseUrl },
+      ...(p === 'local' || p === 'ollama' || p === 'lmstudio' ? { localEndpoint: baseUrl } : {})
+    }))
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setProviderConfig) {
+      void window.physlab.ai.setProviderConfig(p, { baseUrl })
+    }
+  },
+  setAvailableProviderModels: (p, models) =>
+    set((s) => ({
+      availableProviderModels: { ...s.availableProviderModels, [p]: models }
+    })),
+  setPresets: (presets) => set({ presets }),
+  refreshConfig: async () => {
+    if (typeof window !== 'undefined' && window.physlab?.ai?.getConfig) {
+      try {
+        const cfg = await window.physlab.ai.getConfig()
+        if (cfg) {
+          set((s) => {
+            const nextMain = cfg.mainProvider || (cfg.hasAzure ? 'azure' : s.mainProvider)
+            return {
+              presets: (cfg.presets as PresetSummary[]) || s.presets,
+              mainProvider: nextMain,
+              provider: nextMain,
+              fallbackProvider: cfg.fallbackProvider ?? s.fallbackProvider,
+              azureDeployment: cfg.azureDeployment || s.azureDeployment
+            }
+          })
+        }
+      } catch {
+        // ignore
+      }
+    }
+  },
   setGeminiApiKey: (geminiApiKey) => {
     try {
       if (typeof window !== 'undefined' && window.physlab?.ai?.setKey) {
@@ -433,6 +549,11 @@ useAiStore.subscribe((s) => {
         memories: s.memories,
         goals: s.goals,
         provider: s.provider,
+        mainProvider: s.mainProvider,
+        fallbackProvider: s.fallbackProvider,
+        providerModels: s.providerModels,
+        providerBaseUrls: s.providerBaseUrls,
+        availableProviderModels: s.availableProviderModels,
         geminiModel: s.geminiModel,
         azureDeployment: s.azureDeployment,
         localEndpoint: s.localEndpoint,
@@ -448,14 +569,7 @@ useAiStore.subscribe((s) => {
   }, 250)
 })
 
-// Query config from main process to prioritize Azure when configured
+// Query config from main process to initialize presets and active provider
 if (typeof window !== 'undefined' && window.physlab?.ai?.getConfig) {
-  void window.physlab.ai.getConfig().then((cfg) => {
-    if (cfg) {
-      useAiStore.setState((s) => ({
-        azureDeployment: cfg.azureDeployment || s.azureDeployment || 'gpt-5.4',
-        provider: s.provider === 'local' ? 'local' : (cfg.hasAzure ? 'azure' : s.provider)
-      }))
-    }
-  }).catch(() => {})
+  void useAiStore.getState().refreshConfig()
 }
