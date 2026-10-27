@@ -26,6 +26,50 @@ import { stepOneFrame } from '../sim/stepping'
 
 let actionCounter = 0
 
+function isPlanningLine(line: string): boolean {
+  return /^(?:[-*•]\s+)?(?:Domain|User wants to|The user wants to|We will use|We need to|Plan:|Thinking:|Goal:|Task:|Step \d+:)\b/i.test(
+    line.trim()
+  )
+}
+
+function isActionTagLine(line: string): boolean {
+  return /^<\/?physlab_action\b[^>]*>/i.test(line.trim())
+}
+
+export function extractLeadingPlanning(text: string): { planning?: string; remaining: string } {
+  const lines = text.split('\n')
+  const planningLines: string[] = []
+  let i = 0
+
+  while (i < lines.length && !lines[i].trim()) i++
+
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    if (!line) {
+      const nextNonEmpty = lines.slice(i + 1).find((l) => l.trim().length > 0)?.trim()
+      if (nextNonEmpty && isPlanningLine(nextNonEmpty)) {
+        i++
+        continue
+      }
+      break
+    }
+    if (isPlanningLine(line) || isActionTagLine(line)) {
+      if (!isActionTagLine(line)) {
+        planningLines.push(lines[i])
+      }
+      i++
+    } else {
+      break
+    }
+  }
+
+  if (planningLines.length > 0) {
+    const remaining = lines.slice(i).join('\n').trim()
+    return { planning: planningLines.join('\n').trim(), remaining }
+  }
+  return { remaining: text }
+}
+
 function stripMetaBullets(s: string): string {
   const bulletMatch = s.match(/^((?:\s*[-*•]\s+[^\n]+\n+)+)([\s\S]*)$/)
   if (bulletMatch) {
@@ -105,16 +149,25 @@ export function extractThinkTrace(text: string): {
     }
   }
 
+  // 3. Extract any leading planning block (Domain: ..., User wants to ..., We will use ...)
+  // and move it to the thinking trace so it displays only in the collapsed thinking section!
+  const leading = extractLeadingPlanning(cleanContent)
+  if (leading.planning) {
+    think = think ? `${think}\n${leading.planning}` : leading.planning
+    cleanContent = leading.remaining
+  }
+
   // Finally, always strip any leftover </?think> tags, [AGENT: ...] markers, and Intuition Hook headers from cleanContent
   cleanContent = cleanContent
     .replace(/<\/?think>/gi, '')
     .replace(/\[AGENT:\s*[^\]]+\]/gi, '')
     .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
     .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+    .replace(/<\/?physlab_action\b[^>]*>/gi, '')
     .trim()
 
   if (think) {
-    think = think.replace(/<\/?think>/gi, '').trim()
+    think = think.replace(/<\/?think>/gi, '').replace(/<\/?physlab_action\b[^>]*>/gi, '').trim()
   }
 
   const agentTraces = parseAgentTraces((think ? think + '\n' : '') + repaired)

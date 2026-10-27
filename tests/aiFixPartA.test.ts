@@ -130,7 +130,7 @@ describe('Part A: Honest Actions & Truth Check', () => {
     it('removes bodies in Sandbox mode and undo() restores them', async () => {
       enterMode('sandbox')
       const b1 = useSandbox.getState().addBody('sphere', [0, 2, 0])
-      const b2 = useSandbox.getState().addBody('box', [1, 2, 0])
+      useSandbox.getState().addBody('box', [1, 2, 0])
       expect(useSandbox.getState().bodies.length).toBe(2)
 
       // Remove single body
