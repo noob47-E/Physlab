@@ -17,6 +17,7 @@ import { trigEquationsMethod } from './trigEquations'
 import { inequalityMethod } from './inequality'
 import { expSubstMethod } from './expSubst'
 import { expRootMethod } from './expRoot'
+import { logSumMethod } from './logSum'
 
 export {
   linearOneVarMethod,
@@ -34,6 +35,7 @@ export {
   expLogMethod,
   expRootMethod,
   expSubstMethod,
+  logSumMethod,
   inequalityMethod
 }
 
@@ -62,5 +64,6 @@ export const ALL_STEP_METHODS: Method[] = [
   expLogMethod,
   expRootMethod,
   expSubstMethod,
+  logSumMethod,
   inequalityMethod
 ]

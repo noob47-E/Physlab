@@ -81,14 +81,17 @@ describe('S3: exponential and logarithmic equations, through runLatex', () => {
     expect(failures).toEqual([])
   })
 
-  it('leaves to the older path what this method does not work yet: two logarithms or non-bare ln', () => {
-    // 5^x = 12 and e^x = 5 are solved by EXPLOGGEN (expRoot.ts). ln(x + 1) = 2 is e squared minus one,
-    // and log(x) + log(x - 3) = 1 needs roots rejected by evaluating every logarithm of the original equation;
-    // these stay noWorking and the older path answers them.
-    for (const latex of ['\\ln(x+1)=2', '\\log(x)+\\log(x-3)=1']) {
+  it('leaves to the older path what this method does not work yet: non-bare ln', () => {
+    // ln(x + 1) = 2 is e squared minus one; stays noWorking and the older path answers it.
+    for (const latex of ['\\ln(x+1)=2']) {
       const w = typed(latex)
       expect(w?.method, latex).not.toBe(METHOD)
     }
+    // log(x) + log(x - 3) = 1 is handled by logSumMethod and checked ok
+    const wLogSum = typed('\\log(x)+\\log(x-3)=1')
+    expect(wLogSum?.method).toBe(METHOD)
+    expect(wLogSum?.checked).toBe('ok')
+    expect(wLogSum?.answers).toEqual([{ label: 'x', tex: '5' }])
     for (const latex of ['5^{x}=12', 'e^{x}=5']) {
       const w = typed(latex)
       expect(w?.method, latex).toBe(METHOD)

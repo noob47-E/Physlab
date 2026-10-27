@@ -54,4 +54,17 @@ describe('F-SUBST: Exponential substitution equations step by step', () => {
       { label: 'x', tex: '\\ln{3}' }
     ])
   })
+
+  it('solves e^(2x) - 5e^x + 6 = 0 through u = e^x with roots x = ln(2), ln(3)', () => {
+    const w = typed('e^{2x} - 5e^{x} + 6 = 0')
+    console.log('e^(2x) - 5e^x + 6 = 0 working:', {
+      noWorking: w?.noWorking,
+      error: w?.error,
+      checked: w?.checked,
+      method: w?.method,
+      answers: w?.answers
+    })
+    expect(w).not.toBeNull()
+    expect(w?.checked).toBe('ok')
+  })
 })

@@ -107,8 +107,9 @@ function lnArgOf(text: string): string | null {
 
 /** The argument of a base-10 logarithm written log(A) (readable form), or null. */
 function log10ArgOf(text: string): string | null {
-  if (!text.startsWith('log')) return null
-  return wholeGroup(text.slice(3))
+  const s = text.trim().replace(/^\\/, '')
+  if (!s.startsWith('log')) return null
+  return wholeGroup(s.slice(3))
 }
 
 /**
@@ -530,7 +531,7 @@ export function checkLogImplication(before: string, after: string, payload: Reco
 }
 
 /** The real roots of a polynomial of degree 1 or 2 with rational roots, or null when a root is not rational (not proved here). */
-function rationalRootsOf(Q: Expr, v: string): Rat[] | null {
+export function rationalRootsOf(Q: Expr, v: string): Rat[] | null {
   if (Q.some((t) => Object.keys(t.v).some((name) => name !== v))) return null
   if (exprDegree(Q) > 2) return null
   const coef: Rat[] = [R0, R0, R0]
