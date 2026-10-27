@@ -18,7 +18,10 @@ import {
   Eye,
   EyeOff,
   Square,
-  Cpu
+  Cpu,
+  MoreHorizontal,
+  RotateCcw,
+  ArrowLeft
 } from 'lucide-react'
 import { useAiStore } from '../ai/store'
 import {
@@ -36,7 +39,46 @@ import { verifyMessage } from '../ai/truthCheck'
 import { MarkdownView } from './ai/MarkdownView'
 import { MindMapView } from './ai/MindMapView'
 import { hidePanel } from '../app/panels'
-import type { Attachment, MindMapNode } from '../ai/types'
+import { runHistory } from '../app/undoRoute'
+import { useApp } from '../app/modes'
+import type { Attachment, MindMapNode, PhysLabAction } from '../ai/types'
+
+function formatActionChip(act: PhysLabAction): string {
+  if (act.tool === 'geometry_create') {
+    const kind = act.args?.kind || 'object'
+    const name = act.args?.name || ''
+    return `+ ${kind} ${name}`.trim()
+  }
+  if (act.tool === 'remove') {
+    return `− ${act.args?.target || act.args?.name || 'object'}`
+  }
+  if (act.tool === 'plot' || act.tool === 'graph_plot') {
+    return `plot ${act.args?.expression || act.args?.equation || 'f(x)'}`
+  }
+  if (act.tool === 'graph3d_plot') {
+    return `plot 3D ${act.args?.expression || act.args?.equation || 'z(x,y)'}`
+  }
+  if (act.tool === 'build_experiment') {
+    const objs = Array.isArray(act.args?.objects) ? act.args.objects : []
+    if (objs.length === 1) return `+ ${objs[0]?.kind || 'object'}`
+    if (objs.length > 1) return `+ ${objs.length} objects`
+    return `+ experiment`
+  }
+  if (act.tool === 'sandbox_experiment' || act.tool === 'load_experiment') {
+    return `+ ${act.args?.id || act.args?.presetId || act.args?.experimentType || 'experiment'}`
+  }
+  if (act.tool === 'calc_solve' || act.tool === 'solve') {
+    const inp = String(act.args?.input || act.args?.expression || '').trim()
+    return `solve ${inp}`.trim()
+  }
+  if (act.tool === 'set_speed') {
+    return `speed ${act.args?.factor}x`
+  }
+  if (act.tool === 'set_param') {
+    return `${act.args?.name || 'param'} = ${act.args?.value ?? ''}`
+  }
+  return act.tool.replace(/_/g, ' ')
+}
 
 type TabId = 'chat' | 'mindmap' | 'goals' | 'settings'
 
@@ -65,9 +107,22 @@ export function AiCopilot() {
   // Goal keeper form state
   const [newGoalTitle, setNewGoalTitle] = useState('')
   const [newGoalTarget, setNewGoalTarget] = useState(3)
+  const [menuOpen, setMenuOpen] = useState(false)
 
+  const menuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleOutsideClick)
+    return () => window.removeEventListener('mousedown', handleOutsideClick)
+  }, [menuOpen])
 
   // Store bindings
   const provider = useAiStore((s) => s.provider)
@@ -293,160 +348,187 @@ export function AiCopilot() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-0 text-ink select-none overflow-hidden font-ui">
-      {/* 1. Header & Navigation Tabs (Minimal & Calm) */}
-      <div className="flex flex-col border-b border-line bg-surface-1">
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Brain size={18} className="text-accent" />
-            <span className="font-semibold text-small text-ink-strong">AI Tutor</span>
-            <span className="text-fine text-ink-faint font-mono">
-              {provider === 'azure' ? (azureDeployment || 'gpt-5.4') : provider === 'local' ? localModel : geminiModel}
-            </span>
+    <div className="ai-panel-wrapper font-ui select-none">
+      <div className="ai-panel-card text-ink overflow-hidden relative">
+        {/* 1. Header (Calm & Minimal: Title, Model, New Chat, "⋯" Menu, Close) */}
+        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-line/50 bg-surface-1/60 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {activeTab !== 'chat' ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab('chat')}
+                className="flex items-center gap-1 text-fine text-ai-accent hover:underline cursor-pointer"
+                title="Back to Chat"
+              >
+                <ArrowLeft size={14} />
+                <span>Chat</span>
+              </button>
+            ) : (
+              <>
+                <Sparkles size={16} className="text-ai-accent shrink-0" />
+                <span className="font-semibold text-small text-ink-strong">AI Tutor</span>
+                <span className="text-fine text-ink-faint font-mono truncate max-w-[120px]">
+                  {provider === 'azure' ? (azureDeployment || 'gpt-5.4') : provider === 'local' ? localModel : geminiModel}
+                </span>
+              </>
+            )}
+            {activeTab !== 'chat' && (
+              <span className="font-semibold text-small text-ink-strong capitalize">
+                {activeTab === 'mindmap' ? 'Mind Map' : activeTab === 'goals' ? 'Student Goals' : 'Settings'}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 relative" ref={menuRef}>
             <button
               type="button"
               title="New Chat"
               onClick={() => {
                 useAiStore.getState().createThread()
                 setActiveTab('chat')
+                setMenuOpen(false)
               }}
-              className="p-1 rounded text-ink-dim hover:text-ink hover:bg-surface-2 cursor-pointer transition-colors"
+              className="p-1.5 rounded-full text-ink-dim hover:text-ink hover:bg-surface-2 cursor-pointer transition-colors"
             >
-              <Plus size={16} />
+              <Plus size={15} />
             </button>
             <button
               type="button"
-              title="Settings"
-              onClick={() => setActiveTab(activeTab === 'settings' ? 'chat' : 'settings')}
-              className={`p-1 rounded cursor-pointer transition-colors ${
-                activeTab === 'settings'
-                  ? 'text-accent bg-surface-2'
-                  : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+              title="More options"
+              onClick={() => setMenuOpen((v) => !v)}
+              className={`p-1.5 rounded-full cursor-pointer transition-colors ${
+                menuOpen ? 'text-ai-accent bg-surface-2' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
               }`}
             >
-              <Settings2 size={16} />
+              <MoreHorizontal size={15} />
             </button>
             <button
               type="button"
               title="Close AI Tutor"
               onClick={() => hidePanel('ai_copilot')}
-              className="p-1 rounded text-ink-dim hover:text-bad hover:bg-surface-2 cursor-pointer transition-colors"
+              className="p-1.5 rounded-full text-ink-dim hover:text-bad hover:bg-surface-2 cursor-pointer transition-colors"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
-          </div>
-        </div>
 
-        {/* 4 Clean Tabs */}
-        <div className="flex items-center px-2 gap-1 border-t border-line text-fine">
-          <TabButton
-            active={activeTab === 'chat'}
-            icon={<MessageSquare size={13} />}
-            label="Chat"
-            onClick={() => setActiveTab('chat')}
-          />
-          <TabButton
-            active={activeTab === 'mindmap'}
-            icon={<Network size={13} />}
-            label="Mind Map"
-            onClick={() => setActiveTab('mindmap')}
-          />
-          <TabButton
-            active={activeTab === 'goals'}
-            icon={<Target size={13} />}
-            label="Goals"
-            onClick={() => setActiveTab('goals')}
-          />
-          <TabButton
-            active={activeTab === 'settings'}
-            icon={<Settings2 size={13} />}
-            label="Settings"
-            onClick={() => setActiveTab('settings')}
-          />
-        </div>
-      </div>
-
-      {/* 2. Main Tab Content */}
-      <div className="flex-1 overflow-hidden relative">
-        {/* TAB 1: CHAT */}
-        {activeTab === 'chat' && (
-          <div className="flex flex-col h-full">
-            {/* Missing Key Notification in Chat */}
-            {provider !== 'local' && !geminiApiKey.trim() && hasMainKey === false && (
-              <div className="m-3 p-3 rounded-lg border border-line bg-surface-1 flex items-center justify-between gap-3 text-small">
-                <div className="flex items-center gap-2 text-ink-dim">
-                  <Sparkles size={16} className="text-accent shrink-0" />
-                  <span>Please configure an AI API key in Settings to start chatting.</span>
-                </div>
+            {/* "⋯" Dropdown Menu */}
+            {menuOpen && (
+              <div className="absolute right-0 top-8 z-50 min-w-[170px] rounded-xl bg-surface-1 border border-line shadow-lg p-1.5 flex flex-col gap-0.5 text-small">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('settings')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer shrink-0"
+                  onClick={() => {
+                    setActiveTab('chat')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'chat' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
                 >
-                  <Settings2 size={13} />
-                  <span>Open Settings</span>
+                  <MessageSquare size={14} className="text-ai-accent" />
+                  <span>Chat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('mindmap')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'mindmap' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Network size={14} />
+                  <span>Mind Map</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('goals')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'goals' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Target size={14} />
+                  <span>Goals &amp; Memory</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('settings')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'settings' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Settings2 size={14} />
+                  <span>Settings</span>
                 </button>
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 select-text">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center text-ink-dim gap-3 my-auto">
-                  <div className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center">
-                    <Sparkles size={20} className="text-accent" />
+        {/* 2. Main Tab Content */}
+        <div className="flex-1 overflow-hidden relative">
+          {/* TAB 1: CHAT */}
+          {activeTab === 'chat' && (
+            <div className="flex flex-col h-full">
+              {/* Missing Key Notification in Chat */}
+              {provider !== 'local' && !geminiApiKey.trim() && hasMainKey === false && (
+                <div className="m-3 p-3 rounded-xl border border-line bg-surface-1 flex items-center justify-between gap-3 text-small">
+                  <div className="flex items-center gap-2 text-ink-dim">
+                    <Sparkles size={16} className="text-ai-accent shrink-0" />
+                    <span>Please configure an AI API key in Settings to start chatting.</span>
                   </div>
-                  <div className="flex flex-col gap-1 max-w-xs">
-                    <span className="font-semibold text-body text-ink">PhysLab-Brain Ultimatrix</span>
-                    <span className="text-small text-ink-faint">
-                      Ask physics or math questions, drop photos of diagrams, or run an Ultimatrix test:
-                    </span>
-                  </div>
-
-                  {/* Quick-Prompt Chips */}
-                  <div className="flex flex-col gap-1.5 w-full max-w-xs mt-2">
-                    <QuickChip
-                      title="Test Quotient Cancellation Derivative"
-                      subtitle="Tests hidden (sqrt(x)-b) factor cancellation & 3-way check"
-                      onClick={() =>
-                        runQuickTest(
-                          'Differentiate f(x) = (sqrt(x+a)*(x^(3/2) - b^3))/(sqrt(x) - b). Factor and cancel all hidden algebraic terms first!'
-                        )
-                      }
-                    />
-                    <QuickChip
-                      title="Test 28° Incline Static Friction Trap"
-                      subtitle="Checks static threshold mu_s=0.6 vs kinetic sliding in 3D Sandbox"
-                      onClick={() =>
-                        runQuickTest(
-                          'A 2 kg crate rests on a 28° incline with static friction mu_s = 0.6 and kinetic friction mu_k = 0.4. Does it slide? Check the static friction threshold, derive acceleration, and build the 3D sandbox experiment!'
-                        )
-                      }
-                    />
-                    <QuickChip
-                      title="Build Calculus & Mechanics Mind Map"
-                      subtitle="Generates Obsidian concept graph connecting rules & traps"
-                      onClick={() =>
-                        runQuickTest(
-                          'Build an interactive Obsidian-style concept mind map connecting Incline Mechanics, Static Friction Trap, Kinetic Sliding, and Quotient Rule Cancellations.'
-                        )
-                      }
-                    />
-                    <QuickChip
-                      title="Plot 3D Ripple Surface"
-                      subtitle="3D Graphing mode: radial waves & ripple surface"
-                      onClick={() =>
-                        runQuickTest(
-                          'Plot a beautiful 3D ripple surface z = sin(sqrt(x^2 + y^2)) in 3D Graphing mode and explain how radial waves work.'
-                        )
-                      }
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('settings')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-ai-accent text-on-accent text-fine font-medium hover:opacity-90 cursor-pointer shrink-0 transition-opacity"
+                  >
+                    <Settings2 size={13} />
+                    <span>Open Settings</span>
+                  </button>
                 </div>
-              ) : (
+              )}
+
+              {/* Messages Scroll Area */}
+              <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3.5 select-text">
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center text-ink-dim gap-3 my-auto px-2">
+                    <div className="w-11 h-11 rounded-full bg-ai-surface border border-ai-border flex items-center justify-center shadow-sm">
+                      <Sparkles size={20} className="text-ai-accent" />
+                    </div>
+                    <div className="flex flex-col gap-1 max-w-xs">
+                      <span className="font-semibold text-lead text-ink-strong">PhysLab AI Tutor</span>
+                      <span className="text-small text-ink-faint">
+                        Ask anything about physics and maths, or try one of these:
+                      </span>
+                    </div>
+
+                    {/* Quick-Prompt Chips */}
+                    <div className="flex flex-col gap-2 w-full max-w-xs mt-3">
+                      {[
+                        "Construct Ceva's theorem",
+                        "Build an Atwood machine",
+                        "Plot y = sin x and find its roots",
+                        "Resolve a 50 N force at 30°"
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => runQuickTest(prompt)}
+                          className="px-3.5 py-2 rounded-xl border border-line bg-surface-1 hover:bg-surface-2 text-ink text-small text-left cursor-pointer transition-all hover:border-ai-border shadow-sm flex items-center justify-between group"
+                        >
+                          <span className="font-medium text-ink-strong">{prompt}</span>
+                          <Sparkles size={12} className="text-ink-faint group-hover:text-ai-accent transition-colors shrink-0 ml-1.5" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
                 messages.map((m, idx) => {
                   const isLastAssistantMessage = m.role === 'assistant' && idx === messages.length - 1
                   const isCurrentlyStreaming = isStreaming && isLastAssistantMessage
@@ -455,7 +537,7 @@ export function AiCopilot() {
                     <div
                       key={m.id}
                       ref={isLastAssistantMessage ? lastBotMsgRef : undefined}
-                      className={`flex flex-col gap-1 ${
+                      className={`ai-message-enter flex flex-col gap-1.5 ${
                         m.role === 'user' ? 'items-end' : 'items-start w-full'
                       }`}
                     >
@@ -467,35 +549,42 @@ export function AiCopilot() {
                               key={att.id}
                               src={att.dataUrl}
                               alt="Attachment"
-                              className="max-h-28 rounded border border-line object-contain bg-surface-1"
+                              className="max-h-28 rounded-xl border border-line object-contain bg-surface-1"
                             />
                           ))}
                         </div>
                       )}
 
-                      <div
-                        className={`max-w-[95%] rounded-lg p-2.5 ${
-                          m.role === 'user'
-                            ? 'bg-accent text-on-accent text-body'
-                            : 'bg-surface-1 border border-line text-ink w-full'
-                        }`}
-                      >
-                        {m.role === 'user' ? (
+                      {m.role === 'user' ? (
+                        <div className="ai-bubble-user p-3 max-w-[85%] text-body select-text">
                           <div className="whitespace-pre-wrap">{m.content}</div>
-                        ) : (
-                          <>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2.5 w-full">
+                          <div className="mt-2.5 shrink-0">
+                            <div className="ai-avatar-dot" title="PhysLab AI" />
+                          </div>
+                          <div className="ai-bubble-bot p-3.5 flex-1 min-w-0 select-text flex flex-col gap-2.5">
                             {/* Message Header with Model Tag */}
                             {m.model && !isCurrentlyStreaming && (
-                              <div className="flex items-center justify-end gap-2 mb-1.5 pb-1 border-b border-line text-fine">
+                              <div className="flex items-center justify-end pb-1 border-b border-line/40 text-fine">
                                 <span className="text-fine text-ink-faint font-mono">{m.model}</span>
                               </div>
                             )}
 
-                            {/* Small grey tool progress lines during streaming */}
+                            {/* Small tool progress / shimmer during streaming */}
                             {isCurrentlyStreaming && (
-                              <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-surface-2 border border-line text-fine text-ink-dim font-mono mb-2">
-                                <Sparkles size={12} className="text-accent animate-pulse shrink-0" />
-                                <span>{m.content.startsWith('Running') || m.content.startsWith('Solving') || m.content.startsWith('Loading') || m.content.startsWith('Simulating') || m.content.startsWith('Plotting') ? m.content : getBrainStageText(m.content, true)}</span>
+                              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/60 border border-line/50 text-fine text-ink-dim font-mono mb-1">
+                                <Sparkles size={13} className="text-ai-accent ai-thinking-shimmer shrink-0" />
+                                <span>
+                                  {m.content.startsWith('Running') ||
+                                  m.content.startsWith('Solving') ||
+                                  m.content.startsWith('Loading') ||
+                                  m.content.startsWith('Simulating') ||
+                                  m.content.startsWith('Plotting')
+                                    ? m.content
+                                    : getBrainStageText(m.content, true)}
+                                </span>
                               </div>
                             )}
 
@@ -529,38 +618,64 @@ export function AiCopilot() {
                                 .find((prev) => prev.role === 'user')?.content
 
                               return (
-                                <MarkdownView
-                                  content={
-                                    isCurrentlyStreaming
-                                      ? stripIncompleteActionBlocks(
-                                          streamingTrace?.cleanContent || m.content
-                                        )
-                                      : m.content
-                                  }
-                                  studentPrompt={studentPrompt}
-                                  think={m.think ?? streamingTrace?.think}
-                                  agentTraces={m.agentTraces ?? streamingTrace?.agentTraces}
-                                  actions={m.actions}
-                                  verified={m.verified}
-                                  verification={m.verification}
-                                  onActionExecuted={(updated) => {
-                                    useAiStore.getState().updateMessage(m.id, {
-                                      actions: m.actions?.map((a) => (a.id === updated.id ? updated : a))
-                                    })
-                                  }}
-                                  onChallengeClick={(prompt) => handleSend(prompt)}
-                                />
+                                <>
+                                  <MarkdownView
+                                    content={
+                                      isCurrentlyStreaming
+                                        ? stripIncompleteActionBlocks(
+                                            streamingTrace?.cleanContent || m.content
+                                          )
+                                        : m.content
+                                    }
+                                    studentPrompt={studentPrompt}
+                                    think={m.think ?? streamingTrace?.think}
+                                    agentTraces={m.agentTraces ?? streamingTrace?.agentTraces}
+                                    actions={m.actions}
+                                    verified={m.verified}
+                                    verification={m.verification}
+                                    onActionExecuted={(updated) => {
+                                      useAiStore.getState().updateMessage(m.id, {
+                                        actions: m.actions?.map((a) => (a.id === updated.id ? updated : a))
+                                      })
+                                    }}
+                                    onChallengeClick={(prompt) => handleSend(prompt)}
+                                  />
+
+                                  {/* Calm "AI did:" line with chips and Undo */}
+                                  {m.actions && m.actions.length > 0 && (
+                                    <div className="flex items-center flex-wrap gap-1.5 pt-2 mt-1 border-t border-line/40 text-fine text-ink-dim">
+                                      <span className="font-medium text-ink-faint">AI did:</span>
+                                      {m.actions.map((act) => (
+                                        <span
+                                          key={act.id}
+                                          className="px-2 py-0.5 rounded-full bg-surface-2 border border-line text-ink font-mono text-fine"
+                                        >
+                                          {formatActionChip(act)}
+                                        </span>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        onClick={() => runHistory(useApp.getState().mode, { menu: 'undo' })}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-2 hover:bg-surface-3 border border-line text-ink-dim hover:text-ink cursor-pointer transition-colors text-fine ml-auto"
+                                        title="Undo this turn's actions"
+                                      >
+                                        <RotateCcw size={11} />
+                                        <span>Undo</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
                               )
                             })()}
-                          </>
-                        )}
-                      </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })
               )}
               {streamError && (
-                <div className="p-3 rounded bg-surface-1 border border-line flex flex-col gap-2 text-fine">
+                <div className="p-3 rounded-xl bg-surface-1 border border-line flex flex-col gap-2 text-fine">
                   <div className="text-ink-dim">
                     The AI needs the internet. Everything else in PhysLab works offline.
                   </div>
@@ -568,7 +683,7 @@ export function AiCopilot() {
                     <button
                       type="button"
                       onClick={() => setActiveTab('settings')}
-                      className="px-2.5 py-1 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
+                      className="px-3 py-1 rounded-full bg-ai-accent text-on-accent text-fine font-medium hover:opacity-90 cursor-pointer transition-opacity"
                     >
                       Set AI key
                     </button>
@@ -591,7 +706,7 @@ export function AiCopilot() {
                     <img
                       src={att.dataUrl}
                       alt="Preview"
-                      className="h-14 w-14 object-cover rounded border border-line"
+                      className="h-14 w-14 object-cover rounded-xl border border-line"
                     />
                     <button
                       type="button"
@@ -607,15 +722,15 @@ export function AiCopilot() {
 
             {/* Vision Transcription Progress */}
             {transcribing && (
-              <div className="flex items-center gap-2 p-2.5 mx-2.5 my-1 rounded bg-surface-2 border border-line text-fine text-ink-dim">
-                <Sparkles size={14} className="text-accent animate-pulse shrink-0" />
+              <div className="flex items-center gap-2 p-2.5 mx-2.5 my-1 rounded-xl bg-surface-2 border border-line text-fine text-ink-dim">
+                <Sparkles size={14} className="text-ai-accent ai-thinking-shimmer shrink-0" />
                 <span>Transcribing problem from diagram photo via Gemini Vision…</span>
               </div>
             )}
 
             {/* Vision Transcription Error */}
             {transcribeError && (
-              <div className="flex items-center justify-between p-2 mx-2.5 my-1 rounded bg-surface-2 border border-bad/30 text-fine text-ink-dim">
+              <div className="flex items-center justify-between p-2 mx-2.5 my-1 rounded-xl bg-surface-2 border border-bad/30 text-fine text-ink-dim">
                 <span>{transcribeError}</span>
                 <button
                   type="button"
@@ -629,10 +744,10 @@ export function AiCopilot() {
 
             {/* Editable Confirmation UI for Transcribed Diagram */}
             {transcribedText !== null && (
-              <div className="p-3 mx-2.5 my-1.5 rounded-lg border border-line bg-surface-2 flex flex-col gap-2">
+              <div className="p-3 mx-2.5 my-1.5 rounded-xl border border-line bg-surface-2 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Sparkles size={14} className="text-accent" />
+                    <Sparkles size={14} className="text-ai-accent" />
                     <span>Photo / Diagram Transcribed</span>
                   </div>
                   <button
@@ -653,7 +768,7 @@ export function AiCopilot() {
                   value={transcribedText}
                   onChange={(e) => setTranscribedText(e.target.value)}
                   rows={3}
-                  className="w-full p-2 rounded bg-surface-0 border border-line text-body text-ink resize-y outline-none focus:border-accent font-math"
+                  className="w-full p-2 rounded-xl bg-surface-0 border border-line text-body text-ink resize-y outline-none focus:border-ai-border font-math"
                 />
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -667,7 +782,7 @@ export function AiCopilot() {
                         handleSend(text, currentAtts)
                       }
                     }}
-                    className="px-3 py-1.5 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 cursor-pointer transition-colors"
+                    className="px-3.5 py-1.5 rounded-full bg-ai-accent text-on-accent text-small font-medium hover:opacity-90 cursor-pointer transition-opacity"
                   >
                     Confirm & Solve with PhysLab
                   </button>
@@ -676,8 +791,8 @@ export function AiCopilot() {
             )}
 
             {/* Input Bar */}
-            <div className="p-2.5 border-t border-line bg-surface-1 flex flex-col gap-1.5">
-              <div className="flex items-end gap-1.5 bg-surface-0 border border-line rounded-md p-1.5 focus-within:border-line-2">
+            <div className="p-3 border-t border-line/50 bg-surface-1/40 flex flex-col gap-1.5">
+              <div className="flex items-end gap-2 bg-surface-0 border border-line rounded-2xl p-2 px-3 focus-within:border-ai-border focus-within:ring-1 focus-within:ring-ai-border/40 transition-all">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -693,7 +808,7 @@ export function AiCopilot() {
                   type="button"
                   title="Upload / Drop diagram photo"
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-1.5 text-ink-dim hover:text-ink hover:bg-surface-2 rounded cursor-pointer transition-colors"
+                  className="p-1.5 text-ink-dim hover:text-ink hover:bg-surface-2 rounded-full cursor-pointer transition-colors"
                 >
                   <ImageIcon size={16} />
                 </button>
@@ -708,9 +823,9 @@ export function AiCopilot() {
                       if (!transcribing) handleSend()
                     }
                   }}
-                  rows={2}
-                  placeholder="Ask a question or paste a diagram photo (Ctrl+V)…"
-                  className="flex-1 bg-transparent border-none outline-none resize-none text-body text-ink placeholder:text-ink-faint px-1"
+                  rows={1}
+                  placeholder="Ask anything or paste diagram photo…"
+                  className="flex-1 bg-transparent border-none outline-none resize-none text-body text-ink placeholder:text-ink-faint py-1 max-h-32"
                 />
 
                 {isStreaming ? (
@@ -718,18 +833,18 @@ export function AiCopilot() {
                     type="button"
                     onClick={abortActiveStream}
                     title="Stop generation"
-                    className="p-1.5 bg-bad text-on-accent rounded hover:opacity-90 cursor-pointer transition-opacity"
+                    className="p-2 bg-bad text-on-accent rounded-full hover:opacity-90 cursor-pointer transition-opacity"
                   >
-                    <Square size={15} fill="currentColor" />
+                    <Square size={14} fill="currentColor" />
                   </button>
                 ) : (
                   <button
                     type="button"
                     disabled={(!inputPrompt.trim() && attachments.length === 0) || transcribing}
                     onClick={() => handleSend()}
-                    className="p-1.5 bg-accent text-on-accent rounded hover:bg-accent-2 disabled:opacity-40 cursor-pointer transition-colors"
+                    className="p-2 bg-ai-accent text-on-accent rounded-full hover:opacity-90 disabled:opacity-40 cursor-pointer transition-opacity shadow-sm"
                   >
-                    <Send size={15} />
+                    <Send size={14} />
                   </button>
                 )}
               </div>
@@ -1226,55 +1341,8 @@ export function AiCopilot() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
-  )
-}
-
-function TabButton({
-  active,
-  icon,
-  label,
-  onClick
-}: {
-  active: boolean
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 py-1 px-2 border-b-2 font-medium cursor-pointer transition-colors ${
-        active
-          ? 'border-accent text-accent'
-          : 'border-transparent text-ink-dim hover:text-ink'
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  )
-}
-
-function QuickChip({
-  title,
-  subtitle,
-  onClick
-}: {
-  title: string
-  subtitle: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="p-2 rounded border border-line bg-surface-1 hover:bg-surface-2 text-left cursor-pointer transition-colors flex flex-col gap-0.5"
-    >
-      <span className="font-medium text-small text-ink-strong">{title}</span>
-      <span className="text-fine text-ink-faint">{subtitle}</span>
-    </button>
   )
 }

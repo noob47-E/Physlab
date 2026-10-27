@@ -2,7 +2,6 @@ import { Fragment, memo, useMemo } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
-  Check,
   CheckCircle2,
   Sparkles
 } from 'lucide-react'
@@ -353,10 +352,10 @@ export const MarkdownView = memo(function MarkdownView({
       {/* 1. Answer-First Banner (Prominent Final Answer Box with Rule 3 Guarantee) */}
       {boxedAnswer && (
         <div
-          className={`rounded-lg border p-3 flex flex-col gap-2 ${
+          className={`rounded-xl border p-3 flex flex-col gap-2 ${
             isDisagreed
               ? 'border-bad/40 bg-surface-2'
-              : 'border-line bg-surface-2'
+              : 'border-ai-border/50 bg-surface-2/80 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -368,19 +367,19 @@ export const MarkdownView = memo(function MarkdownView({
               {isDisagreed ? (
                 <AlertTriangle size={14} className="text-bad" />
               ) : (
-                <Sparkles size={14} className="text-accent" />
+                <Sparkles size={14} className="text-ai-accent" />
               )}
               <span>{isDisagreed ? 'PhysLab Verified Answer' : 'Final Answer'}</span>
             </span>
 
             {/* Strict rule: Exactly ONE badge per answer */}
             {isVerified ? (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-good border border-line">
+              <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-good border border-line">
                 <CheckCircle2 size={12} />
                 <span>Checked by PhysLab</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-medium text-ink-dim border border-line">
+              <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-1 text-fine font-medium text-ink-dim border border-line">
                 <span>Not checked</span>
               </span>
             )}
@@ -420,31 +419,7 @@ export const MarkdownView = memo(function MarkdownView({
         {renderMarkdownWithMath(cleanProse, knownNumbers)}
       </div>
 
-      {/* 4. Interactive PhysLab Action Cards */}
-      {actions && actions.length > 0 && (
-        <div className="flex flex-col gap-2 mt-1">
-          {actions.map((act) => {
-            const isSuccess = act.status === 'success'
-
-            return (
-              <div
-                key={act.id}
-                className="flex items-center justify-between px-2.5 py-1.5 rounded bg-surface-1 border border-line text-fine"
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="font-semibold text-ink-strong font-mono">{act.tool}</span>
-                  <span className="text-ink-dim truncate">
-                    {getToolShortResult(act.tool, act.args, act.result)}
-                  </span>
-                </div>
-                {isSuccess && <Check size={12} className="text-good shrink-0 ml-2" />}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* 5. What-If Interactive Challenge Chips */}
+      {/* 3. What-If Interactive Challenge Chips */}
       {challengeChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <span className="text-fine font-medium text-ink-dim flex items-center gap-1 mr-1">
