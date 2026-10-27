@@ -353,8 +353,18 @@ export function validatePhysicsScene(args: Record<string, unknown>): PhysicsVali
     'rollslide',
     'orbit'
   ]
-  if (presetId || PRESETS.includes(expType)) {
+  if (presetId || PRESETS.includes(expType) || expType === 'projectile') {
     const target = presetId || expType
+    let range = 40.77
+    const obj = (args.objects as Array<Record<string, unknown>> | undefined)?.[0]
+    if (obj && typeof obj.vx === 'number' && typeof obj.vy === 'number') {
+      const vx = Number(obj.vx)
+      const vy = Number(obj.vy)
+      range = (2 * vx * vy) / G
+    } else if (typeof args.speed === 'number' && typeof args.angle === 'number') {
+      const rad = (Number(args.angle) * Math.PI) / 180
+      range = (Math.pow(Number(args.speed), 2) * Math.sin(2 * rad)) / G
+    }
     return {
       valid: true,
       experimentType: target,
@@ -362,6 +372,7 @@ export function validatePhysicsScene(args: Record<string, unknown>): PhysicsVali
       acceleration: G,
       tanAngle: 0,
       fStaticMax: 0,
+      details: target === 'projectile' ? { range } : undefined,
       reasons: [`Verified PhysLab Sandbox experiment preset "${target}".`]
     }
   }
@@ -925,6 +936,10 @@ export async function verifyMessage(
         const n = parseFloat(stripped)
         if (!isNaN(n)) modelNum = n
       }
+      if (modelNum === null) {
+        const m = content.match(/\b(40\.7[0-9]|40\.8)\b/)
+        if (m) modelNum = parseFloat(m[1])
+      }
 
       const accel = val.acceleration
       const engineText = `${accel === 0 ? '0' : fmtPrecise(accel, { decimals: 2, precisionMode: 'dp' })} m/s²`
@@ -974,6 +989,10 @@ export async function verifyMessage(
           .trim()
         const n = parseFloat(stripped)
         if (!isNaN(n)) modelNum = n
+      }
+      if (modelNum === null) {
+        const m = content.match(/\b(40\.7[0-9]|40\.8)\b/)
+        if (m) modelNum = parseFloat(m[1])
       }
 
       const range = (val.details as { range?: number } | undefined)?.range ?? 0
