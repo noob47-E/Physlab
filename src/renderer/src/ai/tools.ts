@@ -202,15 +202,15 @@ export const TOOLS = [
     type: 'function',
     function: {
       name: 'set_param',
-      description: 'Set a property on a physical body (e.g. velocity, speed, mass, friction, restitution).',
+      description: 'Set a property on a physical body or the simulation world (e.g. velocity, speed, mass, friction, restitution, gravity).',
       parameters: {
         type: 'object',
         properties: {
-          bodyId: { type: 'string', description: 'ID of the body.' },
-          name: { type: 'string', description: 'Property name (e.g. velocity, speed, mass, friction, restitution).' },
+          bodyId: { type: 'string', description: 'ID of the body (optional if modifying the primary body or setting world gravity).' },
+          name: { type: 'string', description: 'Property name (e.g. velocity, speed, mass, friction, restitution, gravity).' },
           value: { description: 'Numeric value or [vx, vy] array to set.' }
         },
-        required: ['bodyId', 'name', 'value']
+        required: ['name', 'value']
       }
     }
   },
@@ -443,6 +443,38 @@ export const TOOLS = [
           }
         },
         required: ['names']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_table',
+      description: 'Create a new table in Lab Data for recording experimental measurements.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Table title (e.g. Pendulum Length vs Period).' },
+          xName: { type: 'string', description: 'Name of the first column (e.g. L).' },
+          xUnit: { type: 'string', description: 'Unit of the first column (e.g. m).' },
+          yName: { type: 'string', description: 'Name of the second column (e.g. T).' },
+          yUnit: { type: 'string', description: 'Unit of the second column (e.g. s).' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_reading',
+      description: 'Add a row of readings/measurements to the active Lab Data table.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tableId: { type: 'string', description: 'Optional table ID (defaults to active table).' },
+          row: { type: 'array', items: { type: 'number' }, description: 'Values for each column in order.' }
+        },
+        required: ['row']
       }
     }
   }
@@ -695,6 +727,8 @@ export async function runTool(
           if (typeof obj.vx === 'number' || typeof obj.vy === 'number') {
             patch.velocity = [obj.vx ?? 0, obj.vy ?? 0, 0]
           }
+          if (typeof obj.restitution === 'number') patch.restitution = obj.restitution
+          if (typeof obj.friction === 'number') patch.friction = obj.friction
           if (obj.fixed === true) {
             patch.motion = 'static'
           } else if (obj.fixed === false) {
@@ -751,6 +785,8 @@ export async function runTool(
         const patch: Record<string, any> = {}
         if (typeof args.mass === 'number') patch.mass = args.mass
         if (typeof args.radius === 'number') patch.radius = args.radius
+        if (typeof args.restitution === 'number') patch.restitution = args.restitution
+        if (typeof args.friction === 'number') patch.friction = args.friction
         if (typeof args.vx === 'number' || typeof args.vy === 'number') {
           patch.velocity = [args.vx ?? 0, args.vy ?? 0, 0]
         }
@@ -776,10 +812,18 @@ export async function runTool(
         const bodyId = String(args.bodyId || '').trim()
         const name = String(args.name || '').trim().toLowerCase()
         const rawValue = args.value
-        if (!bodyId || !name || rawValue === undefined) {
-          return { ok: false, error: 'bodyId, name, and value are required.' }
+        if (!name || rawValue === undefined) {
+          return { ok: false, error: 'name and value are required.' }
         }
-        const target = useSandbox.getState().bodies.find((b) => b.id === bodyId || b.name.toLowerCase() === bodyId.toLowerCase())
+        if (name === 'gravity' || name === 'g') {
+          const g = Number(rawValue)
+          useSandbox.getState().setWorld({ gravity: g })
+          return { ok: true, gravity: g }
+        }
+        const bodies = useSandbox.getState().bodies
+        const target = bodyId
+          ? bodies.find((b) => b.id === bodyId || b.name.toLowerCase() === bodyId.toLowerCase())
+          : (bodies.find((b) => b.motion === 'dynamic' && b.shape !== 'ground') ?? bodies.find((b) => b.shape !== 'ground') ?? bodies[0])
         if (!target) return { ok: false, error: `Body not found: ${bodyId}` }
 
         const patch: Partial<BodyDef> = {}
@@ -1290,6 +1334,44 @@ export async function runTool(
 
         s.removeObjects(idsToRemove)
         return { ok: true, removedCount: idsToRemove.length, removedNames }
+      }
+
+      case 'add_table': {
+        enterMode('lab')
+        showPanel('labdata')
+        const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim() : 'Lab Data'
+        const col1Name = typeof args.xName === 'string' && args.xName.trim() ? args.xName.trim() : 'x'
+        const col1Unit = typeof args.xUnit === 'string' ? args.xUnit.trim() : ''
+        const col2Name = typeof args.yName === 'string' && args.yName.trim() ? args.yName.trim() : 'y'
+        const col2Unit = typeof args.yUnit === 'string' ? args.yUnit.trim() : ''
+
+        const col1 = { id: `col_${Date.now()}_1`, name: col1Name, unit: col1Unit }
+        const col2 = { id: `col_${Date.now()}_2`, name: col2Name, unit: col2Unit }
+        const newTab = {
+          id: `tab_${Date.now()}`,
+          title,
+          columns: [col1, col2],
+          rows: Array.from({ length: 5 }, () => [null, null] as (number | null)[]),
+          plot: { x: col1.id, y: col2.id, fit: 'linear' as const }
+        }
+        useLab.getState().appendTable(newTab)
+        return { ok: true, tableId: newTab.id, title }
+      }
+
+      case 'add_row':
+      case 'add_reading': {
+        enterMode('lab')
+        showPanel('labdata')
+        const tables = useLab.getState().tables
+        const tableId = typeof args.tableId === 'string' ? args.tableId : useLab.getState().currentId
+        const table = tables.find((t) => t.id === tableId) ?? tables[0]
+        if (!table) return { ok: false, error: 'No lab table found.' }
+        const rawRow = Array.isArray(args.row) ? args.row : [args.x ?? args.val1 ?? null, args.y ?? args.val2 ?? null]
+        useLab.getState().update(table.id, (t) => ({
+          ...t,
+          rows: [...t.rows.filter((r) => r.some((c) => c !== null)), rawRow]
+        }))
+        return { ok: true, tableId: table.id }
       }
 
       default:
