@@ -196,4 +196,15 @@ describe('GF-SANDBOX: guess store lifecycle', () => {
     expect(useGuessStore.getState().guess?.text).toBe('0.9 s')
     expect(useGuessStore.getState().guess?.skipped).toBe(false)
   })
+
+  it('a new scene (as the AI builds) drops the old experiment\'s question', async () => {
+    const { useSandbox } = await import('../src/renderer/src/sim/store')
+    useSandbox.getState().loadPreset('cradle')
+    expect(useGuessStore.getState().target).not.toBeNull()
+
+    useSandbox.getState().setScene(presetById('projectile')!.build().bodies, {}, [])
+    expect(useGuessStore.getState().target).toBeNull()
+    expect(useGuessStore.getState().requestPlay({ hasRun: false })).toBe(true)
+    expect(useGuessStore.getState().promptOpen).toBe(false)
+  })
 })

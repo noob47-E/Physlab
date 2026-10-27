@@ -425,6 +425,8 @@ export const useSandbox = create<SandboxState>((set, get) => ({
       actuators: [],
       presetId: null
     })
+    // The old experiment's "predict before you play" question belongs to objects that are gone.
+    useGuessStore.getState().initPreset('')
     engine.world?.setActuators([])
   },
   loadPreset: (id) => {
