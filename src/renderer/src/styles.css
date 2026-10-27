@@ -11,12 +11,12 @@
   --font-ui: 'Segoe UI', 'Inter', system-ui, sans-serif;
   --font-math: 'Cambria Math', 'Cambria', 'Times New Roman', serif;
   --font-mono: 'Cascadia Code', 'Consolas', monospace;
-  --text-fine: 11px;
-  --text-small: 12px;
-  --text-body: 13px;
-  --text-lead: 15px;
-  --text-title: 18px;
-  --text-display: 22px;
+  --text-fine: 12px;
+  --text-small: 14px;
+  --text-body: 15px;
+  --text-lead: 17px;
+  --text-title: 20px;
+  --text-display: 24px;
 }
 
 /* Colour utilities resolve to the theme variables below, so the same class works in both themes. */
@@ -905,7 +905,7 @@ input[type='range'] {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: var(--text-fine);
+  font-size: var(--text-small);
   color: var(--tick-text);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -915,7 +915,7 @@ input[type='range'] {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: 14px;
+  font-size: var(--text-body);
   font-weight: 600;
   font-style: italic;
   font-family: var(--font-math);
@@ -1356,9 +1356,16 @@ math-field.math-input::part(menu-toggle) {
 /* The block the popup keypad hangs under — the field, the toolbar, the answer and the drawers —
    so the keypad never sits over the answer it produces. */
 .maths-head {
+  position: sticky;
+  top: -10px;
+  z-index: 20;
+  background: var(--bg-1);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding-top: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
 }
 .maths-field {
   display: flex;
@@ -1369,6 +1376,7 @@ math-field.math-input::part(menu-toggle) {
 .maths-field .field {
   flex: 1;
   min-width: 0;
+  overflow-x: auto;
 }
 .maths-field .field {
   height: 46px;
@@ -1544,10 +1552,14 @@ math-field.math-input::part(menu-toggle) {
 
 /* ---------- Pure Math: the step-by-step working area ---------- */
 .pure-doc .katex-display {
-  margin: 3px 0;
+  margin: 4px 0;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 2px 0;
+  font-size: var(--text-title);
+}
+.pure-doc .katex {
+  font-size: var(--text-title);
 }
 .pure-move {
   display: flex;
@@ -1573,7 +1585,8 @@ math-field.math-input::part(menu-toggle) {
 }
 .pure-head {
   color: var(--text);
-  line-height: 1.45;
+  line-height: 1.5;
+  font-size: var(--text-lead);
 }
 .pure-note {
   color: var(--text-faint);
@@ -1603,9 +1616,10 @@ math-field.math-input::part(menu-toggle) {
 }
 .pure-answer {
   border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-  background: color-mix(in srgb, var(--warn) 7%, transparent);
-  padding: 10px 12px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 50%, var(--good) 50%);
+  background: color-mix(in srgb, var(--bg-3) 90%, transparent);
+  padding: 12px 16px;
+  font-size: var(--text-display);
 }
 .pure-history {
   display: flex;

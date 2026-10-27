@@ -710,11 +710,12 @@ function Expression({ mode, mathRef, baseRef, onChange, onEnter }: { mode: Field
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount: the field collects what was queued while it was away
   }, [])
 
+  const isLong = input.length > 35
   if (mode === 'BASE-N') {
     return (
       <input
         ref={baseRef}
-        className="field font-mono text-lead"
+        className={`field font-mono ${isLong ? 'text-title' : 'text-display'}`}
         value={input}
         spellCheck={false}
         placeholder="e.g. FF + 1A   or   1010 and 0110"
@@ -726,7 +727,7 @@ function Expression({ mode, mathRef, baseRef, onChange, onEnter }: { mode: Field
       />
     )
   }
-  return <MathInput ref={mathRef} size="lg" value={input} onChange={onChange} onEnter={onEnter} placeholder={mode === 'CMPLX' ? '(3+4i)(1-2i)' : 'type here, or open the keypad'} />
+  return <MathInput ref={mathRef} size={isLong ? 'md' : 'lg'} value={input} onChange={onChange} onEnter={onEnter} placeholder={mode === 'CMPLX' ? '(3+4i)(1-2i)' : 'type here, or open the keypad'} />
 }
 
 // ---------------------------------------------------------------------------

@@ -401,7 +401,7 @@ function CalcRowView({
           style={{ background: cssColor(obj), opacity: 0.8 }}
         />
         <div className="flex flex-1 items-center justify-between font-math">
-          <div className="flex items-center gap-1.5 text-[var(--text-strong)] font-medium">
+          <div className="flex items-center gap-1.5 text-title text-[var(--text-strong)] font-medium">
             {!row.name.startsWith('ans') && (
               <>
                 <span className="italic">{row.name}</span>
@@ -525,14 +525,14 @@ function Row({
           ) : (
             <button
               type="button"
-              className="field min-h-[44px] w-full overflow-x-auto text-left"
+              className="field min-h-[44px] w-full overflow-x-auto text-left text-title"
               aria-label={`Edit ${row.source}`}
               onClick={() => {
                 setLive(row.source)
                 setEditing(true)
               }}
             >
-              {problem ? <span className="font-mono">{row.source}</span> : <LineTex text={row.source} plain />}
+              {problem ? <span className="font-mono text-title">{row.source}</span> : <LineTex text={row.source} plain />}
             </button>
           )}
         </div>
@@ -981,14 +981,14 @@ function ParametricRowView({
       ) : (
         <button
           type="button"
-          className="field min-h-[44px] w-full overflow-x-auto text-left py-1.5 px-2 mt-1.5 cursor-pointer hover:border-[var(--accent)] transition-colors"
+          className="field min-h-[44px] w-full overflow-x-auto text-left py-1.5 px-2 mt-1.5 cursor-pointer hover:border-[var(--accent)] transition-colors text-title"
           aria-label={`Edit ${title}`}
           onClick={() => setEditing(true)}
         >
           {tex ? (
-            <Tex tex={tex} className="text-small text-[var(--text-strong)]" />
+            <Tex tex={tex} className="text-title text-[var(--text-strong)]" />
           ) : (
-            <span className="font-mono text-small">{row.source}</span>
+            <span className="font-mono text-title">{row.source}</span>
           )}
         </button>
       )}
