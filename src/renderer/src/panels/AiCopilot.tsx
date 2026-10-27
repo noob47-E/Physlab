@@ -31,6 +31,7 @@ import {
 } from '../ai/client'
 import { executePhysLabAction, extractThinkTrace, getBrainStageText } from '../ai/bridge'
 import { stripIncompleteActionBlocks } from '../ai/contract'
+import { runTool } from '../ai/tools'
 import { verifyMessage } from '../ai/truthCheck'
 import { MarkdownView } from './ai/MarkdownView'
 import { MindMapView } from './ai/MindMapView'
@@ -177,6 +178,15 @@ export function AiCopilot() {
           })
         },
         onDone: async ({ content, think, actions, agentTraces, model }) => {
+          for (const act of actions) {
+            if (!act.result && (act.tool === 'solve' || act.tool === 'calc_solve')) {
+              try {
+                act.result = await runTool(act.tool, act.args)
+              } catch {
+                // continue
+              }
+            }
+          }
           const verification = await verifyMessage(content, actions)
           useAiStore.getState().updateMessage(botMsg.id, {
             content,

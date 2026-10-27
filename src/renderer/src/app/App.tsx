@@ -28,6 +28,27 @@ import { MobileNav } from './MobileNav'
 import { PANEL_TITLES, dropHiddenPanels, hidePanel, isPanelOpen, refreshOpenPanels, setDockApi, showPanel } from './panels'
 import { isCalmMode } from './sidePanelsCalm'
 import { warmupEngineWhenIdle } from '../math/engine'
+import { useSandbox } from '../sim/store'
+import { useTape } from '../sim/tapeStore'
+import { useTheme } from './theme'
+import { loadExperiment } from '../sim/transportActions'
+import { buildScene, LAB_DEFAULTS } from '../sim/labScenes'
+import { useAiStore } from '../ai/store'
+
+if (typeof window !== 'undefined') {
+  ;(window as any).__physlab_debug = {
+    enterMode,
+    showPanel,
+    useScene,
+    useSandbox,
+    useTape,
+    useTheme,
+    loadExperiment,
+    buildScene,
+    LAB_DEFAULTS,
+    useAiStore
+  }
+}
 
 // Heavier panels load on first use so the app starts faster on slow computers.
 const Solver = lazy(() => import('../panels/Solver').then((m) => ({ default: m.Solver })))
