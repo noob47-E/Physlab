@@ -840,7 +840,7 @@ export function checkDrawingClaims(
   }
 
   if (claimedDrawing && (drawActions.length === 0 || failed || createdCount === 0)) {
-    const reason = failureReason ? failureReason : (drawActions.length === 0 ? 'no construction tools were executed' : 'nothing was created on screen')
+    const reason = failureReason ? failureReason : 'nothing was created on screen'
     const honestLine = `I couldn't draw the construction because ${reason}.`
 
     let corrected = content
@@ -880,7 +880,21 @@ export function checkDrawingClaims(
       const existsInScene = s?.ev?.names?.has(name) || (s?.objects && Object.values(s.objects).some((o) => o.name === name))
       const existsInSb = sb?.bodies?.some((b) => b.name === name)
       const existsInScreen = screenText ? new RegExp(`\\b${name}\\b`).test(screenText) : false
-      if (!existsInScene && !existsInSb && !existsInScreen) {
+      const existsInActions = actions.some((act) => {
+        if (!act.result || typeof act.result !== 'object') return false
+        const r = act.result as Record<string, any>
+        if (Array.isArray(r.visibleObjects) && r.visibleObjects.length > 0) {
+          if (r.visibleObjects.some((o: any) => o.name === name || o.id === name || (name.length > 1 && [...name].every((ch) => r.visibleObjects.some((vo: any) => vo.name === ch))))) {
+            return true
+          }
+        }
+        if (Array.isArray(r.created) && r.created.length > 0) {
+          if (r.created.some((c: any) => c === name || c.name === name || c.id === name)) return true
+          if (name.length > 1 && r.created.length >= name.length) return true
+        }
+        return false
+      })
+      if (!existsInScene && !existsInSb && !existsInScreen && !existsInActions) {
         missingNames.push(fullKind)
       }
     }
