@@ -1178,14 +1178,84 @@ export async function runTool(
         const allRemoved: ObjId[] = []
         const allChanged: ObjId[] = []
 
+        const scenePastLen = useScene.getState().past.length
+        const sbPastLen = useSandbox.getState().past.length
+        const labPastLen = useLab.getState().past.length
+
+        const collapseHistory = () => {
+          try {
+            const sc = useScene.getState()
+            if (sc.past.length > scenePastLen + 1) {
+              useScene.setState({ past: sc.past.slice(0, scenePastLen + 1) })
+            }
+            const sb = useSandbox.getState()
+            if (sb.past.length > sbPastLen + 1) {
+              useSandbox.setState({ past: sb.past.slice(0, sbPastLen + 1) })
+            }
+            const lb = useLab.getState()
+            if (lb.past.length > labPastLen + 1) {
+              useLab.setState({ past: lb.past.slice(0, labPastLen + 1) })
+            }
+          } catch {
+            // ignore
+          }
+        }
+
         for (const cmd of commands) {
           const trimmed = cmd.trim()
           if (!trimmed) continue
+
+          // Bulk deletion safeguard: ask first before removing >5 objects or clearing mode with work
+          if (!args.confirmed) {
+            if (trimmed.match(/^(?:clear|new)$/i)) {
+              const objCount = Object.keys(useScene.getState().objects).length + useSandbox.getState().bodies.length
+              if (objCount > 5) {
+                const currentMode = targetMode ?? useApp.getState().mode
+                const screen = describeScreen(currentMode)
+                collapseHistory()
+                return {
+                  ok: false,
+                  requiresConfirmation: true,
+                  failingCommand: trimmed,
+                  error: `Clearing the scene with ${objCount} objects requires confirmation. Please ask the student to confirm first.`,
+                  failures: [{ command: trimmed, error: `Clearing ${objCount} objects requires confirmation` }],
+                  results,
+                  created: allCreated,
+                  removed: allRemoved,
+                  changed: allChanged,
+                  screen
+                }
+              }
+            }
+            const delMatch = trimmed.match(/^(?:delete|del|remove)\s+(.+)$/i)
+            if (delMatch) {
+              const targets = delMatch[1].split(/[,\s]+/).filter(Boolean)
+              if (targets.length > 5) {
+                const currentMode = targetMode ?? useApp.getState().mode
+                const screen = describeScreen(currentMode)
+                collapseHistory()
+                return {
+                  ok: false,
+                  requiresConfirmation: true,
+                  failingCommand: trimmed,
+                  error: `Deleting ${targets.length} objects requires confirmation. Please ask the student to confirm first.`,
+                  failures: [{ command: trimmed, error: `Deleting ${targets.length} objects requires confirmation` }],
+                  results,
+                  created: allCreated,
+                  removed: allRemoved,
+                  changed: allChanged,
+                  screen
+                }
+              }
+            }
+          }
+
           const res = await runCommand(trimmed)
           results.push({ command: trimmed, result: res })
           if (!res.ok) {
             const currentMode = targetMode ?? useApp.getState().mode
             const screen = describeScreen(currentMode)
+            collapseHistory()
             return {
               ok: false,
               failingCommand: trimmed,
@@ -1202,6 +1272,8 @@ export async function runTool(
           allRemoved.push(...res.removed)
           if (res.changed) allChanged.push(...res.changed)
         }
+
+        collapseHistory()
 
         const currentMode = targetMode ?? useApp.getState().mode
         const currentSpace = spaceOf(currentMode)

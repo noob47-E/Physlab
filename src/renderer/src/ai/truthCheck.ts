@@ -4,6 +4,8 @@ import { tryLatexToMath } from '../math/latexToMath'
 import { fmt, fmtPrecise } from '../math/format'
 import { casInDegrees } from '../calc/angle'
 import { scene } from '../core/store'
+import { useSandbox } from '../sim/store'
+import { describeScreen } from './describeScreen'
 import { G, extractLastBoxed, sanitizeMathInput, type CalcOp } from './contract'
 import type { MessageVerification, PhysLabAction } from './types'
 
@@ -788,13 +790,11 @@ export function matchToolAnswer(modelAnswer: string, toolAnswer: string): boolea
 
 export function checkDrawingClaims(
   content: string,
-  actions: PhysLabAction[]
+  actions: PhysLabAction[],
+  screenText?: string
 ): { claimedDrawing: boolean; honest: boolean; honestLine?: string; correctedContent?: string } {
-  const claimRegex = /\b(?:let's construct(?: it)?(?: live)?|here is the construction|I have (?:drawn|constructed|plotted|shown)|I've (?:drawn|constructed|plotted|shown)|(?:is|are|has been|have been) (?:drawn|constructed|plotted|shown on screen)|constructed triangle|plotted the graph|drawn the circle)\b/i
+  const claimRegex = /\b(?:let's construct(?: it)?(?: live)?|here is the (?:construction|graph|plot|drawing|triangle|circle|vector)|I (?:have |'ve )?(?:drawn|constructed|plotted|created|added|built|shown)|(?:is|are|has been|have been) (?:drawn|constructed|plotted|created|added|shown on screen)|constructed (?:triangle|circle|line|point|polygon|vector)|plotted (?:the )?(?:graph|curve|function)|drawn (?:the )?(?:circle|line|point|vector|triangle))\b/i
   const claimedDrawing = claimRegex.test(content)
-  if (!claimedDrawing) {
-    return { claimedDrawing: false, honest: true }
-  }
 
   const drawActions = actions.filter(
     (a) =>
@@ -828,46 +828,151 @@ export function checkDrawingClaims(
     }
   }
 
-  if (drawActions.length > 0 && !failed && createdCount > 0) {
-    return { claimedDrawing: true, honest: true }
+  if (claimedDrawing && (drawActions.length === 0 || failed || createdCount === 0)) {
+    const reason = failureReason ? failureReason : (drawActions.length === 0 ? 'no construction tools were executed' : 'nothing was created on screen')
+    const honestLine = `I couldn't draw the construction because ${reason}.`
+
+    let corrected = content
+      .replace(/(?:Let's construct(?: it)?(?: live)?[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:I have (?:drawn|constructed|plotted|shown|created)[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:I've (?:drawn|constructed|plotted|shown|created)[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:Here is the (?:construction|graph|plot|drawing)[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:(?:The|This) [^\n.]+ (?:is|has been) (?:constructed|drawn|shown on screen)[^.\n]*[.:]?)/gi, honestLine)
+
+    if (!corrected.includes(honestLine)) {
+      corrected = `${honestLine}\n\n${corrected}`
+    }
+
+    corrected = corrected
+      .replace(/\b(?:constructed on screen|shown on screen)\b/gi, 'not shown on screen')
+
+    return {
+      claimedDrawing: true,
+      honest: false,
+      honestLine,
+      correctedContent: corrected.trim()
+    }
   }
 
-  const reason = failureReason ? failureReason : 'nothing was created on screen'
-  const honestLine = `I couldn't draw the construction because ${reason}.`
+  // Object existence check: verify specific object names mentioned in content actually exist
+  try {
+    const s = scene()
+    const sb = useSandbox.getState()
+    const nameRegex = /\b(?:point|circle|line|segment|triangle|polygon|vector|body|curve)\s+([A-Za-z0-9_]+)\b/gi
+    let match: RegExpExecArray | null
+    const missingNames: string[] = []
 
+    while ((match = nameRegex.exec(content)) !== null) {
+      const fullKind = match[0]
+      const name = match[1]
+      if (['the', 'a', 'an', 'this', 'that', 'and', 'or', 'with', 'from', 'to', 'in', 'on', 'at', 'is'].includes(name.toLowerCase())) continue
+      const existsInScene = s?.ev?.names?.has(name) || (s?.objects && Object.values(s.objects).some((o) => o.name === name))
+      const existsInSb = sb?.bodies?.some((b) => b.name === name)
+      const existsInScreen = screenText ? new RegExp(`\\b${name}\\b`).test(screenText) : false
+      if (!existsInScene && !existsInSb && !existsInScreen) {
+        missingNames.push(fullKind)
+      }
+    }
+
+    if (missingNames.length > 0 && claimedDrawing) {
+      const honestLine = `I couldn't create ${missingNames.join(', ')} because it could not be constructed on screen.`
+      let corrected = content
+      for (const name of missingNames) {
+        const pattern = new RegExp(`(?:I (?:have )?(?:drawn|constructed|created|added)\\s+[^.\\n]*?\\b${name}\\b[^.\\n]*[.:]?)`, 'gi')
+        corrected = corrected.replace(pattern, honestLine)
+      }
+      if (!corrected.includes(honestLine)) {
+        corrected = `${honestLine}\n\n${corrected}`
+      }
+      return {
+        claimedDrawing: true,
+        honest: false,
+        honestLine,
+        correctedContent: corrected.trim()
+      }
+    }
+  } catch {
+    // outside scene store context
+  }
+
+  return { claimedDrawing: false, honest: true }
+}
+
+export function checkMeasuredClaims(
+  content: string,
+  actions: PhysLabAction[],
+  screenText?: string
+): { honest: boolean; honestLine?: string; correctedContent?: string } {
+  const measureRegex = /(?:measured|calculated|found)?\s*(?:length|distance|area|angle|slope|acceleration|accel)\s*(?:of\s+[A-Za-z0-9_]+)?\s*(?:is|=|:)\s*([0-9]+(?:\.[0-9]+)?)/gi
+  const matches: Array<{ full: string; num: number }> = []
+  let m: RegExpExecArray | null
+  while ((m = measureRegex.exec(content)) !== null) {
+    const val = parseFloat(m[1])
+    if (!isNaN(val)) matches.push({ full: m[0], num: val })
+  }
+
+  if (matches.length === 0) return { honest: true }
+
+  const screen = screenText ?? (typeof describeScreen === 'function' ? describeScreen() : '')
+  const realNumbers: number[] = []
+  const numRegex = /[-+]?[0-9]*\.?[0-9]+/g
+  let nm: RegExpExecArray | null
+  while ((nm = numRegex.exec(screen)) !== null) {
+    const v = parseFloat(nm[0])
+    if (!isNaN(v)) realNumbers.push(v)
+  }
+  for (const act of actions) {
+    if (act.result && typeof act.result === 'object') {
+      const str = JSON.stringify(act.result)
+      let rnm: RegExpExecArray | null
+      while ((rnm = numRegex.exec(str)) !== null) {
+        const v = parseFloat(rnm[0])
+        if (!isNaN(v)) realNumbers.push(v)
+      }
+    }
+  }
+
+  let unverifiedLine = ''
   let corrected = content
-    .replace(/(?:Let's construct(?: it)?(?: live)?[^.\n]*[.:]?)/gi, honestLine)
-    .replace(/(?:I have (?:drawn|constructed|plotted|shown)[^.\n]*[.:]?)/gi, honestLine)
-    .replace(/(?:I've (?:drawn|constructed|plotted|shown)[^.\n]*[.:]?)/gi, honestLine)
-    .replace(/(?:Here is the construction[^.\n]*[.:]?)/gi, honestLine)
-    .replace(/(?:(?:The|This) [^\n.]+ (?:is|has been) (?:constructed|drawn|shown on screen)[^.\n]*[.:]?)/gi, honestLine)
-
-  if (!corrected.includes(honestLine)) {
-    corrected = `${honestLine}\n\n${corrected}`
+  for (const item of matches) {
+    const matchesReal = realNumbers.some((rn) => {
+      const tol = Math.max(0.05, 0.05 * Math.abs(rn))
+      return Math.abs(item.num - rn) <= tol
+    })
+    if (!matchesReal) {
+      unverifiedLine = "I couldn't verify the measured value on screen."
+      corrected = corrected.replace(item.full, `${item.full} (unverified)`)
+    }
   }
 
-  corrected = corrected
-    .replace(/\b(?:constructed on screen|shown on screen)\b/gi, 'not shown on screen')
-
-  return {
-    claimedDrawing: true,
-    honest: false,
-    honestLine,
-    correctedContent: corrected.trim()
+  if (unverifiedLine) {
+    return { honest: false, honestLine: unverifiedLine, correctedContent: corrected }
   }
+  return { honest: true }
 }
 
 export async function verifyMessage(
   content: string,
-  actions: PhysLabAction[]
+  actions: PhysLabAction[],
+  screenText?: string
 ): Promise<MessageVerification> {
-  const drawingCheck = checkDrawingClaims(content, actions)
+  const drawingCheck = checkDrawingClaims(content, actions, screenText)
   if (drawingCheck.claimedDrawing && !drawingCheck.honest) {
     return {
       state: 'disagrees',
       badgeText: 'Not checked',
       notes: drawingCheck.honestLine ?? 'Drawing claimed but nothing was created on screen',
       correctedContent: drawingCheck.correctedContent
+    }
+  }
+
+  const measureCheck = checkMeasuredClaims(content, actions, screenText)
+  if (!measureCheck.honest) {
+    return {
+      state: 'disagrees',
+      badgeText: 'Not checked',
+      notes: measureCheck.honestLine ?? 'Measured value not found on screen',
+      correctedContent: measureCheck.correctedContent
     }
   }
 

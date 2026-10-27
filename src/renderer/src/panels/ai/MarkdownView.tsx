@@ -1,14 +1,17 @@
-import { Fragment, memo, useMemo } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
-  Check,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Undo2
 } from 'lucide-react'
 import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
 import { extractThinkTrace } from '../../ai/bridge'
 import { extractLastBoxed, repairControlCharLatex, stripIncompleteActionBlocks } from '../../ai/contract'
+import { scene } from '../../core/store'
+import { useSandbox } from '../../sim/store'
+import { useLab } from '../../lab/labStore'
 
 interface MarkdownViewProps {
   content: string
@@ -82,6 +85,69 @@ export function getToolShortResult(tool: string, args: Record<string, any> = {},
     return String(result.message)
   }
   return 'Done'
+}
+
+export interface AiDidChip {
+  id: string
+  label: string
+  kind: 'add' | 'remove' | 'cmd'
+}
+
+export function extractAiDidChips(actions?: PhysLabAction[]): AiDidChip[] {
+  if (!actions || !actions.length) return []
+  const chips: AiDidChip[] = []
+
+  for (const act of actions) {
+    if (act.tool === 'run_commands') {
+      const res = act.result as Record<string, any> | undefined
+      if (res) {
+        if (Array.isArray(res.created)) {
+          for (const id of res.created) {
+            let name = id
+            let type = 'object'
+            try {
+              const s = scene().objects[id]
+              const b = useSandbox.getState().bodies.find((x) => x.id === id)
+              if (s) {
+                name = s.name
+                type = s.type
+              } else if (b) {
+                name = b.name
+                type = b.shape
+              }
+            } catch {}
+            chips.push({ id: `c_${id}`, label: `+ ${type} ${name}`, kind: 'add' })
+          }
+        }
+        if (Array.isArray(res.removed)) {
+          for (const id of res.removed) {
+            chips.push({ id: `r_${id}`, label: `− ${id}`, kind: 'remove' })
+          }
+        }
+        if ((!res.created || res.created.length === 0) && (!res.removed || res.removed.length === 0)) {
+          const cmds = Array.isArray(act.args?.commands) ? act.args.commands : []
+          for (let i = 0; i < cmds.length; i++) {
+            const cmd = String(cmds[i]).trim()
+            if (cmd) {
+              chips.push({ id: `${act.id}_cmd_${i}`, label: cmd, kind: 'cmd' })
+            }
+          }
+        }
+      }
+    } else if (act.tool === 'plot' || act.tool === 'graph_plot' || act.tool === 'graph3d_plot') {
+      const expr = act.args?.expression || act.args?.equation || ''
+      chips.push({ id: act.id, label: expr ? `plot ${expr}` : 'plot', kind: 'cmd' })
+    } else if (act.tool === 'solve' || act.tool === 'calc_solve') {
+      const expr = act.args?.expression || act.args?.input || ''
+      chips.push({ id: act.id, label: expr ? `solve ${expr}` : 'solve', kind: 'cmd' })
+    } else if (act.tool === 'load_experiment') {
+      chips.push({ id: act.id, label: `load ${act.args?.id || 'experiment'}`, kind: 'cmd' })
+    } else if (act.tool === 'build_experiment') {
+      chips.push({ id: act.id, label: 'build experiment', kind: 'cmd' })
+    }
+  }
+
+  return chips
 }
 
 /**
@@ -346,6 +412,22 @@ export const MarkdownView = memo(function MarkdownView({
     return false
   }, [boxedAnswer, isVerified, knownNumbers])
 
+  const [undone, setUndone] = useState(false)
+  const aiDidChips = useMemo(() => extractAiDidChips(actions), [actions])
+
+  const handleUndo = () => {
+    try {
+      scene().undo()
+    } catch {}
+    try {
+      useSandbox.getState().undo()
+    } catch {}
+    try {
+      useLab.getState().undo()
+    } catch {}
+    setUndone(true)
+  }
+
   const challengeChips = getChallengeChips(actions, cleanProse)
 
   return (
@@ -420,27 +502,36 @@ export const MarkdownView = memo(function MarkdownView({
         {renderMarkdownWithMath(cleanProse, knownNumbers)}
       </div>
 
-      {/* 4. Interactive PhysLab Action Cards */}
-      {actions && actions.length > 0 && (
-        <div className="flex flex-col gap-2 mt-1">
-          {actions.map((act) => {
-            const isSuccess = act.status === 'success'
-
-            return (
-              <div
-                key={act.id}
-                className="flex items-center justify-between px-2.5 py-1.5 rounded bg-surface-1 border border-line text-fine"
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="font-semibold text-ink-strong font-mono">{act.tool}</span>
-                  <span className="text-ink-dim truncate">
-                    {getToolShortResult(act.tool, act.args, act.result)}
-                  </span>
-                </div>
-                {isSuccess && <Check size={12} className="text-good shrink-0 ml-2" />}
-              </div>
-            )
-          })}
+      {/* 4. Calm "AI did:" line with small rounded chips and one Undo button */}
+      {aiDidChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-1.5 border-t border-line/40 text-fine">
+          <span className="text-ink-faint font-medium select-none">AI did:</span>
+          {aiDidChips.map((chip) => (
+            <span
+              key={chip.id}
+              className={`px-2 py-0.5 rounded-full border text-fine font-mono select-none ${
+                undone
+                  ? 'bg-surface-1 border-line/40 text-ink-faint line-through'
+                  : 'bg-surface-2 border-line text-ink-dim'
+              }`}
+            >
+              {chip.label}
+            </span>
+          ))}
+          <button
+            type="button"
+            disabled={undone}
+            onClick={handleUndo}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-fine transition-colors cursor-pointer ${
+              undone
+                ? 'bg-surface-1 border-line/40 text-ink-faint cursor-not-allowed'
+                : 'bg-surface-2 hover:bg-surface-3 border-line text-ink hover:text-accent'
+            }`}
+            title={undone ? 'Undone' : 'Undo this AI turn'}
+          >
+            <Undo2 size={11} className={undone ? 'text-ink-faint' : 'text-accent'} />
+            <span>{undone ? 'Undone' : 'Undo'}</span>
+          </button>
         </div>
       )}
 

@@ -4,6 +4,9 @@ import { repairControlCharLatex } from './contract'
 import { useAiStore } from './store'
 import type { Attachment, ChatMessage } from './types'
 import { TOOLS, runTool } from './tools'
+import { useScene } from '../core/store'
+import { useSandbox } from '../sim/store'
+import { useLab } from '../lab/labStore'
 
 let activeAbortController: AbortController | null = null
 
@@ -358,6 +361,7 @@ export async function autoConnectLocalBrain(): Promise<{
 }
 
 export const MAX_TOOL_ROUNDS = 4
+export const ACTION_LOOP_MAX_ROUNDS = 3
 
 /**
  * Estimates number of questions in a prompt using numbering, conjunctions, semicolons, and question marks.
@@ -434,6 +438,17 @@ export async function runToolLoop(
   let lastChecked: boolean | undefined
   let finalContent = ''
   const executedActions: any[] = []
+
+  let scenePastLen = 0
+  let sbPastLen = 0
+  let labPastLen = 0
+  try {
+    scenePastLen = useScene.getState().past.length
+    sbPastLen = useSandbox.getState().past.length
+    labPastLen = useLab.getState().past.length
+  } catch {
+    // ignore
+  }
 
   while (roundCount < maxRounds) {
     roundCount++
@@ -512,6 +527,24 @@ export async function runToolLoop(
         content: JSON.stringify(result)
       })
     }
+  }
+
+  // One AI turn = One undo step: collapse history snapshots across all rounds of this turn
+  try {
+    const sceneState = useScene.getState()
+    if (sceneState.past.length > scenePastLen + 1) {
+      useScene.setState({ past: sceneState.past.slice(0, scenePastLen + 1) })
+    }
+    const sbState = useSandbox.getState()
+    if (sbState.past.length > sbPastLen + 1) {
+      useSandbox.setState({ past: sbState.past.slice(0, sbPastLen + 1) })
+    }
+    const labState = useLab.getState()
+    if (labState.past.length > labPastLen + 1) {
+      useLab.setState({ past: labState.past.slice(0, labPastLen + 1) })
+    }
+  } catch {
+    // ignore
   }
 
   const resultPayload = {
