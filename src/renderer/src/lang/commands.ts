@@ -3,5 +3,5 @@
 //   Triangle((0,0), (4,0), (0,3))      Circle(P, 3)   y = sin(x)  solve(x^2 - 5x + 6 = 0)
 
 export { describeComputed } from './commands/common'
-export { runCommand } from './commands/route'
+export { runCommand, type CommandResult } from './commands/route'
 export { HELP, solveRowsTex } from './commands/solve'

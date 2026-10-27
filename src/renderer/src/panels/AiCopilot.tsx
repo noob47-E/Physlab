@@ -188,8 +188,9 @@ export function AiCopilot() {
             }
           }
           const verification = await verifyMessage(content, actions)
+          const finalContent = verification.correctedContent ?? content
           useAiStore.getState().updateMessage(botMsg.id, {
-            content,
+            content: finalContent,
             think,
             actions,
             agentTraces,

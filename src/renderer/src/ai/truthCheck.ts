@@ -786,10 +786,91 @@ export function matchToolAnswer(modelAnswer: string, toolAnswer: string): boolea
   return false
 }
 
+export function checkDrawingClaims(
+  content: string,
+  actions: PhysLabAction[]
+): { claimedDrawing: boolean; honest: boolean; honestLine?: string; correctedContent?: string } {
+  const claimRegex = /\b(?:let's construct(?: it)?(?: live)?|here is the construction|I have (?:drawn|constructed|plotted|shown)|I've (?:drawn|constructed|plotted|shown)|(?:is|are|has been|have been) (?:drawn|constructed|plotted|shown on screen)|constructed triangle|plotted the graph|drawn the circle)\b/i
+  const claimedDrawing = claimRegex.test(content)
+  if (!claimedDrawing) {
+    return { claimedDrawing: false, honest: true }
+  }
+
+  const drawActions = actions.filter(
+    (a) =>
+      a.tool === 'run_commands' ||
+      a.tool === 'plot' ||
+      a.tool === 'graph_plot' ||
+      a.tool === 'graph3d_plot' ||
+      a.tool === 'build_experiment'
+  )
+
+  let createdCount = 0
+  let failed = false
+  let failureReason = ''
+
+  for (const act of drawActions) {
+    if (act.status === 'failed') {
+      failed = true
+    }
+    if (act.result && typeof act.result === 'object') {
+      const res = act.result as Record<string, unknown>
+      if (res.ok === false) {
+        failed = true
+        failureReason = String(res.error || res.message || (res as any).failingCommand || '')
+      }
+      if (Array.isArray(res.created)) {
+        createdCount += res.created.length
+      }
+      if (Array.isArray(res.visibleObjects) && res.visibleObjects.length > 0) {
+        createdCount += res.visibleObjects.length
+      }
+    }
+  }
+
+  if (drawActions.length > 0 && !failed && createdCount > 0) {
+    return { claimedDrawing: true, honest: true }
+  }
+
+  const reason = failureReason ? failureReason : 'nothing was created on screen'
+  const honestLine = `I couldn't draw the construction because ${reason}.`
+
+  let corrected = content
+    .replace(/(?:Let's construct(?: it)?(?: live)?[^.\n]*[.:]?)/gi, honestLine)
+    .replace(/(?:I have (?:drawn|constructed|plotted|shown)[^.\n]*[.:]?)/gi, honestLine)
+    .replace(/(?:I've (?:drawn|constructed|plotted|shown)[^.\n]*[.:]?)/gi, honestLine)
+    .replace(/(?:Here is the construction[^.\n]*[.:]?)/gi, honestLine)
+    .replace(/(?:(?:The|This) [^\n.]+ (?:is|has been) (?:constructed|drawn|shown on screen)[^.\n]*[.:]?)/gi, honestLine)
+
+  if (!corrected.includes(honestLine)) {
+    corrected = `${honestLine}\n\n${corrected}`
+  }
+
+  corrected = corrected
+    .replace(/\b(?:constructed on screen|shown on screen)\b/gi, 'not shown on screen')
+
+  return {
+    claimedDrawing: true,
+    honest: false,
+    honestLine,
+    correctedContent: corrected.trim()
+  }
+}
+
 export async function verifyMessage(
   content: string,
   actions: PhysLabAction[]
 ): Promise<MessageVerification> {
+  const drawingCheck = checkDrawingClaims(content, actions)
+  if (drawingCheck.claimedDrawing && !drawingCheck.honest) {
+    return {
+      state: 'disagrees',
+      badgeText: 'Not checked',
+      notes: drawingCheck.honestLine ?? 'Drawing claimed but nothing was created on screen',
+      correctedContent: drawingCheck.correctedContent
+    }
+  }
+
   const boxed = extractLastBoxed(content)
   const solveAction = actions.find((a) => a.tool === 'solve')
   const sbAction = actions.find((a) => a.tool === 'sandbox_experiment' || a.tool === 'build_experiment')

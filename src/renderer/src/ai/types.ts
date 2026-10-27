@@ -43,6 +43,8 @@ export type PhysLabTool =
   | 'export_readings'
   | 'demonstrate'
   | 'get_app_state'
+  | 'list_objects'
+  | 'remove'
   | (string & {})
 
 export interface PhysLabAction {
@@ -71,6 +73,7 @@ export interface MessageVerification {
   engineAnswerText?: string
   modelAnswerLatex?: string
   notes: string
+  correctedContent?: string
 }
 
 export interface ChatMessage {

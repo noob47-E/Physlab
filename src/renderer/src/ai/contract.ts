@@ -590,10 +590,11 @@ export function stripIncompleteActionBlocks(text: string): string {
   return text
     .replace(/<physlab_action>[\s\S]*?<\/physlab_action>/gi, '')
     .replace(/<physlab_action>[\s\S]*$/gi, '')
+    .replace(/<\/?physlab_action>/gi, '')
     .replace(/<\/?think>/gi, '')
     .replace(/\[\s*\{\s*"tool"\s*:[\s\S]*?\]/gi, '')
     .replace(
-      /\{\s*"tool"\s*:\s*"(?:calc_solve|sandbox_experiment|mindmap_build|goal_update|graph_plot|graph3d_plot|quiz_challenge|app_guide|run_commands|build_experiment|set_speed|graph_readings|get_readings|play|pause|reset|add_body|remove_body|set_param|load_experiment|list_experiments|solve|plot|export_readings|demonstrate|get_app_state)"[\s\S]*?\}\s*\}?/gi,
+      /\{\s*"tool"\s*:\s*"(?:calc_solve|sandbox_experiment|mindmap_build|goal_update|graph_plot|graph3d_plot|quiz_challenge|app_guide|run_commands|build_experiment|set_speed|graph_readings|get_readings|play|pause|reset|add_body|remove_body|set_param|load_experiment|list_experiments|solve|plot|export_readings|demonstrate|get_app_state|list_objects|remove)"[\s\S]*?\}\s*\}?/gi,
       ''
     )
     .trim()

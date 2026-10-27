@@ -20,47 +20,129 @@ import { namedGraphs, tryGraph } from './graph'
 
 // ---------------------------------------------------------------------------
 
-export async function runCommand(raw: string): Promise<void> {
+export interface CommandResult {
+  ok: boolean
+  created: ObjId[]
+  removed: ObjId[]
+  message: string
+}
+
+export async function runCommand(raw: string): Promise<CommandResult> {
   const input = raw.trim()
-  if (!input) return
+  if (!input) return { ok: true, created: [], removed: [], message: '' }
   const lower = input.toLowerCase()
   const s = scene()
+  const idsBefore = new Set(s.order)
+  const objectsBefore = { ...s.objects }
+  const logLenBefore = s.log.length
 
   if (lower === 'clear' || lower === 'new') {
+    const removed = [...idsBefore]
     s.newScene()
     s.pushLog({ input, kind: 'info', text: 'Scene cleared.' })
-    return
+    return { ok: true, created: [], removed, message: 'Scene cleared.' }
   }
-  if (lower === 'undo') return s.undo()
-  if (lower === 'redo') return s.redo()
-  if (lower === 'play') return s.setPlaying(true)
-  if (lower === 'pause' || lower === 'stop') return s.setPlaying(false)
-  if (lower === '2d' || lower === '3d') return s.setViewMode(lower)
+  if (lower === 'undo') {
+    s.undo()
+    const sAfter = scene()
+    const idsAfter = new Set(sAfter.order)
+    const created = sAfter.order.filter((id) => !idsBefore.has(id))
+    const removed = [...idsBefore].filter((id) => !idsAfter.has(id))
+    return { ok: true, created, removed, message: 'Undone.' }
+  }
+  if (lower === 'redo') {
+    s.redo()
+    const sAfter = scene()
+    const idsAfter = new Set(sAfter.order)
+    const created = sAfter.order.filter((id) => !idsBefore.has(id))
+    const removed = [...idsBefore].filter((id) => !idsAfter.has(id))
+    return { ok: true, created, removed, message: 'Redone.' }
+  }
+  if (lower === 'play') {
+    s.setPlaying(true)
+    return { ok: true, created: [], removed: [], message: 'Playing.' }
+  }
+  if (lower === 'pause' || lower === 'stop') {
+    s.setPlaying(false)
+    return { ok: true, created: [], removed: [], message: 'Paused.' }
+  }
+  if (lower === '2d' || lower === '3d') {
+    s.setViewMode(lower)
+    return { ok: true, created: [], removed: [], message: `View set to ${lower}.` }
+  }
   if (lower === 'help' || lower === '?') {
     s.pushLog({ input, kind: 'info', text: HELP })
-    return
+    return { ok: true, created: [], removed: [], message: HELP }
   }
   const del = input.match(/^(?:delete|del|remove)\s+(.+)$/i)
   if (del) {
     const ids = del[1].split(/[,\s]+/).map((n) => s.ev.names.get(n)).filter(Boolean) as ObjId[]
-    if (!ids.length) return logError(input, 'Nothing with that name.')
+    if (!ids.length) {
+      logError(input, 'Nothing with that name.')
+      return { ok: false, created: [], removed: [], message: 'Nothing with that name.' }
+    }
     s.removeObjects(ids)
     s.pushLog({ input, kind: 'info', text: `Deleted ${del[1]}.` })
-    return
+    return { ok: true, created: [], removed: ids, message: `Deleted ${del[1]}.` }
   }
 
   try {
-    if (tryPointInSpace(input)) return
-    if (tryPureMath(input)) return
-    if (await tryCas(input)) return
-    if (tryGraph(input)) return
-    if (tryAssignment(input)) return
-    if (tryGeometryCommand(input, undefined)) return
-    if (trySolverCommand(input)) return
-    evaluatePlain(input)
+    if (
+      !tryPointInSpace(input) &&
+      !tryPureMath(input) &&
+      !(await tryCas(input)) &&
+      !tryGraph(input) &&
+      !tryAssignment(input) &&
+      !tryGeometryCommand(input, undefined) &&
+      !trySolverCommand(input)
+    ) {
+      evaluatePlain(input)
+    }
   } catch (e) {
-    logError(input, friendlyError(e, input))
+    const msg = friendlyError(e, input)
+    logError(input, msg)
+    return { ok: false, created: [], removed: [], message: msg }
   }
+
+  const sAfter = scene()
+  const newLogs = sAfter.log.slice(logLenBefore)
+  const errorLog = newLogs.find((l) => l.kind === 'error')
+  if (errorLog) {
+    return {
+      ok: false,
+      created: [],
+      removed: [],
+      message: errorLog.text || 'Command failed.'
+    }
+  }
+
+  const created = sAfter.order.filter((id) => !idsBefore.has(id) || sAfter.objects[id] !== objectsBefore[id])
+  const removed = [...idsBefore].filter((id) => !sAfter.objects[id])
+
+  for (const id of created) {
+    const err = sAfter.ev.errors.get(id)
+    if (err) {
+      const name = sAfter.objects[id]?.name ?? 'Object'
+      return {
+        ok: false,
+        created: [],
+        removed,
+        message: `${name}: ${err}`
+      }
+    }
+  }
+
+  const resultLog = newLogs.find((l) => l.kind === 'result' || l.kind === 'info')
+  const message =
+    resultLog?.text ??
+    resultLog?.tex ??
+    (created.length > 0
+      ? `Created ${created.map((id) => sAfter.objects[id]?.name ?? id).join(', ')}`
+      : removed.length > 0
+        ? `Removed ${removed.length} object(s)`
+        : 'OK')
+
+  return { ok: true, created, removed, message }
 }
 
 /** The parser's own words, which a student is never shown: "Parenthesis ) expected (char 7)". */

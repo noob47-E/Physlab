@@ -1,13 +1,26 @@
 import { enterMode } from '../app/layout'
 import { showPanel } from '../app/panels'
-import { useApp } from '../app/modes'
+import { useApp, type ModeId } from '../app/modes'
 import { useScene } from '../core/store'
+import { spaceOf, visibleIn, visibleOrder } from '../core/visibility'
+import type { ObjId } from '../core/types'
 import { useCalc } from '../calc/calcStore'
 import { evaluateInput } from '../calc/evaluateInput'
 import { usePure } from '../math/pure/store'
 import { reconcile } from '../calc/working'
 import { run3WayTruthCheck } from './truthCheck'
-import { runCommand } from '../lang/commands'
+import { runCommand, type CommandResult } from '../lang/commands'
+
+export function normalizeModeId(mode: string): ModeId {
+  const m = mode.toLowerCase().trim()
+  if (m === 'calc' || m === 'calculator') return 'calculator'
+  if (m === 'geometry' || m === 'geom' || m === 'shapes') return 'shapes'
+  if (m === 'graph' || m === 'graphing') return 'graphing'
+  if (m === 'vector' || m === 'vectors') return 'vectors'
+  if (m === 'sandbox' || m === 'sim' || m === 'physics') return 'sandbox'
+  if (m === 'lab') return 'lab'
+  return m as ModeId
+}
 import { resetCamera } from '../render/viewState'
 import { PRESETS } from '../sim/presets'
 import { loadExperiment, play, pause } from '../sim/transportActions'
@@ -390,6 +403,46 @@ export const TOOLS = [
           view: { type: 'string', enum: ['2d', '3d'], description: 'View dimension.' }
         },
         required: ['commands']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_objects',
+      description: 'List objects on screen in Graphing, Geometry, Vectors, or the Sandbox with their names, types, and key values.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            description: 'Optional mode to list objects from (graphing, shapes/geometry, vectors, sandbox).'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remove',
+      description: 'Remove objects or bodies by name or remove "all" on the current drawing/mode. Works in every mode including Sandbox.',
+      parameters: {
+        type: 'object',
+        properties: {
+          names: {
+            description: 'List of object/body names to remove, or "all" to clear the drawing/simulation.',
+            oneOf: [
+              { type: 'string' },
+              { type: 'array', items: { type: 'string' } }
+            ]
+          },
+          mode: {
+            type: 'string',
+            description: 'Optional mode to remove from (graphing, shapes/geometry, vectors, sandbox).'
+          }
+        },
+        required: ['names']
       }
     }
   }
@@ -1074,7 +1127,7 @@ export async function runTool(
       }
 
       case 'run_commands': {
-        const targetMode = args.mode ? (args.mode === 'calc' ? 'calculator' : args.mode) : undefined
+        const targetMode = args.mode ? normalizeModeId(String(args.mode)) : undefined
         if (targetMode) {
           enterMode(targetMode)
         }
@@ -1082,16 +1135,161 @@ export async function runTool(
           useScene.getState().setViewMode(args.view)
         }
         const commands = Array.isArray(args.commands) ? args.commands.map(String) : []
-        const dropped: string[] = []
+        const results: Array<{ command: string; result: CommandResult }> = []
+        const allCreated: ObjId[] = []
+        const allRemoved: ObjId[] = []
+
         for (const cmd of commands) {
           const trimmed = cmd.trim()
-          if (/^distance/i.test(trimmed)) {
-            dropped.push(trimmed)
-            continue
+          if (!trimmed) continue
+          const res = await runCommand(trimmed)
+          results.push({ command: trimmed, result: res })
+          if (!res.ok) {
+            return {
+              ok: false,
+              failingCommand: trimmed,
+              error: res.message || `Command failed: ${trimmed}`,
+              results,
+              created: allCreated,
+              removed: allRemoved
+            }
           }
-          await runCommand(trimmed)
+          allCreated.push(...res.created)
+          allRemoved.push(...res.removed)
         }
-        return { ok: true, executedCount: commands.length - dropped.length, dropped }
+
+        const currentMode = targetMode ?? useApp.getState().mode
+        const currentSpace = spaceOf(currentMode)
+        const s = useScene.getState()
+        const visibleIds = visibleOrder(s.order, s.objects, currentSpace)
+        const visibleObjects = visibleIds.map((id) => {
+          const o = s.objects[id]
+          return {
+            id,
+            name: o?.name ?? id,
+            type: o?.type ?? 'unknown'
+          }
+        })
+
+        return {
+          ok: true,
+          executedCount: results.length,
+          results,
+          created: allCreated,
+          removed: allRemoved,
+          visibleObjects
+        }
+      }
+
+      case 'list_objects': {
+        const targetMode = args.mode ? normalizeModeId(String(args.mode)) : useApp.getState().mode
+        if (targetMode === 'sandbox') {
+          const bodies = useSandbox.getState().bodies
+          const items = bodies.map((b) => ({
+            id: b.id,
+            name: b.name,
+            type: b.shape,
+            position: b.position,
+            velocity: b.velocity,
+            mass: b.mass
+          }))
+          return { ok: true, mode: 'sandbox', count: items.length, objects: items }
+        }
+
+        const currentSpace = spaceOf(targetMode)
+        const s = useScene.getState()
+        const visibleIds = visibleOrder(s.order, s.objects, currentSpace)
+        const items = visibleIds.map((id) => {
+          const o = s.objects[id]
+          const val = s.ev.values.get(id)
+          return {
+            id,
+            name: o?.name ?? id,
+            type: o?.type ?? 'unknown',
+            def: o?.type === 'point' ? (o as any).def : o?.type === 'graph' ? (o as any).def?.raw : undefined,
+            value: val?.type === 'number' ? val.value : val?.type === 'vector' ? val.comp : undefined
+          }
+        })
+        return { ok: true, mode: targetMode, count: items.length, objects: items }
+      }
+
+      case 'remove': {
+        const targetMode = args.mode ? normalizeModeId(String(args.mode)) : useApp.getState().mode
+        const namesArg = args.names ?? args.name
+        const isAll =
+          namesArg === 'all' ||
+          (Array.isArray(namesArg) && namesArg.some((n) => String(n).toLowerCase() === 'all'))
+
+        if (targetMode === 'sandbox') {
+          const sb = useSandbox.getState()
+          if (isAll) {
+            const bodies = [...sb.bodies]
+            for (const b of bodies) sb.removeBody(b.id)
+            return { ok: true, removedCount: bodies.length, removedNames: bodies.map((b) => b.name) }
+          }
+          const targets = Array.isArray(namesArg) ? namesArg.map(String) : [String(namesArg)]
+          const removed: string[] = []
+          for (const target of targets) {
+            const lower = target.toLowerCase().trim()
+            const found = sb.bodies.find(
+              (b) => b.id === target || b.name.toLowerCase() === lower || b.shape.toLowerCase() === lower
+            )
+            if (found) {
+              sb.removeBody(found.id)
+              removed.push(found.name)
+            }
+          }
+          if (removed.length === 0) {
+            return { ok: false, error: `No matching sandbox bodies found to remove: ${targets.join(', ')}` }
+          }
+          return { ok: true, removedCount: removed.length, removedNames: removed }
+        }
+
+        const s = useScene.getState()
+        const currentSpace = spaceOf(targetMode)
+        if (isAll) {
+          const visibleIds = visibleOrder(s.order, s.objects, currentSpace)
+          if (visibleIds.length === 0) {
+            return { ok: true, removedCount: 0, removedNames: [] }
+          }
+          const names = visibleIds.map((id) => s.objects[id]?.name ?? id)
+          s.removeObjects(visibleIds)
+          return { ok: true, removedCount: visibleIds.length, removedNames: names }
+        }
+
+        const targets = Array.isArray(namesArg) ? namesArg.map(String) : [String(namesArg)]
+        const idsToRemove: ObjId[] = []
+        const removedNames: string[] = []
+
+        for (const target of targets) {
+          const trimmed = target.trim()
+          const lower = trimmed.toLowerCase()
+          let id = s.ev.names.get(trimmed)
+          if (!id) {
+            id = s.order.find((oid) => {
+              const o = s.objects[oid]
+              return visibleIn(o, currentSpace) && o.name.toLowerCase() === lower
+            })
+          }
+          if (!id) {
+            const cleanType = lower.replace(/^(?:the|a)\s+/i, '').trim()
+            id = s.order.find((oid) => {
+              const o = s.objects[oid]
+              return visibleIn(o, currentSpace) && o.type.toLowerCase() === cleanType
+            })
+          }
+          if (id && !idsToRemove.includes(id)) {
+            idsToRemove.push(id)
+            removedNames.push(s.objects[id]?.name ?? id)
+          }
+        }
+
+        if (idsToRemove.length === 0) {
+          return { ok: false, error: `No objects found with names: ${targets.join(', ')}` }
+        }
+
+        s.removeObjects(idsToRemove)
+        return { ok: true, removedCount: idsToRemove.length, removedNames }
       }
 
       default:
