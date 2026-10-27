@@ -17,6 +17,7 @@ import { unitRefusal } from '../../calc/units'
 import { evaluatePlain, HELP, solutionFor, tryCas, tryPureMath, trySolverCommand } from './solve'
 import { assertKnown, describeComputed, evaluateNode, freeLetterFor, GRAPH_VARS, isConstant, isUnitName, kindOfName, logError, parseNode, splitInputs, sumOperands, unknownSymbols, vectorExtras } from './common'
 import { namedGraphs, tryGraph } from './graph'
+import { registry } from '../registry'
 
 // ---------------------------------------------------------------------------
 
@@ -24,6 +25,7 @@ export interface CommandResult {
   ok: boolean
   created: ObjId[]
   removed: ObjId[]
+  changed?: ObjId[]
   message: string
 }
 
@@ -79,11 +81,27 @@ export async function runCommand(raw: string): Promise<CommandResult> {
     const ids = del[1].split(/[,\s]+/).map((n) => s.ev.names.get(n)).filter(Boolean) as ObjId[]
     if (!ids.length) {
       logError(input, 'Nothing with that name.')
-      return { ok: false, created: [], removed: [], message: 'Nothing with that name.' }
+      return { ok: false, created: [], removed: [], changed: [], message: 'Nothing with that name.' }
     }
     s.removeObjects(ids)
     s.pushLog({ input, kind: 'info', text: `Deleted ${del[1]}.` })
-    return { ok: true, created: [], removed: ids, message: `Deleted ${del[1]}.` }
+    return { ok: true, created: [], removed: ids, changed: [], message: `Deleted ${del[1]}.` }
+  }
+
+  const regResult = await registry.dispatch(input)
+  if (regResult) {
+    if (regResult.ok) {
+      s.pushLog({ input, kind: 'info', text: regResult.message })
+    } else {
+      logError(input, regResult.message)
+    }
+    return {
+      ok: regResult.ok,
+      created: regResult.created,
+      removed: regResult.removed,
+      changed: regResult.changed,
+      message: regResult.message
+    }
   }
 
   try {
@@ -142,7 +160,8 @@ export async function runCommand(raw: string): Promise<CommandResult> {
         ? `Removed ${removed.length} object(s)`
         : 'OK')
 
-  return { ok: true, created, removed, message }
+  const changed = sAfter.order.filter((id) => idsBefore.has(id) && sAfter.objects[id] !== objectsBefore[id])
+  return { ok: true, created, removed, changed, message }
 }
 
 /** The parser's own words, which a student is never shown: "Parenthesis ) expected (char 7)". */
