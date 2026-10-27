@@ -1,8 +1,10 @@
 // Vector Commands: add, components, resolve, dot, cross, mag, unit, proj
 import { scene } from '../../core/store'
 import { Builder } from '../../core/factory'
+import { uniqueName } from '../../core/naming'
 import * as VS from '../../math/vectorSolver'
 import { heading, len, toDeg } from '../../math/vec'
+import { addHeadToTailHelpers } from '../commands/route'
 import type { CommandEntry, RegistryResult } from './types'
 
 export const vectorCommands: CommandEntry[] = [
@@ -14,10 +16,10 @@ export const vectorCommands: CommandEntry[] = [
       { name: 'angle', type: 'number', required: false, description: 'Angle in degrees (if target is magnitude)' }
     ],
     summary: 'Resolve a vector into rectangular components and toggle display',
-    examples: ['resolve A', 'resolve 10 30'],
+    examples: ['resolve A', 'resolve 10 30', 'resolve 10 N at 30°'],
     parse: (raw) => {
-      const numM = raw.match(/^resolve\s+([-\d.]+)\s+([-\d.]+)$/i)
-      if (numM) return { target: parseFloat(numM[1]), angle: parseFloat(numM[2]) }
+      const numM = raw.match(/^resolve\s+([-\d.]+)\s*(?:N|kN|m\/s|m\/s\^2|m)?\s*(?:at\s+)?([-\d.]+)\s*(?:°|deg|rad)?$/i)
+      if (numM) return { target: parseFloat(numM[1]), angle: parseFloat(numM[2]), unit: raw.match(/\b(N|kN|m\/s|m\/s\^2|m)\b/i)?.[1] }
       const vecM = raw.match(/^resolve\s+(\S+)$/i)
       if (vecM) return { target: vecM[1] }
       return null
@@ -25,14 +27,28 @@ export const vectorCommands: CommandEntry[] = [
     run: (args): RegistryResult => {
       const s = scene()
       if (typeof args.target === 'number' && typeof args.angle === 'number') {
-        const sol = VS.solveComponents('A', args.target, args.angle)
+        const mag = args.target
+        const angle = args.angle
+        const unit = args.unit ? String(args.unit) : undefined
+        const bld = new Builder()
+        const rad = (angle * Math.PI) / 180
+        const vx = mag * Math.cos(rad)
+        const vy = mag * Math.sin(rad)
+        const vName = uniqueName('v', s.objects)
+        const vObj = bld.vector(
+          { kind: 'free', tail: [0, 0, 0], comp: [vx, vy, 0] },
+          { name: vName, unit, showComponents: true, color: '#0cdefd' }
+        )
+        bld.commit()
+
+        const sol = VS.solveComponents(vName, mag, angle)
         s.showSolution(sol)
         return {
           ok: true,
-          created: [],
+          created: [vObj.id],
           removed: [],
           changed: [],
-          message: `Resolved ${args.target} at ${args.angle}°: Ax = ${(args.target * Math.cos((args.angle * Math.PI) / 180)).toFixed(2)}, Ay = ${(args.target * Math.sin((args.angle * Math.PI) / 180)).toFixed(2)}.`
+          message: `Created and resolved ${vName} = ${mag}${unit ? ` ${unit}` : ''} ∠ ${angle}°: ${vName}x = ${vx.toFixed(2)}, ${vName}y = ${vy.toFixed(2)}.`
         }
       }
 
@@ -59,18 +75,22 @@ export const vectorCommands: CommandEntry[] = [
   },
   {
     name: 'addvector',
-    aliases: ['addvec'],
+    aliases: ['addvec', 'add'],
     modes: ['vectors'],
     args: [
       { name: 'a', type: 'string', required: true, description: 'First vector' },
       { name: 'b', type: 'string', required: true, description: 'Second vector' },
       { name: 'name', type: 'string', required: false, description: 'Result vector name' }
     ],
-    summary: 'Add two vectors and create a live resultant vector',
-    examples: ['addvector A B', 'addvec A B R'],
+    summary: 'Add two vectors and create a live resultant vector with head-to-tail parallelogram',
+    examples: ['addvector A B', 'addvec A B R', 'add u and v'],
     parse: (raw) => {
-      const m = raw.match(/^(?:addvector|addvec)\s+(\S+)\s+(\S+)(?:\s+(\S+))?$/i)
-      return m ? { a: m[1], b: m[2], name: m[3] } : null
+      const m = raw.match(/^(?:addvector|addvec|add)\s+(\S+?)(?:\s*,\s*|\s+and\s+|\s+to\s+|\s+)(\S+?)(?:\s+(?:as|to|=|into)\s+(\S+)|\s+(\S+))?$/i)
+      if (m) {
+        const rName = m[3] || m[4]
+        return { a: m[1], b: m[2], name: rName }
+      }
+      return null
     },
     run: (args): RegistryResult => {
       const s = scene()
@@ -85,8 +105,9 @@ export const vectorCommands: CommandEntry[] = [
       const bld = new Builder()
       const expr = `${aName} + ${bName}`
       const obj = bld.vector({ kind: 'expr', expr, tailOf: aId }, { name: rName, color: '#ffd43b' })
+      addHeadToTailHelpers(bld, [aName, bName])
       bld.commit()
-      return { ok: true, created: [obj.id], removed: [], changed: [], message: `Created resultant vector ${rName} = ${aName} + ${bName}.` }
+      return { ok: true, created: [obj.id, ...bld.created.filter(c => c.id !== obj.id).map(c => c.id)], removed: [], changed: [], message: `Created resultant vector ${rName} = ${aName} + ${bName}.` }
     }
   }
 ]

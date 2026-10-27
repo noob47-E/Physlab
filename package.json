@@ -18,7 +18,8 @@
     "lint": "eslint . && node scripts/deadcode.mjs --check",
     "smoke": "node scripts/smoke.mjs",
     "gate": "node scripts/gate.mjs",
-    "hooks:install": "node scripts/install-hooks.mjs"
+    "hooks:install": "node scripts/install-hooks.mjs",
+    "ai:manual": "node scripts/generate-ai-manual.mjs"
   },
   "build": {
     "appId": "com.physlab.desktop",

@@ -29,6 +29,43 @@ export interface CommandResult {
   message: string
 }
 
+function parsePointPair(text: string): { pA: string; pB: string } | null {
+  const trimmed = text.trim()
+  let pA = ''
+  let pB = ''
+  const mSpace = trimmed.match(/^([A-Za-zͰ-Ͽ][\wͰ-Ͽ'′″‴⁗]*)\s+([A-Za-zͰ-Ͽ][\wͰ-Ͽ'′″‴⁗]*)$/)
+  if (mSpace) {
+    pA = mSpace[1]
+    pB = mSpace[2]
+  } else if (/^[A-Z]{2}$/.test(trimmed)) {
+    pA = trimmed[0]
+    pB = trimmed[1]
+  }
+  if (pA && pB) {
+    const s = scene()
+    if (s.ev.names.has(pA) && s.ev.names.has(pB)) {
+      if (kindOfName(pA) === 'point' && kindOfName(pB) === 'point') {
+        return { pA, pB }
+      }
+    }
+  }
+  return null
+}
+
+function isPointDiff(node: MathNode): { pB: string; pA: string } | null {
+  const op = node as unknown as { type: string; fn?: string; args?: Array<{ type: string; name?: string }> }
+  if (op.type === 'OperatorNode' && op.fn === 'subtract' && op.args?.length === 2) {
+    const a0 = op.args[0]
+    const a1 = op.args[1]
+    if (a0?.type === 'SymbolNode' && a1?.type === 'SymbolNode' && a0.name && a1.name) {
+      if (kindOfName(a0.name) === 'point' && kindOfName(a1.name) === 'point') {
+        return { pB: a0.name, pA: a1.name }
+      }
+    }
+  }
+  return null
+}
+
 export async function runCommand(raw: string): Promise<CommandResult> {
   const input = raw.trim()
   if (!input) return { ok: true, created: [], removed: [], message: '' }
@@ -86,6 +123,29 @@ export async function runCommand(raw: string): Promise<CommandResult> {
     s.removeObjects(ids)
     s.pushLog({ input, kind: 'info', text: `Deleted ${del[1]}.` })
     return { ok: true, created: [], removed: ids, changed: [], message: `Deleted ${del[1]}.` }
+  }
+
+  const ptPair = parsePointPair(input)
+  if (ptPair) {
+    const idA = s.ev.names.get(ptPair.pA)!
+    const idB = s.ev.names.get(ptPair.pB)!
+    const b = new Builder()
+    const vName = `${ptPair.pA}${ptPair.pB}`
+    const obj = b.vector({ kind: 'points', a: idA, b: idB }, { name: vName })
+    b.commit()
+    const val = s.ev.values.get(obj.id)
+    s.pushLog({
+      input,
+      kind: 'result',
+      tex: `${vName} = ${describeComputed(val, s.settings)}`
+    })
+    return {
+      ok: true,
+      created: [obj.id],
+      removed: [],
+      changed: [],
+      message: `Created vector ${vName} from ${ptPair.pA} to ${ptPair.pB}.`
+    }
   }
 
   const regResult = await registry.dispatch(input)
@@ -247,6 +307,22 @@ function tryAssignment(input: string): boolean {
   if (taken && isPieceCorner(taken, scene().objects)) throw new Error(`${name} is a corner of a piece. Slide, turn or flip the piece to move it, or choose another letter.`)
   if (tryGeometryCommand(rhs, name, input)) return true
 
+  const ptPair = parsePointPair(rhs)
+  if (ptPair) {
+    const idA = scene().ev.names.get(ptPair.pA)!
+    const idB = scene().ev.names.get(ptPair.pB)!
+    const b = new Builder()
+    const obj = b.vector({ kind: 'points', a: idA, b: idB }, { name })
+    b.commit()
+    const val = scene().ev.values.get(obj.id)
+    scene().pushLog({
+      input,
+      kind: 'result',
+      tex: `${name} = ${describeComputed(val, scene().settings)}`
+    })
+    return true
+  }
+
   // The line is kept as typed: the runtime × (math/expr.ts, timesOrCross) reads every case the
   // bar does, so `C = 2 × A` stays `2 × A` in the Properties field instead of becoming `2 * A`.
   const node = parseNode(rhs)
@@ -261,14 +337,21 @@ function tryAssignment(input: string): boolean {
   if (kind === 'point') {
     obj = isConstant(node) ? b.point(toV3(evaluateNode(node)), { name }) : b.point({ kind: 'expr', expr }, { name })
   } else if (kind === 'vector') {
-    const unit = unitOf(node)
-    if (isConstant(node)) {
-      obj = b.vector({ kind: 'free', tail: [0, 0, 0], comp: toV3(evaluateNode(node)) }, { name, unit })
+    const ptDiff = isPointDiff(node)
+    if (ptDiff) {
+      const idA = scene().ev.names.get(ptDiff.pA)!
+      const idB = scene().ev.names.get(ptDiff.pB)!
+      obj = b.vector({ kind: 'points', a: idA, b: idB }, { name })
     } else {
-      const addends = sumOperands(node)
-      const first = addends?.[0] ? scene().ev.names.get(addends[0]) : undefined
-      obj = b.vector({ kind: 'expr', expr, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
-      if (addends && addends.length >= 2) addHeadToTailHelpers(b, addends)
+      const unit = unitOf(node)
+      if (isConstant(node)) {
+        obj = b.vector({ kind: 'free', tail: [0, 0, 0], comp: toV3(evaluateNode(node)) }, { name, unit })
+      } else {
+        const addends = sumOperands(node)
+        const first = addends?.[0] ? scene().ev.names.get(addends[0]) : undefined
+        obj = b.vector({ kind: 'expr', expr, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
+        if (addends && addends.length >= 2) addHeadToTailHelpers(b, addends)
+      }
     }
   } else {
     const constant = isConstant(node)
@@ -319,7 +402,7 @@ function unitOf(node: MathNode): string | undefined {
 }
 
 /** Faint copies of B, C… placed head-to-tail after A, linked live. */
-function addHeadToTailHelpers(b: Builder, names: string[]) {
+export function addHeadToTailHelpers(b: Builder, names: string[]) {
   const ids = names.map((n) => scene().ev.names.get(n)!)
   let prev = ids[0]
   for (let i = 1; i < ids.length; i++) {

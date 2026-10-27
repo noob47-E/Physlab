@@ -11,6 +11,7 @@ import { reconcile } from '../calc/working'
 import { run3WayTruthCheck } from './truthCheck'
 import { runCommand, type CommandResult } from '../lang/commands'
 import { describeScreen } from './describeScreen'
+import { getModeManual } from './manual.generated'
 
 export function normalizeModeId(mode: string): ModeId {
   const m = mode.toLowerCase().trim()
@@ -422,6 +423,22 @@ export const TOOLS = [
           filter: {
             type: 'string',
             description: 'Optional text filter to search for specific objects by name, type, or property when there are many objects.'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'manual',
+      description: 'Look up detailed commands, exact syntax, parameter definitions, and examples for any PhysLab mode (graphing, geometry/shapes, vectors, sandbox, calculator, pure, lab, view, app, all).',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            description: 'Mode to get manual for: graphing, geometry, vectors, sandbox, calculator, pure, lab, view, app, or all (default: all).'
           }
         }
       }
@@ -1219,6 +1236,17 @@ export async function runTool(
           mode: args.mode ? normalizeModeId(String(args.mode)) : useApp.getState().mode,
           screen: text,
           description: text
+        }
+      }
+
+      case 'manual': {
+        const mode = args.mode ? String(args.mode) : 'all'
+        const doc = getModeManual(mode)
+        return {
+          ok: true,
+          mode,
+          manual: doc,
+          content: doc
         }
       }
 
