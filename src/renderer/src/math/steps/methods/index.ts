@@ -18,6 +18,7 @@ import { inequalityMethod } from './inequality'
 import { expSubstMethod } from './expSubst'
 import { expRootMethod } from './expRoot'
 import { logSumMethod } from './logSum'
+import { integrationMethod } from './integration'
 
 export {
   linearOneVarMethod,
@@ -36,7 +37,8 @@ export {
   expRootMethod,
   expSubstMethod,
   logSumMethod,
-  inequalityMethod
+  inequalityMethod,
+  integrationMethod
 }
 
 /** Every S1a method, in the order a router should consider them. */
@@ -65,5 +67,6 @@ export const ALL_STEP_METHODS: Method[] = [
   expRootMethod,
   expSubstMethod,
   logSumMethod,
-  inequalityMethod
+  inequalityMethod,
+  integrationMethod
 ]

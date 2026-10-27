@@ -14,9 +14,12 @@ export function drawnTex(text: string): string {
     .replace(/\^(-\d)/g, '^{$1}')
 }
 
-/** LaTeX commands and \text{...} are the only words a line may hold: a bare run of letters is refused. */
+/** LaTeX commands, standard calculus/math functions and \text{...} are the words a line may hold: an unknown bare run of letters is refused. */
 function withoutCommands(text: string): string {
-  return text.replace(/\\text\{[^{}]*\}/g, ' ').replace(/\\[A-Za-z]+/g, ' ')
+  return text
+    .replace(/\\text\{[^{}]*\}/g, ' ')
+    .replace(/\\[A-Za-z]+/g, ' ')
+    .replace(/\b(integrate|integral|derivative|diff|sin|cos|tan|sec|csc|cot|asin|acos|atan|sinh|cosh|tanh|exp|ln|log|sqrt|abs|pi)\b/g, ' ')
 }
 
 /** A brace must belong to a command, a power, a subscript or a previous group: a bare { draws nothing in KaTeX. */

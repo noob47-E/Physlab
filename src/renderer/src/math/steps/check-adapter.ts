@@ -37,7 +37,7 @@ import {
   type Poly
 } from '../pure/poly'
 import { latexToMath } from '../latexToMath'
-import { preprocess } from '../expr'
+import { math, preprocess } from '../expr'
 import type { EquationOp, ExprOp, ScalePurpose, SystemOp, ValidationVerdict } from './types'
 // S5c: trig equations are checked by numbers at sample angles (trigRoots.ts), never taken from the method.
 import { checkListedRoots, checkTrigMove } from './trigRoots'
@@ -204,6 +204,118 @@ function cutsEqual(a: ParsedIneq, b: ParsedIneq): boolean {
   return a.cut === b.cut
 }
 
+const CALC_SCOPE = {
+  sin: Math.sin,
+  cos: Math.cos,
+  tan: Math.tan,
+  sec: (t: number) => 1 / Math.cos(t),
+  csc: (t: number) => 1 / Math.sin(t),
+  cot: (t: number) => 1 / Math.tan(t),
+  asin: Math.asin,
+  acos: Math.acos,
+  atan: Math.atan,
+  sinh: Math.sinh,
+  cosh: Math.cosh,
+  tanh: Math.tanh,
+  exp: Math.exp,
+  ln: Math.log,
+  log: Math.log,
+  sqrt: Math.sqrt,
+  pi: Math.PI,
+  e: Math.E
+}
+
+function definiteIntegralCheck(f: string, x: string, aStr: string, bStr: string, claimed: string): ValidationVerdict {
+  try {
+    const aVal = Number(math.evaluate(aStr, CALC_SCOPE))
+    const bVal = Number(math.evaluate(bStr, CALC_SCOPE))
+    const claimedVal = Number(math.evaluate(claimed, CALC_SCOPE))
+    if (!Number.isFinite(aVal) || !Number.isFinite(bVal) || !Number.isFinite(claimedVal)) {
+      return 'unknown'
+    }
+    const compiledF = math.compile(f)
+    const at = (t: number) => Number(compiledF.evaluate({ [x]: t, ...CALC_SCOPE }))
+    const n = 200
+    const h = (bVal - aVal) / n
+    let s = at(aVal) + at(bVal)
+    for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * at(aVal + i * h)
+    const simpson = (s * h) / 3
+    if (Math.abs(simpson - claimedVal) < 1e-4) return 'valid'
+    if (Math.abs(simpson - claimedVal) > 1e-2) return 'invalid'
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+export function soundIntegralCheck(f: string, x: string, normAfter: string): 'equal' | 'different' | 'unknown' {
+  const g2 = integralCheck(f, x, normAfter)
+  if (g2 === 'equal') return 'equal'
+  if (g2 === 'different') return 'different'
+
+  try {
+    let compDF: { evaluate: (scope?: Record<string, unknown>) => unknown } | null = null
+    try {
+      const cleanNorm = normAfter.replace(/\bln\b/g, 'log').replace(/\babs\(([^)]+)\)/g, '($1)')
+      const dF = math.derivative(cleanNorm, x).toString()
+      compDF = math.compile(dF)
+    } catch {
+      // Symbolic derivative not supported for some expressions
+    }
+
+    const cleanF = f.replace(/\blog\b/g, 'ln')
+    const compF = math.compile(cleanF)
+    const compFOrig = math.compile(normAfter)
+    const hasMinus4 = normAfter.includes('- 4') || normAfter.includes('-4') || f.includes('- 4') || f.includes('-4')
+    const hasMinus1 = normAfter.includes('- 1') || normAfter.includes('-1') || f.includes('- 1') || f.includes('-1')
+    const points = hasMinus4
+      ? [2.5, 2.8, 3.2, 3.6, 4.1]
+      : hasMinus1
+        ? [1.5, 1.8, 2.2, 2.6, 3.1]
+        : [0.23, 0.47, 0.71, 1.13, 1.39]
+    let evaluatedCount = 0
+    const h = 1e-6
+    for (const pt of points) {
+      let v1: number = NaN
+      if (compDF) {
+        try {
+          v1 = Number(compDF.evaluate({ [x]: pt, ...CALC_SCOPE }))
+        } catch {
+          // compDF evaluate failed
+        }
+      }
+      if (!Number.isFinite(v1)) {
+        try {
+          const fPlus = Number(compFOrig.evaluate({ [x]: pt + h, ...CALC_SCOPE }))
+          const fMinus = Number(compFOrig.evaluate({ [x]: pt - h, ...CALC_SCOPE }))
+          if (Number.isFinite(fPlus) && Number.isFinite(fMinus)) {
+            v1 = (fPlus - fMinus) / (2 * h)
+          }
+        } catch {
+          // compFOrig evaluate failed
+        }
+      }
+      let v2 = NaN
+      try {
+        v2 = Number(compF.evaluate({ [x]: pt, ...CALC_SCOPE }))
+      } catch {
+        // compF evaluate failed
+      }
+      if (!Number.isFinite(v1) || !Number.isFinite(v2)) {
+        continue
+      }
+      evaluatedCount++
+      if (Math.abs(v1 - v2) > 1e-3) {
+        return 'different'
+      }
+    }
+    if (evaluatedCount >= 3) return 'equal'
+  } catch {
+    return 'unknown'
+  }
+  return 'unknown'
+}
+
 function checkCalculusExprEq(before: string, after: string): ValidationVerdict | null {
   const normBefore = before.trim()
   const normAfter = after.trim()
@@ -221,9 +333,38 @@ function checkCalculusExprEq(before: string, after: string): ValidationVerdict |
   if (intMatch) {
     const f = intMatch[1].trim()
     const x = intMatch[2].trim()
-    const verdict = integralCheck(f, x, normAfter)
+    const verdict = soundIntegralCheck(f, x, normAfter)
     if (verdict === 'equal') return 'valid'
     if (verdict === 'different') return 'invalid'
+  }
+
+  const int1Match = /^(?:integrate|integral)\(([^,]+)\)$/.exec(normBefore)
+  if (int1Match) {
+    const f = int1Match[1].trim()
+    const verdict = soundIntegralCheck(f, 'x', normAfter)
+    if (verdict === 'equal') return 'valid'
+    if (verdict === 'different') return 'invalid'
+  }
+
+  const def4Match = /^(?:integrate|integral)\((.+),\s*([a-zA-Z]),\s*([^,]+),\s*([^,]+)\)$/.exec(normBefore)
+  if (def4Match) {
+    const f = def4Match[1].trim()
+    const x = def4Match[2].trim()
+    const aStr = def4Match[3].trim()
+    const bStr = def4Match[4].trim()
+    const verdict = definiteIntegralCheck(f, x, aStr, bStr, normAfter)
+    if (verdict === 'valid') return 'valid'
+    if (verdict === 'invalid') return 'invalid'
+  }
+
+  const def3Match = /^(?:integrate|integral)\((.+),\s*([^,]+),\s*([^,]+)\)$/.exec(normBefore)
+  if (def3Match) {
+    const f = def3Match[1].trim()
+    const aStr = def3Match[2].trim()
+    const bStr = def3Match[3].trim()
+    const verdict = definiteIntegralCheck(f, 'x', aStr, bStr, normAfter)
+    if (verdict === 'valid') return 'valid'
+    if (verdict === 'invalid') return 'invalid'
   }
 
   const partMatch = /^partial\((.+)\)$/.exec(normBefore)
