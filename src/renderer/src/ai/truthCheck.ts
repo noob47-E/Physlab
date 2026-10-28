@@ -5,6 +5,7 @@ import { fmt, fmtPrecise } from '../math/format'
 import { casInDegrees } from '../calc/angle'
 import { scene } from '../core/store'
 import { useSandbox } from '../sim/store'
+import { useVC } from '../panels/vectorCalcStore'
 import { describeScreen } from './describeScreen'
 import { G, extractLastBoxed, sanitizeMathInput, type CalcOp } from './contract'
 import type { MessageVerification, PhysLabAction } from './types'
@@ -799,6 +800,79 @@ export function matchToolAnswer(modelAnswer: string, toolAnswer: string): boolea
   return false
 }
 
+export const OBJECT_NAME_STOP_WORDS = new Set([
+  'addition',
+  'sum',
+  'product',
+  'resultant',
+  'diagram',
+  'construction',
+  'theorem',
+  'method',
+  'components',
+  'component',
+  'formula',
+  'equation',
+  'calculation',
+  'solution',
+  'law',
+  'ratio',
+  'ratios',
+  'length',
+  'lengths',
+  'direction',
+  'magnitude',
+  'angle',
+  'distance',
+  'cross',
+  'dot',
+  'value',
+  'values',
+  'answer',
+  'step',
+  'steps',
+  'mode',
+  'object',
+  'objects',
+  'the',
+  'a',
+  'an',
+  'this',
+  'that',
+  'and',
+  'or',
+  'with',
+  'from',
+  'to',
+  'in',
+  'on',
+  'at',
+  'is',
+  'are',
+  'was',
+  'were',
+  'has',
+  'have',
+  'been',
+  'of',
+  'by',
+  'for'
+])
+
+export function isCandidateObjectName(name: string): boolean {
+  if (!name) return false
+  // 1. Single capital letter (e.g. A, B, C, P, O, R, F) is always a valid object name
+  if (/^[A-Z]$/.test(name)) return true
+  if (OBJECT_NAME_STOP_WORDS.has(name.toLowerCase())) return false
+  // 2. Capital plus digits or primes: A1, P', P1, B'', A_1
+  if (/^[A-Z][0-9']{1,4}$/.test(name) || /^[A-Z]_[0-9a-zA-Z]$/.test(name)) return true
+  // 3. Multi-letter geometric notation like segment/line AB, CD, or triangle ABC
+  if (/^[A-Z]{2,3}$/.test(name)) return true
+  // 4. Short lowercase symbol: u, v, w, u1, v'
+  if (/^[a-z][0-9']?$/.test(name)) return true
+  return false
+}
+
 export function checkDrawingClaims(
   content: string,
   actions: PhysLabAction[],
@@ -852,6 +926,21 @@ export function checkDrawingClaims(
   if (createdCount === 0 && screenText && /\b(?:Point|Segment|Vector|Circle|Triangle|Curve|Line|Object|Body|Sphere|Ball)\b/i.test(screenText)) {
     createdCount = 1
   }
+  if (createdCount === 0) {
+    try {
+      const s = scene()
+      const sceneObjs = Object.keys(s?.objects || {}).length
+      const sb = useSandbox.getState()
+      const sandboxBodies = (sb?.bodies || []).length
+      let vcVectors = 0
+      try {
+        vcVectors = (useVC.getState()?.cards || []).length
+      } catch {}
+      if (sceneObjs > 0) createdCount = sceneObjs
+      else if (sandboxBodies > 0) createdCount = sandboxBodies
+      else if (vcVectors > 0) createdCount = vcVectors
+    } catch {}
+  }
   if (createdCount === 0 && typeof window !== 'undefined') {
     try {
       const sceneObjs = Object.keys((window as any).__physlab_debug?.useScene?.getState()?.objects || {}).length
@@ -891,22 +980,28 @@ export function checkDrawingClaims(
   try {
     const s = scene()
     const sb = useSandbox.getState()
-    const nameRegex = /\b(?:point|circle|line|segment|triangle|polygon|vector|body|curve)\s+([A-Za-z0-9_]+)\b/gi
+    const nameRegex = /\b(?:point|circle|line|segment|triangle|polygon|vector|body|curve)\s+([A-Za-z0-9_']+)\b/gi
     let match: RegExpExecArray | null
     const missingNames: string[] = []
 
     while ((match = nameRegex.exec(content)) !== null) {
       const fullKind = match[0]
       const name = match[1]
-      if (['the', 'a', 'an', 'this', 'that', 'and', 'or', 'with', 'from', 'to', 'in', 'on', 'at', 'is'].includes(name.toLowerCase())) continue
-      const existsInScene = s?.ev?.names?.has(name) || (s?.objects && Object.values(s.objects).some((o) => o.name === name))
-      const existsInSb = sb?.bodies?.some((b) => b.name === name)
-      const existsInScreen = screenText ? new RegExp(`\\b${name}\\b`).test(screenText) : false
+      if (!isCandidateObjectName(name)) continue
+      const existsInScene = s?.ev?.names?.has(name) || (s?.objects && Object.values(s.objects).some((o) => o.name === name || o.name?.toLowerCase() === name.toLowerCase()))
+      const existsInSb = sb?.bodies?.some((b) => b.name === name || b.name?.toLowerCase() === name.toLowerCase())
+      let existsInVc = false
+      try {
+        const vc = useVC.getState()
+        existsInVc = (vc?.cards || []).some((c) => c.name.toLowerCase() === name.toLowerCase()) ||
+                     Boolean(vc?.result?.sol?.visual?.vectors?.some((v) => v.name.toLowerCase() === name.toLowerCase()))
+      } catch {}
+      const existsInScreen = screenText ? new RegExp(`\\b${name}\\b`, 'i').test(screenText) : false
       const existsInActions = actions.some((act) => {
         if (!act.result || typeof act.result !== 'object') return false
         const r = act.result as Record<string, any>
         if (Array.isArray(r.visibleObjects) && r.visibleObjects.length > 0) {
-          if (r.visibleObjects.some((o: any) => o.name === name || o.id === name || (name.length > 1 && [...name].every((ch) => r.visibleObjects.some((vo: any) => vo.name === ch))))) {
+          if (r.visibleObjects.some((o: any) => o.name === name || o.id === name || o.name?.toLowerCase() === name.toLowerCase() || (name.length > 1 && [...name].every((ch) => r.visibleObjects.some((vo: any) => vo.name === ch))))) {
             return true
           }
         }
@@ -916,7 +1011,7 @@ export function checkDrawingClaims(
         }
         return false
       })
-      if (!existsInScene && !existsInSb && !existsInScreen && !existsInActions) {
+      if (!existsInScene && !existsInSb && !existsInVc && !existsInScreen && !existsInActions) {
         missingNames.push(fullKind)
       }
     }
