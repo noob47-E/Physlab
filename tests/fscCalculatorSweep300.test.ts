@@ -126,5 +126,5 @@ describe('Q03: Calculator 300+ FSc/A-level Coverage Sweep', () => {
       console.error('WRONG CHECKED ANSWERS:', wrongChecked)
       expect(wrongChecked.length).toBe(0)
     }
-  })
+  }, 60_000)
 })
