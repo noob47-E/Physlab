@@ -371,6 +371,89 @@ export function isStepOrStructuralNumber(
   return false
 }
 
+/**
+ * Self-talk patterns that leak from model internal planning notes into prose.
+ */
+export const SELF_TALK_PATTERNS: RegExp[] = [
+  /\btool\s+returned\b/i,
+  /\bneed\s+answer\b/i,
+  /\buse\s+only\s+tool\b/i,
+  /\bstudent\s+asked\b/i,
+  /\bmust\s+answer\s+in\b/i,
+  /\b(?:i|we)\s+should\s+(?:explain|answer|use)\b/i,
+  /\bno\s+calculation\s+is\s+needed\b/i,
+  /\bthe\s+question\s+is\s+(?:conceptual|clear)\b/i,
+  /\bformat\s*:/i
+]
+
+export function isHeadingOrBoldOrMath(p: string): boolean {
+  const trimmed = p.trim()
+  return (
+    /^#{1,6}\s+/.test(trimmed) ||
+    /^(?:[-*•]\s+)?(?:\d+[\.\)]\s+)?\*\*[^*]+\*\*/.test(trimmed) ||
+    /^(?:\$\$|\\\[)/.test(trimmed)
+  )
+}
+
+/**
+ * Strips model planning self-talk paragraphs and drops consecutive duplicate paragraphs.
+ * Only drops leading paragraphs before the first heading, bold label, or maths block
+ * when 2 or more self-talk patterns match.
+ */
+export function stripPlanningNotesAndDuplicates(text: string): string {
+  if (!text) return ''
+
+  // Split into paragraphs separated by blank lines, ensuring headings, bold blocks,
+  // or math blocks on new lines form their own block boundaries.
+  const normalized = text.replace(/([^\n])\r?\n(#{1,6}\s+|\*\*[^*]+\*\*|\$\$|\\\[)/g, '$1\n\n$2')
+  const rawParagraphs = normalized
+    .split(/\r?\n\s*\r?\n/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+
+  if (rawParagraphs.length === 0) return ''
+
+  // 1. Drop exact duplicate paragraph appearing twice in a row
+  const deduped: string[] = []
+  for (let i = 0; i < rawParagraphs.length; i++) {
+    if (i > 0 && rawParagraphs[i] === rawParagraphs[i - 1]) {
+      continue
+    }
+    deduped.push(rawParagraphs[i])
+  }
+
+  // 2. Drop leading paragraphs before first heading, bold label, or maths block
+  // only if matching 2 or more self-talk patterns
+  let firstKeepIdx = 0
+  for (let i = 0; i < deduped.length; i++) {
+    const p = deduped[i]
+    if (isHeadingOrBoldOrMath(p)) {
+      // Reached heading, bold label, or maths block; stop dropping
+      break
+    }
+    const hits = SELF_TALK_PATTERNS.filter((pattern) => pattern.test(p)).length
+    if (hits >= 2) {
+      firstKeepIdx = i + 1
+    } else {
+      // Reached legitimate prose; stop dropping
+      break
+    }
+  }
+
+  const kept = deduped.slice(firstKeepIdx)
+
+  // 3. Drop any adjacent duplicate paragraph that might have formed
+  const finalParagraphs: string[] = []
+  for (let i = 0; i < kept.length; i++) {
+    if (i > 0 && kept[i] === kept[i - 1]) {
+      continue
+    }
+    finalParagraphs.push(kept[i])
+  }
+
+  return finalParagraphs.join('\n\n')
+}
+
 export const MarkdownView = memo(function MarkdownView({
   content,
   studentPrompt,
@@ -383,7 +466,7 @@ export const MarkdownView = memo(function MarkdownView({
   const fixedContent = repairControlCharLatex(content)
   const { cleanContent } = extractThinkTrace(fixedContent)
 
-  const cleanProse = stripIncompleteActionBlocks(cleanContent)
+  const cleanProse = stripPlanningNotesAndDuplicates(stripIncompleteActionBlocks(cleanContent))
   const boxedAnswer = extractLastBoxed(fixedContent)
 
   // Known numbers from student prompt and engine tool results
@@ -564,9 +647,11 @@ export const MarkdownView = memo(function MarkdownView({
 export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React.ReactNode[] {
   if (!text) return []
 
-  const cleanText = text
-    .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
-    .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+  const cleanText = stripPlanningNotesAndDuplicates(
+    text
+      .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
+      .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+  )
 
   const lines = cleanText.split('\n')
   const nodes: React.ReactNode[] = []

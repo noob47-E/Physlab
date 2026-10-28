@@ -33,7 +33,7 @@ import { stripIncompleteActionBlocks } from '../ai/contract'
 import { runTool } from '../ai/tools'
 import { verifyMessage } from '../ai/truthCheck'
 import { AI_PROVIDER_PRESETS, type AiProviderPreset } from '../ai/presets'
-import { MarkdownView } from './ai/MarkdownView'
+import { MarkdownView, stripPlanningNotesAndDuplicates } from './ai/MarkdownView'
 import { MindMapView } from './ai/MindMapView'
 import { hidePanel } from '../app/panels'
 import { runHistory } from '../app/undoRoute'
@@ -359,7 +359,7 @@ export function AiCopilot() {
             }
           }
           const verification = await verifyMessage(content, actions)
-          const finalContent = verification.correctedContent ?? content
+          const finalContent = stripPlanningNotesAndDuplicates(verification.correctedContent ?? content)
           useAiStore.getState().updateMessage(botMsg.id, {
             content: finalContent,
             think,
