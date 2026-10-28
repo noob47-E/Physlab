@@ -39,9 +39,9 @@ describe('Fix B: Eliminate false red uncreated boxes for valid vectors and const
     // Vectors present in useVC or actions
     useVC.setState({
       cards: [
-        { id: 1, name: 'u', v: [2, 1, 0], entry: 'comp' },
-        { id: 2, name: 'v', v: [1, 3, 0], entry: 'comp' },
-        { id: 3, name: 'R', v: [3, 4, 0], entry: 'comp' }
+        { id: 1, name: 'u', entry: 'comp', latex: '2\\hat{i} + \\hat{j}', mag: '', angle: '', sceneId: 'u' },
+        { id: 2, name: 'v', entry: 'comp', latex: '\\hat{i} + 3\\hat{j}', mag: '', angle: '', sceneId: 'v' },
+        { id: 3, name: 'R', entry: 'comp', latex: '3\\hat{i} + 4\\hat{j}', mag: '', angle: '', sceneId: 'R' }
       ]
     })
 
