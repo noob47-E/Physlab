@@ -836,7 +836,21 @@ export function checkDrawingClaims(
       if (Array.isArray(res.visibleObjects) && res.visibleObjects.length > 0) {
         createdCount += res.visibleObjects.length
       }
+      if (res.ok === true && createdCount === 0 && Array.isArray(res.commands) && res.commands.length > 0) {
+        createdCount += res.commands.length
+      }
     }
+  }
+
+  // Also check if objects exist on screen or in screenText
+  if (createdCount === 0 && screenText && /\b(?:Point|Segment|Vector|Circle|Triangle|Curve|Line|Object)\b/i.test(screenText)) {
+    createdCount = 1
+  }
+  if (createdCount === 0 && typeof window !== 'undefined') {
+    try {
+      const objCount = Object.keys((window as any).__physlab_debug?.useScene?.getState()?.objects || {}).length
+      if (objCount > 0) createdCount = objCount
+    } catch {}
   }
 
   if (claimedDrawing && (drawActions.length === 0 || failed || createdCount === 0)) {

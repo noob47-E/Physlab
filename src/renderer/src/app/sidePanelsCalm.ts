@@ -14,7 +14,8 @@ export function conflictingPanels(mode: string, side: 'left' | 'right', openPane
   if (!isCalmMode(mode)) return []
   const opposite = side === 'left' ? 'right' : 'left'
   // 'practice' belongs to Problem Sets and stays open beside a question's picture (skipFocus)
-  return openPanels.filter((id) => id !== 'practice' && panelHome(id) === opposite)
+  // 'ai_copilot' is the student's AI companion and stays open alongside geometry and tools
+  return openPanels.filter((id) => id !== 'practice' && id !== 'ai_copilot' && panelHome(id) === opposite)
 }
 
 /** Whether a panel on `side` ('left' or 'right') is allowed given the currently open panels. */

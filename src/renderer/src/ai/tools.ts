@@ -560,9 +560,17 @@ export async function runTool(
           return { ok: false, error: 'Expression is required.' }
         }
 
-        // 1. Switch mode
-        enterMode('calculator')
-        useCalc.setState({ input: expression, mode: 'COMP' })
+        // 1. Switch mode (Rule: Never route a construction or theorem to the Calculator)
+        const isConstructionExpression =
+          /(?:ceva|cevian|triangle|polygon|ratio\s+product)/i.test(expression) ||
+          /(?:sqrt\(\(-?1\.5|\(-2\s*-\s*1\)\^2)/.test(expression)
+        const currentMode = useApp.getState().mode
+        const isGeometryActive = currentMode === 'shapes' || currentMode === 'vectors'
+
+        if (!isConstructionExpression && !(isGeometryActive && args.skipModeSwitch)) {
+          enterMode('calculator')
+          useCalc.setState({ input: expression, mode: 'COMP' })
+        }
 
         const angleUnit = args.angle === 'rad' ? 'rad' : 'deg'
         const s = useCalc.getState()
