@@ -13,6 +13,7 @@ type Bridge = {
   autosaveWrite?: (content: string) => Promise<boolean>
   /** Synchronous, for the moment the window closes: a promise made then never resolves. */
   autosaveWriteSync?: (content: string) => boolean
+  autosaveClearSync?: () => boolean
   setDirty?: (dirty: boolean) => void
   autosaveRead?: () => Promise<string | null>
   autosaveClear?: () => Promise<boolean>
@@ -227,8 +228,12 @@ async function saveNow(): Promise<void> {
 function saveOnLeave(): void {
   if (!looked) return
   const text = envelopeText()
-  if (!text) return
   const b = bridge()
+  if (!text) {
+    if (b?.autosaveClearSync) b.autosaveClearSync()
+    else void clearAutosave()
+    return
+  }
   if (b?.autosaveWriteSync) b.autosaveWriteSync(text)
   else void write(text)
 }

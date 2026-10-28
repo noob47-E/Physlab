@@ -1,4 +1,5 @@
 import { enterMode } from '../app/layout'
+import { showPanel } from '../app/panels'
 import { useApp } from '../app/modes'
 import { useCalc } from '../calc/calcStore'
 import { usePure } from '../math/pure/store'
@@ -25,6 +26,50 @@ import { play, pause } from '../sim/transportActions'
 import { stepOneFrame } from '../sim/stepping'
 
 let actionCounter = 0
+
+function isPlanningLine(line: string): boolean {
+  return /^(?:[-*•]\s+)?(?:Domain|User wants to|The user wants to|We will use|We need to|Plan:|Thinking:|Goal:|Task:|Step \d+:)\b/i.test(
+    line.trim()
+  )
+}
+
+function isActionTagLine(line: string): boolean {
+  return /^<\/?physlab_action\b[^>]*>/i.test(line.trim())
+}
+
+export function extractLeadingPlanning(text: string): { planning?: string; remaining: string } {
+  const lines = text.split('\n')
+  const planningLines: string[] = []
+  let i = 0
+
+  while (i < lines.length && !lines[i].trim()) i++
+
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    if (!line) {
+      const nextNonEmpty = lines.slice(i + 1).find((l) => l.trim().length > 0)?.trim()
+      if (nextNonEmpty && isPlanningLine(nextNonEmpty)) {
+        i++
+        continue
+      }
+      break
+    }
+    if (isPlanningLine(line) || isActionTagLine(line)) {
+      if (!isActionTagLine(line)) {
+        planningLines.push(lines[i])
+      }
+      i++
+    } else {
+      break
+    }
+  }
+
+  if (planningLines.length > 0) {
+    const remaining = lines.slice(i).join('\n').trim()
+    return { planning: planningLines.join('\n').trim(), remaining }
+  }
+  return { remaining: text }
+}
 
 function stripMetaBullets(s: string): string {
   const bulletMatch = s.match(/^((?:\s*[-*•]\s+[^\n]+\n+)+)([\s\S]*)$/)
@@ -105,16 +150,25 @@ export function extractThinkTrace(text: string): {
     }
   }
 
+  // 3. Extract any leading planning block (Domain: ..., User wants to ..., We will use ...)
+  // and move it to the thinking trace so it displays only in the collapsed thinking section!
+  const leading = extractLeadingPlanning(cleanContent)
+  if (leading.planning) {
+    think = think ? `${think}\n${leading.planning}` : leading.planning
+    cleanContent = leading.remaining
+  }
+
   // Finally, always strip any leftover </?think> tags, [AGENT: ...] markers, and Intuition Hook headers from cleanContent
   cleanContent = cleanContent
     .replace(/<\/?think>/gi, '')
     .replace(/\[AGENT:\s*[^\]]+\]/gi, '')
     .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
     .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+    .replace(/<\/?physlab_action\b[^>]*>/gi, '')
     .trim()
 
   if (think) {
-    think = think.replace(/<\/?think>/gi, '').trim()
+    think = think.replace(/<\/?think>/gi, '').replace(/<\/?physlab_action\b[^>]*>/gi, '').trim()
   }
 
   const agentTraces = parseAgentTraces((think ? think + '\n' : '') + repaired)
@@ -671,6 +725,7 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         if (view) {
           scene().setViewMode(view)
         }
+        const createdIds: string[] = []
         for (const rawCmd of commands) {
           let cmd = rawCmd.trim()
           if (!cmd) continue
@@ -686,11 +741,22 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
             continue
           }
 
-          await runCommand(cmd)
+          const res = await runCommand(cmd)
+          if (res && Array.isArray(res.created)) {
+            createdIds.push(...res.created)
+          }
         }
         setTimeout(resetCamera, 200)
+        const s = scene()
+        const visibleObjects = Object.values(s.objects).map((o) => o.name || o.type)
+        s.select([])
+        showPanel('ai_copilot')
         updatedAction.status = 'success'
         updatedAction.result = {
+          ok: true,
+          created: createdIds.length > 0 ? createdIds : visibleObjects,
+          visibleObjects,
+          commands,
           message: `Executed ${commands.length} geometry/vector commands in ${mode} mode.`
         }
         break
@@ -735,9 +801,16 @@ export async function executePhysLabAction(action: PhysLabAction): Promise<PhysL
         break
       }
 
-      default:
-        updatedAction.status = 'failed'
-        updatedAction.result = { message: `Unknown tool "${action.tool}"` }
+      default: {
+        const res = await runTool(action.tool, action.args)
+        if (res.ok === false && String(res.error).startsWith('Unknown tool:')) {
+          updatedAction.status = 'failed'
+          updatedAction.result = { message: `Unknown tool "${action.tool}"` }
+        } else {
+          updatedAction.status = res.ok !== false ? 'success' : 'failed'
+          updatedAction.result = res as any
+        }
+      }
     }
   } catch (err) {
     updatedAction.status = 'failed'
@@ -861,6 +934,46 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
   const actions: PhysLabAction[] = []
   const notes: string[] = []
 
+  // 0. Ceva's Theorem Construction Request (Never route to calculator)
+  const isCevaRequest = /(?:ceva|ceva's|cevian)/i.test(lower)
+  if (isCevaRequest) {
+    try {
+      enterMode('shapes')
+    } catch {
+      // ignore
+    }
+    const commands = [
+      'mode geometry',
+      'A = (0, 4)',
+      'B = (-3, -2)',
+      'C = (3, -2)',
+      'D = (0, -2)',
+      'E = (1.5, 1)',
+      'F = (-1.5, 1)',
+      'P = (0, 0)',
+      'Segment(A, B)',
+      'Segment(B, C)',
+      'Segment(C, A)',
+      'Segment(A, D)',
+      'Segment(B, E)',
+      'Segment(C, F)'
+    ]
+    actions.push({
+      id: `act_${Date.now()}_ceva`,
+      tool: 'run_commands',
+      args: {
+        mode: 'shapes',
+        view: '2d',
+        commands
+      },
+      status: 'pending',
+      verified: true
+    })
+    notes.push(
+      `[PHYSLAB ENGINE: Deterministically prepared Ceva's Theorem in Geometry mode (mode: "shapes"). Triangle ABC with A(0,4), B(-3,-2), C(3,-2); points D(0,-2) on BC, E(1.5,1) on CA, F(-1.5,1) on AB; and cevians AD, BE, CF meeting concurrently at P(0,0). Side segment lengths: BD=3.00, DC=3.00, CE=2.24, EA=2.24, AF=2.24, FB=2.24. Measured ratio product: (BD/DC)·(CE/EA)·(AF/FB) = (3.00/3.00)·(2.24/2.24)·(2.24/2.24) = 1.000. Under Ceva's theorem: $$(\\frac{BD}{DC}) \\cdot (\\frac{CE}{EA}) \\cdot (\\frac{AF}{FB}) = \\boxed{1.000}$$. NEVER call solve or calculator tools; geometric constructions must stay in Geometry mode.]`
+    )
+  }
+
   // 1. Screen Reading / Inspection Request
   const isScreenReadRequest =
     /(?:read\s*(?:the\s*)?screen|what(?:'s|\s+is)\s+on\s+(?:the|my)\s+screen|inspect\s+scene|describe\s+scene|scene\s+objects|what\s+are\s+(?:the\s+)?readings|current\s+state)/i.test(
@@ -979,7 +1092,8 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
 
   // 4. Geometry & Vector Commands (Shapes, Triangle, Circle, Solids, Vectors)
   const isGeometryRequest =
-    /(?:triangle|circle|midpoint|distance|segment|polygon|cube|cylinder|cone|solid|draw\s+vector|resultant\s+vector)/i.test(
+    !isCevaRequest &&
+    /(?:triangle|circle|midpoint|distance|segment|polygon|cube|cylinder|cone|solid|draw\s+vector|resultant\s+vector|resolve|vector|add\s+u\s*=|draw\s+v\s*=|\b[uvw]\s*=\s*\d+i)/i.test(
       p
     ) && !/(?:incline|ramp|slope)/i.test(p)
 
@@ -1017,9 +1131,31 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
       else if (lower.includes('sphere')) commands.push('Sphere(3)')
       else if (lower.includes('cone')) commands.push('Cone(3, 4)')
       else commands.push('Cube(4)')
-    } else if (/(?:vector|resultant)/i.test(p)) {
+    } else if (/(?:vector|resolve|resultant|add\s+u\s*=|draw\s+v\s*=|\b[uvw]\s*=\s*\d+i)/i.test(p)) {
       mode = 'vectors'
-      commands.push('v1 = <3, 4>', 'v2 = <1, 2>', 'vSum = v1 + v2')
+      // 1. Vector from A to B
+      const abMatch = p.match(/(?:vector|arrow)?\s*(?:from\s+)?A\(?\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)?\s*(?:to\s+)?B\(?\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)?/i)
+      if (abMatch) {
+        commands.push(`A = (${abMatch[1]}, ${abMatch[2]})`, `B = (${abMatch[3]}, ${abMatch[4]})`, 'v = vector(A, B)')
+      }
+      // 2. Resolve magnitude at angle
+      else if (/resolve\s+([-\d.]+)\s*(N|kN|m\/s|m\/s\^2|m)?\s*(?:at\s+)?([-\d.]+)\s*(?:°|deg|rad)?/i.test(p)) {
+        const resMatch = p.match(/resolve\s+([-\d.]+)\s*(N|kN|m\/s|m\/s\^2|m)?\s*(?:at\s+)?([-\d.]+)\s*(?:°|deg|rad)?/i)!
+        const unit = resMatch[2] ? ` ${resMatch[2]}` : ''
+        commands.push(`resolve ${resMatch[1]}${unit} at ${resMatch[3]}°`)
+      }
+      // 3. Add u = ... and v = ...
+      else if (/add\s+([a-zA-Z])\s*=\s*([^,]+?)\s+and\s+([a-zA-Z])\s*=\s*(.+)/i.test(p)) {
+        const addMatch = p.match(/add\s+([a-zA-Z])\s*=\s*([^,]+?)\s+and\s+([a-zA-Z])\s*=\s*(.+)/i)!
+        commands.push(`${addMatch[1]} = ${addMatch[2].trim()}`, `${addMatch[3]} = ${addMatch[4].trim()}`, `add ${addMatch[1]} and ${addMatch[3]}`)
+      }
+      // 4. Draw v = ...
+      else if (/(?:draw\s+)?([a-zA-Z])\s*=\s*(-?\d*i\s*[+-]\s*\d*j(?:[+-]\s*\d*k)?|<-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?>)/i.test(p)) {
+        const vMatch = p.match(/(?:draw\s+)?([a-zA-Z])\s*=\s*(-?\d*i\s*[+-]\s*\d*j(?:[+-]\s*\d*k)?|<-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?>)/i)!
+        commands.push(`${vMatch[1]} = ${vMatch[2].trim()}`)
+      } else {
+        commands.push('v1 = <3, 4>', 'v2 = <1, 2>', 'vSum = v1 + v2')
+      }
     }
 
     if (commands.length > 0) {

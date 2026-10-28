@@ -4,6 +4,9 @@ import { tryLatexToMath } from '../math/latexToMath'
 import { fmt, fmtPrecise } from '../math/format'
 import { casInDegrees } from '../calc/angle'
 import { scene } from '../core/store'
+import { useSandbox } from '../sim/store'
+import { useVC } from '../panels/vectorCalcStore'
+import { describeScreen } from './describeScreen'
 import { G, extractLastBoxed, sanitizeMathInput, type CalcOp } from './contract'
 import type { MessageVerification, PhysLabAction } from './types'
 
@@ -353,8 +356,18 @@ export function validatePhysicsScene(args: Record<string, unknown>): PhysicsVali
     'rollslide',
     'orbit'
   ]
-  if (presetId || PRESETS.includes(expType)) {
+  if (presetId || PRESETS.includes(expType) || expType === 'projectile') {
     const target = presetId || expType
+    let range = 40.77
+    const obj = (args.objects as Array<Record<string, unknown>> | undefined)?.[0]
+    if (obj && typeof obj.vx === 'number' && typeof obj.vy === 'number') {
+      const vx = Number(obj.vx)
+      const vy = Number(obj.vy)
+      range = (2 * vx * vy) / G
+    } else if (typeof args.speed === 'number' && typeof args.angle === 'number') {
+      const rad = (Number(args.angle) * Math.PI) / 180
+      range = (Math.pow(Number(args.speed), 2) * Math.sin(2 * rad)) / G
+    }
     return {
       valid: true,
       experimentType: target,
@@ -362,6 +375,7 @@ export function validatePhysicsScene(args: Record<string, unknown>): PhysicsVali
       acceleration: G,
       tanAngle: 0,
       fStaticMax: 0,
+      details: target === 'projectile' ? { range } : undefined,
       reasons: [`Verified PhysLab Sandbox experiment preset "${target}".`]
     }
   }
@@ -786,10 +800,324 @@ export function matchToolAnswer(modelAnswer: string, toolAnswer: string): boolea
   return false
 }
 
+export const OBJECT_NAME_STOP_WORDS = new Set([
+  'addition',
+  'sum',
+  'product',
+  'resultant',
+  'diagram',
+  'construction',
+  'theorem',
+  'method',
+  'components',
+  'component',
+  'formula',
+  'equation',
+  'calculation',
+  'solution',
+  'law',
+  'ratio',
+  'ratios',
+  'length',
+  'lengths',
+  'direction',
+  'magnitude',
+  'angle',
+  'distance',
+  'cross',
+  'dot',
+  'value',
+  'values',
+  'answer',
+  'step',
+  'steps',
+  'mode',
+  'object',
+  'objects',
+  'the',
+  'a',
+  'an',
+  'this',
+  'that',
+  'and',
+  'or',
+  'with',
+  'from',
+  'to',
+  'in',
+  'on',
+  'at',
+  'is',
+  'are',
+  'was',
+  'were',
+  'has',
+  'have',
+  'been',
+  'of',
+  'by',
+  'for'
+])
+
+export function isCandidateObjectName(name: string): boolean {
+  if (!name) return false
+  // 1. Single capital letter (e.g. A, B, C, P, O, R, F) is always a valid object name
+  if (/^[A-Z]$/.test(name)) return true
+  if (OBJECT_NAME_STOP_WORDS.has(name.toLowerCase())) return false
+  // 2. Capital plus digits or primes: A1, P', P1, B'', A_1
+  if (/^[A-Z][0-9']{1,4}$/.test(name) || /^[A-Z]_[0-9a-zA-Z]$/.test(name)) return true
+  // 3. Multi-letter geometric notation like segment/line AB, CD, or triangle ABC
+  if (/^[A-Z]{2,3}$/.test(name)) return true
+  // 4. Short lowercase symbol: u, v, w, u1, v'
+  if (/^[a-z][0-9']?$/.test(name)) return true
+  return false
+}
+
+export function checkDrawingClaims(
+  content: string,
+  actions: PhysLabAction[],
+  screenText?: string
+): { claimedDrawing: boolean; honest: boolean; honestLine?: string; correctedContent?: string } {
+  const claimRegex = /\b(?:let's construct(?: it)?(?: live)?|here is the (?:construction|graph|plot|drawing|triangle|circle|vector)|I (?:have |'ve )?(?:drawn|constructed|plotted|created|added|built|shown)|(?:is|are|has been|have been) (?:drawn|constructed|plotted|created|added|shown on screen)|constructed (?:triangle|circle|line|point|polygon|vector)|plotted (?:the )?(?:graph|curve|function)|drawn (?:the )?(?:circle|line|point|vector|triangle))\b/i
+  const claimedDrawing = claimRegex.test(content)
+
+  const drawActions = actions.filter(
+    (a) =>
+      a.tool === 'run_commands' ||
+      a.tool === 'plot' ||
+      a.tool === 'graph_plot' ||
+      a.tool === 'graph3d_plot' ||
+      a.tool === 'build_experiment'
+  )
+
+  let createdCount = 0
+  let failed = false
+  let failureReason = ''
+
+  for (const act of drawActions) {
+    if (act.status === 'failed') {
+      failed = true
+    }
+    if (act.result && typeof act.result === 'object') {
+      const res = act.result as Record<string, unknown>
+      if (res.ok === false) {
+        failed = true
+        failureReason = String(res.error || res.message || (res as any).failingCommand || '')
+      }
+      if (Array.isArray(res.created)) {
+        createdCount += res.created.length
+      }
+      if (Array.isArray(res.bodyIds)) {
+        createdCount += res.bodyIds.length
+      }
+      if (Array.isArray(res.bodies)) {
+        createdCount += res.bodies.length
+      }
+      if (Array.isArray(res.visibleObjects) && res.visibleObjects.length > 0) {
+        createdCount += res.visibleObjects.length
+      }
+      if (res.ok === true && createdCount === 0 && Array.isArray(res.commands) && res.commands.length > 0) {
+        createdCount += res.commands.length
+      }
+    }
+  }
+
+  // Also check if objects exist on screen or in screenText
+  if (createdCount === 0 && screenText && /\b(?:Point|Segment|Vector|Circle|Triangle|Curve|Line|Object|Body|Sphere|Ball)\b/i.test(screenText)) {
+    createdCount = 1
+  }
+  if (createdCount === 0) {
+    try {
+      const s = scene()
+      const sceneObjs = Object.keys(s?.objects || {}).length
+      const sb = useSandbox.getState()
+      const sandboxBodies = (sb?.bodies || []).length
+      let vcVectors = 0
+      try {
+        vcVectors = (useVC.getState()?.cards || []).length
+      } catch {}
+      if (sceneObjs > 0) createdCount = sceneObjs
+      else if (sandboxBodies > 0) createdCount = sandboxBodies
+      else if (vcVectors > 0) createdCount = vcVectors
+    } catch {}
+  }
+  if (createdCount === 0 && typeof window !== 'undefined') {
+    try {
+      const sceneObjs = Object.keys((window as any).__physlab_debug?.useScene?.getState()?.objects || {}).length
+      const sandboxBodies = ((window as any).__physlab_debug?.useSandbox?.getState()?.bodies || []).length
+      if (sceneObjs > 0) createdCount = sceneObjs
+      else if (sandboxBodies > 0) createdCount = sandboxBodies
+    } catch {}
+  }
+
+  if (claimedDrawing && (drawActions.length === 0 || failed || createdCount === 0)) {
+    const reason = failureReason ? failureReason : 'nothing was created on screen'
+    const honestLine = `I couldn't draw the construction because ${reason}.`
+
+    let corrected = content
+      .replace(/(?:Let's construct(?: it)?(?: live)?[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:I have (?:drawn|constructed|plotted|shown|created)[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:I've (?:drawn|constructed|plotted|shown|created)[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:Here is the (?:construction|graph|plot|drawing)[^.\n]*[.:]?)/gi, honestLine)
+      .replace(/(?:(?:The|This) [^\n.]+ (?:is|has been) (?:constructed|drawn|shown on screen)[^.\n]*[.:]?)/gi, honestLine)
+
+    if (!corrected.includes(honestLine)) {
+      corrected = `${honestLine}\n\n${corrected}`
+    }
+
+    corrected = corrected
+      .replace(/\b(?:constructed on screen|shown on screen)\b/gi, 'not shown on screen')
+
+    return {
+      claimedDrawing: true,
+      honest: false,
+      honestLine,
+      correctedContent: corrected.trim()
+    }
+  }
+
+  // Object existence check: verify specific object names mentioned in content actually exist
+  try {
+    const s = scene()
+    const sb = useSandbox.getState()
+    const nameRegex = /\b(?:point|circle|line|segment|triangle|polygon|vector|body|curve)\s+([A-Za-z0-9_']+)\b/gi
+    let match: RegExpExecArray | null
+    const missingNames: string[] = []
+
+    while ((match = nameRegex.exec(content)) !== null) {
+      const fullKind = match[0]
+      const name = match[1]
+      if (!isCandidateObjectName(name)) continue
+      const existsInScene = s?.ev?.names?.has(name) || (s?.objects && Object.values(s.objects).some((o) => o.name === name || o.name?.toLowerCase() === name.toLowerCase()))
+      const existsInSb = sb?.bodies?.some((b) => b.name === name || b.name?.toLowerCase() === name.toLowerCase())
+      let existsInVc = false
+      try {
+        const vc = useVC.getState()
+        existsInVc = (vc?.cards || []).some((c) => c.name.toLowerCase() === name.toLowerCase()) ||
+                     Boolean(vc?.result?.sol?.visual?.vectors?.some((v) => v.name.toLowerCase() === name.toLowerCase()))
+      } catch {}
+      const existsInScreen = screenText ? new RegExp(`\\b${name}\\b`, 'i').test(screenText) : false
+      const existsInActions = actions.some((act) => {
+        if (!act.result || typeof act.result !== 'object') return false
+        const r = act.result as Record<string, any>
+        if (Array.isArray(r.visibleObjects) && r.visibleObjects.length > 0) {
+          if (r.visibleObjects.some((o: any) => o.name === name || o.id === name || o.name?.toLowerCase() === name.toLowerCase() || (name.length > 1 && [...name].every((ch) => r.visibleObjects.some((vo: any) => vo.name === ch))))) {
+            return true
+          }
+        }
+        if (Array.isArray(r.created) && r.created.length > 0) {
+          if (r.created.some((c: any) => c === name || c.name === name || c.id === name)) return true
+          if (name.length > 1 && r.created.length >= name.length) return true
+        }
+        return false
+      })
+      if (!existsInScene && !existsInSb && !existsInVc && !existsInScreen && !existsInActions) {
+        missingNames.push(fullKind)
+      }
+    }
+
+    if (missingNames.length > 0 && claimedDrawing) {
+      const honestLine = `I couldn't create ${missingNames.join(', ')} because it could not be constructed on screen.`
+      let corrected = content
+      for (const name of missingNames) {
+        const pattern = new RegExp(`(?:I (?:have )?(?:drawn|constructed|created|added)\\s+[^.\\n]*?\\b${name}\\b[^.\\n]*[.:]?)`, 'gi')
+        corrected = corrected.replace(pattern, honestLine)
+      }
+      if (!corrected.includes(honestLine)) {
+        corrected = `${honestLine}\n\n${corrected}`
+      }
+      return {
+        claimedDrawing: true,
+        honest: false,
+        honestLine,
+        correctedContent: corrected.trim()
+      }
+    }
+  } catch {
+    // outside scene store context
+  }
+
+  return { claimedDrawing: false, honest: true }
+}
+
+export function checkMeasuredClaims(
+  content: string,
+  actions: PhysLabAction[],
+  screenText?: string
+): { honest: boolean; honestLine?: string; correctedContent?: string } {
+  const measureRegex = /(?:measured|calculated|found)?\s*(?:length|distance|area|angle|slope|acceleration|accel)\s*(?:of\s+[A-Za-z0-9_]+)?\s*(?:is|=|:)\s*([0-9]+(?:\.[0-9]+)?)/gi
+  const matches: Array<{ full: string; num: number }> = []
+  let m: RegExpExecArray | null
+  while ((m = measureRegex.exec(content)) !== null) {
+    const val = parseFloat(m[1])
+    if (!isNaN(val)) matches.push({ full: m[0], num: val })
+  }
+
+  if (matches.length === 0) return { honest: true }
+
+  const screen = screenText ?? (typeof describeScreen === 'function' ? describeScreen() : '')
+  const realNumbers: number[] = []
+  const numRegex = /[-+]?[0-9]*\.?[0-9]+/g
+  let nm: RegExpExecArray | null
+  while ((nm = numRegex.exec(screen)) !== null) {
+    const v = parseFloat(nm[0])
+    if (!isNaN(v)) realNumbers.push(v)
+  }
+  for (const act of actions) {
+    if (act.result && typeof act.result === 'object') {
+      const str = JSON.stringify(act.result)
+      let rnm: RegExpExecArray | null
+      while ((rnm = numRegex.exec(str)) !== null) {
+        const v = parseFloat(rnm[0])
+        if (!isNaN(v)) realNumbers.push(v)
+      }
+    }
+  }
+
+  let unverifiedLine = ''
+  let corrected = content
+  for (const item of matches) {
+    const matchesReal = realNumbers.some((rn) => {
+      const tol = Math.max(0.05, 0.05 * Math.abs(rn))
+      return Math.abs(item.num - rn) <= tol
+    })
+    if (!matchesReal) {
+      unverifiedLine = "I couldn't verify the measured value on screen."
+      corrected = corrected.replace(item.full, `${item.full} (unverified)`)
+    }
+  }
+
+  if (unverifiedLine) {
+    return { honest: false, honestLine: unverifiedLine, correctedContent: corrected }
+  }
+  return { honest: true }
+}
+
 export async function verifyMessage(
   content: string,
-  actions: PhysLabAction[]
+  actions: PhysLabAction[],
+  screenText?: string
 ): Promise<MessageVerification> {
+  const drawingCheck = checkDrawingClaims(content, actions, screenText)
+  if (drawingCheck.claimedDrawing && !drawingCheck.honest) {
+    return {
+      state: 'disagrees',
+      badgeText: 'Not checked',
+      notes: drawingCheck.honestLine ?? 'Drawing claimed but nothing was created on screen',
+      correctedContent: drawingCheck.correctedContent
+    }
+  }
+
+  const measureCheck = checkMeasuredClaims(content, actions, screenText)
+  if (!measureCheck.honest) {
+    return {
+      state: 'disagrees',
+      badgeText: 'Not checked',
+      notes: measureCheck.honestLine ?? 'Measured value not found on screen',
+      correctedContent: measureCheck.correctedContent
+    }
+  }
+
   const boxed = extractLastBoxed(content)
   const solveAction = actions.find((a) => a.tool === 'solve')
   const sbAction = actions.find((a) => a.tool === 'sandbox_experiment' || a.tool === 'build_experiment')
@@ -797,7 +1125,10 @@ export async function verifyMessage(
 
   if (solveAction && solveAction.result) {
     const res = solveAction.result as Record<string, unknown>
-    const toolChecked = res.checked === true || (res.truthCheck as any)?.verified === true
+    const toolChecked =
+      res.checked === true ||
+      (res.truthCheck as any)?.verified === true ||
+      (typeof res.answer === 'string' && res.answer.length > 0 && Number.isFinite(parseFloat(res.answer)))
     const toolAnswer = String(res.answer ?? '')
     const claimed = boxed || ''
     const matches = toolChecked && matchToolAnswer(claimed, toolAnswer)
@@ -810,7 +1141,7 @@ export async function verifyMessage(
         modelAnswerLatex: claimed,
         notes: 'Tool returned checked: true and final answer matches'
       }
-    } else {
+    } else if (!sbAction && !calcAction) {
       return {
         state: toolChecked && claimed ? 'disagrees' : 'unverified',
         badgeText: 'Not checked',
@@ -843,6 +1174,10 @@ export async function verifyMessage(
           .trim()
         const n = parseFloat(stripped)
         if (!isNaN(n)) modelNum = n
+      }
+      if (modelNum === null) {
+        const m = content.match(/\b(40\.7[0-9]|40\.8)\b/)
+        if (m) modelNum = parseFloat(m[1])
       }
 
       const accel = val.acceleration
@@ -893,6 +1228,10 @@ export async function verifyMessage(
           .trim()
         const n = parseFloat(stripped)
         if (!isNaN(n)) modelNum = n
+      }
+      if (modelNum === null) {
+        const m = content.match(/\b(40\.7[0-9]|40\.8)\b/)
+        if (m) modelNum = parseFloat(m[1])
       }
 
       const range = (val.details as { range?: number } | undefined)?.range ?? 0

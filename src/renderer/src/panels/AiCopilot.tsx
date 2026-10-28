@@ -18,25 +18,64 @@ import {
   Eye,
   EyeOff,
   Square,
-  Cpu
+  MoreHorizontal,
+  RotateCcw,
+  ArrowLeft
 } from 'lucide-react'
 import { useAiStore } from '../ai/store'
 import {
   abortActiveStream,
-  autoConnectLocalBrain,
-  fetchAvailableModels,
   streamChatCompletion,
-  testAiConnection,
   transcribeDiagram
 } from '../ai/client'
 import { executePhysLabAction, extractThinkTrace, getBrainStageText } from '../ai/bridge'
 import { stripIncompleteActionBlocks } from '../ai/contract'
 import { runTool } from '../ai/tools'
 import { verifyMessage } from '../ai/truthCheck'
-import { MarkdownView } from './ai/MarkdownView'
+import { AI_PROVIDER_PRESETS, type AiProviderPreset } from '../ai/presets'
+import { MarkdownView, stripPlanningNotesAndDuplicates } from './ai/MarkdownView'
 import { MindMapView } from './ai/MindMapView'
 import { hidePanel } from '../app/panels'
-import type { Attachment, MindMapNode } from '../ai/types'
+import { runHistory } from '../app/undoRoute'
+import { useApp } from '../app/modes'
+import type { Attachment, MindMapNode, PhysLabAction } from '../ai/types'
+
+function formatActionChip(act: PhysLabAction): string {
+  if (act.tool === 'geometry_create') {
+    const kind = act.args?.kind || 'object'
+    const name = act.args?.name || ''
+    return `+ ${kind} ${name}`.trim()
+  }
+  if (act.tool === 'remove') {
+    return `− ${act.args?.target || act.args?.name || 'object'}`
+  }
+  if (act.tool === 'plot' || act.tool === 'graph_plot') {
+    return `plot ${act.args?.expression || act.args?.equation || 'f(x)'}`
+  }
+  if (act.tool === 'graph3d_plot') {
+    return `plot 3D ${act.args?.expression || act.args?.equation || 'z(x,y)'}`
+  }
+  if (act.tool === 'build_experiment') {
+    const objs = Array.isArray(act.args?.objects) ? act.args.objects : []
+    if (objs.length === 1) return `+ ${objs[0]?.kind || 'object'}`
+    if (objs.length > 1) return `+ ${objs.length} objects`
+    return `+ experiment`
+  }
+  if (act.tool === 'sandbox_experiment' || act.tool === 'load_experiment') {
+    return `+ ${act.args?.id || act.args?.presetId || act.args?.experimentType || 'experiment'}`
+  }
+  if (act.tool === 'calc_solve' || act.tool === 'solve') {
+    const inp = String(act.args?.input || act.args?.expression || '').trim()
+    return `solve ${inp}`.trim()
+  }
+  if (act.tool === 'set_speed') {
+    return `speed ${act.args?.factor}x`
+  }
+  if (act.tool === 'set_param') {
+    return `${act.args?.name || 'param'} = ${act.args?.value ?? ''}`
+  }
+  return act.tool.replace(/_/g, ' ')
+}
 
 type TabId = 'chat' | 'mindmap' | 'goals' | 'settings'
 
@@ -51,32 +90,164 @@ export function AiCopilot() {
   const [transcribing, setTranscribing] = useState(false)
   const [transcribedText, setTranscribedText] = useState<string | null>(null)
   const [transcribeError, setTranscribeError] = useState<string | null>(null)
-  const [verifyMsg, setVerifyMsg] = useState<{ ok: boolean; message: string } | null>(null)
-  const [isVerifying, setIsVerifying] = useState(false)
   const [showKeyText, setShowKeyText] = useState(false)
-  const [isFetchingModels, setIsFetchingModels] = useState(false)
-  const [modelFetchMsg, setModelFetchMsg] = useState<string | null>(null)
-  const [isAutoConnecting, setIsAutoConnecting] = useState(false)
-  const [autoConnectResult, setAutoConnectResult] = useState<{
-    ok: boolean
-    message: string
-  } | null>(null)
 
   // Goal keeper form state
   const [newGoalTitle, setNewGoalTitle] = useState('')
   const [newGoalTarget, setNewGoalTarget] = useState(3)
+  const [menuOpen, setMenuOpen] = useState(false)
 
+  const menuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleOutsideClick)
+    return () => window.removeEventListener('mousedown', handleOutsideClick)
+  }, [menuOpen])
+
   // Store bindings
   const provider = useAiStore((s) => s.provider)
+  const mainProvider = useAiStore((s) => s.mainProvider)
+  const fallbackProvider = useAiStore((s) => s.fallbackProvider)
+  const providerModels = useAiStore((s) => s.providerModels)
+  const providerBaseUrls = useAiStore((s) => s.providerBaseUrls)
+  const availableProviderModels = useAiStore((s) => s.availableProviderModels)
+  const presetsFromStore = useAiStore((s) => s.presets)
+
   const geminiApiKey = useAiStore((s) => s.geminiApiKey)
   const geminiModel = useAiStore((s) => s.geminiModel)
-  const localEndpoint = useAiStore((s) => s.localEndpoint)
-  const localModel = useAiStore((s) => s.localModel)
+  const azureDeployment = useAiStore((s) => s.azureDeployment)
   const autoExecuteActions = useAiStore((s) => s.autoExecuteActions)
-  const availableGeminiModels = useAiStore((s) => s.availableGeminiModels)
+  const thinking = useAiStore((s) => s.thinking)
+
+  const presets: readonly AiProviderPreset[] =
+    presetsFromStore && presetsFromStore.length > 0 ? presetsFromStore : AI_PROVIDER_PRESETS
+
+  const [selectedConfigProvider, setSelectedConfigProvider] = useState<string>(
+    mainProvider || provider || 'gemini'
+  )
+  const [keyInput, setKeyInput] = useState<string>('')
+  const [keySavedBadge, setKeySavedBadge] = useState<boolean>(false)
+  const [hasKeyMap, setHasKeyMap] = useState<Record<string, boolean>>({})
+  const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false)
+  const [testConnResult, setTestConnResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [isLoadingRemoteModels, setIsLoadingRemoteModels] = useState<boolean>(false)
+  const [loadModelsStatus, setLoadModelsStatus] = useState<string | null>(null)
+
+  const [hasMainKey, setHasMainKey] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.physlab?.ai?.hasKey) {
+      window.physlab.ai.hasKey().then(setHasMainKey).catch(() => setHasMainKey(false))
+      for (const p of presets) {
+        window.physlab.ai.hasKey(p.id).then((hk) => {
+          setHasKeyMap((prev) => ({ ...prev, [p.id]: hk }))
+        }).catch(() => {})
+      }
+    }
+  }, [provider, mainProvider, presets])
+
+  const activePreset = presets.find((p) => p.id === (mainProvider || provider))
+  const activeModelName =
+    providerModels[mainProvider || provider] ||
+    (mainProvider === 'azure' ? (azureDeployment || 'gpt-5.4') : mainProvider === 'gemini' ? (geminiModel || 'gemini-2.5-flash') : activePreset?.model) ||
+    'gemini-2.5-flash'
+
+  const currentPreset = presets.find((p) => p.id === selectedConfigProvider) || presets[0]
+  const currentBaseUrl =
+    providerBaseUrls[currentPreset.id] !== undefined
+      ? providerBaseUrls[currentPreset.id]
+      : currentPreset.baseUrl
+  const currentModel =
+    providerModels[currentPreset.id] !== undefined
+      ? providerModels[currentPreset.id]
+      : (currentPreset.id === 'azure' ? azureDeployment : currentPreset.id === 'gemini' ? geminiModel : currentPreset.model)
+  const currentAvailableModels =
+    availableProviderModels[currentPreset.id] && availableProviderModels[currentPreset.id].length > 0
+      ? availableProviderModels[currentPreset.id]
+      : currentPreset.suggestedModels
+  const currentHasKey = hasKeyMap[currentPreset.id] ?? false
+
+  const handleSelectConfigProvider = (id: string) => {
+    setSelectedConfigProvider(id)
+    setKeyInput('')
+    setKeySavedBadge(false)
+    setTestConnResult(null)
+    setLoadModelsStatus(null)
+    const preset = presets.find((p) => p.id === id)
+    if (preset) {
+      if (providerBaseUrls[id] === undefined && preset.baseUrl) {
+        useAiStore.getState().setProviderBaseUrl(id, preset.baseUrl)
+      }
+      if (providerModels[id] === undefined && preset.model) {
+        useAiStore.getState().setProviderModel(id, preset.model)
+      }
+    }
+  }
+
+  const handleSaveCurrentKey = async () => {
+    if (!keyInput.trim()) return
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setKey) {
+      await window.physlab.ai.setKey(currentPreset.id, keyInput.trim())
+      setKeyInput('')
+      setKeySavedBadge(true)
+      setHasKeyMap((prev) => ({ ...prev, [currentPreset.id]: true }))
+      setTimeout(() => setKeySavedBadge(false), 5000)
+    }
+  }
+
+  const handleRemoveCurrentKey = async () => {
+    if (typeof window !== 'undefined' && window.physlab?.ai?.removeKey) {
+      await window.physlab.ai.removeKey(currentPreset.id)
+      setHasKeyMap((prev) => ({ ...prev, [currentPreset.id]: false }))
+      setKeySavedBadge(false)
+    }
+  }
+
+  const handleTestCurrentConnection = async () => {
+    setIsTestingConnection(true)
+    setTestConnResult(null)
+    try {
+      if (typeof window !== 'undefined' && window.physlab?.ai?.testConnection) {
+        const res = await window.physlab.ai.testConnection(currentPreset.id)
+        if (res.ok) {
+          setTestConnResult({ ok: true, message: res.message || 'Connection works!' })
+        } else {
+          setTestConnResult({ ok: false, message: res.error || 'Connection failed' })
+        }
+      }
+    } catch (err) {
+      setTestConnResult({ ok: false, message: String(err) })
+    } finally {
+      setIsTestingConnection(false)
+    }
+  }
+
+  const handleLoadRemoteModels = async () => {
+    setIsLoadingRemoteModels(true)
+    setLoadModelsStatus(null)
+    try {
+      if (typeof window !== 'undefined' && window.physlab?.ai?.listRemoteModels) {
+        const res = await window.physlab.ai.listRemoteModels(currentPreset.id)
+        if (res.ok && res.models && res.models.length > 0) {
+          useAiStore.getState().setAvailableProviderModels(currentPreset.id, res.models)
+          setLoadModelsStatus(`Loaded ${res.models.length} model(s)`)
+        } else {
+          setLoadModelsStatus(res.error || 'No models returned from server')
+        }
+      }
+    } catch (err) {
+      setLoadModelsStatus(String(err))
+    } finally {
+      setIsLoadingRemoteModels(false)
+    }
+  }
 
   const threads = useAiStore((s) => s.threads)
   const activeThreadId = useAiStore((s) => s.activeThreadId)
@@ -179,7 +350,7 @@ export function AiCopilot() {
         },
         onDone: async ({ content, think, actions, agentTraces, model }) => {
           for (const act of actions) {
-            if (!act.result && (act.tool === 'solve' || act.tool === 'calc_solve')) {
+            if (!act.result && (act.tool === 'solve' || act.tool === 'calc_solve' || act.tool === 'run_commands' || act.tool === 'build_experiment')) {
               try {
                 act.result = await runTool(act.tool, act.args)
               } catch {
@@ -188,8 +359,9 @@ export function AiCopilot() {
             }
           }
           const verification = await verifyMessage(content, actions)
+          const finalContent = stripPlanningNotesAndDuplicates(verification.correctedContent ?? content)
           useAiStore.getState().updateMessage(botMsg.id, {
-            content,
+            content: finalContent,
             think,
             actions,
             agentTraces,
@@ -202,8 +374,9 @@ export function AiCopilot() {
           // Auto-execute if enabled and engine did not disagree
           const { autoExecuteActions } = useAiStore.getState()
           if (autoExecuteActions && verification.state !== 'disagrees') {
-            for (const act of actions) {
-              void executePhysLabAction(act).then((updatedAct) => {
+            void (async () => {
+              for (const act of actions) {
+                const updatedAct = await executePhysLabAction(act)
                 const thread = useAiStore
                   .getState()
                   .threads.find((t) => t.id === useAiStore.getState().activeThreadId)
@@ -214,8 +387,8 @@ export function AiCopilot() {
                   )
                   useAiStore.getState().updateMessage(botMsg.id, { actions: updatedActions })
                 }
-              })
-            }
+              }
+            })()
           }
         },
         onError: (err) => {
@@ -247,31 +420,6 @@ export function AiCopilot() {
     handleSend(prompt)
   }
 
-  const handleVerify = async () => {
-    setIsVerifying(true)
-    setVerifyMsg(null)
-    const result = await testAiConnection()
-    setVerifyMsg(result)
-    setIsVerifying(false)
-  }
-
-  const handleFetchModels = async () => {
-    setIsFetchingModels(true)
-    setModelFetchMsg(null)
-    const result = await fetchAvailableModels()
-    setIsFetchingModels(false)
-    if (result.message) {
-      setModelFetchMsg(result.message)
-    }
-  }
-
-  const handleAutoConnectLocal = async () => {
-    setIsAutoConnecting(true)
-    setAutoConnectResult(null)
-    const result = await autoConnectLocalBrain()
-    setAutoConnectResult(result)
-    setIsAutoConnecting(false)
-  }
 
   const handleAddGoal = () => {
     if (!newGoalTitle.trim()) return
@@ -284,157 +432,187 @@ export function AiCopilot() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-0 text-ink select-none overflow-hidden font-ui">
-      {/* 1. Header & Navigation Tabs (Minimal & Calm) */}
-      <div className="flex flex-col border-b border-line bg-surface-1">
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Brain size={18} className="text-accent" />
-            <span className="font-semibold text-small text-ink-strong">AI Tutor</span>
+    <div className="ai-panel-wrapper font-ui select-none">
+      <div className="ai-panel-card text-ink overflow-hidden relative">
+        {/* 1. Header (Calm & Minimal: Title, Model, New Chat, "⋯" Menu, Close) */}
+        <div className="relative z-20 flex items-center justify-between px-3.5 py-2.5 border-b border-line/50 bg-surface-1/60 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {activeTab !== 'chat' ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab('chat')}
+                className="flex items-center gap-1 text-fine text-ai-accent hover:underline cursor-pointer"
+                title="Back to Chat"
+              >
+                <ArrowLeft size={14} />
+                <span>Chat</span>
+              </button>
+            ) : (
+              <>
+                <Sparkles size={16} className="text-ai-accent shrink-0" />
+                <span className="font-semibold text-small text-ink-strong">AI Tutor</span>
+                <span className="text-fine text-ink-faint font-mono truncate max-w-[120px]">
+                  {activeModelName}
+                </span>
+              </>
+            )}
+            {activeTab !== 'chat' && (
+              <span className="font-semibold text-small text-ink-strong capitalize">
+                {activeTab === 'mindmap' ? 'Mind Map' : activeTab === 'goals' ? 'Student Goals' : 'Settings'}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 relative" ref={menuRef}>
             <button
               type="button"
               title="New Chat"
               onClick={() => {
                 useAiStore.getState().createThread()
                 setActiveTab('chat')
+                setMenuOpen(false)
               }}
-              className="p-1 rounded text-ink-dim hover:text-ink hover:bg-surface-2 cursor-pointer transition-colors"
+              className="p-1.5 rounded-full text-ink-dim hover:text-ink hover:bg-surface-2 cursor-pointer transition-colors"
             >
-              <Plus size={16} />
+              <Plus size={15} />
             </button>
             <button
               type="button"
-              title="Settings"
-              onClick={() => setActiveTab(activeTab === 'settings' ? 'chat' : 'settings')}
-              className={`p-1 rounded cursor-pointer transition-colors ${
-                activeTab === 'settings'
-                  ? 'text-accent bg-surface-2'
-                  : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+              title="More options"
+              onClick={() => setMenuOpen((v) => !v)}
+              className={`p-1.5 rounded-full cursor-pointer transition-colors ${
+                menuOpen ? 'text-ai-accent bg-surface-2' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
               }`}
             >
-              <Settings2 size={16} />
+              <MoreHorizontal size={15} />
             </button>
             <button
               type="button"
               title="Close AI Tutor"
               onClick={() => hidePanel('ai_copilot')}
-              className="p-1 rounded text-ink-dim hover:text-bad hover:bg-surface-2 cursor-pointer transition-colors"
+              className="p-1.5 rounded-full text-ink-dim hover:text-bad hover:bg-surface-2 cursor-pointer transition-colors"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
-          </div>
-        </div>
 
-        {/* 4 Clean Tabs */}
-        <div className="flex items-center px-2 gap-1 border-t border-line text-fine">
-          <TabButton
-            active={activeTab === 'chat'}
-            icon={<MessageSquare size={13} />}
-            label="Chat"
-            onClick={() => setActiveTab('chat')}
-          />
-          <TabButton
-            active={activeTab === 'mindmap'}
-            icon={<Network size={13} />}
-            label="Mind Map"
-            onClick={() => setActiveTab('mindmap')}
-          />
-          <TabButton
-            active={activeTab === 'goals'}
-            icon={<Target size={13} />}
-            label="Goals"
-            onClick={() => setActiveTab('goals')}
-          />
-          <TabButton
-            active={activeTab === 'settings'}
-            icon={<Settings2 size={13} />}
-            label="Settings"
-            onClick={() => setActiveTab('settings')}
-          />
-        </div>
-      </div>
-
-      {/* 2. Main Tab Content */}
-      <div className="flex-1 overflow-hidden relative">
-        {/* TAB 1: CHAT */}
-        {activeTab === 'chat' && (
-          <div className="flex flex-col h-full">
-            {/* Missing Key Notification in Chat */}
-            {provider === 'gemini' && !geminiApiKey.trim() && (
-              <div className="m-3 p-3 rounded-lg border border-line bg-surface-1 flex items-center justify-between gap-3 text-small">
-                <div className="flex items-center gap-2 text-ink-dim">
-                  <Sparkles size={16} className="text-accent shrink-0" />
-                  <span>Please paste your Google Gemini API key to start chatting.</span>
-                </div>
+            {/* "⋯" Dropdown Menu */}
+            {menuOpen && (
+              <div className="absolute right-0 top-8 z-50 min-w-[170px] rounded-xl bg-surface-1 border border-line shadow-lg p-1.5 flex flex-col gap-0.5 text-small">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('settings')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer shrink-0"
+                  onClick={() => {
+                    setActiveTab('chat')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'chat' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
                 >
-                  <Settings2 size={13} />
-                  <span>Open Settings</span>
+                  <MessageSquare size={14} className="text-ai-accent" />
+                  <span>Chat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('mindmap')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'mindmap' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Network size={14} />
+                  <span>Mind Map</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('goals')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'goals' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Target size={14} />
+                  <span>Goals &amp; Memory</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('settings')
+                    setMenuOpen(false)
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                    activeTab === 'settings' ? 'bg-surface-2 text-ink-strong font-medium' : 'text-ink-dim hover:text-ink hover:bg-surface-2'
+                  }`}
+                >
+                  <Settings2 size={14} />
+                  <span>AI Provider Settings</span>
                 </button>
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 select-text">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center text-ink-dim gap-3 my-auto">
-                  <div className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center">
-                    <Sparkles size={20} className="text-accent" />
+        {/* 2. Main Tab Content */}
+        <div className="flex-1 overflow-hidden relative">
+          {/* TAB 1: CHAT */}
+          {activeTab === 'chat' && (
+            <div className="flex flex-col h-full">
+              {/* Missing Key Notification in Chat */}
+              {provider !== 'local' && !geminiApiKey.trim() && hasMainKey === false && (
+                <div className="m-3 p-3 rounded-xl border border-line bg-surface-1 flex items-center justify-between gap-3 text-small">
+                  <div className="flex items-center gap-2 text-ink-dim">
+                    <Sparkles size={16} className="text-ai-accent shrink-0" />
+                    <span>Please configure an AI API key in Settings to start chatting.</span>
                   </div>
-                  <div className="flex flex-col gap-1 max-w-xs">
-                    <span className="font-semibold text-body text-ink">PhysLab-Brain Ultimatrix</span>
-                    <span className="text-small text-ink-faint">
-                      Ask physics or math questions, drop photos of diagrams, or run an Ultimatrix test:
-                    </span>
-                  </div>
-
-                  {/* Quick-Prompt Chips */}
-                  <div className="flex flex-col gap-1.5 w-full max-w-xs mt-2">
-                    <QuickChip
-                      title="Test Quotient Cancellation Derivative"
-                      subtitle="Tests hidden (sqrt(x)-b) factor cancellation & 3-way check"
-                      onClick={() =>
-                        runQuickTest(
-                          'Differentiate f(x) = (sqrt(x+a)*(x^(3/2) - b^3))/(sqrt(x) - b). Factor and cancel all hidden algebraic terms first!'
-                        )
-                      }
-                    />
-                    <QuickChip
-                      title="Test 28° Incline Static Friction Trap"
-                      subtitle="Checks static threshold mu_s=0.6 vs kinetic sliding in 3D Sandbox"
-                      onClick={() =>
-                        runQuickTest(
-                          'A 2 kg crate rests on a 28° incline with static friction mu_s = 0.6 and kinetic friction mu_k = 0.4. Does it slide? Check the static friction threshold, derive acceleration, and build the 3D sandbox experiment!'
-                        )
-                      }
-                    />
-                    <QuickChip
-                      title="Build Calculus & Mechanics Mind Map"
-                      subtitle="Generates Obsidian concept graph connecting rules & traps"
-                      onClick={() =>
-                        runQuickTest(
-                          'Build an interactive Obsidian-style concept mind map connecting Incline Mechanics, Static Friction Trap, Kinetic Sliding, and Quotient Rule Cancellations.'
-                        )
-                      }
-                    />
-                    <QuickChip
-                      title="Plot 3D Ripple Surface"
-                      subtitle="3D Graphing mode: radial waves & ripple surface"
-                      onClick={() =>
-                        runQuickTest(
-                          'Plot a beautiful 3D ripple surface z = sin(sqrt(x^2 + y^2)) in 3D Graphing mode and explain how radial waves work.'
-                        )
-                      }
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('settings')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-ai-accent text-on-accent text-fine font-medium hover:opacity-90 cursor-pointer shrink-0 transition-opacity"
+                  >
+                    <Settings2 size={13} />
+                    <span>Open Settings</span>
+                  </button>
                 </div>
-              ) : (
+              )}
+
+              {/* Messages Scroll Area */}
+              <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3.5 select-text">
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center text-ink-dim gap-3 my-auto px-2">
+                    <div className="w-11 h-11 rounded-full bg-ai-surface border border-ai-border flex items-center justify-center shadow-sm">
+                      <Sparkles size={20} className="text-ai-accent" />
+                    </div>
+                    <div className="flex flex-col gap-1 max-w-xs">
+                      <span className="font-semibold text-lead text-ink-strong">PhysLab AI Tutor</span>
+                      <span className="text-small text-ink-faint">
+                        Ask anything about physics and maths, or try one of these:
+                      </span>
+                    </div>
+
+                    {/* Quick-Prompt Chips */}
+                    <div className="flex flex-col gap-2 w-full max-w-xs mt-3">
+                      {[
+                        "Construct Ceva's theorem",
+                        "Build an Atwood machine",
+                        "Plot y = sin x and find its roots",
+                        "Resolve a 50 N force at 30°"
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => runQuickTest(prompt)}
+                          className="px-3.5 py-2 rounded-xl border border-line bg-surface-1 hover:bg-surface-2 text-ink text-small text-left cursor-pointer transition-all hover:border-ai-border shadow-sm flex items-center justify-between group"
+                        >
+                          <span className="font-medium text-ink-strong">{prompt}</span>
+                          <Sparkles size={12} className="text-ink-faint group-hover:text-ai-accent transition-colors shrink-0 ml-1.5" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
                 messages.map((m, idx) => {
                   const isLastAssistantMessage = m.role === 'assistant' && idx === messages.length - 1
                   const isCurrentlyStreaming = isStreaming && isLastAssistantMessage
@@ -443,7 +621,7 @@ export function AiCopilot() {
                     <div
                       key={m.id}
                       ref={isLastAssistantMessage ? lastBotMsgRef : undefined}
-                      className={`flex flex-col gap-1 ${
+                      className={`ai-message-enter flex flex-col gap-1.5 ${
                         m.role === 'user' ? 'items-end' : 'items-start w-full'
                       }`}
                     >
@@ -455,35 +633,42 @@ export function AiCopilot() {
                               key={att.id}
                               src={att.dataUrl}
                               alt="Attachment"
-                              className="max-h-28 rounded border border-line object-contain bg-surface-1"
+                              className="max-h-28 rounded-xl border border-line object-contain bg-surface-1"
                             />
                           ))}
                         </div>
                       )}
 
-                      <div
-                        className={`max-w-[95%] rounded-lg p-2.5 ${
-                          m.role === 'user'
-                            ? 'bg-accent text-on-accent text-body'
-                            : 'bg-surface-1 border border-line text-ink w-full'
-                        }`}
-                      >
-                        {m.role === 'user' ? (
+                      {m.role === 'user' ? (
+                        <div className="ai-bubble-user p-3 max-w-[85%] text-body select-text">
                           <div className="whitespace-pre-wrap">{m.content}</div>
-                        ) : (
-                          <>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2.5 w-full">
+                          <div className="mt-2.5 shrink-0">
+                            <div className="ai-avatar-dot" title="PhysLab AI" />
+                          </div>
+                          <div className="ai-bubble-bot p-3.5 flex-1 min-w-0 select-text flex flex-col gap-2.5">
                             {/* Message Header with Model Tag */}
                             {m.model && !isCurrentlyStreaming && (
-                              <div className="flex items-center justify-end gap-2 mb-1.5 pb-1 border-b border-line text-fine">
+                              <div className="flex items-center justify-end pb-1 border-b border-line/40 text-fine">
                                 <span className="text-fine text-ink-faint font-mono">{m.model}</span>
                               </div>
                             )}
 
-                            {/* Small grey tool progress lines during streaming */}
+                            {/* Small tool progress / shimmer during streaming */}
                             {isCurrentlyStreaming && (
-                              <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-surface-2 border border-line text-fine text-ink-dim font-mono mb-2">
-                                <Sparkles size={12} className="text-accent animate-pulse shrink-0" />
-                                <span>{m.content.startsWith('Running') || m.content.startsWith('Solving') || m.content.startsWith('Loading') || m.content.startsWith('Simulating') || m.content.startsWith('Plotting') ? m.content : getBrainStageText(m.content, true)}</span>
+                              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-2/60 border border-line/50 text-fine text-ink-dim font-mono mb-1">
+                                <Sparkles size={13} className="text-ai-accent ai-thinking-shimmer shrink-0" />
+                                <span>
+                                  {m.content.startsWith('Running') ||
+                                  m.content.startsWith('Solving') ||
+                                  m.content.startsWith('Loading') ||
+                                  m.content.startsWith('Simulating') ||
+                                  m.content.startsWith('Plotting')
+                                    ? m.content
+                                    : getBrainStageText(m.content, true)}
+                                </span>
                               </div>
                             )}
 
@@ -517,38 +702,64 @@ export function AiCopilot() {
                                 .find((prev) => prev.role === 'user')?.content
 
                               return (
-                                <MarkdownView
-                                  content={
-                                    isCurrentlyStreaming
-                                      ? stripIncompleteActionBlocks(
-                                          streamingTrace?.cleanContent || m.content
-                                        )
-                                      : m.content
-                                  }
-                                  studentPrompt={studentPrompt}
-                                  think={m.think ?? streamingTrace?.think}
-                                  agentTraces={m.agentTraces ?? streamingTrace?.agentTraces}
-                                  actions={m.actions}
-                                  verified={m.verified}
-                                  verification={m.verification}
-                                  onActionExecuted={(updated) => {
-                                    useAiStore.getState().updateMessage(m.id, {
-                                      actions: m.actions?.map((a) => (a.id === updated.id ? updated : a))
-                                    })
-                                  }}
-                                  onChallengeClick={(prompt) => handleSend(prompt)}
-                                />
+                                <>
+                                  <MarkdownView
+                                    content={
+                                      isCurrentlyStreaming
+                                        ? stripIncompleteActionBlocks(
+                                            streamingTrace?.cleanContent || m.content
+                                          )
+                                        : m.content
+                                    }
+                                    studentPrompt={studentPrompt}
+                                    think={m.think ?? streamingTrace?.think}
+                                    agentTraces={m.agentTraces ?? streamingTrace?.agentTraces}
+                                    actions={m.actions}
+                                    verified={m.verified}
+                                    verification={m.verification}
+                                    onActionExecuted={(updated) => {
+                                      useAiStore.getState().updateMessage(m.id, {
+                                        actions: m.actions?.map((a) => (a.id === updated.id ? updated : a))
+                                      })
+                                    }}
+                                    onChallengeClick={(prompt) => handleSend(prompt)}
+                                  />
+
+                                  {/* Calm "AI did:" line with chips and Undo */}
+                                  {m.actions && m.actions.length > 0 && (
+                                    <div className="flex items-center flex-wrap gap-1.5 pt-2 mt-1 border-t border-line/40 text-fine text-ink-dim">
+                                      <span className="font-medium text-ink-faint">AI did:</span>
+                                      {m.actions.map((act) => (
+                                        <span
+                                          key={act.id}
+                                          className="px-2 py-0.5 rounded-full bg-surface-2 border border-line text-ink font-mono text-fine"
+                                        >
+                                          {formatActionChip(act)}
+                                        </span>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        onClick={() => runHistory(useApp.getState().mode, { menu: 'undo' })}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-2 hover:bg-surface-3 border border-line text-ink-dim hover:text-ink cursor-pointer transition-colors text-fine ml-auto"
+                                        title="Undo this turn's actions"
+                                      >
+                                        <RotateCcw size={11} />
+                                        <span>Undo</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
                               )
                             })()}
-                          </>
-                        )}
-                      </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })
               )}
               {streamError && (
-                <div className="p-3 rounded bg-surface-1 border border-line flex flex-col gap-2 text-fine">
+                <div className="p-3 rounded-xl bg-surface-1 border border-line flex flex-col gap-2 text-fine">
                   <div className="text-ink-dim">
                     The AI needs the internet. Everything else in PhysLab works offline.
                   </div>
@@ -556,7 +767,7 @@ export function AiCopilot() {
                     <button
                       type="button"
                       onClick={() => setActiveTab('settings')}
-                      className="px-2.5 py-1 rounded bg-accent text-on-accent text-fine font-medium hover:bg-accent-2 cursor-pointer"
+                      className="px-3 py-1 rounded-full bg-ai-accent text-on-accent text-fine font-medium hover:opacity-90 cursor-pointer transition-opacity"
                     >
                       Set AI key
                     </button>
@@ -579,7 +790,7 @@ export function AiCopilot() {
                     <img
                       src={att.dataUrl}
                       alt="Preview"
-                      className="h-14 w-14 object-cover rounded border border-line"
+                      className="h-14 w-14 object-cover rounded-xl border border-line"
                     />
                     <button
                       type="button"
@@ -595,15 +806,15 @@ export function AiCopilot() {
 
             {/* Vision Transcription Progress */}
             {transcribing && (
-              <div className="flex items-center gap-2 p-2.5 mx-2.5 my-1 rounded bg-surface-2 border border-line text-fine text-ink-dim">
-                <Sparkles size={14} className="text-accent animate-pulse shrink-0" />
+              <div className="flex items-center gap-2 p-2.5 mx-2.5 my-1 rounded-xl bg-surface-2 border border-line text-fine text-ink-dim">
+                <Sparkles size={14} className="text-ai-accent ai-thinking-shimmer shrink-0" />
                 <span>Transcribing problem from diagram photo via Gemini Vision…</span>
               </div>
             )}
 
             {/* Vision Transcription Error */}
             {transcribeError && (
-              <div className="flex items-center justify-between p-2 mx-2.5 my-1 rounded bg-surface-2 border border-bad/30 text-fine text-ink-dim">
+              <div className="flex items-center justify-between p-2 mx-2.5 my-1 rounded-xl bg-surface-2 border border-bad/30 text-fine text-ink-dim">
                 <span>{transcribeError}</span>
                 <button
                   type="button"
@@ -617,10 +828,10 @@ export function AiCopilot() {
 
             {/* Editable Confirmation UI for Transcribed Diagram */}
             {transcribedText !== null && (
-              <div className="p-3 mx-2.5 my-1.5 rounded-lg border border-line bg-surface-2 flex flex-col gap-2">
+              <div className="p-3 mx-2.5 my-1.5 rounded-xl border border-line bg-surface-2 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Sparkles size={14} className="text-accent" />
+                    <Sparkles size={14} className="text-ai-accent" />
                     <span>Photo / Diagram Transcribed</span>
                   </div>
                   <button
@@ -641,7 +852,7 @@ export function AiCopilot() {
                   value={transcribedText}
                   onChange={(e) => setTranscribedText(e.target.value)}
                   rows={3}
-                  className="w-full p-2 rounded bg-surface-0 border border-line text-body text-ink resize-y outline-none focus:border-accent font-math"
+                  className="w-full p-2 rounded-xl bg-surface-0 border border-line text-body text-ink resize-y outline-none focus:border-ai-border font-math"
                 />
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -655,7 +866,7 @@ export function AiCopilot() {
                         handleSend(text, currentAtts)
                       }
                     }}
-                    className="px-3 py-1.5 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 cursor-pointer transition-colors"
+                    className="px-3.5 py-1.5 rounded-full bg-ai-accent text-on-accent text-small font-medium hover:opacity-90 cursor-pointer transition-opacity"
                   >
                     Confirm & Solve with PhysLab
                   </button>
@@ -664,8 +875,8 @@ export function AiCopilot() {
             )}
 
             {/* Input Bar */}
-            <div className="p-2.5 border-t border-line bg-surface-1 flex flex-col gap-1.5">
-              <div className="flex items-end gap-1.5 bg-surface-0 border border-line rounded-md p-1.5 focus-within:border-line-2">
+            <div className="p-3 border-t border-line/50 bg-surface-1/40 flex flex-col gap-1.5">
+              <div className="flex items-end gap-2 bg-surface-0 border border-line rounded-2xl p-2 px-3 focus-within:border-ai-border focus-within:ring-1 focus-within:ring-ai-border/40 transition-all">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -681,7 +892,7 @@ export function AiCopilot() {
                   type="button"
                   title="Upload / Drop diagram photo"
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-1.5 text-ink-dim hover:text-ink hover:bg-surface-2 rounded cursor-pointer transition-colors"
+                  className="p-1.5 text-ink-dim hover:text-ink hover:bg-surface-2 rounded-full cursor-pointer transition-colors"
                 >
                   <ImageIcon size={16} />
                 </button>
@@ -696,9 +907,9 @@ export function AiCopilot() {
                       if (!transcribing) handleSend()
                     }
                   }}
-                  rows={2}
-                  placeholder="Ask a question or paste a diagram photo (Ctrl+V)…"
-                  className="flex-1 bg-transparent border-none outline-none resize-none text-body text-ink placeholder:text-ink-faint px-1"
+                  rows={1}
+                  placeholder="Ask anything or paste diagram photo…"
+                  className="flex-1 bg-transparent border-none outline-none resize-none text-body text-ink placeholder:text-ink-faint py-1 max-h-32"
                 />
 
                 {isStreaming ? (
@@ -706,18 +917,18 @@ export function AiCopilot() {
                     type="button"
                     onClick={abortActiveStream}
                     title="Stop generation"
-                    className="p-1.5 bg-bad text-on-accent rounded hover:opacity-90 cursor-pointer transition-opacity"
+                    className="p-2 bg-bad text-on-accent rounded-full hover:opacity-90 cursor-pointer transition-opacity"
                   >
-                    <Square size={15} fill="currentColor" />
+                    <Square size={14} fill="currentColor" />
                   </button>
                 ) : (
                   <button
                     type="button"
                     disabled={(!inputPrompt.trim() && attachments.length === 0) || transcribing}
                     onClick={() => handleSend()}
-                    className="p-1.5 bg-accent text-on-accent rounded hover:bg-accent-2 disabled:opacity-40 cursor-pointer transition-colors"
+                    className="p-2 bg-ai-accent text-on-accent rounded-full hover:opacity-90 disabled:opacity-40 cursor-pointer transition-opacity shadow-sm"
                   >
-                    <Send size={15} />
+                    <Send size={14} />
                   </button>
                 )}
               </div>
@@ -897,81 +1108,137 @@ export function AiCopilot() {
         {/* TAB 4: SETTINGS & SESSIONS */}
         {activeTab === 'settings' && (
           <div className="flex flex-col h-full overflow-y-auto p-3 gap-4">
-            {/* Provider Switcher */}
-            <div className="flex flex-col gap-2">
-              <span className="font-semibold text-small text-ink-strong">AI Provider Selection</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => useAiStore.getState().setProvider('gemini')}
-                  className={`p-2 rounded border text-left cursor-pointer transition-colors ${
-                    provider === 'gemini'
-                      ? 'border-accent bg-surface-2'
-                      : 'border-line bg-surface-1 text-ink-dim'
-                  }`}
-                >
-                  <div className="font-semibold text-small text-ink-strong">Google Gemini API</div>
-                  <div className="text-fine text-ink-faint">Direct cloud testing (Vision + Flash)</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => useAiStore.getState().setProvider('local')}
-                  className={`p-2 rounded border text-left cursor-pointer transition-colors ${
-                    provider === 'local'
-                      ? 'border-accent bg-surface-2'
-                      : 'border-line bg-surface-1 text-ink-dim'
-                  }`}
-                >
-                  <div className="font-semibold text-small text-ink-strong">Local GGUF / Ollama</div>
-                  <div className="text-fine text-ink-faint">Custom Ultimatrix fine-tune</div>
-                </button>
+            {/* Primary & Fallback Provider Selectors */}
+            <div className="flex flex-col gap-3 p-3 rounded border border-line bg-surface-1">
+              <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
+                <Sparkles size={15} className="text-accent" />
+                <span>AI Providers &amp; Fallback</span>
               </div>
-            </div>
 
-            {/* Google Gemini Card */}
-            {provider === 'gemini' && (
-              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Sparkles size={15} className="text-accent" />
-                    <span>Google Gemini API</span>
-                  </div>
-                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                    Active Provider
-                  </span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-fine font-medium text-ink-dim">Main Provider</label>
+                  <select
+                    value={mainProvider || provider || 'gemini'}
+                    onChange={(e) => {
+                      const newMain = e.target.value
+                      useAiStore.getState().setMainProvider(newMain)
+                      setSelectedConfigProvider(newMain)
+                    }}
+                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+                  >
+                    {presets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex flex-col gap-1">
+                  <label className="text-fine font-medium text-ink-dim">Fallback Provider (Optional)</label>
+                  <select
+                    value={fallbackProvider || ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null
+                      useAiStore.getState().setFallbackProvider(val)
+                    }}
+                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+                  >
+                    <option value="">None (No fallback)</option>
+                    {presets
+                      .filter((p) => p.id !== (mainProvider || provider))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+              <span className="text-fine text-ink-faint">
+                If the main provider fails or exceeds quota, PhysLab switches to the fallback automatically.
+              </span>
+            </div>
+
+            {/* Provider Configuration Card */}
+            <div className="flex flex-col gap-3 p-3 rounded border border-accent bg-surface-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <label className="text-small font-semibold text-ink-strong">Configure Provider:</label>
+                  <select
+                    value={selectedConfigProvider}
+                    onChange={(e) => handleSelectConfigProvider(e.target.value)}
+                    className="p-1 rounded bg-surface-0 border border-line text-small text-ink outline-none font-medium"
+                  >
+                    {presets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label} {p.id === (mainProvider || provider) ? '(Main)' : p.id === fallbackProvider ? '(Fallback)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {currentPreset.docUrl && (
+                  <a
+                    href={currentPreset.docUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-fine text-accent hover:underline cursor-pointer"
+                  >
+                    Official Docs ↗
+                  </a>
+                )}
+              </div>
+
+              {currentPreset.note && (
+                <div className="text-fine text-ink-faint">
+                  {currentPreset.note}
+                </div>
+              )}
+
+              {/* API Key Section */}
+              {currentPreset.requiresKey ? (
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
                   <div className="flex items-center justify-between">
                     <label className="text-fine font-medium text-ink-dim">
-                      Google AI Studio API Key
+                      API Key {currentHasKey ? <span className="text-good font-semibold ml-1">✓ Saved in Main Process</span> : ''}
                     </label>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const clip = await navigator.clipboard.readText()
-                          if (clip && clip.trim()) {
-                            useAiStore.getState().setGeminiApiKey(clip.trim())
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const clip = await navigator.clipboard.readText()
+                            if (clip && clip.trim()) setKeyInput(clip.trim())
+                          } catch {
+                            // ignore
                           }
-                        } catch {
-                          // Ignore clipboard error
-                        }
-                      }}
-                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
-                    >
-                      <ClipboardPaste size={11} />
-                      <span>Paste Key</span>
-                    </button>
+                        }}
+                        className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer"
+                      >
+                        <ClipboardPaste size={11} />
+                        <span>Paste</span>
+                      </button>
+                      {currentHasKey && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveCurrentKey}
+                          className="text-fine text-bad hover:underline cursor-pointer"
+                        >
+                          Remove key
+                        </button>
+                      )}
+                    </div>
                   </div>
+
                   <div className="flex items-center gap-1.5 w-full">
                     <input
                       type={showKeyText ? 'text' : 'password'}
-                      value={geminiApiKey}
-                      onChange={(e) => useAiStore.getState().setGeminiApiKey(e.target.value)}
+                      value={keyInput}
+                      onChange={(e) => setKeyInput(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="AIzaSy..."
+                      placeholder={currentHasKey ? '•••••••••••••••••••• (Key saved ✓ - enter new key to replace)' : 'Enter or paste API key…'}
                       className="flex-1 min-w-0 p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
                     />
                     <button
@@ -982,111 +1249,122 @@ export function AiCopilot() {
                     >
                       {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
-                  </div>
-                  <span className="text-fine text-ink-faint">
-                    Saved locally in your browser/app storage.
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-fine font-medium text-ink-dim">Gemini Model</label>
                     <button
                       type="button"
-                      onClick={handleFetchModels}
-                      disabled={isFetchingModels}
-                      className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                      disabled={!keyInput.trim()}
+                      onClick={handleSaveCurrentKey}
+                      className="px-3 py-1.5 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-40 shrink-0"
                     >
-                      <RefreshCw size={11} className={isFetchingModels ? 'animate-spin' : ''} />
-                      <span>{isFetchingModels ? 'Fetching…' : 'Fetch Models'}</span>
+                      Save Key
                     </button>
                   </div>
-                  <select
-                    value={geminiModel}
-                    onChange={(e) => useAiStore.getState().setGeminiModel(e.target.value)}
-                    className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
-                  >
-                    {availableGeminiModels.map((m) => (
-                      <option key={m} value={m}>
-                        {m} {m === 'gemini-3.5-flash-lite' ? '(Recommended)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {modelFetchMsg && (
-                    <span className="text-fine text-good">{modelFetchMsg}</span>
-                  )}
-                </div>
-              </div>
-            )}
 
-            {/* Local Brain Card */}
-            {provider === 'local' && (
-              <div className="flex flex-col gap-2.5 p-3 rounded border border-accent bg-surface-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-semibold text-small text-ink-strong">
-                    <Cpu size={15} className="text-accent" />
-                    <span>Plug &amp; Play PhysLab-Brain (Qwen Q4)</span>
-                  </div>
-                  <span className="text-fine text-good bg-surface-0 px-2 py-0.5 rounded-full border border-line">
-                    Local Qwen Q4
+                  {keySavedBadge && (
+                    <span className="text-fine text-good font-medium">Key saved ✓</span>
+                  )}
+                  <span className="text-fine text-ink-faint">
+                    Keys live only in the secure main process key store and are never exposed to the UI or logs.
                   </span>
                 </div>
+              ) : (
+                <div className="pt-2 border-t border-line text-fine text-ink-dim">
+                  ✓ Local provider (no API key required on localhost).
+                </div>
+              )}
 
-                <div className="text-fine text-ink-dim">
-                  One-click connection to local Qwen 2.5 / PhysLab-Brain runners (llama.cpp, Ollama, LM Studio, or local GPU runner).
+              {/* Base URL */}
+              <div className="flex flex-col gap-1 pt-2 border-t border-line">
+                <label className="text-fine font-medium text-ink-dim">Base URL</label>
+                <input
+                  type="text"
+                  value={currentBaseUrl}
+                  onChange={(e) => useAiStore.getState().setProviderBaseUrl(currentPreset.id, e.target.value)}
+                  placeholder={currentPreset.baseUrl || 'https://...'}
+                  className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
+                />
+              </div>
+
+              {/* Model */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-fine font-medium text-ink-dim">Model Identifier</label>
+                  <button
+                    type="button"
+                    onClick={handleLoadRemoteModels}
+                    disabled={isLoadingRemoteModels}
+                    className="flex items-center gap-1 text-fine text-accent hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={isLoadingRemoteModels ? 'animate-spin' : ''} />
+                    <span>{isLoadingRemoteModels ? 'Loading…' : 'Load models'}</span>
+                  </button>
                 </div>
 
+                <div className="flex items-center gap-1.5 w-full">
+                  <input
+                    type="text"
+                    value={currentModel}
+                    onChange={(e) => useAiStore.getState().setProviderModel(currentPreset.id, e.target.value)}
+                    list={`suggestions-${currentPreset.id}`}
+                    placeholder="e.g. gpt-4o, deepseek-chat..."
+                    className="flex-1 min-w-0 p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none font-mono"
+                  />
+                  <datalist id={`suggestions-${currentPreset.id}`}>
+                    {currentAvailableModels.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {loadModelsStatus && (
+                  <span className="text-fine text-good">{loadModelsStatus}</span>
+                )}
+              </div>
+
+              {/* Test Connection Button */}
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
                 <button
                   type="button"
-                  disabled={isAutoConnecting}
-                  onClick={handleAutoConnectLocal}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-accent text-on-accent text-small font-medium hover:bg-accent-2 transition-colors cursor-pointer disabled:opacity-50"
+                  disabled={isTestingConnection}
+                  onClick={handleTestCurrentConnection}
+                  className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-surface-2 border border-line text-small font-medium text-ink hover:bg-surface-3 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  <RefreshCw size={13} className={isAutoConnecting ? 'animate-spin' : ''} />
-                  <span>{isAutoConnecting ? 'Probing Local Endpoints…' : 'Auto-Connect Local Brain'}</span>
+                  <RefreshCw size={14} className={isTestingConnection ? 'animate-spin' : ''} />
+                  <span>{isTestingConnection ? 'Testing…' : `Test Connection (${currentPreset.label})`}</span>
                 </button>
 
-                {autoConnectResult && (
+                {testConnResult && (
                   <div
                     className={`p-2 rounded text-fine ${
-                      autoConnectResult.ok
+                      testConnResult.ok
                         ? 'bg-surface-0 text-good border border-line'
                         : 'bg-surface-0 text-bad border border-line'
                     }`}
                   >
-                    {autoConnectResult.message}
+                    {testConnResult.message}
                   </div>
                 )}
-
-                {/* Expandable Advanced Endpoint Settings */}
-                <details className="flex flex-col gap-2 p-2 rounded border border-line bg-surface-0 group mt-1">
-                  <summary className="text-fine font-medium text-ink-dim cursor-pointer select-none">
-                    Advanced Endpoint Settings
-                  </summary>
-                  <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-line">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-fine font-medium text-ink-dim">Base URL</label>
-                      <input
-                        type="text"
-                        value={localEndpoint}
-                        onChange={(e) => useAiStore.getState().setLocalEndpoint(e.target.value)}
-                        placeholder="http://127.0.0.1:8080/v1"
-                        className="p-1.5 rounded bg-surface-1 border border-line text-body text-ink outline-none font-mono"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-fine font-medium text-ink-dim">Model Identifier</label>
-                      <input
-                        type="text"
-                        value={localModel}
-                        onChange={(e) => useAiStore.getState().setLocalModel(e.target.value)}
-                        className="p-1.5 rounded bg-surface-1 border border-line text-small text-ink outline-none font-mono"
-                      />
-                    </div>
-                  </div>
-                </details>
               </div>
-            )}
+            </div>
+
+            {/* Reasoning / Thinking Effort */}
+            <div className="flex flex-col gap-1 p-2.5 rounded border border-line bg-surface-1">
+              <label className="text-fine font-medium text-ink-dim">Reasoning / Thinking Effort</label>
+              <select
+                value={thinking || 'fast'}
+                onChange={(e) => {
+                  const val = e.target.value as 'fast' | 'balanced' | 'deep'
+                  useAiStore.getState().setThinking(val)
+                }}
+                className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+              >
+                <option value="fast">Fast (Low reasoning, instant responses)</option>
+                <option value="balanced">Balanced (Medium reasoning)</option>
+                <option value="deep">Deep (High reasoning, complex derivations)</option>
+              </select>
+              <span className="text-fine text-ink-faint">
+                Controls reasoning effort for thinking models like GPT-5.4, o1, and DeepSeek.
+              </span>
+            </div>
 
             {/* Auto Execute Toggle */}
             <label className="flex items-center gap-2 text-small text-ink-strong cursor-pointer p-2.5 rounded border border-line bg-surface-1">
@@ -1097,29 +1375,6 @@ export function AiCopilot() {
               />
               <span>Auto-Execute PhysLab Actions (Sandbox / Calculator)</span>
             </label>
-
-            {/* Test Connection Button */}
-            <div className="flex flex-col gap-1.5">
-              <button
-                type="button"
-                disabled={isVerifying}
-                onClick={handleVerify}
-                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-surface-2 border border-line text-small font-medium text-ink hover:bg-surface-3 transition-colors cursor-pointer"
-              >
-                <RefreshCw size={14} className={isVerifying ? 'animate-spin' : ''} />
-                <span>{isVerifying ? 'Verifying…' : 'Verify Connection'}</span>
-              </button>
-
-              {verifyMsg && (
-                <div
-                  className={`p-2 rounded text-fine ${
-                    verifyMsg.ok ? 'bg-surface-1 text-good border border-line' : 'bg-surface-1 text-bad border border-line'
-                  }`}
-                >
-                  {verifyMsg.message}
-                </div>
-              )}
-            </div>
 
             {/* Multi-Session Chat Threads */}
             <div className="flex flex-col gap-2 border-t border-line pt-3">
@@ -1157,55 +1412,8 @@ export function AiCopilot() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
-  )
-}
-
-function TabButton({
-  active,
-  icon,
-  label,
-  onClick
-}: {
-  active: boolean
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1.5 py-1 px-2 border-b-2 font-medium cursor-pointer transition-colors ${
-        active
-          ? 'border-accent text-accent'
-          : 'border-transparent text-ink-dim hover:text-ink'
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  )
-}
-
-function QuickChip({
-  title,
-  subtitle,
-  onClick
-}: {
-  title: string
-  subtitle: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="p-2 rounded border border-line bg-surface-1 hover:bg-surface-2 text-left cursor-pointer transition-colors flex flex-col gap-0.5"
-    >
-      <span className="font-medium text-small text-ink-strong">{title}</span>
-      <span className="text-fine text-ink-faint">{subtitle}</span>
-    </button>
   )
 }

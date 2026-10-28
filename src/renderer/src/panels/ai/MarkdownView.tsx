@@ -1,14 +1,17 @@
-import { Fragment, memo, useMemo } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import katex from 'katex'
 import {
   AlertTriangle,
-  Check,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Undo2
 } from 'lucide-react'
 import type { MessageVerification, PhysLabAction, SpecialAgent } from '../../ai/types'
 import { extractThinkTrace } from '../../ai/bridge'
 import { extractLastBoxed, repairControlCharLatex, stripIncompleteActionBlocks } from '../../ai/contract'
+import { scene } from '../../core/store'
+import { useSandbox } from '../../sim/store'
+import { useLab } from '../../lab/labStore'
 
 interface MarkdownViewProps {
   content: string
@@ -82,6 +85,69 @@ export function getToolShortResult(tool: string, args: Record<string, any> = {},
     return String(result.message)
   }
   return 'Done'
+}
+
+export interface AiDidChip {
+  id: string
+  label: string
+  kind: 'add' | 'remove' | 'cmd'
+}
+
+export function extractAiDidChips(actions?: PhysLabAction[]): AiDidChip[] {
+  if (!actions || !actions.length) return []
+  const chips: AiDidChip[] = []
+
+  for (const act of actions) {
+    if (act.tool === 'run_commands') {
+      const res = act.result as Record<string, any> | undefined
+      if (res) {
+        if (Array.isArray(res.created)) {
+          for (const id of res.created) {
+            let name = id
+            let type = 'object'
+            try {
+              const s = scene().objects[id]
+              const b = useSandbox.getState().bodies.find((x) => x.id === id)
+              if (s) {
+                name = s.name
+                type = s.type
+              } else if (b) {
+                name = b.name
+                type = b.shape
+              }
+            } catch {}
+            chips.push({ id: `c_${id}`, label: `+ ${type} ${name}`, kind: 'add' })
+          }
+        }
+        if (Array.isArray(res.removed)) {
+          for (const id of res.removed) {
+            chips.push({ id: `r_${id}`, label: `− ${id}`, kind: 'remove' })
+          }
+        }
+        if ((!res.created || res.created.length === 0) && (!res.removed || res.removed.length === 0)) {
+          const cmds = Array.isArray(act.args?.commands) ? act.args.commands : []
+          for (let i = 0; i < cmds.length; i++) {
+            const cmd = String(cmds[i]).trim()
+            if (cmd) {
+              chips.push({ id: `${act.id}_cmd_${i}`, label: cmd, kind: 'cmd' })
+            }
+          }
+        }
+      }
+    } else if (act.tool === 'plot' || act.tool === 'graph_plot' || act.tool === 'graph3d_plot') {
+      const expr = act.args?.expression || act.args?.equation || ''
+      chips.push({ id: act.id, label: expr ? `plot ${expr}` : 'plot', kind: 'cmd' })
+    } else if (act.tool === 'solve' || act.tool === 'calc_solve') {
+      const expr = act.args?.expression || act.args?.input || ''
+      chips.push({ id: act.id, label: expr ? `solve ${expr}` : 'solve', kind: 'cmd' })
+    } else if (act.tool === 'load_experiment') {
+      chips.push({ id: act.id, label: `load ${act.args?.id || 'experiment'}`, kind: 'cmd' })
+    } else if (act.tool === 'build_experiment') {
+      chips.push({ id: act.id, label: 'build experiment', kind: 'cmd' })
+    }
+  }
+
+  return chips
 }
 
 /**
@@ -305,6 +371,89 @@ export function isStepOrStructuralNumber(
   return false
 }
 
+/**
+ * Self-talk patterns that leak from model internal planning notes into prose.
+ */
+export const SELF_TALK_PATTERNS: RegExp[] = [
+  /\btool\s+returned\b/i,
+  /\bneed\s+answer\b/i,
+  /\buse\s+only\s+tool\b/i,
+  /\bstudent\s+asked\b/i,
+  /\bmust\s+answer\s+in\b/i,
+  /\b(?:i|we)\s+should\s+(?:explain|answer|use)\b/i,
+  /\bno\s+calculation\s+is\s+needed\b/i,
+  /\bthe\s+question\s+is\s+(?:conceptual|clear)\b/i,
+  /\bformat\s*:/i
+]
+
+export function isHeadingOrBoldOrMath(p: string): boolean {
+  const trimmed = p.trim()
+  return (
+    /^#{1,6}\s+/.test(trimmed) ||
+    /^(?:[-*•]\s+)?(?:\d+[\.\)]\s+)?\*\*[^*]+\*\*/.test(trimmed) ||
+    /^(?:\$\$|\\\[)/.test(trimmed)
+  )
+}
+
+/**
+ * Strips model planning self-talk paragraphs and drops consecutive duplicate paragraphs.
+ * Only drops leading paragraphs before the first heading, bold label, or maths block
+ * when 2 or more self-talk patterns match.
+ */
+export function stripPlanningNotesAndDuplicates(text: string): string {
+  if (!text) return ''
+
+  // Split into paragraphs separated by blank lines, ensuring headings, bold blocks,
+  // or math blocks on new lines form their own block boundaries.
+  const normalized = text.replace(/([^\n])\r?\n(#{1,6}\s+|\*\*[^*]+\*\*|\$\$|\\\[)/g, '$1\n\n$2')
+  const rawParagraphs = normalized
+    .split(/\r?\n\s*\r?\n/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+
+  if (rawParagraphs.length === 0) return ''
+
+  // 1. Drop exact duplicate paragraph appearing twice in a row
+  const deduped: string[] = []
+  for (let i = 0; i < rawParagraphs.length; i++) {
+    if (i > 0 && rawParagraphs[i] === rawParagraphs[i - 1]) {
+      continue
+    }
+    deduped.push(rawParagraphs[i])
+  }
+
+  // 2. Drop leading paragraphs before first heading, bold label, or maths block
+  // only if matching 2 or more self-talk patterns
+  let firstKeepIdx = 0
+  for (let i = 0; i < deduped.length; i++) {
+    const p = deduped[i]
+    if (isHeadingOrBoldOrMath(p)) {
+      // Reached heading, bold label, or maths block; stop dropping
+      break
+    }
+    const hits = SELF_TALK_PATTERNS.filter((pattern) => pattern.test(p)).length
+    if (hits >= 2) {
+      firstKeepIdx = i + 1
+    } else {
+      // Reached legitimate prose; stop dropping
+      break
+    }
+  }
+
+  const kept = deduped.slice(firstKeepIdx)
+
+  // 3. Drop any adjacent duplicate paragraph that might have formed
+  const finalParagraphs: string[] = []
+  for (let i = 0; i < kept.length; i++) {
+    if (i > 0 && kept[i] === kept[i - 1]) {
+      continue
+    }
+    finalParagraphs.push(kept[i])
+  }
+
+  return finalParagraphs.join('\n\n')
+}
+
 export const MarkdownView = memo(function MarkdownView({
   content,
   studentPrompt,
@@ -317,7 +466,7 @@ export const MarkdownView = memo(function MarkdownView({
   const fixedContent = repairControlCharLatex(content)
   const { cleanContent } = extractThinkTrace(fixedContent)
 
-  const cleanProse = stripIncompleteActionBlocks(cleanContent)
+  const cleanProse = stripPlanningNotesAndDuplicates(stripIncompleteActionBlocks(cleanContent))
   const boxedAnswer = extractLastBoxed(fixedContent)
 
   // Known numbers from student prompt and engine tool results
@@ -346,6 +495,22 @@ export const MarkdownView = memo(function MarkdownView({
     return false
   }, [boxedAnswer, isVerified, knownNumbers])
 
+  const [undone, setUndone] = useState(false)
+  const aiDidChips = useMemo(() => extractAiDidChips(actions), [actions])
+
+  const handleUndo = () => {
+    try {
+      scene().undo()
+    } catch {}
+    try {
+      useSandbox.getState().undo()
+    } catch {}
+    try {
+      useLab.getState().undo()
+    } catch {}
+    setUndone(true)
+  }
+
   const challengeChips = getChallengeChips(actions, cleanProse)
 
   return (
@@ -353,10 +518,10 @@ export const MarkdownView = memo(function MarkdownView({
       {/* 1. Answer-First Banner (Prominent Final Answer Box with Rule 3 Guarantee) */}
       {boxedAnswer && (
         <div
-          className={`rounded-lg border p-3 flex flex-col gap-2 ${
+          className={`rounded-xl border p-3 flex flex-col gap-2 ${
             isDisagreed
               ? 'border-bad/40 bg-surface-2'
-              : 'border-line bg-surface-2'
+              : 'border-ai-border/50 bg-surface-2/80 shadow-sm'
           }`}
         >
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -368,19 +533,19 @@ export const MarkdownView = memo(function MarkdownView({
               {isDisagreed ? (
                 <AlertTriangle size={14} className="text-bad" />
               ) : (
-                <Sparkles size={14} className="text-accent" />
+                <Sparkles size={14} className="text-ai-accent" />
               )}
               <span>{isDisagreed ? 'PhysLab Verified Answer' : 'Final Answer'}</span>
             </span>
 
             {/* Strict rule: Exactly ONE badge per answer */}
             {isVerified ? (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-good border border-line">
+              <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-1 text-fine font-semibold text-good border border-line">
                 <CheckCircle2 size={12} />
                 <span>Checked by PhysLab</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-1 text-fine font-medium text-ink-dim border border-line">
+              <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-1 text-fine font-medium text-ink-dim border border-line">
                 <span>Not checked</span>
               </span>
             )}
@@ -420,31 +585,40 @@ export const MarkdownView = memo(function MarkdownView({
         {renderMarkdownWithMath(cleanProse, knownNumbers)}
       </div>
 
-      {/* 4. Interactive PhysLab Action Cards */}
-      {actions && actions.length > 0 && (
-        <div className="flex flex-col gap-2 mt-1">
-          {actions.map((act) => {
-            const isSuccess = act.status === 'success'
-
-            return (
-              <div
-                key={act.id}
-                className="flex items-center justify-between px-2.5 py-1.5 rounded bg-surface-1 border border-line text-fine"
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <span className="font-semibold text-ink-strong font-mono">{act.tool}</span>
-                  <span className="text-ink-dim truncate">
-                    {getToolShortResult(act.tool, act.args, act.result)}
-                  </span>
-                </div>
-                {isSuccess && <Check size={12} className="text-good shrink-0 ml-2" />}
-              </div>
-            )
-          })}
+      {/* 3. Calm "AI did:" line with small rounded chips and one Undo button */}
+      {aiDidChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-1.5 border-t border-line/40 text-fine">
+          <span className="text-ink-faint font-medium select-none">AI did:</span>
+          {aiDidChips.map((chip) => (
+            <span
+              key={chip.id}
+              className={`px-2 py-0.5 rounded-full border text-fine font-mono select-none ${
+                undone
+                  ? 'bg-surface-1 border-line/40 text-ink-faint line-through'
+                  : 'bg-surface-2 border-line text-ink-dim'
+              }`}
+            >
+              {chip.label}
+            </span>
+          ))}
+          <button
+            type="button"
+            disabled={undone}
+            onClick={handleUndo}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-fine transition-colors cursor-pointer ${
+              undone
+                ? 'bg-surface-1 border-line/40 text-ink-faint cursor-not-allowed'
+                : 'bg-surface-2 hover:bg-surface-3 border-line text-ink hover:text-accent'
+            }`}
+            title={undone ? 'Undone' : 'Undo this AI turn'}
+          >
+            <Undo2 size={11} className={undone ? 'text-ink-faint' : 'text-accent'} />
+            <span>{undone ? 'Undone' : 'Undo'}</span>
+          </button>
         </div>
       )}
 
-      {/* 5. What-If Interactive Challenge Chips */}
+      {/* 4. What-If Interactive Challenge Chips */}
       {challengeChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <span className="text-fine font-medium text-ink-dim flex items-center gap-1 mr-1">
@@ -473,15 +647,20 @@ export const MarkdownView = memo(function MarkdownView({
 export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>): React.ReactNode[] {
   if (!text) return []
 
-  const cleanText = text
-    .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
-    .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+  const cleanText = stripPlanningNotesAndDuplicates(
+    text
+      .replace(/^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook[^\n]*\n?/gim, '')
+      .replace(/^\*\*💡?\s*Intuition\s*Hook[^*]*\*\*\s*:?\s*/gim, '')
+  )
 
   const lines = cleanText.split('\n')
   const nodes: React.ReactNode[] = []
   let buffer: string[] = []
   let inDisplayMath = false
   let mathBuffer = ''
+  let displayDelim: '$$' | '\\[' | null = null
+  let inCodeBlock = false
+  let codeBuffer: string[] = []
 
   const flushBuffer = () => {
     if (buffer.length > 0) {
@@ -509,6 +688,33 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
 
+    // 0. Fenced code block handling (```) - completely untouched
+    if (line.trim().startsWith('```')) {
+      if (!inCodeBlock) {
+        flushBuffer()
+        inCodeBlock = true
+        codeBuffer = []
+      } else {
+        inCodeBlock = false
+        const codeText = codeBuffer.join('\n')
+        nodes.push(
+          <pre
+            key={`code_${nodes.length}`}
+            className="my-2 p-2.5 rounded bg-surface-1 border border-line overflow-x-auto font-mono text-fine text-ink"
+          >
+            <code>{codeText}</code>
+          </pre>
+        )
+        codeBuffer = []
+      }
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(line)
+      continue
+    }
+
     if (
       /^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook/i.test(line.trim()) ||
       /^\*\*💡?\s*Intuition\s*Hook/i.test(line.trim())
@@ -521,9 +727,12 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
       continue
     }
 
-    if (line.trim().startsWith('$$') && line.trim().endsWith('$$') && line.trim().length > 4) {
+    const trimmed = line.trim()
+
+    // 1. Single-line $$ ... $$
+    if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
       flushBuffer()
-      const formula = line.trim().slice(2, -2)
+      const formula = trimmed.slice(2, -2).trim()
       let isInv = false
       if (knownNumbers && isAnswerOrResultLine(formula)) {
         const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
@@ -541,8 +750,37 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
       continue
     }
 
-    if (line.trim().startsWith('$$')) {
-      if (inDisplayMath) {
+    // 2. Single-line \[ ... \]
+    if (trimmed.startsWith('\\[') && trimmed.endsWith('\\]') && trimmed.length >= 4) {
+      flushBuffer()
+      const formula = trimmed.slice(2, -2).trim()
+      let isInv = false
+      if (knownNumbers && isAnswerOrResultLine(formula)) {
+        const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+        let m: RegExpExecArray | null
+        while ((m = numRegex.exec(formula)) !== null) {
+          const matchStr = m[0]
+          const matchIdx = m.index
+          if (!isKnownNumber(matchStr, knownNumbers) && !isStepOrStructuralNumber(formula, matchIdx, matchStr)) {
+            isInv = true
+            break
+          }
+        }
+      }
+      nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={formula} isInvented={isInv} />)
+      continue
+    }
+
+    // 3. Multi-line display math closing / accumulating
+    if (inDisplayMath) {
+      const isClosing =
+        (displayDelim === '$$' && trimmed.startsWith('$$')) ||
+        (displayDelim === '\\[' && (trimmed.endsWith('\\]') || trimmed === '\\]'))
+
+      if (isClosing) {
+        if (displayDelim === '\\[' && trimmed !== '\\]') {
+          mathBuffer += (mathBuffer ? '\n' : '') + line.replace(/\\\]\s*$/, '')
+        }
         let isInv = false
         if (knownNumbers && isAnswerOrResultLine(mathBuffer)) {
           const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
@@ -556,19 +794,30 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
             }
           }
         }
-        nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={mathBuffer} isInvented={isInv} />)
+        nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={mathBuffer.trim()} isInvented={isInv} />)
         mathBuffer = ''
         inDisplayMath = false
+        displayDelim = null
       } else {
-        flushBuffer()
-        inDisplayMath = true
-        mathBuffer = line.replace('$$', '')
+        mathBuffer += (mathBuffer ? '\n' : '') + line
       }
       continue
     }
 
-    if (inDisplayMath) {
-      mathBuffer += `\n${line}`
+    // 4. Multi-line display math opening
+    if (trimmed.startsWith('$$')) {
+      flushBuffer()
+      inDisplayMath = true
+      displayDelim = '$$'
+      mathBuffer = line.replace(/^\s*\$\$/, '')
+      continue
+    }
+
+    if (trimmed === '\\[' || (trimmed.startsWith('\\[') && !trimmed.endsWith('\\]'))) {
+      flushBuffer()
+      inDisplayMath = true
+      displayDelim = '\\['
+      mathBuffer = line.replace(/^\s*\\\[/, '')
       continue
     }
 
@@ -617,6 +866,24 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
   }
 
   flushBuffer()
+  if (inCodeBlock && codeBuffer.length > 0) {
+    nodes.push(
+      <pre
+        key={`code_${nodes.length}`}
+        className="my-2 p-2.5 rounded bg-surface-1 border border-line overflow-x-auto font-mono text-fine text-ink"
+      >
+        <code>{codeBuffer.join('\n')}</code>
+      </pre>
+    )
+  }
+  if (inDisplayMath && mathBuffer.length > 0) {
+    const rawUnclosed = (displayDelim === '\\[' ? '\\[' : '$$') + (mathBuffer ? '\n' + mathBuffer : '')
+    nodes.push(
+      <div key={`p_${nodes.length}`} className="my-1" dir="auto">
+        {rawUnclosed}
+      </div>
+    )
+  }
   return nodes
 }
 
@@ -676,31 +943,58 @@ function renderProseWithInventedGuard(
 }
 
 /**
- * Safely renders inline KaTeX math ($...$) and bold/code formatting.
+ * Safely renders inline KaTeX math ($...$, \(...\)), display math ($$...$$, \[...\]), and bold/code formatting.
  */
 function renderInlineMath(
   text: string,
   isAnswerLine?: boolean,
   knownNumbers?: Set<string>
 ): React.ReactNode {
-  // Pre-sanitize unescaped control chars and strip stray '$' characters surrounding \boxed formulas
+  // Pre-sanitize unescaped control chars and strip stray '$' or '\(' characters surrounding \boxed formulas
   const preCleaned = repairControlCharLatex(text)
     .replace(/\$\s*(\\boxed\{[^}]+\})\s*\$/g, '$1')
+    .replace(/\\\((\s*\\boxed\{[^}]+\}\s*)\\\)/g, '$1')
 
   const parts = preCleaned.split(
-    /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g
+    /(`[^`\n]+`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([^\n]*?\\\)|(?<![\w\\])\$(?!\s)[^$\n]+?(?<!\s)\$|\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g
   )
 
   return parts.map((part, idx) => {
     if (!part) return null
 
-    const isDelimitedMath =
-      (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) ||
-      (part.startsWith('$') && part.endsWith('$') && part.length >= 2)
+    // 1. Untouched inline code `...`
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return (
+        <code key={idx} className="font-mono text-fine text-code bg-surface-2 px-1 py-0.5 rounded">
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+
+    const isParenMath = part.startsWith('\\(') && part.endsWith('\\)') && part.length >= 4
+    const isBracketMath = part.startsWith('\\[') && part.endsWith('\\]') && part.length >= 4
+    const isDollarDisplay = part.startsWith('$$') && part.endsWith('$$') && part.length >= 4
+    const isDollarInline = part.startsWith('$') && part.endsWith('$') && part.length >= 2 && !part.startsWith('$$')
     const isDirectBoxed = part.startsWith('\\boxed{')
+    const isDelimitedMath = isParenMath || isBracketMath || isDollarDisplay || isDollarInline
 
     if (isDelimitedMath || isDirectBoxed) {
-      const tex = repairControlCharLatex(part.replace(/^\$+|\$+$/g, '').trim())
+      let tex = ''
+      let isDisplay = false
+      if (isParenMath) {
+        tex = part.slice(2, -2).trim()
+      } else if (isBracketMath) {
+        tex = part.slice(2, -2).trim()
+        isDisplay = true
+      } else if (isDollarDisplay) {
+        tex = part.slice(2, -2).trim()
+        isDisplay = true
+      } else if (isDollarInline) {
+        tex = part.slice(1, -1).trim()
+      } else if (isDirectBoxed) {
+        tex = part.trim()
+      }
+      tex = repairControlCharLatex(tex)
 
       let hasInvented = false
       if (isAnswerLine && knownNumbers) {
@@ -720,7 +1014,7 @@ function renderInlineMath(
 
       try {
         const html = katex.renderToString(tex, {
-          displayMode: false,
+          displayMode: isDisplay,
           throwOnError: false,
           output: 'html'
         })
@@ -728,7 +1022,11 @@ function renderInlineMath(
           <span
             key={idx}
             dir="ltr"
-            className="inline-block mx-0.5 align-middle"
+            className={
+              isDisplay
+                ? 'inline-block mx-1 my-1 align-middle text-center w-full'
+                : 'inline-block mx-0.5 align-middle'
+            }
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )

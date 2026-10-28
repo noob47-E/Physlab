@@ -26,6 +26,11 @@ an answer is right:
 
 - **AI Tutor (beta, optional):** ask in your own words. PhysLab checks the AI's numbers with its own engine
   and marks a right answer **Checked by PhysLab**. It needs internet and your own key.
+- **New in 0.9.3:** the tutor now **draws for you**: vectors as real arrows, constructions such as Ceva's
+  theorem in Geometry (it opens Geometry by itself), and it can remove what it drew. Its maths shows as
+  proper maths, and it no longer shows a false "couldn't draw" warning when the drawing is there.
+- **Any AI provider:** DeepSeek, Gemini, Azure OpenAI, OpenRouter or any OpenAI-compatible service, with
+  a backup provider if the first one fails, and a **Thinking: Fast / Balanced / Deep** choice.
 - **Live formulas in the Sandbox:** formula cards fill in with the real numbers of the run, and a gap row
   shows the formula against what the simulation measured, and says *why* they differ.
 - **Record, rewind and branch:** scrub back to any moment, replay a bounce in fine steps, or change the ball

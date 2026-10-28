@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   isDesktop: true,
+  isRehearsal: Boolean(
+    process.env['PHYSLAB_SMOKE_USERDATA'] ||
+    process.env['PHYSLAB_REHEARSE'] ||
+    process.argv?.includes('--rehearse')
+  ),
   /** No filters: the .phys project dialog. A question file passes its own (.pqjson, .exam) and a title. */
   openFile: (filters?: { name: string; extensions: string[] }[], title?: string): Promise<{ path: string; content: string } | null> =>
     ipcRenderer.invoke('file:open', filters, title),
@@ -13,6 +18,8 @@ const api = {
   autosaveClear: (): Promise<boolean> => ipcRenderer.invoke('autosave:clear'),
   /** The copy written as the window closes; a promise would never come back. */
   autosaveWriteSync: (content: string): boolean => ipcRenderer.sendSync('autosave:writeSync', content) as boolean,
+  /** Clear recovery copy synchronously on clean exit. */
+  autosaveClearSync: (): boolean => ipcRenderer.sendSync('autosave:clearSync') as boolean,
   /** So the window can ask before closing on unsaved work. */
   setDirty: (dirty: boolean): void => ipcRenderer.send('app:dirty', dirty),
   /** The theme's page colour, so the window paints it on the next launch before the page does. */
@@ -57,8 +64,50 @@ const api = {
       }
     },
     hasKey: (provider?: string): Promise<boolean> => ipcRenderer.invoke('ai:hasKey', provider),
-    setKey: (key: string, provider?: string): Promise<boolean> =>
-      ipcRenderer.invoke('ai:setKey', key, provider),
+    getConfig: (): Promise<{
+      hasAzure: boolean
+      hasGemini: boolean
+      defaultProvider: 'azure' | 'gemini'
+      azureDeployment: string
+      mainProvider?: string
+      fallbackProvider?: string
+      thinking?: 'fast' | 'balanced' | 'deep'
+      presets?: Array<{
+        id: string
+        label: string
+        kind: 'openai-compatible' | 'azure' | 'anthropic'
+        baseUrl: string
+        model: string
+        suggestedModels: string[]
+        docUrl: string
+        supportsTools: boolean
+        enabledByDefault: boolean
+        requiresKey: boolean
+        hasKey: boolean
+        note?: string
+      }>
+      configs?: Record<string, { baseUrl?: string; model?: string; apiVersion?: string }>
+    }> => ipcRenderer.invoke('ai:getConfig'),
+    setKey: (keyOrProvider: string, maybeKey?: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setKey', keyOrProvider, maybeKey),
+    removeKey: (provider: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:removeKey', provider),
+    setProviderConfig: (
+      provider: string,
+      config: { baseUrl?: string; model?: string; apiVersion?: string }
+    ): Promise<boolean> => ipcRenderer.invoke('ai:setProviderConfig', provider, config),
+    setActiveProviders: (main: string, fallback?: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setActiveProviders', main, fallback),
+    setThinking: (thinking: 'fast' | 'balanced' | 'deep'): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setThinking', thinking),
+    testConnection: (
+      provider?: string
+    ): Promise<{ ok: boolean; message?: string; error?: string }> =>
+      ipcRenderer.invoke('ai:testConnection', provider),
+    listRemoteModels: (
+      provider?: string
+    ): Promise<{ ok: boolean; models: string[]; error?: string }> =>
+      ipcRenderer.invoke('ai:listRemoteModels', provider),
     transcribe: async (
       dataUrl: string
     ): Promise<{ ok: boolean; text?: string; error?: string }> => {

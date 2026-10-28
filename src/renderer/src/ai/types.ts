@@ -1,6 +1,24 @@
 import type { PhysicsValidationResult } from './truthCheck'
 
-export type ProviderType = 'gemini' | 'azure' | 'local' | 'gemini-openai'
+export type ProviderType =
+  | 'gemini'
+  | 'azure'
+  | 'local'
+  | 'gemini-openai'
+  | 'deepseek'
+  | 'openai'
+  | 'openrouter'
+  | 'groq'
+  | 'mistral'
+  | 'together'
+  | 'xai'
+  | 'anthropic'
+  | 'modelark'
+  | 'modelark-coding'
+  | 'ollama'
+  | 'lmstudio'
+  | 'custom'
+  | (string & {})
 
 export interface Attachment {
   id: string
@@ -43,6 +61,8 @@ export type PhysLabTool =
   | 'export_readings'
   | 'demonstrate'
   | 'get_app_state'
+  | 'list_objects'
+  | 'remove'
   | (string & {})
 
 export interface PhysLabAction {
@@ -71,6 +91,7 @@ export interface MessageVerification {
   engineAnswerText?: string
   modelAnswerLatex?: string
   notes: string
+  correctedContent?: string
 }
 
 export interface ChatMessage {

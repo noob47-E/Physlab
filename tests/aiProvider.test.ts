@@ -25,8 +25,8 @@ describe('AI Provider in main process', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     setEnvCaseInsensitive('google_ai_studio_noob_api', 'test-gemini-secret-key-12345')
-    setEnvCaseInsensitive('AZURE_AI_ENDPOINT', 'https://test-azure-resource.openai.azure.com')
-    setEnvCaseInsensitive('AZURE_AI_KEY', 'test-azure-secret-key-67890')
+    setEnvCaseInsensitive('AZURE_AI_ENDPOINT', '')
+    setEnvCaseInsensitive('AZURE_AI_KEY', '')
     setEnvCaseInsensitive('AZURE_AI_DEPLOYMENT', 'gpt-5.4')
   })
 
@@ -102,15 +102,10 @@ describe('AI Provider in main process', () => {
     expect(callCount).toBe(2)
   })
 
-  it('falls through to Azure OpenAI when all Gemini models are exhausted', async () => {
+  it('makes Azure OpenAI the default provider when its key exists', async () => {
+    setEnvCaseInsensitive('AZURE_AI_ENDPOINT', 'https://test-azure-resource.openai.azure.com')
+    setEnvCaseInsensitive('AZURE_AI_KEY', 'test-azure-secret-key-67890')
     global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('googleapis.com')) {
-        return Promise.resolve({
-          ok: false,
-          status: 429,
-          text: async () => JSON.stringify({ error: { message: 'Quota exceeded' } })
-        })
-      }
       if (url.includes('azure.com')) {
         return Promise.resolve({
           ok: true,
@@ -130,6 +125,39 @@ describe('AI Provider in main process', () => {
     if ('message' in result) {
       expect(result.message.content).toBe('Hello from Azure OpenAI')
       expect(result.model).toBe('gpt-5.4')
+    }
+  })
+
+  it('falls through to Gemini when Azure OpenAI fails', async () => {
+    setEnvCaseInsensitive('AZURE_AI_ENDPOINT', 'https://test-azure-resource.openai.azure.com')
+    setEnvCaseInsensitive('AZURE_AI_KEY', 'test-azure-secret-key-67890')
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('azure.com')) {
+        return Promise.resolve({
+          ok: false,
+          status: 429,
+          text: async () => JSON.stringify({ error: { message: 'Azure quota exceeded' } })
+        })
+      }
+      if (url.includes('googleapis.com')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'Hello from fallback Gemini' } }],
+              usage: { prompt_tokens: 15, completion_tokens: 10 }
+            })
+        })
+      }
+      return Promise.reject(new Error('Unknown URL'))
+    })
+
+    const result = await handleAiChat([{ role: 'user', content: 'test' }])
+    expect('message' in result).toBe(true)
+    if ('message' in result) {
+      expect(result.message.content).toBe('Hello from fallback Gemini')
+      expect(result.model).toBe('gemini-3.5-flash-lite')
     }
   })
 

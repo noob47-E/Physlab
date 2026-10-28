@@ -6,6 +6,8 @@ import { create } from 'zustand'
 import { Check, Keyboard, X } from 'lucide-react'
 import { enterMode } from '../layout'
 import { showPanel } from '../panels'
+import { useScene } from '../../core/store'
+import { useAiStore } from '../../ai/store'
 import { useSandboxView } from '../../sim/sandboxView'
 import { usePure } from '../../math/pure/store'
 import { JOBS } from '../../math/pure/run'
@@ -267,6 +269,16 @@ export function Tour() {
   const rect = useAnchorRect(current?.anchor, step)
   useMissionWatcher()
 
+  const isPlaying = useScene((s) => s.playing)
+  const hasAiAnswer = useAiStore((s) => s.isStreaming || s.threads.some((t) => t.messages.some((m) => m.role === 'assistant')))
+
+  // Never let the Welcome card obstruct active physics simulations or AI tutor conversations
+  useEffect(() => {
+    if (showWelcome && (isPlaying || hasAiAnswer)) {
+      stop()
+    }
+  }, [showWelcome, isPlaying, hasAiAnswer, stop])
+
   // A step whose anchor lives in the Sandbox's All tools (Connect) borrows that view for the step and gives the student's
   // own choice back when the step is left (SB63). Declared before the mode effect, so enterMode sees the view the step wants.
   useEffect(() => {
@@ -302,7 +314,7 @@ export function Tour() {
 
   return (
     <>
-      {showWelcome && <Welcome onTour={start} onSkip={stop} />}
+      {showWelcome && !isPlaying && !hasAiAnswer && <Welcome onTour={start} onSkip={stop} />}
       {current && <Spotlight step={step!} current={current} rect={rect} onNext={next} onBack={back} onStop={stop} />}
       {spotlightMission && <MissionSpotlight mission={spotlightMission} onClose={clearSpotlight} />}
       {showMissions && <Missions done={done} onClose={() => setMissions(false)} />}

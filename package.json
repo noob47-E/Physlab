@@ -1,7 +1,7 @@
 {
   "name": "physlab",
   "productName": "PhysLab",
-  "version": "0.9.1-ai",
+  "version": "0.9.3-ai",
   "description": "Personal physics and math simulation engine",
   "main": "./out/main/index.js",
   "author": "PhysLab",
@@ -17,8 +17,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . && node scripts/deadcode.mjs --check",
     "smoke": "node scripts/smoke.mjs",
+    "ai:bank": "npx tsx scripts/run-ai-bank.ts",
     "gate": "node scripts/gate.mjs",
-    "hooks:install": "node scripts/install-hooks.mjs"
+    "hooks:install": "node scripts/install-hooks.mjs",
+    "ai:manual": "node scripts/generate-ai-manual.mjs"
   },
   "build": {
     "appId": "com.physlab.desktop",

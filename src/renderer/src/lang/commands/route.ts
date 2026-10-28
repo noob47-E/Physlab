@@ -17,50 +17,211 @@ import { unitRefusal } from '../../calc/units'
 import { evaluatePlain, HELP, solutionFor, tryCas, tryPureMath, trySolverCommand } from './solve'
 import { assertKnown, describeComputed, evaluateNode, freeLetterFor, GRAPH_VARS, isConstant, isUnitName, kindOfName, logError, parseNode, splitInputs, sumOperands, unknownSymbols, vectorExtras } from './common'
 import { namedGraphs, tryGraph } from './graph'
+import { registry } from '../registry'
 
 // ---------------------------------------------------------------------------
 
-export async function runCommand(raw: string): Promise<void> {
+export interface CommandResult {
+  ok: boolean
+  created: ObjId[]
+  removed: ObjId[]
+  changed?: ObjId[]
+  message: string
+}
+
+function parsePointPair(text: string): { pA: string; pB: string } | null {
+  const trimmed = text.trim()
+  let pA = ''
+  let pB = ''
+  const mSpace = trimmed.match(/^([A-Za-zͰ-Ͽ][\wͰ-Ͽ'′″‴⁗]*)\s+([A-Za-zͰ-Ͽ][\wͰ-Ͽ'′″‴⁗]*)$/)
+  if (mSpace) {
+    pA = mSpace[1]
+    pB = mSpace[2]
+  } else if (/^[A-Z]{2}$/.test(trimmed)) {
+    pA = trimmed[0]
+    pB = trimmed[1]
+  }
+  if (pA && pB) {
+    const s = scene()
+    if (s.ev.names.has(pA) && s.ev.names.has(pB)) {
+      if (kindOfName(pA) === 'point' && kindOfName(pB) === 'point') {
+        return { pA, pB }
+      }
+    }
+  }
+  return null
+}
+
+function isPointDiff(node: MathNode): { pB: string; pA: string } | null {
+  const op = node as unknown as { type: string; fn?: string; args?: Array<{ type: string; name?: string }> }
+  if (op.type === 'OperatorNode' && op.fn === 'subtract' && op.args?.length === 2) {
+    const a0 = op.args[0]
+    const a1 = op.args[1]
+    if (a0?.type === 'SymbolNode' && a1?.type === 'SymbolNode' && a0.name && a1.name) {
+      if (kindOfName(a0.name) === 'point' && kindOfName(a1.name) === 'point') {
+        return { pB: a0.name, pA: a1.name }
+      }
+    }
+  }
+  return null
+}
+
+export async function runCommand(raw: string): Promise<CommandResult> {
   const input = raw.trim()
-  if (!input) return
+  if (!input) return { ok: true, created: [], removed: [], message: '' }
   const lower = input.toLowerCase()
   const s = scene()
+  const idsBefore = new Set(s.order)
+  const objectsBefore = { ...s.objects }
+  const logLenBefore = s.log.length
 
   if (lower === 'clear' || lower === 'new') {
+    const removed = [...idsBefore]
     s.newScene()
     s.pushLog({ input, kind: 'info', text: 'Scene cleared.' })
-    return
+    return { ok: true, created: [], removed, message: 'Scene cleared.' }
   }
-  if (lower === 'undo') return s.undo()
-  if (lower === 'redo') return s.redo()
-  if (lower === 'play') return s.setPlaying(true)
-  if (lower === 'pause' || lower === 'stop') return s.setPlaying(false)
-  if (lower === '2d' || lower === '3d') return s.setViewMode(lower)
+  if (lower === 'undo') {
+    s.undo()
+    const sAfter = scene()
+    const idsAfter = new Set(sAfter.order)
+    const created = sAfter.order.filter((id) => !idsBefore.has(id))
+    const removed = [...idsBefore].filter((id) => !idsAfter.has(id))
+    return { ok: true, created, removed, message: 'Undone.' }
+  }
+  if (lower === 'redo') {
+    s.redo()
+    const sAfter = scene()
+    const idsAfter = new Set(sAfter.order)
+    const created = sAfter.order.filter((id) => !idsBefore.has(id))
+    const removed = [...idsBefore].filter((id) => !idsAfter.has(id))
+    return { ok: true, created, removed, message: 'Redone.' }
+  }
+  if (lower === 'play') {
+    s.setPlaying(true)
+    return { ok: true, created: [], removed: [], message: 'Playing.' }
+  }
+  if (lower === 'pause' || lower === 'stop') {
+    s.setPlaying(false)
+    return { ok: true, created: [], removed: [], message: 'Paused.' }
+  }
+  if (lower === '2d' || lower === '3d') {
+    s.setViewMode(lower)
+    return { ok: true, created: [], removed: [], message: `View set to ${lower}.` }
+  }
   if (lower === 'help' || lower === '?') {
     s.pushLog({ input, kind: 'info', text: HELP })
-    return
+    return { ok: true, created: [], removed: [], message: HELP }
   }
   const del = input.match(/^(?:delete|del|remove)\s+(.+)$/i)
   if (del) {
     const ids = del[1].split(/[,\s]+/).map((n) => s.ev.names.get(n)).filter(Boolean) as ObjId[]
-    if (!ids.length) return logError(input, 'Nothing with that name.')
+    if (!ids.length) {
+      logError(input, 'Nothing with that name.')
+      return { ok: false, created: [], removed: [], changed: [], message: 'Nothing with that name.' }
+    }
     s.removeObjects(ids)
     s.pushLog({ input, kind: 'info', text: `Deleted ${del[1]}.` })
-    return
+    return { ok: true, created: [], removed: ids, changed: [], message: `Deleted ${del[1]}.` }
+  }
+
+  const ptPair = parsePointPair(input)
+  if (ptPair) {
+    const idA = s.ev.names.get(ptPair.pA)!
+    const idB = s.ev.names.get(ptPair.pB)!
+    const b = new Builder()
+    const vName = `${ptPair.pA}${ptPair.pB}`
+    const obj = b.vector({ kind: 'points', a: idA, b: idB }, { name: vName })
+    b.commit()
+    const val = s.ev.values.get(obj.id)
+    s.pushLog({
+      input,
+      kind: 'result',
+      tex: `${vName} = ${describeComputed(val, s.settings)}`
+    })
+    return {
+      ok: true,
+      created: [obj.id],
+      removed: [],
+      changed: [],
+      message: `Created vector ${vName} from ${ptPair.pA} to ${ptPair.pB}.`
+    }
+  }
+
+  const regResult = await registry.dispatch(input)
+  if (regResult) {
+    if (regResult.ok) {
+      s.pushLog({ input, kind: 'info', text: regResult.message })
+    } else {
+      logError(input, regResult.message)
+    }
+    return {
+      ok: regResult.ok,
+      created: regResult.created,
+      removed: regResult.removed,
+      changed: regResult.changed,
+      message: regResult.message
+    }
   }
 
   try {
-    if (tryPointInSpace(input)) return
-    if (tryPureMath(input)) return
-    if (await tryCas(input)) return
-    if (tryGraph(input)) return
-    if (tryAssignment(input)) return
-    if (tryGeometryCommand(input, undefined)) return
-    if (trySolverCommand(input)) return
-    evaluatePlain(input)
+    if (
+      !tryPointInSpace(input) &&
+      !tryPureMath(input) &&
+      !(await tryCas(input)) &&
+      !tryGraph(input) &&
+      !tryAssignment(input) &&
+      !tryGeometryCommand(input, undefined) &&
+      !trySolverCommand(input)
+    ) {
+      evaluatePlain(input)
+    }
   } catch (e) {
-    logError(input, friendlyError(e, input))
+    const msg = friendlyError(e, input)
+    logError(input, msg)
+    return { ok: false, created: [], removed: [], message: msg }
   }
+
+  const sAfter = scene()
+  const newLogs = sAfter.log.slice(logLenBefore)
+  const errorLog = newLogs.find((l) => l.kind === 'error')
+  if (errorLog) {
+    return {
+      ok: false,
+      created: [],
+      removed: [],
+      message: errorLog.text || 'Command failed.'
+    }
+  }
+
+  const created = sAfter.order.filter((id) => !idsBefore.has(id) || sAfter.objects[id] !== objectsBefore[id])
+  const removed = [...idsBefore].filter((id) => !sAfter.objects[id])
+
+  for (const id of created) {
+    const err = sAfter.ev.errors.get(id)
+    if (err) {
+      const name = sAfter.objects[id]?.name ?? 'Object'
+      return {
+        ok: false,
+        created: [],
+        removed,
+        message: `${name}: ${err}`
+      }
+    }
+  }
+
+  const resultLog = newLogs.find((l) => l.kind === 'result' || l.kind === 'info')
+  const message =
+    resultLog?.text ??
+    resultLog?.tex ??
+    (created.length > 0
+      ? `Created ${created.map((id) => sAfter.objects[id]?.name ?? id).join(', ')}`
+      : removed.length > 0
+        ? `Removed ${removed.length} object(s)`
+        : 'OK')
+
+  const changed = sAfter.order.filter((id) => idsBefore.has(id) && sAfter.objects[id] !== objectsBefore[id])
+  return { ok: true, created, removed, changed, message }
 }
 
 /** The parser's own words, which a student is never shown: "Parenthesis ) expected (char 7)". */
@@ -146,6 +307,22 @@ function tryAssignment(input: string): boolean {
   if (taken && isPieceCorner(taken, scene().objects)) throw new Error(`${name} is a corner of a piece. Slide, turn or flip the piece to move it, or choose another letter.`)
   if (tryGeometryCommand(rhs, name, input)) return true
 
+  const ptPair = parsePointPair(rhs)
+  if (ptPair) {
+    const idA = scene().ev.names.get(ptPair.pA)!
+    const idB = scene().ev.names.get(ptPair.pB)!
+    const b = new Builder()
+    const obj = b.vector({ kind: 'points', a: idA, b: idB }, { name })
+    b.commit()
+    const val = scene().ev.values.get(obj.id)
+    scene().pushLog({
+      input,
+      kind: 'result',
+      tex: `${name} = ${describeComputed(val, scene().settings)}`
+    })
+    return true
+  }
+
   // The line is kept as typed: the runtime × (math/expr.ts, timesOrCross) reads every case the
   // bar does, so `C = 2 × A` stays `2 × A` in the Properties field instead of becoming `2 * A`.
   const node = parseNode(rhs)
@@ -160,14 +337,21 @@ function tryAssignment(input: string): boolean {
   if (kind === 'point') {
     obj = isConstant(node) ? b.point(toV3(evaluateNode(node)), { name }) : b.point({ kind: 'expr', expr }, { name })
   } else if (kind === 'vector') {
-    const unit = unitOf(node)
-    if (isConstant(node)) {
-      obj = b.vector({ kind: 'free', tail: [0, 0, 0], comp: toV3(evaluateNode(node)) }, { name, unit })
+    const ptDiff = isPointDiff(node)
+    if (ptDiff) {
+      const idA = scene().ev.names.get(ptDiff.pA)!
+      const idB = scene().ev.names.get(ptDiff.pB)!
+      obj = b.vector({ kind: 'points', a: idA, b: idB }, { name })
     } else {
-      const addends = sumOperands(node)
-      const first = addends?.[0] ? scene().ev.names.get(addends[0]) : undefined
-      obj = b.vector({ kind: 'expr', expr, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
-      if (addends && addends.length >= 2) addHeadToTailHelpers(b, addends)
+      const unit = unitOf(node)
+      if (isConstant(node)) {
+        obj = b.vector({ kind: 'free', tail: [0, 0, 0], comp: toV3(evaluateNode(node)) }, { name, unit })
+      } else {
+        const addends = sumOperands(node)
+        const first = addends?.[0] ? scene().ev.names.get(addends[0]) : undefined
+        obj = b.vector({ kind: 'expr', expr, tailOf: first }, { name, unit, color: addends ? '#ffd43b' : undefined })
+        if (addends && addends.length >= 2) addHeadToTailHelpers(b, addends)
+      }
     }
   } else {
     const constant = isConstant(node)
@@ -218,7 +402,7 @@ function unitOf(node: MathNode): string | undefined {
 }
 
 /** Faint copies of B, C… placed head-to-tail after A, linked live. */
-function addHeadToTailHelpers(b: Builder, names: string[]) {
+export function addHeadToTailHelpers(b: Builder, names: string[]) {
   const ids = names.map((n) => scene().ev.names.get(n)!)
   let prev = ids[0]
   for (let i = 1; i < ids.length; i++) {

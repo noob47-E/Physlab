@@ -4,6 +4,9 @@ import { repairControlCharLatex } from './contract'
 import { useAiStore } from './store'
 import type { Attachment, ChatMessage } from './types'
 import { TOOLS, runTool } from './tools'
+import { useScene } from '../core/store'
+import { useSandbox } from '../sim/store'
+import { useLab } from '../lab/labStore'
 
 let activeAbortController: AbortController | null = null
 
@@ -67,6 +70,13 @@ export async function transcribeDiagram(
  */
 export async function testAiConnection(): Promise<{ ok: boolean; message: string }> {
   if (typeof window !== 'undefined' && window.physlab?.ai) {
+    if (window.physlab.ai.testConnection) {
+      const res = await window.physlab.ai.testConnection()
+      if (res.ok) {
+        return { ok: true, message: res.message || 'Connected to PhysLab AI!' }
+      }
+      return { ok: false, message: res.error || 'Connection failed.' }
+    }
     const has = await window.physlab.ai.hasKey()
     if (!has) {
       return {
@@ -358,6 +368,7 @@ export async function autoConnectLocalBrain(): Promise<{
 }
 
 export const MAX_TOOL_ROUNDS = 4
+export const ACTION_LOOP_MAX_ROUNDS = 3
 
 /**
  * Estimates number of questions in a prompt using numbering, conjunctions, semicolons, and question marks.
@@ -422,6 +433,7 @@ export async function runToolLoop(
   } = {}
 ): Promise<{
   content: string
+  think?: string
   actions: any[]
   checked?: boolean
   model?: string
@@ -433,7 +445,19 @@ export async function runToolLoop(
   let finalModel: string | undefined
   let lastChecked: boolean | undefined
   let finalContent = ''
+  let finalThink: string | undefined
   const executedActions: any[] = []
+
+  let scenePastLen = 0
+  let sbPastLen = 0
+  let labPastLen = 0
+  try {
+    scenePastLen = useScene.getState().past.length
+    sbPastLen = useSandbox.getState().past.length
+    labPastLen = useLab.getState().past.length
+  } catch {
+    // ignore
+  }
 
   while (roundCount < maxRounds) {
     roundCount++
@@ -450,11 +474,14 @@ export async function runToolLoop(
         break
       }
       options.onError?.(err)
-      return { content: err, actions: executedActions, roundCount }
+      return { content: err, think: finalThink, actions: executedActions, roundCount }
     }
 
     finalModel = res.model ?? finalModel
     const assistantMsg = res.message
+    if ((assistantMsg as any).think && !finalThink) {
+      finalThink = (assistantMsg as any).think
+    }
 
     // CRITICAL: Push assistant message back EXACTLY as received, preserving Gemini 3 thought signatures & extra fields
     messages.push(assistantMsg)
@@ -514,8 +541,27 @@ export async function runToolLoop(
     }
   }
 
+  // One AI turn = One undo step: collapse history snapshots across all rounds of this turn
+  try {
+    const sceneState = useScene.getState()
+    if (sceneState.past.length > scenePastLen + 1) {
+      useScene.setState({ past: sceneState.past.slice(0, scenePastLen + 1) })
+    }
+    const sbState = useSandbox.getState()
+    if (sbState.past.length > sbPastLen + 1) {
+      useSandbox.setState({ past: sbState.past.slice(0, sbPastLen + 1) })
+    }
+    const labState = useLab.getState()
+    if (labState.past.length > labPastLen + 1) {
+      useLab.setState({ past: labState.past.slice(0, labPastLen + 1) })
+    }
+  } catch {
+    // ignore
+  }
+
   const resultPayload = {
     content: finalContent,
+    think: finalThink,
     actions: executedActions,
     checked: lastChecked,
     model: finalModel,
@@ -546,9 +592,9 @@ export async function streamChatCompletion(
   activeAbortController = controller
   const signal = controller.signal
 
-  // Primary: Call the main-process IPC provider with 4-round tool loop
-  if (provider !== 'local' && typeof window !== 'undefined' && window.physlab?.ai?.chat) {
-    const hasKey = await window.physlab.ai.hasKey()
+  // Primary: Call the main-process IPC provider with dynamic tool loop
+  if (typeof window !== 'undefined' && window.physlab?.ai?.chat) {
+    const hasKey = await window.physlab.ai.hasKey(provider)
     if (!hasKey) {
       callbacks.onError('The AI needs an API key. You can set it in Settings.')
       return
@@ -603,7 +649,7 @@ export async function streamChatCompletion(
 
       callbacks.onDone({
         content: repairControlCharLatex(finalContent || loopResult.content),
-        think,
+        think: loopResult.think || think,
         actions,
         agentTraces,
         checked: loopResult.checked,
