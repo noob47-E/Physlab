@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, shell
 import { extname, join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { resolveAppPath } from './appPath'
 import { openDialogOptions } from './openDialog'
 import { registerLocalAiIpc } from './localAi'
@@ -402,6 +402,15 @@ ipcMain.on('autosave:writeSync', (e, content: string) => {
     const tmp = `${autosaveFile()}.saving`
     writeFileSync(tmp, content, 'utf8')
     renameSync(tmp, autosaveFile())
+    e.returnValue = true
+  } catch {
+    e.returnValue = false
+  }
+})
+
+ipcMain.on('autosave:clearSync', (e) => {
+  try {
+    rmSync(autosaveFile(), { force: true })
     e.returnValue = true
   } catch {
     e.returnValue = false

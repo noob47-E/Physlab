@@ -44,6 +44,19 @@ app.on('browser-window-created', (_e, win) => {
         return p
       }
 
+      const dismissTour = async () => {
+        await exec(`
+          try {
+            localStorage.setItem('physlab.tourSeen', '1');
+            localStorage.setItem('physlab.chipHidden', '1');
+          } catch {}
+          const btns = Array.from(document.querySelectorAll('button'));
+          const skip = btns.find(b => b.textContent?.trim() === 'Skip');
+          if (skip) skip.click();
+        `)
+      }
+      await dismissTour()
+
       // Clear any prior autosave so recovery banner doesn't appear
       await exec(`
         if (window.physlab?.autosaveClear) {
@@ -361,6 +374,7 @@ app.on('browser-window-created', (_e, win) => {
           break
         }
       }
+      await dismissTour()
       const shot14 = await snap('14-ai-wow-projectile.png')
       results.push({ step: '14-ai-wow', shot: shot14, aiDone })
       out({ step: '14-ai-wow', ok: aiDone })

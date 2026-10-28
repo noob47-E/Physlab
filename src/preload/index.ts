@@ -18,6 +18,8 @@ const api = {
   autosaveClear: (): Promise<boolean> => ipcRenderer.invoke('autosave:clear'),
   /** The copy written as the window closes; a promise would never come back. */
   autosaveWriteSync: (content: string): boolean => ipcRenderer.sendSync('autosave:writeSync', content) as boolean,
+  /** Clear recovery copy synchronously on clean exit. */
+  autosaveClearSync: (): boolean => ipcRenderer.sendSync('autosave:clearSync') as boolean,
   /** So the window can ask before closing on unsaved work. */
   setDirty: (dirty: boolean): void => ipcRenderer.send('app:dirty', dirty),
   /** The theme's page colour, so the window paints it on the next launch before the page does. */
